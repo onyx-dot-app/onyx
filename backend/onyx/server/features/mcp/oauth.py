@@ -106,6 +106,13 @@ class MCPRefreshSuperseded(Exception):
     """The grant changed while a refresh request was in flight."""
 
 
+class MCPReauthenticationRequired(OAuthFlowError):
+    """A non-interactive MCP operation requires a new browser grant."""
+
+    def __init__(self) -> None:
+        super().__init__("Please reconnect to the server through Onyx.")
+
+
 def _refresh_log_context(
     mcp_server: MCPServer, connection_config_id: int
 ) -> MCPRefreshLogContext:
@@ -664,16 +671,17 @@ class OAuthAuthorizationRequired(Exception):
 
 
 class OnyxOAuthClientProvider(OAuthClientProvider):
-    """MCP SDK OAuth provider with safe refresh telemetry and error parsing."""
+    """MCP SDK provider with an optional resumable browser handoff.
+
+    Without a handoff, the provider can use or refresh existing credentials but
+    cannot begin interactive authorization.
+    """
 
     def __init__(
         self,
         server_url: str,
         client_metadata: OAuthClientMetadata,
         storage: TokenStorage,
-        redirect_handler: Callable[[str], Awaitable[None]] | None = None,
-        callback_handler: Callable[[], Awaitable[tuple[str, str | None]]] | None = None,
-        timeout: float = 300.0,
         client_metadata_url: str | None = None,
         *,
         refresh_log_context: MCPRefreshLogContext,
@@ -683,9 +691,8 @@ class OnyxOAuthClientProvider(OAuthClientProvider):
             server_url=server_url,
             client_metadata=client_metadata,
             storage=storage,
-            redirect_handler=redirect_handler,
-            callback_handler=callback_handler,
-            timeout=timeout,
+            redirect_handler=None,
+            callback_handler=None,
             client_metadata_url=client_metadata_url,
         )
         self.refresh_log_context = refresh_log_context
@@ -752,7 +759,7 @@ class OnyxOAuthClientProvider(OAuthClientProvider):
         """
         handler = self.authorization_request_handler
         if handler is None:
-            return await super()._perform_authorization_code_grant()
+            raise MCPReauthenticationRequired()
 
         authorization = self.build_resumable_authorization_request()
         await handler(authorization, self.context)
@@ -950,9 +957,6 @@ def make_oauth_provider(
     expected_connection_headers_fingerprint: str | None = None,
     expected_client_information_fingerprint: str | None = None,
 ) -> OnyxOAuthClientProvider:
-    async def reconnect_required(_auth_url: str) -> None:
-        raise ValueError("Please Reconnect to the server")
-
     refresh_log_context = _refresh_log_context(mcp_server, connection_config_id)
     storage = OnyxTokenStorage(
         connection_config_id,
@@ -983,8 +987,6 @@ def make_oauth_provider(
             token_endpoint_auth_method="none",
         ),
         storage=storage,
-        redirect_handler=reconnect_required,
-        callback_handler=None,
         client_metadata_url=client_metadata_url,
         authorization_request_handler=authorization_request_handler,
     )

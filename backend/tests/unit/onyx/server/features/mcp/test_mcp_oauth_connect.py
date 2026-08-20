@@ -22,6 +22,7 @@ from onyx.server.features.mcp.models import (
     MCPToolCreateRequest,
     MCPUserOAuthConnectRequest,
 )
+from onyx.server.features.mcp.oauth import MCPReauthenticationRequired
 
 _TOKEN_URL = "https://accounts.example.com/token"
 
@@ -55,6 +56,33 @@ def _request(
         oauth_client_secret=None,
         force_reauthentication=force_reauthentication,
     )
+
+
+def test_tool_discovery_reports_reauthentication_as_unauthenticated(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    server = _server()
+    user = cast(User, SimpleNamespace(id=uuid4(), email="user@example.com"))
+    credentials = MagicMock()
+    credentials.can_authenticate.return_value = True
+    credentials.connection_config = SimpleNamespace(id=101)
+    credentials.build_headers.return_value = {"Authorization": "Bearer stale"}
+
+    monkeypatch.setattr(api, "get_mcp_server_by_id", lambda *_args: server)
+    monkeypatch.setattr(api, "_ensure_mcp_server_owner_or_admin", lambda *_args: None)
+    monkeypatch.setattr(api, "resolve_mcp_credentials", lambda *_args: credentials)
+    monkeypatch.setattr(api, "make_oauth_provider", lambda *_args: MagicMock())
+    monkeypatch.setattr(
+        api,
+        "discover_mcp_tools",
+        MagicMock(side_effect=MCPReauthenticationRequired()),
+    )
+
+    with pytest.raises(OnyxError) as exc_info:
+        api._list_mcp_tools_by_id(server.id, MagicMock(), True, user)
+
+    assert exc_info.value.error_code is OnyxErrorCode.UNAUTHENTICATED
+    assert exc_info.value.detail == "Please reconnect to the server through Onyx."
 
 
 def test_user_cannot_start_oauth_for_an_inaccessible_server(

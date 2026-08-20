@@ -114,6 +114,7 @@ from onyx.server.features.mcp.models import (
 )
 from onyx.server.features.mcp.oauth import (
     REQUESTED_SCOPE,
+    MCPReauthenticationRequired,
     make_oauth_provider,
 )
 from onyx.server.features.mcp.oauth_flow import (
@@ -917,10 +918,12 @@ async def process_oauth_callback(
     except ValueError as error:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "MCP server not found") from error
 
-    if not user_can_access_mcp_server(user, mcp_server.id, db_session):
+    if not user_can_access_mcp_server(
+        user, mcp_server.id, db_session
+    ) and not can_manage_mcp_server(user, mcp_server):
         raise OnyxError(
             OnyxErrorCode.UNAUTHORIZED,
-            "You no longer have access to this MCP server.",
+            "You no longer have access to or management authority for this MCP server.",
         )
 
     user_config = get_user_connection_config(mcp_server.id, user.email, db_session)
@@ -1445,9 +1448,9 @@ def get_mcp_server_tools_snapshots(
             )
             db.commit()
 
-            if isinstance(e, HTTPException):
-                # Re-raise HTTP exceptions (e.g. 401, 400) so they are returned to client
-                raise e
+            if isinstance(e, (HTTPException, OnyxError)):
+                # Preserve structured client errors after updating the server status.
+                raise
 
             logger.error("Failed to discover tools for MCP server: %s", e)
             raise HTTPException(status_code=500, detail="Failed to discover tools")
@@ -1577,12 +1580,15 @@ def _list_mcp_tools_by_id(
             detail="MCP server transport is not configured",
         )
 
-    discovered_tools = discover_mcp_tools(
-        server_url,
-        credentials.build_headers(),
-        transport=mcp_server.transport,
-        auth=auth,
-    )
+    try:
+        discovered_tools = discover_mcp_tools(
+            server_url,
+            credentials.build_headers(),
+            transport=mcp_server.transport,
+            auth=auth,
+        )
+    except MCPReauthenticationRequired as error:
+        raise OnyxError(OnyxErrorCode.UNAUTHENTICATED, str(error)) from error
     logger.info(
         "Discovered %s tools for MCP server: %s: %s",
         len(discovered_tools),

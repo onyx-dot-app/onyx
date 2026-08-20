@@ -81,7 +81,6 @@ def _complete_oauth_callback(
     callback_params: dict[str, list[str]],
     admin_user: DATestUser,
 ) -> None:
-
     callback_response = client.post(
         f"{API_SERVER_URL}/mcp/oauth/callback",
         params={

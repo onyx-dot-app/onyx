@@ -14,6 +14,7 @@ from onyx.server.features.mcp.models import (
     merge_mcp_headers,
 )
 from onyx.server.features.mcp.oauth import (
+    MCPReauthenticationRequired,
     make_oauth_provider,
     refresh_mcp_oauth_token_if_expired,
 )
@@ -288,7 +289,7 @@ class MCPTool(Tool[None]):
             error_str = str(e).lower()
             logger.error("Failed to execute MCP tool '%s': %s", self._name, e)
 
-            is_auth_error = any(
+            is_auth_error = isinstance(e, MCPReauthenticationRequired) or any(
                 indicator in error_str for indicator in _AUTH_ERROR_INDICATORS
             )
 

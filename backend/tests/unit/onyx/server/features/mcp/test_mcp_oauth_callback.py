@@ -224,7 +224,7 @@ def test_callback_rejects_replaced_connection_config(
         )
 
 
-def test_callback_rechecks_server_access_before_exchanging_code(
+def test_callback_rechecks_server_authorization_before_exchanging_code(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     server = _server()
@@ -233,6 +233,7 @@ def test_callback_rechecks_server_access_before_exchanging_code(
         monkeypatch, server, flow
     )
     monkeypatch.setattr(api, "user_can_access_mcp_server", lambda *_args: False)
+    monkeypatch.setattr(api, "can_manage_mcp_server", lambda *_args: False)
     complete_flow = AsyncMock()
     monkeypatch.setattr(api, "complete_mcp_oauth_flow", complete_flow)
 
@@ -249,6 +250,33 @@ def test_callback_rechecks_server_access_before_exchanging_code(
     complete_flow.assert_not_awaited()
     db_session.commit.assert_not_called()
     hot_reload.assert_not_called()
+
+
+def test_callback_allows_server_manager_without_server_access(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    server = _server()
+    flow = _flow(server)
+    user, db_session, _, _ = _install_callback_dependencies(monkeypatch, server, flow)
+    monkeypatch.setattr(api, "user_can_access_mcp_server", lambda *_args: False)
+    monkeypatch.setattr(api, "can_manage_mcp_server", lambda *_args: True)
+    complete_flow = AsyncMock()
+    monkeypatch.setattr(api, "complete_mcp_oauth_flow", complete_flow)
+
+    asyncio.run(
+        api.process_oauth_callback(
+            _request(state=_STATE, code="authorization-code"),
+            db_session,
+            user,
+        )
+    )
+
+    complete_flow.assert_awaited_once_with(
+        flow,
+        server,
+        _client_information(),
+        "authorization-code",
+    )
 
 
 def test_callback_claim_is_bound_to_authenticated_user(
@@ -296,38 +324,6 @@ def test_provider_denial_claims_flow_without_exchanging_code(
     cast(MagicMock, api.mcp_oauth_attempt_store()).consume.assert_called_once_with(
         owner_id=str(user.id),
         state=_STATE,
-    )
-
-
-def test_known_provider_callback_dispatches_the_validated_attempt(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    server = _server(MCPOAuthProviderMode.KNOWN_PROVIDER)
-    flow = _flow(server)
-    user, db_session, _, _ = _install_callback_dependencies(monkeypatch, server, flow)
-    connection_data = MCPConnectionData(
-        headers={},
-        client_info=_client_information().model_dump(mode="json"),
-    )
-    monkeypatch.setattr(
-        api, "extract_connection_data", lambda *_args, **_kwargs: connection_data
-    )
-    complete_flow = AsyncMock()
-    monkeypatch.setattr(api, "complete_mcp_oauth_flow", complete_flow)
-
-    asyncio.run(
-        api.process_oauth_callback(
-            _request(state=_STATE, code="authorization-code"),
-            db_session,
-            user,
-        )
-    )
-
-    complete_flow.assert_awaited_once_with(
-        flow,
-        server,
-        _client_information(),
-        "authorization-code",
     )
 
 

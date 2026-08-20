@@ -117,6 +117,39 @@ def _provider(
     return provider
 
 
+def _authorization_required_response(request: httpx.Request) -> httpx.Response:
+    if "oauth-protected-resource" in request.url.path:
+        return httpx.Response(
+            200,
+            json={
+                "resource": "https://mcp.example.com/mcp",
+                "authorization_servers": ["https://accounts.example.com"],
+            },
+            request=request,
+        )
+    if "oauth-authorization-server" in request.url.path:
+        return httpx.Response(
+            200,
+            json={
+                "issuer": "https://accounts.example.com",
+                "authorization_endpoint": _AUTHORIZATION_URL,
+                "token_endpoint": _TOKEN_URL,
+            },
+            request=request,
+        )
+    assert request.url.path == "/mcp"
+    return httpx.Response(
+        401,
+        headers={
+            "WWW-Authenticate": (
+                'Bearer resource_metadata="https://mcp.example.com/'
+                '.well-known/oauth-protected-resource/mcp"'
+            )
+        },
+        request=request,
+    )
+
+
 def test_authorization_request_binds_state_pkce_scope_and_resource() -> None:
     provider = _provider(_MemoryTokenStorage())
 
@@ -328,40 +361,10 @@ def test_sdk_handoff_raises_the_same_authorization_attempt_it_records() -> None:
         _MemoryTokenStorage(), authorization_request_handler=persist_handoff
     )
 
-    def handle_request(request: httpx.Request) -> httpx.Response:
-        if request.url.path == "/mcp":
-            return httpx.Response(
-                401,
-                headers={
-                    "WWW-Authenticate": (
-                        'Bearer resource_metadata="https://mcp.example.com/'
-                        '.well-known/oauth-protected-resource/mcp"'
-                    )
-                },
-                request=request,
-            )
-        if "oauth-protected-resource" in request.url.path:
-            return httpx.Response(
-                200,
-                json={
-                    "resource": "https://mcp.example.com/mcp",
-                    "authorization_servers": ["https://accounts.example.com"],
-                },
-                request=request,
-            )
-        return httpx.Response(
-            200,
-            json={
-                "issuer": "https://accounts.example.com",
-                "authorization_endpoint": _AUTHORIZATION_URL,
-                "token_endpoint": _TOKEN_URL,
-            },
-            request=request,
-        )
-
     async def run() -> None:
         async with httpx.AsyncClient(
-            auth=provider, transport=httpx.MockTransport(handle_request)
+            auth=provider,
+            transport=httpx.MockTransport(_authorization_required_response),
         ) as client:
             await client.get("https://mcp.example.com/mcp")
 
@@ -371,3 +374,20 @@ def test_sdk_handoff_raises_the_same_authorization_attempt_it_records() -> None:
     assert handoffs == [exc_info.value.authorization]
     assert handoffs[0].state
     assert handoffs[0].code_verifier
+
+
+def test_noninteractive_provider_requires_reconnection() -> None:
+    provider = _provider(_MemoryTokenStorage())
+
+    async def run() -> None:
+        async with httpx.AsyncClient(
+            auth=provider,
+            transport=httpx.MockTransport(_authorization_required_response),
+        ) as client:
+            await client.get("https://mcp.example.com/mcp")
+
+    with pytest.raises(
+        oauth.MCPReauthenticationRequired,
+        match="Please reconnect to the server through Onyx",
+    ):
+        asyncio.run(run())
