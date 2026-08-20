@@ -64,7 +64,6 @@ from onyx.db.enums import SandboxStatus
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.configs import (
     ONYX_SERVER_URL,
-    OPENCODE_DISABLED_TOOLS,
     OPENCODE_SERVE_PORT,
     OPENCODE_SERVER_PASSWORD,
     SANDBOX_CONTAINER_IMAGE,
@@ -148,6 +147,7 @@ from onyx.server.features.build.timeouts import (
     RUNTIME_TEARDOWN_SECONDS,
     WORKSPACE_SETUP_DEADLINE_SECONDS,
 )
+from onyx.server.features.build.utils import get_opencode_disabled_tools
 from onyx.server.metrics.craft_sandbox import (
     SandboxProvisionPhase,
     time_provision_phase,
@@ -997,7 +997,6 @@ class KubernetesSandboxManager(SandboxManager):
         tenant_id: str,
         onyx_pat: str | None,
         provisioning_attempt_number: int,
-        disabled_tools: list[str] | None = None,
     ) -> SandboxInfo:
         """Provision a new sandbox as a Kubernetes pod (user-level).
 
@@ -1045,9 +1044,6 @@ class KubernetesSandboxManager(SandboxManager):
             raise ValueError(
                 "SANDBOX_PROXY_HOST must be set for Kubernetes sandbox provisioning"
             )
-        resolved_disabled_tools = (
-            disabled_tools if disabled_tools is not None else OPENCODE_DISABLED_TOOLS
-        )
 
         with _provisioning_lock(sandbox_id, tenant_id):
             # Every phase below (service churn, scheduling + image pull,
@@ -1110,7 +1106,7 @@ class KubernetesSandboxManager(SandboxManager):
 
                 # Secret must exist before the Pod (secretKeyRef).
                 opencode_config = build_opencode_base_config(
-                    disabled_tools=resolved_disabled_tools,
+                    disabled_tools=get_opencode_disabled_tools(),
                     plugins=[
                         _OPENCODE_CONNECT_APP_PLUGIN_PATH,
                         _OPENCODE_TURN_BUDGET_PLUGIN_PATH,
@@ -1378,7 +1374,6 @@ class KubernetesSandboxManager(SandboxManager):
         connectable_apps_section: str,
         user_name: str | None = None,
         mcp_servers: Sequence[CraftMCPServerConfig] = (),
-        disabled_tools: list[str] | None = None,
     ) -> None:
         """Set up a session workspace within an existing sandbox pod.
 
@@ -1402,9 +1397,7 @@ class KubernetesSandboxManager(SandboxManager):
         """
         pod_name = self._get_pod_name(str(sandbox_id))
         session_path = f"{SESSIONS_ROOT}/{session_id}"
-        resolved_disabled_tools = (
-            disabled_tools if disabled_tools is not None else OPENCODE_DISABLED_TOOLS
-        )
+        disabled_tools = get_opencode_disabled_tools()
 
         # Paths inside the pod (created during workspace setup below):
         # - {session_path}/attachments: user-uploaded files
@@ -1414,13 +1407,13 @@ class KubernetesSandboxManager(SandboxManager):
             connectable_apps_section=connectable_apps_section,
             provider=llm_config.provider,
             model_name=llm_config.model_name,
-            disabled_tools=resolved_disabled_tools,
+            disabled_tools=disabled_tools,
             user_name=user_name,
         )
         session_opencode_config = json.dumps(
             build_provider_opencode_config(
                 llm_config,
-                disabled_tools=resolved_disabled_tools,
+                disabled_tools=disabled_tools,
                 mcp_servers=mcp_servers,
                 session_id=str(session_id),
             )
@@ -1796,7 +1789,6 @@ echo "Session cleanup complete"
         llm_config: CraftLLMProviderConfig,
         connectable_apps_section: str,
         mcp_servers: Sequence[CraftMCPServerConfig] = (),
-        disabled_tools: list[str] | None = None,
     ) -> None:
         """Restore a FileStore-backed snapshot through the sidecar filesystem API.
 
@@ -1854,7 +1846,6 @@ echo "Session cleanup complete"
                 connectable_apps_section=connectable_apps_section,
                 llm_config=llm_config,
                 mcp_servers=mcp_servers,
-                disabled_tools=disabled_tools,
             )
 
             if nextjs_port is not None:
@@ -1900,23 +1891,20 @@ echo "Session cleanup complete"
         user_name: str | None = None,
         llm_config: CraftLLMProviderConfig | None = None,
         mcp_servers: Sequence[CraftMCPServerConfig] = (),
-        disabled_tools: list[str] | None = None,
     ) -> None:
         """Rewrite generated session configuration and managed symlinks."""
         # nextjs_port stays in the signature to match the abstract contract
         # (base.py) shared with restore_snapshot's own webapp-script rewrite;
         # AGENTS.md no longer embeds it.
         _ = nextjs_port
-        resolved_disabled_tools = (
-            disabled_tools if disabled_tools is not None else OPENCODE_DISABLED_TOOLS
-        )
+        disabled_tools = get_opencode_disabled_tools()
         pod_name = self._get_pod_name(str(sandbox_id))
         session_path = shlex.quote(f"/workspace/sessions/{session_id}")
         agent_instructions = self._load_agent_instructions(
             connectable_apps_section=connectable_apps_section,
             provider=agent_provider,
             model_name=agent_model,
-            disabled_tools=resolved_disabled_tools,
+            disabled_tools=disabled_tools,
             user_name=user_name,
         )
 
@@ -1925,7 +1913,7 @@ echo "Session cleanup complete"
             json.dumps(
                 build_provider_opencode_config(
                     llm_config,
-                    disabled_tools=resolved_disabled_tools,
+                    disabled_tools=disabled_tools,
                     mcp_servers=mcp_servers,
                     session_id=str(session_id),
                 )

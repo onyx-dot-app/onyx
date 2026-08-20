@@ -82,7 +82,6 @@ from onyx.server.features.build.timeouts import (
     PROVISION_WAIT_SECONDS,
     RECOVERY_HISTORY_SNAPSHOT_SECONDS,
 )
-from onyx.server.features.build.utils import get_opencode_disabled_tools
 from onyx.server.metrics.craft_sandbox import (
     SandboxProvisionPhase,
     SandboxReadyOutcome,
@@ -601,7 +600,6 @@ def reconcile_sandbox(
                 tenant_id=tenant_id,
                 onyx_pat=onyx_pat,
                 provisioning_attempt_number=attempt_number,
-                disabled_tools=get_opencode_disabled_tools(),
             )
     except SandboxProvisionContentionError as e:
         # A superseded attempt's tail still holds the backend lock. Record

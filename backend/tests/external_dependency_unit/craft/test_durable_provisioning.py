@@ -92,7 +92,6 @@ class _ProbingStub(StubSandboxManager):
         tenant_id: str,
         onyx_pat: str | None,
         provisioning_attempt_number: int,
-        disabled_tools: list[str] | None = None,
     ) -> SandboxInfo:
         probe = _ReservationProbe(
             flow_session_in_transaction=self._flow_db_session.in_transaction(),
@@ -132,7 +131,6 @@ class _ProbingStub(StubSandboxManager):
             tenant_id,
             onyx_pat=onyx_pat,
             provisioning_attempt_number=provisioning_attempt_number,
-            disabled_tools=disabled_tools,
         )
 
 

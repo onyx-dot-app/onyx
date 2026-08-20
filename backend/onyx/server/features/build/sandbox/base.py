@@ -129,7 +129,6 @@ class SandboxManager(_ServeMixin, ABC):
         tenant_id: str,
         onyx_pat: str | None,
         provisioning_attempt_number: int,
-        disabled_tools: list[str] | None = None,
     ) -> SandboxInfo:
         """Provision a new sandbox for a user. Returns only once the sandbox
         is RUNNING; every failure raises.
@@ -155,8 +154,6 @@ class SandboxManager(_ServeMixin, ABC):
                 orphans (never read programmatically — the attempt-number
                 condition on DB status writes is what blocks stale
                 attempts).
-            disabled_tools: opencode tools to disable; None falls back to
-                OPENCODE_DISABLED_TOOLS in the implementation.
 
         Returns:
             SandboxInfo with the provisioned sandbox details
@@ -187,7 +184,6 @@ class SandboxManager(_ServeMixin, ABC):
         connectable_apps_section: str,
         user_name: str | None = None,
         mcp_servers: Sequence[CraftMCPServerConfig] = (),
-        disabled_tools: list[str] | None = None,
     ) -> None:
         """Set up a session workspace within an existing sandbox.
 
@@ -251,7 +247,6 @@ class SandboxManager(_ServeMixin, ABC):
         user_name: str | None = None,
         llm_config: CraftLLMProviderConfig | None = None,
         mcp_servers: Sequence[CraftMCPServerConfig] = (),
-        disabled_tools: list[str] | None = None,
     ) -> None:
         """Rewrite generated session configuration without replacing outputs."""
         ...
@@ -297,7 +292,6 @@ class SandboxManager(_ServeMixin, ABC):
         llm_config: CraftLLMProviderConfig,
         connectable_apps_section: str,
         mcp_servers: Sequence[CraftMCPServerConfig] = (),
-        disabled_tools: list[str] | None = None,
     ) -> None:
         """Restore a session workspace from a snapshot.
 
