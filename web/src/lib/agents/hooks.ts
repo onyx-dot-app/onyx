@@ -254,22 +254,6 @@ export function useActiveAgent(): MinimalAgent | undefined {
   }, [agents, assistantDisabled, pinnedAgents, sessionAgentId, urlAgentIdRaw]);
 }
 
-/**
- * Where "New Session" goes.
- *
- * Normally a bare new chat, which lands on the Assistant. With
- * "Always Start with an Agent" there is no such chat to land on, so the link
- * names an agent outright — the one already in view, or the featured agent a
- * new user should start in. {@link useActiveAgent} answers both.
- */
-export function useNewSessionHref(): string {
-  const activeAgent = useActiveAgent();
-  const settings = useSettings();
-
-  if (!settings.disable_default_assistant || !activeAgent) return "/app";
-  return `/app?${SEARCH_PARAM_NAMES.AGENT_ID}=${activeAgent.id}`;
-}
-
 // ── Agent preferences ─────────────────────────────────────────────────────────
 
 /**

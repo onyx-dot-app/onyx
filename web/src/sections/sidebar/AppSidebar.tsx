@@ -38,12 +38,7 @@ import {
 } from "@dnd-kit/modifiers";
 import useChatSessions from "@/hooks/useChatSessions";
 import { useProjects } from "@/lib/projects/hooks";
-import {
-  useAgents,
-  useActiveAgent,
-  useNewSessionHref,
-  usePinnedAgents,
-} from "@/lib/agents/hooks";
+import { useAgents, useActiveAgent, usePinnedAgents } from "@/lib/agents/hooks";
 import ProjectFolderButton from "@/sections/sidebar/ProjectFolderButton";
 import CreateProjectModal from "@/sections/modals/CreateProjectModal";
 import MoveCustomAgentChatModal from "@/sections/modals/MoveCustomAgentChatModal";
@@ -497,7 +492,6 @@ export default function AppSidebar() {
   const defaultAppMode =
     (user?.preferences?.default_app_mode?.toLowerCase() as "chat" | "search") ??
     "chat";
-  const newSessionHref = useNewSessionHref();
 
   const moreAgentsButton = (
     <div data-testid="AppSidebar/more-agents">
@@ -601,7 +595,7 @@ export default function AppSidebar() {
           <div data-testid="AppSidebar/new-session">
             <SidebarTab
               icon={SvgEditBig}
-              href={newSessionHref}
+              href="/app"
               selected={activeSidebarTab.isNewSession()}
               onClick={() => {
                 if (!activeSidebarTab.isNewSession()) return;
