@@ -33,19 +33,19 @@ import {
 } from "@/lib/languageModels/options";
 import { ReasoningEffortOverride } from "@/lib/languageModels/types";
 import {
+  ADMIN_LIMITED_SETTING_TOOLTIP,
   ALL_REASONING_STOPS,
   PaneSlider,
   REASONING_STOP_LABELS,
   SettingRow,
   UNKNOWN_CONTEXT_TOOLTIP,
+  UNSET_REASONING_STOP,
   UNSUPPORTED_SETTING_TOOLTIP,
+  cappedReasoningStop,
   formatContextWindow,
   maxReasoningStop,
   reasoningStopIndex,
 } from "@/sections/model-selector/setting-controls";
-
-const ADMIN_LIMITED_SETTING_TOOLTIP =
-  "Your admin limits this model to a lower reasoning level.";
 import { useCurrentAgentLLMProviders } from "@/lib/languageModels/hooks";
 import { useUser } from "@/providers/UserProvider";
 import { useSettings } from "@/lib/settings/hooks";
@@ -59,7 +59,7 @@ export interface TemperatureManager {
   temperature: number;
   updateTemperature: (value: number) => void;
   maxTemperature: number;
-  /** False when `temperature` is just a fallback, not a user's choice. */
+  /** True only when an override was set locally or is stored on the session. */
   hasTemperatureOverride: boolean;
 }
 
@@ -114,9 +114,18 @@ export function useModelDetailManagers(
   ]);
 }
 
-/** Highest stop this model supports, as a slider index. */
-function maxSupportedReasoningStop(option: LLMOption): number {
-  return maxReasoningStop(option.supportedReasoningEfforts);
+/** Where the slider parks on open: the session's own choice, else the admin
+ *  default, bounded by the selected model's slider maximum. */
+function initialTemperature(
+  option: LLMOption,
+  manager: TemperatureManager | undefined
+): number {
+  const sessionTemperature = manager?.temperature ?? 0.5;
+  if (manager?.hasTemperatureOverride) return sessionTemperature;
+  return Math.min(
+    option.temperatureDefault ?? sessionTemperature,
+    manager?.maxTemperature ?? 2
+  );
 }
 
 /** Fixed-height scroll box: the popover clips overflow instead of scrolling. */
@@ -152,13 +161,14 @@ function ModelDetailPane({ option, managers, onBack }: ModelDetailPaneProps) {
   const temperatureManager = managers.temperature;
   const reasoningManager = managers.reasoning;
   const temperatureEnabled = !option.supportsReasoning && !!temperatureManager;
+  const capabilityStop = maxReasoningStop(option.supportedReasoningEfforts);
+  // The admin cap further limits which stops users may request.
+  const maxSupportedStop = cappedReasoningStop(
+    capabilityStop,
+    option.reasoningEffortMax
+  );
   // A reasoning model with no supported levels takes no effort parameter at
   // all (e.g. o1-mini), so the row stays disabled.
-  const capabilityStop = maxSupportedReasoningStop(option);
-  // An admin cap narrows what the model can do to what users may request.
-  const adminCapStop = reasoningStopIndex(option.reasoningEffortMax);
-  const maxSupportedStop =
-    adminCapStop >= 0 ? Math.min(capabilityStop, adminCapStop) : capabilityStop;
   const reasoningEnabled =
     option.supportsReasoning && !!reasoningManager && maxSupportedStop >= 0;
 
@@ -168,24 +178,18 @@ function ModelDetailPane({ option, managers, onBack }: ModelDetailPaneProps) {
   const clampStop = (stop: number) =>
     Math.max(0, Math.min(stop, maxSupportedStop));
 
-  // The manager always reports a concrete number, so the admin default is only
-  // reachable by asking whether the session actually pinned one.
+  // temperature is always concrete, so the override flag decides when the
+  // admin default applies.
   const [localTemperature, setLocalTemperature] = useState(() =>
-    temperatureManager?.hasTemperatureOverride
-      ? temperatureManager.temperature
-      : (option.temperatureDefault ?? temperatureManager?.temperature ?? 0.5)
+    initialTemperature(option, temperatureManager)
   );
   // A stored level the model doesn't support (e.g. xhigh after switching
   // models) displays clamped to the highest supported stop.
-  const storedStop = ALL_REASONING_STOPS.indexOf(
-    reasoningManager?.reasoningEffort ??
-      option.reasoningEffortDefault ??
-      "medium"
+  const storedStop = reasoningStopIndex(
+    reasoningManager?.reasoningEffort ?? option.reasoningEffortDefault
   );
   const [localEffortStop, setLocalEffortStop] = useState(
-    clampStop(
-      storedStop === -1 ? ALL_REASONING_STOPS.indexOf("medium") : storedStop
-    )
+    clampStop(storedStop >= 0 ? storedStop : UNSET_REASONING_STOP)
   );
 
   const displayTemperature = temperatureEnabled ? localTemperature : 1;

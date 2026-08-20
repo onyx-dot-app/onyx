@@ -433,7 +433,7 @@ export interface LlmManager {
   updateImageFilesPresent: (present: boolean) => void;
   activeAgent: MinimalAgent | null;
   maxTemperature: number;
-  /** False when `temperature` is just a fallback, not a user's choice. */
+  /** True only when an override was set locally or is stored on the session. */
   hasTemperatureOverride: boolean;
   llmProviders: LLMProviderDescriptor[] | undefined;
   isLoadingProviders: boolean;
@@ -913,7 +913,7 @@ export function useLlmManager(
       return;
     }
 
-    if (currentChatSession?.current_temperature_override) {
+    if (currentChatSession?.current_temperature_override != null) {
       setTemperature(currentChatSession.current_temperature_override);
     } else if (
       activeAgent?.tools.some((tool) => tool.in_code_tool_id === SEARCH_TOOL_ID)
@@ -1007,8 +1007,7 @@ export function useLlmManager(
     updateImageFilesPresent,
     activeAgent: activeAgent ?? null,
     maxTemperature,
-    // Covers the window where the user just moved the slider and the session
-    // write has not landed yet.
+    // Covers a slider choice the session snapshot does not yet reflect.
     hasTemperatureOverride:
       temperatureExplicitlySet ||
       currentChatSession?.current_temperature_override != null,
