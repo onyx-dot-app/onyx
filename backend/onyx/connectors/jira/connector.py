@@ -2,7 +2,7 @@ import copy
 import json
 import os
 from collections.abc import Callable, Generator, Iterable, Iterator
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Any
 
 import requests
@@ -714,19 +714,13 @@ class JiraConnector(
     def _get_jql_query(
         self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
     ) -> str:
-        """Get the JQL query based on configuration and time range
+        """JQL for the configured project/query plus the poll window.
 
-        If a custom JQL query is provided, it will be used and combined with time constraints.
-        Otherwise, the query will be constructed based on project key (if provided).
+        Unquoted epoch-ms so Jira does not reinterpret naive datetimes in the
+        API user's profile timezone.
+        https://support.atlassian.com/jira-software-cloud/docs/jql-fields/#Updated
         """
-        start_date_str = datetime.fromtimestamp(start, tz=timezone.utc).strftime(
-            "%Y-%m-%d %H:%M"
-        )
-        end_date_str = datetime.fromtimestamp(end, tz=timezone.utc).strftime(
-            "%Y-%m-%d %H:%M"
-        )
-
-        time_jql = f"updated >= '{start_date_str}' AND updated <= '{end_date_str}'"
+        time_jql = f"updated >= {int(start * 1000)} AND updated <= {int(end * 1000)}"
 
         # If custom JQL query is provided, use it and combine with time constraints
         if self.jql_query:
