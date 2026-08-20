@@ -199,6 +199,7 @@ export default function UserRowActions({
                 Groups &amp; Roles
               </LineItem>
             )}
+            {user.id && adminAccessItem}
             <LineItem
               icon={SvgKey}
               onClick={() => openModal(Modal.RESET_PASSWORD)}
