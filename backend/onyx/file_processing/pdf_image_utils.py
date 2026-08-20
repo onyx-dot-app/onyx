@@ -130,6 +130,12 @@ def _iter_xobject_image_refs(
                 obj = xobjects[name]
                 subtype = _resolve(obj.get("/Subtype"))
             except Exception:
+                logger.debug(
+                    "Skipping malformed XObject %s on PDF page %d",
+                    name,
+                    page_index + 1,
+                    exc_info=True,
+                )
                 continue
             entries.append((name, obj, subtype))
             if subtype == "/Image":
