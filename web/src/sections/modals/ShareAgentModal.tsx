@@ -19,7 +19,6 @@ import { Permission, type MinimalUserSnapshot } from "@/lib/types";
 import { hasPermission } from "@/lib/permissions";
 import { can } from "@/lib/permissions/resource-actions";
 import { useUser } from "@/providers/UserProvider";
-import { useSettings } from "@/lib/settings/hooks";
 import { Modal } from "@opal/components";
 import { Button, Divider, Text } from "@opal/components";
 import {
@@ -56,6 +55,8 @@ import {
   TransferOwnershipTarget,
   TransferOwnershipView,
 } from "@/sections/modals/TransferOwnershipView";
+import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { Tier } from "@/lib/settings/types";
 
 type ShareModalView = "share" | "transfer";
 
@@ -142,7 +143,7 @@ export default function ShareAgentModal({
   });
   const { data: shareableGroupsData } = useShareableGroups();
   const { isAdmin, user: currentUser, adminCapabilities } = useUser();
-  const settings = useSettings();
+  const isPaidEnterpriseFeaturesEnabled = useTierAtLeast(Tier.BUSINESS);
 
   const shareableUsers = shareableUsersData ?? [];
   const transferableUsers = transferableUsersData ?? [];
@@ -157,8 +158,6 @@ export default function ShareAgentModal({
     adminCapabilities,
     Permission.MANAGE_AGENTS
   );
-  const isPaidEnterpriseFeaturesEnabled =
-    !settings.isLoading && settings.enterprise !== null;
 
   const initialValues = useMemo(
     () =>

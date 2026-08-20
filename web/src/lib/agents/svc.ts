@@ -150,8 +150,6 @@ export interface AgentShareUpdatePayload {
 export async function updateAgentShares(
   agentId: number,
   payload: AgentShareUpdatePayload,
-  // Passed in rather than read here: this is a plain async service function,
-  // so it cannot call the hook that answers it.
   isPaidEnterpriseFeaturesEnabled: boolean
 ): Promise<string | null> {
   const groupSharesDiscarded =
