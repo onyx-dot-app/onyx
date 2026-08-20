@@ -44,6 +44,7 @@ export function useInitialValues(
     wellKnownLLMProvider?.recommended_default_model?.name;
 
   return {
+    id: existingLlmProvider?.id,
     provider: existingLlmProvider?.provider ?? providerName,
     name: isOnboarding
       ? providerName
@@ -113,6 +114,7 @@ export function buildValidationSchema(
 
 /** Base form values that all provider forms share. */
 export interface BaseLLMFormValues {
+  id?: number;
   name?: string;
   api_key?: string;
   api_base?: string;

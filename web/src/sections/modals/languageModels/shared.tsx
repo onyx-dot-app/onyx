@@ -22,7 +22,7 @@ import InputSelect from "@/refresh-components/inputs/InputSelect";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import { Switch } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
-import { Button } from "@opal/components";
+import { Button, TextButton } from "@opal/components";
 import { BaseLLMFormValues } from "@/sections/modals/languageModels/utils";
 import type { RichStr } from "@opal/types";
 import { Section } from "@/layouts/general-layouts";
@@ -39,6 +39,10 @@ import {
   ModelSettingsPopover,
   type ModelSettingsPatch,
 } from "@/sections/modals/languageModels/ModelSettingsPopover";
+import { setDefaultLlmModel } from "@/lib/languageModels/svc";
+import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
+import { useAdminLLMProviders } from "@/lib/languageModels/hooks";
+import { useSWRConfig } from "swr";
 import {
   SvgArrowExchange,
   SvgChevronDown,
@@ -526,9 +530,11 @@ function modelRightChildren(model: ModelConfiguration): React.ReactNode {
 interface ModelRowProps {
   model: ModelConfiguration;
   isAutoMode: boolean;
+  isDefaultModel: boolean;
   onToggleVisibility: (visible: boolean) => void;
   onRename: (value: string | undefined) => void;
   onSettingsChange: (patch: ModelSettingsPatch) => void;
+  onSetDefaultModel?: () => void;
 }
 
 /**
@@ -547,9 +553,11 @@ interface ModelRowProps {
 function ModelRow({
   model,
   isAutoMode,
+  isDefaultModel,
   onToggleVisibility,
   onRename,
   onSettingsChange,
+  onSetDefaultModel,
 }: ModelRowProps) {
   const editHandle = useRef<ContentMdEditHandle>(null);
   const displayName =
@@ -632,6 +640,27 @@ function ModelRow({
                       onChange={onSettingsChange}
                     />
                   </Hoverable.Item>
+                  {isDefaultModel ? (
+                    <Text secondaryAction text03>
+                      Default Model
+                    </Text>
+                  ) : (
+                    onSetDefaultModel && (
+                      <Hoverable.Item
+                        group="model-row"
+                        variant="appear-on-hover"
+                      >
+                        <TextButton
+                          onClick={(e: React.MouseEvent) => {
+                            e.stopPropagation();
+                            onSetDefaultModel();
+                          }}
+                        >
+                          Default Model
+                        </TextButton>
+                      </Hoverable.Item>
+                    )
+                  )}
                 </OpalSection>
               }
               editable
@@ -662,6 +691,9 @@ export function ModelSelectionField({
   emptyMessage,
 }: ModelSelectionFieldProps) {
   const formikProps = useFormikContext<BaseLLMFormValues>();
+  const { mutate } = useSWRConfig();
+  const { defaultText } = useAdminLLMProviders();
+  const providerId = formikProps.values.id;
   const [newModelName, setNewModelName] = useState("");
   const [isExpanded, setIsExpanded] = useState(false);
   // When the auto-update toggle is hidden, auto mode should have no effect —
@@ -700,6 +732,18 @@ export function ModelSelectionField({
       m.name === modelName ? { ...m, ...patch } : m
     );
     formikProps.setFieldValue("model_configurations", updated);
+  }
+
+  async function setDefaultModel(modelName: string) {
+    if (providerId == null) return;
+    try {
+      await setDefaultLlmModel(providerId, modelName);
+      await refreshLlmProviderCaches(mutate);
+      toast.success("Default model updated successfully!");
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Unknown error";
+      toast.error(`Failed to set default model: ${message}`);
+    }
   }
 
   function setCustomDisplayName(modelName: string, value: string | undefined) {
@@ -804,6 +848,16 @@ export function ModelSelectionField({
                       }
                       onSettingsChange={(patch) =>
                         setModelSettings(model.name, patch)
+                      }
+                      isDefaultModel={
+                        providerId != null &&
+                        defaultText?.provider_id === providerId &&
+                        defaultText?.model_name === model.name
+                      }
+                      onSetDefaultModel={
+                        providerId != null && model.is_visible
+                          ? () => void setDefaultModel(model.name)
+                          : undefined
                       }
                     />
                   ))}
