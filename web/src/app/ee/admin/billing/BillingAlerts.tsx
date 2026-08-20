@@ -1,6 +1,5 @@
 import { MessageCard, Text } from "@opal/components";
 import { BillingInformation, BillingStatus } from "@/lib/billing/interfaces";
-import { useIsTrialingEnterprise } from "@/hooks/useIsTrialingEnterprise";
 
 export function BillingAlerts({
   billingInformation,
@@ -13,7 +12,6 @@ export function BillingAlerts({
     ? new Date(billingInformation.current_period_end) < new Date()
     : false;
   const noPaymentMethod = !billingInformation.payment_method_enabled;
-  const isTrialingEnterprise = useIsTrialingEnterprise();
 
   const messages: string[] = [];
 
@@ -34,9 +32,7 @@ export function BillingAlerts({
       ? new Date(billingInformation.trial_end).toLocaleDateString()
       : "N/A";
     messages.push(
-      isTrialingEnterprise
-        ? `You're trialing Enterprise features. Your trial ends on ${trialEndStr}. After that, your workspace will revert to the Business plan.`
-        : `You're currently on a trial. Your trial ends on ${trialEndStr}.`
+      `You're currently on a trial. Your trial ends on ${trialEndStr}.`
     );
   }
   if (noPaymentMethod) {
