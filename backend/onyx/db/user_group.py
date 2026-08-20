@@ -24,8 +24,25 @@ def assert_group_config_is_editable(
     """Membership is the only thing a default group has, so every other write is refused.
     ``action`` completes "Cannot {action} a default system group.". A missing group falls
     through to the caller's own NOT_FOUND."""
-    group = db_session.scalar(select(UserGroup).where(UserGroup.id == user_group_id))
-    if group is not None and group.is_default:
+    assert_groups_config_are_editable(db_session, [user_group_id], action)
+
+
+def assert_groups_config_are_editable(
+    db_session: Session, user_group_ids: Collection[int], action: str
+) -> None:
+    """Batch form for a caller holding several ids — one query rather than one per id."""
+    if not user_group_ids:
+        return
+
+    is_default_present = db_session.scalar(
+        select(UserGroup.id)
+        .where(
+            UserGroup.id.in_(user_group_ids),
+            UserGroup.is_default.is_(True),
+        )
+        .limit(1)
+    )
+    if is_default_present is not None:
         raise OnyxError(
             OnyxErrorCode.CONFLICT, f"Cannot {action} a default system group."
         )
