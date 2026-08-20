@@ -1510,8 +1510,8 @@ export default function ChatPreferencesPage() {
                     </InputHorizontal>
 
                     <InputHorizontal
-                      title="Always Start with an Agent"
-                      description="This removes the default chat. Users will always start in an agent, and new chats will be created in their first pinned agent. Set featured agents to help new users get started."
+                      title="Disable Default Chat"
+                      description="This forces users to always start in an agent. New chats will be created in their first pinned agent. Set featured agents to help new users get started."
                       withLabel
                     >
                       <Switch
