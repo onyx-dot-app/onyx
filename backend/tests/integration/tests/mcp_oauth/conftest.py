@@ -10,8 +10,10 @@ import sys
 import threading
 import time
 from collections.abc import Generator
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from urllib.parse import urlparse
 
 import httpx
 import pytest
@@ -25,8 +27,8 @@ from fastapi.testclient import TestClient
 from onyx.server.features.mcp import api as mcp_api
 from onyx.server.features.mcp import client_metadata
 from tests.integration.common_utils.cimd_oauth import (
-    CimdHttpsEndpoint,
     CimdOAuthTestServices,
+    OAuthHttpsEndpoint,
 )
 
 NGINX_COMMAND = "nginx"
@@ -122,6 +124,7 @@ def _nginx_config(
     certificate_path: Path,
     key_path: Path,
     upstream_port: int,
+    location_prefix: str,
 ) -> str:
     return f"""
 pid {directory / "nginx.pid"};
@@ -134,14 +137,67 @@ http {{
         ssl_certificate {certificate_path};
         ssl_certificate_key {key_path};
 
-        location /api/ {{
-            rewrite ^/api/(.*)$ /$1 break;
-            proxy_pass http://127.0.0.1:{upstream_port};
+        location {location_prefix} {{
+            proxy_pass http://127.0.0.1:{upstream_port}/;
             proxy_set_header Host $host;
         }}
     }}
 }}
 """
+
+
+@contextmanager
+def _https_proxy(
+    *,
+    upstream_port: int,
+    location_prefix: str,
+    directory_name: str,
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Generator[OAuthHttpsEndpoint, None, None]:
+    public_host = "127.0.0.1"
+    https_port = _available_port()
+    directory = tmp_path_factory.mktemp(directory_name)
+    certificate_path, key_path = _write_certificate(directory, public_host)
+    config_path = directory / "nginx.conf"
+    config_path.write_text(
+        _nginx_config(
+            directory,
+            https_port,
+            certificate_path,
+            key_path,
+            upstream_port,
+            location_prefix,
+        ),
+        encoding="utf-8",
+    )
+    log_path = directory / "nginx.log"
+    log_file = log_path.open("wb")
+    try:
+        process = subprocess.Popen(
+            [NGINX_COMMAND, "-c", str(config_path), "-g", "daemon off;"],
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+        )
+    except OSError as error:
+        log_file.close()
+        raise RuntimeError(f"Failed to start Nginx: {error}") from error
+
+    try:
+        try:
+            _wait_for_port(public_host, https_port, process)
+        except (RuntimeError, TimeoutError) as error:
+            log_file.flush()
+            logs = log_path.read_text(encoding="utf-8", errors="replace")
+            raise RuntimeError(
+                f"Nginx failed during startup: {error}\n{logs}"
+            ) from error
+        yield OAuthHttpsEndpoint(
+            origin=f"https://{public_host}:{https_port}",
+            ca_file=certificate_path,
+        )
+    finally:
+        _stop_process(process)
+        log_file.close()
 
 
 @pytest.fixture(scope="session")
@@ -173,76 +229,31 @@ def cimd_api_server(
 def cimd_https_endpoint(
     cimd_api_server: int,
     tmp_path_factory: pytest.TempPathFactory,
-) -> Generator[CimdHttpsEndpoint, None, None]:
-    public_host = "127.0.0.1"
-    https_port = _available_port()
-    directory = tmp_path_factory.mktemp("mcp-cimd-tls")
-    certificate_path, key_path = _write_certificate(directory, public_host)
-    config_path = directory / "nginx.conf"
-    config_path.write_text(
-        _nginx_config(
-            directory,
-            https_port,
-            certificate_path,
-            key_path,
-            cimd_api_server,
-        ),
-        encoding="utf-8",
-    )
-    log_path = directory / "nginx.log"
-    log_file = log_path.open("wb")
-    try:
-        process = subprocess.Popen(
-            [NGINX_COMMAND, "-c", str(config_path), "-g", "daemon off;"],
-            stdout=log_file,
-            stderr=subprocess.STDOUT,
-        )
-    except OSError as error:
-        log_file.close()
-        raise RuntimeError(f"Failed to start Nginx: {error}") from error
-
+) -> Generator[OAuthHttpsEndpoint, None, None]:
     web_domain_patch = pytest.MonkeyPatch()
     try:
-        try:
-            _wait_for_port(public_host, https_port, process)
-        except (RuntimeError, TimeoutError) as error:
-            log_file.flush()
-            logs = log_path.read_text(encoding="utf-8", errors="replace")
-            raise RuntimeError(
-                f"Nginx failed during startup: {error}\n{logs}"
-            ) from error
-        origin = f"https://{public_host}:{https_port}"
-        web_domain_patch.setattr(mcp_api, "WEB_DOMAIN", origin)
-        web_domain_patch.setattr(client_metadata, "WEB_DOMAIN", origin)
-
-        metadata_url = f"{origin}/api/mcp/oauth/client-metadata"
-        deadline = time.monotonic() + STARTUP_TIMEOUT_SECONDS
-        while time.monotonic() < deadline:
-            try:
-                response = httpx.get(
-                    metadata_url,
-                    verify=str(certificate_path),
-                    timeout=1,
-                )
-                if response.status_code == 200:
-                    break
-            except httpx.HTTPError:
-                time.sleep(0.1)
-        else:
-            log_file.flush()
-            logs = log_path.read_text(encoding="utf-8", errors="replace")
-            raise RuntimeError(f"CIMD HTTPS endpoint did not start:\n{logs}")
-
-        yield CimdHttpsEndpoint(origin=origin, ca_file=certificate_path)
+        with _https_proxy(
+            upstream_port=cimd_api_server,
+            location_prefix="/api/",
+            directory_name="mcp-cimd-tls",
+            tmp_path_factory=tmp_path_factory,
+        ) as endpoint:
+            web_domain_patch.setattr(mcp_api, "WEB_DOMAIN", endpoint.origin)
+            web_domain_patch.setattr(client_metadata, "WEB_DOMAIN", endpoint.origin)
+            response = httpx.get(
+                f"{endpoint.origin}/api/mcp/oauth/client-metadata",
+                verify=str(endpoint.ca_file),
+                timeout=10,
+            )
+            response.raise_for_status()
+            yield endpoint
     finally:
         web_domain_patch.undo()
-        _stop_process(process)
-        log_file.close()
 
 
 @pytest.fixture(scope="module")
 def cimd_oauth_services(
-    cimd_https_endpoint: CimdHttpsEndpoint,
+    cimd_https_endpoint: OAuthHttpsEndpoint,
     tmp_path_factory: pytest.TempPathFactory,
 ) -> Generator[CimdOAuthTestServices, None, None]:
     oidc_port = _available_port()
@@ -303,3 +314,32 @@ def cimd_oauth_services(
         _stop_process(oidc_process)
         mcp_log.close()
         oidc_log.close()
+
+
+@pytest.fixture(scope="module")
+def known_provider_https_endpoint(
+    cimd_oauth_services: CimdOAuthTestServices,
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Generator[OAuthHttpsEndpoint, None, None]:
+    oidc_port = urlparse(cimd_oauth_services.oidc_issuer).port
+    if oidc_port is None:
+        raise RuntimeError("Mock OIDC issuer has no port")
+
+    ssl_patch = pytest.MonkeyPatch()
+    try:
+        with _https_proxy(
+            upstream_port=oidc_port,
+            location_prefix="/",
+            directory_name="mcp-known-provider-tls",
+            tmp_path_factory=tmp_path_factory,
+        ) as endpoint:
+            ssl_patch.setenv("SSL_CERT_FILE", str(endpoint.ca_file))
+            response = httpx.get(
+                f"{endpoint.origin}/healthz",
+                verify=str(endpoint.ca_file),
+                timeout=10,
+            )
+            response.raise_for_status()
+            yield endpoint
+    finally:
+        ssl_patch.undo()
