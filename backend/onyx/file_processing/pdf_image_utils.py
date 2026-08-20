@@ -103,63 +103,62 @@ def _first_visit(obj: Any, seen: set[Any]) -> bool:
     return True
 
 
-def _iter_xobject_image_refs(
-    resources: Any,
-    page_index: int,
-    seen_images: set[Any],
-    seen_forms: set[Any],
-    mask_refs: set[Any],
-) -> Iterator[PdfImageRef]:
+def _iter_xobject_entries(
+    reader: Any,
+) -> Iterator[tuple[int, list[str], str, Any, Any]]:
+    """Yield ``(page_index, ancestors, name, obj, subtype)`` for each XObject
+    entry, visiting shared resource dicts and Form XObjects once."""
+    seen_forms: set[Any] = set()
+    seen_resources: set[Any] = set()
+    for page_index, page in enumerate(reader.pages):
+        page_resources = _resolve(page.get("/Resources"))
+        if page_resources is None or not _first_visit(page_resources, seen_resources):
+            continue
+        # Iterative: Form XObjects can nest arbitrarily deep.
+        stack: list[tuple[Any, list[str]]] = [(page_resources, [])]
+        while stack:
+            resources, ancestors = stack.pop()
+            resources = _resolve(resources)
+            if resources is None:
+                continue
+            xobjects = _resolve(resources.get("/XObject"))
+            if xobjects is None:
+                continue
+            for name in xobjects:
+                try:
+                    obj = xobjects[name]
+                    subtype = _resolve(obj.get("/Subtype"))
+                except Exception:
+                    logger.debug(
+                        "Skipping malformed XObject %s on PDF page %d",
+                        name,
+                        page_index + 1,
+                        exc_info=True,
+                    )
+                    continue
+                yield page_index, ancestors, name, obj, subtype
+                if subtype == "/Form" and _first_visit(obj, seen_forms):
+                    stack.append((obj.get("/Resources"), [*ancestors, name]))
+
+
+def _collect_mask_refs(reader: Any) -> set[Any]:
+    """Every image referenced as another image's /Mask or /SMask, document-wide.
+
+    A full pre-pass: a referrer can live on a later page or in a nested form
+    than the mask it points at, so classification must wait until all
+    references are known.
+    """
     from pypdf.generic import IndirectObject
 
-    # Iterative: Form XObjects can nest arbitrarily deep.
-    stack: list[tuple[Any, list[str]]] = [(resources, [])]
-    while stack:
-        resources, ancestors = stack.pop()
-        resources = _resolve(resources)
-        if resources is None:
+    mask_refs: set[Any] = set()
+    for _, _, _, obj, subtype in _iter_xobject_entries(reader):
+        if subtype != "/Image":
             continue
-        xobjects = _resolve(resources.get("/XObject"))
-        if xobjects is None:
-            continue
-        # First pass: record which images are used as another image's
-        # transparency mask, so a sibling pair resolves regardless of order.
-        entries: list[tuple[str, Any, Any]] = []
-        for name in xobjects:
-            try:
-                obj = xobjects[name]
-                subtype = _resolve(obj.get("/Subtype"))
-            except Exception:
-                logger.debug(
-                    "Skipping malformed XObject %s on PDF page %d",
-                    name,
-                    page_index + 1,
-                    exc_info=True,
-                )
-                continue
-            entries.append((name, obj, subtype))
-            if subtype == "/Image":
-                for mask_key in ("/Mask", "/SMask"):
-                    mask_ref = obj.get(mask_key)
-                    if isinstance(mask_ref, IndirectObject):
-                        mask_refs.add(mask_ref)
-        for name, obj, subtype in entries:
-            if subtype == "/Image":
-                if not _first_visit(obj, seen_images):
-                    continue
-                yield PdfImageRef(
-                    locator=name if not ancestors else [*ancestors, name],
-                    page_index=page_index,
-                    width=_to_int(obj.get("/Width")),
-                    height=_to_int(obj.get("/Height")),
-                    is_transparency_mask=(
-                        getattr(obj, "indirect_reference", None) in mask_refs
-                    ),
-                )
-            elif subtype == "/Form":
-                if not _first_visit(obj, seen_forms):
-                    continue
-                stack.append((obj.get("/Resources"), [*ancestors, name]))
+        for mask_key in ("/Mask", "/SMask"):
+            mask_ref = obj.get(mask_key)
+            if isinstance(mask_ref, IndirectObject):
+                mask_refs.add(mask_ref)
+    return mask_refs
 
 
 def _content_bytes(page: Any) -> bytes | None:
@@ -220,16 +219,21 @@ def iter_pdf_image_refs(reader: Any) -> Iterator[PdfImageRef]:
     pypdf never parses form streams, so no ``page.images`` locator exists
     for them and extraction could not decode them anyway.
     """
+    mask_refs = _collect_mask_refs(reader)
     seen_images: set[Any] = set()
-    seen_forms: set[Any] = set()
-    seen_resources: set[Any] = set()
-    mask_refs: set[Any] = set()
+    for page_index, ancestors, name, obj, subtype in _iter_xobject_entries(reader):
+        if subtype != "/Image" or not _first_visit(obj, seen_images):
+            continue
+        yield PdfImageRef(
+            locator=name if not ancestors else [*ancestors, name],
+            page_index=page_index,
+            width=_to_int(obj.get("/Width")),
+            height=_to_int(obj.get("/Height")),
+            is_transparency_mask=(
+                getattr(obj, "indirect_reference", None) in mask_refs
+            ),
+        )
     for page_index, page in enumerate(reader.pages):
-        resources = _resolve(page.get("/Resources"))
-        if resources is not None and _first_visit(resources, seen_resources):
-            yield from _iter_xobject_image_refs(
-                resources, page_index, seen_images, seen_forms, mask_refs
-            )
         yield from _iter_inline_image_refs(page, page_index)
 
 

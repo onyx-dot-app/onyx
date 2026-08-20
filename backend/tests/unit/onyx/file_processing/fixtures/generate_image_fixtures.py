@@ -12,6 +12,8 @@ The fixtures exercise the embedded-image enumeration and filtering rules in
                           as its /Mask
 - standalone_stencil.pdf  one painted /ImageMask stencil referenced by no
                           other image (content, e.g. a scanned signature)
+- late_mask_reference.pdf a stencil on page 1 whose referencing image only
+                          appears on page 2 (mask must still be excluded)
 - shared_resources.pdf    three pages sharing one resource dict, plus a
                           nested Form XObject referencing the same image
 - inline_image.pdf        one content-sized inline (BI/ID/EI) image + one
@@ -118,6 +120,18 @@ def make_standalone_stencil(out_dir: Path) -> None:
     )
 
 
+def make_late_mask_reference(out_dir: Path) -> None:
+    writer = PdfWriter()
+    page1 = writer.add_blank_page(width=200, height=200)
+    page2 = writer.add_blank_page(width=200, height=200)
+    mask = writer._add_object(_stencil_mask_stream(CONTENT_PX, CONTENT_PX))
+    image = _rgb_image_stream(CONTENT_PX, CONTENT_PX, (200, 30, 200))
+    image[NameObject("/Mask")] = mask
+    _attach_images(writer, page1, {"/Mask1": mask})
+    _attach_images(writer, page2, {"/Img1": writer._add_object(image)})
+    writer.write(out_dir / "late_mask_reference.pdf")
+
+
 def make_shared_resources(out_dir: Path) -> None:
     writer = PdfWriter()
     pages = [writer.add_blank_page(width=200, height=200) for _ in range(3)]
@@ -173,6 +187,7 @@ def generate_all(out_dir: Path) -> None:
     make_shredded_strips(out_dir)
     make_stencil_mask(out_dir)
     make_standalone_stencil(out_dir)
+    make_late_mask_reference(out_dir)
     make_shared_resources(out_dir)
     make_inline_image(out_dir)
 

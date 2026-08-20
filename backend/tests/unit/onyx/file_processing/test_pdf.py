@@ -257,6 +257,9 @@ class TestPdfImageFiltering:
             # 1 painted /ImageMask stencil no other image references — real
             # content (e.g. a scanned signature), so it must survive
             "standalone_stencil.pdf",
+            # a stencil on page 1 referenced only by an image on page 2 —
+            # the mask must be excluded despite the late reference
+            "late_mask_reference.pdf",
             # 1 image referenced by 3 pages plus a nested form (6 references)
             "shared_resources.pdf",
             # one content-sized and one 4x4 inline (BI/ID/EI) image
