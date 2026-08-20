@@ -186,6 +186,16 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: uv run --no-sync --with onyx-devtools ods audit --fail-on=critical
 
+  # Validate that a pushed release tag is versioned correctly, via
+  # `ods release --check`. A cloud tag must be the tag `ods release cloud`
+  # would have cut: its commit on origin/main, its base matching the release
+  # branches, its counter in sequence. Stable (vX.Y.Z) and beta
+  # (vX.Y.Z-beta.N) tags must sit on their release/vX.Y branch with the
+  # patch or counter in sequence; a beta must precede its stable release.
+  #
+  # Deliberately gated on the raw ref name, not on computed tag-type outputs:
+  # a tag that is neither a valid cloud nor stable tag fails loudly here
+  # instead of being skipped by a wrongly computed output.
   check-version-tag:
     runs-on: ubuntu-slim
     timeout-minutes: 10
@@ -204,9 +214,9 @@ jobs:
           # NOTE: This isn't caching much and zizmor suggests this could be poisoned, so disable.
           enable-cache: false
 
-      - name: Validate tag is versioned correctly
+      - name: Validate the tag is versioned correctly
         run: |
-          uv run --no-sync --with release-tag tag --check
+          uv run --no-sync --with onyx-devtools ods release --check --ref "$GITHUB_REF_NAME"
 
   notify-slack-on-tag-check-failure:
     needs:
