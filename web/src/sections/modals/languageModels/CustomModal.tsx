@@ -9,7 +9,10 @@ import {
 } from "@/lib/languageModels/types";
 import type { ModelConfiguration } from "@/lib/languageModels/types";
 import * as Yup from "yup";
-import { useInitialValues } from "@/sections/modals/languageModels/utils";
+import {
+  clampModelSettings,
+  useInitialValues,
+} from "@/sections/modals/languageModels/utils";
 import { submitProvider } from "@/sections/modals/languageModels/svc";
 import { LLMProviderConfiguredSource } from "@/lib/analytics/utils";
 import {
@@ -273,8 +276,10 @@ export default function CustomModal({
     ),
     provider: existingLlmProvider?.provider ?? "",
     api_version: existingLlmProvider?.api_version ?? "",
-    model_configurations: existingLlmProvider?.model_configurations.map(
-      (mc) => ({
+    model_configurations: existingLlmProvider?.model_configurations.map((mc) =>
+      // Stored policy can exceed a capability that shrank since the save,
+      // and the API rejects such values on submit.
+      clampModelSettings({
         name: mc.name,
         display_name: mc.display_name ?? "",
         is_visible: mc.is_visible,

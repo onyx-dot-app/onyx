@@ -130,7 +130,14 @@ export interface BaseLLMFormValues {
 }
 
 /** Bound stored policy by current capability, which can shrink after a save. */
-function clampModelSettings(model: ModelConfiguration): ModelConfiguration {
+export function clampModelSettings<
+  T extends Pick<
+    ModelConfiguration,
+    | "supported_reasoning_efforts"
+    | "reasoning_effort_max"
+    | "reasoning_effort_default"
+  >,
+>(model: T): T {
   const supported = model.supported_reasoning_efforts;
   if (!supported || supported.length === 0) return model;
   const highest = supported[supported.length - 1]!;
