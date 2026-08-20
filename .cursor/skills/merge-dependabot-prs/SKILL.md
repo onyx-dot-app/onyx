@@ -107,14 +107,9 @@ exits non-zero on an unignored finding at or above `--fail-on`
 tree**, so the PR branch must be checked out — a run on `main` says nothing
 about the bump.
 
-**If it exits non-zero, stop.** Don't enqueue, and don't try to work out whether
-the finding came from this bump or was already on `main` — that comparison costs
-a second audit run and can classify a new finding as pre-existing. Report the
-advisory ids and let the user say how to proceed. This holds whichever way the
-audit is invoked, so a quieter output mode doesn't change the procedure.
-
-Never suppress on your own: `ods audit ignore add` writes a shared S3 allowlist
-that gates every deploy.
+**If it exits non-zero, STOP.** Don't enqueue and don't try to work out whether
+the finding came from this bump or was already on `main` Report the advisory ids
+and let the user say how to proceed.
 
 Then, once clean:
 
