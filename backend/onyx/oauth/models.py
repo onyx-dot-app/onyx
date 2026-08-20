@@ -1,4 +1,3 @@
-from datetime import datetime
 from typing import Generic, TypeVar
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
@@ -21,6 +20,3 @@ class AuthorizationAttempt(BaseModel, Generic[PayloadT]):
     state: str = Field(pattern=r"^[A-Za-z0-9_-]{22,1024}$")
     expires_at: AwareDatetime
     payload: PayloadT
-
-    def is_expired(self, now: datetime) -> bool:
-        return self.expires_at <= now

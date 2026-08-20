@@ -102,7 +102,7 @@ class AuthorizationAttemptStore(Generic[PayloadT]):
             attempt.namespace != self._namespace
             or attempt.owner_id != owner_id
             or not secrets.compare_digest(attempt.state, state)
-            or attempt.is_expired(datetime.now(timezone.utc))
+            or attempt.expires_at <= datetime.now(timezone.utc)
         ):
             raise _invalid_attempt_error()
         return attempt
