@@ -55,9 +55,9 @@ function SectionHeader({
   rightValue,
   rightValueTooltip,
 }: SectionHeaderProps) {
-  // raw-ok: mock needs 2px text insets and a flex-1/min-w-0 column, and Section silences px-*
   return (
-    <div className="flex w-full gap-1 p-2">
+    // raw-ok: mock needs 2px text insets and a flex-1/min-w-0 column, and Section silences px-*
+    <div className="flex w-full gap-1 px-2 pb-0.5 pt-2">
       <div className="flex size-5 shrink-0 items-center justify-center p-0.5 text-text-04">
         <Icon size={16} />
       </div>
@@ -78,7 +78,8 @@ function SectionHeader({
             </div>
           )}
         </div>
-        <div className="px-0.5">
+        {/* raw-ok: flex collapses the strut so the caption sits on the font's 16px lines */}
+        <div className="flex px-0.5">
           <Text font="secondary-body" color="text-03">
             {caption}
           </Text>
@@ -111,7 +112,8 @@ function PolicySlider({
   // raw-ok: mock needs asymmetric pl-8/pr-2, and Section silences p-* utilities
   return (
     <div className="w-full pl-8 pr-2">
-      <div className="px-0.5">
+      {/* raw-ok: flex collapses the strut so the label sits on the font's 16px line */}
+      <div className="flex px-0.5">
         <Text font="secondary-action" color="text-03" nowrap>
           {label}
         </Text>
@@ -126,7 +128,8 @@ function PolicySlider({
           onValueChange={onChange}
           onValueCommit={onChange}
         />
-        <div className="flex w-full items-center justify-between">
+        {/* raw-ok: mock annotation row is a fixed 12px line inside the 28px slider */}
+        <div className="flex h-3 w-full items-center justify-between">
           {marks.map((mark, index) => (
             <Text
               key={mark}
@@ -213,97 +216,94 @@ export function ModelSettingsPopover({
         />
       </Popover.Trigger>
       <Popover.Content width="fit" align="end">
-        {/* raw-ok: scroll shell, Popover.Content clips overflow when the viewport is short */}
-        <div className="min-h-0 w-full overflow-y-auto">
-          <Section alignItems="stretch" width={17} height="auto" gap={0.25}>
-            {/* raw-ok: mock header needs 10px/8px asymmetric padding, and Section silences px-* */}
-            <div className="flex w-full flex-col justify-center px-2.5 py-2">
-              <Text font="main-ui-body" color="text-02" nowrap>
-                {model.custom_display_name || model.display_name || model.name}
-              </Text>
-              <Text font="secondary-body" color="text-02">
-                {capabilities.length ? capabilities.join(", ") : "chat"}
-              </Text>
-            </div>
+        <Section alignItems="stretch" width={17} height="auto" gap={0.25}>
+          {/* raw-ok: mock header needs 10px/8px asymmetric padding, and Section silences px-* */}
+          <div className="flex w-full flex-col justify-center px-2.5 py-2">
+            <Text font="main-ui-body" color="text-02" nowrap>
+              {model.custom_display_name || model.display_name || model.name}
+            </Text>
+            <Text font="secondary-body" color="text-02">
+              {capabilities.length ? capabilities.join(", ") : "chat"}
+            </Text>
+          </div>
 
-            <SectionHeader
-              icon={SvgCode}
-              title="Context Window"
-              caption="Tokens limit for each session"
-              rightValue={
-                model.max_input_tokens
-                  ? formatContextWindow(model.max_input_tokens)
-                  : "\u2014"
-              }
-              rightValueTooltip={
-                model.max_input_tokens ? undefined : UNKNOWN_CONTEXT_TOOLTIP
-              }
-            />
+          <SectionHeader
+            icon={SvgCode}
+            title="Context Window"
+            caption="Tokens limit for each session"
+            rightValue={
+              model.max_input_tokens
+                ? formatContextWindow(model.max_input_tokens)
+                : "\u2014"
+            }
+            rightValueTooltip={
+              model.max_input_tokens ? undefined : UNKNOWN_CONTEXT_TOOLTIP
+            }
+          />
 
-            {showReasoning && (
-              <Section
-                alignItems="stretch"
-                height="auto"
-                gap={0.375}
-                className="mb-1.5"
-              >
-                <SectionHeader
-                  icon={SvgBarChart}
-                  title="Reasoning Level"
-                  caption="How much thinking the model should perform before answering"
-                />
-                <PolicySlider
-                  label="Max Level"
-                  value={effectiveMaxStop}
-                  max={supportedStop}
-                  step={1}
-                  marks={reasoningMarks}
-                  activeMark={effectiveMaxStop}
-                  onChange={setMax}
-                />
-                <PolicySlider
-                  label="Default"
-                  value={defaultStop >= 0 ? defaultStop : UNSET_REASONING_STOP}
-                  max={effectiveMaxStop}
-                  step={1}
-                  marks={reasoningMarks}
-                  activeMark={
-                    defaultStop >= 0 ? defaultStop : UNSET_REASONING_STOP
-                  }
-                  onChange={setDefault}
-                />
-              </Section>
-            )}
-
-            <Disabled
-              disabled={temperatureDisabled}
-              tooltip={PINNED_TEMPERATURE_TOOLTIP}
-              tooltipSide="top"
+          {showReasoning && (
+            <Section
+              alignItems="stretch"
+              height="auto"
+              gap={0.375}
+              className="mb-1.5"
             >
-              <Section
-                alignItems="stretch"
-                height="auto"
-                gap={0.375}
-                className="mb-1.5"
-              >
-                <SectionHeader
-                  icon={SvgThermometer}
-                  title="Temperature"
-                  caption="How predictable or creative the model should respond"
-                />
-                <PolicySlider
-                  label="Default"
-                  value={temperatureDisabled ? 1 : temperature}
-                  max={maxTemperature}
-                  step={0.1}
-                  marks={TEMPERATURE_MARKS}
-                  activeMark={temperatureMark}
-                  onChange={(v) => onChange({ temperature_default: v })}
-                />
-              </Section>
-            </Disabled>
-          </Section>
-        </div>
+              <SectionHeader
+                icon={SvgBarChart}
+                title="Reasoning Level"
+                caption="How much thinking the model should perform before answering"
+              />
+              <PolicySlider
+                label="Max Level"
+                value={effectiveMaxStop}
+                max={supportedStop}
+                step={1}
+                marks={reasoningMarks}
+                activeMark={effectiveMaxStop}
+                onChange={setMax}
+              />
+              <PolicySlider
+                label="Default"
+                value={defaultStop >= 0 ? defaultStop : UNSET_REASONING_STOP}
+                max={effectiveMaxStop}
+                step={1}
+                marks={reasoningMarks}
+                activeMark={
+                  defaultStop >= 0 ? defaultStop : UNSET_REASONING_STOP
+                }
+                onChange={setDefault}
+              />
+            </Section>
+          )}
+
+          <Disabled
+            disabled={temperatureDisabled}
+            tooltip={PINNED_TEMPERATURE_TOOLTIP}
+            tooltipSide="top"
+          >
+            <Section
+              alignItems="stretch"
+              height="auto"
+              gap={0.375}
+              className="mb-1.5"
+            >
+              <SectionHeader
+                icon={SvgThermometer}
+                title="Temperature"
+                caption="How predictable or creative the model should respond"
+              />
+              <PolicySlider
+                label="Default"
+                value={temperatureDisabled ? 1 : temperature}
+                max={maxTemperature}
+                step={0.1}
+                marks={TEMPERATURE_MARKS}
+                activeMark={temperatureMark}
+                onChange={(v) => onChange({ temperature_default: v })}
+              />
+            </Section>
+          </Disabled>
+        </Section>
       </Popover.Content>
     </Popover>
   );
