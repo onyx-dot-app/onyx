@@ -50,7 +50,7 @@ import {
   SvgSimpleLoader,
 } from "@opal/icons";
 import { Button } from "@opal/components";
-import { isAssistant } from "@/lib/agents/utils";
+import { DEFAULT_AGENT_ID } from "@/lib/constants";
 
 function buildTooltipMessage(
   actionDescription: string,
@@ -194,7 +194,7 @@ export default function ActionsPopover({
     activeAgent.id
   );
 
-  const agentIsAssistant = isAssistant(activeAgent);
+  const agentIsAssistant = activeAgent.id === DEFAULT_AGENT_ID;
 
   const hasSearchTool = activeAgent.tools.some(
     (tool) => tool.in_code_tool_id === SEARCH_TOOL_ID

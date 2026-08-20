@@ -39,7 +39,7 @@ import { useActiveAgent } from "@/lib/agents/hooks";
 import useChatSessionController from "@/hooks/useChatSessionController";
 import useDeepResearchToggle from "@/hooks/useDeepResearchToggle";
 import { useIncognito } from "@/providers/IncognitoProvider";
-import { isAssistant } from "@/lib/agents/utils";
+import { DEFAULT_AGENT_ID } from "@/lib/constants";
 import AgentDescription from "@/app/app/components/AgentDescription";
 import {
   useChatSessionStore,
@@ -326,7 +326,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   // An unresolved agent reads as plain chat, so a named-agent layout never
   // flashes for an agent that is not there yet.
-  const isPlainChat = !activeAgent || isAssistant(activeAgent);
+  const isPlainChat = !activeAgent || activeAgent.id === DEFAULT_AGENT_ID;
 
   const scrollContainerRef = useRef<ChatScrollContainerHandle>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);

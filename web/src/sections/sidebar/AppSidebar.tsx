@@ -97,16 +97,19 @@ function buildVisibleAgents(
   pinnedAgents: MinimalAgent[],
   activeAgent: MinimalAgent | undefined
 ): [MinimalAgent[], boolean] {
-  /* NOTE: The unified agent (id = 0) is not visible in the sidebar,
-  so we filter it out. */
+  // The Assistant is never shown in the sidebar, so it is filtered out of
+  // both branches.
   if (!activeAgent)
-    return [pinnedAgents.filter((agent) => agent.id !== 0), false];
+    return [
+      pinnedAgents.filter((agent) => agent.id !== DEFAULT_AGENT_ID),
+      false,
+    ];
   const currentAgentIsPinned = pinnedAgents.some(
     (pinnedAgent) => pinnedAgent.id === activeAgent.id
   );
   const visibleAgents = (
     currentAgentIsPinned ? pinnedAgents : [...pinnedAgents, activeAgent]
-  ).filter((agent) => agent.id !== 0);
+  ).filter((agent) => agent.id !== DEFAULT_AGENT_ID);
 
   return [visibleAgents, currentAgentIsPinned];
 }

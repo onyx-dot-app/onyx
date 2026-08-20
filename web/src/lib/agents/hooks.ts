@@ -136,7 +136,9 @@ export function usePinnedAgents() {
     if (agents.length === 0) return [];
     const pinnedIds = user?.preferences.pinned_assistants;
     if (pinnedIds === null || pinnedIds === undefined) {
-      return agents.filter((agent) => agent.is_featured && agent.id !== 0);
+      return agents.filter(
+        (agent) => agent.is_featured && agent.id !== DEFAULT_AGENT_ID
+      );
     }
     return pinnedIds
       .map((id) => agents.find((agent) => agent.id === id))
