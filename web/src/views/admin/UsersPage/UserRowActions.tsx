@@ -20,7 +20,7 @@ import Text from "@/refresh-components/texts/Text";
 import { UserStatus } from "@/lib/types";
 import { toast } from "@opal/layouts";
 import { approveRequest, setUserAdminAccess } from "./svc";
-import { useCanManageGroups } from "@/hooks/useGroups";
+import { useCanManageGroups } from "@/lib/permissions/hooks";
 import EditUserModal from "./EditUserModal";
 import {
   CancelInviteModal,

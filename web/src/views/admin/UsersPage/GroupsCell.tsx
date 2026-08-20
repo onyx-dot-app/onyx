@@ -14,7 +14,7 @@ import { Button, Tag } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { Tooltip } from "@opal/components";
 import EditUserModal from "./EditUserModal";
-import { useCanManageGroups } from "@/hooks/useGroups";
+import { useCanManageGroups } from "@/lib/permissions/hooks";
 import type { UserRow, UserGroupInfo } from "./interfaces";
 
 interface GroupsCellProps {

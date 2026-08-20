@@ -6,17 +6,6 @@ import { UserGroup } from "@/lib/types";
 import { useSettings } from "@/lib/settings/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { buildApiPath } from "@/lib/urlBuilder";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/lib/settings/types";
-
-/**
- * Mirrors the backend BUSINESS gate on `/manage/admin/user-group`. Gate edit
- * affordances on this, not `settings.enterprise` — that only means "EE build",
- * and below Business the endpoint 402s.
- */
-export function useCanManageGroups(): boolean {
-  return useTierAtLeast(Tier.BUSINESS);
-}
 
 /**
  * Fetches all user groups in the organization.
