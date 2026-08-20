@@ -913,6 +913,11 @@ export function useLlmManager(
       return;
     }
 
+    // A local slider choice outranks the snapshot, which may not reflect the
+    // write yet. The flag is a dep so a session switch, which resets it,
+    // re-runs this sync for the new session.
+    if (temperatureExplicitlySet) return;
+
     if (currentChatSession?.current_temperature_override != null) {
       setTemperature(currentChatSession.current_temperature_override);
     } else if (
@@ -927,6 +932,7 @@ export function useLlmManager(
     currentChatSession,
     llmProviders,
     user?.preferences?.default_model,
+    temperatureExplicitlySet,
   ]);
 
   const updateTemperature = (temperature: number) => {
