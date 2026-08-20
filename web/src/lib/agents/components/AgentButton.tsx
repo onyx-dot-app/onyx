@@ -78,7 +78,7 @@ export function AgentButton({ agent }: AgentButtonProps) {
   // For example, say you're in a chat-session that was started with `Agent XYZ`.
   // In that situation, the chat-tab *AND* the `Agent XYZ`-tab should be highlighted.
   //
-  // Another example, say you have the "Always Start with an Agent" setting enabled (via Admin -> Chat Preferences -> Advanced Options -> Always Start with an Agent).
+  // Another example, say you have the "Disable Default Chat" setting enabled (via Admin -> Chat Preferences -> Advanced Options -> Disable Default Chat).
   // If you then navigate to "New Session" (`/app`), the new-session-tab *AND* the `Agent XYZ`-tab should both be highlighted.
   const agentButtonShouldBeHighlighted =
     appFocus.isAgent() ||
