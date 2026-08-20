@@ -7,9 +7,12 @@ import { OnyxDocument } from "@/lib/search/interfaces";
 import { TooltipGroup } from "@/components/tooltip/CustomTooltip";
 import {
   useChatSessionStore,
+  useCurrentMessageTree,
   useDocumentSidebarVisible,
   useSelectedNodeForDocDisplay,
 } from "@/app/app/stores/useChatSessionStore";
+import { messageModelName } from "@/app/app/message/multiModel";
+import { useDistinctModelsUsed } from "@/lib/multiModel/hooks";
 import { convertMarkdownTablesToTsv } from "@/app/app/message/copyingUtils";
 import { getTextContent } from "@/app/app/services/packetUtils";
 import { removeThinkingTokens } from "@/app/app/services/thinkingTokens";
@@ -143,6 +146,15 @@ export default function MessageToolbar({
   citations,
   documentMap,
 }: MessageToolbarProps) {
+  // The message's own model. chatState carries the globally selected model,
+  // so per-response attribution must come from the message node itself.
+  const messageTree = useCurrentMessageTree();
+  const ownModelName = useMemo(() => {
+    const msg = messageTree?.get(nodeId);
+    return msg ? (messageModelName(msg) ?? undefined) : undefined;
+  }, [messageTree, nodeId]);
+  const distinctModelsUsed = useDistinctModelsUsed();
+
   // Incognito responses take no feedback: votes would persist reviewable
   // signal tied to a chat hidden from the owner's surfaces. The session's
   // pinned flag keeps suppression on while exit clears the live toggle.
@@ -331,20 +343,43 @@ export default function MessageToolbar({
               llmManager && (
                 <div data-testid="AgentMessage/regenerate">
                   <ModelSelector
-                    value={findModelConfigId(
-                      llmManager.llmProviders,
-                      llmManager.currentLlm.provider,
-                      currentModelName ?? llmManager.currentLlm.modelName
-                    )}
+                    value={
+                      // The response's model may live under a different
+                      // provider than the global selection, so resolve it
+                      // across all providers, by raw or display name.
+                      ownModelName
+                        ? (llmManager.llmProviders
+                            ?.flatMap((p) => p.model_configurations)
+                            .find(
+                              (m) =>
+                                m.name === ownModelName ||
+                                m.effectiveDisplayName === ownModelName
+                            )?.id ?? null)
+                        : findModelConfigId(
+                            llmManager.llmProviders,
+                            llmManager.currentLlm.provider,
+                            currentModelName ?? llmManager.currentLlm.modelName
+                          )
+                    }
                     renderTrigger={() => {
                       const rawName =
-                        currentModelName ?? llmManager!.currentLlm.modelName;
+                        ownModelName ??
+                        currentModelName ??
+                        llmManager!.currentLlm.modelName;
                       const mc = llmManager!.llmProviders
                         ?.flatMap((p) => p.model_configurations)
-                        .find((m) => m.name === rawName);
+                        .find(
+                          (m) =>
+                            m.name === rawName ||
+                            m.effectiveDisplayName === rawName
+                        );
                       const displayName = mc?.effectiveDisplayName ?? rawName;
                       return (
-                        <OpenButton icon={SvgRefreshCw} foldable>
+                        <OpenButton
+                          icon={SvgRefreshCw}
+                          tooltip="Retry with"
+                          foldable={distinctModelsUsed <= 1}
+                        >
                           {displayName}
                         </OpenButton>
                       );

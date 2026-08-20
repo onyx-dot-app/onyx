@@ -14,6 +14,13 @@ import { MultiModelResponse } from "@/app/app/message/interfaces";
  * resolution. Pass an empty map when the provider list is unavailable (e.g. the
  * read-only shared view). `getModelIcon` then falls back to the model name.
  */
+// The model that produced a message. Error responses carry the model that
+// failed, so they count for attribution too.
+export function messageModelName(msg: Message): string | null {
+  if (msg.type !== "assistant" && msg.type !== "error") return null;
+  return msg.overridden_model || msg.modelDisplayName || null;
+}
+
 export function getMultiModelResponses(
   userMessage: Message,
   messageTree: Map<number, Message>,
