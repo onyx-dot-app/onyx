@@ -87,6 +87,7 @@ repos:
               |docker-compose\.prod-no-letsencrypt\.yml
               |docker-compose\.onyx-lite\.yml
               |docker-compose\.craft\.yml
+              |docker-compose\.dev\.yml
               |env\.template
               |env\.prod\.template
               |env\.nginx\.template
