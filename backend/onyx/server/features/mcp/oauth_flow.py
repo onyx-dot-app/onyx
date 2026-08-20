@@ -20,7 +20,7 @@ from onyx.auth.oauth_token_manager import (
     build_oauth_authorization_url,
 )
 from onyx.cache.factory import get_cache_backend
-from onyx.db.enums import MCPOAuthProviderMode, MCPTransport
+from onyx.db.enums import MCPTransport
 from onyx.db.models import MCPServer
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -44,9 +44,8 @@ from onyx.server.features.mcp.models import (
 from onyx.server.features.mcp.oauth import (
     OAUTH_HTTP_TIMEOUT_SECONDS,
     MCPClientRegistrationConflict,
-    OAuthAuthorizationRequired,
-    OnyxOAuthClientProvider,
     make_oauth_provider,
+    run_with_authorization_handoff,
 )
 from onyx.server.features.mcp.ssrf import (
     mcp_oauth_challenge_httpx_client_factory,
@@ -179,39 +178,6 @@ def validate_mcp_oauth_flow_configuration(
         )
 
 
-def _restore_mcp_oauth_context(
-    flow: MCPOAuthFlowState,
-    context: OAuthContext,
-    client_information: OAuthClientInformationFull,
-) -> None:
-    """Apply a persisted attempt at the SDK boundary used for completion."""
-    if flow.server_snapshot.provider_mode is MCPOAuthProviderMode.AUTO_DISCOVERY:
-        context.protected_resource_metadata = flow.protected_resource_metadata
-        context.oauth_metadata = flow.oauth_metadata
-        context.auth_server_url = flow.authorization_server_url
-        context.protocol_version = flow.protocol_version
-    context.client_metadata.scope = flow.scope
-    context.client_metadata.redirect_uris = [flow.redirect_uri]
-    context.client_info = client_information
-
-
-def _make_completion_provider(
-    flow: MCPOAuthFlowState,
-    mcp_server: MCPServer,
-    client_information: OAuthClientInformationFull,
-) -> OnyxOAuthClientProvider:
-    provider = make_oauth_provider(
-        mcp_server,
-        flow.connection_config_id,
-        mcp_server.admin_connection_config_id,
-        load_stored_tokens=False,
-        expected_connection_headers_fingerprint=(flow.connection_headers_fingerprint),
-        expected_client_information_fingerprint=(flow.client_information_fingerprint),
-    )
-    _restore_mcp_oauth_context(flow, provider.context, client_information)
-    return provider
-
-
 def mcp_oauth_attempt_store() -> AuthorizationAttemptStore[MCPOAuthFlowState]:
     return AuthorizationAttemptStore(
         get_cache_backend(),
@@ -219,48 +185,6 @@ def mcp_oauth_attempt_store() -> AuthorizationAttemptStore[MCPOAuthFlowState]:
         payload_type=MCPOAuthFlowState,
         ttl_seconds=MCP_OAUTH_FLOW_TTL_SECONDS,
     )
-
-
-def _authorization_handoffs(
-    error: Exception,
-) -> list[OAuthAuthorizationRequired] | None:
-    if isinstance(error, OAuthAuthorizationRequired):
-        return [error]
-    if isinstance(error, ExceptionGroup):
-        handoffs: list[OAuthAuthorizationRequired] = []
-        for nested_error in error.exceptions:
-            nested_handoffs = _authorization_handoffs(nested_error)
-            if nested_handoffs is None:
-                return None
-            handoffs.extend(nested_handoffs)
-        return handoffs
-    return None
-
-
-def _authorization_handoff_from_error(
-    error: Exception,
-) -> OAuthAuthorizationRequired:
-    handoffs = _authorization_handoffs(error)
-    if handoffs is None:
-        raise error
-    if len(handoffs) != 1:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "MCP OAuth discovery produced multiple authorization redirects.",
-        )
-    return handoffs[0]
-
-
-def _authorization_redirect_from_group(
-    error: ExceptionGroup,
-) -> OAuthAuthorizationRedirect:
-    matching_errors, unexpected_errors = error.split(OAuthAuthorizationRequired)
-    if unexpected_errors is not None:
-        raise unexpected_errors
-    assert matching_errors is not None
-    authorization_required = _authorization_handoff_from_error(matching_errors)
-    authorization = authorization_required.authorization
-    return OAuthAuthorizationRedirect(authorization.authorization_url)
 
 
 async def _start_oauth_from_well_known_metadata(
@@ -406,18 +330,18 @@ async def _start_auto_discovery_oauth_flow_once(
     try:
         async with asyncio.timeout(OAUTH_HTTP_TIMEOUT_SECONDS):
             try:
-                await initialize_mcp_client(
-                    mcp_server.server_url,
-                    connection_headers=oauth_connection_headers,
-                    transport=probe_transport,
-                    auth=oauth_provider,
+                authorization = await run_with_authorization_handoff(
+                    initialize_mcp_client(
+                        mcp_server.server_url,
+                        connection_headers=oauth_connection_headers,
+                        transport=probe_transport,
+                        auth=oauth_provider,
+                    )
                 )
-            except OAuthAuthorizationRequired as authorization_required:
-                return OAuthAuthorizationRedirect(
-                    authorization_required.authorization.authorization_url
-                )
-            except ExceptionGroup as error:
-                return _authorization_redirect_from_group(error)
+                if authorization is not None:
+                    return OAuthAuthorizationRedirect(authorization.authorization_url)
+            except (ExceptionGroup, OnyxError):
+                raise
             except Exception as error:
                 if _client_registration_conflict(error) is not None:
                     raise
@@ -434,18 +358,15 @@ async def _start_auto_discovery_oauth_flow_once(
             if use_authenticated_connection or oauth_provider.context.is_token_valid():
                 return OAuthAlreadyAuthenticated()
 
-            try:
-                await _start_oauth_from_well_known_metadata(
+            authorization = await run_with_authorization_handoff(
+                _start_oauth_from_well_known_metadata(
                     oauth_provider,
                     mcp_server.server_url,
                     oauth_connection_headers,
                 )
-            except OAuthAuthorizationRequired as authorization_required:
-                return OAuthAuthorizationRedirect(
-                    authorization_required.authorization.authorization_url
-                )
-            except ExceptionGroup as error:
-                return _authorization_redirect_from_group(error)
+            )
+            if authorization is not None:
+                return OAuthAuthorizationRedirect(authorization.authorization_url)
     except TimeoutError as error:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
@@ -502,17 +423,3 @@ async def start_auto_discovery_oauth_flow(
                 "Concurrent MCP client registration won; retrying OAuth discovery"
             )
     raise AssertionError("OAuth discovery retry loop exhausted")
-
-
-async def complete_mcp_oauth_flow(
-    flow: MCPOAuthFlowState,
-    mcp_server: MCPServer,
-    client_information: OAuthClientInformationFull,
-    authorization_code: str,
-) -> None:
-    provider = _make_completion_provider(flow, mcp_server, client_information)
-    await provider.complete_authorization_code_exchange(
-        authorization_code,
-        flow.code_verifier,
-        resource=str(flow.resource) if flow.resource else None,
-    )

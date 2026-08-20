@@ -52,6 +52,7 @@ from onyx.server.features.mcp.credentials import (
     mcp_token_expired,
 )
 from onyx.server.features.mcp.models import (
+    MCPOAuthFlowState,
     MCPOAuthKeys,
     MCPPendingOAuthAuthorization,
     merge_mcp_headers,
@@ -212,10 +213,6 @@ async def _refresh_mcp_oauth_token_if_expired(
     handling (`client_secret_basic` vs. `client_secret_post`) and token
     persistence for free, instead of a second implementation to keep in sync.
 
-    Uses private SDK methods (`_initialize`/`_refresh_token`/
-    `_handle_refresh_response`) since there's no public "refresh if needed"
-    API — may need adjusting on MCP SDK upgrades.
-
     Returns the `Authorization` header to use now, or `None` with no opinion
     (no refresh token / client info) — caller falls back to its own header.
     Raises on failure; caller treats that as non-fatal.
@@ -225,39 +222,10 @@ async def _refresh_mcp_oauth_token_if_expired(
         connection_config_id,
         None,
     )
-    context = provider.context
-    await provider._initialize()
-
-    if not context.can_refresh_token():
+    tokens = await provider.refresh_access_token_if_expired()
+    if tokens is None:
         return None
-
-    if context.is_token_valid():
-        # Valid (no persisted expiry also reads as valid), or a racing call
-        # already refreshed it — hand back the current header either way.
-        current_tokens = context.current_tokens
-        assert current_tokens is not None  # implied by can_refresh_token()
-        return f"{current_tokens.token_type} {current_tokens.access_token}"
-
-    refresh_request = await provider._refresh_token()
-    async with mcp_ssrf_httpx_client_factory(
-        timeout=httpx.Timeout(_REFRESH_POST_TIMEOUT_S)
-    ) as client:
-        response = await client.send(refresh_request)
-
-    if not await provider._handle_refresh_response(response):
-        raise RuntimeError(
-            f"MCP OAuth refresh failed for server '{mcp_server.name}' "
-            f"(config {connection_config_id}): {response.status_code}"
-        )
-
-    logger.info(
-        "Refreshed SSE MCP OAuth token for server '%s' (config %s)",
-        mcp_server.name,
-        connection_config_id,
-    )
-    new_tokens = context.current_tokens
-    assert new_tokens is not None  # set by _handle_refresh_response on success
-    return f"{new_tokens.token_type} {new_tokens.access_token}"
+    return f"{tokens.token_type} {tokens.access_token}"
 
 
 def refresh_mcp_oauth_token_if_expired(
@@ -670,6 +638,49 @@ class OAuthAuthorizationRequired(Exception):
         self.authorization = authorization
 
 
+def _authorization_handoffs(
+    error: BaseException,
+) -> list[OAuthAuthorizationRequired]:
+    if isinstance(error, OAuthAuthorizationRequired):
+        return [error]
+    if isinstance(error, BaseExceptionGroup):
+        return [
+            handoff
+            for nested_error in error.exceptions
+            for handoff in _authorization_handoffs(nested_error)
+        ]
+    return []
+
+
+async def run_with_authorization_handoff(
+    operation: Awaitable[object],
+) -> MCPPendingOAuthAuthorization | None:
+    """Run one SDK operation, returning its resumable browser handoff.
+
+    AnyIO may wrap the control signal in nested exception groups. A group that
+    also contains a real failure is still a failure; only a single, otherwise
+    clean handoff is converted into a normal result.
+    """
+    try:
+        await operation
+    except OAuthAuthorizationRequired as error:
+        return error.authorization
+    except ExceptionGroup as error:
+        matching_errors, unexpected_errors = error.split(OAuthAuthorizationRequired)
+        if unexpected_errors is not None:
+            raise unexpected_errors
+        if matching_errors is None:
+            raise error
+        handoffs = _authorization_handoffs(matching_errors)
+        if len(handoffs) != 1:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "MCP OAuth discovery produced multiple authorization redirects.",
+            )
+        return handoffs[0].authorization
+    return None
+
+
 class OnyxOAuthClientProvider(OAuthClientProvider):
     """MCP SDK provider with an optional resumable browser handoff.
 
@@ -831,6 +842,46 @@ class OnyxOAuthClientProvider(OAuthClientProvider):
         else:
             await storage.set_tokens(tokens)
         return tokens
+
+    async def refresh_access_token_if_expired(self) -> OAuthToken | None:
+        """Drive the SDK refresh step used outside its HTTPX auth generator."""
+        await self._initialize()
+        context = self.context
+        if not context.can_refresh_token():
+            return None
+        if context.is_token_valid():
+            # A racing call may already have persisted a fresh token.
+            current_tokens = context.current_tokens
+            if current_tokens is None:
+                raise RuntimeError(
+                    "MCP OAuth SDK reported a valid token without token data."
+                )
+            return current_tokens
+
+        refresh_request = await self._refresh_token()
+        async with mcp_ssrf_httpx_client_factory(
+            timeout=httpx.Timeout(_REFRESH_POST_TIMEOUT_S)
+        ) as client:
+            response = await client.send(refresh_request)
+        if not await self._handle_refresh_response(response):
+            raise RuntimeError(
+                "MCP OAuth refresh failed for server "
+                f"'{self.refresh_log_context['mcp_server_name']}' "
+                f"(config {self.refresh_log_context['connection_config_id']}): "
+                f"{response.status_code}"
+            )
+
+        logger.info(
+            "Refreshed SSE MCP OAuth token for server '%s' (config %s)",
+            self.refresh_log_context["mcp_server_name"],
+            self.refresh_log_context["connection_config_id"],
+        )
+        refreshed_tokens = context.current_tokens
+        if refreshed_tokens is None:
+            raise RuntimeError(
+                "MCP OAuth SDK reported a successful refresh without token data."
+            )
+        return refreshed_tokens
 
     def _refresh_log_fields(self, **fields: Any) -> dict[str, Any]:
         log_fields: dict[str, Any] = {
@@ -1002,3 +1053,35 @@ def make_oauth_provider(
     if known_metadata is not None:
         provider.context.oauth_metadata = known_metadata
     return provider
+
+
+async def complete_mcp_oauth_authorization(
+    flow: MCPOAuthFlowState,
+    mcp_server: MCPServer,
+    client_information: OAuthClientInformationFull,
+    authorization_code: str,
+) -> None:
+    """Restore one persisted attempt and complete it through the MCP SDK."""
+    provider = make_oauth_provider(
+        mcp_server,
+        flow.connection_config_id,
+        mcp_server.admin_connection_config_id,
+        load_stored_tokens=False,
+        expected_connection_headers_fingerprint=flow.connection_headers_fingerprint,
+        expected_client_information_fingerprint=(flow.client_information_fingerprint),
+    )
+    context = provider.context
+    if flow.server_snapshot.provider_mode is MCPOAuthProviderMode.AUTO_DISCOVERY:
+        context.protected_resource_metadata = flow.protected_resource_metadata
+        context.oauth_metadata = flow.oauth_metadata
+        context.auth_server_url = flow.authorization_server_url
+        context.protocol_version = flow.protocol_version
+    context.client_metadata.scope = flow.scope
+    context.client_metadata.redirect_uris = [flow.redirect_uri]
+    context.client_info = client_information
+
+    await provider.complete_authorization_code_exchange(
+        authorization_code,
+        flow.code_verifier,
+        resource=str(flow.resource) if flow.resource else None,
+    )
