@@ -4,6 +4,10 @@ from enum import Enum
 from typing import Any, List, Literal, NotRequired, Optional, TypedDict
 from uuid import UUID
 
+from mcp.shared.auth import (
+    OAuthMetadata,
+    ProtectedResourceMetadata,
+)
 from mcp.types import Tool as MCPLibTool
 from pydantic import AnyUrl, BaseModel, Field, model_validator
 
@@ -20,6 +24,16 @@ from onyx.db.enums import (
 _PLACEHOLDER_RE = re.compile(r"\{([^}]+)\}")
 # RFC 9110 field-name syntax: a non-empty sequence of HTTP token characters.
 _HTTP_FIELD_NAME_RE = re.compile(r"[!#$%&'*+\-.^_`|~0-9A-Za-z]+")
+RESERVED_MCP_OAUTH_AUTHORIZATION_PARAMS = {
+    "client_id",
+    "code_challenge",
+    "code_challenge_method",
+    "redirect_uri",
+    "resource",
+    "response_type",
+    "scope",
+    "state",
+}
 
 
 def _build_auto_substitution_map(*, user_email: str) -> dict[str, str]:
@@ -293,6 +307,12 @@ class MCPToolCreateRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_auth_configuration(self) -> "MCPToolCreateRequest":
+        if (
+            self.auth_type == MCPAuthenticationType.OAUTH
+            and self.auth_performer != MCPAuthenticationPerformer.PER_USER
+        ):
+            raise ValueError("OAuth authentication must be performed per user")
+
         # A shared API token is required to create an admin-managed server.
         # On update (`existing_server_id` set) it may be omitted: the upsert
         # path reuses the stored token, so requiring it here would reject
@@ -366,6 +386,14 @@ class MCPToolCreateRequest(BaseModel):
             if not self.oauth_token_endpoint:
                 raise ValueError(
                     "oauth_token_endpoint is required for known-provider OAuth mode"
+                )
+            reserved_params = RESERVED_MCP_OAUTH_AUTHORIZATION_PARAMS.intersection(
+                self.oauth_additional_auth_params or {}
+            )
+            if reserved_params:
+                raise ValueError(
+                    "oauth_additional_auth_params cannot override reserved OAuth "
+                    f"parameters: {', '.join(sorted(reserved_params))}"
                 )
         else:
             # AUTO_DISCOVERY: clear fields that only apply to KNOWN_PROVIDER
@@ -513,14 +541,69 @@ class MCPUserOAuthConnectRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_return_path(self) -> "MCPUserOAuthConnectRequest":
-        if not self.return_path.startswith("/"):
-            raise ValueError("return_path must start with a slash")
+        if (
+            not self.return_path.startswith("/")
+            or self.return_path.startswith("//")
+            or "\\" in self.return_path
+            or any(not character.isprintable() for character in self.return_path)
+        ):
+            raise ValueError("return_path must be a safe internal path")
         return self
 
 
 class MCPUserOAuthConnectResponse(BaseModel):
     server_id: int
-    oauth_url: str = Field(..., description="OAuth URL to redirect user to")
+    status: Literal["authorization_required", "already_authenticated"]
+    authorization_url: str | None = None
+    redirect_url: str
+
+    @model_validator(mode="after")
+    def validate_outcome(self) -> "MCPUserOAuthConnectResponse":
+        if self.status == "authorization_required" and not self.authorization_url:
+            raise ValueError("authorization_required needs an authorization_url")
+        if (
+            self.status == "already_authenticated"
+            and self.authorization_url is not None
+        ):
+            raise ValueError(
+                "already_authenticated cannot include an authorization_url"
+            )
+        return self
+
+
+class MCPPendingOAuthAuthorization(BaseModel):
+    authorization_url: str
+    state: str
+    code_verifier: str
+
+
+class MCPOAuthServerSnapshot(BaseModel):
+    server_url: str
+    auth_type: MCPAuthenticationType
+    auth_performer: MCPAuthenticationPerformer
+    provider_mode: MCPOAuthProviderMode
+    transport: MCPTransport | None
+    authorization_endpoint: str | None
+    token_endpoint: str | None
+    scopes: list[str] | None
+    additional_authorization_parameters: dict[str, Any] | None
+
+
+class MCPOAuthFlowState(BaseModel):
+    server_id: int
+    connection_config_id: int
+    return_path: str
+    code_verifier: str
+    redirect_uri: AnyUrl
+    server_snapshot: MCPOAuthServerSnapshot
+    connection_headers_fingerprint: str
+    client_information_fingerprint: str
+    protected_resource_metadata: ProtectedResourceMetadata | None = None
+    oauth_metadata: OAuthMetadata | None = None
+    authorization_server_url: str | None = None
+    protocol_version: str | None = None
+    scope: str | None = None
+    resource: AnyUrl | None = None
 
 
 class MCPOAuthCallbackRequest(BaseModel):

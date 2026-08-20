@@ -185,7 +185,7 @@ class MCPServerResolver(CredentialResolver):
         # Refresh after the session closes — the primitive opens its own.
         if expired_oauth_config_id is not None:
             refreshed_headers = _refresh_oauth_headers(
-                tenant_id, server, str(user_id), expired_oauth_config_id
+                tenant_id, server, expired_oauth_config_id
             )
             if not refreshed_headers:
                 raise CredentialUnavailableError(
@@ -261,16 +261,14 @@ class MCPServerResolver(CredentialResolver):
 
 
 def _refresh_oauth_headers(
-    tenant_id: str, server: MCPServer, user_id: str, connection_config_id: int
+    tenant_id: str, server: MCPServer, connection_config_id: int
 ) -> dict[str, str] | None:
     """Fresh auth headers after refreshing the expired OAuth token, or None if
     it couldn't be refreshed. Sets the tenant contextvar the shared refresh
     primitive reads."""
     token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
     try:
-        auth_header = refresh_mcp_oauth_token_if_expired(
-            server, connection_config_id, user_id
-        )
+        auth_header = refresh_mcp_oauth_token_if_expired(server, connection_config_id)
     except Exception:
         logger.exception("mcp_token_refresh.failed config_id=%s", connection_config_id)
         return None

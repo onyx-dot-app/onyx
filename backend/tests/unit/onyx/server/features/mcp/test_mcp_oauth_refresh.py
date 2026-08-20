@@ -176,7 +176,7 @@ def test_refreshes_expired_token_with_client_secret_post(
     }
     captured = _install_mocks(monkeypatch, config_data, response=_token_response())
 
-    header = refresh_mcp_oauth_token_if_expired(_server_stub(), 42, "user-1")
+    header = refresh_mcp_oauth_token_if_expired(_server_stub(), 42)
 
     assert header == "Bearer NEW"
     sent_request = captured["sent_request"]
@@ -195,6 +195,68 @@ def test_refreshes_expired_token_with_client_secret_post(
     assert persisted[MCPOAuthKeys.TOKENS.value]["refresh_token"] == "REFRESH_2"
     assert persisted["headers"]["Authorization"] == "Bearer NEW"
     assert persisted[MCPOAuthKeys.TOKEN_EXPIRES_AT.value] > time.time()
+
+
+def test_late_refresh_cannot_overwrite_a_concurrent_reauthentication(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_data: dict[str, Any] = {
+        "headers": {"Authorization": "Bearer OLD"},
+        MCPOAuthKeys.TOKENS.value: {
+            "access_token": "OLD",
+            "token_type": "Bearer",
+            "refresh_token": "REFRESH_1",
+        },
+        MCPOAuthKeys.TOKEN_EXPIRES_AT.value: time.time() - 60,
+        MCPOAuthKeys.CLIENT_INFO.value: {
+            "client_id": "cid",
+            "client_secret": "csecret",
+            "redirect_uris": [_REDIRECT_URI],
+            "token_endpoint_auth_method": "client_secret_post",
+        },
+        MCPOAuthKeys.METADATA.value: {
+            "issuer": "https://gitlab.example.com",
+            "authorization_endpoint": "https://gitlab.example.com/oauth/authorize",
+            "token_endpoint": _TOKEN_ENDPOINT,
+        },
+    }
+    captured = _install_mocks(
+        monkeypatch,
+        config_data,
+        response=_token_response(
+            access_token="LATE_REFRESH",
+            refresh_token="REFRESH_2",
+        ),
+    )
+
+    class ConcurrentReauthenticationClient(_FakeAsyncHttpClient):
+        async def send(self, request: httpx.Request) -> httpx.Response:
+            config_data[MCPOAuthKeys.TOKENS.value] = {
+                "access_token": "REAUTH",
+                "token_type": "Bearer",
+                "refresh_token": "REAUTH_REFRESH",
+            }
+            config_data[MCPOAuthKeys.TOKEN_EXPIRES_AT.value] = time.time() + 3600
+            config_data["headers"] = {"Authorization": "Bearer REAUTH"}
+            return await super().send(request)
+
+    monkeypatch.setattr(
+        mcp_oauth,
+        "mcp_ssrf_httpx_client_factory",
+        lambda **_kwargs: ConcurrentReauthenticationClient(
+            _token_response(
+                access_token="LATE_REFRESH",
+                refresh_token="REFRESH_2",
+            ),
+            captured,
+        ),
+    )
+
+    header = refresh_mcp_oauth_token_if_expired(_server_stub(), 42)
+
+    assert header == "Bearer REAUTH"
+    assert "updated_config_data" not in captured
+    assert config_data[MCPOAuthKeys.TOKENS.value]["access_token"] == "REAUTH"
 
 
 @pytest.mark.parametrize(
@@ -233,7 +295,7 @@ def test_refreshes_form_encoded_token_response_with_rotated_refresh_token(
         response=_form_token_response(content_type=content_type),
     )
 
-    header = refresh_mcp_oauth_token_if_expired(_server_stub(), 42, "user-1")
+    header = refresh_mcp_oauth_token_if_expired(_server_stub(), 42)
 
     assert header == "Bearer NEW"
     persisted = captured["updated_config_data"]
@@ -280,7 +342,7 @@ def test_refresh_uses_basic_auth_for_client_secret_basic(
     }
     captured = _install_mocks(monkeypatch, config_data, response=_token_response())
 
-    header = refresh_mcp_oauth_token_if_expired(_server_stub(), 42, "user-1")
+    header = refresh_mcp_oauth_token_if_expired(_server_stub(), 42)
 
     assert header == "Bearer NEW"
     sent_request = captured["sent_request"]
@@ -311,7 +373,7 @@ def test_no_refresh_when_token_still_valid(monkeypatch: pytest.MonkeyPatch) -> N
     }
     captured = _install_mocks(monkeypatch, config_data, response=None)
 
-    header = refresh_mcp_oauth_token_if_expired(_server_stub(), 42, "user-1")
+    header = refresh_mcp_oauth_token_if_expired(_server_stub(), 42)
 
     # No network call is made, but the currently-persisted header is still
     # handed back (it may reflect a concurrent refresh from another call).
@@ -331,7 +393,7 @@ def test_no_refresh_without_refresh_token(monkeypatch: pytest.MonkeyPatch) -> No
     }
     captured = _install_mocks(monkeypatch, config_data, response=None)
 
-    header = refresh_mcp_oauth_token_if_expired(_server_stub(), 42, "user-1")
+    header = refresh_mcp_oauth_token_if_expired(_server_stub(), 42)
 
     assert header is None
     assert "sent_request" not in captured
@@ -349,7 +411,7 @@ def test_no_refresh_without_client_info(monkeypatch: pytest.MonkeyPatch) -> None
     }
     captured = _install_mocks(monkeypatch, config_data, response=None)
 
-    header = refresh_mcp_oauth_token_if_expired(_server_stub(), 42, "user-1")
+    header = refresh_mcp_oauth_token_if_expired(_server_stub(), 42)
 
     assert header is None
     assert "sent_request" not in captured
@@ -372,7 +434,7 @@ def test_no_refresh_without_persisted_expiry(monkeypatch: pytest.MonkeyPatch) ->
     }
     captured = _install_mocks(monkeypatch, config_data, response=None)
 
-    header = refresh_mcp_oauth_token_if_expired(_server_stub(), 42, "user-1")
+    header = refresh_mcp_oauth_token_if_expired(_server_stub(), 42)
 
     assert header == "Bearer OLD"
     assert "sent_request" not in captured
@@ -403,7 +465,7 @@ def test_refresh_persists_via_real_onyx_token_storage(
     }
     _install_mocks(monkeypatch, config_data, response=_token_response())
 
-    header = refresh_mcp_oauth_token_if_expired(_server_stub(), 42, "user-1")
+    header = refresh_mcp_oauth_token_if_expired(_server_stub(), 42)
 
     assert header == "Bearer NEW"
     assert config_data["headers"] == {
@@ -439,7 +501,7 @@ def test_refresh_failure_is_non_fatal_to_caller(
     _install_mocks(monkeypatch, config_data, response=httpx.Response(401))
 
     with pytest.raises(RuntimeError):
-        refresh_mcp_oauth_token_if_expired(_server_stub(), 42, "user-1")
+        refresh_mcp_oauth_token_if_expired(_server_stub(), 42)
 
 
 def test_form_encoded_refresh_error_is_logged_without_secrets(
@@ -475,7 +537,7 @@ def test_form_encoded_refresh_error_is_logged_without_secrets(
     _install_mocks(monkeypatch, config_data, response=response)
 
     with pytest.raises(RuntimeError):
-        refresh_mcp_oauth_token_if_expired(_server_stub(), 42, "user-1")
+        refresh_mcp_oauth_token_if_expired(_server_stub(), 42)
 
     failed_record = next(
         record
@@ -544,7 +606,7 @@ def test_lock_contention_returns_persisted_header_or_none(
 
     monkeypatch.setattr(mcp_oauth, "cache_shared_lock", _contended_lock)
 
-    header = refresh_mcp_oauth_token_if_expired(_server_stub(), 42, "user-1")
+    header = refresh_mcp_oauth_token_if_expired(_server_stub(), 42)
 
     assert header == expected_header
     assert "sent_request" not in captured

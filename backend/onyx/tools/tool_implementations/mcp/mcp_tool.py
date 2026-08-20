@@ -14,7 +14,6 @@ from onyx.server.features.mcp.models import (
     merge_mcp_headers,
 )
 from onyx.server.features.mcp.oauth import (
-    UNUSED_RETURN_PATH,
     make_oauth_provider,
     refresh_mcp_oauth_token_if_expired,
 )
@@ -232,7 +231,6 @@ class MCPTool(Tool[None]):
                         refreshed_header = refresh_mcp_oauth_token_if_expired(
                             self.mcp_server,
                             self.connection_config.id,
-                            self._user_id,
                         )
                         if refreshed_header:
                             headers["Authorization"] = refreshed_header
@@ -242,13 +240,8 @@ class MCPTool(Tool[None]):
                             self._name,
                         )
                 else:
-                    # user_id is the requesting user's UUID; safe here because
-                    # UNUSED_RETURN_PATH ensures redirect_handler raises immediately
-                    # and user_id is never consulted for Redis state lookups.
                     auth = make_oauth_provider(
                         self.mcp_server,
-                        self._user_id,
-                        UNUSED_RETURN_PATH,
                         self.connection_config.id,
                         None,
                     )
