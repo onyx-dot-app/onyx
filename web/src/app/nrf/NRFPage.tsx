@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { useUser } from "@/providers/UserProvider";
 import { toast } from "@opal/layouts";
@@ -41,7 +41,6 @@ import { useAppBackground } from "@/providers/AppBackgroundProvider";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import DocumentsSidebar from "@/sections/document-sidebar/DocumentsSidebar";
 import PreviewModal from "@/sections/modals/PreviewModal";
-import { personaIncludesRetrieval } from "@/app/app/services/lib";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { paidTierGated } from "@/ce";
 import EESearchUI from "@/ee/sections/SearchUI";
@@ -202,14 +201,6 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
   // Query controller for search/chat classification (EE feature)
   const { submit: submitQuery, state } = useQueryController();
-
-  // Determine if retrieval (search) is enabled based on the agent
-  const retrievalEnabled = useMemo(() => {
-    if (activeAgent) {
-      return personaIncludesRetrieval(activeAgent);
-    }
-    return false;
-  }, [activeAgent]);
 
   // Check if we're in search mode
   const isSearch =

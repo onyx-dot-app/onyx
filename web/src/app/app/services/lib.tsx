@@ -22,11 +22,8 @@ import {
   ToolCallMetadata,
   UserKnowledgeFilePacket,
 } from "../interfaces";
-import { MinimalAgent } from "@/lib/agents/types";
 import { ReadonlyURLSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "./searchParams";
-import { WEB_SEARCH_TOOL_ID } from "@/app/app/components/tools/constants";
-import { SEARCH_TOOL_ID } from "@/app/app/components/tools/constants";
 import { Packet } from "./streamingModels";
 
 export async function updateLlmOverrideForChatSession(
@@ -523,14 +520,6 @@ export function processRawChatHistory(
   });
 
   return messages;
-}
-
-export function personaIncludesRetrieval(selectedPersona: MinimalAgent) {
-  return selectedPersona.tools.some(
-    (tool) =>
-      tool.in_code_tool_id &&
-      [SEARCH_TOOL_ID, WEB_SEARCH_TOOL_ID].includes(tool.in_code_tool_id)
-  );
 }
 
 const PARAMS_TO_SKIP = [

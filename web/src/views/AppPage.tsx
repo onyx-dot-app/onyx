@@ -1,10 +1,7 @@
 "use client";
 
 import { redirect, useRouter, useSearchParams } from "next/navigation";
-import {
-  endIncognitoSession,
-  personaIncludesRetrieval,
-} from "@/app/app/services/lib";
+import { endIncognitoSession } from "@/app/app/services/lib";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { Section } from "@/layouts/general-layouts";
@@ -86,6 +83,7 @@ import { paidTierGated } from "@/ce";
 import EESearchUI from "@/ee/sections/SearchUI";
 const SearchUI = paidTierGated(EESearchUI);
 import { motion, AnimatePresence } from "motion/react";
+import { useChatSessionSupportsRetrieval } from "@/lib/app/hooks";
 
 interface FadeProps {
   show: boolean;
@@ -275,8 +273,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     chatSessionsCount: chatSessions.length,
     userId: user?.id,
   });
-
-  const noAgents = activeAgent === null || activeAgent === undefined;
 
   const availableSources: ValidSources[] = useMemo(() => {
     return ccPairs.map((ccPair) => ccPair.source);
@@ -571,23 +567,35 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   useSendMessageToParent();
 
-  const retrievalEnabled = useMemo(() => {
-    if (activeAgent) {
-      return personaIncludesRetrieval(activeAgent);
-    }
-    return false;
-  }, [activeAgent]);
+  const retrievalEnabled = useChatSessionSupportsRetrieval();
 
+  // Close the sources panel once it has nothing left to show. The panel is not
+  // rendered for an agent that cannot retrieve, so this clears a visible flag
+  // left behind by the previous agent.
   useEffect(() => {
-    if (
-      (!personaIncludesRetrieval &&
-        (!selectedDocuments || selectedDocuments.length === 0) &&
-        documentSidebarVisible) ||
-      !currentChatSessionId
-    ) {
+    // Already closed.
+    if (!documentSidebarVisible) return;
+
+    // Not reading a conversation, so there are no sources to show.
+    if (!appFocus.isChattable()) {
       updateCurrentDocumentSidebarVisible(false);
+      return;
     }
-  }, [currentChatSessionId]);
+
+    // The agent can retrieve, so it can still cite sources.
+    if (retrievalEnabled) return;
+
+    // The user picked documents by hand.
+    if (selectedDocuments.length > 0) return;
+
+    updateCurrentDocumentSidebarVisible(false);
+  }, [
+    documentSidebarVisible,
+    appFocus,
+    retrievalEnabled,
+    selectedDocuments,
+    updateCurrentDocumentSidebarVisible,
+  ]);
 
   const handleResubmitLastMessage = useCallback(() => {
     // Grab the last user-type message
@@ -772,9 +780,9 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     };
   }, [currentChatSessionId, currentProjectId, currentProjectDetails?.files]);
 
-  // handle error case where no assistants are available
-  // Only show this after agents have loaded to prevent flash during initial load
-  if (noAgents && !isLoadingAgents) {
+  // Handle error case where no agents are available.
+  // Only show this after agents have loaded to prevent flash during initial load.
+  if (!activeAgent && !isLoadingAgents) {
     return <NoAgentModal />;
   }
 
@@ -815,32 +823,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     <>
       <AppPopup />
 
-      {retrievalEnabled && documentSidebarVisible && isMobile && (
-        <Modal
-          open
-          onOpenChange={() => updateCurrentDocumentSidebarVisible(false)}
-        >
-          <Modal.Content>
-            <Modal.Header
-              icon={SvgFileText}
-              title="Sources"
-              onClose={() => updateCurrentDocumentSidebarVisible(false)}
-            />
-            <Modal.Body>
-              {/* IMPORTANT: this is a memoized component, and it's very important
-              for performance reasons that this stays true. MAKE SURE that all function
-              props are wrapped in useCallback. */}
-              <DocumentsSidebar
-                setPresentingDocument={setPresentingDocument}
-                modal
-                closeSidebar={handleMobileDocumentSidebarClose}
-                selectedDocuments={selectedDocuments}
-              />
-            </Modal.Body>
-          </Modal.Content>
-        </Modal>
-      )}
-
       {presentingDocument && (
         <PreviewModal
           presentingDocument={presentingDocument}
@@ -850,23 +832,50 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
       <FederatedOAuthModal />
 
-      {!(noAgents && !isLoadingAgents) && retrievalEnabled && !isMobile && (
-        <RootLayout.RightPanel>
-          <div
-            className={cn(
-              "overflow-hidden transition-all duration-300 ease-in-out h-full",
-              documentSidebarVisible ? "w-100" : "w-0"
-            )}
-          >
-            <DocumentsSidebar
-              setPresentingDocument={setPresentingDocument}
-              modal={false}
-              closeSidebar={handleDesktopDocumentSidebarClose}
-              selectedDocuments={selectedDocuments}
-            />
-          </div>
-        </RootLayout.RightPanel>
-      )}
+      {retrievalEnabled &&
+        (isMobile ? (
+          documentSidebarVisible && (
+            <Modal
+              open
+              onOpenChange={() => updateCurrentDocumentSidebarVisible(false)}
+            >
+              <Modal.Content>
+                <Modal.Header
+                  icon={SvgFileText}
+                  title="Sources"
+                  onClose={() => updateCurrentDocumentSidebarVisible(false)}
+                />
+                <Modal.Body>
+                  {/* IMPORTANT: this is a memoized component, and it's very important
+                for performance reasons that this stays true. MAKE SURE that all function
+                props are wrapped in useCallback. */}
+                  <DocumentsSidebar
+                    setPresentingDocument={setPresentingDocument}
+                    modal
+                    closeSidebar={handleMobileDocumentSidebarClose}
+                    selectedDocuments={selectedDocuments}
+                  />
+                </Modal.Body>
+              </Modal.Content>
+            </Modal>
+          )
+        ) : (
+          <RootLayout.RightPanel>
+            <div
+              className={cn(
+                "overflow-hidden transition-all duration-300 ease-in-out h-full",
+                documentSidebarVisible ? "w-100" : "w-0"
+              )}
+            >
+              <DocumentsSidebar
+                setPresentingDocument={setPresentingDocument}
+                modal={false}
+                closeSidebar={handleDesktopDocumentSidebarClose}
+                selectedDocuments={selectedDocuments}
+              />
+            </div>
+          </RootLayout.RightPanel>
+        ))}
 
       <div className="w-full h-full overflow-hidden">
         <Dropzone
