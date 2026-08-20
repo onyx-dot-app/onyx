@@ -300,6 +300,10 @@ export default function CustomModal({
         max_input_tokens: null,
         supports_image_input: false,
         supports_reasoning: false,
+        supported_reasoning_efforts: undefined,
+        reasoning_effort_max: null,
+        reasoning_effort_default: null,
+        temperature_default: null,
         effectiveDisplayName: "",
       },
     ],
@@ -350,7 +354,11 @@ export default function CustomModal({
             is_visible: true,
             max_input_tokens: mc.max_input_tokens ?? null,
             supports_image_input: mc.supports_image_input,
-            supports_reasoning: false,
+            supports_reasoning: mc.supports_reasoning,
+            supported_reasoning_efforts: mc.supported_reasoning_efforts,
+            reasoning_effort_max: mc.reasoning_effort_max,
+            reasoning_effort_default: mc.reasoning_effort_default,
+            temperature_default: mc.temperature_default,
             effectiveDisplayName: mc.display_name || mc.name,
           }));
 
