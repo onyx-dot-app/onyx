@@ -54,6 +54,9 @@ interface ContentMdProps {
   /** Optional description text below the title. */
   description?: string | RichStr;
 
+  /** Font used for the description. */
+  descriptionFont?: TextFont;
+
   /**
    * Slot for a control/action (e.g. an input) rendered to the right of the
    * title and description on desktop, and stacked between them on narrow
@@ -158,6 +161,7 @@ function ContentMd({
   icon: Icon,
   title,
   description,
+  descriptionFont = "secondary-body",
   rightChildren,
   descriptionMaxLines,
   editable,
@@ -359,7 +363,7 @@ function ContentMd({
           {/* Clamped, the full description shows in a tooltip when it is cut. */}
           {descriptionMaxLines ? (
             <OverflowText
-              font="secondary-body"
+              font={descriptionFont}
               color="inherit"
               as="p"
               maxLines={descriptionMaxLines}
@@ -367,7 +371,7 @@ function ContentMd({
               {description}
             </OverflowText>
           ) : (
-            <Text font="secondary-body" color="inherit" as="p">
+            <Text font={descriptionFont} color="inherit" as="p">
               {description}
             </Text>
           )}

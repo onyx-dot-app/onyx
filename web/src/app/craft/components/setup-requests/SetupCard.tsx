@@ -246,6 +246,7 @@ export default function SetupCard({
           icon={Logo}
           title={t("connect.title", { app: appName })}
           description={reason ?? t("reason.fallback", { app: appName })}
+          descriptionFont="main-ui-muted"
         />
         {error && (
           <Text font="secondary-body" color="text-03">
