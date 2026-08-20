@@ -18,7 +18,7 @@ import {
   useInitialValues,
   buildValidationSchema,
   BaseLLMFormValues,
-  mergeFetchedModelConfigurations,
+  withFetchedModels,
 } from "@/sections/modals/languageModels/utils";
 import { submitProvider } from "@/sections/modals/languageModels/svc";
 import { LLMProviderConfiguredSource } from "@/lib/analytics/utils";
@@ -110,15 +110,7 @@ function PortkeyModalInternals({
     if (error) {
       throw new Error(error);
     }
-    // Functional form: an edit made while the fetch was in flight must not be
-    // reverted by the snapshot this handler closed over.
-    setValues((prev) => ({
-      ...prev,
-      model_configurations: mergeFetchedModelConfigurations(
-        models,
-        prev.model_configurations
-      ),
-    }));
+    setValues(withFetchedModels(models));
   };
 
   // Refetch once on open so an edit's picker matches the "add" view.
@@ -134,13 +126,7 @@ function PortkeyModalInternals({
     })
       .then(({ models }) => {
         if (models.length > 0) {
-          setValues((prev) => ({
-            ...prev,
-            model_configurations: mergeFetchedModelConfigurations(
-              models,
-              prev.model_configurations
-            ),
-          }));
+          setValues(withFetchedModels(models));
         }
       })
       .catch(() => undefined);

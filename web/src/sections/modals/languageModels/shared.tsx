@@ -39,8 +39,8 @@ import {
   ModelSettingsPopover,
   type ModelSettingsPatch,
 } from "@/sections/modals/languageModels/ModelSettingsPopover";
-import { setDefaultLlmModel } from "@/lib/languageModels/svc";
-import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
+import { setDefaultLlmModelAndRefresh } from "@/lib/languageModels/cache";
+import { modelDisplayName } from "@/lib/languageModels/utils";
 import { useAdminLLMProviders } from "@/lib/languageModels/hooks";
 import { useSWRConfig } from "swr";
 import {
@@ -541,10 +541,9 @@ interface ModelRowProps {
  * A single selectable model row.
  *
  * The row is a clickable `<div role="button">` rather than a real `<button>`,
- * because the `editable` title renders its own nested edit `<button>` — and a
- * `<button>` inside a `<button>` is invalid HTML that triggers a React
- * hydration error. Rendering the row as a div keeps the inline rename pencil a
- * real, keyboard-accessible button while preserving the original look and feel.
+ * because it hosts real action buttons (rename, settings, set as default) and
+ * a `<button>` inside a `<button>` is invalid HTML that triggers a React
+ * hydration error.
  *
  * This mirrors `LineItemButton`'s internals (Stateful → Container →
  * ContentAction) but with a typeless `Interactive.Container`, which renders a
@@ -560,8 +559,10 @@ function ModelRow({
   onSetDefaultModel,
 }: ModelRowProps) {
   const editHandle = useRef<ContentMdEditHandle>(null);
-  const displayName =
-    model.custom_display_name || model.display_name || model.name;
+  // Keeps the hover-revealed actions visible while the settings popover,
+  // which is portaled outside the row, is open.
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const displayName = modelDisplayName(model);
   // In auto mode every model is shown, so the row is always "selected" and the
   // visibility toggle is disabled.
   const isSelected = isAutoMode || model.is_visible;
@@ -582,7 +583,11 @@ function ModelRow({
     : undefined;
 
   return (
-    <Hoverable.Root group="model-row" data-model-name={model.name}>
+    <Hoverable.Root
+      group="model-row"
+      interaction={settingsOpen ? "hover" : "rest"}
+      data-model-name={model.name}
+    >
       <Interactive.Stateful
         variant="select-heavy"
         state={isSelected ? "selected" : "empty"}
@@ -623,37 +628,28 @@ function ModelRow({
                 >
                   {modelRightChildren(model)}
                   <Hoverable.Item group="model-row" variant="appear-on-hover">
-                    <Button
-                      icon={SvgEdit}
-                      prominence="internal"
-                      size="sm"
-                      tooltip="Rename"
-                      onClick={(e: React.MouseEvent) => {
-                        e.stopPropagation();
-                        editHandle.current?.startEditing();
-                      }}
-                    />
-                  </Hoverable.Item>
-                  <Hoverable.Item group="model-row" variant="appear-on-hover">
-                    <ModelSettingsPopover
-                      model={model}
-                      onChange={onSettingsChange}
-                    />
-                  </Hoverable.Item>
-                  {isDefaultModel ? (
-                    <Text
-                      secondaryAction
-                      nowrap
-                      className="px-1.5 py-1 text-action-selection-05"
+                    <OpalSection
+                      flexDirection="row"
+                      width="fit"
+                      height="auto"
+                      gap={1}
                     >
-                      Default Model
-                    </Text>
-                  ) : (
-                    onSetDefaultModel && (
-                      <Hoverable.Item
-                        group="model-row"
-                        variant="appear-on-hover"
-                      >
+                      <Button
+                        icon={SvgEdit}
+                        prominence="internal"
+                        size="sm"
+                        tooltip="Rename"
+                        onClick={(e: React.MouseEvent) => {
+                          e.stopPropagation();
+                          editHandle.current?.startEditing();
+                        }}
+                      />
+                      <ModelSettingsPopover
+                        model={model}
+                        onChange={onSettingsChange}
+                        onOpenChange={setSettingsOpen}
+                      />
+                      {!isDefaultModel && onSetDefaultModel && (
                         <Button
                           prominence="internal"
                           size="sm"
@@ -664,8 +660,17 @@ function ModelRow({
                         >
                           Set as Default
                         </Button>
-                      </Hoverable.Item>
-                    )
+                      )}
+                    </OpalSection>
+                  </Hoverable.Item>
+                  {isDefaultModel && (
+                    <Text
+                      secondaryAction
+                      nowrap
+                      className="px-1.5 py-1 text-action-selection-05"
+                    >
+                      Default Model
+                    </Text>
                   )}
                 </OpalSection>
               }
@@ -742,14 +747,7 @@ export function ModelSelectionField({
 
   async function setDefaultModel(modelName: string) {
     if (providerId == null) return;
-    try {
-      await setDefaultLlmModel(providerId, modelName);
-      await refreshLlmProviderCaches(mutate);
-      toast.success("Default model updated successfully!");
-    } catch (e) {
-      const message = e instanceof Error ? e.message : "Unknown error";
-      toast.error(`Failed to set default model: ${message}`);
-    }
+    await setDefaultLlmModelAndRefresh(providerId, modelName, mutate);
   }
 
   function setCustomDisplayName(modelName: string, value: string | undefined) {
@@ -835,6 +833,10 @@ export function ModelSelectionField({
                 isFoldable && !isExpanded
                   ? displayModels.slice(0, FOLD_THRESHOLD)
                   : displayModels;
+              const defaultModelName =
+                providerId != null && defaultText?.provider_id === providerId
+                  ? defaultText.model_name
+                  : undefined;
 
               return (
                 <>
@@ -852,11 +854,7 @@ export function ModelSelectionField({
                       onSettingsChange={(patch) =>
                         setModelSettings(model.name, patch)
                       }
-                      isDefaultModel={
-                        providerId != null &&
-                        defaultText?.provider_id === providerId &&
-                        defaultText?.model_name === model.name
-                      }
+                      isDefaultModel={model.name === defaultModelName}
                       onSetDefaultModel={
                         providerId != null && model.is_visible
                           ? () => void setDefaultModel(model.name)

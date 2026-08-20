@@ -25,7 +25,8 @@ export interface ModelConfiguration {
    * case the picker falls back to the levels every reasoning model supports.
    */
   supported_reasoning_efforts?: ReasoningEffortOverride[];
-  /** Admin policy: what is permitted, vs what the model can do above. */
+  /** What the admin permits or defaults, distinct from
+   *  supported_reasoning_efforts (what the model can do). Null means unset. */
   reasoning_effort_max?: ReasoningEffortOverride | null;
   reasoning_effort_default?: ReasoningEffortOverride | null;
   temperature_default?: number | null;

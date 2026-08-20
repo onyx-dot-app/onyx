@@ -16,7 +16,7 @@ import {
   useInitialValues,
   buildValidationSchema,
   BaseLLMFormValues,
-  mergeFetchedModelConfigurations,
+  withFetchedModels,
 } from "@/sections/modals/languageModels/utils";
 import { submitProvider } from "@/sections/modals/languageModels/svc";
 import { LLMProviderConfiguredSource } from "@/lib/analytics/utils";
@@ -83,15 +83,7 @@ function BifrostModalInternals({
     if (error) {
       throw new Error(error);
     }
-    // Functional form: an edit made while the fetch was in flight must not be
-    // reverted by the snapshot this handler closed over.
-    formikProps.setValues((prev) => ({
-      ...prev,
-      model_configurations: mergeFetchedModelConfigurations(
-        models,
-        prev.model_configurations
-      ),
-    }));
+    formikProps.setValues(withFetchedModels(models));
   };
 
   return (

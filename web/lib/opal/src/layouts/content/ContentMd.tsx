@@ -182,6 +182,12 @@ function ContentMd({
   }
   useImperativeHandle(editHandle, () => ({ startEditing }), [title]);
 
+  // Starting an edit must not double as a click on the parent row.
+  function handleTitleClick(e: React.MouseEvent) {
+    e.stopPropagation();
+    startEditing();
+  }
+
   function commit() {
     const value = editValue.trim();
     if (value !== toPlainString(title)) onTitleChange?.(value);
@@ -257,15 +263,7 @@ function ContentMd({
               color="inherit"
               maxLines={titleMaxLines}
               title={toPlainString(title)}
-              onClick={
-                editable
-                  ? // Starting an edit must not double as a click on the parent row.
-                    (e: React.MouseEvent) => {
-                      e.stopPropagation();
-                      startEditing();
-                    }
-                  : undefined
-              }
+              onClick={editable ? handleTitleClick : undefined}
             >
               {title}
             </Text>

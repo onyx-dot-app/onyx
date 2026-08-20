@@ -8,6 +8,7 @@ import { Disabled } from "@opal/core";
 import type { IconFunctionComponent } from "@opal/types";
 import { isAnthropic } from "@/lib/languageModels/svc";
 import type { ModelConfiguration } from "@/lib/languageModels/types";
+import { modelDisplayName } from "@/lib/languageModels/utils";
 import {
   ALL_REASONING_STOPS,
   PaneSlider,
@@ -21,7 +22,8 @@ import {
 const PINNED_TEMPERATURE_TOOLTIP =
   "Reasoning models always run at temperature 1.";
 
-/** Where an unset slider parks: the value the backend would apply anyway. */
+/** Where an unset slider parks: the backend default (medium reasoning,
+ *  GEN_AI_TEMPERATURE for temperature). */
 const UNSET_REASONING_STOP = ALL_REASONING_STOPS.indexOf("medium");
 const UNSET_TEMPERATURE = 0;
 
@@ -34,9 +36,27 @@ export type ModelSettingsPatch = Partial<
   >
 >;
 
+/** The subset of a model configuration the popover reads. */
+export type ModelSettingsModel = Pick<
+  ModelConfiguration,
+  | "name"
+  | "display_name"
+  | "custom_display_name"
+  | "vendor"
+  | "max_input_tokens"
+  | "supports_reasoning"
+  | "supports_image_input"
+  | "supported_reasoning_efforts"
+  | "reasoning_effort_max"
+  | "reasoning_effort_default"
+  | "temperature_default"
+>;
+
 interface ModelSettingsPopoverProps {
-  model: ModelConfiguration;
+  model: ModelSettingsModel;
   onChange: (patch: ModelSettingsPatch) => void;
+  /** Reports open state so a hover-revealed trigger can stay visible. */
+  onOpenChange?: (open: boolean) => void;
 }
 
 interface SectionHeaderProps {
@@ -47,7 +67,7 @@ interface SectionHeaderProps {
   rightValueTooltip?: string;
 }
 
-/** Mock spec: 8px padding, 20px icon box, 4px gap, 2px text insets. */
+/** Mock spec: 8px padding (2px bottom), 20px icon box, 4px gap, 2px text insets. */
 function SectionHeader({
   icon: Icon,
   title,
@@ -149,8 +169,13 @@ function PolicySlider({
 export function ModelSettingsPopover({
   model,
   onChange,
+  onOpenChange,
 }: ModelSettingsPopoverProps) {
   const [open, setOpen] = useState(false);
+  function handleOpenChange(next: boolean) {
+    setOpen(next);
+    onOpenChange?.(next);
+  }
 
   const supportedStop = maxReasoningStop(model.supported_reasoning_efforts);
   // No supported levels means the model takes no effort parameter at all.
@@ -162,12 +187,12 @@ export function ModelSettingsPopover({
   const maxStop = reasoningStopIndex(model.reasoning_effort_max);
   const rawDefaultStop = reasoningStopIndex(model.reasoning_effort_default);
   // Capability bounds the stored cap too, in case it shrank after the save.
-  const effectiveMaxStop = Math.min(
-    maxStop >= 0 ? maxStop : supportedStop,
-    supportedStop
-  );
+  const effectiveMaxStop =
+    maxStop >= 0 ? Math.min(maxStop, supportedStop) : supportedStop;
   const defaultStop =
     rawDefaultStop >= 0 ? Math.min(rawDefaultStop, effectiveMaxStop) : -1;
+  const defaultSliderStop =
+    defaultStop >= 0 ? defaultStop : UNSET_REASONING_STOP;
 
   const reasoningMarks = ALL_REASONING_STOPS.slice(0, supportedStop + 1).map(
     (stop) => REASONING_STOP_LABELS[stop]
@@ -181,7 +206,7 @@ export function ModelSettingsPopover({
   const capabilities = [
     model.supports_reasoning && "reasoning",
     model.supports_image_input && "multi-modal",
-  ].filter(Boolean);
+  ].filter((c): c is string => Boolean(c));
 
   function setMax(stop: number) {
     const newMaxStop = Math.min(stop, supportedStop);
@@ -202,10 +227,10 @@ export function ModelSettingsPopover({
   }
 
   return (
-    // A modal popover keeps clicks and focus inside it away from the host
-    // dialog's dismiss and focus-trap layers, without portaling into the
-    // dialog box, which gave the dialog its own scrollbar.
-    <Popover open={open} onOpenChange={setOpen} modal>
+    // modal keeps clicks and focus inside the popover away from the host
+    // dialog's dismiss and focus-trap layers. Portaling into the dialog
+    // instead would give the dialog its own scrollbar.
+    <Popover open={open} onOpenChange={handleOpenChange} modal>
       <Popover.Trigger asChild>
         <Button
           icon={SvgSliders}
@@ -220,7 +245,7 @@ export function ModelSettingsPopover({
           {/* raw-ok: mock header needs 10px/8px asymmetric padding, and Section silences px-* */}
           <div className="flex w-full flex-col justify-center px-2.5 py-2">
             <Text font="main-ui-body" color="text-02" nowrap>
-              {model.custom_display_name || model.display_name || model.name}
+              {modelDisplayName(model)}
             </Text>
             <Text font="secondary-body" color="text-02">
               {capabilities.length ? capabilities.join(", ") : "chat"}
@@ -264,13 +289,11 @@ export function ModelSettingsPopover({
               />
               <PolicySlider
                 label="Default"
-                value={defaultStop >= 0 ? defaultStop : UNSET_REASONING_STOP}
+                value={defaultSliderStop}
                 max={effectiveMaxStop}
                 step={1}
                 marks={reasoningMarks}
-                activeMark={
-                  defaultStop >= 0 ? defaultStop : UNSET_REASONING_STOP
-                }
+                activeMark={defaultSliderStop}
                 onChange={setDefault}
               />
             </Section>

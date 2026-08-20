@@ -115,7 +115,7 @@ function ModelConfigurationItem({
         type="number"
       />
       <ModelSettingsPopover
-        model={{ is_visible: true, effectiveDisplayName: model.name, ...model }}
+        model={model}
         onChange={(patch) => onChange({ ...model, ...patch })}
       />
       <Button

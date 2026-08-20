@@ -12,7 +12,7 @@ import {
   useInitialValues,
   buildValidationSchema,
   BaseLLMFormValues as BaseLLMModalValues,
-  mergeFetchedModelConfigurations,
+  withFetchedModels,
 } from "@/sections/modals/languageModels/utils";
 import { submitProvider } from "@/sections/modals/languageModels/svc";
 import { LLMProviderConfiguredSource } from "@/lib/analytics/utils";
@@ -64,15 +64,7 @@ function LMStudioModalInternals({
     if (data.error) {
       throw new Error(data.error);
     }
-    // Functional form: an edit made while the fetch was in flight must not be
-    // reverted by the snapshot this handler closed over.
-    formikProps.setValues((prev) => ({
-      ...prev,
-      model_configurations: mergeFetchedModelConfigurations(
-        data.models,
-        prev.model_configurations
-      ),
-    }));
+    formikProps.setValues(withFetchedModels(data.models));
   };
 
   return (

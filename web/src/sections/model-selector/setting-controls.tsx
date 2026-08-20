@@ -9,7 +9,7 @@ import { Disabled } from "@opal/core";
 import { ReasoningEffortOverride } from "@/lib/languageModels/types";
 
 /** The levels every reasoning model supports, in ascending order. */
-export const BASE_REASONING_STOPS: ReasoningEffortOverride[] = [
+const BASE_REASONING_STOPS: ReasoningEffortOverride[] = [
   "off",
   "low",
   "medium",

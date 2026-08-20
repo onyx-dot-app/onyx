@@ -5,7 +5,10 @@ import {
   type ModelConfiguration,
   type ReasoningEffortOverride,
 } from "@/lib/languageModels/types";
-import { ALL_REASONING_STOPS } from "@/sections/model-selector/setting-controls";
+import {
+  ALL_REASONING_STOPS,
+  maxReasoningStop,
+} from "@/sections/model-selector/setting-controls";
 import * as Yup from "yup";
 import { useWellKnownLLMProvider } from "@/lib/languageModels/hooks";
 
@@ -138,13 +141,12 @@ export function clampModelSettings<
     | "reasoning_effort_default"
   >,
 >(model: T): T {
-  const supported = model.supported_reasoning_efforts;
-  if (!supported || supported.length === 0) return model;
-  const highest = supported[supported.length - 1]!;
-  const rank = (effort: ReasoningEffortOverride) =>
-    ALL_REASONING_STOPS.indexOf(effort);
+  const highestIndex = maxReasoningStop(model.supported_reasoning_efforts);
+  if (highestIndex < 0) return model;
   const bound = (effort: ReasoningEffortOverride | null | undefined) =>
-    effort && rank(effort) > rank(highest) ? highest : effort;
+    effort && ALL_REASONING_STOPS.indexOf(effort) > highestIndex
+      ? ALL_REASONING_STOPS[highestIndex]
+      : effort;
   return {
     ...model,
     reasoning_effort_max: bound(model.reasoning_effort_max),
@@ -156,10 +158,13 @@ export function clampModelSettings<
 
 /**
  * Merges a freshly-fetched model list with the current form state so that
- * refreshing the model list does not clobber the user's selections.
+ * refreshing the model list does not clobber the user's selections. Call it
+ * from a functional `setValues` so a fetch that lands late cannot revert edits
+ * made while it was in flight.
  *
  * - If the form has no models yet (first fetch / onboarding), the fetched
- *   list is returned as-is so each provider's own default `is_visible` applies.
+ *   list is used with only settings clamped, so each provider's own default
+ *   `is_visible` applies.
  * - Otherwise, models that already exist in the form keep their prior unsaved
  *   edits (visibility, rename, admin settings), and newly-discovered models are
  *   added unselected so the user can opt-in explicitly.
@@ -170,10 +175,9 @@ export function mergeFetchedModelConfigurations(
 ): ModelConfiguration[] {
   if (existing.length === 0) return fetched.map(clampModelSettings);
   const priorByName = new Map(existing.map((m) => [m.name, m]));
-  return fetched.map((fetchedModel) => {
-    const model = clampModelSettings(fetchedModel);
+  return fetched.map((model) => {
     const prior = priorByName.get(model.name);
-    if (!prior) return { ...model, is_visible: false };
+    if (!prior) return clampModelSettings({ ...model, is_visible: false });
     // Unsaved edits live only in form state, so a refetch has to carry them.
     return clampModelSettings({
       ...model,
@@ -183,6 +187,19 @@ export function mergeFetchedModelConfigurations(
       reasoning_effort_default: prior.reasoning_effort_default,
       temperature_default: prior.temperature_default,
     });
+  });
+}
+
+/** Functional `setValues` updater applying {@link mergeFetchedModelConfigurations}. */
+export function withFetchedModels<
+  T extends { model_configurations: ModelConfiguration[] },
+>(fetched: ModelConfiguration[]) {
+  return (prev: T): T => ({
+    ...prev,
+    model_configurations: mergeFetchedModelConfigurations(
+      fetched,
+      prev.model_configurations
+    ),
   });
 }
 
