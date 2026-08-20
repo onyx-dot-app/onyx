@@ -178,7 +178,9 @@ def test_salesforce_standard_oauth_real_redis_postgres_flow(
         )
         assert token_request.call_args.kwargs["log_request_data"] is False
 
-        with pytest.raises(OnyxError, match="Invalid OAuth state"):
+        with pytest.raises(
+            OnyxError, match="Invalid or expired OAuth authorization attempt"
+        ):
             standard_oauth.oauth_callback(
                 source=DocumentSource.SALESFORCE,
                 code=_AUTHORIZATION_CODE,
