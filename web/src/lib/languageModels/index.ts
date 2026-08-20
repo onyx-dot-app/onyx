@@ -168,8 +168,12 @@ export function getProvider(
     companyName: providerName,
   };
 
+  // An empty custom_config means the backend stored a default, not that the
+  // provider came from the custom form.
+  const customConfig = existingProvider?.custom_config;
   if (
-    existingProvider?.custom_config != null &&
+    customConfig != null &&
+    Object.keys(customConfig).length > 0 &&
     CUSTOM_CONFIG_OVERRIDES.has(providerName)
   ) {
     return { ...entry, Modal: CustomModal };
