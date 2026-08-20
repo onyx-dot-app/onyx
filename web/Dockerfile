@@ -3,22 +3,21 @@
 # DHI overrides below carry their own registry (dhi.io), which the cache does not serve.
 ARG BASE_IMAGE_REGISTRY=docker.io
 
-# Node bases. The defaults are the public Debian slim images, so a plain `docker build` needs
+# Bun bases -- bun is both the package manager and the JS runtime here; the image ships no
+# Node.js. The defaults are the public Debian slim images, so a plain `docker build` needs
 # no extra registry access. CI overrides both with the matching Docker Hardened Images from
 # dhi.io, which need a Docker account with DHI catalog access.
 # Refresh a digest with: docker buildx imagetools inspect <image reference>
-ARG NODE_BUILDER_IMAGE=${BASE_IMAGE_REGISTRY}/library/node:24-trixie-slim@sha256:0711b541c1c33a8a530ac4f0d391baa9a15b3d804695b1b24a47daa5fb60e74d
-ARG NODE_RUNTIME_IMAGE=${BASE_IMAGE_REGISTRY}/library/node:24-trixie-slim@sha256:0711b541c1c33a8a530ac4f0d391baa9a15b3d804695b1b24a47daa5fb60e74d
+ARG BUN_BUILDER_IMAGE=${BASE_IMAGE_REGISTRY}/oven/bun:1.4.0-slim@sha256:e0ee68d16ccb9927bf02aa7dd8fd4bf3369ee6d46da04faa72b05ce8bfd135f6
+ARG BUN_RUNTIME_IMAGE=${BASE_IMAGE_REGISTRY}/oven/bun:1.4.0-slim@sha256:e0ee68d16ccb9927bf02aa7dd8fd4bf3369ee6d46da04faa72b05ce8bfd135f6
 
-# bun binary source, in its own stage because buildx only expands the registry ARG in a FROM,
-# not in `COPY --from=`. Use the glibc (Debian) build so it runs on the glibc node images.
-FROM ${BASE_IMAGE_REGISTRY}/oven/bun:1@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 AS bun_source
+# Non-root user of the runtime base. The public oven/bun image ships `bun` (uid 1000); the
+# DHI runtime ships `nonroot` (uid 65532), so CI overrides this along with the base images.
+ARG RUNTIME_USER=bun
 
-# Build stage. Needs a root user plus a shell and npm/npx, which both the default slim image
-# and the DHI "-dev" variant provide.
-FROM ${NODE_BUILDER_IMAGE} AS builder
-COPY --from=bun_source /usr/local/bin/bun /usr/local/bin/bun
-COPY --from=bun_source /usr/local/bin/bunx /usr/local/bin/bunx
+# Build stage. Needs a root user plus a shell, which both the default slim image and the
+# DHI "-dev" variant provide.
+FROM ${BUN_BUILDER_IMAGE} AS builder
 WORKDIR /app
 
 # Copy package files + the full opal AND shared workspace sources so their `prepare`
@@ -89,25 +88,22 @@ ENV NEXT_PUBLIC_RECAPTCHA_SITE_KEY=${NEXT_PUBLIC_RECAPTCHA_SITE_KEY}
 ARG SENTRY_RELEASE
 ENV SENTRY_RELEASE=${SENTRY_RELEASE}
 
-# Add NODE_OPTIONS argument
-ARG NODE_OPTIONS
-
 ARG SKIP_TYPE_CHECK
 ENV SKIP_TYPE_CHECK=${SKIP_TYPE_CHECK}
 
 # SENTRY_AUTH_TOKEN is injected via BuildKit secret mount so it is never written
 # to any image layer, build cache, or registry manifest.
-# Use NODE_OPTIONS in the build command
 RUN --mount=type=secret,id=sentry_auth_token \
     if [ -f /run/secrets/sentry_auth_token ]; then \
         export SENTRY_AUTH_TOKEN="$(cat /run/secrets/sentry_auth_token)"; \
     fi && \
-    NODE_OPTIONS="${NODE_OPTIONS}" npx next build
+    bun run build
 
-# Runtime stage. Runs as the non-root `node` user (uid 1000), which both the default slim
-# image and the DHI runtime variant ship. The DHI variant is near-distroless: no shell or
-# package manager, so keep this stage free of RUN instructions.
-FROM ${NODE_RUNTIME_IMAGE} AS runner
+# Runtime stage. Runs as the non-root user of the base image (see RUNTIME_USER). The DHI
+# variant is near-distroless: no shell or package manager, so keep this stage free of RUN
+# instructions.
+FROM ${BUN_RUNTIME_IMAGE} AS runner
+ARG RUNTIME_USER
 
 LABEL com.onyx.maintainer="founders@onyx.app"
 LABEL com.onyx.description="This image is the web/frontend container of Onyx which \
@@ -124,13 +120,13 @@ WORKDIR /app
 # Disable automatic telemetry collection
 ENV NEXT_TELEMETRY_DISABLED=1
 
-# `/app` is root-owned, so re-own build artifacts to `node` on copy.
-COPY --from=builder --chown=node:node /app/public ./public
+# `/app` is root-owned, so re-own build artifacts to the runtime user on copy.
+COPY --from=builder --chown=${RUNTIME_USER}:${RUNTIME_USER} /app/public ./public
 
 # Automatically leverage output traces to reduce image size
 # https://nextjs.org/docs/advanced-features/output-file-tracing
-COPY --from=builder --chown=node:node /app/.next/standalone ./
-COPY --from=builder --chown=node:node /app/.next/static ./.next/static
+COPY --from=builder --chown=${RUNTIME_USER}:${RUNTIME_USER} /app/.next/standalone ./
+COPY --from=builder --chown=${RUNTIME_USER}:${RUNTIME_USER} /app/.next/static ./.next/static
 
 # Environment variables must be redefined at run time
 # NOTE: if you add something here, make sure to add it to the builder as well
@@ -194,9 +190,13 @@ ENV ONYX_VERSION=${ONYX_VERSION}
 # name only — breaking loopback healthchecks. Force 0.0.0.0 instead.
 ENV HOSTNAME="0.0.0.0"
 
-# Don't run production as root. The DHI runtime already defaults to this user; the default
-# slim image does not.
-USER node
+# Don't run production as root. The DHI runtime already defaults to its non-root user; the
+# public oven/bun image does not.
+USER ${RUNTIME_USER}
 
-# The DHI runtime image sets no default ENTRYPOINT, so invoke node explicitly.
-CMD ["node", "server.js"]
+# Clear the base ENTRYPOINT (the public oven/bun image sets a wrapper script) so the command
+# below runs as written on every base.
+ENTRYPOINT []
+
+# Next.js standalone server, run by bun.
+CMD ["bun", "server.js"]

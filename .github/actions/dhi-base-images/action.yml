@@ -1,7 +1,7 @@
 name: "Docker Hardened Image bases"
 description: >-
-  Logs in to dhi.io and exports the build args that point web/Dockerfile and
-  backend/Dockerfile.model_server at the pinned Docker Hardened Images (DHI).
+  Logs in to dhi.io and exports the build args that point web/Dockerfile (bun) and
+  backend/Dockerfile.model_server (python) at the pinned Docker Hardened Images (DHI).
   Both Dockerfiles default to public Docker Hub images, so without DHI credentials
   (fork pull requests) this action exports nothing and the defaults apply.
 inputs:
@@ -40,14 +40,17 @@ runs:
 
     # Single source of truth for the DHI digests. Refresh one with:
     # docker buildx imagetools inspect <image reference>
+    # TODO: pin the two bun images by digest once they are read from a DHI-authenticated
+    # host; the catalog tops out at bun 1.3.14, so `1-debian13` picks up 1.4 when published.
     - name: Export DHI build args
       if: steps.creds.outputs.available == 'true'
       shell: bash
       run: |
         {
-          echo "DHI_NODE_BUILD_ARGS<<EOF"
-          echo "NODE_BUILDER_IMAGE=dhi.io/node:24-debian13-dev@sha256:25a83f18150669e9ce3c9437327add4d75ae4ea26cbdb5e8747b66d3b74a567a"
-          echo "NODE_RUNTIME_IMAGE=dhi.io/node:24-debian13@sha256:805278f24c1146c6d3c96577b6256f8f97c43196fff88315fe3291a1ce118ddd"
+          echo "DHI_BUN_BUILD_ARGS<<EOF"
+          echo "BUN_BUILDER_IMAGE=dhi.io/bun:1-debian13-dev"
+          echo "BUN_RUNTIME_IMAGE=dhi.io/bun:1-debian13"
+          echo "RUNTIME_USER=nonroot"
           echo "EOF"
           echo "DHI_PYTHON_BUILD_ARGS<<EOF"
           echo "PYTHON_BUILDER_IMAGE=dhi.io/python:3.13-debian13-dev@sha256:7933d16e50454c39bca6e935027166d5e5b05c6c03383dc2f58e8fe6e2440b7d"

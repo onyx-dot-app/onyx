@@ -382,7 +382,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # ratchet:oven-sh/setup-bun@v2 # zizmor: ignore[cache-poisoning]
         with:
-          bun-version: "1.3.13"
+          bun-version: "1.4.0"
 
       - name: install Rust stable
         uses: dtolnay/rust-toolchain@6d9817901c499d6b02debbb57edb38d33daa680b # zizmor: ignore[impostor-commit]
@@ -545,7 +545,7 @@ jobs:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
 
-      # web/Dockerfile defaults to the public Node bases. Release builds ship on the
+      # web/Dockerfile defaults to the public bun bases. Release builds ship on the
       # hardened DHI equivalents, passed as build args below.
       - name: Resolve Docker Hardened Image bases
         uses: ./.github/actions/dhi-base-images
@@ -563,8 +563,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
-            ${{ env.DHI_NODE_BUILD_ARGS }}
-            NODE_OPTIONS=--max-old-space-size=8192
+            ${{ env.DHI_BUN_BUILD_ARGS }}
           cache-from: |
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
@@ -627,7 +626,7 @@ jobs:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
 
-      # web/Dockerfile defaults to the public Node bases. Release builds ship on the
+      # web/Dockerfile defaults to the public bun bases. Release builds ship on the
       # hardened DHI equivalents, passed as build args below.
       - name: Resolve Docker Hardened Image bases
         uses: ./.github/actions/dhi-base-images
@@ -645,8 +644,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
-            ${{ env.DHI_NODE_BUILD_ARGS }}
-            NODE_OPTIONS=--max-old-space-size=8192
+            ${{ env.DHI_BUN_BUILD_ARGS }}
           cache-from: |
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
@@ -801,7 +799,7 @@ jobs:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
 
-      # web/Dockerfile defaults to the public Node bases. Release builds ship on the
+      # web/Dockerfile defaults to the public bun bases. Release builds ship on the
       # hardened DHI equivalents, passed as build args below.
       - name: Resolve Docker Hardened Image bases
         uses: ./.github/actions/dhi-base-images
@@ -819,7 +817,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
-            ${{ env.DHI_NODE_BUILD_ARGS }}
+            ${{ env.DHI_BUN_BUILD_ARGS }}
             NEXT_PUBLIC_CLOUD_ENABLED=true
             WEB_FRAME_PROTECTION_ENABLED=false
             NEXT_PUBLIC_POSTHOG_KEY=${{ secrets.POSTHOG_KEY }}
@@ -829,7 +827,6 @@ jobs:
             NEXT_PUBLIC_GTM_ENABLED=true
             NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED=true
             NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK=true
-            NODE_OPTIONS=--max-old-space-size=8192
             SENTRY_RELEASE=${{ github.sha }}
           secrets: |
             sentry_auth_token=${{ secrets.SENTRY_AUTH_TOKEN }}
@@ -893,7 +890,7 @@ jobs:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
 
-      # web/Dockerfile defaults to the public Node bases. Release builds ship on the
+      # web/Dockerfile defaults to the public bun bases. Release builds ship on the
       # hardened DHI equivalents, passed as build args below.
       - name: Resolve Docker Hardened Image bases
         uses: ./.github/actions/dhi-base-images
@@ -911,7 +908,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
-            ${{ env.DHI_NODE_BUILD_ARGS }}
+            ${{ env.DHI_BUN_BUILD_ARGS }}
             NEXT_PUBLIC_CLOUD_ENABLED=true
             WEB_FRAME_PROTECTION_ENABLED=false
             NEXT_PUBLIC_POSTHOG_KEY=${{ secrets.POSTHOG_KEY }}
@@ -921,7 +918,6 @@ jobs:
             NEXT_PUBLIC_GTM_ENABLED=true
             NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED=true
             NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK=true
-            NODE_OPTIONS=--max-old-space-size=8192
             SENTRY_RELEASE=${{ github.sha }}
           secrets: |
             sentry_auth_token=${{ secrets.SENTRY_AUTH_TOKEN }}

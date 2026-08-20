@@ -16,7 +16,7 @@ Related files:
 
 ## SHA-pinned base + helper images
 
-`python:3.13-slim`, `node:24-trixie-slim`, and `oven/bun:1.3.14` are
+`python:3.13-slim`, `node:24-trixie-slim`, and `oven/bun:1.4.0` are
 SHA-pinned in the Dockerfile (`@sha256:...`). Same precedent as
 `backend/Dockerfile` and `web/Dockerfile`. Bump via:
 
@@ -45,7 +45,7 @@ the sandbox's credential surface.
 We used to `curl -fsSL https://bun.sh/install | bash` at image-build
 time. That hit the public internet on every uncached layer rebuild and
 made builds vulnerable to bun.sh availability. The bun binary is now
-copied out of `oven/bun:<version>` (same pattern as `web/Dockerfile:15-16`).
+copied out of `oven/bun:<version>`.
 
 `BUN_VERSION` and the COPY tag must be kept in sync.
 

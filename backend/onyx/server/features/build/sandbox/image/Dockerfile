@@ -12,7 +12,7 @@ ARG BASE_IMAGE_REGISTRY=docker.io
 # bun binary source. Pinned via the registry prefix in its own stage because
 # buildx rejects variable expansion directly in `COPY --from=` — the ARG is
 # only expandable in a FROM.
-FROM ${BASE_IMAGE_REGISTRY}/oven/bun:1.3.14@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 AS bun_source
+FROM ${BASE_IMAGE_REGISTRY}/oven/bun:1.4.0@sha256:5ff609364c049b54eb0ff560ec96319729a972078ef2c755d758f0c6ef89c2d6 AS bun_source
 
 # Node.js source. The final image is Python-based, but the sandbox still needs
 # Node/npm/npx for MCP commands and skill-runtime packages.
