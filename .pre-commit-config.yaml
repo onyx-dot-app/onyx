@@ -217,8 +217,12 @@ repos:
           # ripsecrets joins every pattern into one regex and runs it over the
           # whole file, so `^`/`$` anchor to the start and end of the file, not
           # a line -- an anchored pattern here silently matches nothing.
+          # `\b` keeps the prefix a real token start: without it the pattern
+          # matches inside words, e.g. the "sk-" in "celery-task-meta-<uuid>".
+          # The capture group makes ripsecrets test the key body for
+          # randomness, which drops placeholders like "sk-test-key-0000...".
           - --additional-pattern
-          - sk-[A-Za-z0-9_\-]{20,}
+          - \bsk-([A-Za-z0-9_\-]{20,})
 
   - repo: https://github.com/antonbabenko/pre-commit-terraform
     rev: d0e12caebb2ab0ee8bf98181c8bfe9702bca103d
