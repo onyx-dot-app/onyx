@@ -181,11 +181,13 @@ export function ModelSettingsPopover({
   ].filter(Boolean);
 
   function setMax(stop: number) {
-    const effort = ALL_REASONING_STOPS[Math.min(stop, supportedStop)];
+    const newMaxStop = Math.min(stop, supportedStop);
+    const effort = ALL_REASONING_STOPS[newMaxStop];
     if (!effort) return;
     const patch: ModelSettingsPatch = { reasoning_effort_max: effort };
-    // The API rejects a default above the max, so keep the pair consistent.
-    if (defaultStop > Math.min(stop, supportedStop)) {
+    // The API rejects a default above the max. Compare the raw stored default,
+    // not the clamped display value, so a stale higher default gets rewritten.
+    if (rawDefaultStop > newMaxStop) {
       patch.reasoning_effort_default = effort;
     }
     onChange(patch);
