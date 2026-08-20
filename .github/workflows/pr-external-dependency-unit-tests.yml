@@ -158,11 +158,9 @@ jobs:
             code-interpreter
 
       - name: Run migrations
+        working-directory: backend
         run: |
-          cd backend
-          # Run migrations to head
           alembic upgrade head
-          alembic heads --verbose
 
       # A real OIDC server for the live multi-provider login test. Auth leg only.
       # Fail if it never becomes ready, otherwise the live tests would silently skip.
