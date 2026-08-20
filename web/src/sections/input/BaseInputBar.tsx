@@ -128,9 +128,11 @@ const BaseInputBar = memo(
         disabled,
       });
 
+      const trimmedMessage = message.trim();
+
       const queueNav = useQueuedMessageNavigation({
         messages: queue,
-        inputIsEmpty: !message,
+        inputIsEmpty: !trimmedMessage,
         onRemove: (index) => onRemoveQueuedMessage?.(index),
         onEdit: setMessage,
       });
@@ -256,7 +258,7 @@ const BaseInputBar = memo(
       }, [onSelectionChange]);
 
       const canSubmit =
-        message.trim().length > 0 &&
+        trimmedMessage.length > 0 &&
         !disabled &&
         !submitBlocked &&
         !sandboxInitializing &&
@@ -317,7 +319,7 @@ const BaseInputBar = memo(
                 aria-disabled={disabled}
                 aria-placeholder={placeholder}
                 data-placeholder={placeholder}
-                data-empty={!message ? "" : undefined}
+                data-empty={!trimmedMessage ? "" : undefined}
                 onCopy={handleCopy}
                 onCut={handleCut}
                 onMouseDown={handleTileMouseDown}
@@ -335,7 +337,7 @@ const BaseInputBar = memo(
                     </Text>
                   </div>
                 ) : (
-                  !message &&
+                  !trimmedMessage &&
                   queueEnabled &&
                   queue.length > 0 && (
                     <div className="flex items-center gap-1 select-none">
