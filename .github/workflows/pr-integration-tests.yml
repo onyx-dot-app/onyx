@@ -82,7 +82,7 @@ jobs:
               - 'uv.lock'
               - '.github/workflows/pr-integration-tests.yml'
               - '.github/actions/setup-test-license/**'
-              - '.github/actions/install-deps-and-generate-openapi-client/**'
+              - '.github/actions/install-python-deps/**'
               - '.github/actions/login-ecr-pullthrough-cache/**'
             gateway:
               - 'backend/onyx/server/gateway/**'
@@ -352,8 +352,8 @@ jobs:
           cd cli
           GOARCH=arm64 GOOS=linux go build -o ${{ github.workspace }}/onyx-cli-test .
 
-      - name: Install Python deps and generate OpenAPI client
-        uses: ./.github/actions/install-deps-and-generate-openapi-client
+      - name: Install Python deps
+        uses: ./.github/actions/install-python-deps
         with:
           devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }}
 
@@ -510,8 +510,8 @@ jobs:
             relational_db
         id: start_docker_onyx_lite
 
-      - name: Install Python deps and generate OpenAPI client
-        uses: ./.github/actions/install-deps-and-generate-openapi-client
+      - name: Install Python deps
+        uses: ./.github/actions/install-python-deps
         with:
           devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }}
 
@@ -614,8 +614,8 @@ jobs:
             indexing_model_server
         id: start_docker_multi_tenant
 
-      - name: Install Python deps and generate OpenAPI client
-        uses: ./.github/actions/install-deps-and-generate-openapi-client
+      - name: Install Python deps
+        uses: ./.github/actions/install-python-deps
         with:
           devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }}
 
