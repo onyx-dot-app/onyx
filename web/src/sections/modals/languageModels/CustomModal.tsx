@@ -20,6 +20,7 @@ import {
   ModalWrapper,
   useApiBaseSubDescription,
 } from "@/sections/modals/languageModels/shared";
+import { ModelSettingsPopover } from "@/sections/modals/languageModels/ModelSettingsPopover";
 import { useCustomProviderNames } from "@/lib/languageModels/hooks";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import KeyValueInput, {
@@ -44,11 +45,19 @@ import { Section } from "@/layouts/general-layouts";
 
 // ─── Model Configuration List ─────────────────────────────────────────────────
 
-const MODEL_GRID_COLS = "grid-cols-[2fr_2fr_minmax(10rem,1fr)_1fr_2.25rem]";
+const MODEL_GRID_COLS =
+  "grid-cols-[2fr_2fr_minmax(10rem,1fr)_1fr_2.25rem_2.25rem]";
 
 type CustomModelConfiguration = Pick<
   ModelConfiguration,
-  "name" | "max_input_tokens" | "supports_image_input"
+  | "name"
+  | "max_input_tokens"
+  | "supports_image_input"
+  | "supports_reasoning"
+  | "supported_reasoning_efforts"
+  | "reasoning_effort_max"
+  | "reasoning_effort_default"
+  | "temperature_default"
 > & {
   display_name: string;
 };
@@ -102,6 +111,10 @@ function ModelConfigurationItem({
         }
         type="number"
       />
+      <ModelSettingsPopover
+        model={{ is_visible: true, effectiveDisplayName: model.name, ...model }}
+        onChange={(patch) => onChange({ ...model, ...patch })}
+      />
       <Button
         disabled={!canRemove}
         prominence="tertiary"
@@ -139,6 +152,7 @@ function ModelConfigurationList() {
         display_name: "",
         max_input_tokens: null,
         supports_image_input: false,
+        supports_reasoning: false,
       },
     ]);
   }
@@ -153,6 +167,7 @@ function ModelConfigurationList() {
           <Text mainUiAction>Display Name</Text>
           <Text mainUiAction>Input Type</Text>
           <Text mainUiAction>Max Tokens</Text>
+          <div aria-hidden />
           <div aria-hidden />
 
           {models.map((model, index) => (
@@ -266,6 +281,10 @@ export default function CustomModal({
         max_input_tokens: mc.max_input_tokens ?? null,
         supports_image_input: mc.supports_image_input,
         supports_reasoning: mc.supports_reasoning,
+        supported_reasoning_efforts: mc.supported_reasoning_efforts,
+        reasoning_effort_max: mc.reasoning_effort_max,
+        reasoning_effort_default: mc.reasoning_effort_default,
+        temperature_default: mc.temperature_default,
         effectiveDisplayName: mc.effectiveDisplayName,
       })
     ) ?? [
