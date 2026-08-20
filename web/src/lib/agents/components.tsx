@@ -4,14 +4,15 @@ import React, { useEffect, useRef } from "react";
 import { MinimalAgent } from "@/lib/agents/types";
 import { usePinnedAgents, useActiveAgent } from "@/lib/agents/hooks";
 import { noProp } from "@/lib/utils";
-import { SidebarTab, Button } from "@opal/components";
+import { SidebarTab, Button, Modal, Text } from "@opal/components";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import useOnMount from "@/hooks/useOnMount";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
-import { SvgX } from "@opal/icons";
+import { SvgX, SvgOnyxOctagon } from "@opal/icons";
 import { Hoverable } from "@opal/core";
 import useAppFocus from "@/hooks/useAppFocus";
+import { useUser } from "@/providers/UserProvider";
 
 interface SortableItemProps {
   id: number;
@@ -120,5 +121,39 @@ export function AgentButton({ agent }: AgentButtonProps) {
         </SidebarTab>
       </Hoverable.Root>
     </SortableItem>
+  );
+}
+
+export function NoAgentModal() {
+  const { isAdmin } = useUser();
+
+  return (
+    <Modal open>
+      <Modal.Content width="sm" height="sm">
+        <Modal.Header icon={SvgOnyxOctagon} title="No Agent Available" />
+        <Modal.Body gap={2}>
+          <Text as="p" color="text-03">
+            You currently have no agent configured.
+          </Text>
+          {isAdmin ? (
+            <Text as="p" color="text-03">
+              As an administrator, you can create a new agent by visiting the
+              admin panel.
+            </Text>
+          ) : (
+            <Text as="p" color="text-03">
+              Please contact your administrator to configure an agent for you.
+            </Text>
+          )}
+        </Modal.Body>
+        {isAdmin && (
+          <Modal.Footer>
+            <Button href="/admin/agents" prominence="secondary">
+              Go to Admin Panel
+            </Button>
+          </Modal.Footer>
+        )}
+      </Modal.Content>
+    </Modal>
   );
 }
