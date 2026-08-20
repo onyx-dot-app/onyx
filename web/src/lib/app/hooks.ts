@@ -6,6 +6,7 @@ import { useSettings } from "@/lib/settings/hooks";
 import { APP_SLOGAN } from "@/lib/constants";
 import useAppFocus from "@/hooks/useAppFocus";
 import useChatSessions from "@/hooks/useChatSessions";
+import { useCurrentSessionPersonaId } from "@/app/app/stores/useChatSessionStore";
 import { useActiveAgent, useAgents } from "@/lib/agents/hooks";
 import {
   SEARCH_TOOL_ID,
@@ -51,16 +52,27 @@ export function useAdminDocumentTitle(): void {
  * agent. {@link useActiveAgent} cannot be used here because it falls through
  * to the Assistant, then to pins, when the session's agent does not resolve.
  *
+ * The id comes from the store, not from {@link useChatSessions}: that hook
+ * pages 50 sessions at a time, so an older chat is absent from its list and
+ * would read as "no session at all".
+ *
  * Before a session exists, the active agent is the one about to answer.
+ *
+ * Returns null while the agent list loads. An empty list means "not known
+ * yet", never "cannot retrieve", and a caller that acts on the difference
+ * must wait rather than read a premature false.
  */
-export function useChatSessionSupportsRetrieval(): boolean {
-  const { agents } = useAgents();
-  const { currentChatSession } = useChatSessions();
+export function useChatSessionSupportsRetrieval(): boolean | null {
+  const { agents, isLoading: isLoadingAgents } = useAgents();
+  const sessionPersonaId = useCurrentSessionPersonaId();
   const activeAgent = useActiveAgent();
 
-  const agent = currentChatSession
-    ? agents.find((candidate) => candidate.id === currentChatSession.persona_id)
-    : activeAgent;
+  if (isLoadingAgents) return null;
+
+  const agent =
+    sessionPersonaId === null
+      ? activeAgent
+      : agents.find((candidate) => candidate.id === sessionPersonaId);
 
   return (agent?.tools ?? []).some(
     (tool) =>

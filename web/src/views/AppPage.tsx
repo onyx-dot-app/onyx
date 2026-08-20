@@ -576,6 +576,9 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     // Already closed.
     if (!documentSidebarVisible) return;
 
+    // Retrieval is not known yet. Closing now would need a reopen later.
+    if (retrievalEnabled === null) return;
+
     // Not reading a conversation, so there are no sources to show.
     if (!appFocus.isChattable()) {
       updateCurrentDocumentSidebarVisible(false);
