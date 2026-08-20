@@ -424,6 +424,9 @@ def _convert_page_to_document(
     page_content = client.get_page_content(space_id, page_id)
 
     text = _extract_text_from_document(page_content)
+    description: str = page.get("description", "")
+    if description:
+        text = f"{description}\n\n{text}"
 
     return Document(
         id=f"gitbook-{space_id}-{page_id}",
