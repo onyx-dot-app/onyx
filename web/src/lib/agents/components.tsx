@@ -11,6 +11,7 @@ import useOnMount from "@/hooks/useOnMount";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { SvgX } from "@opal/icons";
 import { Hoverable } from "@opal/core";
+import useAppFocus from "@/hooks/useAppFocus";
 
 interface SortableItemProps {
   id: number;
@@ -69,6 +70,21 @@ export function AgentButton({ agent }: AgentButtonProps) {
   const { pinnedAgents, togglePinnedAgent } = usePinnedAgents();
   const isActuallyPinned = pinnedAgents.some((a) => a.id === agent.id);
   const isCurrentAgent = activeAgent?.id === agent.id;
+  const appFocus = useAppFocus();
+
+  // # NOTE (@raunakab):
+  //
+  // The agent button should be highlighted in many cases; even in cases in which the "Start chat with an Agent" tab is not explicitly selected.
+  // Notably, say you're in a chat-session that was started with `Agent XYZ`.
+  // In that situation, the chat-tab *AND* the `Agent XYZ`-tab should be highlighted.
+  //
+  // Another example: say you have the "Always Start with an Agent" setting enabled (via Admin -> Chat Preferences -> Advanced Options -> Always Start with an Agent).
+  // If you then navigate to "New Session", the new-session-tab AND the `Agent XYZ`-tab should both be highlighted.
+  const agentButtonShouldBeHighlighted =
+    appFocus.isAgent() ||
+    appFocus.isNewSession() ||
+    appFocus.isChat() ||
+    appFocus.isSharedChat();
 
   async function handleClick() {
     if (isActuallyPinned) return;
@@ -83,7 +99,7 @@ export function AgentButton({ agent }: AgentButtonProps) {
           icon={() => <AgentAvatar agent={agent} />}
           href={`/app?agentId=${agent.id}`}
           onClick={handleClick}
-          selected={isCurrentAgent}
+          selected={agentButtonShouldBeHighlighted && isCurrentAgent}
           rightChildren={
             // Hide unpin button for current agent since auto-pin would immediately re-pin
             !isCurrentAgent && (
