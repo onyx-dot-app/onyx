@@ -15,6 +15,7 @@
 
 # python
 .venv
+.migration_snapshots
 .mypy_cache
 .idea
 __pycache__/

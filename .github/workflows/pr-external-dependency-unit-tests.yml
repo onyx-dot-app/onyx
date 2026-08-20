@@ -161,11 +161,23 @@ jobs:
             opensearch \
             code-interpreter
 
+      # A hit skips the ~440-revision replay. The key covers every revision file, so
+      # a changed migration misses and the restore-key falls back to an older
+      # snapshot, which is then topped up by replaying only the new revisions.
+      - name: Restore migration snapshot cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # zizmor: ignore[cache-poisoning]
+        with:
+          path: backend/.migration_snapshots
+          key: migration-snapshot-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('backend/alembic/versions/**') }}
+          restore-keys: |
+            migration-snapshot-${{ runner.os }}-${{ runner.arch }}-
+
       - name: Run migrations
         run: |
           cd backend
-          # Run migrations to head
-          alembic upgrade head
+          # Restores a snapshot when one applies, otherwise runs the full chain.
+          # Either way the database ends at head. See onyx/db/migration_snapshot.py.
+          uv run python -m scripts.alembic_snapshot apply
           alembic heads --verbose
 
       # A real OIDC server for the live multi-provider login test. Auth leg only.

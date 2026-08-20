@@ -18,6 +18,7 @@ from onyx.db.engine.sql_engine import (
     build_connection_string,
     get_session_with_current_tenant,
 )
+from onyx.db.migration_snapshot import build_schema
 from onyx.db.swap_index import check_and_perform_index_swap
 from onyx.file_store.file_store import get_default_file_store
 from onyx.setup import setup_postgres
@@ -137,12 +138,23 @@ def upgrade_postgres(
         db_api=SYNC_DB_API,
         app_name="upgrade_postgres",
     )
-    _run_migrations(
-        conn_str,
-        config_name,
-        direction="upgrade",
-        revision=revision,
-    )
+
+    def _upgrade() -> None:
+        _run_migrations(
+            conn_str,
+            config_name,
+            direction="upgrade",
+            revision=revision,
+        )
+
+    # Only the main chain to head is worth snapshotting. alembic_tenants is ~10
+    # revisions, and a partial upgrade is not what a snapshot represents.
+    if config_name != "alembic" or revision != "head":
+        _upgrade()
+        return
+
+    outcome = build_schema(database=database, migrate_to_head=_upgrade)
+    logger.info("Postgres schema built via %s", outcome.value)
 
 
 def drop_multitenant_postgres(
