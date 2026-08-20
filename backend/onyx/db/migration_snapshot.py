@@ -289,6 +289,29 @@ def _load_metadata(directory: Path) -> list[SnapshotMetadata]:
     return found
 
 
+def _expected_head(directory: Path, key: str) -> str:
+    """Head revision recorded alongside snapshot `key`.
+
+    Falls back to reading the revision files when the sidecar is missing, which is
+    slow (it parses every revision) but always correct.
+    """
+    path = directory / f"{key}.json"
+    try:
+        return SnapshotMetadata.from_json(path.read_text()).head_revision
+    except (OSError, json.JSONDecodeError, KeyError):
+        return head_revision()
+
+
+def _assert_stamped(database: str, expected: str) -> None:
+    with _cursor(database) as cur:
+        cur.execute("SELECT version_num FROM public.alembic_version ORDER BY 1")
+        stamped = [row[0] for row in cur.fetchall()]
+    if stamped != [expected]:
+        raise RuntimeError(
+            f"Snapshot restored {database} to {stamped}, expected [{expected}]."
+        )
+
+
 def _find_reusable_snapshot(
     directory: Path, files: dict[str, str], server_major: int
 ) -> SnapshotMetadata | None:
@@ -364,6 +387,12 @@ def build_schema(
         exact = directory / f"{key}.sql"
         if exact.is_file():
             restore_dump(database, exact.read_text(), schema=schema)
+            # The restore is the one path that never runs Alembic, so confirm it
+            # landed on the revision the snapshot claims. The recorded head is
+            # trustworthy here: an exact key match means the revision files are
+            # byte-for-byte what they were when the snapshot was taken. A mismatch
+            # raises, which falls back to the full chain below.
+            _assert_stamped(database, _expected_head(directory, key))
             logger.info(
                 "Restored migration snapshot %s (%s revisions)", key, len(files)
             )

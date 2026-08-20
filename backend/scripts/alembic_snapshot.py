@@ -29,7 +29,7 @@ from onyx.configs.app_configs import (
 )
 from onyx.db.engine.shard_registry import ALEMBIC_TARGET_URL_ATTRIBUTE
 from onyx.db.engine.sql_engine import build_connection_string
-from onyx.db.migration_snapshot import build_schema, head_revision, snapshot_dir
+from onyx.db.migration_snapshot import build_schema, snapshot_dir
 
 
 @contextmanager
@@ -83,15 +83,11 @@ def cmd_apply(args: argparse.Namespace) -> int:
         database=database, migrate_to_head=lambda: _upgrade(database)
     )
 
-    # Report the stamped revision here rather than shelling out to `alembic heads`,
-    # which would pay the multi-second `onyx` import a second time. Mismatch means
-    # the database is not where the caller asked it to be, so fail loudly.
-    head = head_revision()
-    applied = _applied_revisions(database)
-    print(f"{database} via {outcome.value}: applied={applied} head={head}")
-    if applied != [head]:
-        print("ERROR: database is not at head", file=sys.stderr)
-        return 1
+    # Report the stamped revision rather than shelling out to `alembic heads`, which
+    # would pay the multi-second `onyx` import a second time. build_schema already
+    # guarantees head: the snapshot path checks the stamp, the other paths end in
+    # `alembic upgrade head`.
+    print(f"{database} via {outcome.value}: applied={_applied_revisions(database)}")
     return 0
 
 
