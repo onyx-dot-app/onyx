@@ -17,7 +17,7 @@ import LineItem from "@/refresh-components/buttons/LineItem";
 import { Popover } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import Text from "@/refresh-components/texts/Text";
-import { UserStatus } from "@/lib/types";
+import { AccountType, UserStatus } from "@/lib/types";
 import { toast } from "@opal/layouts";
 import { approveRequest, setUserAdminAccess } from "./svc";
 import { useCanManageGroups } from "@/lib/permissions/hooks";
@@ -90,7 +90,7 @@ export default function UserRowActions({
     })();
   };
 
-  const adminAccessItem = (
+  const adminAccessItem = user.account_type === AccountType.STANDARD && (
     <LineItem icon={SvgUserManage} onClick={toggleAdminAccess}>
       {user.is_admin ? "Remove Admin Access" : "Make Admin"}
     </LineItem>
