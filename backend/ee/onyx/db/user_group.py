@@ -55,7 +55,7 @@ from onyx.db.permissions import (
     recompute_permissions_for_group__no_commit,
     recompute_user_permissions__no_commit,
 )
-from onyx.db.users import fetch_user_by_id
+from onyx.db.users import assert_admin_access_survives_removal, fetch_user_by_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.audit import (
@@ -749,6 +749,10 @@ def update_user_group(
     removed_user_ids = list(current_user_ids - updated_user_ids)
 
     _assert_no_privilege_amplification(db_session, user, user_group_id, added_user_ids)
+    # Runs before the manager guard below so the admin-specific message wins.
+    assert_admin_access_survives_removal(
+        db_session, user, user_group_id, removed_user_ids
+    )
 
     # Removing yourself drops the membership row carrying is_manager, and
     # effective_permissions is derived from group grants — so leaving can revoke the very

@@ -11,8 +11,6 @@ import LineItem from "@/refresh-components/buttons/LineItem";
 import { ShadowDiv } from "@opal/components";
 import { Tooltip } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/lib/settings/types";
 import useGroups from "@/hooks/useGroups";
 import { addUserToGroup, removeUserFromGroup } from "./svc";
 import type { UserRow } from "./interfaces";
@@ -37,8 +35,8 @@ export default function EditUserModal({
   onClose,
   onMutate,
 }: EditUserModalProps) {
-  const businessTier = useTierAtLeast(Tier.BUSINESS);
-  const { data: allGroups, isLoading: groupsLoading } = useGroups();
+  // defaults included; backend rejects the unsafe removals (last admin, self)
+  const { data: allGroups, isLoading: groupsLoading } = useGroups(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [popoverOpen, setPopoverOpen] = useState(false);

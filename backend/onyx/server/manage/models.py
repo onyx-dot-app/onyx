@@ -251,6 +251,11 @@ class UserByEmail(BaseModel):
     user_email: str
 
 
+class UserAdminAccessUpdateRequest(BaseModel):
+    user_email: str
+    is_admin: bool
+
+
 class UserCraftAccessUpdateRequest(BaseModel):
     user_emails: list[str] = Field(min_length=1)
     # True/False = explicit override; None = clear the override (follow the
