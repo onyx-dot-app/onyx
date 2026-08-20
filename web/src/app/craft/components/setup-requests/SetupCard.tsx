@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useSWRConfig } from "swr";
 
 import { Button, Text } from "@opal/components";
+import { Content } from "@opal/layouts";
 import { cn } from "@opal/utils";
 import {
   ConnectAppDecision,
@@ -218,15 +219,16 @@ export default function SetupCard({
         data-testid="setup-card"
         className="rounded-08 border-[0.5px] border-status-info-03 px-3 py-2 flex flex-col gap-2"
       >
-        <div className="flex flex-col gap-1.5">
-          <div className="flex min-w-0 items-center gap-1.5">
-            <Logo className="size-4 shrink-0" />
-            <Text font="main-ui-action">{`Connect ${appName}`}</Text>
-          </div>
-          <Text as="p" font="main-ui-muted" color="text-03">
-            {reason ?? `The agent needs ${appName} to continue this task.`}
-          </Text>
-        </div>
+        <Content
+          sizePreset="main-ui"
+          variant="section"
+          icon={Logo}
+          title={`Connect ${appName}`}
+          description={
+            reason ?? `The agent needs ${appName} to continue this task.`
+          }
+          descriptionFont="main-ui-muted"
+        />
         {error && (
           <Text font="secondary-body" color="text-03">
             {error}

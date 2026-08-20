@@ -17,7 +17,7 @@ import {
   ContentMd,
   type ContentMdProps,
 } from "@opal/layouts/content/ContentMd";
-import type { TagProps } from "@opal/components";
+import type { TagProps, TextFont } from "@opal/components";
 import type { ColorTypes, IconFunctionComponent, RichStr } from "@opal/types";
 import { widthVariants } from "@opal/shared";
 import type { ExtremaSizeVariants } from "@opal/types";
@@ -118,6 +118,8 @@ type MdContentProps = ContentBaseProps & {
   tag?: TagProps;
   /** Slot for a control rendered to the right (desktop) / between title and description (mobile). See ContentMd. */
   rightChildren?: React.ReactNode;
+  /** Font used for the description. */
+  descriptionFont?: TextFont;
 };
 
 /** ContentSm does not support descriptions or inline editing. */
