@@ -22,7 +22,7 @@ import InputSelect from "@/refresh-components/inputs/InputSelect";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import { Switch } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
-import { Button, TextButton } from "@opal/components";
+import { Button } from "@opal/components";
 import { BaseLLMFormValues } from "@/sections/modals/languageModels/utils";
 import type { RichStr } from "@opal/types";
 import { Section } from "@/layouts/general-layouts";
@@ -641,7 +641,11 @@ function ModelRow({
                     />
                   </Hoverable.Item>
                   {isDefaultModel ? (
-                    <Text secondaryAction text03>
+                    <Text
+                      secondaryAction
+                      nowrap
+                      className="px-1.5 py-1 text-action-selection-05"
+                    >
                       Default Model
                     </Text>
                   ) : (
@@ -650,14 +654,16 @@ function ModelRow({
                         group="model-row"
                         variant="appear-on-hover"
                       >
-                        <TextButton
+                        <Button
+                          prominence="internal"
+                          size="sm"
                           onClick={(e: React.MouseEvent) => {
                             e.stopPropagation();
                             onSetDefaultModel();
                           }}
                         >
-                          Default Model
-                        </TextButton>
+                          Set as Default
+                        </Button>
                       </Hoverable.Item>
                     )
                   )}
