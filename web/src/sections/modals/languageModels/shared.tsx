@@ -693,9 +693,22 @@ export function ModelSelectionField({
   function handleToggleAutoMode(nextIsAutoMode: boolean) {
     formikProps.setFieldValue("is_auto_mode", nextIsAutoMode);
     if (nextIsAutoMode) {
+      // Auto mode restores the snapshot's visibility, but unsaved renames and
+      // settings are edits the toggle has no business discarding.
+      const currentByName = new Map(models.map((m) => [m.name, m]));
       formikProps.setFieldValue(
         "model_configurations",
-        originalModelsRef.current
+        originalModelsRef.current.map((original) => {
+          const current = currentByName.get(original.name);
+          if (!current) return original;
+          return {
+            ...original,
+            custom_display_name: current.custom_display_name,
+            reasoning_effort_max: current.reasoning_effort_max,
+            reasoning_effort_default: current.reasoning_effort_default,
+            temperature_default: current.temperature_default,
+          };
+        })
       );
     }
   }

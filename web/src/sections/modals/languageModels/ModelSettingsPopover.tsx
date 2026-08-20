@@ -36,7 +36,11 @@ interface ModelSettingsPopoverProps {
   onChange: (patch: ModelSettingsPatch) => void;
 }
 
-function ResetToAuto({ onClick }: { onClick: () => void }) {
+interface ResetToAutoProps {
+  onClick: () => void;
+}
+
+function ResetToAuto({ onClick }: ResetToAutoProps) {
   return (
     <Section flexDirection="row" justifyContent="end" height="auto">
       <Button prominence="tertiary" onClick={onClick}>
