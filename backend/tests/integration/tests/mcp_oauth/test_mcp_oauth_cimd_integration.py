@@ -324,15 +324,16 @@ def test_mcp_oauth_known_provider_flow(
     )
 
     try:
+        tls_context = ssl.create_default_context(
+            cafile=str(known_provider_https_endpoint.ca_file)
+        )
         callback = _start_oauth_flow(
             server_id,
             admin_user,
             cimd_oauth_services,
             force_reauthentication=False,
             authorization_endpoint=authorization_endpoint,
-            verify=ssl.create_default_context(
-                cafile=str(known_provider_https_endpoint.ca_file)
-            ),
+            verify=tls_context,
         )
         _complete_oauth_callback(callback, admin_user)
 
@@ -342,10 +343,22 @@ def test_mcp_oauth_known_provider_flow(
             force_reauthentication=False,
         )
         assert authenticated_connect == {
+            "server_id": server_id,
             "status": "already_authenticated",
             "authorization_url": None,
             "redirect_url": RETURN_PATH,
         }
+
+        reauthentication_callback = _start_oauth_flow(
+            server_id,
+            admin_user,
+            cimd_oauth_services,
+            force_reauthentication=True,
+            authorization_endpoint=authorization_endpoint,
+            verify=tls_context,
+        )
+        _complete_oauth_callback(reauthentication_callback, admin_user)
+
         assert MCP_TOOL_NAME in _available_tool_names(server_id, admin_user)
     finally:
         _delete_mcp_server(server_id, admin_user)
