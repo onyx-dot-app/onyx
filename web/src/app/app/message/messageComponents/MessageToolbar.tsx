@@ -12,6 +12,7 @@ import {
   useSelectedNodeForDocDisplay,
 } from "@/app/app/stores/useChatSessionStore";
 import { messageModelName } from "@/app/app/message/multiModel";
+import { useDistinctModelsUsed } from "@/lib/multiModel/hooks";
 import { convertMarkdownTablesToTsv } from "@/app/app/message/copyingUtils";
 import { getTextContent } from "@/app/app/services/packetUtils";
 import { removeThinkingTokens } from "@/app/app/services/thinkingTokens";
@@ -152,17 +153,7 @@ export default function MessageToolbar({
     const msg = messageTree?.get(nodeId);
     return msg ? (messageModelName(msg) ?? undefined) : undefined;
   }, [messageTree, nodeId]);
-  // More than one model in the session (multi-model turns, or a model switch
-  // between turns) keeps the Retry label expanded so responses stay attributed.
-  const distinctModelsUsed = useMemo(() => {
-    if (!messageTree) return 0;
-    const names = new Set<string>();
-    messageTree.forEach((m) => {
-      const name = messageModelName(m);
-      if (name) names.add(name);
-    });
-    return names.size;
-  }, [messageTree]);
+  const distinctModelsUsed = useDistinctModelsUsed();
 
   // Incognito responses take no feedback: votes would persist reviewable
   // signal tied to a chat hidden from the owner's surfaces. The session's
@@ -383,15 +374,11 @@ export default function MessageToolbar({
                             m.effectiveDisplayName === rawName
                         );
                       const displayName = mc?.effectiveDisplayName ?? rawName;
-                      return distinctModelsUsed > 1 ? (
-                        <OpenButton icon={SvgRefreshCw} tooltip="Retry with">
-                          {displayName}
-                        </OpenButton>
-                      ) : (
+                      return (
                         <OpenButton
                           icon={SvgRefreshCw}
                           tooltip="Retry with"
-                          foldable
+                          foldable={distinctModelsUsed <= 1}
                         >
                           {displayName}
                         </OpenButton>
