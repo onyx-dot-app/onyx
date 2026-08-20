@@ -12,8 +12,12 @@ snapshot reaches the same schema as running every revision.
 import argparse
 import os
 import sys
+from collections.abc import Iterator
+from contextlib import contextmanager
 from types import SimpleNamespace
 
+import psycopg2
+import psycopg2.extensions
 from alembic import command
 from alembic.config import Config
 
@@ -25,7 +29,25 @@ from onyx.configs.app_configs import (
 )
 from onyx.db.engine.shard_registry import ALEMBIC_TARGET_URL_ATTRIBUTE
 from onyx.db.engine.sql_engine import build_connection_string
-from onyx.db.migration_snapshot import build_schema, snapshot_dir
+from onyx.db.migration_snapshot import build_schema, head_revision, snapshot_dir
+
+
+@contextmanager
+def _cursor(database: str) -> Iterator["psycopg2.extensions.cursor"]:
+    conn = psycopg2.connect(
+        dbname=database,
+        user=POSTGRES_USER,
+        password=POSTGRES_PASSWORD,
+        host=POSTGRES_HOST,
+        port=POSTGRES_PORT,
+        application_name="alembic_snapshot",
+    )
+    conn.autocommit = True
+    try:
+        with conn.cursor() as cur:
+            yield cur
+    finally:
+        conn.close()
 
 
 def _alembic_config(database: str) -> Config:
@@ -49,12 +71,27 @@ def _upgrade(database: str, revision: str = "head") -> None:
     command.upgrade(_alembic_config(database), revision)
 
 
+def _applied_revisions(database: str) -> list[str]:
+    with _cursor(database) as cur:
+        cur.execute("SELECT version_num FROM public.alembic_version ORDER BY 1")
+        return [row[0] for row in cur.fetchall()]
+
+
 def cmd_apply(args: argparse.Namespace) -> int:
     database = args.database or os.environ.get("POSTGRES_DB") or "postgres"
     outcome = build_schema(
         database=database, migrate_to_head=lambda: _upgrade(database)
     )
-    print(f"{database} is at head via {outcome.value}")
+
+    # Report the stamped revision here rather than shelling out to `alembic heads`,
+    # which would pay the multi-second `onyx` import a second time. Mismatch means
+    # the database is not where the caller asked it to be, so fail loudly.
+    head = head_revision()
+    applied = _applied_revisions(database)
+    print(f"{database} via {outcome.value}: applied={applied} head={head}")
+    if applied != [head]:
+        print("ERROR: database is not at head", file=sys.stderr)
+        return 1
     return 0
 
 

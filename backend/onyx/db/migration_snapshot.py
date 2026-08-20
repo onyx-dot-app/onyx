@@ -166,7 +166,7 @@ def server_major_version(database: str) -> int:
         return int(row[0]) // 10000
 
 
-def _head_revision() -> str:
+def head_revision() -> str:
     script = ScriptDirectory(str(_BACKEND_DIR / "alembic"))
     head = script.get_current_head()
     if head is None:
@@ -185,7 +185,7 @@ def _is_ancestor_of_head(revision: str) -> bool:
     try:
         return any(
             rev.revision == revision
-            for rev in script.iterate_revisions(_head_revision(), "base")
+            for rev in script.iterate_revisions(head_revision(), "base")
         )
     except Exception:
         # Unknown revision - alembic raises rather than returning empty.
@@ -400,7 +400,7 @@ def build_schema(
             dump_database(database),
             SnapshotMetadata(
                 key=key,
-                head_revision=_head_revision(),
+                head_revision=head_revision(),
                 server_major=server_major,
                 format_version=_SNAPSHOT_FORMAT_VERSION,
                 files=files,

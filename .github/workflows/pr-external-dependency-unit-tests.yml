@@ -176,9 +176,13 @@ jobs:
         run: |
           cd backend
           # Restores a snapshot when one applies, otherwise runs the full chain.
-          # Either way the database ends at head. See onyx/db/migration_snapshot.py.
-          uv run python -m scripts.alembic_snapshot apply
-          alembic heads --verbose
+          # Either way the database ends at head, and the script fails if it does
+          # not. See onyx/db/migration_snapshot.py.
+          #
+          # Plain `python`, not `uv run`: the dependencies are already installed by
+          # the setup step, and `uv run` would build a second virtualenv from
+          # scratch (438 packages, including a ~100MB torch download).
+          python -m scripts.alembic_snapshot apply
 
       # A real OIDC server for the live multi-provider login test. Auth leg only.
       # Fail if it never becomes ready, otherwise the live tests would silently skip.
