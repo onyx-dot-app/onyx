@@ -213,94 +213,97 @@ export function ModelSettingsPopover({
         />
       </Popover.Trigger>
       <Popover.Content width="fit" align="end">
-        <Section alignItems="stretch" width={17} height="auto" gap={0.25}>
-          {/* raw-ok: mock header needs 10px/8px asymmetric padding, and Section silences px-* */}
-          <div className="flex w-full flex-col justify-center px-2.5 py-2">
-            <Text font="main-ui-body" color="text-02" nowrap>
-              {model.custom_display_name || model.display_name || model.name}
-            </Text>
-            <Text font="secondary-body" color="text-02">
-              {capabilities.length ? capabilities.join(", ") : "chat"}
-            </Text>
-          </div>
+        {/* raw-ok: scroll shell, Popover.Content clips overflow when the viewport is short */}
+        <div className="min-h-0 w-full overflow-y-auto">
+          <Section alignItems="stretch" width={17} height="auto" gap={0.25}>
+            {/* raw-ok: mock header needs 10px/8px asymmetric padding, and Section silences px-* */}
+            <div className="flex w-full flex-col justify-center px-2.5 py-2">
+              <Text font="main-ui-body" color="text-02" nowrap>
+                {model.custom_display_name || model.display_name || model.name}
+              </Text>
+              <Text font="secondary-body" color="text-02">
+                {capabilities.length ? capabilities.join(", ") : "chat"}
+              </Text>
+            </div>
 
-          <SectionHeader
-            icon={SvgCode}
-            title="Context Window"
-            caption="Tokens limit for each session"
-            rightValue={
-              model.max_input_tokens
-                ? formatContextWindow(model.max_input_tokens)
-                : "\u2014"
-            }
-            rightValueTooltip={
-              model.max_input_tokens ? undefined : UNKNOWN_CONTEXT_TOOLTIP
-            }
-          />
+            <SectionHeader
+              icon={SvgCode}
+              title="Context Window"
+              caption="Tokens limit for each session"
+              rightValue={
+                model.max_input_tokens
+                  ? formatContextWindow(model.max_input_tokens)
+                  : "\u2014"
+              }
+              rightValueTooltip={
+                model.max_input_tokens ? undefined : UNKNOWN_CONTEXT_TOOLTIP
+              }
+            />
 
-          {showReasoning && (
-            <Section
-              alignItems="stretch"
-              height="auto"
-              gap={0.375}
-              className="mb-1.5"
+            {showReasoning && (
+              <Section
+                alignItems="stretch"
+                height="auto"
+                gap={0.375}
+                className="mb-1.5"
+              >
+                <SectionHeader
+                  icon={SvgBarChart}
+                  title="Reasoning Level"
+                  caption="How much thinking the model should perform before answering"
+                />
+                <PolicySlider
+                  label="Max Level"
+                  value={effectiveMaxStop}
+                  max={supportedStop}
+                  step={1}
+                  marks={reasoningMarks}
+                  activeMark={effectiveMaxStop}
+                  onChange={setMax}
+                />
+                <PolicySlider
+                  label="Default"
+                  value={defaultStop >= 0 ? defaultStop : UNSET_REASONING_STOP}
+                  max={effectiveMaxStop}
+                  step={1}
+                  marks={reasoningMarks}
+                  activeMark={
+                    defaultStop >= 0 ? defaultStop : UNSET_REASONING_STOP
+                  }
+                  onChange={setDefault}
+                />
+              </Section>
+            )}
+
+            <Disabled
+              disabled={temperatureDisabled}
+              tooltip={PINNED_TEMPERATURE_TOOLTIP}
+              tooltipSide="top"
             >
-              <SectionHeader
-                icon={SvgBarChart}
-                title="Reasoning Level"
-                caption="How much thinking the model should perform before answering"
-              />
-              <PolicySlider
-                label="Max Level"
-                value={effectiveMaxStop}
-                max={supportedStop}
-                step={1}
-                marks={reasoningMarks}
-                activeMark={effectiveMaxStop}
-                onChange={setMax}
-              />
-              <PolicySlider
-                label="Default"
-                value={defaultStop >= 0 ? defaultStop : UNSET_REASONING_STOP}
-                max={effectiveMaxStop}
-                step={1}
-                marks={reasoningMarks}
-                activeMark={
-                  defaultStop >= 0 ? defaultStop : UNSET_REASONING_STOP
-                }
-                onChange={setDefault}
-              />
-            </Section>
-          )}
-
-          <Disabled
-            disabled={temperatureDisabled}
-            tooltip={PINNED_TEMPERATURE_TOOLTIP}
-            tooltipSide="top"
-          >
-            <Section
-              alignItems="stretch"
-              height="auto"
-              gap={0.375}
-              className="mb-1.5"
-            >
-              <SectionHeader
-                icon={SvgThermometer}
-                title="Temperature"
-                caption="How predictable or creative the model should respond"
-              />
-              <PolicySlider
-                label="Default"
-                value={temperatureDisabled ? 1 : temperature}
-                max={maxTemperature}
-                step={0.1}
-                marks={TEMPERATURE_MARKS}
-                activeMark={temperatureMark}
-                onChange={(v) => onChange({ temperature_default: v })}
-              />
-            </Section>
-          </Disabled>
-        </Section>
+              <Section
+                alignItems="stretch"
+                height="auto"
+                gap={0.375}
+                className="mb-1.5"
+              >
+                <SectionHeader
+                  icon={SvgThermometer}
+                  title="Temperature"
+                  caption="How predictable or creative the model should respond"
+                />
+                <PolicySlider
+                  label="Default"
+                  value={temperatureDisabled ? 1 : temperature}
+                  max={maxTemperature}
+                  step={0.1}
+                  marks={TEMPERATURE_MARKS}
+                  activeMark={temperatureMark}
+                  onChange={(v) => onChange({ temperature_default: v })}
+                />
+              </Section>
+            </Disabled>
+          </Section>
+        </div>
       </Popover.Content>
     </Popover>
   );
