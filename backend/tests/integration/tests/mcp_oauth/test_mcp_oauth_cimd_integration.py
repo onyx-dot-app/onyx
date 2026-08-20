@@ -77,19 +77,26 @@ def _start_oauth_flow(
     return parse_qs(urlparse(callback_url).query)
 
 
-def _complete_oauth_callback(
+def _post_oauth_callback(
     callback_params: dict[str, list[str]],
-    admin_user: DATestUser,
-) -> None:
-    callback_response = client.post(
+    user: DATestUser,
+) -> httpx.Response:
+    return client.post(
         f"{API_SERVER_URL}/mcp/oauth/callback",
         params={
             "code": callback_params["code"][0],
             "state": callback_params["state"][0],
         },
-        headers=admin_user.headers,
-        cookies=admin_user.cookies,
+        headers=user.headers,
+        cookies=user.cookies,
     )
+
+
+def _complete_oauth_callback(
+    callback_params: dict[str, list[str]],
+    user: DATestUser,
+) -> None:
+    callback_response = _post_oauth_callback(callback_params, user)
     callback_response.raise_for_status()
     assert callback_response.json()["success"] is True
 
@@ -113,6 +120,7 @@ def _complete_oauth_flow(
 def test_mcp_oauth_cimd_only_flow(
     cimd_oauth_services: CimdOAuthTestServices,
     admin_user: DATestUser,
+    basic_user: DATestUser,
     llm_provider: DATestLLMProvider,  # noqa: ARG001
 ) -> None:
     discovery_response = httpx.get(
@@ -155,8 +163,23 @@ def test_mcp_oauth_cimd_only_flow(
             cimd_oauth_services,
             force_reauthentication=False,
         )
+
+        wrong_user_response = _post_oauth_callback(first_callback, basic_user)
+        assert wrong_user_response.status_code == 400
+        assert wrong_user_response.json() == {
+            "error_code": "INVALID_INPUT",
+            "detail": "Invalid or expired OAuth authorization attempt",
+        }
+
         _complete_oauth_callback(second_callback, admin_user)
         _complete_oauth_callback(first_callback, admin_user)
+
+        replay_response = _post_oauth_callback(second_callback, admin_user)
+        assert replay_response.status_code == 400
+        assert replay_response.json() == {
+            "error_code": "INVALID_INPUT",
+            "detail": "Invalid or expired OAuth authorization attempt",
+        }
 
         authenticated_connect = _connect_oauth(
             server_id,
