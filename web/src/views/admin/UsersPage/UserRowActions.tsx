@@ -10,15 +10,17 @@ import {
   SvgUserPlus,
   SvgUserX,
   SvgKey,
+  SvgUserManage,
 } from "@opal/icons";
 import { Disabled } from "@opal/core";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { Popover } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import Text from "@/refresh-components/texts/Text";
-import { UserStatus } from "@/lib/types";
+import { AccountType, UserStatus } from "@/lib/types";
 import { toast } from "@opal/layouts";
-import { approveRequest } from "./svc";
+import { approveRequest, setUserAdminAccess } from "./svc";
+import { useCanManageGroups } from "@/lib/permissions/hooks";
 import EditUserModal from "./EditUserModal";
 import {
   CancelInviteModal,
@@ -57,6 +59,8 @@ export default function UserRowActions({
 }: UserRowActionsProps) {
   const [modal, setModal] = useState<Modal | null>(null);
   const [popoverOpen, setPopoverOpen] = useState(false);
+  // below Business the group editor is empty, so don't offer it
+  const canManageGroups = useCanManageGroups();
 
   const openModal = (type: Modal) => {
     setPopoverOpen(false);
@@ -70,6 +74,28 @@ export default function UserRowActions({
     onMutate();
   };
 
+  // the only edition-independent way to promote/demote; group editing is EE-only
+  const toggleAdminAccess = () => {
+    setPopoverOpen(false);
+    void (async () => {
+      try {
+        await setUserAdminAccess(user.email, !user.is_admin);
+        onMutate();
+        toast.success(
+          user.is_admin ? "Admin access removed" : "User is now an admin"
+        );
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "An error occurred");
+      }
+    })();
+  };
+
+  const adminAccessItem = user.account_type === AccountType.STANDARD && (
+    <LineItem icon={SvgUserManage} onClick={toggleAdminAccess}>
+      {user.is_admin ? "Remove Admin Access" : "Make Admin"}
+    </LineItem>
+  );
+
   // Status-aware action menus
   const actionButtons = (() => {
     // SCIM-managed users get limited actions — most changes would be
@@ -77,7 +103,7 @@ export default function UserRowActions({
     if (user.is_scim_synced) {
       return (
         <>
-          {user.id && (
+          {user.id && canManageGroups && (
             <LineItem
               icon={SvgUsers}
               onClick={() => openModal(Modal.EDIT_GROUPS)}
@@ -136,7 +162,7 @@ export default function UserRowActions({
       case UserStatus.ACTIVE:
         return (
           <>
-            {user.id && (
+            {user.id && canManageGroups && (
               <LineItem
                 icon={SvgUsers}
                 onClick={() => openModal(Modal.EDIT_GROUPS)}
@@ -144,6 +170,7 @@ export default function UserRowActions({
                 Groups &amp; Roles
               </LineItem>
             )}
+            {user.id && adminAccessItem}
             <LineItem
               icon={SvgKey}
               onClick={() => openModal(Modal.RESET_PASSWORD)}
@@ -164,7 +191,7 @@ export default function UserRowActions({
       case UserStatus.INACTIVE:
         return (
           <>
-            {user.id && (
+            {user.id && canManageGroups && (
               <LineItem
                 icon={SvgUsers}
                 onClick={() => openModal(Modal.EDIT_GROUPS)}
@@ -172,6 +199,7 @@ export default function UserRowActions({
                 Groups &amp; Roles
               </LineItem>
             )}
+            {user.id && adminAccessItem}
             <LineItem
               icon={SvgKey}
               onClick={() => openModal(Modal.RESET_PASSWORD)}

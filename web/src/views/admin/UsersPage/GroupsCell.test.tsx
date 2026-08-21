@@ -25,6 +25,7 @@ const user: UserRow = {
   id: "1",
   email: "user@example.com",
   account_type: AccountType.STANDARD,
+  is_admin: false,
   status: UserStatus.ACTIVE,
   is_active: true,
   is_scim_synced: false,

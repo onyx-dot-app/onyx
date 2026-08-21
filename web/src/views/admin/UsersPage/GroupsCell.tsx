@@ -14,6 +14,7 @@ import { Button, Tag } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { Tooltip } from "@opal/components";
 import EditUserModal from "./EditUserModal";
+import { useCanManageGroups } from "@/lib/permissions/hooks";
 import type { UserRow, UserGroupInfo } from "./interfaces";
 
 interface GroupsCellProps {
@@ -38,6 +39,9 @@ export default function GroupsCell({
 }: GroupsCellProps) {
   const [showModal, setShowModal] = useState(false);
   const [visibleCount, setVisibleCount] = useState<number | null>(null);
+  // below Business the editor is empty, so show pills but don't open it
+  const canManageGroups = useCanManageGroups();
+  const editable = Boolean(user.id) && canManageGroups;
   const containerRef = useRef<HTMLDivElement>(null);
 
   const computeVisibleCount = useCallback(() => {
@@ -142,11 +146,9 @@ export default function GroupsCell({
         semantics rather than a <button> wrapping a <button>. */}
         <div
           className={`relative flex justify-between items-center w-full min-w-0 ${
-            user.id ? "cursor-pointer" : ""
+            editable ? "cursor-pointer" : ""
           }`}
-          // A cell without a user has nothing to edit, so it carries no button
-          // semantics at all.
-          {...(user.id
+          {...(editable
             ? {
                 role: "button" as const,
                 tabIndex: 0,
@@ -183,7 +185,7 @@ export default function GroupsCell({
               </div>
             </Tooltip>
           )}
-          {user.id && (
+          {editable && (
             <Hoverable.Item group="tags" variant="appear-on-hover">
               <Button
                 icon={SvgEdit}

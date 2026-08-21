@@ -22,6 +22,7 @@ export function apiKeyToMemberRow(key: ApiKeyDescriptor): MemberRow {
     id: key.user_id,
     email: "Service Account",
     account_type: AccountType.SERVICE_ACCOUNT,
+    is_admin: false,
     status: UserStatus.ACTIVE,
     is_active: true,
     is_scim_synced: false,

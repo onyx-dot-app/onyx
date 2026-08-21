@@ -10,6 +10,7 @@ export interface FullUserSnapshot {
   id: string;
   email: string;
   account_type: AccountType;
+  is_admin: boolean;
   is_active: boolean;
   password_configured: boolean;
   personal_name: string | null;
@@ -25,6 +26,7 @@ export interface UserRow {
   id: string | null;
   email: string;
   account_type: AccountType | null;
+  is_admin: boolean;
   status: UserStatus;
   is_active: boolean;
   is_scim_synced: boolean;
