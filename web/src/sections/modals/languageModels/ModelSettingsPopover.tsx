@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Button, Popover, Text, Tooltip } from "@opal/components";
 import { SvgBarChart, SvgCode, SvgSliders, SvgThermometer } from "@opal/icons";
-import { Section } from "@opal/layouts";
+import { ContentAction, Section } from "@opal/layouts";
 import { Disabled } from "@opal/core";
 import type { IconFunctionComponent } from "@opal/types";
 import { isAnthropic } from "@/lib/languageModels/svc";
@@ -67,45 +67,41 @@ interface SectionHeaderProps {
   rightValueTooltip?: string;
 }
 
-/** Mock spec: 8px padding (2px bottom), 20px icon box, 4px gap, 2px text insets. */
+/** The mock's section header is the design system's Content component, so
+ *  ContentAction renders it. Outer spacing comes from margins, Section
+ *  silences padding utilities. */
 function SectionHeader({
-  icon: Icon,
+  icon,
   title,
   caption,
   rightValue,
   rightValueTooltip,
 }: SectionHeaderProps) {
   return (
-    // raw-ok: mock needs 2px text insets and a flex-1/min-w-0 column, and Section silences px-*
-    <div className="flex w-full gap-1 px-2 pb-0.5 pt-2">
-      <div className="flex size-5 shrink-0 items-center justify-center p-0.5 text-text-04">
-        <Icon size={16} />
-      </div>
-      <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex w-full items-start gap-1">
-          <div className="flex min-h-5 min-w-0 flex-1 flex-col justify-center px-0.5">
-            <Text font="main-ui-action" color="text-04" nowrap>
-              {title}
-            </Text>
-          </div>
-          {rightValue !== undefined && (
-            <div className="flex min-h-5 items-center p-0.5">
-              <Tooltip tooltip={rightValueTooltip} side="top">
-                <Text font="secondary-mono" color="text-04" nowrap>
-                  {rightValue}
-                </Text>
-              </Tooltip>
-            </div>
-          )}
-        </div>
-        {/* raw-ok: flex collapses the strut so the caption sits on the font's 16px lines */}
-        <div className="flex px-0.5">
-          <Text font="secondary-body" color="text-03">
-            {caption}
-          </Text>
-        </div>
-      </div>
-    </div>
+    <Section
+      alignItems="stretch"
+      width="auto"
+      height="auto"
+      className="mx-2 mb-0.5 mt-2"
+    >
+      <ContentAction
+        sizePreset="main-ui"
+        variant="section"
+        icon={icon}
+        title={title}
+        description={caption}
+        padding={0}
+        rightChildren={
+          rightValue !== undefined ? (
+            <Tooltip tooltip={rightValueTooltip} side="top">
+              <Text font="secondary-mono" color="text-04" nowrap>
+                {rightValue}
+              </Text>
+            </Tooltip>
+          ) : undefined
+        }
+      />
+    </Section>
   );
 }
 
@@ -119,7 +115,8 @@ interface PolicySliderProps {
   onChange: (value: number) => void;
 }
 
-/** Mock spec: 32px left inset, 8px right, 16px label line, 28px slider. */
+/** Mock spec: 32px left inset, 8px right, 16px label line, 28px slider.
+ *  Insets are margins because Section silences padding utilities. */
 function PolicySlider({
   label,
   value,
@@ -129,16 +126,20 @@ function PolicySlider({
   activeMark,
   onChange,
 }: PolicySliderProps) {
-  // raw-ok: mock needs asymmetric pl-8/pr-2, and Section silences p-* utilities
   return (
-    <div className="w-full pl-8 pr-2">
-      {/* raw-ok: flex collapses the strut so the label sits on the font's 16px line */}
-      <div className="flex px-0.5">
+    <Section
+      alignItems="stretch"
+      width="auto"
+      height="auto"
+      gap={0}
+      className="ml-8 mr-2"
+    >
+      <Section alignItems="start" width="auto" height="auto" className="mx-0.5">
         <Text font="secondary-action" color="text-03" nowrap>
           {label}
         </Text>
-      </div>
-      <div className="p-0.5">
+      </Section>
+      <Section alignItems="stretch" height="auto" padding={0.5}>
         <PaneSlider
           compact
           value={value}
@@ -148,8 +149,7 @@ function PolicySlider({
           onValueChange={onChange}
           onValueCommit={onChange}
         />
-        {/* raw-ok: mock annotation row is a fixed 12px line inside the 28px slider */}
-        <div className="flex h-3 w-full items-center justify-between">
+        <Section flexDirection="row" justifyContent="between" height={0.75}>
           {marks.map((mark, index) => (
             <Text
               key={mark}
@@ -160,9 +160,9 @@ function PolicySlider({
               {mark}
             </Text>
           ))}
-        </div>
-      </div>
-    </div>
+        </Section>
+      </Section>
+    </Section>
   );
 }
 
@@ -242,15 +242,20 @@ export function ModelSettingsPopover({
       </Popover.Trigger>
       <Popover.Content width="fit" align="end">
         <Section alignItems="stretch" width={17} height="auto" gap={0.25}>
-          {/* raw-ok: mock header needs 10px/8px asymmetric padding, and Section silences px-* */}
-          <div className="flex w-full flex-col justify-center px-2.5 py-2">
+          <Section
+            alignItems="start"
+            width="auto"
+            height="auto"
+            gap={0}
+            className="mx-2.5 my-2"
+          >
             <Text font="main-ui-body" color="text-02" nowrap>
               {modelDisplayName(model)}
             </Text>
             <Text font="secondary-body" color="text-02">
               {capabilities.length ? capabilities.join(", ") : "chat"}
             </Text>
-          </div>
+          </Section>
 
           <SectionHeader
             icon={SvgCode}
