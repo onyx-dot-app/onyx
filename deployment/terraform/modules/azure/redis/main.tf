@@ -30,9 +30,12 @@ resource "azurerm_managed_redis" "this" {
 
   default_database {
     access_keys_authentication_enabled = var.access_keys_enabled
-    client_protocol                    = var.client_protocol
-    clustering_policy                  = var.clustering_policy
-    eviction_policy                    = var.eviction_policy
+    # Not a variable. The service this replaced had no plaintext port to turn
+    # on, and offering one here would be a weaker guarantee than the module it
+    # replaced, not a new feature.
+    client_protocol   = "Encrypted"
+    clustering_policy = var.clustering_policy
+    eviction_policy   = var.eviction_policy
   }
 
   tags = var.tags

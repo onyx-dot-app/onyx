@@ -18,7 +18,7 @@ infrastructure for Onyx:
   and the document index, and optional GPU and sandbox pools
 - `postgres`: a PostgreSQL Flexible Server on a delegated subnet, its private
   DNS zone, and five metric alerts
-- `redis`: an Azure Cache for Redis behind a private endpoint, with four metric
+- `redis`: an Azure Managed Redis behind a private endpoint, with four metric
   alerts
 - `storage`: a storage account and container for the Onyx file store, with
   versioning, lifecycle rules and network rules
@@ -132,7 +132,7 @@ variable set to a non-null value overrides its tier default.
 | index pool disk | 256 GiB | 512 GiB | 1024 GiB |
 | database SKU | `GP_Standard_D2ds_v5` | `GP_Standard_D2ds_v5` | `GP_Standard_D4ds_v5` |
 | database storage | 64 GiB | 128 GiB | 256 GiB |
-| cache | Standard C3 (6 GB) | Standard C4 (13 GB) | Standard C5 (26 GB) |
+| cache | `Balanced_B5` (~5 GB) | `Balanced_B10` (~10 GB) | `Balanced_B20` (~20 GB) |
 
 Roughly: small suits pilots and small teams, medium a department or company,
 large an org-wide deployment. The index pool is memory-optimised at every tier
@@ -192,8 +192,22 @@ and the database.
 
 ### `redis`
 
-An Azure Cache for Redis reachable only through a private endpoint, with its
-plaintext port disabled.
+An Azure Managed Redis reachable only through a private endpoint.
+
+Azure stopped accepting new **Azure Cache for Redis** instances -- a create now
+returns "Azure Cache for Redis is retiring, create Azure Managed Redis instance
+instead" -- so this module provisions the managed service. It is a different
+resource rather than a renamed one, and the differences show:
+
+- Sizing is one SKU name, `Balanced_B5` for about 5 GB, rather than a tier, a
+  family and a capacity.
+- It speaks TLS on **10000**, where the retiring service used 6380. There is no
+  plaintext port to disable and no minimum TLS version to set.
+- Eviction policies are spelled `VolatileLRU`, not `volatile-lru`.
+- Clustering is a choice. `OSSCluster` shards and needs a cluster-aware client,
+  which redis-py is not, so the module defaults to `EnterpriseCluster`.
+- Alerts report under `Microsoft.Cache/redisEnterprise`, and the single-thread
+  server load metric is replaced by processor time.
 
 ### `storage`
 
@@ -216,7 +230,8 @@ Most of these follow from the platform rather than from taste.
 |---|---|---|
 | document index | managed OpenSearch domain, or in-cluster | in-cluster only; Azure has no managed OpenSearch, and Azure AI Search is a different API |
 | pod identity | IRSA: assume a role from an OIDC subject | federate a managed identity to a service account; same `system:serviceaccount:...` subject |
-| cache credential | you supply an auth token | Azure generates the keys; they come back as outputs |
+| cache credential | you supply an auth token | Azure generates the keys; they come back as outputs, read off the database rather than the cluster |
+| cache service | ElastiCache | Azure Managed Redis; Azure Cache for Redis is retired and will not accept new instances |
 | cluster autoscaler | Helm release plus a ClusterRole patch | part of a node pool |
 | GPU device plugin | Helm release | installed by AKS with the driver |
 | database storage | any GiB, with a growth ceiling | a fixed ladder of sizes, with auto-grow as a switch |
@@ -377,7 +392,8 @@ They do not prove the modules work against Azure. Only an apply does that.
 - Shared access keys on the storage account are off, and blobs are never
   anonymously readable.
 - The database and cache have no public endpoint.
-- The cache refuses its plaintext port, and both refuse TLS below 1.2.
+- The cache speaks TLS only; Managed Redis offers no plaintext port at all, and
+  the database refuses TLS below 1.2.
 - The API server will not be built open. You must set
   `api_server_authorized_ip_ranges`, or `private_cluster_enabled`, or
   `allow_unrestricted_api_server_access` to record that an open control plane is

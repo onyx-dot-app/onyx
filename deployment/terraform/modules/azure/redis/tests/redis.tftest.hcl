@@ -137,6 +137,38 @@ run "an_existing_dns_zone_is_reused" {
   }
 }
 
+run "reusing_a_dns_zone_needs_no_virtual_network" {
+  command = plan
+
+  # The virtual network is only used to link a zone this module creates. A
+  # caller who brings their own has already linked it.
+  variables {
+    virtual_network_id  = null
+    private_dns_zone_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/onyx-rg/providers/Microsoft.Network/privateDnsZones/privatelink.redis.azure.net"
+  }
+
+  assert {
+    condition     = length(azurerm_private_endpoint.this) == 1
+    error_message = "The private endpoint should still be created."
+  }
+
+  assert {
+    condition     = length(azurerm_private_dns_zone_virtual_network_link.this) == 0
+    error_message = "There is no zone of our own to link."
+  }
+}
+
+run "rejects_a_private_endpoint_with_no_dns_anywhere" {
+  command = plan
+
+  variables {
+    virtual_network_id  = null
+    private_dns_zone_id = null
+  }
+
+  expect_failures = [var.enable_private_endpoint]
+}
+
 run "rejects_a_sku_that_is_not_one" {
   command = plan
 

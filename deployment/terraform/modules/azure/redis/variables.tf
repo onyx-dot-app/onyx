@@ -39,19 +39,6 @@ variable "high_availability_enabled" {
   default     = false
 }
 
-# Managed Redis speaks TLS on 10000 and offers no plaintext port, so there is no
-# equivalent of the old non_ssl_port_enabled or minimum_tls_version.
-variable "client_protocol" {
-  type        = string
-  description = "Encrypted speaks TLS. Plaintext exists for clients that cannot, and should not be used outside a private network."
-  default     = "Encrypted"
-
-  validation {
-    condition     = contains(["Encrypted", "Plaintext"], var.client_protocol)
-    error_message = "client_protocol must be Encrypted or Plaintext."
-  }
-}
-
 # OSSCluster shards across nodes and needs a cluster-aware client. Onyx uses
 # Redis as a Celery broker through redis-py, which is not, so the single-endpoint
 # mode is the compatible default.
@@ -96,8 +83,16 @@ variable "enable_private_endpoint" {
   default     = true
 
   validation {
-    condition     = !var.enable_private_endpoint || (var.private_endpoint_subnet_id != null && var.virtual_network_id != null) || (!var.enable_private_endpoint)
+    condition     = !var.enable_private_endpoint || var.private_endpoint_subnet_id != null
     error_message = "enable_private_endpoint requires private_endpoint_subnet_id."
+  }
+
+  # The virtual network is only used to link a zone this module creates. A
+  # caller reusing an existing zone has already linked it, so demanding the
+  # network there rejects a configuration that is complete.
+  validation {
+    condition     = !var.enable_private_endpoint || var.private_dns_zone_id != null || var.virtual_network_id != null
+    error_message = "enable_private_endpoint requires virtual_network_id so the private DNS zone can be linked to it, unless private_dns_zone_id points at a zone that is already linked."
   }
 }
 
