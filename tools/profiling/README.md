@@ -5,7 +5,7 @@ Prometheus + Grafana for local development. Pre-loaded with dashboards for the O
 ## Usage
 
 ```bash
-cd profiling/
+cd tools/profiling/
 docker compose up -d
 ```
 

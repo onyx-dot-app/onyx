@@ -23,7 +23,7 @@ would drop Locust).
 
 ```bash
 uv sync --group loadtest
-cd loadtest
+cd tools/loadtest
 ```
 
 ### Mock LLM server
