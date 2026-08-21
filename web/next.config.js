@@ -154,10 +154,7 @@ const nextConfig = {
         destination: "/admin/language-models",
         permanent: true,
       },
-      // Legacy /admin/configuration/* → /admin/* redirects. The segment grouped
-      // nothing: the sidebar builds its groups from the `section` field in
-      // ADMIN_ROUTES, never from the URL.
-      // TODO: Remove these redirects in v4.0 — https://linear.app/onyx-app/issue/ENG-3771
+      // Legacy /admin/configuration/* → /admin/* redirects. The segment provided no additional value.
       {
         source: "/admin/configuration/chat-preferences",
         destination: "/admin/chat-preferences",
@@ -208,7 +205,6 @@ const nextConfig = {
       // Legacy /admin/actions/* → /admin/*. Only `mcp` and `open-api` held a
       // real page; `actions`, `new`, `edit-mcp` and `edit/:toolId` were all
       // redirect pages pointing at the MCP list, so they redirect there too.
-      // TODO: Remove these redirects in v4.0 — https://linear.app/onyx-app/issue/ENG-3771
       {
         source: "/admin/actions/mcp",
         destination: "/admin/mcp-actions",
