@@ -782,7 +782,7 @@ See comprehensive test examples:
 
 - `src/app/auth/login/EmailPasswordForm.test.tsx` - Login/signup workflows, validation
 - `src/app/chat/input-prompts/InputPrompts.test.tsx` - CRUD operations, conditional rendering
-- `src/app/admin/llm/CustomLLMProviderUpdateForm.test.tsx` - Complex forms, multi-step workflows
+- `src/components/admin/connectors/AccessTypeForm.test.tsx` - Complex forms, conditional fields
 
 ## Built-in Mocks
 

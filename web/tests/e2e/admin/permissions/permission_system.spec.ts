@@ -98,7 +98,7 @@ test("group permissions apply immediately when a user is added to the group", as
     await expect(page.getByRole("link", { name: "Users" })).toHaveCount(0);
 
     await page.goto(ADMIN_ROUTES.USERS.path);
-    await expect(page).toHaveURL(/\/admin\/configuration\/language-models/);
+    await expect(page).toHaveURL(new RegExp(ADMIN_ROUTES.LLM_MODELS.path));
   } finally {
     await page.context().clearCookies();
     await loginAs(page, "admin");
