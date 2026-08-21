@@ -6,6 +6,7 @@ from fastapi.concurrency import run_in_threadpool
 from pydantic import ValidationError
 
 from onyx.auth.permissions import require_permission
+from onyx.auth.sso_url_guard import UnsafeSSOUrl, validate_idp_url
 from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -70,6 +71,12 @@ async def put_security_settings_endpoint(
 ) -> SecuritySettings:
     raw = await request.body()
     overrides, present_keys = _parse_put_body(raw)
+
+    if "jwt_public_key_url" in present_keys and overrides.jwt_public_key_url:
+        try:
+            validate_idp_url(overrides.jwt_public_key_url, field="jwt_public_key_url")
+        except UnsafeSSOUrl as e:
+            raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))
 
     # A clear refusal instead of silently storing an override the env pin
     # would render inert.

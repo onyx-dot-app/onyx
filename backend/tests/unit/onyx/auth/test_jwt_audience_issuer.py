@@ -46,6 +46,8 @@ def _configure(
         }
     )
     monkeypatch.setattr(jwt_module, "get_security_settings", lambda: settings)
+    # Unit tests must not resolve DNS through the real SSRF validator.
+    monkeypatch.setattr(jwt_module, "validate_idp_url", lambda _url, **_kw: None)
 
 
 @pytest.mark.parametrize(
@@ -166,3 +168,37 @@ async def test_claim_rejection_does_not_refetch_keys(
     _configure(monkeypatch, "onyx", None)
     assert await verify_jwt_token(_mint({"aud": "some-other-service"})) is None
     assert len(calls) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("signed_key")
+async def test_db_origin_url_failing_ssrf_policy_rejects(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure(monkeypatch, None, None)
+
+    def _reject(_url: str, field: str) -> None:
+        raise jwt_module.UnsafeSSOUrl(f"{field} blocked")
+
+    monkeypatch.setattr(jwt_module, "validate_idp_url", _reject)
+    assert await verify_jwt_token(_mint({"email": "a@b.c"})) is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("signed_key")
+async def test_env_pinned_url_skips_ssrf_validation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure(monkeypatch, None, None)
+
+    def _reject(_url: str, field: str) -> None:
+        raise jwt_module.UnsafeSSOUrl(f"{field} blocked")
+
+    monkeypatch.setattr(jwt_module, "validate_idp_url", _reject)
+    monkeypatch.setattr(
+        jwt_module,
+        "env_pinned_active_fields",
+        lambda: frozenset({"jwt_public_key_url"}),
+    )
+    payload = await verify_jwt_token(_mint({"email": "a@b.c"}))
+    assert payload is not None

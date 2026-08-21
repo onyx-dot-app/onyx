@@ -16,7 +16,11 @@ from jwt import (
 from jwt import decode as jwt_decode
 from jwt.algorithms import RSAAlgorithm  # ty: ignore[possibly-missing-import]
 
-from onyx.server.security.store import get_security_settings
+from onyx.auth.sso_url_guard import UnsafeSSOUrl, validate_idp_url
+from onyx.server.security.store import (
+    env_pinned_active_fields,
+    get_security_settings,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -135,6 +139,15 @@ async def verify_jwt_token(token: str) -> dict[str, Any] | None:
     if settings.jwt_public_key_url is None:
         logger.error("JWT public key URL is not configured")
         return None
+
+    # A DB-origin URL is admin-aimed and must satisfy the outbound SSRF policy.
+    # An env-pinned value is operator config-as-code, trusted as before.
+    if "jwt_public_key_url" not in env_pinned_active_fields():
+        try:
+            validate_idp_url(settings.jwt_public_key_url, field="jwt_public_key_url")
+        except UnsafeSSOUrl as e:
+            logger.error("JWT public key URL rejected: %s", e)
+            return None
 
     for attempt in range(_PUBLIC_KEY_FETCH_ATTEMPTS):
         public_key = get_public_key(token, settings.jwt_public_key_url)

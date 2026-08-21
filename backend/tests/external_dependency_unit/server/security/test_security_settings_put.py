@@ -447,3 +447,15 @@ def test_put_accepts_env_pinned_field_while_env_unset(
     row = _load_row_as_dict()
     assert row is not None
     assert row["jwt_expected_audience"] == "db-aud"
+
+
+def test_put_rejects_jwt_key_url_failing_ssrf_policy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The default SSRF level blocks loopback, so an admin cannot aim the
+    server's key fetch at itself."""
+    monkeypatch.setattr(security_store._cfg, "JWT_PUBLIC_KEY_URL", None)
+
+    with pytest.raises(OnyxError) as exc_info:
+        _put({"jwt_public_key_url": "https://127.0.0.1/keys"})
+    assert exc_info.value.error_code is OnyxErrorCode.INVALID_INPUT
