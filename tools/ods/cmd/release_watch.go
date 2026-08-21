@@ -68,8 +68,7 @@ func watchCloudRelease(tag string) error {
 			return buildErr
 		}
 		log.Warn("The deployment run did not succeed; review it before approving.")
-		log.Infof("Bump PR: %s", pr.URL)
-		fmt.Println(pr.URL)
+		announceBumpPR(pr)
 		return nil
 	}
 
@@ -78,13 +77,26 @@ func watchCloudRelease(tag string) error {
 	if err != nil {
 		return fmt.Errorf("%w; check https://github.com/%s/actions/workflows/%s", err, cloudDeploymentRepo, bumpWorkflowFile)
 	}
-	log.Infof("Bump PR ready for approval: %s", pr.URL)
-	fmt.Println(pr.URL)
+	announceBumpPR(pr)
 	return nil
 }
 
-// waitForBumpPR polls until the bump PR for tag exists or the discovery
-// timeout fires.
+// announceBumpPR prints the bump PR, wording the log line by PR state: a
+// re-attached watch can find a PR that was already merged or closed.
+func announceBumpPR(pr *pullRequest) {
+	switch pr.State {
+	case "MERGED":
+		log.Infof("Bump PR already merged: %s", pr.URL)
+	case "CLOSED":
+		log.Warnf("Bump PR was closed without merging: %s", pr.URL)
+	default:
+		log.Infof("Bump PR ready for approval: %s", pr.URL)
+	}
+	fmt.Println(pr.URL)
+}
+
+// waitForBumpPR polls until the bump PR for tag exists or the discovery timeout
+// fires.
 func waitForBumpPR(tag string) (*pullRequest, error) {
 	deadline := time.Now().Add(bumpPRDiscoveryTimeout)
 	for {
@@ -103,8 +115,8 @@ func waitForBumpPR(tag string) (*pullRequest, error) {
 }
 
 // dispatchJobSucceeded reports whether the run's bump dispatch job concluded
-// successfully. A job that is missing, skipped, or still running counts as
-// not dispatched.
+// successfully. A job that is missing, skipped, or still running counts as not
+// dispatched.
 func dispatchJobSucceeded(runID int64) (bool, error) {
 	cmd := exec.Command(
 		"gh", "run", "view", fmt.Sprintf("%d", runID),
