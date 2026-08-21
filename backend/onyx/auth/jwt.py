@@ -17,6 +17,7 @@ from jwt import decode as jwt_decode
 from jwt.algorithms import RSAAlgorithm  # ty: ignore[possibly-missing-import]
 
 from onyx.auth.sso_url_guard import UnsafeSSOUrl, validate_idp_url
+from onyx.server.security.models import outbound_ssrf_params
 from onyx.server.security.store import (
     env_pinned_active_fields,
     get_security_settings,
@@ -40,6 +41,7 @@ class PublicKeyFormat(Enum):
 def _fetch_public_key_payload(
     public_key_url: str,
     operator_pinned: bool,
+    allow_private_network: bool,
 ) -> tuple[str | dict[str, Any], PublicKeyFormat] | None:
     """Fetch and cache the raw JWT verification material. A DB-origin URL is
     admin-aimed, so its fetch validates every redirect hop and pins the
@@ -49,7 +51,11 @@ def _fetch_public_key_payload(
         if operator_pinned:
             response = requests.get(public_key_url)
         else:
-            response = ssrf_safe_get(public_key_url)
+            # Mirrors the PUT-time check: the configured SSRF level decides
+            # whether private endpoints are reachable.
+            response = ssrf_safe_get(
+                public_key_url, allow_private_network=allow_private_network
+            )
         response.raise_for_status()
     except (requests.RequestException, SSRFException, ValueError) as exc:
         logger.error("Failed to fetch JWT public key: %s", str(exc))
@@ -82,10 +88,15 @@ def _fetch_public_key_payload(
 
 
 def get_public_key(
-    token: str, public_key_url: str, operator_pinned: bool
+    token: str,
+    public_key_url: str,
+    operator_pinned: bool,
+    allow_private_network: bool,
 ) -> RSAPublicKey | str | None:
     """Return the concrete public key used to verify the provided JWT token."""
-    payload = _fetch_public_key_payload(public_key_url, operator_pinned)
+    payload = _fetch_public_key_payload(
+        public_key_url, operator_pinned, allow_private_network
+    )
     if payload is None:
         logger.error("Failed to retrieve public key payload")
         return None
@@ -161,7 +172,12 @@ async def verify_jwt_token(token: str) -> dict[str, Any] | None:
             return None
 
     for attempt in range(_PUBLIC_KEY_FETCH_ATTEMPTS):
-        public_key = get_public_key(token, settings.jwt_public_key_url, operator_pinned)
+        public_key = get_public_key(
+            token,
+            settings.jwt_public_key_url,
+            operator_pinned,
+            outbound_ssrf_params(settings.ssrf_protection_level).allow_private_network,
+        )
         if public_key is None:
             logger.error("Unable to resolve a public key for JWT verification")
             if attempt < _PUBLIC_KEY_FETCH_ATTEMPTS - 1:
