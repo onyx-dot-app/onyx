@@ -23,6 +23,7 @@ import {
   SvgConfluence,
   SvgDiscord,
   SvgDiscourse,
+  SvgDocmost,
   SvgDocument360,
   SvgDropbox,
   SvgDrupal,
@@ -166,6 +167,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     displayName: "Outline",
     category: SourceCategory.Wiki,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/outline`,
+  },
+  docmost: {
+    icon: SvgDocmost,
+    displayName: "DocMost",
+    category: SourceCategory.Wiki,
+    docs: `${DOCS_ADMINS_PATH}/connectors/official/docmost`,
   },
   google_sites: {
     icon: SvgGoogleSites,

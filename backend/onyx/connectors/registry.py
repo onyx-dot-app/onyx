@@ -52,6 +52,10 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.outline.connector",
         class_name="OutlineConnector",
     ),
+    DocumentSource.DOCMOST: ConnectorMapping(
+        module_path="onyx.connectors.docmost.connector",
+        class_name="DocmostConnector",
+    ),
     DocumentSource.CONFLUENCE: ConnectorMapping(
         module_path="onyx.connectors.confluence.connector",
         class_name="ConfluenceConnector",
