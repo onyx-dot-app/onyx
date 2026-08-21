@@ -49,6 +49,8 @@ logger = setup_logger()
 DEFAULT_ADMIN_GROUP_NAME = "Admin"
 DEFAULT_BASIC_GROUP_NAME = "Basic"
 
+_MAX_LISTED_STRANDED_EMAILS = 3
+
 # tenant-hashed so tenants don't block each other and the id can't collide with
 # the other advisory locks in the codebase
 _ADMIN_MEMBERSHIP_LOCK_NAMESPACE = "onyx_admin_membership_lock"
@@ -202,6 +204,64 @@ def assert_admin_access_survives_removal(
         )
 
 
+def _stranded_by_removal(
+    db_session: Session, group_id: int, removed_user_ids: list[UUID]
+) -> list[str]:
+    """Emails of the standard users this removal would leave in no group."""
+    surviving_member_ids = set(
+        db_session.scalars(
+            select(User__UserGroup.user_id)
+            .join(UserGroup, UserGroup.id == User__UserGroup.user_group_id)
+            .where(
+                User__UserGroup.user_id.in_(removed_user_ids),
+                User__UserGroup.user_group_id != group_id,
+                UserGroup.is_up_for_deletion.is_(False),
+            )
+        ).all()
+    )
+    stranded_ids = [
+        user_id for user_id in removed_user_ids if user_id not in surviving_member_ids
+    ]
+    if not stranded_ids:
+        return []
+
+    email_col: KeyedColumnElement[Any] = User.__table__.c.email
+    return list(
+        db_session.scalars(
+            select(email_col)
+            .where(
+                User.id.in_(stranded_ids),  # ty: ignore[unresolved-attribute]
+                User.account_type == AccountType.STANDARD,
+            )
+            .order_by(email_col)
+        ).all()
+    )
+
+
+def assert_group_membership_survives_removal(
+    db_session: Session,
+    group_id: int,
+    removed_user_ids: list[UUID],
+) -> None:
+    """Blocks removals that leave a standard user in no group: permissions come only
+    from group grants, so they would keep a login that can do nothing."""
+    if not removed_user_ids:
+        return
+
+    stranded_emails = _stranded_by_removal(db_session, group_id, removed_user_ids)
+    if not stranded_emails:
+        return
+
+    listed = ", ".join(stranded_emails[:_MAX_LISTED_STRANDED_EMAILS])
+    remainder = len(stranded_emails) - _MAX_LISTED_STRANDED_EMAILS
+    if remainder > 0:
+        listed = f"{listed} and {remainder} more"
+    raise OnyxError(
+        OnyxErrorCode.INVALID_INPUT,
+        f"{listed} would be left without a group. Add them to another group first.",
+    )
+
+
 def fetch_default_group(db_session: Session, name: str) -> UserGroup:
     group = db_session.scalar(
         select(UserGroup).where(UserGroup.name == name, UserGroup.is_default.is_(True))
@@ -251,6 +311,9 @@ def set_user_admin_access(
             return
         assert_admin_access_survives_removal(
             db_session, actor, admin_group.id, [target.id]
+        )
+        assert_group_membership_survives_removal(
+            db_session, admin_group.id, [target.id]
         )
         db_session.delete(membership)
 

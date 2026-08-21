@@ -30,6 +30,7 @@ import { InputTypeIn } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import { errorHandlingFetcher, skipRetryOnAuthError } from "@/lib/fetcher";
+import { AccountType } from "@/lib/types";
 import type { SecuritySettings, UserGroup } from "@/lib/types";
 import { useUser } from "@/providers/UserProvider";
 import { useSettings } from "@/lib/settings/hooks";
@@ -261,6 +262,15 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
     [currentUserId, managerIds, pendingManagerIds]
   );
 
+  // Mirrors the backend guard. Persisted only — dropping an unsaved add strands nobody.
+  const isLastGroupMember = useCallback(
+    (row: MemberRow) =>
+      row.account_type === AccountType.STANDARD &&
+      persistedMemberIds.has(row.id ?? row.email) &&
+      row.groups.length <= 1,
+    [persistedMemberIds]
+  );
+
   // Hits its endpoint immediately (member add/remove defers to Save), then revalidates.
   const handleToggleManager = useCallback(
     async (userId: string, makeManager: boolean) => {
@@ -298,6 +308,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
           const isPersisted = persistedMemberIds.has(userId);
           const isPending = pendingManagerIds.has(userId);
           const isOwnManager = isOwnManagerRow(userId);
+          const isLastGroup = isLastGroupMember(row);
           return (
             <div className="flex items-center gap-1">
               {canManage && (
@@ -325,12 +336,14 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
               <IconButton
                 icon={SvgMinusCircle}
                 tertiary
-                disabled={isOwnManager}
+                disabled={isOwnManager || isLastGroup}
                 aria-label="Remove member"
                 tooltip={
                   isOwnManager
                     ? "You can't remove yourself while managing this group"
-                    : undefined
+                    : isLastGroup
+                      ? "This is their only group. Add them to another group first."
+                      : undefined
                 }
                 onClick={(e) => {
                   e.stopPropagation();
@@ -345,6 +358,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
     [
       handleRemoveMember,
       handleToggleManager,
+      isLastGroupMember,
       isOwnManagerRow,
       managerIds,
       persistedMemberIds,
@@ -379,9 +393,31 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
         setSelectedUserIds([currentUserId, ...ids, ...hiddenMemberIds]);
         return;
       }
+      // Same rule as the remove button; add mode can't disable a checkbox, so re-select.
+      const kept = new Set(ids);
+      const strandedIds = allRows
+        .filter(
+          (row) => !kept.has(row.id ?? row.email) && isLastGroupMember(row)
+        )
+        .map((row) => row.id ?? row.email);
+      if (strandedIds.length > 0) {
+        toast.error(
+          "Some of those members would be left without a group. Add them to another group first."
+        );
+        setSelectedUserIds([...strandedIds, ...ids, ...hiddenMemberIds]);
+        return;
+      }
+
       setSelectedUserIds([...ids, ...hiddenMemberIds]);
     },
-    [initialized, hiddenMemberIds, currentUserId, isOwnManagerRow]
+    [
+      initialized,
+      hiddenMemberIds,
+      currentUserId,
+      isOwnManagerRow,
+      isLastGroupMember,
+      allRows,
+    ]
   );
 
   async function handleSave() {

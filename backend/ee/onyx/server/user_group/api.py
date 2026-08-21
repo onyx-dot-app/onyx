@@ -6,6 +6,7 @@ from ee.onyx.db.document_set import set_document_set_group_membership__no_commit
 from ee.onyx.db.persona import update_persona_access
 from ee.onyx.db.user_group import (
     add_users_to_user_group,
+    assert_group_membership_survives_deletion,
     fetch_user_group,
     fetch_user_groups,
     fetch_user_groups_for_user,
@@ -337,6 +338,7 @@ def delete_user_group(
     db_session: Session = Depends(get_session),
 ) -> None:
     assert_group_config_is_editable(db_session, user_group_id, "delete")
+    assert_group_membership_survives_deletion(db_session, user_group_id)
     try:
         prepare_user_group_for_deletion(db_session, user_group_id)
     except ValueError as e:

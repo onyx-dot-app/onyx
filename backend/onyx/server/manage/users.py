@@ -394,6 +394,32 @@ def list_invited_users(
     return [InvitedUserSnapshot(email=email) for email in filtered_invited_emails]
 
 
+def _snapshots_with_groups(
+    db_session: Session, accepted: list[User], slack: list[User]
+) -> tuple[list[FullUserSnapshot], list[FullUserSnapshot]]:
+    """One membership lookup for both lists. Slack users are included because bot
+    memberships predating the join gate can still exist."""
+    groups_by_user = batch_get_user_groups(
+        db_session,
+        [user.id for user in (*accepted, *slack)],
+        include_default=True,
+    )
+
+    def to_snapshot(user: User) -> FullUserSnapshot:
+        return FullUserSnapshot.from_user_model(
+            user,
+            groups=[
+                UserGroupInfo(id=gid, name=gname)
+                for gid, gname in groups_by_user.get(user.id, [])
+            ],
+            is_admin=user_is_admin(user),
+        )
+
+    return [to_snapshot(user) for user in accepted], [
+        to_snapshot(user) for user in slack
+    ]
+
+
 @router.get("/manage/users", tags=PUBLIC_API_TAGS)
 def list_all_users(
     q: str | None = None,
@@ -437,21 +463,12 @@ def list_all_users(
 
     # If any of q, accepted_page, or invited_page is None, return all users
     if accepted_page is None or invited_page is None or slack_users_page is None:
+        accepted_snapshots, slack_snapshots = _snapshots_with_groups(
+            db_session, accepted_users, slack_users
+        )
         return AllUsersResponse(
-            accepted=[
-                FullUserSnapshot.from_user_model(
-                    user,
-                    is_admin=user_is_admin(user),
-                )
-                for user in accepted_users
-            ],
-            slack_users=[
-                FullUserSnapshot.from_user_model(
-                    user,
-                    is_admin=user_is_admin(user),
-                )
-                for user in slack_users
-            ],
+            accepted=accepted_snapshots,
+            slack_users=slack_snapshots,
             invited=[InvitedUserSnapshot(email=email) for email in invited_emails],
             accepted_pages=1,
             invited_pages=1,
@@ -460,20 +477,19 @@ def list_all_users(
 
     # Otherwise, return paginated results. Slice before building snapshots so
     # only the requested page is serialized.
+    accepted_snapshots, slack_snapshots = _snapshots_with_groups(
+        db_session,
+        accepted_users[
+            accepted_page * USERS_PAGE_SIZE : (accepted_page + 1) * USERS_PAGE_SIZE
+        ],
+        slack_users[
+            slack_users_page * USERS_PAGE_SIZE : (slack_users_page + 1)
+            * USERS_PAGE_SIZE
+        ],
+    )
     return AllUsersResponse(
-        accepted=[
-            FullUserSnapshot.from_user_model(user, is_admin=user_is_admin(user))
-            for user in accepted_users[
-                accepted_page * USERS_PAGE_SIZE : (accepted_page + 1) * USERS_PAGE_SIZE
-            ]
-        ],
-        slack_users=[
-            FullUserSnapshot.from_user_model(user, is_admin=user_is_admin(user))
-            for user in slack_users[
-                slack_users_page * USERS_PAGE_SIZE : (slack_users_page + 1)
-                * USERS_PAGE_SIZE
-            ]
-        ],
+        accepted=accepted_snapshots,
+        slack_users=slack_snapshots,
         invited=[
             InvitedUserSnapshot(email=email)
             for email in invited_emails[

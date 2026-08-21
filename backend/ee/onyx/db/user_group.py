@@ -26,6 +26,7 @@ from onyx.db.connector_credential_pair import (
 )
 from onyx.db.enums import (
     AccessType,
+    AccountType,
     ConnectorCredentialPairStatus,
     GrantSource,
     Permission,
@@ -56,7 +57,11 @@ from onyx.db.permissions import (
     recompute_permissions_for_group__no_commit,
     recompute_user_permissions__no_commit,
 )
-from onyx.db.users import assert_admin_access_survives_removal, fetch_user_by_id
+from onyx.db.users import (
+    assert_admin_access_survives_removal,
+    assert_group_membership_survives_removal,
+    fetch_user_by_id,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.audit import (
@@ -68,6 +73,12 @@ from onyx.utils.audit import (
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+_NON_GROUP_ACCOUNT_TYPES = (
+    AccountType.BOT,
+    AccountType.EXT_PERM_USER,
+    AccountType.ANONYMOUS,
+)
 
 
 def _cleanup_user__user_group_relationships__no_commit(
@@ -639,6 +650,21 @@ def _assert_no_privilege_amplification(
         )
 
 
+def _assert_users_can_join_groups(added_users: list[User]) -> None:
+    """Only STANDARD and SERVICE_ACCOUNT enter the group system. The picker hides
+    the rest, but the route accepts any uuid."""
+    rejected = sorted(
+        f"{added_user.email} ({added_user.account_type.value})"
+        for added_user in added_users
+        if added_user.account_type in _NON_GROUP_ACCOUNT_TYPES
+    )
+    if rejected:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "These accounts can't join a group: " + ", ".join(rejected),
+        )
+
+
 def _assert_default_group_update_allowed(
     user: User,
     db_user_group: UserGroup,
@@ -784,6 +810,9 @@ def update_user_group(
     assert_admin_access_survives_removal(
         db_session, user, user_group_id, removed_user_ids
     )
+    assert_group_membership_survives_removal(
+        db_session, user_group_id, removed_user_ids
+    )
 
     # Removing yourself drops the membership row carrying is_manager, and
     # effective_permissions is derived from group grants — so leaving can revoke the very
@@ -797,15 +826,19 @@ def update_user_group(
         )
 
     if added_user_ids:
-        missing_users = [
-            user_id
-            for user_id in added_user_ids
-            if fetch_user_by_id(db_session, user_id) is None
-        ]
+        added_users: list[User] = []
+        missing_users: list[UUID] = []
+        for user_id in added_user_ids:
+            added_user = fetch_user_by_id(db_session, user_id)
+            if added_user is None:
+                missing_users.append(user_id)
+            else:
+                added_users.append(added_user)
         if missing_users:
             raise ValueError(
                 f"User(s) not found: {', '.join(str(user_id) for user_id in missing_users)}"
             )
+        _assert_users_can_join_groups(added_users)
 
     if removed_user_ids:
         _cleanup_user__user_group_relationships__no_commit(
@@ -922,6 +955,24 @@ def rename_user_group(
 
     db_session.commit()
     return db_user_group
+
+
+def assert_group_membership_survives_deletion(
+    db_session: Session, user_group_id: int
+) -> None:
+    """Deletion drops every membership, so the strand rule covers the whole roster.
+    Guards the route, not prepare_user_group_for_deletion — the sync task re-runs
+    that one, and raising there would wedge a scheduled deletion."""
+    member_ids: list[UUID] = [
+        user_id
+        for user_id in db_session.scalars(
+            select(User__UserGroup.user_id).where(
+                User__UserGroup.user_group_id == user_group_id
+            )
+        ).all()
+        if user_id is not None
+    ]
+    assert_group_membership_survives_removal(db_session, user_group_id, member_ids)
 
 
 def prepare_user_group_for_deletion(db_session: Session, user_group_id: int) -> None:
