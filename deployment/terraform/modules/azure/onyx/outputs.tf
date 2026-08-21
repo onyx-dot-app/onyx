@@ -23,6 +23,15 @@ output "workload_identity_client_id" {
   value       = module.aks.workload_identity_client_id
 }
 
+# The client id annotates a service account; a role assignment needs the
+# principal id instead. Granting this identity access to anything the
+# composition does not itself create - a key vault, another storage account -
+# is impossible without it.
+output "workload_identity_principal_id" {
+  description = "Principal ID of the workload identity, for granting it roles on resources outside this module"
+  value       = module.aks.workload_identity_principal_id
+}
+
 output "node_resource_group" {
   description = "Resource group AKS creates for the cluster's own infrastructure"
   value       = module.aks.node_resource_group
