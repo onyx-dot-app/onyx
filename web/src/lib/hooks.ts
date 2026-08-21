@@ -433,6 +433,8 @@ export interface LlmManager {
   updateImageFilesPresent: (present: boolean) => void;
   activeAgent: MinimalAgent | null;
   maxTemperature: number;
+  /** True only when an override was set locally or is stored on the session. */
+  hasTemperatureOverride: boolean;
   llmProviders: LLMProviderDescriptor[] | undefined;
   isLoadingProviders: boolean;
   hasAnyProvider: boolean;
@@ -911,7 +913,12 @@ export function useLlmManager(
       return;
     }
 
-    if (currentChatSession?.current_temperature_override) {
+    // A local slider choice outranks the snapshot, which may not reflect the
+    // write yet. The flag is a dep so a session switch, which resets it,
+    // re-runs this sync for the new session.
+    if (temperatureExplicitlySet) return;
+
+    if (currentChatSession?.current_temperature_override != null) {
       setTemperature(currentChatSession.current_temperature_override);
     } else if (
       activeAgent?.tools.some((tool) => tool.in_code_tool_id === SEARCH_TOOL_ID)
@@ -925,6 +932,7 @@ export function useLlmManager(
     currentChatSession,
     llmProviders,
     user?.preferences?.default_model,
+    temperatureExplicitlySet,
   ]);
 
   const updateTemperature = (temperature: number) => {
@@ -1005,6 +1013,10 @@ export function useLlmManager(
     updateImageFilesPresent,
     activeAgent: activeAgent ?? null,
     maxTemperature,
+    // Covers a slider choice the session snapshot does not yet reflect.
+    hasTemperatureOverride:
+      temperatureExplicitlySet ||
+      currentChatSession?.current_temperature_override != null,
     llmProviders,
     isLoadingProviders:
       isLoadingAllProviders ||

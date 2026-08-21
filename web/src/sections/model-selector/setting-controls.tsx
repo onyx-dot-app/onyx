@@ -36,6 +36,12 @@ export const UNSUPPORTED_SETTING_TOOLTIP =
 export const UNKNOWN_CONTEXT_TOOLTIP =
   "Context size is not available for this model. Chats still apply a token limit automatically.";
 
+export const ADMIN_LIMITED_SETTING_TOOLTIP =
+  "Your admin limits this model to a lower reasoning level.";
+
+/** Where an unset reasoning setting parks: the backend resolves AUTO to medium. */
+export const UNSET_REASONING_STOP = ALL_REASONING_STOPS.indexOf("medium");
+
 /** Highest supported stop. Nothing from an older backend means the base set. */
 export function maxReasoningStop(
   supported: ReasoningEffortOverride[] | undefined
@@ -51,6 +57,15 @@ export function reasoningStopIndex(
   effort: ReasoningEffortOverride | null | undefined
 ): number {
   return effort ? ALL_REASONING_STOPS.indexOf(effort) : -1;
+}
+
+/** Highest stop a user may request: model capability, narrowed by the admin cap. */
+export function cappedReasoningStop(
+  capabilityStop: number,
+  cap: ReasoningEffortOverride | null | undefined
+): number {
+  const capStop = reasoningStopIndex(cap);
+  return capStop >= 0 ? Math.min(capabilityStop, capStop) : capabilityStop;
 }
 
 export function formatContextWindow(tokens: number): string {
