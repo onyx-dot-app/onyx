@@ -1,6 +1,7 @@
 "use client";
 
 import { memo, useState, useCallback } from "react";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import Text from "@/refresh-components/texts/Text";
 import { Button, Divider } from "@opal/components";
 import LLMProviderCard from "@/sections/onboarding/components/LLMProviderCard";
@@ -141,7 +142,7 @@ const LLMStep = memo(
                   disabled={disabled}
                   prominence="tertiary"
                   rightIcon={SvgExternalLink}
-                  href="/admin/language-models"
+                  href={ADMIN_ROUTES.LLM_MODELS.path}
                 >
                   View in Admin Panel
                 </Button>

@@ -1,6 +1,7 @@
 "use client";
 
 import { Button, Card, Divider, Modal, Text } from "@opal/components";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { SvgPlug, SvgPlus, SvgSettings } from "@opal/icons";
 import {
@@ -59,7 +60,7 @@ export default function AddAppCatalogModal({
               </Text>
               <Button
                 prominence="tertiary"
-                href="/admin/actions/mcp"
+                href={ADMIN_ROUTES.MCP_ACTIONS.path}
                 icon={SvgSettings}
               >
                 Open Actions

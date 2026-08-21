@@ -210,7 +210,7 @@ export const ADMIN_ROUTES = {
     visibleWhen: null,
   },
   MCP_ACTIONS: {
-    path: "/admin/actions/mcp",
+    path: "/admin/mcp-actions",
     icon: SvgMcp,
     title: "MCP Actions",
     sidebarLabel: "MCP Actions",
@@ -220,7 +220,7 @@ export const ADMIN_ROUTES = {
     visibleWhen: null,
   },
   OPENAPI_ACTIONS: {
-    path: "/admin/actions/open-api",
+    path: "/admin/openapi-actions",
     icon: SvgActions,
     title: "OpenAPI Actions",
     sidebarLabel: "OpenAPI Actions",

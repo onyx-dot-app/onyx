@@ -205,6 +205,40 @@ const nextConfig = {
         destination: "/admin/craft/access",
         permanent: true,
       },
+      // Legacy /admin/actions/* → /admin/*. Only `mcp` and `open-api` held a
+      // real page; `actions`, `new`, `edit-mcp` and `edit/:toolId` were all
+      // redirect pages pointing at the MCP list, so they redirect there too.
+      // TODO: Remove these redirects in v4.0 — https://linear.app/onyx-app/issue/ENG-3771
+      {
+        source: "/admin/actions/mcp",
+        destination: "/admin/mcp-actions",
+        permanent: true,
+      },
+      {
+        source: "/admin/actions/open-api",
+        destination: "/admin/openapi-actions",
+        permanent: true,
+      },
+      {
+        source: "/admin/actions",
+        destination: "/admin/mcp-actions",
+        permanent: true,
+      },
+      {
+        source: "/admin/actions/new",
+        destination: "/admin/mcp-actions",
+        permanent: true,
+      },
+      {
+        source: "/admin/actions/edit-mcp",
+        destination: "/admin/mcp-actions",
+        permanent: true,
+      },
+      {
+        source: "/admin/actions/edit/:toolId",
+        destination: "/admin/mcp-actions",
+        permanent: true,
+      },
     ];
   },
 };

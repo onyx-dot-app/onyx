@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useMemo, useEffect } from "react";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { KeyedMutator } from "swr";
 import MCPActionCard from "@/sections/actions/MCPActionCard";
 import AdminListHeader from "@/sections/admin/AdminListHeader";
@@ -82,7 +83,7 @@ export default function MCPPageContent() {
 
           await mutateMcpServers();
 
-          router.replace("/admin/actions/mcp");
+          router.replace(ADMIN_ROUTES.MCP_ACTIONS.path);
 
           // Automatically expand the tools for this server
           setServerToExpand(serverIdInt);

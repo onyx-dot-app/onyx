@@ -6,8 +6,9 @@
  */
 
 import { type Page, type Locator, expect } from "@playwright/test";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 
-const INDEX_SETTINGS_URL = "/admin/index-settings";
+const INDEX_SETTINGS_URL = ADMIN_ROUTES.INDEX_SETTINGS.path;
 
 export class IndexSettingsPage {
   readonly page: Page;

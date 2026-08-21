@@ -1,4 +1,5 @@
 import { test, expect, type APIResponse } from "@playwright/test";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { Permission } from "@/lib/types";
 import { apiLogin, loginAs } from "@tests/e2e/utils/auth";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
@@ -86,7 +87,7 @@ test("group permissions apply immediately when a user is added to the group", as
       "manage:llms should imply read:users for LLM sharing UI"
     );
 
-    await page.goto("/admin/language-models");
+    await page.goto(ADMIN_ROUTES.LLM_MODELS.path);
     await expect(page.getByLabel("admin-page-title")).toContainText(
       "Language Models"
     );
@@ -96,7 +97,7 @@ test("group permissions apply immediately when a user is added to the group", as
     await expect(page.getByRole("link", { name: "Groups" })).toHaveCount(0);
     await expect(page.getByRole("link", { name: "Users" })).toHaveCount(0);
 
-    await page.goto("/admin/users");
+    await page.goto(ADMIN_ROUTES.USERS.path);
     await expect(page).toHaveURL(/\/admin\/configuration\/language-models/);
   } finally {
     await page.context().clearCookies();
