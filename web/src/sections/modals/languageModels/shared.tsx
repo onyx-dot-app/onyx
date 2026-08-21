@@ -685,7 +685,6 @@ function ModelRow({
                 </OpalSection>
               }
               editable
-              hideEditButton
               editHandle={editHandle}
               onTitleChange={(newTitle) => onRename(newTitle || undefined)}
               padding={0}

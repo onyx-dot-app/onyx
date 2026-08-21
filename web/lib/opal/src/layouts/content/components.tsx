@@ -55,10 +55,8 @@ interface ContentBaseProps {
   /** Enable inline editing of the title. */
   editable?: boolean;
 
-  /** Hide the built-in pencil, for callers that trigger editing externally. */
-  hideEditButton?: boolean;
-
-  /** Handle for starting a title edit from an external control. */
+  /** Handle for starting a title edit from an external control. Setting it
+   *  hides the built-in pencil. */
   editHandle?: React.Ref<ContentMdEditHandle>;
 
   /** Called when the user commits an edit. */

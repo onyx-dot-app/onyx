@@ -66,10 +66,8 @@ interface ContentMdProps {
   /** Enable inline editing of the title. */
   editable?: boolean;
 
-  /** Hide the built-in pencil, for callers that trigger editing externally. */
-  hideEditButton?: boolean;
-
-  /** Handle for starting a title edit from an external control. */
+  /** Handle for starting a title edit from an external control. Setting it
+   *  hides the built-in pencil. */
   editHandle?: React.Ref<ContentMdEditHandle>;
 
   /** Called when the user commits an edit. */
@@ -162,7 +160,6 @@ function ContentMd({
   titleMaxLines,
   sizePreset = "main-ui",
   ref,
-  hideEditButton,
   editHandle,
 }: ContentMdProps) {
   const [editing, setEditing] = useState(false);
@@ -296,7 +293,7 @@ function ContentMd({
 
           {tag && <Tag {...tag} />}
 
-          {editable && !editing && !hideEditButton && (
+          {editable && !editing && editHandle == null && (
             <div
               className={cn(
                 "opal-content-md-edit-button",
