@@ -382,19 +382,23 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
   const handleSelectionChange = useCallback(
     (ids: string[]) => {
       if (!initialized) return;
+      const kept = new Set(ids);
+      // Both rules run: one deselection can strip your own row and a last-group
+      // member at once, and returning after the first leaves the other removed.
+      const forcedIds: string[] = [];
+
       // Add mode can deselect your own row, which the member list disables — it would
       // drop the membership carrying your manager role. The backend rejects it too.
       if (
         currentUserId &&
         isOwnManagerRow(currentUserId) &&
-        !ids.includes(currentUserId)
+        !kept.has(currentUserId)
       ) {
         toast.error("You can't remove yourself while managing this group");
-        setSelectedUserIds([currentUserId, ...ids, ...hiddenMemberIds]);
-        return;
+        forcedIds.push(currentUserId);
       }
+
       // Same rule as the remove button; add mode can't disable a checkbox, so re-select.
-      const kept = new Set(ids);
       const strandedIds = allRows
         .filter(
           (row) => !kept.has(row.id ?? row.email) && isLastGroupMember(row)
@@ -404,11 +408,13 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
         toast.error(
           "Some of those members would be left without a group. Add them to another group first."
         );
-        setSelectedUserIds([...strandedIds, ...ids, ...hiddenMemberIds]);
-        return;
+        forcedIds.push(...strandedIds);
       }
 
-      setSelectedUserIds([...ids, ...hiddenMemberIds]);
+      // Deduped: a manager whose only group is this one satisfies both rules.
+      setSelectedUserIds(
+        Array.from(new Set([...forcedIds, ...ids, ...hiddenMemberIds]))
+      );
     },
     [
       initialized,
