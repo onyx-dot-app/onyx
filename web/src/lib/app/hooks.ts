@@ -67,7 +67,9 @@ export function useChatSessionSupportsRetrieval(): boolean | null {
   const sessionPersonaId = useCurrentSessionPersonaId();
   const activeAgent = useActiveAgent();
 
-  if (isLoadingAgents) return null;
+  // A failed fetch also leaves the list empty, with the loading flag already
+  // down. Both cases read as "not known yet", so neither reports a false.
+  if (isLoadingAgents || agents.length === 0) return null;
 
   const agent =
     sessionPersonaId === null
