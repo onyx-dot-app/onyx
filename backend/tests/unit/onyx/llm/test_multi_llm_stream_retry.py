@@ -1,9 +1,11 @@
-from collections.abc import Iterator
+from collections.abc import Generator, Iterator
+from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
 import pytest
 from litellm.exceptions import Timeout as LiteLLMTimeout
 
+from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LanguageModelInput
 from onyx.llm.model_response import Delta, ModelResponseStream, StreamingChoice
 from onyx.llm.models import UserMessage
@@ -88,3 +90,49 @@ def test_stream_does_not_retry_after_first_chunk() -> None:
 
     assert fake_llm._completion.call_count == 1
     mock_logger.warning.assert_not_called()
+
+
+def test_stream_closes_non_isolated_stream_on_abandon() -> None:
+    """Regression test for onyx-dot-app/onyx#13743.
+
+    Non-isolated providers do not get a per-request HTTPHandler, so the stream
+    must be closed when the generator is abandoned. Otherwise checked-out
+    connections stay in the shared pool until it is exhausted.
+    """
+
+    class FakeStream:
+        def __init__(self, completion_stream: Any):
+            self.completion_stream = completion_stream
+
+        def __iter__(self) -> Iterator[Any]:
+            return iter(self.completion_stream)
+
+    llm = LitellmLLM(
+        api_key="test_key",
+        model_provider=LlmProviderNames.BEDROCK,
+        model_name="anthropic.claude-3-sonnet",
+        max_input_tokens=100_000,
+    )
+
+    completion_stream = MagicMock()
+    completion_stream.__iter__ = MagicMock(
+        return_value=iter([object(), object(), object()])
+    )
+    fake_stream = FakeStream(completion_stream)
+
+    with (
+        patch("litellm.completion", return_value=fake_stream) as mock_completion,
+        patch(
+            "onyx.llm.model_response.from_litellm_model_response_stream",
+            return_value=_make_stream_response("hello"),
+        ),
+    ):
+        gen = cast(
+            Generator[ModelResponseStream, None, None],
+            llm.stream(prompt=_make_prompt()),
+        )
+        next(gen)
+        gen.close()
+
+    mock_completion.assert_called_once()
+    completion_stream.close.assert_called_once()

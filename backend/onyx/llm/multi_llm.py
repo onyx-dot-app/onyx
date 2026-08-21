@@ -162,13 +162,36 @@ class LLMRateLimitError(Exception):
     """
 
 
+def _close_stream(response: Any) -> None:
+    """Best-effort close a LiteLLM stream and its underlying completion_stream.
+
+    Abandoned streams can keep checked-out HTTP connections alive. Closing the
+    underlying iterator returns those connections to the pool.
+    """
+    try:
+        completion_stream = getattr(response, "completion_stream", None)
+    except Exception:
+        return
+
+    if completion_stream is None:
+        return
+
+    close = getattr(completion_stream, "close", None)
+    if close is None:
+        return
+
+    try:
+        close()
+    except Exception as e:
+        logger.debug("Failed to close LLM stream: %s", e)
+
+
 def _consume_stream_with_timeout(stream: Any, total_timeout: float | None) -> list[Any]:
     """Drain a litellm stream, capping total wall-clock time when set.
 
     The socket read timeout only bounds the gap between packets, so keepalive
-    pings defeat it; this caps the whole call. On breach we raise — never close,
-    since litellm 1.93.0 exposes only async ``aclose`` — which frees the thread;
-    GC releases the connection.
+    pings defeat it; this caps the whole call. On breach we raise. The caller
+    must close the stream, for example via ``_close_stream``.
     """
     if total_timeout is None:
         return list(stream)
@@ -1136,6 +1159,7 @@ class LitellmLLM(LLM):
             read_timeout = min(read_timeout, max(1, int(total_timeout_override)))
 
         client = None
+        stream_response: Any = None
         if self._uses_isolated_client():
             client = HTTPHandler(timeout=read_timeout)
 
@@ -1181,6 +1205,7 @@ class LitellmLLM(LLM):
 
             return model_response
         finally:
+            _close_stream(stream_response)
             if client is not None:
                 client.close()
 
@@ -1246,6 +1271,7 @@ class LitellmLLM(LLM):
         #    - Per-request HTTPHandler eliminates cross-thread interference
         for attempt in range(max_attempts):
             client = None
+            response: Any = None
             if self._uses_isolated_client():
                 client = HTTPHandler(timeout=timeout_override or self._timeout)
 
@@ -1288,6 +1314,7 @@ class LitellmLLM(LLM):
                     max_attempts,
                 )
             finally:
+                _close_stream(response)
                 if client is not None:
                     client.close()
 
