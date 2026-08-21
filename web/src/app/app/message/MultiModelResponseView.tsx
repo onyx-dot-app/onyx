@@ -140,14 +140,22 @@ export default function MultiModelResponseView({
   const deselectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // True while the reverse animation is playing (deselect → back to equal panels)
   const [selectionExiting, setSelectionExiting] = useState(false);
+  // Measures the root container so the layout can drop to the one-at-a-time
+  // carousel when the panels can't all fit side by side.
+  const [containerW, setContainerW] = useState(0);
+  const [rootEl, setRootEl] = useState<HTMLDivElement | null>(null);
+
   // Measures the overflow-hidden carousel container for responsive preferred-panel sizing.
   const [trackContainerW, setTrackContainerW] = useState(0);
   const trackContainerElRef = useRef<HTMLDivElement | null>(null);
   const [trackContainerEl, setTrackContainerEl] =
     useState<HTMLDivElement | null>(null);
+  // Also feeds the container-width measurement: every layout branch must keep
+  // containerW live, or a resize can never switch back to the carousel.
   const trackContainerRef = useCallback((el: HTMLDivElement | null) => {
     trackContainerElRef.current = el;
     setTrackContainerEl(el);
+    setRootEl(el);
   }, []);
 
   // Measures the preferred panel's height to cap non-preferred panels in selection mode.
@@ -170,10 +178,6 @@ export default function MultiModelResponseView({
     []
   );
 
-  // Measures the root container so the layout can drop to the one-at-a-time
-  // carousel when the panels can't all fit side by side.
-  const [containerW, setContainerW] = useState(0);
-  const [rootEl, setRootEl] = useState<HTMLDivElement | null>(null);
   useLayoutEffect(() => {
     if (!rootEl) return;
     const ro = new ResizeObserver(([entry]) => {
@@ -248,6 +252,18 @@ export default function MultiModelResponseView({
     [responses, hiddenPanels]
   );
 
+  // One-at-a-time carousel when the panels can't all fit side by side. Narrow
+  // width outranks selection mode, so picking or clearing a preference never
+  // swaps the carousel out from under the user.
+  const requiredSideBySideW =
+    visibleResponses.length * MIN_PANEL_W +
+    (visibleResponses.length - 1) * PANEL_GAP;
+  const showNarrowCarousel =
+    !readOnly &&
+    visibleResponses.length > 1 &&
+    containerW > 0 &&
+    containerW < requiredSideBySideW;
+
   const toggleVisibility = useCallback(
     (modelIndex: number) => {
       setHiddenPanels((prev) => {
@@ -289,7 +305,7 @@ export default function MultiModelResponseView({
       // When switching preferred within selection mode, panels are already
       // capped and the track just slides — no height changes to worry about.
       const alreadyInSelection = preferredIndex !== null;
-      if (!alreadyInSelection) {
+      if (!alreadyInSelection && !showNarrowCarousel) {
         const scrollContainer = trackContainerElRef.current?.closest(
           "[data-chat-scroll]"
         ) as HTMLElement | null;
@@ -335,6 +351,7 @@ export default function MultiModelResponseView({
       selectionDisabled,
       responses,
       preferredIndex,
+      showNarrowCarousel,
       parentMessage,
       currentSessionId,
       updateSessionMessageTree,
@@ -345,7 +362,27 @@ export default function MultiModelResponseView({
   // preferred_response_id. The SetPreferredResponseRequest model doesn't
   // accept null. A backend endpoint for clearing preference would be needed
   // if deselect should persist across reloads.
+  const clearPreferredInTree = useCallback(() => {
+    if (!parentMessage || !currentSessionId) return;
+    const tree = useChatSessionStore
+      .getState()
+      .sessions.get(currentSessionId)?.messageTree;
+    const updated =
+      tree && applyPreferredResponse(tree, parentMessage.nodeId, null);
+    if (updated) {
+      updateSessionMessageTree(currentSessionId, updated);
+    }
+  }, [parentMessage, currentSessionId, updateSessionMessageTree]);
+
   const handleDeselectPreferred = useCallback(() => {
+    // The carousel keeps every card in place, so the chip just toggles off.
+    // None of the selection layout's exit choreography applies.
+    if (showNarrowCarousel) {
+      setPreferredIndex(null);
+      clearPreferredInTree();
+      return;
+    }
+
     const scrollContainer = trackContainerElRef.current?.closest(
       "[data-chat-scroll]"
     ) as HTMLElement | null;
@@ -406,26 +443,9 @@ export default function MultiModelResponseView({
         restoreScroll();
       }
 
-      // Clear preferredResponseId in the local tree so the next send assumes
-      // a preference again
-      if (parentMessage && currentSessionId) {
-        const tree = useChatSessionStore
-          .getState()
-          .sessions.get(currentSessionId)?.messageTree;
-        const updated =
-          tree && applyPreferredResponse(tree, parentMessage.nodeId, null);
-        if (updated) {
-          updateSessionMessageTree(currentSessionId, updated);
-        }
-      }
+      clearPreferredInTree();
     }, 450);
-  }, [
-    parentMessage,
-    currentSessionId,
-    updateSessionMessageTree,
-    preferredIndex,
-    hiddenPanels,
-  ]);
+  }, [showNarrowCarousel, clearPreferredInTree, preferredIndex, hiddenPanels]);
 
   // Clear preferred selection when generation starts
   // Reset selection state when generation restarts
@@ -463,9 +483,12 @@ export default function MultiModelResponseView({
   // Use the selection layout once a preferred response has been chosen, even
   // after deselect. Only fall through to generation layout before the first
   // selection or during active streaming. The read-only (shared) view stays in
-  // generation layout so every response is shown equal-width.
+  // generation layout so every response is shown equal-width. The narrow
+  // carousel outranks it: at carousel widths a preference only moves the chip.
   const showSelectionMode =
-    !readOnly && (isActivelySelected || hasEnteredSelection);
+    !readOnly &&
+    !showNarrowCarousel &&
+    (isActivelySelected || hasEnteredSelection);
 
   // Trigger the slide-out animation one frame after a preferred panel is selected.
   // Uses isActivelySelected (not showSelectionMode) so re-selecting after a
@@ -479,20 +502,15 @@ export default function MultiModelResponseView({
     return () => cancelAnimationFrame(raf);
   }, [isActivelySelected]);
 
-  // One-at-a-time carousel when the panels can't all fit side by side (the
-  // spec's smaller-screen layout). Starts on the first model, the right-most
-  // panel in the side-by-side layout.
-  const requiredSideBySideW =
-    visibleResponses.length * MIN_PANEL_W +
-    (visibleResponses.length - 1) * PANEL_GAP;
-  const showNarrowCarousel =
-    !readOnly &&
-    !showSelectionMode &&
-    visibleResponses.length > 1 &&
-    containerW > 0 &&
-    containerW < requiredSideBySideW;
+  // Carousel starts on the preferred card when a preference exists, else the
+  // first model (the right-most side-by-side panel).
   const lastCarouselPos = Math.max(0, visibleResponses.length - 1);
-  const [carouselPos, setCarouselPos] = useState(lastCarouselPos);
+  const preferredCarouselPos = visibleResponses.findIndex(
+    (r) => r.modelIndex === preferredIndex
+  );
+  const [carouselPos, setCarouselPos] = useState(
+    preferredCarouselPos !== -1 ? preferredCarouselPos : lastCarouselPos
+  );
   const clampedCarouselPos = Math.min(carouselPos, lastCarouselPos);
   const currentCarouselResponse = visibleResponses[clampedCarouselPos];
 
