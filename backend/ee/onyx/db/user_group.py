@@ -61,6 +61,7 @@ from onyx.db.users import (
     assert_admin_access_survives_removal,
     assert_group_membership_survives_removal,
     fetch_users_by_ids,
+    lock_group_membership,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -959,6 +960,9 @@ def assert_group_membership_survives_deletion(
     """Deletion drops every membership, so the strand rule covers the whole roster.
     Guards the route, not prepare_user_group_for_deletion — the sync task re-runs
     that one, and raising there would wedge a scheduled deletion."""
+    # Locked first: cleanup deletes every membership, including ones added after this read.
+    lock_group_membership(db_session)
+
     member_ids: list[UUID] = [
         user_id
         for user_id in db_session.scalars(

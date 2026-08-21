@@ -234,6 +234,12 @@ def _stranded_by_removal(
     )
 
 
+def lock_group_membership(db_session: Session) -> None:
+    """Take before reading the rows a removal will delete: a roster read outside the
+    lock misses a concurrent add, and two removals each see the other survive."""
+    _take_tenant_lock(db_session, _GROUP_MEMBERSHIP_LOCK_NAMESPACE)
+
+
 def assert_group_membership_survives_removal(
     db_session: Session,
     group_id: int,
@@ -244,7 +250,7 @@ def assert_group_membership_survives_removal(
     if not removed_user_ids:
         return
 
-    _take_tenant_lock(db_session, _GROUP_MEMBERSHIP_LOCK_NAMESPACE)
+    lock_group_membership(db_session)
 
     stranded_emails = _stranded_by_removal(db_session, group_id, removed_user_ids)
     if not stranded_emails:
