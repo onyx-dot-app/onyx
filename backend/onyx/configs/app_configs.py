@@ -357,7 +357,11 @@ if not MOBILE_ALLOWED_REDIRECT_URIS:
     MOBILE_ALLOWED_REDIRECT_URIS = _DEFAULT_MOBILE_REDIRECT_URIS
 
 # JWT Public Key URL for JWT token verification
-JWT_PUBLIC_KEY_URL: str | None = os.getenv("JWT_PUBLIC_KEY_URL", None)
+JWT_PUBLIC_KEY_URL: str | None = os.getenv("JWT_PUBLIC_KEY_URL") or None
+# Optional aud/iss scoping for JWT_PUBLIC_KEY_URL auth, off when unset. Empty
+# counts as unset because compose files pass absent vars through as "".
+JWT_EXPECTED_AUDIENCE: str | None = os.getenv("JWT_EXPECTED_AUDIENCE") or None
+JWT_EXPECTED_ISSUER: str | None = os.getenv("JWT_EXPECTED_ISSUER") or None
 
 USER_AUTH_SECRET = os.environ.get("USER_AUTH_SECRET", "")
 
