@@ -13,12 +13,12 @@ from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.db.llm import fetch_default_llm_model
 from onyx.file_processing.extract_file_text import (
     count_docx_embedded_images,
-    count_pdf_embedded_images,
     extract_file_text,
     get_file_ext,
 )
 from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.file_processing.password_validation import is_file_password_protected
+from onyx.file_processing.pdf_image_utils import count_pdf_embedded_images
 from onyx.natural_language_processing.utils import count_tokens, get_tokenizer
 from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger

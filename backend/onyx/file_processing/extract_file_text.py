@@ -16,7 +16,6 @@ from zipfile import BadZipFile
 import chardet
 import openpyxl
 from openpyxl.worksheet._read_only import ReadOnlyWorksheet
-from PIL import Image
 
 from onyx.configs.app_configs import (
     MAX_EMBEDDED_IMAGES_PER_FILE,
@@ -32,6 +31,7 @@ from onyx.file_processing.file_types import (
     OnyxMimeTypes,
 )
 from onyx.file_processing.html_utils import parse_html_page_basic
+from onyx.file_processing.pdf_image_utils import iter_pdf_extracted_images
 from onyx.file_processing.unstructured import (
     get_unstructured_api_key,
     unstructured_to_text,
@@ -212,56 +212,6 @@ def read_text_file(
     return file_content_raw, metadata
 
 
-def count_pdf_embedded_images(file: IO[Any], cap: int) -> int:
-    """Return the number of embedded images in a PDF, short-circuiting at cap+1.
-
-    Used to reject PDFs whose image count would OOM the user-file-processing
-    worker during indexing. Returns a value > cap as a sentinel once the count
-    exceeds the cap, so callers do not iterate thousands of image objects just
-    to report a number. Returns 0 if the PDF cannot be parsed.
-
-    Owner-password-only PDFs (permission restrictions but no open password) are
-    counted normally — they decrypt with an empty string. Truly password-locked
-    PDFs are skipped (return 0) since we can't inspect them; the caller should
-    ensure the password-protected check runs first.
-
-    Always restores the file pointer to its original position before returning.
-    """
-    from pypdf import PdfReader
-
-    try:
-        start_pos = file.tell()
-    except Exception:
-        start_pos = None
-    try:
-        if start_pos is not None:
-            file.seek(0)
-        reader = PdfReader(file)
-        if reader.is_encrypted:
-            # Try empty password first (owner-password-only PDFs); give up if that fails.
-            try:
-                if reader.decrypt("") == 0:
-                    return 0
-            except Exception:
-                return 0
-        count = 0
-        for page in reader.pages:
-            for _ in page.images:
-                count += 1
-                if count > cap:
-                    return count
-        return count
-    except Exception:
-        logger.warning("Failed to count embedded images in PDF", exc_info=True)
-        return 0
-    finally:
-        if start_pos is not None:
-            try:
-                file.seek(start_pos)
-            except Exception:
-                pass
-
-
 def pdf_to_text(file: IO[Any], pdf_pass: str | None = None) -> str:
     """
     Extract text from a PDF. For embedded images, a more complex approach is needed.
@@ -371,40 +321,13 @@ def read_pdf_file(
             )
 
         if extract_images:
-            image_cap = MAX_EMBEDDED_IMAGES_PER_FILE
-            images_processed = 0
-            cap_reached = False
-            for page_num, page in enumerate(pdf_reader.pages):
-                if cap_reached:
-                    break
-                for image_file_object in page.images:
-                    if images_processed >= image_cap:
-                        # Defense-in-depth backstop. Upload-time validation
-                        # should have rejected files exceeding the cap, but
-                        # we also break here so a single oversized file can
-                        # never pin a worker.
-                        logger.warning(
-                            "PDF embedded image cap reached (%d). "
-                            "Skipping remaining images on page %d and beyond.",
-                            image_cap,
-                            page_num + 1,
-                        )
-                        cap_reached = True
-                        break
-
-                    image = Image.open(io.BytesIO(image_file_object.data))
-                    img_byte_arr = io.BytesIO()
-                    image.save(img_byte_arr, format=image.format)
-                    img_bytes = img_byte_arr.getvalue()
-
-                    image_format = image.format.lower() if image.format else "png"
-                    image_name = f"page_{page_num + 1}_image_{image_file_object.name}.{image_format}"
-                    if image_callback is not None:
-                        # Stream image out immediately
-                        image_callback(img_bytes, image_name)
-                    else:
-                        extracted_images.append((img_bytes, image_name))
-                    images_processed += 1
+            images = iter_pdf_extracted_images(pdf_reader, MAX_EMBEDDED_IMAGES_PER_FILE)
+            if image_callback is None:
+                extracted_images.extend(images)
+            else:
+                # Stream each image out immediately
+                for img_bytes, image_name in images:
+                    image_callback(img_bytes, image_name)
 
         return text, metadata, extracted_images
 
