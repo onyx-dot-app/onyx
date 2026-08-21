@@ -58,7 +58,8 @@ def _patch_runner_environment(
 ) -> MagicMock:
     """Stubs registry lookup and connector construction around the orchestrator.
 
-    Returns the ``instantiate_connector`` mock for call-shape assertions.
+    Returns the ``_instantiate_connector_isolated`` mock for call-shape
+    assertions.
     """
     monkeypatch.setattr(
         runner_module,
@@ -66,11 +67,12 @@ def _patch_runner_environment(
         MagicMock(return_value=MagicMock()),
     )
     # The instantiated connector must satisfy ``CapabilityCheckContext``'s
-    # isinstance validation, hence the spec.
-    instantiate = MagicMock(return_value=MagicMock(spec=BaseConnector))
+    # isinstance validation, hence the spec. The helper also returns the
+    # credential material as loaded on its own session.
+    instantiate = MagicMock(return_value=(MagicMock(spec=BaseConnector), {}))
     if instantiate_error is not None:
         instantiate.side_effect = instantiate_error
-    monkeypatch.setattr(runner_module, "instantiate_connector", instantiate)
+    monkeypatch.setattr(runner_module, "_instantiate_connector_isolated", instantiate)
     monkeypatch.setattr(
         runner_module, "get_capability_checks", MagicMock(return_value=checks)
     )
@@ -89,19 +91,17 @@ def test_configless_run_attempts_empty_config_instantiation(
     # Precondition.
     check = _CallableCheck(MagicMock(return_value=None), check_id="instance_check")
     instantiate = _patch_runner_environment(monkeypatch, [check])
-    db_session = MagicMock()
     credential = _make_credential()
 
     # Under test.
-    report = generate_capability_report(db_session, credential)
+    report = generate_capability_report(credential)
 
     # Postcondition.
     instantiate.assert_called_once_with(
-        db_session=db_session,
         source=DocumentSource.GITHUB,
         input_type=None,
         connector_specific_config={},
-        credential=credential,
+        credential_id=7,
     )
     assert report.credential_id == 7
     assert report.source == DocumentSource.GITHUB
@@ -136,7 +136,7 @@ def test_instantiation_failure_still_runs_credential_only_checks(
     )
 
     # Under test.
-    report = generate_capability_report(MagicMock(), _make_credential())
+    report = generate_capability_report(_make_credential())
 
     # Postcondition.
     statuses = {result.check_id: result.status for result in report.check_results}
@@ -161,7 +161,7 @@ def test_instantiation_failure_degrades_to_skip(
     )
 
     # Under test.
-    report = generate_capability_report(MagicMock(), _make_credential())
+    report = generate_capability_report(_make_credential())
 
     # Postcondition.
     assert report.check_results[0].status == CapabilityCheckStatus.SKIPPED
@@ -184,7 +184,6 @@ def test_supplied_config_instantiation_failure_is_surfaced(
 
     # Under test.
     report = generate_capability_report(
-        MagicMock(),
         _make_credential(),
         connector_specific_config={"channels": ["general"]},
         connector_id=42,
@@ -213,7 +212,6 @@ def test_real_config_unlocks_config_requiring_checks(
 
     # Under test.
     report = generate_capability_report(
-        MagicMock(),
         _make_credential(),
         connector_specific_config=connector_specific_config,
         connector_id=42,
@@ -263,7 +261,6 @@ def test_registered_gateway_is_constructed_and_reaches_checks(
 
     # Under test.
     generate_capability_report(
-        MagicMock(),
         _make_credential(),
         connector_specific_config=connector_specific_config,
     )
@@ -291,7 +288,7 @@ def test_unregistered_source_gets_no_gateway(
     _patch_runner_environment(monkeypatch, [check])
 
     # Under test.
-    generate_capability_report(MagicMock(), _make_credential())
+    generate_capability_report(_make_credential())
 
     # Postcondition.
     assert seen_contexts[0].source_operations is None
@@ -314,7 +311,7 @@ def test_report_decrypt_emits_a_credential_audit_event(
     credential.credential_json.get_value.return_value = {"token": "x"}
 
     # Under test.
-    generate_capability_report(MagicMock(), credential)
+    generate_capability_report(credential)
 
     # Postcondition.
     emit.assert_called_once_with(
@@ -335,7 +332,7 @@ def test_empty_credential_decrypts_nothing_and_emits_no_audit(
     monkeypatch.setattr(runner_module, "emit_credential_access", emit)
 
     # Under test.
-    generate_capability_report(MagicMock(), _make_credential())
+    generate_capability_report(_make_credential())
 
     # Postcondition.
     emit.assert_not_called()
@@ -357,7 +354,7 @@ def test_hung_instantiation_is_bounded_and_surfaces_indeterminate(
 
     # Under test.
     report = generate_capability_report(
-        MagicMock(), _make_credential(), connector_specific_config={"repo": "onyx"}
+        _make_credential(), connector_specific_config={"repo": "onyx"}
     )
 
     # Postcondition. The supplied-config timeout surfaces on the
