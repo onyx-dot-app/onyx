@@ -15,7 +15,12 @@ from onyx.server.security.models import (
     SecuritySettings,
     SecuritySettingsOverrides,
 )
-from onyx.server.security.store import apply_patch, get_security_settings
+from onyx.server.security.store import (
+    apply_patch,
+    env_pinned_active_fields,
+    get_security_settings,
+)
+from onyx.utils.audit import AuditActor
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 
@@ -61,10 +66,20 @@ def get_security_settings_endpoint(
 @admin_router.put("")
 async def put_security_settings_endpoint(
     request: Request,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> SecuritySettings:
     raw = await request.body()
     overrides, present_keys = _parse_put_body(raw)
+
+    # A clear refusal instead of silently storing an override the env pin
+    # would render inert.
+    pinned_in_payload = present_keys & env_pinned_active_fields()
+    if pinned_in_payload:
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "These fields are pinned by environment variables on this deployment: "
+            + ", ".join(sorted(pinned_in_payload)),
+        )
 
     lockdown_in_payload = present_keys & _PASSWORD_LOCKDOWN_FIELDS
     if lockdown_in_payload and MULTI_TENANT:
@@ -85,5 +100,9 @@ async def put_security_settings_endpoint(
                 + ", ".join(sorted(locked_in_payload)),
             )
 
+    # The auth dependency always yields a user, test seams may not.
+    actor = (
+        AuditActor(user_id=str(user.id), email=user.email) if user is not None else None
+    )
     # Sync DB + Redis IO — offload so the event loop isn't blocked.
-    return await run_in_threadpool(apply_patch, overrides, present_keys)
+    return await run_in_threadpool(apply_patch, overrides, present_keys, actor)

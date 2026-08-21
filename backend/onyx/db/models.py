@@ -4794,6 +4794,15 @@ class SecuritySettings(Base):
     password_require_special_char: Mapped[bool | None] = mapped_column(
         Boolean, nullable=True, default=None
     )
+    jwt_public_key_url: Mapped[str | None] = mapped_column(
+        String, nullable=True, default=None
+    )
+    jwt_expected_audience: Mapped[str | None] = mapped_column(
+        String, nullable=True, default=None
+    )
+    jwt_expected_issuer: Mapped[str | None] = mapped_column(
+        String, nullable=True, default=None
+    )
     __table_args__ = (
         CheckConstraint("id = true", name="ck_security_settings_singleton"),
         # Only catches min > max when both are explicitly overridden; the

@@ -16,11 +16,7 @@ from jwt import (
 from jwt import decode as jwt_decode
 from jwt.algorithms import RSAAlgorithm  # ty: ignore[possibly-missing-import]
 
-from onyx.configs.app_configs import (
-    JWT_EXPECTED_AUDIENCE,
-    JWT_EXPECTED_ISSUER,
-    JWT_PUBLIC_KEY_URL,
-)
+from onyx.server.security.store import get_security_settings
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -34,15 +30,14 @@ class PublicKeyFormat(Enum):
     PEM = "pem"
 
 
-@lru_cache()
-def _fetch_public_key_payload() -> tuple[str | dict[str, Any], PublicKeyFormat] | None:
+# Keyed on the URL so a runtime settings change takes effect without a restart.
+@lru_cache(maxsize=8)
+def _fetch_public_key_payload(
+    public_key_url: str,
+) -> tuple[str | dict[str, Any], PublicKeyFormat] | None:
     """Fetch and cache the raw JWT verification material."""
-    if JWT_PUBLIC_KEY_URL is None:
-        logger.error("JWT_PUBLIC_KEY_URL is not set")
-        return None
-
     try:
-        response = requests.get(JWT_PUBLIC_KEY_URL)
+        response = requests.get(public_key_url)
         response.raise_for_status()
     except requests.RequestException as exc:
         logger.error("Failed to fetch JWT public key: %s", str(exc))
@@ -74,9 +69,9 @@ def _fetch_public_key_payload() -> tuple[str | dict[str, Any], PublicKeyFormat] 
     return body, PublicKeyFormat.PEM
 
 
-def get_public_key(token: str) -> RSAPublicKey | str | None:
+def get_public_key(token: str, public_key_url: str) -> RSAPublicKey | str | None:
     """Return the concrete public key used to verify the provided JWT token."""
-    payload = _fetch_public_key_payload()
+    payload = _fetch_public_key_payload(public_key_url)
     if payload is None:
         logger.error("Failed to retrieve public key payload")
         return None
@@ -136,8 +131,13 @@ def _resolve_public_key_from_jwks(
 
 
 async def verify_jwt_token(token: str) -> dict[str, Any] | None:
+    settings = get_security_settings()
+    if settings.jwt_public_key_url is None:
+        logger.error("JWT public key URL is not configured")
+        return None
+
     for attempt in range(_PUBLIC_KEY_FETCH_ATTEMPTS):
-        public_key = get_public_key(token)
+        public_key = get_public_key(token, settings.jwt_public_key_url)
         if public_key is None:
             logger.error("Unable to resolve a public key for JWT verification")
             if attempt < _PUBLIC_KEY_FETCH_ATTEMPTS - 1:
@@ -152,9 +152,9 @@ async def verify_jwt_token(token: str) -> dict[str, Any] | None:
                 token,
                 public_key,
                 algorithms=["RS256"],
-                audience=JWT_EXPECTED_AUDIENCE,
-                issuer=JWT_EXPECTED_ISSUER,
-                options={"verify_aud": JWT_EXPECTED_AUDIENCE is not None},
+                audience=settings.jwt_expected_audience,
+                issuer=settings.jwt_expected_issuer,
+                options={"verify_aud": settings.jwt_expected_audience is not None},
             )
         except (
             InvalidAudienceError,

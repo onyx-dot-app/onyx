@@ -11,6 +11,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 
 import onyx.auth.jwt as jwt_module
 from onyx.auth.jwt import verify_jwt_token
+from onyx.server.security.store import _build_env_defaults
 
 _PRIVATE_KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
 _PUBLIC_PEM = (
@@ -29,7 +30,7 @@ def _mint(claims: dict[str, Any]) -> str:
 
 @pytest.fixture
 def signed_key(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(jwt_module, "get_public_key", lambda _token: _PUBLIC_PEM)
+    monkeypatch.setattr(jwt_module, "get_public_key", lambda _token, _url: _PUBLIC_PEM)
 
 
 def _configure(
@@ -37,8 +38,14 @@ def _configure(
     audience: str | None,
     issuer: str | None,
 ) -> None:
-    monkeypatch.setattr(jwt_module, "JWT_EXPECTED_AUDIENCE", audience)
-    monkeypatch.setattr(jwt_module, "JWT_EXPECTED_ISSUER", issuer)
+    settings = _build_env_defaults().model_copy(
+        update={
+            "jwt_public_key_url": "https://idp.example.com/keys",
+            "jwt_expected_audience": audience,
+            "jwt_expected_issuer": issuer,
+        }
+    )
+    monkeypatch.setattr(jwt_module, "get_security_settings", lambda: settings)
 
 
 @pytest.mark.parametrize(
@@ -151,7 +158,7 @@ async def test_claim_rejection_does_not_refetch_keys(
 ) -> None:
     calls: list[int] = []
 
-    def _counting_get(_token: str) -> str:
+    def _counting_get(_token: str, _url: str) -> str:
         calls.append(1)
         return _PUBLIC_PEM
 
