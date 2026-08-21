@@ -235,8 +235,8 @@ def _stranded_by_removal(
 
 
 def lock_group_membership(db_session: Session) -> None:
-    """Take before reading the rows a removal will delete: a roster read outside the
-    lock misses a concurrent add, and two removals each see the other survive."""
+    """Take before reading membership state a write depends on: a stale read misses a
+    concurrent add, and two removals each see the other survive."""
     _take_tenant_lock(db_session, _GROUP_MEMBERSHIP_LOCK_NAMESPACE)
 
 

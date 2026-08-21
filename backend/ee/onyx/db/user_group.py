@@ -582,6 +582,8 @@ def add_users_to_user_group(
     # group exists, even on the early-return path below.
     assert_manages_group(user, db_session, group_id=user_group_id)
 
+    lock_group_membership(db_session)
+
     db_user_group = fetch_user_group(db_session=db_session, user_group_id=user_group_id)
     if db_user_group is None:
         raise ValueError(f"UserGroup with id '{user_group_id}' not found")
@@ -780,6 +782,10 @@ def update_user_group(
     # Gate before any read so a non-manager can't confirm the group exists; the
     # cc_pair scope check below needs the group row and runs after.
     assert_manages_group(user, db_session, group_id=user_group_id)
+
+    # Locked before the reads below, adds included: an add that lands after a
+    # deletion's roster snapshot is wiped by its cleanup without being checked.
+    lock_group_membership(db_session)
 
     stmt = select(UserGroup).where(UserGroup.id == user_group_id)
     db_user_group = db_session.scalar(stmt)
