@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
@@ -159,3 +160,27 @@ class TestWebSearchToolRunQueryCoercion:
 
         assert "No valid" in str(exc_info.value)
         cast(MagicMock, mock_provider.search).assert_not_called()
+
+    def test_max_llm_chunks_limits_sections_fed_to_llm(self) -> None:
+        """override_kwargs.max_llm_chunks caps the number of results in llm_facing_response."""
+        mock_provider = MagicMock()
+        mock_provider.supports_site_filter = False
+        mock_provider.search.return_value = [
+            _make_result(title=f"Result {i}", link=f"https://example.com/{i}")
+            for i in range(10)
+        ]
+        tool = _make_tool(mock_provider)
+        placement = Placement(turn_index=0, tab_index=0)
+        override_kwargs = WebSearchToolOverrideKwargs(
+            starting_citation_num=1,
+            max_llm_chunks=3,
+        )
+
+        response = tool.run(
+            placement=placement,
+            override_kwargs=override_kwargs,
+            queries=["test query"],
+        )
+
+        parsed_llm_response = json.loads(response.llm_facing_response)
+        assert len(parsed_llm_response["results"]) == 3
