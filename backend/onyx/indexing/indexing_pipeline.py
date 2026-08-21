@@ -10,9 +10,13 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import (
     ENABLE_CONTEXTUAL_RAG,
+    IMAGE_SUMMARIZATION_SYSTEM_PROMPT,
+    IMAGE_SUMMARIZATION_USER_PROMPT,
     MAX_CHUNKS_PER_DOC_BATCH,
     MAX_DOCUMENT_CHARS,
     MAX_TOKENS_FOR_FULL_INCLUSION,
+    SCANNED_DOCUMENT_SYSTEM_PROMPT,
+    SCANNED_DOCUMENT_USER_PROMPT,
     USE_CHUNK_SUMMARY,
     USE_DOCUMENT_SUMMARY,
 )
@@ -31,6 +35,7 @@ from onyx.connectors.models import (
     IndexingDocument,
     Section,
     SectionType,
+    TabularSection,
     TextSection,
 )
 from onyx.db.connector_credential_pair import get_connector_credential_pair
@@ -134,6 +139,8 @@ class _PendingImageSummarization(BaseModel):
     section: Section
     image_data: bytes
     context_name: str
+    system_prompt: str
+    user_prompt: str
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -721,6 +728,21 @@ def filter_documents(
     return documents, failures
 
 
+def _is_scanned_document(document: Document) -> bool:
+    """A document is 'scanned' if it has no text or tabular content (no
+    TextSection with non-empty text, no TabularSection) but does have
+    ImageSections."""
+    has_text = any(
+        section.type == SectionType.TEXT and (section.text or "").strip()
+        for section in document.sections
+    )
+    has_tabular = any(
+        isinstance(section, TabularSection) for section in document.sections
+    )
+    has_images = any(isinstance(section, ImageSection) for section in document.sections)
+    return not has_text and not has_tabular and has_images
+
+
 def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
     """
     Process all sections in documents by:
@@ -787,6 +809,14 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
     for document in documents:
         processed_sections: list[Section] = []
 
+        is_scanned = _is_scanned_document(document)
+        if is_scanned:
+            doc_system_prompt = SCANNED_DOCUMENT_SYSTEM_PROMPT
+            doc_user_prompt = SCANNED_DOCUMENT_USER_PROMPT
+        else:
+            doc_system_prompt = IMAGE_SUMMARIZATION_SYSTEM_PROMPT
+            doc_user_prompt = IMAGE_SUMMARIZATION_USER_PROMPT
+
         for section in document.sections:
             if not isinstance(section, ImageSection):
                 # model_copy keeps the concrete section (incl. a TabularSection's
@@ -818,6 +848,8 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
                         section=processed_section,
                         image_data=image_data,
                         context_name=file_record.display_name or "Image",
+                        system_prompt=doc_system_prompt,
+                        user_prompt=doc_user_prompt,
                     )
                 )
             except Exception as e:
@@ -833,16 +865,31 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
     # Summarize all images in parallel
     if pending:
 
-        def _summarize(image_data: bytes, context_name: str) -> str:
+        def _summarize(
+            image_data: bytes,
+            context_name: str,
+            system_prompt: str,
+            user_prompt: str,
+        ) -> str:
             return (
                 summarize_image_with_error_handling(
-                    llm=llm, image_data=image_data, context_name=context_name
+                    llm=llm,
+                    image_data=image_data,
+                    context_name=context_name,
+                    system_prompt=system_prompt,
+                    user_prompt_template=user_prompt,
                 )
                 or "[Image could not be summarized]"
             )
 
         results = run_functions_tuples_in_parallel(
-            [(_summarize, (p.image_data, p.context_name)) for p in pending],
+            [
+                (
+                    _summarize,
+                    (p.image_data, p.context_name, p.system_prompt, p.user_prompt),
+                )
+                for p in pending
+            ],
             allow_failures=True,
             max_workers=MAX_IMAGE_WORKERS,
         )
