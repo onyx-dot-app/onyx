@@ -18,9 +18,14 @@ const (
 	// The bump workflow opens its PR from the branch bump-version/<tag>.
 	bumpPRBranchPrefix = "bump-version/"
 
+	// The deployment.yml job that sends the new-cloud-image dispatch; its
+	// success means the bump workflow was triggered.
+	dispatchJobName = "dispatch-cloud-deployment"
+
 	// The bump workflow usually opens the PR within a few minutes of the
-	// dispatch at the end of the build; its own timeout is 15 minutes.
-	bumpPRDiscoveryTimeout = 10 * time.Minute
+	// dispatch at the end of the build. The window covers its 15-minute job
+	// timeout plus runner queue delay.
+	bumpPRDiscoveryTimeout = 20 * time.Minute
 	bumpPRPollInterval     = 15 * time.Second
 )
 
@@ -30,6 +35,9 @@ const (
 // interrupting or re-running it is always safe.
 func watchCloudRelease(tag string) error {
 	log.Info("Looking up the deployment run...")
+	// A cloud tag is unique per push and never reused, so any run on this
+	// branch is the right one. A prior-run-id floor above 0 would also break
+	// re-attaching to runs that started before newer releases.
 	run, err := waitForNewRun(onyxRepo, deploymentWorkflowFile, "push", tag, 0)
 	if err != nil {
 		return fmt.Errorf(
@@ -40,15 +48,26 @@ func watchCloudRelease(tag string) error {
 	fmt.Println(run.URL)
 
 	// A failed or timed-out run does not always mean no PR: the dispatch job
-	// can succeed while an unrelated job fails, and the bump workflow can also
-	// be dispatched manually. Check once for the PR before giving up.
+	// can succeed while an unrelated job fails. Whether that job succeeded
+	// decides if a PR is worth waiting for.
 	if buildErr := waitForRunCompletion(onyxRepo, run.DatabaseID, buildPollTimeout, "build"); buildErr != nil {
 		log.Warnf("Deployment run did not succeed: %v", buildErr)
-		pr, err := findBumpPR(tag)
-		if err != nil || pr == nil {
+		dispatched, err := dispatchJobSucceeded(run.DatabaseID)
+		if err != nil {
+			log.Warnf("Could not check the bump dispatch job: %v", err)
 			return buildErr
 		}
-		log.Warn("A bump PR exists anyway; review the run before approving.")
+		if !dispatched {
+			log.Warn("The bump dispatch has not succeeded, so a bump PR is not expected.")
+			return buildErr
+		}
+		log.Info("The bump dispatch succeeded; waiting for the bump PR...")
+		pr, err := waitForBumpPR(tag)
+		if err != nil {
+			log.Warnf("Bump PR lookup failed: %v", err)
+			return buildErr
+		}
+		log.Warn("The deployment run did not succeed; review it before approving.")
 		log.Infof("Bump PR: %s", pr.URL)
 		fmt.Println(pr.URL)
 		return nil
@@ -81,6 +100,39 @@ func waitForBumpPR(tag string) (*pullRequest, error) {
 		}
 		time.Sleep(bumpPRPollInterval)
 	}
+}
+
+// dispatchJobSucceeded reports whether the run's bump dispatch job concluded
+// successfully. A job that is missing, skipped, or still running counts as
+// not dispatched.
+func dispatchJobSucceeded(runID int64) (bool, error) {
+	cmd := exec.Command(
+		"gh", "run", "view", fmt.Sprintf("%d", runID),
+		"-R", onyxRepo,
+		"--json", "jobs",
+	)
+	output, err := cmd.Output()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return false, fmt.Errorf("gh run view failed: %w: %s", err, string(exitErr.Stderr))
+		}
+		return false, fmt.Errorf("gh run view failed: %w", err)
+	}
+	var run struct {
+		Jobs []struct {
+			Name       string `json:"name"`
+			Conclusion string `json:"conclusion"`
+		} `json:"jobs"`
+	}
+	if err := json.Unmarshal(output, &run); err != nil {
+		return false, fmt.Errorf("failed to parse gh run view output: %w", err)
+	}
+	for _, job := range run.Jobs {
+		if job.Name == dispatchJobName {
+			return job.Conclusion == "success", nil
+		}
+	}
+	return false, nil
 }
 
 // pullRequest is a partial representation of a gh pr list JSON entry.
