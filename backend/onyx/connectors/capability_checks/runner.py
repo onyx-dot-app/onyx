@@ -4,7 +4,6 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.models import (
@@ -32,6 +31,8 @@ from onyx.connectors.source_operations import (
     SourceOperations,
     get_source_operations_class,
 )
+from onyx.db.credentials import fetch_credential_by_id
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import CapabilityCheckTrigger
 from onyx.db.models import Credential
 from onyx.utils.credential_audit import emit_credential_access
@@ -267,8 +268,46 @@ def run_capability_checks(
     return results
 
 
+def _instantiate_connector_isolated(
+    *,
+    source: DocumentSource,
+    input_type: InputType | None,
+    connector_specific_config: dict[str, Any],
+    credential_id: int,
+) -> tuple[BaseConnector, dict[str, Any]]:
+    """Instantiates the connector on a session owned by the calling thread.
+
+    ``run_with_timeout`` abandons its thread on timeout while the thread keeps
+    executing, and instantiation can write: ``load_credentials`` may return
+    refreshed tokens, which ``backend_update_credential_json`` persists with a
+    commit. Owning the session and the credential instance here keeps an
+    abandoned thread from committing through state the caller still uses.
+    Returns the connector and the credential material as loaded after
+    instantiation, so a refreshed token reaches checks instead of the caller's
+    pre-refresh copy.
+    """
+    with get_session_with_current_tenant() as db_session:
+        credential = fetch_credential_by_id(credential_id, db_session)
+        if credential is None:
+            raise RuntimeError(
+                f"Credential {credential_id} was deleted while the run was in flight."
+            )
+        connector = instantiate_connector(
+            db_session=db_session,
+            source=source,
+            input_type=input_type,
+            connector_specific_config=connector_specific_config,
+            credential=credential,
+        )
+        credential_json = (
+            credential.credential_json.get_value(apply_mask=False)
+            if credential.credential_json
+            else {}
+        )
+        return connector, credential_json
+
+
 def generate_capability_report(
-    db_session: Session,
     credential: Credential,
     connector_specific_config: dict[str, Any] | None = None,
     connector_id: int | None = None,
@@ -285,6 +324,7 @@ def generate_capability_report(
     instance-requiring checks instead (see ``_missing_instance_outcome``).
     Unlike ``validate_ccpair_for_user``, no source is exempted: MOCK_CONNECTOR
     must run so integration tests can exercise the full pipeline.
+    ``credential`` may be a detached instance; only loaded columns are read.
     """
     source = credential.source
     checks = get_capability_checks(source)
@@ -300,19 +340,19 @@ def generate_capability_report(
         connector_specific_config if connector_specific_config is not None else {}
     )
     connector: BaseConnector | None = None
+    fresh_credential_json: dict[str, Any] | None = None
     instantiation_error: Exception | None = None
     try:
         # Under the guard the run ceiling budgets for it: construction and
         # ``load_credentials`` can probe the source with no timeout of their
         # own, and the stale-run sweep trusts the ceiling.
-        connector = run_with_timeout(
+        connector, fresh_credential_json = run_with_timeout(
             CAPABILITY_CHECK_TIMEOUT_SECONDS,
-            instantiate_connector,
-            db_session=db_session,
+            _instantiate_connector_isolated,
             source=source,
             input_type=input_type,
             connector_specific_config=instantiation_config,
-            credential=credential,
+            credential_id=credential.id,
         )
     except Exception as e:
         # A config-less probe construction fails routinely and stays a skip; a
@@ -338,18 +378,25 @@ def generate_capability_report(
         )
 
     if credential.credential_json:
-        # Distinct decrypt site from ``instantiate_connector``'s paths (which
-        # may not have decrypted at all when instantiation fails). Audit is
-        # best-effort and never raises.
+        # Audits the run's own decrypt of the material (the isolated
+        # instantiation's post-load read, or the fallback below), a distinct
+        # site from ``instantiate_connector``'s paths. Best-effort, never
+        # raises.
         emit_credential_access(
             credential_type="connector",
             provider=str(source),
             row_id=credential.id,
         )
+    # The isolated instantiation reports the material as loaded after a
+    # possible token refresh; the caller's copy is the pre-refresh fallback.
     credential_json = (
-        credential.credential_json.get_value(apply_mask=False)
-        if credential.credential_json
-        else {}
+        fresh_credential_json
+        if fresh_credential_json is not None
+        else (
+            credential.credential_json.get_value(apply_mask=False)
+            if credential.credential_json
+            else {}
+        )
     )
     context = CapabilityCheckContext(
         source=source,

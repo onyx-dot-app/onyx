@@ -3,9 +3,9 @@
 The run task is enqueued by the capability-check trigger endpoint after it
 marks the scope's row RUNNING, and writes through the unconditional upsert: a
 granular run is the freshest truth and replaces whatever is stored (see the
-accessors' writer model). A crashed or expired run leaves its row RUNNING; the
-beat sweep retires such marks to FAILED_TO_RUN once they outlive their
-source's run ceiling.
+accessors' writer model). A run that fails gracefully records FAILED_TO_RUN
+itself; only hard kills and expired tasks leave their row RUNNING for the beat
+sweep to retire once the mark outlives its source's run ceiling.
 """
 
 from typing import Any
@@ -23,6 +23,7 @@ from onyx.connectors.models import InputType
 from onyx.db.connector import fetch_connector_by_id
 from onyx.db.credential_capability import (
     get_sources_with_running_capability_runs,
+    mark_capability_run_failed,
     mark_stale_capability_runs_failed,
     upsert_completed_capability_report,
 )
@@ -44,6 +45,10 @@ def run_capability_checks_task(
     tenant_id: str | None,
 ) -> None:
     """Runs every capability check for the scope and stores the report."""
+    # Setup reads use a short-lived session: the probes below can run for
+    # hours, and an open transaction would hold its connection and read locks
+    # for the whole run. ``credential`` stays readable after the close because
+    # its columns are already loaded.
     with get_session_with_current_tenant() as db_session:
         credential = fetch_credential_by_id(credential_id, db_session)
         if credential is None:
@@ -67,34 +72,46 @@ def run_capability_checks_task(
             input_type = connector.input_type
             if config is None:
                 config = connector.connector_specific_config
+    try:
         report = generate_capability_report(
-            db_session,
             credential,
             connector_specific_config=config,
             connector_id=connector_id,
             input_type=input_type,
             trigger=CapabilityCheckTrigger.MANUAL,
         )
-        upsert_completed_capability_report(
-            db_session,
-            credential_id=credential_id,
-            connector_id=connector_id,
-            source=credential.source,
-            trigger=CapabilityCheckTrigger.MANUAL,
-            report=report,
-            connector_config_hash=(
-                compute_connector_config_hash(config)
-                if connector_id is not None
-                else None
-            ),
-        )
-        # The accessors leave the transaction to the caller.
-        db_session.commit()
+        with get_session_with_current_tenant() as db_session:
+            upsert_completed_capability_report(
+                db_session,
+                credential_id=credential_id,
+                connector_id=connector_id,
+                source=credential.source,
+                trigger=CapabilityCheckTrigger.MANUAL,
+                report=report,
+                connector_config_hash=(
+                    compute_connector_config_hash(config)
+                    if connector_id is not None
+                    else None
+                ),
+            )
+            # The accessors leave the transaction to the caller.
+            db_session.commit()
+    except Exception:
+        # The worker is alive, so record the failure now: without this the
+        # scope would read RUNNING until the sweep's staleness window expires.
+        # Hard kills still rely on the sweep.
+        with get_session_with_current_tenant() as db_session:
+            mark_capability_run_failed(
+                db_session,
+                credential_id=credential_id,
+                connector_id=connector_id,
+            )
+            db_session.commit()
+        raise
 
 
 @shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.CHECK_FOR_STALE_CAPABILITY_RUNS,
-    soft_time_limit=300,
     bind=True,
 )
 def check_for_stale_capability_runs(
