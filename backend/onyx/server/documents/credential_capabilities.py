@@ -31,10 +31,10 @@ from onyx.db.connector_credential_pair import (
     get_connector_credential_pairs_for_user,
 )
 from onyx.db.credential_capability import (
-    clear_capability_run_start,
     get_capability_report_row,
     get_capability_report_rows_for_source,
     mark_capability_report_running,
+    mark_capability_run_failed,
 )
 from onyx.db.credentials import (
     fetch_credential_by_id_for_user,
@@ -187,7 +187,15 @@ def trigger_capability_check(
         standing = get_capability_report_row(
             db_session, credential_id, request.connector_id
         )
-        assert standing is not None, "The mark is only blocked by an existing row."
+        if standing is None:
+            # The blocking row vanished between the two statements: the
+            # credential (or the paired connector) was deleted concurrently
+            # and its report rows cascaded away.
+            raise OnyxError(
+                OnyxErrorCode.CREDENTIAL_NOT_FOUND,
+                f"Credential {credential_id} or its paired connector was "
+                "deleted while the request was in flight.",
+            )
         return CapabilityReportSnapshot.from_row(standing)
     snapshot = CapabilityReportSnapshot.from_row(row)
     # Commit before enqueueing so the worker can only observe the RUNNING mark.
@@ -208,9 +216,9 @@ def trigger_capability_check(
             expires=CAPABILITY_CHECK_RUN_STALENESS_SECONDS,
         )
     except Exception:
-        # No run was enqueued, so the fresh mark must not block re-triggering
-        # for the whole staleness bound.
-        clear_capability_run_start(
+        # No run was enqueued: FAILED_TO_RUN is the truth pollers should read,
+        # and it does not block an immediate re-trigger.
+        mark_capability_run_failed(
             db_session,
             credential_id=credential_id,
             connector_id=request.connector_id,

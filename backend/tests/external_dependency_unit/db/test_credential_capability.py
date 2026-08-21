@@ -20,10 +20,10 @@ from onyx.connectors.capability_checks.models import (
     CredentialCapabilityReport,
 )
 from onyx.db.credential_capability import (
-    clear_capability_run_start,
     get_capability_report_row,
     get_capability_report_rows_for_source,
     mark_capability_report_running,
+    mark_capability_run_failed,
     upsert_completed_capability_report,
     upsert_completed_capability_report_unless_granular,
 )
@@ -288,11 +288,19 @@ def test_mark_running_replaces_a_stale_running_mark(db_session: Session) -> None
 
 
 @pytest.mark.usefixtures("tenant_context")
-def test_cleared_run_start_reads_as_stale(db_session: Session) -> None:
-    """Verifies the failed-enqueue fixup: a NULL start unblocks re-marking."""
-    # Precondition.
+def test_failed_run_mark_is_truthful_and_retriggerable(db_session: Session) -> None:
+    """Verifies the failed-enqueue fixup: the mark retires to FAILED_TO_RUN."""
+    # Precondition. A completed report, then a RUNNING mark over it.
     cc_pair = make_cc_pair(db_session, source=DocumentSource.SLACK, commit=False)
     credential_id = cc_pair.credential_id
+    upsert_completed_capability_report(
+        db_session,
+        credential_id=credential_id,
+        connector_id=None,
+        source=DocumentSource.SLACK,
+        trigger=CapabilityCheckTrigger.MANUAL,
+        report=_report(credential_id, check_id="previous"),
+    )
     marked = mark_capability_report_running(
         db_session,
         credential_id=credential_id,
@@ -304,17 +312,19 @@ def test_cleared_run_start_reads_as_stale(db_session: Session) -> None:
     assert marked is not None
 
     # Under test.
-    clear_capability_run_start(
+    mark_capability_run_failed(
         db_session, credential_id=credential_id, connector_id=None
     )
 
-    # Postcondition. The row stays RUNNING but reads as stale: re-marking
-    # succeeds immediately instead of waiting out the bound.
+    # Postcondition. Pollers read FAILED_TO_RUN with the previous report
+    # preserved, and re-marking succeeds immediately instead of waiting out
+    # the bound.
     db_session.expire_all()
     row = get_capability_report_row(db_session, credential_id, None)
     assert row is not None
-    assert row.run_status == CapabilityReportRunStatus.RUNNING
-    assert row.run_started_at is None
+    assert row.run_status == CapabilityReportRunStatus.FAILED_TO_RUN
+    assert row.report is not None
+    assert row.report["check_results"][0]["check_id"] == "previous"
     remarked = mark_capability_report_running(
         db_session,
         credential_id=credential_id,
@@ -324,7 +334,34 @@ def test_cleared_run_start_reads_as_stale(db_session: Session) -> None:
         active_within=timedelta(hours=1),
     )
     assert remarked is not None
-    assert remarked.run_started_at is not None
+    assert remarked.run_status == CapabilityReportRunStatus.RUNNING
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_failed_run_mark_only_retires_running_rows(db_session: Session) -> None:
+    """Verifies the guard: a completion that raced the mark is not clobbered."""
+    # Precondition.
+    cc_pair = make_cc_pair(db_session, source=DocumentSource.SLACK, commit=False)
+    credential_id = cc_pair.credential_id
+    upsert_completed_capability_report(
+        db_session,
+        credential_id=credential_id,
+        connector_id=None,
+        source=DocumentSource.SLACK,
+        trigger=CapabilityCheckTrigger.MANUAL,
+        report=_report(credential_id),
+    )
+
+    # Under test.
+    mark_capability_run_failed(
+        db_session, credential_id=credential_id, connector_id=None
+    )
+
+    # Postcondition.
+    db_session.expire_all()
+    row = get_capability_report_row(db_session, credential_id, None)
+    assert row is not None
+    assert row.run_status == CapabilityReportRunStatus.COMPLETED
 
 
 @pytest.mark.usefixtures("tenant_context")

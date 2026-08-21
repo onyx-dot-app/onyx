@@ -211,6 +211,8 @@ def mark_capability_report_running(
         update_where=or_(
             CredentialCapabilityReportRow.run_status
             != CapabilityReportRunStatus.RUNNING,
+            # Defensive: no writer leaves RUNNING with a NULL start, but the
+            # schema can represent it and it must read as stale, not active.
             CredentialCapabilityReportRow.run_started_at.is_(None),
             CredentialCapabilityReportRow.run_started_at
             < func.statement_timestamp() - active_within,
@@ -218,18 +220,18 @@ def mark_capability_report_running(
     )
 
 
-def clear_capability_run_start(
+def mark_capability_run_failed(
     db_session: Session,
     *,
     credential_id: int,
     connector_id: int | None,
 ) -> None:
-    """Nulls the scope's run start time: the RUNNING mark never became a run.
+    """Retires the scope's RUNNING mark to FAILED_TO_RUN; the report survives.
 
-    For the failed-enqueue path: the mark cannot be reverted (the upsert
-    already replaced the previous run state), but a NULL start time already
-    reads as stale to the re-trigger guard, so the scope stays immediately
-    re-triggerable.
+    For runs that verifiably will not happen (the trigger endpoint's failed
+    enqueue): FAILED_TO_RUN is the truth pollers should read, and it does not
+    block re-marking, so the scope stays immediately re-triggerable. Guarded
+    on RUNNING so a completion that raced this write is never clobbered.
     """
     stmt = (
         update(CredentialCapabilityReportRow)
@@ -244,7 +246,7 @@ def clear_capability_run_start(
             == CapabilityReportRunStatus.RUNNING,
         )
         .values(
-            run_started_at=None,
+            run_status=CapabilityReportRunStatus.FAILED_TO_RUN,
             # Model ``onupdate`` does not apply to bulk updates.
             time_updated=func.statement_timestamp(),
         )

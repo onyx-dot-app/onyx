@@ -142,8 +142,11 @@ class CredentialCapabilityReport(BaseModel):
 
 
 def compute_connector_config_hash(config: dict[str, Any] | None) -> str | None:
-    """sha256 of the canonical config JSON a report ran with; the staleness
-    signal. Shared by every report writer so stored hashes stay comparable."""
+    """Returns the sha256 of the canonical config JSON a report ran with.
+
+    This is the staleness signal, shared by every report writer so stored
+    hashes stay comparable.
+    """
     if config is None:
         return None
     canonical = json.dumps(config, sort_keys=True, separators=(",", ":"))
