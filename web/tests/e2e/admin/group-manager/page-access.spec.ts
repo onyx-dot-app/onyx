@@ -49,9 +49,9 @@ const ALLOWED_PAGES = [
 
 /** Admin-only pages that must not be linked, and must refuse a direct visit. */
 const FORBIDDEN_PAGES = [
-  "/admin/configuration/language-models",
+  "/admin/language-models",
   "/admin/users",
-  "/admin/configuration/web-search",
+  "/admin/web-search",
 ];
 
 // seeding a whole scoped world plus several re-logins puts these well past the

@@ -2,7 +2,7 @@ import { test, expect, Page, Locator } from "@playwright/test";
 import { loginAs } from "@tests/e2e/utils/auth";
 import { expectElementScreenshot } from "@tests/e2e/utils/visualRegression";
 
-const IMAGE_GENERATION_URL = "/admin/configuration/image-generation";
+const IMAGE_GENERATION_URL = "/admin/image-generation";
 
 const FAKE_CONNECTED_CONFIG = {
   image_provider_id: "openai_gpt_image_1_5",

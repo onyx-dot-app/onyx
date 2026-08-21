@@ -78,7 +78,7 @@ export async function pinAgentByName(
  */
 export async function ensureImageGenerationEnabled(page: Page): Promise<void> {
   // Navigate to the chat preferences page
-  await page.goto("/admin/configuration/chat-preferences");
+  await page.goto("/admin/chat-preferences");
   await page.waitForLoadState("networkidle");
 
   // The "Actions & Tools" collapsible is open by default.

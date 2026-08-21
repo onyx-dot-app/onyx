@@ -163,7 +163,7 @@ test.describe("Permission gating — MANAGE_AGENTS", () => {
 });
 
 test.describe("Permission gating — MANAGE_LLMS", () => {
-  test("Admin panel and /admin/configuration/llm are gated behind MANAGE_LLMS", async ({
+  test("Admin panel and /admin/llm are gated behind MANAGE_LLMS", async ({
     page,
     adminClient,
     testUserContext,
@@ -187,14 +187,14 @@ test.describe("Permission gating — MANAGE_LLMS", () => {
     );
 
     try {
-      // Phase 1: Without MANAGE_LLMS — /admin/configuration/llm should redirect to /app
+      // Phase 1: Without MANAGE_LLMS — /admin/llm should redirect to /app
       await page.context().clearCookies();
       await apiLogin(page, email, password);
-      await page.goto("/admin/configuration/llm");
+      await page.goto("/admin/llm");
       await page.waitForLoadState("networkidle");
       expect(page.url()).toContain("/app");
 
-      // Phase 2: Grant MANAGE_LLMS — /admin/configuration/llm should be accessible
+      // Phase 2: Grant MANAGE_LLMS — /admin/llm should be accessible
       await page.context().clearCookies();
       await loginAs(page, "admin");
       await adminClient.setUserGroupPermissions(groupId, [
@@ -203,10 +203,10 @@ test.describe("Permission gating — MANAGE_LLMS", () => {
 
       await page.context().clearCookies();
       await apiLogin(page, email, password);
-      await page.goto("/admin/configuration/llm");
+      await page.goto("/admin/llm");
       await page.waitForLoadState("networkidle");
 
-      expect(page.url()).toContain("/admin/configuration/language-models");
+      expect(page.url()).toContain("/admin/language-models");
       await expect(
         page.getByLabel("admin-page-title").getByText("Language Models")
       ).toBeVisible({
@@ -230,7 +230,7 @@ test.describe("Permission gating — MANAGE_LLMS", () => {
 
       await page.context().clearCookies();
       await apiLogin(page, email, password);
-      await page.goto("/admin/configuration/llm");
+      await page.goto("/admin/llm");
       await page.waitForLoadState("networkidle");
       expect(page.url()).toContain("/app");
     } finally {

@@ -142,14 +142,67 @@ const nextConfig = {
         destination: "/ee/agents/:path*",
         permanent: true,
       },
+      // Next.js does not chain redirects, so these two point at the flattened
+      // paths directly rather than at their old /admin/configuration/ targets.
       {
         source: "/admin/configuration/search",
-        destination: "/admin/configuration/index-settings",
+        destination: "/admin/index-settings",
         permanent: true,
       },
       {
         source: "/admin/configuration/llm",
-        destination: "/admin/configuration/language-models",
+        destination: "/admin/language-models",
+        permanent: true,
+      },
+      // Legacy /admin/configuration/* → /admin/* redirects. The segment grouped
+      // nothing: the sidebar builds its groups from the `section` field in
+      // ADMIN_ROUTES, never from the URL.
+      // TODO: Remove these redirects in v4.0 — https://linear.app/onyx-app/issue/ENG-3771
+      {
+        source: "/admin/configuration/chat-preferences",
+        destination: "/admin/chat-preferences",
+        permanent: true,
+      },
+      {
+        source: "/admin/configuration/code-interpreter",
+        destination: "/admin/code-interpreter",
+        permanent: true,
+      },
+      {
+        source: "/admin/configuration/document-processing",
+        destination: "/admin/document-processing",
+        permanent: true,
+      },
+      {
+        source: "/admin/configuration/image-generation",
+        destination: "/admin/image-generation",
+        permanent: true,
+      },
+      {
+        source: "/admin/configuration/index-settings",
+        destination: "/admin/index-settings",
+        permanent: true,
+      },
+      {
+        source: "/admin/configuration/language-models",
+        destination: "/admin/language-models",
+        permanent: true,
+      },
+      {
+        source: "/admin/configuration/voice",
+        destination: "/admin/voice",
+        permanent: true,
+      },
+      {
+        source: "/admin/configuration/web-search",
+        destination: "/admin/web-search",
+        permanent: true,
+      },
+      // Replaces the redirect page that used to live at
+      // /admin/configuration/craft, kept for /admin/craft/access bookmarks.
+      {
+        source: "/admin/configuration/craft",
+        destination: "/admin/craft/access",
         permanent: true,
       },
     ];

@@ -254,7 +254,7 @@ test.describe("Default Agent MCP Integration", () => {
 
     // Reload and confirm the new state persisted.
     await page.reload();
-    await page.waitForURL("**/admin/configuration/chat-preferences**");
+    await page.waitForURL("**/admin/chat-preferences**");
     await chatPrefs.expandServerCard(serverName);
 
     const toolSwitchAfter = chatPrefs.toolSwitch(MCP_ASSERTED_TOOL_NAME);
@@ -280,7 +280,7 @@ test.describe("Default Agent MCP Integration", () => {
     // Reload and confirm the value persisted.
     await page.reload();
     await page.waitForLoadState("networkidle");
-    await page.waitForURL("**/admin/configuration/chat-preferences**");
+    await page.waitForURL("**/admin/chat-preferences**");
 
     await chatPrefs.openModifyPrompt();
     await chatPrefs.expectSystemPromptValue(testInstructions);

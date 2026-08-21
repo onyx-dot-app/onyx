@@ -103,15 +103,15 @@ function getToolTooltip(
 
 const ADMIN_CONFIG_LINKS: Record<string, { href: string; tooltip: string }> = {
   [IMAGE_GENERATION_TOOL_ID]: {
-    href: "/admin/configuration/image-generation",
+    href: "/admin/image-generation",
     tooltip: "Configure Image Generation",
   },
   [WEB_SEARCH_TOOL_ID]: {
-    href: "/admin/configuration/web-search",
+    href: "/admin/web-search",
     tooltip: "Configure Web Search",
   },
   [PYTHON_TOOL_ID]: {
-    href: "/admin/configuration/code-interpreter",
+    href: "/admin/code-interpreter",
     tooltip: "Configure Code Interpreter",
   },
 };

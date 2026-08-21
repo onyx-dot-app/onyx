@@ -86,7 +86,7 @@ test("group permissions apply immediately when a user is added to the group", as
       "manage:llms should imply read:users for LLM sharing UI"
     );
 
-    await page.goto("/admin/configuration/language-models");
+    await page.goto("/admin/language-models");
     await expect(page.getByLabel("admin-page-title")).toContainText(
       "Language Models"
     );

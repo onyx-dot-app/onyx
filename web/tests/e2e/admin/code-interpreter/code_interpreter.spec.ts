@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import { loginAs } from "@tests/e2e/utils/auth";
 
-const CODE_INTERPRETER_URL = "/admin/configuration/code-interpreter";
+const CODE_INTERPRETER_URL = "/admin/code-interpreter";
 const API_STATUS_URL = "**/api/admin/code-interpreter";
 const API_HEALTH_URL = "**/api/admin/code-interpreter/health";
 

@@ -1,6 +1,6 @@
 import type { Page, Locator } from "@playwright/test";
 
-export const WEB_SEARCH_URL = "/admin/configuration/web-search";
+export const WEB_SEARCH_URL = "/admin/web-search";
 
 export const FAKE_SEARCH_PROVIDERS = {
   exa: {

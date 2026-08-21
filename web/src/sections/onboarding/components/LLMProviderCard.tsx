@@ -13,7 +13,7 @@ import {
   SvgServer,
   SvgSettings,
 } from "@opal/icons";
-import ModelIcon from "@/app/admin/configuration/language-models/ModelIcon";
+import ModelIcon from "@/lib/languageModels/components";
 
 export interface LLMProviderCardProps {
   title: string;
@@ -39,7 +39,7 @@ function LLMProviderCardInner({
 
     if (isConnected) {
       // If connected, redirect to admin page
-      window.location.href = "/admin/configuration/language-models";
+      window.location.href = "/admin/language-models";
       return;
     }
 
@@ -48,9 +48,7 @@ function LLMProviderCardInner({
   }, [disabled, isConnected, onClick]);
 
   const handleSettingsClick = useCallback(
-    noProp(
-      () => (window.location.href = "/admin/configuration/language-models")
-    ),
+    noProp(() => (window.location.href = "/admin/language-models")),
     []
   );
 

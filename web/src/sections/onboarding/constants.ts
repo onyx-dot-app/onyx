@@ -59,14 +59,14 @@ export const FINAL_SETUP_CONFIG: FinalStepItemProps[] = [
     description: "Enable Onyx to search the internet for information.",
     icon: SvgGlobe,
     buttonText: "Web Search",
-    buttonHref: "/admin/configuration/web-search",
+    buttonHref: "/admin/web-search",
   },
   {
     title: "Enable image generation",
     description: "Set up models to create images in your chats.",
     icon: SvgImage,
     buttonText: "Image Generation",
-    buttonHref: "/admin/configuration/image-generation",
+    buttonHref: "/admin/image-generation",
   },
   {
     title: "Invite your team",

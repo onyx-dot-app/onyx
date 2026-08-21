@@ -74,8 +74,8 @@ test.describe("Chat Preferences Admin Page @exclusive", () => {
     }
 
     // Navigate to chat preferences
-    await page.goto("/admin/configuration/chat-preferences");
-    await page.waitForURL("**/admin/configuration/chat-preferences**");
+    await page.goto("/admin/chat-preferences");
+    await page.waitForURL("**/admin/chat-preferences**");
 
     // Attach basic API logging for this spec
     page.on("response", async (resp) => {
@@ -568,7 +568,7 @@ test.describe("Chat Preferences Admin Page @exclusive", () => {
     await waitForUnifiedGreeting(page);
 
     // Go back and re-enable all tools
-    await page.goto("/admin/configuration/chat-preferences");
+    await page.goto("/admin/chat-preferences");
     await page.waitForLoadState("networkidle");
     // Reload to ensure the page has the updated tools list (after providers were created)
     await page.reload();
@@ -663,7 +663,7 @@ test.describe("Chat Preferences Admin Page @exclusive", () => {
     // Web Search and Image Generation form state when providers are created in beforeEach.
     // This is being tracked separately as a potential Formik/form state bug.
 
-    await page.goto("/admin/configuration/chat-preferences");
+    await page.goto("/admin/chat-preferences");
 
     // Restore original states
     let needsSave = false;
@@ -690,13 +690,13 @@ test.describe("Chat Preferences Non-Admin Access", () => {
     await page.context().clearCookies();
 
     // Try to navigate directly to chat preferences without logging in
-    await page.goto("/admin/configuration/chat-preferences");
+    await page.goto("/admin/chat-preferences");
 
     // Wait for navigation to settle
     await page.waitForTimeout(2000);
 
     // Should be redirected away from admin page
     const url = page.url();
-    expect(!url.includes("/admin/configuration/chat-preferences")).toBe(true);
+    expect(!url.includes("/admin/chat-preferences")).toBe(true);
   });
 });

@@ -45,7 +45,7 @@ async function setQueryHistoryType(
   page: Page,
   value: "Show with User Info" | "Anonymized" | "Hidden"
 ): Promise<void> {
-  await page.goto("/admin/configuration/chat-preferences");
+  await page.goto("/admin/chat-preferences");
   await page.waitForLoadState("networkidle");
   await expandAdvancedOptions(page);
 
@@ -82,7 +82,7 @@ test.describe("Query History Toggle @exclusive", () => {
   test("dropdown shows current value and persists after reload", async ({
     page,
   }) => {
-    await page.goto("/admin/configuration/chat-preferences");
+    await page.goto("/admin/chat-preferences");
     await page.waitForLoadState("networkidle");
 
     const currentValue = await getQueryHistoryValue(page);
