@@ -20,7 +20,7 @@ import {
   SettingsLayouts,
   toast,
 } from "@opal/layouts";
-import { Card, InputTypeIn, Switch } from "@opal/components";
+import { Card, InputTypeIn, Switch, Text } from "@opal/components";
 import { markdown } from "@opal/utils";
 import type { RichStr } from "@opal/types";
 import type {
@@ -95,16 +95,27 @@ function JwtTextRow({
   useEffect(() => {
     if (!focused) setText(value);
   }, [value, revision, focused]);
+
+  if (pinned) {
+    // An input promises editability. A pinned value is display-only.
+    return (
+      <InputVertical
+        title={title}
+        description="Pinned by an environment variable."
+        withLabel
+      >
+        <Text font="main-ui-body" color="text-03">
+          {value}
+        </Text>
+      </InputVertical>
+    );
+  }
+
   return (
-    <InputVertical
-      title={title}
-      description={pinned ? "Pinned by an environment variable." : description}
-      withLabel
-    >
+    <InputVertical title={title} description={description} withLabel>
       <InputTypeIn
         value={text}
         placeholder={placeholder}
-        variant={pinned ? "readOnly" : "primary"}
         onChange={(e) => {
           dirty.current = true;
           setText(e.target.value);
@@ -116,7 +127,7 @@ function JwtTextRow({
         onBlur={async () => {
           setFocused(false);
           const next = text.trim();
-          if (pinned || !dirty.current || next === value) return;
+          if (!dirty.current || next === value) return;
           dirty.current = false;
           await onCommit(next);
           setRevision((r) => r + 1);
