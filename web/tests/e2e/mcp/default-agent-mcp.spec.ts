@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { loginAs, apiLogin } from "@tests/e2e/utils/auth";
 import {
   grantAddAgents,
@@ -254,7 +255,7 @@ test.describe("Default Agent MCP Integration", () => {
 
     // Reload and confirm the new state persisted.
     await page.reload();
-    await page.waitForURL("**/admin/configuration/chat-preferences**");
+    await page.waitForURL(`**${ADMIN_ROUTES.CHAT_PREFERENCES.path}**`);
     await chatPrefs.expandServerCard(serverName);
 
     const toolSwitchAfter = chatPrefs.toolSwitch(MCP_ASSERTED_TOOL_NAME);
@@ -280,7 +281,7 @@ test.describe("Default Agent MCP Integration", () => {
     // Reload and confirm the value persisted.
     await page.reload();
     await page.waitForLoadState("networkidle");
-    await page.waitForURL("**/admin/configuration/chat-preferences**");
+    await page.waitForURL(`**${ADMIN_ROUTES.CHAT_PREFERENCES.path}**`);
 
     await chatPrefs.openModifyPrompt();
     await chatPrefs.expectSystemPromptValue(testInstructions);

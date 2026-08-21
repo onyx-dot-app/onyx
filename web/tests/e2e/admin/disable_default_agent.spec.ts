@@ -1,4 +1,5 @@
 import { test, expect, Page } from "@playwright/test";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { loginAs } from "@tests/e2e/utils/auth";
 import { createAgent } from "@tests/e2e/utils/agentUtils";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
@@ -45,7 +46,7 @@ async function setDisableDefaultAssistantSetting(
   let lastCheckedState = false;
 
   for (let attempt = 0; attempt < MAX_SETTING_SAVE_ATTEMPTS; attempt += 1) {
-    await page.goto("/admin/configuration/chat-preferences");
+    await page.goto(ADMIN_ROUTES.CHAT_PREFERENCES.path);
     await page.waitForLoadState("networkidle");
 
     // Expand "Advanced Options" collapsible (closed by default)
@@ -190,7 +191,7 @@ test.describe("Disable Default Agent Setting @exclusive", () => {
     await setDisableDefaultAssistantSetting(page, true);
 
     // Navigate to chat preferences configuration page
-    await page.goto("/admin/configuration/chat-preferences");
+    await page.goto(ADMIN_ROUTES.CHAT_PREFERENCES.path);
     await page.waitForLoadState("networkidle");
 
     // Wait for the page to fully render (page title signals form is loaded)
@@ -219,7 +220,7 @@ test.describe("Disable Default Agent Setting @exclusive", () => {
     await setDisableDefaultAssistantSetting(page, false);
 
     // Navigate to chat preferences configuration page
-    await page.goto("/admin/configuration/chat-preferences");
+    await page.goto(ADMIN_ROUTES.CHAT_PREFERENCES.path);
     await page.waitForLoadState("networkidle");
 
     // Verify configuration UI is shown (Actions & Tools section should be visible and enabled)

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 
 // Proxies browser callback to backend OAuth callback endpoint and then
 // redirects back to the chat UI.
@@ -53,8 +54,8 @@ export async function GET(req: NextRequest) {
     let redirectTo = url.searchParams.get("redirect_to");
     if (!redirectTo) {
       if (isAdminFlow) {
-        // For admin flow, redirect back to the MCP edit page
-        redirectTo = `/admin/actions/edit-mcp?server_id=${serverId}`;
+        // For admin flow, redirect back to the MCP actions list
+        redirectTo = `${ADMIN_ROUTES.MCP_ACTIONS.path}?server_id=${serverId}`;
       } else {
         // For user flow, redirect to chat
         redirectTo = "/app";

@@ -1115,7 +1115,7 @@ export default function IndexSettingsPage() {
                           >
                             <Button
                               icon={SvgExternalLink}
-                              href="/admin/indexing/status"
+                              href={ADMIN_ROUTES.INDEXING_STATUS.path}
                             >
                               See Connectors
                             </Button>
@@ -1637,7 +1637,7 @@ export default function IndexSettingsPage() {
                           tooltip={
                             !hasAnyLlm
                               ? markdown(
-                                  "Contextual Retrieval is disabled because you have no models configured. Set up a [Language Model](/admin/configuration/language-models) first."
+                                  `Contextual Retrieval is disabled because you have no models configured. Set up a [Language Model](${ADMIN_ROUTES.LLM_MODELS.path}) first.`
                                 )
                               : undefined
                           }
@@ -1711,7 +1711,7 @@ export default function IndexSettingsPage() {
                           tooltip={
                             !hasAnyVisionLlm
                               ? markdown(
-                                  "Image Processing is disabled because you have no vision-capable models configured. Set up a vision-capable [Language Model](/admin/configuration/language-models) first."
+                                  `Image Processing is disabled because you have no vision-capable models configured. Set up a vision-capable [Language Model](${ADMIN_ROUTES.LLM_MODELS.path}) first.`
                                 )
                               : undefined
                           }

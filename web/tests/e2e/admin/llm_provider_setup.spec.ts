@@ -1,9 +1,10 @@
 import { expect, test } from "@playwright/test";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import type { Locator, Page } from "@playwright/test";
 import { loginAs } from "@tests/e2e/utils/auth";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 
-const LLM_SETUP_URL = "/admin/configuration/language-models";
+const LLM_SETUP_URL = ADMIN_ROUTES.LLM_MODELS.path;
 const BASE_URL = process.env.BASE_URL || "http://localhost:3000";
 const PROVIDER_API_KEY =
   process.env.E2E_LLM_PROVIDER_API_KEY ||
@@ -120,7 +121,7 @@ async function createPublicProviderWithModels(
 
 async function navigateToAdminLlmPageFromChat(page: Page): Promise<void> {
   await page.goto(LLM_SETUP_URL);
-  await page.waitForURL("**/admin/configuration/language-models**");
+  await page.waitForURL(`**${ADMIN_ROUTES.LLM_MODELS.path}**`);
   await expect(page.getByLabel("admin-page-title")).toHaveText(
     /^Language Models/
   );

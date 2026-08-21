@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import type { Page } from "@playwright/test";
 import { loginAs, loginAsWorkerUser, apiLogin } from "@tests/e2e/utils/auth";
 import { ensureOnboardingComplete } from "@tests/e2e/utils/chatActions";
@@ -118,7 +119,7 @@ async function configureOauthServer(
   );
   // Wait for the connect click to actually start the OAuth navigation before
   // handing off to completeFlow. Otherwise the page is still on
-  // /admin/actions/mcp (which matches the return path) with the server name
+  // /admin/mcp-actions (which matches the return path) with the server name
   // already visible, and completeFlow's "already returned" early-out fires
   // before the IdP handshake even begins.
   await oauthFlow.clickAndWaitForPossibleUrlChange(
@@ -127,7 +128,7 @@ async function configureOauthServer(
   );
 
   await oauthFlow.completeFlow({
-    expectReturnPathContains: "/admin/actions/mcp",
+    expectReturnPathContains: ADMIN_ROUTES.MCP_ACTIONS.path,
     confirmConnected: async () => {
       await adminMcp.expectServerCard(options.serverName);
     },
@@ -362,8 +363,8 @@ test.describe("MCP OAuth flows", () => {
     await verifyToolUsableFromChat(page, artifacts, agentId);
 
     // Server card is still present on the admin actions page.
-    await page.goto("/admin/actions/mcp");
-    await page.waitForURL("**/admin/actions/mcp**");
+    await page.goto(ADMIN_ROUTES.MCP_ACTIONS.path);
+    await page.waitForURL(`**${ADMIN_ROUTES.MCP_ACTIONS.path}**`);
     await expect(
       page.getByText(serverName, { exact: false }).first()
     ).toBeVisible();
@@ -492,7 +493,7 @@ test.describe("MCP OAuth flows", () => {
         curatorTwoCredentials!.email,
         curatorTwoCredentials!.password
       );
-      await curatorTwoPage.goto("/admin/actions/mcp");
+      await curatorTwoPage.goto(ADMIN_ROUTES.MCP_ACTIONS.path);
       // anchor on the page rendering, else the absence check races the load
       await expect(
         curatorTwoPage.getByRole("button", { name: /Add MCP Server/i })

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { useSearchParams } from "next/navigation";
 import { useUser } from "@/providers/UserProvider";
 import { toast } from "@opal/layouts";
@@ -671,7 +672,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
           width="full"
           prominence="secondary"
           onClick={() => {
-            window.location.href = "/admin/configuration/language-models";
+            window.location.href = ADMIN_ROUTES.LLM_MODELS.path;
           }}
         >
           Set up an LLM.

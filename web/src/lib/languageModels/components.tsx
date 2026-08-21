@@ -7,7 +7,7 @@ export interface ModelIconProps extends IconProps {
   modelName?: string;
 }
 
-export default function ModelIcon({
+export function ModelIcon({
   provider,
   modelName,
   size = 16,

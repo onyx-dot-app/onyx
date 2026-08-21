@@ -8,6 +8,7 @@
  */
 
 import { worldTest as test, expect, actAsManager } from "./fixtures";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { AdminConnectorDetailPage } from "@tests/e2e/pages/AdminConnectorDetailPage";
 import { AdminDocumentSetsPage } from "@tests/e2e/pages/AdminDocumentSetsPage";
 
@@ -86,7 +87,7 @@ test.describe("scoped manager affordances", () => {
     expect(ids.has(world.connectedActionId)).toBe(true);
     expect(ids.has(world.orphanActionId)).toBe(false);
 
-    await page.goto("/admin/actions/open-api");
+    await page.goto(ADMIN_ROUTES.OPENAPI_ACTIONS.path);
     await expect(
       page.getByText(`orphan-action-`, { exact: false })
     ).toHaveCount(0);

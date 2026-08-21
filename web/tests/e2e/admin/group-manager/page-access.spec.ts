@@ -9,39 +9,40 @@
  */
 
 import { worldTest as test, expect, actAsManager } from "./fixtures";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 
 /**
  * Heading each page renders once its own content has loaded — the app has no <main>
  * landmark, and a heading proves the page body arrived rather than just the shell.
  */
 const PAGE_HEADINGS: Record<string, string> = {
-  "/admin/agents": "Agents",
-  "/admin/actions/mcp": "MCP Actions",
-  "/admin/actions/open-api": "OpenAPI Actions",
-  "/admin/indexing/status": "Existing Connectors",
-  "/admin/add-connector": "Add Connector",
-  "/admin/documents/sets": "Document Sets",
+  [ADMIN_ROUTES.AGENTS.path]: "Agents",
+  [ADMIN_ROUTES.MCP_ACTIONS.path]: "MCP Actions",
+  [ADMIN_ROUTES.OPENAPI_ACTIONS.path]: "OpenAPI Actions",
+  [ADMIN_ROUTES.INDEXING_STATUS.path]: "Existing Connectors",
+  [ADMIN_ROUTES.ADD_CONNECTOR.path]: "Add Connector",
+  [ADMIN_ROUTES.DOCUMENT_SETS.path]: "Document Sets",
 };
 
 /** Unlocked by the scoped bundle alone, with no feature flag or tier behind them. */
 const ALWAYS_PAGES = [
-  "/admin/actions/mcp",
-  "/admin/actions/open-api",
-  "/admin/agents",
+  ADMIN_ROUTES.MCP_ACTIONS.path,
+  ADMIN_ROUTES.OPENAPI_ACTIONS.path,
+  ADMIN_ROUTES.AGENTS.path,
 ];
 
 /** Also require `vectorDbEnabled`. */
 const VECTOR_DB_PAGES = [
-  "/admin/add-connector",
-  "/admin/documents/sets",
-  "/admin/indexing/status",
+  ADMIN_ROUTES.ADD_CONNECTOR.path,
+  ADMIN_ROUTES.DOCUMENT_SETS.path,
+  ADMIN_ROUTES.INDEXING_STATUS.path,
 ];
 
 /** Also requires Tier.BUSINESS, which the run's license decides. */
-const TIER_GATED_PAGES = ["/admin/groups"];
+const TIER_GATED_PAGES = [ADMIN_ROUTES.GROUPS.path];
 
 /** Nothing outside this may ever appear — anything else is over-exposure. */
-const ALLOWED_PAGES = [
+const ALLOWED_PAGES: string[] = [
   ...ALWAYS_PAGES,
   ...VECTOR_DB_PAGES,
   ...TIER_GATED_PAGES,
@@ -49,9 +50,9 @@ const ALLOWED_PAGES = [
 
 /** Admin-only pages that must not be linked, and must refuse a direct visit. */
 const FORBIDDEN_PAGES = [
-  "/admin/configuration/language-models",
-  "/admin/users",
-  "/admin/configuration/web-search",
+  ADMIN_ROUTES.LLM_MODELS.path,
+  ADMIN_ROUTES.USERS.path,
+  ADMIN_ROUTES.WEB_SEARCH.path,
 ];
 
 // seeding a whole scoped world plus several re-logins puts these well past the
@@ -64,7 +65,7 @@ test.describe("scoped manager admin surface", () => {
     world,
   }) => {
     const managerClient = await actAsManager(page, world.manager);
-    await page.goto("/admin/indexing/status");
+    await page.goto(ADMIN_ROUTES.INDEXING_STATUS.path);
     await page.waitForLoadState("networkidle");
 
     const hrefs = await page.evaluate(() => {

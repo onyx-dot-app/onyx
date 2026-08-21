@@ -96,7 +96,7 @@ export interface AdminRouteEntry {
 export const ADMIN_ROUTES = {
   // ── System Configuration (unlabeled section) ──────────────────────
   LLM_MODELS: {
-    path: "/admin/configuration/language-models",
+    path: "/admin/language-models",
     icon: SvgCpu,
     title: "Language Models",
     sidebarLabel: "Language Models",
@@ -106,7 +106,7 @@ export const ADMIN_ROUTES = {
     visibleWhen: null,
   },
   WEB_SEARCH: {
-    path: "/admin/configuration/web-search",
+    path: "/admin/web-search",
     icon: SvgGlobe,
     title: "Web Search",
     sidebarLabel: "Web Search",
@@ -116,7 +116,7 @@ export const ADMIN_ROUTES = {
     visibleWhen: null,
   },
   IMAGE_GENERATION: {
-    path: "/admin/configuration/image-generation",
+    path: "/admin/image-generation",
     icon: SvgImage,
     title: "Image Generation",
     sidebarLabel: "Image Generation",
@@ -126,7 +126,7 @@ export const ADMIN_ROUTES = {
     visibleWhen: null,
   },
   VOICE: {
-    path: "/admin/configuration/voice",
+    path: "/admin/voice",
     icon: SvgAudio,
     title: "Voice",
     sidebarLabel: "Voice",
@@ -136,7 +136,7 @@ export const ADMIN_ROUTES = {
     visibleWhen: null,
   },
   CODE_INTERPRETER: {
-    path: "/admin/configuration/code-interpreter",
+    path: "/admin/code-interpreter",
     icon: SvgTerminal,
     title: "Code Interpreter",
     sidebarLabel: "Code Interpreter",
@@ -146,7 +146,7 @@ export const ADMIN_ROUTES = {
     visibleWhen: null,
   },
   CHAT_PREFERENCES: {
-    path: "/admin/configuration/chat-preferences",
+    path: "/admin/chat-preferences",
     icon: SvgBubbleText,
     title: "Chat Preferences",
     sidebarLabel: "Chat Preferences",
@@ -210,7 +210,7 @@ export const ADMIN_ROUTES = {
     visibleWhen: null,
   },
   MCP_ACTIONS: {
-    path: "/admin/actions/mcp",
+    path: "/admin/mcp-actions",
     icon: SvgMcp,
     title: "MCP Actions",
     sidebarLabel: "MCP Actions",
@@ -220,7 +220,7 @@ export const ADMIN_ROUTES = {
     visibleWhen: null,
   },
   OPENAPI_ACTIONS: {
-    path: "/admin/actions/open-api",
+    path: "/admin/openapi-actions",
     icon: SvgActions,
     title: "OpenAPI Actions",
     sidebarLabel: "OpenAPI Actions",
@@ -282,7 +282,7 @@ export const ADMIN_ROUTES = {
     visibleWhen: (f: FeatureFlags) => f.vectorDbEnabled,
   },
   INDEX_SETTINGS: {
-    path: "/admin/configuration/index-settings",
+    path: "/admin/index-settings",
     icon: SvgSearchMenu,
     title: "Index Settings",
     sidebarLabel: "Index Settings",
@@ -292,7 +292,7 @@ export const ADMIN_ROUTES = {
     visibleWhen: (f: FeatureFlags) => f.vectorDbEnabled && !f.enableCloud,
   },
   DOCUMENT_PROCESSING: {
-    path: "/admin/configuration/document-processing",
+    path: "/admin/document-processing",
     icon: SvgFileText,
     title: "Document Processing",
     sidebarLabel: "",

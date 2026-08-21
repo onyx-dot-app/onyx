@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import type { Page } from "@playwright/test";
 import { THEMES, setThemeBeforeNavigation } from "@tests/e2e/utils/theme";
 import { expectScreenshot } from "@tests/e2e/utils/visualRegression";
@@ -13,7 +14,7 @@ test.describe.configure({ mode: "parallel" });
  * user / feature-flag configuration.
  */
 async function discoverAdminPages(page: Page): Promise<string[]> {
-  await page.goto("/admin/configuration/language-models");
+  await page.goto(ADMIN_ROUTES.LLM_MODELS.path);
   await page.waitForLoadState("networkidle");
 
   return page.evaluate(() => {
@@ -32,7 +33,7 @@ async function discoverAdminPages(page: Page): Promise<string[]> {
  * Admin routes excluded from the parallel visual-regression sweep because other
  * specs mutate their rendered content while this test is running.
  *
- * `/admin/indexing/status` renders the list of existing connectors. Several
+ * ADMIN_ROUTES.INDEXING_STATUS.path renders the list of existing connectors. Several
  * specs create file connectors mid-run via `apiClient.createFileConnector(...)`
  * (agents, chat, permission-sync, inline file management), and since this
  * `describe` block runs in parallel, a connector row appearing or disappearing
@@ -41,7 +42,7 @@ async function discoverAdminPages(page: Page): Promise<string[]> {
  * for a list whose contents depend on concurrent test state.
  */
 const VISUAL_REGRESSION_EXCLUDED_PATHS = new Set<string>([
-  "/admin/indexing/status",
+  ADMIN_ROUTES.INDEXING_STATUS.path,
 ]);
 
 for (const theme of THEMES) {

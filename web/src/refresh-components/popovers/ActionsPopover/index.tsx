@@ -27,6 +27,7 @@ import { hasPermission } from "@/lib/permissions";
 import { FilterManager, useSourcePreferences } from "@/lib/hooks";
 import { getSourceMetadata } from "@/lib/sources";
 import MCPApiKeyModal from "@/components/chat/MCPApiKeyModal";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { Permission, ValidSources } from "@/lib/types";
 import { SourceMetadata } from "@/lib/search/interfaces";
 import { SourceIcon } from "@/components/SourceIcon";
@@ -103,21 +104,21 @@ function getToolTooltip(
 
 const ADMIN_CONFIG_LINKS: Record<string, { href: string; tooltip: string }> = {
   [IMAGE_GENERATION_TOOL_ID]: {
-    href: "/admin/configuration/image-generation",
+    href: ADMIN_ROUTES.IMAGE_GENERATION.path,
     tooltip: "Configure Image Generation",
   },
   [WEB_SEARCH_TOOL_ID]: {
-    href: "/admin/configuration/web-search",
+    href: ADMIN_ROUTES.WEB_SEARCH.path,
     tooltip: "Configure Web Search",
   },
   [PYTHON_TOOL_ID]: {
-    href: "/admin/configuration/code-interpreter",
+    href: ADMIN_ROUTES.CODE_INTERPRETER.path,
     tooltip: "Configure Code Interpreter",
   },
 };
 
 const OPENAPI_ADMIN_CONFIG = {
-  href: "/admin/actions/open-api",
+  href: ADMIN_ROUTES.OPENAPI_ACTIONS.path,
   tooltip: "Manage OpenAPI Actions",
 };
 
@@ -961,7 +962,11 @@ export default function ActionsPopover({
         null,
 
         hasPermission(permissions, Permission.MANAGE_ACTIONS) && (
-          <LineItem href="/admin/actions" icon={SvgActions} key="more-actions">
+          <LineItem
+            href={ADMIN_ROUTES.MCP_ACTIONS.path}
+            icon={SvgActions}
+            key="more-actions"
+          >
             More Actions
           </LineItem>
         ),

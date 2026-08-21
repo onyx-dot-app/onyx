@@ -239,14 +239,14 @@ function AppsAdminContent({
       blurbAction: (
         <Button
           prominence="tertiary"
-          href="/admin/actions/mcp"
+          href={ADMIN_ROUTES.MCP_ACTIONS.path}
           icon={SvgSettings}
         >
           Manage in Actions
         </Button>
       ),
       emptyAction: (
-        <Button href="/admin/actions/mcp" icon={SvgSettings}>
+        <Button href={ADMIN_ROUTES.MCP_ACTIONS.path} icon={SvgSettings}>
           Open Actions
         </Button>
       ),
