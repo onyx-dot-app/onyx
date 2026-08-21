@@ -13,7 +13,7 @@ import { WellKnownLLMProviderDescriptor } from "@/lib/languageModels/types";
 import { getProvider } from "@/lib/languageModels";
 import ProviderSetupModal from "@/sections/modals/languageModels/ProviderSetupModal";
 import { Disabled } from "@opal/core";
-import ModelIcon from "@/lib/languageModels/components";
+import { ModelIcon } from "@/lib/languageModels/components";
 import { SvgCheckCircle, SvgCpu, SvgExternalLink } from "@opal/icons";
 import { ContentAction } from "@opal/layouts";
 import { useLLMProviderOptions } from "@/lib/hooks/useLLMProviderOptions";

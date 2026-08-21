@@ -13,7 +13,7 @@ import {
   SvgServer,
   SvgSettings,
 } from "@opal/icons";
-import ModelIcon from "@/lib/languageModels/components";
+import { ModelIcon } from "@/lib/languageModels/components";
 
 export interface LLMProviderCardProps {
   title: string;
