@@ -392,4 +392,8 @@ async def opencode_history_mark_restored(
 if __name__ == "__main__":
     # TODO(security): bind to 127.0.0.1 and front with an in-pod proxy, or
     # restrict the listener to the sandbox network namespace.
-    uvicorn.run(app, host="0.0.0.0", port=PUSH_DAEMON_PORT)  # noqa: S104
+    # Bind host defaults to 0.0.0.0 (IPv4). On IPv6-only clusters set
+    # PUSH_DAEMON_HOST=:: so the api-server reaches the daemon over IPv6 (a "::"
+    # socket also accepts IPv4-mapped clients on Linux).
+    push_daemon_host = os.environ.get("PUSH_DAEMON_HOST", "0.0.0.0")  # noqa: S104
+    uvicorn.run(app, host=push_daemon_host, port=PUSH_DAEMON_PORT)
