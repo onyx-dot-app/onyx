@@ -37,7 +37,10 @@ from onyx.chat.prompt_utils import (
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.chat_configs import MAX_LLM_CYCLES
 from onyx.configs.constants import DocumentSource, MessageType
-from onyx.configs.model_configs import GEN_AI_INPUT_TOKEN_SAFETY_MARGIN
+from onyx.configs.model_configs import (
+    GEN_AI_INPUT_TOKEN_SAFETY_MARGIN,
+    GEN_AI_NUM_RESERVED_OUTPUT_TOKENS,
+)
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.memory import UserMemoryContext, add_memory, update_memory_at_index
@@ -46,7 +49,7 @@ from onyx.file_store.models import ChatFileType
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.exceptions import ClassifiedLLMError
 from onyx.llm.interfaces import LLM, LLMUserIdentity, ToolChoiceOptions
-from onyx.llm.model_capabilities import is_true_openai_model
+from onyx.llm.model_capabilities import is_true_openai_model, resolve_max_output_tokens
 from onyx.llm.models import ReasoningEffort
 from onyx.llm.utils import model_supports_image_input
 from onyx.prompts.chat_prompts import (
@@ -377,6 +380,45 @@ def _build_project_message(
     return messages
 
 
+def marker_replay_token_count(
+    image_files_replayed_as_markers: bool,
+    token_counter: Callable[[str], int] | None,
+) -> int:
+    """Token cost of the placeholder text sent in place of one image."""
+    if not image_files_replayed_as_markers:
+        return 0
+    sample_marker = NON_VISION_IMAGE_MARKER.format(file_id="0" * 36)
+    return (
+        token_counter(sample_marker)
+        if token_counter
+        else _NON_VISION_MARKER_TOKEN_FALLBACK
+    )
+
+
+def replay_token_count(
+    msg: ChatMessageSimple,
+    image_files_replayed_as_markers: bool,
+    marker_tokens: int,
+) -> int:
+    """Tokens this message actually costs on the wire.
+
+    Shared by the history budget and the output-token cap so both measure the
+    same thing — the stored image cost is not what gets sent when the model
+    takes no image input.
+    """
+    if not image_files_replayed_as_markers:
+        return msg.token_count
+    # Charge markers for every IMAGE entry, including ones whose stored
+    # token contribution is zero (project/context images are never
+    # counted) — the marker text is still sent for them.
+    num_images = sum(
+        1 for f in msg.image_files or [] if f.file_type == ChatFileType.IMAGE
+    )
+    if not num_images:
+        return msg.token_count
+    return max(0, msg.token_count - msg.image_token_count) + num_images * marker_tokens
+
+
 def construct_message_history(
     system_prompt: ChatMessageSimple | None,
     custom_agent_prompt: ChatMessageSimple | None,
@@ -399,29 +441,12 @@ def construct_message_history(
     # input, translate_history_to_llm_format sends short text markers instead
     # of the images, so charging the stored image token cost would evict
     # history that actually fits.
-    marker_tokens = 0
-    if image_files_replayed_as_markers:
-        sample_marker = NON_VISION_IMAGE_MARKER.format(file_id="0" * 36)
-        marker_tokens = (
-            token_counter(sample_marker)
-            if token_counter
-            else _NON_VISION_MARKER_TOKEN_FALLBACK
-        )
+    marker_tokens = marker_replay_token_count(
+        image_files_replayed_as_markers, token_counter
+    )
 
-    def _replay_token_count(msg: ChatMessageSimple) -> int:
-        if not image_files_replayed_as_markers:
-            return msg.token_count
-        # Charge markers for every IMAGE entry, including ones whose stored
-        # token contribution is zero (project/context images are never
-        # counted) — the marker text is still sent for them.
-        num_images = sum(
-            1 for f in msg.image_files or [] if f.file_type == ChatFileType.IMAGE
-        )
-        if not num_images:
-            return msg.token_count
-        return (
-            max(0, msg.token_count - msg.image_token_count) + num_images * marker_tokens
-        )
+    def _replay_tokens(msg: ChatMessageSimple) -> int:
+        return replay_token_count(msg, image_files_replayed_as_markers, marker_tokens)
 
     # Build the project / file-metadata messages up front so we can use their
     # actual token counts for the budget.
@@ -492,10 +517,8 @@ def construct_message_history(
     messages_after_last_user = simple_chat_history[last_user_msg_index + 1 :]
 
     # Calculate tokens needed for the last user message and everything after it
-    last_user_tokens = _replay_token_count(last_user_message)
-    after_user_tokens = sum(
-        _replay_token_count(msg) for msg in messages_after_last_user
-    )
+    last_user_tokens = _replay_tokens(last_user_message)
+    after_user_tokens = sum(_replay_tokens(msg) for msg in messages_after_last_user)
 
     # Check if we can fit at least the last user message and messages after it
     required_tokens = last_user_tokens + after_user_tokens
@@ -515,7 +538,7 @@ def construct_message_history(
     current_token_count = 0
 
     for msg in reversed(history_before_last_user):
-        msg_tokens = _replay_token_count(msg)
+        msg_tokens = _replay_tokens(msg)
         if current_token_count + msg_tokens <= remaining_budget:
             msg.should_cache = True
             truncated_history_before.insert(0, msg)
@@ -570,7 +593,7 @@ def construct_message_history(
             remaining_budget -= forgotten_files_message.token_count
             while truncated_history_before and current_token_count > remaining_budget:
                 evicted = truncated_history_before.pop(0)
-                current_token_count -= _replay_token_count(evicted)
+                current_token_count -= _replay_tokens(evicted)
                 # If the evicted message is itself a file, add it to the
                 # forgotten metadata (it's now dropped too).
                 if (
@@ -813,6 +836,13 @@ def run_llm_loop(
         available_tokens = int(
             llm.config.max_input_tokens * (1 - GEN_AI_INPUT_TOKEN_SAFETY_MARGIN)
         )
+        # Without an explicit cap LiteLLM applies its own default (4096 for
+        # Anthropic), which truncates models that spend output tokens on
+        # reasoning before they emit an answer. Stays None for models we can't
+        # resolve, so we never claim a ceiling the provider may reject.
+        model_max_output_tokens = resolve_max_output_tokens(
+            llm.config.model_name, llm.config.model_provider
+        )
         # When the model takes no image input, history images are replayed as
         # short text markers (translate_history_to_llm_format) — budget them
         # as markers too, not at their stored image token cost.
@@ -821,6 +851,9 @@ def run_llm_loop(
             for msg in simple_chat_history
         ) and not model_supports_image_input(
             llm.config.model_name, llm.config.model_provider, llm.config.deployment_name
+        )
+        history_marker_tokens = marker_replay_token_count(
+            image_files_replayed_as_markers, token_counter
         )
         tool_choice: ToolChoiceOptions = ToolChoiceOptions.AUTO
         # Initialize gathered_documents with project files if present
@@ -1042,6 +1075,32 @@ def run_llm_loop(
             # This measures how long the user waits before the answer starts streaming
             pre_answer_processing_time = time.monotonic() - loop_start_time
 
+            # Providers reject a request whose input plus requested output
+            # exceeds the context window, so cap the ask at what this cycle's
+            # history actually leaves free. Measured against available_tokens,
+            # not max_input_tokens, so the safety margin stays reserved for
+            # input our local estimate may undercount.
+            cycle_max_output_tokens: int | None = None
+            if model_max_output_tokens is not None:
+                context_headroom = (
+                    available_tokens
+                    - sum(
+                        replay_token_count(
+                            msg, image_files_replayed_as_markers, history_marker_tokens
+                        )
+                        for msg in truncated_message_history
+                    )
+                    - tool_token_budget
+                )
+                # Never leave this unset once the model is known: an absent cap
+                # hands the request back to LiteLLM's model-ceiling default,
+                # which is the worst possible value precisely when headroom has
+                # run out.
+                cycle_max_output_tokens = min(
+                    model_max_output_tokens,
+                    max(context_headroom, GEN_AI_NUM_RESERVED_OUTPUT_TOKENS),
+                )
+
             llm_step_result, has_reasoned = run_llm_step(
                 emitter=emitter,
                 history=truncated_message_history,
@@ -1058,6 +1117,7 @@ def run_llm_loop(
                 user_identity=user_identity,
                 pre_answer_processing_time=pre_answer_processing_time,
                 reasoning_effort=reasoning_effort,
+                max_tokens=cycle_max_output_tokens,
             )
             if has_reasoned:
                 reasoning_cycles += 1
