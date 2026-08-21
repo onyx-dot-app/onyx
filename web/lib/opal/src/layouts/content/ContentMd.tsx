@@ -10,7 +10,7 @@ import SvgXOctagon from "@opal/icons/x-octagon";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { cn } from "@opal/utils";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useImperativeHandle } from "react";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -39,6 +39,10 @@ interface ContentMdPresetConfig {
   descriptionIndent: string;
 }
 
+export interface ContentMdEditHandle {
+  startEditing: () => void;
+}
+
 interface ContentMdProps {
   /** Optional icon component. */
   icon?: IconFunctionComponent;
@@ -61,6 +65,10 @@ interface ContentMdProps {
 
   /** Enable inline editing of the title. */
   editable?: boolean;
+
+  /** Handle for starting a title edit from an external control. Setting it
+   *  hides the built-in pencil. */
+  editHandle?: React.Ref<ContentMdEditHandle>;
 
   /** Called when the user commits an edit. */
   onTitleChange?: (newTitle: string) => void;
@@ -152,6 +160,7 @@ function ContentMd({
   titleMaxLines,
   sizePreset = "main-ui",
   ref,
+  editHandle,
 }: ContentMdProps) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(toPlainString(title));
@@ -167,6 +176,13 @@ function ContentMd({
   function startEditing() {
     setEditValue(toPlainString(title));
     setEditing(true);
+  }
+  useImperativeHandle(editHandle, () => ({ startEditing }), [title]);
+
+  // Starting an edit must not double as a click on the parent row.
+  function handleTitleClick(e: React.MouseEvent) {
+    e.stopPropagation();
+    startEditing();
   }
 
   function commit() {
@@ -244,7 +260,7 @@ function ContentMd({
               color="inherit"
               maxLines={titleMaxLines}
               title={toPlainString(title)}
-              onClick={editable ? startEditing : undefined}
+              onClick={editable ? handleTitleClick : undefined}
             >
               {title}
             </Text>
@@ -277,7 +293,7 @@ function ContentMd({
 
           {tag && <Tag {...tag} />}
 
-          {editable && !editing && (
+          {editable && !editing && editHandle == null && (
             <div
               className={cn(
                 "opal-content-md-edit-button",

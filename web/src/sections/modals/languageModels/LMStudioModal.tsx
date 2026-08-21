@@ -12,7 +12,7 @@ import {
   useInitialValues,
   buildValidationSchema,
   BaseLLMFormValues as BaseLLMModalValues,
-  mergeFetchedModelConfigurations,
+  withFetchedModels,
 } from "@/sections/modals/languageModels/utils";
 import { submitProvider } from "@/sections/modals/languageModels/svc";
 import { LLMProviderConfiguredSource } from "@/lib/analytics/utils";
@@ -64,13 +64,7 @@ function LMStudioModalInternals({
     if (data.error) {
       throw new Error(data.error);
     }
-    formikProps.setFieldValue(
-      "model_configurations",
-      mergeFetchedModelConfigurations(
-        data.models,
-        formikProps.values.model_configurations
-      )
-    );
+    formikProps.setValues(withFetchedModels(data.models));
   };
 
   return (

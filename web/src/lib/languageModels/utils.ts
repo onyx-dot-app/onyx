@@ -163,6 +163,17 @@ export const modelSupportsImageInput = (
   return modelConfiguration?.supports_image_input || false;
 };
 
+/** Display name for form-state model rows, which do not reliably carry
+ *  effectiveDisplayName. Everything else should read that field instead. */
+export function modelDisplayName(
+  model: Pick<
+    ModelConfiguration,
+    "name" | "display_name" | "custom_display_name"
+  >
+): string {
+  return model.custom_display_name || model.display_name || model.name;
+}
+
 export function getDisplayName(
   agent: MinimalAgent,
   llmProviders: LLMProviderDescriptor[]
