@@ -72,6 +72,24 @@ ENV_HELPER_FUNCS = {
     "_non_negative_int_env": "int",
 }
 
+# Config modules migrated to the TOML settings service declare their env
+# surface as pydantic-settings fields instead of os.environ reads. Without
+# these, every migrated variable would silently vanish from the inventory —
+# and the drift gate would read that as "resolved" rather than "invisible".
+# Kept in sync with shared_configs/settings_base.py: the base class name, the
+# field-declaration helper, and its aliases kwarg.
+SETTINGS_BASE_CLASSES = {"OnyxBaseSettings"}
+SETTINGS_FIELD_FUNC = "onyx_field"
+SETTINGS_FIELD_ENV_KWARG = "env"
+
+# Annotations that carry a legacy string-coercion wrapper rather than a plain
+# builtin. Maps the annotation's base name to the effective value type.
+SETTINGS_ANNOTATION_TYPES = {
+    "LegacyEnvBool": "bool",
+    "LegacyEnvBoolUnlessFalse": "bool",
+    "CommaSeparatedStrList": "str",
+}
+
 # Deployment files to cross-reference.
 ENV_TEMPLATES = [
     REPO_ROOT / "deployment" / "docker_compose" / "env.template",
@@ -393,6 +411,103 @@ def _scan_os_imports(tree: ast.AST) -> tuple[set[str], set[str]]:
     return environ_aliases, getenv_aliases
 
 
+def _annotation_type(node: ast.AST | None) -> str:
+    """Effective value type for a settings field annotation.
+
+    Unwraps `X | None` and maps the legacy-coercion aliases onto the builtin
+    they validate to, so a `LegacyEnvBool` field reports `bool` exactly as the
+    equivalent `.lower() == "true"` read used to.
+    """
+    if node is None:
+        return "unknown"
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
+        # `str | None` -> str; `None | str` is not idiomatic but handle both.
+        for side in (node.left, node.right):
+            if not (isinstance(side, ast.Constant) and side.value is None):
+                return _annotation_type(side)
+        return "unknown"
+    if isinstance(node, ast.Subscript):  # list[str], dict[str, str], ...
+        return _annotation_type(node.value)
+    if isinstance(node, ast.Name):
+        return SETTINGS_ANNOTATION_TYPES.get(node.id, node.id)
+    return "unknown"
+
+
+class SettingsFieldVisitor(ast.NodeVisitor):
+    """Collects the env surface declared by OnyxBaseSettings subclasses.
+
+    Each `onyx_field(...)` declaration maps to one or more env var names: the
+    field name uppercased always works, plus any legacy names in the `env`
+    kwarg (which take priority). This mirrors `env_names_of` in
+    shared_configs/settings_base.py — if that priority rule changes, change it
+    here too.
+    """
+
+    def __init__(self, rel_path: str, is_ee: bool) -> None:
+        self.rel_path = rel_path
+        self.is_ee = is_ee
+        self.in_config_dir = any(m in f"/{rel_path}" for m in CONFIG_DIR_MARKERS)
+        self.reads: list[EnvRead] = []
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        bases = {b.id for b in node.bases if isinstance(b, ast.Name)}
+        if bases & SETTINGS_BASE_CLASSES:
+            for stmt in node.body:
+                if isinstance(stmt, ast.AnnAssign):
+                    self._record_field(stmt)
+        self.generic_visit(node)
+
+    def _record_field(self, stmt: ast.AnnAssign) -> None:
+        if not isinstance(stmt.target, ast.Name):
+            return
+        call = stmt.value
+        if not (
+            isinstance(call, ast.Call)
+            and isinstance(call.func, ast.Name)
+            and call.func.id == SETTINGS_FIELD_FUNC
+        ):
+            return
+
+        kwargs = {kw.arg: kw.value for kw in call.keywords if kw.arg}
+        names: list[str] = []
+        env_arg = kwargs.get(SETTINGS_FIELD_ENV_KWARG)
+        if isinstance(env_arg, (ast.Tuple, ast.List)):
+            # `env=` is the complete surface when present — the field name does
+            # NOT also apply, because populate_by_name is off.
+            for element in env_arg.elts:
+                literal = _str_const(element)
+                if literal:
+                    names.append(literal.upper())
+        if not names:
+            names.append(stmt.target.id.upper())
+
+        default_node = kwargs.get("default") or kwargs.get("default_factory")
+        default = _literal_default(default_node)
+        inferred = _annotation_type(stmt.annotation)
+
+        for name in names:
+            if not re.fullmatch(r"[A-Z][A-Z0-9_]*", name):
+                continue
+            self.reads.append(
+                EnvRead(
+                    name=name,
+                    file=self.rel_path,
+                    line=stmt.lineno,
+                    read_style=f"settings:{SETTINGS_FIELD_FUNC}",
+                    inferred_type=inferred,
+                    default=default,
+                    # A settings field is a declaration, not an assignment, so
+                    # it cannot participate in duplicate-assignment detection.
+                    assigned_to=None,
+                    assign_id=None,
+                    assign_line=None,
+                    module_scope=True,
+                    in_config_dir=self.in_config_dir,
+                    is_ee=self.is_ee,
+                )
+            )
+
+
 def collect_reads() -> list[EnvRead]:
     reads: list[EnvRead] = []
     for root in SCAN_ROOTS:
@@ -409,6 +524,9 @@ def collect_reads() -> list[EnvRead]:
             visitor = EnvVisitor(rel, is_ee, environ_aliases, getenv_aliases)
             visitor.visit(tree)
             reads.extend(visitor.reads)
+            settings_visitor = SettingsFieldVisitor(rel, is_ee)
+            settings_visitor.visit(tree)
+            reads.extend(settings_visitor.reads)
     return reads
 
 
