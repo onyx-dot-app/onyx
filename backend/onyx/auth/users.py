@@ -77,6 +77,7 @@ from onyx.auth.mobile_sso.sso_completion import (
     complete_mobile_sso,
     is_mobile_sso,
 )
+from onyx.auth.oidc_client import log_token_exchange_failure
 from onyx.auth.pat import get_hashed_pat_from_request
 from onyx.auth.schemas import AuthBackend, UserCreate, UserRole
 from onyx.auth.session_tokens import (
@@ -2928,7 +2929,8 @@ def get_oauth_router(
                 token = await oauth_client.get_access_token(
                     code, callback_redirect_url, code_verifier
                 )
-            except GetAccessTokenError:
+            except GetAccessTokenError as e:
+                log_token_exchange_failure(e)
                 return build_error_response(
                     OnyxError(
                         OnyxErrorCode.VALIDATION_ERROR,
