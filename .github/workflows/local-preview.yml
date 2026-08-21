@@ -28,6 +28,13 @@ on:
   # then still runs the chosen branch's copy.
   workflow_dispatch:
 
+# One deploy per branch at a time. Without this, two commits deploying
+# together can finish out of order and leave the PR comment on the older
+# commit's URL. Cancelling the older run also frees the server sooner.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -100,7 +107,9 @@ jobs:
           bun run --filter './lib/opal' build
           bun run build:fast
           cp -r .next/static .next/standalone/.next/static
-          [ -d public ] && cp -r public .next/standalone/public || true
+          if [ -d public ]; then
+            cp -r public .next/standalone/public
+          fi
 
       # The published tree becomes the process's working directory and the
       # manifest runs `node .next/standalone/server.js` in it, so the upload
@@ -146,7 +155,8 @@ jobs:
 
           Sign in with GitHub${PREVIEW_SSO_ORG:+ as an \`$PREVIEW_SSO_ORG\` member} to view it."
 
-          EXISTING_COMMENT_ID=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
+          # --paginate: on a long PR the marker can sit past the first page.
+          EXISTING_COMMENT_ID=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
             --jq ".[] | select(.body | startswith(\"$COMMENT_MARKER\")) | .id" | head -1)
 
           if [ -n "$EXISTING_COMMENT_ID" ]; then
