@@ -2,21 +2,27 @@ from fastapi import Depends, Request, Response, params
 from fastapi_limiter import FastAPILimiter
 from fastapi_limiter.depends import RateLimiter
 
+from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_chat_accessible_user
 from onyx.configs.app_configs import (
     AUTH_RATE_LIMITING_ENABLED,
     FEEDBACK_RATE_LIMIT_MAX_REQUESTS,
     FEEDBACK_RATE_LIMIT_WINDOW_SECONDS,
     FEEDBACK_RATE_LIMITING_ENABLED,
+    GATEWAY_COUNT_TOKENS_RATE_LIMIT_MAX_REQUESTS,
+    GATEWAY_COUNT_TOKENS_RATE_LIMIT_WINDOW_SECONDS,
+    GATEWAY_COUNT_TOKENS_RATE_LIMITING_ENABLED,
     RATE_LIMIT_MAX_REQUESTS,
     RATE_LIMIT_WINDOW_SECONDS,
 )
-from onyx.db.enums import AccountType
+from onyx.db.enums import AccountType, Permission
 from onyx.db.models import User
 from onyx.redis.redis_pool import get_async_redis_connection
 
 RATE_LIMITING_ENABLED = (
-    bool(AUTH_RATE_LIMITING_ENABLED) or FEEDBACK_RATE_LIMITING_ENABLED
+    bool(AUTH_RATE_LIMITING_ENABLED)
+    or FEEDBACK_RATE_LIMITING_ENABLED
+    or GATEWAY_COUNT_TOKENS_RATE_LIMITING_ENABLED
 )
 
 _RATE_LIMIT_USER_ID_STATE_KEY = "rate_limit_user_id"
@@ -106,3 +112,29 @@ def get_feedback_rate_limiters() -> list[params.Depends]:
         await limiter(request, response)
 
     return [Depends(user_scoped_feedback_limiter)]
+
+
+def get_gateway_count_tokens_rate_limiters() -> list[params.Depends]:
+    """Limit count-only gateway calls per authorized user.
+
+    This is intentionally separate from token spend limits: no model output is
+    generated, but local tokenization remains a CPU-expensive operation.
+    """
+    if not GATEWAY_COUNT_TOKENS_RATE_LIMITING_ENABLED:
+        return []
+
+    limiter = RateLimiter(
+        times=GATEWAY_COUNT_TOKENS_RATE_LIMIT_MAX_REQUESTS,
+        seconds=GATEWAY_COUNT_TOKENS_RATE_LIMIT_WINDOW_SECONDS,
+        identifier=user_scoped_rate_limit_key,
+    )
+
+    async def user_scoped_gateway_count_tokens_limiter(
+        request: Request,
+        response: Response,
+        user: User = Depends(require_permission(Permission.USE_LLM_GATEWAY)),
+    ) -> None:
+        request.state.rate_limit_user_id = str(user.id)
+        await limiter(request, response)
+
+    return [Depends(user_scoped_gateway_count_tokens_limiter)]

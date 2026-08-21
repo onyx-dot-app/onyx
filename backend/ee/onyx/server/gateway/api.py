@@ -31,6 +31,7 @@ from ee.onyx.server.gateway.stream_bridge import (
     _StreamAccumulator,
 )
 from onyx.auth.permissions import require_permission
+from onyx.configs.app_configs import GATEWAY_COUNT_TOKENS_MAX_LOCAL_INPUT_BYTES
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.llm import (
@@ -110,6 +111,7 @@ from onyx.server.gateway.models import (
     ResponsesRequest,
 )
 from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationView
+from onyx.server.middleware.rate_limiting import get_gateway_count_tokens_rate_limiters
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.create import trace
@@ -1488,7 +1490,35 @@ def gateway_anthropic_messages(
     return JSONResponse(content=result.to_wire())
 
 
-@router.post("/v1/messages/count_tokens")
+def _ensure_anthropic_count_tokens_input_is_bounded(
+    request: AnthropicCountTokensRequest,
+) -> None:
+    if GATEWAY_COUNT_TOKENS_MAX_LOCAL_INPUT_BYTES == 0:
+        return
+
+    countable_input = {
+        "messages": request.messages,
+        "system": request.system,
+        "tools": request.tools,
+    }
+    input_size = len(
+        json.dumps(
+            countable_input,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    )
+    if input_size > GATEWAY_COUNT_TOKENS_MAX_LOCAL_INPUT_BYTES:
+        raise OnyxError(
+            OnyxErrorCode.PAYLOAD_TOO_LARGE,
+            "The count_tokens request is too large for local tokenization.",
+        )
+
+
+@router.post(
+    "/v1/messages/count_tokens",
+    dependencies=get_gateway_count_tokens_rate_limiters(),
+)
 def gateway_anthropic_count_tokens(
     request: AnthropicCountTokensRequest,
     http_request: Request,
@@ -1514,6 +1544,7 @@ def gateway_anthropic_count_tokens(
                 "falling back to the local estimate",
                 request.model,
             )
+    _ensure_anthropic_count_tokens_input_is_bounded(request)
     raw_messages = _anthropic_messages_to_raw_messages(request.messages, request.system)
     tools = _anthropic_tools(request.tools)
     from onyx.llm.litellm_singleton import litellm

@@ -20,6 +20,13 @@ LOG_ONYX_MODEL_INTERACTIONS=False
 # More verbose logging
 LOG_LEVEL=debug
 
+# Gateway count-token calls are rate-limited separately from model spend limits.
+# Set either rate value to 0 to disable; set the input cap to 0 to disable the
+# local-tokenization size limit.
+GATEWAY_COUNT_TOKENS_RATE_LIMIT_MAX_REQUESTS=60
+GATEWAY_COUNT_TOKENS_RATE_LIMIT_WINDOW_SECONDS=60
+GATEWAY_COUNT_TOKENS_MAX_LOCAL_INPUT_BYTES=4194304
+
 
 # Useful if you want to toggle auth on/off (google_oauth/OIDC specifically).
 OAUTH_CLIENT_ID=<REPLACE THIS>
