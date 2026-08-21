@@ -188,8 +188,9 @@ def capability_check_run_ceiling_seconds(source: DocumentSource) -> int:
 
     Checks run sequentially and mirrored checks (one check surfaced under
     several capabilities) execute once, so the bound sums the distinct
-    per-check hang guards. One extra default guard covers the work outside any
-    check's guard: connector instantiation can itself probe the source.
+    per-check hang guards, plus the default guard connector instantiation runs
+    under (it can itself probe the source; ``generate_capability_report``
+    enforces that guard).
     """
     timeout_by_check_id = {
         check.check_id: check.timeout_seconds or CAPABILITY_CHECK_TIMEOUT_SECONDS
@@ -301,7 +302,12 @@ def generate_capability_report(
     connector: BaseConnector | None = None
     instantiation_error: Exception | None = None
     try:
-        connector = instantiate_connector(
+        # Under the guard the run ceiling budgets for it: construction and
+        # ``load_credentials`` can probe the source with no timeout of their
+        # own, and the stale-run sweep trusts the ceiling.
+        connector = run_with_timeout(
+            CAPABILITY_CHECK_TIMEOUT_SECONDS,
+            instantiate_connector,
             db_session=db_session,
             source=source,
             input_type=input_type,

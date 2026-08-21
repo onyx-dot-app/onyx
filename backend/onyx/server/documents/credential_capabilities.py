@@ -47,12 +47,15 @@ from onyx.db.enums import CapabilityCheckTrigger, CapabilityReportRunStatus, Per
 from onyx.db.models import CredentialCapabilityReportRow, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.utils_vector_db import require_vector_db
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
-router = APIRouter(prefix="/manage")
+# Lite (no vector DB) has no connectors, so there is nothing to probe or
+# report, and the celery machinery the trigger relies on is absent there.
+router = APIRouter(prefix="/manage", dependencies=[Depends(require_vector_db)])
 
 
 class CapabilityReportSnapshot(BaseModel):

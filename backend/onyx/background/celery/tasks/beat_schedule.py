@@ -120,6 +120,9 @@ beat_task_templates: list[dict] = [
         "options": {
             "priority": OnyxCeleryPriority.LOW,
             "expires": BEAT_EXPIRES_DEFAULT,
+            # Gated tenants may still hold dead RUNNING marks to retire.
+            "skip_gated": False,
+            "work_gated": True,
         },
     },
     {
