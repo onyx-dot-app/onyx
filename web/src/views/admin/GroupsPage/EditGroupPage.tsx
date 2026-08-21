@@ -19,7 +19,7 @@ import {
   SvgMinusCircle,
   SvgPlusCircle,
   SvgSimpleLoader,
-  SvgShield,
+  SvgUserShield,
 } from "@opal/icons";
 import { markdown } from "@opal/utils";
 import IconButton from "@/refresh-components/buttons/IconButton";
@@ -36,7 +36,7 @@ import { useSettings } from "@/lib/settings/hooks";
 import { Tier } from "@/lib/settings/types";
 import { tierAtLeast } from "@/lib/tiers";
 import type { MemberRow, TokenRateLimitDisplay } from "./interfaces";
-import { baseColumns, memberTableColumns, tc, PAGE_SIZE } from "./shared";
+import { makeBaseColumns, memberTableColumns, tc, PAGE_SIZE } from "./shared";
 import {
   renameGroup,
   updateGroup,
@@ -287,7 +287,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
 
   const memberColumns = useMemo(
     () => [
-      ...baseColumns,
+      ...makeBaseColumns((row) => managerIds.has(row.id ?? row.email)),
       tc.actions({
         showSorting: false,
         showColumnVisibility: false,
@@ -302,7 +302,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
             <div className="flex items-center gap-1">
               {canManage && (
                 <IconButton
-                  icon={isPending ? SvgSimpleLoader : SvgShield}
+                  icon={isPending ? SvgSimpleLoader : SvgUserShield}
                   tertiary
                   transient={isManager}
                   disabled={!isPersisted || isPending || isOwnManager}
