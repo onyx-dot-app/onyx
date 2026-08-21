@@ -1,3 +1,4 @@
+import time
 from collections.abc import Callable
 from unittest.mock import MagicMock
 
@@ -338,3 +339,29 @@ def test_empty_credential_decrypts_nothing_and_emits_no_audit(
 
     # Postcondition.
     emit.assert_not_called()
+
+
+def test_hung_instantiation_is_bounded_and_surfaces_indeterminate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verifies the instantiation guard: a hang cannot outlive its budget.
+
+    The run ceiling budgets one default guard for instantiation, and the
+    stale-run sweep trusts that ceiling, so the guard must be enforced.
+    """
+    # Precondition. Construction blocks far past the shrunken guard.
+    check = _CallableCheck(MagicMock(return_value=None), check_id="instance_check")
+    instantiate = _patch_runner_environment(monkeypatch, [check])
+    instantiate.side_effect = lambda **_kwargs: time.sleep(0.5)
+    monkeypatch.setattr(runner_module, "CAPABILITY_CHECK_TIMEOUT_SECONDS", 0.05)
+
+    # Under test.
+    report = generate_capability_report(
+        MagicMock(), _make_credential(), connector_specific_config={"repo": "onyx"}
+    )
+
+    # Postcondition. The supplied-config timeout surfaces on the
+    # instance-requiring check as INDETERMINATE, per the check contract.
+    (result,) = report.check_results
+    assert result.status == CapabilityCheckStatus.INDETERMINATE
+    assert result.error_type == "TimeoutError"
