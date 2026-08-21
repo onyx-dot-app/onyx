@@ -100,9 +100,7 @@ def get_google_drive_documents_from_database() -> list[dict]:
         """)
     )
 
-    documents = []
-    for row in result:
-        documents.append({"document_id": row.id})
+    documents = [{"document_id": row.id} for row in result]
 
     return documents
 

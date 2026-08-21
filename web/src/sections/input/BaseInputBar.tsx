@@ -274,7 +274,6 @@ const BaseInputBar = memo(
             <QueuedMessageBar
               messages={queue}
               highlightedIndex={queueNav.highlightedIndex}
-              awaitingPreferredSelection={false}
               onDiscard={(index) => onRemoveQueuedMessage?.(index)}
               onHighlight={queueNav.setHighlightedIndex}
             />

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState, useSyncExternalStore } from "react";
-import { cn } from "@opal/utils";
+import { clickOnKeyDown, cn } from "@opal/utils";
 import { MessageCard, Text } from "@opal/components";
 import {
   MAX_VISIBLE_TOASTS,
@@ -95,40 +95,53 @@ function ToastContainer({ errorAppendix }: ToastContainerProps) {
           ? t.message.slice(0, MAX_TOAST_MESSAGE_LENGTH) + "…"
           : t.message;
         const expandable = isTruncatable && !isExpanded;
+        const className = cn(
+          "w-full",
+          t.leaving ? "animate-fade-out-scale" : "animate-fade-in-scale",
+          expandable && "cursor-pointer"
+        );
+        const card = (
+          <MessageCard
+            variant={t.level ?? "info"}
+            title={truncatedTitle}
+            description={buildDescription(t, errorAppendix)}
+            padding={1}
+            onClose={t.dismissible ? () => handleClose(t.id) : undefined}
+            bottomChildren={
+              isExpanded ? <ExpandedDetails message={t.message} /> : undefined
+            }
+          />
+        );
+
+        if (!expandable) {
+          return (
+            <div key={t.id} className={className}>
+              {card}
+            </div>
+          );
+        }
+
         return (
+          // The card holds its own close button, so this stays a div with
+          // button semantics rather than a <button> wrapping a <button>.
           <div
             key={t.id}
-            className={cn(
-              "w-full",
-              t.leaving ? "animate-fade-out-scale" : "animate-fade-in-scale",
-              expandable && "cursor-pointer"
-            )}
-            onClick={
-              expandable
-                ? (e) => {
-                    // Don't intercept clicks on the inner close button.
-                    if (
-                      (e.target as HTMLElement).closest(
-                        'button[aria-label="Close"]'
-                      )
-                    ) {
-                      return;
-                    }
-                    handleExpand(t);
-                  }
-                : undefined
-            }
-          >
-            <MessageCard
-              variant={t.level ?? "info"}
-              title={truncatedTitle}
-              description={buildDescription(t, errorAppendix)}
-              padding={1}
-              onClose={t.dismissible ? () => handleClose(t.id) : undefined}
-              bottomChildren={
-                isExpanded ? <ExpandedDetails message={t.message} /> : undefined
+            className={className}
+            role="button"
+            tabIndex={0}
+            aria-label="Show the full message"
+            onKeyDown={clickOnKeyDown(() => handleExpand(t))}
+            onClick={(e) => {
+              // Don't intercept clicks on the inner close button.
+              if (
+                (e.target as HTMLElement).closest('button[aria-label="Close"]')
+              ) {
+                return;
               }
-            />
+              handleExpand(t);
+            }}
+          >
+            {card}
           </div>
         );
       })}

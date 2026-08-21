@@ -193,7 +193,8 @@ export function CompactQuestionCard({
   openQuestion,
 }: CompactQuestionCardProps) {
   return (
-    <div
+    <button
+      type="button"
       onClick={() => openQuestion(question)}
       className="max-w-[350px] gap-y-1 cursor-pointer pb-0 pt-0 mt-0 flex gap-y-0 flex-col content-start items-start gap-0"
     >
@@ -213,6 +214,6 @@ export function CompactQuestionCard({
           </span>
         )}
       </div>
-    </div>
+    </button>
   );
 }

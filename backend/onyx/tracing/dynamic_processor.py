@@ -60,17 +60,19 @@ def _build_langfuse_processor(config: LangfuseConfig) -> TracingProcessor:
     from onyx import __version__
     from onyx.tracing.langfuse_tracing_processor import LangfuseTracingProcessor
 
-    # The Langfuse SDK reads LANGFUSE_HOST from the env in some paths; keep it in
-    # sync (and cleared when no host is configured) to avoid a stale value.
-    if config.host:
-        os.environ["LANGFUSE_HOST"] = config.host
-    else:
-        os.environ.pop("LANGFUSE_HOST", None)
+    # The SDK resolves the URL as base_url -> LANGFUSE_BASE_URL -> host ->
+    # LANGFUSE_HOST. Pass base_url and keep both env names in sync (cleared when
+    # no host is configured) so a stale env value cannot override the config.
+    for env_name in ("LANGFUSE_BASE_URL", "LANGFUSE_HOST"):
+        if config.host:
+            os.environ[env_name] = config.host
+        else:
+            os.environ.pop(env_name, None)
 
     client = Langfuse(
         public_key=config.public_key,
         secret_key=config.secret_key,
-        host=config.host or None,
+        base_url=config.host or None,
         release=__version__,
     )
     return LangfuseTracingProcessor(client=client)

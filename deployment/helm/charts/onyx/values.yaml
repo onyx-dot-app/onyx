@@ -574,9 +574,20 @@ api:
       cpu: 3000m
       memory: 3Gi
 
-  # Optional health probes
+  # Optional health probes.
+  #
+  # Match the path to the probe. /health/ready reports not-ready once the request
+  # threadpool is saturated, which is what should pull a pod out of the Service.
+  # /health only reports that the process is up. Do NOT put /health/ready on the
+  # liveness probe: saturation is load-induced and hits every replica at once,
+  # so restarting on it turns a slowdown into an outage.
+  #
   # Example:
   # readinessProbe:
+  #   httpGet:
+  #     path: /health/ready
+  #     port: api-server-port
+  # livenessProbe:
   #   httpGet:
   #     path: /health
   #     port: api-server-port
@@ -1283,7 +1294,8 @@ externalSecret:
 # -- If set, adds `envFrom: - secretRef: name: <value>` to every backend
 # deployment so all keys in the named Secret are injected as env vars. Intended
 # for secrets that today live in plaintext under the `configMap:` block and
-# should move into a Secret (e.g. LINEAR_CLIENT_SECRET, BRAINTRUST_API_KEY).
+# should move into a Secret (e.g. LINEAR_CLIENT_SECRET,
+# SALESFORCE_CLIENT_ID, SALESFORCE_CLIENT_SECRET, BRAINTRUST_API_KEY).
 # Typically set to the same value as externalSecret.secretName.
 extraEnvFromSecret: ""
 

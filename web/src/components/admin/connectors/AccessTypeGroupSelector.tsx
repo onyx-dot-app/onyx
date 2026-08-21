@@ -1,10 +1,10 @@
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
-import React, { useState, useEffect } from "react";
+import React, { useEffect } from "react";
 import { FieldArray, ArrayHelpers, ErrorMessage, useField } from "formik";
 import Text from "@/refresh-components/texts/Text";
 import { Button, Divider } from "@opal/components";
-import { UserGroup, UserRole } from "@/lib/types";
+import { UserGroup } from "@/lib/types";
 import { useUserGroups } from "@/lib/hooks";
 import {
   AccessType,
@@ -12,7 +12,8 @@ import {
   ConfigurableSources,
   validAutoSyncSources,
 } from "@/lib/types";
-import { useUser } from "@/providers/UserProvider";
+import { usePermissionAuthority } from "@/lib/permissions/hooks";
+import { Permission } from "@/lib/types";
 import { SvgUsers } from "@opal/icons";
 function isValidAutoSyncSource(
   value: ConfigurableSources
@@ -34,51 +35,34 @@ export function AccessTypeGroupSelector({
   connector: ConfigurableSources;
 }) {
   const { data: userGroups, isLoading: userGroupsIsLoading } = useUserGroups();
-  const { isAdmin, user, isCurator } = useUser();
+  const { isScopedManager } = usePermissionAuthority(
+    Permission.MANAGE_CONNECTORS
+  );
   const businessTier = useTierAtLeast(Tier.BUSINESS);
-  const [shouldHideContent, setShouldHideContent] = useState(false);
   const isAutoSyncSupported = isValidAutoSyncSource(connector);
 
   const [access_type, meta, access_type_helpers] =
     useField<AccessType>("access_type");
   const [groups, groups_meta, groups_helpers] = useField<number[]>("groups");
 
+  // A scoped manager can only create non-public connectors, so default them to
+  // private. Group selection stays theirs to make — auto-assigning their only
+  // group and hiding the control was curator-era behaviour, and it silently
+  // scoped a connector for anyone who merely happened to be in one group.
   useEffect(() => {
-    if (user && userGroups && businessTier) {
-      const isUserAdmin = user.role === UserRole.ADMIN;
-      if (!businessTier) {
-        access_type_helpers.setValue("public");
-        return;
-      }
-
-      // Only set default access type if it's not already set, to avoid overriding user selections
-      if (!access_type.value && !isUserAdmin && !isAutoSyncSupported) {
-        access_type_helpers.setValue("private");
-      }
-
-      if (
-        access_type.value === "private" &&
-        userGroups.length === 1 &&
-        userGroups[0] !== undefined &&
-        !isUserAdmin
-      ) {
-        groups_helpers.setValue([userGroups[0].id]);
-        setShouldHideContent(true);
-      } else if (access_type.value !== "private") {
-        // If the access type is public or sync, empty the groups selection
-        groups_helpers.setValue([]);
-        setShouldHideContent(false);
-      } else {
-        setShouldHideContent(false);
-      }
+    if (!businessTier) return;
+    if (!access_type.value && isScopedManager && !isAutoSyncSupported) {
+      access_type_helpers.setValue("private");
+    }
+    if (access_type.value === "public") {
+      groups_helpers.setValue([]);
     }
   }, [
-    user,
-    userGroups,
     access_type.value,
     access_type_helpers,
     groups_helpers,
     businessTier,
+    isScopedManager,
     isAutoSyncSupported,
   ]);
 
@@ -89,37 +73,30 @@ export function AccessTypeGroupSelector({
     return null;
   }
 
-  if (shouldHideContent) {
-    return (
-      <>
-        {userGroups && userGroups[0] !== undefined && (
-          <div className="mb-1 font-medium text-base">
-            This Connector will be assigned to group <b>{userGroups[0].name}</b>
-            .
-          </div>
-        )}
-      </>
-    );
-  }
-
   return (
     <div>
-      {(access_type.value === "private" || isCurator) &&
+      {(access_type.value === "private" || access_type.value === "sync") &&
         userGroups &&
         userGroups?.length > 0 && (
           <>
             <Divider />
             <div className="flex flex-col gap-3 pt-4">
               <Text as="p" mainUiAction text05>
-                Assign group access for this Connector
+                {access_type.value === "sync"
+                  ? "Assign this Connector to a group"
+                  : "Assign group access for this Connector"}
               </Text>
               {userGroupsIsLoading ? (
                 <div className="animate-pulse bg-background-200 h-8 w-32 rounded-sm" />
               ) : (
                 <Text as="p" mainUiMuted text03>
-                  {isAdmin
-                    ? "This Connector will be visible/accessible by the groups selected below"
-                    : "Curators must select one or more groups to give access to this Connector"}
+                  {access_type.value === "sync"
+                    ? // Groups never widen or narrow a synced connector's document
+                      // access — the source system's permissions decide that.
+                      "The groups below control who can manage this Connector. Access to its documents is inherited from the source's own permissions."
+                    : isScopedManager
+                      ? "Select one or more of the groups you manage to give access to this Connector"
+                      : "This Connector will be visible/accessible by the groups selected below"}
                 </Text>
               )}
             </div>

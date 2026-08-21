@@ -22,6 +22,9 @@ class _MemoryCache(CacheBackend):
     def get(self, key: str) -> bytes | None:
         return self.values.get(key)
 
+    def getdel(self, key: str) -> bytes | None:
+        return self.values.pop(key, None)
+
     def set(
         self,
         key: str,
@@ -31,6 +34,17 @@ class _MemoryCache(CacheBackend):
         self.values[key] = str(value).encode()
         if ex is not None:
             self.expire(key, ex)
+
+    def set_if_absent(
+        self,
+        key: str,
+        value: str | bytes | int | float,
+        ex: int | None = None,
+    ) -> bool:
+        if key in self.values:
+            return False
+        self.set(key, value, ex=ex)
+        return True
 
     def expire(self, key: str, seconds: int) -> None:
         self.expirations.append((key, seconds))

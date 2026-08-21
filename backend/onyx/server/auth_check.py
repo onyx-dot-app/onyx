@@ -6,7 +6,6 @@ from starlette.routing import BaseRoute
 
 from onyx.auth.users import (
     current_chat_accessible_user,
-    current_curator_or_admin_user,
     current_limited_user,
     current_user,
     current_user_from_websocket,
@@ -27,8 +26,10 @@ PUBLIC_ENDPOINT_SPECS = [
     ("/redoc", {"GET", "HEAD"}),
     # should always be callable, will just return 401 if not authenticated
     ("/me", {"GET"}),
-    # just returns 200 to validate that the server is up
+    # liveness: just returns 200 to validate that the process is up
     ("/health", {"GET"}),
+    # readiness: 200 while the server can serve traffic, 503 when saturated
+    ("/health/ready", {"GET"}),
     # just returns auth type, needs to be accessible before the user is logged
     # in to determine what flow to give the user
     ("/auth/type", {"GET"}),
@@ -78,6 +79,10 @@ PUBLIC_ENDPOINT_SPECS = [
     # db-backed multi-provider oidc/google (oidc_multi router)
     ("/auth/oidc/{provider_name}/authorize", {"GET"}),
     ("/auth/oidc/{provider_name}/callback", {"GET"}),
+    # Resolves a workspace's SSO buttons before the user has any session. Public
+    # only because it answers uniformly for unknown, ambiguous, and SSO-less
+    # addresses, and is rate limited.
+    ("/auth/sso/discover", {"POST"}),
     # saml (single router: legacy-compatible + parametric authorize, one
     # issuer-resolved callback)
     ("/auth/saml/authorize", {"GET"}),
@@ -163,7 +168,6 @@ def check_router_auth(
                 if (
                     depends_fn == current_limited_user
                     or depends_fn == current_user
-                    or depends_fn == current_curator_or_admin_user
                     or depends_fn == current_user_with_expired_token
                     or depends_fn == current_chat_accessible_user
                     or depends_fn == current_user_from_websocket

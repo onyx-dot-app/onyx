@@ -72,6 +72,8 @@ from onyx.db.enums import (
     ApprovalDecision,
     ArtifactType,
     BuildSessionStatus,
+    CapabilityCheckTrigger,
+    CapabilityReportRunStatus,
     ChatSessionSharedStatus,
     ConnectorCredentialPairStatus,
     DefaultAppMode,
@@ -94,6 +96,7 @@ from onyx.db.enums import (
     MCPOAuthProviderMode,
     MCPServerStatus,
     MCPTransport,
+    NotificationSeverity,
     OpenSearchDocumentMigrationStatus,
     OpenSearchTenantMigrationStatus,
     PatType,
@@ -327,8 +330,11 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     oauth_accounts: Mapped[list[OAuthAccount]] = relationship(
         "OAuthAccount", lazy="joined", cascade="all, delete-orphan"
     )
-    role: Mapped[UserRole] = mapped_column(
-        Enum(UserRole, native_enum=False, default=UserRole.BASIC)
+    # Legacy tombstone column: no longer read or written by application code.
+    # Kept nullable so a pure-code rollback keeps working.
+    role: Mapped[UserRole | None] = mapped_column(
+        Enum(UserRole, native_enum=False),
+        nullable=True,
     )
     account_type: Mapped[AccountType] = mapped_column(
         Enum(AccountType, native_enum=False),
@@ -396,8 +402,13 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         postgresql.JSONB(), nullable=False, default=[]
     )
 
-    pinned_assistants: Mapped[list[int] | None] = mapped_column(
-        postgresql.JSONB(), nullable=True, default=None
+    # Eagerly loaded: `UserInfo.from_model` reads this without a session, and a
+    # lazy load would fail outright under async.
+    pinned_personas: Mapped[list["User__PinnedPersona"]] = relationship(
+        "User__PinnedPersona",
+        order_by="User__PinnedPersona.display_order",
+        cascade="all, delete-orphan",
+        lazy="selectin",
     )
 
     effective_permissions: Mapped[list[str]] = mapped_column(
@@ -405,6 +416,10 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         nullable=False,
         default=list,
         server_default=text("'[]'::jsonb"),
+    )
+    # Cached for a zero-query route gate; the managed-group list stays live.
+    is_group_manager: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
     )
 
     oidc_expiry: Mapped[datetime.datetime] = mapped_column(
@@ -602,6 +617,11 @@ class Notification(Base):
     notif_type: Mapped[NotificationType] = mapped_column(
         Enum(NotificationType, native_enum=False)
     )
+    severity: Mapped[NotificationSeverity] = mapped_column(
+        Enum(NotificationSeverity, native_enum=False),
+        default=NotificationSeverity.INFO,
+        server_default=NotificationSeverity.INFO.name,
+    )
     user_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("user.id", ondelete="CASCADE"), nullable=True
     )
@@ -641,6 +661,25 @@ class Persona__DocumentSet(Base):
     document_set_id: Mapped[int] = mapped_column(
         ForeignKey("document_set.id"), primary_key=True
     )
+
+
+class User__PinnedPersona(Base):
+    """An agent a user has pinned to their sidebar, and where it sits.
+
+    `display_order` carries the ordering that a JSONB array used to carry by
+    position. It is only meaningful within one user, and it is dense: every
+    write path replaces the user's whole set and numbers it 0..n-1.
+    """
+
+    __tablename__ = "user__pinned_persona"
+
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), primary_key=True
+    )
+    persona_id: Mapped[int] = mapped_column(
+        ForeignKey("persona.id", ondelete="CASCADE"), primary_key=True
+    )
+    display_order: Mapped[int] = mapped_column(Integer, nullable=False)
 
 
 class Persona__User(Base):
@@ -2049,6 +2088,70 @@ class Credential(Base):
     user: Mapped[User | None] = relationship("User", back_populates="credentials")
 
 
+class CredentialCapabilityReportRow(Base):
+    """Latest capability-check report per (credential, connector-scope).
+
+    One config-less credential-time row (``connector_id`` NULL) plus one row per
+    attached connector; latest-only upsert semantics are enforced by the two
+    partial unique indexes. ``report`` holds the last COMPLETED report so it
+    stays readable while a re-run is RUNNING.
+    """
+
+    __tablename__ = "credential_capability_report"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    credential_id: Mapped[int] = mapped_column(
+        ForeignKey("credential.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    # NULL marks the config-less credential-time report.
+    connector_id: Mapped[int | None] = mapped_column(
+        ForeignKey("connector.id", ondelete="CASCADE"), nullable=True
+    )
+    # Denormalized for support queries by source.
+    source: Mapped[DocumentSource] = mapped_column(
+        Enum(DocumentSource, native_enum=False), nullable=False
+    )
+    # sha256 of the canonical config JSON the report ran with; staleness signal
+    # for connector-scoped reports.
+    connector_config_hash: Mapped[str | None] = mapped_column(String, nullable=True)
+    # What initiated the run this row reflects (last write wins).
+    trigger: Mapped[CapabilityCheckTrigger] = mapped_column(
+        Enum(CapabilityCheckTrigger, native_enum=False), nullable=False
+    )
+    # Serialized ``CredentialCapabilityReport``; None until a run completes.
+    report: Mapped[dict[str, Any] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
+    run_status: Mapped[CapabilityReportRunStatus] = mapped_column(
+        Enum(CapabilityReportRunStatus, native_enum=False), nullable=False
+    )
+    run_started_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    time_created: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    time_updated: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        Index(
+            "uq_capability_report_connector_scope",
+            "credential_id",
+            "connector_id",
+            unique=True,
+            postgresql_where=text("connector_id IS NOT NULL"),
+        ),
+        Index(
+            "uq_capability_report_credential_scope",
+            "credential_id",
+            unique=True,
+            postgresql_where=text("connector_id IS NULL"),
+        ),
+    )
+
+
 class FederatedConnector(Base):
     __tablename__ = "federated_connector"
 
@@ -3197,6 +3300,11 @@ class ChatMessage(Base):
     # The display name of the model that generated this assistant message
     model_display_name: Mapped[str | None] = mapped_column(String, nullable=True)
 
+    # Requested reasoning effort plus the kwargs actually sent to the provider.
+    request_params: Mapped[dict[str, Any] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
+
     # What does this message contain
     reasoning_tokens: Mapped[str | None] = mapped_column(Text, nullable=True)
     message: Mapped[str] = mapped_column(Text)
@@ -3568,6 +3676,25 @@ class ModelConfiguration(Base):
     # Admin-specified override for the display name. When set, this takes precedence
     # over both display_name and the LiteLLM-derived name everywhere in the UI.
     custom_display_name: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    # Never store AUTO in either column, an unset value already means AUTO.
+    reasoning_effort_max: Mapped[ReasoningEffort | None] = mapped_column(
+        Enum(
+            ReasoningEffort,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=True,
+    )
+    reasoning_effort_default: Mapped[ReasoningEffort | None] = mapped_column(
+        Enum(
+            ReasoningEffort,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=True,
+    )
+    temperature_default: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     llm_provider: Mapped["LLMProvider"] = relationship(
         "LLMProvider",
@@ -4853,6 +4980,10 @@ class User__UserGroup(Base):
     __table_args__ = (Index("ix_user__user_group_user_id", "user_id"),)
 
     is_curator: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Group-manager role binding for this (user, group) edge.
+    is_manager: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
 
     user_group_id: Mapped[int] = mapped_column(
         ForeignKey("user_group.id"), primary_key=True
@@ -5581,6 +5712,37 @@ class TenantAnonymousUserPath(PublicBase):
     )
 
 
+class TenantSSODomain(PublicBase):
+    """Email domain to workspace, so the cloud login page can route someone who
+    has no account yet. Projected from each provider's allowed_email_domains,
+    which is per-tenant and therefore unreadable before a workspace is known.
+
+    A row only routes once `verified_at` is set: a workspace proves control of
+    the domain by publishing a DNS TXT record for it before strangers on the
+    domain are routed in and auto-provisioned.
+    """
+
+    __tablename__ = "tenant_sso_domain"
+    __table_args__ = (
+        # Only one workspace can hold a domain as VERIFIED. Several may hold it
+        # pending (unverified), so a squatter's pending claim cannot block the
+        # real owner from verifying and taking it.
+        Index(
+            "uq_tenant_sso_domain_verified",
+            "domain",
+            unique=True,
+            postgresql_where=text("verified_at IS NOT NULL"),
+        ),
+        {"schema": "public"},
+    )
+
+    tenant_id: Mapped[str] = mapped_column(String, primary_key=True, nullable=False)
+    domain: Mapped[str] = mapped_column(String, primary_key=True, nullable=False)
+    verified_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
 # Lifetime invite counter per tenant. Incremented atomically on every
 # invite reservation; never decremented — removals do not free quota, so
 # loops of invite → remove → invite cannot bypass the trial cap.
@@ -6030,6 +6192,9 @@ class UserUsage(Base):
     input_tokens: Mapped[int] = mapped_column(BigInteger, nullable=False)
     output_tokens: Mapped[int] = mapped_column(BigInteger, nullable=False)
     cache_read_tokens: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=0
+    )
+    cache_creation_tokens: Mapped[int] = mapped_column(
         BigInteger, nullable=False, default=0
     )
     cost_cents: Mapped[float] = mapped_column(
@@ -6685,6 +6850,13 @@ class ScimUserMapping(Base):
     """Maps SCIM externalId from the IdP to an Onyx User."""
 
     __tablename__ = "scim_user_mapping"
+    __table_args__ = (
+        Index(
+            "uq_scim_user_mapping_scim_username_lower",
+            text("lower(scim_username)"),
+            unique=True,
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     external_id: Mapped[str | None] = mapped_column(

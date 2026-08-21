@@ -14,7 +14,7 @@ import {
   MCPOAuthProviderMode,
   MCPTransportType,
   MCPAuthTemplate,
-} from "@/lib/tools/interfaces";
+} from "@/lib/tools/types";
 import { parseErrorDetail } from "@/lib/fetcher";
 
 export interface ToolStatusUpdateRequest {
@@ -180,7 +180,7 @@ interface UpsertMCPServerResponse {
   oauth_token_endpoint?: string;
   oauth_scopes_override?: string[];
   oauth_additional_auth_params?: Record<string, string>;
-  is_authenticated: boolean;
+  no_user_authentication_required: boolean;
 }
 
 export async function upsertMCPServer(serverData: {
@@ -237,12 +237,34 @@ export async function upsertMCPServer(serverData: {
 
 // ── User-side connect flows (shared by chat and the Craft Apps page) ────────
 
-/** Start the OAuth flow for an MCP server; redirect the browser to the
- * returned URL. `returnPath` is where the callback lands the user. */
+export type MCPUserOAuthStartResponse =
+  | {
+      status: "authorization_required";
+      server_id: number;
+      authorization_url: string;
+      redirect_url: string;
+    }
+  | {
+      status: "already_authenticated";
+      server_id: number;
+      authorization_url: null;
+      redirect_url: string;
+    };
+
+export function getMCPUserOAuthNavigationUrl(
+  response: MCPUserOAuthStartResponse
+): string {
+  return response.status === "authorization_required"
+    ? response.authorization_url
+    : response.redirect_url;
+}
+
+/** Start OAuth or return the internal destination when already authenticated. */
 export async function startMCPUserOAuth(
   serverId: number,
-  returnPath: string
-): Promise<{ oauth_url: string }> {
+  returnPath: string,
+  options: { forceReauthentication?: boolean } = {}
+): Promise<MCPUserOAuthStartResponse> {
   const res = await fetch("/api/mcp/oauth/connect", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -250,6 +272,7 @@ export async function startMCPUserOAuth(
       server_id: serverId,
       return_path: returnPath,
       include_resource_param: true,
+      force_reauthentication: options.forceReauthentication ?? false,
     }),
   });
   if (!res.ok) {

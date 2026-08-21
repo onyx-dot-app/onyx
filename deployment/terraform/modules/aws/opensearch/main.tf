@@ -178,6 +178,15 @@ resource "aws_opensearch_domain" "main" {
   ]
 
   lifecycle {
+    # The master password is managed out-of-band (ESO / the app secret). AWS
+    # re-validates it on ANY domain update (even a tag change) and always shows it
+    # as a diff since it can't be read back — so Terraform re-sending it turns an
+    # unrelated tag update into a hard failure whenever the stored value doesn't
+    # meet OpenSearch's current complexity rules. Ignore it here; it's set on
+    # create and rotated externally thereafter.
+    ignore_changes = [
+      advanced_security_options[0].master_user_options[0].master_user_password,
+    ]
     precondition {
       condition     = !var.internal_user_database_enabled || var.master_user_name != null
       error_message = "master_user_name is required when internal_user_database_enabled is true."
@@ -226,4 +235,115 @@ resource "aws_cloudwatch_log_resource_policy" "opensearch" {
   count           = var.enable_logging ? 1 : 0
   policy_name     = "OpenSearchService-${var.name}-Search-logs"
   policy_document = data.aws_iam_policy_document.opensearch_log_policy[0].json
+}
+
+# ----------------------------------------------------------------------------
+# CloudWatch alarms (AWS/ES). Route to alarm_actions (SNS -> PagerDuty). These
+# cover the managed-domain clusters; clusters that run OpenSearch as an in-cluster
+# pod get their disk/pod failure modes from the kube-level PrometheusRules instead.
+# ----------------------------------------------------------------------------
+
+locals {
+  os_dimensions = {
+    DomainName = var.name
+    ClientId   = data.aws_caller_identity.current.account_id
+  }
+}
+
+# Red = one or more primary shards unallocated -> data unavailable. (Yellow is
+# structural on single-node domains and is intentionally NOT alarmed.)
+resource "aws_cloudwatch_metric_alarm" "cluster_status_red" {
+  alarm_name          = "${var.name}-cluster-status-red"
+  alarm_description   = "OpenSearch ${var.name} cluster status RED — data unavailable"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 1
+  metric_name         = "ClusterStatus.red"
+  namespace           = "AWS/ES"
+  period              = 60
+  statistic           = "Maximum"
+  threshold           = 1
+  treat_missing_data  = "missing"
+
+  alarm_actions = var.alarm_actions
+  ok_actions    = var.alarm_actions
+  dimensions    = local.os_dimensions
+  tags          = var.tags
+}
+
+# Writes blocked = the flood-stage / disk-full state that surfaces as
+# "IndexWriter is closed" and stalls indexing. Highest-value OpenSearch alarm.
+resource "aws_cloudwatch_metric_alarm" "cluster_index_writes_blocked" {
+  alarm_name          = "${var.name}-index-writes-blocked"
+  alarm_description   = "OpenSearch ${var.name} is blocking index writes (flood-stage / disk)"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 1
+  metric_name         = "ClusterIndexWritesBlocked"
+  namespace           = "AWS/ES"
+  period              = 60
+  statistic           = "Maximum"
+  threshold           = 1
+  treat_missing_data  = "missing"
+
+  alarm_actions = var.alarm_actions
+  ok_actions    = var.alarm_actions
+  dimensions    = local.os_dimensions
+  tags          = var.tags
+}
+
+# FreeStorageSpace is reported in MB (per node); Minimum catches the fullest node,
+# which is what trips the flood-stage write block above.
+resource "aws_cloudwatch_metric_alarm" "free_storage" {
+  alarm_name          = "${var.name}-free-storage"
+  alarm_description   = "OpenSearch ${var.name} free storage low"
+  comparison_operator = "LessThanThreshold"
+  evaluation_periods  = 3
+  metric_name         = "FreeStorageSpace"
+  namespace           = "AWS/ES"
+  period              = 300
+  statistic           = "Minimum"
+  threshold           = var.free_storage_threshold_mb != null ? var.free_storage_threshold_mb : var.ebs_volume_size * 1024 * 0.15
+  treat_missing_data  = "missing"
+
+  alarm_actions = var.alarm_actions
+  ok_actions    = var.alarm_actions
+  dimensions    = local.os_dimensions
+  tags          = var.tags
+}
+
+# Sustained JVM heap pressure -> GC thrash / node instability.
+resource "aws_cloudwatch_metric_alarm" "jvm_memory_pressure" {
+  alarm_name          = "${var.name}-jvm-memory-pressure"
+  alarm_description   = "OpenSearch ${var.name} JVM memory pressure high"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 3
+  metric_name         = "JVMMemoryPressure"
+  namespace           = "AWS/ES"
+  period              = 300
+  statistic           = "Maximum"
+  threshold           = var.jvm_memory_pressure_threshold_percent
+  treat_missing_data  = "missing"
+
+  alarm_actions = var.alarm_actions
+  ok_actions    = var.alarm_actions
+  dimensions    = local.os_dimensions
+  tags          = var.tags
+}
+
+# Fewer reachable nodes than provisioned = a node dropped out of the cluster.
+resource "aws_cloudwatch_metric_alarm" "nodes" {
+  alarm_name          = "${var.name}-nodes-low"
+  alarm_description   = "OpenSearch ${var.name} has fewer nodes than expected"
+  comparison_operator = "LessThanThreshold"
+  evaluation_periods  = 3
+  metric_name         = "Nodes"
+  namespace           = "AWS/ES"
+  period              = 300
+  statistic           = "Minimum"
+  threshold           = var.instance_count
+  treat_missing_data  = "missing"
+
+  alarm_actions = var.alarm_actions
+  ok_actions    = var.alarm_actions
+  dimensions    = local.os_dimensions
+  tags          = var.tags
 }

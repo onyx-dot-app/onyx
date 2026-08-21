@@ -12,6 +12,7 @@ version. A lost save means a concurrent writer won or the session ended, and
 the caller must not retry with the history it loaded.
 """
 
+from collections.abc import Collection
 from uuid import UUID
 
 from pydantic import BaseModel, TypeAdapter, ValidationError
@@ -87,6 +88,10 @@ def _context_key(chat_session_id: UUID) -> str:
     return f"{_KEY_PREFIX}:{chat_session_id}"
 
 
+def _stored_context(chat_session_id: UUID) -> bytes | None:
+    return get_redis_client().get(_context_key(chat_session_id))
+
+
 def _parse_version_prefix(raw: bytes) -> tuple[int, bytes | None]:
     """The value's version and JSON body, or (0, None) for a tombstone or a
     value this store did not write.
@@ -107,7 +112,7 @@ def load_incognito_context(chat_session_id: UUID) -> IncognitoContext:
     value expired, or its body failed to parse. The turn proceeds with whatever
     loads: missing context is degraded recall, never an error.
     """
-    raw = get_redis_client().get(_context_key(chat_session_id))
+    raw = _stored_context(chat_session_id)
     if raw is None:
         return IncognitoContext(version=0, messages=[])
 
@@ -184,10 +189,40 @@ def append_incognito_message(chat_session_id: UUID, message: ChatMessageSimple) 
         )
 
 
+def incognito_session_torn_down(chat_session_id: UUID) -> bool:
+    """Whether this session's teardown tombstone is still present.
+
+    A session holds no context until its first message, so absence is not an
+    answer. Callers deciding whether to accept new work must use this.
+    """
+    return _stored_context(chat_session_id) == _TOMBSTONE
+
+
+def incognito_sessions_ended(chat_session_ids: Collection[UUID]) -> set[UUID]:
+    """Which of these sessions have no live context, by teardown or by expiry.
+
+    One round trip for the whole batch. Duplicate ids collapse in the result.
+    """
+    # Materialized once: the ids and the values are zipped positionally, so a
+    # set argument must not be iterated twice.
+    session_ids = list(chat_session_ids)
+    values = get_redis_client().mget(
+        [_context_key(session_id) for session_id in session_ids]
+    )
+    return {
+        session_id
+        for session_id, raw in zip(session_ids, values, strict=True)
+        if raw is None or raw == _TOMBSTONE
+    }
+
+
 def incognito_session_ended(chat_session_id: UUID) -> bool:
-    """Whether the live context is gone, by teardown or by expiry."""
-    raw = get_redis_client().get(_context_key(chat_session_id))
-    return raw is None or raw == _TOMBSTONE
+    """Whether the live context is gone, by teardown or by expiry.
+
+    Absence counts, so a session that has not written its first message reads
+    as ended. Only for callers that have already ruled that out.
+    """
+    return bool(incognito_sessions_ended([chat_session_id]))
 
 
 def teardown_incognito_session(chat_session_id: UUID) -> None:

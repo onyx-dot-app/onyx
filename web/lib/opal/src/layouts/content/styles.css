@@ -59,6 +59,20 @@
   color: var(--content-foreground);
 }
 
+/* Status glyph against muted body text: the field-message pairing, where the
+   icon carries the state and the text stays secondary. */
+[data-content-color="muted-success"] {
+  --content-foreground: var(--text-03);
+  --content-foreground-icon: var(--status-success-05);
+  color: var(--content-foreground);
+}
+
+[data-content-color="muted-warning"] {
+  --content-foreground: var(--text-03);
+  --content-foreground-icon: var(--status-warning-05);
+  color: var(--content-foreground);
+}
+
 [data-content-color="interactive"] {
   color: inherit;
   --content-foreground-icon: var(--interactive-foreground-icon);

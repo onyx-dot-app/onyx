@@ -18,7 +18,7 @@ import {
   useInitialValues,
   buildValidationSchema,
   BaseLLMFormValues,
-  mergeFetchedModelConfigurations,
+  withFetchedModels,
 } from "@/sections/modals/languageModels/utils";
 import { submitProvider } from "@/sections/modals/languageModels/svc";
 import { LLMProviderConfiguredSource } from "@/lib/analytics/utils";
@@ -84,7 +84,7 @@ function PortkeyModalInternals({
   isOnboarding,
 }: PortkeyModalInternalsProps) {
   const formikProps = useFormikContext<PortkeyModalValues>();
-  const { setFieldValue, values } = formikProps;
+  const { setFieldValue, setValues, values } = formikProps;
 
   const mode =
     (values.custom_config?.[PORTKEY_API_MODE_KEY] as
@@ -110,10 +110,7 @@ function PortkeyModalInternals({
     if (error) {
       throw new Error(error);
     }
-    setFieldValue(
-      "model_configurations",
-      mergeFetchedModelConfigurations(models, values.model_configurations)
-    );
+    setValues(withFetchedModels(models));
   };
 
   // Refetch once on open so an edit's picker matches the "add" view.
@@ -129,10 +126,7 @@ function PortkeyModalInternals({
     })
       .then(({ models }) => {
         if (models.length > 0) {
-          setFieldValue(
-            "model_configurations",
-            mergeFetchedModelConfigurations(models, values.model_configurations)
-          );
+          setValues(withFetchedModels(models));
         }
       })
       .catch(() => undefined);

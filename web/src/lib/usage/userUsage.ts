@@ -4,11 +4,13 @@ import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { buildApiPath } from "@/lib/urlBuilder";
+import { formatDateForApiParam } from "@/lib/dateUtils";
 
 export interface UsageExportTotals {
   input_tokens: number;
   output_tokens: number;
   cache_read_tokens: number;
+  cache_creation_tokens: number;
   cost_cents: number;
 }
 
@@ -26,6 +28,7 @@ export interface UsageExportRecord {
   input_tokens: number;
   output_tokens: number;
   cache_read_tokens: number;
+  cache_creation_tokens: number;
   cost_cents: number;
 }
 
@@ -35,16 +38,10 @@ export interface UsageExportResponse {
   users: UsageExportUser[];
 }
 
-function formatDateParam(date: Date): string {
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${date.getFullYear()}-${month}-${day}`;
-}
-
 export function useUsageExport(range?: { from: Date; to: Date } | undefined) {
   const url = buildApiPath(SWR_KEYS.adminUsageExport, {
-    start: range?.from ? formatDateParam(range.from) : undefined,
-    end: range?.to ? formatDateParam(range.to) : undefined,
+    start: range?.from ? formatDateForApiParam(range.from) : undefined,
+    end: range?.to ? formatDateForApiParam(range.to) : undefined,
   });
   const { data, error, isLoading, mutate } = useSWR<UsageExportResponse>(
     url,

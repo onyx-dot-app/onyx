@@ -13,7 +13,7 @@ import type { TracingDisconnectTarget } from "@/lib/tracing/types";
 
 export interface TracingDisconnectModalProps {
   target: TracingDisconnectTarget;
-  onDisconnected: () => Promise<unknown>;
+  onDisconnected: () => Promise<void>;
 }
 
 export function TracingDisconnectModal({

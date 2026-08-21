@@ -11,8 +11,9 @@ import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { useConnectorStatus } from "@/lib/hooks";
 import { useDocumentSets } from "@/lib/hooks/useDocumentSets";
-import { useAgents } from "@/lib/agents/hooks";
+import { useAdminAgents } from "@/lib/agents/hooks";
 import { getSourceMetadata } from "@/lib/sources";
+import type { Agent } from "@/lib/agents/types";
 import type { ValidSources } from "@/lib/types";
 import ResourceContent from "@/views/admin/GroupsPage/SharedGroupResources/ResourceContent";
 import ResourcePopover from "@/views/admin/GroupsPage/SharedGroupResources/ResourcePopover";
@@ -25,11 +26,17 @@ interface SharedGroupResourcesProps {
   onDocSetIdsChange: (ids: number[]) => void;
   selectedAgentIds: number[];
   onAgentIdsChange: (ids: number[]) => void;
+  /** Already shared with this group; merged in so an agent the caller can't otherwise
+   *  see still renders as a chip. */
+  attachedAgents?: Agent[];
 }
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+// Stable identity for the default — an inline [] would re-run the merge every render.
+const NO_ATTACHED_AGENTS: Agent[] = [];
 
 function SharedBadge() {
   return (
@@ -86,13 +93,26 @@ function SharedGroupResources({
   onDocSetIdsChange,
   selectedAgentIds,
   onAgentIdsChange,
+  attachedAgents = NO_ATTACHED_AGENTS,
 }: SharedGroupResourcesProps) {
   const [connectorSearch, setConnectorSearch] = useState("");
   const [agentSearch, setAgentSearch] = useState("");
 
   const { data: connectors = [] } = useConnectorStatus();
   const { documentSets } = useDocumentSets();
-  const { agents } = useAgents();
+  // Admin list, not the chat list: a global holder gets every agent, a scoped manager
+  // only the ones they can edit. Built-ins are already public, so sharing one is a no-op.
+  const { agents: allAgents } = useAdminAgents();
+  const agents = useMemo(() => {
+    const shareable = allAgents.filter((agent) => !agent.builtin_persona);
+    const known = new Set(shareable.map((agent) => agent.id));
+    return [
+      ...shareable,
+      ...attachedAgents.filter(
+        (agent) => !known.has(agent.id) && !agent.builtin_persona
+      ),
+    ];
+  }, [allAgents, attachedAgents]);
 
   // --- Derived data ---
 
@@ -133,6 +153,7 @@ function SharedGroupResources({
         const isSelected = selectedCcPairSet.has(p.cc_pair_id);
         return {
           key: `c-${p.cc_pair_id}`,
+          label: p.name ?? `Connector #${p.cc_pair_id}`,
           disabled: isSelected,
           onSelect: () =>
             isSelected
@@ -142,7 +163,7 @@ function SharedGroupResources({
               : onCcPairIdsChange([...selectedCcPairIds, p.cc_pair_id]),
           render: (dimmed: boolean) => (
             <LineItem
-              interactive={!dimmed}
+              interactive={false}
               muted={dimmed}
               icon={getSourceMetadata(p.connector.source).icon}
               strokeIcon={false}
@@ -162,6 +183,7 @@ function SharedGroupResources({
         const isSelected = selectedDocSetSet.has(ds.id);
         return {
           key: `d-${ds.id}`,
+          label: ds.name,
           disabled: isSelected,
           onSelect: () =>
             isSelected
@@ -171,7 +193,7 @@ function SharedGroupResources({
               : onDocSetIdsChange([...selectedDocSetIds, ds.id]),
           render: (dimmed: boolean) => (
             <LineItem
-              interactive={!dimmed}
+              interactive={false}
               muted={dimmed}
               icon={SvgFiles}
               rightChildren={
@@ -213,6 +235,7 @@ function SharedGroupResources({
         const isSelected = selectedAgentSet.has(a.id);
         return {
           key: `a-${a.id}`,
+          label: a.name,
           disabled: isSelected,
           onSelect: () =>
             isSelected
@@ -220,7 +243,7 @@ function SharedGroupResources({
               : onAgentIdsChange([...selectedAgentIds, a.id]),
           render: (dimmed: boolean) => (
             <LineItem
-              interactive={!dimmed}
+              interactive={false}
               muted={dimmed}
               icon={(_props) => <AgentAvatar agent={a} size={16} />}
               description="agent"

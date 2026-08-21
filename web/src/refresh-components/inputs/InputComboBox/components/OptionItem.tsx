@@ -1,5 +1,5 @@
 import React from "react";
-import { cn } from "@opal/utils";
+import { cn, clickOnKeyDown } from "@opal/utils";
 import { ComboBoxOption } from "../types";
 import { sanitizeOptionId } from "../utils/aria";
 
@@ -66,12 +66,14 @@ export const OptionItem = React.memo(
         id={`${fieldId}-option-${sanitizeOptionId(option.value)}`}
         data-index={index}
         role="option"
+        tabIndex={-1}
         aria-selected={isSelected}
         aria-disabled={option.disabled}
         onClick={(e) => {
           e.stopPropagation();
           onSelect(option);
         }}
+        onKeyDown={clickOnKeyDown(() => onSelect(option))}
         onMouseDown={(e) => {
           e.preventDefault();
         }}

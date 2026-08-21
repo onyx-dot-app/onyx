@@ -1,3 +1,46 @@
+# Installing the chart
+
+## Helm repository (default)
+
+```bash
+helm repo add onyx https://onyx-dot-app.github.io/onyx
+helm repo update
+helm install onyx onyx/onyx -n onyx --create-namespace
+```
+
+Chart tarballs are attached to GitHub releases named `helm/onyx-<version>`, and
+`index.yaml` on the `gh-pages` branch points at them. This is an implementation
+detail: the repository URL above does not change and `helm repo add`,
+`helm search repo` and `helm upgrade` all work as before.
+
+## OCI registry (alternative)
+
+The same chart is published to GHCR:
+
+```bash
+helm install onyx oci://ghcr.io/onyx-dot-app/charts/onyx \
+  --version 0.8.16 -n onyx --create-namespace
+```
+
+`helm repo add` does not accept `oci://` URLs, so an OCI install needs an
+explicit `--version`. There is no `helm repo update` or `helm search repo` for
+OCI and no helm command that lists the available versions. Read them from the
+`helm/onyx-<version>` [releases](https://github.com/onyx-dot-app/onyx/releases)
+or from the Helm repository index:
+
+```bash
+helm search repo onyx/onyx --versions   # needs `helm repo add` from above
+```
+
+To inspect one version before installing it:
+
+```bash
+helm show chart oci://ghcr.io/onyx-dot-app/charts/onyx --version 0.8.16
+```
+
+Both channels ship identical bytes from the same build. Use the Helm repository
+unless you specifically need OCI.
+
 # Recent chart changes (0.5.0)
 
 If you are upgrading from an earlier 0.4.x release, **read [MIGRATION.md](./MIGRATION.md) first.** The 0.5.0 release dropped the bundled Vespa subchart; chart 0.5.6 ships a guard that fails `helm upgrade` if the legacy `da-vespa` StatefulSet is still in the namespace so you don't lose the indexed data silently.

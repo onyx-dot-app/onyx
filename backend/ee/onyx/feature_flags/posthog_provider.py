@@ -55,3 +55,24 @@ class PostHogFeatureFlagProvider(FeatureFlagProvider):
                 "Error checking feature flag %s for user %s: %s", flag_key, user_id, e
             )
             return False
+
+    def feature_variant_for_tenant(
+        self, flag_key: str, tenant_id: str
+    ) -> str | bool | None:
+        if not posthog:
+            return None
+
+        try:
+            return posthog.get_feature_flag(
+                flag_key,
+                tenant_id,
+                person_properties={"tenant_id": tenant_id},
+            )
+        except Exception as e:
+            logger.error(
+                "Error fetching feature flag variant %s for tenant %s: %s",
+                flag_key,
+                tenant_id,
+                e,
+            )
+            return None

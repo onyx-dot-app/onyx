@@ -132,8 +132,7 @@ def collect_control_plane_data() -> list[dict[str, Any]]:
     control_plane_data = []
     with open("control_plane_data.csv", "r", newline="", encoding="utf-8") as csvfile:
         reader = csv.DictReader(csvfile)
-        for row in reader:
-            control_plane_data.append(row)
+        control_plane_data.extend(reader)
 
     return control_plane_data
 

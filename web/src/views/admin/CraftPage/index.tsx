@@ -29,9 +29,9 @@ import { useSettings } from "@/lib/settings/hooks";
 import { toSettings } from "@/lib/settings/types";
 import { updateAdminSettings } from "@/lib/settings/svc";
 import useAdminUsers from "@/hooks/useAdminUsers";
-import { USER_ROLE_LABELS } from "@/lib/types";
 import type { User } from "@/lib/types";
 import type { UserRow } from "@/views/admin/UsersPage/interfaces";
+import GroupsCell from "@/views/admin/UsersPage/GroupsCell";
 import AccessCell from "./AccessCell";
 
 const PAGE_SIZE = 10;
@@ -69,13 +69,12 @@ function buildColumns(defaultEnabled: boolean, onMutate: () => void) {
         />
       ),
     }),
-    tc.column("role", {
-      header: "Role",
+    tc.column("groups", {
+      header: "Groups",
       weight: 24,
-      cell: (role) => (
-        <Text as="span" secondaryBody text03>
-          {role ? (USER_ROLE_LABELS[role] ?? role) : "—"}
-        </Text>
+      enableSorting: false,
+      cell: (value, row) => (
+        <GroupsCell groups={value} user={row} onMutate={onMutate} />
       ),
     }),
     tc.column("craft_enabled", {

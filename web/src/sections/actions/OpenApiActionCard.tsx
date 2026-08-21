@@ -6,10 +6,11 @@ import ActionCard from "@/sections/actions/ActionCard";
 import Actions from "@/sections/actions/Actions";
 import ToolsList from "@/sections/actions/ToolsList";
 import { useCreateModal } from "@opal/components";
-import { ToolSnapshot, ActionStatus, MethodSpec } from "@/lib/tools/interfaces";
+import { ToolSnapshot, ActionStatus, MethodSpec } from "@/lib/tools/types";
 import ToolItem from "@/sections/actions/ToolItem";
 import { extractMethodSpecsFromDefinition } from "@/lib/tools/openApiService";
 import { updateToolStatus } from "@/lib/tools/mcpService";
+import { can } from "@/lib/permissions/resource-actions";
 import { SvgServer, SvgTrash } from "@opal/icons";
 import { ConfirmationModalLayout as Modal } from "@opal/layouts";
 import { Button } from "@opal/components";
@@ -22,7 +23,7 @@ export interface OpenApiActionCardProps {
   onManage?: (tool: ToolSnapshot) => void;
   onDelete?: (tool: ToolSnapshot) => Promise<void> | void;
   onRename?: (toolId: number, newName: string) => Promise<void>;
-  mutateOpenApiTools: () => Promise<unknown> | void;
+  mutateOpenApiTools: () => Promise<void> | void;
   onOpenDisconnectModal?: (tool: ToolSnapshot) => void;
 }
 
@@ -39,6 +40,13 @@ export default function OpenApiActionCard({
   const [searchQuery, setSearchQuery] = useState("");
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const deleteModal = useCreateModal();
+
+  const canEdit = can(tool, "edit");
+  const canDelete = can(tool, "delete");
+  const canToggle = can(tool, "toggle");
+  // Authenticate manages the OAuth config (owner-or-admin) — gate on the server capability,
+  // not canEdit, so a scoped non-owner isn't shown a 403 button.
+  const canAuthenticate = can(tool, "authenticate");
 
   const methodSpecs = useMemo<MethodSpec[]>(() => {
     try {
@@ -121,16 +129,24 @@ export default function OpenApiActionCard({
         toolCount={methodSpecs.length}
         isToolsExpanded={isToolsExpanded}
         onToggleTools={methodSpecs.length ? handleToggleTools : undefined}
-        onDisconnect={() => onOpenDisconnectModal?.(tool)}
-        onManage={onManage ? () => onManage(tool) : undefined}
-        onAuthenticate={() => {
-          onAuthenticate(tool);
-        }}
-        onReconnect={() => handleConnectionUpdate(true)}
-        onDelete={onDelete ? () => deleteModal.toggle(true) : undefined}
+        onDisconnect={
+          canToggle ? () => onOpenDisconnectModal?.(tool) : undefined
+        }
+        onManage={canEdit && onManage ? () => onManage(tool) : undefined}
+        onAuthenticate={
+          canAuthenticate ? () => onAuthenticate(tool) : undefined
+        }
+        onReconnect={canToggle ? () => handleConnectionUpdate(true) : undefined}
+        onDelete={
+          canDelete && onDelete ? () => deleteModal.toggle(true) : undefined
+        }
       />
     ),
     [
+      canAuthenticate,
+      canDelete,
+      canEdit,
+      canToggle,
       deleteModal,
       handleConnectionUpdate,
       handleToggleTools,
@@ -159,7 +175,7 @@ export default function OpenApiActionCard({
         icon={SvgServer}
         status={status}
         actions={actionsComponent}
-        onRename={handleRename}
+        onRename={canEdit ? handleRename : undefined}
         isExpanded={isToolsExpanded}
         onExpandedChange={setIsToolsExpanded}
         enableSearch={true}

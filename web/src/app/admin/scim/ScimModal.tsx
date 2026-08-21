@@ -2,6 +2,7 @@ import { SvgDownload, SvgKey, SvgRefreshCw } from "@opal/icons";
 import { Interactive, Hoverable } from "@opal/core";
 import { Section } from "@/layouts/general-layouts";
 import { Button, InputTextArea } from "@opal/components";
+import useFocusOnMount from "@opal/hooks/useFocusOnMount";
 import Text from "@/refresh-components/texts/Text";
 import { CopyButton } from "@opal/components";
 import { BasicModalFooter, Modal } from "@opal/components";
@@ -45,6 +46,8 @@ export default function ScimModal({
   onRegenerate,
   onClose,
 }: ScimModalProps) {
+  const focusOnMount = useFocusOnMount<HTMLElement>();
+
   switch (view.kind) {
     case "regenerate":
       return (
@@ -95,7 +98,10 @@ export default function ScimModal({
                       resizable={false}
                       rows={2}
                       rightSection={
-                        <div onClick={(e) => e.stopPropagation()}>
+                        <div
+                          role="presentation"
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           <Hoverable.Item
                             group="token"
                             variant="appear-on-hover"
@@ -126,7 +132,7 @@ export default function ScimModal({
                 }
                 submit={
                   <Button
-                    autoFocus
+                    ref={focusOnMount}
                     onClick={() => copyToClipboard(view.rawToken)}
                   >
                     Copy Token

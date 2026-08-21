@@ -718,8 +718,9 @@ class HubSpotConnector(LoadConnector, PollConnector):
             associated_notes = self._get_associated_notes(
                 api_client, ticket.id, "tickets"
             )
-            for note in associated_notes:
-                sections.append(self._create_object_section(note, "notes"))
+            sections.extend(
+                self._create_object_section(note, "notes") for note in associated_notes
+            )
 
             # Add association IDs to metadata
             if associated_contact_ids:
@@ -874,8 +875,9 @@ class HubSpotConnector(LoadConnector, PollConnector):
             associated_notes = self._get_associated_notes(
                 api_client, company.id, "companies"
             )
-            for note in associated_notes:
-                sections.append(self._create_object_section(note, "notes"))
+            sections.extend(
+                self._create_object_section(note, "notes") for note in associated_notes
+            )
 
             # Add association IDs to metadata
             if associated_contact_ids:
@@ -1028,8 +1030,9 @@ class HubSpotConnector(LoadConnector, PollConnector):
 
             # Get associated notes
             associated_notes = self._get_associated_notes(api_client, deal.id, "deals")
-            for note in associated_notes:
-                sections.append(self._create_object_section(note, "notes"))
+            sections.extend(
+                self._create_object_section(note, "notes") for note in associated_notes
+            )
 
             # Add association IDs to metadata
             if associated_contact_ids:
@@ -1202,8 +1205,9 @@ class HubSpotConnector(LoadConnector, PollConnector):
             associated_notes = self._get_associated_notes(
                 api_client, contact.id, "contacts"
             )
-            for note in associated_notes:
-                sections.append(self._create_object_section(note, "notes"))
+            sections.extend(
+                self._create_object_section(note, "notes") for note in associated_notes
+            )
 
             # Add association IDs to metadata
             if associated_company_ids:

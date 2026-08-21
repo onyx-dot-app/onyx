@@ -65,12 +65,12 @@ import {
 import { Modal } from "@opal/components";
 import GenericConfirmModal from "@/sections/modals/GenericConfirmModal";
 import { Switch } from "@opal/components";
-import { useMcpServersForAgentEditor } from "@/lib/agents/hooks";
+import { useMcpServers } from "@/lib/tools/hooks";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
 import { Disabled, Hoverable } from "@opal/core";
 import useFilter from "@/hooks/useFilter";
-import { MCPServer } from "@/lib/tools/interfaces";
+import { MCPServer } from "@/lib/tools/types";
 import type { IconProps } from "@opal/types";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
@@ -114,7 +114,7 @@ function MCPServerCard({
 
   const allToolIds = tools.map((t) => t.id);
   const serverEnabled = tools.some((t) => isToolEnabled(t.id));
-  const needsAuth = !server.is_authenticated;
+  const needsAuth = !server.user_can_authenticate;
   const authTooltip = needsAuth
     ? "Authenticate this MCP server before enabling its tools."
     : undefined;
@@ -794,7 +794,7 @@ export default function ChatPreferencesPage() {
   const uniqueSources = Array.from(new Set(ccPairs.map((p) => p.source)));
 
   // MCP servers and OpenAPI tools
-  const { mcpData } = useMcpServersForAgentEditor();
+  const { mcpData } = useMcpServers();
   const { openApiTools: openApiToolsRaw } = useOpenApiTools();
   const mcpServers = mcpData?.mcp_servers ?? [];
   const openApiTools = openApiToolsRaw ?? [];
@@ -1018,6 +1018,21 @@ export default function ChatPreferencesPage() {
                   onCheckedChange={(checked) => {
                     void saveSettings({
                       temperature_override_enabled: checked,
+                    });
+                  }}
+                />
+              </InputHorizontal>
+              <InputHorizontal
+                title="Reasoning Control"
+                description="Let users adjust how much reasoning the model performs before answering, from the model picker in chat."
+                withLabel
+              >
+                <Switch
+                  id="reasoning_override_enabled"
+                  checked={s.reasoning_override_enabled ?? true}
+                  onCheckedChange={(checked) => {
+                    void saveSettings({
+                      reasoning_override_enabled: checked,
                     });
                   }}
                 />
@@ -1495,8 +1510,8 @@ export default function ChatPreferencesPage() {
                     </InputHorizontal>
 
                     <InputHorizontal
-                      title="Always Start with an Agent"
-                      description="This removes the default chat. Users will always start in an agent, and new chats will be created in their last active agent. Set featured agents to help new users get started."
+                      title="Disable Default Chat"
+                      description="This forces users to always start in an agent. New chats will be created in their first pinned agent. Set featured agents to help new users get started."
                       withLabel
                     >
                       <Switch

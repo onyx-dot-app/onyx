@@ -103,7 +103,13 @@ Each sandbox includes an OpenCode agent configured with:
 - **LLM Provider**: Anthropic, OpenAI, Google, Bedrock, or Azure
 - **Extended thinking**: High reasoning effort / thinking budgets for complex tasks
 - **Tool permissions**: File operations, bash commands, web access
-- **Disabled tools**: Configurable via `OPENCODE_DISABLED_TOOLS` env var
+- **Disabled tools**: Resolved deployment-wide (not per-user) via the
+  `onyx-craft-opencode-disabled-tools` PostHog multivariate flag, keyed on
+  tenant_id so every user in a deployment gets the same answer (each variant
+  key maps to a fixed tools list in `OPENCODE_DISABLED_TOOLS_VARIANTS`),
+  falling back to the `OPENCODE_DISABLED_TOOLS` env var when PostHog is
+  unavailable or the variant is unset/unrecognized — see
+  `get_opencode_disabled_tools()` in `../utils.py`
 
 Configuration is generated dynamically in `util/opencode_config.py`.
 
@@ -144,6 +150,8 @@ Configuration is generated dynamically in `util/opencode_config.py`.
 SANDBOX_BACKEND=kubernetes|docker          # Default: kubernetes
 
 # OpenCode configuration
+# Fallback default when PostHog is unavailable or the
+# onyx-craft-opencode-disabled-tools flag's variant is unset/unrecognized.
 OPENCODE_DISABLED_TOOLS=question           # Comma-separated list, default: question
 ```
 

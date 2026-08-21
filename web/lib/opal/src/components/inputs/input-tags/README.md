@@ -25,6 +25,8 @@ Interaction model:
 | `disabled` | `boolean` | `false` | Dims the field, disables input, hides remove and clear buttons |
 | `icon` | `IconFunctionComponent` | — | Leading icon (24px container) |
 | `onClear` | `() => void` | — | Renders the clear action button |
+| `minRows` | `number` | `1` | Tag rows the field is tall enough to show before it grows. Rows pack from the top |
+| `focusOnMount` | `boolean` | `false` | Focuses the text input on mount |
 
 ### `TagItem`
 

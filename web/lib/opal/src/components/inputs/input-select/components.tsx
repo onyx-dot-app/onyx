@@ -499,6 +499,7 @@ function InputSelectSearch({
   return (
     <div
       ref={rowRef}
+      role="presentation"
       className="opal-input-select-search"
       // Mousedown must not reach Content, whose preventDefault would kill
       // caret placement and text selection in the input.

@@ -21,6 +21,14 @@ from onyx.utils.sensitive import make_mock_sensitive_value
 _ENV_DISCOVERY_URL = "https://idp.example.com/.well-known/openid-configuration"
 
 
+@pytest.fixture(autouse=True)
+def _stub_idp_url_guard(monkeypatch: pytest.MonkeyPatch) -> None:
+    """These tests mock httpx but not DNS, so the SSRF guard's real
+    getaddrinfo on the discovery host would stall a no-network CI runner.
+    Guard behavior is covered in test_sso_url_guard.py."""
+    monkeypatch.setattr(oauth_refresher, "validate_idp_url", lambda *_a, **_k: None)
+
+
 @pytest.fixture
 def legacy_env_mode(monkeypatch: pytest.MonkeyPatch) -> None:
     """No provider row resolves and the legacy env credentials are set."""

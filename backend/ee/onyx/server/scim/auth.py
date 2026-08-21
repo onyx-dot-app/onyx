@@ -9,7 +9,9 @@ Onyx UI. This module provides:
     and returns the raw value, its SHA-256 hash, and a display suffix.
 
 Token format: ``onyx_scim_<random>`` where ``<random>`` is 48 bytes of
-URL-safe base64 from ``secrets.token_urlsafe``.
+URL-safe base64 from ``secrets.token_urlsafe``. Under multi-tenancy the
+tenant is embedded as ``onyx_scim_<tenant>.<random>``, matching API keys and
+PATs — see ``generate_scim_token``.
 
 The hash is stored in the ``scim_token`` table; the raw value is shown to
 the admin exactly once at creation time.
@@ -17,14 +19,17 @@ the admin exactly once at creation time.
 
 import hashlib
 import secrets
+from urllib.parse import quote
 
 from fastapi import Depends, Request
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.scim import ScimDAL
+from onyx.auth.constants import SCIM_TOKEN_LENGTH, SCIM_TOKEN_PREFIX
 from onyx.auth.utils import get_hashed_bearer_token_from_request
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import ScimToken
+from shared_configs.configs import MULTI_TENANT
 
 
 class ScimAuthError(Exception):
@@ -41,23 +46,33 @@ class ScimAuthError(Exception):
         super().__init__(detail)
 
 
-SCIM_TOKEN_PREFIX = "onyx_scim_"
-SCIM_TOKEN_LENGTH = 48
-
-
 def _hash_scim_token(token: str) -> str:
     """SHA-256 hash a SCIM token. No salt needed — tokens are random."""
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
-def generate_scim_token() -> tuple[str, str, str]:
+def generate_scim_token(tenant_id: str | None = None) -> tuple[str, str, str]:
     """Generate a new SCIM bearer token.
+
+    Under multi-tenancy the tenant is embedded in the token as
+    ``onyx_scim_<tenant>.<random>``, the same shape API keys and PATs use
+    (``generate_api_key``). An IdP presents only this bearer token, so the
+    tenant-tracking middleware has nothing else to resolve the workspace
+    from; without it every SCIM request falls back to the default schema.
 
     Returns:
         A tuple of ``(raw_token, hashed_token, token_display)`` where
         ``token_display`` is a masked version showing only the last 4 chars.
     """
-    raw_token = SCIM_TOKEN_PREFIX + secrets.token_urlsafe(SCIM_TOKEN_LENGTH)
+    if not MULTI_TENANT or not tenant_id:
+        raw_token = SCIM_TOKEN_PREFIX + secrets.token_urlsafe(SCIM_TOKEN_LENGTH)
+    else:
+        encoded_tenant = quote(tenant_id)
+        raw_token = (
+            f"{SCIM_TOKEN_PREFIX}{encoded_tenant}."
+            f"{secrets.token_urlsafe(SCIM_TOKEN_LENGTH)}"
+        )
+
     hashed_token = _hash_scim_token(raw_token)
     token_display = SCIM_TOKEN_PREFIX + "****" + raw_token[-4:]
     return raw_token, hashed_token, token_display

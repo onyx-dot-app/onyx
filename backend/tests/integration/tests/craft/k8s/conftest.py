@@ -60,12 +60,6 @@ def _run_migrations() -> None:
 
 
 @pytest.fixture(scope="session", autouse=True)
-def _install_playwright() -> None:
-    """No-op override; this suite does not use browser automation."""
-    return None
-
-
-@pytest.fixture(scope="session", autouse=True)
 def initialize_db() -> None:
     """No-op override; sandbox fixtures initialize SQLAlchemy explicitly."""
     return None

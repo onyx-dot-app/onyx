@@ -719,6 +719,20 @@ export const useDocumentSidebarVisible = () =>
     return currentSession?.documentSidebarVisible || false;
   });
 
+/**
+ * The agent the open session was created with, from the session the backend
+ * actually returned. `useChatSessions` cannot answer this for every session:
+ * it pages 50 at a time, so an older chat is missing from its list.
+ */
+export const useCurrentSessionPersonaId = () =>
+  useChatSessionStore((state) => {
+    const { currentSessionId, sessions } = state;
+    const currentSession = currentSessionId
+      ? sessions.get(currentSessionId)
+      : null;
+    return currentSession?.personaId ?? null;
+  });
+
 export const useSelectedNodeForDocDisplay = () =>
   useChatSessionStore((state) => {
     const { currentSessionId, sessions } = state;

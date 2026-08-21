@@ -3,11 +3,13 @@ from uuid import uuid4
 
 import pytest
 from fastapi_users.password import PasswordHelper
+from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
 from onyx.db.enums import AccountType
-from onyx.db.models import User, UserRole
+from onyx.db.models import User, User__UserGroup
+from onyx.db.users import assign_user_to_default_groups__no_commit
 from onyx.file_store.file_store import get_default_file_store
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
@@ -59,11 +61,16 @@ def tenant_context() -> Generator[None, None, None]:
 def create_test_user(
     db_session: Session,
     email_prefix: str,
-    role: UserRole = UserRole.BASIC,
     account_type: AccountType = AccountType.STANDARD,
+    is_admin: bool = False,
+    assign_default_group: bool = True,
 ) -> User:
-    """Helper to create a test user with a unique email"""
-    # Use UUID to ensure unique email addresses
+    """Create a test user. Assigns the seeded Basic
+    (or Admin if is_admin=True) default group and populates
+    effective_permissions; skipped for BOT/EXT_PERM_USER/ANONYMOUS.
+
+    Pass assign_default_group=False for the group-less case — a service account
+    in no group is what the old LIMITED role described."""
     unique_email = f"{email_prefix}_{uuid4().hex[:8]}@example.com"
 
     password_helper = PasswordHelper()
@@ -77,13 +84,29 @@ def create_test_user(
         is_active=True,
         is_superuser=False,
         is_verified=True,
-        role=role,
         account_type=account_type,
     )
     db_session.add(user)
+    db_session.flush()
+
+    if assign_default_group:
+        assign_user_to_default_groups__no_commit(db_session, user, is_admin=is_admin)
+
     db_session.commit()
     db_session.refresh(user)
     return user
+
+
+def delete_test_user(db_session: Session, *users: User) -> None:
+    """Tear down users created by create_test_user. Clears default-group
+    membership first — user__user_group.user_id has no ON DELETE CASCADE, so a
+    bare delete(user) raises ForeignKeyViolation. Mirrors the production delete
+    path in onyx.db.users."""
+    user_ids = [user.id for user in users]
+    db_session.execute(
+        delete(User__UserGroup).where(User__UserGroup.user_id.in_(user_ids))
+    )
+    db_session.execute(delete(User).where(User.__table__.c.id.in_(user_ids)))
 
 
 @pytest.fixture(scope="module")

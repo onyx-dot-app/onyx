@@ -9,7 +9,7 @@ die before finishing finalizer processing, and namespace cleanup hangs.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: {{ include "onyx.fullname" . }}-pre-delete
+  name: {{ include "onyx.resourceName" (list . "pre-delete") }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
   annotations:
@@ -20,7 +20,7 @@ metadata:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: {{ include "onyx.fullname" . }}-pre-delete
+  name: {{ include "onyx.resourceName" (list . "pre-delete") }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
   annotations:
@@ -42,7 +42,7 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: {{ include "onyx.fullname" . }}-pre-delete
+  name: {{ include "onyx.resourceName" (list . "pre-delete") }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
   annotations:
@@ -52,16 +52,16 @@ metadata:
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: {{ include "onyx.fullname" . }}-pre-delete
+  name: {{ include "onyx.resourceName" (list . "pre-delete") }}
 subjects:
   - kind: ServiceAccount
-    name: {{ include "onyx.fullname" . }}-pre-delete
+    name: {{ include "onyx.resourceName" (list . "pre-delete") }}
     namespace: {{ .Release.Namespace }}
 ---
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: {{ include "onyx.fullname" . }}-pre-delete
+  name: {{ include "onyx.resourceName" (list . "pre-delete") }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
   annotations:
@@ -75,7 +75,7 @@ spec:
       labels:
         {{- include "onyx.selectorLabels" . | nindent 8 }}
     spec:
-      serviceAccountName: {{ include "onyx.fullname" . }}-pre-delete
+      serviceAccountName: {{ include "onyx.resourceName" (list . "pre-delete") }}
       restartPolicy: Never
       containers:
         - name: cleanup

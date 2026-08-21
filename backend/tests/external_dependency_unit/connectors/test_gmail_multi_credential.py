@@ -8,12 +8,11 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from onyx.auth.schemas import UserRole
 from onyx.configs.constants import DocumentSource
 from onyx.db.models import Credential, User
 from onyx.server.documents.credential import create_credential_from_model
 from onyx.server.documents.models import CredentialBase
-from tests.external_dependency_unit.conftest import create_test_user
+from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
 
 
 @dataclass
@@ -59,7 +58,7 @@ def created_gmail_credentials_cleanup(
     if state.user_id is not None:
         user = db_session.get(User, state.user_id)
         if user is not None:
-            db_session.delete(user)
+            delete_test_user(db_session, user)
 
     db_session.commit()
 
@@ -72,7 +71,7 @@ def test_second_gmail_credential_preserves_first(
     admin = create_test_user(
         db_session,
         "gmail_multi_credential_admin",
-        role=UserRole.ADMIN,
+        is_admin=True,
     )
     created_gmail_credentials_cleanup.user_id = admin.id
 

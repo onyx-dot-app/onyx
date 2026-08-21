@@ -1,6 +1,7 @@
 "use client";
 
 import { memo, useCallback } from "react";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import Text from "@/refresh-components/texts/Text";
 import Truncated from "@/refresh-components/texts/Truncated";
 import IconButton from "@/refresh-components/buttons/IconButton";
@@ -13,7 +14,7 @@ import {
   SvgServer,
   SvgSettings,
 } from "@opal/icons";
-import ModelIcon from "@/app/admin/configuration/language-models/ModelIcon";
+import { ModelIcon } from "@/lib/languageModels/components";
 
 export interface LLMProviderCardProps {
   title: string;
@@ -39,7 +40,7 @@ function LLMProviderCardInner({
 
     if (isConnected) {
       // If connected, redirect to admin page
-      window.location.href = "/admin/configuration/language-models";
+      window.location.href = ADMIN_ROUTES.LLM_MODELS.path;
       return;
     }
 
@@ -48,9 +49,7 @@ function LLMProviderCardInner({
   }, [disabled, isConnected, onClick]);
 
   const handleSettingsClick = useCallback(
-    noProp(
-      () => (window.location.href = "/admin/configuration/language-models")
-    ),
+    noProp(() => (window.location.href = ADMIN_ROUTES.LLM_MODELS.path)),
     []
   );
 

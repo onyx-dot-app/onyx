@@ -15,7 +15,7 @@ import {
   useInitialValues,
   buildValidationSchema,
   BaseLLMFormValues,
-  mergeFetchedModelConfigurations,
+  withFetchedModels,
 } from "@/sections/modals/languageModels/utils";
 import { submitProvider } from "@/sections/modals/languageModels/svc";
 import { LLMProviderConfiguredSource } from "@/lib/analytics/utils";
@@ -59,13 +59,7 @@ function NebiusTokenfactoryModalInternals({
     if (error) {
       throw new Error(error);
     }
-    formikProps.setFieldValue(
-      "model_configurations",
-      mergeFetchedModelConfigurations(
-        models,
-        formikProps.values.model_configurations
-      )
-    );
+    formikProps.setValues(withFetchedModels(models));
   };
 
   // When editing a saved provider, the models load from the DB without the
@@ -84,13 +78,7 @@ function NebiusTokenfactoryModalInternals({
     })
       .then(({ models }) => {
         if (models.length > 0) {
-          setFieldValue(
-            "model_configurations",
-            mergeFetchedModelConfigurations(
-              models,
-              formikProps.values.model_configurations
-            )
-          );
+          formikProps.setValues(withFetchedModels(models));
         }
       })
       .catch(() => undefined);

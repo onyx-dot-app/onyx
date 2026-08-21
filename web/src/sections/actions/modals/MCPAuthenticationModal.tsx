@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import useSWR, { KeyedMutator } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -32,9 +33,14 @@ import {
   MCPServer,
   MCPServersResponse,
   MCPAuthTemplate,
-} from "@/lib/tools/interfaces";
+} from "@/lib/tools/types";
 import { PerUserAuthConfig } from "@/sections/actions/PerUserAuthConfig";
-import { updateMCPServerStatus, upsertMCPServer } from "@/lib/tools/mcpService";
+import {
+  getMCPUserOAuthNavigationUrl,
+  MCPUserOAuthStartResponse,
+  updateMCPServerStatus,
+  upsertMCPServer,
+} from "@/lib/tools/mcpService";
 import { toast } from "@opal/layouts";
 import { SvgArrowExchange } from "@opal/icons";
 import { useOAuthPassThroughEnabled } from "@/lib/auth/hooks";
@@ -462,7 +468,7 @@ export default function MCPAuthenticationModal({
             oauth_client_id: values.oauth_client_id,
             oauth_client_secret: values.oauth_client_secret,
             ...oauthChangedFlags,
-            return_path: `/admin/actions/mcp/?server_id=${mcpServer.id}&trigger_fetch=true`,
+            return_path: `${ADMIN_ROUTES.MCP_ACTIONS.path}/?server_id=${mcpServer.id}&trigger_fetch=true`,
             include_resource_param: true,
           }),
         });
@@ -475,15 +481,16 @@ export default function MCPAuthenticationModal({
           throw new Error("Failed to initiate OAuth: " + error.detail);
         }
 
-        const { oauth_url } = await oauthResponse.json();
-        window.location.href = oauth_url;
+        const oauthStart: MCPUserOAuthStartResponse =
+          await oauthResponse.json();
+        window.location.href = getMCPUserOAuthNavigationUrl(oauthStart);
       } else {
         // For non-OAuth authentication, trigger tools fetch in-place (no hard navigation)
         if (onTriggerFetchTools) {
           onTriggerFetchTools(mcpServer.id);
         } else {
           // Fallback to previous behavior if parent didn't provide handler
-          window.location.href = `/admin/actions/mcp/?server_id=${mcpServer.id}&trigger_fetch=true`;
+          window.location.href = `${ADMIN_ROUTES.MCP_ACTIONS.path}/?server_id=${mcpServer.id}&trigger_fetch=true`;
         }
         toggle(false);
       }

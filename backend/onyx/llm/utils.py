@@ -20,6 +20,7 @@ from onyx.llm.interfaces import LLM, LLMUserIdentity
 from onyx.llm.model_capabilities import (
     get_max_input_tokens,
     litellm_thinks_model_supports_image_input,
+    model_identity_names,
 )
 from onyx.llm.model_response import ModelResponse
 from onyx.llm.models import LLMErrorInfo, UserMessage
@@ -28,6 +29,7 @@ from onyx.prompts.contextual_retrieval import (
     DOCUMENT_SUMMARY_TOKEN_ESTIMATE,
 )
 from onyx.utils.logger import setup_logger
+from onyx.utils.redaction import scrub_sensitive_values
 from shared_configs.configs import DOC_EMBEDDING_CONTEXT_SIZE
 
 if TYPE_CHECKING:
@@ -365,34 +367,6 @@ def is_sensitive_custom_config_key(key: str) -> bool:
     )
 
 
-_SCRUB_PLACEHOLDER = "[REDACTED]"
-
-
-def scrub_sensitive_values(message: str, secrets: Iterable[str | None]) -> str:
-    """Replace every literal secret in `message` with `[REDACTED]`.
-
-    Defense in depth on top of `litellm_exception_to_error_msg` — that helper
-    already maps known LiteLLM exception types to friendly messages and
-    swallows unknown ones, but a few branches (`RateLimitError`, `APIError`,
-    `ServiceUnavailableError`) still embed `str(core_exception)`. This pass
-    strips any credential we already know about before the message is surfaced
-    to a client.
-
-    Short / empty secrets are ignored so we don't accidentally eat common
-    substrings.
-    """
-    if not message:
-        return message
-
-    scrubbed = message
-    for secret in secrets:
-        if not secret or len(secret) < 3:
-            continue
-        scrubbed = scrubbed.replace(secret, _SCRUB_PLACEHOLDER)
-
-    return scrubbed
-
-
 def collect_credential_values(
     api_key: str | None, custom_config: dict[str, str] | None
 ) -> list[str]:
@@ -567,8 +541,13 @@ def get_max_input_tokens_from_llm_provider(
     )
 
 
-def model_supports_image_input(model_name: str, model_provider: str) -> bool:
-    # First, try to read an explicit configuration from the model_configuration table
+def model_supports_image_input(
+    model_name: str,
+    model_provider: str,
+    deployment_name: str | None = None,
+) -> bool:
+    # First, try to read an explicit configuration from the model_configuration
+    # table, keyed by the admin's configured row name (not the deployment alias).
     try:
         with get_session_with_current_tenant() as db_session:
             model_config = db_session.scalar(
@@ -595,11 +574,18 @@ def model_supports_image_input(model_name: str, model_provider: str) -> bool:
             e,
         )
 
-    # Fallback to looking up the model in the litellm model_cost dict
-    return litellm_thinks_model_supports_image_input(model_name, model_provider)
+    # Fallback to looking up the model in the litellm model_cost dict. A
+    # custom provider (e.g. Azure AI Foundry) may carry the real model
+    # identity only in the deployment alias.
+    return any(
+        litellm_thinks_model_supports_image_input(name, model_provider)
+        for name in model_identity_names(model_name, deployment_name)
+    )
 
 
-def model_needs_formatting_reenabled(model_name: str) -> bool:
+def model_needs_formatting_reenabled(
+    model_name: str, deployment_name: str | None = None
+) -> bool:
     # See https://simonwillison.net/tags/markdown/ for context on why this is needed
     # for OpenAI reasoning models to have correct markdown generation
 
@@ -614,7 +600,7 @@ def model_needs_formatting_reenabled(model_name: str) -> bool:
         + r")(?:$|[\s\-/])"
     )
 
-    if re.search(pattern, model_name):
-        return True
-
-    return False
+    return any(
+        re.search(pattern, name)
+        for name in model_identity_names(model_name, deployment_name)
+    )

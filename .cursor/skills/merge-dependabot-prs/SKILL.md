@@ -9,11 +9,11 @@ description: >
   Use when the user asks to merge, clean up, clear out, or land Dependabot (or
   similar bot-authored) PRs.
 license: MIT
-compatibility: Requires git, pre-commit, uv, bun, and gh (GitHub CLI) authenticated with write access to onyx-dot-app/onyx.
+compatibility: Requires git, pre-commit, uv, bun, ods (the repo venv's devtools script), and gh (GitHub CLI) authenticated with write access to onyx-dot-app/onyx.
 metadata:
   author: jmelahman
-  version: "1.0"
-allowed-tools: Bash(gh:*), Bash(git:*), Bash(pre-commit:*), Bash(bun install:*)
+  version: "1.1"
+allowed-tools: Bash(gh:*), Bash(git:*), Bash(pre-commit:*), Bash(bun install:*), Bash(ods audit:*)
 ---
 
 # Merge Dependabot PRs
@@ -58,9 +58,18 @@ same package, or a manual bump PR overlapping a bot one.
 ## 2. Triage into buckets, confirm the plan
 
 These PRs aren't in a rush. Wait for every check to complete — required and
-advisory alike (e.g. `storybook-build` on `web/**` changes, which never gates
-the queue but pages Slack if broken post-merge) — and treat any red check as
-a failure to classify, never as noise to skip.
+advisory alike — and treat any red check as a failure to classify, never as
+noise to skip. Two advisory checks matter here even though the queue ignores
+them:
+
+- `storybook-build` (`pr-storybook-build.yml`) on `web/**` changes — never
+  gates the queue, but pages Slack if broken post-merge.
+- `audit` (`audit.yml`) — runs on every lockfile, `pyproject.toml`,
+  `.github/workflows/**`, and `tools/ods/**` change, so it runs on almost every
+  Dependabot PR. Treat it as **required for this skill**: a Dependabot PR does
+  not get enqueued while `audit` is red. A red `audit` means the bump either
+  pulled in a vulnerable version or landed next to one, and merging it ships
+  the finding.
 
 - **Green & ready** — every check completed and passing, advisory included.
 - **Failing — mechanical** — only a generated/lock file wasn't regenerated
@@ -80,7 +89,29 @@ in per PR.
 
 Summarize buckets and proposed actions, confirm with `AskUserQuestion`, then act.
 
-## 3. Green: approve and enqueue
+## 3. Green: audit, approve, enqueue
+
+Run `ods audit` on the PR's code before you enqueue it. CI's `audit` job covers
+this, but it is skipped when the PR touches no audited path, and it is advisory
+in the queue — so confirm it yourself for every Dependabot PR.
+
+```bash
+gh pr checkout <pr>
+source .venv/bin/activate   # ods ships in the repo venv
+ods audit --fail-on=critical
+```
+
+`ods audit` scans `bun.lock` and `uv.lock` plus open Dependabot alerts, and
+exits non-zero on an unignored finding at or above `--fail-on`
+([tools/ods/README.md](../../../tools/ods/README.md)). It reads the **working
+tree**, so the PR branch must be checked out — a run on `main` says nothing
+about the bump.
+
+**If it exits non-zero, STOP.** Don't enqueue and don't try to work out whether
+the finding came from this bump or was already on `main`. Report the advisory ids
+and let the user say how to proceed.
+
+Then, once clean:
 
 ```bash
 gh pr review <pr> --approve

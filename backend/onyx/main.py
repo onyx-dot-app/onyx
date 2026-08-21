@@ -159,6 +159,7 @@ from onyx.server.saml_multi import router as saml_multi_router
 from onyx.server.security.api import admin_router as security_admin_router
 from onyx.server.settings.api import admin_router as settings_admin_router
 from onyx.server.settings.api import basic_router as settings_router
+from onyx.server.sso_discovery import router as sso_discovery_router
 from onyx.server.utils import BasicAuthenticationError
 from onyx.setup import setup_multitenant_onyx, setup_onyx
 from onyx.tracing.setup import setup_tracing
@@ -694,6 +695,13 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_auth_router_with_prefix(
         application,
         oidc_multi_router,
+    )
+
+    # Resolves which workspace's providers to offer before any of the above can
+    # run. Mounted unconditionally: single-tenant answers from its one schema.
+    include_auth_router_with_prefix(
+        application,
+        sso_discovery_router,
     )
 
     include_auth_router_with_prefix(

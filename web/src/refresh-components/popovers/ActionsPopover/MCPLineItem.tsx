@@ -5,7 +5,7 @@ import {
   MCPAuthenticationType,
   MCPAuthenticationPerformer,
   ToolSnapshot,
-} from "@/lib/tools/interfaces";
+} from "@/lib/tools/types";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { noProp } from "@/lib/utils";
 import { cn } from "@opal/utils";
@@ -28,8 +28,7 @@ export interface MCPServer {
   server_url: string;
   auth_type: MCPAuthenticationType;
   auth_performer: MCPAuthenticationPerformer;
-  is_authenticated: boolean;
-  user_authenticated?: boolean;
+  user_can_authenticate?: boolean;
   auth_template?: any;
   user_credentials?: Record<string, string>;
 }

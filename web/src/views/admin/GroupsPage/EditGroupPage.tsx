@@ -4,7 +4,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import useSWR, { useSWRConfig } from "swr";
 import useGroupMemberCandidates from "./useGroupMemberCandidates";
-import { Button, Card, Divider, Switch, Table } from "@opal/components";
+import {
+  Button,
+  Card,
+  Divider,
+  MessageCard,
+  Switch,
+  Table,
+} from "@opal/components";
 import { IllustrationContent, InputHorizontal, toast } from "@opal/layouts";
 import {
   SvgUsers,
@@ -12,6 +19,7 @@ import {
   SvgMinusCircle,
   SvgPlusCircle,
   SvgSimpleLoader,
+  SvgUserShield,
 } from "@opal/icons";
 import { markdown } from "@opal/utils";
 import IconButton from "@/refresh-components/buttons/IconButton";
@@ -22,12 +30,14 @@ import { InputTypeIn } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import { errorHandlingFetcher, skipRetryOnAuthError } from "@/lib/fetcher";
+import { AccountType } from "@/lib/types";
 import type { SecuritySettings, UserGroup } from "@/lib/types";
+import { useUser } from "@/providers/UserProvider";
 import { useSettings } from "@/lib/settings/hooks";
 import { Tier } from "@/lib/settings/types";
 import { tierAtLeast } from "@/lib/tiers";
 import type { MemberRow, TokenRateLimitDisplay } from "./interfaces";
-import { baseColumns, memberTableColumns, tc, PAGE_SIZE } from "./shared";
+import { makeBaseColumns, memberTableColumns, tc, PAGE_SIZE } from "./shared";
 import {
   renameGroup,
   updateGroup,
@@ -36,11 +46,16 @@ import {
   updateAgentGroupSharing,
   updateDocSetGroupSharing,
   saveTokenLimits,
+  saveGroupPermissions,
+  setGroupManager,
+  refreshGroupLists,
 } from "./svc";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import SharedGroupResources from "@/views/admin/GroupsPage/SharedGroupResources";
+import GroupPermissionsSection from "./GroupPermissionsSection";
 import TokenLimitSection from "./TokenLimitSection";
 import type { TokenLimit } from "./TokenLimitSection";
+import { can } from "@/lib/permissions/resource-actions";
 
 const HOURS_PER_DAY = 24;
 const addModeColumns = memberTableColumns;
@@ -57,6 +72,8 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
   const router = useRouter();
   const { mutate } = useSWRConfig();
   const settings = useSettings();
+  const { user } = useUser();
+  const currentUserId = user?.id;
   const isEnterpriseTier = tierAtLeast(settings.tier, Tier.ENTERPRISE);
   const tokenLimitsDisabledTooltip = markdown(
     "Token rate limits are available on the [Enterprise version of Onyx](/admin/billing) only."
@@ -68,28 +85,48 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
     data: groups,
     isLoading: groupLoading,
     error: groupError,
-  } = useSWR<UserGroup[]>(SWR_KEYS.adminUserGroups, errorHandlingFetcher, {
-    refreshInterval: (latestData) => {
-      const g = latestData?.find((g) => g.id === groupId);
-      return g && !g.is_up_to_date ? 5000 : 0;
-    },
-  });
+  } = useSWR<UserGroup[]>(
+    SWR_KEYS.adminUserGroupsWithDefault,
+    errorHandlingFetcher,
+    {
+      refreshInterval: (latestData) => {
+        const g = latestData?.find((g) => g.id === groupId);
+        return g && !g.is_up_to_date ? 5000 : 0;
+      },
+    }
+  );
 
   const group = useMemo(
     () => groups?.find((g) => g.id === groupId) ?? null,
     [groups, groupId]
   );
 
+  const canManage = can(group, "manage");
+  const canManageMembers = can(group, "manage_members");
+  const canDelete = can(group, "delete");
+  const canEditPermissions = can(group, "edit_permissions");
+  const canEditTokenLimits = can(group, "edit_token_limits");
+  const isDefaultGroup = group?.is_default ?? false;
+
   const isSyncing = group != null && !group.is_up_to_date;
 
-  // Fetch token rate limits for this group. Skip retry on tier-gated 402
-  // (BUSINESS-tier tenants don't have access) so SWR doesn't churn the form
-  // by repeatedly flipping its isLoading state.
+  // Gate on edit_token_limits so a non-manager (who'd 403 on the read) skips the fetch.
+  // Skip retry on tier-gated 402 so SWR doesn't churn isLoading.
   const { data: tokenRateLimits, isLoading: tokenLimitsLoading } = useSWR<
     TokenRateLimitDisplay[]
-  >(SWR_KEYS.userGroupTokenRateLimit(groupId), errorHandlingFetcher, {
-    onErrorRetry: skipRetryOnAuthError,
-  });
+  >(
+    canEditTokenLimits ? SWR_KEYS.userGroupTokenRateLimit(groupId) : null,
+    errorHandlingFetcher,
+    { onErrorRetry: skipRetryOnAuthError }
+  );
+
+  // Fetch permissions for this group (admin only)
+  const { data: groupPermissions, isLoading: permissionsLoading } = useSWR<
+    string[]
+  >(
+    canEditPermissions ? SWR_KEYS.userGroupPermissions(groupId) : null,
+    errorHandlingFetcher
+  );
 
   // The flag only does anything under designated-groups availability, so the
   // field stays off the page entirely elsewhere. Curators get a 403 reading
@@ -120,6 +157,9 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
       costBudgetDollars: null,
     },
   ]);
+  const [enabledPermissions, setEnabledPermissions] = useState<Set<string>>(
+    new Set()
+  );
   const [incognitoEnabled, setIncognitoEnabled] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -135,7 +175,11 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
     error: candidatesError,
   } = useGroupMemberCandidates();
 
-  const isLoading = groupLoading || candidatesLoading || tokenLimitsLoading;
+  const isLoading =
+    groupLoading ||
+    candidatesLoading ||
+    tokenLimitsLoading ||
+    permissionsLoading;
   const error = groupError ?? candidatesError;
 
   // Pre-populate form when group data loads
@@ -155,21 +199,35 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
     }
   }, [group, initialized]);
 
-  // Pre-populate token limits when fetched
+  // Pre-populate token limits once. Re-seeding on later revalidations (focus,
+  // reconnect, a concurrent edit) would silently discard unsaved edits.
+  const tokenLimitsSeededRef = useRef(false);
   useEffect(() => {
-    if (tokenRateLimits && tokenRateLimits.length > 0) {
-      setTokenLimits(
-        tokenRateLimits.map((trl) => ({
-          tokenId: trl.token_id,
-          enabled: trl.enabled,
-          tokenBudget: trl.token_budget,
-          periodDays: trl.period_hours / HOURS_PER_DAY,
-          costBudgetDollars:
-            trl.cost_budget_cents != null ? trl.cost_budget_cents / 100 : null,
-        }))
-      );
-    }
+    if (!tokenRateLimits || tokenLimitsSeededRef.current) return;
+    tokenLimitsSeededRef.current = true;
+    // No saved limits — keep the blank starter row.
+    if (tokenRateLimits.length === 0) return;
+    setTokenLimits(
+      tokenRateLimits.map((trl) => ({
+        tokenId: trl.token_id,
+        enabled: trl.enabled,
+        tokenBudget: trl.token_budget,
+        periodDays: trl.period_hours / HOURS_PER_DAY,
+        costBudgetDollars:
+          trl.cost_budget_cents != null ? trl.cost_budget_cents / 100 : null,
+      }))
+    );
   }, [tokenRateLimits]);
+
+  // Pre-populate permissions once. Re-seeding on later revalidations (focus,
+  // reconnect, a concurrent edit) would silently discard unsaved toggles.
+  const permissionsSeededRef = useRef(false);
+  useEffect(() => {
+    if (groupPermissions && !permissionsSeededRef.current) {
+      permissionsSeededRef.current = true;
+      setEnabledPermissions(new Set(groupPermissions));
+    }
+  }, [groupPermissions]);
 
   const memberRows = useMemo(() => {
     const selected = new Set(selectedUserIds);
@@ -186,25 +244,128 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
     setSelectedUserIds((prev) => prev.filter((id) => id !== userId));
   }, []);
 
+  const managerIds = useMemo(() => new Set(group?.manager_ids ?? []), [group]);
+  // Manager must be a saved member (can't assign one that isn't persisted yet).
+  const persistedMemberIds = useMemo(
+    () => new Set(group?.users.map((u) => u.id) ?? []),
+    [group]
+  );
+  const [pendingManagerIds, setPendingManagerIds] = useState<Set<string>>(
+    () => new Set()
+  );
+
+  const isOwnManagerRow = useCallback(
+    (userId: string) =>
+      currentUserId != null &&
+      userId === currentUserId &&
+      (managerIds.has(userId) || pendingManagerIds.has(userId)),
+    [currentUserId, managerIds, pendingManagerIds]
+  );
+
+  // Mirrors the backend guard. Persisted only — dropping an unsaved add strands nobody.
+  const isLastGroupMember = useCallback(
+    (row: MemberRow) =>
+      row.account_type === AccountType.STANDARD &&
+      persistedMemberIds.has(row.id ?? row.email) &&
+      row.groups.length <= 1,
+    [persistedMemberIds]
+  );
+
+  // Hits its endpoint immediately (member add/remove defers to Save), then revalidates.
+  const handleToggleManager = useCallback(
+    async (userId: string, makeManager: boolean) => {
+      setPendingManagerIds((prev) => new Set(prev).add(userId));
+      try {
+        await setGroupManager(groupId, userId, makeManager);
+        await refreshGroupLists(mutate);
+        toast.success(makeManager ? "Manager assigned" : "Manager revoked");
+      } catch (err) {
+        console.error("Failed to update manager:", err);
+        toast.error(
+          err instanceof Error ? err.message : "Failed to update manager"
+        );
+      } finally {
+        setPendingManagerIds((prev) => {
+          const next = new Set(prev);
+          next.delete(userId);
+          return next;
+        });
+      }
+    },
+    [groupId, mutate]
+  );
+
   const memberColumns = useMemo(
     () => [
-      ...baseColumns,
+      ...makeBaseColumns((row) => managerIds.has(row.id ?? row.email)),
       tc.actions({
         showSorting: false,
         showColumnVisibility: false,
-        cell: (row: MemberRow) => (
-          <IconButton
-            icon={SvgMinusCircle}
-            tertiary
-            onClick={(e) => {
-              e.stopPropagation();
-              handleRemoveMember(row.id ?? row.email);
-            }}
-          />
-        ),
+        cell: (row: MemberRow) => {
+          if (!canManageMembers) return null;
+          const userId = row.id ?? row.email;
+          const isManager = managerIds.has(userId);
+          const isPersisted = persistedMemberIds.has(userId);
+          const isPending = pendingManagerIds.has(userId);
+          const isOwnManager = isOwnManagerRow(userId);
+          const isLastGroup = isLastGroupMember(row);
+          return (
+            <div className="flex items-center gap-1">
+              {canManage && (
+                <IconButton
+                  icon={isPending ? SvgSimpleLoader : SvgUserShield}
+                  tertiary
+                  transient={isManager}
+                  disabled={!isPersisted || isPending || isOwnManager}
+                  aria-label={isManager ? "Revoke manager" : "Make manager"}
+                  tooltip={
+                    !isPersisted
+                      ? "Save the group before assigning a manager"
+                      : isOwnManager
+                        ? "You can't revoke your own manager access"
+                        : isManager
+                          ? "Revoke manager"
+                          : "Make manager"
+                  }
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleToggleManager(userId, !isManager);
+                  }}
+                />
+              )}
+              <IconButton
+                icon={SvgMinusCircle}
+                tertiary
+                disabled={isOwnManager || isLastGroup}
+                aria-label="Remove member"
+                tooltip={
+                  isOwnManager
+                    ? "You can't remove yourself while managing this group"
+                    : isLastGroup
+                      ? "This is their only group. Add them to another group first."
+                      : undefined
+                }
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleRemoveMember(userId);
+                }}
+              />
+            </div>
+          );
+        },
       }),
     ],
-    [handleRemoveMember]
+    [
+      handleRemoveMember,
+      handleToggleManager,
+      isLastGroupMember,
+      isOwnManagerRow,
+      managerIds,
+      persistedMemberIds,
+      pendingManagerIds,
+      canManage,
+      canManageMembers,
+    ]
   );
 
   // IDs of members not visible in the add-mode table (e.g. inactive users).
@@ -221,9 +382,51 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
   const handleSelectionChange = useCallback(
     (ids: string[]) => {
       if (!initialized) return;
-      setSelectedUserIds([...ids, ...hiddenMemberIds]);
+      const kept = new Set(ids);
+      // Both rules run: one deselection can strip your own row and a last-group
+      // member at once, and returning after the first leaves the other removed.
+      const forcedIds: string[] = [];
+
+      // Add mode can deselect your own row, which the member list disables — it would
+      // drop the membership carrying your manager role. The backend rejects it too.
+      if (
+        currentUserId &&
+        isOwnManagerRow(currentUserId) &&
+        !kept.has(currentUserId)
+      ) {
+        toast.error("You can't remove yourself while managing this group");
+        forcedIds.push(currentUserId);
+      }
+
+      // Same rule as the remove button; add mode can't disable a checkbox, so re-select.
+      // Rows already forced above are skipped, so one row never raises two toasts.
+      const strandedIds = allRows
+        .filter((row) => {
+          const rowId = row.id ?? row.email;
+          return (
+            !kept.has(rowId) &&
+            !forcedIds.includes(rowId) &&
+            isLastGroupMember(row)
+          );
+        })
+        .map((row) => row.id ?? row.email);
+      if (strandedIds.length > 0) {
+        toast.error(
+          "Some of those members would be left without a group. Add them to another group first."
+        );
+        forcedIds.push(...strandedIds);
+      }
+
+      setSelectedUserIds([...forcedIds, ...ids, ...hiddenMemberIds]);
     },
-    [initialized, hiddenMemberIds]
+    [
+      initialized,
+      hiddenMemberIds,
+      currentUserId,
+      isOwnManagerRow,
+      isLastGroupMember,
+      allRows,
+    ]
   );
 
   async function handleSave() {
@@ -236,8 +439,8 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
     }
 
     // Re-fetch group to check sync status before saving
-    const freshGroups = await fetch(SWR_KEYS.adminUserGroups).then((r) =>
-      r.json()
+    const freshGroups = await fetch(SWR_KEYS.adminUserGroupsWithDefault).then(
+      (r) => r.json()
     );
     const freshGroup = freshGroups.find((g: UserGroup) => g.id === groupId);
     if (freshGroup && !freshGroup.is_up_to_date) {
@@ -251,35 +454,43 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
     setIsSubmitting(true);
     try {
       // Rename if name changed
-      if (group && trimmed !== group.name) {
+      if (canManage && group && trimmed !== group.name) {
         await renameGroup(group.id, trimmed);
       }
 
       // Update members and cc_pairs
       await updateGroup(groupId, selectedUserIds, selectedCcPairIds);
 
-      // Update agent sharing (add/remove this group from changed agents)
-      await updateAgentGroupSharing(
-        groupId,
-        initialAgentIdsRef.current,
-        selectedAgentIds
-      );
+      if (canManage) {
+        // Update agent sharing (add/remove this group from changed agents)
+        await updateAgentGroupSharing(
+          groupId,
+          initialAgentIdsRef.current,
+          selectedAgentIds
+        );
 
-      // Update document set sharing (add/remove this group from changed doc sets)
-      await updateDocSetGroupSharing(
-        groupId,
-        initialDocSetIdsRef.current,
-        selectedDocSetIds
-      );
+        // Update document set sharing (add/remove this group from changed doc sets)
+        await updateDocSetGroupSharing(
+          groupId,
+          initialDocSetIdsRef.current,
+          selectedDocSetIds
+        );
+      }
 
-      // Save token rate limits (create/update/delete) — Enterprise-only
-      if (isEnterpriseTier) {
+      // Group-scoped create/update/delete routes admit a group admin, so their full save
+      // (including PUT/DELETE of existing limits) is authorized.
+      if (isEnterpriseTier && canEditTokenLimits) {
         await saveTokenLimits(groupId, tokenLimits, tokenRateLimits ?? []);
+      }
+
+      // Bulk desired-state replace; FULL_ADMIN only.
+      if (canEditPermissions) {
+        await saveGroupPermissions(groupId, enabledPermissions);
       }
 
       // Last: granting incognito access must not outlive a save that then
       // fails, which would report an error while members already had it.
-      if (group && incognitoEnabled !== group.incognito_enabled) {
+      if (canManage && group && incognitoEnabled !== group.incognito_enabled) {
         await setGroupIncognito(groupId, incognitoEnabled);
       }
 
@@ -287,8 +498,11 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
       initialAgentIdsRef.current = selectedAgentIds;
       initialDocSetIdsRef.current = selectedDocSetIds;
 
-      mutate(SWR_KEYS.adminUserGroups);
+      refreshGroupLists(mutate);
       mutate(SWR_KEYS.userGroupTokenRateLimit(groupId));
+      if (canEditPermissions) {
+        mutate(SWR_KEYS.userGroupPermissions(groupId));
+      }
       // Membership and the incognito flag both feed chat availability.
       mutate(SWR_KEYS.incognitoAvailability);
       toast.success(`Group "${trimmed}" updated`);
@@ -305,7 +519,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
     setIsDeleting(true);
     try {
       await deleteGroup(groupId);
-      mutate(SWR_KEYS.adminUserGroups);
+      refreshGroupLists(mutate);
       toast.success(`Group "${group?.name}" deleted`);
       router.push("/admin/groups");
     } catch (e) {
@@ -316,8 +530,9 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
     }
   }
 
-  // 404 state
-  if (!isLoading && !error && !group) {
+  // 404 state: a group the caller can't act on reads as absent, so a deep link to a
+  // default group as a non-full-admin lands here — matching the list, which hides it.
+  if (!isLoading && !error && !canManageMembers) {
     return (
       <SettingsLayouts.Root>
         <SettingsLayouts.Header
@@ -346,7 +561,9 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
       </Button>
       <Button
         onClick={handleSave}
-        disabled={!groupName.trim() || isSubmitting || isSyncing}
+        disabled={
+          !groupName.trim() || isSubmitting || isSyncing || !canManageMembers
+        }
         tooltip={
           isSyncing
             ? "Document embeddings are being updated due to recent changes to this group."
@@ -379,6 +596,14 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
 
           {!isLoading && !error && group && (
             <>
+              {isDefaultGroup && (
+                <MessageCard
+                  variant="info"
+                  title="System group"
+                  description="Onyx manages this group. Members are the only thing it holds, and the only thing you can change."
+                />
+              )}
+
               {/* Group Name */}
               <Section
                 gap={2}
@@ -392,6 +617,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                 <InputTypeIn
                   placeholder="Name your group"
                   value={groupName}
+                  variant={canManage ? "primary" : "readOnly"}
                   onChange={(e) => setGroupName(e.target.value)}
                 />
               </Section>
@@ -430,13 +656,15 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                       Done
                     </Button>
                   ) : (
-                    <Button
-                      prominence="tertiary"
-                      icon={SvgPlusCircle}
-                      onClick={() => setIsAddingMembers(true)}
-                    >
-                      Add
-                    </Button>
+                    canManageMembers && (
+                      <Button
+                        prominence="tertiary"
+                        icon={SvgPlusCircle}
+                        onClick={() => setIsAddingMembers(true)}
+                      >
+                        Add
+                      </Button>
+                    )
                   )}
                 </Section>
 
@@ -479,23 +707,36 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                 )}
               </Section>
 
-              <SharedGroupResources
-                selectedCcPairIds={selectedCcPairIds}
-                onCcPairIdsChange={setSelectedCcPairIds}
-                selectedDocSetIds={selectedDocSetIds}
-                onDocSetIdsChange={setSelectedDocSetIds}
-                selectedAgentIds={selectedAgentIds}
-                onAgentIdsChange={setSelectedAgentIds}
-              />
+              {canEditPermissions && (
+                <GroupPermissionsSection
+                  enabledPermissions={enabledPermissions}
+                  onPermissionsChange={setEnabledPermissions}
+                />
+              )}
 
-              <TokenLimitSection
-                limits={tokenLimits}
-                onLimitsChange={setTokenLimits}
-                disabled={!isEnterpriseTier}
-                disabledTooltip={tokenLimitsDisabledTooltip}
-              />
+              {/* a default group has no sharing, limits or incognito to show */}
+              {canManage && (
+                <>
+                  <SharedGroupResources
+                    selectedCcPairIds={selectedCcPairIds}
+                    onCcPairIdsChange={setSelectedCcPairIds}
+                    selectedDocSetIds={selectedDocSetIds}
+                    onDocSetIdsChange={setSelectedDocSetIds}
+                    selectedAgentIds={selectedAgentIds}
+                    onAgentIdsChange={setSelectedAgentIds}
+                    attachedAgents={group?.personas}
+                  />
 
-              {showIncognitoField && (
+                  <TokenLimitSection
+                    limits={tokenLimits}
+                    onLimitsChange={setTokenLimits}
+                    disabled={!isEnterpriseTier || !canEditTokenLimits}
+                    disabledTooltip={tokenLimitsDisabledTooltip}
+                  />
+                </>
+              )}
+
+              {canManage && showIncognitoField && (
                 <Card border="solid" rounding="lg">
                   <Section alignItems="start" height="fit">
                     <InputHorizontal
@@ -513,24 +754,26 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
               )}
 
               {/* Delete This Group */}
-              <Card border="solid" rounding="lg">
-                <Section alignItems="start" height="fit">
-                  <InputHorizontal
-                    title="Delete This Group"
-                    description="Members will lose access to any resources shared with this group."
-                    center
-                  >
-                    <Button
-                      variant="danger"
-                      prominence="secondary"
-                      icon={SvgTrash}
-                      onClick={() => setShowDeleteModal(true)}
+              {canDelete && (
+                <Card border="solid" rounding="lg">
+                  <Section alignItems="start" height="fit">
+                    <InputHorizontal
+                      title="Delete This Group"
+                      description="Members will lose access to any resources shared with this group."
+                      center
                     >
-                      Delete Group
-                    </Button>
-                  </InputHorizontal>
-                </Section>
-              </Card>
+                      <Button
+                        variant="danger"
+                        prominence="secondary"
+                        icon={SvgTrash}
+                        onClick={() => setShowDeleteModal(true)}
+                      >
+                        Delete Group
+                      </Button>
+                    </InputHorizontal>
+                  </Section>
+                </Card>
+              )}
             </>
           )}
         </SettingsLayouts.Body>

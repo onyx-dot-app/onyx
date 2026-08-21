@@ -19,17 +19,24 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from onyx.cache.factory import get_cache_backend
+from onyx.chat.chat_processing_checker import is_chat_session_processing
 from onyx.chat.incognito_context import (
     incognito_context_available,
-    incognito_session_ended,
+    incognito_sessions_ended,
 )
+from onyx.configs.constants import INCOGNITO_FILE_CLEANUP_BATCH
 from onyx.db.enums import IncognitoRecordMode, record_mode_persists_content
-from onyx.db.file_record import get_incognito_file_ids
+from onyx.db.file_record import (
+    get_incognito_file_ids,
+    get_session_ids_with_incognito_files,
+)
 from onyx.db.incognito import (
-    is_content_persisting_session,
-    mark_incognito_user_files_deleting,
-    mark_unadopted_incognito_files_deleting,
+    mark_user_files_deleting,
     stale_incognito_session_ids,
+    stale_unadopted_upload_ids,
+    stale_upload_ids_for_sessions,
+    touch_incognito_uploads_for_sessions,
     user_in_incognito_enabled_group,
 )
 from onyx.db.models import User
@@ -102,25 +109,56 @@ def resolve_incognito_record_mode() -> IncognitoRecordMode:
     return load_effective_uncached().incognito_record_mode
 
 
-def sweep_stale_incognito_user_files(db_session: Session) -> int:
+def sweep_stale_incognito_user_files(db_session: Session) -> list[UUID]:
     """Queue uploads of dead incognito sessions for deletion. Caller commits.
 
-    Covers both shapes: uploads no session ever adopted, and uploads whose
-    session is gone. A session whose live context is still present is skipped
-    however old its files are, so a chat left open past the orphan window keeps
-    its attachments. Shared by the Celery beat task and the lite deployment
-    poller, which have no scheduler in common.
+    Two passes, because the two shapes starve differently. Uploads no session
+    ever claimed are deletable on sight. Uploads a session holds depend on that
+    session's liveness, and are bounded by distinct sessions so one busy session
+    cannot fill a pass. A live session keeps its attachments and its orphan
+    clock restarts, so it does not occupy the next pass as well.
     """
-    marked = mark_unadopted_incognito_files_deleting(db_session)
-    for session_id in stale_incognito_session_ids(db_session):
-        # Full-history sessions never create a Redis context, so liveness would
-        # read them as ended and delete a live chat's attachments.
-        if is_content_persisting_session(db_session, session_id):
+    deletable = stale_unadopted_upload_ids(db_session)
+
+    session_ids = stale_incognito_session_ids(db_session)
+    ended = incognito_sessions_ended(session_ids)
+    deletable += stale_upload_ids_for_sessions(db_session, sorted(ended))
+    touch_incognito_uploads_for_sessions(
+        db_session,
+        [session_id for session_id in session_ids if session_id not in ended],
+    )
+
+    mark_user_files_deleting(db_session, deletable)
+    return deletable
+
+
+def sweep_incognito_generated_files(db_session: Session) -> None:
+    """Retry deletion of tool-generated blobs a teardown pass failed to remove.
+
+    A blob's record carries the session that produced it and deleting the blob
+    deletes the record, so anything still stamped is what a store failure left
+    behind. Shared by the Celery beat task and the lite drain, which is that
+    deployment's only background pass.
+    """
+    cache = get_cache_backend()
+    ended = incognito_sessions_ended(
+        [
+            UUID(raw_id)
+            for raw_id in get_session_ids_with_incognito_files(
+                db_session, limit=INCOGNITO_FILE_CLEANUP_BATCH
+            )
+        ]
+    )
+    for session_id in ended:
+        # A turn in flight owns its files, and an evicted context reads as
+        # ended, so the processing fence decides, not the context.
+        if is_chat_session_processing(session_id, cache):
             continue
-        if not incognito_session_ended(session_id):
-            continue
-        marked += len(mark_incognito_user_files_deleting(db_session, session_id))
-    return marked
+        try:
+            delete_incognito_generated_files(session_id, db_session)
+        except Exception:
+            # One unreachable blob must not strand every session behind it.
+            logger.exception("Incognito file cleanup failed for session %s", session_id)
 
 
 def incognito_llm_extra_headers(

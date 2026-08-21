@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from onyx.auth.schemas import UserRole
 from onyx.db.enums import AccountType
 from onyx.db.models import User
-from tests.external_dependency_unit.conftest import create_test_user
+from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
 
 
 @pytest.fixture
@@ -25,7 +25,7 @@ def users_to_clean(db_session: Session) -> Generator[list[User], None, None]:
     created: list[User] = []
     yield created
     for user in created:
-        db_session.delete(user)
+        delete_test_user(db_session, user)
     db_session.commit()
 
 

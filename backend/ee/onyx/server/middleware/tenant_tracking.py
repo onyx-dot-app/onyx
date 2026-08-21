@@ -12,7 +12,7 @@ from ee.onyx.configs.multi_tenant_gating_config import (
 )
 from ee.onyx.server.tenants.product_gating import is_tenant_gated
 from onyx.auth.utils import extract_tenant_from_auth_header
-from onyx.configs.constants import ANONYMOUS_USER_COOKIE_NAME, TENANT_ID_COOKIE_NAME
+from onyx.configs.constants import ANONYMOUS_USER_COOKIE_NAME
 from onyx.db.engine.sql_engine import is_valid_schema_name
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.redis.redis_pool import (
@@ -25,7 +25,9 @@ from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 # Unauthenticated, non-tenant-scoped endpoints (LB/Prometheus probes, API docs),
 # so tenant resolution is skipped for them.
-TENANT_RESOLUTION_SKIP_PATHS = frozenset({"/health", "/metrics", "/openapi.json"})
+TENANT_RESOLUTION_SKIP_PATHS = frozenset(
+    {"/health", "/health/ready", "/metrics", "/openapi.json"}
+)
 
 
 def add_api_server_tenant_id_middleware(
@@ -41,7 +43,10 @@ def add_api_server_tenant_id_middleware(
         to use elsewhere.
         """
         try:
-            if request.url.path in TENANT_RESOLUTION_SKIP_PATHS:
+            # Strip the prefix first: with APP_API_PREFIX set these arrive as
+            # /<prefix>/health, which would otherwise miss the skip list and
+            # send probes through the Redis session lookup.
+            if strip_api_prefix(request.url.path) in TENANT_RESOLUTION_SKIP_PATHS:
                 CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA)
                 return await call_next(request)
 
@@ -111,13 +116,12 @@ def _is_path_allowed(path: str) -> bool:
 async def _get_tenant_id_from_request(
     request: Request, logger: logging.LoggerAdapter
 ) -> str:
-    """
-    Attempt to extract tenant_id from:
-    1) The API key or PAT (Personal Access Token) header
-    2) The Redis-based session token (Cookie: fastapiusersauth, or the
-       Authorization: Bearer header used by mobile clients)
-    3) The anonymous user cookie
-    Fallback: POSTGRES_DEFAULT_SCHEMA
+    """Workspace this request is authenticated for: the API key or PAT header,
+    the Redis session token, or the anonymous-user cookie.
+
+    Every source is signed or server-issued, so a caller cannot name a workspace
+    it has not authenticated to. An unauthenticated request resolves to the
+    default schema, which owns no workspace data.
     """
     # Check for API key or PAT in Authorization header
     tenant_id = extract_tenant_from_auth_header(request)
@@ -185,13 +189,4 @@ async def _get_tenant_id_from_request(
         # Don't `return` while an exception is propagating — it would swallow it
         # and fall back to the wrong tenant. Fall back only on the normal path.
         if sys.exc_info()[0] is None:
-            if tenant_id:
-                return tenant_id  # noqa: B012
-
-            # As a final step, check for explicit tenant_id cookie
-            tenant_id_cookie = request.cookies.get(TENANT_ID_COOKIE_NAME)
-            if tenant_id_cookie and is_valid_schema_name(tenant_id_cookie):
-                return tenant_id_cookie  # noqa: B012
-
-            # If we've reached this point, return the default schema
-            return POSTGRES_DEFAULT_SCHEMA  # noqa: B012
+            return tenant_id or POSTGRES_DEFAULT_SCHEMA  # noqa: B012

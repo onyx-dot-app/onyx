@@ -48,7 +48,7 @@ FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:f82c96458eedc847b233
 # the image.
 ARG ENABLE_SKILLS=true
 ARG ENABLE_BROWSER=true
-ARG OPENCODE_VERSION=1.18.13
+ARG OPENCODE_VERSION=1.18.19
 ARG AGENT_BROWSER_VERSION=0.31.1
 
 # firewall-init.sh needs: iptables (egress lockdown), ca-certificates (trust

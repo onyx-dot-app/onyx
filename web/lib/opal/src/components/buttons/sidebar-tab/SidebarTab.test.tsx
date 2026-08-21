@@ -5,9 +5,14 @@
 // SidebarTab is also used for page-level tab navigation (e.g. the settings
 // page). Those tabs have no sidebar above them and must stay expanded when the
 // app sidebar folds.
-import { render, screen } from "@tests/setup/test-utils";
+import * as TooltipPrimitive from "@radix-ui/react-tooltip";
+import { render, screen, userEvent, waitFor } from "@tests/setup/test-utils";
 import { SidebarTab } from "@opal/components";
-import { SidebarLayouts, SidebarStateProvider } from "@opal/layouts";
+import {
+  SidebarLayouts,
+  SidebarStateProvider,
+  useSidebarState,
+} from "@opal/layouts";
 import { renderSidebarLogo } from "@/lib/sidebar/utils";
 
 jest.mock("@opal/hooks/useScreenSize", () => ({
@@ -63,6 +68,44 @@ it("still honors an explicit folded prop as an override", () => {
   );
   const tab = screen.getByText("Settings").closest(".opal-sidebar-tab");
   expect(tab).toHaveAttribute("data-folded", "true");
+});
+
+it("does not show the folded tooltip for a tab the pointer already left", async () => {
+  const user = userEvent.setup();
+
+  function FoldableSidebar() {
+    const { setFolded } = useSidebarState();
+    return (
+      <SidebarLayouts.Root foldable>
+        <SidebarLayouts.Header renderAppLogo={renderSidebarLogo}>
+          <SidebarTab href="/settings">Settings</SidebarTab>
+        </SidebarLayouts.Header>
+        <button onClick={() => setFolded(true)}>Fold</button>
+      </SidebarLayouts.Root>
+    );
+  }
+
+  render(
+    // Open on the first hover, so the test does not wait out the default delay.
+    <TooltipPrimitive.Provider delayDuration={0}>
+      <SidebarStateProvider>
+        <FoldableSidebar />
+      </SidebarStateProvider>
+    </TooltipPrimitive.Provider>
+  );
+
+  // Hover the tab while the sidebar is open, then leave it. An open sidebar
+  // shows its labels, so the tooltip stays closed the whole time.
+  const tab = screen.getByLabelText("Settings");
+  await user.hover(tab);
+  await user.unhover(tab);
+
+  await user.click(screen.getByRole("button", { name: "Fold" }));
+
+  // The pointer is elsewhere, so folding must not reveal a tooltip.
+  await waitFor(() => {
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+  });
 });
 
 it("names the tab for assistive technology in both states", () => {

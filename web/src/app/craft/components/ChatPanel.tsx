@@ -793,8 +793,6 @@ export default function BuildChatPanel({
                       </Tooltip>
                     </div>
                   )}
-                  {/* Model is locked once the session starts — show the picker
-                  only before the first message. */}
                   {sessionId && session?.skillsStale && (
                     <div className="pb-2">
                       <SkillsStaleNotice
@@ -803,7 +801,10 @@ export default function BuildChatPanel({
                       />
                     </div>
                   )}
-                  {session?.isLoaded && session.messages.length === 0 && (
+                  {/* The selected model is sent with each message, so a
+                  switch applies from the next turn. Subagent transcripts
+                  cannot send, so they get no picker. */}
+                  {session?.isLoaded && !isViewingSubagent && (
                     <div className="flex justify-end pb-2">
                       <ModelPickerButton
                         selection={selectedModel}
@@ -815,7 +816,6 @@ export default function BuildChatPanel({
                             }));
                           }
                         }}
-                        disabled={isViewingSubagent}
                       />
                     </div>
                   )}

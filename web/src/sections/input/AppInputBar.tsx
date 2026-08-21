@@ -28,6 +28,7 @@ import { Disabled } from "@opal/core";
 import { useUser } from "@/providers/UserProvider";
 import { useSettings } from "@/lib/settings/hooks";
 import { useProjectsContext } from "@/providers/ProjectsContext";
+import { useActiveProject, useProjects } from "@/lib/projects/hooks";
 import { FileCard } from "@/sections/cards/FileCard";
 import { ProjectFile, UserFileStatus } from "@/lib/projects/types";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
@@ -81,7 +82,7 @@ export interface AppInputBarProps {
   availableContextTokens: number;
 
   // agents
-  selectedAgent: MinimalAgent | undefined;
+  activeAgent: MinimalAgent | undefined;
 
   handleFileUpload: (files: File[]) => void;
   filterManager: FilterManager;
@@ -90,7 +91,6 @@ export interface AppInputBarProps {
   toggleDeepResearch: () => void;
   isMultiModelActive?: boolean;
   disabled: boolean;
-  awaitingPreferredSelection?: boolean;
   ref?: React.Ref<AppInputBarHandle>;
   // Side panel tab reading
   tabReadingEnabled?: boolean;
@@ -107,7 +107,7 @@ const AppInputBar = React.memo(
     chatState,
     currentSessionFileTokenCount,
     availableContextTokens,
-    selectedAgent,
+    activeAgent,
 
     handleFileUpload,
     llmManager,
@@ -116,7 +116,6 @@ const AppInputBar = React.memo(
     isMultiModelActive,
     setPresentingDocument,
     disabled,
-    awaitingPreferredSelection = false,
     ref,
     tabReadingEnabled,
     currentTabUrl,
@@ -320,8 +319,10 @@ const AppInputBar = React.memo(
     }, [isNewSession, initialMessage]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const { forcedToolIds, setForcedToolIds } = useForcedTools();
-    const { currentMessageFiles, setCurrentMessageFiles, currentProjectId } =
+    const { currentMessageFiles, setCurrentMessageFiles } =
       useProjectsContext();
+    const { isLoading: isLoadingProjects } = useProjects();
+    const activeProject = useActiveProject();
 
     const currentIndexingFiles = useMemo(() => {
       return currentMessageFiles.filter(
@@ -366,7 +367,6 @@ const AppInputBar = React.memo(
     const combinedSettingsData = useSettings();
 
     const prevChatStateRef = useRef(chatState);
-    const prevAwaitingRef = useRef(awaitingPreferredSelection);
     const prevRenderCompleteRef = useRef(latestMessageRenderComplete);
 
     useEffect(() => {
@@ -375,16 +375,10 @@ const AppInputBar = React.memo(
       // gate, a queued follow-up fires while the smooth-streaming
       // typewriter is still flushing the prior answer.
       const wasReady =
-        prevChatStateRef.current === "input" &&
-        !prevAwaitingRef.current &&
-        prevRenderCompleteRef.current;
-      const isReady =
-        chatState === "input" &&
-        !awaitingPreferredSelection &&
-        latestMessageRenderComplete;
+        prevChatStateRef.current === "input" && prevRenderCompleteRef.current;
+      const isReady = chatState === "input" && latestMessageRenderComplete;
 
       prevChatStateRef.current = chatState;
-      prevAwaitingRef.current = awaitingPreferredSelection;
       prevRenderCompleteRef.current = latestMessageRenderComplete;
 
       if (!wasReady && isReady && queuedMessages.length > 0) {
@@ -397,7 +391,6 @@ const AppInputBar = React.memo(
       }
     }, [
       chatState,
-      awaitingPreferredSelection,
       latestMessageRenderComplete,
       queuedMessages,
       removeCurrentQueuedMessage,
@@ -455,7 +448,7 @@ const AppInputBar = React.memo(
     const controlsLoading =
       ccPairsLoading ||
       federatedLoading ||
-      !selectedAgent ||
+      !activeAgent ||
       llmManager.isLoadingProviders;
     const [showPrompts, setShowPrompts] = useState(false);
 
@@ -548,19 +541,28 @@ const AppInputBar = React.memo(
     const showDeepResearch = useMemo(() => {
       const deepResearchGloballyEnabled =
         combinedSettingsData?.deep_research_enabled ?? true;
-      const isProjectWorkflow = currentProjectId !== null;
+
+      // Resolved from the chat, not the URL. `projectId` is dropped once a chat
+      // opens (`PARAMS_TO_SKIP` in `app/app/services/lib.tsx`), so a project
+      // chat carries no project context in its URL — reading the search param
+      // hid the toggle on the project page and left it showing in the one place
+      // it actually breaks.
+      // Loading counts as "unknown", and unknown withholds: an unloaded
+      // projects list makes a project chat look like a normal one.
+      const isProjectWorkflow = isLoadingProjects || activeProject !== null;
 
       // TODO(@yuhong): Re-enable Deep Research in Projects workflow once it is fully supported.
       // https://linear.app/onyx-app/issue/ENG-3818/re-enable-deep-research-in-projects
       return (
         !isProjectWorkflow &&
         deepResearchGloballyEnabled &&
-        hasSearchToolsAvailable(selectedAgent?.tools || [])
+        hasSearchToolsAvailable(activeAgent?.tools || [])
       );
     }, [
-      selectedAgent?.tools,
+      activeAgent?.tools,
       combinedSettingsData?.deep_research_enabled,
-      currentProjectId,
+      activeProject,
+      isLoadingProjects,
     ]);
 
     function handleKeyDownForPromptShortcuts(
@@ -654,9 +656,9 @@ const AppInputBar = React.memo(
               controlsLoading && "invisible"
             )}
           >
-            {selectedAgent && selectedAgent.tools.length > 0 && (
+            {activeAgent && activeAgent.tools.length > 0 && (
               <ActionsPopover
-                selectedAgent={selectedAgent}
+                activeAgent={activeAgent}
                 filterManager={filterManager}
                 availableSources={memoizedAvailableSources}
                 disabled={disabled}
@@ -701,10 +703,10 @@ const AppInputBar = React.memo(
               )
             )}
 
-            {selectedAgent &&
+            {activeAgent &&
               forcedToolIds.length > 0 &&
               forcedToolIds.map((toolId) => {
-                const tool = selectedAgent.tools.find(
+                const tool = activeAgent.tools.find(
                   (tool) => tool.id === toolId
                 );
                 if (!tool) {
@@ -780,16 +782,14 @@ const AppInputBar = React.memo(
             icon={
               isClassifying
                 ? SvgSimpleLoader
-                : (chatState !== "input" || awaitingPreferredSelection) &&
-                    message.trim()
+                : chatState !== "input" && message.trim()
                   ? SvgArrowUp
                   : chatState === "streaming" || isVoicePlaybackControllable
                     ? SvgStop
                     : SvgArrowUp
             }
             onClick={() => {
-              const canSubmitNormally =
-                chatState === "input" && !awaitingPreferredSelection;
+              const canSubmitNormally = chatState === "input";
               if (!canSubmitNormally && message.trim()) {
                 if (queuedMessages.length < MAX_QUEUED_MESSAGES) {
                   enqueueCurrentMessage(message.trim());
@@ -817,7 +817,6 @@ const AppInputBar = React.memo(
         <QueuedMessageBar
           messages={queuedMessages}
           highlightedIndex={queueNav.highlightedIndex}
-          awaitingPreferredSelection={awaitingPreferredSelection}
           onDiscard={removeCurrentQueuedMessage}
           onHighlight={queueNav.setHighlightedIndex}
         />
@@ -953,9 +952,7 @@ const AppInputBar = React.memo(
                           !(event.nativeEvent as any).isComposing
                         ) {
                           event.preventDefault();
-                          const canSubmitNormally =
-                            chatState === "input" &&
-                            !awaitingPreferredSelection;
+                          const canSubmitNormally = chatState === "input";
                           if (canSubmitNormally) {
                             if (
                               message &&

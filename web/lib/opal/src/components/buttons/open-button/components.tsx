@@ -28,13 +28,13 @@ import { ChevronIcon } from "@opal/components/buttons/chevron";
 /**
  * Content props — a discriminated union on `foldable` that enforces:
  *
- * - `foldable: true`  → `icon` and `children` are required (icon stays visible,
- *                        label + chevron fold away)
- * - `foldable?: false` → at least one of `icon` or `children` must be provided
+ * - `foldable: boolean` → `icon` and `children` are required (icon stays
+ *                          visible, label + chevron fold away when true)
+ * - `foldable?: false`  → at least one of `icon` or `children` must be provided
  */
 type OpenButtonContentProps =
   | {
-      foldable: true;
+      foldable: boolean;
       icon: IconFunctionComponent;
       children: string | RichStr;
     }

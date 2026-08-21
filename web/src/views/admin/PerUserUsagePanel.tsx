@@ -25,9 +25,7 @@ function SummaryMetric({
   detail: string;
 }) {
   return (
-    // basis + flex-1 rather than a fixed fraction: fractions plus the row gap
-    // overflow and wrap the last metric onto its own line.
-    <div className="flex min-w-0 flex-1 basis-40 flex-col gap-0.5 px-3 py-2 first:pl-0 last:pr-0">
+    <div className="flex min-w-0 flex-col gap-0.5 px-3 py-3 sm:px-4">
       <Text font="secondary-body" color="text-03">
         {label}
       </Text>
@@ -45,12 +43,10 @@ function SummaryMetric({
 
 interface PerUserUsagePanelProps {
   timeRange?: DateRange;
-  headerRight?: React.ReactNode;
 }
 
 export default function PerUserUsagePanel({
   timeRange,
-  headerRight,
 }: PerUserUsagePanelProps) {
   const { usage, isLoading, error } = useUsageExport(timeRange);
   const [selectedEmail, setSelectedEmail] = useState<string | null>(null);
@@ -89,25 +85,21 @@ export default function PerUserUsagePanel({
   );
 
   const header = (
-    // sm:flex-row / sm:items-center / sm:justify-between have no Section equivalent, kept as a raw div
-    <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-      <Section
-        flexDirection="column"
-        justifyContent="start"
-        alignItems="stretch"
-        gap={0.5}
-        width="full"
-        height="fit"
-      >
-        <Text font="heading-h3">Usage this period</Text>
-        <Text font="secondary-body" color="text-03">
-          {usage
-            ? `${formatDate(usage.start)} – ${formatDate(usage.end)} · Costs are calculated from recorded model usage.`
-            : "Per-user spend and token usage for the selected period."}
-        </Text>
-      </Section>
-      {headerRight}
-    </div>
+    <Section
+      flexDirection="column"
+      justifyContent="start"
+      alignItems="stretch"
+      gap={0.125}
+      width="full"
+      height="fit"
+    >
+      <Text font="heading-h3">Usage overview</Text>
+      <Text font="secondary-body" color="text-03">
+        {usage
+          ? `${formatDate(usage.start)} – ${formatDate(usage.end)} · Costs are calculated from recorded model usage.`
+          : "Per-user spend and token usage for the selected period."}
+      </Text>
+    </Section>
   );
 
   if (isLoading) {
@@ -116,7 +108,7 @@ export default function PerUserUsagePanel({
         flexDirection="column"
         justifyContent="start"
         alignItems="stretch"
-        gap={4}
+        gap={1}
         width="full"
         height="fit"
       >
@@ -131,7 +123,7 @@ export default function PerUserUsagePanel({
         flexDirection="column"
         justifyContent="start"
         alignItems="stretch"
-        gap={4}
+        gap={1}
         width="full"
         height="fit"
       >
@@ -150,50 +142,52 @@ export default function PerUserUsagePanel({
       flexDirection="column"
       justifyContent="start"
       alignItems="stretch"
-      gap={4}
+      gap={1}
       width="full"
       height="fit"
     >
       {header}
 
-      <Card border="solid" rounding="lg" padding={2}>
-        <Section
-          flexDirection="row"
-          justifyContent="start"
-          alignItems="start"
-          gap={0.5}
-          wrap
-          width="full"
-          height="fit"
-        >
-          <SummaryMetric
-            label="Workspace spend"
-            value={formatCost(totalCostCents)}
-            detail="Across all listed users"
-          />
-          <SummaryMetric
-            label="Total tokens"
-            value={formatTokens(totalTokens)}
-            detail="Input (including cache reads) and output"
-          />
-          <SummaryMetric
-            label="Active users"
-            value={activeUsers.toLocaleString()}
-            detail={`${users.length.toLocaleString()} users with records`}
-          />
-          <SummaryMetric
-            label="Top spender"
-            value={topSpender ? formatCost(topSpender.totals.cost_cents) : "—"}
-            detail={topSpender?.email ?? "No spend recorded"}
-          />
-        </Section>
+      <Card border="solid" rounding="lg" padding={0}>
+        <div className="grid grid-cols-2 lg:grid-cols-4">
+          <div className="border-b border-border-02 lg:border-b-0">
+            <SummaryMetric
+              label="Workspace spend"
+              value={formatCost(totalCostCents)}
+              detail="Across all listed users"
+            />
+          </div>
+          <div className="border-b border-l border-border-02 lg:border-b-0">
+            <SummaryMetric
+              label="Total tokens"
+              value={formatTokens(totalTokens)}
+              detail="Input (including cache reads) and output"
+            />
+          </div>
+          <div className="border-b border-border-02 lg:border-b-0 lg:border-l">
+            <SummaryMetric
+              label="Active users"
+              value={activeUsers.toLocaleString()}
+              detail={`${users.length.toLocaleString()} users with records`}
+            />
+          </div>
+          <div className="border-l border-border-02">
+            <SummaryMetric
+              label="Top spender"
+              value={
+                topSpender ? formatCost(topSpender.totals.cost_cents) : "—"
+              }
+              detail={topSpender?.email ?? "No spend recorded"}
+            />
+          </div>
+        </div>
       </Card>
 
       <Section
         flexDirection="column"
         justifyContent="start"
         alignItems="stretch"
-        gap={2}
+        gap={0.5}
         width="full"
         height="fit"
       >
@@ -201,18 +195,19 @@ export default function PerUserUsagePanel({
           flexDirection="column"
           justifyContent="start"
           alignItems="stretch"
-          gap={0.5}
+          gap={0.125}
           width="full"
           height="fit"
         >
-          <Text font="heading-h3">Spend by user</Text>
+          <Text font="heading-h3">Users</Text>
           <Text font="secondary-body" color="text-03">
-            Filter by model or flow, and click a user for their full breakdown.
+            Spend is sorted highest first. Filter the list, then select a user
+            for a complete breakdown.
           </Text>
         </Section>
 
         {users.length === 0 ? (
-          <Card border="solid" rounding="lg" padding={2}>
+          <Card border="solid" rounding="lg" padding={3}>
             <Text font="main-ui-body" color="text-03">
               No usage recorded for this period.
             </Text>

@@ -123,6 +123,7 @@ export default function TableHead({
       </div>
       {resizable && (
         <div
+          role="presentation"
           onMouseDown={onResizeStart}
           onTouchStart={onResizeStart}
           className={cn(

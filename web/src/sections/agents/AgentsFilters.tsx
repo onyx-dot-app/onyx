@@ -32,7 +32,7 @@ import { SvgActions, SvgUser } from "@opal/icons";
 import { Popover, PopoverMenu } from "@opal/components";
 import { InputTypeIn } from "@opal/components";
 import useFilter from "@/hooks/useFilter";
-import useMcpServers from "@/hooks/useMcpServers";
+import { useAdminMcpServers } from "@/lib/tools/hooks";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
 import useUsers from "@/hooks/useUsers";
 import { useUser } from "@/providers/UserProvider";
@@ -94,7 +94,7 @@ export function useAgentsFilters<T extends MinimalAgent>(
   agents: T[]
 ): UseAgentsFiltersReturn<T> {
   const { user } = useUser();
-  const { mcpData } = useMcpServers();
+  const { mcpData } = useAdminMcpServers();
   const { tools: allTools } = useAvailableTools();
   const { data: usersData } = useUsers({ includeApiKeys: false });
 

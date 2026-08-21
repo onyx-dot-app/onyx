@@ -12,6 +12,7 @@ from onyx.background.celery.tasks.port.tasks import (
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.app_configs import DISABLE_INDEX_UPDATE_ON_SWAP
 from onyx.context.search.models import (
+    ContextualRagModelUpdateResponse,
     SavedSearchSettings,
     SearchSettingsCreationRequest,
 )
@@ -63,6 +64,12 @@ from onyx.server.manage.embedding.models import SearchSettingsDeleteRequest
 from onyx.server.manage.models import FullModelVersionResponse
 from onyx.server.models import IdReturn
 from onyx.server.utils_vector_db import require_vector_db
+from onyx.utils.audit import (
+    AuditAction,
+    AuditOutcome,
+    actor_from_user,
+    emit_audit_event,
+)
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import ALT_INDEX_SUFFIX, MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
@@ -411,37 +418,95 @@ def get_all_search_settings(
     )
 
 
-# Updates current non-reindex search settings
+def _validate_contextual_model_only_update(
+    current: SearchSettings,
+    requested: SavedSearchSettings,
+) -> int:
+    model_configuration_id = requested.contextual_rag_model_configuration_id
+    if model_configuration_id is None:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Select a Contextual Retrieval model.",
+        )
+
+    expected = SavedSearchSettings.from_db_model(current).model_copy(
+        update={
+            "contextual_rag_model_configuration_id": model_configuration_id,
+        }
+    )
+    if requested != expected:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Only the Contextual Retrieval model can be updated without re-indexing.",
+        )
+    return model_configuration_id
+
+
 @router.post("/update-inference-settings")
 def update_saved_search_settings(
     search_settings: SavedSearchSettings,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
-) -> None:
+) -> ContextualRagModelUpdateResponse:
     # Disallow contextual RAG for cloud deployments
     if MULTI_TENANT and search_settings.enable_contextual_rag:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Contextual RAG disabled in Onyx Cloud",
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Contextual RAG disabled in Onyx Cloud",
         )
 
-    # enable_contextual_rag is preserved here (never written), so don't validate it:
-    # the flag is discarded, and validating would 400 a change we ignore.
+    if (
+        get_secondary_search_settings(db_session) is not None
+        or _active_port_settings(db_session) is not None
+    ):
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "A re-index is in progress. Wait for it to finish before updating the "
+            "Contextual Retrieval model.",
+        )
+
+    current = get_current_search_settings(db_session)
+    if not current.enable_contextual_rag:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Contextual Retrieval must be enabled before its model can be updated "
+            "without re-indexing.",
+        )
+
+    model_configuration_id = _validate_contextual_model_only_update(
+        current, search_settings
+    )
     validate_contextual_rag_model(
-        model_configuration_id=search_settings.contextual_rag_model_configuration_id,
+        model_configuration_id=model_configuration_id,
         db_session=db_session,
+        enable_contextual_rag=True,
     )
 
+    previous_model_configuration_id = current.contextual_rag_model_configuration_id
     update_current_search_settings(
         search_settings=search_settings, db_session=db_session
     )
+    _sync_default_contextual_model(db_session)
 
     logger.info(
-        "Updated current search settings to %s", search_settings.model_dump_json()
+        "Updated current contextual retrieval model from %s to %s",
+        previous_model_configuration_id,
+        model_configuration_id,
     )
-
-    # Re-sync default to match PRESENT search settings
-    _sync_default_contextual_model(db_session)
+    emit_audit_event(
+        AuditAction.CONTEXTUAL_RAG_MODEL_UPDATE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(user),
+        resource_type="search_settings",
+        resource_id=current.id,
+        extra={
+            "previous_model_configuration_id": previous_model_configuration_id,
+            "model_configuration_id": model_configuration_id,
+        },
+    )
+    return ContextualRagModelUpdateResponse(
+        contextual_rag_model_configuration_id=model_configuration_id
+    )
 
 
 @router.get("/unstructured-api-key-set")

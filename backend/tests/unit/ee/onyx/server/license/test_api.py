@@ -165,7 +165,6 @@ class TestClaimSurfacesWhyItFailed:
     async def test_a_rejection_reports_the_upstream_reason(
         self, mock_reclaim: MagicMock, _mock_invalidate: MagicMock
     ) -> None:
-
         mock_reclaim.side_effect = LicenseRejectedError(
             "Invalid license: Invalid license signature"
         )
@@ -183,7 +182,6 @@ class TestClaimSurfacesWhyItFailed:
     async def test_nothing_stored_still_points_at_checkout(
         self, mock_reclaim: MagicMock, _mock_invalidate: MagicMock
     ) -> None:
-
         mock_reclaim.side_effect = LicenseNotStoredError("nothing stored")
 
         with pytest.raises(OnyxError) as exc:

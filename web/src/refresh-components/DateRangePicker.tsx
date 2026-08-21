@@ -36,9 +36,15 @@ const PRESETS: DatePreset[] = [
 ];
 
 export function rangeForInclusiveDays(
-  inclusiveDays: number
+  inclusiveDays: number,
+  now = new Date()
 ): Exclude<DateRange, undefined> {
-  const to = endOfDay(new Date());
+  const utcToday = new Date(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate()
+  );
+  const to = endOfDay(utcToday);
   return { from: startOfDay(subDays(to, inclusiveDays - 1)), to };
 }
 

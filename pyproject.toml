@@ -124,7 +124,7 @@ backend = [
     "sendgrid==6.12.5",
     "exa_py==1.15.4",
     "braintrust==0.3.9",
-    "langfuse==3.10.0",
+    "langfuse==4.14.4",
     "nest_asyncio==1.6.0",
     "openinference-instrumentation==0.1.42",
     "opentelemetry-proto>=1.42.1",
@@ -142,7 +142,7 @@ dev = [
     "manygo==0.2.0",
     "matplotlib==3.10.8",
     "ty==0.0.63",
-    "onyx-devtools==0.11.0",
+    "onyx-devtools==0.12.2",
     "openapi-generator-cli==7.17.0",
     "pre-commit==3.2.2",
     "pytest-alembic==0.12.1",
@@ -156,7 +156,7 @@ dev = [
     "release-tag==0.5.2",
     # Keep in sync with the pinned `ruff==` in the ruff / ruff-format hooks in
     # .pre-commit-config.yaml, which install ruff into an isolated overlay.
-    "ruff==0.16.0",
+    "ruff==0.16.1",
     "types-docker==7.1.0.20260518",
     "types-beautifulsoup4==4.12.0.3",
     "types-html5lib==1.1.11.13",
@@ -292,7 +292,7 @@ ignore = [
     "B904", # raise-without-from-inside-except (~465 existing violations).
 ]
 # G004: f-strings in logging break Sentry's message-pattern grouping.
-select = ["ARG", "B", "E", "F", "G004", "I", "S", "W"]
+select = ["ARG", "B", "E", "F", "G004", "I", "PERF", "S", "W"]
 
 [tool.ruff.lint.flake8-bugbear]
 # FastAPI dependency-injection markers are the intended way to write these

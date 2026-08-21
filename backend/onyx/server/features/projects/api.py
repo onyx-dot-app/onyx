@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
 from onyx.chat.incognito import incognito_allowed_for_user
-from onyx.chat.incognito_context import incognito_session_ended
+from onyx.chat.incognito_context import incognito_session_torn_down
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import (
     PUBLIC_API_TAGS,
@@ -31,6 +31,7 @@ from onyx.db.incognito import mark_incognito_user_files_deleting
 from onyx.db.models import ChatSession, Project__UserFile, User, UserFile, UserProject
 from onyx.db.persona import get_personas_by_ids
 from onyx.db.projects import (
+    check_project_ownership,
     get_project_token_count,
     upload_files_to_user_files_with_indexing,
 )
@@ -69,6 +70,31 @@ class UserFileDeleteResult(BaseModel):
     has_associations: bool
     project_names: list[str] = []
     assistant_names: list[str] = []
+
+
+def _claim_upload_if_session_ended(
+    db_session: Session, incognito_session_id: UUID | None, user_id: UUID
+) -> None:
+    """Queue this session's uploads if a teardown landed during the upload.
+
+    Never raises: it runs on the upload's failure path too, where masking the
+    original error would cost more than the delay to the orphan sweep.
+    """
+    if incognito_session_id is None:
+        return
+    try:
+        # The caller may be unwinding a failed statement, which would refuse
+        # any further query on this session.
+        db_session.rollback()
+        if not incognito_session_torn_down(incognito_session_id):
+            return
+        mark_incognito_user_files_deleting(db_session, incognito_session_id, user_id)
+        db_session.commit()
+    except Exception:
+        logger.exception(
+            "Could not claim uploads for ended incognito session %s",
+            incognito_session_id,
+        )
 
 
 def _trigger_user_file_project_sync(
@@ -164,9 +190,8 @@ def upload_user_files(
                 "Incognito chat is not enabled for this user.",
             )
         # Teardown marks the rows that exist when it runs, so an upload landing
-        # after it would otherwise sit until the orphan sweep. The tombstone is
-        # durable, which makes this the point where that race is settled.
-        if incognito_session_ended(incognito_session_id):
+        # after it would otherwise sit until the orphan sweep.
+        if incognito_session_torn_down(incognito_session_id):
             raise OnyxError(
                 OnyxErrorCode.INVALID_INPUT,
                 "This incognito chat has ended.",
@@ -195,17 +220,6 @@ def upload_user_files(
             incognito_session_id=incognito_session_id,
         )
 
-        # Re-check after the rows exist. The tombstone is monotonic, so a
-        # teardown that landed during the upload is caught here even though the
-        # pre-check passed, which is what the marking query alone would miss.
-        if incognito_session_id is not None and incognito_session_ended(
-            incognito_session_id
-        ):
-            mark_incognito_user_files_deleting(
-                db_session, incognito_session_id, user.id
-            )
-            db_session.commit()
-
         return CategorizedFilesSnapshot.from_result(categorized_files_result)
 
     except Exception as e:
@@ -214,6 +228,10 @@ def upload_user_files(
             status_code=500,
             detail="Failed to upload files. Please try again or contact support if the issue persists.",
         )
+    finally:
+        # Rows are committed before the indexing hand-off, which can still
+        # fail, so this runs on every exit.
+        _claim_upload_if_session_ended(db_session, incognito_session_id, user.id)
 
 
 @router.get("/{project_id}", tags=PUBLIC_API_TAGS)
@@ -240,6 +258,10 @@ def get_files_in_project(
     db_session: Session = Depends(get_session),
 ) -> list[UserFileSnapshot]:
     user_id = user.id
+    # filtering files by owner alone 200s an empty list, leaking that the id exists
+    if not check_project_ownership(project_id, user_id, db_session):
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Project not found")
+
     user_files = (
         db_session.query(UserFile)
         .join(Project__UserFile, UserFile.id == Project__UserFile.user_file_id)

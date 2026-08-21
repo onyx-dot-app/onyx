@@ -24,7 +24,6 @@ from onyx.db.llm import (
     sync_auto_mode_models,
     update_default_provider,
 )
-from onyx.db.models import UserRole
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLM
 from onyx.llm.well_known_providers.auto_update_models import (
@@ -45,7 +44,6 @@ from onyx.server.manage.llm.models import (
 def _create_mock_admin() -> MagicMock:
     """Create a mock admin user for testing."""
     mock_admin = MagicMock()
-    mock_admin.role = UserRole.ADMIN
     return mock_admin
 
 

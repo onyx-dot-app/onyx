@@ -19,11 +19,11 @@ import { SettingsLayouts } from "@opal/layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import { getProvider } from "@/lib/languageModels";
-import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 import {
-  deleteLlmProvider,
-  setDefaultLlmModel,
-} from "@/lib/languageModels/svc";
+  refreshLlmProviderCaches,
+  setDefaultLlmModelAndRefresh,
+} from "@/lib/languageModels/cache";
+import { deleteLlmProvider } from "@/lib/languageModels/svc";
 import ModelSelector from "@/sections/model-selector/ModelSelector";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import { useCreateModal } from "@opal/components";
@@ -381,15 +381,7 @@ export default function LanguageModelsPage() {
     const separatorIndex = compositeValue.indexOf(":");
     const providerId = Number(compositeValue.slice(0, separatorIndex));
     const modelName = compositeValue.slice(separatorIndex + 1);
-
-    try {
-      await setDefaultLlmModel(providerId, modelName);
-      await refreshLlmProviderCaches(mutate);
-      toast.success("Default model updated successfully!");
-    } catch (e) {
-      const message = e instanceof Error ? e.message : "Unknown error";
-      toast.error(`Failed to set default model: ${message}`);
-    }
+    await setDefaultLlmModelAndRefresh(providerId, modelName, mutate);
   }
 
   return (

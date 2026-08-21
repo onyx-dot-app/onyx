@@ -15,6 +15,7 @@ import { SelectedModel } from "@/sections/model-selector/MultiModelSelector";
 import { buildModelProviderLookup } from "@/lib/languageModels/options";
 import DynamicBottomSpacer from "@/components/chat/DynamicBottomSpacer";
 import {
+  useCurrentChatState,
   useCurrentMessageHistory,
   useCurrentMessageTree,
   useLoadingError,
@@ -29,7 +30,7 @@ import { cn } from "@opal/utils";
 const MSG_MAX_W = "md:max-w-[720px] md:min-w-[400px]";
 
 export interface ChatUIProps {
-  liveAgent: MinimalAgent;
+  activeAgent: MinimalAgent;
   llmManager: LlmManager;
   setPresentingDocument: (doc: MinimalOnyxDocument | null) => void;
   onMessageSelection: (nodeId: number) => void;
@@ -70,7 +71,7 @@ export interface ChatUIProps {
 
 const ChatUI = React.memo(
   ({
-    liveAgent,
+    activeAgent,
     llmManager,
     setPresentingDocument,
     onMessageSelection,
@@ -88,6 +89,7 @@ const ChatUI = React.memo(
     const messageTree = useCurrentMessageTree();
     const error = useUncaughtError();
     const loadError = useLoadingError();
+    const chatState = useCurrentChatState();
     // Stable fallbacks to avoid changing prop identities on each render
     const emptyDocs = useMemo<OnyxDocument[]>(() => [], []);
     const emptyChildrenIds = useMemo<number[]>(() => [], []);
@@ -215,7 +217,7 @@ const ChatUI = React.memo(
                     <MultiModelResponseView
                       responses={multiModelResponses}
                       chatState={{
-                        agent: liveAgent,
+                        agent: activeAgent,
                         docs: emptyDocs,
                         citations: undefined,
                         setPresentingDocument,
@@ -228,6 +230,7 @@ const ChatUI = React.memo(
                         parentMessage?.childrenNodeIds ?? emptyChildrenIds
                       }
                       onMessageSelection={onMessageSelection}
+                      selectionDisabled={chatState !== "input"}
                     />
                   )}
                 </div>
@@ -262,7 +265,7 @@ const ChatUI = React.memo(
               }
 
               const chatStateData = {
-                agent: liveAgent,
+                agent: activeAgent,
                 docs: message.documents ?? emptyDocs,
                 citations: message.citations,
                 setPresentingDocument,

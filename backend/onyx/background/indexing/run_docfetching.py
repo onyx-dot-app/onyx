@@ -26,7 +26,15 @@ from onyx.configs.app_configs import (
     PERSISTENT_INDEXING,
     POLL_CONNECTOR_OFFSET,
 )
-from onyx.configs.constants import OnyxCeleryPriority, OnyxCeleryQueues, OnyxCeleryTask
+from onyx.configs.constants import (
+    NotificationType,
+    OnyxCeleryPriority,
+    OnyxCeleryQueues,
+    OnyxCeleryTask,
+)
+from onyx.connectors.capability_checks.recorder import (
+    record_blocking_validation_outcome,
+)
 from onyx.connectors.connector_runner import ConnectorRunner
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
@@ -42,6 +50,7 @@ from onyx.connectors.models import (
     TextSection,
 )
 from onyx.db.connector import mark_ccpair_with_indexing_trigger
+from onyx.db.connector_alerts import notify_admins_of_connector_alert
 from onyx.db.connector_credential_pair import (
     get_connector_credential_pair_from_id,
     get_last_successful_attempt_poll_range_end,
@@ -51,14 +60,12 @@ from onyx.db.constants import CONNECTOR_VALIDATION_ERROR_MESSAGE_PREFIX
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import (
     AccessType,
+    CapabilityCheckTrigger,
     ConnectorCredentialPairStatus,
     IndexingStatus,
     IndexModelStatus,
 )
-from onyx.db.hierarchy import (
-    upsert_hierarchy_node_cc_pair_entries,
-    upsert_hierarchy_nodes_batch,
-)
+from onyx.db.hierarchy import persist_hierarchy_nodes_for_cc_pair
 from onyx.db.index_attempt import (
     create_index_attempt_error,
     get_index_attempt,
@@ -121,11 +128,38 @@ def _get_connector_runner(
     NOTE: `start_time` and `end_time` are only used for poll connectors
 
     Returns an iterator of document batches and whether the returned documents
-    are the complete list of existing documents of the connector. If the task
-    of type LOAD_STATE, the list will be considered complete and otherwise incomplete.
+    are the complete list of existing documents of the connector. If the task of
+    type LOAD_STATE, the list will be considered complete and otherwise
+    incomplete.
     """
 
     task = attempt.connector_credential_pair.connector.input_type
+
+    # Plain values for the closure: it runs inside exception handlers, where
+    # lazy ORM attribute loads can raise (e.g. ``PendingRollbackError``) and
+    # replace the exception being handled.
+    credential_id = attempt.connector_credential_pair.credential.id
+    connector_id = attempt.connector_credential_pair.connector.id
+    source = attempt.connector_credential_pair.connector.source
+    connector_specific_config = (
+        attempt.connector_credential_pair.connector.connector_specific_config
+    )
+
+    def _record_outcome(error: Exception | None, perm_sync_validated: bool) -> None:
+        # Best-effort scribe for the validation outcome below; never raises.
+        # INTEGRATION_TESTS_MODE skips the validation itself, so there is no
+        # outcome to record.
+        if INTEGRATION_TESTS_MODE:
+            return
+        record_blocking_validation_outcome(
+            credential_id=credential_id,
+            connector_id=connector_id,
+            source=source,
+            trigger=CapabilityCheckTrigger.INDEXING_ATTEMPT,
+            error=error,
+            perm_sync_validated=perm_sync_validated,
+            connector_specific_config=connector_specific_config,
+        )
 
     try:
         with time_stage(IndexAttemptStage.CONNECTOR_VALIDATION, attempt.id):
@@ -138,24 +172,29 @@ def _get_connector_runner(
                 raw_file_callback=raw_file_callback,
             )
 
-            # validate the connector settings
+            # Validate the connector settings.
             if not INTEGRATION_TESTS_MODE:
                 runnable_connector.validate_connector_settings()
 
-        if (
+        perm_sync_validated = (
             not INTEGRATION_TESTS_MODE
             and attempt.connector_credential_pair.access_type == AccessType.SYNC
-        ):
+        )
+        if perm_sync_validated:
             with time_stage(IndexAttemptStage.PERMISSION_VALIDATION, attempt.id):
                 runnable_connector.validate_perm_sync()
+
+        _record_outcome(None, perm_sync_validated=perm_sync_validated)
 
     except UnexpectedValidationError as e:
         logger.exception(
             "Unable to instantiate connector due to an unexpected temporary issue."
         )
+        _record_outcome(e, perm_sync_validated=False)
         raise e
     except Exception as e:
         logger.exception("Unable to instantiate connector. Pausing until fixed.")
+        _record_outcome(e, perm_sync_validated=False)
         # since we failed to even instantiate the connector, we pause the CCPair since
         # it will never succeed
 
@@ -913,6 +952,19 @@ def connector_document_extraction(
                             credential_id=db_credential.id,
                             status=ConnectorCredentialPairStatus.INVALID,
                         )
+                        invalid_name = db_connector.name or f"cc_pair_{cc_pair_id}"
+                        notify_admins_of_connector_alert(
+                            db_session=db_session_temp,
+                            cc_pair_id=cc_pair_id,
+                            notif_type=NotificationType.CONNECTOR_INVALID,
+                            title=f"Connector '{invalid_name}' has been marked invalid",
+                            description=(
+                                f"The {db_connector.source.value} connector failed "
+                                "validation repeatedly, usually due to expired "
+                                "credentials or revoked access. Update its "
+                                "credentials to resume indexing."
+                            ),
+                        )
             raise e
         elif isinstance(e, ConnectorStopSignal):
             with get_session_with_current_tenant() as db_session_temp:
@@ -968,20 +1020,13 @@ def cache_and_upsert_hierarchy_nodes(
         hierarchy_node_batch
     )
     with get_session_with_current_tenant() as db_session:
-        upserted_nodes = upsert_hierarchy_nodes_batch(
+        upserted_nodes = persist_hierarchy_nodes_for_cc_pair(
             db_session=db_session,
             nodes=hierarchy_node_batch_cleaned,
             source=db_connector.source,
-            commit=True,
-            is_connector_public=is_connector_public,
-        )
-
-        upsert_hierarchy_node_cc_pair_entries(
-            db_session=db_session,
-            hierarchy_node_ids=[n.id for n in upserted_nodes],
             connector_id=db_connector.id,
             credential_id=db_credential.id,
-            commit=True,
+            is_connector_public=is_connector_public,
         )
 
         # Cache in Redis for fast ancestor resolution during doc processing

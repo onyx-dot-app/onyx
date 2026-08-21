@@ -1,6 +1,7 @@
 import type { Page, Locator } from "@playwright/test";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 
-export const WEB_SEARCH_URL = "/admin/configuration/web-search";
+export const WEB_SEARCH_URL = ADMIN_ROUTES.WEB_SEARCH.path;
 
 export const FAKE_SEARCH_PROVIDERS = {
   exa: {

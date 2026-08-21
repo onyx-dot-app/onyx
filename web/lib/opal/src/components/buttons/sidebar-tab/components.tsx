@@ -83,23 +83,19 @@ interface FoldedTooltipProps {
  * not. On a fold toggle React re-renders this wrapper alone — `children` is
  * the same element it received before, so the tab below it never re-renders.
  *
- * The tooltip stays mounted and is gated by `open` instead of being added and
- * removed. Changing the tree shape on a fold would remount the tab and cut the
- * label's fade short.
+ * The tooltip stays mounted and is suppressed while unfolded instead of being
+ * added and removed. Dropping it would change the tree shape on a fold, which
+ * remounts the tab and cuts the label's fade short.
  */
 function FoldedTooltip({ label, folded, children }: FoldedTooltipProps) {
   const foldedFromSidebar = useSidebarFolded();
-  const [hovered, setHovered] = React.useState(false);
 
   const effectiveFolded = folded ?? foldedFromSidebar;
 
+  /* `suppressed`, not a controlled `open`: hover stays Radix's to track, so an
+  unfolded tab keeps no hover state of its own that a later fold could act on. */
   return (
-    <Tooltip
-      tooltip={label}
-      side="right"
-      open={effectiveFolded && hovered}
-      onOpenChange={setHovered}
-    >
+    <Tooltip tooltip={label} side="right" suppressed={!effectiveFolded}>
       {children}
     </Tooltip>
   );

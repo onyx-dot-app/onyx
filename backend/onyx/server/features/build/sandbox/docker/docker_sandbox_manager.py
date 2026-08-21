@@ -83,7 +83,6 @@ from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.configs import (
     ATTACHMENTS_DIRECTORY,
     ONYX_SERVER_URL,
-    OPENCODE_DISABLED_TOOLS,
     OPENCODE_SERVE_PORT,
     OPENCODE_SERVER_PASSWORD,
     SANDBOX_CONTAINER_IMAGE,
@@ -157,6 +156,7 @@ from onyx.server.features.build.timeouts import (
     POLL_INTERVAL_SECONDS,
     PROVISION_DEADLINE_SECONDS,
 )
+from onyx.server.features.build.utils import get_opencode_disabled_tools
 from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
 
@@ -857,7 +857,7 @@ class DockerSandboxManager(SandboxManager):
                 SANDBOX_PROXY_INJECTED_PLACEHOLDER if SANDBOX_PROXY_HOST else onyx_pat
             )
             opencode_config = build_opencode_base_config(
-                disabled_tools=OPENCODE_DISABLED_TOOLS,
+                disabled_tools=get_opencode_disabled_tools(),
                 plugins=plugins,
             )
             opencode_config_json = json.dumps(opencode_config)
@@ -1067,7 +1067,7 @@ class DockerSandboxManager(SandboxManager):
             connectable_apps_section=connectable_apps_section,
             provider=agent_provider,
             model_name=agent_model,
-            disabled_tools=OPENCODE_DISABLED_TOOLS,
+            disabled_tools=get_opencode_disabled_tools(),
             user_name=user_name,
             organization_instructions=load_settings().craft_instructions,
         )
@@ -1093,7 +1093,7 @@ class DockerSandboxManager(SandboxManager):
         session_opencode_config = json.dumps(
             build_provider_opencode_config(
                 llm_config,
-                disabled_tools=OPENCODE_DISABLED_TOOLS,
+                disabled_tools=get_opencode_disabled_tools(),
                 mcp_servers=mcp_servers,
                 session_id=str(session_id),
             )
@@ -1521,7 +1521,7 @@ fi
             json.dumps(
                 build_provider_opencode_config(
                     llm_config,
-                    disabled_tools=OPENCODE_DISABLED_TOOLS,
+                    disabled_tools=get_opencode_disabled_tools(),
                     mcp_servers=mcp_servers,
                     session_id=str(session_id),
                 )

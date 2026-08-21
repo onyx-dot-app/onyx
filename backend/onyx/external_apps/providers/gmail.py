@@ -139,7 +139,6 @@ _ENDPOINTS: list[EndpointSpec] = [
         description="Save a new draft email (not sent).",
         matches=(RestRoute(method="POST", path=_DRAFTS),),
         default_policy=EndpointPolicy.ALWAYS,
-        requires_self_hosted_scope=True,
     ),
     EndpointSpec(
         id=GmailAction.DRAFTS_UPDATE,
@@ -170,9 +169,13 @@ _ENDPOINTS: list[EndpointSpec] = [
 # full draft lifecycle — but not permanent message delete, which keeps the
 # integration safer by default.
 _SELF_HOSTED_SCOPE = "https://www.googleapis.com/auth/gmail.modify"
-# Every Gmail scope that can read mail or touch drafts is restricted, so on
-# cloud the app is send-only.
-_CLOUD_SCOPE = "https://www.googleapis.com/auth/gmail.send"
+# Every classic Gmail scope that can read mail or touch drafts is restricted.
+# The granular `gmail.drafts.create` scope is not, so cloud is send plus draft
+# creation. That scope is live in Google's OAuth registry; public docs lag.
+_CLOUD_SCOPE = (
+    "https://www.googleapis.com/auth/gmail.send "
+    "https://www.googleapis.com/auth/gmail.drafts.create"
+)
 
 
 class GmailProvider(GoogleOAuthProvider, OnyxManagedExtApp):

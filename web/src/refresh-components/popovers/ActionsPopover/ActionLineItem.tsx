@@ -2,7 +2,7 @@
 
 import React from "react";
 import { SEARCH_TOOL_ID } from "@/app/app/components/tools/constants";
-import { ToolSnapshot } from "@/lib/tools/interfaces";
+import { ToolSnapshot } from "@/lib/tools/types";
 import { getIconForAction } from "@/app/app/services/actionUtils";
 import { ToolAuthStatus } from "@/lib/hooks/useToolOAuthStatus";
 import LineItem from "@/refresh-components/buttons/LineItem";

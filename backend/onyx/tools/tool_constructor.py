@@ -13,10 +13,8 @@ from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.context.search.models import BaseFilters, PersonaSearchInfo
 from onyx.db.engine.sql_engine import get_session_with_current_tenant_if_none
 from onyx.db.mcp import (
-    MCPCredentialsError,
     get_all_mcp_tools_for_server,
     get_mcp_server_by_id,
-    resolve_mcp_credentials,
 )
 from onyx.db.models import Persona, User
 from onyx.db.models import Tool as ToolDBModel
@@ -27,6 +25,10 @@ from onyx.document_index.factory import get_default_document_index
 from onyx.image_gen.interfaces import ImageGenerationProviderCredentials
 from onyx.llm.interfaces import LLM, LLMConfig
 from onyx.onyxbot.slack.models import SlackContext
+from onyx.server.features.mcp.credentials import (
+    MCPCredentialsError,
+    resolve_mcp_credentials,
+)
 from onyx.tools.built_in_tools import get_built_in_tool_by_id
 from onyx.tools.interface import Tool
 from onyx.tools.models import DynamicSchemaInfo, SearchToolUsage

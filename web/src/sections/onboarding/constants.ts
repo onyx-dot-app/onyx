@@ -1,4 +1,5 @@
 import { OnboardingStep, FinalStepItemProps } from "@/interfaces/onboarding";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { SvgGlobe, SvgImage, SvgUsers } from "@opal/icons";
 
 type StepConfig = {
@@ -59,20 +60,20 @@ export const FINAL_SETUP_CONFIG: FinalStepItemProps[] = [
     description: "Enable Onyx to search the internet for information.",
     icon: SvgGlobe,
     buttonText: "Web Search",
-    buttonHref: "/admin/configuration/web-search",
+    buttonHref: ADMIN_ROUTES.WEB_SEARCH.path,
   },
   {
     title: "Enable image generation",
     description: "Set up models to create images in your chats.",
     icon: SvgImage,
     buttonText: "Image Generation",
-    buttonHref: "/admin/configuration/image-generation",
+    buttonHref: ADMIN_ROUTES.IMAGE_GENERATION.path,
   },
   {
     title: "Invite your team",
     description: "Manage users and permissions for your team",
     icon: SvgUsers,
     buttonText: "Manage Users",
-    buttonHref: "/admin/users",
+    buttonHref: ADMIN_ROUTES.USERS.path,
   },
 ];

@@ -36,7 +36,6 @@ from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.configs import (
     MAX_TOTAL_UPLOAD_SIZE_BYTES,
     MAX_UPLOAD_FILES_PER_SESSION,
-    OPENCODE_DISABLED_TOOLS,
 )
 from onyx.server.features.build.db.build_session import (
     create_build_session__no_commit,
@@ -102,6 +101,7 @@ from onyx.server.features.build.timeouts import (
     PROMPT_SLOT_KEEP_ALIVE_MAX_SECONDS,
     PROVISION_WAIT_SECONDS,
 )
+from onyx.server.features.build.utils import get_opencode_disabled_tools
 from onyx.server.metrics.craft_sandbox import SandboxReadyOutcome
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import start_thread_with_context
@@ -271,7 +271,7 @@ class SessionManager:
         expected = json.dumps(
             build_provider_opencode_config(
                 llm_config,
-                disabled_tools=OPENCODE_DISABLED_TOOLS,
+                disabled_tools=get_opencode_disabled_tools(),
                 mcp_servers=mcp_servers,
                 session_id=str(session.id),
             )

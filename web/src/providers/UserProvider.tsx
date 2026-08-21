@@ -12,9 +12,10 @@ import React, {
 import {
   User,
   UserPersonalization,
-  UserRole,
   ThemePreference,
+  Permission,
 } from "@/lib/types";
+import { hasAnyAdminPermission } from "@/lib/permissions";
 import { usePostHog } from "posthog-js/react";
 import { isAuthStatusError } from "@/lib/fetcher";
 import { useSettings } from "@/lib/settings/hooks";
@@ -27,6 +28,8 @@ import {
 } from "@/lib/users/svc";
 import { useTheme } from "next-themes";
 
+const EMPTY_PERMISSIONS: string[] = [];
+
 // Auth failures skip SWR's retry but are usually transient refresh races. SWR's backoff owns the rest.
 const ME_RETRY_DELAYS_MS = [2_000, 5_000, 15_000];
 
@@ -36,11 +39,17 @@ const ME_LOADING_DEADLINE_MS = 30_000;
 /** Only "resolved" lets a null user mean signed out. "unavailable" means /api/me keeps failing for a possibly valid session. */
 export type UserResolution = "loading" | "unavailable" | "resolved";
 
-interface UserContextType {
+export interface UserContextType {
   user: User | null;
   userResolution: UserResolution;
   isAdmin: boolean;
-  isCurator: boolean;
+  hasAdminAccess: boolean;
+  permissions: string[];
+  // Coarse admin-reach set: effective tokens plus the scoped manager bundle. Feeds
+  // nav/page gates so a group manager is included; org-wide checks still use isAdmin.
+  adminCapabilities: string[];
+  // True only while /api/me is in flight. `user === null` won't do: it also means signed out.
+  isUserLoading: boolean;
   refreshUser: () => Promise<void>;
   isCloudSuperuser: boolean;
   authTypeMetadata: AuthTypeMetadata | undefined;
@@ -73,6 +82,11 @@ const UserContext = createContext<UserContextType | undefined>(undefined);
 
 export function UserProvider({ children }: { children: React.ReactNode }) {
   const { user: fetchedUser, mutateUser, userError } = useCurrentUser();
+  // undefined = in flight. An error counts as resolved, so a failed load fails closed.
+  const isUserLoading = fetchedUser === undefined && userError === undefined;
+  // Permissions read the fetch result, not `upToDateUser`: that copy lands one render late,
+  // so a page gate could see empty permissions after `isUserLoading` went false and redirect.
+  const authUser = fetchedUser ?? null;
   const { authTypeMetadata, isLoading: authTypeMetadataLoading } =
     useAuthTypeMetadata();
   const updatedSettingsData = useSettings();
@@ -613,12 +627,16 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         updateUserDefaultAppMode,
         updateUserVoiceSettings,
         toggleAgentPinnedStatus,
-        isAdmin: upToDateUser?.role === UserRole.ADMIN,
-        // Curator status applies for either global or basic curator
-        isCurator:
-          upToDateUser?.role === UserRole.CURATOR ||
-          upToDateUser?.role === UserRole.GLOBAL_CURATOR,
-        isCloudSuperuser: upToDateUser?.is_cloud_superuser ?? false,
+        isAdmin: (
+          authUser?.effective_permissions ?? EMPTY_PERMISSIONS
+        ).includes(Permission.FULL_ADMIN_PANEL_ACCESS),
+        hasAdminAccess: hasAnyAdminPermission(
+          authUser?.admin_capabilities ?? EMPTY_PERMISSIONS
+        ),
+        permissions: authUser?.effective_permissions ?? EMPTY_PERMISSIONS,
+        adminCapabilities: authUser?.admin_capabilities ?? EMPTY_PERMISSIONS,
+        isUserLoading,
+        isCloudSuperuser: authUser?.is_cloud_superuser ?? false,
       }}
     >
       {children}

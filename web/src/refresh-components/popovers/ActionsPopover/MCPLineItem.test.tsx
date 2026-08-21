@@ -3,7 +3,7 @@ import {
   MCPAuthenticationPerformer,
   MCPAuthenticationType,
   ToolSnapshot,
-} from "@/lib/tools/interfaces";
+} from "@/lib/tools/types";
 import MCPLineItem, {
   MCPServer,
 } from "@/refresh-components/popovers/ActionsPopover/MCPLineItem";
@@ -15,7 +15,7 @@ const oauthServer: MCPServer = {
   server_url: "https://mcp.example.com",
   auth_type: MCPAuthenticationType.OAUTH,
   auth_performer: MCPAuthenticationPerformer.PER_USER,
-  is_authenticated: false,
+  user_can_authenticate: false,
 };
 
 const tool: ToolSnapshot = {

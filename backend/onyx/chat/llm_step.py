@@ -43,6 +43,7 @@ from onyx.llm.models import (
     UserMessage,
 )
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
+from onyx.llm.request_context import get_llm_request_params
 from onyx.llm.utils import model_needs_formatting_reenabled, model_supports_image_input
 from onyx.prompts.chat_prompts import (
     CODE_BLOCK_MARKDOWN,
@@ -874,7 +875,9 @@ def translate_history_to_llm_format(
     supports_image_input = True
     if any(msg.message_type == MessageType.USER and msg.image_files for msg in history):
         supports_image_input = model_supports_image_input(
-            llm_config.model_name, llm_config.model_provider
+            llm_config.model_name,
+            llm_config.model_provider,
+            llm_config.deployment_name,
         )
 
     # Per-request image cap (provider-aware). When the cap is enforced and
@@ -1029,7 +1032,9 @@ def translate_history_to_llm_format(
 
     # Apply model-specific formatting when translating to LLM format (e.g. OpenAI
     # reasoning models need CODE_BLOCK_MARKDOWN prefix for correct markdown generation)
-    if model_needs_formatting_reenabled(llm_config.model_name):
+    if model_needs_formatting_reenabled(
+        llm_config.model_name, llm_config.deployment_name
+    ):
         for i, m in enumerate(messages):
             if isinstance(m, SystemMessage):
                 messages[i] = SystemMessage(
@@ -1309,6 +1314,10 @@ def run_llm_step_pkt_generator(
             user_identity=user_identity,
             timeout_override=timeout_override,
         ):
+            # On the first chunk, not at stream end: a mid-step stop persists
+            # from another thread and needs this step's params already there.
+            if stream_chunk_count == 0 and state_container:
+                state_container.set_request_params(get_llm_request_params())
             stream_chunk_count += 1
             if packet.usage:
                 usage = packet.usage

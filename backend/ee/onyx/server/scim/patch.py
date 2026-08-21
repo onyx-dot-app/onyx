@@ -17,11 +17,12 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, TypeVar
+
+from pydantic import BaseModel, ValidationError
 
 from ee.onyx.server.scim.models import (
     SCIM_ENTERPRISE_USER_SCHEMA,
-    ScimGroupMember,
     ScimGroupResource,
     ScimPatchOperation,
     ScimPatchOperationType,
@@ -32,6 +33,8 @@ from ee.onyx.server.scim.models import (
 
 logger = logging.getLogger(__name__)
 
+_ResourceT = TypeVar("_ResourceT", bound=BaseModel)
+
 # Lowercased enterprise extension URN for case-insensitive matching
 _ENTERPRISE_URN_LOWER = SCIM_ENTERPRISE_USER_SCHEMA.lower()
 
@@ -39,7 +42,7 @@ _ENTERPRISE_URN_LOWER = SCIM_ENTERPRISE_USER_SCHEMA.lower()
 #   emails[primary eq true].value  (Okta)
 #   emails[type eq "work"].value   (Azure AD / Entra ID)
 _EMAIL_FILTER_RE = re.compile(
-    r"^emails\[.+\]\.value$",
+    r'^emails\[(\w+)\s+eq\s+"?([^"\]]+)"?\]\.value$',
     re.IGNORECASE,
 )
 
@@ -87,6 +90,18 @@ class ScimPatchError(Exception):
         self.detail = detail
         self.status = status
         super().__init__(detail)
+
+
+def _validate_patched(model: type[_ResourceT], data: dict[str, Any]) -> _ResourceT:
+    """Rebuild the patched resource, surfacing bad values as a 400.
+
+    A value the union mis-shapes (e.g. an emails entry with unknown keys)
+    only fails here, and the IdP sent it, so it is a client error.
+    """
+    try:
+        return model.model_validate(data)
+    except ValidationError as e:
+        raise ScimPatchError(f"Invalid PATCH value: {e.errors()[0]['msg']}") from e
 
 
 @dataclass
@@ -137,7 +152,7 @@ def apply_user_patch(
             )
 
     ctx.data["name"] = ctx.name_data
-    return ScimUserResource.model_validate(ctx.data), ctx.ent_data
+    return _validate_patched(ScimUserResource, ctx.data), ctx.ent_data
 
 
 def _apply_user_replace(
@@ -219,8 +234,10 @@ def _set_user_field(
     elif path == "emails":
         if isinstance(value, list):
             ctx.data["emails"] = value
-    elif _EMAIL_FILTER_RE.match(path):
-        _update_primary_email(ctx.data, value)
+    elif email_filter := _EMAIL_FILTER_RE.match(path):
+        _update_filtered_email(
+            ctx.data, email_filter.group(1), email_filter.group(2), value
+        )
     elif path.startswith(_ENTERPRISE_URN_LOWER):
         _set_enterprise_field(path, value, ctx.ent_data)
     elif not strict:
@@ -229,15 +246,31 @@ def _set_user_field(
         raise ScimPatchError(f"Unsupported path '{path}' for User PATCH")
 
 
-def _update_primary_email(data: dict[str, Any], value: ScimPatchValue) -> None:
-    """Update the primary email entry via an email filter path."""
+def _update_filtered_email(
+    data: dict[str, Any], attr: str, literal: str, value: ScimPatchValue
+) -> None:
+    """Update the email entry an ``emails[<attr> eq <literal>].value`` path names.
+
+    A type filter targets the matching typed entry so it cannot move a
+    different primary entry. An unmatched filter appends: primary for a
+    primary filter, a non-primary typed entry otherwise (unless it is the
+    only entry, which must stay resolvable as the account email).
+    """
     emails: list[dict] = data.get("emails") or []
+    attr = attr.lower()
     for email_entry in emails:
-        if email_entry.get("primary"):
+        matches = (
+            str(email_entry.get("primary")).lower() == literal.lower()
+            if attr == "primary"
+            else str(email_entry.get(attr)).lower() == literal.lower()
+        )
+        if matches:
             email_entry["value"] = value
             break
     else:
-        emails.append({"value": value, "type": "work", "primary": True})
+        entry_type = literal if attr == "type" else "work"
+        primary = attr == "primary" or not emails
+        emails.append({"value": value, "type": entry_type, "primary": primary})
     data["emails"] = emails
 
 
@@ -254,6 +287,13 @@ def _to_dict(value: ScimPatchValue) -> dict | None:
     return None
 
 
+def _ent_str(value: Any, attr: str) -> str | None:
+    """Enterprise extension values must be strings, so anything else is a 400."""
+    if value is None or isinstance(value, str):
+        return value
+    raise ScimPatchError(f"Invalid value for enterprise attribute '{attr}'")
+
+
 def _set_enterprise_field(
     path: str,
     value: ScimPatchValue,
@@ -266,11 +306,11 @@ def _set_enterprise_field(
         d = _to_dict(value)
         if d is not None:
             if "department" in d:
-                ent_data["department"] = d["department"]
+                ent_data["department"] = _ent_str(d["department"], "department")
             if "manager" in d:
                 mgr = d["manager"]
                 if isinstance(mgr, dict):
-                    ent_data["manager"] = mgr.get("value")
+                    ent_data["manager"] = _ent_str(mgr.get("value"), "manager")
         return
 
     # Dotted URN path, e.g. "urn:...:user:department"
@@ -280,7 +320,7 @@ def _set_enterprise_field(
     elif suffix == "manager":
         d = _to_dict(value)
         if d is not None:
-            ent_data["manager"] = d.get("value")
+            ent_data["manager"] = _ent_str(d.get("value"), "manager")
         elif isinstance(value, str):
             ent_data["manager"] = value
     else:
@@ -333,7 +373,7 @@ def apply_group_patch(
             )
 
     data["members"] = current_members
-    group = ScimGroupResource.model_validate(data)
+    group = _validate_patched(ScimGroupResource, data)
     return group, added_ids, removed_ids
 
 
@@ -369,9 +409,7 @@ def _apply_group_replace(
     _set_group_field(path, op.value, data, ignored_paths)
 
 
-def _members_to_dicts(
-    value: str | bool | list[ScimGroupMember] | ScimPatchResourceValue | None,
-) -> list[dict]:
+def _members_to_dicts(value: ScimPatchValue) -> list[dict]:
     """Convert a member list value to a list of dicts for internal processing."""
     if not isinstance(value, list):
         raise ScimPatchError("Replace members requires a list value")
