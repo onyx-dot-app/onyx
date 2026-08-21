@@ -1,0 +1,167 @@
+name: Local Preview Deployment
+
+# Per-commit full-stack previews on the self-hosted local-preview server: the
+# Next.js frontend and the FastAPI backend running together at
+# <sha>-onyx.<the server's preview domain>. Which server that is lives
+# entirely in vars.PREVIEW_URL, managed in onyx-infra
+# (internal-tools/terraform/github-org) — nothing here names a host, so
+# pointing this at a different deployment is a variable change, not a PR.
+#
+# Separate from preview.yml (Vercel) because the two want different triggers.
+# The server does not watch this repo: it deploys only what this workflow
+# hands it, so a commit that never runs this job never gets a preview. That is
+# why backend/** is here and is not in preview.yml — Vercel has no backend to
+# build and should not run for a backend-only change.
+on:
+  push:
+    branches-ignore:
+      - main
+    paths:
+      - "web/**"
+      - "backend/**"
+  # Redeploy a branch without pushing to it — for a preview lost to a server
+  # rebuild, or a commit whose only changes fell outside the paths above.
+  # Path filters do not apply to a dispatch, so this always builds.
+  #
+  # GitHub resolves dispatchable workflows from the default branch, so this
+  # appears in the Actions tab only once this file is on main; the ref picker
+  # then still runs the chosen branch's copy.
+  workflow_dispatch:
+
+# One deploy per branch at a time. Without this, two commits deploying
+# together can finish out of order and leave the PR comment on the older
+# commit's URL. Cancelling the older run also frees the server sooner.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  Deploy-Local-Preview:
+    if: ${{ vars.PREVIEW_URL != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    env:
+      PREVIEW_URL: ${{ vars.PREVIEW_URL }}
+      # Matches the server's --github-oidc-audience (terraform sets it to the
+      # server URL). The CLI would default to exactly this; naming it keeps
+      # the two ends visibly pinned to each other.
+      PREVIEW_GITHUB_OIDC_AUDIENCE: ${{ vars.PREVIEW_URL }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Setup bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # ratchet:oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.13"
+
+      - name: Cache bun install cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('web/bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      # next build's incremental compilation cache — the bulk of this job's
+      # runtime is that one command, and without this every run compiles the
+      # whole app from cold. Keyed on the sources so an unchanged tree restores
+      # exactly; the restore-keys prefix means a changed one still starts from
+      # the last build rather than from nothing.
+      - name: Cache the Next.js build
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: web/.next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('web/bun.lock') }}-${{ hashFiles('web/**/*.[jt]s', 'web/**/*.[jt]sx') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-${{ hashFiles('web/bun.lock') }}-
+            ${{ runner.os }}-nextjs-
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # ratchet:astral-sh/setup-uv@v9.0.0
+
+      - name: Install the preview CLI
+        run: uv tool install local-preview==0.9.0
+
+      # Must match the frontend build in the server's own manifest for this
+      # repo (manifests/onyx.toml in the terraform workspace) step for step —
+      # an upload replaces what the server would have built, so a divergence
+      # here is a preview that doesn't match what a rebuild would produce.
+      #
+      # @onyx-ai/opal depends on @onyx-ai/shared, so shared builds first.
+      # (The Vercel job below has the two in the other order; it survives
+      # because bun install's prepare scripts have already built both.)
+      - name: Build the frontend
+        working-directory: ./web
+        run: |
+          bun install --frozen-lockfile
+          bun run --filter './lib/shared' build
+          bun run --filter './lib/opal' build
+          bun run build:fast
+          cp -r .next/static .next/standalone/.next/static
+          if [ -d public ]; then
+            cp -r public .next/standalone/public
+          fi
+
+      # The published tree becomes the process's working directory and the
+      # manifest runs `node .next/standalone/server.js` in it, so the upload
+      # has to keep that path — but nothing else. Shipping web/ wholesale
+      # would mean uploading node_modules for no reason.
+      - name: Assemble the upload tree
+        run: |
+          mkdir -p upload/.next
+          cp -r web/.next/standalone upload/.next/standalone
+
+      - name: Upload the frontend and deploy
+        id: deploy
+        run: |
+          # Without pipefail the tee below would mask a failed upload.
+          set -o pipefail
+          preview upload frontend upload "$GITHUB_SHA" \
+            --repo onyx --server "$PREVIEW_URL" --oidc --deploy | tee out.txt
+          URL=$(sed -n 's/^ready: //p' out.txt)
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+
+      - name: Update PR comment with preview URL
+        if: always() && steps.deploy.outputs.url
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PREVIEW_DEPLOYMENT_URL: ${{ steps.deploy.outputs.url }}
+          # Which GitHub org the server admits, only so the comment can say
+          # so. Optional — the sign-in line drops the clause when it is unset.
+          PREVIEW_SSO_ORG: ${{ vars.PREVIEW_SSO_ORG }}
+        run: |
+          PR_NUMBER=$(gh pr list --head "$GITHUB_REF_NAME" --json number --jq '.[0].number')
+          if [ -z "$PR_NUMBER" ]; then
+            echo "No open PR found for branch $GITHUB_REF_NAME, skipping comment."
+            exit 0
+          fi
+
+          COMMENT_MARKER="<!-- local-preview-deployment -->"
+          COMMENT_BODY="$COMMENT_MARKER
+          **Full-stack Preview** (frontend + backend)
+
+          | Status | Preview | Commit | Updated |
+          | --- | --- | --- | --- |
+          | ✅ | $PREVIEW_DEPLOYMENT_URL | \`${GITHUB_SHA::7}\` | $(date -u '+%Y-%m-%d %H:%M:%S UTC') |
+
+          Sign in with GitHub${PREVIEW_SSO_ORG:+ as an \`$PREVIEW_SSO_ORG\` member} to view it."
+
+          # --paginate: on a long PR the marker can sit past the first page.
+          EXISTING_COMMENT_ID=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
+            --jq ".[] | select(.body | startswith(\"$COMMENT_MARKER\")) | .id" | head -1)
+
+          if [ -n "$EXISTING_COMMENT_ID" ]; then
+            gh api "repos/$GITHUB_REPOSITORY/issues/comments/$EXISTING_COMMENT_ID" \
+              --method PATCH --field body="$COMMENT_BODY"
+          else
+            gh pr comment "$PR_NUMBER" --body "$COMMENT_BODY"
+          fi
