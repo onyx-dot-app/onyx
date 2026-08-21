@@ -399,10 +399,16 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
       }
 
       // Same rule as the remove button; add mode can't disable a checkbox, so re-select.
+      // Rows already forced above are skipped, so one row never raises two toasts.
       const strandedIds = allRows
-        .filter(
-          (row) => !kept.has(row.id ?? row.email) && isLastGroupMember(row)
-        )
+        .filter((row) => {
+          const rowId = row.id ?? row.email;
+          return (
+            !kept.has(rowId) &&
+            !forcedIds.includes(rowId) &&
+            isLastGroupMember(row)
+          );
+        })
         .map((row) => row.id ?? row.email);
       if (strandedIds.length > 0) {
         toast.error(
@@ -411,10 +417,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
         forcedIds.push(...strandedIds);
       }
 
-      // Deduped: a manager whose only group is this one satisfies both rules.
-      setSelectedUserIds(
-        Array.from(new Set([...forcedIds, ...ids, ...hiddenMemberIds]))
-      );
+      setSelectedUserIds([...forcedIds, ...ids, ...hiddenMemberIds]);
     },
     [
       initialized,
