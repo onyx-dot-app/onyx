@@ -511,6 +511,16 @@ export default function MultiModelResponseView({
   const [carouselPos, setCarouselPos] = useState(
     preferredCarouselPos !== -1 ? preferredCarouselPos : lastCarouselPos
   );
+  // Breaking into the carousel keeps continuity with the wide layout: land on
+  // the preferred card when one exists, else keep the last carousel position.
+  const wasNarrowRef = useRef(showNarrowCarousel);
+  useEffect(() => {
+    const entered = showNarrowCarousel && !wasNarrowRef.current;
+    wasNarrowRef.current = showNarrowCarousel;
+    if (entered && preferredCarouselPos !== -1) {
+      setCarouselPos(preferredCarouselPos);
+    }
+  }, [showNarrowCarousel, preferredCarouselPos]);
   const clampedCarouselPos = Math.min(carouselPos, lastCarouselPos);
   const currentCarouselResponse = visibleResponses[clampedCarouselPos];
 
@@ -589,10 +599,25 @@ export default function MultiModelResponseView({
         ? Math.min(trackContainerW - 2 * (PEEK_W + PANEL_GAP), GEN_PANEL_W_2)
         : GEN_PANEL_W_2;
 
+    // Uniform width shrinks with the container so the deselected track never
+    // overflows and clips headers at mid widths.
+    const uniformPanelW = Math.max(
+      MIN_PANEL_W,
+      Math.min(
+        SELECTION_PANEL_W,
+        trackContainerW > 0
+          ? (trackContainerW -
+              hiddenPanels.size * HIDDEN_PANEL_W -
+              (n - 1) * PANEL_GAP) /
+              (visibleResponses.length || 1)
+          : SELECTION_PANEL_W
+      )
+    );
+
     const selectionWidths = responses.map((r, i) => {
       if (hiddenPanels.has(r.modelIndex)) return HIDDEN_PANEL_W;
       if (i === preferredIdx) return dynamicPrefW;
-      return SELECTION_PANEL_W;
+      return uniformPanelW;
     });
 
     const panelLeftEdges = selectionWidths.reduce<number[]>((acc, w, i) => {
@@ -603,12 +628,12 @@ export default function MultiModelResponseView({
     const preferredCenterInTrack =
       panelLeftEdges[preferredIdx]! + selectionWidths[preferredIdx]! / 2;
 
-    // Start position: hidden panels at HIDDEN_PANEL_W, visible at SELECTION_PANEL_W
+    // Start position: hidden panels at HIDDEN_PANEL_W, visible at uniformPanelW
     const uniformTrackW =
       responses.reduce(
         (sum, r) =>
           sum +
-          (hiddenPanels.has(r.modelIndex) ? HIDDEN_PANEL_W : SELECTION_PANEL_W),
+          (hiddenPanels.has(r.modelIndex) ? HIDDEN_PANEL_W : uniformPanelW),
         0
       ) +
       (n - 1) * PANEL_GAP;
@@ -646,7 +671,7 @@ export default function MultiModelResponseView({
             const isPref = r.modelIndex === preferredIndex;
             const isNonPref = !isHidden && !isPref && preferredIndex !== null;
             const finalW = selectionWidths[i]!;
-            const startW = isHidden ? HIDDEN_PANEL_W : SELECTION_PANEL_W;
+            const startW = isHidden ? HIDDEN_PANEL_W : uniformPanelW;
             const capped = isNonPref && preferredPanelHeight != null;
             const overflows = capped && overflowingPanels.has(r.modelIndex);
             return (
