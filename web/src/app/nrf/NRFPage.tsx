@@ -300,6 +300,8 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     submitOnLoadPerformed,
     refreshChatSessions,
     onSubmit,
+    // No URL-based chat seeding on this page, so no agent-resolution gate.
+    isSeedAgentReady: true,
   });
 
   // Handle file upload

@@ -30,12 +30,38 @@ export const SEARCH_PARAM_NAMES = {
 export type SearchParamName =
   (typeof SEARCH_PARAM_NAMES)[keyof typeof SEARCH_PARAM_NAMES];
 
+// Strict parsing on purpose: `searchParams.get()` returns strings, so a
+// truthiness check would treat "false" as enabled.
+function isFlagParamTrue(
+  searchParams: ReadonlyURLSearchParams | null,
+  paramName: SearchParamName
+) {
+  const rawValue = searchParams?.get(paramName);
+  return rawValue === "true" || rawValue === "1";
+}
+
 export function shouldSubmitOnLoad(
   searchParams: ReadonlyURLSearchParams | null
 ) {
-  const rawSubmitOnLoad = searchParams?.get(SEARCH_PARAM_NAMES.SUBMIT_ON_LOAD);
-  if (rawSubmitOnLoad === "true" || rawSubmitOnLoad === "1") {
-    return true;
+  return isFlagParamTrue(searchParams, SEARCH_PARAM_NAMES.SUBMIT_ON_LOAD);
+}
+
+export function shouldSendOnLoad(searchParams: ReadonlyURLSearchParams | null) {
+  return isFlagParamTrue(searchParams, SEARCH_PARAM_NAMES.SEND_ON_LOAD);
+}
+
+/**
+ * Parses the `agentId` search param. Returns null when absent or not a valid
+ * integer, so callers can fall back to the default agent.
+ */
+export function getAgentIdFromSearchParam(
+  searchParams: ReadonlyURLSearchParams | null
+): number | null {
+  const rawValue = searchParams?.get(SEARCH_PARAM_NAMES.PERSONA_ID);
+  // Full-value check: parseInt alone would accept prefixes like "12abc".
+  if (!rawValue || !/^\d+$/.test(rawValue)) {
+    return null;
   }
-  return false;
+  const parsed = Number(rawValue);
+  return Number.isSafeInteger(parsed) ? parsed : null;
 }

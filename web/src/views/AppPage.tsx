@@ -1,12 +1,21 @@
 "use client";
 
-import { redirect, useRouter, useSearchParams } from "next/navigation";
+import {
+  ReadonlyURLSearchParams,
+  redirect,
+  useRouter,
+  useSearchParams,
+} from "next/navigation";
 import {
   endIncognitoSession,
   personaIncludesRetrieval,
 } from "@/app/app/services/lib";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
+import {
+  SEARCH_PARAM_NAMES,
+  getAgentIdFromSearchParam,
+  shouldSendOnLoad,
+} from "@/app/app/services/searchParams";
 import { Section } from "@/layouts/general-layouts";
 import { useFederatedConnectors, useFilters, useLlmManager } from "@/lib/hooks";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
@@ -225,6 +234,18 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       }
     });
 
+  // Seeded sends (`send-on-load` / `submit-on-load`) create the session with
+  // `liveAgent` at submit time, so they must wait until agent resolution has
+  // settled — otherwise the chat binds to the fallback default instead of the
+  // URL's `agentId`. If the URL names an agent that doesn't exist, settle for
+  // whatever resolved rather than blocking the send forever.
+  const seededAgentId = getAgentIdFromSearchParam(searchParams);
+  const isSeedAgentReady =
+    !isLoadingAgents &&
+    (seededAgentId === null ||
+      liveAgent?.id === seededAgentId ||
+      !agents.some((agent) => agent.id === seededAgentId));
+
   const { deepResearchEnabled, toggleDeepResearch } = useDeepResearchToggle({
     chatSessionId: currentChatSessionId,
     agentId: selectedAgent?.id,
@@ -351,19 +372,30 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     if (event.data.type === SUBMIT_MESSAGE_TYPES.PAGE_CHANGE) {
       try {
         const url = new URL(event.data.href);
-        processSearchParamsAndSubmitMessage(url.searchParams.toString());
+        const nextParams = new ReadonlyURLSearchParams(url.searchParams);
+        if (shouldSendOnLoad(nextParams)) {
+          // Route seeded navigations through the page's search params so the
+          // send below waits for the NEW URL's agent to resolve, not the
+          // agent resolved for whatever page is currently open.
+          router.replace(`?${nextParams.toString()}`, { scroll: false });
+          return;
+        }
+        processSearchParamsAndSubmitMessage(nextParams.toString());
       } catch (error) {
         console.error("Error parsing URL:", error);
       }
     }
   }
 
-  // Equivalent to `loadNewPageLogic`
+  // Single gate for every seeded send (`send-on-load`): readiness is derived
+  // from the live page params, so it always reflects the URL that will be
+  // submitted. Non-seeded PAGE_CHANGE messages keep their direct path above.
   useEffect(() => {
-    if (searchParams?.get(SEARCH_PARAM_NAMES.SEND_ON_LOAD)) {
-      processSearchParamsAndSubmitMessage(searchParams.toString());
+    if (!shouldSendOnLoad(searchParams) || !isSeedAgentReady) {
+      return;
     }
-  }, [searchParams, router]);
+    processSearchParamsAndSubmitMessage(searchParams.toString());
+  }, [searchParams, router, isSeedAgentReady]);
 
   useEffect(() => {
     window.addEventListener("message", loadNewPageLogic);
@@ -540,6 +572,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     submitOnLoadPerformed,
     refreshChatSessions,
     onSubmit,
+    isSeedAgentReady,
   });
 
   useSendMessageToParent();

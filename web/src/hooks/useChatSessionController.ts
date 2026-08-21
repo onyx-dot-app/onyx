@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useCallback, useState } from "react";
+import { useEffect, useCallback, useRef, useState } from "react";
 import { ReadonlyURLSearchParams } from "next/navigation";
 import {
   nameChatSession,
@@ -20,6 +20,7 @@ import {
 } from "@/app/app/interfaces";
 import {
   SEARCH_PARAM_NAMES,
+  getAgentIdFromSearchParam,
   shouldSubmitOnLoad,
 } from "@/app/app/services/searchParams";
 import { FilterManager } from "@/lib/hooks";
@@ -69,6 +70,11 @@ interface UseChatSessionControllerProps {
     deepResearch: boolean;
     isSeededChat?: boolean;
   }) => Promise<void>;
+
+  // Whether agent resolution (URL `agentId` → liveAgent) has settled. Seeded
+  // submissions wait on this so the new session binds to the intended agent
+  // instead of the fallback default.
+  isSeedAgentReady: boolean;
 }
 
 export type SessionFetchError = {
@@ -91,12 +97,16 @@ export default function useChatSessionController({
   submitOnLoadPerformed,
   refreshChatSessions,
   onSubmit,
+  isSeedAgentReady,
 }: UseChatSessionControllerProps) {
   const [currentSessionFileTokenCount, setCurrentSessionFileTokenCount] =
     useState<number>(0);
   const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
   const [sessionFetchError, setSessionFetchError] =
     useState<SessionFetchError>(null);
+  // Tracks seed-gate flips so the fetch effect can ignore readiness changes
+  // that don't coincide with a session change.
+  const prevIsSeedAgentReadyRef = useRef(isSeedAgentReady);
   // Store actions
   const updateSessionAndMessageTree = useChatSessionStore(
     (state) => state.updateSessionAndMessageTree
@@ -134,6 +144,20 @@ export default function useChatSessionController({
     const loadedSessionId = loadedIdSessionRef.current;
     chatSessionIdRef.current = existingChatSessionId;
     loadedIdSessionRef.current = existingChatSessionId;
+
+    // Readiness only matters for seeding a brand-new session. When it flips
+    // while an existing session is already open, skip the rerun rather than
+    // fetching the same session twice.
+    const seedReadinessChanged =
+      prevIsSeedAgentReadyRef.current !== isSeedAgentReady;
+    prevIsSeedAgentReadyRef.current = isSeedAgentReady;
+    if (
+      seedReadinessChanged &&
+      existingChatSessionId !== null &&
+      priorChatSessionId === existingChatSessionId
+    ) {
+      return;
+    }
 
     chatInputBarRef.current?.focus();
 
@@ -175,21 +199,33 @@ export default function useChatSessionController({
         // Clear the current session in the store to show intro messages
         setCurrentSession(null);
 
-        // Reset the selected agent back to default
-        setSelectedAgentFromId(null);
+        // Select the URL's agent when chat seeding provides one, else reset
+        // to the default. Passing the id through (rather than always null)
+        // also keeps mid-session URL agent changes working.
+        setSelectedAgentFromId(getAgentIdFromSearchParam(searchParams));
         updateCurrentChatSessionSharedStatus(ChatSessionSharedStatus.Private);
 
         // If we're supposed to submit on initial load, then do that here
         if (
           shouldSubmitOnLoad(searchParams) &&
-          !submitOnLoadPerformed.current
+          !submitOnLoadPerformed.current &&
+          isSeedAgentReady
         ) {
           submitOnLoadPerformed.current = true;
-          await onSubmit({
-            message: firstMessage || "",
-            currentMessageFiles: [],
-            deepResearch: false,
-          });
+          // `user-prompt` is the documented seeding param and wins when both
+          // it and the legacy `firstMessage` alias are present.
+          const message =
+            searchParams?.get(SEARCH_PARAM_NAMES.USER_PROMPT) ||
+            firstMessage ||
+            "";
+          // An empty message would create a blank user bubble — skip instead.
+          if (message) {
+            await onSubmit({
+              message,
+              currentMessageFiles: [],
+              deepResearch: false,
+            });
+          }
         }
         return;
       }
@@ -493,6 +529,7 @@ export default function useChatSessionController({
   }, [
     existingChatSessionId,
     searchParams?.get(SEARCH_PARAM_NAMES.PERSONA_ID),
+    isSeedAgentReady,
     // Note: We're intentionally not including all dependencies to avoid infinite loops
     // This effect should only run when existingChatSessionId or persona ID changes
   ]);
