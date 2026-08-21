@@ -596,8 +596,10 @@ function ModelRow({
         variant="select-heavy"
         state={isSelected ? "selected" : "empty"}
         onPointerDownCapture={(e: React.PointerEvent) => {
+          // Scoped to the title row: the checkbox also owns a hidden input.
           renamingAtPointerDown.current =
-            e.currentTarget.querySelector("input") != null;
+            e.currentTarget.querySelector(".opal-content-md-title-row input") !=
+            null;
         }}
         onClick={toggleFromRow}
         role={toggleVisibility ? "button" : undefined}
