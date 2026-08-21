@@ -41,7 +41,17 @@ def _make_db_session(
 
 @patch("ee.onyx.db.user_group.recompute_user_permissions__no_commit")
 @patch("ee.onyx.db.user_group._add_user__user_group_relationships__no_commit")
-@patch("ee.onyx.db.user_group.fetch_user_by_id", return_value=MagicMock())
+@patch(
+    "ee.onyx.db.user_group.fetch_users_by_ids",
+    side_effect=lambda _db_session, user_ids: [
+        MagicMock(
+            id=user_id,
+            email=f"{user_id}@example.com",
+            account_type=AccountType.STANDARD,
+        )
+        for user_id in user_ids
+    ],
+)
 @patch("ee.onyx.db.user_group._check_user_group_is_modifiable")
 def test_update_user_group_emits_on_membership_change(
     _modifiable: MagicMock,

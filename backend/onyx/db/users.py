@@ -49,9 +49,11 @@ logger = setup_logger()
 DEFAULT_ADMIN_GROUP_NAME = "Admin"
 DEFAULT_BASIC_GROUP_NAME = "Basic"
 
+_MAX_LISTED_STRANDED_EMAILS = 3
+
 # tenant-hashed so tenants don't block each other and the id can't collide with
 # the other advisory locks in the codebase
-_ADMIN_MEMBERSHIP_LOCK_NAMESPACE = "onyx_admin_membership_lock"
+_MEMBERSHIP_LOCK_NAMESPACE = "onyx_membership_lock"
 
 
 def is_limited_user(user: User) -> bool:
@@ -152,25 +154,24 @@ def another_admin_survives(
     return db_session.scalar(stmt) is not None
 
 
-def _admin_membership_lock_id(tenant_id: str) -> int:
+def _membership_lock_id(tenant_id: str) -> int:
     digest = hashlib.sha256(
-        f"{_ADMIN_MEMBERSHIP_LOCK_NAMESPACE}:{tenant_id}".encode()
+        f"{_MEMBERSHIP_LOCK_NAMESPACE}:{tenant_id}".encode()
     ).digest()
     # pg_advisory_xact_lock takes a signed 8-byte int.
     return struct.unpack("q", digest[:8])[0]
 
 
-def _lock_admin_membership(db_session: Session) -> None:
-    """Serialize admin removals tenant-wide; released on the caller's commit.
-
-    Unlocked, two admins demoting each other concurrently each read the other as
-    the surviving admin and both commit, leaving zero. The caller must delete
-    inside the same transaction so check and write are one critical section."""
+def lock_group_membership(db_session: Session) -> None:
+    """One lock for every membership write, admin access included, released on the
+    caller's commit. Take it before reading state the write depends on: a stale read
+    misses a concurrent add, and two removals each see the other survive. Splitting it
+    per class would only buy a lock order to get wrong."""
     # Bounded wait: a wedged holder should fail fast, not hang the request.
     db_session.execute(text("SET LOCAL lock_timeout = '10s'"))
     db_session.execute(
         text("SELECT pg_advisory_xact_lock(:lock_id)"),
-        {"lock_id": _admin_membership_lock_id(get_current_tenant_id())},
+        {"lock_id": _membership_lock_id(get_current_tenant_id())},
     )
     db_session.execute(text("SET LOCAL lock_timeout = DEFAULT"))
 
@@ -193,13 +194,73 @@ def assert_admin_access_survives_removal(
             "You can't remove yourself from the admin group. Ask another admin to do it.",
         )
 
-    _lock_admin_membership(db_session)
+    lock_group_membership(db_session)
 
     if not another_admin_survives(db_session, group_id, removed_user_ids):
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             "You can't remove the last admin. Grant another user admin access first.",
         )
+
+
+def _stranded_by_removal(
+    db_session: Session, group_id: int, removed_user_ids: list[UUID]
+) -> list[str]:
+    """Emails of the standard users this removal would leave in no group."""
+    surviving_member_ids = set(
+        db_session.scalars(
+            select(User__UserGroup.user_id)
+            .join(UserGroup, UserGroup.id == User__UserGroup.user_group_id)
+            .where(
+                User__UserGroup.user_id.in_(removed_user_ids),
+                User__UserGroup.user_group_id != group_id,
+                UserGroup.is_up_for_deletion.is_(False),
+            )
+        ).all()
+    )
+    stranded_ids = [
+        user_id for user_id in removed_user_ids if user_id not in surviving_member_ids
+    ]
+    if not stranded_ids:
+        return []
+
+    email_col: KeyedColumnElement[Any] = User.__table__.c.email
+    return list(
+        db_session.scalars(
+            select(email_col)
+            .where(
+                User.id.in_(stranded_ids),  # ty: ignore[unresolved-attribute]
+                User.account_type == AccountType.STANDARD,
+            )
+            .order_by(email_col)
+        ).all()
+    )
+
+
+def assert_group_membership_survives_removal(
+    db_session: Session,
+    group_id: int,
+    removed_user_ids: list[UUID],
+) -> None:
+    """Blocks removals that leave a standard user in no group: permissions come only
+    from group grants, so they would keep a login that can do nothing."""
+    if not removed_user_ids:
+        return
+
+    lock_group_membership(db_session)
+
+    stranded_emails = _stranded_by_removal(db_session, group_id, removed_user_ids)
+    if not stranded_emails:
+        return
+
+    listed = ", ".join(stranded_emails[:_MAX_LISTED_STRANDED_EMAILS])
+    remainder = len(stranded_emails) - _MAX_LISTED_STRANDED_EMAILS
+    if remainder > 0:
+        listed = f"{listed} and {remainder} more"
+    raise OnyxError(
+        OnyxErrorCode.INVALID_INPUT,
+        f"{listed} would be left without a group. Add them to another group first.",
+    )
 
 
 def fetch_default_group(db_session: Session, name: str) -> UserGroup:
@@ -251,6 +312,9 @@ def set_user_admin_access(
             return
         assert_admin_access_survives_removal(
             db_session, actor, admin_group.id, [target.id]
+        )
+        assert_group_membership_survives_removal(
+            db_session, admin_group.id, [target.id]
         )
         db_session.delete(membership)
 
@@ -604,6 +668,21 @@ def reconcile_user_email__no_commit(
         .values(user_email=normalized_new_email)
     )
     return old_email, prior_emails
+
+
+def fetch_users_by_ids(db_session: Session, user_ids: list[UUID]) -> list[User]:
+    """Missing ids are absent from the result; callers diff to name them."""
+    if not user_ids:
+        return []
+    return list(
+        db_session.scalars(
+            select(User).where(
+                User.id.in_(user_ids)  # ty: ignore[unresolved-attribute]
+            )
+        )
+        .unique()
+        .all()
+    )
 
 
 def fetch_user_by_id(
