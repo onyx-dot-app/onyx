@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import logging
 import threading
+from contextlib import AbstractContextManager, nullcontext
 from datetime import datetime
 from typing import Any, Optional, Union
 
-from langfuse import Langfuse
+from langfuse import Langfuse, propagate_attributes
 from langfuse._client.span import LangfuseObservationWrapper
 
 from onyx.tracing.flows import IMAGE_FLOWS
@@ -58,6 +59,9 @@ class LangfuseTracingProcessor(TracingProcessor):
         self._first_input: dict[str, Any] = {}
         self._last_output: dict[str, Any] = {}
         self._trace_metadata: dict[str, dict[str, Any]] = {}
+        # Correlating attributes (user, session, trace name) re-applied to every
+        # observation. See _propagated().
+        self._trace_attributes: dict[str, dict[str, Any]] = {}
         # Langfuse IDs for thread-safe parent linking via trace_context
         self._langfuse_trace_ids: dict[
             str, str
@@ -75,6 +79,36 @@ class LangfuseTracingProcessor(TracingProcessor):
 
             self._client = get_client()
         return self._client
+
+    @staticmethod
+    def _build_trace_attributes(name: str, metadata: dict[str, Any]) -> dict[str, Any]:
+        """Build the correlating attributes for a trace.
+
+        Session and user are promoted out of metadata so they reach the dedicated
+        Langfuse facets, not just the metadata blob.
+        """
+        session_id = metadata.get("chat_session_id")
+        user_id = metadata.get("user_id")
+        attributes: dict[str, Any] = {"trace_name": name}
+        if session_id:
+            attributes["session_id"] = str(session_id)
+        if user_id:
+            attributes["user_id"] = str(user_id)
+        if metadata:
+            attributes["metadata"] = metadata
+        return attributes
+
+    @staticmethod
+    def _propagated(attributes: dict[str, Any] | None) -> AbstractContextManager[Any]:
+        """Apply a trace's correlating attributes to the observation created inside.
+
+        Re-applied per observation, not held open for the trace: Onyx links
+        observations by explicit id across threads, so an enclosing context would
+        not reach them.
+        """
+        if not attributes:
+            return nullcontext()
+        return propagate_attributes(**attributes)
 
     def _mask_if_enabled(self, data: Any) -> Any:
         """Apply masking to data if masking is enabled."""
@@ -138,26 +172,17 @@ class LangfuseTracingProcessor(TracingProcessor):
             trace_meta = trace.export() or {}
             metadata = trace_meta.get("metadata") or {}
 
-            # Create a root span which implicitly creates a Langfuse trace
-            # The span name becomes the trace name in Langfuse UI
-            # In Langfuse SDK v3, use start_observation instead of start_span
-            langfuse_span = client.start_observation(
-                name=trace.name,
-            )
+            trace_attributes = self._build_trace_attributes(trace.name, metadata)
 
-            # Promote first-class Langfuse fields out of metadata so they
-            # populate the dedicated UI facets (Sessions, Users) rather than
-            # only the metadata JSON blob.
-            session_id = metadata.get("chat_session_id")
-            user_id = metadata.get("user_id")
-            langfuse_span.update_trace(
-                name=trace.name,
-                session_id=session_id if session_id else None,
-                user_id=str(user_id) if user_id else None,
-                metadata=metadata if metadata else None,
-            )
+            # Create a root span which implicitly creates a Langfuse trace.
+            # The span name becomes the trace name in Langfuse UI.
+            with self._propagated(trace_attributes):
+                langfuse_span = client.start_observation(
+                    name=trace.name,
+                )
 
             with self._lock:
+                self._trace_attributes[trace.trace_id] = trace_attributes
                 if metadata:
                     self._trace_metadata[trace.trace_id] = metadata
                 self._trace_spans[trace.trace_id] = langfuse_span
@@ -178,6 +203,7 @@ class LangfuseTracingProcessor(TracingProcessor):
             with self._lock:
                 langfuse_span = self._trace_spans.pop(trace.trace_id, None)
                 self._trace_metadata.pop(trace.trace_id, None)
+                self._trace_attributes.pop(trace.trace_id, None)
                 self._langfuse_trace_ids.pop(trace.trace_id, None)  # Clean up trace ID
                 self._langfuse_span_ids.pop(
                     trace.trace_id, None
@@ -214,6 +240,7 @@ class LangfuseTracingProcessor(TracingProcessor):
             # Get Langfuse IDs and metadata under lock for thread-safe access
             with self._lock:
                 trace_metadata = self._trace_metadata.get(span.trace_id)
+                trace_attributes = self._trace_attributes.get(span.trace_id)
                 langfuse_trace_id = self._langfuse_trace_ids.get(span.trace_id)
                 # Get parent's Langfuse span ID
                 if span.parent_id is not None:
@@ -229,11 +256,11 @@ class LangfuseTracingProcessor(TracingProcessor):
                     span.span_id,
                 )
                 # Fall back to creating an orphan span
-                # In Langfuse SDK v3, use start_observation instead of start_span
                 client = self._get_client()
-                langfuse_span = client.start_observation(
-                    name=data.type if hasattr(data, "type") else "unknown",
-                )
+                with self._propagated(trace_attributes):
+                    langfuse_span = client.start_observation(
+                        name=data.type if hasattr(data, "type") else "unknown",
+                    )
                 with self._lock:
                     self._spans[span.span_id] = langfuse_span
                     self._langfuse_span_ids[span.span_id] = langfuse_span.id
@@ -249,42 +276,42 @@ class LangfuseTracingProcessor(TracingProcessor):
                 trace_context["parent_span_id"] = parent_langfuse_id
 
             # Create spans using trace_context (thread-safe ID-based approach)
-            # In Langfuse SDK v3, use start_observation with as_type parameter
-            if isinstance(data, GenerationSpanData):
-                langfuse_span = client.start_observation(  # ty: ignore[no-matching-overload]
-                    trace_context=trace_context,
-                    name=self._get_generation_name(data),
-                    as_type="generation",
-                    metadata=trace_metadata,
-                    model=data.model,
-                    model_parameters=self._get_model_parameters(data),
-                )
-            elif isinstance(data, FunctionSpanData):
-                langfuse_span = client.start_observation(
-                    trace_context=trace_context,
-                    name=data.name,
-                    as_type="tool",
-                    metadata=trace_metadata,
-                )
-            elif isinstance(data, AgentSpanData):
-                langfuse_span = client.start_observation(
-                    trace_context=trace_context,
-                    name=data.name,
-                    as_type="agent",
-                    metadata={
-                        **(trace_metadata or {}),
-                        "tools": data.tools,
-                        "handoffs": data.handoffs,
-                        "output_type": data.output_type,
-                    },
-                )
-            else:
-                langfuse_span = client.start_observation(
-                    trace_context=trace_context,
-                    name=data.type if hasattr(data, "type") else "unknown",
-                    as_type="span",
-                    metadata=trace_metadata,
-                )
+            with self._propagated(trace_attributes):
+                if isinstance(data, GenerationSpanData):
+                    langfuse_span = client.start_observation(  # ty: ignore[no-matching-overload]
+                        trace_context=trace_context,
+                        name=self._get_generation_name(data),
+                        as_type="generation",
+                        metadata=trace_metadata,
+                        model=data.model,
+                        model_parameters=self._get_model_parameters(data),
+                    )
+                elif isinstance(data, FunctionSpanData):
+                    langfuse_span = client.start_observation(
+                        trace_context=trace_context,
+                        name=data.name,
+                        as_type="tool",
+                        metadata=trace_metadata,
+                    )
+                elif isinstance(data, AgentSpanData):
+                    langfuse_span = client.start_observation(
+                        trace_context=trace_context,
+                        name=data.name,
+                        as_type="agent",
+                        metadata={
+                            **(trace_metadata or {}),
+                            "tools": data.tools,
+                            "handoffs": data.handoffs,
+                            "output_type": data.output_type,
+                        },
+                    )
+                else:
+                    langfuse_span = client.start_observation(
+                        trace_context=trace_context,
+                        name=data.type if hasattr(data, "type") else "unknown",
+                        as_type="span",
+                        metadata=trace_metadata,
+                    )
 
             with self._lock:
                 self._spans[span.span_id] = langfuse_span
