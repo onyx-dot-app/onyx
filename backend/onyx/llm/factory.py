@@ -284,6 +284,7 @@ def get_default_llm_with_vision(
         models = fetch_existing_models(
             db_session=db_session,
             flow_types=[LLMModelFlowType.VISION, LLMModelFlowType.CHAT],
+            only_visible=True,
         )
 
         if not models:
