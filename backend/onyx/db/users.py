@@ -667,6 +667,21 @@ def reconcile_user_email__no_commit(
     return old_email, prior_emails
 
 
+def fetch_users_by_ids(db_session: Session, user_ids: list[UUID]) -> list[User]:
+    """Missing ids are absent from the result; callers diff to name them."""
+    if not user_ids:
+        return []
+    return list(
+        db_session.scalars(
+            select(User).where(
+                User.id.in_(user_ids)  # ty: ignore[unresolved-attribute]
+            )
+        )
+        .unique()
+        .all()
+    )
+
+
 def fetch_user_by_id(
     db_session: Session, user_id: UUID, for_update: bool = False
 ) -> User | None:

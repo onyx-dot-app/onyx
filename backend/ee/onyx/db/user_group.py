@@ -60,7 +60,7 @@ from onyx.db.permissions import (
 from onyx.db.users import (
     assert_admin_access_survives_removal,
     assert_group_membership_survives_removal,
-    fetch_user_by_id,
+    fetch_users_by_ids,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -585,9 +585,8 @@ def add_users_to_user_group(
     if db_user_group is None:
         raise ValueError(f"UserGroup with id '{user_group_id}' not found")
 
-    missing_users = [
-        user_id for user_id in user_ids if fetch_user_by_id(db_session, user_id) is None
-    ]
+    found_ids = {user.id for user in fetch_users_by_ids(db_session, user_ids)}
+    missing_users = [user_id for user_id in user_ids if user_id not in found_ids]
     if missing_users:
         raise ValueError(
             f"User(s) not found: {', '.join(str(user_id) for user_id in missing_users)}"
@@ -826,14 +825,11 @@ def update_user_group(
         )
 
     if added_user_ids:
-        added_users: list[User] = []
-        missing_users: list[UUID] = []
-        for user_id in added_user_ids:
-            added_user = fetch_user_by_id(db_session, user_id)
-            if added_user is None:
-                missing_users.append(user_id)
-            else:
-                added_users.append(added_user)
+        added_users = fetch_users_by_ids(db_session, added_user_ids)
+        found_ids = {added_user.id for added_user in added_users}
+        missing_users = [
+            user_id for user_id in added_user_ids if user_id not in found_ids
+        ]
         if missing_users:
             raise ValueError(
                 f"User(s) not found: {', '.join(str(user_id) for user_id in missing_users)}"
