@@ -14,8 +14,10 @@ output "address_space" {
 }
 
 output "subnet_ids" {
-  description = "Subnet resource IDs, keyed by the same names as the subnets variable"
+  description = "Subnet resource IDs, keyed by the same names as the subnets variable. Available once any NAT gateway associations exist, so a consumer that needs egress in place does not race them."
   value       = { for key, subnet in azurerm_subnet.this : key => subnet.id }
+
+  depends_on = [azurerm_subnet_nat_gateway_association.this]
 }
 
 output "subnet_address_prefixes" {
@@ -25,9 +27,19 @@ output "subnet_address_prefixes" {
 
 # Convenience outputs for the subnets the other modules expect. Null when the
 # caller replaced the default subnet map and dropped that key.
+#
+# The AKS one waits on the NAT gateway associations. A cluster created with
+# outbound_type = userAssignedNATGateway is rejected outright if its subnet has
+# no gateway attached yet, and nothing else orders the two: the cluster depends
+# on the subnet, the association depends on the subnet, so Terraform is free to
+# run them at the same time. Making the id itself arrive late is what serialises
+# them, and it does so for every consumer rather than asking each one to
+# remember a depends_on.
 output "aks_subnet_id" {
-  description = "Resource ID of the AKS subnet"
+  description = "Resource ID of the AKS subnet, available once any NAT gateway association on it exists"
   value       = try(azurerm_subnet.this["aks"].id, null)
+
+  depends_on = [azurerm_subnet_nat_gateway_association.this]
 }
 
 output "postgres_subnet_id" {
