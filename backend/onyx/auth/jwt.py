@@ -6,7 +6,13 @@ from typing import Any, cast
 import jwt
 import requests
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
-from jwt import InvalidTokenError, PyJWTError
+from jwt import (
+    InvalidAudienceError,
+    InvalidIssuerError,
+    InvalidTokenError,
+    MissingRequiredClaimError,
+    PyJWTError,
+)
 from jwt import decode as jwt_decode
 from jwt.algorithms import RSAAlgorithm  # ty: ignore[possibly-missing-import]
 
@@ -150,6 +156,15 @@ async def verify_jwt_token(token: str) -> dict[str, Any] | None:
                 issuer=JWT_EXPECTED_ISSUER,
                 options={"verify_aud": JWT_EXPECTED_AUDIENCE is not None},
             )
+        except (
+            InvalidAudienceError,
+            InvalidIssuerError,
+            MissingRequiredClaimError,
+        ) as e:
+            # Definitive claim rejection: refetched keys cannot change it, and a
+            # cache clear would let bad tokens evict the signing key for everyone.
+            logger.warning("JWT rejected by aud/iss enforcement: %s", str(e))
+            return None
         except InvalidTokenError as e:
             logger.error("Invalid JWT token: %s", str(e))
             if attempt < _PUBLIC_KEY_FETCH_ATTEMPTS - 1:

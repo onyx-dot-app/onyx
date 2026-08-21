@@ -143,3 +143,19 @@ def test_empty_env_counts_as_unset(monkeypatch: pytest.MonkeyPatch) -> None:
     finally:
         monkeypatch.undo()
         importlib.reload(app_configs)
+
+
+@pytest.mark.asyncio
+async def test_claim_rejection_does_not_refetch_keys(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[int] = []
+
+    def _counting_get(_token: str) -> str:
+        calls.append(1)
+        return _PUBLIC_PEM
+
+    monkeypatch.setattr(jwt_module, "get_public_key", _counting_get)
+    _configure(monkeypatch, "onyx", None)
+    assert await verify_jwt_token(_mint({"aud": "some-other-service"})) is None
+    assert len(calls) == 1
