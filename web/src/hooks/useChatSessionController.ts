@@ -20,6 +20,7 @@ import {
 } from "@/app/app/interfaces";
 import {
   SEARCH_PARAM_NAMES,
+  getAgentIdFromSearchParam,
   shouldSubmitOnLoad,
 } from "@/app/app/services/searchParams";
 import { FilterManager } from "@/lib/hooks";
@@ -69,6 +70,11 @@ interface UseChatSessionControllerProps {
     deepResearch: boolean;
     isSeededChat?: boolean;
   }) => Promise<void>;
+
+  // Whether agent resolution (URL `agentId` → liveAgent) has settled. Seeded
+  // submissions wait on this so the new session binds to the intended agent
+  // instead of the fallback default.
+  isSeedAgentReady: boolean;
 }
 
 export type SessionFetchError = {
@@ -91,6 +97,7 @@ export default function useChatSessionController({
   submitOnLoadPerformed,
   refreshChatSessions,
   onSubmit,
+  isSeedAgentReady,
 }: UseChatSessionControllerProps) {
   const [currentSessionFileTokenCount, setCurrentSessionFileTokenCount] =
     useState<number>(0);
@@ -175,21 +182,33 @@ export default function useChatSessionController({
         // Clear the current session in the store to show intro messages
         setCurrentSession(null);
 
-        // Reset the selected agent back to default
-        setSelectedAgentFromId(null);
+        // Select the URL's agent when chat seeding provides one, else reset
+        // to the default. Passing the id through (rather than always null)
+        // also keeps mid-session URL agent changes working.
+        setSelectedAgentFromId(getAgentIdFromSearchParam(searchParams));
         updateCurrentChatSessionSharedStatus(ChatSessionSharedStatus.Private);
 
         // If we're supposed to submit on initial load, then do that here
         if (
           shouldSubmitOnLoad(searchParams) &&
-          !submitOnLoadPerformed.current
+          !submitOnLoadPerformed.current &&
+          isSeedAgentReady
         ) {
           submitOnLoadPerformed.current = true;
-          await onSubmit({
-            message: firstMessage || "",
-            currentMessageFiles: [],
-            deepResearch: false,
-          });
+          // `user-prompt` is the documented seeding param; `firstMessage` is
+          // the legacy alias threaded through the server page component.
+          const message =
+            firstMessage ||
+            searchParams?.get(SEARCH_PARAM_NAMES.USER_PROMPT) ||
+            "";
+          // An empty message would create a blank user bubble — skip instead.
+          if (message) {
+            await onSubmit({
+              message,
+              currentMessageFiles: [],
+              deepResearch: false,
+            });
+          }
         }
         return;
       }
@@ -493,6 +512,7 @@ export default function useChatSessionController({
   }, [
     existingChatSessionId,
     searchParams?.get(SEARCH_PARAM_NAMES.PERSONA_ID),
+    isSeedAgentReady,
     // Note: We're intentionally not including all dependencies to avoid infinite loops
     // This effect should only run when existingChatSessionId or persona ID changes
   ]);
