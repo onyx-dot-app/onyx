@@ -3,6 +3,8 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from onyx.oauth.models import SafeOAuthReturnPath
+
 
 class OAuthConfigCreate(BaseModel):
     name: str
@@ -40,7 +42,7 @@ class OAuthConfigSnapshot(BaseModel):
 
 class OAuthInitiateRequest(BaseModel):
     oauth_config_id: int
-    return_path: str = "/chat"  # Where to redirect after OAuth flow
+    return_path: SafeOAuthReturnPath = "/chat"
 
 
 class OAuthInitiateResponse(BaseModel):
