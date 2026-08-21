@@ -51,18 +51,6 @@ const ACCOUNT_TYPE_ICONS: Partial<Record<AccountType, IconFunctionComponent>> =
 // Column renderers
 // ---------------------------------------------------------------------------
 
-function renderNameColumn(_searchValue: unknown, row: MemberRow) {
-  const { email, personal_name } = row;
-  return (
-    <Content
-      sizePreset="main-ui"
-      variant="section"
-      title={personal_name ?? email}
-      description={personal_name ? email : undefined}
-    />
-  );
-}
-
 function renderAccountTypeColumn(_value: unknown, row: MemberRow) {
   const Icon =
     (row.account_type && ACCOUNT_TYPE_ICONS[row.account_type]) || SvgUser;
@@ -84,35 +72,55 @@ function renderAccountTypeColumn(_value: unknown, row: MemberRow) {
 
 export const tc = createTableColumns<MemberRow>();
 
-export const baseColumns = [
-  tc.qualifier(),
+// `isManager` is optional — only the group edit page knows who manages a group.
+function nameColumn(isManager?: (row: MemberRow) => boolean) {
   // Search/sort by a name+email composite so service accounts — whose email is a
   // "Service Account" placeholder — are findable by their API-key name.
-  tc.column((row) => [row.personal_name, row.email].filter(Boolean).join(" "), {
-    id: "name",
-    header: "Name",
-    weight: 25,
-    cell: renderNameColumn,
-  }),
-  tc.column("api_key_display", {
-    header: "",
-    weight: 15,
-    enableSorting: false,
-    cell: (value) =>
-      value ? (
-        <Text as="span" secondaryBody text03>
-          {value}
-        </Text>
-      ) : null,
-  }),
-  tc.column("account_type", {
-    header: "Account Type",
-    weight: 15,
-    cell: renderAccountTypeColumn,
-  }),
-];
+  return tc.column(
+    (row) => [row.personal_name, row.email].filter(Boolean).join(" "),
+    {
+      id: "name",
+      header: "Name",
+      weight: 25,
+      cell: (_searchValue, row) => (
+        <Content
+          sizePreset="main-ui"
+          variant="section"
+          title={row.personal_name ?? row.email}
+          description={row.personal_name ? row.email : undefined}
+          tag={
+            isManager?.(row) ? { title: "Manager", color: "blue" } : undefined
+          }
+        />
+      ),
+    }
+  );
+}
+
+export function makeBaseColumns(isManager?: (row: MemberRow) => boolean) {
+  return [
+    tc.qualifier(),
+    nameColumn(isManager),
+    tc.column("api_key_display", {
+      header: "",
+      weight: 15,
+      enableSorting: false,
+      cell: (value) =>
+        value ? (
+          <Text as="span" secondaryBody text03>
+            {value}
+          </Text>
+        ) : null,
+    }),
+    tc.column("account_type", {
+      header: "Account Type",
+      weight: 15,
+      cell: renderAccountTypeColumn,
+    }),
+  ];
+}
 
 export const memberTableColumns = [
-  ...baseColumns,
+  ...makeBaseColumns(),
   tc.actions({ showSorting: false }),
 ];
