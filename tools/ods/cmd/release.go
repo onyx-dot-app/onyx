@@ -20,7 +20,6 @@ func NewReleaseCommand() *cobra.Command {
 	}
 
 	cmd.AddCommand(NewReleaseOpalCommand())
-	cmd.AddCommand(NewReleaseCloudCommand())
 
 	return cmd
 }
