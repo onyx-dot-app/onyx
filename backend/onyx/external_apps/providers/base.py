@@ -102,6 +102,7 @@ class OAuthFlowSpec(BaseModel):
     # The query param `optional_scope` rides under, mirroring `scope_param`.
     optional_scope_param: str = "optional_scope"
     extra_authorize_params: dict[str, str] = {}
+    supports_pkce: bool = False
 
 
 class AdminDescriptorSpec(BaseModel):
@@ -288,24 +289,34 @@ class OAuthExternalAppProvider(ExternalAppProvider, abstract=True):
     # --- Initial-grant token exchange (override for divergent client auth) ---
 
     def build_token_exchange_request(
-        self, code: str, client_id: str, client_secret: str, redirect_uri: str
+        self,
+        code: str,
+        client_id: str,
+        client_secret: str,
+        redirect_uri: str,
+        *,
+        code_verifier: str | None = None,
     ) -> TokenExchangeRequest:
         """Build the authorization-code → token exchange POST. The default sends
         RFC-6749 form-encoded client credentials in the body. Override for a
         provider that requires HTTP Basic client auth and/or a JSON body (e.g.
         Notion)."""
+        body = {
+            "grant_type": "authorization_code",
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "code": code,
+            "redirect_uri": redirect_uri,
+        }
+        if code_verifier is not None:
+            body["code_verifier"] = code_verifier
+
         return TokenExchangeRequest(
             headers={
                 "Content-Type": "application/x-www-form-urlencoded",
                 "Accept": "application/json",
             },
-            body={
-                "grant_type": "authorization_code",
-                "client_id": client_id,
-                "client_secret": client_secret,
-                "code": code,
-                "redirect_uri": redirect_uri,
-            },
+            body=body,
         )
 
     # --- Refresh template method (override a hook below, not this) ---
