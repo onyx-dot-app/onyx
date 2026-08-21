@@ -689,7 +689,7 @@ export default function MultiModelResponseView({
                       ? "width 0.45s cubic-bezier(0.2, 0, 0, 1)"
                       : "none",
                   maxHeight: capped ? preferredPanelHeight : undefined,
-                  overflow: capped ? "hidden" : undefined,
+                  overflow: "clip",
                   ...(overflows
                     ? {
                         maskImage:
@@ -700,7 +700,13 @@ export default function MultiModelResponseView({
                     : {}),
                 }}
               >
-                <div className={cn(isNonPref && "opacity-50")}>
+                {/* Content is laid out at the final width so the wrapper's
+                    width animation reveals it instead of rewrapping text
+                    every frame, which reads as content pouring in. */}
+                <div
+                  style={{ width: `${finalW}px` }}
+                  className={cn(isNonPref && "opacity-50")}
+                >
                   <MultiModelPanel {...buildPanelProps(r, isNonPref)} />
                 </div>
               </div>
