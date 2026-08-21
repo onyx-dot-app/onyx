@@ -152,6 +152,39 @@ run "an_existing_dns_zone_is_reused" {
   }
 }
 
+run "a_database_the_server_ships_is_not_recreated" {
+  command = plan
+
+  # Flexible Server already has one called "postgres"; creating it fails with
+  # "already exists".
+  variables {
+    db_name = "postgres"
+  }
+
+  assert {
+    condition     = length(azurerm_postgresql_flexible_server_database.this) == 0
+    error_message = "Naming a built-in database should mean use it, not create it."
+  }
+
+  assert {
+    condition     = output.db_name == "postgres"
+    error_message = "The output still reports what Onyx connects to."
+  }
+}
+
+run "a_database_of_our_own_is_created" {
+  command = plan
+
+  variables {
+    db_name = "onyx"
+  }
+
+  assert {
+    condition     = length(azurerm_postgresql_flexible_server_database.this) == 1
+    error_message = "A name the server does not ship should be created."
+  }
+}
+
 run "no_entra_administrator_by_default" {
   command = plan
 

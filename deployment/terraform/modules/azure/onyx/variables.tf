@@ -283,8 +283,8 @@ variable "redis_high_availability_enabled" {
 
 variable "kubernetes_version" {
   type        = string
-  description = "Kubernetes version for the control plane"
-  default     = "1.33"
+  description = "Kubernetes version for the control plane Versions age out of standard support and become Long-Term-Support only, at which point AKS refuses to build a cluster on them: check with az aks get-versions."
+  default     = "1.34"
 }
 
 variable "main_node_vm_size" {

@@ -1,4 +1,10 @@
 locals {
+  # Flexible Server ships these already. Asking Terraform to create one by any
+  # of these names fails with "already exists", so naming one is read as "use
+  # the database that is already there" rather than as an error.
+  builtin_databases = ["postgres", "azure_maintenance", "azure_sys"]
+  create_database   = !contains(local.builtin_databases, var.db_name)
+
   create_private_dns_zone = var.private_dns_zone_id == null
   private_dns_zone_id     = local.create_private_dns_zone ? azurerm_private_dns_zone.this[0].id : var.private_dns_zone_id
 
@@ -115,6 +121,8 @@ resource "azurerm_postgresql_flexible_server_active_directory_administrator" "th
 }
 
 resource "azurerm_postgresql_flexible_server_database" "this" {
+  count = local.create_database ? 1 : 0
+
   name      = var.db_name
   server_id = azurerm_postgresql_flexible_server.this.id
   charset   = "UTF8"

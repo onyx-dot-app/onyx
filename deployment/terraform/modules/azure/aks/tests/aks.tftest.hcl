@@ -47,6 +47,17 @@ run "defaults" {
   }
 }
 
+run "the_default_version_is_one_azure_still_builds" {
+  command = plan
+
+  # Versions age out of standard support into Long-Term-Support only, and AKS
+  # then refuses to build a cluster on them. 1.33 crossed that line.
+  assert {
+    condition     = azurerm_kubernetes_cluster.this.kubernetes_version == "1.34"
+    error_message = "The default version must be one AKS will still build without an LTS opt-in."
+  }
+}
+
 run "dns_service_ip_is_derived_from_the_service_range" {
   command = plan
 
