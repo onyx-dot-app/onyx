@@ -122,7 +122,7 @@ backend = [
     "mistune==3.3.0",
     "mitmproxy==12.2.3",
     "sendgrid==6.12.5",
-    "exa_py==1.15.4",
+    "exa_py==2.16.2",
     "braintrust==0.3.9",
     "langfuse==4.14.4",
     "nest_asyncio==1.6.0",

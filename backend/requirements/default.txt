@@ -750,9 +750,9 @@ et-xmlfile==2.0.0 \
 events==0.5 \
     --hash=sha256:a7286af378ba3e46640ac9825156c93bdba7502174dd696090fdfcd4d80a1abd
     # via opensearch-py
-exa-py==1.15.4 \
-    --hash=sha256:2c29e74f130a086e061bab10cb042f5c7894beb471eddb58dad8b2ed5e916cba \
-    --hash=sha256:707781bead63e495576375385729ebff4f5e843559e8acd78a0f0feb120292ca
+exa-py==2.16.2 \
+    --hash=sha256:51285f76c82c62e91c59147c49e1b3c121f9431c8e1ea99d7465374dbed131e8 \
+    --hash=sha256:e2eed571874edabe2276cee8a66640ef9ce50301e0a66f58383a570864b9d5ea
 exceptiongroup==1.3.0 \
     --hash=sha256:4d111e6e0c13d0644cad6ddaa7ed0261a0b36971f6d23e7ec9b4b9097da78a10 \
     --hash=sha256:b241f5885f560bc56a59ee63ca4c6a8bfa46ae4ad651af316d4e81817bb9fd88
@@ -1134,6 +1134,7 @@ httpcore==1.0.9 \
     --hash=sha256:2d400746a40668fc9dec9810239072b40b4484b640a8c38fd654a024c7a1bf55 \
     --hash=sha256:6e34463af53fd2ab5d807f399a9b45ea31c3dfa2276f15a2c3f00afff6e176e8
     # via
+    #   exa-py
     #   httpx
     #   unstructured-client
 httplib2==0.32.0 \
@@ -2444,6 +2445,7 @@ python-dotenv==1.2.2 \
     --hash=sha256:2c371a91fbd7ba082c2c1dc1f8bf89ca22564a087c2c287cd9b662adde799cf3
     # via
     #   braintrust
+    #   exa-py
     #   fastmcp
     #   litellm
     #   magika

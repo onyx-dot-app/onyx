@@ -1565,18 +1565,20 @@ wheels = [
 
 [[package]]
 name = "exa-py"
-version = "1.15.4"
+version = "2.16.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
+    { name = "httpcore" },
     { name = "httpx" },
     { name = "openai" },
     { name = "pydantic" },
+    { name = "python-dotenv" },
     { name = "requests" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/5b/39/750a4a62e25afad962cf4f6d2c7e998ac25e8001b448ab6906292f86a88f/exa_py-1.15.4.tar.gz", hash = "sha256:707781bead63e495576375385729ebff4f5e843559e8acd78a0f0feb120292ca", size = 40250, upload-time = "2025-08-29T02:40:51.073Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/3f/fa/4929c8ccc971ec2eec2195d7eb301c657ee2b679a28c94340ff18556add7/exa_py-2.16.2.tar.gz", hash = "sha256:e2eed571874edabe2276cee8a66640ef9ce50301e0a66f58383a570864b9d5ea", size = 63566, upload-time = "2026-07-27T18:44:06.045Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/bb/9a/3503696c939aee273a55a20f434d1f61ea623ff12f09a612f0efed1087c7/exa_py-1.15.4-py3-none-any.whl", hash = "sha256:2c29e74f130a086e061bab10cb042f5c7894beb471eddb58dad8b2ed5e916cba", size = 55176, upload-time = "2025-08-29T02:40:49.695Z" },
+    { url = "https://files.pythonhosted.org/packages/7f/7a/5e88efa68682378643431c6e88be9c420bde3677b23810fb4c45fa43915b/exa_py-2.16.2-py3-none-any.whl", hash = "sha256:51285f76c82c62e91c59147c49e1b3c121f9431c8e1ea99d7465374dbed131e8", size = 86912, upload-time = "2026-07-27T18:44:04.866Z" },
 ]
 
 [[package]]
@@ -4472,7 +4474,7 @@ backend = [
     { name = "distributed", specifier = "==2026.1.1" },
     { name = "docker", specifier = "==7.1.0" },
     { name = "dropbox", specifier = "==12.0.2" },
-    { name = "exa-py", specifier = "==1.15.4" },
+    { name = "exa-py", specifier = "==2.16.2" },
     { name = "fastapi-limiter", specifier = "==0.1.6" },
     { name = "fastapi-users", specifier = "==15.0.4" },
     { name = "fastapi-users-db-sqlalchemy", specifier = "==7.0.0" },
