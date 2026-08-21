@@ -331,6 +331,7 @@ export default function MessageToolbar({
               llmManager && (
                 <div data-testid="AgentMessage/regenerate">
                   <ModelSelector
+                    providerOptions={llmManager.llmProviders}
                     value={findModelConfigId(
                       llmManager.llmProviders,
                       llmManager.currentLlm.provider,
