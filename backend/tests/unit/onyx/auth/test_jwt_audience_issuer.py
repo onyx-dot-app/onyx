@@ -30,7 +30,9 @@ def _mint(claims: dict[str, Any]) -> str:
 
 @pytest.fixture
 def signed_key(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(jwt_module, "get_public_key", lambda _token, _url: _PUBLIC_PEM)
+    monkeypatch.setattr(
+        jwt_module, "get_public_key", lambda _token, _url, _pinned: _PUBLIC_PEM
+    )
 
 
 def _configure(
@@ -160,7 +162,7 @@ async def test_claim_rejection_does_not_refetch_keys(
 ) -> None:
     calls: list[int] = []
 
-    def _counting_get(_token: str, _url: str) -> str:
+    def _counting_get(_token: str, _url: str, _pinned: bool) -> str:
         calls.append(1)
         return _PUBLIC_PEM
 
@@ -202,3 +204,25 @@ async def test_env_pinned_url_skips_ssrf_validation(
     )
     payload = await verify_jwt_token(_mint({"email": "a@b.c"}))
     assert payload is not None
+
+
+def test_db_origin_fetch_uses_hardened_get(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+
+    class _Resp:
+        text = "not json"
+        headers: dict[str, str] = {}
+
+        def raise_for_status(self) -> None:
+            return None
+
+    monkeypatch.setattr(
+        jwt_module, "ssrf_safe_get", lambda _url, **_kw: calls.append("safe") or _Resp()
+    )
+    monkeypatch.setattr(
+        jwt_module.requests, "get", lambda _url, **_kw: calls.append("raw") or _Resp()
+    )
+    jwt_module._fetch_public_key_payload.cache_clear()
+    jwt_module._fetch_public_key_payload("https://db-origin/keys", False)
+    jwt_module._fetch_public_key_payload("https://env-pinned/keys", True)
+    assert calls == ["safe", "raw"]

@@ -22,6 +22,7 @@ from onyx.server.security.store import (
     get_security_settings,
 )
 from onyx.utils.logger import setup_logger
+from onyx.utils.url import SSRFException, ssrf_safe_get
 
 logger = setup_logger()
 
@@ -38,12 +39,19 @@ class PublicKeyFormat(Enum):
 @lru_cache(maxsize=8)
 def _fetch_public_key_payload(
     public_key_url: str,
+    operator_pinned: bool,
 ) -> tuple[str | dict[str, Any], PublicKeyFormat] | None:
-    """Fetch and cache the raw JWT verification material."""
+    """Fetch and cache the raw JWT verification material. A DB-origin URL is
+    admin-aimed, so its fetch validates every redirect hop and pins the
+    resolved IP against DNS rebinding. An env-pinned URL is operator
+    config-as-code and fetched as-is."""
     try:
-        response = requests.get(public_key_url)
+        if operator_pinned:
+            response = requests.get(public_key_url)
+        else:
+            response = ssrf_safe_get(public_key_url)
         response.raise_for_status()
-    except requests.RequestException as exc:
+    except (requests.RequestException, SSRFException, ValueError) as exc:
         logger.error("Failed to fetch JWT public key: %s", str(exc))
         return None
     content_type = response.headers.get("Content-Type", "").lower()
@@ -73,9 +81,11 @@ def _fetch_public_key_payload(
     return body, PublicKeyFormat.PEM
 
 
-def get_public_key(token: str, public_key_url: str) -> RSAPublicKey | str | None:
+def get_public_key(
+    token: str, public_key_url: str, operator_pinned: bool
+) -> RSAPublicKey | str | None:
     """Return the concrete public key used to verify the provided JWT token."""
-    payload = _fetch_public_key_payload(public_key_url)
+    payload = _fetch_public_key_payload(public_key_url, operator_pinned)
     if payload is None:
         logger.error("Failed to retrieve public key payload")
         return None
@@ -142,7 +152,8 @@ async def verify_jwt_token(token: str) -> dict[str, Any] | None:
 
     # A DB-origin URL is admin-aimed and must satisfy the outbound SSRF policy.
     # An env-pinned value is operator config-as-code, trusted as before.
-    if "jwt_public_key_url" not in env_pinned_active_fields():
+    operator_pinned = "jwt_public_key_url" in env_pinned_active_fields()
+    if not operator_pinned:
         try:
             validate_idp_url(settings.jwt_public_key_url, field="jwt_public_key_url")
         except UnsafeSSOUrl as e:
@@ -150,7 +161,7 @@ async def verify_jwt_token(token: str) -> dict[str, Any] | None:
             return None
 
     for attempt in range(_PUBLIC_KEY_FETCH_ATTEMPTS):
-        public_key = get_public_key(token, settings.jwt_public_key_url)
+        public_key = get_public_key(token, settings.jwt_public_key_url, operator_pinned)
         if public_key is None:
             logger.error("Unable to resolve a public key for JWT verification")
             if attempt < _PUBLIC_KEY_FETCH_ATTEMPTS - 1:
