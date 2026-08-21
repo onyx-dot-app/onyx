@@ -20,6 +20,7 @@ from onyx.connectors.capability_checks.models import (
     CredentialCapabilityReport,
 )
 from onyx.db.credential_capability import (
+    clear_capability_run_start,
     get_capability_report_row,
     get_capability_report_rows_for_source,
     mark_capability_report_running,
@@ -284,6 +285,46 @@ def test_mark_running_replaces_a_stale_running_mark(db_session: Session) -> None
     assert remarked is not None
     assert remarked.run_started_at is not None
     assert remarked.run_started_at > stale_started_at
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_cleared_run_start_reads_as_stale(db_session: Session) -> None:
+    """Verifies the failed-enqueue fixup: a NULL start unblocks re-marking."""
+    # Precondition.
+    cc_pair = make_cc_pair(db_session, source=DocumentSource.SLACK, commit=False)
+    credential_id = cc_pair.credential_id
+    marked = mark_capability_report_running(
+        db_session,
+        credential_id=credential_id,
+        connector_id=None,
+        source=DocumentSource.SLACK,
+        trigger=CapabilityCheckTrigger.MANUAL,
+        active_within=timedelta(hours=1),
+    )
+    assert marked is not None
+
+    # Under test.
+    clear_capability_run_start(
+        db_session, credential_id=credential_id, connector_id=None
+    )
+
+    # Postcondition. The row stays RUNNING but reads as stale: re-marking
+    # succeeds immediately instead of waiting out the bound.
+    db_session.expire_all()
+    row = get_capability_report_row(db_session, credential_id, None)
+    assert row is not None
+    assert row.run_status == CapabilityReportRunStatus.RUNNING
+    assert row.run_started_at is None
+    remarked = mark_capability_report_running(
+        db_session,
+        credential_id=credential_id,
+        connector_id=None,
+        source=DocumentSource.SLACK,
+        trigger=CapabilityCheckTrigger.MANUAL,
+        active_within=timedelta(hours=1),
+    )
+    assert remarked is not None
+    assert remarked.run_started_at is not None
 
 
 @pytest.mark.usefixtures("tenant_context")

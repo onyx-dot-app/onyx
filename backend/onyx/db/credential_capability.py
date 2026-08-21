@@ -16,7 +16,7 @@ flags a run in flight while the last completed report stays readable.
 from datetime import datetime, timedelta
 from typing import Any, TypedDict
 
-from sqlalchemy import ColumnElement, func, literal_column, or_, select, text
+from sqlalchemy import ColumnElement, func, literal_column, or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -216,6 +216,40 @@ def mark_capability_report_running(
             < func.statement_timestamp() - active_within,
         ),
     )
+
+
+def clear_capability_run_start(
+    db_session: Session,
+    *,
+    credential_id: int,
+    connector_id: int | None,
+) -> None:
+    """Nulls the scope's run start time: the RUNNING mark never became a run.
+
+    For the failed-enqueue path: the mark cannot be reverted (the upsert
+    already replaced the previous run state), but a NULL start time already
+    reads as stale to the re-trigger guard, so the scope stays immediately
+    re-triggerable.
+    """
+    stmt = (
+        update(CredentialCapabilityReportRow)
+        .where(
+            CredentialCapabilityReportRow.credential_id == credential_id,
+            (
+                CredentialCapabilityReportRow.connector_id.is_(None)
+                if connector_id is None
+                else CredentialCapabilityReportRow.connector_id == connector_id
+            ),
+            CredentialCapabilityReportRow.run_status
+            == CapabilityReportRunStatus.RUNNING,
+        )
+        .values(
+            run_started_at=None,
+            # Model ``onupdate`` does not apply to bulk updates.
+            time_updated=func.statement_timestamp(),
+        )
+    )
+    db_session.execute(stmt)
 
 
 def get_capability_report_row(
