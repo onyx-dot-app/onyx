@@ -17,7 +17,7 @@ from jwt import decode as jwt_decode
 from jwt.algorithms import RSAAlgorithm  # ty: ignore[possibly-missing-import]
 
 from onyx.auth.sso_url_guard import UnsafeSSOUrl, validate_idp_url
-from onyx.server.security.models import outbound_ssrf_params
+from onyx.server.security.models import OutboundSSRFParams, outbound_ssrf_params
 from onyx.server.security.store import (
     env_pinned_active_fields,
     get_security_settings,
@@ -42,6 +42,8 @@ def _fetch_public_key_payload(
     public_key_url: str,
     operator_pinned: bool,
     allow_private_network: bool,
+    block_loopback_and_link_local: bool,
+    block_link_local_only: bool,
 ) -> tuple[str | dict[str, Any], PublicKeyFormat] | None:
     """Fetch and cache the raw JWT verification material. A DB-origin URL is
     admin-aimed, so its fetch validates every redirect hop and pins the
@@ -54,7 +56,10 @@ def _fetch_public_key_payload(
             # Mirrors the PUT-time check: the configured SSRF level decides
             # whether private endpoints are reachable.
             response = ssrf_safe_get(
-                public_key_url, allow_private_network=allow_private_network
+                public_key_url,
+                allow_private_network=allow_private_network,
+                block_loopback_and_link_local=block_loopback_and_link_local,
+                block_link_local_only=block_link_local_only,
             )
         response.raise_for_status()
     except (requests.RequestException, SSRFException, ValueError) as exc:
@@ -91,11 +96,15 @@ def get_public_key(
     token: str,
     public_key_url: str,
     operator_pinned: bool,
-    allow_private_network: bool,
+    ssrf_params: OutboundSSRFParams,
 ) -> RSAPublicKey | str | None:
     """Return the concrete public key used to verify the provided JWT token."""
     payload = _fetch_public_key_payload(
-        public_key_url, operator_pinned, allow_private_network
+        public_key_url,
+        operator_pinned,
+        ssrf_params.allow_private_network,
+        ssrf_params.block_loopback_and_link_local,
+        ssrf_params.block_link_local_only,
     )
     if payload is None:
         logger.error("Failed to retrieve public key payload")
@@ -176,7 +185,7 @@ async def verify_jwt_token(token: str) -> dict[str, Any] | None:
             token,
             settings.jwt_public_key_url,
             operator_pinned,
-            outbound_ssrf_params(settings.ssrf_protection_level).allow_private_network,
+            outbound_ssrf_params(settings.ssrf_protection_level),
         )
         if public_key is None:
             logger.error("Unable to resolve a public key for JWT verification")
