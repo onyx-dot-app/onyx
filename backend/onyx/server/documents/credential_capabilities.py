@@ -6,7 +6,7 @@ nothing here gates connector creation or indexing, and check failures are
 report content, never an HTTP error.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends
@@ -23,7 +23,8 @@ from onyx.configs.constants import (
 )
 from onyx.connectors.capability_checks.models import CredentialCapabilityReport
 from onyx.connectors.capability_checks.runner import (
-    CAPABILITY_CHECK_RUN_STALENESS_SECONDS,
+    capability_check_run_ceiling_seconds,
+    capability_check_run_stale_after,
 )
 from onyx.db.connector import fetch_connector_by_id
 from onyx.db.connector_credential_pair import (
@@ -45,9 +46,12 @@ from onyx.db.enums import CapabilityCheckTrigger, CapabilityReportRunStatus, Per
 from onyx.db.models import CredentialCapabilityReportRow, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.utils_vector_db import require_vector_db
 from shared_configs.contextvars import get_current_tenant_id
 
-router = APIRouter(prefix="/manage")
+# Lite (no vector DB) has no connectors, so there is nothing to probe or
+# report, and the celery machinery the trigger relies on is absent there.
+router = APIRouter(prefix="/manage", dependencies=[Depends(require_vector_db)])
 
 
 class CapabilityReportSnapshot(BaseModel):
@@ -180,7 +184,7 @@ def trigger_capability_check(
         connector_id=request.connector_id,
         source=credential.source,
         trigger=CapabilityCheckTrigger.MANUAL,
-        active_within=timedelta(seconds=CAPABILITY_CHECK_RUN_STALENESS_SECONDS),
+        active_within=capability_check_run_stale_after(credential.source),
     )
     if row is None:
         # An unexpired run is in flight; return its row without re-enqueueing.
@@ -211,9 +215,10 @@ def trigger_capability_check(
             ),
             queue=OnyxCeleryQueues.CAPABILITY_CHECKS,
             priority=OnyxCeleryPriority.HIGH,
-            # The queued run and its RUNNING mark go stale together, so an
-            # expired task never strands an unmarkable scope.
-            expires=CAPABILITY_CHECK_RUN_STALENESS_SECONDS,
+            # Queue wait is bounded by one execution ceiling; the staleness
+            # cutoff above allows for both, so an expired task never strands
+            # the scope.
+            expires=capability_check_run_ceiling_seconds(credential.source),
         )
     except Exception:
         # No run was enqueued: FAILED_TO_RUN is the truth pollers should read,

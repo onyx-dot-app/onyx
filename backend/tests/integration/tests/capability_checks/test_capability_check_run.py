@@ -12,7 +12,12 @@ from typing import Any
 
 from sqlalchemy import update
 
-from onyx.configs.constants import DocumentSource
+from onyx.background.celery.versioned_apps.client import app as client_app
+from onyx.configs.constants import (
+    DocumentSource,
+    OnyxCeleryPriority,
+    OnyxCeleryTask,
+)
 from onyx.connectors.capabilities import CredentialCapability
 from onyx.connectors.capability_checks.models import (
     CapabilityCheckStatus,
@@ -23,6 +28,7 @@ from onyx.db.credential_capability import mark_capability_report_running
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import CapabilityCheckTrigger, CapabilityReportRunStatus
 from onyx.db.models import CredentialCapabilityReportRow
+from shared_configs.contextvars import get_current_tenant_id
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.connector import ConnectorManager
@@ -46,10 +52,13 @@ def _report_url(credential_id: int) -> str:
     return f"{API_SERVER_URL}/manage/admin/credential/{credential_id}/capability-report"
 
 
-def _poll_until_completed(
-    credential_id: int, connector_id: int | None, headers: dict[str, str]
+def _poll_until_run_status(
+    credential_id: int,
+    connector_id: int | None,
+    headers: dict[str, str],
+    run_status: CapabilityReportRunStatus,
 ) -> dict[str, Any]:
-    """Polls the report GET until the run completes; the FE will do the same."""
+    """Polls the report GET until the run reaches ``run_status``, FE-style."""
     params = {} if connector_id is None else {"connector_id": connector_id}
     deadline = time.monotonic() + _RUN_COMPLETION_TIMEOUT_SECONDS
     while time.monotonic() < deadline:
@@ -58,15 +67,12 @@ def _poll_until_completed(
         )
         response.raise_for_status()
         snapshot = response.json()
-        if (
-            snapshot is not None
-            and snapshot["run_status"] == CapabilityReportRunStatus.COMPLETED.value
-        ):
+        if snapshot is not None and snapshot["run_status"] == run_status.value:
             return snapshot
         time.sleep(0.5)
     raise AssertionError(
-        f"Capability check run for credential {credential_id} did not complete "
-        f"within {_RUN_COMPLETION_TIMEOUT_SECONDS}s."
+        f"Capability check run for credential {credential_id} did not reach "
+        f"{run_status.value} within {_RUN_COMPLETION_TIMEOUT_SECONDS}s."
     )
 
 
@@ -90,7 +96,9 @@ def test_credential_scoped_run_completes_and_persists_a_report(
     assert accepted["trigger"] == CapabilityCheckTrigger.MANUAL.value
     assert accepted["run_started_at"] is not None
     assert accepted["report"] is None
-    completed = _poll_until_completed(credential.id, None, admin_user.headers)
+    completed = _poll_until_run_status(
+        credential.id, None, admin_user.headers, CapabilityReportRunStatus.COMPLETED
+    )
     assert completed["connector_config_hash"] is None
     report = completed["report"]
     assert report["connector_id"] is None
@@ -130,7 +138,12 @@ def test_connector_scoped_run_carries_the_config_hash(admin_user: DATestUser) ->
     # Postcondition.
     response.raise_for_status()
     assert response.json()["connector_id"] == connector.id
-    completed = _poll_until_completed(credential.id, connector.id, admin_user.headers)
+    completed = _poll_until_run_status(
+        credential.id,
+        connector.id,
+        admin_user.headers,
+        CapabilityReportRunStatus.COMPLETED,
+    )
     assert completed["connector_id"] == connector.id
     assert completed["connector_config_hash"] is not None
     assert completed["report"]["connector_id"] == connector.id
@@ -204,7 +217,9 @@ def test_stale_running_mark_is_replaced_and_the_run_proceeds(
     response.raise_for_status()
     snapshot = response.json()
     assert datetime.fromisoformat(snapshot["run_started_at"]) > stale_started_at
-    _poll_until_completed(credential.id, None, admin_user.headers)
+    _poll_until_run_status(
+        credential.id, None, admin_user.headers, CapabilityReportRunStatus.COMPLETED
+    )
 
 
 def test_config_without_connector_id_is_invalid_input(admin_user: DATestUser) -> None:
@@ -284,3 +299,62 @@ def test_trigger_requires_connector_management_permission(
     response = client.post(_check_url(1), json={}, headers=basic_user.headers)
     assert response.status_code == 403
     assert response.json()["error_code"] == "INSUFFICIENT_PERMISSIONS"
+
+
+def test_sweep_retires_a_dead_run_and_retrigger_recovers(
+    admin_user: DATestUser,
+) -> None:
+    # Precondition. A completed report, then a RUNNING mark backdated past any
+    # derived ceiling: a run that died without a trace.
+    credential = CredentialManager.create(
+        source=DocumentSource.MOCK_CONNECTOR, user_performing_action=admin_user
+    )
+    response = client.post(
+        _check_url(credential.id), json={}, headers=admin_user.headers
+    )
+    response.raise_for_status()
+    _poll_until_run_status(
+        credential.id, None, admin_user.headers, CapabilityReportRunStatus.COMPLETED
+    )
+    with get_session_with_current_tenant() as db_session:
+        row = mark_capability_report_running(
+            db_session,
+            credential_id=credential.id,
+            connector_id=None,
+            source=DocumentSource.MOCK_CONNECTOR,
+            trigger=CapabilityCheckTrigger.MANUAL,
+            active_within=timedelta(hours=1),
+        )
+        assert row is not None
+        db_session.execute(
+            update(CredentialCapabilityReportRow)
+            .where(CredentialCapabilityReportRow.id == row.id)
+            .values(run_started_at=datetime.now(timezone.utc) - timedelta(days=30))
+        )
+        db_session.commit()
+
+    # Under test. The sweep the beat schedule fires every ten minutes.
+    client_app.send_task(
+        OnyxCeleryTask.CHECK_FOR_STALE_CAPABILITY_RUNS,
+        kwargs=dict(tenant_id=get_current_tenant_id()),
+        priority=OnyxCeleryPriority.LOW,
+        expires=300,
+    )
+
+    # Postcondition. The dead run surfaces as FAILED_TO_RUN with the previous
+    # report still readable, and a re-trigger recovers the scope.
+    retired = _poll_until_run_status(
+        credential.id,
+        None,
+        admin_user.headers,
+        CapabilityReportRunStatus.FAILED_TO_RUN,
+    )
+    assert retired["report"] is not None
+    response = client.post(
+        _check_url(credential.id), json={}, headers=admin_user.headers
+    )
+    response.raise_for_status()
+    assert response.json()["run_status"] == CapabilityReportRunStatus.RUNNING.value
+    _poll_until_run_status(
+        credential.id, None, admin_user.headers, CapabilityReportRunStatus.COMPLETED
+    )
