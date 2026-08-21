@@ -191,8 +191,12 @@ export function ModelSettingsPopover({
     maxStop >= 0 ? Math.min(maxStop, supportedStop) : supportedStop;
   const defaultStop =
     rawDefaultStop >= 0 ? Math.min(rawDefaultStop, effectiveMaxStop) : -1;
+  // An unset default parks where the backend resolves AUTO: medium, bounded
+  // by the cap.
   const defaultSliderStop =
-    defaultStop >= 0 ? defaultStop : UNSET_REASONING_STOP;
+    defaultStop >= 0
+      ? defaultStop
+      : Math.min(UNSET_REASONING_STOP, effectiveMaxStop);
 
   const reasoningMarks = ALL_REASONING_STOPS.slice(0, supportedStop + 1).map(
     (stop) => REASONING_STOP_LABELS[stop]
@@ -295,7 +299,7 @@ export function ModelSettingsPopover({
               <PolicySlider
                 label="Default"
                 value={defaultSliderStop}
-                max={effectiveMaxStop}
+                max={supportedStop}
                 step={1}
                 marks={reasoningMarks}
                 activeMark={defaultSliderStop}
