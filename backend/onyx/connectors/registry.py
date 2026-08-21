@@ -148,6 +148,10 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.clickup.connector",
         class_name="ClickupConnector",
     ),
+    DocumentSource.CLICKUP_DOCS: ConnectorMapping(
+        module_path="onyx.connectors.clickup_docs.connector",
+        class_name="ClickupDocsConnector",
+    ),
     DocumentSource.MEDIAWIKI: ConnectorMapping(
         module_path="onyx.connectors.mediawiki.wiki",
         class_name="MediaWikiConnector",
