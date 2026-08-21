@@ -1,6 +1,11 @@
 "use client";
 
-import { redirect, useRouter, useSearchParams } from "next/navigation";
+import {
+  ReadonlyURLSearchParams,
+  redirect,
+  useRouter,
+  useSearchParams,
+} from "next/navigation";
 import {
   endIncognitoSession,
   personaIncludesRetrieval,
@@ -363,16 +368,39 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   const loadedIdSessionRef = useRef<string | null>(currentChatSessionId);
   const submitOnLoadPerformed = useRef<boolean>(false);
 
+  // Refs keep the (once-registered) message listener in sync with the latest
+  // render, and hold a seeded PAGE_CHANGE navigation until agents resolve.
+  const isSeedAgentReadyRef = useRef(isSeedAgentReady);
+  useEffect(() => {
+    isSeedAgentReadyRef.current = isSeedAgentReady;
+  }, [isSeedAgentReady]);
+  const pendingSeedParamsRef = useRef<string | null>(null);
+
   function loadNewPageLogic(event: MessageEvent) {
     if (event.data.type === SUBMIT_MESSAGE_TYPES.PAGE_CHANGE) {
       try {
         const url = new URL(event.data.href);
-        processSearchParamsAndSubmitMessage(url.searchParams.toString());
+        const nextParams = new ReadonlyURLSearchParams(url.searchParams);
+        if (shouldSendOnLoad(nextParams) && !isSeedAgentReadyRef.current) {
+          pendingSeedParamsRef.current = nextParams.toString();
+          return;
+        }
+        processSearchParamsAndSubmitMessage(nextParams.toString());
       } catch (error) {
         console.error("Error parsing URL:", error);
       }
     }
   }
+
+  // Replay a seeded PAGE_CHANGE that arrived before agent resolution settled.
+  useEffect(() => {
+    if (!isSeedAgentReady || pendingSeedParamsRef.current === null) {
+      return;
+    }
+    const pendingParams = pendingSeedParamsRef.current;
+    pendingSeedParamsRef.current = null;
+    processSearchParamsAndSubmitMessage(pendingParams);
+  }, [isSeedAgentReady]);
 
   // Equivalent to `loadNewPageLogic`
   useEffect(() => {

@@ -58,9 +58,10 @@ export function getAgentIdFromSearchParam(
   searchParams: ReadonlyURLSearchParams | null
 ): number | null {
   const rawValue = searchParams?.get(SEARCH_PARAM_NAMES.PERSONA_ID);
-  if (!rawValue) {
+  // Full-value check: parseInt alone would accept prefixes like "12abc".
+  if (!rawValue || !/^\d+$/.test(rawValue)) {
     return null;
   }
-  const parsed = parseInt(rawValue);
-  return Number.isNaN(parsed) ? null : parsed;
+  const parsed = Number(rawValue);
+  return Number.isSafeInteger(parsed) ? parsed : null;
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useCallback, useState } from "react";
+import { useEffect, useCallback, useRef, useState } from "react";
 import { ReadonlyURLSearchParams } from "next/navigation";
 import {
   nameChatSession,
@@ -104,6 +104,9 @@ export default function useChatSessionController({
   const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
   const [sessionFetchError, setSessionFetchError] =
     useState<SessionFetchError>(null);
+  // Tracks seed-gate flips so the fetch effect can ignore readiness changes
+  // that don't coincide with a session change.
+  const prevIsSeedAgentReadyRef = useRef(isSeedAgentReady);
   // Store actions
   const updateSessionAndMessageTree = useChatSessionStore(
     (state) => state.updateSessionAndMessageTree
@@ -141,6 +144,20 @@ export default function useChatSessionController({
     const loadedSessionId = loadedIdSessionRef.current;
     chatSessionIdRef.current = existingChatSessionId;
     loadedIdSessionRef.current = existingChatSessionId;
+
+    // Readiness only matters for seeding a brand-new session. When it flips
+    // while an existing session is already open, skip the rerun rather than
+    // fetching the same session twice.
+    const seedReadinessChanged =
+      prevIsSeedAgentReadyRef.current !== isSeedAgentReady;
+    prevIsSeedAgentReadyRef.current = isSeedAgentReady;
+    if (
+      seedReadinessChanged &&
+      existingChatSessionId !== null &&
+      priorChatSessionId === existingChatSessionId
+    ) {
+      return;
+    }
 
     chatInputBarRef.current?.focus();
 
@@ -195,11 +212,11 @@ export default function useChatSessionController({
           isSeedAgentReady
         ) {
           submitOnLoadPerformed.current = true;
-          // `user-prompt` is the documented seeding param; `firstMessage` is
-          // the legacy alias threaded through the server page component.
+          // `user-prompt` is the documented seeding param and wins when both
+          // it and the legacy `firstMessage` alias are present.
           const message =
-            firstMessage ||
             searchParams?.get(SEARCH_PARAM_NAMES.USER_PROMPT) ||
+            firstMessage ||
             "";
           // An empty message would create a blank user bubble — skip instead.
           if (message) {

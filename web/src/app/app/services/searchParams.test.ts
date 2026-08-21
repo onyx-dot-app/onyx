@@ -78,6 +78,26 @@ describe("getAgentIdFromSearchParam", () => {
     expect(getAgentIdFromSearchParam(searchParams)).toBe(null);
   });
 
+  // Regression: parseInt accepted numeric prefixes like "12abc" as 12.
+  it("returns null when agentId has a non-numeric suffix", () => {
+    const searchParams = buildSearchParams("agentId=12abc");
+    expect(getAgentIdFromSearchParam(searchParams)).toBe(null);
+  });
+
+  it("returns null for negative or decimal values", () => {
+    expect(getAgentIdFromSearchParam(buildSearchParams("agentId=-3"))).toBe(
+      null
+    );
+    expect(getAgentIdFromSearchParam(buildSearchParams("agentId=1.5"))).toBe(
+      null
+    );
+  });
+
+  it("returns null for values beyond the safe integer range", () => {
+    const searchParams = buildSearchParams("agentId=99999999999999999999");
+    expect(getAgentIdFromSearchParam(searchParams)).toBe(null);
+  });
+
   it("reads the documented agentId param name", () => {
     expect(SEARCH_PARAM_NAMES.PERSONA_ID).toBe("agentId");
   });
