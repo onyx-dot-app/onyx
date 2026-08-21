@@ -55,9 +55,16 @@ def send_msg_ack_to_user(details: SlackMessageInfo, client: WebClient) -> None:
 
 
 def schedule_feedback_reminder(
-    details: SlackMessageInfo, include_followup: bool, client: WebClient
+    details: SlackMessageInfo,
+    include_followup: bool,
+    client: WebClient,
+    feedback_enabled: bool,
 ) -> str | None:
     logger = setup_logger(extra={SLACK_CHANNEL_ID: details.channel_to_respond})
+
+    if not feedback_enabled:
+        logger.info("Scheduled feedback reminder disabled for channel...")
+        return None
 
     if not ONYX_BOT_FEEDBACK_REMINDER:
         logger.info("Scheduled feedback reminder disabled...")

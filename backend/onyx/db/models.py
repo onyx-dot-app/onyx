@@ -4409,6 +4409,7 @@ class ChannelConfig(TypedDict):
     # If empty list, follow up with no tags
     follow_up_tags: NotRequired[list[str]]
     show_continue_in_web_ui: NotRequired[bool]  # defaults to False
+    remove_feedback_buttons: NotRequired[bool]  # defaults to False
     disabled: NotRequired[bool]  # defaults to False
 
 

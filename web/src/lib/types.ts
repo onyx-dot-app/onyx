@@ -496,6 +496,7 @@ export interface ChannelConfig {
   respond_to_bots?: boolean;
   is_ephemeral?: boolean;
   show_continue_in_web_ui?: boolean;
+  remove_feedback_buttons?: boolean;
   respond_member_group_list?: string[];
   answer_filters?: AnswerFilterOption[];
   follow_up_tags?: string[];

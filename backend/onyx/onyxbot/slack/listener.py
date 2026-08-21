@@ -1127,7 +1127,12 @@ def process_message(
         )
 
         feedback_reminder_id = schedule_feedback_reminder(
-            details=details, client=client.web_client, include_followup=follow_up
+            details=details,
+            client=client.web_client,
+            include_followup=follow_up,
+            feedback_enabled=not slack_channel_config.channel_config.get(
+                "remove_feedback_buttons", False
+            ),
         )
 
         failed = handle_message(
