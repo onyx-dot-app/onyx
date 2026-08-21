@@ -296,6 +296,17 @@ def test_exchange_failure_never_logs_non_error_body() -> None:
     assert "Invalid JSON content" in detail
 
 
+def test_exchange_failure_summarizes_non_oauth_error_body() -> None:
+    # A proxy's HTML error page may reflect request material, so never log it raw.
+    error = GetAccessTokenError(
+        "Server error '502 Bad Gateway' for url 'https://idp/token'",
+        httpx.Response(502, text="<html>secret-echo</html>"),
+    )
+    detail = _exchange_log_detail(error)
+    assert "secret-echo" not in detail
+    assert "unparseable body" in detail
+
+
 def test_exchange_failure_without_response_logs_message_only() -> None:
     detail = _exchange_log_detail(GetAccessTokenError("connection failed"))
     assert detail == "connection failed"
