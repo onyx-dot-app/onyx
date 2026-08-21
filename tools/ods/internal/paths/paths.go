@@ -7,7 +7,7 @@ import (
 	"runtime"
 	"strings"
 
-	log "github.com/sirupsen/logrus"
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/log"
 )
 
 // GitRoot returns the root directory of the current git repository.

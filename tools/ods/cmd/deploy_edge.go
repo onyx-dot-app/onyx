@@ -3,11 +3,11 @@ package cmd
 import (
 	"time"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/config"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/git"
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/log"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/prompt"
 )
 
@@ -81,7 +81,7 @@ func deployEdge(opts *DeployEdgeOptions) {
 	)
 
 	if opts.DryRun {
-		log.Warning("=== DRY RUN MODE: tag push and workflow dispatch will be skipped (read-only gh and git fetch still run) ===")
+		log.Warn("=== DRY RUN MODE: tag push and workflow dispatch will be skipped (read-only gh and git fetch still run) ===")
 	}
 
 	if !opts.Yes {

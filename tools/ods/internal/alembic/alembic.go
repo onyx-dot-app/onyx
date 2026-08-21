@@ -8,9 +8,8 @@ import (
 	"runtime"
 	"strings"
 
-	log "github.com/sirupsen/logrus"
-
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/docker"
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/log"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/postgres"
 )

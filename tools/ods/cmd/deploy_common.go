@@ -7,9 +7,8 @@ import (
 	"sort"
 	"time"
 
-	log "github.com/sirupsen/logrus"
-
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/config"
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/log"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/prompt"
 )

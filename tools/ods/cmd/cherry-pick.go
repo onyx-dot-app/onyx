@@ -9,11 +9,11 @@ import (
 	"strconv"
 	"strings"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/git"
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/log"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/prompt"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/release"
 )
@@ -123,7 +123,7 @@ func runCherryPick(cmd *cobra.Command, args []string, opts *CherryPickOptions) {
 	}
 
 	if opts.DryRun {
-		log.Warning("=== DRY RUN MODE: No remote operations will be performed ===")
+		log.Warn("=== DRY RUN MODE: No remote operations will be performed ===")
 	}
 
 	// Save the current branch to switch back later
@@ -354,7 +354,7 @@ func runCherryPickDispatch(args []string, opts *CherryPickOptions) {
 	}
 
 	if opts.DryRun {
-		log.Warning("=== DRY RUN MODE: No workflow will be dispatched ===")
+		log.Warn("=== DRY RUN MODE: No workflow will be dispatched ===")
 	}
 
 	// Resolve any PR numbers (e.g. "1234") to their merge commit SHAs

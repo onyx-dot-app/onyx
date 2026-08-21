@@ -1,8 +1,9 @@
 package cmd
 
 import (
-	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/log"
 )
 
 // LogsOptions holds options for the logs command.

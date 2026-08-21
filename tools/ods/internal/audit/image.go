@@ -6,10 +6,10 @@ import (
 	"io"
 	"time"
 
-	log "github.com/sirupsen/logrus"
-
 	"github.com/google/osv-scanner/v2/pkg/models"
 	"github.com/google/osv-scanner/v2/pkg/osvscanner"
+
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/log"
 )
 
 // ImageOptions configures a container image audit run.

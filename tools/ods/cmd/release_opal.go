@@ -5,10 +5,10 @@ import (
 	"os/exec"
 	"strings"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/git"
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/log"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/prompt"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/release"
 )

@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	log "github.com/sirupsen/logrus"
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/log"
 )
 
 // PushHookHintDelay is how long a push with hooks enabled runs before HintAfter
@@ -48,7 +48,7 @@ func GetCurrentBranch() (string, error) {
 func RunCommand(args ...string) error {
 	log.Debugf("Running: git %s", strings.Join(args, " "))
 	cmd := exec.Command("git", args...)
-	if log.IsLevelEnabled(log.DebugLevel) {
+	if log.Enabled(log.LevelDebug) {
 		cmd.Stdout = os.Stdout
 	}
 	cmd.Stderr = os.Stderr
@@ -71,7 +71,7 @@ func RunCommandVerboseOnError(args ...string) error {
 	}
 
 	// Print output on success only if debug is enabled
-	if log.IsLevelEnabled(log.DebugLevel) && len(output) > 0 {
+	if log.Enabled(log.LevelDebug) && len(output) > 0 {
 		fmt.Print(string(output))
 	}
 	return nil

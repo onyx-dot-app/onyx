@@ -8,8 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 
-	log "github.com/sirupsen/logrus"
-
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/log"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
 )
 
@@ -146,4 +145,3 @@ func GenerateAll(schemaPath string, clientOutputDir string) error {
 	}
 	return RunScript(args)
 }
-

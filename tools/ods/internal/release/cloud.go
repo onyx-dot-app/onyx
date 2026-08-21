@@ -4,9 +4,8 @@ import (
 	"fmt"
 	"regexp"
 
-	log "github.com/sirupsen/logrus"
-
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/git"
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/log"
 )
 
 // cloudTagRe matches a well-formed cloud tag and captures its base version

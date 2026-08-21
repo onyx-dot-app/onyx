@@ -7,11 +7,11 @@ import (
 	"strings"
 
 	"github.com/sergi/go-diff/diffmatchpatch"
-	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/composegen"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/deployfilessync"
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/log"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
 )
 

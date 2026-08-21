@@ -4,8 +4,9 @@ import (
 	"os"
 	"os/exec"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/log"
 )
 
 func newDevRebuildCommand() *cobra.Command {

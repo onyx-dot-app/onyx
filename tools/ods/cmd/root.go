@@ -3,10 +3,10 @@ package cmd
 import (
 	"fmt"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/docker"
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/log"
 )
 
 var (
@@ -30,13 +30,10 @@ func NewRootCommand() *cobra.Command {
 		Run:   rootCmd,
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
 			if opts.Debug {
-				log.SetLevel(log.DebugLevel)
+				log.SetLevel(log.LevelDebug)
 			} else {
-				log.SetLevel(log.InfoLevel)
+				log.SetLevel(log.LevelInfo)
 			}
-			log.SetFormatter(&log.TextFormatter{
-				DisableTimestamp: true,
-			})
 			docker.SetProjectFlags(opts.Project)
 		},
 		Version: fmt.Sprintf("%s\ncommit %s", Version, Commit),

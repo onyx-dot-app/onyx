@@ -5,7 +5,7 @@ import (
 	"os"
 	"os/exec"
 
-	log "github.com/sirupsen/logrus"
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/log"
 )
 
 // PutFile uploads a single local file to an S3 object using the AWS CLI.

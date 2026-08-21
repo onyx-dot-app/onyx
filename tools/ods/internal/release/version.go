@@ -12,9 +12,8 @@ import (
 	"strconv"
 	"strings"
 
-	log "github.com/sirupsen/logrus"
-
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/git"
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/log"
 )
 
 // bareSemverRe matches a bare X.Y.Z version (no leading v). Leading zeroes are

@@ -6,7 +6,7 @@ import (
 	"os/exec"
 	"strings"
 
-	log "github.com/sirupsen/logrus"
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/log"
 )
 
 // Cluster holds the connection info for a Kubernetes cluster.

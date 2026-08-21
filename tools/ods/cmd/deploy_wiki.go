@@ -3,11 +3,11 @@ package cmd
 import (
 	"time"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/config"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/git"
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/log"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/prompt"
 )
 
@@ -87,7 +87,7 @@ func deployWiki(opts *DeployWikiOptions) {
 	)
 
 	if opts.DryRun {
-		log.Warning("=== DRY RUN MODE: workflow dispatches will be skipped ===")
+		log.Warn("=== DRY RUN MODE: workflow dispatches will be skipped ===")
 	}
 
 	versionTag := "nightly-latest-" + time.Now().UTC().Format("20060102")

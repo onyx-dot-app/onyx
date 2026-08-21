@@ -3,10 +3,10 @@ package cmd
 import (
 	"os"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/audit"
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/log"
 )
 
 // AuditImageOptions holds options for the `ods audit image` command.

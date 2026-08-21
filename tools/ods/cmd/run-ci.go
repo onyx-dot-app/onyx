@@ -6,10 +6,10 @@ import (
 	"os/exec"
 	"strings"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/git"
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/log"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/prompt"
 )
 
@@ -87,7 +87,7 @@ func runCI(cmd *cobra.Command, args []string, opts *RunCIOptions) {
 	log.Debugf("Running CI for PR: %s", prNumber)
 
 	if opts.DryRun {
-		log.Warning("=== DRY RUN MODE: No remote operations will be performed ===")
+		log.Warn("=== DRY RUN MODE: No remote operations will be performed ===")
 	}
 
 	// Save the current branch to switch back later

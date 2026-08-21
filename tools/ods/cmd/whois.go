@@ -7,10 +7,10 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/kube"
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/log"
 )
 
 var safeIdentifier = regexp.MustCompile(`^[a-zA-Z0-9_\-]+$`)

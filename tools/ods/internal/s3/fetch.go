@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	log "github.com/sirupsen/logrus"
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/log"
 )
 
 // S3URL represents a parsed S3 URL.

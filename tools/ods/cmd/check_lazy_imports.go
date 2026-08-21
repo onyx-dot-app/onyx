@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"os"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/lazyimports"
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/log"
 )
 
 // NewCheckLazyImportsCommand creates the check-lazy-imports command.
@@ -65,4 +65,3 @@ func runCheckLazyImports(providedPaths []string) {
 
 	log.Info("✅ All lazy modules are properly imported!")
 }
-

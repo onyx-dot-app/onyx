@@ -7,9 +7,8 @@ import (
 	"strconv"
 	"strings"
 
-	log "github.com/sirupsen/logrus"
-
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/git"
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/log"
 )
 
 // stableTagRe matches a well-formed stable tag (vX.Y.Z, no pre-release

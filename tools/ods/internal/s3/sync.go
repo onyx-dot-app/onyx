@@ -5,7 +5,7 @@ import (
 	"os"
 	"os/exec"
 
-	log "github.com/sirupsen/logrus"
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/log"
 )
 
 // SyncDown downloads an S3 prefix to a local directory using AWS CLI.
