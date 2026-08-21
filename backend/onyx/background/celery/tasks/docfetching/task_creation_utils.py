@@ -121,5 +121,3 @@ def try_creating_docfetching_task(
     finally:
         if lock.owned():
             lock.release()
-
-    return index_attempt_id
