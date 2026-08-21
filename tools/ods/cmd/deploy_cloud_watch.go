@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
+	"regexp"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -28,6 +29,10 @@ const (
 	bumpPRDiscoveryTimeout = 20 * time.Minute
 	bumpPRPollInterval     = 15 * time.Second
 )
+
+// cloudTagRe matches complete cloud release tags. It mirrors the validation in
+// the bump workflow.
+var cloudTagRe = regexp.MustCompile(`^v\d+\.\d+\.\d+-cloud\.\d+$`)
 
 // watchCloudRelease follows the release pipeline of an already-pushed cloud
 // tag: the deployment.yml build, then the bump PR that the dispatched bump

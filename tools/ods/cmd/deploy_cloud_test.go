@@ -1,17 +1,17 @@
 package cmd
 
-// Command states for releaseCloud. Tag computation and validation are tested
+// Command states for deployCloud. Tag computation and validation are tested
 // in internal/release; these tests pin the command-level flow.
 //
 //	E1 dry run                               -> prints tag, creates nothing,
-//	                                            returns no pushed tag           TestReleaseCloud_dryRunCreatesNothing
+//	                                            returns no pushed tag           TestDeployCloud_dryRunCreatesNothing
 //	E2 real run                              -> tag on origin at origin/main,
-//	                                            tag name returned               TestReleaseCloud_tagsOriginMainHead
+//	                                            tag name returned               TestDeployCloud_tagsOriginMainHead
 //	E3 push rejected by origin               -> local tag rolled back,
-//	                                            returns no pushed tag           TestReleaseCloud_pushFailureRollsBackLocalTag
+//	                                            returns no pushed tag           TestDeployCloud_pushFailureRollsBackLocalTag
 //	E4 counter tag only on origin            -> fetched, counter continues,
-//	                                            tag name returned               TestReleaseCloud_fetchesRemoteOnlyCounterTags
-//	E5 --version with leading zeroes         -> rejected before any git work    TestReleaseCloud_rejectsLeadingZeroVersion
+//	                                            tag name returned               TestDeployCloud_fetchesRemoteOnlyCounterTags
+//	E5 --version with leading zeroes         -> rejected before any git work    TestDeployCloud_rejectsLeadingZeroVersion
 
 import (
 	"os"
@@ -22,12 +22,12 @@ import (
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/gittest"
 )
 
-func TestReleaseCloud_dryRunCreatesNothing(t *testing.T) {
+func TestDeployCloud_dryRunCreatesNothing(t *testing.T) {
 	// Precondition.
 	repo := gittest.SetupReleaseBranchRepo(t)
 
 	// Under test.
-	tag, err := releaseCloud(&ReleaseCloudOptions{Ref: "origin/main", DryRun: true, Yes: true})
+	tag, err := deployCloud(&DeployCloudOptions{Ref: "origin/main", DryRun: true, Yes: true})
 
 	// Postcondition.
 	if err != nil {
@@ -41,12 +41,12 @@ func TestReleaseCloud_dryRunCreatesNothing(t *testing.T) {
 	}
 }
 
-func TestReleaseCloud_tagsOriginMainHead(t *testing.T) {
+func TestDeployCloud_tagsOriginMainHead(t *testing.T) {
 	// Precondition.
 	repo := gittest.SetupReleaseBranchRepo(t)
 
 	// Under test.
-	tag, err := releaseCloud(&ReleaseCloudOptions{Ref: "origin/main", Yes: true})
+	tag, err := deployCloud(&DeployCloudOptions{Ref: "origin/main", Yes: true})
 
 	// Postcondition.
 	if err != nil {
@@ -61,7 +61,7 @@ func TestReleaseCloud_tagsOriginMainHead(t *testing.T) {
 	}
 }
 
-func TestReleaseCloud_fetchesRemoteOnlyCounterTags(t *testing.T) {
+func TestDeployCloud_fetchesRemoteOnlyCounterTags(t *testing.T) {
 	// Precondition: a counter tag another developer pushed but this clone never
 	// fetched. Computing from local tags alone would mint a colliding
 	// v4.6.0-cloud.3.
@@ -71,7 +71,7 @@ func TestReleaseCloud_fetchesRemoteOnlyCounterTags(t *testing.T) {
 	gittest.Git(t, repo.Work, "tag", "-d", "v4.6.0-cloud.3")
 
 	// Under test.
-	tag, err := releaseCloud(&ReleaseCloudOptions{Ref: "origin/main", Yes: true})
+	tag, err := deployCloud(&DeployCloudOptions{Ref: "origin/main", Yes: true})
 
 	// Postcondition.
 	if err != nil {
@@ -85,21 +85,21 @@ func TestReleaseCloud_fetchesRemoteOnlyCounterTags(t *testing.T) {
 	}
 }
 
-func TestReleaseCloud_rejectsLeadingZeroVersion(t *testing.T) {
+func TestDeployCloud_rejectsLeadingZeroVersion(t *testing.T) {
 	// Precondition: SemVer 2.0.0 item 2 forbids leading zeroes in numeric
 	// identifiers; such an override must never become a tag.
 	gittest.SetupReleaseBranchRepo(t)
 
 	// Under test and postcondition.
 	for _, version := range []string{"04.6.0", "4.06.0", "4.6.00"} {
-		_, err := releaseCloud(&ReleaseCloudOptions{Ref: "origin/main", Version: version, DryRun: true, Yes: true})
+		_, err := deployCloud(&DeployCloudOptions{Ref: "origin/main", Version: version, DryRun: true, Yes: true})
 		if err == nil || !strings.Contains(err.Error(), "--version must be X.Y.Z") {
 			t.Errorf("expected validation error for %q, got %v", version, err)
 		}
 	}
 }
 
-func TestReleaseCloud_pushFailureRollsBackLocalTag(t *testing.T) {
+func TestDeployCloud_pushFailureRollsBackLocalTag(t *testing.T) {
 	// Precondition: origin rejects every push.
 	repo := gittest.SetupReleaseBranchRepo(t)
 	hook := filepath.Join(repo.Origin, "hooks", "pre-receive")
@@ -108,7 +108,7 @@ func TestReleaseCloud_pushFailureRollsBackLocalTag(t *testing.T) {
 	}
 
 	// Under test.
-	tag, err := releaseCloud(&ReleaseCloudOptions{Ref: "origin/main", Yes: true})
+	tag, err := deployCloud(&DeployCloudOptions{Ref: "origin/main", Yes: true})
 
 	// Postcondition.
 	if err == nil || !strings.Contains(err.Error(), "failed to push") {
