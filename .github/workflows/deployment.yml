@@ -207,16 +207,22 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Setup uv
-        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # ratchet:astral-sh/setup-uv@v9.0.0
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # zizmor: ignore[cache-poisoning]
         with:
-          version: "0.11.25"
-          # NOTE: This isn't caching much and zizmor suggests this could be poisoned, so disable.
-          enable-cache: false
+          go-version-file: tools/ods/go.mod
+          cache-dependency-path: tools/ods/go.sum
 
       - name: Validate the tag is versioned correctly
+        # Run `ods` from the source checked out at this ref instead of pulling
+        # the latest onyx-devtools wheel from PyPI: `--check` is only meaningful
+        # for the internal/release logic that shipped alongside it on this ref,
+        # and an unpinned PyPI pull can predate (or diverge from) that logic,
+        # e.g. right after `--check` itself was added but before a new
+        # onyx-devtools release was cut (see #14072).
+        working-directory: tools/ods
         run: |
-          uv run --no-sync --with onyx-devtools ods release --check --ref "$GITHUB_REF_NAME"
+          go run . release --check --ref "$GITHUB_REF_NAME"
 
   notify-slack-on-tag-check-failure:
     needs:
