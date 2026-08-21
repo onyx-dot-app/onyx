@@ -10,7 +10,7 @@ import { Button, Card, Tabs, Text } from "@opal/components";
 import { IllustrationContent, SettingsLayouts } from "@opal/layouts";
 import { SvgUnPlugged } from "@opal/illustrations";
 import { SvgArrowLeft, SvgPlus, SvgSettings } from "@opal/icons";
-import { MCPServer, MCPServersResponse } from "@/lib/tools/interfaces";
+import { MCPServer, MCPServersResponse } from "@/lib/tools/types";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import {
   availableBuiltInDescriptors,

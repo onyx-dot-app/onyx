@@ -1,5 +1,5 @@
 "use client";
-import { ActionStatus } from "@/lib/tools/interfaces";
+import { ActionStatus } from "@/lib/tools/types";
 import React from "react";
 import { Button } from "@opal/components";
 import {

@@ -48,7 +48,6 @@ interface UseChatSessionControllerProps {
   firstMessage?: string;
 
   // UI state setters
-  setSelectedAgentFromId: (agentId: number | null) => void;
   setSelectedDocuments: (documents: OnyxDocument[]) => void;
   setCurrentMessageFiles: (
     files: ProjectFile[] | ((prev: ProjectFile[]) => ProjectFile[])
@@ -81,7 +80,6 @@ export default function useChatSessionController({
   searchParams,
   filterManager,
   firstMessage,
-  setSelectedAgentFromId,
   setSelectedDocuments,
   setCurrentMessageFiles,
   chatSessionIdRef,
@@ -175,8 +173,6 @@ export default function useChatSessionController({
         // Clear the current session in the store to show intro messages
         setCurrentSession(null);
 
-        // Reset the selected agent back to default
-        setSelectedAgentFromId(null);
         updateCurrentChatSessionSharedStatus(ChatSessionSharedStatus.Private);
 
         // If we're supposed to submit on initial load, then do that here
@@ -243,7 +239,6 @@ export default function useChatSessionController({
       const isIncognito = chatSession.incognito ?? false;
       setIncognitoEnabled(isIncognito);
       setIncognitoSessionId(isIncognito ? chatSession.chat_session_id : null);
-      setSelectedAgentFromId(chatSession.persona_id);
 
       // Ensure the current session is set to the actual session ID from the response
       setCurrentSession(chatSession.chat_session_id);
@@ -492,7 +487,7 @@ export default function useChatSessionController({
     }
   }, [
     existingChatSessionId,
-    searchParams?.get(SEARCH_PARAM_NAMES.PERSONA_ID),
+    searchParams?.get(SEARCH_PARAM_NAMES.AGENT_ID),
     // Note: We're intentionally not including all dependencies to avoid infinite loops
     // This effect should only run when existingChatSessionId or persona ID changes
   ]);

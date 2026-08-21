@@ -14,7 +14,7 @@ import { useSettings } from "@/lib/settings/hooks";
 import { MinimalAgent } from "@/lib/agents/types";
 import Text from "@/refresh-components/texts/Text";
 import ChatButton from "@/sections/sidebar/ChatButton";
-import AgentButton from "@/sections/sidebar/AgentButton";
+import { AgentButton } from "@/lib/agents/components";
 import { DragEndEvent } from "@dnd-kit/core";
 import {
   DndContext,
@@ -38,14 +38,10 @@ import {
 } from "@dnd-kit/modifiers";
 import useChatSessions from "@/hooks/useChatSessions";
 import { useProjects } from "@/lib/projects/hooks";
-import {
-  useAgents,
-  useCurrentAgent,
-  usePinnedAgents,
-} from "@/lib/agents/hooks";
+import { useAgents, useActiveAgent, usePinnedAgents } from "@/lib/agents/hooks";
 import ProjectFolderButton from "@/sections/sidebar/ProjectFolderButton";
 import CreateProjectModal from "@/sections/modals/CreateProjectModal";
-import MoveCustomAgentChatModal from "@/sections/modals/MoveCustomAgentChatModal";
+import { MoveCustomAgentChatModal } from "@/lib/agents/components";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import { removeChatSessionFromProject } from "@/lib/projects/svc";
 import type { Project } from "@/lib/projects/types";
@@ -88,22 +84,23 @@ import { dismissNotification } from "@/lib/notifications/api";
 import AccountPopover from "@/sections/sidebar/AccountPopover";
 import ChatSearchCommandMenu from "@/sections/sidebar/ChatSearchCommandMenu";
 import { useQueryController } from "@/providers/QueryControllerProvider";
+import { DEFAULT_AGENT_ID } from "@/lib/constants";
 
 // Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
 // OR Visible-agents = pinned-agents (if current-agent in pinned-agents)
 function buildVisibleAgents(
   pinnedAgents: MinimalAgent[],
-  currentAgent: MinimalAgent | null
+  activeAgent: MinimalAgent | undefined
 ): [MinimalAgent[], boolean] {
   /* NOTE: The unified agent (id = 0) is not visible in the sidebar,
   so we filter it out. */
-  if (!currentAgent)
+  if (!activeAgent)
     return [pinnedAgents.filter((agent) => agent.id !== 0), false];
   const currentAgentIsPinned = pinnedAgents.some(
-    (pinnedAgent) => pinnedAgent.id === currentAgent.id
+    (pinnedAgent) => pinnedAgent.id === activeAgent.id
   );
   const visibleAgents = (
-    currentAgentIsPinned ? pinnedAgents : [...pinnedAgents, currentAgent]
+    currentAgentIsPinned ? pinnedAgents : [...pinnedAgents, activeAgent]
   ).filter((agent) => agent.id !== 0);
 
   return [visibleAgents, currentAgentIsPinned];
@@ -231,7 +228,7 @@ export default function AppSidebar() {
     isLoading: isLoadingProjects,
   } = useProjects();
   const { isLoading: isLoadingAgents } = useAgents();
-  const currentAgent = useCurrentAgent();
+  const activeAgent = useActiveAgent();
   const {
     pinnedAgents,
     updatePinnedAgents,
@@ -320,8 +317,8 @@ export default function AppSidebar() {
   }, [buildModeNotification, mutateNotifications]);
 
   const [visibleAgents, currentAgentIsPinned] = useMemo(
-    () => buildVisibleAgents(pinnedAgents, currentAgent),
-    [pinnedAgents, currentAgent]
+    () => buildVisibleAgents(pinnedAgents, activeAgent),
+    [pinnedAgents, activeAgent]
   );
   const visibleAgentIds = useMemo(
     () => visibleAgents.map((agent) => agent.id),
@@ -355,11 +352,18 @@ export default function AppSidebar() {
 
       let newPinnedAgents: MinimalAgent[];
 
-      if (currentAgent && !currentAgentIsPinned) {
+      // The Assistant is excluded: it is the active agent in plain chat but is
+      // never in `visibleAgents`, so pinning it here would persist an agent the
+      // sidebar cannot show.
+      if (
+        activeAgent &&
+        activeAgent.id !== DEFAULT_AGENT_ID &&
+        !currentAgentIsPinned
+      ) {
         // This is the case in which the user is dragging the UNPINNED agent and moving it to somewhere else in the list.
         // This is an indication that we WANT to pin this agent!
         if (activeIndex === visibleAgentIds.length - 1) {
-          const pinnedWithCurrent = [...pinnedAgents, currentAgent];
+          const pinnedWithCurrent = [...pinnedAgents, activeAgent];
           newPinnedAgents = arrayMove(
             pinnedWithCurrent,
             activeIndex,
@@ -381,7 +385,7 @@ export default function AppSidebar() {
       visibleAgents,
       pinnedAgents,
       updatePinnedAgents,
-      currentAgent,
+      activeAgent,
       currentAgentIsPinned,
     ]
   );
@@ -488,10 +492,7 @@ export default function AppSidebar() {
   const defaultAppMode =
     (user?.preferences?.default_app_mode?.toLowerCase() as "chat" | "search") ??
     "chat";
-  const newSessionHref =
-    combinedSettingsData?.disable_default_assistant && currentAgent
-      ? `/app?agentId=${currentAgent.id}`
-      : "/app";
+
   const moreAgentsButton = (
     <div data-testid="AppSidebar/more-agents">
       <SidebarTab
@@ -594,7 +595,7 @@ export default function AppSidebar() {
           <div data-testid="AppSidebar/new-session">
             <SidebarTab
               icon={SvgEditBig}
-              href={newSessionHref}
+              href="/app"
               selected={activeSidebarTab.isNewSession()}
               onClick={() => {
                 if (!activeSidebarTab.isNewSession()) return;

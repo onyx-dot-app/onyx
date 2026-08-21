@@ -1,4 +1,4 @@
-import { MCPServer } from "@/lib/tools/interfaces";
+import { MCPServer } from "@/lib/tools/types";
 import { updateMCPServer } from "@/lib/tools/mcpService";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
 import {

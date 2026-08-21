@@ -3,7 +3,7 @@
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { MCPServer, ToolSnapshot } from "@/lib/tools/interfaces";
+import { MCPServer, ToolSnapshot } from "@/lib/tools/types";
 import { updateMCPServer } from "@/lib/tools/mcpService";
 import ActionPolicyEditorModal from "@/app/craft/v1/apps/admin/ActionPolicyEditorModal";
 import type { EndpointPolicy } from "@/app/craft/v1/apps/registry";

@@ -28,7 +28,7 @@ import {
 } from "@/lib/agents/svc";
 import type { Agent } from "@/lib/agents/types";
 import type { Route } from "next";
-import ShareAgentModal from "@/sections/modals/ShareAgentModal";
+import { ShareAgentModal } from "@/lib/agents/components";
 import { useCreateModal } from "@opal/components";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";

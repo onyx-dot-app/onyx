@@ -11,7 +11,7 @@ interface MoveCustomAgentChatModalProps {
   onConfirm: (doNotShowAgain: boolean) => void;
 }
 
-export default function MoveCustomAgentChatModal({
+export function MoveCustomAgentChatModal({
   onCancel,
   onConfirm,
 }: MoveCustomAgentChatModalProps) {

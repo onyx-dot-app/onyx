@@ -469,6 +469,12 @@ function ModelDetailPane({ option, managers, onBack }: ModelDetailPaneProps) {
 export interface ModelSelectorContentProps {
   currentModelName?: string;
   providerOptions?: ModelOptionProvider[];
+  /**
+   * Set by a host that fetches `providerOptions` itself, to report that the
+   * fetch is still in flight. An empty list then reads as "not here yet"
+   * instead of "no models".
+   */
+  isLoading?: boolean;
   includeHiddenModels?: boolean;
   requiresImageInput?: boolean;
   onSelect: (option: LLMOption) => void;
@@ -484,6 +490,7 @@ export interface ModelSelectorContentProps {
 export default function ModelSelectorContent({
   currentModelName,
   providerOptions,
+  isLoading: isLoadingProp = false,
   includeHiddenModels = false,
   requiresImageInput,
   onSelect,
@@ -501,7 +508,8 @@ export default function ModelSelectorContent({
   } = useCurrentAgentLLMProviders();
   const llmProviders = providerOptions ?? currentAgentProviderOptions;
   const isLoading =
-    providerOptions === undefined && currentAgentProvidersLoading;
+    isLoadingProp ||
+    (providerOptions === undefined && currentAgentProvidersLoading);
 
   const globalDefaultDisplayName = useMemo(() => {
     if (!defaultText || !llmProviders) return null;

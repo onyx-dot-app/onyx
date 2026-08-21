@@ -10,7 +10,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { CopyButton } from "@opal/components";
 import { Button, Divider } from "@opal/components";
 import { Hoverable } from "@opal/core";
-import { MethodSpec, ToolSnapshot } from "@/lib/tools/interfaces";
+import { MethodSpec, ToolSnapshot } from "@/lib/tools/types";
 import { can } from "@/lib/permissions/resource-actions";
 import {
   validateToolDefinition,

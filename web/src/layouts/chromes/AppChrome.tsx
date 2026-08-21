@@ -30,7 +30,7 @@ import {
 } from "@/lib/chat/exportChatSession";
 import { UNNAMED_CHAT } from "@/lib/constants";
 import { useRouter } from "next/navigation";
-import MoveCustomAgentChatModal from "@/sections/modals/MoveCustomAgentChatModal";
+import { MoveCustomAgentChatModal } from "@/lib/agents/components";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import FrostedDiv from "@/refresh-components/FrostedDiv";
 import {

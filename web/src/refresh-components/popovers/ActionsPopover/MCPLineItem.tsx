@@ -5,7 +5,7 @@ import {
   MCPAuthenticationType,
   MCPAuthenticationPerformer,
   ToolSnapshot,
-} from "@/lib/tools/interfaces";
+} from "@/lib/tools/types";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { noProp } from "@/lib/utils";
 import { cn } from "@opal/utils";

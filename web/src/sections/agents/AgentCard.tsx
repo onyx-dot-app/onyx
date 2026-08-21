@@ -25,8 +25,8 @@ import {
   SvgUser,
 } from "@opal/icons";
 import { useCreateModal } from "@opal/components";
-import ShareAgentModal from "@/sections/modals/ShareAgentModal";
-import AgentViewerModal from "@/sections/modals/AgentViewerModal";
+import { ShareAgentModal } from "@/lib/agents/components";
+import { AgentViewerModal } from "@/lib/agents/components";
 import { CardItemLayout } from "@/layouts/general-layouts";
 import { Content } from "@opal/layouts";
 import { Interactive } from "@opal/core";

@@ -9,7 +9,7 @@ import { InputTypeIn } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { Divider } from "@opal/components";
 import type { MCPAuthFormValues } from "@/sections/actions/modals/MCPAuthenticationModal";
-import { MCPAuthenticationType } from "@/lib/tools/interfaces";
+import { MCPAuthenticationType } from "@/lib/tools/types";
 import { SvgUser } from "@opal/icons";
 
 interface PerUserAuthConfigProps {

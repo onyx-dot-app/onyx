@@ -16,7 +16,7 @@ import {
   createProject as createProjectService,
 } from "@/lib/projects/svc";
 import { useProjectsContext } from "@/providers/ProjectsContext";
-import MoveCustomAgentChatModal from "@/sections/modals/MoveCustomAgentChatModal";
+import { MoveCustomAgentChatModal } from "@/lib/agents/components";
 import { UNNAMED_CHAT } from "@/lib/constants";
 import ShareChatSessionModal from "@/sections/modals/ShareChatSessionModal";
 import { Button, LineItemButton, SidebarTab } from "@opal/components";

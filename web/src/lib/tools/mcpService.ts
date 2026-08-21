@@ -14,7 +14,7 @@ import {
   MCPOAuthProviderMode,
   MCPTransportType,
   MCPAuthTemplate,
-} from "@/lib/tools/interfaces";
+} from "@/lib/tools/types";
 import { parseErrorDetail } from "@/lib/fetcher";
 
 export interface ToolStatusUpdateRequest {

@@ -19,7 +19,7 @@ import {
   MCPAuthenticationType,
   MCPAuthenticationPerformer,
   ToolSnapshot,
-} from "@/lib/tools/interfaces";
+} from "@/lib/tools/types";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import { useAgentPreferences } from "@/lib/agents/hooks";
 import { useUser } from "@/providers/UserProvider";
@@ -50,6 +50,7 @@ import {
   SvgSimpleLoader,
 } from "@opal/icons";
 import { Button } from "@opal/components";
+import { isAssistant } from "@/lib/agents/utils";
 import {
   getMCPUserOAuthNavigationUrl,
   startMCPUserOAuth,
@@ -165,14 +166,14 @@ type SecondaryViewState =
   | { type: "mcp"; serverId: number };
 
 export interface ActionsPopoverProps {
-  selectedAgent: MinimalAgent;
+  activeAgent: MinimalAgent;
   filterManager: FilterManager;
   availableSources?: ValidSources[];
   disabled?: boolean;
 }
 
 export default function ActionsPopover({
-  selectedAgent,
+  activeAgent,
   filterManager,
   availableSources = [],
   disabled = false,
@@ -188,18 +189,18 @@ export default function ActionsPopover({
   const { selectedSources, setSelectedSources } = filterManager;
   const [mcpServers, setMcpServers] = useState<MCPServer[]>([]);
   const { llmProviders, isLoading: isLLMLoading } = useLLMProviders(
-    selectedAgent.id
+    activeAgent.id
   );
   const hasAnyProvider = !isLLMLoading && (llmProviders?.length ?? 0) > 0;
 
   // Use the OAuth hook
   const { getToolAuthStatus, authenticateTool } = useToolOAuthStatus(
-    selectedAgent.id
+    activeAgent.id
   );
 
-  const isDefaultAgent = selectedAgent.id === 0;
+  const agentIsAssistant = isAssistant(activeAgent);
 
-  const hasSearchTool = selectedAgent.tools.some(
+  const hasSearchTool = activeAgent.tools.some(
     (tool) => tool.in_code_tool_id === SEARCH_TOOL_ID
   );
 
@@ -207,17 +208,17 @@ export default function ActionsPopover({
   // can search over (doc sets, federated, hierarchy nodes, attached docs, user files).
   // Default agent is special-cased to show everything available.
   const agentAccessibleSources = useMemo(() => {
-    if (isDefaultAgent) {
+    if (agentIsAssistant) {
       return null; // null means "all accessible"
     }
 
-    const sources = selectedAgent.knowledge_sources ?? [];
+    const sources = activeAgent.knowledge_sources ?? [];
     if (sources.length === 0 && hasSearchTool) {
       return null;
     }
 
     return new Set<string>(sources);
-  }, [isDefaultAgent, selectedAgent.knowledge_sources, hasSearchTool]);
+  }, [agentIsAssistant, activeAgent.knowledge_sources, hasSearchTool]);
 
   // Scope availableSources to only what this agent can access. This ensures
   // that (a) agent-only sources like user_file appear in the toggle list and
@@ -244,7 +245,7 @@ export default function ActionsPopover({
   // Store previously enabled sources when search tool is disabled
   const previouslyEnabledSourcesRef = useRef<SourceMetadata[]>([]);
 
-  // Store MCP server auth/loading state (tools are part of selectedAgent.tools)
+  // Store MCP server auth/loading state (tools are part of activeAgent.tools)
   const [mcpServerData, setMcpServerData] = useState<{
     [serverId: number]: {
       isAuthenticated: boolean;
@@ -277,7 +278,7 @@ export default function ActionsPopover({
   // Reset state when assistant changes
   useEffect(() => {
     setForcedToolIds([]);
-  }, [selectedAgent.id, setForcedToolIds]);
+  }, [activeAgent.id, setForcedToolIds]);
 
   const { isAdmin, permissions } = useUser();
   const { vectorDbEnabled } = useSettings();
@@ -290,13 +291,13 @@ export default function ActionsPopover({
   // Check if there are any connectors available
   const hasNoConnectors = ccPairs.length === 0;
 
-  const agentPreference = agentPreferences?.[selectedAgent.id];
+  const agentPreference = agentPreferences?.[activeAgent.id];
   const disabledToolIds =
     agentPreference?.disabled_tool_ids || NO_DISABLED_TOOLS;
   const toggleToolForCurrentAgent = useCallback(
     (toolId: number) => {
       const disabled = disabledToolIds.includes(toolId);
-      setSpecificAgentPreferences(selectedAgent.id, {
+      setSpecificAgentPreferences(activeAgent.id, {
         disabled_tool_ids: disabled
           ? disabledToolIds.filter((id) => id !== toolId)
           : [...disabledToolIds, toolId],
@@ -309,7 +310,7 @@ export default function ActionsPopover({
     },
     [
       disabledToolIds,
-      selectedAgent.id,
+      activeAgent.id,
       setSpecificAgentPreferences,
       forcedToolIds,
       setForcedToolIds,
@@ -332,10 +333,10 @@ export default function ActionsPopover({
   // Get internal search tool reference for auto-pin logic
   const internalSearchTool = useMemo(
     () =>
-      selectedAgent.tools.find(
+      activeAgent.tools.find(
         (tool) => tool.in_code_tool_id === SEARCH_TOOL_ID && !tool.mcp_server_id
       ),
-    [selectedAgent.tools]
+    [activeAgent.tools]
   );
 
   // Handle explicit force toggle from ActionLineItem
@@ -421,7 +422,7 @@ export default function ActionsPopover({
   // Filter out MCP tools from the main list (they have mcp_server_id)
   // Also filter out internal search tool for basic users when there are no connectors
   // Also filter out tools that are not chat-selectable (e.g., OpenURL)
-  const displayTools = selectedAgent.tools.filter((tool) => {
+  const displayTools = activeAgent.tools.filter((tool) => {
     // Filter out MCP tools
     if (tool.mcp_server_id) return false;
 
@@ -468,7 +469,7 @@ export default function ActionsPopover({
 
   // Fetch MCP servers for the agent on mount
   useEffect(() => {
-    if (selectedAgent == null || selectedAgent.id == null || !hasAnyProvider)
+    if (activeAgent == null || activeAgent.id == null || !hasAnyProvider)
       return;
 
     const abortController = new AbortController();
@@ -476,7 +477,7 @@ export default function ActionsPopover({
     const fetchMCPServers = async () => {
       try {
         const response = await fetch(
-          `/api/mcp/servers/persona/${selectedAgent.id}`,
+          `/api/mcp/servers/persona/${activeAgent.id}`,
           {
             signal: abortController.signal,
           }
@@ -510,9 +511,9 @@ export default function ActionsPopover({
     return () => {
       abortController.abort();
     };
-  }, [selectedAgent?.id, hasAnyProvider]);
+  }, [activeAgent?.id, hasAnyProvider]);
 
-  // No separate MCP tool loading; tools already exist in selectedAgent.tools
+  // No separate MCP tool loading; tools already exist in activeAgent.tools
 
   // Handle MCP authentication
   const handleMCPAuthenticate = async (
@@ -686,7 +687,7 @@ export default function ActionsPopover({
     : undefined;
   const selectedMcpTools =
     selectedMcpServerId !== null
-      ? selectedAgent.tools.filter(
+      ? activeAgent.tools.filter(
           (t) => t.mcp_server_id === Number(selectedMcpServerId)
         )
       : [];
@@ -719,7 +720,7 @@ export default function ActionsPopover({
     if (!selectedMcpServer) return;
     const serverToolIds = selectedMcpTools.map((tool) => tool.id);
     const merged = Array.from(new Set([...disabledToolIds, ...serverToolIds]));
-    setSpecificAgentPreferences(selectedAgent.id, {
+    setSpecificAgentPreferences(activeAgent.id, {
       disabled_tool_ids: merged,
     });
     setForcedToolIds(forcedToolIds.filter((id) => !serverToolIds.includes(id)));
@@ -728,7 +729,7 @@ export default function ActionsPopover({
   const enableAllToolsForSelectedServer = () => {
     if (!selectedMcpServer) return;
     const serverToolIdSet = new Set(selectedMcpTools.map((tool) => tool.id));
-    setSpecificAgentPreferences(selectedAgent.id, {
+    setSpecificAgentPreferences(activeAgent.id, {
       disabled_tool_ids: disabledToolIds.filter(
         (id) => !serverToolIdSet.has(id)
       ),
@@ -930,7 +931,7 @@ export default function ActionsPopover({
           };
 
           // Tools for this server come from assistant.tools
-          const serverTools = selectedAgent.tools.filter(
+          const serverTools = activeAgent.tools.filter(
             (t) => t.mcp_server_id === Number(server.id)
           );
           const enabledTools = serverTools.filter(

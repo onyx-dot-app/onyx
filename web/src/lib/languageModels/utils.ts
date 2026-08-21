@@ -59,14 +59,14 @@ export function getFinalLLM(
 }
 
 export function getProviderOverrideForAgent(
-  liveAgent: MinimalAgent,
+  activeAgent: MinimalAgent,
   llmProviders: LLMProviderDescriptor[]
 ): LlmDescriptor | null {
   // Canonical path: resolve from model configuration ID.
-  if (liveAgent.default_model_configuration_id != null) {
+  if (activeAgent.default_model_configuration_id != null) {
     for (const provider of llmProviders) {
       const mc = provider.model_configurations.find(
-        (m) => m.id === liveAgent.default_model_configuration_id
+        (m) => m.id === activeAgent.default_model_configuration_id
       );
       if (mc) {
         return {

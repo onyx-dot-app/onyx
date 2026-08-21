@@ -343,6 +343,7 @@ export default function MessageToolbar({
               llmManager && (
                 <div data-testid="AgentMessage/regenerate">
                   <ModelSelector
+                    providerOptions={llmManager.llmProviders}
                     value={
                       // The response's model may live under a different
                       // provider than the global selection, so resolve it

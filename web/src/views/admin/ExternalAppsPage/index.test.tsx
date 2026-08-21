@@ -17,7 +17,7 @@ import {
   BuiltInExternalAppDescriptor,
   ExternalAppAdminResponse,
 } from "@/app/craft/v1/apps/registry";
-import { MCPServer, MCPServerStatus } from "@/lib/tools/interfaces";
+import { MCPServer, MCPServerStatus } from "@/lib/tools/types";
 import * as externalAppsService from "@/app/craft/services/externalAppsService";
 import * as mcpService from "@/lib/tools/mcpService";
 

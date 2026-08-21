@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { ToolSnapshot } from "@/lib/tools/interfaces";
+import { ToolSnapshot } from "@/lib/tools/types";
 import { initiateOAuthFlow } from "@/lib/oauth/api";
 import { useToolOAuthStatus } from "@/lib/hooks/useToolOAuthStatus";
 import { SvgArrowExchange } from "@opal/icons";

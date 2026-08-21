@@ -431,7 +431,7 @@ export interface LlmManager {
   updateModelOverrideBasedOnChatSession: (chatSession?: ChatSession) => void;
   imageFilesPresent: boolean;
   updateImageFilesPresent: (present: boolean) => void;
-  liveAgent: MinimalAgent | null;
+  activeAgent: MinimalAgent | null;
   maxTemperature: number;
   llmProviders: LLMProviderDescriptor[] | undefined;
   isLoadingProviders: boolean;
@@ -459,7 +459,7 @@ Thus, the input should be
 - Current assistant
 
 Changes take place as
-- liveAgent or currentChatSession changes (and the associated model override is set)
+- activeAgent or currentChatSession changes (and the associated model override is set)
 - (updateCurrentLlm) User explicitly setting a model override (and we explicitly override and set the userSpecifiedOverride which we'll use in place of the user preferences unless overridden by an agent)
 
 If we have a live assistant, we should use that model override
@@ -625,7 +625,7 @@ export function getValidLlmDescriptorForProviders(
 
 export function useLlmManager(
   currentChatSession?: ChatSession,
-  liveAgent?: MinimalAgent
+  activeAgent?: MinimalAgent
 ): LlmManager {
   const { user } = useUser();
 
@@ -638,7 +638,7 @@ export function useLlmManager(
   } = useLLMProviders();
   // Fetch persona-specific providers to enforce RBAC restrictions per assistant
   // Only fetch if we have an agent selected
-  const personaId = liveAgent?.id !== undefined ? liveAgent.id : undefined;
+  const personaId = activeAgent?.id !== undefined ? activeAgent.id : undefined;
   const {
     llmProviders: personaProviders,
     defaultText: personaDefaultText,
@@ -666,15 +666,15 @@ export function useLlmManager(
   // Reset manual override when switching to a different assistant
   useEffect(() => {
     if (
-      liveAgent?.id !== undefined &&
+      activeAgent?.id !== undefined &&
       prevAgentIdRef.current !== undefined &&
-      liveAgent.id !== prevAgentIdRef.current
+      activeAgent.id !== prevAgentIdRef.current
     ) {
       // User switched to a different assistant - reset manual override
       setUserHasManuallyOverriddenLLM(false);
     }
-    prevAgentIdRef.current = liveAgent?.id;
-  }, [liveAgent?.id]);
+    prevAgentIdRef.current = activeAgent?.id;
+  }, [activeAgent?.id]);
 
   // Clear manual override when arriving at a *different* existing session
   // from any previously-seen defined session. Tracks only the last
@@ -727,12 +727,12 @@ export function useLlmManager(
       );
     }
 
-    if (liveAgent && liveAgent.id !== DEFAULT_AGENT_ID) {
+    if (activeAgent && activeAgent.id !== DEFAULT_AGENT_ID) {
       // Custom agent — its configured default takes precedence. When the agent
       // has no explicit default, fall to the global system default. The user's
       // personal preference is irrelevant in an agent-scoped chat.
       const agentOverride = getProviderOverrideForAgent(
-        liveAgent,
+        activeAgent,
         llmProviders
       );
       return (
@@ -760,8 +760,8 @@ export function useLlmManager(
     manualLlm.provider,
     manualLlm.modelName,
     manualLlm.modelConfigurationId,
-    liveAgent?.id,
-    liveAgent?.default_model_configuration_id,
+    activeAgent?.id,
+    activeAgent?.default_model_configuration_id,
     user?.preferences?.default_model,
   ]);
   const currentLlm = useMemo(
@@ -817,7 +817,7 @@ export function useLlmManager(
         isAnthropicModel ? 1.0 : 2.0
       );
     } else if (
-      liveAgent?.tools.some((tool) => tool.in_code_tool_id === SEARCH_TOOL_ID)
+      activeAgent?.tools.some((tool) => tool.in_code_tool_id === SEARCH_TOOL_ID)
     ) {
       return 0;
     }
@@ -914,14 +914,14 @@ export function useLlmManager(
     if (currentChatSession?.current_temperature_override) {
       setTemperature(currentChatSession.current_temperature_override);
     } else if (
-      liveAgent?.tools.some((tool) => tool.in_code_tool_id === SEARCH_TOOL_ID)
+      activeAgent?.tools.some((tool) => tool.in_code_tool_id === SEARCH_TOOL_ID)
     ) {
       setTemperature(0);
     } else {
       setTemperature(0.5);
     }
   }, [
-    liveAgent,
+    activeAgent,
     currentChatSession,
     llmProviders,
     user?.preferences?.default_model,
@@ -1003,7 +1003,7 @@ export function useLlmManager(
     persistOverrides,
     imageFilesPresent,
     updateImageFilesPresent,
-    liveAgent: liveAgent ?? null,
+    activeAgent: activeAgent ?? null,
     maxTemperature,
     llmProviders,
     isLoadingProviders:

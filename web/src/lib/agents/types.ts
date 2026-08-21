@@ -1,5 +1,5 @@
 import { ValidSources } from "@/lib/types";
-import { ToolSnapshot } from "@/lib/tools/interfaces";
+import { ToolSnapshot } from "@/lib/tools/types";
 import { DocumentSetSummary, MinimalUserSnapshot } from "@/lib/types";
 import type { PermissionsOf } from "@/lib/permissions/resource-actions";
 

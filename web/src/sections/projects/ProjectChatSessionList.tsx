@@ -32,7 +32,7 @@ import {
 import { timeAgo } from "@opal/time";
 import type { IconFunctionComponent } from "@opal/types";
 import { noProp } from "@/lib/utils";
-import MoveCustomAgentChatModal from "@/sections/modals/MoveCustomAgentChatModal";
+import { MoveCustomAgentChatModal } from "@/lib/agents/components";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import { PopoverSearchInput } from "@/sections/sidebar/ChatButton";
 

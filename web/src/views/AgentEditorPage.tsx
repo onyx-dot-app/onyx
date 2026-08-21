@@ -70,19 +70,15 @@ import CustomAgentAvatar, {
 } from "@/refresh-components/avatars/CustomAgentAvatar";
 import InputAvatar from "@/refresh-components/inputs/InputAvatar";
 import SquareButton from "@/refresh-components/buttons/SquareButton";
-import { useAgents, useLabels } from "@/lib/agents/hooks";
+import { useAgents, useAgentLabels } from "@/lib/agents/hooks";
 import { createAgent, updateAgent } from "@/lib/agents/svc";
 import InputChipField from "@/refresh-components/inputs/InputChipField";
 import { AgentUpsertParameters } from "@/lib/agents/types";
-import { useMcpServersForPersonaEditor } from "@/lib/agents/hooks";
+import { useMcpServersForAgent } from "@/lib/tools/hooks";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
-import {
-  AgentEditorMCPServer,
-  MCPTool,
-  ToolSnapshot,
-} from "@/lib/tools/interfaces";
+import { AgentEditorMCPServer, MCPTool, ToolSnapshot } from "@/lib/tools/types";
 import { InputTypeIn } from "@opal/components";
 import useFilter from "@/hooks/useFilter";
 import EnabledCount from "@/refresh-components/EnabledCount";
@@ -97,9 +93,7 @@ import {
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
 import { ConfirmationModalLayout } from "@opal/layouts";
-import ShareAgentModal, {
-  ShareDraftState,
-} from "@/sections/modals/ShareAgentModal";
+import { ShareAgentModal, type ShareDraftState } from "@/lib/agents/components";
 import AgentKnowledgePane from "@/sections/knowledge/AgentKnowledgePane";
 import { Permission, ValidSources } from "@/lib/types";
 import { useSettings } from "@/lib/settings/hooks";
@@ -573,7 +567,7 @@ export default function AgentEditorPage({
   const userFileIdsRef = useRef<string[]>([]);
 
   // Labels are edited in the Share Agent section and saved with the form
-  const { labels: allLabels, createLabel } = useLabels();
+  const { labels: allLabels, createLabel } = useAgentLabels();
   const [labelInputValue, setLabelInputValue] = useState("");
   const addAgentLabel = useCallback(
     async (
@@ -627,7 +621,7 @@ export default function AgentEditorPage({
     semantic_identifier: string;
   } | null>(null);
 
-  const { mcpServers, isLoading: isMcpLoading } = useMcpServersForPersonaEditor(
+  const { mcpServers, isLoading: isMcpLoading } = useMcpServersForAgent(
     existingAgent?.id
   );
   const { openApiTools: openApiToolsRaw, isLoading: isOpenApiLoading } =

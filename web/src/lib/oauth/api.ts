@@ -2,7 +2,7 @@ import {
   OAuthConfig,
   OAuthConfigCreate,
   OAuthConfigUpdate,
-} from "@/lib/tools/interfaces";
+} from "@/lib/tools/types";
 
 // Admin OAuth Config Management
 

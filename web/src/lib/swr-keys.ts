@@ -30,19 +30,20 @@ export const SWR_KEYS = {
     ...domains,
   ],
 
-  // ── Agents / Personas ─────────────────────────────────────────────────────
-  personas: "/api/persona",
-  persona: (id: number) => `/api/persona/${id}`,
+  // ── Agents ────────────────────────────────────────────────────────────────
+  agents: "/api/persona",
+  agent: (agentId: number) => `/api/persona/${agentId}`,
   agentPreferences: "/api/user/assistant/preferences",
   defaultAssistantConfig: "/api/admin/default-assistant/configuration",
-  personaLabels: "/api/persona/labels",
+  agentLabels: "/api/persona/labels",
+  adminAgentLabel: (labelId: number) => `/api/admin/persona/label/${labelId}`,
   adminAgents: "/api/admin/agents",
   adminPersona: "/api/admin/persona",
 
   // ── LLM Providers ─────────────────────────────────────────────────────────
   llmProviders: "/api/llm/provider",
-  llmProvidersForPersona: (personaId: number) =>
-    `/api/llm/persona/${personaId}/providers`,
+  llmProvidersForAgent: (agentId: number) =>
+    `/api/llm/persona/${agentId}/providers`,
   adminLlmProviders: "/api/admin/llm/provider",
   llmProvidersWithImageGen: "/api/admin/llm/provider?include_image_gen=true",
   customProviderNames: "/api/admin/llm/custom-provider-names",
@@ -142,8 +143,7 @@ export const SWR_KEYS = {
     `/api/admin/mcp/server/${serverId}/tools/snapshots?source=db`,
   mcpServers: "/api/mcp/servers",
   mcpServersCraft: "/api/mcp/servers/craft",
-  personaMcpServers: (personaId: number) =>
-    `/api/mcp/servers/persona/${personaId}`,
+  agentMcpServers: (agentId: number) => `/api/mcp/servers/persona/${agentId}`,
 
   // ── Skills ────────────────────────────────────────────────────────────────
   userSkills: "/api/skills",

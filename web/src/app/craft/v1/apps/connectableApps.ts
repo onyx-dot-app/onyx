@@ -20,7 +20,7 @@ import {
   MCPAuthenticationPerformer,
   MCPAuthenticationType,
   MCPServer,
-} from "@/lib/tools/interfaces";
+} from "@/lib/tools/types";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
 import { CRAFT_APPS_PATH } from "@/app/craft/v1/constants";
 

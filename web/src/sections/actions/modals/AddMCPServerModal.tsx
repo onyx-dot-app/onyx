@@ -13,7 +13,7 @@ import {
   MCPServerCreateRequest,
   MCPServerStatus,
   MCPServer,
-} from "@/lib/tools/interfaces";
+} from "@/lib/tools/types";
 import { useModal } from "@opal/components";
 import { useUser } from "@/providers/UserProvider";
 import { hasPermission } from "@/lib/permissions";

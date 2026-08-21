@@ -65,12 +65,12 @@ import {
 import { Modal } from "@opal/components";
 import GenericConfirmModal from "@/sections/modals/GenericConfirmModal";
 import { Switch } from "@opal/components";
-import { useMcpServersForAgentEditor } from "@/lib/agents/hooks";
+import { useMcpServers } from "@/lib/tools/hooks";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
 import { Disabled, Hoverable } from "@opal/core";
 import useFilter from "@/hooks/useFilter";
-import { MCPServer } from "@/lib/tools/interfaces";
+import { MCPServer } from "@/lib/tools/types";
 import type { IconProps } from "@opal/types";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
@@ -794,7 +794,7 @@ export default function ChatPreferencesPage() {
   const uniqueSources = Array.from(new Set(ccPairs.map((p) => p.source)));
 
   // MCP servers and OpenAPI tools
-  const { mcpData } = useMcpServersForAgentEditor();
+  const { mcpData } = useMcpServers();
   const { openApiTools: openApiToolsRaw } = useOpenApiTools();
   const mcpServers = mcpData?.mcp_servers ?? [];
   const openApiTools = openApiToolsRaw ?? [];
@@ -1510,8 +1510,8 @@ export default function ChatPreferencesPage() {
                     </InputHorizontal>
 
                     <InputHorizontal
-                      title="Always Start with an Agent"
-                      description="This removes the default chat. Users will always start in an agent, and new chats will be created in their last active agent. Set featured agents to help new users get started."
+                      title="Disable Default Chat"
+                      description="This forces users to always start in an agent. New chats will be created in their first pinned agent. Set featured agents to help new users get started."
                       withLabel
                     >
                       <Switch

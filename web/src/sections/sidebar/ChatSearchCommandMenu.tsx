@@ -11,8 +11,6 @@ import { useCreateModal } from "@opal/components";
 import CreateProjectModal from "@/sections/modals/CreateProjectModal";
 import { timeAgo } from "@opal/time";
 import { highlightMatch } from "@/lib/sidebar/utils";
-import { useSettings } from "@/lib/settings/hooks";
-import { useCurrentAgent } from "@/lib/agents/hooks";
 import Text from "@/refresh-components/texts/Text";
 import useChatSearchOptimistic from "@/lib/sidebar/hooks";
 import {
@@ -73,8 +71,6 @@ export default function ChatSearchCommandMenu({
 
   // Data hooks
   const { projects } = useProjects();
-  const settings = useSettings();
-  const currentAgent = useCurrentAgent();
   const createProjectModal = useCreateModal();
 
   // Constants for preview limits
@@ -150,13 +146,9 @@ export default function ChatSearchCommandMenu({
 
   // Navigation handlers
   const handleNewSession = useCallback(() => {
-    const href =
-      settings?.disable_default_assistant && currentAgent
-        ? `/app?agentId=${currentAgent.id}`
-        : "/app";
-    router.push(href as Route);
+    router.push("/app");
     setOpen(false);
-  }, [router, settings, currentAgent]);
+  }, [router]);
 
   const handleChatSelect = useCallback(
     (chatId: string) => {

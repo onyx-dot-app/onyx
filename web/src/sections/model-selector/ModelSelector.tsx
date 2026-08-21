@@ -8,7 +8,7 @@ import {
   LLMOption,
   ModelOptionProvider,
 } from "@/lib/languageModels/options";
-import { useCurrentAgentLLMProviders } from "@/lib/languageModels/hooks";
+import { useLLMProviders } from "@/lib/languageModels/hooks";
 import ModelSelectorContent, {
   ReasoningManager,
   TemperatureManager,
@@ -65,9 +65,19 @@ export default function ModelSelector({
   includeGlobalDefault = false,
   side = "top",
 }: ModelSelectorProps) {
-  const { llmProviders: currentAgentProviderOptions, defaultText } =
-    useCurrentAgentLLMProviders();
-  const llmProviders = providerOptions ?? currentAgentProviderOptions;
+  // Unscoped by default. An agent narrows the model list, but only a chat has
+  // an agent. The admin and settings pages that embed this picker have none,
+  // and must not be filtered by whichever agent happens to be active. A chat
+  // caller passes its own scoped list through providerOptions.
+  // The list stays defined even before it arrives, so the child never sees
+  // undefined and never falls through to its own agent-scoped list.
+  const {
+    llmProviders: allProviderOptions,
+    defaultText,
+    isLoading: allProvidersLoading,
+  } = useLLMProviders();
+  const llmProviders = providerOptions ?? allProviderOptions ?? [];
+  const isLoading = providerOptions === undefined && allProvidersLoading;
   const [open, setOpen] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
@@ -150,7 +160,8 @@ export default function ModelSelector({
       <Popover.Content side={side} align="end" width="xl" sticky="partial">
         <ModelSelectorContent
           currentModelName={currentOption?.modelName}
-          providerOptions={providerOptions}
+          providerOptions={llmProviders}
+          isLoading={isLoading}
           includeHiddenModels={includeHiddenModels}
           requiresImageInput={requiresImageInput}
           onSelect={handleSelect}

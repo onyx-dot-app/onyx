@@ -112,8 +112,8 @@ function buildInitialDraftState(
 
 async function refreshAgentShareCaches(agentId: number) {
   await Promise.all([
-    mutate(SWR_KEYS.personas),
-    mutate(SWR_KEYS.persona(agentId)),
+    mutate(SWR_KEYS.agents),
+    mutate(SWR_KEYS.agent(agentId)),
     // Paginated admin list keys carry query params — match by prefix
     mutate(
       (key) => typeof key === "string" && key.startsWith(SWR_KEYS.adminAgents)
@@ -121,7 +121,7 @@ async function refreshAgentShareCaches(agentId: number) {
   ]);
 }
 
-export default function ShareAgentModal({
+export function ShareAgentModal({
   agentId,
   draftShares = null,
   groupIds = [],

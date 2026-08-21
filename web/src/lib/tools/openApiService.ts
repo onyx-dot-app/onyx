@@ -1,4 +1,4 @@
-import { MethodSpec, ApiResponse, ToolSnapshot } from "@/lib/tools/interfaces";
+import { MethodSpec, ApiResponse, ToolSnapshot } from "@/lib/tools/types";
 
 const SUPPORTED_HTTP_METHODS = new Set([
   "get",

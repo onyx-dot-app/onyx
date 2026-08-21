@@ -117,13 +117,12 @@ interface RegenerationRequest {
 interface UseChatControllerProps {
   filterManager: FilterManager;
   llmManager: LlmManager;
-  liveAgent: MinimalAgent | undefined;
+  activeAgent: MinimalAgent | undefined;
   availableAgents: MinimalAgent[];
   existingChatSessionId: string | null;
   selectedDocuments: OnyxDocument[];
   searchParams: ReadonlyURLSearchParams;
   resetInputBar: () => void;
-  setSelectedAgentFromId: (agentId: number | null) => void;
 }
 
 async function stopChatSession(chatSessionId: string): Promise<void> {
@@ -143,11 +142,10 @@ export default function useChatController({
   filterManager,
   llmManager,
   availableAgents,
-  liveAgent,
+  activeAgent,
   existingChatSessionId,
   selectedDocuments,
   resetInputBar,
-  setSelectedAgentFromId,
 }: UseChatControllerProps) {
   const pathname = usePathname();
   const router = useRouter();
@@ -505,12 +503,12 @@ export default function useChatController({
       }
 
       // Auto-pin the agent to sidebar when sending a message if not already pinned
-      if (liveAgent) {
+      if (activeAgent) {
         const isAlreadyPinned = pinnedAgents.some(
-          (agent) => agent.id === liveAgent.id
+          (agent) => agent.id === activeAgent.id
         );
         if (!isAlreadyPinned) {
-          togglePinnedAgent(liveAgent, true).catch((err) => {
+          togglePinnedAgent(activeAgent, true).catch((err) => {
             console.error("Failed to auto-pin agent:", err);
           });
         }
@@ -533,7 +531,7 @@ export default function useChatController({
         // There is no incognito agent chat, so incognito pins the default
         // assistant regardless of any selected agent.
         currChatSessionId = await createChatSession(
-          incognito ? 0 : liveAgent?.id || 0,
+          incognito ? 0 : activeAgent?.id || 0,
           searchParamBasedChatSessionName,
           projectId ? parseInt(projectId) : null,
           incognito,
@@ -546,7 +544,7 @@ export default function useChatController({
         if (!incognito) {
           addPendingChatSession({
             chatSessionId: currChatSessionId,
-            personaId: liveAgent?.id || 0,
+            personaId: activeAgent?.id || 0,
             projectId: projectId ? parseInt(projectId) : null,
           });
         }
@@ -1018,12 +1016,12 @@ export default function useChatController({
         const lastSuccessfulMessageId = getLastSuccessfulMessageId(
           currentMessageTreeLocal
         );
-        const disabledToolIds = liveAgent
-          ? agentPreferences?.[liveAgent?.id]?.disabled_tool_ids
+        const disabledToolIds = activeAgent
+          ? agentPreferences?.[activeAgent?.id]?.disabled_tool_ids
           : undefined;
 
         // Find the search tool's numeric ID for forceSearch
-        const searchToolNumericId = liveAgent?.tools.find(
+        const searchToolNumericId = activeAgent?.tools.find(
           (tool) => tool.in_code_tool_id === SEARCH_TOOL_ID
         )?.id;
 
@@ -1079,8 +1077,8 @@ export default function useChatController({
           temperature: llmManager.temperature || undefined,
           deepResearch,
           enabledToolIds:
-            disabledToolIds && liveAgent
-              ? liveAgent.tools
+            disabledToolIds && activeAgent
+              ? activeAgent.tools
                   .filter((tool) => !disabledToolIds?.includes(tool.id))
                   .map((tool) => tool.id)
               : undefined,
@@ -1139,7 +1137,7 @@ export default function useChatController({
               if (isExtension) {
                 track(AnalyticsEvent.EXTENSION_CHAT_QUERY, {
                   extension_context: extensionContext,
-                  assistant_id: liveAgent?.id,
+                  assistant_id: activeAgent?.id,
                   has_files: effectiveFileDescriptors.length > 0,
                   deep_research: deepResearch,
                 });
@@ -1471,13 +1469,12 @@ export default function useChatController({
       llmManager.currentLlm,
       llmManager.temperature,
       // Others that affect logic
-      liveAgent,
+      activeAgent,
       availableAgents,
       existingChatSessionId,
       selectedDocuments,
       searchParams,
       resetInputBar,
-      setSelectedAgentFromId,
       updateSelectedNodeForDocDisplay,
       currentMessageTree,
       currentChatState,
@@ -1496,7 +1493,7 @@ export default function useChatController({
     async (acceptedFiles: File[]) => {
       const [_, llmModel] = getFinalLLM(
         llmManager.llmProviders || [],
-        liveAgent || null,
+        activeAgent || null,
         llmManager.currentLlm
       );
       const llmAcceptsImages = modelSupportsImageInput(
@@ -1522,7 +1519,7 @@ export default function useChatController({
       setCurrentMessageFiles((prev) => [...prev, ...uploadedMessageFiles]);
       updateChatStateAction(getCurrentSessionId(), "input");
     },
-    [liveAgent, llmManager, forcedToolIds]
+    [activeAgent, llmManager, forcedToolIds]
   );
 
   useEffect(() => {
@@ -1536,14 +1533,6 @@ export default function useChatController({
       }
     };
   }, [pathname]);
-
-  // update chosen assistant if we navigate between pages
-  useEffect(() => {
-    if (currentMessageHistory.length === 0 && existingChatSessionId === null) {
-      // Select from available assistants so shared assistants appear.
-      setSelectedAgentFromId(null);
-    }
-  }, [existingChatSessionId, availableAgents, currentMessageHistory.length]);
 
   useEffect(() => {
     const handleSlackChatRedirect = async () => {
@@ -1616,7 +1605,7 @@ export default function useChatController({
           return;
         }
 
-        const personaId = liveAgent?.id;
+        const personaId = activeAgent?.id;
         if (personaId == null) {
           setIfActive(DEFAULT_CONTEXT_TOKENS);
           return;
@@ -1636,7 +1625,7 @@ export default function useChatController({
   }, [
     currentSessionId,
     existingChatSessionId,
-    liveAgent?.id,
+    activeAgent?.id,
     llmManager.hasAnyProvider,
     llmManager.currentLlm.modelConfigurationId,
   ]);

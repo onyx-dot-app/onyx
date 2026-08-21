@@ -1,7 +1,7 @@
 "use client";
 
 import { OnSubmitProps } from "@/hooks/useChatController";
-import { useCurrentAgent } from "@/lib/agents/hooks";
+import { useActiveAgent } from "@/lib/agents/hooks";
 import { Interactive } from "@opal/core";
 import { Content } from "@opal/layouts";
 
@@ -10,12 +10,12 @@ export interface SuggestionsProps {
 }
 
 export default function Suggestions({ onSubmit }: SuggestionsProps) {
-  const currentAgent = useCurrentAgent();
+  const activeAgent = useActiveAgent();
 
   if (
-    !currentAgent ||
-    !currentAgent.starter_messages ||
-    currentAgent.starter_messages.length === 0
+    !activeAgent ||
+    !activeAgent.starter_messages ||
+    activeAgent.starter_messages.length === 0
   )
     return null;
 
@@ -29,7 +29,7 @@ export default function Suggestions({ onSubmit }: SuggestionsProps) {
 
   return (
     <div className="max-w-(--app-page-main-content-width) flex flex-col w-full p-1">
-      {currentAgent.starter_messages.map(({ message }, index) => (
+      {activeAgent.starter_messages.map(({ message }, index) => (
         <Interactive.Stateless
           key={index}
           variant="default"

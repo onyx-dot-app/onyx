@@ -21,9 +21,9 @@ import {
   SvgStar,
   SvgUser,
 } from "@opal/icons";
-import { useMcpServersForAgentEditor } from "@/lib/agents/hooks";
+import { useMcpServers } from "@/lib/tools/hooks";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
-import { MCPServer, ToolSnapshot } from "@/lib/tools/interfaces";
+import { MCPServer, ToolSnapshot } from "@/lib/tools/types";
 import { EmptyMessageCard } from "@opal/components";
 import { Switch } from "@opal/components";
 import { Button } from "@opal/components";
@@ -132,7 +132,7 @@ function AgentChatInput({ agent, onSubmit }: AgentChatInputProps) {
       llmManager={llmManager}
       chatState="input"
       filterManager={filterManager}
-      selectedAgent={agent}
+      activeAgent={agent}
       stopGenerating={() => {}}
       handleFileUpload={() => {}}
       currentSessionFileTokenCount={0}
@@ -168,7 +168,7 @@ function AgentChatInput({ agent, onSubmit }: AgentChatInputProps) {
 export interface AgentViewerModalProps {
   agent: FullAgent;
 }
-export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
+export function AgentViewerModal({ agent }: AgentViewerModalProps) {
   const agentViewerModal = useModal();
   const router = useRouter();
   const { allRecentFiles } = useProjectsContext();
@@ -177,7 +177,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
   const handleStartChat = useCallback(
     (message: string) => {
       const params = new URLSearchParams({
-        [SEARCH_PARAM_NAMES.PERSONA_ID]: String(agent.id),
+        [SEARCH_PARAM_NAMES.AGENT_ID]: String(agent.id),
         [SEARCH_PARAM_NAMES.USER_PROMPT]: message,
         [SEARCH_PARAM_NAMES.SEND_ON_LOAD]: "true",
       });
@@ -212,7 +212,7 @@ export default function AgentViewerModal({ agent }: AgentViewerModalProps) {
   );
 
   // Fetch MCP server metadata for display
-  const { mcpData } = useMcpServersForAgentEditor();
+  const { mcpData } = useMcpServers();
   const mcpServers = mcpData?.mcp_servers ?? [];
 
   const mcpServersWithTools = useMemo(
