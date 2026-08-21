@@ -368,21 +368,16 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   const loadedIdSessionRef = useRef<string | null>(currentChatSessionId);
   const submitOnLoadPerformed = useRef<boolean>(false);
 
-  // Refs keep the (once-registered) message listener in sync with the latest
-  // render, and hold a seeded PAGE_CHANGE navigation until agents resolve.
-  const isSeedAgentReadyRef = useRef(isSeedAgentReady);
-  useEffect(() => {
-    isSeedAgentReadyRef.current = isSeedAgentReady;
-  }, [isSeedAgentReady]);
-  const pendingSeedParamsRef = useRef<string | null>(null);
-
   function loadNewPageLogic(event: MessageEvent) {
     if (event.data.type === SUBMIT_MESSAGE_TYPES.PAGE_CHANGE) {
       try {
         const url = new URL(event.data.href);
         const nextParams = new ReadonlyURLSearchParams(url.searchParams);
-        if (shouldSendOnLoad(nextParams) && !isSeedAgentReadyRef.current) {
-          pendingSeedParamsRef.current = nextParams.toString();
+        if (shouldSendOnLoad(nextParams)) {
+          // Route seeded navigations through the page's search params so the
+          // send below waits for the NEW URL's agent to resolve, not the
+          // agent resolved for whatever page is currently open.
+          router.replace(`?${nextParams.toString()}`, { scroll: false });
           return;
         }
         processSearchParamsAndSubmitMessage(nextParams.toString());
@@ -392,17 +387,9 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     }
   }
 
-  // Replay a seeded PAGE_CHANGE that arrived before agent resolution settled.
-  useEffect(() => {
-    if (!isSeedAgentReady || pendingSeedParamsRef.current === null) {
-      return;
-    }
-    const pendingParams = pendingSeedParamsRef.current;
-    pendingSeedParamsRef.current = null;
-    processSearchParamsAndSubmitMessage(pendingParams);
-  }, [isSeedAgentReady]);
-
-  // Equivalent to `loadNewPageLogic`
+  // Single gate for every seeded send (`send-on-load`): readiness is derived
+  // from the live page params, so it always reflects the URL that will be
+  // submitted. Non-seeded PAGE_CHANGE messages keep their direct path above.
   useEffect(() => {
     if (!shouldSendOnLoad(searchParams) || !isSeedAgentReady) {
       return;
