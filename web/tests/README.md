@@ -780,9 +780,9 @@ render(<Component />)
 
 See comprehensive test examples:
 
-- `src/app/auth/login/EmailPasswordForm.test.tsx` - Login/signup workflows, validation
-- `src/app/chat/input-prompts/InputPrompts.test.tsx` - CRUD operations, conditional rendering
-- `src/components/admin/connectors/AccessTypeForm.test.tsx` - Complex forms, conditional fields
+- `src/components/admin/connectors/AccessTypeForm.test.tsx` - Form defaults that depend on permissions
+- `src/views/SkillsPage.test.tsx` - Optimistic updates, conditional rendering
+- `src/sections/modals/skills/CreateSkillModal.test.tsx` - Modal workflows, pending and error states
 
 ## Built-in Mocks
 
