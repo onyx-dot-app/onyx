@@ -43,6 +43,7 @@ from onyx.llm.models import (
     UserMessage,
 )
 from onyx.llm.prompt_cache.processor import process_with_prompt_cache
+from onyx.llm.request_context import get_llm_request_params
 from onyx.llm.utils import model_needs_formatting_reenabled, model_supports_image_input
 from onyx.prompts.chat_prompts import (
     CODE_BLOCK_MARKDOWN,
@@ -1313,6 +1314,10 @@ def run_llm_step_pkt_generator(
             user_identity=user_identity,
             timeout_override=timeout_override,
         ):
+            # On the first chunk, not at stream end: a mid-step stop persists
+            # from another thread and needs this step's params already there.
+            if stream_chunk_count == 0 and state_container:
+                state_container.set_request_params(get_llm_request_params())
             stream_chunk_count += 1
             if packet.usage:
                 usage = packet.usage

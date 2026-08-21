@@ -145,7 +145,7 @@ export default function UsersTable({
   >([]);
   const [selectedGroups, setSelectedGroups] = useState<number[]>([]);
 
-  const { data: allGroups } = useGroups();
+  const { data: allGroups } = useGroups(true);
 
   const groupOptions: GroupOption[] = useMemo(
     () =>

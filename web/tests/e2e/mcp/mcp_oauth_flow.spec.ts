@@ -350,6 +350,17 @@ test.describe("MCP OAuth flows", () => {
     );
     await verifyToolUsableFromChat(page, artifacts, agentId);
 
+    // Exercise the distinct authenticated path: the server row now drills into
+    // its tool list, where the Re-Authenticate row starts a fresh OAuth attempt.
+    // A second successful invocation proves the callback restored usable state
+    // rather than leaving the popover or persisted credentials disconnected.
+    await oauthFlow.reauthenticateFromChat(
+      actions,
+      serverName,
+      `/app?agentId=${agentId}`
+    );
+    await verifyToolUsableFromChat(page, artifacts, agentId);
+
     // Server card is still present on the admin actions page.
     await page.goto("/admin/actions/mcp");
     await page.waitForURL("**/admin/actions/mcp**");

@@ -39,6 +39,7 @@ from onyx.db.scoped_permissions import (
     scoped_group_ids_subquery,
     within_managed_scope_clause,
 )
+from onyx.db.user_group import assert_not_shared_with_default_group
 from onyx.server.models import StatusResponse
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
@@ -717,6 +718,8 @@ def _relate_groups_to_cc_pair__no_commit(
 ) -> None:
     if not user_group_ids:
         return
+
+    assert_not_shared_with_default_group(db_session, user_group_ids)
 
     for group_id in user_group_ids:
         db_session.add(

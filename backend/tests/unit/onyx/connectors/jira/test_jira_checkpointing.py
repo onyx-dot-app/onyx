@@ -141,22 +141,21 @@ def test_load_credentials(jira_connector: JiraConnector) -> None:
 
 
 def test_get_jql_query_with_project(jira_connector: JiraConnector) -> None:
-    """Test JQL query generation with project specified"""
+    """Poll windows are unquoted epoch-ms, not naive datetimes."""
     start = datetime(2023, 1, 1, tzinfo=timezone.utc).timestamp()
     end = datetime(2023, 1, 2, tzinfo=timezone.utc).timestamp()
 
     query = jira_connector._get_jql_query(start, end)
 
-    # Check that the project part and time part are both in the query
     assert f'project = "{jira_connector.jira_project}"' in query
-    assert "updated >= '2023-01-01 00:00'" in query
-    assert "updated <= '2023-01-02 00:00'" in query
+    assert f"updated >= {int(start * 1000)}" in query
+    assert f"updated <= {int(end * 1000)}" in query
+    assert "2023-01-01 00:00" not in query
     assert " AND " in query
 
 
 def test_get_jql_query_without_project(jira_base_url: str) -> None:
-    """Test JQL query generation without project specified"""
-    # Create connector without project key
+    """Poll windows stay epoch-ms when no project key is set."""
     connector = JiraConnector(jira_base_url=jira_base_url)
 
     start = datetime(2023, 1, 1, tzinfo=timezone.utc).timestamp()
@@ -164,10 +163,10 @@ def test_get_jql_query_without_project(jira_base_url: str) -> None:
 
     query = connector._get_jql_query(start, end)
 
-    # Check that only time part is in the query
     assert "project =" not in query
-    assert "updated >= '2023-01-01 00:00'" in query
-    assert "updated <= '2023-01-02 00:00'" in query
+    assert f"updated >= {int(start * 1000)}" in query
+    assert f"updated <= {int(end * 1000)}" in query
+    assert "2023-01-01 00:00" not in query
 
 
 def test_load_from_checkpoint_happy_path(

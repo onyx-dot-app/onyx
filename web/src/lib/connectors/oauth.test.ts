@@ -21,10 +21,14 @@ test("surfaces the backend OAuth validation error", async () => {
   Object.defineProperty(globalThis, "window", {
     configurable: true,
     value: {
-      location: { href: "http://localhost:3000/admin/connectors/salesforce" },
+      location: {
+        pathname: "/admin/connectors/salesforce",
+        search: "?step=0",
+        hash: "#setup",
+      },
     },
   });
-  jest.spyOn(global, "fetch").mockResolvedValue({
+  const fetchMock = jest.spyOn(global, "fetch").mockResolvedValue({
     ok: false,
     json: jest.fn().mockResolvedValue({ detail: SALESFORCE_URL_ERROR }),
   } as unknown as Response);
@@ -38,5 +42,10 @@ test("surfaces the backend OAuth validation error", async () => {
   expect(consoleError).toHaveBeenCalledWith(
     expect.stringContaining(ValidSources.Salesforce),
     expect.any(Error)
+  );
+  expect(fetchMock).toHaveBeenCalledWith(
+    expect.stringContaining(
+      "desired_return_url=%2Fadmin%2Fconnectors%2Fsalesforce%3Fstep%3D0%23setup"
+    )
   );
 });

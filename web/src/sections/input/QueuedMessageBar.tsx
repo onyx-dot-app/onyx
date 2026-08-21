@@ -6,7 +6,6 @@ import { QueuedMessage } from "@/app/app/interfaces";
 interface QueuedMessageBarProps {
   messages: readonly QueuedMessage[];
   highlightedIndex: number | null;
-  awaitingPreferredSelection: boolean;
   onDiscard: (index: number) => void;
   onHighlight: (index: number | null) => void;
 }
@@ -14,7 +13,6 @@ interface QueuedMessageBarProps {
 function QueuedMessageBar({
   messages,
   highlightedIndex,
-  awaitingPreferredSelection,
   onDiscard,
   onHighlight,
 }: QueuedMessageBarProps) {
@@ -31,8 +29,6 @@ function QueuedMessageBar({
         <div className="flex flex-col gap-1 pb-1.5">
           {messages.map((item, index) => {
             const isHighlighted = highlightedIndex === index;
-            const showAwaitingLabel = awaitingPreferredSelection && index === 0;
-            const showEditLabel = isHighlighted && !showAwaitingLabel;
 
             return (
               <div
@@ -63,14 +59,7 @@ function QueuedMessageBar({
                     {item.text}
                   </Text>
                 </div>
-                {showAwaitingLabel && (
-                  <div className="shrink-0 whitespace-nowrap">
-                    <Text font="secondary-body" color="text-02">
-                      Select a response to continue
-                    </Text>
-                  </div>
-                )}
-                {showEditLabel && (
+                {isHighlighted && (
                   <div className="shrink-0 whitespace-nowrap flex items-center gap-0.5">
                     <span className="translate-y-[1.5px] text-text-02 text-[0.7rem]">
                       ↵

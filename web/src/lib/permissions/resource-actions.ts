@@ -28,7 +28,13 @@ export const RESOURCE_ACTIONS = {
   Action: ["edit", "delete", "toggle", "authenticate"],
   MCPServer: ["edit", "delete", "authenticate", "manage_status"],
   CustomSkill: ["edit", "manage_access", "delete", "publish"],
-  UserGroup: ["manage", "delete", "edit_permissions", "edit_token_limits"],
+  UserGroup: [
+    "manage",
+    "manage_members",
+    "delete",
+    "edit_permissions",
+    "edit_token_limits",
+  ],
 } as const;
 
 export type ResourceName = keyof typeof RESOURCE_ACTIONS;

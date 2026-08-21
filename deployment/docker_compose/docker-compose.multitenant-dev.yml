@@ -140,6 +140,9 @@ services:
       # Generous start_period so that `docker compose up --wait` does not flag
       # the container unhealthy while alembic migrations run on a fresh DB.
       start_period: 600s
+      # Poll every 2s until the first success, so a fast boot is not rounded up
+      # to the 30s interval. Docker reverts to `interval` once healthy.
+      start_interval: 2s
 
   background:
     image: ${ONYX_BACKEND_IMAGE:-onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}}
@@ -504,6 +507,11 @@ services:
       interval: 30s
       timeout: 20s
       retries: 3
+      # MinIO is ready a few seconds after start, but the 30s interval delays
+      # the first probe. start_interval polls every second until the first
+      # success, so `up --wait` does not block for a full interval.
+      start_period: 30s
+      start_interval: 1s
 
   cache:
     image: ${BASE_IMAGE_REGISTRY:-docker.io}/library/redis:7.4-alpine

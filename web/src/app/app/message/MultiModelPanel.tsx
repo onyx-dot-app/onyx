@@ -48,6 +48,8 @@ export interface MultiModelPanelProps {
   errorDetails?: Record<string, any> | null;
   /** Whether any model is still streaming — disables preferred selection */
   isGenerating?: boolean;
+  /** Whether a send is in flight, which disables preferred selection */
+  selectionDisabled?: boolean;
 }
 
 /**
@@ -79,10 +81,16 @@ export default function MultiModelPanel({
   errorStackTrace,
   errorDetails,
   isGenerating,
+  selectionDisabled,
 }: MultiModelPanelProps) {
   const ModelIcon = getModelIcon(provider, modelName);
 
-  const canSelect = !isHidden && !isPreferred && !isGenerating && !readOnly;
+  const canSelect =
+    !isHidden &&
+    !isPreferred &&
+    !isGenerating &&
+    !selectionDisabled &&
+    !readOnly;
 
   const handlePanelClick = useCallback(() => {
     if (canSelect) onSelect();

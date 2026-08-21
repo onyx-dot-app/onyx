@@ -13,7 +13,6 @@ on:
       - "uv.lock"
       - ".github/workflows/pr-external-dependency-unit-tests.yml"
       - ".github/actions/setup-python-and-install-dependencies/**"
-      - ".github/actions/setup-playwright/**"
       - ".github/actions/login-ecr-pullthrough-cache/**"
       - "deployment/docker_compose/docker-compose.yml"
       - "deployment/docker_compose/docker-compose.dev.yml"
@@ -114,9 +113,6 @@ jobs:
             backend/requirements/dev.txt
             backend/requirements/ee.txt
 
-      - name: Setup Playwright
-        uses: ./.github/actions/setup-playwright
-
       - name: Setup Helm
         if: matrix.test-dir == 'craft_helm'
         uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # ratchet:azure/setup-helm@v5.0.1
@@ -162,11 +158,9 @@ jobs:
             code-interpreter
 
       - name: Run migrations
+        working-directory: backend
         run: |
-          cd backend
-          # Run migrations to head
           alembic upgrade head
-          alembic heads --verbose
 
       # A real OIDC server for the live multi-provider login test. Auth leg only.
       # Fail if it never becomes ready, otherwise the live tests would silently skip.

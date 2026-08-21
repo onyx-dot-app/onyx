@@ -10,6 +10,7 @@ import (
 
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/git"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/prompt"
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/release"
 )
 
 const opalTagPrefix = "opal/v"
@@ -62,7 +63,7 @@ Example usage:
 
 func releaseOpal(opts *ReleaseOpalOptions) {
 	if opts.Version != "" {
-		if !bareSemverRe.MatchString(opts.Version) {
+		if !release.IsBareVersion(opts.Version) {
 			log.Fatalf("--version must be X.Y.Z with no leading v, got %q", opts.Version)
 		}
 	} else if opts.Bump != "patch" && opts.Bump != "minor" && opts.Bump != "major" {
@@ -130,7 +131,7 @@ func latestOpalVersion() (string, error) {
 	}
 	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
 		version := strings.TrimPrefix(strings.TrimSpace(line), opalTagPrefix)
-		if bareSemverRe.MatchString(version) {
+		if release.IsBareVersion(version) {
 			return version, nil
 		}
 	}

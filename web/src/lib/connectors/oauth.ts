@@ -17,7 +17,7 @@ export async function getConnectorOauthRedirectUrl(
 ): Promise<string> {
   try {
     const queryParams = new URLSearchParams({
-      desired_return_url: window.location.href,
+      desired_return_url: `${window.location.pathname}${window.location.search}${window.location.hash}`,
       ...additional_kwargs,
     });
     const response = await fetch(

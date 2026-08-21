@@ -67,6 +67,48 @@ def parse_user_selectable_reasoning_effort(value: str) -> ReasoningEffort:
     return effort
 
 
+# AUTO has no rank: it defers a choice rather than naming an amount.
+_REASONING_EFFORT_RANK: dict[ReasoningEffort, int] = {
+    ReasoningEffort.OFF: 0,
+    ReasoningEffort.LOW: 1,
+    ReasoningEffort.MEDIUM: 2,
+    ReasoningEffort.HIGH: 3,
+    ReasoningEffort.XHIGH: 4,
+}
+
+
+def reasoning_effort_exceeds(effort: ReasoningEffort, cap: ReasoningEffort) -> bool:
+    """Whether `effort` asks for more thinking than `cap` allows."""
+    return _REASONING_EFFORT_RANK[effort] > _REASONING_EFFORT_RANK[cap]
+
+
+def resolve_reasoning_effort(
+    requested: ReasoningEffort,
+    default: ReasoningEffort | None,
+    maximum: ReasoningEffort | None,
+) -> ReasoningEffort:
+    """Settle a request against the admin's per-model default and cap.
+
+    Ordered chain, first concrete source wins, so another tier (a per-user
+    default) is a one-line insert. The cap applies last and unconditionally.
+
+    AUTO is concretized before clamping because it maps to medium downstream,
+    which would quietly exceed a cap of LOW.
+    """
+    if requested != ReasoningEffort.AUTO:
+        effort = requested
+    elif default is not None and default != ReasoningEffort.AUTO:
+        effort = default
+    else:
+        if maximum is None:
+            return ReasoningEffort.AUTO
+        effort = ReasoningEffort.MEDIUM
+
+    if maximum is not None and reasoning_effort_exceeds(effort, maximum):
+        return maximum
+    return effort
+
+
 # OpenAI reasoning effort mapping
 # Note: OpenAI API does not support "auto" - valid values are: none, minimal, low, medium, high, xhigh
 OPENAI_REASONING_EFFORT: dict[ReasoningEffort, str] = {

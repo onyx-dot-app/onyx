@@ -82,7 +82,7 @@ jobs:
               - 'uv.lock'
               - '.github/workflows/pr-integration-tests.yml'
               - '.github/actions/setup-test-license/**'
-              - '.github/actions/install-deps-and-generate-openapi-client/**'
+              - '.github/actions/install-python-deps/**'
               - '.github/actions/login-ecr-pullthrough-cache/**'
             gateway:
               - 'backend/onyx/server/gateway/**'
@@ -319,6 +319,10 @@ jobs:
           EOF
           fi
 
+      # NOTE: only `inference_model_server` runs. `indexing_model_server` is the
+      # same image with the same routes (INDEXING_ONLY only changes the log
+      # request-id prefix), so the tests point both hosts at the one container
+      # and skip a second load of the embedding model.
       - name: Start Docker containers
         run: |
           cd deployment/docker_compose
@@ -328,8 +332,7 @@ jobs:
             opensearch \
             cache \
             minio \
-            inference_model_server \
-            indexing_model_server
+            inference_model_server
         id: start_docker
 
       - name: Start Mock Services
@@ -352,8 +355,8 @@ jobs:
           cd cli
           GOARCH=arm64 GOOS=linux go build -o ${{ github.workspace }}/onyx-cli-test .
 
-      - name: Install Python deps and generate OpenAPI client
-        uses: ./.github/actions/install-deps-and-generate-openapi-client
+      - name: Install Python deps
+        uses: ./.github/actions/install-python-deps
         with:
           devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }}
 
@@ -401,7 +404,7 @@ jobs:
               -e OPENSEARCH_HOST=opensearch \
               -e REDIS_HOST=cache \
               -e MODEL_SERVER_HOST=inference_model_server \
-              -e INDEXING_MODEL_SERVER_HOST=indexing_model_server \
+              -e INDEXING_MODEL_SERVER_HOST=inference_model_server \
               -e S3_ENDPOINT_URL=http://minio:9000 \
               -e S3_AWS_ACCESS_KEY_ID=minioadmin \
               -e S3_AWS_SECRET_ACCESS_KEY=minioadmin \
@@ -510,8 +513,8 @@ jobs:
             relational_db
         id: start_docker_onyx_lite
 
-      - name: Install Python deps and generate OpenAPI client
-        uses: ./.github/actions/install-deps-and-generate-openapi-client
+      - name: Install Python deps
+        uses: ./.github/actions/install-python-deps
         with:
           devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }}
 
@@ -589,6 +592,8 @@ jobs:
         with:
           ecr-registry: ${{ vars.ECR_REGISTRY }}
 
+      # NOTE: `indexing_model_server` is intentionally not started. See the
+      # integration-tests job above.
       - name: Start Docker containers for multi-tenant tests
         env:
           ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
@@ -610,12 +615,11 @@ jobs:
             opensearch \
             cache \
             minio \
-            inference_model_server \
-            indexing_model_server
+            inference_model_server
         id: start_docker_multi_tenant
 
-      - name: Install Python deps and generate OpenAPI client
-        uses: ./.github/actions/install-deps-and-generate-openapi-client
+      - name: Install Python deps
+        uses: ./.github/actions/install-python-deps
         with:
           devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }}
 
@@ -640,7 +644,7 @@ jobs:
             -e OPENSEARCH_HOST=opensearch \
             -e REDIS_HOST=cache \
             -e MODEL_SERVER_HOST=inference_model_server \
-            -e INDEXING_MODEL_SERVER_HOST=indexing_model_server \
+            -e INDEXING_MODEL_SERVER_HOST=inference_model_server \
             -e S3_ENDPOINT_URL=http://minio:9000 \
             -e S3_AWS_ACCESS_KEY_ID=minioadmin \
             -e S3_AWS_SECRET_ACCESS_KEY=minioadmin \

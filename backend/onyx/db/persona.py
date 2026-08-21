@@ -891,6 +891,9 @@ def _transfer_persona_ownership(
         # as soon as its sync worker runs.
         if group.is_up_for_deletion:
             raise ValueError("New owner group is being deleted")
+        # Basic/Admin ownership would make the whole org a co-owner; that's what public is
+        if group.is_default:
+            raise ValueError("A default system group can't own an agent")
         if group.id == prev_owner_group_id:
             raise ValueError("This group already owns the agent")
         persona.owner_group_id = group.id

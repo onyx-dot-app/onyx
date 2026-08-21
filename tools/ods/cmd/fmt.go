@@ -70,16 +70,17 @@ func runFmtTerraform(args []string, check bool) {
 		log.Fatalf("Cannot collect Terraform files: %v", err)
 	}
 
+	results, errs := terraform.FormatFiles(files, !check)
+
 	var changed []string
 	var failed bool
-	for _, file := range files {
-		res, err := terraform.FormatFile(file, !check)
-		if err != nil {
+	for i, file := range files {
+		if err := errs[i]; err != nil {
 			fmt.Fprintf(os.Stderr, "%s: %v\n", relativeTo(root, file), err)
 			failed = true
 			continue
 		}
-		if res.Changed {
+		if results[i].Changed {
 			changed = append(changed, relativeTo(root, file))
 		}
 	}

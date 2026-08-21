@@ -1,9 +1,11 @@
+import hashlib
+import struct
 from collections.abc import Callable, Sequence
 from typing import Any
 from uuid import UUID
 
 from fastapi_users.password import PasswordHelper
-from sqlalchemy import Select, case, delete, func, literal, select, update
+from sqlalchemy import Select, case, delete, func, literal, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, lazyload, selectinload
@@ -25,6 +27,7 @@ from onyx.db.models import (
     MCPConnectionConfig,
     MCPServer,
     OAuthAccount,
+    PermissionGrant,
     Persona,
     Persona__User,
     SamlAccount,
@@ -34,11 +37,21 @@ from onyx.db.models import (
     UserGroup,
 )
 from onyx.db.permissions import recompute_user_permissions__no_commit
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.models import UserGroupInfo
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
+
+DEFAULT_ADMIN_GROUP_NAME = "Admin"
+DEFAULT_BASIC_GROUP_NAME = "Basic"
+
+# tenant-hashed so tenants don't block each other and the id can't collide with
+# the other advisory locks in the codebase
+_ADMIN_MEMBERSHIP_LOCK_NAMESPACE = "onyx_admin_membership_lock"
 
 
 def is_limited_user(user: User) -> bool:
@@ -89,6 +102,161 @@ def _active_admin_user_stmt() -> Select[tuple[User]]:
 
 def get_active_admin_users(db_session: Session) -> list[User]:
     return list(db_session.execute(_active_admin_user_stmt()).unique().scalars().all())
+
+
+def group_grants_full_admin(db_session: Session, group_id: int) -> bool:
+    return (
+        db_session.scalar(
+            select(PermissionGrant.id).where(
+                PermissionGrant.group_id == group_id,
+                PermissionGrant.permission == Permission.FULL_ADMIN_PANEL_ACCESS,
+                PermissionGrant.is_deleted.is_(False),
+            )
+        )
+        is not None
+    )
+
+
+def another_admin_survives(
+    db_session: Session, group_id: int, removed_user_ids: list[UUID]
+) -> bool:
+    """Reads grants, not ``effective_permissions``, which still reflects the removal.
+
+    Exclusions mirror ``_active_admin_user_stmt`` — keep the two in step."""
+    email_col: KeyedColumnElement[Any] = User.__table__.c.email
+    is_active_col: KeyedColumnElement[Any] = User.__table__.c.is_active
+    stmt = (
+        select(User__UserGroup.user_id)
+        .join(
+            PermissionGrant,
+            PermissionGrant.group_id == User__UserGroup.user_group_id,
+        )
+        .join(
+            User,
+            User.id == User__UserGroup.user_id,  # ty: ignore[invalid-argument-type]
+        )
+        .where(
+            PermissionGrant.permission == Permission.FULL_ADMIN_PANEL_ACCESS,
+            PermissionGrant.is_deleted.is_(False),
+            is_active_col.is_(True),
+            expression.not_(email_col.endswith(DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN)),
+            email_col != ANONYMOUS_USER_EMAIL,
+            email_col != NO_AUTH_PLACEHOLDER_USER_EMAIL,
+            or_(
+                User__UserGroup.user_group_id != group_id,
+                User__UserGroup.user_id.not_in(removed_user_ids),
+            ),
+        )
+        .limit(1)
+    )
+    return db_session.scalar(stmt) is not None
+
+
+def _admin_membership_lock_id(tenant_id: str) -> int:
+    digest = hashlib.sha256(
+        f"{_ADMIN_MEMBERSHIP_LOCK_NAMESPACE}:{tenant_id}".encode()
+    ).digest()
+    # pg_advisory_xact_lock takes a signed 8-byte int.
+    return struct.unpack("q", digest[:8])[0]
+
+
+def _lock_admin_membership(db_session: Session) -> None:
+    """Serialize admin removals tenant-wide; released on the caller's commit.
+
+    Unlocked, two admins demoting each other concurrently each read the other as
+    the surviving admin and both commit, leaving zero. The caller must delete
+    inside the same transaction so check and write are one critical section."""
+    # Bounded wait: a wedged holder should fail fast, not hang the request.
+    db_session.execute(text("SET LOCAL lock_timeout = '10s'"))
+    db_session.execute(
+        text("SELECT pg_advisory_xact_lock(:lock_id)"),
+        {"lock_id": _admin_membership_lock_id(get_current_tenant_id())},
+    )
+    db_session.execute(text("SET LOCAL lock_timeout = DEFAULT"))
+
+
+def assert_admin_access_survives_removal(
+    db_session: Session,
+    actor: User,
+    group_id: int,
+    removed_user_ids: list[UUID],
+) -> None:
+    """Guards against locking the workspace out of its own admin panel.
+
+    Shared by the CE admin-access endpoint and the EE group editor — same rows."""
+    if not removed_user_ids or not group_grants_full_admin(db_session, group_id):
+        return
+
+    if actor.id in removed_user_ids:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "You can't remove yourself from the admin group. Ask another admin to do it.",
+        )
+
+    _lock_admin_membership(db_session)
+
+    if not another_admin_survives(db_session, group_id, removed_user_ids):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "You can't remove the last admin. Grant another user admin access first.",
+        )
+
+
+def fetch_default_group(db_session: Session, name: str) -> UserGroup:
+    group = db_session.scalar(
+        select(UserGroup).where(UserGroup.name == name, UserGroup.is_default.is_(True))
+    )
+    if group is None:
+        raise RuntimeError(
+            f"Default group '{name}' not found. "
+            "Ensure the seed_default_groups migration has run."
+        )
+    return group
+
+
+def set_user_admin_access(
+    db_session: Session,
+    actor: User,
+    target: User,
+    is_admin: bool,
+) -> None:
+    """Toggles seeded Admin group membership — admin *is* that membership now.
+
+    Replaces the removed ``PATCH /manage/set-user-role``. Editing groups directly is
+    EE-only, which strands Community on whichever user registered first."""
+    if target.account_type in (
+        AccountType.BOT,
+        AccountType.EXT_PERM_USER,
+        AccountType.ANONYMOUS,
+        AccountType.SERVICE_ACCOUNT,
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            f"Can't change admin access for a {target.account_type.value} account.",
+        )
+
+    admin_group = fetch_default_group(db_session, DEFAULT_ADMIN_GROUP_NAME)
+    membership_stmt = select(User__UserGroup).where(
+        User__UserGroup.user_id == target.id,
+        User__UserGroup.user_group_id == admin_group.id,
+    )
+    membership = db_session.scalar(membership_stmt)
+
+    if is_admin:
+        if membership is not None:
+            return
+        db_session.add(User__UserGroup(user_id=target.id, user_group_id=admin_group.id))
+    else:
+        if membership is None:
+            return
+        assert_admin_access_survives_removal(
+            db_session, actor, admin_group.id, [target.id]
+        )
+        db_session.delete(membership)
+
+    db_session.flush()
+    recompute_user_permissions__no_commit(target.id, db_session)
+    db_session.commit()
 
 
 def get_all_users(
@@ -602,7 +770,9 @@ def assign_user_to_default_groups__no_commit(
     ):
         return
 
-    target_group_name = "Admin" if is_admin else "Basic"
+    target_group_name = (
+        DEFAULT_ADMIN_GROUP_NAME if is_admin else DEFAULT_BASIC_GROUP_NAME
+    )
 
     default_group = (
         db_session.query(UserGroup)

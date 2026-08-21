@@ -21,6 +21,8 @@ from onyx.db.models import (
 from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.db.models import Tool as ToolModel
 from onyx.db.persona import get_raw_personas_for_user
+from onyx.db.user_group import assert_not_shared_with_default_group
+from onyx.llm.models import ReasoningEffort
 from onyx.llm.utils import model_supports_image_input
 from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
 from onyx.server.manage.embedding.models import (
@@ -31,6 +33,7 @@ from onyx.server.manage.llm.models import (
     LLMProviderUpsertRequest,
     LLMProviderView,
     SyncModelEntry,
+    ensure_default_within_max,
 )
 from onyx.utils.logger import setup_logger
 from shared_configs.enums import EmbeddingProvider
@@ -43,6 +46,8 @@ def update_group_llm_provider_relationships__no_commit(
     group_ids: list[int] | None,
     db_session: Session,
 ) -> None:
+    assert_not_shared_with_default_group(db_session, group_ids or [])
+
     # Delete existing relationships
     db_session.query(LLMProvider__UserGroup).filter(
         LLMProvider__UserGroup.llm_provider_id == llm_provider_id
@@ -319,6 +324,24 @@ def upsert_llm_provider(
 
         existing = existing_by_name.get(model_config.name)
         if existing:
+            # An omitted field keeps the stored value. Validate the merged
+            # policy, not just what was sent.
+            merged_reasoning_max = (
+                model_config.reasoning_effort_max
+                if model_config.reasoning_effort_max_provided
+                else existing.reasoning_effort_max
+            )
+            merged_reasoning_default = (
+                model_config.reasoning_effort_default
+                if model_config.reasoning_effort_default_provided
+                else existing.reasoning_effort_default
+            )
+            merged_temperature = (
+                model_config.temperature_default
+                if model_config.temperature_default_provided
+                else existing.temperature_default
+            )
+            ensure_default_within_max(merged_reasoning_default, merged_reasoning_max)
             update_model_configuration__no_commit(
                 db_session=db_session,
                 model_configuration_id=existing.id,
@@ -327,6 +350,9 @@ def upsert_llm_provider(
                 max_input_tokens=model_config.max_input_tokens,
                 display_name=model_config.display_name,
                 custom_display_name=model_config.custom_display_name,
+                reasoning_effort_max=merged_reasoning_max,
+                reasoning_effort_default=merged_reasoning_default,
+                temperature_default=merged_temperature,
             )
         else:
             insert_new_model_configuration__no_commit(
@@ -338,6 +364,9 @@ def upsert_llm_provider(
                 max_input_tokens=model_config.max_input_tokens,
                 display_name=model_config.display_name,
                 custom_display_name=model_config.custom_display_name,
+                reasoning_effort_max=model_config.reasoning_effort_max,
+                reasoning_effort_default=model_config.reasoning_effort_default,
+                temperature_default=model_config.temperature_default,
             )
 
     # Make sure the relationship table stays up to date
@@ -1161,6 +1190,9 @@ def insert_new_model_configuration__no_commit(
     max_input_tokens: int | None,
     display_name: str | None,
     custom_display_name: str | None = None,
+    reasoning_effort_max: ReasoningEffort | None = None,
+    reasoning_effort_default: ReasoningEffort | None = None,
+    temperature_default: float | None = None,
 ) -> int | None:
     result = db_session.execute(
         insert(ModelConfiguration)
@@ -1172,6 +1204,9 @@ def insert_new_model_configuration__no_commit(
             display_name=display_name,
             custom_display_name=custom_display_name,
             supports_image_input=LLMModelFlowType.VISION in supported_flows,
+            reasoning_effort_max=reasoning_effort_max,
+            reasoning_effort_default=reasoning_effort_default,
+            temperature_default=temperature_default,
         )
         .on_conflict_do_nothing()
         .returning(ModelConfiguration.id)
@@ -1200,6 +1235,9 @@ def update_model_configuration__no_commit(
     max_input_tokens: int | None,
     display_name: str | None,
     custom_display_name: str | None = None,
+    reasoning_effort_max: ReasoningEffort | None = None,
+    reasoning_effort_default: ReasoningEffort | None = None,
+    temperature_default: float | None = None,
 ) -> None:
     result = db_session.execute(
         update(ModelConfiguration)
@@ -1209,6 +1247,9 @@ def update_model_configuration__no_commit(
             display_name=display_name,
             custom_display_name=custom_display_name,
             supports_image_input=LLMModelFlowType.VISION in supported_flows,
+            reasoning_effort_max=reasoning_effort_max,
+            reasoning_effort_default=reasoning_effort_default,
+            temperature_default=temperature_default,
         )
         .where(ModelConfiguration.id == model_configuration_id)
         .returning(ModelConfiguration)

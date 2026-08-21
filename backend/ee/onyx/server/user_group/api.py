@@ -60,6 +60,7 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission, PermissionAuthority
 from onyx.db.models import User
 from onyx.db.persona import fetch_persona_by_id_for_user, get_personas_by_ids
+from onyx.db.user_group import assert_group_config_is_editable
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.security.store import get_security_settings
@@ -117,6 +118,7 @@ def list_user_groups(
                 ),
                 is_user_groups_admin=is_user_groups_admin,
                 is_full_admin=is_full_admin,
+                is_default=user_group.is_default,
             ),
         )
         for user_group in user_groups
@@ -183,6 +185,9 @@ def set_user_group_permissions(
     group = fetch_user_group(db_session, user_group_id)
     if group is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "User group not found")
+    assert_group_config_is_editable(
+        db_session, user_group_id, "change the permissions of"
+    )
 
     non_toggleable = [p for p in request.permissions if p in NON_TOGGLEABLE_PERMISSIONS]
     if non_toggleable:
@@ -232,9 +237,7 @@ def rename_user_group_endpoint(
 ) -> UserGroup:
     # GATE 2: rename's DB fn takes no user and re-reads nothing, so gate here.
     assert_manages_group(user, db_session, group_id=rename_request.id)
-    group = fetch_user_group(db_session, rename_request.id)
-    if group and group.is_default:
-        raise OnyxError(OnyxErrorCode.CONFLICT, "Cannot rename a default system group.")
+    assert_group_config_is_editable(db_session, rename_request.id, "rename")
     try:
         return UserGroup.from_model(
             rename_user_group(
@@ -265,6 +268,9 @@ def patch_user_group_incognito(
 ) -> UserGroup:
     """Only meaningful while the security setting is groups-only, but always
     storable so admins can stage membership before flipping the mode."""
+    assert_group_config_is_editable(
+        db_session, user_group_id, "change incognito access on"
+    )
     try:
         return UserGroup.from_model(
             set_user_group_incognito(
@@ -330,9 +336,7 @@ def delete_user_group(
     _: User = Depends(require_permission(Permission.MANAGE_USER_GROUPS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    group = fetch_user_group(db_session, user_group_id)
-    if group and group.is_default:
-        raise OnyxError(OnyxErrorCode.CONFLICT, "Cannot delete a default system group.")
+    assert_group_config_is_editable(db_session, user_group_id, "delete")
     try:
         prepare_user_group_for_deletion(db_session, user_group_id)
     except ValueError as e:
@@ -360,6 +364,7 @@ def update_group_agents(
 
     if fetch_user_group(db_session, user_group_id) is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "User group not found")
+    assert_group_config_is_editable(db_session, user_group_id, "share agents with")
 
     attach_ids = set(request.added_agent_ids)
     detach_ids = set(request.removed_agent_ids)
@@ -430,6 +435,9 @@ def update_group_document_sets(
 
     if fetch_user_group(db_session, user_group_id) is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "User group not found")
+    assert_group_config_is_editable(
+        db_session, user_group_id, "share document sets with"
+    )
 
     attach_ids = set(request.added_document_set_ids)
     detach_ids = set(request.removed_document_set_ids)
@@ -510,6 +518,7 @@ def set_group_manager(
     # a scoped manager may only (de)assign managers within a group they manage — so
     # a manager can delegate within their own group but not beyond it.
     assert_manages_group(user, db_session, group_id=user_group_id)
+    assert_group_config_is_editable(db_session, user_group_id, "assign a manager on")
     try:
         if request.is_manager:
             make_group_manager(db_session, request.user_id, user_group_id)

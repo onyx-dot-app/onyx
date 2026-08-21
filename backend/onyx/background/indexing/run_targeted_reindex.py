@@ -33,10 +33,7 @@ from onyx.connectors.models import (
 )
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.enums import AccessType
-from onyx.db.hierarchy import (
-    upsert_hierarchy_node_cc_pair_entries,
-    upsert_hierarchy_nodes_batch,
-)
+from onyx.db.hierarchy import persist_hierarchy_nodes_for_cc_pair
 from onyx.db.models import (
     ConnectorCredentialPair,
     IndexAttempt,
@@ -199,19 +196,13 @@ def _persist_hierarchy_nodes(
     back to "source-type root" until the next full crawl.
     """
     sanitized = sanitize_hierarchy_nodes_for_postgres(nodes)
-    upserted = upsert_hierarchy_nodes_batch(
+    upserted = persist_hierarchy_nodes_for_cc_pair(
         db_session=db_session,
         nodes=sanitized,
         source=cc_pair.connector.source,
-        commit=True,
-        is_connector_public=cc_pair.access_type == AccessType.PUBLIC,
-    )
-    upsert_hierarchy_node_cc_pair_entries(
-        db_session=db_session,
-        hierarchy_node_ids=[n.id for n in upserted],
         connector_id=cc_pair.connector.id,
         credential_id=cc_pair.credential.id,
-        commit=True,
+        is_connector_public=cc_pair.access_type == AccessType.PUBLIC,
     )
     cache_hierarchy_nodes_batch(
         redis_client=get_redis_client(tenant_id=tenant_id),

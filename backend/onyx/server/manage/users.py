@@ -80,6 +80,7 @@ from onyx.db.users import (
     get_total_filtered_users_count,
     get_user_by_email,
     get_user_counts_by_account_type_and_status,
+    set_user_admin_access,
     user_is_admin,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -105,6 +106,7 @@ from onyx.server.manage.models import (
     TenantInfo,
     TenantSnapshot,
     ThemePreferenceRequest,
+    UserAdminAccessUpdateRequest,
     UserByEmail,
     UserCraftAccessUpdateRequest,
     UserInfo,
@@ -141,6 +143,44 @@ logger = setup_logger()
 router = APIRouter()
 
 USERS_PAGE_SIZE = 10
+
+
+@router.patch("/manage/admin/users/admin-access", tags=PUBLIC_API_TAGS)
+def set_user_admin_access_endpoint(
+    admin_access_update_request: UserAdminAccessUpdateRequest,
+    current_user: User = Depends(
+        require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)
+    ),
+    db_session: Session = Depends(get_session),
+) -> None:
+    target = get_user_by_email(
+        email=admin_access_update_request.user_email, db_session=db_session
+    )
+    if not target:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "User not found")
+
+    was_admin = user_is_admin(target)
+    if was_admin == admin_access_update_request.is_admin:
+        return
+
+    set_user_admin_access(
+        db_session=db_session,
+        actor=current_user,
+        target=target,
+        is_admin=admin_access_update_request.is_admin,
+    )
+
+    emit_audit_event(
+        AuditAction.USER_ROLE_CHANGE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(current_user),
+        resource_type="user",
+        resource_id=str(target.id),
+        extra={
+            "target_email": target.email,
+            "is_admin": admin_access_update_request.is_admin,
+        },
+    )
 
 
 @router.patch("/manage/admin/users/craft-enabled")
@@ -252,7 +292,7 @@ def list_accepted_users(
         )
 
     user_ids = [user.id for user in filtered_accepted_users]
-    groups_by_user = batch_get_user_groups(db_session, user_ids)
+    groups_by_user = batch_get_user_groups(db_session, user_ids, include_default=True)
 
     # Batch-fetch SCIM mappings to mark synced users
     scim_synced_ids: set[UUID] = set()
@@ -299,7 +339,7 @@ def list_all_accepted_users(
         return []
 
     user_ids = [user.id for user in users]
-    groups_by_user = batch_get_user_groups(db_session, user_ids)
+    groups_by_user = batch_get_user_groups(db_session, user_ids, include_default=True)
 
     # Batch-fetch SCIM mappings to mark synced users
     scim_synced_ids: set[UUID] = set()

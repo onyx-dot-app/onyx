@@ -17,6 +17,26 @@ These are the same modules Onyx runs for its own managed deployments. The manage
 deployments add operational wiring on top (alert routing, secret management, log
 aggregation) but provision the underlying AWS infrastructure from exactly this code.
 
+## Consuming these modules from another repository
+
+The quickstart below uses local paths. To consume the modules from somewhere
+else, point `source` at this repository and pin a ref:
+
+```hcl
+module "vpc" {
+  source   = "git::https://github.com/onyx-dot-app/onyx.git//deployment/terraform/modules/aws/vpc?ref=tf/v1.0.2"
+  vpc_name = "onyx-vpc"
+}
+```
+
+Releases are tagged `tf/vX.Y.Z`, versioned independently of Onyx product
+releases. A commit sha works as a `ref` too, and is the better choice for
+automated consumers: a sha cannot be moved, where a tag can. Terraform clones
+the whole repository either way, so there is no meaningful speed difference.
+
+Pin something. Without a `ref` Terraform tracks the default branch, so an
+unrelated merge can change your infrastructure.
+
 ## Quickstart (copy/paste)
 The snippet below shows a minimal working example that:
 - Sets up providers

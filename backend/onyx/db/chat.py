@@ -1001,6 +1001,7 @@ def translate_db_message_to_chat_message_detail(
         latest_child_message=chat_message.latest_child_message_id,
         message=chat_message.message,
         reasoning_tokens=chat_message.reasoning_tokens,
+        request_params=chat_message.request_params,
         message_type=chat_message.message_type,
         context_docs=top_documents,
         citations=converted_citations,
