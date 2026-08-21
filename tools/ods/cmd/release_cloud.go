@@ -18,6 +18,7 @@ type ReleaseCloudOptions struct {
 	DryRun  bool
 	Yes     bool
 	Verify  bool
+	NoWatch bool
 }
 
 // NewReleaseCloudCommand creates the `ods release cloud` command.
@@ -38,9 +39,11 @@ for the same base, starting at 0.
 
 Pushing the tag triggers deployment.yml, which builds the cloud images.
 
-After the push, the command looks up the triggered deployment run via the gh
-CLI and prints its URL. The lookup is best-effort: if gh is missing or the
-run cannot be found, the release still succeeds.
+After the push, the command prints the URL of that deployment run, waits for
+it to finish, and then prints the URL of the version bump PR that the infra
+repo opens for the new tag. All of this is read-only polling through the gh
+CLI: Ctrl-C is safe at any point (the tag is already pushed). Pass --no-watch
+to print the run URL and exit immediately.
 
 To validate an existing tag instead of cutting one, see "ods release --check".
 
@@ -49,7 +52,8 @@ Example usage:
     $ ods release cloud
     $ ods release cloud --dry-run
     $ ods release cloud --ref 1a2b3c4d
-    $ ods release cloud --version 5.0.0`,
+    $ ods release cloud --version 5.0.0
+    $ ods release cloud --no-watch`,
 		Args:         cobra.NoArgs,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -57,8 +61,12 @@ Example usage:
 			if err != nil || tag == "" {
 				return err
 			}
-			announceCloudRun(tag)
-			return nil
+			if opts.NoWatch {
+				announceCloudRun(tag)
+				return nil
+			}
+			log.Info("Watching the release; Ctrl-C is safe, the tag is already pushed.")
+			return watchCloudRelease(tag)
 		},
 	}
 
@@ -67,6 +75,7 @@ Example usage:
 	cmd.Flags().BoolVar(&opts.DryRun, "dry-run", false, "Compute and print the tag but don't tag or push")
 	cmd.Flags().BoolVar(&opts.Yes, "yes", false, "Skip the confirmation prompt")
 	cmd.Flags().BoolVar(&opts.Verify, "verify", false, "Run pre-push hooks when pushing the tag; they are skipped by default")
+	cmd.Flags().BoolVar(&opts.NoWatch, "no-watch", false, "Print the deployment run URL and exit instead of watching for the bump PR")
 
 	return cmd
 }
