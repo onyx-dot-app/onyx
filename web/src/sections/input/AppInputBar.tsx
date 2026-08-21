@@ -91,7 +91,6 @@ export interface AppInputBarProps {
   toggleDeepResearch: () => void;
   isMultiModelActive?: boolean;
   disabled: boolean;
-  awaitingPreferredSelection?: boolean;
   ref?: React.Ref<AppInputBarHandle>;
   // Side panel tab reading
   tabReadingEnabled?: boolean;
@@ -117,7 +116,6 @@ const AppInputBar = React.memo(
     isMultiModelActive,
     setPresentingDocument,
     disabled,
-    awaitingPreferredSelection = false,
     ref,
     tabReadingEnabled,
     currentTabUrl,
@@ -369,7 +367,6 @@ const AppInputBar = React.memo(
     const combinedSettingsData = useSettings();
 
     const prevChatStateRef = useRef(chatState);
-    const prevAwaitingRef = useRef(awaitingPreferredSelection);
     const prevRenderCompleteRef = useRef(latestMessageRenderComplete);
 
     useEffect(() => {
@@ -378,16 +375,10 @@ const AppInputBar = React.memo(
       // gate, a queued follow-up fires while the smooth-streaming
       // typewriter is still flushing the prior answer.
       const wasReady =
-        prevChatStateRef.current === "input" &&
-        !prevAwaitingRef.current &&
-        prevRenderCompleteRef.current;
-      const isReady =
-        chatState === "input" &&
-        !awaitingPreferredSelection &&
-        latestMessageRenderComplete;
+        prevChatStateRef.current === "input" && prevRenderCompleteRef.current;
+      const isReady = chatState === "input" && latestMessageRenderComplete;
 
       prevChatStateRef.current = chatState;
-      prevAwaitingRef.current = awaitingPreferredSelection;
       prevRenderCompleteRef.current = latestMessageRenderComplete;
 
       if (!wasReady && isReady && queuedMessages.length > 0) {
@@ -400,7 +391,6 @@ const AppInputBar = React.memo(
       }
     }, [
       chatState,
-      awaitingPreferredSelection,
       latestMessageRenderComplete,
       queuedMessages,
       removeCurrentQueuedMessage,
@@ -792,16 +782,14 @@ const AppInputBar = React.memo(
             icon={
               isClassifying
                 ? SvgSimpleLoader
-                : (chatState !== "input" || awaitingPreferredSelection) &&
-                    message.trim()
+                : chatState !== "input" && message.trim()
                   ? SvgArrowUp
                   : chatState === "streaming" || isVoicePlaybackControllable
                     ? SvgStop
                     : SvgArrowUp
             }
             onClick={() => {
-              const canSubmitNormally =
-                chatState === "input" && !awaitingPreferredSelection;
+              const canSubmitNormally = chatState === "input";
               if (!canSubmitNormally && message.trim()) {
                 if (queuedMessages.length < MAX_QUEUED_MESSAGES) {
                   enqueueCurrentMessage(message.trim());
@@ -829,7 +817,6 @@ const AppInputBar = React.memo(
         <QueuedMessageBar
           messages={queuedMessages}
           highlightedIndex={queueNav.highlightedIndex}
-          awaitingPreferredSelection={awaitingPreferredSelection}
           onDiscard={removeCurrentQueuedMessage}
           onHighlight={queueNav.setHighlightedIndex}
         />
@@ -965,9 +952,7 @@ const AppInputBar = React.memo(
                           !(event.nativeEvent as any).isComposing
                         ) {
                           event.preventDefault();
-                          const canSubmitNormally =
-                            chatState === "input" &&
-                            !awaitingPreferredSelection;
+                          const canSubmitNormally = chatState === "input";
                           if (canSubmitNormally) {
                             if (
                               message &&

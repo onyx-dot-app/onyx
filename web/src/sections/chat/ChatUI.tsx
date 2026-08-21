@@ -15,6 +15,7 @@ import { SelectedModel } from "@/sections/model-selector/MultiModelSelector";
 import { buildModelProviderLookup } from "@/lib/languageModels/options";
 import DynamicBottomSpacer from "@/components/chat/DynamicBottomSpacer";
 import {
+  useCurrentChatState,
   useCurrentMessageHistory,
   useCurrentMessageTree,
   useLoadingError,
@@ -88,6 +89,7 @@ const ChatUI = React.memo(
     const messageTree = useCurrentMessageTree();
     const error = useUncaughtError();
     const loadError = useLoadingError();
+    const chatState = useCurrentChatState();
     // Stable fallbacks to avoid changing prop identities on each render
     const emptyDocs = useMemo<OnyxDocument[]>(() => [], []);
     const emptyChildrenIds = useMemo<number[]>(() => [], []);
@@ -228,6 +230,7 @@ const ChatUI = React.memo(
                         parentMessage?.childrenNodeIds ?? emptyChildrenIds
                       }
                       onMessageSelection={onMessageSelection}
+                      selectionDisabled={chatState !== "input"}
                     />
                   )}
                 </div>
