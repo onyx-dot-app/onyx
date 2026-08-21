@@ -50,6 +50,10 @@ import {
   SvgSimpleLoader,
 } from "@opal/icons";
 import { Button } from "@opal/components";
+import {
+  getMCPUserOAuthNavigationUrl,
+  startMCPUserOAuth,
+} from "@/lib/tools/mcpService";
 
 function buildTooltipMessage(
   actionDescription: string,
@@ -535,24 +539,12 @@ export default function ActionsPopover({
 
       updateLoadingState(true);
       try {
-        const response = await fetch("/api/mcp/oauth/connect", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            server_id: serverId,
-            return_path: window.location.pathname + window.location.search,
-            include_resource_param: true,
-            force_reauthentication: forceReauthentication,
-          }),
-        });
-
-        if (!response.ok) {
-          throw new Error("Failed to start MCP OAuth");
-        }
-        const { oauth_url } = await response.json();
-        window.location.href = oauth_url;
+        const oauthStart = await startMCPUserOAuth(
+          serverId,
+          window.location.pathname + window.location.search,
+          { forceReauthentication }
+        );
+        window.location.href = getMCPUserOAuthNavigationUrl(oauthStart);
       } catch (error) {
         console.error("Error initiating OAuth:", error);
         updateLoadingState(false);

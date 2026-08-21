@@ -29,13 +29,12 @@ RETURN_PATH = "/admin/actions/mcp"
 MCP_TOOL_NAME = "tool_0"
 
 
-def _complete_oauth_flow(
+def _connect_oauth(
     server_id: int,
     admin_user: DATestUser,
-    services: CimdOAuthTestServices,
     *,
     force_reauthentication: bool,
-) -> None:
+) -> dict[str, object]:
     connect_response = client.post(
         f"{API_SERVER_URL}/admin/mcp/oauth/connect",
         json={
@@ -48,7 +47,24 @@ def _complete_oauth_flow(
         cookies=admin_user.cookies,
     )
     connect_response.raise_for_status()
-    oauth_url = str(connect_response.json()["oauth_url"])
+    return connect_response.json()
+
+
+def _start_oauth_flow(
+    server_id: int,
+    admin_user: DATestUser,
+    services: CimdOAuthTestServices,
+    *,
+    force_reauthentication: bool,
+) -> dict[str, list[str]]:
+    connect_body = _connect_oauth(
+        server_id,
+        admin_user,
+        force_reauthentication=force_reauthentication,
+    )
+    assert connect_body["status"] == "authorization_required"
+    assert connect_body["redirect_url"] == RETURN_PATH
+    oauth_url = str(connect_body["authorization_url"])
     assert oauth_url.startswith(f"{services.oidc_issuer}/authorize?")
 
     authorization_response = httpx.get(
@@ -58,24 +74,53 @@ def _complete_oauth_flow(
     )
     assert authorization_response.status_code == 302
     callback_url = authorization_response.headers["location"]
-    callback_params = parse_qs(urlparse(callback_url).query)
+    return parse_qs(urlparse(callback_url).query)
 
-    callback_response = client.post(
+
+def _post_oauth_callback(
+    callback_params: dict[str, list[str]],
+    user: DATestUser,
+) -> httpx.Response:
+    return client.post(
         f"{API_SERVER_URL}/mcp/oauth/callback",
         params={
             "code": callback_params["code"][0],
             "state": callback_params["state"][0],
         },
-        headers=admin_user.headers,
-        cookies=admin_user.cookies,
+        headers=user.headers,
+        cookies=user.cookies,
     )
+
+
+def _complete_oauth_callback(
+    callback_params: dict[str, list[str]],
+    user: DATestUser,
+) -> None:
+    callback_response = _post_oauth_callback(callback_params, user)
     callback_response.raise_for_status()
     assert callback_response.json()["success"] is True
+
+
+def _complete_oauth_flow(
+    server_id: int,
+    admin_user: DATestUser,
+    services: CimdOAuthTestServices,
+    *,
+    force_reauthentication: bool,
+) -> None:
+    callback_params = _start_oauth_flow(
+        server_id,
+        admin_user,
+        services,
+        force_reauthentication=force_reauthentication,
+    )
+    _complete_oauth_callback(callback_params, admin_user)
 
 
 def test_mcp_oauth_cimd_only_flow(
     cimd_oauth_services: CimdOAuthTestServices,
     admin_user: DATestUser,
+    basic_user: DATestUser,
     llm_provider: DATestLLMProvider,  # noqa: ARG001
 ) -> None:
     discovery_response = httpx.get(
@@ -106,12 +151,44 @@ def test_mcp_oauth_cimd_only_flow(
     persona: DATestPersona | None = None
 
     try:
-        _complete_oauth_flow(
+        first_callback = _start_oauth_flow(
             server_id,
             admin_user,
             cimd_oauth_services,
             force_reauthentication=False,
         )
+        second_callback = _start_oauth_flow(
+            server_id,
+            admin_user,
+            cimd_oauth_services,
+            force_reauthentication=False,
+        )
+
+        wrong_user_response = _post_oauth_callback(first_callback, basic_user)
+        assert wrong_user_response.status_code == 400
+        assert wrong_user_response.json() == {
+            "error_code": "INVALID_INPUT",
+            "detail": "Invalid or expired OAuth authorization attempt",
+        }
+
+        _complete_oauth_callback(second_callback, admin_user)
+        _complete_oauth_callback(first_callback, admin_user)
+
+        replay_response = _post_oauth_callback(second_callback, admin_user)
+        assert replay_response.status_code == 400
+        assert replay_response.json() == {
+            "error_code": "INVALID_INPUT",
+            "detail": "Invalid or expired OAuth authorization attempt",
+        }
+
+        authenticated_connect = _connect_oauth(
+            server_id,
+            admin_user,
+            force_reauthentication=False,
+        )
+        assert authenticated_connect["status"] == "already_authenticated"
+        assert authenticated_connect["authorization_url"] is None
+        assert authenticated_connect["redirect_url"] == RETURN_PATH
 
         tools_response = client.get(
             f"{API_SERVER_URL}/admin/mcp/server/{server_id}/tools",

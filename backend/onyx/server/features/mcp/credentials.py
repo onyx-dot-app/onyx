@@ -19,10 +19,13 @@ This module holds pure logic plus the resolve orchestration; the DB fetch lives
 in ``onyx.db.mcp``. It must not import ``onyx.server.features.mcp.oauth``.
 """
 
+import hashlib
+import json
 import time
 from collections.abc import Mapping
 from typing import cast
 
+from mcp.shared.auth import OAuthClientInformationFull
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
@@ -65,6 +68,34 @@ def mcp_token_expired(config_data: MCPConnectionData) -> bool:
     """True iff the stored access token is past its persisted expiry."""
     expires_at = config_data.get(MCPOAuthKeys.TOKEN_EXPIRES_AT.value)
     return expires_at is not None and float(expires_at) <= time.time()
+
+
+def mcp_oauth_connection_headers_fingerprint(headers: dict[str, str]) -> str:
+    routing_headers = sorted(
+        (key.lower(), value)
+        for key, value in headers.items()
+        if key.lower() != "authorization"
+    )
+    serialized_headers = json.dumps(
+        routing_headers, ensure_ascii=True, separators=(",", ":")
+    )
+    return hashlib.sha256(serialized_headers.encode()).hexdigest()
+
+
+def mcp_oauth_client_information_fingerprint(
+    client_information: OAuthClientInformationFull,
+) -> str:
+    serialized_client = json.dumps(
+        client_information.model_dump(
+            mode="json",
+            exclude_none=True,
+            by_alias=True,
+        ),
+        ensure_ascii=True,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(serialized_client.encode()).hexdigest()
 
 
 def requires_user_authentication(

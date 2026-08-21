@@ -22,6 +22,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 from fastapi.testclient import TestClient
 
+from onyx.server.features.mcp import api as mcp_api
 from onyx.server.features.mcp import client_metadata
 from tests.integration.common_utils.cimd_oauth import (
     CimdHttpsEndpoint,
@@ -211,6 +212,7 @@ def cimd_https_endpoint(
                 f"Nginx failed during startup: {error}\n{logs}"
             ) from error
         origin = f"https://{public_host}:{https_port}"
+        web_domain_patch.setattr(mcp_api, "WEB_DOMAIN", origin)
         web_domain_patch.setattr(client_metadata, "WEB_DOMAIN", origin)
 
         metadata_url = f"{origin}/api/mcp/oauth/client-metadata"
