@@ -749,7 +749,7 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
         llm = get_default_llm_with_vision()
 
     if not llm:
-        if get_image_extraction_and_analysis_enabled():
+        if get_image_extraction_and_analysis_enabled() and has_image_section:
             logger.warning(
                 "Image analysis is enabled but no vision-capable LLM is "
                 "available — images will not be summarized. Configure a "
