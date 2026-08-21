@@ -162,7 +162,7 @@ def test_auto_discovery_callback_dispatches_claimed_flow(
         monkeypatch, server, flow
     )
     complete_flow = AsyncMock()
-    monkeypatch.setattr(api, "complete_mcp_oauth_flow", complete_flow)
+    monkeypatch.setattr(api, "complete_mcp_oauth_authorization", complete_flow)
     response = asyncio.run(
         api.process_oauth_callback(
             _request(state=_STATE, code="authorization-code"),
@@ -191,7 +191,7 @@ def test_callback_rejects_server_configuration_changed_after_authorization(
     server.server_url = "https://replacement.example.com/mcp"
     user, db_session, _, _ = _install_callback_dependencies(monkeypatch, server, flow)
     complete_flow = AsyncMock()
-    monkeypatch.setattr(api, "complete_mcp_oauth_flow", complete_flow)
+    monkeypatch.setattr(api, "complete_mcp_oauth_authorization", complete_flow)
 
     with pytest.raises(OnyxError, match="server configuration changed"):
         asyncio.run(
@@ -235,7 +235,7 @@ def test_callback_rechecks_server_authorization_before_exchanging_code(
     monkeypatch.setattr(api, "user_can_access_mcp_server", lambda *_args: False)
     monkeypatch.setattr(api, "can_manage_mcp_server", lambda *_args: False)
     complete_flow = AsyncMock()
-    monkeypatch.setattr(api, "complete_mcp_oauth_flow", complete_flow)
+    monkeypatch.setattr(api, "complete_mcp_oauth_authorization", complete_flow)
 
     with pytest.raises(OnyxError) as exc_info:
         asyncio.run(
@@ -261,7 +261,7 @@ def test_callback_allows_server_manager_without_server_access(
     monkeypatch.setattr(api, "user_can_access_mcp_server", lambda *_args: False)
     monkeypatch.setattr(api, "can_manage_mcp_server", lambda *_args: True)
     complete_flow = AsyncMock()
-    monkeypatch.setattr(api, "complete_mcp_oauth_flow", complete_flow)
+    monkeypatch.setattr(api, "complete_mcp_oauth_authorization", complete_flow)
 
     asyncio.run(
         api.process_oauth_callback(
@@ -310,7 +310,7 @@ def test_provider_denial_claims_flow_without_exchanging_code(
     flow = _flow(server)
     user, db_session, _, _ = _install_callback_dependencies(monkeypatch, server, flow)
     complete_flow = AsyncMock()
-    monkeypatch.setattr(api, "complete_mcp_oauth_flow", complete_flow)
+    monkeypatch.setattr(api, "complete_mcp_oauth_authorization", complete_flow)
 
     with pytest.raises(OnyxError, match="denied or failed"):
         asyncio.run(
@@ -348,7 +348,7 @@ def test_callback_rejects_a_stale_client_registration(
         ),
     )
     complete_flow = AsyncMock()
-    monkeypatch.setattr(api, "complete_mcp_oauth_flow", complete_flow)
+    monkeypatch.setattr(api, "complete_mcp_oauth_authorization", complete_flow)
 
     with pytest.raises(OnyxError, match="client registration changed"):
         asyncio.run(

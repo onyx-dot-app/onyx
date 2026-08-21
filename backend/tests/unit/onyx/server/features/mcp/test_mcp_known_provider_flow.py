@@ -198,7 +198,7 @@ def test_completion_uses_configured_provider_context_and_sdk_exchange(
     )
 
     asyncio.run(
-        oauth_flow.complete_mcp_oauth_flow(
+        oauth.complete_mcp_oauth_authorization(
             flow,
             _server(),
             _client_information(),

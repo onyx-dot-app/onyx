@@ -546,12 +546,12 @@ def test_reverse_order_completions_restore_their_own_registration(
         exchanges.append(exchange)
         return provider
 
-    monkeypatch.setattr(oauth_flow, "make_oauth_provider", make_provider)
+    monkeypatch.setattr(oauth, "make_oauth_provider", make_provider)
     first_flow = _flow("first-state", client_id="first-registration")
     second_flow = _flow("second-state", client_id="second-registration")
 
     asyncio.run(
-        oauth_flow.complete_mcp_oauth_flow(
+        oauth.complete_mcp_oauth_authorization(
             second_flow,
             cast(MCPServer, _server()),
             _client_information("second-registration"),
@@ -559,7 +559,7 @@ def test_reverse_order_completions_restore_their_own_registration(
         )
     )
     asyncio.run(
-        oauth_flow.complete_mcp_oauth_flow(
+        oauth.complete_mcp_oauth_authorization(
             first_flow,
             cast(MCPServer, _server()),
             _client_information("first-registration"),

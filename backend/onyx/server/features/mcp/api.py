@@ -115,12 +115,12 @@ from onyx.server.features.mcp.models import (
 from onyx.server.features.mcp.oauth import (
     REQUESTED_SCOPE,
     MCPReauthenticationRequired,
+    complete_mcp_oauth_authorization,
     make_oauth_provider,
 )
 from onyx.server.features.mcp.oauth_flow import (
     OAuthAlreadyAuthenticated,
     OAuthAuthorizationRedirect,
-    complete_mcp_oauth_flow,
     mcp_oauth_attempt_store,
     start_auto_discovery_oauth_flow,
     start_known_provider_oauth_flow,
@@ -966,7 +966,7 @@ async def process_oauth_callback(
             "MCP OAuth client registration changed while authorization was pending.",
         )
 
-    await complete_mcp_oauth_flow(
+    await complete_mcp_oauth_authorization(
         flow,
         mcp_server,
         client_info,
