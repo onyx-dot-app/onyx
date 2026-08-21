@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import has_global_permission, require_permission
@@ -31,6 +31,7 @@ from onyx.db.connector_credential_pair import (
     get_connector_credential_pairs_for_user,
 )
 from onyx.db.credential_capability import (
+    clear_capability_run_start,
     get_capability_report_row,
     get_capability_report_rows_for_source,
     mark_capability_report_running,
@@ -114,6 +115,10 @@ class CapabilityCheckRunRequest(BaseModel):
     not-yet-saved edit) and is only meaningful with ``connector_id``.
     """
 
+    # Both fields are optional, so a typoed field name would otherwise
+    # silently select the wrong scope.
+    model_config = ConfigDict(extra="forbid")
+
     connector_id: int | None = None
     connector_specific_config: dict[str, Any] | None = None
 
@@ -187,20 +192,34 @@ def trigger_capability_check(
     snapshot = CapabilityReportSnapshot.from_row(row)
     # Commit before enqueueing so the worker can only observe the RUNNING mark.
     db_session.commit()
-    client_app.send_task(
-        OnyxCeleryTask.RUN_CAPABILITY_CHECKS,
-        kwargs=dict(
+    try:
+        client_app.send_task(
+            OnyxCeleryTask.RUN_CAPABILITY_CHECKS,
+            kwargs=dict(
+                credential_id=credential_id,
+                connector_id=request.connector_id,
+                connector_specific_config=request.connector_specific_config,
+                tenant_id=get_current_tenant_id(),
+            ),
+            queue=OnyxCeleryQueues.CAPABILITY_CHECKS,
+            priority=OnyxCeleryPriority.HIGH,
+            # The queued run and its RUNNING mark go stale together, so an
+            # expired task never strands an unmarkable scope.
+            expires=CAPABILITY_CHECK_RUN_STALENESS_SECONDS,
+        )
+    except Exception:
+        # No run was enqueued, so the fresh mark must not block re-triggering
+        # for the whole staleness bound.
+        clear_capability_run_start(
+            db_session,
             credential_id=credential_id,
             connector_id=request.connector_id,
-            connector_specific_config=request.connector_specific_config,
-            tenant_id=get_current_tenant_id(),
-        ),
-        queue=OnyxCeleryQueues.CAPABILITY_CHECKS,
-        priority=OnyxCeleryPriority.HIGH,
-        # The queued run and its RUNNING mark go stale together, so an expired
-        # task never strands an unmarkable scope.
-        expires=CAPABILITY_CHECK_RUN_STALENESS_SECONDS,
-    )
+        )
+        db_session.commit()
+        raise OnyxError(
+            OnyxErrorCode.SERVICE_UNAVAILABLE,
+            "Could not enqueue the capability check run; try again shortly.",
+        )
     return snapshot
 
 

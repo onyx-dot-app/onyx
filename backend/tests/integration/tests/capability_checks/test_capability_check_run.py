@@ -257,6 +257,26 @@ def test_unknown_credential_maps_to_credential_not_found(
     assert response.json()["error_code"] == "CREDENTIAL_NOT_FOUND"
 
 
+def test_unknown_connector_maps_to_connector_not_found(
+    admin_user: DATestUser,
+) -> None:
+    # Precondition.
+    credential = CredentialManager.create(
+        source=DocumentSource.MOCK_CONNECTOR, user_performing_action=admin_user
+    )
+
+    # Under test.
+    response = client.post(
+        _check_url(credential.id),
+        json={"connector_id": 999_999_999},
+        headers=admin_user.headers,
+    )
+
+    # Postcondition.
+    assert response.status_code == 404
+    assert response.json()["error_code"] == "CONNECTOR_NOT_FOUND"
+
+
 def test_trigger_requires_connector_management_permission(
     basic_user: DATestUser,
 ) -> None:
