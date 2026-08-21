@@ -23,7 +23,7 @@ would drop Locust).
 
 ```bash
 uv sync --group loadtest
-cd loadtest
+cd tools/loadtest
 ```
 
 ### Mock LLM server
@@ -261,7 +261,7 @@ p95 / failure rate bend up, and which resource saturates first.
 ## Docker
 
 ```bash
-cd loadtest && docker build -f mock_llm/Dockerfile -t onyx-mock-llm .
+cd tools/loadtest && docker build -f mock_llm/Dockerfile -t onyx-mock-llm .
 docker run -p 8001:8000 onyx-mock-llm
 
 # Locust harness image (locustfile + scenarios baked in, for k8s/)

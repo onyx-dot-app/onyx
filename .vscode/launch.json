@@ -923,7 +923,7 @@
         "up",
         "-d"
       ],
-      "cwd": "${workspaceFolder}/profiling",
+      "cwd": "${workspaceFolder}/tools/profiling",
       "console": "integratedTerminal",
       "presentation": {
         "group": "3"

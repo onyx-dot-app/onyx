@@ -181,9 +181,9 @@ zizmor = ["zizmor==1.25.2"]
 # Enterprise Edition features
 ee = ["posthog==3.7.4"]
 
-# Locust load-test runtime (the loadtest/ project). Kept OUT of default-groups
+# Locust load-test runtime (the tools/loadtest/ project). Kept OUT of default-groups
 # so a normal `uv sync` doesn't pull locust's heavy gevent/flask/socketio tree.
-# Opt in with `uv sync --group loadtest`. See loadtest/README.md.
+# Opt in with `uv sync --group loadtest`. See tools/loadtest/README.md.
 loadtest = [
     "locust>=2.32",
     "fastapi>=0.115",

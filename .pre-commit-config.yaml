@@ -105,7 +105,7 @@ repos:
         # Scope to backend/, matching `[tool.ty.src] include = ["backend"]` in
         # pyproject. The full ty run only discovers backend/, but pre-commit
         # passes explicit filenames, which bypass that discovery-time include —
-        # without this, a touched file outside backend/ (examples/, loadtest/,
+        # without this, a touched file outside backend/ (examples/, tools/loadtest/,
         # tools/, …) would get type-checked against the backend venv it was
         # never meant to run in.
         files: ^backend/
