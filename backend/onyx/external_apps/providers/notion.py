@@ -253,11 +253,20 @@ class NotionProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
     }
 
     def build_token_exchange_request(
-        self, code: str, client_id: str, client_secret: str, redirect_uri: str
+        self,
+        code: str,
+        client_id: str,
+        client_secret: str,
+        redirect_uri: str,
+        *,
+        code_verifier: str | None = None,
     ) -> TokenExchangeRequest:
         # Notion requires HTTP Basic client authentication and a JSON body for
         # the token exchange (client_id/client_secret are NOT accepted in the
         # form body), so override the default RFC-6749 form-encoded request.
+        if code_verifier is not None:
+            raise ValueError("Notion OAuth does not support PKCE")
+
         basic = base64.b64encode(f"{client_id}:{client_secret}".encode("utf-8")).decode(
             "ascii"
         )

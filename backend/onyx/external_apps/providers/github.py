@@ -233,6 +233,7 @@ class GitHubProvider(OAuthExternalAppProvider, OnyxManagedExtApp):
             token_url="https://github.com/login/oauth/access_token",
             scope=" ".join(["repo", "read:org", "read:user"]),
             scope_param="scope",
+            supports_pkce=True,
         ),
         descriptor=AdminDescriptorSpec(
             upstream_url_patterns=["https://api\\.github\\.com/.*"],
