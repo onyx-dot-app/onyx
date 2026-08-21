@@ -264,22 +264,19 @@ variable "tenant_id" {
 
 # --- Redis -------------------------------------------------------------------
 
+# Azure stopped accepting new Azure Cache for Redis instances, so the redis
+# module now provisions Azure Managed Redis. That sizes by a single SKU name
+# rather than the tier, family and capacity the retiring service used.
 variable "redis_sku_name" {
   type        = string
-  description = "Cache tier. Null uses the t-shirt size default."
+  description = "Managed Redis SKU, for example \"Balanced_B5\" for 5 GB. Null uses the t-shirt size default."
   default     = null
 }
 
-variable "redis_family" {
-  type        = string
-  description = "Cache family. Null uses the t-shirt size default."
-  default     = null
-}
-
-variable "redis_capacity" {
-  type        = number
-  description = "Cache size within the family. Null uses the t-shirt size default."
-  default     = null
+variable "redis_high_availability_enabled" {
+  type        = bool
+  description = "Keep a Redis replica in another availability zone. Roughly doubles cache cost."
+  default     = false
 }
 
 # --- Cluster -----------------------------------------------------------------

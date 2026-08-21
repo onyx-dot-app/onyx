@@ -52,9 +52,7 @@ locals {
       index_node_disk_size_gb = 256
       postgres_sku_name       = "GP_Standard_D2ds_v5"
       postgres_storage_gb     = 64
-      redis_sku_name          = "Standard"
-      redis_family            = "C"
-      redis_capacity          = 3
+      redis_sku_name          = "Balanced_B5"
     }
     medium = {
       main_node_vm_size       = "Standard_D16ds_v5"
@@ -64,9 +62,7 @@ locals {
       index_node_disk_size_gb = 512
       postgres_sku_name       = "GP_Standard_D2ds_v5"
       postgres_storage_gb     = 128
-      redis_sku_name          = "Standard"
-      redis_family            = "C"
-      redis_capacity          = 4
+      redis_sku_name          = "Balanced_B10"
     }
     large = {
       main_node_vm_size       = "Standard_D16ds_v5"
@@ -76,9 +72,7 @@ locals {
       index_node_disk_size_gb = 1024
       postgres_sku_name       = "GP_Standard_D4ds_v5"
       postgres_storage_gb     = 256
-      redis_sku_name          = "Standard"
-      redis_family            = "C"
-      redis_capacity          = 5
+      redis_sku_name          = "Balanced_B20"
     }
   }
   sizing = local.size_defaults[var.size]
@@ -92,8 +86,6 @@ locals {
   postgres_sku_name       = coalesce(var.postgres_sku_name, local.sizing.postgres_sku_name)
   postgres_storage_gb     = coalesce(var.postgres_storage_gb, local.sizing.postgres_storage_gb)
   redis_sku_name          = coalesce(var.redis_sku_name, local.sizing.redis_sku_name)
-  redis_family            = coalesce(var.redis_family, local.sizing.redis_family)
-  redis_capacity          = coalesce(var.redis_capacity, local.sizing.redis_capacity)
 
   node_pools = merge(
     {
@@ -218,9 +210,8 @@ module "redis" {
   location            = var.location
   tags                = local.merged_tags
 
-  sku_name = local.redis_sku_name
-  family   = local.redis_family
-  capacity = local.redis_capacity
+  sku_name                  = local.redis_sku_name
+  high_availability_enabled = var.redis_high_availability_enabled
 
   private_endpoint_subnet_id = local.private_endpoint_subnet_id
   virtual_network_id         = local.virtual_network_id

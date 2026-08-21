@@ -28,8 +28,8 @@ run "medium_is_the_default_tier" {
   }
 
   assert {
-    condition     = local.redis_capacity == 4
-    error_message = "Standard C4 is 13 GB, matching the AWS composition's cache.m6g.xlarge."
+    condition     = local.redis_sku_name == "Balanced_B10"
+    error_message = "Balanced_B10 is about 10 GB, the closest Managed Redis shape to the AWS composition's cache.m6g.xlarge."
   }
 
   assert {
