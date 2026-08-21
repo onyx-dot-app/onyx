@@ -64,6 +64,14 @@ def get_security_settings_endpoint(
     return get_security_settings()
 
 
+@admin_router.get("/pinned-fields")
+def get_pinned_fields_endpoint(
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+) -> list[str]:
+    """Fields currently pinned by env vars, so the UI can lock their inputs."""
+    return sorted(env_pinned_active_fields())
+
+
 @admin_router.put("")
 async def put_security_settings_endpoint(
     request: Request,
