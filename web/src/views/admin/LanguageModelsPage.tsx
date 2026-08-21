@@ -77,6 +77,7 @@ const PROVIDER_GROUPS: ProviderGroup[] = [
       LLMProviderName.PORTKEY,
       LLMProviderName.NEBIUS_TOKENFACTORY,
       LLMProviderName.BIFROST,
+      LLMProviderName.ORCAROUTER,
     ],
   },
   {

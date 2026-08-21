@@ -813,3 +813,19 @@ class PortkeyFinalModelResponse(BaseModel):
     max_input_tokens: int | None
     supports_image_input: bool
     supports_reasoning: bool
+
+
+# OrcaRouter dynamic models fetch
+class OrcaRouterModelsRequest(BaseModel):
+    api_base: str
+    api_key: str | None = None
+    # Existing provider id; resolves the stored key and syncs fetched models on edit
+    provider_id: int | None = None
+
+
+class OrcaRouterFinalModelResponse(BaseModel):
+    name: str  # Model ID (e.g. "orcarouter/fusion")
+    display_name: str  # Human-readable name from API
+    max_input_tokens: int | None
+    supports_image_input: bool
+    supports_reasoning: bool

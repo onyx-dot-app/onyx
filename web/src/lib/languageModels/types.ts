@@ -68,6 +68,7 @@ export enum LLMProviderName {
   OPENAI_COMPATIBLE = "openai_compatible",
   NEBIUS_TOKENFACTORY = "nebius_tokenfactory",
   PORTKEY = "portkey",
+  ORCAROUTER = "orcarouter",
   CUSTOM = "custom",
 }
 
@@ -277,6 +278,21 @@ export interface PortkeyModelResponse {
   supports_reasoning: boolean;
 }
 
+export interface OrcaRouterFetchParams {
+  api_base?: string;
+  api_key?: string;
+  provider_id?: number;
+  signal?: AbortSignal;
+}
+
+export interface OrcaRouterModelResponse {
+  name: string;
+  display_name: string;
+  max_input_tokens: number | null;
+  supports_image_input: boolean;
+  supports_reasoning: boolean;
+}
+
 export interface VertexAIFetchParams {
   model_configurations?: ModelConfiguration[];
 }
@@ -297,4 +313,5 @@ export type FetchModelsParams =
   | BifrostFetchParams
   | OpenAICompatibleFetchParams
   | VertexAIFetchParams
-  | LMStudioFetchParams;
+  | LMStudioFetchParams
+  | OrcaRouterFetchParams;

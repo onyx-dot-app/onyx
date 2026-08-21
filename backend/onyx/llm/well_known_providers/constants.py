@@ -33,6 +33,9 @@ PORTKEY_DEFAULT_API_MODE = PORTKEY_API_MODE_CHAT_COMPLETIONS
 PORTKEY_DEFAULT_API_BASE_OPENAI = "https://api.portkey.ai/v1"
 PORTKEY_DEFAULT_API_BASE_ANTHROPIC = "https://api.portkey.ai"
 
+ORCAROUTER_PROVIDER_NAME = "orcarouter"
+ORCAROUTER_DEFAULT_API_BASE = "https://api.orcarouter.ai/v1"
+
 # Providers that use optional Bearer auth from custom_config
 PROVIDERS_WITH_SPECIAL_API_KEY_HANDLING: dict[str, str] = {
     LlmProviderNames.LM_STUDIO: LM_STUDIO_API_KEY_CONFIG_KEY,
