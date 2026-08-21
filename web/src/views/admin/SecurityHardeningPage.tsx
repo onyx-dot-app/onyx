@@ -146,9 +146,10 @@ export default function SecurityHardeningPage() {
       SWR_KEYS.adminSecuritySettings,
       errorHandlingFetcher
     );
-  const { data: pinnedFields, isLoading: pinnedFieldsLoading } = useSWR<
-    string[]
-  >(SWR_KEYS.adminSecurityPinnedFields, errorHandlingFetcher);
+  const { data: pinnedFields } = useSWR<string[]>(
+    SWR_KEYS.adminSecurityPinnedFields,
+    errorHandlingFetcher
+  );
 
   // Local state mirrors the loaded settings. We save on every committed change.
   const [draft, setDraft] = useState<SecuritySettings | null>(null);
@@ -205,7 +206,9 @@ export default function SecurityHardeningPage() {
           const fresh = await mutate<SecuritySettings>(
             SWR_KEYS.adminSecuritySettings
           );
-          if (fresh) setDraft(fresh);
+          // Re-checked after the await: an edit queued during the fetch owns
+          // the draft now.
+          if (fresh && savesQueued.current === 1) setDraft(fresh);
         }
       } catch {
         // If revalidation also fails (e.g. network down), the optimistic
@@ -244,7 +247,7 @@ export default function SecurityHardeningPage() {
     [doSave]
   );
 
-  if (settingsLoading || pinnedFieldsLoading || !draft) {
+  if (settingsLoading || !draft) {
     return (
       <SettingsLayouts.Root>
         <SettingsLayouts.Header icon={route.icon} title={route.title} divider />
@@ -447,8 +450,9 @@ export default function SecurityHardeningPage() {
             </Card>
           )}
 
-          {/* External JWT auth (single-tenant only) */}
-          {!isMultiTenant && (
+          {/* External JWT auth (single-tenant only). Absent while the
+              pinned state is unknown, editability must never fail open. */}
+          {!isMultiTenant && pinnedFields && (
             <Card border="solid" rounding="lg">
               <Section>
                 <Content
@@ -463,7 +467,7 @@ export default function SecurityHardeningPage() {
                   description="JWKS or PEM endpoint used to verify token signatures. Leave empty to disable JWT authentication."
                   value={draft.jwt_public_key_url ?? ""}
                   placeholder="https://idp.example.com/.well-known/jwks.json"
-                  pinned={pinnedFields?.includes("jwt_public_key_url") ?? false}
+                  pinned={pinnedFields.includes("jwt_public_key_url")}
                   onCommit={(value) =>
                     saveSettings({ jwt_public_key_url: value || null })
                   }
@@ -474,9 +478,7 @@ export default function SecurityHardeningPage() {
                   description="Reject tokens whose aud claim does not match. Empty disables the check."
                   value={draft.jwt_expected_audience ?? ""}
                   placeholder="onyx"
-                  pinned={
-                    pinnedFields?.includes("jwt_expected_audience") ?? false
-                  }
+                  pinned={pinnedFields.includes("jwt_expected_audience")}
                   onCommit={(value) =>
                     saveSettings({ jwt_expected_audience: value || null })
                   }
@@ -487,9 +489,7 @@ export default function SecurityHardeningPage() {
                   description="Reject tokens whose iss claim does not match. Empty disables the check."
                   value={draft.jwt_expected_issuer ?? ""}
                   placeholder="https://idp.example.com"
-                  pinned={
-                    pinnedFields?.includes("jwt_expected_issuer") ?? false
-                  }
+                  pinned={pinnedFields.includes("jwt_expected_issuer")}
                   onCommit={(value) =>
                     saveSettings({ jwt_expected_issuer: value || null })
                   }
