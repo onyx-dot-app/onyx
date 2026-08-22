@@ -35,6 +35,7 @@ type pickerKind int
 const (
 	pickerSession pickerKind = iota
 	pickerAgent
+	pickerModel
 )
 
 // pickerItem is a selectable item in the picker.
@@ -275,6 +276,8 @@ func (v *viewport) pickerTitle() string {
 		return "Select Agent"
 	case pickerSession:
 		return "Resume Session"
+	case pickerModel:
+		return "Select Model"
 	default:
 		return "Select"
 	}

@@ -1,0 +1,125 @@
+package tui
+
+import (
+	"testing"
+
+	"github.com/onyx-dot-app/onyx/cli/internal/config"
+	"github.com/onyx-dot-app/onyx/cli/internal/models"
+)
+
+func intPtr(v int) *int { return &v }
+
+func strPtr(v string) *string { return &v }
+
+func testProviderResponse() *models.LLMProviderResponse {
+	return &models.LLMProviderResponse{
+		Providers: []models.LLMProviderDescriptor{
+			{
+				ID:                  1,
+				Name:                strPtr("OpenAI Prod"),
+				Provider:            "openai",
+				ProviderDisplayName: "OpenAI",
+				ModelConfigurations: []models.ModelConfiguration{
+					{ID: intPtr(10), Name: "gpt-4o", IsVisible: true, DisplayName: strPtr("GPT-4o")},
+					{ID: intPtr(11), Name: "gpt-4o-mini", IsVisible: false},
+				},
+			},
+			{
+				ID:                  2,
+				Provider:            "anthropic",
+				ProviderDisplayName: "Anthropic",
+				ModelConfigurations: []models.ModelConfiguration{
+					{ID: intPtr(20), Name: "claude-sonnet-5", IsVisible: true},
+				},
+			},
+		},
+		DefaultText: &models.DefaultModel{ProviderID: 2, ModelName: "claude-sonnet-5"},
+	}
+}
+
+func TestFlattenModelOptions(t *testing.T) {
+	options := flattenModelOptions(testProviderResponse())
+
+	if len(options) != 2 {
+		t.Fatalf("expected 2 visible models, got %d", len(options))
+	}
+	if options[0].label != "GPT-4o" {
+		t.Errorf("label = %q, want %q", options[0].label, "GPT-4o")
+	}
+	if options[0].providerName != "OpenAI Prod" {
+		t.Errorf("providerName = %q, want %q", options[0].providerName, "OpenAI Prod")
+	}
+	if options[0].isDefault {
+		t.Error("gpt-4o should not be the default")
+	}
+	if options[1].label != "claude-sonnet-5" {
+		t.Errorf("label = %q, want %q", options[1].label, "claude-sonnet-5")
+	}
+	if !options[1].isDefault {
+		t.Error("claude-sonnet-5 should be the default")
+	}
+}
+
+func TestFlattenModelOptionsNil(t *testing.T) {
+	if got := flattenModelOptions(nil); got != nil {
+		t.Errorf("expected nil for nil response, got %v", got)
+	}
+}
+
+func TestModelsLoadedSetsStatusToDefault(t *testing.T) {
+	m := NewModel(config.DefaultConfig(), nil)
+	updated, _ := m.handleModelsLoaded(ModelsLoadedMsg{Response: testProviderResponse()})
+	m = updated.(Model)
+
+	if m.status.modelName != "claude-sonnet-5" {
+		t.Errorf("status model = %q, want %q", m.status.modelName, "claude-sonnet-5")
+	}
+	if m.viewport.pickerActive {
+		t.Error("startup load must not open the picker")
+	}
+}
+
+func TestModelsLoadedShowsPicker(t *testing.T) {
+	m := NewModel(config.DefaultConfig(), nil)
+	updated, _ := m.handleModelsLoaded(ModelsLoadedMsg{Response: testProviderResponse(), ShowPicker: true})
+	m = updated.(Model)
+
+	if !m.viewport.pickerActive {
+		t.Fatal("expected picker to be active")
+	}
+	if m.viewport.pickerType != pickerModel {
+		t.Errorf("pickerType = %d, want pickerModel", m.viewport.pickerType)
+	}
+	if len(m.viewport.pickerItems) != 2 {
+		t.Fatalf("expected 2 picker items, got %d", len(m.viewport.pickerItems))
+	}
+}
+
+func TestSelectModelSetsOverrideAndStatus(t *testing.T) {
+	m := NewModel(config.DefaultConfig(), nil)
+	updated, _ := m.handleModelsLoaded(ModelsLoadedMsg{Response: testProviderResponse()})
+	m = updated.(Model)
+
+	m, _ = cmdSelectModel(m, "0")
+
+	if m.modelOverride == nil {
+		t.Fatal("expected an override to be set")
+	}
+	if m.modelOverride.ModelConfigurationID == nil || *m.modelOverride.ModelConfigurationID != 10 {
+		t.Errorf("ModelConfigurationID = %v, want 10", m.modelOverride.ModelConfigurationID)
+	}
+	if m.modelOverride.ModelVersion == nil || *m.modelOverride.ModelVersion != "gpt-4o" {
+		t.Errorf("ModelVersion = %v, want gpt-4o", m.modelOverride.ModelVersion)
+	}
+	if m.status.modelName != "GPT-4o" {
+		t.Errorf("status model = %q, want %q", m.status.modelName, "GPT-4o")
+	}
+}
+
+func TestSelectModelInvalidIndex(t *testing.T) {
+	m := NewModel(config.DefaultConfig(), nil)
+	m, _ = cmdSelectModel(m, "5")
+	if m.modelOverride != nil {
+		t.Error("expected no override for an out-of-range index")
+	}
+}

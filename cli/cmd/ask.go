@@ -77,6 +77,7 @@ to a temp file. Set --max-output 0 to disable truncation.`,
 				agentID,
 				&parentID,
 				nil,
+				nil,
 			)
 
 			// Determine truncation threshold.
