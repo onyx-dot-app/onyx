@@ -672,7 +672,7 @@ export default function AppSidebar() {
                     <OpalButton
                       icon={SvgFolderPlus}
                       prominence="tertiary"
-                      size="sm"
+                      size="md"
                       tooltip="New Project"
                       onClick={() => createProjectModal.toggle(true)}
                     />
