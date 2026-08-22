@@ -207,6 +207,7 @@ function ExistingProviderCard({
                     aria-label={`Delete ${providerDisplayName(provider)}`}
                     onClick={(e) => {
                       e.stopPropagation();
+                      onBeforeOpen?.();
                       deleteModal.toggle(true);
                     }}
                   />
