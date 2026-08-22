@@ -53,6 +53,9 @@ interface ContentMdProps {
   /** Optional description text below the title. */
   description?: string | RichStr;
 
+  /** Font used for the description. */
+  descriptionFont?: TextFont;
+
   /**
    * Slot for a control/action (e.g. an input) rendered to the right of the
    * title and description on desktop, and stacked between them on narrow
@@ -150,6 +153,7 @@ function ContentMd({
   icon: Icon,
   title,
   description,
+  descriptionFont = "secondary-body",
   rightChildren,
   descriptionMaxLines,
   editable,
@@ -327,7 +331,7 @@ function ContentMd({
           }
         >
           <Text
-            font="secondary-body"
+            font={descriptionFont}
             color="text-03"
             as="p"
             maxLines={descriptionMaxLines}
