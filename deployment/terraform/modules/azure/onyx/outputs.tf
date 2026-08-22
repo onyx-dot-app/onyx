@@ -32,6 +32,11 @@ output "workload_identity_principal_id" {
   value       = module.aks.workload_identity_principal_id
 }
 
+output "cluster_identity_principal_id" {
+  description = "Principal ID of the cluster identity, for granting it roles on network resources this module does not own -- an ingress public IP, most often"
+  value       = module.aks.cluster_identity_principal_id
+}
+
 output "node_resource_group" {
   description = "Resource group AKS creates for the cluster's own infrastructure"
   value       = module.aks.node_resource_group

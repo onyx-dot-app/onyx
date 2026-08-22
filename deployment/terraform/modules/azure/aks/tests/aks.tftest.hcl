@@ -131,6 +131,18 @@ run "optional_pools_are_tainted_and_labelled" {
   }
 }
 
+run "the_cluster_has_an_identity_to_grant_roles_to" {
+  command = plan
+
+  # A public IP or subnet held outside the node resource group is only usable
+  # once this identity holds Network Contributor on it. Without an identity
+  # block there is no principal to grant, and the load balancer never attaches.
+  assert {
+    condition     = one(azurerm_kubernetes_cluster.this.identity).type == "SystemAssigned"
+    error_message = "The cluster needs its own identity, or a BYO ingress IP cannot be granted to it."
+  }
+}
+
 run "no_storage_account_means_no_identity" {
   command = plan
 
@@ -356,7 +368,7 @@ run "a_long_namespace_still_produces_a_valid_credential_name" {
   variables {
     storage_account_ids                = ["/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/onyx-rg/providers/Microsoft.Storage/storageAccounts/onyxfilestore"]
     workload_service_account_namespace = "onyx-production-workloads-with-a-deliberately-long-namespace-nm"
-    workload_service_account_name       = "onyx-workload-access-with-a-deliberately-long-service-account-n"
+    workload_service_account_name      = "onyx-workload-access-with-a-deliberately-long-service-account-n"
   }
 
   assert {
@@ -401,7 +413,7 @@ run "an_open_control_plane_can_be_asked_for_explicitly" {
   command = plan
 
   variables {
-    api_server_authorized_ip_ranges     = []
+    api_server_authorized_ip_ranges      = []
     allow_unrestricted_api_server_access = true
   }
 
@@ -446,7 +458,7 @@ run "rejects_a_private_cluster_with_authorized_ranges" {
   command = plan
 
   variables {
-    private_cluster_enabled        = true
+    private_cluster_enabled         = true
     api_server_authorized_ip_ranges = ["203.0.113.0/24"]
   }
 
@@ -483,7 +495,7 @@ run "rejects_a_pool_name_azure_would_reject" {
 
   variables {
     node_pools = {
-      main               = { vm_size = "Standard_D8ds_v5" }
+      main                = { vm_size = "Standard_D8ds_v5" }
       document-index-pool = { vm_size = "Standard_E8ds_v5" }
     }
   }

@@ -288,11 +288,11 @@ run "entra_only_needs_no_password" {
 
   variables {
     postgres_password                     = null
-    enable_entra_database_authentication   = true
-    entra_database_authentication_only     = true
-    tenant_id                              = "00000000-0000-0000-0000-000000000000"
-    database_administrator_object_id       = "11111111-1111-1111-1111-111111111111"
-    database_administrator_principal_name  = "onyx-db-admins"
+    enable_entra_database_authentication  = true
+    entra_database_authentication_only    = true
+    tenant_id                             = "00000000-0000-0000-0000-000000000000"
+    database_administrator_object_id      = "11111111-1111-1111-1111-111111111111"
+    database_administrator_principal_name = "onyx-db-admins"
   }
 
   assert {
@@ -318,7 +318,7 @@ run "an_empty_api_allowlist_stays_empty" {
   # silently turn "open" into "only the cluster itself", which locks the
   # operator out of their own API server.
   variables {
-    api_server_authorized_ip_ranges     = []
+    api_server_authorized_ip_ranges      = []
     allow_unrestricted_api_server_access = true
   }
 
