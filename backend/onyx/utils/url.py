@@ -403,6 +403,7 @@ def _make_ssrf_safe_request(
     allow_private_network: bool = False,
     block_loopback_and_link_local: bool = True,
     block_link_local_only: bool = False,
+    https_only: bool = False,
     **kwargs: Any,
 ) -> requests.Response:
     """
@@ -421,12 +422,18 @@ def _make_ssrf_safe_request(
     it to ``block_link_local_only`` so loopback services are reachable while
     cloud-metadata stays blocked.
     """
+    if https_only and urlparse(url).scheme != "https":
+        raise SSRFException(
+            f"Invalid URL scheme '{urlparse(url).scheme}'. Only https is allowed."
+        )
+
     if allow_private_network:
         validate_outbound_http_url(
             url,
             allow_private_network=True,
             block_loopback_and_link_local=block_loopback_and_link_local,
             block_link_local_only=block_link_local_only,
+            https_only=https_only,
         )
         parsed = urlparse(url)
         hostname = parsed.hostname or ""
@@ -458,6 +465,7 @@ def ssrf_safe_get(
     allow_private_network: bool = False,
     block_loopback_and_link_local: bool = True,
     block_link_local_only: bool = False,
+    https_only: bool = False,
     **kwargs: Any,
 ) -> requests.Response:
     """
@@ -493,6 +501,7 @@ def ssrf_safe_get(
         allow_private_network=allow_private_network,
         block_loopback_and_link_local=block_loopback_and_link_local,
         block_link_local_only=block_link_local_only,
+        https_only=https_only,
         **kwargs,
     )
 
@@ -532,6 +541,7 @@ def ssrf_safe_get(
             allow_private_network=allow_private_network,
             block_loopback_and_link_local=block_loopback_and_link_local,
             block_link_local_only=block_link_local_only,
+            https_only=https_only,
             **kwargs,
         )
 

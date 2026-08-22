@@ -55,11 +55,14 @@ def _fetch_public_key_payload(
         else:
             # Mirrors the PUT-time check: the configured SSRF level decides
             # whether private endpoints are reachable.
+            # https_only holds across redirect hops, so no hop can downgrade
+            # the key fetch to plaintext.
             response = ssrf_safe_get(
                 public_key_url,
                 allow_private_network=allow_private_network,
                 block_loopback_and_link_local=block_loopback_and_link_local,
                 block_link_local_only=block_link_local_only,
+                https_only=True,
             )
         response.raise_for_status()
     except (requests.RequestException, SSRFException, ValueError) as exc:

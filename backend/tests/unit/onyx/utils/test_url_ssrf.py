@@ -607,3 +607,25 @@ class TestValidateOutboundHttpUrl:
                 block_loopback_and_link_local=True,
             )
             assert validated == "https://internal-only.company.com/"
+
+
+class TestSsrfSafeGetHttpsOnly:
+    def test_redirect_cannot_downgrade_to_http(self) -> None:
+        """A https_only fetch must refuse a redirect hop to plain http."""
+        redirect = MagicMock()
+        redirect.is_redirect = True
+        redirect.headers = {"Location": "http://cdn.example.com/keys"}
+
+        with patch("onyx.utils.url.socket.getaddrinfo") as mock_getaddrinfo:
+            mock_getaddrinfo.return_value = [(2, 1, 6, "", ("93.184.216.34", 443))]
+
+            with patch("onyx.utils.url.requests.Session") as mock_session_cls:
+                session = mock_session_cls.return_value.__enter__.return_value
+                session.get.return_value = redirect
+
+                with pytest.raises(SSRFException, match="Only https"):
+                    ssrf_safe_get("https://idp.example.com/keys", https_only=True)
+
+    def test_rejects_plain_http_upfront(self) -> None:
+        with pytest.raises(SSRFException, match="Only https"):
+            ssrf_safe_get("http://idp.example.com/keys", https_only=True)
