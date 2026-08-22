@@ -19,7 +19,7 @@ infrastructure for Onyx:
 - `postgres`: a PostgreSQL Flexible Server on a delegated subnet, its private
   DNS zone, and five metric alerts
 - `redis`: an Azure Managed Redis behind a private endpoint, with four metric
-  alerts
+  alerts. Off by default, because Onyx cannot use it -- see below
 - `storage`: a storage account and container for the Onyx file store, with
   versioning, lifecycle rules and network rules
 - `waf`: a regional Web Application Firewall policy for an Application Gateway
@@ -194,6 +194,16 @@ and the database.
 
 An Azure Managed Redis reachable only through a private endpoint.
 
+**Onyx cannot run on it, so `enable_redis` defaults to `false`.** Run Redis in
+the cluster instead. Managed Redis is always clustered, and Celery's pidbox
+opens a `MULTI` spanning keys in several hash slots, which clustered Redis
+rejects with `CROSSSLOT`. `EnterpriseCluster` does not avoid this: it presents
+one endpoint but still shards underneath, and it was tried against a live
+cache, not assumed. `NoCluster` returns `NotImplemented`. Managed Redis also
+offers only database 0, where Onyx wants 0, 14 and 15.
+
+The module stays for anyone who wants a cache for something else.
+
 Azure stopped accepting new **Azure Cache for Redis** instances -- a create now
 returns "Azure Cache for Redis is retiring, create Azure Managed Redis instance
 instead" -- so this module provisions the managed service. It is a different
@@ -204,8 +214,9 @@ resource rather than a renamed one, and the differences show:
 - It speaks TLS on **10000**, where the retiring service used 6380. There is no
   plaintext port to disable and no minimum TLS version to set.
 - Eviction policies are spelled `VolatileLRU`, not `volatile-lru`.
-- Clustering is a choice. `OSSCluster` shards and needs a cluster-aware client,
-  which redis-py is not, so the module defaults to `EnterpriseCluster`.
+- Clustering is not really a choice. `OSSCluster` shards and needs a
+  cluster-aware client, which redis-py is not, so the module asks for
+  `EnterpriseCluster`.
 - Alerts report under `Microsoft.Cache/redisEnterprise`, and the single-thread
   server load metric is replaced by processor time.
 

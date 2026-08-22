@@ -407,6 +407,12 @@ variable "create_workload_service_account" {
 
 # --- WAF ---------------------------------------------------------------------
 
+variable "enable_redis" {
+  type        = bool
+  description = "Create an Azure Managed Redis cache. Off by default: Onyx cannot use one. Managed Redis is always clustered, and Celery's pidbox opens a MULTI spanning keys in several hash slots, which clustered Redis rejects with CROSSSLOT. The EnterpriseCluster policy presents a single endpoint but still shards, NoCluster returns NotImplemented, and only database 0 exists where Onyx wants 0, 14 and 15. Run Redis in the cluster instead."
+  default     = false
+}
+
 variable "enable_waf" {
   type        = bool
   description = "Create a WAF policy to attach to an Application Gateway or Front Door route"

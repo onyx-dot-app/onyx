@@ -219,6 +219,7 @@ module "postgres" {
 
 module "redis" {
   source = "../redis"
+  count  = var.enable_redis ? 1 : 0
 
   name                = local.redis_name
   resource_group_name = local.resource_group_name

@@ -82,19 +82,19 @@ output "postgres_username" {
 
 output "redis_host" {
   description = "Hostname of the cache. Behind its private endpoint this resolves to a private address."
-  value       = module.redis.hostname
+  value       = one(module.redis[*].hostname)
 }
 
 output "redis_ssl_port" {
   description = "TLS port of the cache. The plaintext port is disabled."
-  value       = module.redis.ssl_port
+  value       = one(module.redis[*].ssl_port)
 }
 
 # Azure generates this rather than accepting one, so it comes out of the module
 # rather than going in.
 output "redis_primary_access_key" {
   description = "Generated primary access key for the cache"
-  value       = module.redis.primary_access_key
+  value       = one(module.redis[*].primary_access_key)
   sensitive   = true
 }
 

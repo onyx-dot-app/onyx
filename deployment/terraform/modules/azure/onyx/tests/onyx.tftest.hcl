@@ -387,3 +387,33 @@ run "rejects_a_size_that_is_not_a_tier" {
 
   expect_failures = [var.size]
 }
+
+run "no_managed_redis_by_default" {
+  command = plan
+
+  # Managed Redis cannot serve Celery: it is always clustered, and the pidbox
+  # opens a MULTI across hash slots. Provisioning one by default would bill for
+  # a cache that Onyx cannot talk to.
+  assert {
+    condition     = length(module.redis) == 0
+    error_message = "Managed Redis should be off unless asked for, because Onyx cannot use it."
+  }
+
+  assert {
+    condition     = output.redis_host == null
+    error_message = "With no cache there is no hostname to publish."
+  }
+}
+
+run "managed_redis_can_still_be_asked_for" {
+  command = plan
+
+  variables {
+    enable_redis = true
+  }
+
+  assert {
+    condition     = length(module.redis) == 1
+    error_message = "enable_redis should still create the cache for anyone who wants one."
+  }
+}
