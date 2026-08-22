@@ -42,14 +42,20 @@ export interface ModelSelectorProps {
   reasoningManager?: ReasoningManager;
 
   disabled?: boolean;
+
   /**
    * When true, a "Global Default Model" entry is prepended to the list.
    * Selecting it calls onChange with GLOBAL_DEFAULT_LLM_OPTION
    * (modelConfigurationId === null), which callers should treat as "clear."
    */
   includeGlobalDefault?: boolean;
+
   /** Which side of the trigger the popover prefers to open on. */
   side?: "top" | "bottom" | "left" | "right";
+
+  /** Optional controlled open state for the popover. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 export default function ModelSelector({
@@ -64,6 +70,8 @@ export default function ModelSelector({
   disabled = false,
   includeGlobalDefault = false,
   side = "top",
+  open: controlledOpen,
+  onOpenChange,
 }: ModelSelectorProps) {
   // Unscoped by default. An agent narrows the model list, but only a chat has
   // an agent. The admin and settings pages that embed this picker have none,
@@ -76,16 +84,34 @@ export default function ModelSelector({
     defaultText,
     isLoading: allProvidersLoading,
   } = useLLMProviders();
+
   const llmProviders = providerOptions ?? allProviderOptions ?? [];
   const isLoading = providerOptions === undefined && allProvidersLoading;
-  const [open, setOpen] = useState(false);
+
+  const [internalOpen, setInternalOpen] = useState(false);
+
+  const isControlled = controlledOpen !== undefined;
+  const open = isControlled ? controlledOpen : internalOpen;
+
+  const handleOpenChange = useCallback(
+    (nextOpen: boolean) => {
+      if (!isControlled) {
+        setInternalOpen(nextOpen);
+      }
+      onOpenChange?.(nextOpen);
+    },
+    [isControlled, onOpenChange]
+  );
+
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // Resolve the currently selected option from the ID
   const currentOption = useMemo(() => {
     if (value == null || !llmProviders) return null;
+
     for (const provider of llmProviders) {
       const mc = provider.model_configurations.find((m) => m.id === value);
+
       if (mc) {
         return {
           provider: provider.provider,
@@ -94,17 +120,24 @@ export default function ModelSelector({
         };
       }
     }
+
     return null;
   }, [value, llmProviders]);
 
   // When no model is explicitly selected, fall back to showing the global default.
   const defaultModelOption = useMemo(() => {
     if (!defaultText || !llmProviders) return null;
-    const provider = llmProviders.find((p) => p.id === defaultText.provider_id);
+
+    const provider = llmProviders.find(
+      (p) => p.id === defaultText.provider_id
+    );
+
     const mc = provider?.model_configurations.find(
       (m) => m.name === defaultText.model_name
     );
+
     if (!mc || !provider) return null;
+
     return {
       provider: provider.provider,
       modelName: mc.name,
@@ -118,6 +151,7 @@ export default function ModelSelector({
   const isSelected = useCallback(
     (option: LLMOption) => {
       if (option === GLOBAL_DEFAULT_LLM_OPTION) return value === null;
+
       return option.modelConfigurationId != null
         ? option.modelConfigurationId === value
         : option.provider === currentOption?.provider &&
@@ -129,9 +163,9 @@ export default function ModelSelector({
   const handleSelect = useCallback(
     (option: LLMOption) => {
       onChange(option);
-      setOpen(false);
+      handleOpenChange(false);
     },
-    [onChange]
+    [onChange, handleOpenChange]
   );
 
   const modelDetail = useModelDetailManagers(
@@ -144,7 +178,7 @@ export default function ModelSelector({
     : getModelIcon("", "");
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <div data-testid="llm-popover-trigger">
         <Popover.Trigger asChild disabled={disabled}>
           {renderTrigger ? (
