@@ -29,11 +29,10 @@ import RefreshText from "@/refresh-components/texts/Text";
 import { renderSidebarLogo } from "@/lib/sidebar/utils";
 import { useShowLogoWhenFolded } from "@/lib/sidebar/hooks";
 import AccountPopover from "@/sections/sidebar/AccountPopover";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
 import LineItem from "@/refresh-components/buttons/LineItem";
+import { Hoverable } from "@opal/core";
 import { noProp } from "@/lib/utils";
-import { cn } from "@opal/utils";
 import {
   SvgEditBig,
   SvgArrowLeft,
@@ -166,16 +165,18 @@ function BuildSessionButton({
     <>
       <Popover.Trigger asChild onClick={noProp()}>
         <div>
-          {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
-          <IconButton
-            icon={SvgMoreHorizontal}
-            className={cn(
-              !popoverOpen && "hidden",
-              !renaming && "group-hover/SidebarTab:flex"
-            )}
-            transient={popoverOpen}
-            internal
-          />
+          {/* While renaming the row is an input, so the menu stays away unless
+              its own popover is already open. */}
+          {(!renaming || popoverOpen) && (
+            <Hoverable.Item group="CraftSessionTab">
+              <Button
+                icon={SvgMoreHorizontal}
+                prominence="internal"
+                size="sm"
+                interaction={popoverOpen ? "hover" : "rest"}
+              />
+            </Hoverable.Item>
+          )}
         </div>
       </Popover.Trigger>
       <Popover.Content side="right" align="start">
@@ -211,37 +212,42 @@ function BuildSessionButton({
         }}
       >
         <Popover.Anchor>
-          <SidebarTab
-            /* While renaming, drop the click target so the input stays usable. */
-            onClick={renaming ? undefined : onLoad}
-            selected={isActive}
-            rightChildren={rightMenu}
+          <Hoverable.Root
+            group="CraftSessionTab"
+            interaction={popoverOpen ? "hover" : "rest"}
           >
-            {renaming ? (
-              <ButtonRenaming
-                initialName={historyItem.title}
-                onRename={onRename}
-                onClose={() => setRenaming(false)}
-              />
-            ) : shouldAnimate ? (
-              // Opal Text takes string children only; this wraps <TypewriterText>.
-              <RefreshText
-                as="p"
-                data-state={isActive ? "active" : "inactive"}
-                className="line-clamp-1 break-all text-left"
-                mainUiBody
-              >
-                <TypewriterText
-                  text={historyItem.title}
-                  charSpeed={25}
-                  animateOnMount={true}
-                  onAnimationComplete={() => setShouldAnimate(false)}
+            <SidebarTab
+              /* While renaming, drop the click target so the input stays usable. */
+              onClick={renaming ? undefined : onLoad}
+              selected={isActive}
+              rightChildren={rightMenu}
+            >
+              {renaming ? (
+                <ButtonRenaming
+                  initialName={historyItem.title}
+                  onRename={onRename}
+                  onClose={() => setRenaming(false)}
                 />
-              </RefreshText>
-            ) : (
-              historyItem.title
-            )}
-          </SidebarTab>
+              ) : shouldAnimate ? (
+                // Opal Text takes string children only; this wraps <TypewriterText>.
+                <RefreshText
+                  as="p"
+                  data-state={isActive ? "active" : "inactive"}
+                  className="line-clamp-1 break-all text-left"
+                  mainUiBody
+                >
+                  <TypewriterText
+                    text={historyItem.title}
+                    charSpeed={25}
+                    animateOnMount={true}
+                    onAnimationComplete={() => setShouldAnimate(false)}
+                  />
+                </RefreshText>
+              ) : (
+                historyItem.title
+              )}
+            </SidebarTab>
+          </Hoverable.Root>
         </Popover.Anchor>
       </Popover>
       {isDeleteModalOpen && (

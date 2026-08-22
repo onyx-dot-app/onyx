@@ -2,7 +2,7 @@
 
 import React, { useRef } from "react";
 import Text from "@/refresh-components/texts/Text";
-import { InputTypeIn } from "@opal/components";
+import { Button, InputTypeIn } from "@opal/components";
 import {
   OnboardingState,
   OnboardingActions,
@@ -10,7 +10,6 @@ import {
 } from "@/interfaces/onboarding";
 import InputAvatar from "@/refresh-components/inputs/InputAvatar";
 import { cn, clickOnKeyDown } from "@opal/utils";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgCheckCircle, SvgEdit, SvgUser } from "@opal/icons";
 import { InputHorizontal } from "@opal/layouts";
 import { Hoverable } from "@opal/core";
@@ -101,9 +100,13 @@ const NameStep = React.memo(
             </Text>
           </div>
           <div className="p-1 flex items-center gap-1">
-            {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
             <Hoverable.Item group="nameStep" variant="appear-on-hover">
-              <IconButton internal icon={SvgEdit} tooltip="Edit" />
+              <Button
+                prominence="internal"
+                size="sm"
+                icon={SvgEdit}
+                tooltip="Edit"
+              />
             </Hoverable.Item>
             <SvgCheckCircle
               className={cn(
