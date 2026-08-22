@@ -611,15 +611,13 @@ func (m Model) handleModelsLoaded(msg ModelsLoadedMsg) (tea.Model, tea.Cmd) {
 	var items []pickerItem
 	for i, opt := range m.llmModels {
 		label := opt.label
-		if opt.providerLabel != "" {
-			label += " - " + opt.providerLabel
-		}
 		if m.isCurrentModel(opt) {
 			label += " *"
 		}
 		items = append(items, pickerItem{
-			id:    strconv.Itoa(i),
-			label: label,
+			id:     strconv.Itoa(i),
+			label:  label,
+			detail: opt.providerLabel,
 		})
 	}
 	m.viewport.showPicker(pickerModel, items)

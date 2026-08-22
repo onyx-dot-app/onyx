@@ -38,10 +38,12 @@ const (
 	pickerModel
 )
 
-// pickerItem is a selectable item in the picker.
+// pickerItem is a selectable item in the picker. detail, when set, is
+// right-aligned on the row (like a tabwriter column).
 type pickerItem struct {
-	id    string
-	label string
+	id     string
+	label  string
+	detail string
 }
 
 // streamRenderInterval is the minimum time between markdown re-renders during streaming.
@@ -324,11 +326,7 @@ func (v *viewport) renderPicker(width, height int) string {
 	var itemLines []string
 	for i := startIdx; i < endIdx; i++ {
 		item := v.pickerItems[i]
-		label := item.label
-		labelRunes := []rune(label)
-		if len(labelRunes) > innerWidth-4 {
-			label = string(labelRunes[:innerWidth-7]) + "..."
-		}
+		label := formatPickerLabel(item, innerWidth-4)
 		if i == v.pickerIndex {
 			line := lipgloss.NewStyle().Foreground(accentColor).Bold(true).Render("> " + label)
 			itemLines = append(itemLines, line)
@@ -374,6 +372,31 @@ func (v *viewport) renderPicker(width, height int) string {
 
 	// Center the panel in the viewport
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, panel)
+}
+
+// formatPickerLabel fits an item into avail columns. When the item has a
+// detail, the detail is right-aligned with at least a two-space gap and the
+// label is truncated to make room.
+func formatPickerLabel(item pickerItem, avail int) string {
+	label := []rune(item.label)
+	if item.detail == "" {
+		if len(label) > avail {
+			return string(label[:avail-3]) + "..."
+		}
+		return string(label)
+	}
+
+	detail := []rune(item.detail)
+	maxLabel := avail - len(detail) - 2
+	if maxLabel < 8 {
+		// Too narrow for columns — fall back to an inline suffix.
+		return formatPickerLabel(pickerItem{label: item.label + "  " + item.detail}, avail)
+	}
+	if len(label) > maxLabel {
+		label = []rune(string(label[:maxLabel-3]) + "...")
+	}
+	gap := avail - len(label) - len(detail)
+	return string(label) + strings.Repeat(" ", gap) + string(detail)
 }
 
 // streamingContent returns the display content for the in-progress stream.

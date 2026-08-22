@@ -146,8 +146,8 @@ func TestSelectModelSetsOverrideAndStatus(t *testing.T) {
 func TestPickerBorderLinesShareOneWidth(t *testing.T) {
 	v := newViewport(120, false)
 	v.showPicker(pickerModel, []pickerItem{
-		{id: "0", label: "Gemma 4 E2B - Ollama *"},
-		{id: "1", label: "Qwen 3 8B - Ollama"},
+		{id: "0", label: "Gemma 4 E2B *", detail: "Ollama"},
+		{id: "1", label: "Qwen 3 8B", detail: "Ollama"},
 	})
 
 	var widths []int
@@ -165,6 +165,33 @@ func TestPickerBorderLinesShareOneWidth(t *testing.T) {
 		if w != widths[0] {
 			t.Errorf("panel line %d width = %d, want %d (title border must match the panel)", i, w, widths[0])
 		}
+	}
+}
+
+func TestFormatPickerLabelAlignsDetail(t *testing.T) {
+	rows := []pickerItem{
+		{label: "Gemma 4 E2B *", detail: "Ollama"},
+		{label: "Qwen 3 8B", detail: "Ollama"},
+		{label: "GPT-4o", detail: "OpenAI"},
+	}
+	const avail = 40
+	for _, row := range rows {
+		got := formatPickerLabel(row, avail)
+		if len([]rune(got)) != avail {
+			t.Errorf("%q: width = %d, want %d", got, len([]rune(got)), avail)
+		}
+		if !strings.HasSuffix(got, row.detail) {
+			t.Errorf("%q: detail %q must be flush right", got, row.detail)
+		}
+	}
+
+	long := pickerItem{label: strings.Repeat("x", 60), detail: "Ollama"}
+	got := formatPickerLabel(long, avail)
+	if len([]rune(got)) != avail {
+		t.Errorf("long label: width = %d, want %d", len([]rune(got)), avail)
+	}
+	if !strings.Contains(got, "...") || !strings.HasSuffix(got, "Ollama") {
+		t.Errorf("long label must truncate and keep detail flush right, got %q", got)
 	}
 }
 
