@@ -311,6 +311,36 @@ run "rejects_a_deployment_with_no_database_password" {
   expect_failures = [var.postgres_password]
 }
 
+run "an_empty_api_allowlist_stays_empty" {
+  command = plan
+
+  # Empty means no restriction. Appending the egress address to it would
+  # silently turn "open" into "only the cluster itself", which locks the
+  # operator out of their own API server.
+  variables {
+    api_server_authorized_ip_ranges     = []
+    allow_unrestricted_api_server_access = true
+  }
+
+  assert {
+    condition     = length(local.api_server_authorized_ip_ranges) == 0
+    error_message = "An empty allowlist must stay empty rather than becoming a one-entry allowlist."
+  }
+}
+
+run "the_cluster_trusts_its_own_egress_by_default" {
+  command = plan
+
+  assert {
+    condition     = var.trust_nat_gateway_ip_on_api_server
+    error_message = "A cluster whose API allowlist excludes its own egress cannot bootstrap its nodes, so this defaults on."
+  }
+
+  # That the caller's own range survives the concat is not checkable here: the
+  # egress address is unknown until apply, which makes the whole list unknown.
+  # The empty-stays-empty case above is the one a mocked plan can see.
+}
+
 run "rejects_an_open_control_plane" {
   command = plan
 

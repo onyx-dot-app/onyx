@@ -337,6 +337,15 @@ variable "api_server_authorized_ip_ranges" {
   default     = []
 }
 
+# On by default because the alternative is a cluster that cannot bootstrap its
+# own nodes. Turn it off only when something else already covers the egress
+# address, such as a firewall rule or a range that contains it.
+variable "trust_nat_gateway_ip_on_api_server" {
+  type        = bool
+  description = "Add the NAT gateway's egress address to api_server_authorized_ip_ranges. Only applies when this module creates the network and the list is non-empty."
+  default     = true
+}
+
 variable "allow_unrestricted_api_server_access" {
   type        = bool
   description = "Accept a public API server reachable from any address. Only for throwaway deployments; set api_server_authorized_ip_ranges or private_cluster_enabled instead."

@@ -33,8 +33,23 @@ locals {
     var.create_virtual_network && var.enable_nat_gateway ? "userAssignedNATGateway" : "loadBalancer",
   )
 
-  nat_gateway_ips = var.create_virtual_network ? module.vnet[0].nat_gateway_public_ips : []
-  trusted_nat_ips = var.waf_trust_nat_gateway_ip ? local.nat_gateway_ips : []
+  nat_gateway_ips   = var.create_virtual_network ? module.vnet[0].nat_gateway_public_ips : []
+  trusted_nat_ips   = var.waf_trust_nat_gateway_ip ? local.nat_gateway_ips : []
+  nat_gateway_cidrs = [for ip in local.nat_gateway_ips : "${ip}/32"]
+
+  # A cluster whose API server allowlist excludes the cluster's own egress is
+  # broken, not locked down. With outbound_type = userAssignedNATGateway, AKS
+  # does not add the egress address for you the way it does when it manages
+  # outbound, so anything in the cluster that reaches the API server through the
+  # public endpoint is refused: node bootstrap, and every in-cluster client that
+  # uses its service account.
+  #
+  # Empty stays empty. An empty list means "no restriction", and adding an
+  # address to it would silently turn that into a restriction.
+  api_server_authorized_ip_ranges = length(var.api_server_authorized_ip_ranges) == 0 ? [] : distinct(concat(
+    var.api_server_authorized_ip_ranges,
+    var.trust_nat_gateway_ip_on_api_server ? local.nat_gateway_cidrs : [],
+  ))
 
   waf_allowed_ip_cidrs           = distinct(concat(var.waf_allowed_ip_cidrs, local.trusted_nat_ips))
   waf_rate_limit_exempt_ip_cidrs = distinct(concat(var.waf_rate_limit_exempt_ip_cidrs, local.trusted_nat_ips))
