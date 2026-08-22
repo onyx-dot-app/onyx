@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import useSWR, { mutate } from "swr";
 import { useAuthTypeMetadata } from "@/lib/auth/hooks";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -20,7 +20,7 @@ import {
   SettingsLayouts,
   toast,
 } from "@opal/layouts";
-import { Card, Switch } from "@opal/components";
+import { Card, InputTypeIn, Switch, Text } from "@opal/components";
 import { markdown } from "@opal/utils";
 import type { RichStr } from "@opal/types";
 import type {
@@ -66,6 +66,80 @@ function ToggleRow({
   );
 }
 
+interface JwtTextRowProps {
+  title: string | RichStr;
+  description: string | RichStr;
+  value: string;
+  placeholder: string;
+  pinned: boolean;
+  onCommit: (value: string) => Promise<void>;
+}
+
+function JwtTextRow({
+  title,
+  description,
+  value,
+  placeholder,
+  pinned,
+  onCommit,
+}: JwtTextRowProps) {
+  const [text, setText] = useState(value);
+  // The revision bump resyncs after a commit settles even when `value` did not
+  // move, e.g. a failed clear where the optimistic patch drops nulls. A focused
+  // field is being edited, so the resync waits for the next blur.
+  const [revision, setRevision] = useState(0);
+  const [focused, setFocused] = useState(false);
+  // Commit only text the user typed this focus. A frozen unedited field must
+  // not overwrite a value that moved underneath it (another tab, env change).
+  const dirty = useRef(false);
+  useEffect(() => {
+    if (!focused) setText(value);
+  }, [value, revision, focused]);
+
+  if (pinned) {
+    // An input promises editability. A pinned value is display-only.
+    return (
+      <InputVertical
+        title={title}
+        description="Pinned by an environment variable."
+        withLabel
+      >
+        <Text font="main-ui-body" color="text-03">
+          {value}
+        </Text>
+      </InputVertical>
+    );
+  }
+
+  return (
+    <InputVertical title={title} description={description} withLabel>
+      <InputTypeIn
+        value={text}
+        placeholder={placeholder}
+        onChange={(e) => {
+          dirty.current = true;
+          setText(e.target.value);
+        }}
+        onFocus={() => {
+          dirty.current = false;
+          setFocused(true);
+        }}
+        onBlur={async () => {
+          setFocused(false);
+          const next = text.trim();
+          if (!dirty.current || next === value) return;
+          dirty.current = false;
+          await onCommit(next);
+          setRevision((r) => r + 1);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") e.currentTarget.blur();
+        }}
+      />
+    </InputVertical>
+  );
+}
+
 export default function SecurityHardeningPage() {
   const isMultiTenant = NEXT_PUBLIC_CLOUD_ENABLED;
   const { authTypeMetadata, isLoading: authTypeLoading } =
@@ -83,8 +157,12 @@ export default function SecurityHardeningPage() {
       SWR_KEYS.adminSecuritySettings,
       errorHandlingFetcher
     );
+  const { data: pinnedFields } = useSWR<string[]>(
+    SWR_KEYS.adminSecurityPinnedFields,
+    errorHandlingFetcher
+  );
 
-  // Local state mirrors the loaded settings; we save on every change.
+  // Local state mirrors the loaded settings. We save on every committed change.
   const [draft, setDraft] = useState<SecuritySettings | null>(null);
   const [domainInput, setDomainInput] = useState("");
   // The "Restrict Email Domains" toggle has no backing field — restriction is
@@ -92,22 +170,20 @@ export default function SecurityHardeningPage() {
   // and reveal the (still empty) input before typing the first domain. It stays
   // independent of `draft` so unrelated saves don't collapse the open input.
   const [forceShowDomains, setForceShowDomains] = useState(false);
+  // Saves are serialized through a promise chain: overlapping PUTs cannot
+  // exist. Only the last queued save adopts the server response, so a
+  // mid-queue response never erases a later edit's optimistic state (which
+  // full-value fields like the domain list read back at click time).
+  const saveQueue = useRef<Promise<void>>(Promise.resolve());
+  const savesQueued = useRef(0);
 
   useEffect(() => {
-    if (settings) setDraft(settings);
+    // Queued saves own the draft, their optimistic state must survive a cache
+    // update landing mid-queue.
+    if (settings && savesQueued.current === 0) setDraft(settings);
   }, [settings]);
 
-  const saveSettings = useCallback(async (updates: SecuritySettingsUpdate) => {
-    // Optimistically reflect concrete changes for snappy toggles. A `null`
-    // clears an override; its resolved env default only arrives with the PUT
-    // response, so we leave the current value in place rather than guess.
-    setDraft((prev) => {
-      if (!prev) return prev;
-      const concrete = Object.fromEntries(
-        Object.entries(updates).filter(([, value]) => value != null)
-      ) as Partial<SecuritySettings>;
-      return { ...prev, ...concrete };
-    });
+  const doSave = useCallback(async (updates: SecuritySettingsUpdate) => {
     try {
       const response = await fetch(SWR_KEYS.adminSecuritySettings, {
         method: "PUT",
@@ -125,20 +201,26 @@ export default function SecurityHardeningPage() {
       // PUT returns the new effective settings — adopt them as the source of
       // truth so the UI matches what was actually persisted/merged.
       const effective: SecuritySettings = await response.json();
-      setDraft(effective);
-      await mutate(SWR_KEYS.adminSecuritySettings, effective, {
-        revalidate: false,
-      });
+      if (savesQueued.current === 1) {
+        setDraft(effective);
+        await mutate(SWR_KEYS.adminSecuritySettings, effective, {
+          revalidate: false,
+        });
+      }
       toast.success("Security settings updated");
     } catch (error) {
       // Re-sync from the server (the source of truth) rather than a possibly
       // stale local snapshot — a late failure must not clobber other edits
       // that may have succeeded while this request was in flight.
       try {
-        const fresh = await mutate<SecuritySettings>(
-          SWR_KEYS.adminSecuritySettings
-        );
-        if (fresh) setDraft(fresh);
+        if (savesQueued.current === 1) {
+          const fresh = await mutate<SecuritySettings>(
+            SWR_KEYS.adminSecuritySettings
+          );
+          // Re-checked after the await: an edit queued during the fetch owns
+          // the draft now.
+          if (fresh && savesQueued.current === 1) setDraft(fresh);
+        }
       } catch {
         // If revalidation also fails (e.g. network down), the optimistic
         // update stays until the next successful SWR refresh (e.g. focus).
@@ -150,6 +232,31 @@ export default function SecurityHardeningPage() {
       toast.error(message);
     }
   }, []);
+
+  const saveSettings = useCallback(
+    (updates: SecuritySettingsUpdate) => {
+      // Applied at enqueue so a full-value edit (the domain list) reads every
+      // queued change off `draft`. A null keeps the current value, its env
+      // default only arrives with the PUT response.
+      setDraft((prev) => {
+        if (!prev) return prev;
+        const concrete = Object.fromEntries(
+          Object.entries(updates).filter(([, value]) => value != null)
+        ) as Partial<SecuritySettings>;
+        return { ...prev, ...concrete };
+      });
+      savesQueued.current += 1;
+      const run = saveQueue.current
+        .then(() => doSave(updates))
+        .finally(() => {
+          savesQueued.current -= 1;
+        });
+      // doSave never rejects, the catch keeps the chain alive regardless.
+      saveQueue.current = run.catch(() => undefined);
+      return run;
+    },
+    [doSave]
+  );
 
   if (settingsLoading || !draft) {
     return (
@@ -348,6 +455,54 @@ export default function SecurityHardeningPage() {
                     void saveSettings({
                       password_require_special_char: checked,
                     })
+                  }
+                />
+              </Section>
+            </Card>
+          )}
+
+          {/* External JWT auth (single-tenant only). Absent while the
+              pinned state is unknown, editability must never fail open. */}
+          {!isMultiTenant && pinnedFields && (
+            <Card border="solid" rounding="lg">
+              <Section>
+                <Content
+                  title="External JWT Authentication"
+                  description="Accept RS256 bearer tokens signed by your identity provider. Values set by environment variables are pinned and cannot be edited here."
+                  sizePreset="main-ui"
+                  variant="section"
+                />
+
+                <JwtTextRow
+                  title="Public Key URL"
+                  description="JWKS or PEM endpoint used to verify token signatures. Leave empty to disable JWT authentication."
+                  value={draft.jwt_public_key_url ?? ""}
+                  placeholder="https://idp.example.com/.well-known/jwks.json"
+                  pinned={pinnedFields.includes("jwt_public_key_url")}
+                  onCommit={(value) =>
+                    saveSettings({ jwt_public_key_url: value || null })
+                  }
+                />
+
+                <JwtTextRow
+                  title="Expected Audience"
+                  description="Reject tokens whose aud claim does not match. Empty disables the check."
+                  value={draft.jwt_expected_audience ?? ""}
+                  placeholder="onyx"
+                  pinned={pinnedFields.includes("jwt_expected_audience")}
+                  onCommit={(value) =>
+                    saveSettings({ jwt_expected_audience: value || null })
+                  }
+                />
+
+                <JwtTextRow
+                  title="Expected Issuer"
+                  description="Reject tokens whose iss claim does not match. Empty disables the check."
+                  value={draft.jwt_expected_issuer ?? ""}
+                  placeholder="https://idp.example.com"
+                  pinned={pinnedFields.includes("jwt_expected_issuer")}
+                  onCommit={(value) =>
+                    saveSettings({ jwt_expected_issuer: value || null })
                   }
                 />
               </Section>

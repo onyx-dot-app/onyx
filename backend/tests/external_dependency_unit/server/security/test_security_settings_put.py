@@ -26,7 +26,10 @@ from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.server.security import api as security_api
 from onyx.server.security import store as security_store
-from onyx.server.security.api import put_security_settings_endpoint
+from onyx.server.security.api import (
+    get_pinned_fields_endpoint,
+    put_security_settings_endpoint,
+)
 from onyx.server.security.models import SecuritySettingsOverrides
 from onyx.server.security.store import (
     _build_env_defaults,
@@ -459,3 +462,12 @@ def test_put_rejects_jwt_key_url_failing_ssrf_policy(
     with pytest.raises(OnyxError) as exc_info:
         _put({"jwt_public_key_url": "https://127.0.0.1/keys"})
     assert exc_info.value.error_code is OnyxErrorCode.INVALID_INPUT
+
+
+def test_pinned_fields_endpoint_reflects_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(security_store._cfg, "JWT_EXPECTED_AUDIENCE", "env-aud")
+    monkeypatch.setattr(security_store._cfg, "JWT_EXPECTED_ISSUER", None)
+    monkeypatch.setattr(security_store._cfg, "JWT_PUBLIC_KEY_URL", None)
+    assert get_pinned_fields_endpoint(_PLACEHOLDER_USER) == ["jwt_expected_audience"]
