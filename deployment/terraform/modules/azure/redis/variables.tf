@@ -15,114 +15,70 @@ variable "resource_group_name" {
 
 variable "location" {
   type        = string
-  description = "Azure region, for example \"eastus\""
+  description = "Azure region, for example \"eastus2\""
 }
 
-# Azure sizes a cache by tier, family and capacity rather than by an instance
-# type. Standard C3 is 6 GB with a replica, which is the size the AWS module
-# defaults to.
+# Azure Managed Redis sizes by a single SKU name rather than the tier, family
+# and capacity that Azure Cache for Redis used. The prefix picks the shape:
+# Balanced is the general purpose one, MemoryOptimized trades vCPU for RAM,
+# ComputeOptimized does the reverse, FlashOptimized puts colder keys on NVMe.
 variable "sku_name" {
   type        = string
-  description = "Cache tier. Basic has no replica and no SLA. Standard adds a replica. Premium adds zone redundancy, persistence and clustering."
-  default     = "Standard"
+  description = "Managed Redis SKU, for example \"Balanced_B5\" for 5 GB. The number is roughly the memory in GB."
+  default     = "Balanced_B5"
 
+  # Each family uses its own letter, so the letter and the family have to agree:
+  # Balanced_C3 is not a size, it is two families spliced together. Checking the
+  # pairing catches that without pinning an exact SKU list that goes stale every
+  # time Azure adds a size.
   validation {
-    condition     = contains(["Basic", "Standard", "Premium"], var.sku_name)
-    error_message = "sku_name must be Basic, Standard or Premium."
+    condition     = can(regex("^(Balanced_B|MemoryOptimized_M|ComputeOptimized_X|FlashOptimized_A)[0-9]+$", var.sku_name))
+    error_message = "sku_name must pair the family with its own letter: Balanced_B*, MemoryOptimized_M*, ComputeOptimized_X* or FlashOptimized_A* (for example Balanced_B5)."
   }
 }
 
-variable "family" {
-  type        = string
-  description = "SKU family. C goes with Basic and Standard, P goes with Premium."
-  default     = "C"
-
-  validation {
-    condition     = contains(["C", "P"], var.family)
-    error_message = "family must be C or P."
-  }
-
-  validation {
-    condition     = (var.sku_name == "Premium") == (var.family == "P")
-    error_message = "Premium uses family P; Basic and Standard use family C."
-  }
-}
-
-variable "capacity" {
-  type        = number
-  description = "Size within the family. C0 is 250 MB, C1 1 GB, C2 2.5 GB, C3 6 GB, C4 13 GB, C5 26 GB, C6 53 GB. P1 is 6 GB, P2 13 GB, P3 26 GB, P4 53 GB, P5 120 GB."
-  default     = 3
-
-  validation {
-    condition     = floor(var.capacity) == var.capacity
-    error_message = "capacity must be a whole number: the sizes are discrete steps, not a scale."
-  }
-
-  validation {
-    condition     = var.family != "C" || (var.capacity >= 0 && var.capacity <= 6)
-    error_message = "capacity must be between 0 and 6 for family C."
-  }
-
-  validation {
-    condition     = var.family != "P" || (var.capacity >= 1 && var.capacity <= 5)
-    error_message = "capacity must be between 1 and 5 for family P."
-  }
-}
-
-variable "zones" {
-  type        = list(string)
-  description = "Availability zones to spread the cache across. Only Premium offers this."
-  default     = []
-
-  validation {
-    condition     = length(var.zones) == 0 || var.sku_name == "Premium"
-    error_message = "Only the Premium tier can be spread across availability zones."
-  }
-}
-
-variable "minimum_tls_version" {
-  type        = string
-  description = "Minimum TLS version the cache accepts"
-  default     = "1.2"
-
-  validation {
-    condition     = contains(["1.0", "1.1", "1.2"], var.minimum_tls_version)
-    error_message = "minimum_tls_version must be one of: 1.0, 1.1, 1.2."
-  }
-}
-
-# The AWS module takes an auth token as an input. Azure generates the access
-# keys itself and offers no way to set them, so they come back as outputs
-# instead. That removes the need for a caller to invent and store a password.
-variable "access_keys_enabled" {
+variable "high_availability_enabled" {
   type        = bool
-  description = "Allow authenticating with the cache's generated access keys. Turn this off only once every client authenticates with Entra ID."
-  default     = true
-
-  validation {
-    condition     = var.access_keys_enabled || var.enable_entra_authentication
-    error_message = "Turning off access keys leaves no way to authenticate unless enable_entra_authentication is true."
-  }
-}
-
-variable "enable_entra_authentication" {
-  type        = bool
-  description = "Accept Microsoft Entra ID logins. This is the analogue of the AWS module's IAM authentication."
+  description = "Keep a replica in another availability zone. Roughly doubles cost, and is what makes the cache survive a zone failure."
   default     = false
 }
 
-variable "maxmemory_policy" {
+# OSSCluster shards across nodes and needs a cluster-aware client. Onyx uses
+# Redis as a Celery broker through redis-py, which is not, so the single-endpoint
+# mode is the compatible default.
+variable "clustering_policy" {
   type        = string
-  description = "What the cache does when it reaches its memory limit. Onyx uses Redis as a Celery broker, where an eviction silently drops a queued task, so watch the eviction alert if you move off the default."
-  default     = "volatile-lru"
+  description = "EnterpriseCluster presents one endpoint and works with ordinary Redis clients. OSSCluster shards and requires a cluster-aware client."
+  default     = "EnterpriseCluster"
+
+  validation {
+    condition     = contains(["EnterpriseCluster", "OSSCluster"], var.clustering_policy)
+    error_message = "clustering_policy must be EnterpriseCluster or OSSCluster."
+  }
+}
+
+# Redis Enterprise names these differently from Redis itself: VolatileLRU rather
+# than volatile-lru.
+variable "eviction_policy" {
+  type        = string
+  description = "What the cache does at its memory limit. Onyx uses Redis as a Celery broker, where an eviction silently drops a queued task, so watch the eviction alert if you move off the default."
+  default     = "VolatileLRU"
 
   validation {
     condition = contains([
-      "noeviction", "allkeys-lru", "volatile-lru", "allkeys-random",
-      "volatile-random", "volatile-ttl", "allkeys-lfu", "volatile-lfu",
-    ], var.maxmemory_policy)
-    error_message = "maxmemory_policy must be one of: noeviction, allkeys-lru, volatile-lru, allkeys-random, volatile-random, volatile-ttl, allkeys-lfu, volatile-lfu."
+      "NoEviction", "AllKeysLRU", "AllKeysLFU", "AllKeysRandom",
+      "VolatileLRU", "VolatileLFU", "VolatileRandom", "VolatileTTL",
+    ], var.eviction_policy)
+    error_message = "eviction_policy must be one of: NoEviction, AllKeysLRU, AllKeysLFU, AllKeysRandom, VolatileLRU, VolatileLFU, VolatileRandom, VolatileTTL."
   }
+}
+
+# Azure generates the access keys and offers no way to set them, so they come
+# back as outputs rather than going in as a variable.
+variable "access_keys_enabled" {
+  type        = bool
+  description = "Allow authenticating with the generated access keys. Turn this off only once every client authenticates with Entra ID through an access policy assignment."
+  default     = true
 }
 
 variable "enable_private_endpoint" {
@@ -135,6 +91,9 @@ variable "enable_private_endpoint" {
     error_message = "enable_private_endpoint requires private_endpoint_subnet_id."
   }
 
+  # The virtual network is only used to link a zone this module creates. A
+  # caller reusing an existing zone has already linked it, so demanding the
+  # network there rejects a configuration that is complete.
   validation {
     condition     = !var.enable_private_endpoint || var.private_dns_zone_id != null || var.virtual_network_id != null
     error_message = "enable_private_endpoint requires virtual_network_id so the private DNS zone can be linked to it, unless private_dns_zone_id points at a zone that is already linked."
@@ -153,12 +112,12 @@ variable "virtual_network_id" {
   default     = null
 }
 
-# privatelink.redis.cache.windows.net is a fixed name shared by every cache in
-# a resource group, so a second module in the same group must be handed the
-# zone the first one made rather than creating its own.
+# privatelink.redis.azure.net is a fixed name shared by every managed cache in a
+# resource group, so a second module in the same group must be handed the zone
+# the first one made rather than creating its own.
 variable "private_dns_zone_id" {
   type        = string
-  description = "Existing privatelink.redis.cache.windows.net zone to use. Null creates one."
+  description = "Existing privatelink.redis.azure.net zone to use. Null creates one."
   default     = null
 }
 
@@ -214,23 +173,17 @@ variable "memory_critical_threshold_percent" {
   }
 }
 
-# Redis runs its commands on one thread, so server load is the meaningful CPU
-# signal, the same reason the AWS module alarms on EngineCPUUtilization rather
-# than host CPU.
-variable "server_load_threshold_percent" {
+variable "cpu_threshold_percent" {
   type        = number
-  description = "serverLoad threshold, the share of time the Redis server thread spent busy"
+  description = "percentProcessorTime threshold. Redis Enterprise reports processor time rather than the single-thread server load the old service exposed."
   default     = 90
 
   validation {
-    condition     = var.server_load_threshold_percent > 0 && var.server_load_threshold_percent <= 100
-    error_message = "server_load_threshold_percent must be between 0 and 100."
+    condition     = var.cpu_threshold_percent > 0 && var.cpu_threshold_percent <= 100
+    error_message = "cpu_threshold_percent must be between 0 and 100."
   }
 }
 
-# Azure exposes no swap metric, so this replaces the AWS module's swap alarm.
-# It catches the same failure one step later: memory pressure that has started
-# costing data.
 variable "evicted_keys_threshold" {
   type        = number
   description = "Evictions per window before alerting. Zero alerts on the first eviction, which for a Celery broker means a dropped task."

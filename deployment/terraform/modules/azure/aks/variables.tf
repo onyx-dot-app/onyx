@@ -15,8 +15,8 @@ variable "location" {
 
 variable "kubernetes_version" {
   type        = string
-  description = "Kubernetes version for the control plane. Move one minor at a time."
-  default     = "1.33"
+  description = "Kubernetes version for the control plane. Move one minor at a time. Versions age out of standard support and become Long-Term-Support only, at which point AKS refuses to build a cluster on them: check with az aks get-versions."
+  default     = "1.34"
 }
 
 variable "subnet_id" {

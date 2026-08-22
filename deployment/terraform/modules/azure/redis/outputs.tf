@@ -1,29 +1,31 @@
 output "cache_id" {
   description = "Resource ID of the cache"
-  value       = azurerm_redis_cache.this.id
+  value       = azurerm_managed_redis.this.id
 }
 
 output "hostname" {
   description = "Hostname of the cache. Behind a private endpoint this resolves to a private address from networks linked to the DNS zone."
-  value       = azurerm_redis_cache.this.hostname
+  value       = azurerm_managed_redis.this.hostname
 }
 
+# Managed Redis speaks TLS on 10000, where Azure Cache for Redis used 6380.
 output "ssl_port" {
-  description = "TLS port. The non-TLS port is disabled."
-  value       = azurerm_redis_cache.this.ssl_port
+  description = "TLS port. Managed Redis offers no plaintext port."
+  value       = 10000
 }
 
-# The AWS module takes an auth token as an input; Azure generates the keys and
-# offers no way to set them, so the credential comes back out of the module.
+# Azure generates the keys and offers no way to set them, so the credential
+# comes back out of the module rather than going in. They live on the database
+# rather than the cluster, hence the enterprise data source.
 output "primary_access_key" {
   description = "Generated primary access key, null when access keys are disabled"
-  value       = var.access_keys_enabled ? azurerm_redis_cache.this.primary_access_key : null
+  value       = try(data.azurerm_redis_enterprise_database.this[0].primary_access_key, null)
   sensitive   = true
 }
 
 output "secondary_access_key" {
   description = "Generated secondary access key, for rotating without downtime"
-  value       = var.access_keys_enabled ? azurerm_redis_cache.this.secondary_access_key : null
+  value       = try(data.azurerm_redis_enterprise_database.this[0].secondary_access_key, null)
   sensitive   = true
 }
 
