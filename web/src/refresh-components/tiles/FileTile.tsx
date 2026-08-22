@@ -1,11 +1,10 @@
 import type { FunctionComponent } from "react";
 import { Button } from "@opal/components";
-
-import { noProp } from "@/lib/utils";
 import { cn, clickOnKeyDown } from "@opal/utils";
 import { SvgMaximize2, SvgTextLines, SvgX } from "@opal/icons";
 import type { IconProps } from "@opal/types";
 import { Hoverable } from "@opal/core";
+import { noProp } from "@/lib/utils";
 import Text from "../texts/Text";
 import Truncated from "../texts/Truncated";
 

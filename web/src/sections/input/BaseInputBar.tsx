@@ -17,7 +17,7 @@ import PasteTilePopover from "@/sections/input/PasteTilePopover";
 import { cn } from "@opal/utils";
 import { Disabled } from "@opal/core";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import { Text } from "@opal/components";
+import { Button, Text } from "@opal/components";
 import { SvgArrowUp, SvgLoader, SvgStop } from "@opal/icons";
 import Keycap from "@/refresh-components/Keycap";
 import { useContentEditable } from "@/hooks/useContentEditable";
@@ -368,8 +368,16 @@ const BaseInputBar = memo(
                     aria-label="Stop generating"
                   />
                 </div>
-                <IconButton
-                  icon={sandboxInitializing ? SvgLoader : SvgArrowUp}
+                <Button
+                  icon={
+                    sandboxInitializing
+                      ? ({ className }) => (
+                          <SvgLoader
+                            className={cn(className, "animate-spin")}
+                          />
+                        )
+                      : SvgArrowUp
+                  }
                   onClick={handleSubmit}
                   disabled={!canSubmit}
                   tooltip={
@@ -380,9 +388,6 @@ const BaseInputBar = memo(
                         : "Send"
                   }
                   aria-label={isRunning ? "Queue message" : "Send"}
-                  iconClassName={
-                    sandboxInitializing ? "animate-spin" : undefined
-                  }
                 />
               </div>
             </div>
