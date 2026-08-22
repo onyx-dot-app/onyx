@@ -1,11 +1,10 @@
 import type { FunctionComponent } from "react";
-
-import { noProp } from "@/lib/utils";
+import { Button } from "@opal/components";
 import { cn, clickOnKeyDown } from "@opal/utils";
 import { SvgMaximize2, SvgTextLines, SvgX } from "@opal/icons";
 import type { IconProps } from "@opal/types";
 import { Hoverable } from "@opal/core";
-import IconButton from "../buttons/IconButton";
+import { noProp } from "@/lib/utils";
 import Text from "../texts/Text";
 import Truncated from "../texts/Truncated";
 
@@ -157,7 +156,12 @@ export default function FileTile({
           )}
           {onOpen && (
             <div className="h-full">
-              <IconButton small icon={SvgMaximize2} onClick={noProp(onOpen)} />
+              <Button
+                size="xs"
+                prominence="internal"
+                icon={SvgMaximize2}
+                onClick={noProp(onOpen)}
+              />
             </div>
           )}
         </div>

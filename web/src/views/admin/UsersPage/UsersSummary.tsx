@@ -4,7 +4,6 @@ import { Button, Card } from "@opal/components";
 import { Hoverable } from "@opal/core";
 import { clickOnKeyDown } from "@opal/utils";
 import { Section } from "@/layouts/general-layouts";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import Text from "@/refresh-components/texts/Text";
 import Link from "next/link";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
@@ -39,11 +38,11 @@ function StatCell({ value, label, onFilter }: StatCellProps) {
       {onFilter && (
         <div className="absolute right-1 top-1">
           <Hoverable.Item group="stat" variant="appear-on-hover">
-            <IconButton
-              tertiary
+            <Button
+              prominence="tertiary"
               icon={SvgFilterPlus}
               tooltip="Add Filter"
-              toolTipPosition="left"
+              tooltipSide="left"
               onClick={(e) => {
                 e.stopPropagation();
                 onFilter();

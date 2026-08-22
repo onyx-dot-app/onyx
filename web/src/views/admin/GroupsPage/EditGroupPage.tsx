@@ -22,7 +22,6 @@ import {
   SvgUserShield,
 } from "@opal/icons";
 import { markdown } from "@opal/utils";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { SettingsLayouts } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
@@ -312,10 +311,10 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
           return (
             <div className="flex items-center gap-1">
               {canManage && (
-                <IconButton
+                <Button
                   icon={isPending ? SvgSimpleLoader : SvgUserShield}
-                  tertiary
-                  transient={isManager}
+                  prominence="tertiary"
+                  interaction={isManager ? "hover" : "rest"}
                   disabled={!isPersisted || isPending || isOwnManager}
                   aria-label={isManager ? "Revoke manager" : "Make manager"}
                   tooltip={
@@ -333,9 +332,9 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
                   }}
                 />
               )}
-              <IconButton
+              <Button
                 icon={SvgMinusCircle}
-                tertiary
+                prominence="tertiary"
                 disabled={isOwnManager || isLastGroup}
                 aria-label="Remove member"
                 tooltip={

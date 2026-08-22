@@ -9,7 +9,6 @@ import { planTagProps } from "@/lib/tier-badge";
 import { Section } from "@/layouts/general-layouts";
 import InputNumber from "@/refresh-components/inputs/InputNumber";
 import Text from "@/refresh-components/texts/Text";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
 
 // ---------------------------------------------------------------------------
@@ -194,8 +193,9 @@ function TokenLimitSection({
                         placeholder="1"
                       />
                     </div>
-                    <IconButton
-                      small
+                    <Button
+                      size="xs"
+                      prominence="internal"
                       icon={SvgMinusCircle}
                       onClick={() => removeLimit(i)}
                     />
