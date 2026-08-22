@@ -11,6 +11,7 @@ from mcp.shared.auth import (
 from mcp.types import Tool as MCPLibTool
 from pydantic import AnyUrl, BaseModel, Field, model_validator
 
+from onyx.auth.oauth_token_manager import conflicting_authorization_params
 from onyx.db.enums import (
     EndpointPolicy,
     MCPAuthenticationPerformer,
@@ -19,21 +20,16 @@ from onyx.db.enums import (
     MCPServerStatus,
     MCPTransport,
 )
+from onyx.oauth.models import (
+    OAuthConfigurationFingerprint,
+    PKCECodeVerifier,
+    SafeOAuthReturnPath,
+)
 
 # Matches `{placeholder_name}` inside header value templates.
 _PLACEHOLDER_RE = re.compile(r"\{([^}]+)\}")
 # RFC 9110 field-name syntax: a non-empty sequence of HTTP token characters.
 _HTTP_FIELD_NAME_RE = re.compile(r"[!#$%&'*+\-.^_`|~0-9A-Za-z]+")
-RESERVED_MCP_OAUTH_AUTHORIZATION_PARAMS = {
-    "client_id",
-    "code_challenge",
-    "code_challenge_method",
-    "redirect_uri",
-    "resource",
-    "response_type",
-    "scope",
-    "state",
-}
 
 
 def _build_auto_substitution_map(*, user_email: str) -> dict[str, str]:
@@ -387,8 +383,8 @@ class MCPToolCreateRequest(BaseModel):
                 raise ValueError(
                     "oauth_token_endpoint is required for known-provider OAuth mode"
                 )
-            reserved_params = RESERVED_MCP_OAUTH_AUTHORIZATION_PARAMS.intersection(
-                self.oauth_additional_auth_params or {}
+            reserved_params = conflicting_authorization_params(
+                self.oauth_additional_auth_params
             )
             if reserved_params:
                 raise ValueError(
@@ -511,7 +507,9 @@ class MCPOAuthConnectResponse(BaseModel):
 
 class MCPUserOAuthConnectRequest(BaseModel):
     server_id: int = Field(..., description="ID of the MCP server")
-    return_path: str = Field(..., description="Path to redirect to after callback")
+    return_path: SafeOAuthReturnPath = Field(
+        ..., description="Path to redirect to after callback"
+    )
     include_resource_param: bool = Field(..., description="Include resource parameter")
     force_reauthentication: bool = Field(
         default=False,
@@ -539,17 +537,6 @@ class MCPUserOAuthConnectRequest(BaseModel):
         ),
     )
 
-    @model_validator(mode="after")
-    def validate_return_path(self) -> "MCPUserOAuthConnectRequest":
-        if (
-            not self.return_path.startswith("/")
-            or self.return_path.startswith("//")
-            or "\\" in self.return_path
-            or any(not character.isprintable() for character in self.return_path)
-        ):
-            raise ValueError("return_path must be a safe internal path")
-        return self
-
 
 class MCPUserOAuthConnectResponse(BaseModel):
     server_id: int
@@ -574,7 +561,7 @@ class MCPUserOAuthConnectResponse(BaseModel):
 class MCPPendingOAuthAuthorization(BaseModel):
     authorization_url: str
     state: str
-    code_verifier: str
+    code_verifier: PKCECodeVerifier
 
 
 class MCPOAuthServerSnapshot(BaseModel):
@@ -592,12 +579,12 @@ class MCPOAuthServerSnapshot(BaseModel):
 class MCPOAuthFlowState(BaseModel):
     server_id: int
     connection_config_id: int
-    return_path: str
-    code_verifier: str
+    return_path: SafeOAuthReturnPath
+    code_verifier: PKCECodeVerifier
     redirect_uri: AnyUrl
     server_snapshot: MCPOAuthServerSnapshot
-    connection_headers_fingerprint: str
-    client_information_fingerprint: str
+    connection_headers_fingerprint: OAuthConfigurationFingerprint
+    client_information_fingerprint: OAuthConfigurationFingerprint
     protected_resource_metadata: ProtectedResourceMetadata | None = None
     oauth_metadata: OAuthMetadata | None = None
     authorization_server_url: str | None = None
