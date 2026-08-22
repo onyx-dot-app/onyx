@@ -271,6 +271,54 @@ func (c *Client) ListAgents(ctx context.Context) ([]models.AgentSummary, error) 
 	return result, nil
 }
 
+// ListModels returns the models the given agent can answer with, flattened
+// across the LLM providers the user can access.
+//
+// The returned options are ordered provider by provider, and the agent's
+// default model is flagged with IsAgentDefault.
+func (c *Client) ListModels(ctx context.Context, agentID int) ([]models.ModelOption, error) {
+	// The per-persona endpoint applies the agent's provider restrictions and
+	// reports the agent's own default model, which /llm/provider does not.
+	path := fmt.Sprintf("/llm/persona/%d/providers", agentID)
+	var resp models.LLMProviderResponse
+	if err := c.doJSON(ctx, "GET", path, nil, &resp); err != nil {
+		return nil, err
+	}
+
+	var options []models.ModelOption
+	for _, provider := range resp.Providers {
+		providerName := ""
+		if provider.Name != nil {
+			providerName = *provider.Name
+		}
+		for _, mc := range provider.ModelConfigurations {
+			if !mc.IsVisible {
+				continue
+			}
+			displayName := ""
+			if mc.DisplayName != nil {
+				displayName = *mc.DisplayName
+			}
+			option := models.ModelOption{
+				SelectedModel: models.SelectedModel{
+					Provider:    providerName,
+					ModelName:   mc.Name,
+					DisplayName: displayName,
+				},
+				ProviderLabel: provider.ProviderDisplayName,
+				IsAgentDefault: resp.DefaultText != nil &&
+					resp.DefaultText.ProviderID == provider.ID &&
+					resp.DefaultText.ModelName == mc.Name,
+			}
+			if mc.ID != nil {
+				option.ConfigurationID = *mc.ID
+			}
+			options = append(options, option)
+		}
+	}
+	return options, nil
+}
+
 // ListChatSessions returns recent chat sessions.
 func (c *Client) ListChatSessions(ctx context.Context) ([]models.ChatSessionDetails, error) {
 	var resp struct {
@@ -389,13 +437,14 @@ func (c *Client) StopChatSession(ctx context.Context, sessionID string) {
 type ClientAPI interface {
 	TestConnection(ctx context.Context) error
 	ListAgents(ctx context.Context) ([]models.AgentSummary, error)
+	ListModels(ctx context.Context, agentID int) ([]models.ModelOption, error)
 	ListChatSessions(ctx context.Context) ([]models.ChatSessionDetails, error)
 	GetChatSession(ctx context.Context, sessionID string) (*models.ChatSessionDetailResponse, error)
 	RenameChatSession(ctx context.Context, sessionID string, name *string) (string, error)
 	UploadFile(ctx context.Context, filePath string) (*models.FileDescriptorPayload, error)
 	GetBackendVersion(ctx context.Context) (string, error)
 	StopChatSession(ctx context.Context, sessionID string)
-	SendMessageStream(ctx context.Context, message string, chatSessionID *string, agentID int, parentMessageID *int, fileDescriptors []models.FileDescriptorPayload) <-chan models.StreamEvent
+	SendMessageStream(ctx context.Context, message string, chatSessionID *string, agentID int, parentMessageID *int, fileDescriptors []models.FileDescriptorPayload, llmOverride *models.LLMOverride) <-chan models.StreamEvent
 	Search(ctx context.Context, req models.SearchRequest) (*models.SearchResponse, error)
 	GenerateImage(ctx context.Context, req models.ImageGenerationRequest) (*models.ImageGenerationResponse, error)
 }

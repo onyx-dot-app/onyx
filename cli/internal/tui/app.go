@@ -36,6 +36,9 @@ type Model struct {
 	agentID         int
 	agentName       string
 	agents          []models.AgentSummary
+	// selectedModel is nil while the agent's default model is in use.
+	selectedModel   *models.SelectedModel
+	modelOptions    []models.ModelOption
 	parentMessageID *int
 	isStreaming     bool
 	streamCancel    context.CancelFunc
@@ -66,6 +69,7 @@ func NewModel(cfg config.OnyxCliConfig, client api.ClientAPI) Model {
 		status:          newStatusBar(),
 		agentID:         cfg.DefaultAgentID,
 		agentName:       "Default",
+		selectedModel:   cfg.DefaultModel,
 		parentMessageID: &parentID,
 		citations:       make(map[int]string),
 	}
@@ -83,7 +87,7 @@ func (m Model) Init() tea.Cmd {
 	if m.client == nil {
 		return nil
 	}
-	return loadAgentsCmd(m.client)
+	return tea.Batch(loadAgentsCmd(m.client), loadModelsCmd(m.client, m.agentID, false))
 }
 
 // Update handles messages.
@@ -148,6 +152,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case AgentsLoadedMsg:
 		return m.handleAgentsLoaded(msg)
+
+	case ModelsLoadedMsg:
+		return m.handleModelsLoaded(msg)
 
 	case SessionsLoadedMsg:
 		return m.handleSessionsLoaded(msg)
@@ -297,6 +304,8 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 					return cmdResume(m, item.id)
 				case pickerAgent:
 					return cmdSelectAgent(m, item.id)
+				case pickerModel:
+					return cmdSelectModel(m, item.id)
 				}
 			}
 			return m, nil
@@ -394,6 +403,7 @@ func (m Model) sendMessage(message string) (Model, tea.Cmd) {
 		m.agentID,
 		m.parentMessageID,
 		fileDescs,
+		m.selectedModel.Override(),
 	)
 	m.streamCh = ch
 
@@ -533,6 +543,7 @@ func (m Model) handleInitDone(msg InitDoneMsg) (tea.Model, tea.Cmd) {
 	}
 	m.status.setServer(m.config.ServerURL)
 	m.status.setAgent(m.agentName)
+	m.refreshModelStatus()
 	return m, nil
 }
 
@@ -568,6 +579,69 @@ func (m Model) handleAgentsLoaded(msg AgentsLoadedMsg) (tea.Model, tea.Cmd) {
 		})
 	}
 	m.viewport.showPicker(pickerAgent, items)
+	return m, nil
+}
+
+// refreshModelStatus updates the status bar with the model in use: the
+// explicit selection when there is one, otherwise the agent's default.
+func (m *Model) refreshModelStatus() {
+	if m.selectedModel != nil {
+		m.status.setModel(m.selectedModel.Label())
+		return
+	}
+	for _, option := range m.modelOptions {
+		if option.IsAgentDefault {
+			m.status.setModel(option.Label())
+			return
+		}
+	}
+	m.status.setModel("")
+}
+
+func (m Model) handleModelsLoaded(msg ModelsLoadedMsg) (tea.Model, tea.Cmd) {
+	if msg.Err != nil {
+		if msg.ShowPicker {
+			m.viewport.addError("Could not load models: " + msg.Err.Error())
+		}
+		return m, nil
+	}
+	m.modelOptions = msg.Options
+
+	// Drop a selection the current agent cannot use, so the status bar never
+	// claims a model the server would ignore. The saved preference is left on
+	// disk — it applies again if the user switches back to an agent that
+	// allows it. Use "/model default" to forget it.
+	if m.selectedModel != nil && !hasModel(m.modelOptions, m.selectedModel.ModelName) {
+		m.viewport.addWarning(fmt.Sprintf(
+			"Model %q is not available for this agent. Using the agent default.",
+			m.selectedModel.Label(),
+		))
+		m.selectedModel = nil
+	}
+	m.refreshModelStatus()
+
+	if !msg.ShowPicker {
+		return m, nil
+	}
+	if len(m.modelOptions) == 0 {
+		m.viewport.addInfo("No models available.")
+		return m, nil
+	}
+
+	m.viewport.addInfo("Select a model (Enter to select, Esc to cancel):")
+
+	items := []pickerItem{{id: "default", label: "Agent default"}}
+	for i, option := range m.modelOptions {
+		label := fmt.Sprintf("%d: %s", i+1, option.Label())
+		if option.ProviderLabel != "" {
+			label += " (" + option.ProviderLabel + ")"
+		}
+		if m.selectedModel != nil && m.selectedModel.ModelName == option.ModelName {
+			label += " *"
+		}
+		items = append(items, pickerItem{id: strconv.Itoa(i + 1), label: label})
+	}
+	m.viewport.showPicker(pickerModel, items)
 	return m, nil
 }
 
@@ -632,8 +706,10 @@ func (m Model) handleSessionResumed(msg SessionResumedMsg) (tea.Model, tea.Cmd) 
 		m.agentName = *detail.AgentName
 		m.status.setAgent(*detail.AgentName)
 	}
-	if detail.AgentID != nil {
+	reloadModels := false
+	if detail.AgentID != nil && *detail.AgentID != m.agentID {
 		m.agentID = *detail.AgentID
+		reloadModels = true
 	}
 
 	// Replay messages
@@ -659,6 +735,9 @@ func (m Model) handleSessionResumed(msg SessionResumedMsg) (tea.Model, tea.Cmd) 
 		desc = *detail.Description
 	}
 	m.viewport.addInfo("Resumed session: " + desc)
+	if reloadModels {
+		return m, loadModelsCmd(m.client, m.agentID, false)
+	}
 	return m, nil
 }
 

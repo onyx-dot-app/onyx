@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/onyx-dot-app/onyx/cli/internal/models"
 )
 
 const (
@@ -14,6 +16,7 @@ const (
 	EnvAPIPrefix      = "ONYX_API_PREFIX"
 	EnvAPIKey         = "ONYX_PAT"
 	EnvAgentID        = "ONYX_PERSONA_ID"
+	EnvModel          = "ONYX_MODEL"
 	EnvSSHHostKey     = "ONYX_SSH_HOST_KEY"
 	EnvStreamMarkdown = "ONYX_STREAM_MARKDOWN"
 )
@@ -32,6 +35,8 @@ type OnyxCliConfig struct {
 	APIKey         string   `json:"api_key"`
 	DefaultAgentID int      `json:"default_persona_id"`
 	Features       Features `json:"features,omitempty"`
+	// DefaultModel overrides the agent's model. nil means use the agent default.
+	DefaultModel *models.SelectedModel `json:"default_model,omitempty"`
 }
 
 // DefaultConfig returns a config with default values.
@@ -145,6 +150,12 @@ func Load() OnyxCliConfig {
 		if id, err := strconv.Atoi(v); err == nil {
 			cfg.DefaultAgentID = id
 		}
+	}
+	// The env var names a model version (e.g. "gpt-4o"). It carries no
+	// configuration id, so the server resolves it by name against the agent's
+	// provider. Use /model in the TUI for an unambiguous selection.
+	if v := os.Getenv(EnvModel); v != "" {
+		cfg.DefaultModel = &models.SelectedModel{ModelName: v}
 	}
 	if v := os.Getenv(EnvStreamMarkdown); v != "" {
 		if b, err := strconv.ParseBool(v); err == nil {

@@ -35,6 +35,7 @@ type pickerKind int
 const (
 	pickerSession pickerKind = iota
 	pickerAgent
+	pickerModel
 )
 
 // pickerItem is a selectable item in the picker.

@@ -35,6 +35,14 @@ type AgentsLoadedMsg struct {
 	Err    error
 }
 
+// ModelsLoadedMsg carries the models available for the current agent.
+// ShowPicker is set when the user asked for the list with /model.
+type ModelsLoadedMsg struct {
+	Options    []models.ModelOption
+	ShowPicker bool
+	Err        error
+}
+
 // ConfigTestResultMsg carries the result of an async connection test during /configure.
 type ConfigTestResultMsg struct {
 	Err error

@@ -84,6 +84,92 @@ type SendMessagePayload struct {
 	Origin           string                   `json:"origin"`
 	IncludeCitations bool                     `json:"include_citations"`
 	Stream           bool                     `json:"stream"`
+	LLMOverride      *LLMOverride             `json:"llm_override,omitempty"`
+}
+
+// LLMOverride tells the server which model to answer with, instead of the
+// agent's configured default.
+type LLMOverride struct {
+	// ModelConfigurationID routes unambiguously; provider display names are
+	// not unique. The name fields are sent alongside it as a fallback.
+	ModelConfigurationID *int   `json:"model_configuration_id,omitempty"`
+	ModelProvider        string `json:"model_provider,omitempty"`
+	ModelVersion         string `json:"model_version,omitempty"`
+}
+
+// SelectedModel is a model the user picked with /model. It is persisted in the
+// CLI config, so it keeps the fields needed to rebuild an LLMOverride and to
+// label the model in the UI without a server round-trip.
+type SelectedModel struct {
+	ConfigurationID int    `json:"model_configuration_id,omitempty"`
+	Provider        string `json:"model_provider,omitempty"`
+	ModelName       string `json:"model_version"`
+	DisplayName     string `json:"display_name,omitempty"`
+}
+
+// Label returns the human-readable name for the model.
+func (s SelectedModel) Label() string {
+	if s.DisplayName != "" {
+		return s.DisplayName
+	}
+	return s.ModelName
+}
+
+// Override converts the selection to a wire-format LLM override.
+// A nil selection means "use the agent's default model".
+func (s *SelectedModel) Override() *LLMOverride {
+	if s == nil || (s.ConfigurationID == 0 && s.ModelName == "") {
+		return nil
+	}
+	override := &LLMOverride{
+		ModelProvider: s.Provider,
+		ModelVersion:  s.ModelName,
+	}
+	if s.ConfigurationID != 0 {
+		id := s.ConfigurationID
+		override.ModelConfigurationID = &id
+	}
+	return override
+}
+
+// ModelConfiguration is one model exposed by an LLM provider.
+type ModelConfiguration struct {
+	ID          *int    `json:"id"`
+	Name        string  `json:"name"`
+	IsVisible   bool    `json:"is_visible"`
+	DisplayName *string `json:"display_name"`
+}
+
+// LLMProviderDescriptor is a provider and its models, as visible to a
+// non-admin user.
+type LLMProviderDescriptor struct {
+	ID                  int                  `json:"id"`
+	Name                *string              `json:"name"`
+	Provider            string               `json:"provider"`
+	ProviderDisplayName string               `json:"provider_display_name"`
+	ModelConfigurations []ModelConfiguration `json:"model_configurations"`
+}
+
+// DefaultModel identifies the workspace default model.
+type DefaultModel struct {
+	ProviderID int    `json:"provider_id"`
+	ModelName  string `json:"model_name"`
+}
+
+// LLMProviderResponse is the response from GET /api/llm/provider.
+type LLMProviderResponse struct {
+	Providers   []LLMProviderDescriptor `json:"providers"`
+	DefaultText *DefaultModel           `json:"default_text"`
+}
+
+// ModelOption is a selectable model, flattened across providers.
+type ModelOption struct {
+	SelectedModel
+	// ProviderLabel is the provider's human-friendly name, for display only.
+	ProviderLabel string
+	// IsAgentDefault marks the model the agent answers with when no override
+	// is set.
+	IsAgentDefault bool
 }
 
 // SearchDoc represents a document found during search.

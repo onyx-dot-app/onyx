@@ -33,6 +33,12 @@ func handleSlashCommand(m Model, text string) (Model, tea.Cmd) {
 		}
 		return cmdShowAgents(m)
 
+	case "/model":
+		if strings.TrimSpace(arg) != "" {
+			return cmdSelectModel(m, arg)
+		}
+		return cmdShowModels(m)
+
 	case "/attach":
 		return cmdAttach(m, arg)
 
@@ -137,7 +143,97 @@ func cmdSelectAgent(m Model, idStr string) (Model, tea.Cmd) {
 	m.config.DefaultAgentID = target.ID
 	_ = config.Save(m.config)
 
-	return m, nil
+	// The new agent may allow a different model set and have its own default.
+	return m, loadModelsCmd(m.client, m.agentID, false)
+}
+
+func cmdShowModels(m Model) (Model, tea.Cmd) {
+	m.viewport.addInfo("Loading models...")
+	return m, loadModelsCmd(m.client, m.agentID, true)
+}
+
+// cmdSelectModel picks a model by its list number, or by model name / display
+// name (case-insensitive, exact match first, then unique prefix). The literal
+// "default" clears the override and returns to the agent's own model.
+func cmdSelectModel(m Model, arg string) (Model, tea.Cmd) {
+	needle := strings.TrimSpace(arg)
+
+	if strings.EqualFold(needle, "default") {
+		m.selectedModel = nil
+		m.config.DefaultModel = nil
+		_ = config.Save(m.config)
+		m.refreshModelStatus()
+		m.viewport.addInfo("Using the agent's default model: " + m.status.modelName)
+		return m, nil
+	}
+
+	if len(m.modelOptions) == 0 {
+		m.viewport.addWarning("No models loaded yet. Use /model to list them.")
+		return m, nil
+	}
+
+	if n, err := strconv.Atoi(needle); err == nil {
+		if n < 1 || n > len(m.modelOptions) {
+			m.viewport.addWarning(fmt.Sprintf("No model %d. Use /model to see the list.", n))
+			return m, nil
+		}
+		return applyModel(m, m.modelOptions[n-1]), nil
+	}
+
+	match := findModel(m.modelOptions, needle)
+	if match == nil {
+		m.viewport.addWarning(fmt.Sprintf("Model %q not found. Use /model to see available models.", needle))
+		return m, nil
+	}
+	return applyModel(m, *match), nil
+}
+
+// findModel resolves a name to one model: an exact name or display-name match
+// wins, otherwise a prefix match, but only when it is unique.
+func findModel(options []models.ModelOption, needle string) *models.ModelOption {
+	var prefixMatches []models.ModelOption
+	for _, option := range options {
+		if strings.EqualFold(option.ModelName, needle) || strings.EqualFold(option.DisplayName, needle) {
+			return &option
+		}
+		if strings.HasPrefix(strings.ToLower(option.ModelName), strings.ToLower(needle)) ||
+			strings.HasPrefix(strings.ToLower(option.DisplayName), strings.ToLower(needle)) {
+			prefixMatches = append(prefixMatches, option)
+		}
+	}
+	if len(prefixMatches) == 1 {
+		return &prefixMatches[0]
+	}
+	return nil
+}
+
+// hasModel reports whether the exact model name is in the list.
+func hasModel(options []models.ModelOption, name string) bool {
+	for _, option := range options {
+		if option.ModelName == name {
+			return true
+		}
+	}
+	return false
+}
+
+func applyModel(m Model, option models.ModelOption) Model {
+	selected := option.SelectedModel
+	m.selectedModel = &selected
+	m.config.DefaultModel = &selected
+	_ = config.Save(m.config)
+	m.refreshModelStatus()
+	m.viewport.addInfo("Switched to model: " + selected.Label())
+	return m
+}
+
+// loadModelsCmd fetches the models available to an agent. showPicker asks the
+// handler to display the selection list rather than only refresh the status bar.
+func loadModelsCmd(client api.ClientAPI, agentID int, showPicker bool) tea.Cmd {
+	return func() tea.Msg {
+		options, err := client.ListModels(context.Background(), agentID)
+		return ModelsLoadedMsg{Options: options, ShowPicker: showPicker, Err: err}
+	}
 }
 
 func cmdAttach(m Model, pathStr string) (Model, tea.Cmd) {

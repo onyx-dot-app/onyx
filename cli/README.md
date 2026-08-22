@@ -38,6 +38,7 @@ Environment variables override config file values:
 | `ONYX_API_PREFIX` | No | API path prefix (default: `/api`); set to empty for direct backend access |
 | `ONYX_PAT` | No | Personal access token for authentication (required if no config file) |
 | `ONYX_PERSONA_ID` | No | Default agent/persona ID |
+| `ONYX_MODEL` | No | Model to answer with (e.g. `gpt-4o`); overrides the model saved by `/model` |
 | `ONYX_STREAM_MARKDOWN` | No | Enable/disable progressive markdown rendering (true/false) |
 | `ONYX_SSH_HOST_KEY` | No | Path to SSH host key for `serve` command |
 
@@ -181,6 +182,7 @@ onyx-cli install-skill --agent claude-code
 | `/help` | Show help message |
 | `/clear` | Clear chat and start a new session |
 | `/agent` | List and switch agents |
+| `/model [name]` | List and switch models; `/model default` returns to the agent's model |
 | `/attach <path>` | Attach a file to next message |
 | `/sessions` | List recent chat sessions |
 | `/configure` | Re-run connection setup |
