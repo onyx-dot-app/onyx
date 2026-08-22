@@ -69,7 +69,7 @@ def _flow(
 ) -> MCPOAuthFlowState:
     mcp_server = cast(MCPServer, _server())
     client_information = _client_information(client_id)
-    code_verifier = f"{state}-verifier"
+    code_verifier = f"{state}-verifier".ljust(43, "v")
     return MCPOAuthFlowState(
         server_id=mcp_server.id,
         connection_config_id=101,
@@ -572,8 +572,8 @@ def test_reverse_order_completions_restore_their_own_registration(
     )
     assert providers[1].context.client_info == _client_information("first-registration")
     exchanges[0].assert_awaited_once_with(
-        "second-code", "second-state-verifier", resource=None
+        "second-code", "second-state-verifier".ljust(43, "v"), resource=None
     )
     exchanges[1].assert_awaited_once_with(
-        "first-code", "first-state-verifier", resource=None
+        "first-code", "first-state-verifier".ljust(43, "v"), resource=None
     )
