@@ -13,6 +13,7 @@ import {
   Text,
   useCreateModal,
 } from "@opal/components";
+import useFocusOnMount from "@opal/hooks/useFocusOnMount";
 import {
   ConfirmationModalLayout,
   Section,
@@ -103,8 +104,12 @@ function useFolderIcon(
         : SvgFolder;
 
   return () => (
-    <div
+    <button
+      type="button"
       data-testid="ProjectFolderIcon"
+      // The glyph carries no text, so the control needs its own name and state.
+      aria-label={open ? "Collapse project" : "Expand project"}
+      aria-expanded={open}
       /* Above the tab's click overlay. `SidebarTab` lays an absolute
          `z-99` control over the whole row whenever it has an `onClick`, and a
          statically positioned element can never paint above it — so without
@@ -122,7 +127,7 @@ function useFolderIcon(
       })}
     >
       <Glyph size={16} className="text-text-03" />
-    </div>
+    </button>
   );
 }
 
@@ -364,6 +369,7 @@ export function FoldedProjectsPopover() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const matches = useProjectSearch(query);
+  const focusOnMount = useFocusOnMount<HTMLInputElement>();
   const createProjectModal = useCreateModal();
 
   // Any navigation means the popover has done its job. Folding a project's
@@ -418,7 +424,7 @@ export function FoldedProjectsPopover() {
               data-testid="ProjectsPopover/search"
               searchIcon
               clearButton
-              autoFocus
+              ref={focusOnMount}
               variant="internal"
               placeholder="Search projects..."
               value={query}
