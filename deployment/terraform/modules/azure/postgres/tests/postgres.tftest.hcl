@@ -185,6 +185,35 @@ run "a_database_of_our_own_is_created" {
   }
 }
 
+run "the_extensions_onyx_needs_are_allow_listed" {
+  command = plan
+
+  # Azure refuses CREATE EXTENSION unless the extension is on this list, and it
+  # starts empty, so Onyx's migrations fail on a fresh server without it.
+  assert {
+    condition     = azurerm_postgresql_flexible_server_configuration.azure_extensions[0].name == "azure.extensions"
+    error_message = "The allowlist is written to the azure.extensions server parameter."
+  }
+
+  assert {
+    condition     = azurerm_postgresql_flexible_server_configuration.azure_extensions[0].value == "pgcrypto,pg_trgm"
+    error_message = "pgcrypto and pg_trgm are what Onyx's migrations create."
+  }
+}
+
+run "an_empty_extension_list_writes_no_parameter" {
+  command = plan
+
+  variables {
+    allowed_extensions = []
+  }
+
+  assert {
+    condition     = length(azurerm_postgresql_flexible_server_configuration.azure_extensions) == 0
+    error_message = "An empty list should leave the parameter alone rather than setting it to nothing."
+  }
+}
+
 run "no_entra_administrator_by_default" {
   command = plan
 

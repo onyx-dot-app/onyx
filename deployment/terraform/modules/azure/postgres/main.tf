@@ -106,6 +106,17 @@ resource "azurerm_postgresql_flexible_server" "this" {
   depends_on = [azurerm_private_dns_zone_virtual_network_link.this]
 }
 
+# azure.extensions is a dynamic parameter, so this needs no restart. Without it
+# CREATE EXTENSION fails for every extension, including the ones Onyx's
+# migrations run on first start.
+resource "azurerm_postgresql_flexible_server_configuration" "azure_extensions" {
+  count = length(var.allowed_extensions) > 0 ? 1 : 0
+
+  name      = "azure.extensions"
+  server_id = azurerm_postgresql_flexible_server.this.id
+  value     = join(",", var.allowed_extensions)
+}
+
 # Without this an Entra-only server has no administrator: password logins are
 # off and no Entra principal has been granted access, so nobody can connect to
 # bootstrap the roles a workload identity needs.
