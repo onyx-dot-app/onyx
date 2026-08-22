@@ -98,16 +98,23 @@ interface ExistingProviderCardProps {
   provider: LLMProviderView;
   isDefault: boolean;
   isLastProvider: boolean;
+  onBeforeOpen?: () => void;
 }
 
 function ExistingProviderCard({
   provider,
   isDefault,
   isLastProvider,
+  onBeforeOpen,
 }: ExistingProviderCardProps) {
   const { mutate } = useSWRConfig();
   const [isOpen, setIsOpen] = useState(false);
   const deleteModal = useCreateModal();
+
+  const handleOpen = () => {
+    onBeforeOpen?.();
+    setIsOpen(true);
+  };
 
   const handleDelete = async () => {
     try {
@@ -178,7 +185,7 @@ function ExistingProviderCard({
           state="filled"
           padding={2}
           rounding="lg"
-          onClick={() => setIsOpen(true)}
+          onClick={handleOpen}
         >
           <ContentAction
             icon={icon}
@@ -210,7 +217,7 @@ function ExistingProviderCard({
                   aria-label={`Edit ${providerDisplayName(provider)}`}
                   onClick={(e) => {
                     e.stopPropagation();
-                    setIsOpen(true);
+                    handleOpen();
                   }}
                 />
               </div>
@@ -229,21 +236,28 @@ function ExistingProviderCard({
 interface NewProviderCardProps {
   providerName: string;
   isFirstProvider: boolean;
+  onBeforeOpen?: () => void;
 }
 
 function NewProviderCard({
   providerName,
   isFirstProvider,
+  onBeforeOpen,
 }: NewProviderCardProps) {
   const [isOpen, setIsOpen] = useState(false);
   const { icon, productName, companyName, Modal } = getProvider(providerName);
+
+  const handleOpen = () => {
+    onBeforeOpen?.();
+    setIsOpen(true);
+  };
 
   return (
     <SelectCard
       state="empty"
       padding={2}
       rounding="lg"
-      onClick={() => setIsOpen(true)}
+      onClick={handleOpen}
     >
       <ContentAction
         icon={icon}
@@ -258,7 +272,7 @@ function NewProviderCard({
             prominence="tertiary"
             onClick={(e) => {
               e.stopPropagation();
-              setIsOpen(true);
+              handleOpen();
             }}
           >
             Connect
@@ -266,7 +280,10 @@ function NewProviderCard({
         }
       />
       {isOpen && (
-        <Modal shouldMarkAsDefault={isFirstProvider} onOpenChange={setIsOpen} />
+        <Modal
+          shouldMarkAsDefault={isFirstProvider}
+          onOpenChange={setIsOpen}
+        />
       )}
     </SelectCard>
   );
@@ -278,25 +295,35 @@ function NewProviderCard({
 
 interface NewCustomProviderCardProps {
   isFirstProvider: boolean;
+  onBeforeOpen?: () => void;
 }
 
 function NewCustomProviderCard({
   isFirstProvider,
+  onBeforeOpen,
 }: NewCustomProviderCardProps) {
   const [isOpen, setIsOpen] = useState(false);
   const { icon, productName, companyName, Modal } = getProvider("custom");
 
+  const handleOpen = () => {
+    onBeforeOpen?.();
+    setIsOpen(true);
+  };
+
   return (
     <>
       {isOpen && (
-        <Modal shouldMarkAsDefault={isFirstProvider} onOpenChange={setIsOpen} />
+        <Modal
+          shouldMarkAsDefault={isFirstProvider}
+          onOpenChange={setIsOpen}
+        />
       )}
 
       <SelectCard
         state="empty"
         padding={2}
         rounding="lg"
-        onClick={() => setIsOpen(true)}
+        onClick={handleOpen}
       >
         <ContentAction
           icon={icon}
@@ -311,7 +338,7 @@ function NewCustomProviderCard({
               prominence="tertiary"
               onClick={(e) => {
                 e.stopPropagation();
-                setIsOpen(true);
+                handleOpen();
               }}
             >
               Set Up
@@ -334,6 +361,8 @@ export default function LanguageModelsPage() {
   const isConfigurationDisabled = usePHFeatureFlag(
     PHFeatureFlag.LANGUAGE_MODEL_CONFIGURATION_DISABLED
   );
+  const [isDefaultModelSelectorOpen, setIsDefaultModelSelectorOpen] =
+    useState(false);
 
   // Resolve the current default to a model_configuration_id for ModelSelector
   const defaultModelConfigId = useMemo(() => {
@@ -412,6 +441,8 @@ export default function LanguageModelsPage() {
                   }
                 }}
                 side="bottom"
+                open={isDefaultModelSelectorOpen}
+                onOpenChange={setIsDefaultModelSelectorOpen}
               />
             </InputHorizontal>
           </Card>
@@ -444,6 +475,9 @@ export default function LanguageModelsPage() {
                     provider={provider}
                     isDefault={defaultText?.provider_id === provider.id}
                     isLastProvider={sortedProviders.length === 1}
+                    onBeforeOpen={() =>
+                      setIsDefaultModelSelectorOpen(false)
+                    }
                   />
                 ))}
               </div>
@@ -492,10 +526,18 @@ export default function LanguageModelsPage() {
                       key={name}
                       providerName={name}
                       isFirstProvider={isFirstProvider}
+                      onBeforeOpen={() =>
+                        setIsDefaultModelSelectorOpen(false)
+                      }
                     />
                   ))}
                   {group.includeCustom && (
-                    <NewCustomProviderCard isFirstProvider={isFirstProvider} />
+                    <NewCustomProviderCard
+                      isFirstProvider={isFirstProvider}
+                      onBeforeOpen={() =>
+                        setIsDefaultModelSelectorOpen(false)
+                      }
+                    />
                   )}
                 </div>
               </GeneralLayouts.Section>
