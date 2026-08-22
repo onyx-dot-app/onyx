@@ -353,18 +353,20 @@ func (v *viewport) renderPicker(width, height int) string {
 		Bold(true).
 		Render(" " + title + " ")
 
-	// Build top border manually to avoid ANSI-corrupted rune slicing.
-	// panelWidth+2 accounts for the left and right border characters.
+	// Build top border manually to avoid ANSI-corrupted rune slicing. Measure
+	// the rendered panel instead of assuming its width — lipgloss box sizing
+	// would put the replacement line off by one.
+	panelLines := strings.Split(panel, "\n")
+	panelTotalWidth := lipgloss.Width(panelLines[len(panelLines)-1])
 	borderColor := lipgloss.NewStyle().Foreground(accentColor)
 	titleWidth := lipgloss.Width(titleRendered)
-	rightDashes := panelWidth + 2 - 3 - titleWidth // total - "╭─" - "╮" - title
+	rightDashes := panelTotalWidth - 3 - titleWidth // total - "╭─" - "╮" - title
 	if rightDashes < 0 {
 		rightDashes = 0
 	}
 	topBorder := borderColor.Render("╭─") + titleRendered +
 		borderColor.Render(strings.Repeat("─", rightDashes)+"╮")
 
-	panelLines := strings.Split(panel, "\n")
 	if len(panelLines) > 0 {
 		panelLines[0] = topBorder
 	}

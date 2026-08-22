@@ -1,8 +1,10 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 
+	"charm.land/lipgloss/v2"
 	"github.com/onyx-dot-app/onyx/cli/internal/config"
 	"github.com/onyx-dot-app/onyx/cli/internal/models"
 )
@@ -138,6 +140,31 @@ func TestSelectModelSetsOverrideAndStatus(t *testing.T) {
 	}
 	if m.status.modelName != "GPT-4o" {
 		t.Errorf("status model = %q, want %q", m.status.modelName, "GPT-4o")
+	}
+}
+
+func TestPickerBorderLinesShareOneWidth(t *testing.T) {
+	v := newViewport(120, false)
+	v.showPicker(pickerModel, []pickerItem{
+		{id: "0", label: "Gemma 4 E2B - Ollama *"},
+		{id: "1", label: "Qwen 3 8B - Ollama"},
+	})
+
+	var widths []int
+	for _, line := range strings.Split(v.renderPicker(120, 30), "\n") {
+		trimmed := strings.TrimRight(line, " ")
+		if strings.TrimSpace(stripANSI(trimmed)) == "" {
+			continue
+		}
+		widths = append(widths, lipgloss.Width(trimmed))
+	}
+	if len(widths) == 0 {
+		t.Fatal("expected rendered panel lines")
+	}
+	for i, w := range widths {
+		if w != widths[0] {
+			t.Errorf("panel line %d width = %d, want %d (title border must match the panel)", i, w, widths[0])
+		}
 	}
 }
 
