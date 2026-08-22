@@ -105,17 +105,28 @@ func cmdRunSkill(m Model, s skills.Skill, arg string) (Model, tea.Cmd) {
 	return m.sendMessageWithDisplay(skillPrompt(s, arg), display)
 }
 
-// skillPrompt builds the chat message for a skill invocation.
+// skillPrompt builds the chat message for a skill invocation. If the skill
+// body references $ARGUMENTS, the user's request is substituted there;
+// otherwise it is appended after the skill instructions.
 func skillPrompt(s skills.Skill, arg string) string {
+	body := s.Body
+	inlineArgs := strings.Contains(body, "$ARGUMENTS")
+	if inlineArgs {
+		body = strings.ReplaceAll(body, "$ARGUMENTS", arg)
+	}
+
 	var b strings.Builder
 	b.WriteString("Follow the instructions in this skill to complete my request.\n\n")
 	b.WriteString("<skill name=\"" + s.Name + "\">\n")
-	b.WriteString(s.Body)
-	b.WriteString("\n</skill>\n\n")
+	b.WriteString(body)
+	b.WriteString("\n</skill>")
+	if inlineArgs {
+		return b.String()
+	}
 	if arg != "" {
-		b.WriteString("My request: " + arg)
+		b.WriteString("\n\nMy request: " + arg)
 	} else {
-		b.WriteString("My request: run this skill.")
+		b.WriteString("\n\nMy request: run this skill.")
 	}
 	return b.String()
 }

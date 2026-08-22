@@ -209,8 +209,9 @@ Instructions for the agent...
 ```
 
 Type `/release-notes summarize this week` to run it. The CLI sends the skill
-instructions and your request to the agent as one message. Use `/skills` to
-list discovered skills.
+instructions and your request to the agent as one message. If the skill body
+contains `$ARGUMENTS`, your request is substituted there instead of being
+appended. Use `/skills` to list discovered skills.
 
 ## Keyboard Shortcuts
 
