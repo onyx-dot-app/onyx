@@ -54,7 +54,7 @@ _PLACEHOLDER_USER: User = cast(User, None)
 def _put(body: dict[str, Any] | bytes) -> Any:
     raw = body if isinstance(body, bytes) else json.dumps(body).encode("utf-8")
     request = cast(Request, _FakeRequest(raw))
-    return asyncio.run(put_security_settings_endpoint(request, _=_PLACEHOLDER_USER))
+    return asyncio.run(put_security_settings_endpoint(request, user=_PLACEHOLDER_USER))
 
 
 def _load_row_as_dict() -> dict[str, Any] | None:
@@ -421,3 +421,41 @@ def test_put_rejects_kill_switch_in_multi_tenant(
     assert exc_info.value.error_code is OnyxErrorCode.INVALID_INPUT
     assert _load_row_as_dict() is None
     assert _load_password_auth_kv() == "missing"
+
+
+def test_put_rejects_env_pinned_field_while_env_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A set env var pins the field: the PUT refuses instead of storing an
+    override the merge would render inert."""
+    monkeypatch.setattr(security_store._cfg, "JWT_EXPECTED_AUDIENCE", "env-aud")
+
+    with pytest.raises(OnyxError) as exc_info:
+        _put({"jwt_expected_audience": "db-aud"})
+    assert exc_info.value.error_code is OnyxErrorCode.INSUFFICIENT_PERMISSIONS
+
+
+def test_put_accepts_env_pinned_field_while_env_unset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(security_store._cfg, "JWT_EXPECTED_AUDIENCE", None)
+    monkeypatch.setattr(security_store._cfg, "JWT_EXPECTED_ISSUER", None)
+    monkeypatch.setattr(security_store._cfg, "JWT_PUBLIC_KEY_URL", None)
+
+    effective = _put({"jwt_expected_audience": "db-aud"})
+    assert effective.jwt_expected_audience == "db-aud"
+    row = _load_row_as_dict()
+    assert row is not None
+    assert row["jwt_expected_audience"] == "db-aud"
+
+
+def test_put_rejects_jwt_key_url_failing_ssrf_policy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The default SSRF level blocks loopback, so an admin cannot aim the
+    server's key fetch at itself."""
+    monkeypatch.setattr(security_store._cfg, "JWT_PUBLIC_KEY_URL", None)
+
+    with pytest.raises(OnyxError) as exc_info:
+        _put({"jwt_public_key_url": "https://127.0.0.1/keys"})
+    assert exc_info.value.error_code is OnyxErrorCode.INVALID_INPUT

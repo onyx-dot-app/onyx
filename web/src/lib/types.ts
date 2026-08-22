@@ -576,9 +576,9 @@ export type SSRFProtectionLevel =
   | "allow_private_network"
   | "disabled";
 
-// Read shape of GET /admin/security: effective, env-merged settings. Every
-// field is concrete, the backend never returns null here (see
-// `SecuritySettings` in backend/onyx/server/security/models.py).
+// Read shape of GET /admin/security: effective, env-merged settings (see
+// `SecuritySettings` in backend/onyx/server/security/models.py). Only the
+// jwt_* fields are nullable, null meaning that check is off.
 export interface SecuritySettings {
   user_directory_admin_only: boolean;
   incognito_availability: IncognitoAvailability;
@@ -595,6 +595,9 @@ export interface SecuritySettings {
   password_require_digit: boolean;
   password_require_special_char: boolean;
   password_auth_enabled: boolean;
+  jwt_public_key_url: string | null;
+  jwt_expected_audience: string | null;
+  jwt_expected_issuer: string | null;
 }
 
 export enum ValidSources {

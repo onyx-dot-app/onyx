@@ -16,12 +16,14 @@ from jwt import (
 from jwt import decode as jwt_decode
 from jwt.algorithms import RSAAlgorithm  # ty: ignore[possibly-missing-import]
 
-from onyx.configs.app_configs import (
-    JWT_EXPECTED_AUDIENCE,
-    JWT_EXPECTED_ISSUER,
-    JWT_PUBLIC_KEY_URL,
+from onyx.auth.sso_url_guard import UnsafeSSOUrl, validate_idp_url
+from onyx.server.security.models import OutboundSSRFParams, outbound_ssrf_params
+from onyx.server.security.store import (
+    env_pinned_active_fields,
+    get_security_settings,
 )
 from onyx.utils.logger import setup_logger
+from onyx.utils.url import SSRFException, ssrf_safe_get
 
 logger = setup_logger()
 
@@ -34,17 +36,36 @@ class PublicKeyFormat(Enum):
     PEM = "pem"
 
 
-@lru_cache()
-def _fetch_public_key_payload() -> tuple[str | dict[str, Any], PublicKeyFormat] | None:
-    """Fetch and cache the raw JWT verification material."""
-    if JWT_PUBLIC_KEY_URL is None:
-        logger.error("JWT_PUBLIC_KEY_URL is not set")
-        return None
-
+# Keyed on the URL so a runtime settings change takes effect without a restart.
+@lru_cache(maxsize=8)
+def _fetch_public_key_payload(
+    public_key_url: str,
+    operator_pinned: bool,
+    allow_private_network: bool,
+    block_loopback_and_link_local: bool,
+    block_link_local_only: bool,
+) -> tuple[str | dict[str, Any], PublicKeyFormat] | None:
+    """Fetch and cache the raw JWT verification material. A DB-origin URL is
+    admin-aimed, so its fetch validates every redirect hop and pins the
+    resolved IP against DNS rebinding. An env-pinned URL is operator
+    config-as-code and fetched as-is."""
     try:
-        response = requests.get(JWT_PUBLIC_KEY_URL)
+        if operator_pinned:
+            response = requests.get(public_key_url)
+        else:
+            # Mirrors the PUT-time check: the configured SSRF level decides
+            # whether private endpoints are reachable.
+            # https_only holds across redirect hops, so no hop can downgrade
+            # the key fetch to plaintext.
+            response = ssrf_safe_get(
+                public_key_url,
+                allow_private_network=allow_private_network,
+                block_loopback_and_link_local=block_loopback_and_link_local,
+                block_link_local_only=block_link_local_only,
+                https_only=True,
+            )
         response.raise_for_status()
-    except requests.RequestException as exc:
+    except (requests.RequestException, SSRFException, ValueError) as exc:
         logger.error("Failed to fetch JWT public key: %s", str(exc))
         return None
     content_type = response.headers.get("Content-Type", "").lower()
@@ -74,9 +95,20 @@ def _fetch_public_key_payload() -> tuple[str | dict[str, Any], PublicKeyFormat] 
     return body, PublicKeyFormat.PEM
 
 
-def get_public_key(token: str) -> RSAPublicKey | str | None:
+def get_public_key(
+    token: str,
+    public_key_url: str,
+    operator_pinned: bool,
+    ssrf_params: OutboundSSRFParams,
+) -> RSAPublicKey | str | None:
     """Return the concrete public key used to verify the provided JWT token."""
-    payload = _fetch_public_key_payload()
+    payload = _fetch_public_key_payload(
+        public_key_url,
+        operator_pinned,
+        ssrf_params.allow_private_network,
+        ssrf_params.block_loopback_and_link_local,
+        ssrf_params.block_link_local_only,
+    )
     if payload is None:
         logger.error("Failed to retrieve public key payload")
         return None
@@ -136,8 +168,28 @@ def _resolve_public_key_from_jwks(
 
 
 async def verify_jwt_token(token: str) -> dict[str, Any] | None:
+    settings = get_security_settings()
+    if settings.jwt_public_key_url is None:
+        logger.error("JWT public key URL is not configured")
+        return None
+
+    # A DB-origin URL is admin-aimed and must satisfy the outbound SSRF policy.
+    # An env-pinned value is operator config-as-code, trusted as before.
+    operator_pinned = "jwt_public_key_url" in env_pinned_active_fields()
+    if not operator_pinned:
+        try:
+            validate_idp_url(settings.jwt_public_key_url, field="jwt_public_key_url")
+        except UnsafeSSOUrl as e:
+            logger.error("JWT public key URL rejected: %s", e)
+            return None
+
     for attempt in range(_PUBLIC_KEY_FETCH_ATTEMPTS):
-        public_key = get_public_key(token)
+        public_key = get_public_key(
+            token,
+            settings.jwt_public_key_url,
+            operator_pinned,
+            outbound_ssrf_params(settings.ssrf_protection_level),
+        )
         if public_key is None:
             logger.error("Unable to resolve a public key for JWT verification")
             if attempt < _PUBLIC_KEY_FETCH_ATTEMPTS - 1:
@@ -152,9 +204,9 @@ async def verify_jwt_token(token: str) -> dict[str, Any] | None:
                 token,
                 public_key,
                 algorithms=["RS256"],
-                audience=JWT_EXPECTED_AUDIENCE,
-                issuer=JWT_EXPECTED_ISSUER,
-                options={"verify_aud": JWT_EXPECTED_AUDIENCE is not None},
+                audience=settings.jwt_expected_audience,
+                issuer=settings.jwt_expected_issuer,
+                options={"verify_aud": settings.jwt_expected_audience is not None},
             )
         except (
             InvalidAudienceError,

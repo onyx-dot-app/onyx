@@ -83,6 +83,7 @@ PASSWORD_MAX_LENGTH_FLOOR = 4
 
 
 _OPERATOR_LOCKED_MARKER = "operator_locked"
+_ENV_PINNED_MARKER = "env_pinned"
 
 
 def _operator_locked() -> dict[str, bool]:
@@ -93,6 +94,14 @@ def _operator_locked() -> dict[str, bool]:
 def _tenant_editable() -> dict[str, bool]:
     """Field marker: tenant admins may override at runtime."""
     return {_OPERATOR_LOCKED_MARKER: False}
+
+
+def _env_pinned() -> dict[str, bool]:
+    """Field marker: a set env var wins over any stored override, so infra can
+    keep auth-gating values as reviewable config-as-code that an app-level
+    admin compromise cannot flip. Also operator-locked: never tenant-editable
+    in multi-tenant, and single-tenant editable only while env is unset."""
+    return {_OPERATOR_LOCKED_MARKER: True, _ENV_PINNED_MARKER: True}
 
 
 class IncognitoAvailability(str, Enum):
@@ -161,6 +170,15 @@ class SecuritySettingsOverrides(BaseModel):
     password_auth_enabled: bool | None = Field(
         default=None, json_schema_extra=_operator_locked()
     )
+    jwt_public_key_url: str | None = Field(
+        default=None, json_schema_extra=_env_pinned()
+    )
+    jwt_expected_audience: str | None = Field(
+        default=None, json_schema_extra=_env_pinned()
+    )
+    jwt_expected_issuer: str | None = Field(
+        default=None, json_schema_extra=_env_pinned()
+    )
 
     @field_validator("valid_email_domains")
     @classmethod
@@ -199,6 +217,18 @@ def _derive_operator_locked_fields() -> frozenset[str]:
 OPERATOR_LOCKED_FIELDS: frozenset[str] = _derive_operator_locked_fields()
 
 
+def _derive_env_pinned_fields() -> frozenset[str]:
+    return frozenset(
+        name
+        for name, info in SecuritySettingsOverrides.model_fields.items()
+        if isinstance(info.json_schema_extra, dict)
+        and info.json_schema_extra.get(_ENV_PINNED_MARKER)
+    )
+
+
+ENV_PINNED_FIELDS: frozenset[str] = _derive_env_pinned_fields()
+
+
 class SecuritySettings(BaseModel):
     """Effective, env-merged, immutable security settings."""
 
@@ -219,6 +249,10 @@ class SecuritySettings(BaseModel):
     password_require_digit: bool
     password_require_special_char: bool
     password_auth_enabled: bool
+    # None disables JWT bearer auth / the corresponding claim check entirely.
+    jwt_public_key_url: str | None
+    jwt_expected_audience: str | None
+    jwt_expected_issuer: str | None
 
     @model_validator(mode="after")
     def _check_password_length_invariants(self) -> Self:
