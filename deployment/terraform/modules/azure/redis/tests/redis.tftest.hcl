@@ -179,6 +179,31 @@ run "rejects_a_sku_that_is_not_one" {
   expect_failures = [var.sku_name]
 }
 
+run "rejects_a_family_spliced_to_the_wrong_letter" {
+  command = plan
+
+  # Each family has its own letter. Balanced uses B, so Balanced_C3 is two
+  # families spliced together rather than a size.
+  variables {
+    sku_name = "Balanced_C3"
+  }
+
+  expect_failures = [var.sku_name]
+}
+
+run "accepts_each_family_with_its_own_letter" {
+  command = plan
+
+  variables {
+    sku_name = "MemoryOptimized_M10"
+  }
+
+  assert {
+    condition     = azurerm_managed_redis.this.sku_name == "MemoryOptimized_M10"
+    error_message = "A correctly paired SKU should reach the resource."
+  }
+}
+
 run "rejects_a_redis_style_eviction_policy" {
   command = plan
 

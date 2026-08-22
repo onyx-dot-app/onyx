@@ -27,9 +27,13 @@ variable "sku_name" {
   description = "Managed Redis SKU, for example \"Balanced_B5\" for 5 GB. The number is roughly the memory in GB."
   default     = "Balanced_B5"
 
+  # Each family uses its own letter, so the letter and the family have to agree:
+  # Balanced_C3 is not a size, it is two families spliced together. Checking the
+  # pairing catches that without pinning an exact SKU list that goes stale every
+  # time Azure adds a size.
   validation {
-    condition     = can(regex("^(Balanced|MemoryOptimized|ComputeOptimized|FlashOptimized)_[A-Z][0-9]+$", var.sku_name))
-    error_message = "sku_name must look like Balanced_B5, MemoryOptimized_M10, ComputeOptimized_X3 or FlashOptimized_A250."
+    condition     = can(regex("^(Balanced_B|MemoryOptimized_M|ComputeOptimized_X|FlashOptimized_A)[0-9]+$", var.sku_name))
+    error_message = "sku_name must pair the family with its own letter: Balanced_B*, MemoryOptimized_M*, ComputeOptimized_X* or FlashOptimized_A* (for example Balanced_B5)."
   }
 }
 

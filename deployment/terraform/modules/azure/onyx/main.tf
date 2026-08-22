@@ -251,7 +251,7 @@ module "aks" {
   enable_sandbox_node_pool = var.enable_sandbox_node_pool
 
   private_cluster_enabled              = var.private_cluster_enabled
-  api_server_authorized_ip_ranges      = var.api_server_authorized_ip_ranges
+  api_server_authorized_ip_ranges      = local.api_server_authorized_ip_ranges
   allow_unrestricted_api_server_access = var.allow_unrestricted_api_server_access
   network_policy                       = var.network_policy
 
