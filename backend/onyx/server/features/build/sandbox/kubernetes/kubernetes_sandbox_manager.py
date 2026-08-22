@@ -181,6 +181,12 @@ _OPENCODE_CONNECT_APP_PLUGIN_PATH = "/workspace/opencode-plugins/connect-app.ts"
 _OPENCODE_TURN_BUDGET_PLUGIN_PATH = "/workspace/opencode-plugins/turn-budget.ts"
 # Surfaces the `webapp` tool (start/status/logs/restart); always on.
 _OPENCODE_WEBAPP_PLUGIN_PATH = "/workspace/opencode-plugins/webapp.ts"
+# Surfaces the no-op `propose_scheduled_task` tool; always on. Unlike
+# connect_app it needs no permission interception: the persisted tool call is
+# what the approval card is built from.
+_OPENCODE_SCHEDULED_TASK_PROPOSAL_PLUGIN_PATH = (
+    "/workspace/opencode-plugins/scheduled-task-proposal.ts"
+)
 
 
 _PROXY_RESOLVE_RETRY_ATTEMPTS = 5
@@ -1113,6 +1119,7 @@ class KubernetesSandboxManager(SandboxManager):
                         _OPENCODE_CONNECT_APP_PLUGIN_PATH,
                         _OPENCODE_TURN_BUDGET_PLUGIN_PATH,
                         _OPENCODE_WEBAPP_PLUGIN_PATH,
+                        _OPENCODE_SCHEDULED_TASK_PROPOSAL_PLUGIN_PATH,
                         _OPENCODE_SESSION_TAG_PLUGIN_PATH,
                     ],
                 )
