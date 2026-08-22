@@ -5,7 +5,9 @@ from datetime import datetime
 from typing import Any
 
 import httpx
+import pydantic_core
 from fastmcp.server.auth.auth import AccessToken
+from fastmcp.tools.tool import ToolResult
 from pydantic import BaseModel, TypeAdapter, ValidationError
 
 from onyx.configs.constants import DocumentSource
@@ -92,6 +94,19 @@ def _error_payload(error: str) -> dict[str, Any]:
     return {"error": error, "results": []}
 
 
+def _as_tool_result(payload: dict[str, Any]) -> ToolResult:
+    """Emit the payload once, as content text only.
+
+    Returning a bare dict lets FastMCP derive an output schema from the
+    annotation and send the payload twice - once as ``structuredContent`` and
+    again as serialised JSON in a text block. For search the payload is the
+    retrieved document content, so that duplicate is expensive. The schema is
+    derived from ``dict[str, Any]`` and conveys no structure, so clients gain
+    nothing from the structured copy. The text is byte-identical either way.
+    """
+    return ToolResult(content=pydantic_core.to_json(payload, fallback=str).decode())
+
+
 _TIME_CUTOFF_ADAPTER: TypeAdapter[datetime | None] = TypeAdapter(datetime | None)
 
 
@@ -113,7 +128,7 @@ async def search_indexed_documents(
     document_set_names: list[str] | None = None,
     time_cutoff: str | None = None,
     skip_query_expansion: bool = False,
-) -> dict[str, Any]:
+) -> ToolResult:
     """
     Search the user's knowledge base indexed in Onyx.
     Use this tool for information that is not public knowledge and specific to the user,
@@ -182,15 +197,19 @@ async def search_indexed_documents(
                 err,
                 exc_info=True,
             )
-            return _error_payload(f"Failed to check indexed sources: {str(err)}")
+            return _as_tool_result(
+                _error_payload(f"Failed to check indexed sources: {str(err)}")
+            )
 
         if not sources:
             logger.info("Onyx MCP Server: No indexed sources available for tenant")
             outcome = MCPToolCallStatus.SUCCESS
             result_count = 0
-            return _error_payload(
-                "No document sources are indexed yet. Add connectors or upload data "
-                "through Onyx before calling search_indexed_documents."
+            return _as_tool_result(
+                _error_payload(
+                    "No document sources are indexed yet. Add connectors or upload "
+                    "data through Onyx before calling search_indexed_documents."
+                )
             )
 
         source_type_enums: list[DocumentSource] | None = None
@@ -225,7 +244,7 @@ async def search_indexed_documents(
         endpoint = f"{build_api_server_url_for_http_requests(respect_env_override_if_set=True)}/search"
         response = await _post_model(endpoint, request, access_token)
         if not response.is_success:
-            return _error_payload(_extract_error_detail(response))
+            return _as_tool_result(_error_payload(_extract_error_detail(response)))
 
         payload = SearchResponse.model_validate_json(response.content)
         results = [_to_mcp_dict(result) for result in payload.results]
@@ -234,10 +253,10 @@ async def search_indexed_documents(
         logger.info(
             "Onyx MCP Server: Internal search returned %s results", len(results)
         )
-        return {"results": results}
+        return _as_tool_result({"results": results})
     except Exception as err:
         logger.error("Onyx MCP Server: Document search error: %s", err, exc_info=True)
-        return _error_payload(f"Document search failed: {str(err)}")
+        return _as_tool_result(_error_payload(f"Document search failed: {str(err)}"))
     finally:
         record_mcp_server_tool_outcome(tool, _start, outcome)
         if result_count is not None:
