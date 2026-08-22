@@ -589,6 +589,12 @@ func (m Model) handleModelsLoaded(msg ModelsLoadedMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// A startup response that lands while the model picker is open must not
+	// replace the list the picker's indices point into.
+	if !msg.ShowPicker && m.viewport.pickerActive && m.viewport.pickerType == pickerModel {
+		return m, nil
+	}
+
 	m.llmModels = flattenModelOptions(msg.Response)
 	m.status.setModel(m.currentModelLabel())
 

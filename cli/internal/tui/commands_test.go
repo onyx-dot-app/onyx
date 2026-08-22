@@ -95,6 +95,31 @@ func TestModelsLoadedShowsPicker(t *testing.T) {
 	}
 }
 
+func TestStartupLoadKeepsOpenPickerListStable(t *testing.T) {
+	m := NewModel(config.DefaultConfig(), nil)
+	updated, _ := m.handleModelsLoaded(ModelsLoadedMsg{Response: testProviderResponse(), ShowPicker: true})
+	m = updated.(Model)
+
+	late := &models.LLMProviderResponse{
+		Providers: []models.LLMProviderDescriptor{
+			{
+				ID:                  3,
+				Provider:            "ollama",
+				ProviderDisplayName: "Ollama",
+				ModelConfigurations: []models.ModelConfiguration{
+					{ID: intPtr(30), Name: "llama3", IsVisible: true},
+				},
+			},
+		},
+	}
+	updated, _ = m.handleModelsLoaded(ModelsLoadedMsg{Response: late})
+	m = updated.(Model)
+
+	if len(m.llmModels) != 2 {
+		t.Errorf("expected the picker's model list to stay at 2 entries, got %d", len(m.llmModels))
+	}
+}
+
 func TestSelectModelSetsOverrideAndStatus(t *testing.T) {
 	m := NewModel(config.DefaultConfig(), nil)
 	updated, _ := m.handleModelsLoaded(ModelsLoadedMsg{Response: testProviderResponse()})

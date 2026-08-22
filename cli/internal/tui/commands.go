@@ -161,8 +161,10 @@ func flattenModelOptions(resp *models.LLMProviderResponse) []modelOption {
 	}
 	var options []modelOption
 	for _, provider := range resp.Providers {
-		providerName := provider.Provider
-		if provider.Name != nil && *provider.Name != "" {
+		// Only the provider config name works for the name-based override
+		// fallback on older servers; the provider type key does not resolve.
+		providerName := ""
+		if provider.Name != nil {
 			providerName = *provider.Name
 		}
 		for _, mc := range provider.ModelConfigurations {
