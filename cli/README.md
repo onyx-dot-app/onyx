@@ -183,10 +183,34 @@ onyx-cli install-skill --agent claude-code
 | `/agent` | List and switch agents |
 | `/attach <path>` | Attach a file to next message |
 | `/sessions` | List recent chat sessions |
+| `/skills` | List available skills |
 | `/configure` | Re-run connection setup |
 | `/connectors` | Open connectors in browser |
 | `/settings` | Open settings in browser |
 | `/quit` | Exit Onyx CLI |
+| `/<skill> [request]` | Run a local skill (see below) |
+
+### Skills as slash commands
+
+The TUI discovers local agent skills and exposes each one as a slash command.
+A skill is a `SKILL.md` file at `.agents/skills/<name>/SKILL.md`, in the
+current directory or in your home directory. Skills in the current directory
+win on name collisions; built-in commands always win over skills.
+
+`SKILL.md` starts with optional YAML frontmatter:
+
+```markdown
+---
+name: release-notes
+description: Draft release notes from recent changes.
+---
+
+Instructions for the agent...
+```
+
+Type `/release-notes summarize this week` to run it. The CLI sends the skill
+instructions and your request to the agent as one message. Use `/skills` to
+list discovered skills.
 
 ## Keyboard Shortcuts
 

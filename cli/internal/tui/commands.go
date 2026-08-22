@@ -11,6 +11,7 @@ import (
 	"github.com/onyx-dot-app/onyx/cli/internal/browser"
 	"github.com/onyx-dot-app/onyx/cli/internal/config"
 	"github.com/onyx-dot-app/onyx/cli/internal/models"
+	"github.com/onyx-dot-app/onyx/cli/internal/skills"
 )
 
 // handleSlashCommand dispatches slash commands and returns updated model + cmd.
@@ -24,7 +25,11 @@ func handleSlashCommand(m Model, text string) (Model, tea.Cmd) {
 
 	switch command {
 	case "/help":
-		m.viewport.addInfo(helpText)
+		m.viewport.addInfo(renderHelp(m.skills))
+		return m, nil
+
+	case "/skills":
+		m.viewport.addInfo(renderSkillList(m.skills))
 		return m, nil
 
 	case "/agent":
@@ -74,9 +79,45 @@ func handleSlashCommand(m Model, text string) (Model, tea.Cmd) {
 		return m, tea.Quit
 
 	default:
+		for _, s := range m.skills {
+			if s.Command() == command {
+				return cmdRunSkill(m, s, arg)
+			}
+		}
 		m.viewport.addWarning(fmt.Sprintf("Unknown command: %s. Type /help for available commands.", command))
 		return m, nil
 	}
+}
+
+// cmdRunSkill sends the skill's instructions (plus the user's request, if
+// any) to the agent as a chat message.
+func cmdRunSkill(m Model, s skills.Skill, arg string) (Model, tea.Cmd) {
+	if m.isStreaming {
+		m.viewport.addWarning("Wait for the current response to finish before running a skill.")
+		return m, nil
+	}
+
+	arg = strings.TrimSpace(arg)
+	display := s.Command()
+	if arg != "" {
+		display += " " + arg
+	}
+	return m.sendMessageWithDisplay(skillPrompt(s, arg), display)
+}
+
+// skillPrompt builds the chat message for a skill invocation.
+func skillPrompt(s skills.Skill, arg string) string {
+	var b strings.Builder
+	b.WriteString("Follow the instructions in this skill to complete my request.\n\n")
+	b.WriteString("<skill name=\"" + s.Name + "\">\n")
+	b.WriteString(s.Body)
+	b.WriteString("\n</skill>\n\n")
+	if arg != "" {
+		b.WriteString("My request: " + arg)
+	} else {
+		b.WriteString("My request: run this skill.")
+	}
+	return b.String()
 }
 
 func cmdNew(m Model) (Model, tea.Cmd) {

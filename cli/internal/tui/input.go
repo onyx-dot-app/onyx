@@ -21,6 +21,7 @@ var slashCommands = []slashCommand{
 	{"/agent", "List and switch agents"},
 	{"/attach", "Attach a file to next message"},
 	{"/sessions", "Browse and resume previous sessions"},
+	{"/skills", "List available skills"},
 	{"/configure", "Re-run connection setup"},
 	{"/connectors", "Open connectors in browser"},
 	{"/settings", "Open settings in browser"},
@@ -33,6 +34,18 @@ var argCommands = map[string]bool{
 	"/attach": true,
 }
 
+// isBuiltinCommand reports whether cmd is a built-in slash command or alias.
+// Skills with these names are ignored — built-ins always win.
+func isBuiltinCommand(cmd string) bool {
+	for _, sc := range slashCommands {
+		if sc.command == cmd {
+			return true
+		}
+	}
+	// Aliases handled in handleSlashCommand but not listed in the menu.
+	return cmd == "/new" || cmd == "/resume"
+}
+
 // inputModel manages the text input and slash command menu.
 type inputModel struct {
 	textInput     textinput.Model
@@ -42,6 +55,12 @@ type inputModel struct {
 	attachedFiles []string
 	customPrompt  string
 	suppressMenu  bool
+	skillCommands []slashCommand
+}
+
+// setSkillCommands registers skill slash commands for the completion menu.
+func (m *inputModel) setSkillCommands(cmds []slashCommand) {
+	m.skillCommands = cmds
 }
 
 func newInputModel() inputModel {
@@ -145,7 +164,7 @@ func (m inputModel) updateMenu() inputModel {
 	if strings.HasPrefix(val, "/") && !strings.Contains(val, " ") {
 		needle := strings.ToLower(val)
 		var filtered []slashCommand
-		for _, sc := range slashCommands {
+		for _, sc := range append(append([]slashCommand{}, slashCommands...), m.skillCommands...) {
 			if strings.HasPrefix(sc.command, needle) {
 				filtered = append(filtered, sc)
 			}

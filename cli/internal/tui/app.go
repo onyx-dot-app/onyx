@@ -15,6 +15,7 @@ import (
 	"github.com/onyx-dot-app/onyx/cli/internal/api"
 	"github.com/onyx-dot-app/onyx/cli/internal/config"
 	"github.com/onyx-dot-app/onyx/cli/internal/models"
+	"github.com/onyx-dot-app/onyx/cli/internal/skills"
 )
 
 // Model is the root Bubble Tea model.
@@ -44,6 +45,7 @@ type Model struct {
 	attachedFiles   []models.FileDescriptorPayload
 	needsRename     bool
 	agentStarted    bool
+	skills          []skills.Skill
 
 	// Configure state
 	configState *configState
@@ -58,16 +60,37 @@ type Model struct {
 func NewModel(cfg config.OnyxCliConfig, client api.ClientAPI) Model {
 	parentID := -1
 
+	localSkills := skills.Discover()
+	filtered := localSkills[:0]
+	for _, s := range localSkills {
+		if !isBuiltinCommand(s.Command()) {
+			filtered = append(filtered, s)
+		}
+	}
+	localSkills = filtered
+
+	input := newInputModel()
+	skillCmds := make([]slashCommand, len(localSkills))
+	for i, s := range localSkills {
+		desc := s.Description
+		if desc == "" {
+			desc = "Run the " + s.Name + " skill"
+		}
+		skillCmds[i] = slashCommand{command: s.Command(), description: desc}
+	}
+	input.setSkillCommands(skillCmds)
+
 	return Model{
 		config:          cfg,
 		client:          client,
 		viewport:        newViewport(80, cfg.Features.StreamMarkdownEnabled()),
-		input:           newInputModel(),
+		input:           input,
 		status:          newStatusBar(),
 		agentID:         cfg.DefaultAgentID,
 		agentName:       "Default",
 		parentMessageID: &parentID,
 		citations:       make(map[int]string),
+		skills:          localSkills,
 	}
 }
 
@@ -366,11 +389,17 @@ func (m Model) cancelStream() (Model, tea.Cmd) {
 }
 
 func (m Model) sendMessage(message string) (Model, tea.Cmd) {
+	return m.sendMessageWithDisplay(message, message)
+}
+
+// sendMessageWithDisplay sends message to the agent but shows display in the
+// chat view. Used by skill commands, whose full prompt is too long to show.
+func (m Model) sendMessageWithDisplay(message string, display string) (Model, tea.Cmd) {
 	if m.isStreaming {
 		return m, nil
 	}
 
-	m.viewport.addUserMessage(message)
+	m.viewport.addUserMessage(display)
 	m.viewport.startAgent()
 
 	// Prepare file descriptors
