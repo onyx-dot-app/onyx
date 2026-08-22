@@ -1888,6 +1888,27 @@ export class OnyxApiClient {
   }
 
   /**
+   * Moves a chat session into a project.
+   *
+   * @param projectId - The project to move the chat into
+   * @param chatId - The chat session to move
+   */
+  async moveChatSessionToProject(
+    projectId: number,
+    chatId: string
+  ): Promise<void> {
+    const response = await this.post(
+      `/user/projects/${projectId}/move_chat_session`,
+      { chat_session_id: chatId }
+    );
+    await this.handleResponseSoft(
+      response,
+      `Failed to move chat ${chatId} into project ${projectId}`
+    );
+    this.log(`Moved chat ${chatId} into project ${projectId}`);
+  }
+
+  /**
    * Deletes a project.
    *
    * @param projectId - The project ID to delete
