@@ -323,10 +323,14 @@ func (v *viewport) renderPicker(width, height int) string {
 		}
 	}
 
+	// Computed over all items (not just the visible window) so the column
+	// stays put while scrolling.
+	detailCol := pickerDetailCol(v.pickerItems, innerWidth-4)
+
 	var itemLines []string
 	for i := startIdx; i < endIdx; i++ {
 		item := v.pickerItems[i]
-		label := formatPickerLabel(item, innerWidth-4)
+		label := formatPickerLabel(item, innerWidth-4, detailCol)
 		if i == v.pickerIndex {
 			line := lipgloss.NewStyle().Foreground(accentColor).Bold(true).Render("> " + label)
 			itemLines = append(itemLines, line)
@@ -374,29 +378,55 @@ func (v *viewport) renderPicker(width, height int) string {
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, panel)
 }
 
+// pickerDetailCol returns the column where the detail column starts, so
+// details left-align across rows: two past the widest label, pulled back so
+// the widest detail still fits in avail. Zero when no item has a detail.
+func pickerDetailCol(items []pickerItem, avail int) int {
+	maxLabel, maxDetail := 0, 0
+	for _, it := range items {
+		if it.detail == "" {
+			continue
+		}
+		if w := len([]rune(it.label)); w > maxLabel {
+			maxLabel = w
+		}
+		if w := len([]rune(it.detail)); w > maxDetail {
+			maxDetail = w
+		}
+	}
+	if maxDetail == 0 {
+		return 0
+	}
+	col := maxLabel + 2
+	if col > avail-maxDetail {
+		col = avail - maxDetail
+	}
+	if col < 10 {
+		col = 10
+	}
+	return col
+}
+
 // formatPickerLabel fits an item into avail columns. When the item has a
-// detail, the detail is right-aligned with at least a two-space gap and the
-// label is truncated to make room.
-func formatPickerLabel(item pickerItem, avail int) string {
+// detail, the label is truncated to end before detailCol and the detail is
+// left-aligned at detailCol.
+func formatPickerLabel(item pickerItem, avail int, detailCol int) string {
 	label := []rune(item.label)
-	if item.detail == "" {
+	if item.detail == "" || detailCol <= 0 {
 		if len(label) > avail {
 			return string(label[:avail-3]) + "..."
 		}
 		return string(label)
 	}
 
-	detail := []rune(item.detail)
-	maxLabel := avail - len(detail) - 2
-	if maxLabel < 8 {
-		// Too narrow for columns — fall back to an inline suffix.
-		return formatPickerLabel(pickerItem{label: item.label + "  " + item.detail}, avail)
+	if len(label) > detailCol-2 {
+		label = []rune(string(label[:detailCol-5]) + "...")
 	}
-	if len(label) > maxLabel {
-		label = []rune(string(label[:maxLabel-3]) + "...")
+	out := []rune(string(label) + strings.Repeat(" ", detailCol-len(label)) + item.detail)
+	if len(out) > avail {
+		return string(out[:avail-3]) + "..."
 	}
-	gap := avail - len(label) - len(detail)
-	return string(label) + strings.Repeat(" ", gap) + string(detail)
+	return string(out)
 }
 
 // streamingContent returns the display content for the in-progress stream.

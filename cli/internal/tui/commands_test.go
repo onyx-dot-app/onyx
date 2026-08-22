@@ -175,23 +175,26 @@ func TestFormatPickerLabelAlignsDetail(t *testing.T) {
 		{label: "GPT-4o", detail: "OpenAI"},
 	}
 	const avail = 40
+	col := pickerDetailCol(rows, avail)
+	if want := len([]rune("Gemma 4 E2B *")) + 2; col != want {
+		t.Errorf("detailCol = %d, want %d (widest label + 2)", col, want)
+	}
 	for _, row := range rows {
-		got := formatPickerLabel(row, avail)
-		if len([]rune(got)) != avail {
-			t.Errorf("%q: width = %d, want %d", got, len([]rune(got)), avail)
-		}
-		if !strings.HasSuffix(got, row.detail) {
-			t.Errorf("%q: detail %q must be flush right", got, row.detail)
+		got := formatPickerLabel(row, avail, col)
+		if idx := strings.Index(got, row.detail); idx != col {
+			t.Errorf("%q: detail starts at %d, want column %d", got, idx, col)
 		}
 	}
 
-	long := pickerItem{label: strings.Repeat("x", 60), detail: "Ollama"}
-	got := formatPickerLabel(long, avail)
-	if len([]rune(got)) != avail {
-		t.Errorf("long label: width = %d, want %d", len([]rune(got)), avail)
+	// A long label truncates so its detail stays on the shared column.
+	long := append(rows, pickerItem{label: strings.Repeat("x", 60), detail: "Ollama"})
+	col = pickerDetailCol(long, avail)
+	got := formatPickerLabel(long[3], avail, col)
+	if len([]rune(got)) > avail {
+		t.Errorf("long label: width = %d, want <= %d", len([]rune(got)), avail)
 	}
-	if !strings.Contains(got, "...") || !strings.HasSuffix(got, "Ollama") {
-		t.Errorf("long label must truncate and keep detail flush right, got %q", got)
+	if !strings.Contains(got, "...") || strings.Index(got, "Ollama") != col {
+		t.Errorf("long label must truncate and keep detail on column %d, got %q", col, got)
 	}
 }
 
