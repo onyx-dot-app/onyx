@@ -371,9 +371,10 @@ const BaseInputBar = memo(
                 <Button
                   icon={
                     sandboxInitializing
-                      ? ({ className }) => (
+                      ? ({ className, style }) => (
                           <SvgLoader
                             className={cn(className, "animate-spin")}
+                            style={style}
                           />
                         )
                       : SvgArrowUp
