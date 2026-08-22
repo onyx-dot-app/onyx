@@ -10,8 +10,16 @@ const helpText = `Onyx CLI Commands
   /configure         Re-run connection setup
   /connectors        Open connectors page in browser
   /settings          Open Onyx settings in browser
+  /skills            List local skills and reload them from disk
   /experiments       List experimental features and their status
   /quit              Exit Onyx CLI
+
+Skills
+
+  Put a SKILL.md file in .agents/skills/<name>/ (project) or
+  ~/.agents/skills/<name>/ (global) to get a /<name> command. Running it
+  sends the file content as your next message. Text after the command name
+  replaces $ARGUMENTS, or is appended when the skill has no placeholder.
 
 Keyboard Shortcuts
 

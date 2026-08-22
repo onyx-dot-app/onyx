@@ -15,6 +15,7 @@ import (
 	"github.com/onyx-dot-app/onyx/cli/internal/api"
 	"github.com/onyx-dot-app/onyx/cli/internal/config"
 	"github.com/onyx-dot-app/onyx/cli/internal/models"
+	"github.com/onyx-dot-app/onyx/cli/internal/skills"
 )
 
 // Model is the root Bubble Tea model.
@@ -45,6 +46,9 @@ type Model struct {
 	needsRename     bool
 	agentStarted    bool
 
+	// Skills discovered on disk, keyed by command name (no leading slash).
+	skills map[string]skills.Skill
+
 	// Configure state
 	configState *configState
 
@@ -58,7 +62,7 @@ type Model struct {
 func NewModel(cfg config.OnyxCliConfig, client api.ClientAPI) Model {
 	parentID := -1
 
-	return Model{
+	m := Model{
 		config:          cfg,
 		client:          client,
 		viewport:        newViewport(80, cfg.Features.StreamMarkdownEnabled()),
@@ -69,6 +73,44 @@ func NewModel(cfg config.OnyxCliConfig, client api.ClientAPI) Model {
 		parentMessageID: &parentID,
 		citations:       make(map[int]string),
 	}
+	return m.loadSkills()
+}
+
+// loadSkills rescans the skill directories and refreshes the command menu.
+// Skills that collide with a built-in command name are dropped, because the
+// built-in always wins in handleSlashCommand.
+func (m Model) loadSkills() Model {
+	m.skills = make(map[string]skills.Skill)
+	reserved := builtinNames()
+
+	var entries []slashCommand
+	for _, skill := range skills.Discover() {
+		if reserved["/"+skill.Name] {
+			continue
+		}
+		m.skills[skill.Name] = skill
+		entries = append(entries, slashCommand{
+			command:     "/" + skill.Name,
+			description: skillMenuDescription(skill),
+			optionalArg: true,
+		})
+	}
+
+	m.input.setSkillCommands(entries)
+	return m
+}
+
+// skillMenuDescription keeps menu rows to a single readable line.
+func skillMenuDescription(skill skills.Skill) string {
+	const maxLen = 60
+	desc := skill.Description
+	if desc == "" {
+		desc = "Skill"
+	}
+	if len(desc) > maxLen {
+		desc = desc[:maxLen-1] + "…"
+	}
+	return desc
 }
 
 // NewFirstRunModel creates a TUI model that auto-enters configure mode on startup.

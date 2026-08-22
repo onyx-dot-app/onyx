@@ -13,29 +13,44 @@ import (
 type slashCommand struct {
 	command     string
 	description string
+	// requiresArg commands are prefilled with a trailing space instead of
+	// running when picked from the menu.
+	requiresArg bool
+	// optionalArg commands run on Enter but prefill with a trailing space on
+	// Tab, so the user can add arguments.
+	optionalArg bool
 }
 
-var slashCommands = []slashCommand{
-	{"/help", "Show help message"},
-	{"/clear", "Clear chat and start a new session"},
-	{"/agent", "List and switch agents"},
-	{"/attach", "Attach a file to next message"},
-	{"/sessions", "Browse and resume previous sessions"},
-	{"/configure", "Re-run connection setup"},
-	{"/connectors", "Open connectors in browser"},
-	{"/settings", "Open settings in browser"},
-	{"/experiments", "List experimental features"},
-	{"/quit", "Exit Onyx CLI"},
+var builtinCommands = []slashCommand{
+	{command: "/help", description: "Show help message"},
+	{command: "/clear", description: "Clear chat and start a new session"},
+	{command: "/agent", description: "List and switch agents"},
+	{command: "/attach", description: "Attach a file to next message", requiresArg: true},
+	{command: "/sessions", description: "Browse and resume previous sessions"},
+	{command: "/configure", description: "Re-run connection setup"},
+	{command: "/connectors", description: "Open connectors in browser"},
+	{command: "/settings", description: "Open settings in browser"},
+	{command: "/skills", description: "List and reload local skills"},
+	{command: "/experiments", description: "List experimental features"},
+	{command: "/quit", description: "Exit Onyx CLI"},
 }
 
-// Commands that take arguments (filled in with trailing space on Tab/Enter).
-var argCommands = map[string]bool{
-	"/attach": true,
+// builtinNames reports the command names that skills cannot override.
+func builtinNames() map[string]bool {
+	names := make(map[string]bool, len(builtinCommands)+2)
+	for _, sc := range builtinCommands {
+		names[sc.command] = true
+	}
+	// Aliases handled by handleSlashCommand but absent from the menu.
+	names["/new"] = true
+	names["/resume"] = true
+	return names
 }
 
 // inputModel manages the text input and slash command menu.
 type inputModel struct {
 	textInput     textinput.Model
+	commands      []slashCommand
 	menuVisible   bool
 	menuItems     []slashCommand
 	menuIndex     int
@@ -54,7 +69,16 @@ func newInputModel() inputModel {
 
 	return inputModel{
 		textInput: ti,
+		commands:  builtinCommands,
 	}
+}
+
+// setSkillCommands appends skill commands to the menu, after the built-ins.
+func (m *inputModel) setSkillCommands(entries []slashCommand) {
+	commands := make([]slashCommand, 0, len(builtinCommands)+len(entries))
+	commands = append(commands, builtinCommands...)
+	commands = append(commands, entries...)
+	m.commands = commands
 }
 
 func (m inputModel) update(msg tea.Msg) (inputModel, tea.Cmd) {
@@ -82,21 +106,21 @@ func (m inputModel) handleKey(msg tea.KeyPressMsg) (inputModel, tea.Cmd) {
 		}
 	case "tab":
 		if m.menuVisible && len(m.menuItems) > 0 {
-			cmd := m.menuItems[m.menuIndex].command
-			if argCommands[cmd] {
-				m.textInput.SetValue(cmd + " ")
-				m.textInput.SetCursor(len(cmd) + 1)
-			} else {
-				m.textInput.SetValue(cmd)
-				m.textInput.SetCursor(len(cmd))
+			item := m.menuItems[m.menuIndex]
+			value := item.command
+			if item.requiresArg || item.optionalArg {
+				value += " "
 			}
+			m.textInput.SetValue(value)
+			m.textInput.SetCursor(len(value))
 			m.menuVisible = false
 			return m, nil
 		}
 	case "enter":
 		if m.menuVisible && len(m.menuItems) > 0 {
-			cmd := m.menuItems[m.menuIndex].command
-			if argCommands[cmd] {
+			item := m.menuItems[m.menuIndex]
+			cmd := item.command
+			if item.requiresArg {
 				m.textInput.SetValue(cmd + " ")
 				m.textInput.SetCursor(len(cmd) + 1)
 				m.menuVisible = false
@@ -145,7 +169,7 @@ func (m inputModel) updateMenu() inputModel {
 	if strings.HasPrefix(val, "/") && !strings.Contains(val, " ") {
 		needle := strings.ToLower(val)
 		var filtered []slashCommand
-		for _, sc := range slashCommands {
+		for _, sc := range m.commands {
 			if strings.HasPrefix(sc.command, needle) {
 				filtered = append(filtered, sc)
 			}

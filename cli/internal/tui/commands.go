@@ -3,6 +3,8 @@ package tui
 import (
 	"context"
 	"fmt"
+	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -11,6 +13,7 @@ import (
 	"github.com/onyx-dot-app/onyx/cli/internal/browser"
 	"github.com/onyx-dot-app/onyx/cli/internal/config"
 	"github.com/onyx-dot-app/onyx/cli/internal/models"
+	"github.com/onyx-dot-app/onyx/cli/internal/skills"
 )
 
 // handleSlashCommand dispatches slash commands and returns updated model + cmd.
@@ -70,13 +73,64 @@ func handleSlashCommand(m Model, text string) (Model, tea.Cmd) {
 		m.viewport.addInfo(config.ExperimentsText(m.config.Features))
 		return m, nil
 
+	case "/skills":
+		return cmdSkills(m)
+
 	case "/quit":
 		return m, tea.Quit
 
 	default:
+		if skill, ok := m.skills[strings.TrimPrefix(command, "/")]; ok {
+			return cmdRunSkill(m, skill, arg)
+		}
 		m.viewport.addWarning(fmt.Sprintf("Unknown command: %s. Type /help for available commands.", command))
 		return m, nil
 	}
+}
+
+// cmdRunSkill expands a skill into a prompt and sends it as the next message.
+func cmdRunSkill(m Model, skill skills.Skill, arg string) (Model, tea.Cmd) {
+	if m.isStreaming {
+		m.viewport.addWarning("Wait for the current response to finish.")
+		return m, nil
+	}
+	m.viewport.addInfo("Running skill: " + skill.Name)
+	return m.sendMessage(skill.Prompt(arg))
+}
+
+// cmdSkills rescans the skill directories and lists what is available.
+func cmdSkills(m Model) (Model, tea.Cmd) {
+	m = m.loadSkills()
+
+	if len(m.skills) == 0 {
+		var b strings.Builder
+		b.WriteString("No skills found. Add a SKILL.md file in one of:\n")
+		for _, root := range skills.Roots() {
+			b.WriteString("  " + filepath.Join(root, ".agents", "skills", "<name>", "SKILL.md") + "\n")
+		}
+		m.viewport.addInfo(strings.TrimRight(b.String(), "\n"))
+		return m, nil
+	}
+
+	names := make([]string, 0, len(m.skills))
+	for name := range m.skills {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "Skills (%d)\n\n", len(names))
+	for _, name := range names {
+		skill := m.skills[name]
+		fmt.Fprintf(&b, "  /%s", name)
+		if skill.Description != "" {
+			b.WriteString("  " + skill.Description)
+		}
+		b.WriteString("\n")
+	}
+	b.WriteString("\nRun one with /<name> [arguments].")
+	m.viewport.addInfo(b.String())
+	return m, nil
 }
 
 func cmdNew(m Model) (Model, tea.Cmd) {
