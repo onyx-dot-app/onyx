@@ -187,9 +187,9 @@ func TestFormatPickerLabelAlignsDetail(t *testing.T) {
 	}
 
 	// A long label truncates so its detail stays on the shared column.
-	long := append(rows, pickerItem{label: strings.Repeat("x", 60), detail: "Ollama"})
-	col = pickerDetailCol(long, avail)
-	got := formatPickerLabel(long[3], avail, col)
+	longRow := pickerItem{label: strings.Repeat("x", 60), detail: "Ollama"}
+	col = pickerDetailCol(append(rows[:len(rows):len(rows)], longRow), avail)
+	got := formatPickerLabel(longRow, avail, col)
 	if len([]rune(got)) > avail {
 		t.Errorf("long label: width = %d, want <= %d", len([]rune(got)), avail)
 	}
