@@ -94,8 +94,13 @@ func cmdRunSkill(m Model, skill skills.Skill, arg string) (Model, tea.Cmd) {
 		m.viewport.addWarning("Wait for the current response to finish.")
 		return m, nil
 	}
+	prompt := skill.Prompt(arg)
+	if strings.TrimSpace(prompt) == "" {
+		m.viewport.addWarning(fmt.Sprintf("Skill %s needs arguments.", skill.Name))
+		return m, nil
+	}
 	m.viewport.addInfo("Running skill: " + skill.Name)
-	return m.sendMessage(skill.Prompt(arg))
+	return m.sendMessage(prompt)
 }
 
 // cmdSkills rescans the skill directories and lists what is available.

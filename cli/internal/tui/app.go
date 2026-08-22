@@ -107,8 +107,9 @@ func skillMenuDescription(skill skills.Skill) string {
 	if desc == "" {
 		desc = "Skill"
 	}
-	if len(desc) > maxLen {
-		desc = desc[:maxLen-1] + "…"
+	// Truncate by rune, so a multibyte character is never cut in half.
+	if runes := []rune(desc); len(runes) > maxLen {
+		desc = string(runes[:maxLen-1]) + "…"
 	}
 	return desc
 }

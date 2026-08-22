@@ -83,7 +83,7 @@ func TestSkillCommandWithoutArguments(t *testing.T) {
 		"standup": "Summarize yesterday's standup.\n",
 	})
 
-	m, _ = handleSlashCommand(m, "/standup")
+	_, _ = handleSlashCommand(m, "/standup")
 
 	if len(client.sent) != 1 || client.sent[0] != "Summarize yesterday's standup." {
 		t.Fatalf("sent %v, want the skill body", client.sent)
@@ -95,10 +95,30 @@ func TestSkillCommandIsCaseInsensitive(t *testing.T) {
 		"standup": "Summarize yesterday's standup.\n",
 	})
 
-	m, _ = handleSlashCommand(m, "/StandUp")
+	_, _ = handleSlashCommand(m, "/StandUp")
 
 	if len(client.sent) != 1 {
 		t.Fatalf("sent %d messages, want 1", len(client.sent))
+	}
+}
+
+// A body of only $ARGUMENTS expands to nothing, which must not be sent.
+func TestSkillWithEmptyExpansionIsNotSent(t *testing.T) {
+	m, client := newSkillsModel(t, map[string]string{
+		"echo": "$ARGUMENTS\n",
+	})
+
+	m, _ = handleSlashCommand(m, "/echo")
+
+	if len(client.sent) != 0 {
+		t.Fatalf("sent %v, want nothing", client.sent)
+	}
+	if m.isStreaming {
+		t.Error("expected no stream for an empty expansion")
+	}
+	last := m.viewport.entries[len(m.viewport.entries)-1]
+	if !strings.Contains(stripANSI(last.rendered), "needs arguments") {
+		t.Errorf("expected an arguments warning, got %q", stripANSI(last.rendered))
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // writeSkill creates <root>/<dir>/<name>/SKILL.md with the given content.
@@ -220,7 +221,10 @@ func TestNormalizeName(t *testing.T) {
 
 func TestSplitFrontmatterWithoutBlock(t *testing.T) {
 	content := "# Just markdown\n\nNo frontmatter here.\n"
-	meta, body := splitFrontmatter(content)
+	meta, body, err := splitFrontmatter(content)
+	if err != nil {
+		t.Fatalf("splitFrontmatter: %v", err)
+	}
 	if len(meta) != 0 {
 		t.Errorf("meta = %+v, want empty", meta)
 	}
@@ -230,12 +234,46 @@ func TestSplitFrontmatterWithoutBlock(t *testing.T) {
 }
 
 func TestSplitFrontmatterUnterminatedBlock(t *testing.T) {
-	content := "---\nname: broken\n"
-	meta, body := splitFrontmatter(content)
-	if len(meta) != 0 {
-		t.Errorf("meta = %+v, want empty", meta)
+	if _, _, err := splitFrontmatter("---\nname: broken\n"); err == nil {
+		t.Fatal("splitFrontmatter accepted an unclosed block, want an error")
 	}
-	if body != content {
-		t.Errorf("body = %q, want the whole content", body)
+}
+
+// An unclosed frontmatter block must be skipped, never sent as prompt content.
+func TestLoadRejectsUnterminatedFrontmatter(t *testing.T) {
+	root := t.TempDir()
+	path := writeSkill(t, root, ".agents/skills", "broken", "---\nname: broken\ndescription: Oops.\n")
+
+	if _, err := Load(path); err == nil {
+		t.Fatal("Load accepted an unclosed frontmatter block, want an error")
+	}
+}
+
+func TestLoadRejectsNonRegularFile(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, ".agents", "skills", "fifo")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	path := filepath.Join(dir, "SKILL.md")
+	if err := makeFIFO(path); err != nil {
+		t.Skipf("cannot create a FIFO: %v", err)
+	}
+
+	// A blocking read here would hang the test rather than fail it, so the
+	// mode check has to happen before os.ReadFile.
+	done := make(chan error, 1)
+	go func() {
+		_, err := Load(path)
+		done <- err
+	}()
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("Load accepted a FIFO, want an error")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Load blocked on a FIFO")
 	}
 }

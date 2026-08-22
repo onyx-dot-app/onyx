@@ -125,6 +125,11 @@ func Load(path string) (Skill, error) {
 	if err != nil {
 		return Skill{}, err
 	}
+	// Reading a FIFO or device file can block forever, and Size() is
+	// meaningless for them.
+	if !info.Mode().IsRegular() {
+		return Skill{}, fmt.Errorf("%s is not a regular file", path)
+	}
 	if info.Size() > maxBodyBytes {
 		return Skill{}, fmt.Errorf("%s is larger than %d bytes", path, maxBodyBytes)
 	}
@@ -134,7 +139,10 @@ func Load(path string) (Skill, error) {
 		return Skill{}, err
 	}
 
-	meta, body := splitFrontmatter(string(data))
+	meta, body, err := splitFrontmatter(string(data))
+	if err != nil {
+		return Skill{}, fmt.Errorf("%s: %w", path, err)
+	}
 	body = strings.TrimSpace(body)
 	if body == "" {
 		return Skill{}, errors.New("skill body is empty")
@@ -157,21 +165,23 @@ func Load(path string) (Skill, error) {
 }
 
 // splitFrontmatter separates a leading YAML frontmatter block from the body.
-// Only flat `key: value` pairs are read; anything else is ignored.
-func splitFrontmatter(content string) (map[string]string, string) {
+// Only flat `key: value` pairs are read; anything else is ignored. A file that
+// opens a frontmatter block but never closes it is an error, because returning
+// it whole would send the YAML metadata as prompt content.
+func splitFrontmatter(content string) (map[string]string, string, error) {
 	meta := make(map[string]string)
 
 	rest, ok := strings.CutPrefix(content, "---\n")
 	if !ok {
 		rest, ok = strings.CutPrefix(content, "---\r\n")
 		if !ok {
-			return meta, content
+			return meta, content, nil
 		}
 	}
 
 	end := strings.Index(rest, "\n---")
 	if end < 0 {
-		return meta, content
+		return nil, "", errors.New("frontmatter block is not closed")
 	}
 	block := rest[:end]
 	body := rest[end+len("\n---"):]
@@ -194,7 +204,7 @@ func splitFrontmatter(content string) (map[string]string, string) {
 		}
 	}
 
-	return meta, body
+	return meta, body, nil
 }
 
 // normalizeName lowercases a name and keeps only characters that are safe in a
