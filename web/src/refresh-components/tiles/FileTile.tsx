@@ -6,7 +6,6 @@ import { cn, clickOnKeyDown } from "@opal/utils";
 import { SvgMaximize2, SvgTextLines, SvgX } from "@opal/icons";
 import type { IconProps } from "@opal/types";
 import { Hoverable } from "@opal/core";
-import IconButton from "../buttons/IconButton";
 import Text from "../texts/Text";
 import Truncated from "../texts/Truncated";
 
