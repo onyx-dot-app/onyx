@@ -239,7 +239,7 @@ Other docker-compose-style values you should set deliberately:
 
 # Local testing
 
-> This section covers chart-maintainer testing; for the Onyx Craft local-kind developer workflow, see [docs/craft/dev/local-kubernetes.md](/docs/craft/dev/local-kubernetes.md).
+> This section covers chart-maintainer testing; for the Onyx Craft local-kind developer workflow, see [docs/craft/dev/local-kubernetes.md](../../docs/craft/dev/local-kubernetes.md).
 
 ## One time setup
 * brew install kind

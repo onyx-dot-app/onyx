@@ -8,7 +8,7 @@ attached to api_server / celery / web.
 This is the canonical local setup for **Onyx Craft (build mode)** — sandboxes
 are real Kubernetes pods, so there is no longer a non-cluster shortcut.
 Non-Craft work can still use the docker-compose deps + vscode debugger path
-described in [CONTRIBUTING.md](/CONTRIBUTING.md); use that when you don't
+described in [CONTRIBUTING.md](../../../CONTRIBUTING.md); use that when you don't
 need a sandbox.
 
 For iterating on the **docker** sandbox backend specifically
@@ -113,7 +113,7 @@ For transparency / debugging, `craft-up.sh` runs these steps in order. You
 can also invoke them individually for tighter rebuild loops.
 
 **1. Bring up the cluster.** Delegates to
-[`deployment/helm/dev/k8s-up.sh`](/deployment/helm/dev/k8s-up.sh). The
+[`deployment/helm/dev/k8s-up.sh`](../../../deployment/helm/dev/k8s-up.sh). The
 script is idempotent and refuses to run unless your kubectl context is
 `kind-onyx-dev`. It also installs the telepresence traffic-manager once
 per cluster. New clusters use the `kindest/node:v1.33.1` node image so Craft's
@@ -127,7 +127,7 @@ kubectl -n onyx get pods -w
 ```
 
 The chart pins images to the `:edge` tag in
-[`values-localdev.yaml`](/deployment/helm/charts/onyx/values-localdev.yaml)
+[`values-localdev.yaml`](../../../deployment/helm/charts/onyx/values-localdev.yaml)
 with `pullPolicy: Always`, so in-cluster pods track nightly builds off `main`
 rather than the released `:latest`.
 
@@ -325,7 +325,7 @@ kubectl -n onyx rollout restart deployment/onyx-api-server
 For logic that doesn't depend on cluster-only behavior (safe-extract, push
 wire format, tarball round-trips), drive it from unit /
 external-dependency-unit tests against a temp dir. See
-[`backend/tests/README.md`](/backend/tests/README.md).
+[`backend/tests/README.md`](../../../backend/tests/README.md).
 
 ### End of day
 
@@ -376,7 +376,7 @@ ONYX_SANDBOX_PUSH_PRIVATE_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
 ```
 
 The `onyxdotapp/sandbox:dev` image referenced here is **local-only**; build
-and load it per [step 3 of One-time setup](#3-build-and-load-the-sandbox-image)
+and load it per [step 3 of One-time setup](#one-time-setup)
 before launching the api_server.
 
 ## Troubleshooting
@@ -474,8 +474,8 @@ just-flipped flag).
 
 ## References
 
-- [CONTRIBUTING.md — Development Setup](/CONTRIBUTING.md#development-setup)
-- [deployment/helm/README.md](/deployment/helm/README.md)
-- [backend/onyx/server/features/build/sandbox/README.md](/backend/onyx/server/features/build/sandbox/README.md)
+- [CONTRIBUTING.md — Development Setup](../../../CONTRIBUTING.md#development-setup)
+- [deployment/helm/README.md](../../../deployment/helm/README.md)
+- [backend/onyx/server/features/build/sandbox/README.md](../../../backend/onyx/server/features/build/sandbox/README.md)
 - [Telepresence docs](https://www.telepresence.io/docs/)
 - [kind docs](https://kind.sigs.k8s.io/)
