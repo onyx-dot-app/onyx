@@ -152,6 +152,30 @@ def test_ipynb_to_text_raw_and_empty_cells() -> None:
     assert result == "Raw cell content here."
 
 
+def test_ipynb_to_text_empty_source_with_outputs() -> None:
+    notebook = {
+        "cells": [
+            {
+                "cell_type": "code",
+                "source": "",
+                "outputs": [
+                    {
+                        "output_type": "stream",
+                        "name": "stdout",
+                        "text": ["Output from cleared cell\n"],
+                    }
+                ],
+            }
+        ]
+    }
+
+    file_bytes = _create_notebook_bytes(notebook)
+    result = ipynb_to_text(file_bytes)
+
+    assert "Output:\nOutput from cleared cell" in result
+    assert "```python" not in result
+
+
 def test_ipynb_to_text_malformed_json_fallback() -> None:
     malformed = io.BytesIO(b"{ invalid json string")
     result = ipynb_to_text(malformed)

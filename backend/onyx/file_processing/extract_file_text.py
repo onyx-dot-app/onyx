@@ -778,13 +778,14 @@ def ipynb_to_text(file: IO[Any]) -> str:
             source_text = ""
 
         source_text = source_text.strip()
-        if not source_text:
-            continue
 
         if cell_type == "markdown":
-            extracted_sections.append(source_text)
+            if source_text:
+                extracted_sections.append(source_text)
         elif cell_type == "code":
-            cell_blocks: list[str] = [f"```python\n{source_text}\n```"]
+            cell_blocks: list[str] = []
+            if source_text:
+                cell_blocks.append(f"```python\n{source_text}\n```")
             outputs = cell.get("outputs", [])
             if isinstance(outputs, list):
                 for output in outputs:
@@ -815,9 +816,11 @@ def ipynb_to_text(file: IO[Any]) -> str:
                     output_text = output_text.strip()
                     if output_text:
                         cell_blocks.append(f"Output:\n{output_text}")
-            extracted_sections.append("\n".join(cell_blocks))
+            if cell_blocks:
+                extracted_sections.append("\n".join(cell_blocks))
         elif cell_type == "raw":
-            extracted_sections.append(source_text)
+            if source_text:
+                extracted_sections.append(source_text)
 
     return TEXT_SECTION_SEPARATOR.join(extracted_sections)
 
