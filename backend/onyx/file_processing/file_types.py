@@ -42,6 +42,7 @@ class OnyxMimeTypes:
         PRESENTATION_MIME_TYPE,
         "message/rfc822",
         "application/epub+zip",
+        "application/x-ipynb+json",
     }
 
     ALLOWED_MIME_TYPES = IMAGE_MIME_TYPES.union(
@@ -87,6 +88,7 @@ class OnyxFileExtensions:
         ".eml",
         ".epub",
         ".html",
+        ".ipynb",
     } | SPREADSHEET_EXTENSIONS
     IMAGE_EXTENSIONS = {
         ".png",
