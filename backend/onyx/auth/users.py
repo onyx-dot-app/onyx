@@ -541,23 +541,28 @@ async def resolve_tenant_for_user(email: str, request: Request | None = None) ->
     )(email=email, request=request)
 
 
-@asynccontextmanager
-async def _tenant_session_with_context(
-    tenant_id: str,
-) -> AsyncGenerator[AsyncSession, None]:
-    token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
-    try:
-        async with get_async_session_context_manager(tenant_id) as db_session:
-            yield db_session
-    finally:
-        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
-
-
 class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     reset_password_token_secret = USER_AUTH_SECRET
     verification_token_secret = USER_AUTH_SECRET
     verification_token_lifetime_seconds = AUTH_COOKIE_EXPIRE_TIME_SECONDS
     user_db: SQLAlchemyUserDatabase[User, uuid.UUID]
+
+    @asynccontextmanager
+    async def _tenant_session_with_bound_user_db(
+        self, tenant_id: str
+    ) -> AsyncGenerator[AsyncSession, None]:
+        """Run tenant work on one AsyncSession; user_db writes use that connection."""
+        token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
+        previous_user_db = self.user_db
+        try:
+            async with get_async_session_context_manager(tenant_id) as db_session:
+                self.user_db = SQLAlchemyUserDatabase[User, uuid.UUID](
+                    db_session, User, OAuthAccount
+                )
+                yield db_session
+        finally:
+            self.user_db = previous_user_db
+            CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
     async def get_by_email(self, user_email: str) -> User:
         tenant_id = fetch_ee_implementation_or_noop(
@@ -963,8 +968,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         if not tenant_id:
             raise HTTPException(status_code=401, detail="User not found")
 
-        # Proceed with the tenant context
-        async with _tenant_session_with_context(tenant_id) as db_session:
+        async with self._tenant_session_with_bound_user_db(tenant_id) as db_session:
             verify_email_in_whitelist(account_email, tenant_id, oauth_name, account_id)
             oauth_security_settings = get_security_settings()
             effective_valid_email_domains = (
@@ -990,14 +994,6 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                         "This workspace has not verified your email domain for "
                         "single sign-on.",
                     )
-
-            # NOTE(rkuo): If this UserManager is instantiated per connection
-            # should we even be doing this here?
-            if MULTI_TENANT:
-                tenant_user_db = SQLAlchemyUserDatabase[User, uuid.UUID](
-                    db_session, User, OAuthAccount
-                )
-                self.user_db = tenant_user_db
 
             oauth_account_dict = {
                 "oauth_name": oauth_name,
@@ -1140,14 +1136,10 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
             # Handle case where user has used product outside of web and is now creating an account through web
             if not user.account_type.is_web_login():
-                # We must use the existing user in the session if it matches
-                # the user we just got by email/oauth. Note that this only applies
-                # to multi-tenant, due to the overwriting of the user_db
-                if MULTI_TENANT:
-                    if user.id:
-                        user_by_session = await db_session.get(User, user.id)
-                        if user_by_session:
-                            user = user_by_session
+                if user.id:
+                    user_by_session = await db_session.get(User, user.id)
+                    if user_by_session:
+                        user = user_by_session
 
                 # Lock + check + upgrade in one transaction.
                 was_inactive = not user.is_active
