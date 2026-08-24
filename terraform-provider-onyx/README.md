@@ -134,12 +134,15 @@ its own. This reuses the running Postgres, Redis, OpenSearch and MinIO container
 docker exec onyx-stack-relational_db-1 psql -U postgres -c "CREATE DATABASE onyx_tf_acc;"
 cd backend && POSTGRES_DB=onyx_tf_acc uv run alembic upgrade head
 POSTGRES_DB=onyx_tf_acc AUTH_TYPE=basic LICENSE_ENFORCEMENT_ENABLED=false \
+  ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true \
   USER_AUTH_SECRET="$(openssl rand -hex 32)" \
   uv run uvicorn onyx.main:app --port 8081
 ```
 
-`AUTH_TYPE=basic` gives the harness a login to bootstrap its key with, and license
-enforcement must be off or API key creation answers 402.
+Each variable earns its place. `AUTH_TYPE=basic` gives the harness a login to bootstrap
+its key with. License enforcement must be off or API key creation answers 402. The
+enterprise features flag registers the user-group routes, which the harness reads to find
+the Admin group its key needs.
 
 ### Docs
 
