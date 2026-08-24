@@ -37,6 +37,10 @@ server {
 
     client_max_body_size 5G;    # Maximum upload size
 
+    # When a load balancer fronts nginx, this must exceed its idle timeout
+    # (AWS guidance) or connection reuse can 502. Default matches nginx's 75s.
+    keepalive_timeout ${NGINX_KEEPALIVE_TIMEOUT}s;
+
     access_log /var/log/nginx/access.log custom_main;
 
     # Conditionally include MCP location configuration
@@ -145,6 +149,10 @@ server {
     listen 443 ssl default_server;
 
     client_max_body_size 5G;    # Maximum upload size
+
+    # When a load balancer fronts nginx, this must exceed its idle timeout
+    # (AWS guidance) or connection reuse can 502. Default matches nginx's 75s.
+    keepalive_timeout ${NGINX_KEEPALIVE_TIMEOUT}s;
 
     location / {
         # misc headers
