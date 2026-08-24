@@ -20,12 +20,14 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.server.security.models import (
+    ENV_PINNED_FIELDS,
     OPERATOR_LOCKED_FIELDS,
     IncognitoAvailability,
     SecuritySettings,
     SecuritySettingsOverrides,
     SSRFProtectionLevel,
 )
+from onyx.utils.audit import AuditAction, AuditActor, AuditOutcome, emit_audit_event
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
@@ -105,6 +107,9 @@ def _build_env_defaults() -> SecuritySettings:
         password_require_digit=_cfg.PASSWORD_REQUIRE_DIGIT,
         password_require_special_char=_cfg.PASSWORD_REQUIRE_SPECIAL_CHAR,
         password_auth_enabled=True,
+        jwt_public_key_url=_cfg.JWT_PUBLIC_KEY_URL,
+        jwt_expected_audience=_cfg.JWT_EXPECTED_AUDIENCE,
+        jwt_expected_issuer=_cfg.JWT_EXPECTED_ISSUER,
     )
 
 
@@ -114,14 +119,20 @@ def merge_with_env(overrides: SecuritySettingsOverrides) -> SecuritySettings:
     overrides are ignored (env wins) — belt-and-braces alongside the API
     rejection.
     """
-    env = _build_env_defaults()
+    env_values = _build_env_defaults().model_dump()
+    override_values = overrides.model_dump()
     locked = OPERATOR_LOCKED_FIELDS if MULTI_TENANT else frozenset()
 
     merged: dict[str, Any] = {}
     for name in SecuritySettings.model_fields:
-        override_value = getattr(overrides, name, None)
-        if name in locked or override_value is None:
-            merged[name] = getattr(env, name)
+        override_value = override_values.get(name)
+        env_value = env_values[name]
+        # The DB row is truth only under an unset env (the why lives on
+        # _env_pinned).
+        if name in ENV_PINNED_FIELDS and env_value is not None:
+            merged[name] = env_value
+        elif name in locked or override_value is None:
+            merged[name] = env_value
         else:
             merged[name] = override_value
     # Process-wide env vars are a cross-tenant risk: force injection off on
@@ -223,8 +234,81 @@ def load_effective_uncached() -> SecuritySettings:
     return merge_with_env(_load_raw_overrides_unlocked())
 
 
+def seed_jwt_settings_from_env() -> None:
+    """Single-tenant api_server startup: mirror set JWT env values into the DB
+    row so retiring an env var later keeps its last pinned value. While a pin is
+    active the API refuses admin writes to the field, so overwriting a differing
+    stored value loses nothing admin-authored. Never raises: a seed failure must
+    not block boot."""
+    if MULTI_TENANT:
+        return
+    env_values = _build_env_defaults().model_dump()
+    # Nothing pinned: skip the distributed lock entirely so contention or a
+    # cache-backend hiccup cannot fail a boot that has nothing to write.
+    if all(env_values[name] is None for name in ENV_PINNED_FIELDS):
+        return
+    try:
+        with security_settings_write_lock():
+            existing = _load_raw_overrides_unlocked()
+            existing_values = existing.model_dump()
+            updates = {
+                name: env_values[name]
+                for name in ENV_PINNED_FIELDS
+                if env_values[name] is not None
+                and existing_values[name] != env_values[name]
+            }
+            if not updates:
+                return
+            _store_overrides_unlocked(existing.model_copy(update=updates))
+            # System-actor audit: an overwrite of a differing stored value must
+            # be as visible as an admin edit.
+            _audit_settings_change(
+                existing,
+                existing.model_copy(update=updates),
+                set(updates),
+                None,
+            )
+            logger.notice(
+                "Seeded security settings from env: %s", ", ".join(sorted(updates))
+            )
+    except Exception:
+        logger.exception("JWT settings seed failed, continuing startup")
+
+
+def env_pinned_active_fields() -> frozenset[str]:
+    """Env-pinned fields whose env var is currently set, i.e. not editable."""
+    env_values = _build_env_defaults().model_dump()
+    return frozenset(name for name in ENV_PINNED_FIELDS if env_values[name] is not None)
+
+
+def _audit_settings_change(
+    existing: SecuritySettingsOverrides,
+    merged: SecuritySettingsOverrides,
+    present_keys: set[str],
+    actor: AuditActor | None,
+) -> None:
+    existing_values = existing.model_dump()
+    merged_values = merged.model_dump()
+    changed = {
+        name: {"old": existing_values[name], "new": merged_values[name]}
+        for name in present_keys
+        if existing_values[name] != merged_values[name]
+    }
+    if not changed:
+        return
+    emit_audit_event(
+        AuditAction.SECURITY_SETTINGS_CHANGE,
+        AuditOutcome.SUCCESS,
+        actor=actor,
+        resource_type="security_settings",
+        extra={"changed": changed},
+    )
+
+
 def apply_patch(
-    patch: SecuritySettingsOverrides, present_keys: set[str]
+    patch: SecuritySettingsOverrides,
+    present_keys: set[str],
+    actor: AuditActor | None = None,
 ) -> SecuritySettings:
     """Public write entry point. Holds the shared write lock for the full
     read-modify-write so concurrent writers can't clobber each other.
@@ -243,6 +327,7 @@ def apply_patch(
             raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))
         _assert_login_path_survives(effective)
         _store_overrides_unlocked(merged)
+        _audit_settings_change(existing, merged, present_keys, actor)
         return effective
 
 

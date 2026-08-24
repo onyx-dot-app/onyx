@@ -100,7 +100,6 @@ from onyx.configs.app_configs import (
     DEV_MODE,
     EMAIL_CONFIGURED,
     INTEGRATION_TESTS_MODE,
-    JWT_PUBLIC_KEY_URL,
     REDIS_AUTH_KEY_PREFIX,
     REQUIRE_EMAIL_VERIFICATION,
     SESSION_EXPIRE_TIME_SECONDS,
@@ -2050,7 +2049,7 @@ async def _check_for_saml_and_jwt(
     async_db_session: AsyncSession,
 ) -> User | None:
     # If user is None, check for JWT in Authorization header
-    if user is None and JWT_PUBLIC_KEY_URL is not None:
+    if user is None and get_security_settings().jwt_public_key_url is not None:
         auth_header = request.headers.get("Authorization")
         if auth_header and auth_header.startswith("Bearer "):
             token = auth_header[len("Bearer ") :].strip()

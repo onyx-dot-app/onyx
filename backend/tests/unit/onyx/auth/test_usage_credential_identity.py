@@ -7,6 +7,7 @@ from onyx.auth import users
 from onyx.db.enums import PatType
 from onyx.db.models import User
 from onyx.db.pat import PatAuthResult
+from onyx.server.security.store import _build_env_defaults
 from shared_configs.contextvars import UsageCredentialIdentity
 from shared_configs.enums import UsageCredentialType
 
@@ -30,10 +31,15 @@ async def _resolve(request: Request, user: User | None) -> User | None:
     )
 
 
+def _point_settings_at(monkeypatch: pytest.MonkeyPatch, url: str | None) -> None:
+    settings = _build_env_defaults().model_copy(update={"jwt_public_key_url": url})
+    monkeypatch.setattr(users, "get_security_settings", lambda: settings)
+
+
 @pytest.fixture(autouse=True)
 def _patch_auth_helpers(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(users, "_maybe_refresh_oauth_tokens", _no_oauth_refresh)
-    monkeypatch.setattr(users, "JWT_PUBLIC_KEY_URL", None)
+    _point_settings_at(monkeypatch, None)
 
 
 @pytest.mark.asyncio
@@ -104,7 +110,7 @@ async def test_external_jwt_user_is_jwt_credential(
     async def fake_get_or_create(*_: Any, **__: Any) -> User:
         return jwt_user
 
-    monkeypatch.setattr(users, "JWT_PUBLIC_KEY_URL", "https://idp.example/jwks")
+    _point_settings_at(monkeypatch, "https://idp.example/jwks")
     monkeypatch.setattr(users, "verify_jwt_token", fake_verify)
     monkeypatch.setattr(users, "_get_or_create_user_from_jwt", fake_get_or_create)
     request = _bare_request([(b"authorization", b"Bearer some-token")])

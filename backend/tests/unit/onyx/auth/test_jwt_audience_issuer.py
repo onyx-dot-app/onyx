@@ -11,6 +11,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 
 import onyx.auth.jwt as jwt_module
 from onyx.auth.jwt import verify_jwt_token
+from onyx.server.security.store import _build_env_defaults
 
 _PRIVATE_KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
 _PUBLIC_PEM = (
@@ -29,7 +30,9 @@ def _mint(claims: dict[str, Any]) -> str:
 
 @pytest.fixture
 def signed_key(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(jwt_module, "get_public_key", lambda _token: _PUBLIC_PEM)
+    monkeypatch.setattr(
+        jwt_module, "get_public_key", lambda _token, _url, _pinned, _params: _PUBLIC_PEM
+    )
 
 
 def _configure(
@@ -37,8 +40,16 @@ def _configure(
     audience: str | None,
     issuer: str | None,
 ) -> None:
-    monkeypatch.setattr(jwt_module, "JWT_EXPECTED_AUDIENCE", audience)
-    monkeypatch.setattr(jwt_module, "JWT_EXPECTED_ISSUER", issuer)
+    settings = _build_env_defaults().model_copy(
+        update={
+            "jwt_public_key_url": "https://idp.example.com/keys",
+            "jwt_expected_audience": audience,
+            "jwt_expected_issuer": issuer,
+        }
+    )
+    monkeypatch.setattr(jwt_module, "get_security_settings", lambda: settings)
+    # Unit tests must not resolve DNS through the real SSRF validator.
+    monkeypatch.setattr(jwt_module, "validate_idp_url", lambda _url, **_kw: None)
 
 
 @pytest.mark.parametrize(
@@ -151,7 +162,7 @@ async def test_claim_rejection_does_not_refetch_keys(
 ) -> None:
     calls: list[int] = []
 
-    def _counting_get(_token: str) -> str:
+    def _counting_get(_token: str, _url: str, _pinned: bool, _params: object) -> str:
         calls.append(1)
         return _PUBLIC_PEM
 
@@ -159,3 +170,63 @@ async def test_claim_rejection_does_not_refetch_keys(
     _configure(monkeypatch, "onyx", None)
     assert await verify_jwt_token(_mint({"aud": "some-other-service"})) is None
     assert len(calls) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("signed_key")
+async def test_db_origin_url_failing_ssrf_policy_rejects(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure(monkeypatch, None, None)
+
+    def _reject(_url: str, field: str) -> None:
+        raise jwt_module.UnsafeSSOUrl(f"{field} blocked")
+
+    monkeypatch.setattr(jwt_module, "validate_idp_url", _reject)
+    assert await verify_jwt_token(_mint({"email": "a@b.c"})) is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("signed_key")
+async def test_env_pinned_url_skips_ssrf_validation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure(monkeypatch, None, None)
+
+    def _reject(_url: str, field: str) -> None:
+        raise jwt_module.UnsafeSSOUrl(f"{field} blocked")
+
+    monkeypatch.setattr(jwt_module, "validate_idp_url", _reject)
+    monkeypatch.setattr(
+        jwt_module,
+        "env_pinned_active_fields",
+        lambda: frozenset({"jwt_public_key_url"}),
+    )
+    payload = await verify_jwt_token(_mint({"email": "a@b.c"}))
+    assert payload is not None
+
+
+def test_db_origin_fetch_uses_hardened_get(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+
+    class _Resp:
+        text = "not json"
+        headers: dict[str, str] = {}
+
+        def raise_for_status(self) -> None:
+            return None
+
+    monkeypatch.setattr(
+        jwt_module, "ssrf_safe_get", lambda _url, **_kw: calls.append("safe") or _Resp()
+    )
+    monkeypatch.setattr(
+        jwt_module.requests, "get", lambda _url, **_kw: calls.append("raw") or _Resp()
+    )
+    jwt_module._fetch_public_key_payload.cache_clear()
+    jwt_module._fetch_public_key_payload(
+        "https://db-origin/keys", False, False, True, False
+    )
+    jwt_module._fetch_public_key_payload(
+        "https://env-pinned/keys", True, False, True, False
+    )
+    assert calls == ["safe", "raw"]
