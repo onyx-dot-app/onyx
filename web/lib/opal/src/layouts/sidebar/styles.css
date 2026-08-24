@@ -83,7 +83,7 @@
    --------------------------------------------------------------------------- */
 
 .opal-sidebar-header {
-  @apply flex flex-col gap-4;
+  @apply flex flex-col gap-4 pb-2;
 }
 
 .opal-sidebar-header__topbar {
