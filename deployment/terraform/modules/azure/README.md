@@ -19,7 +19,8 @@ infrastructure for Onyx:
 - `postgres`: a PostgreSQL Flexible Server on a delegated subnet, its private
   DNS zone, and five metric alerts
 - `redis`: an Azure Managed Redis behind a private endpoint, with four metric
-  alerts. Off by default, because Onyx cannot use it -- see below
+  alerts. Off by default, because the in-cluster Redis needs no extra
+  configuration -- see below
 - `storage`: a storage account and container for the Onyx file store, with
   versioning, lifecycle rules and network rules
 - `waf`: a regional Web Application Firewall policy for an Application Gateway
@@ -194,15 +195,31 @@ and the database.
 
 An Azure Managed Redis reachable only through a private endpoint.
 
-**Onyx cannot run on it, so `enable_redis` defaults to `false`.** Run Redis in
-the cluster instead. Managed Redis is always clustered, and Celery's pidbox
-opens a `MULTI` spanning keys in several hash slots, which clustered Redis
-rejects with `CROSSSLOT`. `EnterpriseCluster` does not avoid this: it presents
-one endpoint but still shards underneath, and it was tried against a live
-cache, not assumed. `NoCluster` returns `NotImplemented`. Managed Redis also
-offers only database 0, where Onyx wants 0, 14 and 15.
+Onyx runs on it, but not on the default settings, so `enable_redis` defaults
+to `false`. Two separate limits apply, both measured against live caches rather
+than assumed:
 
-The module stays for anyone who wants a cache for something else.
+- **Only database 0 exists.** `SELECT 1` and above return `DB index is out of
+  range` under every clustering policy, because that is a Redis Enterprise
+  property rather than a clustering one. Onyx defaults to database 0 for the
+  app, 14 for Celery results and 15 for the Celery broker, so a caller must set
+  `REDIS_DB_NUMBER`, `REDIS_DB_NUMBER_CELERY` and
+  `REDIS_DB_NUMBER_CELERY_RESULT_BACKEND` to `0`. The three key namespaces do
+  not collide: Onyx prefixes its own keys with the tenant, Celery results are
+  `celery-task-meta-*` and the broker uses `_kombu.binding.*` and bare queue
+  names.
+- **Sharded policies break Celery.** `EnterpriseCluster` presents one endpoint
+  but still shards, so kombu's priority-step pipeline fails on the first publish
+  with `CROSSSLOT`. `OSSCluster` needs a cluster-aware client, and kombu ships
+  none. The module therefore defaults to `clustering_policy = "NoCluster"`,
+  which reports `redis_mode=standalone` and runs Celery unchanged. `NoCluster`
+  is capped at 25 GB and cannot scale up without a policy change.
+  `EnterpriseCluster` stays selectable for a caller that sets a kombu
+  `global_keyprefix` carrying a hash tag, which puts every broker key in one
+  slot.
+
+The in-cluster Redis remains the default because it keeps databases 0, 14 and
+15 and so needs no extra configuration.
 
 Azure stopped accepting new **Azure Cache for Redis** instances -- a create now
 returns "Azure Cache for Redis is retiring, create Azure Managed Redis instance
@@ -214,9 +231,8 @@ resource rather than a renamed one, and the differences show:
 - It speaks TLS on **10000**, where the retiring service used 6380. There is no
   plaintext port to disable and no minimum TLS version to set.
 - Eviction policies are spelled `VolatileLRU`, not `volatile-lru`.
-- Clustering is not really a choice. `OSSCluster` shards and needs a
-  cluster-aware client, which redis-py is not, so the module asks for
-  `EnterpriseCluster`.
+- Clustering is not really a choice for Onyx. Every instance shards unless the
+  policy says otherwise, so the module asks for `NoCluster`.
 - Alerts report under `Microsoft.Cache/redisEnterprise`, and the single-thread
   server load metric is replaced by processor time.
 
