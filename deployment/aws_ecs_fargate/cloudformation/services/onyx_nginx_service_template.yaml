@@ -234,8 +234,13 @@ Resources:
       Type: application
       Scheme: internet-facing
       Subnets: !Ref SubnetIDs
-      SecurityGroups: 
+      SecurityGroups:
         - !Ref SecurityGroup
+      LoadBalancerAttributes:
+        # Match the 300s nginx proxy timeouts; the 60s default severs
+        # long-running buffered responses (e.g. MCP document search).
+        - Key: idle_timeout.timeout_seconds
+          Value: "300"
 
   LoadBalancerListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
