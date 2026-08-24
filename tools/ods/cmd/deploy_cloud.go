@@ -71,7 +71,7 @@ Example usage:
 						return fmt.Errorf("--attach cannot be combined with --%s", name)
 					}
 				}
-				if !cloudTagRe.MatchString(opts.Attach) {
+				if !release.IsCloudTag(opts.Attach) {
 					return fmt.Errorf("%q is not a cloud tag (expected vX.Y.Z-cloud.N)", opts.Attach)
 				}
 				return watchCloudRelease(opts.Attach)

@@ -15,6 +15,11 @@ import (
 var cloudTagRe = regexp.MustCompile(
 	`^(v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*))-cloud\.(0|[1-9]\d*)$`)
 
+// IsCloudTag reports whether s is a complete cloud tag, e.g. "v4.7.0-cloud.3".
+func IsCloudTag(s string) bool {
+	return cloudTagRe.MatchString(s)
+}
+
 // ComputeCloudTag returns the next cloud tag for commitSHA. The base version
 // is "v" + overrideVersion when given, else one minor past the newest release
 // branch on origin that does not contain the commit; the counter is one past

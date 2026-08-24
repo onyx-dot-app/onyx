@@ -12,8 +12,11 @@ package cmd
 //	E4 counter tag only on origin            -> fetched, counter continues,
 //	                                            tag name returned               TestDeployCloud_fetchesRemoteOnlyCounterTags
 //	E5 --version with leading zeroes         -> rejected before any git work    TestDeployCloud_rejectsLeadingZeroVersion
+//	E6 --attach with malformed tag           -> rejected before any gh work     TestDeployCloud_attachRejectsMalformedTag
+//	E7 --attach with a cut-flow flag         -> rejected before any gh work     TestDeployCloud_attachRejectsCutFlowFlags
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -95,6 +98,36 @@ func TestDeployCloud_rejectsLeadingZeroVersion(t *testing.T) {
 		_, err := deployCloud(&DeployCloudOptions{Ref: "origin/main", Version: version, DryRun: true, Yes: true})
 		if err == nil || !strings.Contains(err.Error(), "--version must be X.Y.Z") {
 			t.Errorf("expected validation error for %q, got %v", version, err)
+		}
+	}
+}
+
+func TestDeployCloud_attachRejectsMalformedTag(t *testing.T) {
+	// Under test: leading zeroes are invalid per SemVer 2.0.0 item 2, so this
+	// must fail validation, not reach the gh-backed watcher.
+	cmd := NewDeployCloudCommand()
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+	cmd.SetArgs([]string{"--attach", "v4.7.0-cloud.01"})
+	err := cmd.Execute()
+
+	// Postcondition.
+	if err == nil || !strings.Contains(err.Error(), "is not a cloud tag") {
+		t.Errorf("expected cloud tag validation error, got %v", err)
+	}
+}
+
+func TestDeployCloud_attachRejectsCutFlowFlags(t *testing.T) {
+	// Under test and postcondition: the malformed tag keeps a regressed clash
+	// check from reaching the gh-backed watcher.
+	for _, flag := range []string{"--ref=abc", "--version=5.0.0", "--dry-run", "--yes", "--verify", "--no-watch"} {
+		cmd := NewDeployCloudCommand()
+		cmd.SetOut(io.Discard)
+		cmd.SetErr(io.Discard)
+		cmd.SetArgs([]string{"--attach", "not-a-tag", flag})
+		err := cmd.Execute()
+		if err == nil || !strings.Contains(err.Error(), "--attach cannot be combined with") {
+			t.Errorf("expected flag clash error for %s, got %v", flag, err)
 		}
 	}
 }
