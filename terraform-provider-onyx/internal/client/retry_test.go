@@ -42,7 +42,7 @@ func TestRetriesServerErrorsOnReads(t *testing.T) {
 
 func TestNeverReplaysPostOnServerError(t *testing.T) {
 	c, attempts := newCountingServer(t, http.StatusBadGateway, http.StatusOK)
-	_, err := c.CreateAPIKey(context.Background(), APIKeyArgs{Role: "basic"})
+	_, err := c.CreateAPIKey(context.Background(), APIKeyArgs{GroupIDs: []int64{}})
 	if err == nil {
 		t.Fatal("a failed POST must surface, not be replayed")
 	}
@@ -58,7 +58,7 @@ func TestNeverReplaysPostOnServerError(t *testing.T) {
 func TestRetriesRateLimitsOnWrites(t *testing.T) {
 	c, attempts := newCountingServer(t, http.StatusTooManyRequests, http.StatusOK)
 	// A 429 is rejected before the handler runs, so replaying is safe.
-	if _, err := c.CreateAPIKey(context.Background(), APIKeyArgs{Role: "basic"}); err != nil {
+	if _, err := c.CreateAPIKey(context.Background(), APIKeyArgs{GroupIDs: []int64{}}); err != nil {
 		t.Fatalf("a rate-limited POST should be retried: %v", err)
 	}
 	if *attempts != 2 {
