@@ -306,8 +306,9 @@ def test_trigger_requires_connector_management_permission(
 def test_sweep_retires_a_dead_run_and_retrigger_recovers(
     admin_user: DATestUser,
 ) -> None:
-    # Precondition. A completed report, then a RUNNING mark backdated past any
-    # derived ceiling: a run that died without a trace.
+    # Precondition.
+    # A completed report, then a RUNNING mark backdated past any derived
+    # ceiling: a run that died without a trace.
     credential = CredentialManager.create(
         source=DocumentSource.MOCK_CONNECTOR, user_performing_action=admin_user
     )
@@ -315,9 +316,10 @@ def test_sweep_retires_a_dead_run_and_retrigger_recovers(
         _check_url(credential.id), json={}, headers=admin_user.headers
     )
     response.raise_for_status()
-    _poll_until_run_status(
+    completed = _poll_until_run_status(
         credential.id, None, admin_user.headers, CapabilityReportRunStatus.COMPLETED
     )
+    assert completed["report"] is not None
     with get_session_with_current_tenant() as db_session:
         row = mark_capability_report_running(
             db_session,
@@ -335,7 +337,8 @@ def test_sweep_retires_a_dead_run_and_retrigger_recovers(
         )
         db_session.commit()
 
-    # Under test. The sweep the beat schedule fires every ten minutes.
+    # Under test.
+    # The sweep the beat schedule fires every ten minutes.
     client_app.send_task(
         OnyxCeleryTask.CHECK_FOR_STALE_CAPABILITY_RUNS,
         kwargs=dict(tenant_id=get_current_tenant_id()),
@@ -343,15 +346,18 @@ def test_sweep_retires_a_dead_run_and_retrigger_recovers(
         expires=300,
     )
 
-    # Postcondition. The dead run surfaces as FAILED_TO_RUN with the previous
-    # report still readable, and a re-trigger recovers the scope.
+    # Postcondition.
+    # The dead run surfaces as FAILED_TO_RUN with the previous report preserved
+    # unchanged, and a re-trigger recovers the scope. Nothing runs between the
+    # two reads (the dead mark was crafted directly, with no task behind it), so
+    # equality is deterministic.
     retired = _poll_until_run_status(
         credential.id,
         None,
         admin_user.headers,
         CapabilityReportRunStatus.FAILED_TO_RUN,
     )
-    assert retired["report"] is not None
+    assert retired["report"] == completed["report"]
     response = client.post(
         _check_url(credential.id), json={}, headers=admin_user.headers
     )
