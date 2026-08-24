@@ -143,6 +143,32 @@ run "the_cluster_has_an_identity_to_grant_roles_to" {
   }
 }
 
+run "upgrade_settings_are_managed_not_left_to_azure" {
+  command = plan
+
+  # Azure fills this in itself. Unmanaged, it shows as drift on every plan and
+  # a stray apply changes upgrade behaviour without anyone asking for it.
+  assert {
+    condition     = one(one(azurerm_kubernetes_cluster.this.default_node_pool).upgrade_settings).max_surge == "10%"
+    error_message = "The system pool should declare its surge rather than inherit Azure's."
+  }
+
+  assert {
+    condition     = alltrue([for p in azurerm_kubernetes_cluster_node_pool.this : one(p.upgrade_settings).max_surge == "10%"])
+    error_message = "Every optional pool should declare its surge too."
+  }
+}
+
+run "rejects_a_max_surge_azure_would_not_take" {
+  command = plan
+
+  variables {
+    node_pool_max_surge = "lots"
+  }
+
+  expect_failures = [var.node_pool_max_surge]
+}
+
 run "no_storage_account_means_no_identity" {
   command = plan
 
