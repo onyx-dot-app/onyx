@@ -36,6 +36,8 @@ type Model struct {
 	agentID         int
 	agentName       string
 	agents          []models.AgentSummary
+	llmModels       []modelOption
+	modelOverride   *models.LLMOverride
 	parentMessageID *int
 	isStreaming     bool
 	streamCancel    context.CancelFunc
@@ -83,7 +85,7 @@ func (m Model) Init() tea.Cmd {
 	if m.client == nil {
 		return nil
 	}
-	return loadAgentsCmd(m.client)
+	return tea.Batch(loadAgentsCmd(m.client), loadModelsCmd(m.client))
 }
 
 // Update handles messages.
@@ -148,6 +150,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case AgentsLoadedMsg:
 		return m.handleAgentsLoaded(msg)
+
+	case ModelsLoadedMsg:
+		return m.handleModelsLoaded(msg)
 
 	case SessionsLoadedMsg:
 		return m.handleSessionsLoaded(msg)
@@ -297,6 +302,8 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 					return cmdResume(m, item.id)
 				case pickerAgent:
 					return cmdSelectAgent(m, item.id)
+				case pickerModel:
+					return cmdSelectModel(m, item.id)
 				}
 			}
 			return m, nil
@@ -394,6 +401,7 @@ func (m Model) sendMessage(message string) (Model, tea.Cmd) {
 		m.agentID,
 		m.parentMessageID,
 		fileDescs,
+		m.modelOverride,
 	)
 	m.streamCh = ch
 
@@ -569,6 +577,73 @@ func (m Model) handleAgentsLoaded(msg AgentsLoadedMsg) (tea.Model, tea.Cmd) {
 	}
 	m.viewport.showPicker(pickerAgent, items)
 	return m, nil
+}
+
+func (m Model) handleModelsLoaded(msg ModelsLoadedMsg) (tea.Model, tea.Cmd) {
+	if msg.Err != nil {
+		// Startup fetch failures are silent — the status bar just omits the
+		// model segment. Only report when the user asked for the picker.
+		if msg.ShowPicker {
+			m.viewport.addError("Could not load models: " + msg.Err.Error())
+		}
+		return m, nil
+	}
+
+	// A startup response that lands while the model picker is open must not
+	// replace the list the picker's indices point into.
+	if !msg.ShowPicker && m.viewport.pickerActive && m.viewport.pickerType == pickerModel {
+		return m, nil
+	}
+
+	m.llmModels = flattenModelOptions(msg.Response)
+	m.status.setModel(m.currentModelLabel())
+
+	if !msg.ShowPicker {
+		return m, nil
+	}
+	if len(m.llmModels) == 0 {
+		m.viewport.addInfo("No models available.")
+		return m, nil
+	}
+
+	m.viewport.addInfo("Select a model (Enter to select, Esc to cancel):")
+
+	var items []pickerItem
+	for i, opt := range m.llmModels {
+		label := opt.label
+		if m.isCurrentModel(opt) {
+			label += " *"
+		}
+		items = append(items, pickerItem{
+			id:     strconv.Itoa(i),
+			label:  label,
+			detail: opt.providerLabel,
+		})
+	}
+	m.viewport.showPicker(pickerModel, items)
+	return m, nil
+}
+
+// isCurrentModel reports whether opt is the model in effect: the explicit
+// override when one is set, otherwise the workspace default.
+func (m Model) isCurrentModel(opt modelOption) bool {
+	if m.modelOverride == nil {
+		return opt.isDefault
+	}
+	if m.modelOverride.ModelConfigurationID != nil && opt.configID != nil {
+		return *m.modelOverride.ModelConfigurationID == *opt.configID
+	}
+	return m.modelOverride.ModelVersion != nil && *m.modelOverride.ModelVersion == opt.name
+}
+
+// currentModelLabel returns the display label of the model in effect.
+func (m Model) currentModelLabel() string {
+	for _, opt := range m.llmModels {
+		if m.isCurrentModel(opt) {
+			return opt.label
+		}
+	}
+	return ""
 }
 
 func (m Model) handleSessionsLoaded(msg SessionsLoadedMsg) (tea.Model, tea.Cmd) {
