@@ -1897,8 +1897,15 @@ MCP_SERVER_ENABLED = os.environ.get("MCP_SERVER_ENABLED", "").lower() == "true"
 
 # Read timeout for requests the MCP server proxies to the API server (document
 # search can run for minutes). Default matches the 300s nginx read timeout on /mcp.
-MCP_SERVER_API_REQUEST_TIMEOUT_SECONDS: int = int(
+_MCP_SERVER_API_REQUEST_TIMEOUT_RAW = int(
     os.environ.get("MCP_SERVER_API_REQUEST_TIMEOUT_SECONDS") or 300
+)
+# 0/negative would make every proxied request time out immediately; fall back
+# to the default instead.
+MCP_SERVER_API_REQUEST_TIMEOUT_SECONDS: int = (
+    _MCP_SERVER_API_REQUEST_TIMEOUT_RAW
+    if _MCP_SERVER_API_REQUEST_TIMEOUT_RAW > 0
+    else 300
 )
 MCP_SERVER_HOST = os.environ.get("MCP_SERVER_HOST", "0.0.0.0")  # noqa: S104 — server bind address; intentional default for containerized deployment
 MCP_SERVER_PORT = int(os.environ.get("MCP_SERVER_PORT") or 8090)
