@@ -4,11 +4,14 @@ page_title: "onyx_connector Resource - terraform-provider-onyx"
 subcategory: ""
 description: |-
   A connector definition: what to index and how often. A connector on its own indexes nothing — pair it with an onyx_credential to start indexing.
+  Access control is not set here. Onyx applies it when a credential is associated, so it belongs to the connector-credential pair.
 ---
 
 # onyx_connector (Resource)
 
 A connector definition: what to index and how often. A connector on its own indexes nothing — pair it with an `onyx_credential` to start indexing.
+
+Access control is not set here. Onyx applies it when a credential is associated, so it belongs to the connector-credential pair.
 
 ## Example Usage
 
@@ -42,8 +45,6 @@ resource "onyx_connector" "docs_site" {
 
 ### Optional
 
-- `access_type` (String) `public`, `private`, or `sync`. Onyx validates write permission against it but stores it on the cc-pair, so this value is never refreshed.
-- `groups` (List of Number) Enterprise user-group ids used for the same write-permission check. Also stored on the cc-pair, not on the connector.
 - `indexing_start` (String) Earliest document timestamp to index, RFC 3339, e.g. `2026-01-01T00:00:00Z`. Onyx ignores it on update, so changing it replaces the connector.
 - `prune_freq` (Number) Seconds between pruning runs. Onyx rewrites an unset value to its default of 604800 (7 days) on the first update, and Terraform then keeps that value.
 - `refresh_freq` (Number) Seconds between index runs. Unset means index once, with no refresh.
@@ -61,7 +62,6 @@ The [`terraform import` command](https://developer.hashicorp.com/terraform/cli/c
 
 ```shell
 #!/bin/sh
-# Import by numeric connector id. access_type and groups live on the cc-pair,
-# so they return to their defaults after import.
+# Import by numeric connector id.
 terraform import onyx_connector.docs_site 5
 ```

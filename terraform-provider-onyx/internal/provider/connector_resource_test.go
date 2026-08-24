@@ -33,7 +33,6 @@ resource "onyx_connector" "test" {
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("onyx_connector.test", "name", "tf-acc-connector"),
 					resource.TestCheckResourceAttr("onyx_connector.test", "source", "web"),
-					resource.TestCheckResourceAttr("onyx_connector.test", "access_type", "public"),
 					resource.TestCheckResourceAttr("onyx_connector.test", "credential_ids.#", "0"),
 					resource.TestCheckResourceAttrSet("onyx_connector.test", "id"),
 				),
@@ -42,9 +41,6 @@ resource "onyx_connector" "test" {
 				ResourceName:      "onyx_connector.test",
 				ImportState:       true,
 				ImportStateVerify: true,
-				// Both live on the cc-pair, so an imported connector cannot
-				// report them.
-				ImportStateVerifyIgnore: []string{"access_type", "groups"},
 			},
 			{
 				// Renaming and rescheduling must not replace the connector, and

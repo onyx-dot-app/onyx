@@ -36,7 +36,7 @@ resource "onyx_credential" "confluence" {
 
 ### Optional
 
-- `admin_public` (Boolean) Whether every admin can use this credential. Onyx has no API to change it later.
+- `admin_public` (Boolean) Whether every admin can use this credential. Onyx has no API to change it later. Leaving it `true` also keeps the credential readable: the API hides a private credential from admins other than its creator, and Terraform cannot tell that apart from a deleted one.
 - `curator_public` (Boolean) Whether curators of the assigned groups can use this credential. Create-only.
 - `groups` (List of Number) Enterprise user-group ids allowed to use this credential. Create-only, and not returned by the API, so Terraform cannot detect changes made elsewhere.
 - `name` (String) Display name. Onyx has no API to clear a name, so removing this attribute keeps the last value instead of planning a change.

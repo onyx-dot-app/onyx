@@ -77,6 +77,15 @@ and on Onyx Cloud the tenant is embedded in the key itself.
   validated on write but stored on the cc-pair, so Terraform cannot refresh them. Onyx also
   rewrites an unset `prune_freq` to 7 days on the first update, which the provider then
   keeps as the value of record.
+- **`onyx_connector` does not set access control.** Onyx applies it when a credential is
+  associated, so it belongs to the connector-credential pair. The connector endpoints still
+  require an `access_type` in the request body but ignore it, so the provider sends a fixed
+  value rather than offering a knob that would do nothing.
+- **A private credential can look deleted.** The API hides a credential with
+  `admin_public = false` from admins other than its creator, and that is indistinguishable
+  from a deleted one, so Terraform would drop it from state and recreate it. Keep
+  `admin_public = true` (the default) for credentials Terraform manages, or run Terraform
+  with the key that created them.
 - **The model list read is the API's display view.** It hides obsolete models and dated
   duplicates, so writes (including the auto-mode pass-through, which is also not atomic
   with its read) cannot preserve rows the API hides. The admin UI round-trips the same
@@ -128,10 +137,11 @@ Without `TF_ACC` these tests skip, so plain `go test ./...` (and the repo's Go C
 green with no Onyx running.
 
 To test against an API server that does not touch your dev database, give it a database of
-its own. This reuses the running Postgres, Redis, OpenSearch and MinIO containers:
+its own. This reuses the running Postgres, Redis, OpenSearch and MinIO containers (the
+container name follows your compose project, so adjust it if yours differs):
 
 ```bash
-docker exec onyx-stack-relational_db-1 psql -U postgres -c "CREATE DATABASE onyx_tf_acc;"
+docker exec onyx-relational_db-1 psql -U postgres -c "CREATE DATABASE onyx_tf_acc;"
 cd backend && POSTGRES_DB=onyx_tf_acc uv run alembic upgrade head
 POSTGRES_DB=onyx_tf_acc AUTH_TYPE=basic LICENSE_ENFORCEMENT_ENABLED=false \
   ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true \

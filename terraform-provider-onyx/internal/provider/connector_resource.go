@@ -11,7 +11,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -42,8 +41,6 @@ type connectorResourceModel struct {
 	RefreshFreq             types.Int64          `tfsdk:"refresh_freq"`
 	PruneFreq               types.Int64          `tfsdk:"prune_freq"`
 	IndexingStart           types.String         `tfsdk:"indexing_start"`
-	AccessType              types.String         `tfsdk:"access_type"`
-	Groups                  types.List           `tfsdk:"groups"`
 	CredentialIDs           types.List           `tfsdk:"credential_ids"`
 }
 
@@ -54,7 +51,9 @@ func (r *connectorResource) Metadata(_ context.Context, req resource.MetadataReq
 func (r *connectorResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "A connector definition: what to index and how often. A connector on its own " +
-			"indexes nothing — pair it with an `onyx_credential` to start indexing.",
+			"indexes nothing — pair it with an `onyx_credential` to start indexing.\n\n" +
+			"Access control is not set here. Onyx applies it when a credential is associated, so it " +
+			"belongs to the connector-credential pair.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:            true,
@@ -112,22 +111,6 @@ func (r *connectorResource) Schema(_ context.Context, _ resource.SchemaRequest, 
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
-			"access_type": schema.StringAttribute{
-				Optional: true,
-				Computed: true,
-				Default:  stringdefault.StaticString("public"),
-				MarkdownDescription: "`public`, `private`, or `sync`. Onyx validates write permission " +
-					"against it but stores it on the cc-pair, so this value is never refreshed.",
-				Validators: []validator.String{
-					stringvalidator.OneOf("public", "private", "sync"),
-				},
-			},
-			"groups": schema.ListAttribute{
-				Optional:    true,
-				ElementType: types.Int64Type,
-				MarkdownDescription: "Enterprise user-group ids used for the same write-permission check. " +
-					"Also stored on the cc-pair, not on the connector.",
-			},
 			"credential_ids": schema.ListAttribute{
 				Computed:            true,
 				ElementType:         types.Int64Type,
@@ -146,10 +129,6 @@ func (r *connectorResource) upsertFromModel(ctx context.Context, model connector
 	if !ok {
 		return client.ConnectorUpsert{}, false
 	}
-	groups, ok := int64ListValues(ctx, model.Groups, diags)
-	if !ok {
-		return client.ConnectorUpsert{}, false
-	}
 	return client.ConnectorUpsert{
 		Name:                    model.Name.ValueString(),
 		Source:                  model.Source.ValueString(),
@@ -158,8 +137,10 @@ func (r *connectorResource) upsertFromModel(ctx context.Context, model connector
 		RefreshFreq:             int64Pointer(model.RefreshFreq),
 		PruneFreq:               int64Pointer(model.PruneFreq),
 		IndexingStart:           stringPointer(model.IndexingStart),
-		AccessType:              model.AccessType.ValueString(),
-		Groups:                  groups,
+		// Required by the request body but ignored by both handlers: access
+		// control is applied when a credential is associated, on the cc-pair.
+		AccessType: "public",
+		Groups:     []int64{},
 	}, true
 }
 
@@ -241,7 +222,6 @@ func (r *connectorResource) Read(ctx context.Context, req resource.ReadRequest, 
 		resp.Diagnostics.AddError("Failed to read Onyx connector", err.Error())
 		return
 	}
-	// access_type and groups are carried forward: both live on the cc-pair.
 	if !applyRemote(ctx, &state, remote, &resp.Diagnostics) {
 		return
 	}
@@ -294,7 +274,5 @@ func (r *connectorResource) Delete(ctx context.Context, req resource.DeleteReque
 }
 
 func (r *connectorResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	// access_type and groups stay at their defaults after import: the API
-	// returns neither on the connector.
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }

@@ -87,10 +87,13 @@ func (r *credentialResource) Schema(_ context.Context, _ resource.SchemaRequest,
 					"The required keys depend on the source.",
 			},
 			"admin_public": schema.BoolAttribute{
-				Optional:            true,
-				Computed:            true,
-				Default:             booldefault.StaticBool(true),
-				MarkdownDescription: "Whether every admin can use this credential. Onyx has no API to change it later.",
+				Optional: true,
+				Computed: true,
+				Default:  booldefault.StaticBool(true),
+				MarkdownDescription: "Whether every admin can use this credential. Onyx has no API to change " +
+					"it later. Leaving it `true` also keeps the credential readable: the API hides a private " +
+					"credential from admins other than its creator, and Terraform cannot tell that apart from " +
+					"a deleted one.",
 				PlanModifiers: []planmodifier.Bool{
 					boolplanmodifier.RequiresReplace(),
 				},

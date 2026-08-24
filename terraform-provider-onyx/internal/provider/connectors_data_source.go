@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"sort"
 	"strconv"
 
 	"github.com/hashicorp/terraform-plugin-framework-jsontypes/jsontypes"
@@ -95,6 +96,10 @@ func (d *connectorsDataSource) Read(ctx context.Context, _ datasource.ReadReques
 		resp.Diagnostics.AddError("Failed to list Onyx connectors", err.Error())
 		return
 	}
+
+	// The listing has no ORDER BY, so a stable sort keeps index-based
+	// references and plans from churning between reads.
+	sort.Slice(remote, func(i, j int) bool { return remote[i].ID < remote[j].ID })
 
 	summaries := make([]connectorSummaryModel, 0, len(remote))
 	for _, c := range remote {
