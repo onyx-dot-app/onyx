@@ -16,6 +16,10 @@ on:
   push:
     branches-ignore:
       - main
+      # The merge queue pushes to these short-lived branches on its way to
+      # main. Their commits are about to land there anyway, and the deploy
+      # would only hold a server slot a real branch could use.
+      - "gh-readonly-queue/**"
     paths:
       - "web/**"
       - "backend/**"

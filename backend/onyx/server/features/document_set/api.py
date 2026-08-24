@@ -19,6 +19,7 @@ from onyx.db.document_set import (
     check_document_sets_are_public,
     fetch_all_document_sets_for_user,
     get_document_set_by_id,
+    get_document_set_by_id_for_user,
     get_group_ids_for_document_set,
     insert_document_set,
     mark_document_set_as_to_be_deleted,
@@ -223,6 +224,57 @@ def delete_document_set(
             kwargs={"tenant_id": tenant_id},
             priority=OnyxCeleryPriority.HIGH,
         )
+
+
+@router.get("/admin/document-set/{document_set_id}")
+def get_document_set(
+    document_set_id: int,
+    user: User = Depends(
+        require_permission(Permission.MANAGE_DOCUMENT_SETS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> DocumentSetSummary:
+    """Read one document set.
+
+    The listing is scoped to the caller, so a client managing a single set had
+    to fetch every set and filter. This returns the same shape as the listing.
+    """
+    # The two scopes are not nested: the readable filter needs membership or a
+    # public set, while the editable one matches a managed scope and a creator's
+    # groupless set. The listing unions them, so this does too.
+    readable = get_document_set_by_id_for_user(
+        db_session=db_session,
+        document_set_id=document_set_id,
+        user=user,
+        get_editable=False,
+    )
+    editable = get_document_set_by_id_for_user(
+        db_session=db_session,
+        document_set_id=document_set_id,
+        user=user,
+        get_editable=True,
+    )
+    document_set = readable or editable
+    if document_set is None:
+        raise OnyxError(
+            OnyxErrorCode.DOCUMENT_SET_NOT_FOUND,
+            f"Document set {document_set_id} does not exist",
+        )
+
+    is_document_sets_admin = (
+        has_permission(user, Permission.MANAGE_DOCUMENT_SETS)
+        is PermissionAuthority.GLOBAL
+    )
+    is_editable = is_document_sets_admin or editable is not None
+    return DocumentSetSummary.from_model(
+        document_set,
+        permissions=document_set_permissions(
+            is_editable=is_editable,
+            is_document_sets_admin=is_document_sets_admin,
+            owns_groupless=is_editable
+            and user_owns_groupless_document_set(document_set, user),
+        ),
+    )
 
 
 """Endpoints for non-admins"""

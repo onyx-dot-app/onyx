@@ -22,6 +22,8 @@ from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.db.models import Tool as ToolModel
 from onyx.db.persona import get_raw_personas_for_user
 from onyx.db.user_group import assert_not_shared_with_default_group
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.models import ReasoningEffort
 from onyx.llm.utils import model_supports_image_input
 from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
@@ -35,7 +37,9 @@ from onyx.server.manage.llm.models import (
     SyncModelEntry,
     ensure_default_within_max,
 )
+from onyx.utils.encryption import is_masked_credential, mask_string
 from onyx.utils.logger import setup_logger
+from onyx.utils.sensitive import SensitiveValue
 from shared_configs.enums import EmbeddingProvider
 
 logger = setup_logger()
@@ -199,6 +203,40 @@ def fetch_persona_with_groups(db_session: Session, persona_id: int) -> Persona |
     )
 
 
+def _resolve_embedding_api_key(
+    incoming: str | None, existing: SensitiveValue[str] | None
+) -> str | None:
+    """Restore the stored key when the caller submits the masked placeholder.
+
+    Reads mask the key, so a read-modify-write cycle would otherwise persist the
+    mask itself as the real credential. Mirrors resolve_masked_credentials in
+    onyx/db/external_app.py.
+    """
+    if incoming is None:
+        return incoming
+
+    stored = existing.get_value(apply_mask=False) if existing is not None else None
+    if stored is not None:
+        # Compare against this key's own mask rather than the general shape
+        # test, so a real key that happens to look like a placeholder is still
+        # stored instead of being swallowed. Whatever is stored is preserved:
+        # the stored value cannot be told apart from a real key of the same
+        # shape, so refusing it would break providers holding a valid one.
+        #
+        # A caller rotating to a key that equals this mask exactly is read as an
+        # unchanged echo, and keeps the old key. Only a changed-flag on the
+        # request can separate the two, as LLMProviderUpsertRequest does.
+        return stored if incoming == mask_string(stored) else incoming
+
+    if is_masked_credential(incoming):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "api_key was submitted masked but has no stored value to restore — "
+            "provide the actual key.",
+        )
+    return incoming
+
+
 def upsert_cloud_embedding_provider(
     db_session: Session, provider: CloudEmbeddingProviderCreationRequest
 ) -> CloudEmbeddingProvider:
@@ -208,10 +246,16 @@ def upsert_cloud_embedding_provider(
         .first()
     )
     if existing_provider:
-        for key, value in provider.model_dump().items():
+        updates = provider.model_dump()
+        updates["api_key"] = _resolve_embedding_api_key(
+            provider.api_key, existing_provider.api_key
+        )
+        for key, value in updates.items():
             setattr(existing_provider, key, value)
     else:
-        new_provider = CloudEmbeddingProviderModel(**provider.model_dump())
+        creation = provider.model_dump()
+        creation["api_key"] = _resolve_embedding_api_key(provider.api_key, None)
+        new_provider = CloudEmbeddingProviderModel(**creation)
 
         db_session.add(new_provider)
         existing_provider = new_provider
