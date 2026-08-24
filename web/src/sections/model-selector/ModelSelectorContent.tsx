@@ -33,14 +33,18 @@ import {
 } from "@/lib/languageModels/options";
 import { ReasoningEffortOverride } from "@/lib/languageModels/types";
 import {
+  ADMIN_LIMITED_SETTING_TOOLTIP,
   ALL_REASONING_STOPS,
   PaneSlider,
   REASONING_STOP_LABELS,
   SettingRow,
   UNKNOWN_CONTEXT_TOOLTIP,
+  UNSET_REASONING_STOP,
   UNSUPPORTED_SETTING_TOOLTIP,
+  cappedReasoningStop,
   formatContextWindow,
   maxReasoningStop,
+  reasoningStopIndex,
 } from "@/sections/model-selector/setting-controls";
 import { useCurrentAgentLLMProviders } from "@/lib/languageModels/hooks";
 import { useUser } from "@/providers/UserProvider";
@@ -55,6 +59,8 @@ export interface TemperatureManager {
   temperature: number;
   updateTemperature: (value: number) => void;
   maxTemperature: number;
+  /** True only when an override was set locally or is stored on the session. */
+  hasTemperatureOverride: boolean;
 }
 
 export interface ReasoningManager {
@@ -108,9 +114,18 @@ export function useModelDetailManagers(
   ]);
 }
 
-/** Highest stop this model supports, as a slider index. */
-function maxSupportedReasoningStop(option: LLMOption): number {
-  return maxReasoningStop(option.supportedReasoningEfforts);
+/** Where the slider parks on open: the session's own choice, else the admin
+ *  default, bounded by the selected model's slider maximum. */
+function initialTemperature(
+  option: LLMOption,
+  manager: TemperatureManager | undefined
+): number {
+  const sessionTemperature = manager?.temperature ?? 0.5;
+  if (manager?.hasTemperatureOverride) return sessionTemperature;
+  return Math.min(
+    option.temperatureDefault ?? sessionTemperature,
+    manager?.maxTemperature ?? 2
+  );
 }
 
 /** Fixed-height scroll box: the popover clips overflow instead of scrolling. */
@@ -146,9 +161,14 @@ function ModelDetailPane({ option, managers, onBack }: ModelDetailPaneProps) {
   const temperatureManager = managers.temperature;
   const reasoningManager = managers.reasoning;
   const temperatureEnabled = !option.supportsReasoning && !!temperatureManager;
+  const capabilityStop = maxReasoningStop(option.supportedReasoningEfforts);
+  // The admin cap further limits which stops users may request.
+  const maxSupportedStop = cappedReasoningStop(
+    capabilityStop,
+    option.reasoningEffortMax
+  );
   // A reasoning model with no supported levels takes no effort parameter at
   // all (e.g. o1-mini), so the row stays disabled.
-  const maxSupportedStop = maxSupportedReasoningStop(option);
   const reasoningEnabled =
     option.supportsReasoning && !!reasoningManager && maxSupportedStop >= 0;
 
@@ -158,18 +178,18 @@ function ModelDetailPane({ option, managers, onBack }: ModelDetailPaneProps) {
   const clampStop = (stop: number) =>
     Math.max(0, Math.min(stop, maxSupportedStop));
 
-  const [localTemperature, setLocalTemperature] = useState(
-    temperatureManager?.temperature ?? 0.5
+  // temperature is always concrete, so the override flag decides when the
+  // admin default applies.
+  const [localTemperature, setLocalTemperature] = useState(() =>
+    initialTemperature(option, temperatureManager)
   );
   // A stored level the model doesn't support (e.g. xhigh after switching
   // models) displays clamped to the highest supported stop.
-  const storedStop = ALL_REASONING_STOPS.indexOf(
-    reasoningManager?.reasoningEffort ?? "medium"
+  const storedStop = reasoningStopIndex(
+    reasoningManager?.reasoningEffort ?? option.reasoningEffortDefault
   );
   const [localEffortStop, setLocalEffortStop] = useState(
-    clampStop(
-      storedStop === -1 ? ALL_REASONING_STOPS.indexOf("medium") : storedStop
-    )
+    clampStop(storedStop >= 0 ? storedStop : UNSET_REASONING_STOP)
   );
 
   const displayTemperature = temperatureEnabled ? localTemperature : 1;
@@ -299,7 +319,11 @@ function ModelDetailPane({ option, managers, onBack }: ModelDetailPaneProps) {
                 >
                   <Disabled
                     disabled={reasoningEnabled && index > maxSupportedStop}
-                    tooltip={UNSUPPORTED_SETTING_TOOLTIP}
+                    tooltip={
+                      index > capabilityStop
+                        ? UNSUPPORTED_SETTING_TOOLTIP
+                        : ADMIN_LIMITED_SETTING_TOOLTIP
+                    }
                     tooltipSide="top"
                   >
                     <Text

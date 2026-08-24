@@ -1074,7 +1074,11 @@ export default function useChatController({
             : modelOverride
               ? (modelOverride.modelConfigurationId ?? undefined)
               : (llmManager.currentLlm.modelConfigurationId ?? undefined),
-          temperature: llmManager.temperature || undefined,
+          // Only a chosen temperature is sent, zero included. Without one the
+          // backend resolves the admin default, then GEN_AI_TEMPERATURE.
+          temperature: llmManager.hasTemperatureOverride
+            ? llmManager.temperature
+            : undefined,
           deepResearch,
           enabledToolIds:
             disabledToolIds && activeAgent
@@ -1468,6 +1472,7 @@ export default function useChatController({
       filterManager.timeRange,
       llmManager.currentLlm,
       llmManager.temperature,
+      llmManager.hasTemperatureOverride,
       // Others that affect logic
       activeAgent,
       availableAgents,
