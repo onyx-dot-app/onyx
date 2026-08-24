@@ -1,5 +1,5 @@
 # Locust harness image for running the chat load tests in-cluster.
-# Build from the loadtest/ directory:  docker build -t onyx-loadtest .
+# Build from the tools/loadtest/ directory:  docker build -t onyx-loadtest .
 # Master/worker mode and run flags are supplied by the deployment (see k8s/).
 ARG BASE_IMAGE_REGISTRY=docker.io
 # Keep the tag in sync with the locust pin in uv.lock.
