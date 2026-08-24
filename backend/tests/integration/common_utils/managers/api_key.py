@@ -16,8 +16,7 @@ class APIKeyManager:
     ) -> DATestAPIKey:
         name = f"{name}-api-key" if name else f"test-api-key-{uuid4()}"
         # Default to the Admin default group so API keys created without
-        # explicit groups inherit admin-level permissions, matching the
-        # pre-permission-migration default of UserRole.ADMIN.
+        # explicit groups inherit admin-level permissions.
         if group_ids is None:
             admin_group = UserGroupManager.get_default(
                 user_performing_action=user_performing_action,

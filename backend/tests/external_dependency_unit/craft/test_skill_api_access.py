@@ -12,7 +12,7 @@ from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import SkillAccessLevel, SkillSharePermission
-from onyx.db.models import User, UserRole, UserSkillPreference
+from onyx.db.models import User, UserSkillPreference
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.skill.api import (
@@ -50,7 +50,7 @@ def test_curator_without_group_scope_cannot_patch_shared_skill(
     db_session: Session,
     test_user: User,  # noqa: ARG001
 ) -> None:
-    curator = make_user(db_session, role=UserRole.CURATOR)
+    curator = make_user(db_session, is_group_manager=True)
     group = make_group(db_session)
     add_user_to_group(db_session, curator, group)
     private_skill = make_skill(db_session, is_public=False)
@@ -71,7 +71,7 @@ def test_fetch_direct_shared_skill_is_not_personal(
     db_session: Session,
     test_user: User,  # noqa: ARG001
 ) -> None:
-    user = make_user(db_session, role=UserRole.BASIC)
+    user = make_user(db_session, standard_account=True)
     private_skill = make_skill(db_session, is_public=False)
     share_skill_with_user(db_session, private_skill, user)
 
@@ -90,7 +90,7 @@ def test_fetch_associated_skill_reports_current_user_dependency_readiness(
     db_session: Session,
     test_user: User,  # noqa: ARG001
 ) -> None:
-    user = make_user(db_session, role=UserRole.BASIC)
+    user = make_user(db_session, standard_account=True)
     skill = make_skill(db_session, is_public=True)
     app = make_external_app(
         db_session,
@@ -158,8 +158,8 @@ def test_viewer_share_cannot_patch_skill(
     db_session: Session,
     test_user: User,  # noqa: ARG001
 ) -> None:
-    owner = make_user(db_session, role=UserRole.BASIC)
-    shared_user = make_user(db_session, role=UserRole.BASIC)
+    owner = make_user(db_session, standard_account=True)
+    shared_user = make_user(db_session, standard_account=True)
     private_skill = make_skill(
         db_session,
         is_public=False,
@@ -188,7 +188,7 @@ def test_preference_commit_succeeds_when_sandbox_push_fails(
     test_user: User,  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    user = make_user(db_session, role=UserRole.BASIC)
+    user = make_user(db_session, standard_account=True)
     skill = make_skill(db_session, is_public=True)
 
     def fail_sandbox_lookup(*_args: object, **_kwargs: object) -> None:
@@ -218,7 +218,7 @@ def test_create_reserved_name_rejects_from_bundle_metadata(
     db_session: Session,
     test_user: User,  # noqa: ARG001
 ) -> None:
-    user = make_user(db_session, role=UserRole.BASIC)
+    user = make_user(db_session, standard_account=True)
     bundle = build_single_file_bundle(
         SKILL_MD_NAME,
         build_skill_md(
@@ -243,7 +243,7 @@ def test_editor_create_rejects_whitespace_only_fields(
     db_session: Session,
     test_user: User,  # noqa: ARG001
 ) -> None:
-    user = make_user(db_session, role=UserRole.BASIC)
+    user = make_user(db_session, standard_account=True)
 
     with pytest.raises(OnyxError) as exc_info:
         create_custom_skill_from_editor(
@@ -265,8 +265,8 @@ def test_replace_bundle_authorizes_before_reading_bundle(
     test_user: User,  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    owner = make_user(db_session, role=UserRole.BASIC)
-    shared_user = make_user(db_session, role=UserRole.BASIC)
+    owner = make_user(db_session, standard_account=True)
+    shared_user = make_user(db_session, standard_account=True)
     private_skill = make_skill(
         db_session,
         is_public=False,
@@ -301,8 +301,8 @@ def test_upload_files_authorizes_before_reading_upload(
     test_user: User,  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    owner = make_user(db_session, role=UserRole.BASIC)
-    shared_user = make_user(db_session, role=UserRole.BASIC)
+    owner = make_user(db_session, standard_account=True)
+    shared_user = make_user(db_session, standard_account=True)
     private_skill = make_skill(
         db_session,
         is_public=False,
@@ -337,8 +337,8 @@ def test_remove_file_authorizes_before_reading_bundle(
     test_user: User,  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    owner = make_user(db_session, role=UserRole.BASIC)
-    shared_user = make_user(db_session, role=UserRole.BASIC)
+    owner = make_user(db_session, standard_account=True)
+    shared_user = make_user(db_session, standard_account=True)
     private_skill = make_skill(
         db_session,
         is_public=False,
@@ -373,7 +373,7 @@ def test_remove_file_rejects_empty_path_before_reading_bundle(
     test_user: User,  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    owner = make_user(db_session, role=UserRole.BASIC)
+    owner = make_user(db_session, standard_account=True)
     private_skill = make_skill(
         db_session,
         is_public=False,

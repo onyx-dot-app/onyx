@@ -14,7 +14,7 @@ from onyx.db.external_app import (
     get_skills_for_external_app,
     replace_custom_skill_associations__no_commit,
 )
-from onyx.db.models import Skill, User, UserRole, UserSkillPreference
+from onyx.db.models import Skill, User, UserSkillPreference
 from onyx.db.skill import set_skill_public_permission
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -49,7 +49,7 @@ def test_associate_promotes_visibility_and_preserves_preferences(
     db_session: Session,
     test_user: User,  # noqa: ARG001
 ) -> None:
-    owner = make_user(db_session, role=UserRole.BASIC)
+    owner = make_user(db_session, standard_account=True)
     skill = make_skill(
         db_session,
         is_public=False,
@@ -222,7 +222,7 @@ def test_unlink_retains_skill_visibility_content_and_preferences(
     db_session: Session,
     test_user: User,  # noqa: ARG001
 ) -> None:
-    owner = make_user(db_session, role=UserRole.BASIC)
+    owner = make_user(db_session, standard_account=True)
     skill = make_skill(db_session, is_public=True, author_user_id=owner.id)
     original_bundle_file_id = skill.bundle_file_id
     db_session.add(
@@ -298,8 +298,8 @@ def test_app_update_batches_associations_into_one_sandbox_refresh(
     test_user: User,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    owner = make_user(db_session, role=UserRole.BASIC)
-    other_user = make_user(db_session, role=UserRole.BASIC)
+    owner = make_user(db_session, standard_account=True)
+    other_user = make_user(db_session, standard_account=True)
     make_sandbox(db_session, owner)
     make_sandbox(db_session, other_user)
     skill = make_skill(
@@ -353,7 +353,7 @@ def test_editor_creation_with_app_context_is_atomic_and_not_auto_enabled(
     test_user: User,  # noqa: ARG001
     initialize_file_store: None,  # noqa: ARG001
 ) -> None:
-    admin = make_user(db_session, role=UserRole.ADMIN)
+    admin = make_user(db_session, is_admin=True)
     app_id = _make_app(db_session)
     response = create_custom_skill_from_editor(
         name=f"associated-{uuid4().hex[:8]}",
@@ -393,7 +393,7 @@ def test_editor_app_context_requires_an_admin_before_writing_skill_content(
     db_session: Session,
     test_user: User,  # noqa: ARG001
 ) -> None:
-    user = make_user(db_session, role=UserRole.BASIC)
+    user = make_user(db_session, standard_account=True)
     app_id = _make_app(db_session)
     skill_ids_before = set(db_session.scalars(select(Skill.id)))
 
