@@ -61,11 +61,13 @@ The CLI owns the compose files it writes. Each `onyx-cli deploy upgrade` refresh
 new version. If you edit one, the CLI asks before it replaces the file, and it keeps a backup — but
 your edits are not applied again.
 
-To customize the deployment, put your changes in a file called `docker-compose.override.yml`, in the
-same directory as `docker-compose.yml`. The CLI applies that file last, after its own files, so your
-changes win. The CLI does not manage the override: it never writes, replaces, or backs it up, and an
-upgrade does not touch it. `install`, `upgrade`, `stop`, `logs`, and `uninstall` all apply it. This
-is the same file name that `docker compose` finds on its own.
+To customize the deployment, put your changes in a file next to `docker-compose.yml`, named
+`compose.override.yml`, `compose.override.yaml`, `docker-compose.override.yml`, or
+`docker-compose.override.yaml`. These are the same names `docker compose` finds on its own; if more than
+one is present, the CLI picks the same one Compose would, in that order. The CLI applies that file last,
+after its own files, so your changes win. The CLI does not manage the override: it never writes,
+replaces, or backs it up, and an upgrade does not touch it. `install`, `upgrade`, `stop`, `logs`, and
+`uninstall` all apply it.
 
 For example, to put Onyx behind your own reverse proxy, stop nginx from publishing a host port and
 attach it to your proxy's network:

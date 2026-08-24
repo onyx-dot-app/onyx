@@ -1518,31 +1518,39 @@ func (in *installer) starRepo(ctx context.Context) {
 }
 
 // composeFileNames returns the -f list: the managed files for the mode, then
-// the user's own docker-compose.override.yml when the deployment directory
-// has one. The override always comes last so its edits win the merge, and it
-// ignores autoDetect — no flag selects it, only its presence on disk.
+// whichever of deployfiles.OverrideNames the deployment directory has. The
+// override always comes last so its edits win the merge, and it ignores
+// autoDetect — no flag selects it, only its presence on disk.
 func (in *installer) composeFileNames(autoDetect bool) []string {
 	files := in.managedComposeFiles(autoDetect)
-	if in.hasComposeOverride() {
-		files = append(files, deployfiles.OverrideName)
+	if name := in.composeOverrideName(); name != "" {
+		files = append(files, name)
 	}
 	return files
 }
 
-// hasComposeOverride reports whether the user dropped an override file next
-// to the managed compose files.
-func (in *installer) hasComposeOverride() bool {
-	return in.overlayOnDisk(deployfiles.OverrideName)
+// composeOverrideName returns the deployment directory's override filename,
+// resolved in deployfiles.OverrideNames precedence order (first match wins,
+// the same rule Compose's own auto-discovery uses), or "" when none is
+// present.
+func (in *installer) composeOverrideName() string {
+	for _, name := range deployfiles.OverrideNames {
+		if in.overlayOnDisk(name) {
+			return name
+		}
+	}
+	return ""
 }
 
 // noteComposeOverride says the override is in the -f list. Its presence on
 // disk is the only thing that selects it, so a run that stays quiet makes the
 // user's customizations look like they came from the managed files.
 func (in *installer) noteComposeOverride() {
-	if !in.hasComposeOverride() {
+	name := in.composeOverrideName()
+	if name == "" {
 		return
 	}
-	in.infof("Using your %s — it is applied last, and the CLI never overwrites it", deployfiles.OverrideName)
+	in.infof("Using your %s — it is applied last, and the CLI never overwrites it", name)
 }
 
 // managedComposeFiles returns the CLI-managed part of the -f list. Prod

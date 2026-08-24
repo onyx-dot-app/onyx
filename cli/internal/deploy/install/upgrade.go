@@ -160,8 +160,8 @@ func (in *installer) runUpgrade(ctx context.Context) error {
 			craftNote += ", Dev overlay: true"
 		}
 		in.plainf("  • Mode: %s%s", in.modeName(), craftNote)
-		if in.hasComposeOverride() {
-			in.plainf("  • Compose override: %s (yours, applied last)", deployfiles.OverrideName)
+		if name := in.composeOverrideName(); name != "" {
+			in.plainf("  • Compose override: %s (yours, applied last)", name)
 		}
 		if in.project != dockercmd.DefaultProjectName {
 			in.plainf("  • Compose project: %s", in.project)

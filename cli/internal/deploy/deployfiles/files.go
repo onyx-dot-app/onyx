@@ -118,12 +118,19 @@ var (
 	}
 )
 
-// OverrideName is the user-owned compose override. It is deliberately not a
-// File: the CLI never writes, fetches, checksums, or backs it up — it only
-// stacks it last on the -f list when the deployment directory has one. The
-// name is the one vanilla Compose auto-discovers, which the CLI's explicit
-// -f flags otherwise suppress.
-const OverrideName = "docker-compose.override.yml"
+// OverrideNames lists the user-owned compose override, in the precedence
+// order Docker Compose's own auto-discovery uses (compose-go's
+// DefaultOverrideFileNames — first match wins). None of these is a File: the
+// CLI never writes, fetches, checksums, or backs any of them up — it only
+// stacks whichever one is found last on the -f list when the deployment
+// directory has one. The CLI's explicit -f flags otherwise suppress Compose's
+// own auto-discovery of these same names.
+var OverrideNames = []string{
+	"compose.override.yml",
+	"compose.override.yaml",
+	"docker-compose.override.yml",
+	"docker-compose.override.yaml",
+}
 
 // All lists every managed file.
 var All = []File{

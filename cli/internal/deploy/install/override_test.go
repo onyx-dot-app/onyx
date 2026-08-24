@@ -7,20 +7,22 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/onyx-dot-app/onyx/cli/internal/deploy/deployfiles"
 	"github.com/onyx-dot-app/onyx/cli/internal/deploy/paths"
 	"github.com/onyx-dot-app/onyx/cli/internal/deploy/state"
 )
 
 const overrideBody = "services:\n  nginx:\n    ports: !override []\n"
 
-// writeOverride drops a user-owned override into the deployment directory.
-func writeOverride(t *testing.T, root string) string {
+// writeOverride drops a user-owned override, under the given name, into the
+// deployment directory.
+func writeOverride(t *testing.T, root, name string) string {
 	t.Helper()
 	dir := filepath.Join(root, "deployment")
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	path := filepath.Join(dir, "docker-compose.override.yml")
+	path := filepath.Join(dir, name)
 	if err := os.WriteFile(path, []byte(overrideBody), 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +66,7 @@ func assertOverrideUntouched(t *testing.T, root, path string) {
 	if err != nil || m == nil {
 		t.Fatalf("manifest: %v, %v", m, err)
 	}
-	if _, ok := m.Files["deployment/docker-compose.override.yml"]; ok {
+	if _, ok := m.Files["deployment/"+filepath.Base(path)]; ok {
 		t.Errorf("override recorded as managed: %v", m.Files)
 	}
 }
@@ -77,7 +79,7 @@ func TestInstallStacksComposeOverrideLast(t *testing.T) {
 	runner := &fakeRunner{handler: healthyDockerHandler}
 	deps := testDeps(t, runner, notFoundServer(t))
 	root := t.TempDir()
-	path := writeOverride(t, root)
+	path := writeOverride(t, root, "docker-compose.override.yml")
 
 	err := RunInstall(context.Background(), deps, Options{
 		NoPrompt: true, // non-interactive default mode is Lite
@@ -113,7 +115,7 @@ func TestInstallStacksComposeOverrideLast(t *testing.T) {
 func TestComposeOverrideAutoDetectedAndSurvivesUpgrade(t *testing.T) {
 	runner := &fakeRunner{handler: healthyDockerHandler}
 	root := installFixture(t, runner, "v4.0.0")
-	path := writeOverride(t, root)
+	path := writeOverride(t, root, "docker-compose.override.yml")
 
 	upgradeRunner := &fakeRunner{handler: healthyDockerHandler}
 	upgradeDeps := testDeps(t, upgradeRunner, rawServer(t, "# compose at v4.2.0\nname: onyx\n"))
@@ -177,7 +179,7 @@ func TestComposeFileNamesOverride(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			root := t.TempDir()
-			writeOverride(t, root)
+			writeOverride(t, root, "docker-compose.override.yml")
 			for _, autoDetect := range []bool{false, true} {
 				in := newInstaller(testDeps(t, &fakeRunner{handler: healthyDockerHandler}, notFoundServer(t)), Options{Dir: root})
 				in.root = paths.InstallRoot{Dir: root}
@@ -202,5 +204,37 @@ func TestComposeFileNamesWithoutOverride(t *testing.T) {
 	got := in.composeFileNames(true)
 	if len(got) != 1 || got[0] != "docker-compose.yml" {
 		t.Errorf("composeFileNames = %v, want just the base file", got)
+	}
+}
+
+// composeOverrideName recognizes every filename Docker Compose's own
+// auto-discovery does, not just docker-compose.override.yml.
+func TestComposeOverrideNameVariants(t *testing.T) {
+	for _, name := range deployfiles.OverrideNames {
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			writeOverride(t, root, name)
+			in := newInstaller(testDeps(t, &fakeRunner{handler: healthyDockerHandler}, notFoundServer(t)), Options{Dir: root})
+			in.root = paths.InstallRoot{Dir: root}
+			if got := in.composeOverrideName(); got != name {
+				t.Errorf("composeOverrideName() = %q, want %q", got, name)
+			}
+		})
+	}
+}
+
+// When more than one override filename is present, the one earliest in
+// deployfiles.OverrideNames wins — matching real Compose, which resolves to a
+// single implicit override file, not all of them at once.
+func TestComposeOverridePrecedence(t *testing.T) {
+	root := t.TempDir()
+	for _, name := range []string{"docker-compose.override.yaml", "docker-compose.override.yml", "compose.override.yml"} {
+		writeOverride(t, root, name)
+	}
+	in := newInstaller(testDeps(t, &fakeRunner{handler: healthyDockerHandler}, notFoundServer(t)), Options{Dir: root})
+	in.root = paths.InstallRoot{Dir: root}
+	const want = "compose.override.yml"
+	if got := in.composeOverrideName(); got != want {
+		t.Errorf("composeOverrideName() = %q, want the highest-precedence name %q", got, want)
 	}
 }
