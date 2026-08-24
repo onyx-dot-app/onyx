@@ -39,10 +39,7 @@ import {
 import useChatSessions from "@/hooks/useChatSessions";
 import { useProjects } from "@/lib/projects/hooks";
 import { useAgents, useActiveAgent, usePinnedAgents } from "@/lib/agents/hooks";
-import {
-  FoldedProjectsPopover,
-  ProjectFolderButton,
-} from "@/lib/projects/components";
+import ProjectFolderButton from "@/sections/sidebar/ProjectFolderButton";
 import CreateProjectModal from "@/sections/modals/CreateProjectModal";
 import { MoveCustomAgentChatModal } from "@/lib/agents/components";
 import { useProjectsContext } from "@/providers/ProjectsContext";
@@ -513,14 +510,12 @@ export default function AppSidebar() {
     </div>
   );
 
-  // Only the unfolded empty state uses this — folded, the sidebar shows
-  // `FoldedProjectsPopover` instead.
   const newProjectButton = (
     <SidebarTab
       icon={SvgFolderPlus}
       onClick={() => createProjectModal.toggle(true)}
       selected={createProjectModal.isOpen}
-      variant="sidebar-light"
+      variant={folded ? "sidebar-heavy" : "sidebar-light"}
     >
       New Project
     </SidebarTab>
@@ -630,7 +625,7 @@ export default function AppSidebar() {
             </div>
           )}
           {folded && moreAgentsButton}
-          <FoldedProjectsPopover />
+          {folded && newProjectButton}
         </SidebarLayouts.Header>
 
         <SidebarLayouts.Body scrollKey="app-sidebar">

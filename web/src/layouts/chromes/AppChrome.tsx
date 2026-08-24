@@ -70,7 +70,6 @@ import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
 import { useAppDocumentTitle, useCustomFooterContent } from "@/lib/app/hooks";
 import { useFullWidthChat } from "@/providers/FullWidthChatProvider";
-import { ActiveProjectBreadcrumb } from "@/lib/projects/components";
 import { useIncognito } from "@/providers/IncognitoProvider";
 
 // ---------------------------------------------------------------------------
@@ -413,10 +412,9 @@ function Header() {
               {/*
           Left:
           - (mobile) sidebar toggle
-          - project breadcrumb
           - app-mode (for Unified S+C [EE gated])
         */}
-              <div className="flex-1 min-w-0 flex flex-row items-center gap-2">
+              <div className="flex-1 flex flex-row items-center gap-2">
                 {isMobile && (
                   <Button
                     prominence="internal"
@@ -425,7 +423,6 @@ function Header() {
                     onClick={() => setFolded(false)}
                   />
                 )}
-                <ActiveProjectBreadcrumb />
                 {incognitoEnabled &&
                   (appFocus.isChat() || appFocus.isNewSession()) && (
                     <OpenButton
