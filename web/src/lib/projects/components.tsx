@@ -366,8 +366,7 @@ export function FoldedProjectsPopover() {
 
       <Popover open={open} onOpenChange={handleOpenChange}>
         <Popover.Trigger asChild>
-          {/* `SidebarTab` does not forward refs, so Radix anchors to this div. */}
-          <div data-testid="AppSidebar/projects">
+          <div data-testid="AppSidebar/projects" tabIndex={-1}>
             <SidebarTab
               icon={SvgFolder}
               type="button"
