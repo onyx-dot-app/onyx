@@ -295,7 +295,12 @@ function ProjectPopoverRow({ match, onNavigate }: ProjectPopoverRowProps) {
   }
 
   return (
-    <div data-testid="ProjectsPopover/row" className="flex flex-col gap-1">
+    <Section
+      data-testid="ProjectsPopover/row"
+      gap={1}
+      alignItems="stretch"
+      height="auto"
+    >
       <SidebarTab
         icon={folderIcon}
         // Same rule as the sidebar: while the chats are hidden, the folder
@@ -319,7 +324,7 @@ function ProjectPopoverRow({ match, onNavigate }: ProjectPopoverRowProps) {
             {chatSession.name || UNNAMED_CHAT}
           </SidebarTab>
         ))}
-    </div>
+    </Section>
   );
 }
 
