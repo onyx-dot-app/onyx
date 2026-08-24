@@ -239,6 +239,9 @@ Resources:
       LoadBalancerAttributes:
         # Match the 300s nginx proxy timeouts; the 60s default severs
         # long-running buffered responses (e.g. MCP document search).
+        # Tradeoff: idle connections stay tracked up to 5x longer. Fine at
+        # single-org concurrency; lower it if this ALB ever serves high
+        # connection volume.
         - Key: idle_timeout.timeout_seconds
           Value: "300"
 
