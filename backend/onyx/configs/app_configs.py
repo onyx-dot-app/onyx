@@ -1894,6 +1894,12 @@ API_KEY_HASH_ROUNDS = (
 # MCP Server Configs
 #####
 MCP_SERVER_ENABLED = os.environ.get("MCP_SERVER_ENABLED", "").lower() == "true"
+
+# Read timeout for requests the MCP server proxies to the API server (document
+# search can run for minutes). Default matches the 300s nginx read timeout on /mcp.
+MCP_SERVER_API_REQUEST_TIMEOUT_SECONDS = int(
+    os.environ.get("MCP_SERVER_API_REQUEST_TIMEOUT_SECONDS") or 300
+)
 MCP_SERVER_HOST = os.environ.get("MCP_SERVER_HOST", "0.0.0.0")  # noqa: S104 — server bind address; intentional default for containerized deployment
 MCP_SERVER_PORT = int(os.environ.get("MCP_SERVER_PORT") or 8090)
 
