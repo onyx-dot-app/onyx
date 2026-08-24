@@ -144,6 +144,10 @@ describe("UsageSettings", () => {
       "true"
     );
     expect(screen.getByText("Show 1 more")).toBeInTheDocument();
+    // The settings screenshot spec hides these counts, so keep the hook stable.
+    expect(screen.getAllByTestId("usage-model-tokens")[0]).toHaveTextContent(
+      "100 in · 10 out"
+    );
     expect(screen.getByTestId("usage-model-preview")).toHaveClass(
       "[mask-image:linear-gradient(to_bottom,black_5%,transparent_75%)]"
     );

@@ -12,6 +12,23 @@ const SLUG_TO_HEADER: Record<string, string> = {
   connectors: "Connectors",
 };
 
+/**
+ * Per-page selectors to hide before the screenshot, keyed by settings slug.
+ *
+ * These elements render values that change between CI runs, so leaving them
+ * visible makes the visual diff fail for reasons unrelated to the change under
+ * review.
+ */
+const SLUG_TO_HIDE_SELECTORS: Record<string, string[]> = {
+  // The access-tokens list loads via SWR, so it flakily flips between
+  // "Loading tokens..." and "No access tokens created." depending on whether
+  // the fetch has settled.
+  "accounts-access": ['[data-testid="access-token-list-status"]'],
+  // Token counts come from the chats that earlier specs ran against a live
+  // model, so the exact numbers differ on every run.
+  usage: ['[data-testid="usage-model-tokens"]'],
+};
+
 for (const theme of THEMES) {
   test.describe(`Settings pages (${theme} mode)`, () => {
     test.beforeEach(async ({ page }) => {
@@ -51,18 +68,11 @@ for (const theme of THEMES) {
         // Scope the screenshot to the settings container (rendered by
         // `SettingsLayouts.Root`) so dynamic app chrome (sidebar, greeting
         // text, etc.) doesn't cause spurious diffs.
-        //
-        // The access-tokens list loads via SWR, so it flakily flips between
-        // "Loading tokens..." and "No access tokens created." depending on
-        // whether the fetch has settled — hide it to keep the diff stable.
         await expectElementScreenshot(
           page.locator("#page-wrapper-scroll-container"),
           {
             name: `settings-${theme}-${slug}`,
-            hide:
-              slug === "accounts-access"
-                ? ['[data-testid="access-token-list-status"]']
-                : [],
+            hide: SLUG_TO_HIDE_SELECTORS[slug] ?? [],
           }
         );
       }
