@@ -3,6 +3,7 @@ package install
 import (
 	"runtime"
 
+	"github.com/onyx-dot-app/onyx/cli/internal/deploy/deployfiles"
 	"github.com/onyx-dot-app/onyx/cli/internal/deploy/dockercmd"
 	"github.com/onyx-dot-app/onyx/cli/internal/deploy/release"
 )
@@ -18,6 +19,9 @@ func (in *installer) printPlan(defaultTag string) {
 	}
 	if in.dev {
 		in.plainf("  • Dev overlay: true (service ports published on the host)")
+	}
+	if in.hasComposeOverride() {
+		in.plainf("  • Compose override: %s (yours, applied last)", deployfiles.OverrideName)
 	}
 	if in.opts.Project != "" {
 		in.plainf("  • Compose project: %s", in.opts.Project)
