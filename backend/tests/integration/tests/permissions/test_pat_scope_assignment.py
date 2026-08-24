@@ -45,6 +45,7 @@ def test_scope_implications(permission_basic_user: DATestUser) -> None:
     assert by_scope[Permission.READ_CHAT.value]["implies"] == []
     assert by_scope[Permission.READ_SEARCH.value]["implies"] == []
     assert by_scope[Permission.USE_LLM_GATEWAY.value]["implies"] == []
+    assert by_scope[Permission.USE_LLM_GATEWAY.value]["min_tier"] == "business"
 
 
 def test_scopes_round_trip(pat_creator: DATestUser) -> None:

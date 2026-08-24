@@ -10,7 +10,7 @@ import { useUser } from "@/providers/UserProvider";
 import { useIsMultiTenant } from "@/lib/auth/hooks";
 import { Section } from "@/layouts/general-layouts";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/lib/settings/types";
+import { LLM_GATEWAY_MIN_TIER } from "@/lib/tiers";
 import { useLLMProviders } from "@/lib/languageModels/hooks";
 import { hasVisibleLLMModel } from "@/lib/languageModels/utils";
 
@@ -28,13 +28,13 @@ export default function Layout({ children }: LayoutProps) {
   const router = useRouter();
   const { user } = useUser();
   const isMultiTenant = useIsMultiTenant();
-  const enterpriseTier = useTierAtLeast(Tier.ENTERPRISE);
+  const gatewayTier = useTierAtLeast(LLM_GATEWAY_MIN_TIER);
   const { llmProviders } = useLLMProviders();
 
   const showPasswordSection = Boolean(user?.password_configured);
   const showTokensSection = isMultiTenant !== null;
   const showAccountsAccessTab = showPasswordSection || showTokensSection;
-  const showGatewayTab = enterpriseTier && hasVisibleLLMModel(llmProviders);
+  const showGatewayTab = gatewayTier && hasVisibleLLMModel(llmProviders);
 
   const tabs: SettingsTab[] = [
     { href: "/app/settings/general", label: "General" },

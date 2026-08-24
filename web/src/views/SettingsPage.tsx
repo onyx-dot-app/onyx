@@ -70,7 +70,7 @@ import { Interactive } from "@opal/core";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
 import { useIsSearchModeAvailable, useSettings } from "@/lib/settings/hooks";
-import { tierAtLeast } from "@/lib/tiers";
+import { LLM_GATEWAY_MIN_TIER, tierAtLeast } from "@/lib/tiers";
 import { Tooltip } from "@opal/components";
 import { useCloudSubscription } from "@/hooks/useCloudSubscription";
 import { useSmoothStreaming } from "@/hooks/useSmoothStreaming";
@@ -1481,7 +1481,7 @@ function GatewayAccessSection({
   canCreateToken,
   onCreateToken,
 }: GatewayAccessSectionProps) {
-  const enterpriseTier = useTierAtLeast(Tier.ENTERPRISE);
+  const gatewayTier = useTierAtLeast(LLM_GATEWAY_MIN_TIER);
   const { llmProviders } = useLLMProviders();
   const [gatewayUrl, setGatewayUrl] = useState("");
 
@@ -1523,7 +1523,7 @@ function GatewayAccessSection({
     0
   );
 
-  if (!enterpriseTier || availableModelCount === 0) {
+  if (!gatewayTier || availableModelCount === 0) {
     return null;
   }
 
