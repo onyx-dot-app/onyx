@@ -1,9 +1,9 @@
-// Package pycheck scans Python source for references to banned builtin
-// names. It is string- and comment-aware but deliberately not a parser:
-// string literal contents and comments never match, and a violation is
-// suppressed by an 'ods: ignore[rule]' marker in a comment on the same
-// physical line. Known limitation: expressions inside f-string replacement
-// fields are treated as string content and are not checked.
+// Package pycheck scans Python source for references to banned builtin names.
+// It is string- and comment-aware but deliberately not a parser: string literal
+// contents and comments never match, and a violation is suppressed by an 'ods:
+// ignore[rule]' marker in a comment on the same physical line. Known
+// limitation: expressions inside f-string replacement fields are treated as
+// string content and are not checked.
 package pycheck
 
 import (
@@ -16,11 +16,11 @@ import (
 )
 
 // BannedName forbids bare references to a builtin name in code context.
-// Attribute access ('obj.getattr') and longer identifiers ('__getattr__')
-// never match.
+// Attribute access ('obj.getattr') and longer identifiers ('__getattr__') never
+// match.
 type BannedName struct {
-	// Name is the banned identifier and also the rule name accepted by
-	// ignore markers, e.g. 'getattr' is suppressed by '# ods: ignore[getattr]'.
+	// Name is the banned identifier and also the rule name accepted by ignore
+	// markers, e.g. 'getattr' is suppressed by '# ods: ignore[getattr]'.
 	Name string
 	re   *regexp.Regexp
 }
@@ -59,8 +59,8 @@ type scannedLine struct {
 	code string
 	// comment is the text after the first '#' in code context.
 	comment string
-	// endsInString reports whether the line ends inside an open string
-	// literal, where appending a trailing comment would change the code.
+	// endsInString reports whether the line ends inside an open string literal,
+	// where appending a trailing comment would change the code.
 	endsInString bool
 }
 
@@ -74,9 +74,9 @@ func scanLine(line string, st stringState) (scannedLine, stringState) {
 		if st.open {
 			c := line[i]
 			if c == '\\' {
-				// A backslash always consumes the next character, so an
-				// escaped quote never closes the literal. This holds for raw
-				// strings too: a backslash still blocks the closing quote.
+				// A backslash always consumes the next character, so an escaped
+				// quote never closes the literal. This holds for raw strings
+				// too: a backslash still blocks the closing quote.
 				i += 2
 				continue
 			}
@@ -101,8 +101,8 @@ func scanLine(line string, st stringState) (scannedLine, stringState) {
 			break
 		}
 		if c == '\'' || c == '"' {
-			// Replace the whole literal with one space so identifiers on
-			// either side cannot merge across it.
+			// Replace the whole literal with one space so identifiers on either
+			// side cannot merge across it.
 			code.WriteByte(' ')
 			if i+2 < len(line) && line[i+1] == c && line[i+2] == c {
 				st = stringState{open: true, quote: c, triple: true}
@@ -117,11 +117,10 @@ func scanLine(line string, st stringState) (scannedLine, stringState) {
 		i++
 	}
 	if st.open && !st.triple && i == len(line) {
-		// A single-quoted literal survives the line break only when a
-		// trailing backslash escaped it, in which case the escape jumped
-		// past the end of the line above. Anything else is malformed
-		// source; close the literal so it cannot poison the rest of the
-		// file.
+		// A single-quoted literal survives the line break only when a trailing
+		// backslash escaped it, in which case the escape jumped past the end of
+		// the line above. Anything else is malformed source; close the literal
+		// so it cannot poison the rest of the file.
 		st = stringState{}
 	}
 	return scannedLine{code: code.String(), comment: comment, endsInString: st.open}, st
@@ -142,8 +141,8 @@ func suppressed(comment string, rule string) bool {
 	return false
 }
 
-// matchesCode reports whether the scanned code text references the banned
-// name, excluding attribute access like 'obj.getattr'.
+// matchesCode reports whether the scanned code text references the banned name,
+// excluding attribute access like 'obj.getattr'.
 func (r BannedName) matchesCode(code string) bool {
 	for _, loc := range r.re.FindAllStringIndex(code, -1) {
 		j := loc[0] - 1
@@ -193,9 +192,9 @@ func isCheckablePythonFile(filePath string) bool {
 	return true
 }
 
-// collectPythonFiles resolves the provided files and directories to the
-// Python files inside the backend directory. A selector that resolves to
-// nothing is an error rather than a silent empty scan.
+// collectPythonFiles resolves the provided files and directories to the Python
+// files inside the backend directory. A selector that resolves to nothing is an
+// error rather than a silent empty scan.
 func collectPythonFiles(startPoints []string, backendDir string) ([]string, error) {
 	var collected []string
 
@@ -254,8 +253,8 @@ func relTo(baseDir string, filePath string) string {
 	return relPath
 }
 
-// Check scans the provided paths (or the whole backend when none are given)
-// and returns the per-file violations of the rule.
+// Check scans the provided paths (or the whole backend when none are given) and
+// returns the per-file violations of the rule.
 func Check(rule BannedName, providedPaths []string) ([]FileViolation, error) {
 	files, backendDir, err := targetFiles(providedPaths)
 	if err != nil {
@@ -285,9 +284,9 @@ func Check(rule BannedName, providedPaths []string) ([]FileViolation, error) {
 type AnnotateResult struct {
 	AnnotatedLines int
 	AnnotatedFiles int
-	// ManualFiles holds violations that cannot be annotated mechanically:
-	// the line ends in a backslash continuation or inside an open string
-	// literal, where a trailing comment would change the code.
+	// ManualFiles holds violations that cannot be annotated mechanically: the
+	// line ends in a backslash continuation or inside an open string literal,
+	// where a trailing comment would change the code.
 	ManualFiles []FileViolation
 }
 
@@ -332,9 +331,9 @@ func annotateFile(filePath string, rule BannedName, marker string) (int, []Viola
 	return annotated, manual, nil
 }
 
-// Annotate appends an 'ods: ignore[rule]' marker to every violating line in
-// the provided paths (or the whole backend when none are given). Suppressed
-// lines are not violations, so a second run is a no-op.
+// Annotate appends an 'ods: ignore[rule]' marker to every violating line in the
+// provided paths (or the whole backend when none are given). Suppressed lines
+// are not violations, so a second run is a no-op.
 func Annotate(rule BannedName, providedPaths []string) (AnnotateResult, error) {
 	var result AnnotateResult
 	files, backendDir, err := targetFiles(providedPaths)

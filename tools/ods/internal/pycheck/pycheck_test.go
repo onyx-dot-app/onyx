@@ -203,8 +203,9 @@ value = getattr(obj, name)`,
 }
 
 func TestCheckContentFStringLimitation(t *testing.T) {
-	// Precondition. This pins the documented limitation: expressions inside
-	// f-string replacement fields read as string content and are not checked.
+	// Precondition.
+	// This pins the documented limitation: expressions inside f-string
+	// replacement fields read as string content and are not checked.
 	content := `label = f"{getattr(obj, name)}"`
 
 	// Under test and postcondition.
@@ -337,8 +338,9 @@ func TestAnnotateFileIsIdempotent(t *testing.T) {
 }
 
 func TestAnnotateFileReportsUnsafeLines(t *testing.T) {
-	// Precondition. Both violations sit on lines where a trailing comment
-	// would change the code: a backslash continuation and an open string.
+	// Precondition.
+	// Both violations sit on lines where a trailing comment would change the
+	// code: a backslash continuation and an open string.
 	content := `value = getattr(obj, name) or \
     fallback
 text = getattr(obj, name), """open string
@@ -367,8 +369,9 @@ closes here"""
 }
 
 func TestAnnotateFilePreservesCRLF(t *testing.T) {
-	// Precondition. Line 3 is a backslash continuation, so it needs a manual
-	// marker even on a CRLF file.
+	// Precondition.
+	// Line 3 is a backslash continuation, so it needs a manual marker even on a
+	// CRLF file.
 	content := "value = getattr(obj, name)\r\nother = 1\r\ncontinued = getattr(obj, name) or \\\r\n    fallback\r\n"
 	path := createTempPythonFile(t, content)
 

@@ -106,9 +106,9 @@ func BackendDir() (string, error) {
 
 // ResolveInBackend resolves one provided path to an absolute path inside the
 // backend directory, or fails loudly. Relative paths are tried against the
-// working directory first and then against the backend directory, so both
-// the 'backend/onyx/chat' (pre-commit) and 'onyx/chat' (backend-relative)
-// selector forms work from any working directory.
+// working directory first and then against the backend directory, so both the
+// 'backend/onyx/chat' (pre-commit) and 'onyx/chat' (backend-relative) selector
+// forms work from any working directory.
 func ResolveInBackend(p string, backendDir string) (string, os.FileInfo, error) {
 	backendReal, err := filepath.Abs(backendDir)
 	if err != nil {
