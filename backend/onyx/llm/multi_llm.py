@@ -612,6 +612,7 @@ class LitellmLLM(LLM):
         )
         is_claude_model = any("claude" in name.lower() for name in model_identity_names)
         is_qwen_model = any("qwen" in name.lower() for name in model_identity_names)
+        is_glm_model = any("glm" in name.lower() for name in model_identity_names)
         uses_adaptive_thinking = any(
             anthropic_uses_adaptive_thinking(name) for name in model_identity_names
         )
@@ -687,16 +688,17 @@ class LitellmLLM(LLM):
 
         # Tool choice
         # Downgrade tool_choice=required to AUTO for models that mishandle it:
-        # Claude skips reasoning when it's set, and Qwen thinking models reject
-        # it with a 400. The chat loop's fallback tool-call extraction still
-        # enforces the forced tool. Matched by model name rather than
-        # `is_reasoning` because the litellm/local registry lags behind new
-        # Qwen releases (e.g. qwen3.7-plus).
+        # Claude skips reasoning when it's set, Qwen thinking models reject it
+        # with a 400, and Z.AI rejects any GLM tool_choice other than auto
+        # ("Tool choice must be auto"). The chat loop's fallback tool-call
+        # extraction still enforces the forced tool. Matched by model name
+        # rather than `is_reasoning` because the litellm/local registry lags
+        # behind new Qwen/GLM releases (e.g. qwen3.7-plus, glm-5.3).
         # A NamedToolChoice is deliberately NOT downgraded: legacy Claude
-        # thinking is skipped below instead, and Qwen thinking models may still
+        # thinking is skipped below instead, and the other models may still
         # reject the forced tool upstream (a loud 400 beats silently ignoring
         # the caller's forced tool).
-        if (is_claude_model or is_qwen_model) and (
+        if (is_claude_model or is_qwen_model or is_glm_model) and (
             tool_choice == ToolChoiceOptions.REQUIRED
         ):
             tool_choice = ToolChoiceOptions.AUTO

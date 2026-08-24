@@ -2527,13 +2527,14 @@ _TOOL_CHOICE_DOWNGRADE_TOOLS = [
     [
         (LlmProviderNames.OPENROUTER, "qwen/qwen3.7-plus"),
         (LlmProviderNames.ANTHROPIC, "claude-sonnet-5"),
+        (LlmProviderNames.OPENROUTER, "z-ai/glm-5.3"),
     ],
 )
 def test_required_tool_choice_downgraded_to_auto(
     model_provider: str, model_name: str
 ) -> None:
-    """Claude and Qwen thinking models reject/degrade required tool_choice, so
-    it must be sent to the provider as AUTO instead."""
+    """Claude, Qwen thinking, and GLM models reject/degrade required
+    tool_choice, so it must be sent to the provider as AUTO instead."""
     llm = LitellmLLM(
         api_key="test_key",
         timeout=30,
