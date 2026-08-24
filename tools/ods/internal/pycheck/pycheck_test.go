@@ -2,6 +2,7 @@ package pycheck
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -362,5 +363,76 @@ closes here"""
 	}
 	if string(data) != content {
 		t.Fatalf("Expected the file to be unchanged")
+	}
+}
+
+func TestAnnotateFilePreservesCRLF(t *testing.T) {
+	// Precondition. Line 3 is a backslash continuation, so it needs a manual
+	// marker even on a CRLF file.
+	content := "value = getattr(obj, name)\r\nother = 1\r\ncontinued = getattr(obj, name) or \\\r\n    fallback\r\n"
+	path := createTempPythonFile(t, content)
+
+	// Under test.
+	annotated, manual, err := annotateFile(path, getattrRule, "  # ods: ignore[getattr]")
+
+	// Postcondition.
+	if err != nil {
+		t.Fatalf("annotateFile failed: %v", err)
+	}
+	if annotated != 1 {
+		t.Fatalf("Expected 1 annotated line, got %d", annotated)
+	}
+	assertLineNums(t, manual, []int{3})
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("Failed to read file: %v", err)
+	}
+	want := "value = getattr(obj, name)  # ods: ignore[getattr]\r\nother = 1\r\ncontinued = getattr(obj, name) or \\\r\n    fallback\r\n"
+	if string(data) != want {
+		t.Fatalf("Expected %q, got %q", want, string(data))
+	}
+}
+
+// writePythonFile creates path (and parent directories) with dummy content.
+func writePythonFile(t *testing.T, path string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("Failed to create directory: %v", err)
+	}
+	if err := os.WriteFile(path, []byte("x = 1\n"), 0o644); err != nil {
+		t.Fatalf("Failed to write file: %v", err)
+	}
+}
+
+func TestCollectPythonFilesResolvesSelectors(t *testing.T) {
+	// Precondition.
+	backendDir := t.TempDir()
+	writePythonFile(t, filepath.Join(backendDir, "pkg", "a.py"))
+	writePythonFile(t, filepath.Join(backendDir, "pkg", "b.txt"))
+	writePythonFile(t, filepath.Join(backendDir, "top.py"))
+	writePythonFile(t, filepath.Join(backendDir, ".venv", "skip.py"))
+
+	// Under test and postcondition.
+	// A backend-relative selector resolves via the backend fallback.
+	files, err := collectPythonFiles([]string{"pkg"}, backendDir)
+	if err != nil {
+		t.Fatalf("collectPythonFiles failed: %v", err)
+	}
+	if len(files) != 1 || files[0] != filepath.Join(backendDir, "pkg", "a.py") {
+		t.Fatalf("Expected only pkg/a.py, got %v", files)
+	}
+
+	// A whole-backend scan skips non-Python files and skip directories.
+	files, err = collectPythonFiles([]string{backendDir}, backendDir)
+	if err != nil {
+		t.Fatalf("collectPythonFiles failed: %v", err)
+	}
+	if len(files) != 2 {
+		t.Fatalf("Expected pkg/a.py and top.py, got %v", files)
+	}
+
+	// A selector that resolves to nothing fails loudly.
+	if _, err := collectPythonFiles([]string{"nonexistent"}, backendDir); err == nil {
+		t.Fatalf("Expected an error for a selector that matches nothing")
 	}
 }

@@ -1,6 +1,7 @@
 package paths
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -101,4 +102,32 @@ func BackendDir() (string, error) {
 		return "", err
 	}
 	return filepath.Join(root, "backend"), nil
+}
+
+// ResolveInBackend resolves one provided path to an absolute path inside the
+// backend directory, or fails loudly. Relative paths are tried against the
+// working directory first and then against the backend directory, so both
+// the 'backend/onyx/chat' (pre-commit) and 'onyx/chat' (backend-relative)
+// selector forms work from any working directory.
+func ResolveInBackend(p string, backendDir string) (string, os.FileInfo, error) {
+	backendReal, err := filepath.Abs(backendDir)
+	if err != nil {
+		return "", nil, err
+	}
+	absPath, err := filepath.Abs(p)
+	if err == nil {
+		relPath, relErr := filepath.Rel(backendReal, absPath)
+		if relErr == nil && !strings.HasPrefix(relPath, "..") {
+			if info, statErr := os.Stat(absPath); statErr == nil {
+				return absPath, info, nil
+			}
+		}
+	}
+	if !filepath.IsAbs(p) {
+		fallback := filepath.Join(backendReal, p)
+		if info, statErr := os.Stat(fallback); statErr == nil {
+			return fallback, info, nil
+		}
+	}
+	return "", nil, fmt.Errorf("path %q does not exist inside the backend directory", p)
 }

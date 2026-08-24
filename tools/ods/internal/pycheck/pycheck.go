@@ -12,8 +12,6 @@ import (
 	"regexp"
 	"strings"
 
-	log "github.com/sirupsen/logrus"
-
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
 )
 
@@ -196,37 +194,22 @@ func isCheckablePythonFile(filePath string) bool {
 }
 
 // collectPythonFiles resolves the provided files and directories to the
-// Python files inside the backend directory.
+// Python files inside the backend directory. A selector that resolves to
+// nothing is an error rather than a silent empty scan.
 func collectPythonFiles(startPoints []string, backendDir string) ([]string, error) {
 	var collected []string
-	backendReal, err := filepath.Abs(backendDir)
-	if err != nil {
-		return nil, err
-	}
 
 	for _, p := range startPoints {
-		absPath, err := filepath.Abs(p)
+		absPath, info, err := paths.ResolveInBackend(p, backendDir)
 		if err != nil {
-			log.Debugf("Skipping path that cannot be resolved: %s", p)
-			continue
-		}
-
-		relPath, err := filepath.Rel(backendReal, absPath)
-		if err != nil || strings.HasPrefix(relPath, "..") {
-			log.Debugf("Skipping path outside backend directory: %s", p)
-			continue
-		}
-
-		info, err := os.Stat(absPath)
-		if err != nil {
-			log.Debugf("Skipping non-existent path: %s", p)
-			continue
+			return nil, err
 		}
 
 		if info.IsDir() {
 			err := filepath.Walk(absPath, func(path string, info os.FileInfo, err error) error {
 				if err != nil {
-					return nil // Skip files with errors.
+					// Fail closed: an unreadable file must not pass the check.
+					return err
 				}
 				if !info.IsDir() && isCheckablePythonFile(path) {
 					collected = append(collected, path)
@@ -234,12 +217,10 @@ func collectPythonFiles(startPoints []string, backendDir string) ([]string, erro
 				return nil
 			})
 			if err != nil {
-				log.Debugf("Error walking directory %s: %v", absPath, err)
+				return nil, err
 			}
-		} else {
-			if isCheckablePythonFile(absPath) {
-				collected = append(collected, absPath)
-			}
+		} else if isCheckablePythonFile(absPath) {
+			collected = append(collected, absPath)
 		}
 	}
 
@@ -285,8 +266,8 @@ func Check(rule BannedName, providedPaths []string) ([]FileViolation, error) {
 	for _, filePath := range files {
 		data, err := os.ReadFile(filePath)
 		if err != nil {
-			log.Errorf("Error reading %s: %v", filePath, err)
-			continue
+			// Fail closed: an unreadable file must not pass the check.
+			return nil, err
 		}
 		lines := CheckContent(string(data), rule)
 		if len(lines) == 0 {
@@ -333,11 +314,13 @@ func annotateFile(filePath string, rule BannedName, marker string) (int, []Viola
 		if !rule.matchesCode(scanned.code) || suppressed(scanned.comment, rule.Name) {
 			continue
 		}
-		if scanned.endsInString || strings.HasSuffix(strings.TrimRight(scanned.code, " \t"), "\\") {
+		if scanned.endsInString || strings.HasSuffix(strings.TrimRight(scanned.code, " \t\r"), "\\") {
 			manual = append(manual, ViolationLine{LineNum: i + 1, Content: line})
 			continue
 		}
-		lines[i] = line + marker
+		// Insert the marker before a CRLF line ending so the '\r' survives.
+		body := strings.TrimSuffix(line, "\r")
+		lines[i] = body + marker + line[len(body):]
 		annotated++
 	}
 
