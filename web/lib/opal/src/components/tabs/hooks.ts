@@ -46,6 +46,9 @@ export function usePillIndicator(
   const [isScrolling, setIsScrolling] = useState(false);
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // The scroll-debounce timer is ref-held and cleared in this effect's
+  // cleanup. The rule cannot trace handler-created timers.
+  // oxlint-disable-next-line react-doctor/effect-needs-cleanup
   useEffect(() => {
     if (!enabled) return;
 

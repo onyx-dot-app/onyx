@@ -211,11 +211,10 @@ DISPOSABLE_EMAIL_DOMAINS_URL = os.environ.get(
 # lifetime, so a paired-up cookie + token never outlive each other.
 CAPTCHA_COOKIE_TTL_SECONDS = int(os.environ.get("CAPTCHA_COOKIE_TTL_SECONDS", "120"))
 
-# Redis TTL for cached control-plane billing/trial lookups. 24h default —
-# trial→paid conversions propagate within this window in the worst case,
-# and the admin panel call sites invalidate on write so immediate UI
-# refreshes are not stale. Env-tunable for emergency tightening.
-BILLING_CACHE_TTL_SECONDS = int(os.environ.get("BILLING_CACHE_TTL_SECONDS", "86400"))
+# Redis TTL for cached control-plane billing/trial lookups. Backstop only:
+# successful /tenants/tier-update pushes and admin-panel billing mutations
+# drop this cache, so 1h bounds staleness when a push is missed or fails.
+BILLING_CACHE_TTL_SECONDS = int(os.environ.get("BILLING_CACHE_TTL_SECONDS", "3600"))
 
 # OAuth Login Flow
 # Used for both Google OAuth2 and OIDC flows
@@ -358,7 +357,11 @@ if not MOBILE_ALLOWED_REDIRECT_URIS:
     MOBILE_ALLOWED_REDIRECT_URIS = _DEFAULT_MOBILE_REDIRECT_URIS
 
 # JWT Public Key URL for JWT token verification
-JWT_PUBLIC_KEY_URL: str | None = os.getenv("JWT_PUBLIC_KEY_URL", None)
+JWT_PUBLIC_KEY_URL: str | None = os.getenv("JWT_PUBLIC_KEY_URL") or None
+# Optional aud/iss scoping for JWT_PUBLIC_KEY_URL auth, off when unset. Empty
+# counts as unset because compose files pass absent vars through as "".
+JWT_EXPECTED_AUDIENCE: str | None = os.getenv("JWT_EXPECTED_AUDIENCE") or None
+JWT_EXPECTED_ISSUER: str | None = os.getenv("JWT_EXPECTED_ISSUER") or None
 
 USER_AUTH_SECRET = os.environ.get("USER_AUTH_SECRET", "")
 
@@ -632,6 +635,42 @@ ONYX_DB_DEFAULT_SHARD = os.environ.get("ONYX_DB_DEFAULT_SHARD") or "default"
 # Shard that holds the shared `public` catalog tables (user_tenant_mapping etc.)
 # and the tenant -> shard map itself. Must be resolvable without a lookup.
 ONYX_DB_CATALOG_SHARD = os.environ.get("ONYX_DB_CATALOG_SHARD") or ONYX_DB_DEFAULT_SHARD
+# Shard that newly created tenants are placed on. Existing tenants are unaffected;
+# flipping this changes where the *next* tenant's schema is built. The pre-provisioned
+# pool drains oldest-first, so a flip ramps in gradually rather than all at once.
+ONYX_DB_NEW_TENANT_SHARD = (
+    os.environ.get("ONYX_DB_NEW_TENANT_SHARD") or ONYX_DB_DEFAULT_SHARD
+)
+# Connection pool for shards other than the default one. Unset means each shard gets
+# the same budget as the default, which is correct because a connection limit belongs
+# to a database rather than to the fleet. Set these lower while a new shard is still
+# filling up.
+ONYX_DB_SHARD_POOL_SIZE = (
+    int(os.environ["ONYX_DB_SHARD_POOL_SIZE"])
+    if os.environ.get("ONYX_DB_SHARD_POOL_SIZE")
+    else None
+)
+ONYX_DB_SHARD_POOL_OVERFLOW = (
+    int(os.environ["ONYX_DB_SHARD_POOL_OVERFLOW"])
+    if os.environ.get("ONYX_DB_SHARD_POOL_OVERFLOW")
+    else None
+)
+
+# Checked here so a bad value stops the process rather than surfacing on the first
+# request routed to a shard, whose engine is built lazily.
+if ONYX_DB_SHARD_POOL_SIZE is not None and ONYX_DB_SHARD_POOL_SIZE < 1:
+    # SQLAlchemy reads pool_size=0 as "no size limit", so a 0 here would uncap the
+    # shard rather than constrain it — the opposite of why this setting exists.
+    raise ValueError(
+        f"ONYX_DB_SHARD_POOL_SIZE must be at least 1, got {ONYX_DB_SHARD_POOL_SIZE}"
+    )
+if ONYX_DB_SHARD_POOL_OVERFLOW is not None and ONYX_DB_SHARD_POOL_OVERFLOW < 0:
+    # 0 is meaningful (no overflow past pool_size); negative means unlimited.
+    raise ValueError(
+        f"ONYX_DB_SHARD_POOL_OVERFLOW must be zero or greater, got "
+        f"{ONYX_DB_SHARD_POOL_OVERFLOW}"
+    )
+
 # Operator escape hatch: JSON object of tenant_id -> shard name, consulted
 # before the catalog table. Intended for incident response, not routine use.
 ONYX_DB_SHARD_OVERRIDES_JSON = os.environ.get("ONYX_DB_SHARD_OVERRIDES", "").strip()
@@ -1135,12 +1174,6 @@ POLL_CONNECTOR_OFFSET = 30  # Minutes overlap between poll windows
 # only very select connectors are enabled and admins cannot add other connector types
 ENABLED_CONNECTOR_TYPES = os.environ.get("ENABLED_CONNECTOR_TYPES") or ""
 
-# If set to true, curators can only access and edit assistants that they created
-CURATORS_CANNOT_VIEW_OR_EDIT_NON_OWNED_ASSISTANTS = (
-    os.environ.get("CURATORS_CANNOT_VIEW_OR_EDIT_NON_OWNED_ASSISTANTS", "").lower()
-    == "true"
-)
-
 # Some calls to get information on expert users are quite costly especially with rate limiting
 # Since experts are not used in the actual user experience, currently it is turned off
 # for some connectors
@@ -1360,6 +1393,10 @@ EGNYTE_CLIENT_SECRET = os.getenv("EGNYTE_CLIENT_SECRET")
 LINEAR_CLIENT_ID = os.getenv("LINEAR_CLIENT_ID")
 LINEAR_CLIENT_SECRET = os.getenv("LINEAR_CLIENT_SECRET")
 
+# Salesforce specific configs
+SALESFORCE_CLIENT_ID = os.getenv("SALESFORCE_CLIENT_ID")
+SALESFORCE_CLIENT_SECRET = os.getenv("SALESFORCE_CLIENT_SECRET")
+
 # Slack specific configs
 SLACK_NUM_THREADS = int(os.getenv("SLACK_NUM_THREADS") or 8)
 MAX_SLACK_QUERY_EXPANSIONS = int(os.environ.get("MAX_SLACK_QUERY_EXPANSIONS", "5"))
@@ -1436,8 +1473,6 @@ ENABLE_MULTIPASS_INDEXING = (
 # Enable contextual retrieval
 ENABLE_CONTEXTUAL_RAG = os.environ.get("ENABLE_CONTEXTUAL_RAG", "").lower() == "true"
 
-DEFAULT_CONTEXTUAL_RAG_LLM_NAME = "gpt-4o-mini"
-DEFAULT_CONTEXTUAL_RAG_LLM_PROVIDER = "DevEnvPresetOpenAI"
 # Finer grained chunking for more detail retention
 # Slightly larger since the sentence aware split is a max cutoff so most minichunks will be under MINI_CHUNK_SIZE
 # tokens. But we need it to be at least as big as 1/4th chunk size to avoid having a tiny mini-chunk at the end
@@ -1511,13 +1546,22 @@ MAX_FILE_SIZE_BYTES = int(
 # with thousands of embedded images can OOM the user-file-processing worker
 # because every image is decoded with PIL and then sent to the vision LLM.
 # Enforced both at upload time (rejects the file) and during extraction
-# (defense-in-depth: caps the number of images materialized).
+# (defense-in-depth: caps the number of images materialized). For PDFs the
+# count is of unique images that pass the content filters in
+# onyx/file_processing/pdf_image_utils.py.
 #
 # Clamped to >= 0; a negative env value would turn upload validation into
 # always-fail and extraction into always-stop, which is never desired. 0
 # disables image extraction entirely, which is a valid (if aggressive) setting.
 MAX_EMBEDDED_IMAGES_PER_FILE = max(
     0, int(os.environ.get("MAX_EMBEDDED_IMAGES_PER_FILE") or 500)
+)
+
+# Embedded PDF images narrower or shorter than this (px) are treated as
+# rendering artifacts (scanline strips, spacers, gradient tiles), not content,
+# and are skipped by both upload-time counting and extraction. 0 disables.
+MIN_EMBEDDED_IMAGE_DIMENSION_PX = max(
+    0, int(os.environ.get("MIN_EMBEDDED_IMAGE_DIMENSION_PX") or 16)
 )
 
 # Maximum embedded images allowed across all files in a single upload batch.

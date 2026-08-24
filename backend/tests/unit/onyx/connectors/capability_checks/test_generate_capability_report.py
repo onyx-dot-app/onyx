@@ -9,13 +9,14 @@ from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
     CapabilityCheckStatus,
-    CapabilityCheckTrigger,
     CapabilityVerdict,
     CredentialCapability,
 )
 from onyx.connectors.capability_checks.runner import generate_capability_report
 from onyx.connectors.exceptions import CredentialInvalidError
 from onyx.connectors.interfaces import BaseConnector
+from onyx.connectors.source_operations import SourceOperations
+from onyx.db.enums import CapabilityCheckTrigger
 
 
 class _CallableCheck(CapabilityCheck):
@@ -227,3 +228,113 @@ def test_real_config_unlocks_config_requiring_checks(
     assert report.connector_id == 42
     assert report.trigger == CapabilityCheckTrigger.CC_PAIR_VALIDATION
     assert report.check_results[0].status == CapabilityCheckStatus.PASSED
+
+
+def test_registered_gateway_is_constructed_and_reaches_checks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    Verifies the runner constructs the registered gateway uniformly (provider
+    plus the supplied config) and hands it to checks via the context.
+    """
+    # Precondition.
+    seen_contexts: list[CapabilityCheckContext] = []
+    check = _CallableCheck(
+        seen_contexts.append,
+        check_id="gateway_check",
+        requires_connector_instance=False,
+    )
+    _patch_runner_environment(monkeypatch, [check])
+    provider = MagicMock()
+    monkeypatch.setattr(
+        runner_module,
+        "build_db_credentials_provider",
+        MagicMock(return_value=provider),
+    )
+    gateway_instance = MagicMock(spec=SourceOperations)
+    gateway_class = MagicMock(return_value=gateway_instance)
+    monkeypatch.setattr(
+        runner_module,
+        "get_source_operations_class",
+        MagicMock(return_value=gateway_class),
+    )
+    connector_specific_config = {"channels": ["general"]}
+
+    # Under test.
+    generate_capability_report(
+        MagicMock(),
+        _make_credential(),
+        connector_specific_config=connector_specific_config,
+    )
+
+    # Postcondition.
+    gateway_class.assert_called_once_with(
+        credentials_provider=provider,
+        connector_specific_config=connector_specific_config,
+    )
+    assert seen_contexts[0].source_operations is gateway_instance
+
+
+def test_unregistered_source_gets_no_gateway(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verifies the context carries no gateway for unmigrated sources."""
+    # Precondition.
+    # Github has no registered gateway, so the real lookup returns None.
+    seen_contexts: list[CapabilityCheckContext] = []
+    check = _CallableCheck(
+        seen_contexts.append,
+        check_id="gateway_check",
+        requires_connector_instance=False,
+    )
+    _patch_runner_environment(monkeypatch, [check])
+
+    # Under test.
+    generate_capability_report(MagicMock(), _make_credential())
+
+    # Postcondition.
+    assert seen_contexts[0].source_operations is None
+
+
+def test_report_decrypt_emits_a_credential_audit_event(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    Verifies the report run's own decrypt is audited: it is a distinct decrypt
+    site from ``instantiate_connector``, which may not have decrypted at all.
+    """
+    # Precondition.
+    check = _CallableCheck(MagicMock(return_value=None), check_id="instance_check")
+    _patch_runner_environment(monkeypatch, [check])
+    emit = MagicMock()
+    monkeypatch.setattr(runner_module, "emit_credential_access", emit)
+    credential = _make_credential()
+    credential.credential_json = MagicMock()
+    credential.credential_json.get_value.return_value = {"token": "x"}
+
+    # Under test.
+    generate_capability_report(MagicMock(), credential)
+
+    # Postcondition.
+    emit.assert_called_once_with(
+        credential_type="connector",
+        provider=str(DocumentSource.GITHUB),
+        row_id=7,
+    )
+
+
+def test_empty_credential_decrypts_nothing_and_emits_no_audit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verifies a credential-less row produces no phantom audit event."""
+    # Precondition.
+    check = _CallableCheck(MagicMock(return_value=None), check_id="instance_check")
+    _patch_runner_environment(monkeypatch, [check])
+    emit = MagicMock()
+    monkeypatch.setattr(runner_module, "emit_credential_access", emit)
+
+    # Under test.
+    generate_capability_report(MagicMock(), _make_credential())
+
+    # Postcondition.
+    emit.assert_not_called()

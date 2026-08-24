@@ -52,6 +52,7 @@
   "exclude": [
     "node_modules",
     "lib/opal",
-    "lib/shared"
+    "lib/shared",
+    "tools"
   ]
 }

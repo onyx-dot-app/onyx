@@ -44,13 +44,11 @@ def test_generate_agent_instructions_populates_real_template_without_skills_sect
         connectable_apps_section="",
         provider="openai",
         model_name="gpt-5-mini",
-        nextjs_port=3210,
         disabled_tools=["web-search", "shell"],
         user_name="TEST_USER",
     )
 
     assert "TEST_USER" in content
-    assert "3210" in content
     assert "OpenAI / gpt-5-mini" in content
     assert "web-search, shell" in content
     assert "## Skills" not in content

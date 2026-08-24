@@ -49,8 +49,13 @@ async function runResumeStream(
   const controller = new AbortController();
   store.getState().setAbortController(sessionId, controller);
   store.getState().updateChatState(sessionId, "streaming");
-  // clear the reserved placeholder so it doesn't render above the replayed stream
-  store.getState().patchNode(sessionId, nodeId, { message: "", packets: [] });
+  // clear the reserved placeholder so it doesn't render above the replayed stream. The timer
+  // restarts from here: this client never saw the run's true start (web shows no timer at all here).
+  store.getState().patchNode(sessionId, nodeId, {
+    message: "",
+    packets: [],
+    streamingStartedAt: Date.now(),
+  });
 
   // writes are safe only while this session stays focused and unaborted
   const stillCurrent = () =>

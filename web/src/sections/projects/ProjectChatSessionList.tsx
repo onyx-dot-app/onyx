@@ -32,7 +32,7 @@ import {
 import { timeAgo } from "@opal/time";
 import type { IconFunctionComponent } from "@opal/types";
 import { noProp } from "@/lib/utils";
-import MoveCustomAgentChatModal from "@/sections/modals/MoveCustomAgentChatModal";
+import { MoveCustomAgentChatModal } from "@/lib/agents/components";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import { PopoverSearchInput } from "@/sections/sidebar/ChatButton";
 
@@ -302,7 +302,7 @@ export default function ProjectChatSessionList() {
         {isLoadingProjectDetails && !currentProjectDetails ? (
           <SvgSimpleLoader className="mx-4" />
         ) : projectChats.length === 0 ? (
-          <Card rounding="md" border="dashed" background="none" padding="sm">
+          <Card rounding="md" border="dashed" background="none" padding={2}>
             <div className="p-1">
               <Text as="p" font="secondary-body" color="text-02">
                 No chats yet.

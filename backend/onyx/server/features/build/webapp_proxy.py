@@ -41,6 +41,7 @@ from onyx.server.features.build.db.build_session import (
     get_webapp_target_async,
 )
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
+from onyx.server.features.build.sandbox.nextjs_dev import webapp_base_path
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -168,9 +169,8 @@ async def _aiter_and_close(response: httpx.Response) -> AsyncGenerator[bytes, No
 
 
 def _webapp_next_path(session_id: UUID, path: str = "") -> str:
-    session_str = str(session_id)
     rel_path = path.lstrip("/")
-    base_path = f"api/build/sessions/{session_str}/webapp"
+    base_path = webapp_base_path(session_id).lstrip("/")
     return f"{base_path}/{rel_path}" if rel_path else base_path
 
 

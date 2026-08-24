@@ -61,6 +61,47 @@ export class AppFocus {
     | "user-settings" {
     return typeof this.value === "object" ? this.value.type : this.value;
   }
+
+  // # NOTE (@raunakab):
+  // ## Composite questions
+  //
+  // Some call-sites ask the same question about several focus states at once.
+  // Each helper below names that question. The state list then lives here
+  // instead of being spelled out, and drifting, at each call-site.
+
+  /**
+   * True while the user reads a conversation, either their own or a shared one.
+   *
+   * `useAppDocumentTitle` uses this to decide when the chat name belongs in
+   * the document title. `AppPage` uses it to decide when the sources panel may
+   * stay open — there the shared arm changes nothing, because shared chats
+   * render through `SharedChatDisplay`, which has no sources panel.
+   */
+  isChattable(): boolean {
+    return this.isChat() || this.isSharedChat();
+  }
+
+  /**
+   * True when the active agent's sidebar tab must look selected.
+   *
+   * The tab highlights in more cases than an explicit click on it. Two
+   * examples:
+   *
+   * - You are in a chat that started with `Agent XYZ`. The chat tab *and* the
+   *   `Agent XYZ` tab both highlight.
+   * - "Disable Default Chat" is on (Admin -> Chat Preferences -> Advanced
+   *   Options). You open "New Session" (`/app`), which resolves to an agent
+   *   because no default chat exists. The new-session tab *and* that agent's
+   *   tab both highlight.
+   */
+  isAgentTabHighlightable(): boolean {
+    return (
+      this.isAgent() ||
+      this.isNewSession() ||
+      this.isChat() ||
+      this.isSharedChat()
+    );
+  }
 }
 
 export default function useAppFocus(): AppFocus {
@@ -68,7 +109,7 @@ export default function useAppFocus(): AppFocus {
   const searchParams = useSearchParams();
 
   const chatId = searchParams.get(SEARCH_PARAM_NAMES.CHAT_ID);
-  const agentId = searchParams.get(SEARCH_PARAM_NAMES.PERSONA_ID);
+  const agentId = searchParams.get(SEARCH_PARAM_NAMES.AGENT_ID);
   const projectId = searchParams.get(SEARCH_PARAM_NAMES.PROJECT_ID);
 
   // Memoize on the values that determine which AppFocus is constructed.

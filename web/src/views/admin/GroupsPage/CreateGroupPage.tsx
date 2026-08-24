@@ -16,11 +16,14 @@ import {
   updateAgentGroupSharing,
   updateDocSetGroupSharing,
   saveTokenLimits,
+  saveGroupPermissions,
 } from "./svc";
 import { memberTableColumns, PAGE_SIZE } from "./shared";
 import SharedGroupResources from "@/views/admin/GroupsPage/SharedGroupResources";
+import GroupPermissionsSection from "./GroupPermissionsSection";
 import TokenLimitSection from "./TokenLimitSection";
 import type { TokenLimit } from "./TokenLimitSection";
+import { useUser } from "@/providers/UserProvider";
 
 function CreateGroupPage() {
   const router = useRouter();
@@ -31,6 +34,9 @@ function CreateGroupPage() {
   const [selectedCcPairIds, setSelectedCcPairIds] = useState<number[]>([]);
   const [selectedDocSetIds, setSelectedDocSetIds] = useState<number[]>([]);
   const [selectedAgentIds, setSelectedAgentIds] = useState<number[]>([]);
+  const [enabledPermissions, setEnabledPermissions] = useState<Set<string>>(
+    new Set()
+  );
   const [tokenLimits, setTokenLimits] = useState<TokenLimit[]>([
     {
       tokenId: null,
@@ -41,6 +47,7 @@ function CreateGroupPage() {
     },
   ]);
 
+  const { isAdmin } = useUser();
   const { rows: allRows, isLoading, error } = useGroupMemberCandidates();
 
   async function handleCreate() {
@@ -57,6 +64,9 @@ function CreateGroupPage() {
         selectedUserIds,
         selectedCcPairIds
       );
+      if (isAdmin) {
+        await saveGroupPermissions(groupId, enabledPermissions);
+      }
       await updateAgentGroupSharing(groupId, [], selectedAgentIds);
       await updateDocSetGroupSharing(groupId, [], selectedDocSetIds);
       await saveTokenLimits(groupId, tokenLimits, []);
@@ -70,7 +80,7 @@ function CreateGroupPage() {
   }
 
   const headerActions = (
-    <Section flexDirection="row" gap={0.5} width="auto" height="auto">
+    <Section flexDirection="row" gap={2} width="auto" height="auto">
       <Button
         prominence="secondary"
         onClick={() => router.push("/admin/groups")}
@@ -98,7 +108,7 @@ function CreateGroupPage() {
       <SettingsLayouts.Body>
         {/* Group Name */}
         <Section
-          gap={0.5}
+          gap={2}
           height="auto"
           alignItems="stretch"
           justifyContent="start"
@@ -113,7 +123,7 @@ function CreateGroupPage() {
           />
         </Section>
 
-        <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+        <Divider paddingParallel={0} paddingPerpendicular={0} />
 
         {/* Members table */}
         {isLoading && <SvgSimpleLoader />}
@@ -126,7 +136,7 @@ function CreateGroupPage() {
 
         {!isLoading && !error && (
           <Section
-            gap={0.75}
+            gap={3}
             height="auto"
             alignItems="stretch"
             justifyContent="start"
@@ -156,6 +166,13 @@ function CreateGroupPage() {
             />
           </Section>
         )}
+        {isAdmin && (
+          <GroupPermissionsSection
+            enabledPermissions={enabledPermissions}
+            onPermissionsChange={setEnabledPermissions}
+          />
+        )}
+
         <SharedGroupResources
           selectedCcPairIds={selectedCcPairIds}
           onCcPairIdsChange={setSelectedCcPairIds}

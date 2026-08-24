@@ -262,7 +262,8 @@ class TestInstantiateConnectorIntegration:
 
         # This should trigger lazy loading but will fail on actual instantiation
         # due to missing real configuration - that's expected
-        with pytest.raises(Exception):  # We expect some kind of error due to mock data
+        # We expect some kind of error due to mock data
+        with pytest.raises(Exception):  # noqa: B017
             instantiate_connector(
                 mock_session,
                 DocumentSource.WEB,  # Simple connector

@@ -92,7 +92,7 @@ export function DiscordChannelsTable({
                 <Section
                   flexDirection="row"
                   justifyContent="start"
-                  gap={0.5}
+                  gap={2}
                   width="fit"
                 >
                   <ChannelIcon width={16} height={16} />

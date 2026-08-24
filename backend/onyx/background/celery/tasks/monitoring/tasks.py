@@ -33,7 +33,10 @@ from onyx.db.engine.sql_engine import (
     get_session_with_current_tenant,
     get_session_with_shared_schema,
 )
-from onyx.db.engine.tenant_utils import get_all_tenant_ids, validate_tenant_id
+from onyx.db.engine.tenant_utils import (
+    get_all_tenant_ids,
+    validate_tenant_id,
+)
 from onyx.db.engine.time_utils import get_db_current_time
 from onyx.db.enums import IndexingStatus, SyncStatus, SyncType
 from onyx.db.models import (
@@ -840,7 +843,7 @@ def cloud_check_alembic() -> bool | None:
                     tenant_to_revision[tenant_id] = ALEMBIC_NULL_REVISION
 
         # get the total count of each revision
-        for k, v in tenant_to_revision.items():
+        for v in tenant_to_revision.values():
             revision_counts[v] = revision_counts.get(v, 0) + 1
 
         # error if any null revision tenants are found

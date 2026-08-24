@@ -22,7 +22,6 @@ from onyx.db.llm import (
     remove_llm_provider,
     upsert_llm_provider,
 )
-from onyx.db.models import UserRole
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.constants import LlmProviderNames
@@ -70,7 +69,6 @@ def _cleanup_provider(db_session: Session, name: str) -> None:
 def _create_mock_admin() -> MagicMock:
     """Create a mock admin user for testing."""
     mock_admin = MagicMock()
-    mock_admin.role = UserRole.ADMIN
     return mock_admin
 
 
@@ -610,7 +608,7 @@ def test_upload_with_custom_config_then_change(
             # Check inside the database and check that custom_config is the same as the original
             db_provider = fetch_existing_llm_provider(name=name, db_session=db_session)
             if not db_provider:
-                assert False, "Provider not found in the database"
+                raise AssertionError("Provider not found in the database")
 
             assert db_provider.custom_config == custom_config, (
                 f"Expected custom_config {custom_config}, but got {db_provider.custom_config}"

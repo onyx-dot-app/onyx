@@ -339,8 +339,10 @@ export const MessageTextRenderer: MessageRenderer<
   // never change — otherwise every typewriter tick would invalidate
   // React reconciliation on the markdown subtree.
   const stateRef = useRef(state);
+  // oxlint-disable-next-line react-doctor/no-ref-current-in-render -- render-phase mirror keeps markdownComponents identities stable (see block comment above)
   stateRef.current = state;
   const processedContentRef = useRef(processedContent);
+  // oxlint-disable-next-line react-doctor/no-ref-current-in-render -- render-phase mirror keeps markdownComponents identities stable (see block comment above)
   processedContentRef.current = processedContent;
 
   const markdownComponents = useMemo<Components>(

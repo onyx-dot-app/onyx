@@ -21,8 +21,7 @@ import {
 // RN TextInput only handles strings; binding a number/boolean field would corrupt form state.
 type StringFieldPath<TFieldValues extends FieldValues> = {
   [K in FieldPath<TFieldValues>]: FieldPathValue<TFieldValues, K> extends
-    | string
-    | undefined
+    string | undefined
     ? K
     : never;
 }[FieldPath<TFieldValues>];

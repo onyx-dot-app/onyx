@@ -19,12 +19,12 @@ interface MCPApiKeyModalProps {
   serverName: string;
   serverId: number;
   authTemplate?: MCPAuthTemplate;
-  onSubmit: (serverId: number, apiKey: string) => void;
+  onSubmit: (serverId: number, apiKey: string) => Promise<void> | void;
   onSubmitCredentials?: (
     serverId: number,
     credentials: Record<string, string>
-  ) => void;
-  onSuccess?: () => void;
+  ) => Promise<void> | void;
+  onSuccess?: () => Promise<void> | void;
   isAuthenticated?: boolean;
   existingCredentials?: Record<string, string>;
 }
@@ -85,7 +85,7 @@ export default function MCPApiKeyModal({
         }
         setCredentials({});
         if (onSuccess) {
-          onSuccess();
+          await onSuccess();
         }
         onClose();
       } catch (error) {
@@ -109,7 +109,7 @@ export default function MCPApiKeyModal({
         await onSubmit(serverId, apiKey);
         setApiKey("");
         if (onSuccess) {
-          onSuccess();
+          await onSuccess();
         }
         onClose();
       } catch (error) {

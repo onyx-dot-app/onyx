@@ -2,7 +2,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "onyx.fullname" . }}-indexing-model
+  name: {{ include "onyx.resourceName" (list . "indexing-model") }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
     {{- with .Values.indexCapability.deploymentLabels }}
@@ -97,7 +97,7 @@ spec:
         {{- with include "onyx.modelServer.volumeMountsWithCA" (dict "ctx" . "volumeMounts" .Values.indexCapability.volumeMounts) }}
         {{- . | nindent 8 }}
         {{- end }}
-      {{- with include "onyx.volumesWithCA" (dict "ctx" . "volumes" .Values.indexCapability.volumes) }}
+      {{- with include "onyx.modelServer.volumesWithCA" (dict "ctx" . "volumes" .Values.indexCapability.volumes) }}
       {{- . | nindent 6 }}
       {{- end }}
 {{- end }}

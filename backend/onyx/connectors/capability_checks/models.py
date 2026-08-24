@@ -7,17 +7,10 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict
 
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.capabilities import CredentialCapability
 from onyx.connectors.interfaces import BaseConnector
-
-
-class CredentialCapability(str, Enum):
-    """
-    User-visible capabilities a credential may or may not support for a source.
-    """
-
-    INDEXING = "indexing"
-    DOC_PERMISSION_SYNC = "doc_permission_sync"
-    EXTERNAL_GROUP_SYNC = "external_group_sync"
+from onyx.connectors.source_operations import SourceOperations
+from onyx.db.enums import CapabilityCheckTrigger
 
 
 class CapabilityCheckStatus(str, Enum):
@@ -44,17 +37,6 @@ class CapabilityVerdict(str, Enum):
     NOT_APPLICABLE = "not_applicable"
 
 
-class CapabilityCheckTrigger(str, Enum):
-    """What initiated a capability-check run."""
-
-    MANUAL = "manual"
-    CREDENTIAL_CREATED = "credential_created"
-    # Recorded from the blocking validation at cc-pair creation/swap time.
-    CC_PAIR_VALIDATION = "cc_pair_validation"
-    # Recorded from the blocking validation at indexing-run start.
-    INDEXING_ATTEMPT = "indexing_attempt"
-
-
 class CapabilityCheckContext(BaseModel):
     """Inputs available to a capability check at run time.
 
@@ -63,9 +45,14 @@ class CapabilityCheckContext(BaseModel):
     them. ``instantiation_error`` is set when connector construction failed for
     a supplied config; the runner surfaces it on instance-requiring checks
     instead of skipping them.
+
+    ``source_operations`` is the gateway migrated checks compose; it is None for
+    sources without one. ``connector`` serves the fallback path only: migrated
+    checks need no connector instance.
     """
 
-    # ``BaseConnector`` is not a pydantic type; validate by isinstance.
+    # ``BaseConnector`` and ``SourceOperations`` are not pydantic types;
+    # validate by isinstance.
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     source: DocumentSource
@@ -73,6 +60,7 @@ class CapabilityCheckContext(BaseModel):
     connector: BaseConnector | None = None
     connector_specific_config: dict[str, Any] | None = None
     instantiation_error: Exception | None = None
+    source_operations: SourceOperations | None = None
 
 
 class CapabilityCheck(ABC):
@@ -157,13 +145,13 @@ def aggregate_capability_verdict(
 ) -> CapabilityVerdict:
     """Rolls the per-check results of one capability up into a single verdict.
 
-    Pure function. Required checks gate the verdict: a required failure is
-    FAILED, and a required indeterminate is INDETERMINATE, since the
-    capability's core is unverified and no PASSED claim can be made.
-    Non-required outcomes only downgrade: failures to PASSED_WITH_WARNINGS
-    (definite, stable, actionable), indeterminates to INDETERMINATE when no
-    warning outranks them (transient, self-resolves on re-run). An empty result
-    list aggregates to SKIPPED.
+    Pure function, evaluated in strict precedence order. Required checks gate
+    the verdict: a required FAILED is FAILED, and a required INDETERMINATE or
+    SKIPPED leaves the capability's core unverified, so no pass-ish claim may be
+    made. Non-required failures and indeterminates only downgrade to
+    PASSED_WITH_WARNINGS (partial capability); non-required skips do not
+    downgrade at all. An empty result list aggregates to SKIPPED: a capability
+    is never PASSED on the basis of having checked nothing.
     """
     if not applicable:
         return CapabilityVerdict.NOT_APPLICABLE
@@ -177,10 +165,17 @@ def aggregate_capability_verdict(
         for result in results
     ):
         return CapabilityVerdict.INDETERMINATE
-    if any(result.status == CapabilityCheckStatus.FAILED for result in results):
+    if any(
+        result.status == CapabilityCheckStatus.SKIPPED and result.required
+        for result in results
+    ):
+        return CapabilityVerdict.SKIPPED
+    if any(
+        result.status
+        in (CapabilityCheckStatus.FAILED, CapabilityCheckStatus.INDETERMINATE)
+        for result in results
+    ):
         return CapabilityVerdict.PASSED_WITH_WARNINGS
-    if any(result.status == CapabilityCheckStatus.INDETERMINATE for result in results):
-        return CapabilityVerdict.INDETERMINATE
     if all(result.status == CapabilityCheckStatus.SKIPPED for result in results):
         return CapabilityVerdict.SKIPPED
     return CapabilityVerdict.PASSED

@@ -29,10 +29,11 @@ from onyx.utils.audit import (
 
 def _capture(caplog: pytest.LogCaptureFixture) -> list[dict[str, Any]]:
     """Parse every captured ``onyx.audit`` JSON message into a dict."""
-    events: list[dict[str, Any]] = []
-    for record in caplog.records:
-        if record.name.startswith("onyx.audit"):
-            events.append(json.loads(record.getMessage()))
+    events: list[dict[str, Any]] = [
+        json.loads(record.getMessage())
+        for record in caplog.records
+        if record.name.startswith("onyx.audit")
+    ]
     return events
 
 

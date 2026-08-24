@@ -110,7 +110,6 @@ from onyx.server.features.usage.api import router as cost_override_router
 from onyx.server.features.user_oauth_token.api import router as user_oauth_token_router
 from onyx.server.features.web_search.api import router as web_search_router
 from onyx.server.federated.api import router as federated_router
-from onyx.server.gateway.api import router as llm_gateway_router
 from onyx.server.kg.api import admin_router as kg_admin_router
 from onyx.server.manage.administrative import router as admin_router
 from onyx.server.manage.code_interpreter.api import (
@@ -160,7 +159,7 @@ from onyx.server.saml_multi import router as saml_multi_router
 from onyx.server.security.api import admin_router as security_admin_router
 from onyx.server.settings.api import admin_router as settings_admin_router
 from onyx.server.settings.api import basic_router as settings_router
-from onyx.server.token_rate_limits.api import router as token_rate_limit_settings_router
+from onyx.server.sso_discovery import router as sso_discovery_router
 from onyx.server.utils import BasicAuthenticationError
 from onyx.setup import setup_multitenant_onyx, setup_onyx
 from onyx.tracing.setup import setup_tracing
@@ -544,7 +543,6 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, public_build_router)
     include_router_with_global_prefix_prepended(application, build_router)
     include_router_with_global_prefix_prepended(application, build_admin_router)
-    include_router_with_global_prefix_prepended(application, llm_gateway_router)
     include_router_with_global_prefix_prepended(application, image_generation_router)
     include_router_with_global_prefix_prepended(application, document_set_router)
     include_router_with_global_prefix_prepended(application, hierarchy_router)
@@ -591,9 +589,6 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, voice_websocket_router)
     include_router_with_global_prefix_prepended(
         application, opensearch_migration_admin_router
-    )
-    include_router_with_global_prefix_prepended(
-        application, token_rate_limit_settings_router
     )
     include_router_with_global_prefix_prepended(application, cost_override_router)
     include_router_with_global_prefix_prepended(application, user_usage_router)
@@ -700,6 +695,13 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_auth_router_with_prefix(
         application,
         oidc_multi_router,
+    )
+
+    # Resolves which workspace's providers to offer before any of the above can
+    # run. Mounted unconditionally: single-tenant answers from its one schema.
+    include_auth_router_with_prefix(
+        application,
+        sso_discovery_router,
     )
 
     include_auth_router_with_prefix(

@@ -10,6 +10,7 @@ import argparse
 import json
 import mimetypes
 import os
+import re
 import sys
 import urllib.error
 import urllib.parse
@@ -72,6 +73,24 @@ def _prune(value: Any) -> Any:
 def _seg(value: str) -> str:
     """URL-encode a single path segment (ids may contain special chars)."""
     return urllib.parse.quote(value, safe="")
+
+
+_URL_ID_RE = re.compile(r"/(?:d|folders)/([A-Za-z0-9_-]+)")
+
+
+def _id_arg(value: str) -> str:
+    """Accept a bare id or a Drive/Docs URL — extracts the `/d/<id>` or
+    `/folders/<id>` path segment, or the `?id=` query parameter of share
+    links; agents paste full links."""
+    if "://" not in value:
+        return value
+    match = _URL_ID_RE.search(value)
+    if match:
+        return match.group(1)
+    query = urllib.parse.parse_qs(urllib.parse.urlparse(value).query)
+    if query.get("id"):
+        return query["id"][0]
+    return value
 
 
 def _url(base: str, path: str, params: dict[str, Any] | None = None) -> str:
@@ -139,9 +158,19 @@ def _doc_end_index(doc: dict[str, Any]) -> int:
     return end
 
 
-def _get_doc(document_id: str, fields: str | None = None) -> dict[str, Any]:
-    params = {"fields": fields} if fields else None
-    return _req_docs(f"documents/{_seg(document_id)}", params=params)
+def _get_doc(
+    document_id: str, fields: str | None = None, include_tabs: bool = False
+) -> dict[str, Any]:
+    params: dict[str, Any] = {}
+    if fields:
+        # A mask without `tabs` would filter out the requested tab content.
+        if include_tabs and "tabs" not in fields:
+            fields += ",tabs"
+        params["fields"] = fields
+    # Without this a tabbed Doc's response `body` holds only the first tab.
+    if include_tabs:
+        params["includeTabsContent"] = "true"
+    return _req_docs(f"documents/{_seg(document_id)}", params=params or None)
 
 
 def _batch_update(document_id: str, requests: list[Any]) -> dict[str, Any]:
@@ -342,7 +371,9 @@ def _build_parser() -> argparse.ArgumentParser:
     sp.add_argument("text", nargs="?", help="free-text query (fullText contains)")
     sp.add_argument("--name", help="filter: name contains")
     sp.add_argument("--mime", help="filter: exact mimeType")
-    sp.add_argument("--in", dest="parent", help="filter: files in this folder id")
+    sp.add_argument(
+        "--in", dest="parent", type=_id_arg, help="filter: files in this folder id"
+    )
     sp.add_argument(
         "--include-trashed",
         dest="include_trashed",
@@ -352,15 +383,15 @@ def _build_parser() -> argparse.ArgumentParser:
     with_common(sp)
 
     sp = sub.add_parser("list", help="list a folder's children")
-    sp.add_argument("folder_id")
+    sp.add_argument("folder_id", type=_id_arg)
     with_common(sp)
 
     sp = sub.add_parser("get", help="one file's metadata")
-    sp.add_argument("file_id")
+    sp.add_argument("file_id", type=_id_arg)
     sp.add_argument("--fields", default=_FILE_FIELDS, help="Drive fields selector")
 
     sp = sub.add_parser("read", help="read a file's contents as text")
-    sp.add_argument("file_id")
+    sp.add_argument("file_id", type=_id_arg)
     sp.add_argument("--mime", help="override export mimeType for native docs")
     sp.add_argument(
         "--max-bytes", dest="max_bytes", type=int, default=_DEFAULT_MAX_BYTES
@@ -372,14 +403,14 @@ def _build_parser() -> argparse.ArgumentParser:
     # --- writes (may prompt for approval) ---
     sp = sub.add_parser("create-folder", help="create a folder (write)")
     sp.add_argument("name")
-    sp.add_argument("--in", dest="parent", help="parent folder id")
+    sp.add_argument("--in", dest="parent", type=_id_arg, help="parent folder id")
 
     sp = sub.add_parser(
         "upload", help="upload a local file as a new Drive file (write)"
     )
     sp.add_argument("path", help="local file path to upload")
     sp.add_argument("--name", help="Drive file name (default: basename)")
-    sp.add_argument("--in", dest="parent", help="parent folder id")
+    sp.add_argument("--in", dest="parent", type=_id_arg, help="parent folder id")
     sp.add_argument("--as", dest="content_type", help="source content-type override")
     sp.add_argument(
         "--convert-to",
@@ -388,21 +419,28 @@ def _build_parser() -> argparse.ArgumentParser:
     )
 
     sp = sub.add_parser("replace", help="replace a file's contents (write)")
-    sp.add_argument("file_id")
+    sp.add_argument("file_id", type=_id_arg)
     sp.add_argument("path", help="local file path with the new contents")
     sp.add_argument("--as", dest="content_type", help="source content-type override")
 
     sp = sub.add_parser("update", help="update a file's metadata (write)")
-    sp.add_argument("file_id")
+    sp.add_argument("file_id", type=_id_arg)
     sp.add_argument("--name", help="new name")
-    sp.add_argument("--add-parent", dest="add_parent", help="folder id to add")
-    sp.add_argument("--remove-parent", dest="remove_parent", help="folder id to remove")
+    sp.add_argument(
+        "--add-parent", dest="add_parent", type=_id_arg, help="folder id to add"
+    )
+    sp.add_argument(
+        "--remove-parent",
+        dest="remove_parent",
+        type=_id_arg,
+        help="folder id to remove",
+    )
 
     sp = sub.add_parser("trash", help="move a file to the trash (write)")
-    sp.add_argument("file_id")
+    sp.add_argument("file_id", type=_id_arg)
 
     sp = sub.add_parser("delete", help="permanently delete a file (destructive)")
-    sp.add_argument("file_id")
+    sp.add_argument("file_id", type=_id_arg)
 
     sp = sub.add_parser("call", help="raw Drive request")
     sp.add_argument("method", choices=("GET", "POST", "PATCH", "PUT", "DELETE"))
@@ -413,18 +451,24 @@ def _build_parser() -> argparse.ArgumentParser:
     sp = sub.add_parser(
         "get-doc", help="get a Google Doc's structure (body content + indices)"
     )
-    sp.add_argument("document_id")
+    sp.add_argument("document_id", type=_id_arg)
     sp.add_argument(
         "--fields",
         help="Docs fields selector, e.g. 'documentId,body,title' "
         "(default: whole document)",
+    )
+    sp.add_argument(
+        "--tabs",
+        action="store_true",
+        help="include every tab's content under tabs[] "
+        "(a tabbed Doc's body holds only the first tab)",
     )
 
     sp = sub.add_parser(
         "batch-update",
         help="apply raw Docs batchUpdate requests to a Doc (write)",
     )
-    sp.add_argument("document_id")
+    sp.add_argument("document_id", type=_id_arg)
     sp.add_argument(
         "requests_json",
         nargs="?",
@@ -438,7 +482,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
 
     sp = sub.add_parser("insert-text", help="insert text at an index in a Doc (write)")
-    sp.add_argument("document_id")
+    sp.add_argument("document_id", type=_id_arg)
     sp.add_argument(
         "--index", type=int, required=True, help="1-based character index to insert at"
     )
@@ -447,7 +491,7 @@ def _build_parser() -> argparse.ArgumentParser:
     sp = sub.add_parser(
         "append-text", help="append text to the end of a Doc's body (write)"
     )
-    sp.add_argument("document_id")
+    sp.add_argument("document_id", type=_id_arg)
     sp.add_argument("--text", required=True, help="text to append")
 
     sp = sub.add_parser("create-doc", help="create a new empty Google Doc (write)")
@@ -527,7 +571,9 @@ def _dispatch(a: argparse.Namespace) -> dict[str, Any]:
 
     # --- Google Docs API ---
     if a.cmd == "get-doc":
-        doc = _get_doc(a.document_id, fields=getattr(a, "fields", None))
+        doc = _get_doc(
+            a.document_id, fields=getattr(a, "fields", None), include_tabs=a.tabs
+        )
         return {"ok": True, "document": doc}
 
     if a.cmd == "batch-update":
@@ -592,7 +638,18 @@ def main(argv: list[str]) -> int:
         return 1
     except urllib.error.HTTPError as e:
         detail = e.read().decode("utf-8", errors="replace")
-        print(f"HTTP {e.code} calling Google Drive: {detail}", file=sys.stderr)
+        url = getattr(e, "url", None) or e.filename or ""
+        is_docs = url.startswith(_DOCS_BASE)
+        api = "Google Docs" if is_docs else "Google Drive"
+        print(f"HTTP {e.code} calling {api}: {detail}", file=sys.stderr)
+        if e.code == 404 and not is_docs:
+            print(
+                "note: Drive answers 404 both for a missing id and for an "
+                "existing file the current grant cannot see. A Google Doc, "
+                "Sheet, or Slides file may still be reachable through its own "
+                "API (get-doc / gsheets_api.py / gslides_api.py).",
+                file=sys.stderr,
+            )
         return 1
     except urllib.error.URLError as e:
         print(f"network error calling Google Drive: {e.reason}", file=sys.stderr)

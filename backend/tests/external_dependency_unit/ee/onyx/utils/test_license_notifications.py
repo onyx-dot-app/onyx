@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from ee.onyx.utils.license_expiry import ExpiryWarningStage
 from ee.onyx.utils.license_notifications import notify_admins_for_stage
 from onyx.configs.constants import NotificationType
-from onyx.db.models import Notification, User, UserRole
+from onyx.db.models import Notification, User
 from tests.external_dependency_unit.conftest import create_test_user
 
 EXPIRES_AT = datetime(2026, 6, 1, 12, 0, 0, tzinfo=timezone.utc)
@@ -27,7 +27,7 @@ def admin(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
 ) -> User:
-    return create_test_user(db_session, "license_admin", role=UserRole.ADMIN)
+    return create_test_user(db_session, "license_admin", is_admin=True)
 
 
 @pytest.fixture
@@ -36,8 +36,8 @@ def two_admins(
     tenant_context: None,  # noqa: ARG001
 ) -> list[User]:
     return [
-        create_test_user(db_session, "license_admin1", role=UserRole.ADMIN),
-        create_test_user(db_session, "license_admin2", role=UserRole.ADMIN),
+        create_test_user(db_session, "license_admin1", is_admin=True),
+        create_test_user(db_session, "license_admin2", is_admin=True),
     ]
 
 
@@ -46,7 +46,7 @@ def basic_user(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
 ) -> User:
-    return create_test_user(db_session, "license_basic", role=UserRole.BASIC)
+    return create_test_user(db_session, "license_basic")
 
 
 def _count_license_notifs(

@@ -3,7 +3,7 @@
 import useSWR, { KeyedMutator } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
-import { MCPServer, MCPTool, ToolSnapshot } from "@/lib/tools/interfaces";
+import { MCPServer, MCPTool, ToolSnapshot } from "@/lib/tools/types";
 
 /**
  * Return type for the useServerTools hook
@@ -98,6 +98,7 @@ export default function useServerTools(
         description: tool.description,
         isAvailable: true,
         isEnabled: tool.enabled,
+        permissions: tool.permissions,
       }))
     : [];
 

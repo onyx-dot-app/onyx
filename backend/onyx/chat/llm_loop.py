@@ -42,12 +42,18 @@ from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.memory import UserMemoryContext, add_memory, update_memory_at_index
 from onyx.db.models import Persona
+from onyx.file_store.models import ChatFileType
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.exceptions import ClassifiedLLMError
 from onyx.llm.interfaces import LLM, LLMUserIdentity, ToolChoiceOptions
 from onyx.llm.model_capabilities import is_true_openai_model
 from onyx.llm.models import ReasoningEffort
-from onyx.prompts.chat_prompts import IMAGE_GEN_REMINDER, OPEN_URL_REMINDER
+from onyx.llm.utils import model_supports_image_input
+from onyx.prompts.chat_prompts import (
+    IMAGE_GEN_REMINDER,
+    NON_VISION_IMAGE_MARKER,
+    OPEN_URL_REMINDER,
+)
 from onyx.prompts.prompt_utils import substitute_user_placeholders
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
@@ -61,6 +67,7 @@ from onyx.tools.interface import Tool
 from onyx.tools.models import (
     ChatFile,
     CustomToolCallSummary,
+    CustomToolUserFileSnapshot,
     MemoryToolResponseSnapshot,
     PythonToolRichResponse,
     ToolCallInfo,
@@ -78,8 +85,13 @@ from onyx.tools.tool_runner import run_tool_calls
 from onyx.tools.utils import compute_all_tool_tokens
 from onyx.tracing.framework.create import ChatTraceMetadata, trace
 from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import get_current_incognito_record_mode
 
 logger = setup_logger()
+
+# Used when no token_counter is available to measure the non-vision image
+# marker; intentionally generous so budgeting stays conservative.
+_NON_VISION_MARKER_TOKEN_FALLBACK = 40
 
 
 class EmptyLLMResponseError(ClassifiedLLMError):
@@ -375,12 +387,41 @@ def construct_message_history(
     last_n_user_messages: int | None = None,
     token_counter: Callable[[str], int] | None = None,
     all_injected_file_metadata: dict[str, FileToolMetadata] | None = None,
+    image_files_replayed_as_markers: bool = False,
 ) -> list[ChatMessageSimple]:
     if last_n_user_messages is not None:
         if last_n_user_messages <= 0:
             raise ValueError(
                 "filtering chat history by last N user messages must be a value greater than 0"
             )
+
+    # Budget each message at its replay cost: when the model takes no image
+    # input, translate_history_to_llm_format sends short text markers instead
+    # of the images, so charging the stored image token cost would evict
+    # history that actually fits.
+    marker_tokens = 0
+    if image_files_replayed_as_markers:
+        sample_marker = NON_VISION_IMAGE_MARKER.format(file_id="0" * 36)
+        marker_tokens = (
+            token_counter(sample_marker)
+            if token_counter
+            else _NON_VISION_MARKER_TOKEN_FALLBACK
+        )
+
+    def _replay_token_count(msg: ChatMessageSimple) -> int:
+        if not image_files_replayed_as_markers:
+            return msg.token_count
+        # Charge markers for every IMAGE entry, including ones whose stored
+        # token contribution is zero (project/context images are never
+        # counted) — the marker text is still sent for them.
+        num_images = sum(
+            1 for f in msg.image_files or [] if f.file_type == ChatFileType.IMAGE
+        )
+        if not num_images:
+            return msg.token_count
+        return (
+            max(0, msg.token_count - msg.image_token_count) + num_images * marker_tokens
+        )
 
     # Build the project / file-metadata messages up front so we can use their
     # actual token counts for the budget.
@@ -451,8 +492,10 @@ def construct_message_history(
     messages_after_last_user = simple_chat_history[last_user_msg_index + 1 :]
 
     # Calculate tokens needed for the last user message and everything after it
-    last_user_tokens = last_user_message.token_count
-    after_user_tokens = sum(msg.token_count for msg in messages_after_last_user)
+    last_user_tokens = _replay_token_count(last_user_message)
+    after_user_tokens = sum(
+        _replay_token_count(msg) for msg in messages_after_last_user
+    )
 
     # Check if we can fit at least the last user message and messages after it
     required_tokens = last_user_tokens + after_user_tokens
@@ -469,14 +512,14 @@ def construct_message_history(
     # Track dropped file messages so we can provide their metadata to the
     # FileReaderTool instead.
     truncated_history_before: list[ChatMessageSimple] = []
-    dropped_file_ids: list[str] = []
     current_token_count = 0
 
     for msg in reversed(history_before_last_user):
-        if current_token_count + msg.token_count <= remaining_budget:
+        msg_tokens = _replay_token_count(msg)
+        if current_token_count + msg_tokens <= remaining_budget:
             msg.should_cache = True
             truncated_history_before.insert(0, msg)
-            current_token_count += msg.token_count
+            current_token_count += msg_tokens
         else:
             # Can't fit this message, stop truncating.
             # This message and everything older is dropped.
@@ -487,9 +530,11 @@ def construct_message_history(
     # recent messages, so the dropped ones are at the start of the original
     # list up to (len(history) - len(kept)).
     num_kept = len(truncated_history_before)
-    for msg in history_before_last_user[: len(history_before_last_user) - num_kept]:
-        if msg.file_id is not None:
-            dropped_file_ids.append(msg.file_id)
+    dropped_file_ids: list[str] = [
+        msg.file_id
+        for msg in history_before_last_user[: len(history_before_last_user) - num_kept]
+        if msg.file_id is not None
+    ]
 
     # Also treat "orphaned" metadata entries as dropped -- these are files
     # from messages removed by summary truncation (before convert_chat_history
@@ -525,7 +570,7 @@ def construct_message_history(
             remaining_budget -= forgotten_files_message.token_count
             while truncated_history_before and current_token_count > remaining_budget:
                 evicted = truncated_history_before.pop(0)
-                current_token_count -= evicted.token_count
+                current_token_count -= _replay_token_count(evicted)
                 # If the evicted message is itself a file, add it to the
                 # forgotten metadata (it's now dropped too).
                 if (
@@ -619,10 +664,10 @@ def _create_file_tool_metadata_message(
         "read sections of any file. You MUST pass the file_id UUID (not the "
         "filename) to read_file:"
     ]
-    for meta in file_metadata:
-        lines.append(
-            f'- file_id="{meta.file_id}" filename="{meta.filename}" (~{meta.approx_char_count:,} chars)'
-        )
+    lines.extend(
+        f'- file_id="{meta.file_id}" filename="{meta.filename}" (~{meta.approx_char_count:,} chars)'
+        for meta in file_metadata
+    )
 
     message_content = "\n".join(lines)
     return ChatMessageSimple(
@@ -767,6 +812,15 @@ def run_llm_loop(
         # undercount the provider's tokenizer and overflow the context window.
         available_tokens = int(
             llm.config.max_input_tokens * (1 - GEN_AI_INPUT_TOKEN_SAFETY_MARGIN)
+        )
+        # When the model takes no image input, history images are replayed as
+        # short text markers (translate_history_to_llm_format) — budget them
+        # as markers too, not at their stored image token cost.
+        image_files_replayed_as_markers = any(
+            msg.message_type == MessageType.USER and msg.image_files
+            for msg in simple_chat_history
+        ) and not model_supports_image_input(
+            llm.config.model_name, llm.config.model_provider, llm.config.deployment_name
         )
         tool_choice: ToolChoiceOptions = ToolChoiceOptions.AUTO
         # Initialize gathered_documents with project files if present
@@ -977,6 +1031,7 @@ def run_llm_loop(
                 available_tokens=max(0, available_tokens - tool_token_budget),
                 token_counter=token_counter,
                 all_injected_file_metadata=all_injected_file_metadata,
+                image_files_replayed_as_markers=image_files_replayed_as_markers,
             )
 
             # This calls the LLM, yields packets (reasoning, answers, etc.) and returns the result
@@ -1168,35 +1223,60 @@ def run_llm_loop(
                         tool_response.rich_response.generated_files or None
                     )
 
-                # Persist memory if this is a memory tool response
-                memory_snapshot: MemoryToolResponseSnapshot | None = None
-                if isinstance(tool_response.rich_response, MemoryToolResponse):
-                    persisted_memory_id: int | None = None
-                    if user_memory_context and user_memory_context.user_id:
-                        if tool_response.rich_response.index_to_replace is not None:
-                            persisted_memory_id = update_memory_at_index(
-                                user_id=user_memory_context.user_id,
-                                index=tool_response.rich_response.index_to_replace,
-                                new_text=tool_response.rich_response.memory_text,
-                            )
-                        else:
-                            persisted_memory_id = add_memory(
-                                user_id=user_memory_context.user_id,
-                                memory_text=tool_response.rich_response.memory_text,
-                            )
-                    operation: Literal["add", "update"] = (
-                        "update"
-                        if tool_response.rich_response.index_to_replace is not None
-                        else "add"
-                    )
-                    memory_snapshot = MemoryToolResponseSnapshot(
-                        memory_text=tool_response.rich_response.memory_text,
-                        operation=operation,
-                        memory_id=persisted_memory_id,
-                        index=tool_response.rich_response.index_to_replace,
+                # Custom tools save image/CSV blobs and return their ids.
+                generated_file_ids = None
+                if isinstance(
+                    tool_response.rich_response, CustomToolCallSummary
+                ) and isinstance(
+                    tool_response.rich_response.tool_result, CustomToolUserFileSnapshot
+                ):
+                    generated_file_ids = (
+                        tool_response.rich_response.tool_result.file_ids or None
                     )
 
-                if memory_snapshot:
+                # Persist memory if this is a memory tool response
+                memory_snapshot: MemoryToolResponseSnapshot | None = None
+                incognito_memory_refusal: str | None = None
+                if isinstance(tool_response.rich_response, MemoryToolResponse):
+                    # Any incognito mode refuses memory writes with an explicit
+                    # error, so neither the model nor the user sees a saved
+                    # memory that does not exist.
+                    if get_current_incognito_record_mode() is not None:
+                        incognito_memory_refusal = (
+                            "Error: memories cannot be saved from an incognito "
+                            "chat. Tell the user their request was not saved."
+                        )
+                    else:
+                        persisted_memory_id: int | None = None
+                        if user_memory_context and user_memory_context.user_id:
+                            if tool_response.rich_response.index_to_replace is not None:
+                                persisted_memory_id = update_memory_at_index(
+                                    user_id=user_memory_context.user_id,
+                                    index=tool_response.rich_response.index_to_replace,
+                                    new_text=tool_response.rich_response.memory_text,
+                                )
+                            else:
+                                persisted_memory_id = add_memory(
+                                    user_id=user_memory_context.user_id,
+                                    memory_text=tool_response.rich_response.memory_text,
+                                )
+                        operation: Literal["add", "update"] = (
+                            "update"
+                            if tool_response.rich_response.index_to_replace is not None
+                            else "add"
+                        )
+                        memory_snapshot = MemoryToolResponseSnapshot(
+                            memory_text=tool_response.rich_response.memory_text,
+                            operation=operation,
+                            memory_id=persisted_memory_id,
+                            index=tool_response.rich_response.index_to_replace,
+                        )
+
+                if incognito_memory_refusal:
+                    saved_response = incognito_memory_refusal
+                    # The next LLM cycle must see the refusal too.
+                    tool_response.llm_facing_response = incognito_memory_refusal
+                elif memory_snapshot:
                     saved_response = json.dumps(memory_snapshot.model_dump())
                 elif isinstance(tool_response.rich_response, CustomToolCallSummary):
                     saved_response = json.dumps(
@@ -1220,6 +1300,7 @@ def run_llm_loop(
                     search_docs=displayed_docs or search_docs,
                     generated_images=generated_images,
                     generated_files=generated_files,
+                    generated_file_ids=generated_file_ids,
                 )
                 # Add to state container for partial save support
                 state_container.add_tool_call(tool_call_info)

@@ -94,3 +94,21 @@ def test_redis_cache_lock_extend_translates_lock_not_owned_error() -> None:
 
     with pytest.raises(CacheLockLostError):
         lock.extend(30.0)
+
+
+def test_redis_cache_getdel_delegates_atomic_consume() -> None:
+    redis_client = MagicMock(spec=TenantRedisClient)
+    redis_client.getdel.return_value = b"value"
+    backend = RedisCacheBackend(redis_client)
+
+    assert backend.getdel("attempt") == b"value"
+    redis_client.getdel.assert_called_once_with("attempt")
+
+
+def test_redis_cache_set_if_absent_uses_atomic_set() -> None:
+    redis_client = MagicMock(spec=TenantRedisClient)
+    redis_client.set.return_value = True
+    backend = RedisCacheBackend(redis_client)
+
+    assert backend.set_if_absent("attempt", b"value", ex=300)
+    redis_client.set.assert_called_once_with("attempt", b"value", ex=300, nx=True)

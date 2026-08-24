@@ -4,16 +4,16 @@ import { useState, useMemo } from "react";
 import { SvgEmpty, SvgFiles, SvgXOctagon } from "@opal/icons";
 import { Content } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
-import Card from "@/refresh-components/cards/Card";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import Text from "@/refresh-components/texts/Text";
-import { Divider } from "@opal/components";
+import { Card, Divider } from "@opal/components";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { useConnectorStatus } from "@/lib/hooks";
 import { useDocumentSets } from "@/lib/hooks/useDocumentSets";
-import { useAgents } from "@/lib/agents/hooks";
+import { useAdminAgents } from "@/lib/agents/hooks";
 import { getSourceMetadata } from "@/lib/sources";
+import type { Agent } from "@/lib/agents/types";
 import type { ValidSources } from "@/lib/types";
 import ResourceContent from "@/views/admin/GroupsPage/SharedGroupResources/ResourceContent";
 import ResourcePopover from "@/views/admin/GroupsPage/SharedGroupResources/ResourcePopover";
@@ -26,11 +26,17 @@ interface SharedGroupResourcesProps {
   onDocSetIdsChange: (ids: number[]) => void;
   selectedAgentIds: number[];
   onAgentIdsChange: (ids: number[]) => void;
+  /** Already shared with this group; merged in so an agent the caller can't otherwise
+   *  see still renders as a chip. */
+  attachedAgents?: Agent[];
 }
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+// Stable identity for the default — an inline [] would re-run the merge every render.
+const NO_ATTACHED_AGENTS: Agent[] = [];
 
 function SharedBadge() {
   return (
@@ -87,13 +93,26 @@ function SharedGroupResources({
   onDocSetIdsChange,
   selectedAgentIds,
   onAgentIdsChange,
+  attachedAgents = NO_ATTACHED_AGENTS,
 }: SharedGroupResourcesProps) {
   const [connectorSearch, setConnectorSearch] = useState("");
   const [agentSearch, setAgentSearch] = useState("");
 
   const { data: connectors = [] } = useConnectorStatus();
   const { documentSets } = useDocumentSets();
-  const { agents } = useAgents();
+  // Admin list, not the chat list: a global holder gets every agent, a scoped manager
+  // only the ones they can edit. Built-ins are already public, so sharing one is a no-op.
+  const { agents: allAgents } = useAdminAgents();
+  const agents = useMemo(() => {
+    const shareable = allAgents.filter((agent) => !agent.builtin_persona);
+    const known = new Set(shareable.map((agent) => agent.id));
+    return [
+      ...shareable,
+      ...attachedAgents.filter(
+        (agent) => !known.has(agent.id) && !agent.builtin_persona
+      ),
+    ];
+  }, [allAgents, attachedAgents]);
 
   // --- Derived data ---
 
@@ -134,6 +153,7 @@ function SharedGroupResources({
         const isSelected = selectedCcPairSet.has(p.cc_pair_id);
         return {
           key: `c-${p.cc_pair_id}`,
+          label: p.name ?? `Connector #${p.cc_pair_id}`,
           disabled: isSelected,
           onSelect: () =>
             isSelected
@@ -143,7 +163,7 @@ function SharedGroupResources({
               : onCcPairIdsChange([...selectedCcPairIds, p.cc_pair_id]),
           render: (dimmed: boolean) => (
             <LineItem
-              interactive={!dimmed}
+              interactive={false}
               muted={dimmed}
               icon={getSourceMetadata(p.connector.source).icon}
               strokeIcon={false}
@@ -163,6 +183,7 @@ function SharedGroupResources({
         const isSelected = selectedDocSetSet.has(ds.id);
         return {
           key: `d-${ds.id}`,
+          label: ds.name,
           disabled: isSelected,
           onSelect: () =>
             isSelected
@@ -172,7 +193,7 @@ function SharedGroupResources({
               : onDocSetIdsChange([...selectedDocSetIds, ds.id]),
           render: (dimmed: boolean) => (
             <LineItem
-              interactive={!dimmed}
+              interactive={false}
               muted={dimmed}
               icon={SvgFiles}
               rightChildren={
@@ -214,6 +235,7 @@ function SharedGroupResources({
         const isSelected = selectedAgentSet.has(a.id);
         return {
           key: `a-${a.id}`,
+          label: a.name,
           disabled: isSelected,
           onSelect: () =>
             isSelected
@@ -221,7 +243,7 @@ function SharedGroupResources({
               : onAgentIdsChange([...selectedAgentIds, a.id]),
           render: (dimmed: boolean) => (
             <LineItem
-              interactive={!dimmed}
+              interactive={false}
               muted={dimmed}
               icon={(_props) => <AgentAvatar agent={a} size={16} />}
               description="agent"
@@ -268,136 +290,138 @@ function SharedGroupResources({
         description="Share connectors, document sets, agents with members of this group."
       />
       <SimpleCollapsible.Content>
-        <Card>
-          <Section
-            gap={1}
-            height="auto"
-            alignItems="stretch"
-            justifyContent="start"
-            width="full"
-          >
-            {/* Connectors & Document Sets */}
+        <Card border="solid" rounding="lg">
+          <Section alignItems="start" height="fit">
             <Section
-              gap={0.5}
+              gap={4}
               height="auto"
               alignItems="stretch"
               justifyContent="start"
+              width="full"
             >
+              {/* Connectors & Document Sets */}
               <Section
-                gap={0.25}
+                gap={2}
                 height="auto"
                 alignItems="stretch"
                 justifyContent="start"
               >
-                <Text mainUiAction text04>
-                  Connectors & Document Sets
-                </Text>
-                <ResourcePopover
-                  placeholder="Add connectors, document sets"
-                  searchValue={connectorSearch}
-                  onSearchChange={setConnectorSearch}
-                  sections={connectorDocSetSections}
-                />
-              </Section>
-              {hasSelectedResources ? (
                 <Section
-                  flexDirection="row"
-                  wrap
-                  gap={0.25}
+                  gap={1}
                   height="auto"
-                  alignItems="start"
+                  alignItems="stretch"
                   justifyContent="start"
                 >
-                  {selectedPairs.map((pair) => (
-                    <ResourceContent
-                      key={`c-${pair.cc_pair_id}`}
-                      icon={getSourceMetadata(pair.connector.source).icon}
-                      title={pair.name ?? `Connector #${pair.cc_pair_id}`}
-                      description="Connector"
-                      onRemove={() => removeConnector(pair.cc_pair_id)}
-                    />
-                  ))}
-                  {selectedDocSets.map((ds) => (
-                    <ResourceContent
-                      key={`d-${ds.id}`}
-                      icon={SvgFiles}
-                      title={ds.name}
-                      description="Document Set"
-                      infoContent={
-                        <SourceIconStack sources={ds.cc_pair_summaries} />
-                      }
-                      onRemove={() => removeDocSet(ds.id)}
-                    />
-                  ))}
+                  <Text mainUiAction text04>
+                    Connectors & Document Sets
+                  </Text>
+                  <ResourcePopover
+                    placeholder="Add connectors, document sets"
+                    searchValue={connectorSearch}
+                    onSearchChange={setConnectorSearch}
+                    sections={connectorDocSetSections}
+                  />
                 </Section>
-              ) : (
-                <Content
-                  icon={SvgEmpty}
-                  title="No connectors or document sets added"
-                  description="Add connectors or document set to share with this group."
-                  sizePreset="secondary"
-                  variant="section"
-                />
-              )}
-            </Section>
+                {hasSelectedResources ? (
+                  <Section
+                    flexDirection="row"
+                    wrap
+                    gap={1}
+                    height="auto"
+                    alignItems="start"
+                    justifyContent="start"
+                  >
+                    {selectedPairs.map((pair) => (
+                      <ResourceContent
+                        key={`c-${pair.cc_pair_id}`}
+                        icon={getSourceMetadata(pair.connector.source).icon}
+                        title={pair.name ?? `Connector #${pair.cc_pair_id}`}
+                        description="Connector"
+                        onRemove={() => removeConnector(pair.cc_pair_id)}
+                      />
+                    ))}
+                    {selectedDocSets.map((ds) => (
+                      <ResourceContent
+                        key={`d-${ds.id}`}
+                        icon={SvgFiles}
+                        title={ds.name}
+                        description="Document Set"
+                        infoContent={
+                          <SourceIconStack sources={ds.cc_pair_summaries} />
+                        }
+                        onRemove={() => removeDocSet(ds.id)}
+                      />
+                    ))}
+                  </Section>
+                ) : (
+                  <Content
+                    icon={SvgEmpty}
+                    title="No connectors or document sets added"
+                    description="Add connectors or document set to share with this group."
+                    sizePreset="secondary"
+                    variant="section"
+                  />
+                )}
+              </Section>
 
-            <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+              <Divider paddingParallel={0} paddingPerpendicular={0} />
 
-            {/* Agents */}
-            <Section
-              gap={0.5}
-              height="auto"
-              alignItems="stretch"
-              justifyContent="start"
-            >
+              {/* Agents */}
               <Section
-                gap={0.25}
+                gap={2}
                 height="auto"
                 alignItems="stretch"
                 justifyContent="start"
               >
-                <Text mainUiAction text04>
-                  Agents
-                </Text>
-                <ResourcePopover
-                  placeholder="Add agents"
-                  searchValue={agentSearch}
-                  onSearchChange={setAgentSearch}
-                  sections={agentSections}
-                />
-              </Section>
-              {selectedAgentObjects.length > 0 ? (
                 <Section
-                  flexDirection="row"
-                  wrap
-                  gap={0.25}
+                  gap={1}
                   height="auto"
-                  alignItems="start"
+                  alignItems="stretch"
                   justifyContent="start"
                 >
-                  {selectedAgentObjects.map((agent) => (
-                    <ResourceContent
-                      key={agent.id}
-                      leftContent={
-                        <div className="flex items-center justify-center shrink-0 size-5 p-0.5 rounded-04">
-                          <AgentAvatar agent={agent} size={16} />
-                        </div>
-                      }
-                      title={agent.name}
-                      description="agent"
-                      onRemove={() => removeAgent(agent.id)}
-                    />
-                  ))}
+                  <Text mainUiAction text04>
+                    Agents
+                  </Text>
+                  <ResourcePopover
+                    placeholder="Add agents"
+                    searchValue={agentSearch}
+                    onSearchChange={setAgentSearch}
+                    sections={agentSections}
+                  />
                 </Section>
-              ) : (
-                <Content
-                  icon={SvgXOctagon}
-                  title="No agents added"
-                  description="Add agents to share with this group."
-                  sizePreset="secondary"
-                  variant="section"
-                />
-              )}
+                {selectedAgentObjects.length > 0 ? (
+                  <Section
+                    flexDirection="row"
+                    wrap
+                    gap={1}
+                    height="auto"
+                    alignItems="start"
+                    justifyContent="start"
+                  >
+                    {selectedAgentObjects.map((agent) => (
+                      <ResourceContent
+                        key={agent.id}
+                        leftContent={
+                          <div className="flex items-center justify-center shrink-0 size-5 p-0.5 rounded-04">
+                            <AgentAvatar agent={agent} size={16} />
+                          </div>
+                        }
+                        title={agent.name}
+                        description="agent"
+                        onRemove={() => removeAgent(agent.id)}
+                      />
+                    ))}
+                  </Section>
+                ) : (
+                  <Content
+                    icon={SvgXOctagon}
+                    title="No agents added"
+                    description="Add agents to share with this group."
+                    sizePreset="secondary"
+                    variant="section"
+                  />
+                )}
+              </Section>
             </Section>
           </Section>
         </Card>

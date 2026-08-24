@@ -13,10 +13,15 @@ import {
   waitForUnifiedGreeting,
 } from "@tests/e2e/utils/tools";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
+import {
+  grantAddAgents,
+  deleteGrantGroups,
+} from "@tests/e2e/utils/grantPermissions";
 
 // Tool-related test selectors now imported from shared utils
 
 test.describe("Default Agent Tests", () => {
+  const grantGroupIds: number[] = [];
   let imageGenConfigId: string | null = null;
 
   test.beforeAll(async ({ browser }) => {
@@ -42,6 +47,9 @@ test.describe("Default Agent Tests", () => {
   });
 
   test.afterAll(async ({ browser }) => {
+    await deleteGrantGroups(browser, grantGroupIds);
+    grantGroupIds.length = 0;
+
     // Cleanup the image generation config
     if (imageGenConfigId) {
       const adminContext = await browser.newContext({
@@ -58,10 +66,12 @@ test.describe("Default Agent Tests", () => {
     }
   });
 
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(async ({ page, browser }) => {
     // Clear cookies and log in as a random user
     await page.context().clearCookies();
-    await loginAsRandomUser(page);
+    const { email } = await loginAsRandomUser(page);
+    // several tests here create an agent through the UI, which EE gates
+    grantGroupIds.push(await grantAddAgents(browser, email));
 
     // Navigate to the chat page
     await page.goto("/app");

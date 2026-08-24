@@ -1,5 +1,5 @@
-import { ToolSnapshot } from "./interfaces";
-import { fetchSS } from "../utilsSS";
+import { ToolSnapshot } from "@/lib/tools/types";
+import { fetchSS } from "@/lib/utilsSS";
 
 export async function fetchToolsSS(): Promise<ToolSnapshot[] | null> {
   try {

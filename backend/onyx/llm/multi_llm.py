@@ -1,6 +1,6 @@
 import copy
+import math
 import os
-import re
 import time
 from collections.abc import Iterator
 from contextlib import AbstractContextManager, contextmanager, nullcontext
@@ -23,7 +23,7 @@ from onyx.llm.api_surfaces import (
     LlmApiSurface,
     resolve_api_surface,
 )
-from onyx.llm.constants import LlmProviderNames
+from onyx.llm.constants import MODEL_PREFIX_TO_VENDOR, LlmProviderNames
 from onyx.llm.cost import compute_cost_cents
 from onyx.llm.custom_config_mapping import (
     UI_ONLY_CONFIG_KEYS,
@@ -35,20 +35,32 @@ from onyx.llm.interfaces import (
     LLMConfig,
     LLMUserIdentity,
     ReasoningEffort,
-    ToolChoiceOptions,
+    ToolChoice,
 )
 from onyx.llm.model_capabilities import (
+    ReasoningParamStyle,
+    anthropic_omits_sampling_params,
+    anthropic_supports_thinking,
+    anthropic_uses_adaptive_thinking,
     is_true_openai_model,
     model_is_reasoning_model,
+    openai_chat_variant_rejects_reasoning,
     openai_model_rejects_reasoning_effort,
+    resolve_reasoning_param_style,
+)
+from onyx.llm.model_capabilities import (
+    model_identity_names as resolve_model_identity_names,
 )
 from onyx.llm.model_response import ModelResponse, ModelResponseStream, Usage
 from onyx.llm.models import (
     ANTHROPIC_ADAPTIVE_REASONING_EFFORT,
     ANTHROPIC_REASONING_EFFORT_BUDGET,
     OPENAI_REASONING_EFFORT,
+    NamedToolChoice,
+    ToolChoiceOptions,
+    resolve_reasoning_effort,
 )
-from onyx.llm.request_context import get_llm_mock_response
+from onyx.llm.request_context import get_llm_mock_response, set_llm_request_params
 from onyx.llm.utils import build_litellm_passthrough_kwargs
 from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
 from onyx.tracing.llm_utils import record_llm_request_params
@@ -75,23 +87,12 @@ STANDARD_MAX_TOKENS_KWARG = "max_completion_tokens"
 # LiteLLM's BaseAzureLLM._is_azure_v1_api_version.
 _AZURE_V1_API_VERSIONS = frozenset({"preview", "latest", "v1"})
 
-_VERTEX_ANTHROPIC_MODELS_REJECTING_OUTPUT_CONFIG = (
+_VERTEX_ANTHROPIC_MODELS_REJECTING_STREAM_OPTIONS = (
     "claude-opus-4-5",
     "claude-opus-4-6",
     "claude-opus-4-7",
     "claude-opus-4-8",
 )
-
-# Starting with Claude Opus 4.7, Anthropic requires the adaptive thinking API
-# (thinking.type.adaptive + output_config.effort) in place of the legacy
-# thinking.type.enabled + budget_tokens, and rejects any non-default sampling
-# parameter (temperature/top_p/top_k) with a 400 invalid_request_error. Every
-# later model — Opus 4.8, the Claude 5 line (fable/mythos/sonnet), and beyond —
-# inherits both behaviors, so we gate on the parsed model version rather than an
-# explicit list. This lets new releases be handled without a code change, and
-# avoids relying on LiteLLM's drop_params (unreliable here, since AnthropicConfig
-# still advertises temperature as supported).
-_ANTHROPIC_ADAPTIVE_THINKING_MIN_VERSION = (4, 7)
 
 # Best-effort tuning kwargs, never worth failing a chat over. _completion
 # retries provider rejections without them: reasoning keys first, then all.
@@ -112,6 +113,32 @@ _KWARG_ERROR_ALIASES: dict[str, tuple[str, ...]] = {
 }
 
 
+def _merge_under(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    """Fill *base* in beneath *override*, recursing so an override key that
+    holds a dict keeps the siblings *base* declared under it. Leaves in
+    *override* always win."""
+    merged = dict(base)
+    for key, value in override.items():
+        existing = merged.get(key)
+        if isinstance(existing, dict) and isinstance(value, dict):
+            merged[key] = _merge_under(existing, value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def _json_safe(value: Any) -> Any:
+    """Drop NaN and Infinity. Postgres rejects them in JSONB, and these params
+    ride to the message row, so one would fail the commit that saves the answer."""
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    if isinstance(value, dict):
+        return {k: _json_safe(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_json_safe(v) for v in value]
+    return value
+
+
 def _rejection_names_strippable_kwargs(error: Exception, strippable: set[str]) -> bool:
     """True when the 400's message names a kwarg a later attempt would drop.
     Unrelated 400s (context length, malformed input) must not be retried."""
@@ -121,13 +148,6 @@ def _rejection_names_strippable_kwargs(error: Exception, strippable: set[str]) -
         for key in strippable
         for alias in _KWARG_ERROR_ALIASES.get(key, (key,))
     )
-
-
-# Named tiers spanning Claude's naming schemes, including the Claude 5 line whose
-# version digit can precede or follow the tier ("claude-sonnet-5" vs
-# "claude-5-sonnet").
-_ANTHROPIC_MODEL_TIERS = ("opus", "sonnet", "haiku", "fable", "mythos")
-_ANTHROPIC_VERSION_PATTERN = r"\d+(?:[.-]\d+)?"
 
 
 class LLMTimeoutError(Exception):
@@ -140,6 +160,28 @@ class LLMRateLimitError(Exception):
     """
     Exception raised when an LLM call is rate limited.
     """
+
+
+def _consume_stream_with_timeout(stream: Any, total_timeout: float | None) -> list[Any]:
+    """Drain a litellm stream, capping total wall-clock time when set.
+
+    The socket read timeout only bounds the gap between packets, so keepalive
+    pings defeat it; this caps the whole call. On breach we raise — never close,
+    since litellm 1.93.0 exposes only async ``aclose`` — which frees the thread;
+    GC releases the connection.
+    """
+    if total_timeout is None:
+        return list(stream)
+
+    deadline = time.monotonic() + total_timeout
+    chunks: list[Any] = []
+    for chunk in stream:
+        chunks.append(chunk)
+        if time.monotonic() > deadline:
+            raise LLMTimeoutError(
+                f"LLM streaming call exceeded total timeout of {total_timeout}s"
+            )
+    return chunks
 
 
 def _prompt_to_dicts(prompt: LanguageModelInput) -> list[dict[str, Any]]:
@@ -169,6 +211,25 @@ def _normalize_content(raw: Any) -> str:
             for block in raw
         )
     return str(raw)
+
+
+# Providers not in this set forward the unknown `thinking_blocks` key verbatim,
+# so strip it for them.
+_THINKING_BLOCK_PROVIDERS = {
+    LlmProviderNames.ANTHROPIC,
+    LlmProviderNames.BEDROCK,
+    LlmProviderNames.BEDROCK_CONVERSE,
+    LlmProviderNames.VERTEX_AI,
+}
+
+
+def _strip_thinking_blocks_from_messages(
+    messages: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    return [
+        {key: value for key, value in msg.items() if key != "thinking_blocks"}
+        for msg in messages
+    ]
 
 
 def _strip_tool_content_from_messages(
@@ -257,6 +318,24 @@ def _fix_tool_user_message_ordering(
     return result
 
 
+_MISTRAL_FAMILY_MARKERS: frozenset[str] = frozenset(
+    prefix for prefix, vendor in MODEL_PREFIX_TO_VENDOR.items() if vendor == "mistral"
+)
+
+
+def _is_mistral_family_name(identity_names: list[str]) -> bool:
+    """Whether any model/deployment identity name looks like a Mistral-family
+    model (mistral, mixtral, codestral, ...). The provider name alone is not
+    enough: Mistral models are frequently served behind Azure or
+    OpenAI-compatible endpoints (e.g. vLLM), where only the configured names
+    carry the signal."""
+    return any(
+        marker in name.lower()
+        for name in identity_names
+        for marker in _MISTRAL_FAMILY_MARKERS
+    )
+
+
 def _messages_contain_tool_content(messages: list[dict[str, Any]]) -> bool:
     """Check if any messages contain tool-related content blocks."""
     for msg in messages:
@@ -300,61 +379,12 @@ def _log_azure_responses_api_version_override(
     )
 
 
-def _is_vertex_model_rejecting_output_config(model_name: str) -> bool:
+def _is_vertex_model_rejecting_stream_options(model_name: str) -> bool:
     normalized_model_name = model_name.lower()
     return any(
         blocked_model in normalized_model_name
-        for blocked_model in _VERTEX_ANTHROPIC_MODELS_REJECTING_OUTPUT_CONFIG
+        for blocked_model in _VERTEX_ANTHROPIC_MODELS_REJECTING_STREAM_OPTIONS
     )
-
-
-def _parse_anthropic_model_version(model_name: str) -> tuple[int, int] | None:
-    """Extract the (major, minor) version from a Claude model name.
-
-    Handles the naming variants that reach LiteLLM: tier-first
-    ("claude-opus-4-8"), version-first ("claude-4-8-opus"), dot-separated
-    ("claude-opus-4.8"), the named Claude 5 tiers ("claude-fable-5",
-    "claude-5-sonnet"), legacy names ("claude-3-5-sonnet-20241022"), and
-    provider-prefixed / date-snapshot forms. Returns None when the name is not a
-    Claude model or carries no parseable version.
-    """
-    name = model_name.lower()
-    if "claude" not in name:
-        return None
-    # Drop any provider prefix (e.g. "anthropic/", "bedrock/anthropic.").
-    name = name[name.index("claude") :]
-    # Drop date/snapshot suffixes ("@20260101", "-20241022") so their digits
-    # can't be mistaken for a version.
-    name = name.split("@")[0]
-    name = re.sub(r"\d{6,}", "", name)
-
-    tier = next((t for t in _ANTHROPIC_MODEL_TIERS if t in name), None)
-    if tier is not None:
-        # The version can sit on either side of the tier depending on scheme.
-        match = re.search(
-            rf"{tier}[.-]?({_ANTHROPIC_VERSION_PATTERN})", name
-        ) or re.search(rf"({_ANTHROPIC_VERSION_PATTERN})[.-]?{tier}", name)
-        version_str = match.group(1) if match else None
-    else:
-        match = re.search(_ANTHROPIC_VERSION_PATTERN, name)
-        version_str = match.group(0) if match else None
-
-    if not version_str:
-        return None
-    parts = re.split(r"[.-]", version_str)
-    major = int(parts[0])
-    minor = int(parts[1]) if len(parts) > 1 else 0
-    return (major, minor)
-
-
-def _anthropic_uses_adaptive_thinking(model_name: str) -> bool:
-    version = _parse_anthropic_model_version(model_name)
-    return version is not None and version >= _ANTHROPIC_ADAPTIVE_THINKING_MIN_VERSION
-
-
-def _anthropic_omits_sampling_params(model_name: str) -> bool:
-    version = _parse_anthropic_model_version(model_name)
-    return version is not None and version >= _ANTHROPIC_ADAPTIVE_THINKING_MIN_VERSION
 
 
 def _env_injection_enabled() -> bool:
@@ -396,15 +426,15 @@ class LitellmLLM(LLM):
         extra_headers: dict[str, str] | None = None,
         extra_body: dict | None = LITELLM_EXTRA_BODY,
         model_kwargs: dict[str, Any] | None = None,
+        reasoning_effort_default: ReasoningEffort | None = None,
+        reasoning_effort_max: ReasoningEffort | None = None,
     ):
         # Timeout in seconds for each socket read operation (i.e., max time between
         # receiving data chunks/tokens). This is NOT a total request timeout - a
         # request can run indefinitely as long as data keeps arriving within this
         # window. If the LLM pauses for longer than this timeout between chunks,
         # a ReadTimeout is raised.
-        self._timeout = timeout
-        if timeout is None:
-            self._timeout = LLM_SOCKET_READ_TIMEOUT
+        self._timeout = timeout if timeout is not None else LLM_SOCKET_READ_TIMEOUT
 
         self._temperature = GEN_AI_TEMPERATURE if temperature is None else temperature
 
@@ -417,6 +447,8 @@ class LitellmLLM(LLM):
         self._custom_llm_provider = custom_llm_provider
         self._max_input_tokens = max_input_tokens
         self._custom_config = custom_config
+        self._reasoning_effort_default = reasoning_effort_default
+        self._reasoning_effort_max = reasoning_effort_max
 
         self._api_surface = resolve_api_surface(model_provider, custom_config)
 
@@ -482,10 +514,17 @@ class LitellmLLM(LLM):
         # This is needed for Ollama to do proper function calling
         if model_provider == LlmProviderNames.OLLAMA_CHAT and api_base is not None:
             model_kwargs["api_base"] = api_base
+        # Deployment config merges under anything already in model_kwargs, so a
+        # policy-supplied value wins. Incognito retention flags live here, and
+        # replacing the dict would silently re-enable provider logging.
         if extra_headers:
-            model_kwargs.update({"extra_headers": extra_headers})
+            model_kwargs["extra_headers"] = _merge_under(
+                extra_headers, model_kwargs.get("extra_headers") or {}
+            )
         if extra_body:
-            model_kwargs.update({"extra_body": extra_body})
+            model_kwargs["extra_body"] = _merge_under(
+                extra_body, model_kwargs.get("extra_body") or {}
+            )
 
         self._model_kwargs = model_kwargs
 
@@ -524,19 +563,17 @@ class LitellmLLM(LLM):
         from onyx.db.engine.sql_engine import get_session_with_current_tenant
         from onyx.db.usage import UsageType, increment_usage
 
-        cache_read = usage.cache_read_input_tokens
-        # prompt_tokens is cache-inclusive; price non-cached + cache separately.
-        non_cached_input = max(usage.prompt_tokens - cache_read, 0)
         provider = self._custom_llm_provider or self._model_provider
 
         try:
             with get_session_with_current_tenant() as db_session:
                 input_cents, output_cents = compute_cost_cents(
-                    self._model_version,
-                    provider,
-                    non_cached_input,
-                    usage.completion_tokens,
-                    cache_read_tokens=cache_read,
+                    model=self._model_version,
+                    provider=provider,
+                    prompt_tokens=usage.prompt_tokens,
+                    completion_tokens=usage.completion_tokens,
+                    cache_read_tokens=usage.cache_read_input_tokens,
+                    cache_creation_tokens=usage.cache_creation_input_tokens,
                     db_session=db_session,
                 )
                 cost_cents = input_cents + output_cents
@@ -552,7 +589,7 @@ class LitellmLLM(LLM):
         self,
         prompt: LanguageModelInput,
         tools: list[dict] | None,
-        tool_choice: ToolChoiceOptions | None,
+        tool_choice: ToolChoice | None,
         stream: bool,
         parallel_tool_calls: bool,
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
@@ -570,40 +607,40 @@ class LitellmLLM(LLM):
         #########################
         # Flags that modify the final arguments
         #########################
-        # Custom providers (e.g. Azure AI Foundry) may carry the model identity
-        # only in the deployment alias, which is also the string actually sent
-        # to LiteLLM — so model detection must consider both names.
-        model_identity_names = [
-            name
-            for name in (self.config.model_name, self.config.deployment_name)
-            if name
-        ]
-        is_claude_model = any("claude" in name.lower() for name in model_identity_names)
-        is_qwen_model = "qwen" in self.config.model_name.lower()
-        # Claude >= 4.7 always reasons via the adaptive thinking API, so treat
-        # it as a reasoning model even when the litellm registry doesn't know
-        # the (possibly aliased) name — otherwise reasoning_effort is silently
-        # dropped for such models.
-        uses_adaptive_thinking = any(
-            _anthropic_uses_adaptive_thinking(name) for name in model_identity_names
+        model_identity_names = resolve_model_identity_names(
+            self.config.model_name, self.config.deployment_name
         )
-        is_reasoning = uses_adaptive_thinking or any(
-            model_is_reasoning_model(name, self.config.model_provider)
-            for name in model_identity_names
+        is_claude_model = any("claude" in name.lower() for name in model_identity_names)
+        is_qwen_model = any("qwen" in name.lower() for name in model_identity_names)
+        uses_adaptive_thinking = any(
+            anthropic_uses_adaptive_thinking(name) for name in model_identity_names
+        )
+        model_supports_anthropic_thinking = any(
+            anthropic_supports_thinking(name) for name in model_identity_names
+        )
+        is_reasoning = (
+            uses_adaptive_thinking
+            or model_supports_anthropic_thinking
+            or any(
+                model_is_reasoning_model(name, self.config.model_provider)
+                for name in model_identity_names
+            )
         )
         # All OpenAI models will use responses API for consistency
         # Responses API is needed to get reasoning packets from OpenAI models
-        is_openai_model = is_true_openai_model(
-            self.config.model_provider, self.config.model_name
+        is_openai_model = any(
+            is_true_openai_model(self.config.model_provider, name)
+            for name in model_identity_names
         )
         is_ollama = self._model_provider == LlmProviderNames.OLLAMA_CHAT
         is_mistral = self._model_provider == LlmProviderNames.MISTRAL
         is_vertex_ai = self._model_provider == LlmProviderNames.VERTEX_AI
-        # Some Vertex Anthropic models reject output_config.
-        # Keep this guard until LiteLLM/Vertex accept the field for these models.
-        is_vertex_model_rejecting_output_config = (
-            is_vertex_ai
-            and _is_vertex_model_rejecting_output_config(self.config.model_name)
+        # Some Vertex Anthropic models reject stream_options. Reasoning params
+        # are sent regardless: a provider that rejects one answers with a 400
+        # naming the kwarg, which the retry ladder below strips.
+        is_vertex_model_rejecting_stream_options = is_vertex_ai and any(
+            _is_vertex_model_rejecting_stream_options(name)
+            for name in model_identity_names
         )
 
         #########################
@@ -655,6 +692,10 @@ class LitellmLLM(LLM):
         # enforces the forced tool. Matched by model name rather than
         # `is_reasoning` because the litellm/local registry lags behind new
         # Qwen releases (e.g. qwen3.7-plus).
+        # A NamedToolChoice is deliberately NOT downgraded: legacy Claude
+        # thinking is skipped below instead, and Qwen thinking models may still
+        # reject the forced tool upstream (a loud 400 beats silently ignoring
+        # the caller's forced tool).
         if (is_claude_model or is_qwen_model) and (
             tool_choice == ToolChoiceOptions.REQUIRED
         ):
@@ -665,22 +706,30 @@ class LitellmLLM(LLM):
             tool_choice = None
 
         # Temperature
-        # Some models reject any non-default sampling parameter (e.g. Claude
-        # Opus 4.7/4.8 return a 400 invalid_request_error if temperature is set
-        # to anything). For those models we must omit the param entirely —
+        # Some models (e.g. Claude Opus 4.7/4.8) reject a non-default
+        # temperature with a 400 invalid_request_error. For those models we
+        # must omit the param entirely.
         # LiteLLM's drop_params is not reliable here because the upstream
         # provider config can still claim the param is supported.
         # https://github.com/BerriAI/litellm/issues/26444
-        # TODO(litellm): Consider removing this once the above is resolved,
+        # TODO(acaprau): Consider removing this once the above is resolved,
         # although this assumes users have upgraded their litellm if relevant.
         omits_sampling_params = any(
-            _anthropic_omits_sampling_params(name) for name in model_identity_names
+            anthropic_omits_sampling_params(name) for name in model_identity_names
         )
         if not omits_sampling_params:
             optional_kwargs["temperature"] = 1 if is_reasoning else self._temperature
 
-        if stream and not is_vertex_model_rejecting_output_config:
+        if stream and not is_vertex_model_rejecting_stream_options:
             optional_kwargs["stream_options"] = {"include_usage": True}
+
+        # Settle before anything reads it, so every branch below and tracing
+        # see the same effort the provider will.
+        reasoning_effort = resolve_reasoning_effort(
+            reasoning_effort,
+            self.config.reasoning_effort_default,
+            self.config.reasoning_effort_max,
+        )
 
         # Note, there is a reasoning_effort parameter in LiteLLM but it is completely jank and does not work for any
         # of the major providers. Not setting it sets it to OFF.
@@ -688,20 +737,42 @@ class LitellmLLM(LLM):
             is_reasoning
             # The default of this parameter not set is surprisingly not the equivalent of an Auto but is actually Off
             and reasoning_effort != ReasoningEffort.OFF
-            and not is_vertex_model_rejecting_output_config
-            and not openai_model_rejects_reasoning_effort(self.config.model_name)
+            and not any(
+                openai_model_rejects_reasoning_effort(name)
+                for name in model_identity_names
+            )
         ):
-            if is_openai_model:
-                # OpenAI API does not accept reasoning params for GPT 5 chat models
-                # (neither reasoning nor reasoning_effort are accepted)
-                # even though they are reasoning models (bug in OpenAI)
-                if "-chat" not in model:
-                    optional_kwargs["reasoning"] = {
-                        "effort": OPENAI_REASONING_EFFORT[reasoning_effort],
-                        "summary": "auto",
-                    }
+            openai_style_reasoning = {
+                "effort": OPENAI_REASONING_EFFORT[reasoning_effort],
+                "summary": "auto",
+            }
+            reasoning_style = resolve_reasoning_param_style(
+                self.config.model_provider,
+                model_identity_names,
+                self._api_surface,
+            )
 
-            elif is_claude_model:
+            if reasoning_style is ReasoningParamStyle.OPENAI:
+                if is_claude_model:
+                    # Only a gateway routes Claude here, and it still translates
+                    # to Anthropic, so the signed-thinking-block constraint
+                    # described below applies to these requests too.
+                    send_reasoning = not _prompt_contains_tool_call_history(prompt)
+                else:
+                    # OpenAI API does not accept reasoning params for GPT 5 chat
+                    # models (neither reasoning nor reasoning_effort are accepted)
+                    # even though they are reasoning models (bug in OpenAI)
+                    send_reasoning = not any(
+                        openai_chat_variant_rejects_reasoning(name)
+                        for name in model_identity_names
+                    )
+                if send_reasoning:
+                    optional_kwargs["reasoning"] = openai_style_reasoning
+
+            elif reasoning_style in (
+                ReasoningParamStyle.ANTHROPIC_ADAPTIVE,
+                ReasoningParamStyle.ANTHROPIC_BUDGET,
+            ):
                 # Anthropic requires every assistant message with tool_use
                 # blocks to start with a thinking block that carries a
                 # cryptographic signature.  We don't preserve those blocks
@@ -711,7 +782,7 @@ class LitellmLLM(LLM):
                 # (notably Bedrock).
                 has_tool_call_history = _prompt_contains_tool_call_history(prompt)
 
-                if uses_adaptive_thinking:
+                if reasoning_style is ReasoningParamStyle.ANTHROPIC_ADAPTIVE:
                     # Newer Anthropic models (Claude Opus 4.7+) reject
                     # thinking.type.enabled — they require the adaptive
                     # thinking config with output_config.effort.
@@ -726,7 +797,14 @@ class LitellmLLM(LLM):
                     budget_tokens: int | None = ANTHROPIC_REASONING_EFFORT_BUDGET.get(
                         reasoning_effort
                     )
-                    if budget_tokens is not None and not has_tool_call_history:
+                    # thinking.type=enabled is rejected alongside a forced
+                    # tool_choice (only adaptive thinking supports forced tool
+                    # use), so skip thinking for a NamedToolChoice.
+                    if (
+                        budget_tokens is not None
+                        and not has_tool_call_history
+                        and not isinstance(tool_choice, NamedToolChoice)
+                    ):
                         if max_tokens is not None:
                             # Anthropic has a weird rule where max token has to be at least as much as budget tokens if set
                             # and the minimum budget tokens is 1024
@@ -739,9 +817,6 @@ class LitellmLLM(LLM):
                             "budget_tokens": budget_tokens,
                         }
 
-                # LiteLLM just does some mapping like this anyway but is incomplete for Anthropic
-                optional_kwargs.pop("reasoning_effort", None)
-
             else:
                 # Hope for the best from LiteLLM
                 if reasoning_effort in [
@@ -752,7 +827,9 @@ class LitellmLLM(LLM):
                     optional_kwargs["reasoning_effort"] = reasoning_effort.value
                 elif reasoning_effort is ReasoningEffort.XHIGH:
                     # Provider mappings behind litellm's reasoning_effort are
-                    # uneven (Gemini raises on xhigh), clamp to high.
+                    # uneven (Gemini raises on xhigh), clamp to high. The model
+                    # picker greys the level out for these models, so reaching
+                    # here means a stored override outliving a model switch.
                     optional_kwargs["reasoning_effort"] = ReasoningEffort.HIGH.value
                 else:
                     optional_kwargs["reasoning_effort"] = ReasoningEffort.MEDIUM.value
@@ -835,6 +912,15 @@ class LitellmLLM(LLM):
 
             messages = _prompt_to_dicts(prompt)
 
+            if not (
+                is_claude_model
+                and (
+                    self._model_provider in _THINKING_BLOCK_PROVIDERS
+                    or self._api_surface is LlmApiSurface.ANTHROPIC_MESSAGES
+                )
+            ):
+                messages = _strip_thinking_blocks_from_messages(messages)
+
             # Bedrock's Converse API requires toolConfig when messages
             # contain toolUse/toolResult content blocks. When no tools are
             # provided for this request but the history contains tool
@@ -849,19 +935,28 @@ class LitellmLLM(LLM):
             # Some models (e.g. Mistral) reject a user message
             # immediately after a tool message. Insert a synthetic
             # assistant bridge message to satisfy the ordering
-            # constraint. Check both the provider and the deployment/
-            # model name to catch Mistral hosted on Azure.
-            model_or_deployment = (
-                self._deployment_name or self._model_version or ""
-            ).lower()
-            is_mistral_model = is_mistral or "mistral" in model_or_deployment
+            # constraint. Check the provider, the LiteLLM routing
+            # override, and every identity name (deployment alias and
+            # model name) to catch Mistral served behind Azure or
+            # OpenAI-compatible endpoints (e.g. vLLM).
+            is_mistral_model = (
+                is_mistral
+                or self._custom_llm_provider == LlmProviderNames.MISTRAL
+                or _is_mistral_family_name(model_identity_names)
+            )
             if is_mistral_model:
                 messages = _fix_tool_user_message_ordering(messages)
 
             # Only pass tool_choice when tools are present — some providers (e.g. Fireworks)
             # reject requests where tool_choice is explicitly null.
             if tools and tool_choice is not None:
-                optional_kwargs["tool_choice"] = tool_choice
+                if isinstance(tool_choice, NamedToolChoice):
+                    optional_kwargs["tool_choice"] = {
+                        "type": "function",
+                        "function": {"name": tool_choice.name},
+                    }
+                else:
+                    optional_kwargs["tool_choice"] = tool_choice
 
             if not _env_injection_enabled() and self._env_only_custom_config:
                 _warn_dropped_env_only_keys(
@@ -910,18 +1005,20 @@ class LitellmLLM(LLM):
 
             for i, opts in enumerate(attempts):
                 # Last write wins: sent_kwargs holds what the returning (or
-                # final failing) attempt sent, reasoning_effort the requested
-                # intent.
-                record_llm_request_params(
-                    {
-                        "reasoning_effort": reasoning_effort.value,
-                        "max_tokens": max_tokens,
-                        "sent_kwargs": {
-                            k: opts[k]
-                            for k in sorted(_BEST_EFFORT_KWARG_KEYS & opts.keys())
-                        },
-                    }
-                )
+                # final failing) attempt sent, reasoning_effort the effective
+                # intent. One dict, two sinks, so they cannot drift.
+                request_params = {
+                    "model_name": self.config.model_name,
+                    "model_provider": self.config.model_provider,
+                    "reasoning_effort": reasoning_effort.value,
+                    "max_tokens": max_tokens,
+                    "sent_kwargs": {
+                        k: _json_safe(opts[k])
+                        for k in sorted(_BEST_EFFORT_KWARG_KEYS & opts.keys())
+                    },
+                }
+                record_llm_request_params(request_params)
+                set_llm_request_params(request_params)
                 try:
                     return _call_litellm(opts)
                 except BadRequestError as e:
@@ -961,13 +1058,20 @@ class LitellmLLM(LLM):
             deployment_name=self._deployment_name,
             custom_config=self._custom_config,
             max_input_tokens=self._max_input_tokens,
+            reasoning_effort_default=self._reasoning_effort_default,
+            reasoning_effort_max=self._reasoning_effort_max,
         )
 
     def _uses_isolated_client(self) -> bool:
         """Providers whose sync calls need a fresh per-call HTTPHandler instead of
         litellm's shared module_level_client (see threading notes in invoke())."""
         return (
-            is_true_openai_model(self.config.model_provider, self.config.model_name)
+            any(
+                is_true_openai_model(self.config.model_provider, name)
+                for name in resolve_model_identity_names(
+                    self.config.model_name, self.config.deployment_name
+                )
+            )
             or self.config.model_provider == LlmProviderNames.ANTHROPIC
         )
 
@@ -975,12 +1079,13 @@ class LitellmLLM(LLM):
         self,
         prompt: LanguageModelInput,
         tools: list[dict] | None = None,
-        tool_choice: ToolChoiceOptions | None = None,
+        tool_choice: ToolChoice | None = None,
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         user_identity: LLMUserIdentity | None = None,
+        total_timeout_override: float | None = None,
     ) -> ModelResponse:
         from litellm import HTTPHandler
         from litellm import ModelResponse as LiteLLMModelResponse
@@ -1022,9 +1127,17 @@ class LitellmLLM(LLM):
         # This note may not be entirely accurate as there is a lot of complexity in the LiteLLM codebase around this
         # and not every model path was traced thoroughly. It is also possible that in future versions of LiteLLM
         # they will realize that their OpenAI handling is not threadsafe. Hope they will just fix it.
+        # Cap the per-read timeout at the total budget. The deadline is only
+        # checked between chunks, so without this a single blocking read could
+        # overshoot a total shorter than the socket read timeout. No-op when the
+        # total exceeds it (our defaults do).
+        read_timeout = timeout_override or self._timeout
+        if total_timeout_override is not None:
+            read_timeout = min(read_timeout, max(1, int(total_timeout_override)))
+
         client = None
         if self._uses_isolated_client():
-            client = HTTPHandler(timeout=timeout_override or self._timeout)
+            client = HTTPHandler(timeout=read_timeout)
 
         try:
             # When env-only custom_config keys are injected (self-hosted
@@ -1044,7 +1157,7 @@ class LitellmLLM(LLM):
                     tool_choice=tool_choice,
                     stream=True,
                     structured_response_format=structured_response_format,
-                    timeout_override=timeout_override,
+                    timeout_override=read_timeout,
                     max_tokens=max_tokens,
                     parallel_tool_calls=True,
                     reasoning_effort=reasoning_effort,
@@ -1052,7 +1165,9 @@ class LitellmLLM(LLM):
                     client=client,
                 ),
             )
-            chunks = list(stream_response)
+            chunks = _consume_stream_with_timeout(
+                stream_response, total_timeout_override
+            )
             response = cast(
                 LiteLLMModelResponse,
                 stream_chunk_builder(chunks),
@@ -1073,7 +1188,7 @@ class LitellmLLM(LLM):
         self,
         prompt: LanguageModelInput,
         tools: list[dict] | None = None,
-        tool_choice: ToolChoiceOptions | None = None,
+        tool_choice: ToolChoice | None = None,
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,

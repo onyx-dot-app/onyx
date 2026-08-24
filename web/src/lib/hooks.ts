@@ -13,8 +13,15 @@ import {
 } from "@/lib/types";
 import useSWR, { mutate, useSWRConfig } from "swr";
 import { errorHandlingFetcher } from "./fetcher";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { DateRangePickerValue } from "@/refresh-components/DateRangePicker";
 import { SourceMetadata } from "./search/interfaces";
 import {
   getProviderOverrideForAgent,
@@ -106,7 +113,9 @@ export const useConnectorIndexingStatusWithPagination = (
 
   //ref to maintain the current source pages for the main request
   const sourcePagesRef = useRef(sourcePages);
-  sourcePagesRef.current = sourcePages;
+  useLayoutEffect(() => {
+    sourcePagesRef.current = sourcePages;
+  }, [sourcePages]);
 
   // Main request that includes current pagination state
   const mainRequest: IndexingStatusRequest = useMemo(
@@ -399,6 +408,8 @@ export interface LlmDescriptor {
   name: string;
   provider: string;
   modelName: string;
+  // Provider display names are not unique; only the id routes unambiguously.
+  modelConfigurationId?: number | null;
 }
 
 export interface LlmManager {
@@ -420,7 +431,7 @@ export interface LlmManager {
   updateModelOverrideBasedOnChatSession: (chatSession?: ChatSession) => void;
   imageFilesPresent: boolean;
   updateImageFilesPresent: (present: boolean) => void;
-  liveAgent: MinimalAgent | null;
+  activeAgent: MinimalAgent | null;
   maxTemperature: number;
   llmProviders: LLMProviderDescriptor[] | undefined;
   isLoadingProviders: boolean;
@@ -448,7 +459,7 @@ Thus, the input should be
 - Current assistant
 
 Changes take place as
-- liveAgent or currentChatSession changes (and the associated model override is set)
+- activeAgent or currentChatSession changes (and the associated model override is set)
 - (updateCurrentLlm) User explicitly setting a model override (and we explicitly override and set the userSpecifiedOverride which we'll use in place of the user preferences unless overridden by an agent)
 
 If we have a live assistant, we should use that model override
@@ -479,6 +490,9 @@ export function getDefaultLlmDescriptor(
         name: provider.name ?? "",
         provider: provider.provider,
         modelName: defaultText.model_name,
+        modelConfigurationId: provider.model_configurations.find(
+          (m) => m.name === defaultText.model_name
+        )?.id,
       };
     }
   }
@@ -493,6 +507,7 @@ export function getDefaultLlmDescriptor(
     return {
       name: firstLlmProvider.name ?? "",
       provider: firstLlmProvider.provider,
+      modelConfigurationId: firstModel?.id,
       modelName: firstModel?.name ?? "",
     };
   }
@@ -512,6 +527,24 @@ export function getValidLlmDescriptorForProviders(
 
   if (modelName) {
     const model = parseLlmDescriptor(modelName);
+
+    // An id resolves exactly even when providers share a display name.
+    if (model.modelConfigurationId != null) {
+      for (const provider of llmProviders) {
+        const mc = provider.model_configurations.find(
+          (config) => config.id === model.modelConfigurationId
+        );
+        if (mc) {
+          return {
+            name: provider.name ?? "",
+            provider: provider.provider,
+            modelName: mc.name,
+            modelConfigurationId: mc.id,
+          };
+        }
+      }
+    }
+
     // If we have no parsed modelName, try to find the provider by the raw modelName string
     if (!(model.modelName && model.modelName.length > 0)) {
       const provider = llmProviders.find((p) =>
@@ -524,6 +557,9 @@ export function getValidLlmDescriptorForProviders(
           modelName: modelName,
           name: provider.name ?? "",
           provider: provider.provider,
+          modelConfigurationId: provider.model_configurations.find(
+            (mc) => mc.name === modelName
+          )?.id,
         };
       }
     }
@@ -547,6 +583,9 @@ export function getValidLlmDescriptorForProviders(
           ...model,
           name: matchingProvider.name ?? "",
           provider: matchingProvider.provider,
+          modelConfigurationId: matchingProvider.model_configurations.find(
+            (mc) => mc.name === model.modelName
+          )?.id,
         };
       }
       // Provider info was present but not found - fall through to default
@@ -563,6 +602,9 @@ export function getValidLlmDescriptorForProviders(
           ...model,
           provider: provider.provider,
           name: provider.name ?? "",
+          modelConfigurationId: provider.model_configurations.find(
+            (mc) => mc.name === model.modelName
+          )?.id,
         };
       }
     }
@@ -583,7 +625,7 @@ export function getValidLlmDescriptorForProviders(
 
 export function useLlmManager(
   currentChatSession?: ChatSession,
-  liveAgent?: MinimalAgent
+  activeAgent?: MinimalAgent
 ): LlmManager {
   const { user } = useUser();
 
@@ -596,7 +638,7 @@ export function useLlmManager(
   } = useLLMProviders();
   // Fetch persona-specific providers to enforce RBAC restrictions per assistant
   // Only fetch if we have an agent selected
-  const personaId = liveAgent?.id !== undefined ? liveAgent.id : undefined;
+  const personaId = activeAgent?.id !== undefined ? activeAgent.id : undefined;
   const {
     llmProviders: personaProviders,
     defaultText: personaDefaultText,
@@ -624,15 +666,15 @@ export function useLlmManager(
   // Reset manual override when switching to a different assistant
   useEffect(() => {
     if (
-      liveAgent?.id !== undefined &&
+      activeAgent?.id !== undefined &&
       prevAgentIdRef.current !== undefined &&
-      liveAgent.id !== prevAgentIdRef.current
+      activeAgent.id !== prevAgentIdRef.current
     ) {
       // User switched to a different assistant - reset manual override
       setUserHasManuallyOverriddenLLM(false);
     }
-    prevAgentIdRef.current = liveAgent?.id;
-  }, [liveAgent?.id]);
+    prevAgentIdRef.current = activeAgent?.id;
+  }, [activeAgent?.id]);
 
   // Clear manual override when arriving at a *different* existing session
   // from any previously-seen defined session. Tracks only the last
@@ -664,72 +706,74 @@ export function useLlmManager(
   }
 
   // Compute the resolved LLM synchronously so it's never one render behind.
-  // This replaces the old llmUpdate() effect for model resolution.
-  // Wrapped with a ref for referential stability — returns the same object
-  // when the resolved name/provider/modelName haven't actually changed,
-  // preventing unnecessary re-creation of downstream callbacks (e.g. onSubmit).
-  const prevLlmRef = useRef<LlmDescriptor>({
-    name: "",
-    provider: "",
-    modelName: "",
-  });
-  const currentLlm = useMemo((): LlmDescriptor => {
-    let resolved: LlmDescriptor;
-
+  // A second memo preserves object identity when the resolved fields stay the
+  // same, preventing unnecessary re-creation of downstream callbacks.
+  const resolvedCurrentLlm = useMemo((): LlmDescriptor => {
     if (llmProviders === undefined || llmProviders === null) {
-      resolved = manualLlm;
-    } else if (userHasManuallyOverriddenLLM) {
+      return manualLlm;
+    }
+
+    if (userHasManuallyOverriddenLLM) {
       // Manual override wins over session's `current_alternate_model`.
       // Cleared on cross-session navigation by the effect above.
-      resolved = manualLlm;
-    } else if (currentChatSession?.current_alternate_model) {
-      resolved = getValidLlmDescriptorForProviders(
+      return manualLlm;
+    }
+
+    if (currentChatSession?.current_alternate_model) {
+      return getValidLlmDescriptorForProviders(
         currentChatSession.current_alternate_model,
         llmProviders,
         defaultText
       );
-    } else if (liveAgent && liveAgent.id !== DEFAULT_AGENT_ID) {
+    }
+
+    if (activeAgent && activeAgent.id !== DEFAULT_AGENT_ID) {
       // Custom agent — its configured default takes precedence. When the agent
       // has no explicit default, fall to the global system default. The user's
       // personal preference is irrelevant in an agent-scoped chat.
       const agentOverride = getProviderOverrideForAgent(
-        liveAgent,
+        activeAgent,
         llmProviders
       );
-      resolved =
+      return (
         agentOverride ??
         getDefaultLlmDescriptor(llmProviders, defaultText) ??
-        manualLlm;
-    } else if (user?.preferences?.default_model) {
-      resolved = getValidLlmDescriptorForProviders(
+        manualLlm
+      );
+    }
+
+    if (user?.preferences?.default_model) {
+      return getValidLlmDescriptorForProviders(
         user.preferences.default_model,
         llmProviders,
         defaultText
       );
-    } else {
-      resolved =
-        getDefaultLlmDescriptor(llmProviders, defaultText) ?? manualLlm;
     }
 
-    const prev = prevLlmRef.current;
-    if (
-      prev.name === resolved.name &&
-      prev.provider === resolved.provider &&
-      prev.modelName === resolved.modelName
-    ) {
-      return prev;
-    }
-    prevLlmRef.current = resolved;
-    return resolved;
+    return getDefaultLlmDescriptor(llmProviders, defaultText) ?? manualLlm;
   }, [
     llmProviders,
     defaultText,
-    currentChatSession,
+    currentChatSession?.current_alternate_model,
     userHasManuallyOverriddenLLM,
-    manualLlm,
-    liveAgent?.default_model_configuration_id,
+    manualLlm.name,
+    manualLlm.provider,
+    manualLlm.modelName,
+    manualLlm.modelConfigurationId,
+    activeAgent?.id,
+    activeAgent?.default_model_configuration_id,
     user?.preferences?.default_model,
   ]);
+  const currentLlm = useMemo(
+    () => resolvedCurrentLlm,
+    [
+      resolvedCurrentLlm.name,
+      resolvedCurrentLlm.provider,
+      resolvedCurrentLlm.modelName,
+      // Normalized so undefined vs null cannot produce a fresh identity.
+      resolvedCurrentLlm.modelConfigurationId ?? null,
+    ]
+  );
 
   // Keep chatSession state in sync (used by temperature effect)
   useEffect(() => {
@@ -773,7 +817,7 @@ export function useLlmManager(
         isAnthropicModel ? 1.0 : 2.0
       );
     } else if (
-      liveAgent?.tools.some((tool) => tool.in_code_tool_id === SEARCH_TOOL_ID)
+      activeAgent?.tools.some((tool) => tool.in_code_tool_id === SEARCH_TOOL_ID)
     ) {
       return 0;
     }
@@ -870,14 +914,14 @@ export function useLlmManager(
     if (currentChatSession?.current_temperature_override) {
       setTemperature(currentChatSession.current_temperature_override);
     } else if (
-      liveAgent?.tools.some((tool) => tool.in_code_tool_id === SEARCH_TOOL_ID)
+      activeAgent?.tools.some((tool) => tool.in_code_tool_id === SEARCH_TOOL_ID)
     ) {
       setTemperature(0);
     } else {
       setTemperature(0.5);
     }
   }, [
-    liveAgent,
+    activeAgent,
     currentChatSession,
     llmProviders,
     user?.preferences?.default_model,
@@ -959,7 +1003,7 @@ export function useLlmManager(
     persistOverrides,
     imageFilesPresent,
     updateImageFilesPresent,
-    liveAgent: liveAgent ?? null,
+    activeAgent: activeAgent ?? null,
     maxTemperature,
     llmProviders,
     isLoadingProviders:

@@ -106,6 +106,13 @@ SANDBOX_PROXY_LISTEN_PORT = int(os.environ.get("SANDBOX_PROXY_LISTEN_PORT", "808
 # read container env), so a compose change here desyncs the probe.
 SANDBOX_PROXY_HEALTHZ_PORT = int(os.environ.get("SANDBOX_PROXY_HEALTHZ_PORT", "8081"))
 
+# Optional additive CA bundle used by mitmproxy when it verifies HTTPS origins.
+# The Helm chart writes it into the proxy's writable confdir because the proxy
+# container intentionally runs non-root with a read-only root filesystem.
+SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA = (
+    os.environ.get("SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA", "").strip() or None
+)
+
 # The CA Secret lives here; the CA ConfigMap is projected into SANDBOX_NAMESPACE
 # so sandboxes can mount it (K8s does not allow cross-namespace ConfigMap
 # mounts).
@@ -182,6 +189,10 @@ OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS = float(
     )
 )
 
+# Per-turn deadline stamp for the turn-budget plugin; name is an internal
+# contract with turn-budget.ts.
+TURN_BUDGET_FILE_NAME = ".onyx-turn-budget.json"
+
 # Prompt-slot lock lease; renewed on every sandbox event/keepalive, so a dead
 # holder strands the slot for at most this long.
 PROMPT_SLOT_LEASE_SECONDS = float(os.environ.get("PROMPT_SLOT_LEASE_SECONDS", "120.0"))
@@ -213,15 +224,6 @@ OPENCODE_SERVE_REQUEST_TIMEOUT = float(
 OPENCODE_SERVE_EVENT_READ_TIMEOUT = float(
     os.environ.get("OPENCODE_SERVE_EVENT_READ_TIMEOUT", "60.0")
 )
-
-# ==============================================================================
-# Rate limiting
-# ==============================================================================
-
-# Messages per week. Free users always get 5 messages total (not configurable).
-# Per-user overrides are managed via the PostHog feature flag
-# "craft-has-usage-limits".
-CRAFT_PAID_USER_RATE_LIMIT = int(os.environ.get("CRAFT_PAID_USER_RATE_LIMIT", "25"))
 
 # ==============================================================================
 # User Library (user-uploaded raw files: xlsx, pptx, docx, etc.)

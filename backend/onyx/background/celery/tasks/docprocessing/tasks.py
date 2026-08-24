@@ -68,6 +68,10 @@ from onyx.configs.constants import (
 )
 from onyx.connectors.models import ConnectorFailure, Document, IndexAttemptMetadata
 from onyx.db.connector import mark_ccpair_with_indexing_trigger
+from onyx.db.connector_alerts import (
+    clear_connector_alerts__no_commit,
+    notify_admins_of_connector_alert,
+)
 from onyx.db.connector_credential_pair import (
     fetch_indexable_standard_connector_credential_pair_ids,
     get_connector_credential_pair_from_id,
@@ -100,16 +104,11 @@ from onyx.db.index_attempt_metrics import (
 )
 from onyx.db.indexing_coordination import CoordinationStatus, IndexingCoordination
 from onyx.db.models import IndexAttempt, SearchSettings
-from onyx.db.notification import (
-    batch_create_notifications,
-    delete_notifications_by_additional_data,
-)
 from onyx.db.search_settings import (
     get_current_search_settings,
     get_secondary_search_settings,
 )
 from onyx.db.swap_index import check_and_perform_index_swap
-from onyx.db.users import get_active_admin_users
 from onyx.document_index.factory import get_all_document_indices
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.document_batch_storage import (
@@ -649,12 +648,12 @@ def check_indexing_completion(
             if cc_pair.in_repeated_error_state:
                 cc_pair.in_repeated_error_state = False
 
-                # Clear every admin's error notification for this connector so a
-                # fresh one is created if it fails again later.
-                delete_notifications_by_additional_data(
-                    notif_type=NotificationType.CONNECTOR_REPEATED_ERRORS,
+                # Clear every admin's alert so the next incident creates a
+                # fresh one.
+                clear_connector_alerts__no_commit(
                     db_session=db_session,
-                    additional_data={"cc_pair_id": cc_pair.id},
+                    cc_pair_id=cc_pair.id,
+                    notif_type=NotificationType.CONNECTOR_REPEATED_ERRORS,
                 )
 
                 db_session.commit()
@@ -1022,21 +1021,16 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                         or f"CC pair {cc_pair.id}"
                     )
                     source = cc_pair.connector.source.value
-                    connector_url = f"/admin/connector/{cc_pair.id}"
-                    admin_ids = [
-                        admin.id for admin in get_active_admin_users(db_session)
-                    ]
-                    batch_create_notifications(
-                        user_ids=admin_ids,
-                        notif_type=NotificationType.CONNECTOR_REPEATED_ERRORS,
+                    notify_admins_of_connector_alert(
                         db_session=db_session,
+                        cc_pair_id=cc_pair.id,
+                        notif_type=NotificationType.CONNECTOR_REPEATED_ERRORS,
                         title=f"Connector '{connector_name}' has entered repeated error state",
                         description=(
-                            f"The {source} connector has failed repeatedly and "
-                            f"has been flagged. View indexing history in the "
-                            f"Advanced section: {connector_url}"
+                            f"The {source} connector has failed repeatedly "
+                            f"and has been flagged. Check its indexing "
+                            f"history and credentials."
                         ),
-                        additional_data={"cc_pair_id": cc_pair.id},
                     )
 
                     task_logger.error(

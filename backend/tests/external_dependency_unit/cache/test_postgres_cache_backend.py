@@ -36,11 +36,42 @@ class TestKV:
     def test_get_missing(self, pg_cache: PostgresCacheBackend) -> None:
         assert pg_cache.get(_key()) is None
 
+    def test_getdel_is_one_time(self, pg_cache: PostgresCacheBackend) -> None:
+        k = _key()
+        pg_cache.set(k, b"one-time")
+
+        assert pg_cache.getdel(k) == b"one-time"
+        assert pg_cache.getdel(k) is None
+
+    def test_getdel_rejects_expired_value(self, pg_cache: PostgresCacheBackend) -> None:
+        k = _key()
+        pg_cache.set(k, b"expired", ex=0)
+
+        assert pg_cache.getdel(k) is None
+
     def test_set_overwrite(self, pg_cache: PostgresCacheBackend) -> None:
         k = _key()
         pg_cache.set(k, b"first")
         pg_cache.set(k, b"second")
         assert pg_cache.get(k) == b"second"
+
+    def test_set_if_absent_does_not_overwrite(
+        self, pg_cache: PostgresCacheBackend
+    ) -> None:
+        k = _key()
+
+        assert pg_cache.set_if_absent(k, b"first", ex=10)
+        assert not pg_cache.set_if_absent(k, b"second", ex=10)
+        assert pg_cache.get(k) == b"first"
+
+    def test_set_if_absent_replaces_expired_value(
+        self, pg_cache: PostgresCacheBackend
+    ) -> None:
+        k = _key()
+        pg_cache.set(k, b"expired", ex=0)
+
+        assert pg_cache.set_if_absent(k, b"replacement", ex=10)
+        assert pg_cache.get(k) == b"replacement"
 
     def test_set_string_value(self, pg_cache: PostgresCacheBackend) -> None:
         k = _key()

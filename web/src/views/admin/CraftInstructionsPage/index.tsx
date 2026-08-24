@@ -158,7 +158,7 @@ export default function CraftInstructionsPage() {
       {header}
       <SettingsLayouts.Body>
         <Card border="solid" rounding="lg">
-          <Section alignItems="stretch" gap={0.25}>
+          <Section alignItems="stretch" gap={1}>
             <InputVertical
               title="Workspace instructions"
               topRight={`${value.length.toLocaleString()} / ${MAX_INSTRUCTIONS_LENGTH.toLocaleString()}`}

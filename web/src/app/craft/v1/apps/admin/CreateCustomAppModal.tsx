@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import useFocusOnMount from "@opal/hooks/useFocusOnMount";
 import { useRouter } from "next/navigation";
 import isEqual from "lodash/isEqual";
 import {
@@ -71,6 +72,8 @@ export default function CreateCustomAppModal({
 }: CreateCustomAppModalProps) {
   const isEdit = existingApp !== null;
   const router = useRouter();
+  // Focus the name field for new apps only; edits keep the natural tab order.
+  const focusNameOnMount = useFocusOnMount<HTMLInputElement>(!isEdit);
 
   const [createdApp, setCreatedApp] = useState<ExternalAppAdminResponse | null>(
     null
@@ -284,7 +287,7 @@ export default function CreateCustomAppModal({
                 <div className="flex flex-col gap-1">
                   <Text font="main-ui-action">Name</Text>
                   <InputTypeIn
-                    autoFocus={!isEdit}
+                    ref={focusNameOnMount}
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     placeholder="My Custom App"

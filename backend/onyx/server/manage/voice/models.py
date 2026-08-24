@@ -22,6 +22,10 @@ class VoiceProviderView(BaseModel):
         default=None,
         description="Target URI for Azure Speech Services.",
     )
+    custom_config: dict[str, Any] | None = Field(
+        default=None,
+        description="Provider-specific config (e.g. Azure speech_region / stt_languages).",
+    )
 
 
 class VoiceProviderUpdateSuccess(BaseModel):
@@ -60,7 +64,11 @@ class VoiceProviderUpsertRequest(BaseModel):
         default=None,
         description="Target URI for Azure Speech Services (maps to api_base).",
     )
-    custom_config: dict[str, Any] | None = None
+    custom_config: dict[str, Any] | None = Field(
+        default=None,
+        description="Provider-specific config (e.g. Azure speech_region / "
+        "stt_languages). None leaves the stored config unchanged; pass {} to clear.",
+    )
     stt_model: str | None = None
     tts_model: str | None = None
     default_voice: str | None = None

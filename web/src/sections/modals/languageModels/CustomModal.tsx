@@ -9,7 +9,10 @@ import {
 } from "@/lib/languageModels/types";
 import type { ModelConfiguration } from "@/lib/languageModels/types";
 import * as Yup from "yup";
-import { useInitialValues } from "@/sections/modals/languageModels/utils";
+import {
+  clampModelSettings,
+  useInitialValues,
+} from "@/sections/modals/languageModels/utils";
 import { submitProvider } from "@/sections/modals/languageModels/svc";
 import { LLMProviderConfiguredSource } from "@/lib/analytics/utils";
 import {
@@ -18,7 +21,9 @@ import {
   DisplayNameField,
   ModelAccessField,
   ModalWrapper,
+  useApiBaseSubDescription,
 } from "@/sections/modals/languageModels/shared";
+import { ModelSettingsPopover } from "@/sections/modals/languageModels/ModelSettingsPopover";
 import { useCustomProviderNames } from "@/lib/languageModels/hooks";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import KeyValueInput, {
@@ -43,11 +48,19 @@ import { Section } from "@/layouts/general-layouts";
 
 // ─── Model Configuration List ─────────────────────────────────────────────────
 
-const MODEL_GRID_COLS = "grid-cols-[2fr_2fr_minmax(10rem,1fr)_1fr_2.25rem]";
+const MODEL_GRID_COLS =
+  "grid-cols-[2fr_2fr_minmax(10rem,1fr)_1fr_2.25rem_2.25rem]";
 
 type CustomModelConfiguration = Pick<
   ModelConfiguration,
-  "name" | "max_input_tokens" | "supports_image_input"
+  | "name"
+  | "max_input_tokens"
+  | "supports_image_input"
+  | "supports_reasoning"
+  | "supported_reasoning_efforts"
+  | "reasoning_effort_max"
+  | "reasoning_effort_default"
+  | "temperature_default"
 > & {
   display_name: string;
 };
@@ -101,6 +114,10 @@ function ModelConfigurationItem({
         }
         type="number"
       />
+      <ModelSettingsPopover
+        model={model}
+        onChange={(patch) => onChange({ ...model, ...patch })}
+      />
       <Button
         disabled={!canRemove}
         prominence="tertiary"
@@ -138,6 +155,7 @@ function ModelConfigurationList() {
         display_name: "",
         max_input_tokens: null,
         supports_image_input: false,
+        supports_reasoning: false,
       },
     ]);
   }
@@ -153,6 +171,7 @@ function ModelConfigurationList() {
           <Text mainUiAction>Input Type</Text>
           <Text mainUiAction>Max Tokens</Text>
           <div aria-hidden />
+          <div aria-hidden />
 
           {models.map((model, index) => (
             <ModelConfigurationItem
@@ -165,7 +184,7 @@ function ModelConfigurationList() {
           ))}
         </div>
       ) : (
-        <EmptyMessageCard title="No models added yet." padding="sm" />
+        <EmptyMessageCard title="No models added yet." padding={2} />
       )}
 
       <Button
@@ -245,6 +264,7 @@ export default function CustomModal({
 }: LLMProviderFormProps) {
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
+  const apiBaseSubDescription = useApiBaseSubDescription();
 
   const onClose = () => onOpenChange?.(false);
 
@@ -256,14 +276,20 @@ export default function CustomModal({
     ),
     provider: existingLlmProvider?.provider ?? "",
     api_version: existingLlmProvider?.api_version ?? "",
-    model_configurations: existingLlmProvider?.model_configurations.map(
-      (mc) => ({
+    model_configurations: existingLlmProvider?.model_configurations.map((mc) =>
+      // Stored policy can exceed a capability that shrank since the save,
+      // and the API rejects such values on submit.
+      clampModelSettings({
         name: mc.name,
         display_name: mc.display_name ?? "",
         is_visible: mc.is_visible,
         max_input_tokens: mc.max_input_tokens ?? null,
         supports_image_input: mc.supports_image_input,
         supports_reasoning: mc.supports_reasoning,
+        supported_reasoning_efforts: mc.supported_reasoning_efforts,
+        reasoning_effort_max: mc.reasoning_effort_max,
+        reasoning_effort_default: mc.reasoning_effort_default,
+        temperature_default: mc.temperature_default,
         effectiveDisplayName: mc.effectiveDisplayName,
       })
     ) ?? [
@@ -274,6 +300,10 @@ export default function CustomModal({
         max_input_tokens: null,
         supports_image_input: false,
         supports_reasoning: false,
+        supported_reasoning_efforts: undefined,
+        reasoning_effort_max: null,
+        reasoning_effort_default: null,
+        temperature_default: null,
         effectiveDisplayName: "",
       },
     ],
@@ -324,7 +354,11 @@ export default function CustomModal({
             is_visible: true,
             max_input_tokens: mc.max_input_tokens ?? null,
             supports_image_input: mc.supports_image_input,
-            supports_reasoning: false,
+            supports_reasoning: mc.supports_reasoning,
+            supported_reasoning_efforts: mc.supported_reasoning_efforts,
+            reasoning_effort_max: mc.reasoning_effort_max,
+            reasoning_effort_default: mc.reasoning_effort_default,
+            temperature_default: mc.temperature_default,
             effectiveDisplayName: mc.display_name || mc.name,
           }));
 
@@ -393,7 +427,7 @@ export default function CustomModal({
         subDescription="Paste your API key if your model provider requires authentication."
       />
 
-      <APIBaseField optional />
+      <APIBaseField optional subDescription={apiBaseSubDescription} />
 
       <InputPadder>
         <InputVertical
@@ -406,7 +440,7 @@ export default function CustomModal({
       </InputPadder>
 
       <InputPadder>
-        <Section gap={0.75}>
+        <Section gap={3}>
           <Content
             title="Environment Variables"
             description={markdown(
@@ -429,7 +463,7 @@ export default function CustomModal({
       )}
 
       <InputDivider />
-      <Section gap={0.5}>
+      <Section gap={2}>
         <InputPadder>
           <Content
             title="Models"
@@ -440,7 +474,7 @@ export default function CustomModal({
           />
         </InputPadder>
 
-        <Card padding="sm">
+        <Card padding={2}>
           <ModelConfigurationList />
         </Card>
       </Section>

@@ -39,8 +39,8 @@ function ErrorLogRow({
         flexDirection="column"
         justifyContent="start"
         alignItems="start"
-        gap={0.25}
-        padding={0.25}
+        gap={1}
+        padding={1}
         height="fit"
       >
         <Section
@@ -221,8 +221,8 @@ export default function HookStatusPopover({
                   ? 20
                   : 12.5
             }
-            padding={0.125}
-            gap={0.25}
+            padding={0.5}
+            gap={1}
           >
             {isLoading ? (
               <Section justifyContent="center">
@@ -250,14 +250,14 @@ export default function HookStatusPopover({
 
                 {topErrors.length > 0 ? (
                   <>
-                    <Divider paddingPerpendicular="fit" />
+                    <Divider paddingPerpendicular={0} />
 
                     <Section
                       flexDirection="column"
                       justifyContent="start"
                       alignItems="start"
-                      gap={0.25}
-                      padding={0.25}
+                      gap={1}
+                      padding={1}
                       height="fit"
                     >
                       {topErrors.map((log, idx) => (
@@ -270,7 +270,7 @@ export default function HookStatusPopover({
                     </Section>
                   </>
                 ) : (
-                  <Divider paddingPerpendicular="fit" />
+                  <Divider paddingPerpendicular={0} />
                 )}
 
                 <LineItem
@@ -307,15 +307,15 @@ export default function HookStatusPopover({
                   />
                 </div>
 
-                <Divider paddingPerpendicular="fit" />
+                <Divider paddingPerpendicular={0} />
 
                 {/* Log rows — at most 3, timestamp first then error message */}
                 <Section
                   flexDirection="column"
                   justifyContent="start"
                   alignItems="start"
-                  gap={0.25}
-                  padding={0.25}
+                  gap={1}
+                  padding={1}
                   height="fit"
                 >
                   {recentErrors.slice(0, 3).map((log, idx) => (
@@ -352,7 +352,7 @@ export default function HookStatusPopover({
                   />
                 </div>
 
-                <Divider paddingPerpendicular="fit" />
+                <Divider paddingPerpendicular={0} />
 
                 {/* View Older Errors */}
                 <LineItem

@@ -4,7 +4,7 @@ import { Button, Card } from "@opal/components";
 
 const BACKGROUND_VARIANTS = ["none", "light", "heavy"] as const;
 const BORDER_VARIANTS = ["none", "dashed", "solid"] as const;
-const PADDING_VARIANTS = ["fit", "2xs", "xs", "sm", "md", "lg"] as const;
+const PADDING_VARIANTS = [0, 0.5, 1, 2, 4, 6] as const;
 const ROUNDING_VARIANTS = ["xs", "sm", "md", "lg"] as const;
 
 const meta: Meta<typeof Card> = {

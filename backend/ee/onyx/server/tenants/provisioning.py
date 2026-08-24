@@ -36,6 +36,7 @@ from onyx.configs.app_configs import (
     VERTEXAI_DEFAULT_CREDENTIALS,
     VERTEXAI_DEFAULT_LOCATION,
 )
+from onyx.db.engine.shard_routing import get_shard_for_new_tenant
 from onyx.db.engine.sql_engine import (
     get_session_with_shared_schema,
     get_session_with_tenant,
@@ -54,6 +55,7 @@ from onyx.db.models import (
     SearchSettings,
     UserTenantMapping,
 )
+from onyx.db.tenant_shard import clear_tenant_placement, record_tenant_placement
 from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
 from onyx.llm.well_known_providers.constants import (
     ANTHROPIC_PROVIDER_NAME,
@@ -201,9 +203,15 @@ async def provision_tenant(tenant_id: str, email: str) -> None:
             status_code=409, detail="User already belongs to an organization"
         )
 
-    logger.debug("Provisioning tenant %s for user %s", tenant_id, email)
+    shard_name = get_shard_for_new_tenant()
+    logger.debug(
+        "Provisioning tenant %s for user %s on shard %s", tenant_id, email, shard_name
+    )
 
     try:
+        # Before schema creation: every step below routes via the catalog.
+        record_tenant_placement(tenant_id, shard_name)
+
         # Create the schema for the tenant
         if not create_schema_if_not_exists(tenant_id):
             logger.debug("Created schema for tenant %s", tenant_id)
@@ -261,8 +269,10 @@ async def rollback_tenant_provisioning(tenant_id: str) -> None:
     rollback_errors = []
 
     # 1. Try to drop the tenant's schema
+    schema_dropped = False
     try:
         drop_schema(tenant_id)
+        schema_dropped = True
         logger.info("Successfully dropped schema for tenant %s", tenant_id)
     except Exception as e:
         error_msg = f"Failed to drop schema for tenant {tenant_id}: {str(e)}"
@@ -313,6 +323,26 @@ async def rollback_tenant_provisioning(tenant_id: str) -> None:
         error_msg = f"Failed to remove tenant {tenant_id} from available tenants table: {str(e)}"
         logger.error(error_msg)
         rollback_errors.append(error_msg)
+
+    # 4. Drop the shard mapping — last, and only if the schema is actually gone.
+    # The mapping is the only route to that schema, so clearing it after a failed
+    # drop strands it on a shard nothing can resolve.
+    if schema_dropped:
+        try:
+            clear_tenant_placement(tenant_id)
+            logger.info("Successfully cleared shard mapping for tenant %s", tenant_id)
+        except Exception as e:
+            error_msg = (
+                f"Failed to clear shard mapping for tenant {tenant_id}: {str(e)}"
+            )
+            logger.error(error_msg)
+            rollback_errors.append(error_msg)
+    else:
+        logger.warning(
+            "Keeping shard mapping for tenant %s: its schema was not dropped, and the "
+            "mapping is what a retry needs to find it",
+            tenant_id,
+        )
 
     # Log summary of rollback operation
     if rollback_errors:

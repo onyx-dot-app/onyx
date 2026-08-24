@@ -27,7 +27,7 @@ export default function AttemptOverhead({
   }, [attemptStages]);
 
   return (
-    <Section alignItems="start" height="fit" width="full" gap={0.25}>
+    <Section alignItems="start" height="fit" width="full" gap={1}>
       <Button
         prominence="tertiary"
         size="sm"
@@ -46,7 +46,7 @@ interface AttemptOverheadListProps {
 
 function AttemptOverheadList({ stages }: AttemptOverheadListProps) {
   return (
-    <Section alignItems="stretch" height="fit" width="full" gap={0.125}>
+    <Section alignItems="stretch" height="fit" width="full" gap={0.5}>
       {stages.map((stage) => (
         <AttemptOverheadRow key={stage.stage} stage={stage} />
       ))}
@@ -66,7 +66,7 @@ function AttemptOverheadRow({ stage }: AttemptOverheadRowProps) {
       alignItems="center"
       width="full"
       height="fit"
-      gap={1}
+      gap={4}
     >
       <Text font="secondary-body" color="text-04">
         {STAGE_LABELS[stage.stage]}

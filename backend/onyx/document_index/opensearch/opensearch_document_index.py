@@ -39,7 +39,9 @@ from onyx.document_index.opensearch.client import (
     OpenSearchClient,
     OpenSearchDocumentMissingError,
     OpenSearchIndexClient,
+    OpenSearchIndexWriteBlockedError,
     SearchHit,
+    is_cluster_block_error,
 )
 from onyx.document_index.opensearch.cluster_settings import OPENSEARCH_CLUSTER_SETTINGS
 from onyx.document_index.opensearch.constants import OpenSearchSearchType
@@ -308,10 +310,24 @@ class OpenSearchDocumentIndex(DocumentIndex):
             and VERIFY_CREATE_OPENSEARCH_INDEX_ON_INIT_MT
             and index_name not in _verified_index_names_for_current_process
         ):
-            self.verify_and_create_index_if_necessary(
-                embedding_dim=embedding_dim, embedding_precision=embedding_precision
-            )
-            _verified_index_names_for_current_process.add(index_name)
+            try:
+                self.verify_and_create_index_if_necessary(
+                    embedding_dim=embedding_dim, embedding_precision=embedding_precision
+                )
+            except OpenSearchIndexWriteBlockedError as e:
+                # Existing index, still readable — don't fail the caller. Not
+                # cached as verified, so a later init retries the mapping
+                # refresh once the block clears.
+                logger.error(
+                    "Index %s is write-blocked; continuing without the mapping "
+                    "refresh. Search still works, but indexing will fail until "
+                    "the block is cleared (usually by freeing disk space below "
+                    "the flood-stage watermark). Error: %s",
+                    index_name,
+                    e,
+                )
+            else:
+                _verified_index_names_for_current_process.add(index_name)
 
     def verify_and_create_index_if_necessary(
         self,
@@ -372,6 +388,15 @@ class OpenSearchDocumentIndex(DocumentIndex):
                 try:
                     self._client.put_mapping(expected_mappings)
                 except Exception as e:
+                    if is_cluster_block_error(e):
+                        # The index exists and is readable; only this metadata
+                        # write was rejected. Raise the targeted type so
+                        # callers that can serve degraded can catch exactly
+                        # this case (never a missing index / blocked create).
+                        raise OpenSearchIndexWriteBlockedError(
+                            f"Index {self._index_name} is write-blocked; the mapping "
+                            "refresh was rejected."
+                        ) from e
                     logger.error(
                         "Failed to update mappings for index %s. This likely means a field type was changed which requires reindexing. Error: %s",
                         self._index_name,

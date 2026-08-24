@@ -2,22 +2,21 @@
 sandbox managers.
 
 The script is replay-safe: the whole setup is serialized per session with an
-in-sandbox ``flock``, an in-progress marker distinguishes a partial directory
-from a complete workspace, and the Next.js dev server is only spawned when no
-live server is already attached to the session. Re-running the script after an
-interruption converges on the same completed workspace.
+in-sandbox ``flock``, and an in-progress marker distinguishes a partial
+directory from a complete workspace. Setup is lazy with respect to the web
+app: it writes the tamper-hardened ``start-webapp.sh`` (when the session has
+a port) but never scaffolds the template, installs dependencies, or starts a
+dev server itself. Re-running the script after an interruption converges on
+the same completed workspace.
 """
 
 import shlex
 
-from onyx.server.features.build.sandbox.base import (
-    BUN_CACHE_DIR,
-    BUN_IMAGE_CACHE_DIR,
+from onyx.server.features.build.sandbox.nextjs_dev import (
+    build_webapp_script_write_snippet,
 )
-from onyx.server.features.build.sandbox.nextjs_dev import build_nextjs_start_script
 
 SESSIONS_ROOT = "/workspace/sessions"
-TEMPLATES_OUTPUTS_PATH = "/workspace/templates/outputs"
 MANAGED_SKILLS_PATH = "/workspace/managed/skills"
 MANAGED_USER_LIBRARY_PATH = "/workspace/managed/user_library"
 
@@ -53,35 +52,12 @@ def build_session_workspace_setup_script(
     """Build the shell script that creates a session workspace.
 
     Headless callers (scheduled tasks) pass ``nextjs_port=None`` — the agent's
-    tools work without a dev server.
+    tools work without a dev server, and no ``start-webapp.sh`` is written.
     """
-    outputs_setup = f"""
-echo "Copying outputs template"
-if [ -d {TEMPLATES_OUTPUTS_PATH} ]; then
-    cp -r {TEMPLATES_OUTPUTS_PATH}/* {session_path}/outputs/
-    # flock+sentinel: serialize concurrent session setups; .ready guards
-    # against a partial cp from a previous interrupted run.
-    (
-        flock -x 9
-        if [ ! -f {BUN_CACHE_DIR}/.ready ]; then
-            echo "Bootstrapping bun cache on workspace volume..."
-            rm -rf {BUN_CACHE_DIR}
-            cp -r {BUN_IMAGE_CACHE_DIR} {BUN_CACHE_DIR} \\
-                || {{ echo "ERROR: bun cache bootstrap failed" >&2; exit 1; }}
-            touch {BUN_CACHE_DIR}/.ready
-        fi
-    ) 9>{BUN_CACHE_DIR}.lock
-    cd {session_path}/outputs/web && \\
-        BUN_INSTALL_CACHE_DIR={BUN_CACHE_DIR} \\
-        bun install --frozen-lockfile --backend=hardlink
-else
-    echo "Warning: outputs template not found at {TEMPLATES_OUTPUTS_PATH}"
-    mkdir -p {session_path}/outputs/web
-fi
-"""
-
-    nextjs_start_script = (
-        build_nextjs_start_script(session_path, nextjs_port, check_node_modules=False)
+    webapp_script_write_snippet = (
+        # Lazy provisioning: write start-webapp.sh, but don't scaffold
+        # outputs/web, install, or start a dev server here.
+        build_webapp_script_write_snippet(session_path, nextjs_port)
         if nextjs_port is not None
         else ""
     )
@@ -91,10 +67,8 @@ set -e
 
 # Serialize workspace *materialization* per session with an flock: a concurrent
 # replay blocks here and then re-runs over the completed workspace, converging
-# instead of racing. The dev-server launch is deliberately NOT inside this
-# subshell — a backgrounded server started here would inherit fd 8 and hold the
-# lock for its entire lifetime, deadlocking every later repair/restore. It runs
-# after the lock releases and has its own pid-guard for idempotency.
+# instead of racing. Nothing spawned here outlives the setup, so nothing can
+# inherit fd 8 and hold the lock open.
 (
 flock -x 8
 set -e
@@ -104,9 +78,6 @@ mkdir -p {session_path}
 touch {session_path}/{SETUP_IN_PROGRESS_MARKER}
 mkdir -p {session_path}/outputs
 mkdir -p {session_path}/attachments
-
-# Setup outputs
-{outputs_setup}
 
 # DO NOT mkdir /workspace/managed/skills or /workspace/managed/user_library
 # here — the push daemon swaps these paths via os.rename(symlink, mount),
@@ -124,11 +95,11 @@ printf '%s' {shlex.quote(agents_md)} > {session_path}/AGENTS.md
 
 printf '%s' {shlex.quote(session_opencode_config_json)} > {session_path}/opencode.json
 
+{webapp_script_write_snippet}
+
 rm -f {session_path}/{SETUP_IN_PROGRESS_MARKER}
 echo "Workspace materialization complete"
 ) 8>{session_path}.setup.lock
 
-# Start Next.js dev server (outside the setup lock; own pid-guard).
-{nextjs_start_script}
 echo "{WORKSPACE_SETUP_COMPLETE_SENTINEL}"
 """

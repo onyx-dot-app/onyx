@@ -12,6 +12,7 @@ from typing import cast
 
 import pytest
 from fastapi import Request
+from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
 from sqlalchemy.orm import Session
 
 from onyx.auth.session_tokens import (
@@ -25,7 +26,6 @@ from onyx.auth.session_tokens import (
 from onyx.auth.users import TenantAwareRedisStrategy, UserManager
 from onyx.configs.app_configs import REDIS_AUTH_KEY_PREFIX, SESSION_EXPIRE_TIME_SECONDS
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
-from onyx.db.auth import SQLAlchemyUserAdminDB
 from onyx.db.engine.async_sql_engine import get_async_session_context_manager
 from onyx.db.models import OAuthAccount, User
 from onyx.redis.redis_pool import get_raw_redis_client
@@ -38,7 +38,7 @@ _TTL_SLACK_SECONDS = 60
 
 async def _read_token(strategy: TenantAwareRedisStrategy, token: str) -> User | None:
     async with get_async_session_context_manager() as async_session:
-        user_db = SQLAlchemyUserAdminDB(async_session, User, OAuthAccount)
+        user_db = SQLAlchemyUserDatabase(async_session, User, OAuthAccount)
         return await strategy.read_token(token, UserManager(user_db))
 
 

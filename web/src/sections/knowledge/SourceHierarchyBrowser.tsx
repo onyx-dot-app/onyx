@@ -88,7 +88,7 @@ function HierarchyBreadcrumb({
       flexDirection="row"
       justifyContent="start"
       alignItems="center"
-      gap={0.25}
+      gap={1}
       height="auto"
     >
       {/* Root source link */}
@@ -214,6 +214,9 @@ export default function SourceHierarchyBrowser({
 
   // Store path before entering view selected mode so we can restore it
   const [savedPath, setSavedPath] = useState<HierarchyNodeSummary[]>([]);
+  const pathRef = useRef(path);
+  const savedPathRef = useRef(savedPath);
+  const viewSelectedOnlyRef = useRef(viewSelectedOnly);
 
   // Store selected document details (for showing all selected documents in view selected mode)
   // Note: useState (not useMemo) because this is modified independently when users select/deselect documents
@@ -525,6 +528,18 @@ export default function SourceHierarchyBrowser({
     onSelectionCountChange?.(source, currentSourceSelectedCount);
   }, [source, currentSourceSelectedCount, onSelectionCountChange]);
 
+  useEffect(() => {
+    pathRef.current = path;
+  }, [path]);
+
+  useEffect(() => {
+    savedPathRef.current = savedPath;
+  }, [savedPath]);
+
+  useEffect(() => {
+    viewSelectedOnlyRef.current = viewSelectedOnly;
+  }, [viewSelectedOnly]);
+
   // Header checkbox state: count how many visible items are selected
   const visibleSelectedCount = useMemo(() => {
     return filteredItems.filter((item) => {
@@ -649,18 +664,22 @@ export default function SourceHierarchyBrowser({
   };
 
   // Handler for toggling view selected mode
-  const handleToggleViewSelected = () => {
-    setViewSelectedOnly((prev) => {
-      if (!prev) {
-        // Entering view selected mode - save current path
-        setSavedPath(path);
-      } else {
-        // Exiting view selected mode - restore saved path
-        setPath(savedPath);
-      }
-      return !prev;
-    });
-  };
+  const handleToggleViewSelected = useCallback(() => {
+    if (!viewSelectedOnlyRef.current) {
+      // Entering view selected mode - save current path
+      const currentPath = pathRef.current;
+      savedPathRef.current = currentPath;
+      setSavedPath(currentPath);
+      viewSelectedOnlyRef.current = true;
+      setViewSelectedOnly(true);
+      return;
+    }
+
+    // Exiting view selected mode - restore saved path
+    setPath(savedPathRef.current);
+    viewSelectedOnlyRef.current = false;
+    setViewSelectedOnly(false);
+  }, []);
 
   // Handler for clicking a row (folder or document)
   const handleItemClick = (item: HierarchyItem) => {
@@ -700,7 +719,7 @@ export default function SourceHierarchyBrowser({
   // Render loading state
   if (isLoadingNodes) {
     return (
-      <GeneralLayouts.Section height="auto" padding={1}>
+      <GeneralLayouts.Section height="auto" padding={4}>
         <Text text03 secondaryBody>
           Loading folders...
         </Text>
@@ -711,7 +730,7 @@ export default function SourceHierarchyBrowser({
   // Render error state
   if (nodesError) {
     return (
-      <GeneralLayouts.Section height="auto" padding={1}>
+      <GeneralLayouts.Section height="auto" padding={4}>
         <Text text03 secondaryBody>
           {nodesError}
         </Text>
@@ -726,7 +745,7 @@ export default function SourceHierarchyBrowser({
         flexDirection="row"
         justifyContent="start"
         alignItems="center"
-        gap={0.5}
+        gap={2}
         height="auto"
       >
         <GeneralLayouts.Section height="auto" width="fit">
@@ -875,7 +894,7 @@ export default function SourceHierarchyBrowser({
         </TableLayouts.TableCell>
       </TableLayouts.TableRow>
 
-      <OpalDivider paddingParallel="fit" paddingPerpendicular="fit" />
+      <OpalDivider paddingParallel={0} paddingPerpendicular={0} />
 
       {/* Scrollable table body */}
       <div
@@ -884,7 +903,7 @@ export default function SourceHierarchyBrowser({
         className="overflow-y-auto max-h-80"
       >
         {filteredItems.length === 0 && !isLoadingDocuments ? (
-          <GeneralLayouts.Section height="auto" padding={1}>
+          <GeneralLayouts.Section height="auto" padding={4}>
             <Text text03 secondaryBody>
               {path.length === 0
                 ? "Select a folder to browse documents."
@@ -916,7 +935,7 @@ export default function SourceHierarchyBrowser({
                         flexDirection="row"
                         justifyContent="start"
                         alignItems="center"
-                        gap={0.25}
+                        gap={1}
                         height="auto"
                       >
                         <GeneralLayouts.Section
@@ -977,7 +996,7 @@ export default function SourceHierarchyBrowser({
 
             {/* Loading more indicator */}
             {isLoadingDocuments && documents.length > 0 && (
-              <GeneralLayouts.Section height="auto" padding={0.5}>
+              <GeneralLayouts.Section height="auto" padding={2}>
                 <Text text03 secondaryBody>
                   Loading more...
                 </Text>
@@ -995,7 +1014,7 @@ export default function SourceHierarchyBrowser({
             flexDirection="row"
             justifyContent="start"
             alignItems="center"
-            gap={0.5}
+            gap={2}
             height="auto"
           >
             <Text text03 secondaryBody>

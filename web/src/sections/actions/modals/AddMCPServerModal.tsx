@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import useFocusOnMount from "@opal/hooks/useFocusOnMount";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import { Modal } from "@opal/components";
@@ -12,8 +13,11 @@ import {
   MCPServerCreateRequest,
   MCPServerStatus,
   MCPServer,
-} from "@/lib/tools/interfaces";
+} from "@/lib/tools/types";
 import { useModal } from "@opal/components";
+import { useUser } from "@/providers/UserProvider";
+import { hasPermission } from "@/lib/permissions";
+import { Permission } from "@/lib/types";
 import { Button, Divider } from "@opal/components";
 import type { ModalCreationInterface } from "@opal/components";
 import { SvgCheckCircle, SvgServer, SvgUnplug } from "@opal/icons";
@@ -51,6 +55,9 @@ export default function AddMCPServerModal({
 }: AddMCPServerModalProps) {
   const { isOpen, toggle } = useModal();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const focusOnMount = useFocusOnMount<HTMLInputElement>();
+
+  const { permissions } = useUser();
 
   // Use activeServer from props
   const server = activeServer;
@@ -159,7 +166,7 @@ export default function AddMCPServerModal({
                   <InputTypeInField
                     name="name"
                     placeholder="Name your MCP server"
-                    autoFocus
+                    ref={focusOnMount}
                   />
                 </InputVertical>
 
@@ -175,7 +182,7 @@ export default function AddMCPServerModal({
                   />
                 </InputVertical>
 
-                <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+                <Divider paddingParallel={0} paddingPerpendicular={0} />
 
                 <InputVertical
                   withLabel="server_url"
@@ -188,30 +195,34 @@ export default function AddMCPServerModal({
                   />
                 </InputVertical>
 
-                <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+                <Divider paddingParallel={0} paddingPerpendicular={0} />
 
                 {/* Access control: who can add this server's tools to agents.
                     Self-gates on tier/role; no-op when groups are unavailable. */}
                 <IsPublicGroupSelector
                   formikProps={formikProps}
                   objectName="MCP server"
+                  isGlobalHolder={hasPermission(
+                    permissions,
+                    Permission.MANAGE_ACTIONS
+                  )}
                   publicToWhom="Users"
                 />
 
                 {/* Authentication Status Section - Only show in edit mode when authenticated */}
                 {isEditMode &&
-                  server?.is_authenticated &&
+                  server?.user_can_authenticate &&
                   server?.status === MCPServerStatus.CONNECTED && (
                     <Section
                       flexDirection="row"
                       justifyContent="between"
                       alignItems="start"
-                      gap={1}
+                      gap={4}
                     >
-                      <Section gap={0.25} alignItems="start">
+                      <Section gap={1} alignItems="start">
                         <Section
                           flexDirection="row"
-                          gap={0.5}
+                          gap={2}
                           alignItems="center"
                           width="fit"
                         >
@@ -228,7 +239,7 @@ export default function AddMCPServerModal({
                       </Section>
                       <Section
                         flexDirection="row"
-                        gap={0.5}
+                        gap={2}
                         alignItems="center"
                         width="fit"
                       >

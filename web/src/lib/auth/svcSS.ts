@@ -5,7 +5,8 @@ import { getDomain } from "@/lib/redirectSS";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { NextRequest, NextResponse } from "next/server";
 import { AuthTypeMetadata, type SSOProviderType } from "@/lib/auth/types";
-import { User, UserRole } from "@/lib/types";
+import { User } from "@/lib/types";
+import { hasAnyAdminPermission } from "@/lib/permissions";
 import { getCurrentUserSS } from "@/lib/users/svcSS";
 
 export async function getAuthTypeMetadataSS(): Promise<AuthTypeMetadata> {
@@ -111,12 +112,6 @@ interface AuthCheckResult {
   redirect?: string;
 }
 
-const ADMIN_ALLOWED_ROLES = [
-  UserRole.ADMIN,
-  UserRole.CURATOR,
-  UserRole.GLOBAL_CURATOR,
-];
-
 export async function requireAuth(): Promise<AuthCheckResult> {
   let user: User | null = null;
   let authTypeMetadata: AuthTypeMetadata | null = null;
@@ -154,7 +149,9 @@ export async function requireAdminAuth(): Promise<AuthCheckResult> {
 
   const { user, authTypeMetadata } = authResult;
 
-  if (user && !ADMIN_ALLOWED_ROLES.includes(user.role)) {
+  // Reaching the admin panel means holding some permission an admin route requires —
+  // a scoped group manager may be a plain BASIC user, so a role check would bounce them.
+  if (user && !hasAnyAdminPermission(user.admin_capabilities ?? [])) {
     return { user, authTypeMetadata, redirect: "/app" };
   }
 

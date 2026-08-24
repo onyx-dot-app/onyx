@@ -48,7 +48,6 @@ async function withApiContext(
 // ---------------------------------------------------------------------------
 
 test.describe("Groups page — layout", () => {
-  let adminGroupId: number;
   let basicGroupId: number;
   let layoutGroupId: number;
   const layoutGroupName = uniqueGroupName("layout");
@@ -61,11 +60,8 @@ test.describe("Groups page — layout", () => {
       if (!adminGroup || !basicGroup) {
         throw new Error("Default Admin/Basic groups not found");
       }
-      adminGroupId = adminGroup.id;
       basicGroupId = basicGroup.id;
 
-      // Create a custom group so the list is non-empty (default groups are
-      // excluded from the API response by default).
       layoutGroupId = await api.createUserGroup(layoutGroupName);
       await api.waitForGroupSync(layoutGroupId);
     });
@@ -87,12 +83,37 @@ test.describe("Groups page — layout", () => {
     await expect(groupsPage.newGroupButton).toBeVisible();
   });
 
-  test.skip("shows built-in groups (Admin, Basic)", async ({ groupsPage }) => {
-    // TODO: Enable once default groups are shown via include_default=true
+  test("shows built-in groups (Admin, Basic)", async ({ groupsPage }) => {
     await groupsPage.goto();
 
     await groupsPage.expectGroupVisible("Admin");
     await groupsPage.expectGroupVisible("Basic");
+  });
+
+  test("built-in groups open read-only, with membership still editable", async ({
+    groupsPage,
+  }) => {
+    await groupsPage.gotoEdit(basicGroupId);
+
+    await expect(groupsPage.groupNameInput).toHaveValue("Basic");
+    await expect(groupsPage.groupNameInput).toHaveAttribute("readonly", "");
+    await expect(groupsPage.systemGroupNotice).toBeVisible();
+
+    await expect(groupsPage.addMembersButton).toBeVisible();
+    await expect(groupsPage.saveButton).toBeEnabled();
+
+    await expect(groupsPage.deleteGroupButton).toHaveCount(0);
+    await expect(groupsPage.permissionsSectionHeader).toHaveCount(0);
+    await expect(groupsPage.sharedResourcesSectionHeader).toHaveCount(0);
+  });
+
+  test("custom groups keep the full edit surface", async ({ groupsPage }) => {
+    await groupsPage.gotoEdit(layoutGroupId);
+
+    await expect(groupsPage.groupNameInput).not.toHaveAttribute("readonly", "");
+    await expect(groupsPage.systemGroupNotice).toHaveCount(0);
+    await expect(groupsPage.deleteGroupButton).toBeVisible();
+    await expect(groupsPage.sharedResourcesSectionHeader).toBeVisible();
   });
 
   test("search filters groups by name", async ({ groupsPage, api }) => {

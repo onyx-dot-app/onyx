@@ -8,7 +8,6 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.auth.schemas import UserRole
 from onyx.db.enums import (
     EndpointPolicy,
     GatedAppKind,
@@ -69,7 +68,7 @@ def test_affected_user_ids_cover_direct_owner_admin_not_unrelated(
     owner = create_test_user(db_session, "aff_owner")
     direct = create_test_user(db_session, "aff_direct")
     unrelated = create_test_user(db_session, "aff_unrelated")
-    admin = create_test_user(db_session, "aff_admin", role=UserRole.ADMIN)
+    admin = create_test_user(db_session, "aff_admin", is_admin=True)
     for u in (owner, direct, unrelated, admin):
         make_sandbox(db_session, u, status=SandboxStatus.RUNNING)
 
@@ -140,7 +139,7 @@ def test_tool_policies_patch_round_trip(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
 ) -> None:
-    admin = create_test_user(db_session, "mcp_admin", role=UserRole.ADMIN)
+    admin = create_test_user(db_session, "mcp_admin", is_admin=True)
     server = _make_server(db_session, tool_names=["send_email", "list_inbox"])
 
     resp = mcp_api.update_mcp_server_simple(
@@ -223,7 +222,7 @@ def test_delete_server_restamps_affected_running_sandbox(
 ) -> None:
     # Deleting a craft server must restamp affected users' running sandboxes so
     # their live sessions detect staleness and drop the server on the next turn.
-    admin = create_test_user(db_session, "del_reload_admin", role=UserRole.ADMIN)
+    admin = create_test_user(db_session, "del_reload_admin", is_admin=True)
     sandbox = make_sandbox(db_session, admin, status=SandboxStatus.RUNNING)
     server = _make_craft_server(db_session, owner_email=admin.email, is_public=True)
     # Credentials are what put the server in the resolved craft set.

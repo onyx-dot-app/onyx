@@ -1,15 +1,26 @@
 from onyx.configs.constants import DocumentSource
+
+# Re-exported: existing callers resolve applicability through the registry; the
+# function lives in ``applicability`` so hot-path modules can import it without
+# this module's eager per-connector check imports.
+from onyx.connectors.capability_checks.applicability import (
+    get_applicable_capabilities as get_applicable_capabilities,
+)
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
     CapabilityCheckContext,
     CredentialCapability,
 )
+from onyx.connectors.slack.capability_checks import build_slack_indexing_checks
+from onyx.connectors.source_operations import get_source_operations_class
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
 # INDEXING checks per source. Checks must be enumerable without an instantiated
 # connector, hence a registry module rather than a ``BaseConnector`` method.
-# Empty at framework stage: per-connector work registers named checks here.
-_INDEXING_CHECKS_BY_SOURCE: dict[DocumentSource, list[CapabilityCheck]] = {}
+# Per-connector work registers named checks here.
+_INDEXING_CHECKS_BY_SOURCE: dict[DocumentSource, list[CapabilityCheck]] = {
+    DocumentSource.SLACK: build_slack_indexing_checks(),
+}
 
 
 class _ConnectorSettingsFallbackCheck(CapabilityCheck):
@@ -43,8 +54,16 @@ def get_capability_checks(source: DocumentSource) -> list[CapabilityCheck]:
     INDEXING checks are registered here; perm-sync checks come from the EE
     implementation and are empty on OSS builds, where the perm-sync feature does
     not exist.
+
+    Ratchet: named checks require a registered source-operations gateway --
+    participation in the checks system is an anti-drift guarantee. Unmigrated
+    sources keep the fallback path.
     """
     checks = list(_INDEXING_CHECKS_BY_SOURCE.get(source, []))
+    assert not checks or get_source_operations_class(source) is not None, (
+        f"{source.value} registers named INDEXING checks but no "
+        "source-operations gateway; migrate the connector first."
+    )
     if not checks:
         checks.append(_ConnectorSettingsFallbackCheck(source))
     get_perm_sync_checks = fetch_ee_implementation_or_noop(
@@ -54,18 +73,3 @@ def get_capability_checks(source: DocumentSource) -> list[CapabilityCheck]:
     )
     checks.extend(get_perm_sync_checks(source))
     return checks
-
-
-def get_applicable_capabilities(source: DocumentSource) -> set[CredentialCapability]:
-    """Returns the capabilities that exist for this source on this build.
-
-    Capabilities outside this set aggregate to a NOT_APPLICABLE verdict. On OSS
-    builds only INDEXING applies, which is correct since perm sync does not
-    exist there.
-    """
-    get_perm_sync_capabilities = fetch_ee_implementation_or_noop(
-        "onyx.connectors.capability_checks",
-        "get_applicable_perm_sync_capabilities",
-        noop_return_value=set(),
-    )
-    return {CredentialCapability.INDEXING} | get_perm_sync_capabilities(source)

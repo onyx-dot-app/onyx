@@ -3,6 +3,7 @@
 import React, { useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
+import { useAppRouter } from "@/hooks/appNavigation";
 import CommandMenu, {
   useCommandMenuContext,
 } from "@/refresh-components/commandmenu/CommandMenu";
@@ -11,8 +12,6 @@ import { useCreateModal } from "@opal/components";
 import CreateProjectModal from "@/sections/modals/CreateProjectModal";
 import { timeAgo } from "@opal/time";
 import { highlightMatch } from "@/lib/sidebar/utils";
-import { useSettings } from "@/lib/settings/hooks";
-import { useCurrentAgent } from "@/lib/agents/hooks";
 import Text from "@/refresh-components/texts/Text";
 import useChatSearchOptimistic from "@/lib/sidebar/hooks";
 import {
@@ -47,7 +46,8 @@ function DynamicFooter() {
 }
 
 interface ChatSearchCommandMenuProps {
-  trigger: React.ReactNode;
+  /** Renders the control that opens the menu. */
+  trigger: (open: () => void) => React.ReactNode;
 }
 
 interface FilterableProject {
@@ -69,11 +69,10 @@ export default function ChatSearchCommandMenu({
     string | undefined
   >();
   const router = useRouter();
+  const route = useAppRouter();
 
   // Data hooks
   const { projects } = useProjects();
-  const settings = useSettings();
-  const currentAgent = useCurrentAgent();
   const createProjectModal = useCreateModal();
 
   // Constants for preview limits
@@ -149,28 +148,24 @@ export default function ChatSearchCommandMenu({
 
   // Navigation handlers
   const handleNewSession = useCallback(() => {
-    const href =
-      settings?.disable_default_assistant && currentAgent
-        ? `/app?agentId=${currentAgent.id}`
-        : "/app";
-    router.push(href as Route);
+    router.push("/app");
     setOpen(false);
-  }, [router, settings, currentAgent]);
+  }, [router]);
 
   const handleChatSelect = useCallback(
     (chatId: string) => {
-      router.push(`/chat?chatId=${chatId}` as Route);
+      route({ chatSessionId: chatId });
       setOpen(false);
     },
-    [router]
+    [route]
   );
 
   const handleProjectSelect = useCallback(
     (projectId: number) => {
-      router.push(`/chat?projectId=${projectId}` as Route);
+      route({ projectId });
       setOpen(false);
     },
-    [router]
+    [route]
   );
 
   const handleNewProject = useCallback(
@@ -181,6 +176,8 @@ export default function ChatSearchCommandMenu({
     },
     [createProjectModal]
   );
+
+  const handleOpen = useCallback(() => setOpen(true), []);
 
   const handleOpenChange = useCallback((newOpen: boolean) => {
     setOpen(newOpen);
@@ -204,9 +201,7 @@ export default function ChatSearchCommandMenu({
 
   return (
     <>
-      <div aria-label="Open chat search" onClick={() => setOpen(true)}>
-        {trigger}
-      </div>
+      {trigger(handleOpen)}
 
       <CommandMenu open={open} onOpenChange={handleOpenChange}>
         <CommandMenu.Content>

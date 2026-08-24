@@ -15,6 +15,7 @@ from onyx.llm.well_known_providers.auto_update_models import (
     LLMRecommendations,
 )
 from onyx.llm.well_known_providers.models import SimpleKnownModel
+from onyx.server.features.build.configs import OPENCODE_DISABLED_TOOLS
 from onyx.server.features.build.sandbox.models import CraftLLMProviderConfig
 from onyx.server.features.build.sandbox.util.opencode_config import (
     build_provider_opencode_config,
@@ -424,9 +425,7 @@ def test_empty_gateway_session_skips_unchanged_catalog() -> None:
     config = _gateway_config()
     manager, sandbox_manager, build_llm_configs = _reconcile_manager(config)
     expected = json.dumps(
-        build_provider_opencode_config(
-            config, disabled_tools=manager_module.OPENCODE_DISABLED_TOOLS
-        )
+        build_provider_opencode_config(config, disabled_tools=OPENCODE_DISABLED_TOOLS)
     )
     assert expected is not None
     sandbox_manager.read_file.return_value = expected.encode()
@@ -451,9 +450,7 @@ def test_unchanged_catalog_retries_pending_dispose() -> None:
     config = _gateway_config()
     manager, sandbox_manager, build_llm_configs = _reconcile_manager(config)
     expected = json.dumps(
-        build_provider_opencode_config(
-            config, disabled_tools=manager_module.OPENCODE_DISABLED_TOOLS
-        )
+        build_provider_opencode_config(config, disabled_tools=OPENCODE_DISABLED_TOOLS)
     )
     assert expected is not None
     sandbox_manager.read_file.return_value = expected.encode()
@@ -594,3 +591,54 @@ def test_empty_gateway_session_restarts_instance_for_changed_catalog() -> None:
     )
     cache.set.assert_called_once()
     cache.delete.assert_called_once()
+
+
+def test_workspace_rebuild_claims_a_dispose_the_next_reconcile_honours() -> None:
+    """Restoring a session rewrites opencode.json but cannot dispose the
+    running instance itself; it claims the dispose and the next turn performs it.
+
+    Both halves go through the real cache key on purpose. The failure this pins
+    is silent: the rebuilt file matches what reconcile would write, so reconcile
+    short-circuits, the instance keeps the catalog it started with, and the
+    first turn after a wake dies with "model not found" while the config on
+    disk looks perfect.
+    """
+    config = _gateway_config()
+    manager, sandbox_manager, _ = _reconcile_manager(config)
+    expected = json.dumps(
+        build_provider_opencode_config(config, disabled_tools=OPENCODE_DISABLED_TOOLS)
+    )
+    # Exactly the post-rebuild state: file already correct on disk.
+    sandbox_manager.read_file.return_value = expected.encode()
+
+    store: dict[str, str] = {}
+    cache = MagicMock()
+    cache.set.side_effect = lambda key, value, ex=None: store.__setitem__(  # noqa: ARG005
+        key, value
+    )
+    cache.get.side_effect = store.get
+    cache.delete.side_effect = lambda key: store.pop(key, None)
+
+    session = cast(
+        BuildSession,
+        MagicMock(
+            id=2,
+            agent_provider=None,
+            agent_model=None,
+            opencode_session_id="ses_restored",
+        ),
+    )
+
+    with patch.object(manager_module, "get_cache_backend", return_value=cache):
+        # What the restore path does after rebuilding the workspace.
+        manager_module.mark_opencode_dispose_pending(session.id)
+        assert store, "the claim must be recorded before the next turn runs"
+
+        manager.reconcile_session_llm_config(
+            cast(Sandbox, MagicMock(id=1)),
+            session,
+            cast(User, MagicMock(spec=User)),
+        )
+
+    sandbox_manager.dispose_opencode_instance.assert_called_once()
+    assert store == {}, "the claim must be cleared once the dispose succeeded"

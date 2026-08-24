@@ -1,4 +1,5 @@
 import { Page } from "@playwright/test";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { test, expect } from "@tests/e2e/fixtures/eeFeatures";
 import { loginAs } from "@tests/e2e/utils/auth";
 
@@ -45,7 +46,7 @@ async function setQueryHistoryType(
   page: Page,
   value: "Show with User Info" | "Anonymized" | "Hidden"
 ): Promise<void> {
-  await page.goto("/admin/configuration/chat-preferences");
+  await page.goto(ADMIN_ROUTES.CHAT_PREFERENCES.path);
   await page.waitForLoadState("networkidle");
   await expandAdvancedOptions(page);
 
@@ -82,7 +83,7 @@ test.describe("Query History Toggle @exclusive", () => {
   test("dropdown shows current value and persists after reload", async ({
     page,
   }) => {
-    await page.goto("/admin/configuration/chat-preferences");
+    await page.goto(ADMIN_ROUTES.CHAT_PREFERENCES.path);
     await page.waitForLoadState("networkidle");
 
     const currentValue = await getQueryHistoryValue(page);
@@ -107,23 +108,23 @@ test.describe("Query History Toggle @exclusive", () => {
 
     await setQueryHistoryType(page, "Show with User Info");
 
-    await page.goto("/admin/performance/usage");
+    await page.goto(ADMIN_ROUTES.USAGE.path);
     await page.waitForLoadState("networkidle");
 
     const sidebar = page.locator(".opal-sidebar-root__column");
     const queryHistoryLink = sidebar.locator(
-      'a[href="/admin/performance/query-history"]'
+      `a[href="${ADMIN_ROUTES.QUERY_HISTORY.path}"]`
     );
     await expect(queryHistoryLink).toBeVisible({ timeout: 5000 });
 
     await setQueryHistoryType(page, "Hidden");
 
-    await page.goto("/admin/performance/usage");
+    await page.goto(ADMIN_ROUTES.USAGE.path);
     await page.waitForLoadState("networkidle");
 
     const sidebarAfter = page.locator(".opal-sidebar-root__column");
     const queryHistoryLinkAfter = sidebarAfter.locator(
-      'a[href="/admin/performance/query-history"]'
+      `a[href="${ADMIN_ROUTES.QUERY_HISTORY.path}"]`
     );
     await expect(queryHistoryLinkAfter).not.toBeVisible({ timeout: 5000 });
   });

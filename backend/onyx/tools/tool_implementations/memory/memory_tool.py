@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from typing_extensions import override
 
 from onyx.chat.emitter import Emitter
+from onyx.chat.incognito import current_turn_persists_content
 from onyx.llm.interfaces import LLM
 from onyx.secondary_llm_flows.memory_update import process_memory_update
 from onyx.server.query_and_chat.placement import Placement
@@ -134,7 +135,8 @@ class MemoryTool(Tool[MemoryToolOverrideKwargs]):
             user_role=override_kwargs.user_role,
         )
 
-        logger.info("New memory to be added: %s", memory_text)
+        if current_turn_persists_content():
+            logger.info("New memory to be added: %s", memory_text)
 
         operation: Literal["add", "update"] = (
             "update" if index_to_replace is not None else "add"

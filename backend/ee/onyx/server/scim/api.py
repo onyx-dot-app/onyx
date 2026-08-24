@@ -11,6 +11,8 @@ require a valid SCIM bearer token.
 
 from __future__ import annotations
 
+import re
+from typing import NamedTuple
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, FastAPI, Query, Request, Response
@@ -20,19 +22,26 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from ee.onyx.db.license import acquire_seat_lock, check_seat_availability
+from ee.onyx.db.license import (
+    acquire_seat_lock,
+    check_seat_availability,
+    user_counts_toward_seats,
+)
 from ee.onyx.db.scim import ScimDAL
 from ee.onyx.server.scim.auth import ScimAuthError, verify_scim_token
 from ee.onyx.server.scim.filtering import parse_scim_filter
 from ee.onyx.server.scim.models import (
     SCIM_LIST_RESPONSE_SCHEMA,
+    ScimEmail,
     ScimError,
     ScimGroupMember,
     ScimGroupResource,
     ScimListResponse,
     ScimMappingFields,
     ScimName,
+    ScimPatchOperation,
     ScimPatchRequest,
+    ScimPatchResourceValue,
     ScimServiceProviderConfig,
     ScimUserResource,
 )
@@ -56,12 +65,12 @@ from ee.onyx.server.scim.schema_definitions import (
 )
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import AccountType, GrantSource, Permission
-from onyx.db.models import ScimToken, ScimUserMapping, User, UserGroup, UserRole
+from onyx.db.models import ScimToken, ScimUserMapping, User, UserGroup
 from onyx.db.permissions import (
     recompute_permissions_for_group__no_commit,
     recompute_user_permissions__no_commit,
 )
-from onyx.db.users import assign_user_to_default_groups__no_commit
+from onyx.db.users import assign_user_to_default_groups__no_commit, user_is_admin
 from onyx.db.utils import is_unique_violation
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
@@ -231,7 +240,232 @@ def _is_ext_perm_user(user: User) -> bool:
     to a real STANDARD account — which consumes a seat. Real users
     (BASIC/ADMIN) are left untouched so we never demote an admin.
     """
-    return user.role == UserRole.EXT_PERM_USER
+    return user.account_type == AccountType.EXT_PERM_USER
+
+
+# Entra ID frees a soft-deleted user's UPN by prefixing the 32-hex objectId.
+_ENTRA_TOMBSTONE_PREFIX = re.compile(r"[0-9a-f]{32}", re.IGNORECASE)
+
+
+def _is_entra_tombstone_rename(current_email: str, new_email: str) -> bool:
+    """Whether *new_email* is Entra's soft-delete rename of *current_email*.
+
+    Entra syncs objectId-prefixed values for soft-deleted users. Writing one
+    over the email would orphan the account, so callers keep the email.
+    """
+    match = _ENTRA_TOMBSTONE_PREFIX.match(new_email)
+    return (
+        match is not None and new_email[match.end() :].lower() == current_email.lower()
+    )
+
+
+def _is_privileged_account(user: User) -> bool:
+    """Whether *user* must stay outside an email move's reach, as source or target.
+
+    SSO login associates by email, so the first login for a moved account's
+    new address claims it. Provisioning only ever grants basic access, so a
+    token must not move an admin or group-manager account — nor adopt one,
+    which would put it under IdP control.
+    """
+    return user_is_admin(user) or user.is_group_manager
+
+
+class _EmailChange(NamedTuple):
+    """Outcome of an email change: the account to update, the email to set
+    (None = keep the current one), and whether adoption freed a seat."""
+
+    user: User
+    email: str | None
+    seat_freed: bool = False
+
+
+def _primary_email(emails: list[ScimEmail]) -> str | None:
+    """The primary (or first) email value, None when absent or blank."""
+    if not emails:
+        return None
+    primary = next((e for e in emails if e.primary), emails[0])
+    return primary.value.strip() or None
+
+
+def _primary_email_or_error(
+    emails: list[ScimEmail],
+) -> str | None | ScimJSONResponse:
+    """Like ``_primary_email``, but a carried-yet-blank value is a 400.
+
+    Persisting a blank list while keeping the login email would make GET
+    report an address that no longer matches the account.
+    """
+    value = _primary_email(emails)
+    if value is None and emails:
+        return _scim_error_response(400, "emails must carry a non-empty value")
+    return value
+
+
+def _validate_username_change(
+    dal: ScimDAL, user: User, requested_username: str
+) -> ScimJSONResponse | None:
+    """Reject a blank userName (400) or one another mapping holds (409).
+
+    userName is a matching attribute, never the login email, so a valid
+    change only needs to be recordable on the mapping (the unique index
+    would reject a duplicate at the write).
+    """
+    if not requested_username:
+        return _scim_error_response(400, "userName must not be empty")
+    holder = dal.get_user_mapping_by_scim_username(requested_username)
+    if holder and holder.user_id != user.id:
+        return _scim_error_response(
+            409, f"User with userName {requested_username} already exists"
+        )
+    return None
+
+
+def _apply_email_change(
+    dal: ScimDAL, user: User, requested_email: str
+) -> _EmailChange | ScimJSONResponse:
+    """Apply an email change, resolving it to the account it describes.
+
+    The email comes from the SCIM ``emails`` attribute, never from userName,
+    and callers only invoke this on a changed address. Beyond a plain change:
+
+    - An Entra soft-delete tombstone value never overwrites the email.
+    - A change onto another SCIM-managed account's address is a conflict (409).
+    - A change onto an address an unmanaged STANDARD account already owns
+      adopts that account (mirror of the POST adoption path): the mapping
+      moves to it and the stale source account is deactivated. Without this,
+      an IdP restoring a user whose address was re-claimed via SSO login
+      retries the collision error forever. Only STANDARD targets qualify:
+      EXT_PERM shadows fall through so ``reconcile_user_email__no_commit``
+      merges them into the changed user, and BOT / service / anonymous
+      accounts must never come under IdP control.
+    - A move of an admin or group manager account is rejected (403).
+    """
+    if _is_entra_tombstone_rename(user.email, requested_email):
+        logger.info(
+            "SCIM email for %s is an Entra soft-delete tombstone; keeping email",
+            user.email,
+        )
+        return _EmailChange(user, None)
+
+    other = dal.get_user_by_email(requested_email)
+    if other and other.id != user.id:
+        if dal.get_user_mapping_by_user_id(other.id):
+            return _scim_error_response(
+                409, f"User with email {requested_email} already exists"
+            )
+        if other.account_type == AccountType.STANDARD:
+            if _is_privileged_account(other):
+                return _scim_error_response(
+                    403, "Cannot adopt an admin or group manager account"
+                )
+            # Adoption deactivates the source. An inactive privileged source
+            # (deprovisioned, then restored elsewhere) may be adopted away,
+            # but an active one must not be disabled through this side door.
+            if user.is_active and _is_privileged_account(user):
+                return _scim_error_response(
+                    403, "Cannot move an admin or group manager address"
+                )
+            mapping = dal.get_user_mapping_by_user_id(user.id)
+            if mapping:
+                dal.reassign_user_mapping(mapping, other.id)
+            seat_freed = user_counts_toward_seats(user)
+            dal.deactivate_user(user)
+            logger.info(
+                "SCIM email change to %s adopted the existing account; "
+                "deactivated stale %s",
+                requested_email,
+                user.email,
+            )
+            return _EmailChange(other, None, seat_freed)
+
+    if _is_privileged_account(user):
+        return _scim_error_response(
+            403, "Cannot move an admin or group manager address"
+        )
+
+    return _EmailChange(user, requested_email)
+
+
+# Unique constraints a concurrent provisioning race can trip: the email, the
+# provisioned userName, and the one-mapping-per-user key (adoption races).
+_PROVISIONING_RACE_CONSTRAINTS = (
+    "ix_user_email",
+    "uq_scim_user_mapping_scim_username_lower",
+    "scim_user_mapping_user_id_key",
+)
+
+
+def _update_user_or_conflict(
+    dal: ScimDAL,
+    requested_username: str,
+    user: User,
+    **updates: object,
+) -> ScimJSONResponse | None:
+    """Update the user, turning a uniqueness race into a SCIM 409.
+
+    An email change reconciles rows keyed by the address, which autoflushes
+    the pending rename and can hit the email unique index there.
+    """
+    try:
+        dal.update_user(user, **updates)  # ty: ignore[invalid-argument-type]
+    except IntegrityError as e:
+        dal.rollback()
+        if any(is_unique_violation(e, c) for c in _PROVISIONING_RACE_CONSTRAINTS):
+            return _scim_error_response(
+                409, f"User with userName {requested_username} already exists"
+            )
+        raise
+    return None
+
+
+def _sync_and_commit_or_conflict(
+    dal: ScimDAL,
+    user_id: UUID,
+    external_id: str | None,
+    scim_username: str | None,
+    fields: ScimMappingFields,
+    requested_username: str,
+) -> ScimJSONResponse | None:
+    """Sync the mapping and commit, turning a uniqueness race into a SCIM 409.
+
+    A rename can slip past the non-locking lookups and hit a unique index at
+    the sync's autoflush or at commit, so both run inside one guard.
+    """
+    try:
+        dal.sync_user_external_id(
+            user_id,
+            external_id,
+            scim_username=scim_username,
+            fields=fields,
+        )
+        dal.commit()
+    except IntegrityError as e:
+        dal.rollback()
+        if any(is_unique_violation(e, c) for c in _PROVISIONING_RACE_CONSTRAINTS):
+            return _scim_error_response(
+                409, f"User with userName {requested_username} already exists"
+            )
+        raise
+    return None
+
+
+def _patch_sets_attr(operations: list[ScimPatchOperation], attr: str) -> bool:
+    """Whether a PATCH carries *attr*, by path or path-less resource value.
+
+    Mirrors ``_apply_user_replace``: path-less values may carry attributes
+    under any key casing (``extra="allow"``), so inspect the dumped keys, not
+    the canonical field. Filtered paths like ``emails[...]`` count as set.
+    """
+    for op in operations:
+        path = (op.path or "").lower()
+        if path == attr or path.startswith(f"{attr}["):
+            return True
+        if not path and isinstance(op.value, ScimPatchResourceValue):
+            if any(
+                key.lower() == attr for key in op.value.model_dump(exclude_unset=True)
+            ):
+                return True
+    return False
 
 
 def _assign_default_groups_or_error(
@@ -259,10 +493,12 @@ def _assign_default_groups_or_error(
         assign_user_to_default_groups__no_commit(db_session, user, is_admin=is_admin)
     except Exception as e:
         dal.rollback()
-        # Only the duplicate-email race is an expected, benign 409. Every other
-        # failure — including non-email integrity errors — stays a 500 so real
-        # backend faults aren't masked as "already exists".
-        if isinstance(e, IntegrityError) and is_unique_violation(e, "ix_user_email"):
+        # Only provisioning races are expected, benign 409s. Every other
+        # failure stays a 500 so real backend faults aren't masked as
+        # "already exists".
+        if isinstance(e, IntegrityError) and any(
+            is_unique_violation(e, c) for c in _PROVISIONING_RACE_CONSTRAINTS
+        ):
             logger.info(
                 "SCIM user %s already exists (concurrent provisioning); returning 409",
                 email,
@@ -484,14 +720,27 @@ def create_user(
     dal = ScimDAL(db_session)
     dal.update_token_last_used(_token.id)
 
-    email = user_resource.userName.strip()
-
-    # Check for existing user — if they exist but aren't SCIM-managed yet,
-    # link them to the IdP rather than rejecting with 409.
+    scim_username = user_resource.userName.strip()
+    if not scim_username:
+        return _scim_error_response(400, "userName must not be empty")
+    # The login email comes from the emails attribute. userName is only the
+    # matching attribute and merely seeds the email when emails is absent.
+    seed_email = _primary_email_or_error(user_resource.emails)
+    if isinstance(seed_email, ScimJSONResponse):
+        return seed_email
+    email = seed_email or scim_username
     external_id: str | None = user_resource.externalId
-    scim_username: str = user_resource.userName.strip()
     fields: ScimMappingFields = _fields_from_resource(user_resource)
 
+    # A mapping already provisioned under this userName is a conflict even when
+    # its account email has diverged from it (identity decoupling).
+    if dal.get_user_mapping_by_scim_username(scim_username):
+        return _scim_error_response(
+            409, f"User with userName {scim_username} already exists"
+        )
+
+    # A user that exists but isn't SCIM-managed yet is linked to the IdP
+    # rather than rejected with 409.
     existing_user = dal.get_user_by_email(email)
     if existing_user:
         existing_mapping = dal.get_user_mapping_by_user_id(existing_user.id)
@@ -512,7 +761,6 @@ def create_user(
         dal.update_user(
             existing_user,
             is_active=user_resource.active,
-            role=UserRole.BASIC if promote else None,
             account_type=AccountType.STANDARD if promote else None,
             **({"personal_name": personal_name} if personal_name else {}),
         )
@@ -562,7 +810,6 @@ def create_user(
     user = User(
         email=email,
         hashed_password=_pw_helper.hash(_pw_helper.generate()),
-        role=UserRole.BASIC,
         account_type=AccountType.STANDARD,
         is_active=user_resource.active,
         is_verified=True,
@@ -626,47 +873,66 @@ def replace_user(
         return result
     user = result
 
+    scim_username = user_resource.userName.strip()
+    error = _validate_username_change(dal, user, scim_username)
+    if error:
+        return error
+
+    # A full replace without emails keeps the address. Passing the current
+    # email through still re-runs reconciliation (EXT_PERM shadow merging).
+    put_email = _primary_email_or_error(user_resource.emails)
+    if isinstance(put_email, ScimJSONResponse):
+        return put_email
+    requested_email = put_email or user.email
+    new_email: str | None = requested_email
+    seat_freed = False
+    if requested_email.lower() != user.email.lower():
+        resolved = _apply_email_change(dal, user, requested_email)
+        if isinstance(resolved, ScimJSONResponse):
+            return resolved
+        user, new_email, seat_freed = resolved
+
     # Handle activation (need seat check) / deactivation. Promoting a shadow
     # EXT_PERM_USER also consumes a seat, so self-heal any that the IdP
-    # re-syncs after being adopted while still in the shadow role.
+    # re-syncs after being adopted while still in the shadow role. An adoption
+    # that deactivated an active source is seat-neutral, so no check.
     promote = _is_ext_perm_user(user)
     is_reactivation = user_resource.active and not user.is_active
-    if user_resource.active and (is_reactivation or promote):
+    if user_resource.active and (is_reactivation or promote) and not seat_freed:
         seat_error = _check_seat_availability(dal)
         if seat_error:
             return _scim_error_response(403, seat_error)
 
     personal_name = _scim_name_to_str(user_resource.name)
 
-    dal.update_user(
+    error = _update_user_or_conflict(
+        dal,
+        scim_username,
         user,
-        email=user_resource.userName.strip(),
+        email=new_email,
         is_active=user_resource.active,
         personal_name=personal_name,
-        role=UserRole.BASIC if promote else None,
         account_type=AccountType.STANDARD if promote else None,
     )
+    if error:
+        return error
 
     # Reconcile default-group membership on reactivation or promotion — a
     # promoted shadow user is now a real account and needs the Basic group.
     if is_reactivation or promote:
         error = _assign_default_groups_or_error(
-            dal, db_session, user, user.email, is_admin=(user.role == UserRole.ADMIN)
+            dal, db_session, user, user.email, is_admin=user_is_admin(user)
         )
         if error:
             return error
 
     new_external_id = user_resource.externalId
-    scim_username = user_resource.userName.strip()
     fields = _fields_from_resource(user_resource)
-    dal.sync_user_external_id(
-        user.id,
-        new_external_id,
-        scim_username=scim_username,
-        fields=fields,
+    error = _sync_and_commit_or_conflict(
+        dal, user.id, new_external_id, scim_username, fields, scim_username
     )
-
-    dal.commit()
+    if error:
+        return error
 
     return _scim_resource_response(
         provider.build_user_resource(
@@ -720,18 +986,54 @@ def patch_user(
     except ScimPatchError as e:
         return _scim_error_response(e.status, e.detail)
 
+    requested_username = patched.userName.strip()
+    # Act only on attributes the PATCH itself carried. A patch touching other
+    # fields must not act on stored values that have drifted.
+    sets_username = _patch_sets_attr(patch_request.Operations, "username")
+    if sets_username:
+        error = _validate_username_change(dal, user, requested_username)
+        if error:
+            return error
+
+    sets_emails = _patch_sets_attr(patch_request.Operations, "emails")
+    new_email: str | None = None
+    seat_freed = False
+    if sets_emails:
+        patched_email = _primary_email_or_error(patched.emails)
+        if isinstance(patched_email, ScimJSONResponse):
+            return patched_email
+        # Act only when the ops changed the primary value. A filtered update
+        # of a secondary entry must not move the login email to a drifted
+        # stored primary.
+        prior_primary = _primary_email(current.emails) or user.email
+        if (
+            patched_email
+            and patched_email.lower() != prior_primary.lower()
+            and patched_email.lower() != user.email.lower()
+        ):
+            resolved = _apply_email_change(dal, user, patched_email)
+            if isinstance(resolved, ScimJSONResponse):
+                return resolved
+            user, new_email, seat_freed = resolved
+
     # Apply changes back to the DB model. A seat is consumed when the user
     # becomes active (reactivation) or when a shadow EXT_PERM_USER is promoted
-    # to a real STANDARD account on re-sync.
+    # to a real STANDARD account on re-sync. An adoption that deactivated an
+    # active source is seat-neutral, so no check.
     promote = _is_ext_perm_user(user)
     is_reactivation = patched.active and not user.is_active
-    if patched.active and (patched.active != user.is_active or promote):
+    if (
+        patched.active
+        and (patched.active != user.is_active or promote)
+        and not seat_freed
+    ):
         seat_error = _check_seat_availability(dal)
         if seat_error:
             return _scim_error_response(403, seat_error)
 
-    # Track the scim_username — if userName was patched, update it
-    new_scim_username = patched.userName.strip() if patched.userName else None
+    # Record the userName on the mapping only when the PATCH carried it. A
+    # nulled collision row must not re-collide via its email fallback.
+    new_scim_username = requested_username if sets_username else None
 
     # If displayName was explicitly patched (different from the original), use
     # it as personal_name directly.  Otherwise, derive from name components.
@@ -741,24 +1043,23 @@ def patch_user(
     else:
         personal_name = _scim_name_to_str(patched.name)
 
-    dal.update_user(
+    error = _update_user_or_conflict(
+        dal,
+        requested_username,
         user,
-        email=(
-            patched.userName.strip()
-            if patched.userName.strip().lower() != user.email.lower()
-            else None
-        ),
+        email=new_email,
         is_active=patched.active if patched.active != user.is_active else None,
         personal_name=personal_name,
-        role=UserRole.BASIC if promote else None,
         account_type=AccountType.STANDARD if promote else None,
     )
+    if error:
+        return error
 
     # Reconcile default-group membership on reactivation or promotion — a
     # promoted shadow user is now a real account and needs the Basic group.
     if is_reactivation or promote:
         error = _assign_default_groups_or_error(
-            dal, db_session, user, user.email, is_admin=(user.role == UserRole.ADMIN)
+            dal, db_session, user, user.email, is_admin=user_is_admin(user)
         )
         if error:
             return error
@@ -770,28 +1071,25 @@ def patch_user(
         manager=ent_data.get("manager", cf.manager),
         given_name=patched.name.givenName if patched.name else cf.given_name,
         family_name=patched.name.familyName if patched.name else cf.family_name,
+        # Persist emails only when the PATCH carried them. patched.emails is
+        # otherwise the response-side fallback, which must not become stored.
         scim_emails_json=(
-            serialize_emails(patched.emails)
-            if patched.emails is not None
-            else cf.scim_emails_json
+            serialize_emails(patched.emails) if sets_emails else cf.scim_emails_json
         ),
     )
 
-    dal.sync_user_external_id(
-        user.id,
-        patched.externalId,
-        scim_username=new_scim_username,
-        fields=fields,
+    error = _sync_and_commit_or_conflict(
+        dal, user.id, patched.externalId, new_scim_username, fields, requested_username
     )
-
-    dal.commit()
+    if error:
+        return error
 
     return _scim_resource_response(
         provider.build_user_resource(
             user,
             patched.externalId,
             groups=dal.get_user_groups(user.id),
-            scim_username=new_scim_username,
+            scim_username=new_scim_username or current_scim_username,
             fields=fields,
         )
     )

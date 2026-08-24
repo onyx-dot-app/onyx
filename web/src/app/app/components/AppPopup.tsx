@@ -83,13 +83,15 @@ export function AppPopup() {
             <ReactMarkdown
               className="prose prose-neutral dark:prose-invert max-w-full"
               components={{
-                a: ({ node, ...props }) => (
+                a: ({ node, children, ...props }) => (
                   <a
                     {...props}
                     className="text-link hover:text-link-hover"
                     target="_blank"
                     rel="noopener noreferrer"
-                  />
+                  >
+                    {children}
+                  </a>
                 ),
                 p: ({ node, ...props }) => (
                   <Text as="p" mainUiBody text03 {...props} />
@@ -137,13 +139,15 @@ export function AppPopup() {
                     <ReactMarkdown
                       className="prose prose-neutral dark:prose-invert max-w-full"
                       components={{
-                        a: ({ node, ...props }) => (
+                        a: ({ node, children, ...props }) => (
                           <a
                             {...props}
                             className="text-link hover:text-link-hover"
                             target="_blank"
                             rel="noopener noreferrer"
-                          />
+                          >
+                            {children}
+                          </a>
                         ),
                         p: ({ node, ...props }) => (
                           <Text

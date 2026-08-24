@@ -62,7 +62,8 @@ from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.session.streaming import BuildStreamingState
 from onyx.server.features.build.timeouts import (
     PROVISION_WAIT_SECONDS,
-    TURN_BUDGET_SECONDS,
+    SCHEDULED_RUN_HARD_CAP_SECONDS,
+    SCHEDULED_RUN_SOFT_BUDGET_SECONDS,
 )
 from onyx.utils.logger import setup_logger
 
@@ -163,7 +164,7 @@ def _notify(
 def run_scheduled_task_logic(
     run_id: UUID,
     *,
-    budget_seconds: int = TURN_BUDGET_SECONDS,
+    budget_seconds: int = SCHEDULED_RUN_HARD_CAP_SECONDS,
 ) -> None:
     """Execute a single scheduled-task run end-to-end.
 
@@ -417,6 +418,14 @@ def _drive_agent(
             db_session.commit()
             return False
         try:
+            session_manager.stamp_turn_deadline(
+                sandbox_id,
+                session_id,
+                soft_budget_seconds=min(
+                    SCHEDULED_RUN_SOFT_BUDGET_SECONDS, budget_seconds
+                ),
+                hard_cap_seconds=budget_seconds,
+            )
             for sandbox_event in session_manager.yield_sandbox_events(
                 sandbox_id,
                 session_id,
@@ -623,6 +632,12 @@ def _drive_agent(
             logger.exception("Scheduled run %s failed", run_id)
             return False
         finally:
+            # Clear the deadline stamp on owned exits so a later turn on this
+            # session can't inherit a stale scheduled-run deadline if its own
+            # stamp write fails; skip when the slot was lost (another holder
+            # may own it and have stamped). Best-effort.
+            if not slot.lost:
+                session_manager.clear_turn_deadline(sandbox_id, session_id)
             # Release the prompt slot on every exit path (clean completion,
             # approval gate, budget exceeded, exception). Matches the
             # interactive path's finally in _stream_cli_agent_response.

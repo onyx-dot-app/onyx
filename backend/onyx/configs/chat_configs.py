@@ -1,7 +1,5 @@
 import os
 
-PROMPTS_YAML = "./onyx/seeding/prompts.yaml"
-PERSONAS_YAML = "./onyx/seeding/personas.yaml"
 NUM_RETURNED_HITS = 50
 
 # May be less depending on model
@@ -18,8 +16,6 @@ MAX_LLM_CYCLES: int = int(os.environ.get("MAX_LLM_CYCLES") or 6)
 DOC_TIME_DECAY = float(
     os.environ.get("DOC_TIME_DECAY") or 0.5  # Hits limit at 2 years by default
 )
-BASE_RECENCY_DECAY = 0.5
-FAVOR_RECENT_DECAY_MULTIPLIER = 2.0
 # For the highest matching base size chunk, how many chunks above and below do we pull in by default
 # Note this is not in any of the deployment configs yet
 # Currently only applies to search flow not chat
@@ -30,6 +26,17 @@ CONTEXT_CHUNKS_BELOW = int(os.environ.get("CONTEXT_CHUNKS_BELOW") or 1)
 LLM_SOCKET_READ_TIMEOUT = int(
     os.environ.get("LLM_SOCKET_READ_TIMEOUT") or "60"
 )  # 60 seconds
+# Total per-call timeout for image summarization. Unlike LLM_SOCKET_READ_TIMEOUT
+# (per-packet gap), this bounds the whole call so a keepalive-only stream can't
+# wedge a docprocessing thread. A generous backstop against hangs.
+IMAGE_SUMMARIZATION_TIMEOUT = int(
+    os.environ.get("IMAGE_SUMMARIZATION_TIMEOUT") or "300"
+)  # 300 seconds (5 min)
+# Same backstop for contextual-RAG doc/chunk summaries. These are short,
+# non-reasoning calls, so this is generous headroom.
+CONTEXTUAL_RAG_LLM_TIMEOUT = int(
+    os.environ.get("CONTEXTUAL_RAG_LLM_TIMEOUT") or "180"
+)  # 180 seconds
 # Max silent gap before the chat stream emits a keepalive packet; must stay below
 # the smallest proxy idle timeout in front (ALBs default to 60s).
 CHAT_HEARTBEAT_INTERVAL_S = int(os.environ.get("CHAT_HEARTBEAT_INTERVAL_S") or "15")

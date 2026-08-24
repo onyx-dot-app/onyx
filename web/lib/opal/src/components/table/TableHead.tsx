@@ -87,7 +87,13 @@ export default function TableHead({
       data-size={resolvedSize}
       data-bottom-border={bottomBorder || undefined}
     >
-      <div className="flex items-center gap-1">
+      <div
+        className={cn(
+          "flex items-center gap-1",
+          alignment === "right" && "justify-end",
+          alignment === "center" && "justify-center"
+        )}
+      >
         <div className="table-head-label">
           <Text
             font={isSmall ? "secondary-action" : "main-ui-action"}
@@ -117,6 +123,7 @@ export default function TableHead({
       </div>
       {resizable && (
         <div
+          role="presentation"
           onMouseDown={onResizeStart}
           onTouchStart={onResizeStart}
           className={cn(

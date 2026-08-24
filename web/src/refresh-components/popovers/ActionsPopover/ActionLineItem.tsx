@@ -2,7 +2,7 @@
 
 import React from "react";
 import { SEARCH_TOOL_ID } from "@/app/app/components/tools/constants";
-import { ToolSnapshot } from "@/lib/tools/interfaces";
+import { ToolSnapshot } from "@/lib/tools/types";
 import { getIconForAction } from "@/app/app/services/actionUtils";
 import { ToolAuthStatus } from "@/lib/hooks/useToolOAuthStatus";
 import LineItem from "@/refresh-components/buttons/LineItem";
@@ -112,7 +112,7 @@ export default function ActionLineItem({
         strikethrough={disabled}
         icon={Icon}
         rightChildren={
-          <Section gap={0.25} flexDirection="row">
+          <Section gap={1} flexDirection="row">
             {!isUnavailable && tool?.oauth_config_id && toolAuthStatus && (
               <Button
                 icon={SvgKey}

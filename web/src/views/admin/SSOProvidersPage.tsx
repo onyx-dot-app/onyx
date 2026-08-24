@@ -163,7 +163,7 @@ export default function SSOProvidersPage() {
                     description={provider.redirect_uri}
                     sizePreset="main-ui"
                     variant="section"
-                    padding="md"
+                    padding={1}
                     rightChildren={
                       <div
                         className={cn(
@@ -208,7 +208,12 @@ export default function SSOProvidersPage() {
       </Shell>
 
       <setupModal.Provider>
-        <SSOProviderModal provider={editProvider} onSaved={() => mutate()} />
+        <SSOProviderModal
+          provider={editProvider}
+          onSaved={async () => {
+            await mutate();
+          }}
+        />
       </setupModal.Provider>
     </>
   );

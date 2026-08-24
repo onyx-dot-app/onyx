@@ -7,9 +7,11 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, cast
 
 import httpx
+from fastapi.concurrency import run_in_threadpool
 from fastapi_users.manager import BaseUserManager
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from onyx.auth.sso_url_guard import UnsafeSSOUrl, validate_idp_url
 from onyx.configs.app_configs import (
     OAUTH_CLIENT_ID,
     OAUTH_CLIENT_SECRET,
@@ -112,20 +114,45 @@ def _cached_token_endpoint(config_url: str) -> tuple[bool, Optional[str]]:
     return True, endpoint
 
 
+async def _revalidate_cached_endpoint(endpoint: Optional[str]) -> Optional[str]:
+    """Re-check a cached endpoint against the live SSRF setting, so tightening
+    the setting is not bypassed for the endpoint's remaining cache TTL."""
+    if endpoint is None:
+        return None
+    try:
+        await run_in_threadpool(validate_idp_url, endpoint, field="token_endpoint")
+    except UnsafeSSOUrl as e:
+        logger.warning("Cached token endpoint now fails SSRF policy: %s", e)
+        return None
+    return endpoint
+
+
 async def _get_oidc_token_endpoint(config_url: str) -> Optional[str]:
     """Resolve token_endpoint from an OIDC discovery document. The per-URL
-    lock + double check coalesce concurrent fetches into one request."""
+    lock + double check coalesce concurrent fetches into one request.
+
+    Refresh runs long after the admin configured the row, and it POSTs the
+    client secret and the user's refresh token to whatever the document names,
+    so both the document URL and that endpoint are held to the same bound the
+    login path applies.
+    """
     if not config_url:
+        return None
+    try:
+        # Off the event loop: the guard resolves the host, which is blocking DNS.
+        await run_in_threadpool(validate_idp_url, config_url, field="openid_config_url")
+    except UnsafeSSOUrl as e:
+        logger.warning("Refusing OIDC discovery for refresh: %s", e)
         return None
     hit, cached = _cached_token_endpoint(config_url)
     if hit:
-        return cached
+        return await _revalidate_cached_endpoint(cached)
     async with await _get_discovery_lock(config_url):
         # Re-check inside the lock — another coroutine may have populated
         # the cache while we were waiting to acquire it.
         hit, cached = _cached_token_endpoint(config_url)
         if hit:
-            return cached
+            return await _revalidate_cached_endpoint(cached)
         token_endpoint: Optional[str] = None
         try:
             async with httpx.AsyncClient() as client:
@@ -134,10 +161,14 @@ async def _get_oidc_token_endpoint(config_url: str) -> Optional[str]:
                 config: Dict[str, Any] = response.json()
             raw_endpoint = config.get("token_endpoint")
             if isinstance(raw_endpoint, str) and raw_endpoint:
+                await run_in_threadpool(
+                    validate_idp_url, raw_endpoint, field="token_endpoint"
+                )
                 token_endpoint = raw_endpoint
         except (httpx.HTTPError, ValueError) as e:
-            # ValueError covers json.JSONDecodeError when the IdP returns a
-            # non-JSON body (e.g. an HTML error page from a misconfigured URL).
+            # ValueError covers json.JSONDecodeError on a non-JSON body, and
+            # UnsafeSSOUrl when the document names a non-public endpoint. Both
+            # leave token_endpoint unset, so refresh declines to post the secret.
             logger.warning("Failed to fetch OIDC discovery document: %s", e)
         _OIDC_TOKEN_ENDPOINT_CACHE[config_url] = (token_endpoint, time.monotonic())
         return token_endpoint

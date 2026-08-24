@@ -15,7 +15,7 @@ their own /tmp volume. */}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "onyx.fullname" . }}-celery-beat
+  name: {{ include "onyx.resourceName" (list . "celery-beat") }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
     {{- with .Values.celery_beat.deploymentLabels }}

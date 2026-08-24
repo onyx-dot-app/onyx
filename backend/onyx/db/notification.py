@@ -8,8 +8,9 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
 from sqlalchemy.sql.elements import ColumnElement
 
-from onyx.auth.schemas import UserRole
+from onyx.auth.permissions import has_global_permission
 from onyx.configs.constants import NotificationType
+from onyx.db.enums import NotificationSeverity, Permission
 from onyx.db.models import Notification, User
 
 
@@ -28,6 +29,7 @@ def _notification_filters(
     user: User | None,
     notif_type: NotificationType | None = None,
     include_dismissed: bool = True,
+    min_severity: NotificationSeverity | None = None,
 ) -> list[ColumnElement[bool]]:
     filters = [
         Notification.user_id == user.id if user else Notification.user_id.is_(None)
@@ -36,6 +38,11 @@ def _notification_filters(
         filters.append(Notification.dismissed.is_(False))
     if notif_type:
         filters.append(Notification.notif_type == notif_type)
+    if min_severity is not None:
+        ordered = list(NotificationSeverity)
+        filters.append(
+            Notification.severity.in_(ordered[ordered.index(min_severity) :])
+        )
     return filters
 
 
@@ -48,6 +55,7 @@ def create_notification(
     additional_data: dict | None = None,
     autocommit: bool = True,
     refresh_existing: bool = True,
+    severity: NotificationSeverity = NotificationSeverity.INFO,
 ) -> Notification:
     """Create or return a notification without racing concurrent user inserts."""
 
@@ -79,6 +87,7 @@ def create_notification(
         .values(
             user_id=user_id,
             notif_type=notif_type,
+            severity=severity,
             title=title,
             description=description,
             dismissed=False,
@@ -139,7 +148,9 @@ def get_notification_by_id(
     if not notif:
         raise ValueError(f"No notification found with id {notification_id}")
     if notif.user_id != user_id and not (
-        notif.user_id is None and user is not None and user.role == UserRole.ADMIN
+        notif.user_id is None
+        and user is not None
+        and has_global_permission(user, Permission.FULL_ADMIN_PANEL_ACCESS)
     ):
         raise PermissionError(
             f"User {user_id} is not authorized to access notification {notification_id}"
@@ -154,12 +165,14 @@ def get_notifications(
     include_dismissed: bool = True,
     limit: int | None = None,
     offset: int = 0,
+    min_severity: NotificationSeverity | None = None,
 ) -> list[Notification]:
     query = select(Notification).where(
         *_notification_filters(
             user=user,
             notif_type=notif_type,
             include_dismissed=include_dismissed,
+            min_severity=min_severity,
         )
     )
     # Sort: undismissed first, then by date (newest first)
@@ -177,6 +190,7 @@ def count_notifications(
     user: User | None,
     db_session: Session,
     notif_type: NotificationType | None = None,
+    min_severity: NotificationSeverity | None = None,
 ) -> tuple[int, int]:
     query = select(
         func.count(Notification.id),
@@ -185,6 +199,7 @@ def count_notifications(
         *_notification_filters(
             user=user,
             notif_type=notif_type,
+            min_severity=min_severity,
         )
     )
     total_items, undismissed_count = db_session.execute(query).one()
@@ -243,6 +258,7 @@ def batch_create_notifications(
     title: str,
     description: str | None = None,
     additional_data: dict | None = None,
+    severity: NotificationSeverity = NotificationSeverity.INFO,
 ) -> set[UUID]:
     """
     Create notifications for multiple users in a single batch operation.
@@ -253,6 +269,10 @@ def batch_create_notifications(
     Returns the set of user_ids whose row was newly inserted (excludes conflicts).
     Callers that need to fire side effects only on fresh inserts (emails, webhooks)
     can iterate the returned set without re-triggering on idempotent retries.
+
+    Severity is set only on fresh inserts: a conflicting row keeps its original
+    severity. Producers that need an escalation to re-alert must vary
+    additional_data (as the license flow does with its stage field).
 
     Relies on unique index on (user_id, notif_type, COALESCE(additional_data, '{}'))
     """
@@ -266,6 +286,7 @@ def batch_create_notifications(
         {
             "user_id": uid,
             "notif_type": notif_type,
+            "severity": severity,
             "title": title,
             "description": description,
             "dismissed": False,

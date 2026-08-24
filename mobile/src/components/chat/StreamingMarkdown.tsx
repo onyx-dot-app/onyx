@@ -5,31 +5,41 @@ import { StreamdownText } from "react-native-streamdown";
 import type { MarkdownStyle } from "react-native-enriched-markdown";
 import { textPresets, varsDark, varsLight } from "@onyx-ai/shared/native";
 
+// "muted": reasoning/secondary body — text-03 with a tighter paragraph rhythm.
+type StreamingMarkdownVariant = "default" | "muted";
+
 interface StreamingMarkdownProps {
   content: string;
   isStreaming: boolean;
   // Tap on any markdown link (incl. `[[n]](url)` citation markers) → the link's URL.
   onLinkPress?: (url: string) => void;
+  variant?: StreamingMarkdownVariant;
 }
 
 // 14px body: deliberate reduction from web's 16px, which reads oversized on a phone.
 const BODY = textPresets["main-ui-body"];
 const MONO = textPresets["main-content-mono"];
 
-function buildMarkdownStyle(scheme: "light" | "dark"): MarkdownStyle {
+function buildMarkdownStyle(
+  scheme: "light" | "dark",
+  variant: StreamingMarkdownVariant,
+): MarkdownStyle {
   const vars = scheme === "dark" ? varsDark : varsLight;
   const color = (token: string): string => vars[token] ?? "#000000";
   // Fenced code has no Onyx token; use Atom One's flat base color (no per-token highlighting).
   const codeBaseColor = scheme === "dark" ? "#e2e6eb" : "#383a42";
+  const muted = variant === "muted";
+  const bodyColor = color(muted ? "--text-03" : "--text-05");
+  const paragraphMarginBottom = muted ? 4 : 8;
   return {
     paragraph: {
-      color: color("--text-05"),
+      color: bodyColor,
       fontFamily: BODY.fontFamily,
       fontSize: BODY.fontSize,
       lineHeight: BODY.lineHeight,
-      // RN doesn't collapse margins: 0 top + 8 bottom gives an even 8px rhythm.
+      // RN doesn't collapse margins: 0 top + a bottom gap gives an even rhythm.
       marginTop: 0,
-      marginBottom: 8,
+      marginBottom: paragraphMarginBottom,
     },
     h1: {
       color: color("--text-05"),
@@ -63,7 +73,7 @@ function buildMarkdownStyle(scheme: "light" | "dark"): MarkdownStyle {
     em: { fontStyle: "italic" },
     link: { color: color("--action-selection-05"), underline: true },
     list: {
-      color: color("--text-05"),
+      color: bodyColor,
       markerColor: color("--text-03"),
       fontFamily: BODY.fontFamily,
       fontSize: BODY.fontSize,
@@ -114,9 +124,13 @@ export function StreamingMarkdown({
   content,
   isStreaming,
   onLinkPress,
+  variant = "default",
 }: StreamingMarkdownProps) {
   const scheme = useColorScheme() === "dark" ? "dark" : "light";
-  const markdownStyle = useMemo(() => buildMarkdownStyle(scheme), [scheme]);
+  const markdownStyle = useMemo(
+    () => buildMarkdownStyle(scheme, variant),
+    [scheme, variant],
+  );
   return (
     <StreamdownText
       markdown={content}

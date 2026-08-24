@@ -18,6 +18,7 @@ import { HoverPopup } from "@/components/HoverPopup";
 import { Checkbox } from "@opal/components";
 import { ScoreSection } from "../ScoreEditor";
 import { truncateString } from "@/lib/utils";
+import { clickOnKeyDown } from "@opal/utils";
 
 const IsVisibleSection = ({
   document,
@@ -26,18 +27,20 @@ const IsVisibleSection = ({
   document: DocumentBoostStatus;
   onUpdate: (response: Response) => void;
 }) => {
+  async function setHidden(hidden: boolean) {
+    onUpdate(await updateHiddenStatus(document.document_id, hidden));
+  }
+
   return (
     <HoverPopup
       mainContent={
         document.hidden ? (
           <div
-            onClick={async () => {
-              const response = await updateHiddenStatus(
-                document.document_id,
-                false
-              );
-              onUpdate(response);
-            }}
+            role="button"
+            tabIndex={0}
+            aria-label="Unhide document"
+            onKeyDown={clickOnKeyDown(() => void setHidden(false))}
+            onClick={() => void setHidden(false)}
             className="flex text-error cursor-pointer hover:bg-accent-background-hovered py-1 px-2 w-fit rounded-full"
           >
             <div className="select-none">Hidden</div>
@@ -47,13 +50,11 @@ const IsVisibleSection = ({
           </div>
         ) : (
           <div
-            onClick={async () => {
-              const response = await updateHiddenStatus(
-                document.document_id,
-                true
-              );
-              onUpdate(response);
-            }}
+            role="button"
+            tabIndex={0}
+            aria-label="Hide document"
+            onKeyDown={clickOnKeyDown(() => void setHidden(true))}
+            onClick={() => void setHidden(true)}
             className="flex cursor-pointer hover:bg-accent-background-hovered py-1 px-2 w-fit rounded-full"
           >
             <div className="my-auto select-none">Visible</div>

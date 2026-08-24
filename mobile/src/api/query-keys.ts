@@ -1,6 +1,8 @@
 export const QUERY_KEYS = {
-  // Keyed by serverUrl so switching instances never serves the prior backend's
-  // cached identity/config.
+  /*
+   * Keyed by serverUrl so switching instances never serves the prior backend's
+   * cached identity/config.
+   */
   me: (serverUrl: string | null) => ["me", serverUrl] as const,
   authType: (serverUrl: string | null) => ["auth-type", serverUrl] as const,
   chatSessions: (serverUrl: string | null) =>
@@ -15,4 +17,10 @@ export const QUERY_KEYS = {
     ["project", serverUrl, projectId] as const,
   userRecentFiles: (serverUrl: string | null) =>
     ["recent-files", serverUrl] as const,
+  agentPreferences: (serverUrl: string | null) =>
+    ["agent-preferences", serverUrl] as const,
+  connectorSources: (serverUrl: string | null) =>
+    ["connector-sources", serverUrl] as const,
+  federatedSources: (serverUrl: string | null) =>
+    ["federated-sources", serverUrl] as const,
 };

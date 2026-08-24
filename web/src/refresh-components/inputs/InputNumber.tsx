@@ -147,7 +147,10 @@ export default function InputNumber({
   };
 
   return (
+    // Pointer convenience only — this forwards a click to the input, which is
+    // already keyboard reachable.
     <div
+      role="presentation"
       className={cn(
         "flex flex-row items-center justify-between w-full h-fit pr-1.5 pl-1.5 rounded-08",
         wrapperClasses[variant],

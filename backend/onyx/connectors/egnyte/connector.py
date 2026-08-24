@@ -133,6 +133,8 @@ def _process_egnyte_file(
 
 
 class EgnyteConnector(LoadConnector, PollConnector, OAuthConnector):
+    supports_manual_credentials = True
+
     class AdditionalOauthKwargs(OAuthConnector.AdditionalOauthKwargs):
         egnyte_domain: str = Field(
             title="Egnyte Domain",
@@ -161,6 +163,7 @@ class EgnyteConnector(LoadConnector, PollConnector, OAuthConnector):
         base_domain: str,
         state: str,
         additional_kwargs: dict[str, str],
+        code_challenge: str | None = None,  # noqa: ARG003
     ) -> str:
         if not EGNYTE_CLIENT_ID:
             raise ValueError("EGNYTE_CLIENT_ID environment variable must be set")
@@ -183,6 +186,7 @@ class EgnyteConnector(LoadConnector, PollConnector, OAuthConnector):
         base_domain: str,
         code: str,
         additional_kwargs: dict[str, str],
+        code_verifier: str | None = None,  # noqa: ARG003
     ) -> dict[str, Any]:
         if not EGNYTE_CLIENT_ID:
             raise ValueError("EGNYTE_CLIENT_ID environment variable must be set")

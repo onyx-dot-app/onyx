@@ -125,20 +125,22 @@ unguarded after an `APPROVED` row is already committed.
 
 ## Data Model
 
-New table `scheduled_task_pre_approved_app` — one row per `(task, app)`
-grant:
+The legacy-named `scheduled_task_pre_approved_app` table stores one row per
+`(task, target)` grant:
 
-- `scheduled_task_id` → `scheduled_task.id` (`ON DELETE CASCADE`) and
-  `external_app_id` → `external_app.id` (`ON DELETE CASCADE`), with a
-  `UNIQUE(scheduled_task_id, external_app_id)` constraint that keeps
-  grants idempotent and serves the per-task lookup. The FKs give real
-  referential integrity — a grant can't point at a removed app, and
-  removing either side drops the grant. `ScheduledTask.pre_approved_apps`
-  is the ORM collection; `pre_approved_app_ids` is a read-only accessor
-  over it, so the API contract (`list[int]`) is unchanged. The write
-  path replaces the whole set (`set_pre_approved_apps`), validated
-  against the configured apps (via the tenant-scoped session) and
-  deduped order-preserving.
+- `scheduled_task_id` references `scheduled_task.id` with `ON DELETE CASCADE`.
+- `gated_app_id` references the polymorphic `gated_app.id` with
+  `ON DELETE CASCADE`. Each `gated_app` row identifies exactly one external app
+  or MCP server.
+- `UNIQUE(scheduled_task_id, gated_app_id)` keeps grants idempotent and serves
+  the per-task lookup.
+- `ScheduledTask.pre_approved_targets` is the ORM collection of
+  `ScheduledTaskPreApprovedTarget` rows. The
+  `pre_approved_external_app_ids` and `pre_approved_mcp_server_ids` properties
+  project each target kind into its API field.
+- `_replace_pre_approved_targets` replaces each supplied target kind and
+  preserves omitted kinds. It deduplicates submitted IDs and reuses unchanged
+  rows.
 - `action_approval.decided_via` — nullable (`user | pre_approval`,
   NULL for legacy/expired rows): the audit marker distinguishing a
   human click from a pre-approval. Kept separate from `decision` so
@@ -160,10 +162,10 @@ pre-decided inserts go through `insert_action_approval` in
 
 - `ScheduledTaskCreate` / `ScheduledTaskPatch` gain
   `pre_approved_app_ids: list[int]`; `ScheduledTaskDetail` returns it.
-  The write path validates ids via `_validated_app_ids` and dedupes
-  (order-preserving) — existence only; a credential / ≥1-`ASK` filter is
-  editor-side advisory, since a grant on a no-`ASK` app is inert and
-  never consulted.
+  The write path validates ids via `_validate_app_ids` and stores each grant
+  once. Grant order has no meaning. Validation checks existence only; a
+  credential / ≥1-`ASK` filter is editor-side advisory because a grant on a
+  no-`ASK` app is inert and never consulted.
 - New `NotificationType.SCHEDULED_TASK_PRE_APPROVED_ACTION`, emitted
   per `(run, app)` on the first unattended forward so chatty tasks
   don't flood the bell. Dedup rides `create_notification`'s existing
@@ -254,7 +256,7 @@ The grant-source seam means future modes drop in as new
   - Grant patch semantics: a prompt edit preserves grants, supplied
     `pre_approved_app_ids` replaces the set, and re-submitting an existing
     grant is idempotent (no unique-key collision).
-  - Create persistence + `_validated_app_ids` dedupe and unknown-id
+  - Create persistence, duplicate grant normalization, and unknown-id
     rejection.
 - **Unit** (gate, stubbed DB):
   `backend/tests/unit/sandbox_proxy/test_gate.py`

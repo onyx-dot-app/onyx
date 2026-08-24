@@ -652,7 +652,7 @@ def test_load_credentials_defers_clients_and_impersonation_lookup() -> None:
     assert connector._content_client is None
     assert connector._user_email == "user@example.com"
 
-    connector.enterprise_client
+    _ = connector.enterprise_client
 
     assert connector._enterprise_client is not None
     assert connector._content_client is None

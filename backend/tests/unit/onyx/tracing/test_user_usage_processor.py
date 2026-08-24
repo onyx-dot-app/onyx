@@ -166,6 +166,38 @@ def test_batch_aggregates_matching_ledger_dimensions(
     assert aggregated[0].output_tokens == 5
 
 
+def test_batch_aggregates_cache_creation_tokens(
+    processor: UserUsageTracingProcessor,
+) -> None:
+    token = CURRENT_USER_ID_CONTEXTVAR.set(str(uuid4()))
+    try:
+        first = processor._capture(
+            _generation_span(
+                usage={
+                    "input_tokens": 30,
+                    "cache_creation_input_tokens": 10,
+                }
+            )
+        )
+        second = processor._capture(
+            _generation_span(
+                usage={
+                    "input_tokens": 50,
+                    "cache_creation_input_tokens": 20,
+                }
+            )
+        )
+    finally:
+        CURRENT_USER_ID_CONTEXTVAR.reset(token)
+
+    assert first is not None
+    assert second is not None
+    aggregated = processor._aggregate_batch([first, second])
+    assert len(aggregated) == 1
+    assert aggregated[0].input_tokens == 80
+    assert aggregated[0].cache_creation_tokens == 30
+
+
 def test_no_record_when_user_id_unset(
     processor: UserUsageTracingProcessor, recorded_calls: list[dict[str, Any]]
 ) -> None:
@@ -250,7 +282,7 @@ def test_on_span_end_never_raises_on_internal_error(
     assert recorded_calls == []
 
 
-def test_excludes_cache_reads_from_priced_input(
+def test_passes_cache_inclusive_usage_to_shared_pricing(
     monkeypatch: pytest.MonkeyPatch, recorded_calls: list[dict[str, Any]]
 ) -> None:
     @contextmanager
@@ -259,17 +291,25 @@ def test_excludes_cache_reads_from_priced_input(
 
     monkeypatch.setattr(proc_mod, "get_session_with_tenant", _fake_session)
 
-    priced: list[tuple[int, int, int]] = []
+    priced: list[tuple[int, int, int, int]] = []
 
     def _capture_cost(
-        _model: str,
-        _provider: Any,
-        input_tokens: int,
-        output_tokens: int,
+        model: str,  # noqa: ARG001
+        provider: Any,  # noqa: ARG001
+        prompt_tokens: int,
+        completion_tokens: int,
         cache_read_tokens: int = 0,
+        cache_creation_tokens: int = 0,
         **_kw: Any,
     ) -> tuple[float, float]:
-        priced.append((input_tokens, output_tokens, cache_read_tokens))
+        priced.append(
+            (
+                prompt_tokens,
+                completion_tokens,
+                cache_read_tokens,
+                cache_creation_tokens,
+            )
+        )
         return (0.0, 0.0)
 
     def _capture_record(db_session: Any, **kwargs: Any) -> None:  # noqa: ARG001
@@ -289,6 +329,7 @@ def test_excludes_cache_reads_from_priced_input(
                         "input_tokens": 3000,
                         "output_tokens": 500,
                         "cache_read_input_tokens": 2000,
+                        "cache_creation_input_tokens": 500,
                     }
                 )
             )
@@ -298,10 +339,11 @@ def test_excludes_cache_reads_from_priced_input(
     finally:
         p.shutdown()
 
-    assert priced == [(1000, 500, 2000)]
+    assert priced == [(3000, 500, 2000, 500)]
     assert len(recorded_calls) == 1
     assert recorded_calls[0]["input_tokens"] == 3000
     assert recorded_calls[0]["cache_read_tokens"] == 2000
+    assert recorded_calls[0]["cache_creation_tokens"] == 500
 
 
 def test_flush_swallows_record_errors(

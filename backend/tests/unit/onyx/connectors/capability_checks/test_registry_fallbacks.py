@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from onyx.configs.constants import DocumentSource
+from onyx.connectors import source_operations as source_operations_module
 from onyx.connectors.capability_checks import registry
 from onyx.connectors.capability_checks.models import (
     CapabilityCheck,
@@ -14,6 +15,7 @@ from onyx.connectors.capability_checks.registry import (
     get_capability_checks,
 )
 from onyx.connectors.interfaces import BaseConnector
+from onyx.connectors.source_operations import SourceOperations
 
 
 class _NamedCheck(CapabilityCheck):
@@ -46,8 +48,15 @@ def test_unregistered_source_gets_connector_settings_fallback() -> None:
 def test_registered_source_gets_no_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
     """Verifies that registered named checks clobber the INDEXING fallback."""
     # Precondition.
-    # Nothing is registered at framework stage, so register a named check the
-    # way a per-connector session would.
+    # Nothing is registered at the framework layer, so register a gateway and a
+    # named check the way a per-connector session would (the ratchet requires
+    # the gateway).
+    monkeypatch.setattr(source_operations_module, "_SOURCE_OPERATIONS_BY_SOURCE", {})
+
+    class _GithubOperations(SourceOperations):
+        source = DocumentSource.GITHUB
+        sdk_modules = ()
+
     named_check = _NamedCheck(
         capability=CredentialCapability.INDEXING,
         check_id="github_named_check",
