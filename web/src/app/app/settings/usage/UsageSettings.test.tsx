@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import UsageSettings from "@/app/app/settings/usage/UsageSettings";
 import { useUserUsage } from "@/app/app/settings/usage/lib";
+import { formatCalendarDay } from "@/lib/dateUtils";
 
 jest.mock("@/app/app/settings/usage/lib", () => ({
   useUserUsage: jest.fn(),
@@ -71,7 +72,9 @@ describe("UsageSettings", () => {
 
     render(<UsageSettings />);
 
-    expect(screen.getByText("Resets on Sep 1")).toBeInTheDocument();
+    expect(
+      screen.getByText(`Resets on ${formatCalendarDay("2026-09-01")}`)
+    ).toBeInTheDocument();
   });
 
   it("shows the top three models before expanding the breakdown", async () => {
