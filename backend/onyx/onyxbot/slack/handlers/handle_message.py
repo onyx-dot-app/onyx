@@ -4,6 +4,7 @@ from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from sqlalchemy.orm import Session
 
+from onyx.auth.users import verify_email_is_invited
 from onyx.configs.onyxbot_configs import (
     ONYX_BOT_FEEDBACK_REMINDER,
     ONYX_BOT_REACT_EMOJI,
@@ -269,6 +270,40 @@ def handle_message(
     with get_session_with_current_tenant() as db_session:
         if message_info.email:
             existing_user = get_user_by_email(message_info.email, db_session)
+
+            # True when this message provisions an account (new user or
+            # EXT_PERM_USER promotion). Read before add_slack_user_if_not_exists
+            # promotes in place, else the cache invalidation below is skipped.
+            provisions_account: bool = existing_user is None or (
+                existing_user.account_type == AccountType.EXT_PERM_USER
+            )
+
+            # Invite-only gates provisioning like any self-serve signup. BOT
+            # accounts were provisioned by the bot itself, never re-checked.
+            if provisions_account:
+                try:
+                    verify_email_is_invited(message_info.email)
+                except OnyxError as e:
+                    if e.error_code != OnyxErrorCode.UNAUTHORIZED:
+                        raise
+                    logger.info(
+                        "Blocked Slack-bot provisioning of uninvited user %s: %s",
+                        message_info.email,
+                        e.detail,
+                    )
+                    respond_in_thread_or_channel(
+                        client=client,
+                        channel=channel,
+                        thread_ts=message_info.msg_to_respond,
+                        text=(
+                            "We weren't able to respond because this workspace "
+                            "is invite-only and your email has not been "
+                            "invited. Please ask your Onyx administrator for "
+                            "an invite."
+                        ),
+                    )
+                    return False
+
             if existing_user is None:
                 # New user — check seat availability before creating
                 check_seat_fn = fetch_ee_implementation_or_noop(
@@ -391,14 +426,6 @@ def handle_message(
                         OnyxErrorCode.SEAT_LIMIT_EXCEEDED, result.error_message
                     )
 
-            # Snapshot pre-call seat-counted state. ``add_slack_user_if_not_exists``
-            # mutates ``existing_user`` in place on EXT_PERM_USER -> BOT, so
-            # reading ``account_type`` after the call would see the new value
-            # and skip cache invalidation.
-            consumed_seat = existing_user is None or (
-                existing_user.account_type == AccountType.EXT_PERM_USER
-            )
-
             try:
                 add_slack_user_if_not_exists(
                     db_session,
@@ -425,7 +452,7 @@ def handle_message(
                 )
                 return False
             else:
-                if consumed_seat:
+                if provisions_account:
                     invalidate_fn = fetch_ee_implementation_or_noop(
                         "onyx.db.license",
                         "invalidate_license_cache",
