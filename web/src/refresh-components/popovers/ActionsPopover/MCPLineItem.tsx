@@ -5,7 +5,7 @@ import {
   MCPAuthenticationType,
   MCPAuthenticationPerformer,
   ToolSnapshot,
-} from "@/lib/tools/interfaces";
+} from "@/lib/tools/types";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { noProp } from "@/lib/utils";
 import { cn } from "@opal/utils";
@@ -19,7 +19,6 @@ import {
   SvgSimpleLoader,
 } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
-import { Button } from "@opal/components";
 import EnabledCount from "@/refresh-components/EnabledCount";
 
 export interface MCPServer {
@@ -29,8 +28,7 @@ export interface MCPServer {
   server_url: string;
   auth_type: MCPAuthenticationType;
   auth_performer: MCPAuthenticationPerformer;
-  is_authenticated: boolean;
-  user_authenticated?: boolean;
+  user_can_authenticate?: boolean;
   auth_template?: any;
   user_credentials?: Record<string, string>;
 }
@@ -103,7 +101,7 @@ export default function MCPLineItem({
       strikethrough={allToolsDisabled}
       selected={isActive}
       rightChildren={
-        <Section gap={0.25} flexDirection="row">
+        <Section gap={1} flexDirection="row">
           {isAuthenticated &&
             tools.length > 0 &&
             enabledTools.length > 0 &&
@@ -114,20 +112,20 @@ export default function MCPLineItem({
               />
             )}
           {canClickIntoServer && (
-            <Button
-              icon={SvgChevronRight}
-              prominence="tertiary"
-              size="sm"
-              onClick={onSelect}
-            />
+            <span
+              aria-hidden="true"
+              className="pointer-events-none flex size-6 shrink-0 items-center justify-center"
+            >
+              <SvgChevronRight className="size-4 stroke-text-03" />
+            </span>
           )}
           {showReauthButton && (
-            <Button
-              icon={SvgKey}
-              prominence="tertiary"
-              size="sm"
-              onClick={onAuthenticate}
-            />
+            <span
+              aria-hidden="true"
+              className="pointer-events-none flex size-6 shrink-0 items-center justify-center"
+            >
+              <SvgKey className="size-4 stroke-text-03" />
+            </span>
           )}
         </Section>
       }

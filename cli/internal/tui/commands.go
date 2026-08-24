@@ -33,6 +33,9 @@ func handleSlashCommand(m Model, text string) (Model, tea.Cmd) {
 		}
 		return cmdShowAgents(m)
 
+	case "/model":
+		return cmdShowModels(m)
+
 	case "/attach":
 		return cmdAttach(m, arg)
 
@@ -140,6 +143,82 @@ func cmdSelectAgent(m Model, idStr string) (Model, tea.Cmd) {
 	return m, nil
 }
 
+// modelOption is one selectable model, flattened across providers.
+type modelOption struct {
+	configID      *int
+	name          string // model name sent to the API
+	label         string // display name shown in the UI
+	providerName  string // provider config name, for name-based override fallback
+	providerLabel string // provider display name shown in the UI
+	isDefault     bool   // true when this is the workspace default text model
+}
+
+// flattenModelOptions turns the provider listing into a flat list of visible
+// models, marking the workspace default.
+func flattenModelOptions(resp *models.LLMProviderResponse) []modelOption {
+	if resp == nil {
+		return nil
+	}
+	var options []modelOption
+	for _, provider := range resp.Providers {
+		// Only the provider config name works for the name-based override
+		// fallback on older servers; the provider type key does not resolve.
+		providerName := ""
+		if provider.Name != nil {
+			providerName = *provider.Name
+		}
+		for _, mc := range provider.ModelConfigurations {
+			if !mc.IsVisible {
+				continue
+			}
+			isDefault := resp.DefaultText != nil &&
+				resp.DefaultText.ProviderID == provider.ID &&
+				resp.DefaultText.ModelName == mc.Name
+			options = append(options, modelOption{
+				configID:      mc.ID,
+				name:          mc.Name,
+				label:         mc.Label(),
+				providerName:  providerName,
+				providerLabel: provider.ProviderDisplayName,
+				isDefault:     isDefault,
+			})
+		}
+	}
+	return options
+}
+
+func cmdShowModels(m Model) (Model, tea.Cmd) {
+	m.viewport.addInfo("Loading models...")
+	client := m.client
+	return m, func() tea.Msg {
+		resp, err := client.ListLLMProviders(context.Background())
+		return ModelsLoadedMsg{Response: resp, ShowPicker: true, Err: err}
+	}
+}
+
+// cmdSelectModel applies the picker selection. idxStr is an index into
+// m.llmModels (model names and config IDs are not unique across providers).
+func cmdSelectModel(m Model, idxStr string) (Model, tea.Cmd) {
+	idx, err := strconv.Atoi(idxStr)
+	if err != nil || idx < 0 || idx >= len(m.llmModels) {
+		m.viewport.addWarning("Invalid model selection.")
+		return m, nil
+	}
+	opt := m.llmModels[idx]
+
+	override := &models.LLMOverride{
+		ModelConfigurationID: opt.configID,
+		ModelVersion:         &opt.name,
+	}
+	if opt.providerName != "" {
+		override.ModelProvider = &opt.providerName
+	}
+	m.modelOverride = override
+	m.status.setModel(opt.label)
+	m.viewport.addInfo("Switched to model: " + opt.label)
+	return m, nil
+}
+
 func cmdAttach(m Model, pathStr string) (Model, tea.Cmd) {
 	if pathStr == "" {
 		m.viewport.addWarning("Usage: /attach <file_path>")
@@ -199,5 +278,14 @@ func loadAgentsCmd(client api.ClientAPI) tea.Cmd {
 	return func() tea.Msg {
 		agents, err := client.ListAgents(context.Background())
 		return InitDoneMsg{Agents: agents, Err: err}
+	}
+}
+
+// loadModelsCmd fetches LLM providers at startup so the status bar can show
+// the current (default) model.
+func loadModelsCmd(client api.ClientAPI) tea.Cmd {
+	return func() tea.Msg {
+		resp, err := client.ListLLMProviders(context.Background())
+		return ModelsLoadedMsg{Response: resp, Err: err}
 	}
 }

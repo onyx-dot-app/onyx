@@ -347,7 +347,7 @@ export default function KeyValueInput({
       ) : (
         <EmptyMessageCard
           title="No items added yet."
-          padding="sm"
+          padding={2}
           sizePreset="secondary"
         />
       )}

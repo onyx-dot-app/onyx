@@ -16,8 +16,7 @@ from typing import cast
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from onyx.auth.permissions import require_permission
-from onyx.auth.schemas import UserRole
+from onyx.auth.permissions import has_global_permission, require_permission
 from onyx.chat.emitter import NullEmitter
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import BaseFilters, PersonaSearchInfo, TimeRange
@@ -100,7 +99,7 @@ def search(
             provider_model,
             user_group_ids,
             persona,
-            user.role == UserRole.ADMIN,
+            has_global_permission(user, Permission.MANAGE_LLMS),
         ):
             raise OnyxError(OnyxErrorCode.UNAUTHORIZED)
 

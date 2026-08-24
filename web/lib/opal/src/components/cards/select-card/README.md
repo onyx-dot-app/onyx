@@ -38,7 +38,7 @@ Inherits **all** props from `InteractiveStatefulProps` (except `variant`, which 
 
 | Prop | Type | Default | Description |
 |---|---|---|---|
-| `padding` | `PaddingVariants` | `"md"` | Padding preset |
+| `padding` | `Spacing` | `4` | Padding, as a spacing step (`N / 4` rem) |
 | `rounding` | `RoundingVariants` | `"md"` | Border-radius preset |
 | `border` | `BorderVariants` | `"solid"` | Border style (`"none"` \| `"dashed"` \| `"solid"`) |
 | `ref` | `React.Ref<HTMLDivElement>` | — | Ref forwarded to the root div |
@@ -46,14 +46,8 @@ Inherits **all** props from `InteractiveStatefulProps` (except `variant`, which 
 
 ### Padding scale
 
-| `padding` | Class   |
-|-----------|---------|
-| `"lg"`    | `p-6`   |
-| `"md"`    | `p-4`   |
-| `"sm"`    | `p-2`   |
-| `"xs"`    | `p-1`   |
-| `"2xs"`   | `p-0.5` |
-| `"fit"`   | `p-0`   |
+`padding` is a spacing step, not a preset: `N` is `N / 4` rem, the same scale Tailwind
+uses. So `padding={2}` is the same distance as `p-2`, and the default `4` is `1rem`.
 
 ### Rounding scale
 

@@ -100,7 +100,7 @@ class TestResetUserUsage:
         ]
 
         assert get_usage_reset_window_start(now, rate_limits) == (
-            current - datetime.timedelta(days=6)
+            current - datetime.timedelta(days=1)
         )
 
     def test_only_targets_the_given_user(self, db: Session) -> None:

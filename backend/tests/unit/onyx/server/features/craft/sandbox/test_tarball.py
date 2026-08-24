@@ -43,6 +43,7 @@ def test_deterministic() -> None:
     raw1, sha1 = _build_targz(files)
     raw2, sha2 = _build_targz(files)
 
+    assert raw1[4:8] == b"\0\0\0\0"
     assert raw1 == raw2
     assert sha1 == sha2
 

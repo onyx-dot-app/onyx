@@ -34,7 +34,7 @@ export class UsersAdminPage {
     this.inviteButton = page.getByRole("button", { name: "Invite Users" });
     this.searchInput = page.getByPlaceholder("Search users...");
 
-    this.accountTypesFilter = page.getByLabel("Filter by role");
+    this.accountTypesFilter = page.getByLabel("Filter by account type");
     this.groupsFilter = page.getByLabel("Filter by group");
     this.statusFilter = page.getByLabel("Filter by status");
 
@@ -229,7 +229,7 @@ export class UsersAdminPage {
 
   /** The email input inside the invite modal. */
   get inviteEmailInput(): Locator {
-    return this.dialog.getByPlaceholder("Add an email and press enter");
+    return this.dialog.getByRole("textbox");
   }
 
   async openInviteModal() {
@@ -240,31 +240,20 @@ export class UsersAdminPage {
   async addInviteEmail(email: string) {
     await this.inviteEmailInput.pressSequentially(email, { delay: 20 });
     await this.inviteEmailInput.press("Enter");
-    // Wait for the chip to appear in the dialog
     await expect(this.dialog.getByText(email)).toBeVisible();
   }
 
   async submitInvite() {
-    await this.dialog.getByRole("button", { name: "Invite" }).click();
+    // Exact, or the substring default also matches a tag's "Remove <email>"
+    // button whenever the address itself contains "invite".
+    await this.dialog
+      .getByRole("button", { name: "Invite", exact: true })
+      .click();
   }
 
   // ---------------------------------------------------------------------------
   // Inline role editing (Popover + OpenButton + LineItem)
   // ---------------------------------------------------------------------------
-
-  async openRoleDropdown(email: string) {
-    const row = this.getRowByEmail(email);
-    const roleButton = row
-      .locator("button")
-      .filter({ hasText: /Basic|Admin|Global Curator|Slack User/ });
-    await roleButton.click();
-    await expect(this.popover).toBeVisible();
-  }
-
-  async selectRole(roleName: string) {
-    await this.popover.getByText(roleName).first().click();
-    await this.waitForTableRefresh();
-  }
 
   // ---------------------------------------------------------------------------
   // Edit groups modal
@@ -291,7 +280,7 @@ export class UsersAdminPage {
     await this.openRowActions(email);
     await this.clickRowAction("Groups");
     await expect(
-      this.editGroupsDialog.getByText("Edit User's Groups & Roles")
+      this.editGroupsDialog.getByText("Edit User's Groups")
     ).toBeVisible();
   }
 

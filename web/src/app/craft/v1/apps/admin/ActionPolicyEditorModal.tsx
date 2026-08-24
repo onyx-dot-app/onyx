@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import useFocusOnMount from "@opal/hooks/useFocusOnMount";
 import isEqual from "lodash/isEqual";
 import {
   Button,
@@ -97,6 +98,8 @@ export default function ActionPolicyEditorModal({
   allowPristineSave = false,
   closeAfterSave = true,
 }: ActionPolicyEditorModalProps) {
+  const focusFirstField =
+    useFocusOnMount<HTMLInputElement>(autoFocusFirstField);
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({
     ...initialFieldValues,
   });
@@ -196,7 +199,7 @@ export default function ActionPolicyEditorModal({
                     <div key={field.key} className="flex flex-col gap-1">
                       <Text font="main-ui-action">{field.label}</Text>
                       <Input
-                        autoFocus={autoFocusFirstField && field === fields[0]}
+                        ref={field === fields[0] ? focusFirstField : undefined}
                         value={fieldValues[field.key] ?? ""}
                         onChange={(e) =>
                           setFieldValues((prev) => ({

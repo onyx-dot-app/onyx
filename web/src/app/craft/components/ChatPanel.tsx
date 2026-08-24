@@ -20,12 +20,8 @@ import {
   useViewedSubagentSessionId,
 } from "@/app/craft/hooks/useBuildSessionStore";
 import { useBuildStreaming } from "@/app/craft/hooks/useBuildStreaming";
-import { useUsageLimits } from "@/app/craft/hooks/useUsageLimits";
 import { useWakeOnIntent } from "@/app/craft/hooks/useWakeOnIntent";
-import {
-  BuildMessageAttachment,
-  SessionErrorCode,
-} from "@/app/craft/types/streamingTypes";
+import { BuildMessageAttachment } from "@/app/craft/types/streamingTypes";
 import {
   BuildFile,
   UploadFileStatus,
@@ -59,7 +55,6 @@ import SubagentView from "@/app/craft/components/SubagentView";
 import SandboxStatusIndicator from "@/app/craft/components/SandboxStatusIndicator";
 import SandboxAsleepNotice from "@/app/craft/components/SandboxAsleepNotice";
 import SkillsStaleNotice from "@/app/craft/components/SkillsStaleNotice";
-import UpgradePlanModal from "@/app/craft/components/UpgradePlanModal";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { SvgSidebar, SvgChevronDown, SvgStopCircle } from "@opal/icons";
 import { Button as OpalButton, Tooltip } from "@opal/components";
@@ -176,22 +171,9 @@ export default function BuildChatPanel({
   const isViewingSubagent = viewedSubagentSessionId !== null;
   const reduceMotion = useReducedMotion();
 
-  const { limits, refreshLimits } = useUsageLimits();
-  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const updateSessionData = useBuildSessionStore(
     (state) => state.updateSessionData
   );
-  const setCurrentError = useBuildSessionStore(
-    (state) => state.setCurrentError
-  );
-
-  useEffect(() => {
-    if (session?.error === SessionErrorCode.RATE_LIMIT_EXCEEDED) {
-      setShowUpgradeModal(true);
-      setCurrentError(null);
-      refreshLimits();
-    }
-  }, [session?.error, refreshLimits, setCurrentError]);
 
   // Access actions directly like chat does - these don't cause re-renders
   const consumePreProvisionedSession = useBuildSessionStore(
@@ -224,6 +206,9 @@ export default function BuildChatPanel({
     turnId: string;
     timer: ReturnType<typeof setTimeout>;
   } | null>(null);
+  const nameSessionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
   const isPreProvisioning = useIsPreProvisioning();
   const isPreProvisioningFailed = useIsPreProvisioningFailed();
   const preProvisionedSessionId = usePreProvisionedSessionId();
@@ -458,11 +443,6 @@ export default function BuildChatPanel({
       attachments: BuildMessageAttachment[],
       modelOverride?: BuildLlmSelection | null
     ) => {
-      if (limits?.isLimited) {
-        setShowUpgradeModal(true);
-        return;
-      }
-
       if (scheduledRunInFlight) {
         toast.error("Please wait for the scheduled run to finish.");
         return;
@@ -490,7 +470,6 @@ export default function BuildChatPanel({
         });
         // Stream the response
         await streamMessage(sessionId, message, chosen, attachments);
-        refreshLimits();
       } else {
         // New session flow - ALWAYS use pre-provisioned session
         const newSessionId = await consumePreProvisionedSession();
@@ -560,11 +539,19 @@ export default function BuildChatPanel({
         // Schedule naming after delay (message will be saved by then)
         // Note: Don't call refreshSessionHistory() here - it would overwrite the
         // optimistic update from consumePreProvisionedSession() before the message is saved
-        setTimeout(() => nameBuildSession(newSessionId), 1000);
+        if (nameSessionTimeoutRef.current !== null) {
+          clearTimeout(nameSessionTimeoutRef.current);
+        }
+        // Session naming is a store action that must survive unmount. Firing
+        // before the 1s save window would name against an unsaved message.
+        // oxlint-disable-next-line react-doctor/effect-needs-cleanup
+        nameSessionTimeoutRef.current = setTimeout(() => {
+          nameSessionTimeoutRef.current = null;
+          nameBuildSession(newSessionId);
+        }, 1000);
 
         // Stream the response (uses session ID directly, not currentSessionId)
         await streamMessage(newSessionId, message, chosen, attachments);
-        refreshLimits();
       }
     },
     [
@@ -579,8 +566,6 @@ export default function BuildChatPanel({
       nameBuildSession,
       router,
       hasUploadingFiles,
-      limits,
-      refreshLimits,
       selectedModel,
     ]
   );
@@ -617,11 +602,10 @@ export default function BuildChatPanel({
   // Auto-send the next queued message FIFO after a run cleanly succeeds (each
   // send re-arms this for the message after). Only fire on a clean completion
   // and when the send is actually eligible — otherwise we'd dequeue a message
-  // that a failed/rate-limited run never sends, silently dropping it. The
-  // sessionId guard avoids mistaking a session switch for a run completion.
+  // that a failed run never sends, silently dropping it. The sessionId guard
+  // avoids mistaking a session switch for a run completion.
   const sessionStatus = session?.status;
   const sessionError = session?.error;
-  const isLimited = limits?.isLimited ?? false;
   const prevIsRunningRef = useRef(isRunning);
   const prevSessionIdRef = useRef(sessionId);
   useEffect(() => {
@@ -635,8 +619,7 @@ export default function BuildChatPanel({
       !isRunning &&
       sessionId === prevSessionId &&
       sessionStatus === "active" &&
-      !sessionError &&
-      !isLimited;
+      !sessionError;
     if (runSucceeded && sessionId && queuedMessages.length > 0) {
       const next = queuedMessages[0];
       if (next) {
@@ -649,7 +632,6 @@ export default function BuildChatPanel({
     sessionId,
     sessionStatus,
     sessionError,
-    isLimited,
     queuedMessages,
     sendMessage,
     removeQueuedMessage,
@@ -657,11 +639,6 @@ export default function BuildChatPanel({
 
   return (
     <div className="h-full w-full">
-      <UpgradePlanModal
-        open={showUpgradeModal}
-        onClose={() => setShowUpgradeModal(false)}
-        limits={limits}
-      />
       {/* Content wrapper - shrinks when output panel opens. Wrapped in a
           dropzone so files can be dropped anywhere in the chat area. */}
       <Dropzone
@@ -686,6 +663,7 @@ export default function BuildChatPanel({
                 {isMobile && leftSidebarFolded && (
                   <OpalButton
                     icon={SvgSidebar}
+                    aria-label="Open Sidebar"
                     onClick={() => setLeftSidebarFolded(false)}
                     prominence="tertiary"
                     size="sm"
@@ -815,8 +793,6 @@ export default function BuildChatPanel({
                       </Tooltip>
                     </div>
                   )}
-                  {/* Model is locked once the session starts — show the picker
-                  only before the first message. */}
                   {sessionId && session?.skillsStale && (
                     <div className="pb-2">
                       <SkillsStaleNotice
@@ -825,7 +801,10 @@ export default function BuildChatPanel({
                       />
                     </div>
                   )}
-                  {session?.isLoaded && session.messages.length === 0 && (
+                  {/* The selected model is sent with each message, so a
+                  switch applies from the next turn. Subagent transcripts
+                  cannot send, so they get no picker. */}
+                  {session?.isLoaded && !isViewingSubagent && (
                     <div className="flex justify-end pb-2">
                       <ModelPickerButton
                         selection={selectedModel}
@@ -837,7 +816,6 @@ export default function BuildChatPanel({
                             }));
                           }
                         }}
-                        disabled={isViewingSubagent}
                       />
                     </div>
                   )}

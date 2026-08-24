@@ -50,7 +50,7 @@ export const GmailAuthSection = ({
       <Section
         alignItems="start"
         justifyContent="start"
-        gap={0.25}
+        gap={1}
         className="mt-4 rounded-sm border border-border-02 bg-background-tint-02 px-4 py-3"
       >
         <Text as="p" font="main-ui-action">
@@ -65,11 +65,11 @@ export const GmailAuthSection = ({
   }
 
   return (
-    <Section alignItems="start" justifyContent="start" gap={1}>
+    <Section alignItems="start" justifyContent="start" gap={4}>
       <Text as="h3" font="heading-h2">
         Gmail Authentication
       </Text>
-      <Section alignItems="start" justifyContent="start" gap={1}>
+      <Section alignItems="start" justifyContent="start" gap={4}>
         <Text as="p" font="main-ui-action">
           Option 1: OAuth app
         </Text>
@@ -207,7 +207,7 @@ export const GmailAuthSection = ({
         >
           {({ isSubmitting }) => (
             <Form className="w-full">
-              <Section alignItems="start" justifyContent="start" gap={0.25}>
+              <Section alignItems="start" justifyContent="start" gap={1}>
                 <Text font="main-ui-body" color="text-03">
                   Primary Admin Email
                 </Text>

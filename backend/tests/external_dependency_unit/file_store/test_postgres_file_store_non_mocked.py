@@ -11,6 +11,7 @@ from collections.abc import Generator
 from io import BytesIO, StringIO
 from typing import Any, Dict, List
 
+import psycopg2
 import pytest
 from sqlalchemy.orm import Session
 
@@ -244,7 +245,10 @@ class TestPostgresBackedFileStore:
     def test_get_file_size_nonexistent(
         self, pg_file_store: PostgresBackedFileStore
     ) -> None:
-        assert pg_file_store.get_file_size(f"{uuid.uuid4()}") is None
+        # Confirmed-missing content raises so callers can distinguish it from
+        # transient lookup failures (which return None).
+        with pytest.raises(FileNotFoundError):
+            pg_file_store.get_file_size(f"{uuid.uuid4()}")
 
     # ── delete ─────────────────────────────────────────────────────
 
@@ -311,7 +315,7 @@ class TestPostgresBackedFileStore:
             assert new_oid != old_oid
 
             raw_conn = _get_raw_connection(session)
-            with pytest.raises(Exception):
+            with pytest.raises(psycopg2.Error):
                 _read_large_object(raw_conn, old_oid)
 
     # ── change_file_id ─────────────────────────────────────────────

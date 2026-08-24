@@ -80,7 +80,9 @@ def main() -> None:
             # Process documents in parallel using ThreadPoolExecutor
             with concurrent.futures.ThreadPoolExecutor(max_workers=100) as executor:
 
-                def process_doc(doc_id: str) -> str | None:
+                def process_doc(
+                    doc_id: str, vespa_index: VespaDocumentIndex = vespa_index
+                ) -> str | None:
                     document = get_document(doc_id, db_session)
                     if not document:
                         return None

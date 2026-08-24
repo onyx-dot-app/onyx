@@ -68,7 +68,11 @@ from onyx.server.features.build.sandbox.models import PromptAttachment
 from onyx.server.features.build.sandbox.opencode.serve_client import _merge_field_meta
 from onyx.server.features.build.sandbox.serve_transport import PromptSlot
 from onyx.server.features.build.sandbox.sse import SSEKeepalive
-from onyx.server.features.build.timeouts import PROMPT_SLOT_KEEP_ALIVE_MAX_SECONDS
+from onyx.server.features.build.timeouts import (
+    INTERACTIVE_TURN_HARD_CAP_SECONDS,
+    INTERACTIVE_TURN_SOFT_BUDGET_SECONDS,
+    PROMPT_SLOT_KEEP_ALIVE_MAX_SECONDS,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import start_thread_with_context
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
@@ -231,10 +235,11 @@ def _extract_text_from_content(content: Any) -> str:
     if hasattr(content, "type") and content.type == "text":
         return getattr(content, "text", "") or ""
     if isinstance(content, list):
-        texts = []
-        for block in content:
-            if hasattr(block, "type") and block.type == "text":
-                texts.append(getattr(block, "text", "") or "")
+        texts = [
+            getattr(block, "text", "") or ""
+            for block in content
+            if hasattr(block, "type") and block.type == "text"
+        ]
         return "".join(texts)
     return ""
 
@@ -855,6 +860,14 @@ def stream_subagent_turn(
             return
         prompt_slot_cm = candidate_cm
 
+        # Own stamp: the plugin must not compare against the parent turn's.
+        sandbox_manager.stamp_turn_deadline(
+            sandbox_id,
+            session_id,
+            soft_budget_seconds=INTERACTIVE_TURN_SOFT_BUDGET_SECONDS,
+            hard_cap_seconds=INTERACTIVE_TURN_HARD_CAP_SECONDS,
+        )
+
         # This generator advances at the SSE client's pace, so a stalled (but
         # not disconnected) client would stop per-event lease renewal and let
         # a live turn's slot expire. Renew on a wall clock instead, capped so
@@ -945,6 +958,8 @@ def stream_subagent_turn(
         finalize_persist(db_session, session_id, state, routing_meta)
         update_sandbox_heartbeat(db_session, sandbox_id)
         db_session.commit()
+        # Slot still held: a successor's fresh stamp can't be clobbered.
+        sandbox_manager.clear_turn_deadline(sandbox_id, session_id)
 
     except GeneratorExit:
         logger.warning(

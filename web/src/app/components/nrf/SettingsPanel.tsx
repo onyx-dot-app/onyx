@@ -131,8 +131,9 @@ export const SettingsPanel = ({
 
   return (
     <>
-      {/* Backdrop overlay */}
+      {/* Backdrop overlay — pointer convenience; the panel closes via keyboard. */}
       <div
+        role="presentation"
         className={cn(
           "fixed inset-0 bg-mask-03 backdrop-blur-xs z-40 transition-opacity duration-300",
           settingsOpen

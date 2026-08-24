@@ -16,5 +16,12 @@ export default async function AdminSSChrome({ children }: AdminSSChromeProps) {
     return redirect(authResult.redirect as Route);
   }
 
-  return <AdminChrome>{children}</AdminChrome>;
+  // Seed the client gate so a cold deep-link doesn't self-redirect before /api/me loads.
+  return (
+    <AdminChrome
+      initialAdminCapabilities={authResult.user?.admin_capabilities ?? []}
+    >
+      {children}
+    </AdminChrome>
+  );
 }

@@ -8,7 +8,7 @@ import { Popover } from "@opal/components";
 import { Divider } from "@opal/components";
 import { InputTypeIn } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
-import { cn } from "@opal/utils";
+import { cn, clickOnKeyDown } from "@opal/utils";
 import type { ResourcePopoverProps } from "@/views/admin/GroupsPage/SharedGroupResources/interfaces";
 
 function ResourcePopover({
@@ -58,7 +58,7 @@ function ResourcePopover({
                     {section.label && (
                       <Section
                         flexDirection="row"
-                        gap={0.25}
+                        gap={1}
                         padding={0}
                         height="auto"
                         alignItems="center"
@@ -68,18 +68,17 @@ function ResourcePopover({
                         <Text secondaryBody text03 className="shrink-0">
                           {section.label}
                         </Text>
-                        <Divider
-                          paddingParallel="fit"
-                          paddingPerpendicular="fit"
-                        />
+                        <Divider paddingParallel={0} paddingPerpendicular={0} />
                       </Section>
                     )}
                     <Section
-                      gap={0.25}
+                      gap={1}
                       alignItems="stretch"
                       justifyContent="start"
                     >
                       {section.items.map((item) => (
+                        // The rendered item can hold its own buttons, so this
+                        // stays a div with button semantics.
                         <div
                           key={item.key}
                           className={cn(
@@ -88,6 +87,10 @@ function ResourcePopover({
                               ? "bg-background-tint-02"
                               : "hover:bg-background-tint-02 transition-colors"
                           )}
+                          role="button"
+                          tabIndex={0}
+                          aria-label={item.label}
+                          onKeyDown={clickOnKeyDown(item.onSelect)}
                           onClick={() => {
                             item.onSelect();
                           }}

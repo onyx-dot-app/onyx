@@ -172,14 +172,6 @@ export default function ImageGenerationContent() {
     refetchProviders();
   };
 
-  if (llmError || configError) {
-    return (
-      <div className="text-error">
-        Failed to load configuration. Please refresh the page.
-      </div>
-    );
-  }
-
   // Compute replacement options when disconnecting an active provider
   const isDisconnectingDefault =
     disconnectProvider &&
@@ -209,6 +201,14 @@ export default function ImageGenerationContent() {
       if (firstModel) setReplacementProviderId(firstModel.image_provider_id);
     }
   }, [disconnectProvider]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (llmError || configError) {
+    return (
+      <div className="text-error">
+        Failed to load configuration. Please refresh the page.
+      </div>
+    );
+  }
 
   return (
     <>
@@ -290,7 +290,7 @@ export default function ImageGenerationContent() {
                     `**${disconnectProvider.title}** is currently the default image generation model. Session history will be preserved.`
                   )}
                 </Text>
-                <Section alignItems="start" gap={0.25}>
+                <Section alignItems="start" gap={1}>
                   <Text as="p" color="text-04">
                     Set New Default
                   </Text>

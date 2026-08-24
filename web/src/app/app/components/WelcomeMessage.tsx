@@ -12,6 +12,8 @@ import { useState, useEffect } from "react";
 import { useSettings } from "@/lib/settings/hooks";
 import FrostedDiv from "@/refresh-components/FrostedDiv";
 import { Section } from "@/layouts/general-layouts";
+import { SvgEyeClosed } from "@opal/icons";
+import { useIncognito } from "@/providers/IncognitoProvider";
 
 export interface WelcomeMessageProps {
   agent?: MinimalAgent;
@@ -35,15 +37,32 @@ export default function WelcomeMessage({
     }
   }, [settings.enterprise?.custom_greeting_message]);
 
+  const { incognitoEnabled } = useIncognito();
+
   let content: React.ReactNode = null;
 
-  if (isDefaultAgent) {
+  if (incognitoEnabled) {
+    content = (
+      <Section
+        data-testid="incognito-intro"
+        flexDirection="column"
+        alignItems="start"
+        gap={0.5}
+        width="fit"
+      >
+        <SvgEyeClosed size={32} className="text-text-04" />
+        <Text as="p" headingH2>
+          You&apos;re incognito
+        </Text>
+      </Section>
+    );
+  } else if (isDefaultAgent) {
     content = (
       <Section
         data-testid="onyx-logo"
         flexDirection="column"
         alignItems="start"
-        gap={0.5}
+        gap={2}
         width="fit"
       >
         <Logo folded size={32} />
@@ -58,7 +77,7 @@ export default function WelcomeMessage({
         data-testid="agent-name-display"
         flexDirection="column"
         alignItems="start"
-        gap={0.5}
+        gap={2}
         width="fit"
       >
         <AgentAvatar agent={agent} size={36} />

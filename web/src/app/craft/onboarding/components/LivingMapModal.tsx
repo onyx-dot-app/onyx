@@ -88,7 +88,7 @@ export default function LivingMapModal({
         {/* The X routes through Radix → onOpenChange, which owns dismissal;
             a real handler here would double-fire onDismiss. */}
         <Modal.Header title="Meet Craft" onClose={() => {}} />
-        <Modal.Body padding={1.5}>
+        <Modal.Body padding={6}>
           <div className="flex w-full flex-col gap-3">
             {/* Stage copy crossfades above a scene that never unmounts. */}
             <div className="relative h-14">

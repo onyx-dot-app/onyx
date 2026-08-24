@@ -1,6 +1,9 @@
 import type { FunctionComponent } from "react";
 import type { IconProps } from "@opal/types";
-import { LLMProviderDescriptor } from "@/lib/languageModels/types";
+import {
+  LLMProviderDescriptor,
+  ReasoningEffortOverride,
+} from "@/lib/languageModels/types";
 import { getModelIcon, getProvider } from "@/lib/languageModels";
 import { AGGREGATOR_PROVIDERS } from "@/lib/languageModels/svc";
 
@@ -26,6 +29,12 @@ export interface LLMOption {
   region?: string | null;
   version?: string | null;
   supportsReasoning?: boolean;
+  /** See ModelConfiguration.supported_reasoning_efforts. */
+  supportedReasoningEfforts?: ReasoningEffortOverride[];
+  /** See ModelConfiguration.reasoning_effort_max. */
+  reasoningEffortMax?: ReasoningEffortOverride | null;
+  reasoningEffortDefault?: ReasoningEffortOverride | null;
+  temperatureDefault?: number | null;
   supportsImageInput?: boolean;
 }
 
@@ -116,6 +125,10 @@ export function buildLlmOptions(
           region: mc.region || null,
           version: mc.version || null,
           supportsReasoning: mc.supports_reasoning || false,
+          supportedReasoningEfforts: mc.supported_reasoning_efforts,
+          reasoningEffortMax: mc.reasoning_effort_max,
+          reasoningEffortDefault: mc.reasoning_effort_default,
+          temperatureDefault: mc.temperature_default,
           supportsImageInput: mc.supports_image_input || false,
         });
       });

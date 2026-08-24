@@ -234,8 +234,8 @@ export default function VoicePage() {
         divider
       />
       <SettingsLayouts.Body>
-        <Section gap={2}>
-          <Section gap={0.75}>
+        <Section gap={8}>
+          <Section gap={3}>
             <Content
               title="Speech to Text"
               description="Select a model to transcribe speech to text in chats."
@@ -250,7 +250,7 @@ export default function VoicePage() {
               />
             )}
 
-            <Section gap={0.5}>
+            <Section gap={2}>
               {STT_MODELS.map((model) => (
                 <ModelCard
                   key={`stt-${model.id}`}
@@ -282,7 +282,7 @@ export default function VoicePage() {
             </Section>
           </Section>
 
-          <Section gap={0.75}>
+          <Section gap={3}>
             <Content
               title="Text to Speech"
               description="Select a model to speak out chat responses."
@@ -297,7 +297,7 @@ export default function VoicePage() {
               />
             )}
 
-            <Section gap={1}>
+            <Section gap={4}>
               {TTS_PROVIDER_GROUPS.map((group) => (
                 <div
                   key={group.providerType}

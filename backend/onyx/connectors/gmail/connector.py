@@ -427,15 +427,16 @@ class GmailConnector(
 
         try:
             admin_service = get_admin_service(self.creds, self.primary_admin_email)
-            emails = []
-            for user in execute_paginated_retrieval(
-                retrieval_function=admin_service.users().list,  # ty: ignore[unresolved-attribute]
-                list_key="users",
-                fields=USER_FIELDS,
-                domain=self.google_domain,
-            ):
-                if email := user.get("primaryEmail"):
-                    emails.append(email)
+            emails = [
+                email
+                for user in execute_paginated_retrieval(
+                    retrieval_function=admin_service.users().list,  # ty: ignore[unresolved-attribute]
+                    list_key="users",
+                    fields=USER_FIELDS,
+                    domain=self.google_domain,
+                )
+                if (email := user.get("primaryEmail"))
+            ]
             return emails
 
         except HttpError as e:

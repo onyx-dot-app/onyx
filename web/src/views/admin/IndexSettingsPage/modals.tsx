@@ -63,7 +63,7 @@ function ModalShell({ provider, isEditing, children }: ModalShellProps) {
           onClose={onClose}
         />
         <Modal.Body twoTone>
-          <GeneralLayouts.Section gap={1}>{children}</GeneralLayouts.Section>
+          <GeneralLayouts.Section gap={4}>{children}</GeneralLayouts.Section>
         </Modal.Body>
         <Modal.Footer>
           <Button prominence="secondary" onClick={onClose}>

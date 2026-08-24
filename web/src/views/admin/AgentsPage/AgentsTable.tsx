@@ -9,7 +9,7 @@ import { PageLoader } from "@opal/layouts";
 import { InputTypeIn } from "@opal/components";
 import type { MinimalUserSnapshot } from "@/lib/types";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
-import type { MinimalAgent, Agent } from "@/lib/agents/types";
+import type { Agent } from "@/lib/agents/types";
 import { useAdminAgents } from "@/lib/agents/hooks";
 import AgentRowActions from "@/views/admin/AgentsPage/AgentRowActions";
 import { updateAgentDisplayPriorities } from "@/lib/agents/svc";
@@ -17,6 +17,7 @@ import { SvgUser } from "@opal/icons";
 import { DEFAULT_PAGE_SIZE } from "@/lib/constants";
 import { Section } from "@/layouts/general-layouts";
 import { useAgentsFilters } from "@/sections/agents/AgentsFilters";
+import { can } from "@/lib/permissions/resource-actions";
 
 // ---------------------------------------------------------------------------
 // Column renderers
@@ -67,7 +68,7 @@ function buildColumns(onMutate: () => void) {
       content: "icon",
       background: true,
       getContent: (row) => (props) => (
-        <AgentAvatar agent={row as unknown as MinimalAgent} size={props.size} />
+        <AgentAvatar agent={row} size={props.size} />
       ),
     }),
     tc.column("name", {
@@ -123,6 +124,8 @@ export default function AgentsTable() {
   const { filtered: filteredAgents, filterBar } =
     useAgentsFilters(nonBuiltinAgents);
 
+  const canReorder = nonBuiltinAgents.some((agent) => can(agent, "reorder"));
+
   async function handleReorder(
     _orderedIds: string[],
     changedOrders: Record<string, number>
@@ -144,14 +147,14 @@ export default function AgentsTable() {
 
   return (
     <div className="flex flex-col">
-      <Section gap={0.5}>
+      <Section gap={2}>
         <InputTypeIn
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           placeholder="Search agents..."
           searchIcon
         />
-        <Section gap={0.25} flexDirection="row" justifyContent="start">
+        <Section gap={1} flexDirection="row" justifyContent="start">
           {filterBar}
         </Section>
       </Section>
@@ -161,9 +164,7 @@ export default function AgentsTable() {
         getRowId={(row) => String(row.id)}
         pageSize={DEFAULT_PAGE_SIZE}
         searchTerm={searchTerm}
-        draggable={{
-          onReorder: handleReorder,
-        }}
+        draggable={canReorder ? { onReorder: handleReorder } : undefined}
         emptyState={
           <IllustrationContent
             illustration={SvgNoResult}

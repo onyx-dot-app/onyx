@@ -13,7 +13,6 @@ from onyx.db.models import (
     Persona,
     Persona__DocumentSet,
     SlackChannelConfig,
-    User,
 )
 from onyx.db.persona import mark_persona_as_deleted, upsert_persona
 from onyx.db.tools import get_builtin_tool
@@ -204,7 +203,6 @@ def update_slack_channel_config(
 def remove_slack_channel_config(
     db_session: Session,
     slack_channel_config_id: int,
-    user: User,
 ) -> None:
     slack_channel_config = db_session.scalar(
         select(SlackChannelConfig).where(
@@ -229,8 +227,9 @@ def remove_slack_channel_config(
             _cleanup_relationships(
                 db_session=db_session, persona_id=existing_persona_id
             )
+
             mark_persona_as_deleted(
-                persona_id=existing_persona_id, user=user, db_session=db_session
+                persona_id=existing_persona_id, user=None, db_session=db_session
             )
 
     db_session.delete(slack_channel_config)

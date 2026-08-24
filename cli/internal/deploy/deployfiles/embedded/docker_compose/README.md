@@ -56,6 +56,39 @@ the directory with the docker-compose.yml file. First bring the containers down 
 verify the version you want in the environment file (see below), (if using `latest` tag, be sure to run
 `docker compose pull`) and run `docker compose up` to restart the services on the latest version
 
+### Customizing the compose files
+The CLI owns the compose files it writes. Each `onyx-cli deploy upgrade` refreshes them to match the
+new version. If you edit one, the CLI asks before it replaces the file, and it keeps a backup — but
+your edits are not applied again.
+
+To customize the deployment, put your changes in a file next to `docker-compose.yml`, named
+`compose.override.yml`, `compose.override.yaml`, `docker-compose.override.yml`, or
+`docker-compose.override.yaml`. These are the same names `docker compose` finds on its own; if more than
+one is present, the CLI picks the same one Compose would, in that order. The CLI applies that file last,
+after its own files, so your changes win. The CLI does not manage the override: it never writes,
+replaces, or backs it up, and an upgrade does not touch it. `install`, `upgrade`, `stop`, `logs`, and
+`uninstall` all apply it.
+
+For example, to put Onyx behind your own reverse proxy, stop nginx from publishing a host port and
+attach it to your proxy's network:
+
+```yaml
+# deployment/docker-compose.override.yml
+services:
+  nginx:
+    # !reset replaces the list. Without it, Compose adds to the list.
+    ports: !reset []
+    networks: [default, proxy]
+
+networks:
+  proxy:
+    external: true
+```
+
+Use `docker compose -f docker-compose.yml -f docker-compose.override.yml config` in the deployment
+directory to see the merged result. Add each file the CLI applies (`docker-compose.onyx-lite.yml`,
+`docker-compose.prod.yml`, and so on) in the same order the CLI does.
+
 ### Environment variables
 The Docker Compose files try to look for a .env file in the same directory. The installer sets it up
 from a file called env.template. Feel free to edit the .env file to customize your deployment. The most

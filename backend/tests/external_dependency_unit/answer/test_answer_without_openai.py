@@ -77,12 +77,12 @@ def test_answer_with_only_anthropic_provider(
             chat_session_id=chat_session.id,
         )
 
-        response_stream: list[AnswerStreamPart] = []
-        for packet in handle_stream_message_objects(
-            new_msg_req=chat_request,
-            user=test_user,
-        ):
-            response_stream.append(packet)
+        response_stream: list[AnswerStreamPart] = list(
+            handle_stream_message_objects(
+                new_msg_req=chat_request,
+                user=test_user,
+            )
+        )
 
         assert response_stream, "Should receive streamed packets"
         assert not any(

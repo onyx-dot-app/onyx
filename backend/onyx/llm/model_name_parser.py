@@ -114,10 +114,8 @@ def _infer_vendor_from_model_name(model_name: str) -> str | None:
 
         # Try to match against known prefixes (sorted by length to match longest first)
         for prefix in sorted(MODEL_PREFIX_TO_VENDOR.keys(), key=len, reverse=True):
-            if base_name.startswith(prefix):  # ty: ignore[invalid-argument-type]
-                return MODEL_PREFIX_TO_VENDOR[  # ty: ignore[invalid-argument-type]
-                    prefix
-                ]
+            if base_name.startswith(prefix):
+                return MODEL_PREFIX_TO_VENDOR[prefix]
     except Exception:
         pass
 

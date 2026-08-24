@@ -1,6 +1,5 @@
 "use client";
 
-import { markdown } from "@opal/utils";
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
 import { InputDivider, toast } from "@opal/layouts";
@@ -14,7 +13,7 @@ import {
   useInitialValues,
   buildValidationSchema,
   BaseLLMFormValues,
-  mergeFetchedModelConfigurations,
+  withFetchedModels,
 } from "@/sections/modals/languageModels/utils";
 import { submitProvider } from "@/sections/modals/languageModels/svc";
 import { LLMProviderConfiguredSource } from "@/lib/analytics/utils";
@@ -25,6 +24,7 @@ import {
   DisplayNameField,
   ModelAccessField,
   ModalWrapper,
+  useApiBaseSubDescription,
 } from "@/sections/modals/languageModels/shared";
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 
@@ -43,6 +43,10 @@ function OpenAICompatibleModalInternals({
   isOnboarding,
 }: OpenAICompatibleModalInternalsProps) {
   const formikProps = useFormikContext<OpenAICompatibleModalValues>();
+  const apiBaseSubDescription = useApiBaseSubDescription(
+    "Paste your OpenAI-compatible endpoint URL.",
+    "[Learn More](https://docs.litellm.ai/docs/providers/openai_compatible)"
+  );
 
   const isFetchDisabled = !formikProps.values.api_base;
 
@@ -55,21 +59,13 @@ function OpenAICompatibleModalInternals({
     if (error) {
       throw new Error(error);
     }
-    formikProps.setFieldValue(
-      "model_configurations",
-      mergeFetchedModelConfigurations(
-        models,
-        formikProps.values.model_configurations
-      )
-    );
+    formikProps.setValues(withFetchedModels(models));
   };
 
   return (
     <>
       <APIBaseField
-        subDescription={markdown(
-          "Paste your OpenAI-compatible endpoint URL. [Learn More](https://docs.litellm.ai/docs/providers/openai_compatible)"
-        )}
+        subDescription={apiBaseSubDescription}
         placeholder="http://localhost:8000/v1"
       />
 

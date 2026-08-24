@@ -462,6 +462,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 bot_token=bot_token,
                 team_id=None,
                 search_settings=search_settings,
+                llm=self.llm,
             )
 
             logger.info("Slack federated search returned %s chunks", len(chunks))
@@ -922,12 +923,12 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             if semantic_query
             else []
         )
-        for llm_query in llm_queries:
-            # In rare cases, the LLM may fail to provide real queries
-            if llm_query:
-                semantic_queries_with_weights.append(
-                    (llm_query, LLM_NON_CUSTOM_QUERY_WEIGHT)
-                )
+        # In rare cases, the LLM may fail to provide real queries
+        semantic_queries_with_weights.extend(
+            (llm_query, LLM_NON_CUSTOM_QUERY_WEIGHT)
+            for llm_query in llm_queries
+            if llm_query
+        )
         if override_kwargs.original_query:
             semantic_queries_with_weights.append(
                 (override_kwargs.original_query, ORIGINAL_QUERY_WEIGHT)

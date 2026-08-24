@@ -11,8 +11,6 @@ import { useCreateModal } from "@opal/components";
 import CreateProjectModal from "@/sections/modals/CreateProjectModal";
 import { timeAgo } from "@opal/time";
 import { highlightMatch } from "@/lib/sidebar/utils";
-import { useSettings } from "@/lib/settings/hooks";
-import { useCurrentAgent } from "@/lib/agents/hooks";
 import Text from "@/refresh-components/texts/Text";
 import useChatSearchOptimistic from "@/lib/sidebar/hooks";
 import {
@@ -47,7 +45,8 @@ function DynamicFooter() {
 }
 
 interface ChatSearchCommandMenuProps {
-  trigger: React.ReactNode;
+  /** Renders the control that opens the menu. */
+  trigger: (open: () => void) => React.ReactNode;
 }
 
 interface FilterableProject {
@@ -72,8 +71,6 @@ export default function ChatSearchCommandMenu({
 
   // Data hooks
   const { projects } = useProjects();
-  const settings = useSettings();
-  const currentAgent = useCurrentAgent();
   const createProjectModal = useCreateModal();
 
   // Constants for preview limits
@@ -149,13 +146,9 @@ export default function ChatSearchCommandMenu({
 
   // Navigation handlers
   const handleNewSession = useCallback(() => {
-    const href =
-      settings?.disable_default_assistant && currentAgent
-        ? `/app?agentId=${currentAgent.id}`
-        : "/app";
-    router.push(href as Route);
+    router.push("/app");
     setOpen(false);
-  }, [router, settings, currentAgent]);
+  }, [router]);
 
   const handleChatSelect = useCallback(
     (chatId: string) => {
@@ -182,6 +175,8 @@ export default function ChatSearchCommandMenu({
     [createProjectModal]
   );
 
+  const handleOpen = useCallback(() => setOpen(true), []);
+
   const handleOpenChange = useCallback((newOpen: boolean) => {
     setOpen(newOpen);
     if (!newOpen) {
@@ -204,9 +199,7 @@ export default function ChatSearchCommandMenu({
 
   return (
     <>
-      <div aria-label="Open chat search" onClick={() => setOpen(true)}>
-        {trigger}
-      </div>
+      {trigger(handleOpen)}
 
       <CommandMenu open={open} onOpenChange={handleOpenChange}>
         <CommandMenu.Content>

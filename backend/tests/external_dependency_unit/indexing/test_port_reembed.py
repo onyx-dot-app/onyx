@@ -571,7 +571,7 @@ def test_reembed_pairs_embeddings_by_identity_not_position() -> None:
     ]
     # ...and each chunk carries ITS OWN content's vector despite the reversed output
     # (a positional zip would give c0 the vector of c2, etc.).
-    for result, stored in zip(results, [c0, c1, c2]):
+    for result, stored in zip(results, [c0, c1, c2], strict=True):
         assert result.content_vector == _vec(stored.content)
 
 

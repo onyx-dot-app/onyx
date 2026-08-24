@@ -1,21 +1,110 @@
-"""RSA-4096 license signature verification utilities."""
+"""License signature verification, persistence, and control-plane re-claim."""
 
 import base64
+import hashlib
 import json
 import os
+import re
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import NamedTuple
 
+import requests
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
+from sqlalchemy.orm import Session
 
+from ee.onyx.configs.app_configs import CLOUD_DATA_PLANE_URL
 from ee.onyx.server.license.models import LicenseData, LicensePayload
+from ee.onyx.utils.license_expiry import (
+    LICENSE_RECLAIM_URGENT_INTERVAL,
+    is_license_due_for_reclaim,
+    is_license_reclaim_urgent,
+)
+from onyx.background.celery.versioned_apps.client import app as client_app
+from onyx.cache.factory import get_cache_backend
+from onyx.cache.interface import CacheBackendType
+from onyx.configs.app_configs import CACHE_BACKEND
+from onyx.configs.constants import OnyxCeleryPriority, OnyxCeleryTask
+from onyx.redis.redis_pool import get_redis_client
 from onyx.server.settings.models import ApplicationStatus
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+# One reclaim attempt per debounce period, no matter how many requests see a
+# stale license. Redis key TTL is the debounce. Redis rather than the cache
+# backend, since what it debounces is a send onto the same broker.
+_LICENSE_RECLAIM_DEBOUNCE_KEY = "license_reclaim_debounce"
+_LICENSE_RECLAIM_DEBOUNCE_TTL_SEC = 15 * 60
+
+# Floor between control-plane reclaims driven by a user action. The billing page
+# fires one on load, so without this a reload loop is an unthrottled proxy call.
+# PEM-style delimiters used in the .lic file format.
+_PEM_BEGIN = "-----BEGIN ONYX LICENSE-----"
+_PEM_END = "-----END ONYX LICENSE-----"
+
+
+def normalize_license_file(content: str) -> str:
+    """Reduce a .lic file to the bare base64 blob.
+
+    Collapses all whitespace, not just the delimiter lines: the stored blob is
+    later sent as a Bearer token and requests rejects a value with newlines.
+    """
+    content = content.strip()
+    if content.startswith(_PEM_BEGIN) and content.endswith(_PEM_END):
+        content = content[len(_PEM_BEGIN) : -len(_PEM_END)]
+    return "".join(content.split())
+
+
+_LICENSE_CLAIM_COOLDOWN_KEY = "license_claim_cooldown"
+_LICENSE_CLAIM_COOLDOWN_SEC = 10
+
+
+def claim_cooldown_is_active() -> bool:
+    """Claim the cooldown slot. True when another claim already holds it.
+
+    Checking is claiming: the SET NX starts the cooldown, so callers must not
+    call this speculatively. Never raises.
+
+    Fails open: a Redis outage should not stop an admin from recovering a
+    lapsed instance, and the cost of an extra proxy call is one request.
+    """
+    try:
+        return not get_redis_client().set(
+            _LICENSE_CLAIM_COOLDOWN_KEY,
+            "1",
+            nx=True,
+            ex=_LICENSE_CLAIM_COOLDOWN_SEC,
+        )
+    except Exception as e:
+        logger.debug("License claim cooldown unavailable: %s", e)
+        return False
+
+
+def clear_claim_cooldown() -> None:
+    """Release the cooldown after a change the next claim has to pick up.
+
+    The cooldown assumes nothing has changed since the last sync. A write that
+    reissues the license breaks that assumption, and the claim that collects it
+    is part of that write rather than a user retrying. Never raises.
+    """
+    try:
+        get_redis_client().delete(_LICENSE_CLAIM_COOLDOWN_KEY)
+    except Exception as e:
+        logger.debug("License claim cooldown unavailable: %s", e)
+
+
+# The control plane authenticates a re-claim with the stored license itself, so
+# a rejected license cannot be fixed by retrying it. Back off for a day, or
+# until a replacement license is stored, instead of every debounce period.
+_LICENSE_RECLAIM_BLOCKED_KEY = "license_reclaim_blocked"
+_LICENSE_RECLAIM_BLOCKED_TTL_SEC = 24 * 60 * 60
+
+# Statuses meaning the stored license itself was refused, not a transient fault.
+_AUTH_REJECTED_STATUSES = frozenset({401, 403})
 
 # Path to the license public key file
 _LICENSE_PUBLIC_KEY_PATH = (
@@ -23,13 +112,70 @@ _LICENSE_PUBLIC_KEY_PATH = (
 )
 
 
-def _get_public_key() -> RSAPublicKey:
-    """Load the public key from file, with env var override."""
-    # Allow env var override for flexibility
+def license_from_control_plane_response(response: requests.Response) -> str:
+    """Pull the signed blob out of a control-plane license response.
+
+    Every malformed shape raises ValueError, the retryable-upstream-fault
+    signal. An empty string counts as absent rather than
+    reaching signature verification and failing as a corrupt license.
+    """
+    try:
+        body = response.json()
+    except ValueError as e:
+        raise ValueError("Control plane response was not JSON") from e
+    license_data = body.get("license") if isinstance(body, dict) else None
+    if not isinstance(license_data, str) or not license_data:
+        raise ValueError("No license in response")
+    return license_data
+
+
+def _load_public_keys(key_pem: str) -> list[RSAPublicKey]:
+    """Parse every PEM public key in *key_pem*, in order.
+
+    Concatenated keys are a trust set rather than a single anchor: rotation
+    signs new licenses with the new key while every license already in the
+    field still verifies, so instances renew themselves instead of all failing
+    at once and needing a hand-uploaded file.
+    """
+    blocks = re.findall(
+        r"-----BEGIN [^-]+-----.*?-----END [^-]+-----", key_pem, flags=re.DOTALL
+    )
+    if not blocks:
+        raise ValueError("No PEM public key found in the configured license key")
+
+    keys: list[RSAPublicKey] = []
+    for block in blocks:
+        key = serialization.load_pem_public_key(block.encode())
+        if not isinstance(key, RSAPublicKey):
+            raise ValueError("Expected RSA public key")
+        keys.append(key)
+    return keys
+
+
+def _verify_against_trust_set(signature: bytes, signed_bytes: bytes) -> None:
+    """Raise InvalidSignature unless some trusted key verifies the signature."""
+    for key in _get_public_keys():
+        try:
+            key.verify(
+                signature,
+                signed_bytes,
+                padding.PSS(
+                    mgf=padding.MGF1(hashes.SHA256()),
+                    salt_length=padding.PSS.MAX_LENGTH,
+                ),
+                hashes.SHA256(),
+            )
+            return
+        except InvalidSignature:
+            continue
+    raise InvalidSignature("No configured public key verifies this license")
+
+
+def _get_public_keys() -> list[RSAPublicKey]:
+    """Trust set for license verification, env var taking priority over file."""
     key_pem = os.environ.get("LICENSE_PUBLIC_KEY_PEM")
 
     if not key_pem:
-        # Read from file
         if not _LICENSE_PUBLIC_KEY_PATH.exists():
             raise ValueError(
                 f"License public key not found at {_LICENSE_PUBLIC_KEY_PATH}. "
@@ -37,10 +183,7 @@ def _get_public_key() -> RSAPublicKey:
             )
         key_pem = _LICENSE_PUBLIC_KEY_PATH.read_text()
 
-    key = serialization.load_pem_public_key(key_pem.encode())
-    if not isinstance(key, RSAPublicKey):
-        raise ValueError("Expected RSA public key")
-    return key
+    return _load_public_keys(key_pem)
 
 
 def verify_license_signature(license_data: str) -> LicensePayload:
@@ -70,17 +213,7 @@ def verify_license_signature(license_data: str) -> LicensePayload:
         signature_bytes = base64.b64decode(license_obj.signature)
 
         # Verify signature using PSS padding (modern standard)
-        public_key = _get_public_key()
-
-        public_key.verify(
-            signature_bytes,
-            payload_json.encode(),
-            padding.PSS(
-                mgf=padding.MGF1(hashes.SHA256()),
-                salt_length=padding.PSS.MAX_LENGTH,
-            ),
-            hashes.SHA256(),
-        )
+        _verify_against_trust_set(signature_bytes, payload_json.encode())
 
         return license_obj.payload
 
@@ -100,9 +233,305 @@ def verify_license_signature(license_data: str) -> LicensePayload:
         raise ValueError("License verification failed: unexpected error")
 
 
+def _is_stale_replacement(stored_data: str, incoming: LicensePayload) -> bool:
+    """True when the stored license was issued after the incoming one.
+
+    Stores can overlap, so a slow response must not overwrite a newer license
+    that landed while it was outstanding. An unreadable stored blob is not
+    newer.
+    """
+    try:
+        stored = verify_license_signature(stored_data)
+    except ValueError:
+        return False
+    if stored.issued_at <= incoming.issued_at:
+        return False
+    logger.info(
+        "Discarding license issued %s, already holding one issued %s",
+        incoming.issued_at,
+        stored.issued_at,
+    )
+    return True
+
+
+def publish_license_cache(db_session: Session) -> None:
+    """Publish metadata for the committed license row. Never raises.
+
+    Namespaces off the ambient tenant, which is what readers resolve. On
+    failure the entry is dropped rather than left to serve its TTL.
+    """
+    # Deferred import: ee.onyx.db.license imports this module.
+    from ee.onyx.db.license import invalidate_license_cache, publish_license_metadata
+
+    try:
+        publish_license_metadata(db_session)
+    except Exception as cache_error:
+        logger.warning("Failed to publish license cache: %s", cache_error)
+        try:
+            invalidate_license_cache()
+        except Exception as invalidate_error:
+            # The license is committed either way, and the enforcement
+            # middleware re-reads the row before gating.
+            logger.error(
+                "License stored but its stale cache entry survives: %s",
+                invalidate_error,
+            )
+
+
+def verify_and_store_license(
+    db_session: Session,
+    license_data: str,
+    expected_tenant_id: str | None = None,
+) -> LicensePayload:
+    """Persist a license blob only after its signature verifies.
+
+    Raises ValueError on an unverifiable blob, leaving the stored license
+    untouched. A blob older than the one already stored is discarded.
+
+    expected_tenant_id rejects a license addressed to someone else. The blob is
+    signed but not addressed, so without it an upstream mix-up would replace
+    this instance's credential with another tenant's.
+
+    Returns the incoming payload even when it was discarded as older.
+    """
+    # Deferred import: ee.onyx.db.license imports this module.
+    from ee.onyx.db.license import (
+        acquire_license_store_lock,
+        get_license,
+        upsert_license,
+    )
+
+    payload = verify_license_signature(license_data)
+    if expected_tenant_id is not None and payload.tenant_id != expected_tenant_id:
+        raise ValueError("Control plane returned a license for a different tenant")
+
+    acquire_license_store_lock(db_session)
+    # The session may have loaded this row before the lock, and the identity
+    # map would hand back those stale attributes. Expire so the read below is
+    # the row as it stands now that writers are serialized.
+    db_session.expire_all()
+    stored = get_license(db_session)
+    if stored and _is_stale_replacement(stored.license_data, payload):
+        db_session.rollback()
+        # The row is already the better one, but the cache may not be, and a
+        # sync is what a user clicks to clear staleness.
+        publish_license_cache(db_session)
+        return payload
+    if stored is None and expected_tenant_id is not None:
+        # Reclaim renews an existing credential. A deleted row must stay gone.
+        db_session.rollback()
+        raise ValueError("Stored license was removed while the reclaim was in flight")
+    upsert_license(db_session, license_data, commit=False)
+    # Commit inside the lock, publish outside it: the Redis cache backend has
+    # no socket timeout, so a stalled publish would hold the advisory lock and
+    # wedge every other store, refresh, and delete behind it.
+    db_session.commit()
+
+    resume_license_reclaim()
+    publish_license_cache(db_session)
+    return payload
+
+
+class StoredLicense(NamedTuple):
+    license_data: str
+    payload: LicensePayload
+
+
+def load_verified_license(db_session: Session) -> StoredLicense | None:
+    """The stored license and its verified payload, or None when there is none.
+
+    Raises ValueError on a stored blob that does not verify. Callers must
+    decide whether that is terminal, since retrying cannot fix it.
+    """
+    # Deferred import: ee.onyx.db.license imports this module.
+    from ee.onyx.db.license import get_license
+
+    license_row = get_license(db_session)
+    if not license_row or not license_row.license_data:
+        return None
+    return StoredLicense(
+        license_row.license_data, verify_license_signature(license_row.license_data)
+    )
+
+
+def _rejection_detail(response: requests.Response) -> str | None:
+    """Pull the upstream's reason out of a refusal, if it gave one."""
+    try:
+        body = response.json()
+    except ValueError:
+        return None
+    detail = body.get("detail") if isinstance(body, dict) else None
+    return detail if isinstance(detail, str) and detail else None
+
+
+class LicenseNotStoredError(Exception):
+    """Nothing is stored to authenticate a reclaim with."""
+
+
+class LicenseRejectedError(Exception):
+    """The control plane refused the stored license as a credential.
+
+    Terminal until the license is replaced, since the reclaim authenticates
+    with the very blob being rejected. Distinct from an unreachable control
+    plane so callers can tell a customer to replace their license rather than
+    to wait.
+    """
+
+
+def reclaim_license_from_control_plane(db_session: Session) -> LicensePayload:
+    """Re-fetch this instance's license from the control plane, authenticating with the stored one.
+
+    Raises LicenseNotStoredError with nothing to authenticate with,
+    LicenseRejectedError when that credential is refused, ValueError on an
+    unusable response, and HTTPError on any other upstream refusal.
+
+    Reads and sets the reclaim block itself, so callers must not
+    re-implement it.
+    """
+    # Deferred import: ee.onyx.db.license imports this module.
+    from ee.onyx.db.license import get_license
+
+    stored = load_verified_license(db_session)
+    if stored is None:
+        raise LicenseNotStoredError("No license stored to authenticate a reclaim")
+
+    # Addressed from the stored blob so a cache outage cannot stop a reclaim.
+    stored_data, tenant_id = stored.license_data, stored.payload.tenant_id
+    if not tenant_id:
+        raise LicenseNotStoredError("Stored license carries no tenant")
+    if license_reclaim_is_blocked(stored_data):
+        raise LicenseRejectedError(
+            "The stored license was already refused by the control plane"
+        )
+
+    response = requests.get(
+        f"{CLOUD_DATA_PLANE_URL}/proxy/license/{tenant_id}",
+        headers={
+            "Authorization": f"Bearer {stored_data}",
+            "Content-Type": "application/json",
+        },
+        timeout=30,
+    )
+    if response.status_code in _AUTH_REJECTED_STATUSES:
+        # Only block while this blob is still the stored one, or a slow
+        # rejection would suppress the replacement that overtook it.
+        db_session.expire_all()
+        current = get_license(db_session)
+        if current and current.license_data == stored_data:
+            block_license_reclaim(stored_data)
+        raise LicenseRejectedError(
+            _rejection_detail(response) or "The control plane refused this license"
+        )
+    response.raise_for_status()
+
+    return verify_and_store_license(
+        db_session,
+        license_from_control_plane_response(response),
+        expected_tenant_id=tenant_id,
+    )
+
+
+def license_fingerprint(license_data: str) -> str:
+    """Short stable id for a license blob, safe to put in the cache."""
+    return hashlib.sha256(license_data.encode()).hexdigest()[:32]
+
+
+def block_license_reclaim(license_data: str) -> None:
+    """Stop re-claiming the license that was just rejected. Never raises.
+
+    Keyed to the rejected blob so a slow rejection cannot suppress a
+    replacement that landed while it was in flight.
+    """
+    try:
+        get_cache_backend().set(
+            _LICENSE_RECLAIM_BLOCKED_KEY,
+            license_fingerprint(license_data),
+            ex=_LICENSE_RECLAIM_BLOCKED_TTL_SEC,
+        )
+    except Exception as e:
+        logger.warning("Failed to set license reclaim block: %s", e)
+
+
+def resume_license_reclaim() -> None:
+    """Let re-claims run again immediately. Never raises."""
+    try:
+        get_cache_backend().delete(_LICENSE_RECLAIM_BLOCKED_KEY)
+    except Exception as e:
+        logger.warning("Failed to clear license reclaim block: %s", e)
+    try:
+        get_redis_client().delete(_LICENSE_RECLAIM_DEBOUNCE_KEY)
+    except Exception as e:
+        logger.warning("Failed to clear license reclaim debounce: %s", e)
+
+
+def license_reclaim_is_blocked(license_data: str) -> bool:
+    """True when this exact license was rejected as auth within the last day.
+
+    A block naming a different blob is ignored, so installing a replacement
+    resumes re-claims even if clearing the block failed. Fails open: an
+    unreachable cache must not stop a legitimate reclaim.
+    """
+    try:
+        blocked = get_cache_backend().get(_LICENSE_RECLAIM_BLOCKED_KEY)
+    except Exception as e:
+        logger.warning("Failed to read license reclaim block: %s", e)
+        return False
+    if blocked is None:
+        return False
+    return blocked.decode() == license_fingerprint(license_data)
+
+
+def maybe_schedule_license_reclaim(expires_at: datetime, tenant_id: str) -> None:
+    """Enqueue one license re-claim per debounce period when the stored license
+    is inside LICENSE_RECLAIM_WINDOW. Never raises, since a scheduling failure
+    must not affect the request that tripped it.
+    """
+    if not is_license_due_for_reclaim(expires_at):
+        return
+    # Both the debounce and the broker behind send_task are this Redis. Where
+    # it does not exist the periodic poller owns reclaim instead.
+    if CACHE_BACKEND != CacheBackendType.REDIS:
+        return
+
+    # A served request is the earliest chance to fetch a replacement.
+    debounce_ttl = (
+        int(LICENSE_RECLAIM_URGENT_INTERVAL.total_seconds())
+        if is_license_reclaim_urgent(expires_at)
+        else _LICENSE_RECLAIM_DEBOUNCE_TTL_SEC
+    )
+    try:
+        redis_client = get_redis_client()
+        # SET NX doubles as the debounce and a cross-process lock: only the
+        # first request in the window enqueues.
+        if not redis_client.set(
+            _LICENSE_RECLAIM_DEBOUNCE_KEY,
+            "1",
+            nx=True,
+            ex=debounce_ttl,
+        ):
+            return
+
+        try:
+            client_app.send_task(
+                OnyxCeleryTask.RECLAIM_LICENSE,
+                kwargs={"tenant_id": tenant_id},
+                priority=OnyxCeleryPriority.HIGH,
+                expires=debounce_ttl,
+            )
+        except Exception:
+            # The claim above is what stops other requests from enqueueing.
+            # Holding it after a failed send would idle out the whole window.
+            redis_client.delete(_LICENSE_RECLAIM_DEBOUNCE_KEY)
+            raise
+        logger.info("Scheduled license reclaim (license expires %s)", expires_at.date())
+    except Exception as e:
+        logger.warning("Failed to schedule license reclaim: %s", e)
+
+
 def get_license_status(
     payload: LicensePayload,
     grace_period_end: datetime | None = None,
+    now: datetime | None = None,
 ) -> ApplicationStatus:
     """
     Determine current license status based on expiry.
@@ -110,11 +539,13 @@ def get_license_status(
     Args:
         payload: The verified license payload
         grace_period_end: Optional grace period end datetime
+        now: Evaluation instant, so a caller deriving other values from the
+            status can keep every comparison on one clock sample
 
     Returns:
         ApplicationStatus indicating current license state
     """
-    now = datetime.now(timezone.utc)
+    now = now or datetime.now(timezone.utc)
 
     # Check if grace period has expired
     if grace_period_end and now > grace_period_end:

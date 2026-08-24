@@ -5,8 +5,8 @@ import { SWR_KEYS } from "@/lib/swr-keys";
  * serialize with a $inf$ prefix, so match by inclusion), the by-type variants,
  * and the summary badge. Call after any dismissal so every surface showing a
  * notification (bell popover, banner queue, badge) updates together. */
-export function invalidateNotificationCaches(): Promise<unknown> {
-  return mutate(
+export async function invalidateNotificationCaches(): Promise<void> {
+  await mutate(
     (key) => typeof key === "string" && key.includes(SWR_KEYS.notifications)
   );
 }

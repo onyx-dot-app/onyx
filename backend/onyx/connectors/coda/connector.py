@@ -231,9 +231,7 @@ class CodaConnector(LoadConnector, PollConnector):
             else:
                 raise
 
-        values = {}
-        for col_name, col_value in response.get("values", {}).items():
-            values[col_name] = col_value
+        values = dict(response.get("values", {}))
 
         return CodaRow(
             id=response["id"],
@@ -408,17 +406,17 @@ class CodaConnector(LoadConnector, PollConnector):
                     raise
 
             items = response.get("items", [])
-            for item in items:
-                tables.append(
-                    CodaTable(
-                        id=item["id"],
-                        browser_link=item["browserLink"],
-                        name=item["name"],
-                        created_at=item["createdAt"],
-                        updated_at=item["updatedAt"],
-                        doc_id=doc_id,
-                    )
+            tables.extend(
+                CodaTable(
+                    id=item["id"],
+                    browser_link=item["browserLink"],
+                    name=item["name"],
+                    created_at=item["createdAt"],
+                    updated_at=item["updatedAt"],
+                    doc_id=doc_id,
                 )
+                for item in items
+            )
 
             next_page_token = response.get("nextPageToken")
             if not next_page_token:
@@ -453,9 +451,7 @@ class CodaConnector(LoadConnector, PollConnector):
 
             items = response.get("items", [])
             for item in items:
-                values = {}
-                for col_name, col_value in item.get("values", {}).items():
-                    values[col_name] = col_value
+                values = dict(item.get("values", {}))
 
                 rows.append(
                     CodaRow(

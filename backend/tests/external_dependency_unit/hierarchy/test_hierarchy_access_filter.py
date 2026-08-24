@@ -1,4 +1,4 @@
-"""Tests hierarchy visibility through node and connector permissions."""
+"""Tests hierarchy node and document visibility through connector permissions."""
 
 from collections.abc import Generator
 from uuid import UUID, uuid4
@@ -11,16 +11,20 @@ from sqlalchemy.orm import Session
 from ee.onyx.db.hierarchy import _get_accessible_hierarchy_nodes_for_source
 from onyx.auth.schemas import UserRole
 from onyx.configs.constants import DocumentSource
+from onyx.db.document import get_accessible_documents_for_hierarchy_node_paginated
 from onyx.db.enums import AccessType, AccountType, HierarchyNodeType
 from onyx.db.hierarchy import get_source_hierarchy_node
 from onyx.db.models import (
     Credential,
+    Document,
+    DocumentByConnectorCredentialPair,
     HierarchyNode,
     HierarchyNodeByConnectorCredentialPair,
     User__UserGroup,
     UserGroup,
     UserGroup__ConnectorCredentialPair,
 )
+from onyx.kg.models import KGStage
 from tests.external_dependency_unit.indexing_helpers import make_cc_pair
 
 
@@ -28,6 +32,7 @@ class ConnectorAccessSeed(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     node: HierarchyNode
+    document_id: str
     owner_id: UUID
     owner_email: str
     member_id: UUID
@@ -149,11 +154,24 @@ def connector_access_seed(
         raw_node_id=f"connector_private_{tag}",
         display_name=f"Connector Private Folder {tag}",
     )
+    document = Document(
+        id=f"connector_private_document_{tag}",
+        semantic_id=f"Connector Private Document {tag}",
+        parent_hierarchy_node_id=None,
+        kg_stage=KGStage.NOT_STARTED,
+    )
     group = UserGroup(name=f"hierarchy-access-group-{tag}")
-    db_session.add_all([node, group])
+    db_session.add_all([node, document, group])
     db_session.flush()
+    document.parent_hierarchy_node_id = node.id
     db_session.add_all(
         [
+            DocumentByConnectorCredentialPair(
+                id=document.id,
+                connector_id=cc_pair.connector_id,
+                credential_id=cc_pair.credential_id,
+                has_been_indexed=True,
+            ),
             HierarchyNodeByConnectorCredentialPair(
                 hierarchy_node_id=node.id,
                 connector_id=cc_pair.connector_id,
@@ -171,6 +189,7 @@ def connector_access_seed(
 
     yield ConnectorAccessSeed(
         node=node,
+        document_id=document.id,
         owner_id=owner.id,
         owner_email=owner.email,
         member_id=member.id,
@@ -246,6 +265,58 @@ def test_connector_user_group_member_can_access_node(
 
     assert seed.node.id in {node.id for node in member_results}
     assert seed.node.id not in {node.id for node in outsider_results}
+
+
+def test_connector_credential_owner_can_access_hierarchy_document(
+    db_session: Session,
+    connector_access_seed: ConnectorAccessSeed,
+) -> None:
+    seed = connector_access_seed
+    owner_results = get_accessible_documents_for_hierarchy_node_paginated(
+        db_session=db_session,
+        parent_hierarchy_node_id=seed.node.id,
+        user_email=seed.owner_email,
+        external_group_ids=[],
+        user_id=seed.owner_id,
+        limit=10,
+    )
+    outsider_results = get_accessible_documents_for_hierarchy_node_paginated(
+        db_session=db_session,
+        parent_hierarchy_node_id=seed.node.id,
+        user_email=seed.outsider_email,
+        external_group_ids=[],
+        user_id=seed.outsider_id,
+        limit=10,
+    )
+
+    assert seed.document_id in {document.id for document in owner_results}
+    assert seed.document_id not in {document.id for document in outsider_results}
+
+
+def test_connector_user_group_member_can_access_hierarchy_document(
+    db_session: Session,
+    connector_access_seed: ConnectorAccessSeed,
+) -> None:
+    seed = connector_access_seed
+    member_results = get_accessible_documents_for_hierarchy_node_paginated(
+        db_session=db_session,
+        parent_hierarchy_node_id=seed.node.id,
+        user_email=seed.member_email,
+        external_group_ids=[],
+        user_id=seed.member_id,
+        limit=10,
+    )
+    outsider_results = get_accessible_documents_for_hierarchy_node_paginated(
+        db_session=db_session,
+        parent_hierarchy_node_id=seed.node.id,
+        user_email=seed.outsider_email,
+        external_group_ids=[],
+        user_id=seed.outsider_id,
+        limit=10,
+    )
+
+    assert seed.document_id in {document.id for document in member_results}
+    assert seed.document_id not in {document.id for document in outsider_results}
 
 
 def test_email_filter(

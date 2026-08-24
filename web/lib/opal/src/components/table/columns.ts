@@ -7,6 +7,7 @@ import {
   type CellContext,
 } from "@tanstack/react-table";
 import type {
+  ColumnAlignment,
   ColumnWidth,
   QualifierContentType,
   OnyxQualifierColumn,
@@ -58,6 +59,7 @@ interface DataColumnConfig<TData, TValue> {
   weight?: number;
   /** Explicit column ID. Derived from the accessor key; required for function accessors. */
   id?: string;
+  alignment?: ColumnAlignment;
 }
 
 // ---------------------------------------------------------------------------
@@ -75,6 +77,7 @@ interface DisplayColumnConfig<TData> {
   width: ColumnWidth;
   /** Enable hiding. @default true */
   enableHiding?: boolean;
+  alignment?: ColumnAlignment;
 }
 
 // ---------------------------------------------------------------------------
@@ -176,6 +179,10 @@ export function createTableColumns<TData>(): TableColumnsBuilder<TData> {
     },
 
     column(
+      // The accessor pulls an arbitrary cell value out of a caller-owned row.
+      // The value is opaque to the table and only handed back to the caller's
+      // own `cell` renderer, so `unknown` is the honest type here.
+      // oxlint-disable-next-line anti-slop/no-unknown-returns
       accessor: DeepKeys<TData> | ((row: TData) => unknown),
       config: DataColumnConfig<TData, any> & { id?: string }
     ): OnyxDataColumn<TData> {
@@ -188,6 +195,7 @@ export function createTableColumns<TData>(): TableColumnsBuilder<TData> {
         icon,
         weight = 20,
         id: explicitId,
+        alignment,
       } = config;
 
       const id = explicitId ?? (accessor as string);
@@ -210,13 +218,21 @@ export function createTableColumns<TData>(): TableColumnsBuilder<TData> {
         def,
         width: { weight, minWidth: Math.max(header.length * 8 + 40, 80) },
         icon,
+        alignment,
       };
     },
 
     displayColumn(
       config: DisplayColumnConfig<TData>
     ): OnyxDisplayColumn<TData> {
-      const { id, header, cell, width, enableHiding = true } = config;
+      const {
+        id,
+        header,
+        cell,
+        width,
+        enableHiding = true,
+        alignment,
+      } = config;
 
       const def: ColumnDef<TData, any> = helper.display({
         id,
@@ -232,6 +248,7 @@ export function createTableColumns<TData>(): TableColumnsBuilder<TData> {
         id,
         def,
         width,
+        alignment,
       };
     },
 

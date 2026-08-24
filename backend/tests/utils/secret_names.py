@@ -21,6 +21,7 @@ class TestSecret(StrEnum):
     __test__ = False
 
     OPENAI_API_KEY = "OPENAI_API_KEY"
+    ANTHROPIC_API_KEY = "ANTHROPIC_API_KEY"
     COHERE_API_KEY = "COHERE_API_KEY"
     AZURE_API_KEY = "AZURE_API_KEY"
     AZURE_API_URL = "AZURE_API_URL"

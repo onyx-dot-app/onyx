@@ -107,7 +107,7 @@ def test_check_for_hierarchy_fetching_skips_unsupported_connectors(
 
     task_app = MagicMock()
     with patch.object(check_for_hierarchy_fetching, "app", task_app):
-        result = check_for_hierarchy_fetching.run(tenant_id="test-tenant")
+        result = check_for_hierarchy_fetching.run(tenant_id="test-tenant")  # ty: ignore[invalid-argument-type]
 
     assert result == 0
     mock_is_due.assert_not_called()
@@ -144,7 +144,7 @@ def test_check_for_hierarchy_fetching_creates_task_for_supported_due_connector(
 
     task_app = MagicMock()
     with patch.object(check_for_hierarchy_fetching, "app", task_app):
-        result = check_for_hierarchy_fetching.run(tenant_id="test-tenant")
+        result = check_for_hierarchy_fetching.run(tenant_id="test-tenant")  # ty: ignore[invalid-argument-type]
 
     assert result == 1
     mock_is_due.assert_called_once_with(cc_pair)
@@ -185,7 +185,7 @@ def test_check_for_hierarchy_fetching_skips_supported_connector_when_not_due(
 
     task_app = MagicMock()
     with patch.object(check_for_hierarchy_fetching, "app", task_app):
-        result = check_for_hierarchy_fetching.run(tenant_id="test-tenant")
+        result = check_for_hierarchy_fetching.run(tenant_id="test-tenant")  # ty: ignore[invalid-argument-type]
 
     assert result == 0
     mock_is_due.assert_called_once_with(cc_pair)

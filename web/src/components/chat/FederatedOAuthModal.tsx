@@ -1,15 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { Modal } from "@opal/components";
+import { Card, Modal } from "@opal/components";
 import { Button } from "@opal/components";
 import { ValidSources } from "@/lib/types";
 import { useSettings } from "@/lib/settings/hooks";
 import { getSourceMetadata } from "@/lib/sources";
 import useFederatedOAuthStatus from "@/hooks/useFederatedOAuthStatus";
 import { SvgLink } from "@opal/icons";
-import { Card } from "@/refresh-components/cards";
-import { ContentAction } from "@opal/layouts";
+import { ContentAction, Section } from "@opal/layouts";
 
 export interface FederatedConnectorOAuthStatus {
   federated_connector_id: number;
@@ -132,23 +131,29 @@ export default function FederatedOAuthModal() {
             );
 
             return (
-              <Card key={connector.federated_connector_id}>
-                <ContentAction
-                  icon={sourceMetadata.icon}
-                  title={sourceMetadata.displayName}
-                  description={sourceMetadata.category}
-                  sizePreset="main-content"
-                  variant="section"
-                  rightChildren={
-                    <Button
-                      prominence="secondary"
-                      target="_blank"
-                      href={connector.authorize_url}
-                    >
-                      Connect
-                    </Button>
-                  }
-                />
+              <Card
+                border="solid"
+                key={connector.federated_connector_id}
+                rounding="lg"
+              >
+                <Section alignItems="start" height="fit">
+                  <ContentAction
+                    icon={sourceMetadata.icon}
+                    title={sourceMetadata.displayName}
+                    description={sourceMetadata.category}
+                    sizePreset="main-content"
+                    variant="section"
+                    rightChildren={
+                      <Button
+                        prominence="secondary"
+                        target="_blank"
+                        href={connector.authorize_url}
+                      >
+                        Connect
+                      </Button>
+                    }
+                  />
+                </Section>
               </Card>
             );
           })}

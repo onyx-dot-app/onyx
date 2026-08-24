@@ -3,7 +3,6 @@
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
 import { InputDivider, toast } from "@opal/layouts";
-import { markdown } from "@opal/utils";
 import {
   LLMProviderFormProps,
   LLMProviderName,
@@ -13,18 +12,18 @@ import {
   useInitialValues,
   buildValidationSchema,
   BaseLLMFormValues as BaseLLMModalValues,
-  mergeFetchedModelConfigurations,
+  withFetchedModels,
 } from "@/sections/modals/languageModels/utils";
 import { submitProvider } from "@/sections/modals/languageModels/svc";
 import { LLMProviderConfiguredSource } from "@/lib/analytics/utils";
 import {
   APIKeyField,
   APIBaseField,
-  CONTAINERIZED_HOST_NOTE,
   ModelSelectionField,
   DisplayNameField,
   ModelAccessField,
   ModalWrapper,
+  useApiBaseSubDescription,
 } from "@/sections/modals/languageModels/shared";
 import { fetchModels } from "@/lib/languageModels/svc";
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
@@ -47,7 +46,9 @@ function LMStudioModalInternals({
   isOnboarding,
 }: LMStudioModalInternalsProps) {
   const formikProps = useFormikContext<LMStudioModalValues>();
-  const settings = useSettings();
+  const apiBaseSubDescription = useApiBaseSubDescription(
+    "The base URL for your LM Studio server."
+  );
 
   const isFetchDisabled = !formikProps.values.api_base;
 
@@ -63,25 +64,13 @@ function LMStudioModalInternals({
     if (data.error) {
       throw new Error(data.error);
     }
-    formikProps.setFieldValue(
-      "model_configurations",
-      mergeFetchedModelConfigurations(
-        data.models,
-        formikProps.values.model_configurations
-      )
-    );
+    formikProps.setValues(withFetchedModels(data.models));
   };
 
   return (
     <>
       <APIBaseField
-        subDescription={
-          settings.is_containerized
-            ? markdown(
-                `The base URL for your LM Studio server. ${CONTAINERIZED_HOST_NOTE}`
-              )
-            : "The base URL for your LM Studio server."
-        }
+        subDescription={apiBaseSubDescription}
         placeholder="Your LM Studio API base URL"
       />
 

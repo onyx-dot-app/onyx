@@ -79,6 +79,7 @@ export {
 export {
   Divider,
   type DividerProps,
+  type DividerSpacing,
 } from "@opal/components/divider/components";
 
 /* IconContainer */

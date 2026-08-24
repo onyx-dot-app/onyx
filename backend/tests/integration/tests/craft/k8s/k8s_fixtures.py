@@ -33,11 +33,19 @@ from onyx.server.features.build.db.user_library import delete_user_file, list_us
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
 )
+from onyx.server.features.build.sandbox.session_workspace import SESSIONS_ROOT
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.integration.common_utils.managers.build_session import BuildSessionManager
 from tests.integration.common_utils.managers.user import UserManager
+from tests.integration.tests.craft.webapp_preview import (
+    WEBAPP_BOOTSTRAP_TIMEOUT_S,
+    verify_webapp_bootstrap,
+    webapp_bootstrap_command,
+    webapp_install_check_command,
+    webapp_logs_command,
+)
 
 logger = setup_logger()
 
@@ -468,10 +476,15 @@ def _cleanup_pool_workspace(
         "-mindepth 1 -delete 2>/dev/null; true",
         container="sidecar",
     )
+    # Dev servers are nohup'd: without the kill they survive the delete and
+    # accumulate on the module-scoped pool pod until something OOMs.
     pod_exec(
         k8s_client,
         pod_name,
         SANDBOX_NAMESPACE,
+        # Bracketed so the patterns don't match this cleanup shell's own
+        # cmdline, which would kill it before the find runs.
+        "pkill -f 'bun run de[v]'; pkill -f 'next-serve[r]'; "
         "find /workspace/sessions -mindepth 1 -delete 2>/dev/null; true",
         container="sandbox",
     )
@@ -611,15 +624,18 @@ def pod_exec(
     namespace: str,
     command: str,
     container: str = "sandbox",
+    timeout_s: float | None = None,
 ) -> str:
     """Run a one-shot ``/bin/sh -c`` command in a pod container; return combined output.
 
     Pass ``container="sidecar"`` to write to ``/workspace/managed/`` (RO in the
-    sandbox container).
+    sandbox container). A lapsed ``timeout_s`` returns buffered output rather
+    than raising, so callers must verify the command's effect.
     """
     from kubernetes.stream import stream as k8s_stream
 
     argv = ["/bin/sh", "-c", command]
+    optional_kwargs = {} if timeout_s is None else {"_request_timeout": timeout_s}
     resp = k8s_stream(
         client.connect_get_namespaced_pod_exec,
         name=pod_name,
@@ -630,6 +646,7 @@ def pod_exec(
         stdin=False,
         stdout=True,
         tty=False,
+        **optional_kwargs,
     )
     return str(resp) if resp is not None else ""
 
@@ -831,9 +848,14 @@ def pool_session(
     Same shape as ``live_pod`` but reuses the pool pod. Use this unless the test
     mutates pod-level state (lifecycle/terminate/restart); those must use ``live_pod``.
     Sessions are headless (no dev server) by default; parametrize indirectly
-    with ``{"headless": False}`` for webapp/preview tests.
+    with ``{"headless": False}`` for webapp/preview tests, or use
+    ``webapp_pool_session`` to also get the webapp bootstrapped.
     """
     headless = getattr(request, "param", {}).get("headless", True)
+    return _create_pool_session(_pool_pod, headless=headless)
+
+
+def _create_pool_session(_pool_pod: _PoolPod, *, headless: bool) -> PoolSession:
     _cleanup_pool_workspace(_pool_pod.k8s_client, _pool_pod.pod_name)
     session_id, sandbox_id = BuildSessionManager.create_with_sandbox(
         _pool_pod.api_user, headless=headless
@@ -853,6 +875,90 @@ def pool_session(
         session_id=session_id,
         pod_name=_pool_pod.pod_name,
     )
+
+
+def start_session_webapp(
+    k8s_client: "k8s_client_module.CoreV1Api",
+    pod_name: str,
+    session_id: UUID,
+) -> str:
+    """Run the lazy webapp bootstrap in-pod, standing in for the agent's
+    `webapp` tool, and return the script's output.
+    """
+    started_at = time.monotonic()
+    output = pod_exec(
+        k8s_client,
+        pod_name,
+        SANDBOX_NAMESPACE,
+        webapp_bootstrap_command(session_id),
+        timeout_s=WEBAPP_BOOTSTRAP_TIMEOUT_S,
+    )
+    elapsed_s = time.monotonic() - started_at
+    install_state = pod_exec(
+        k8s_client,
+        pod_name,
+        SANDBOX_NAMESPACE,
+        webapp_install_check_command(session_id),
+    ).strip()
+    verify_webapp_bootstrap(
+        session_id,
+        output=output,
+        install_state=install_state,
+        elapsed_s=elapsed_s,
+    )
+    return output
+
+
+def session_webapp_logs(
+    k8s_client: "k8s_client_module.CoreV1Api",
+    pod_name: str,
+    session_id: UUID,
+) -> str:
+    return pod_exec(
+        k8s_client,
+        pod_name,
+        SANDBOX_NAMESPACE,
+        webapp_logs_command(session_id),
+    )
+
+
+def stop_session_webapp(
+    k8s_client: "k8s_client_module.CoreV1Api",
+    pod_name: str,
+    session_id: UUID,
+) -> None:
+    """Stop a session's dev server and wait for it to actually exit.
+
+    A live Turbopack keeps writing into the session tree, so a workspace
+    delete races it and leaves the directory behind — which then makes a
+    restore skip its reinstall, since the stale ``package.json`` is still
+    there.
+    """
+    session_path = f"{SESSIONS_ROOT}/{session_id}"
+    pod_exec(
+        k8s_client,
+        pod_name,
+        SANDBOX_NAMESPACE,
+        f"if [ -f {session_path}/nextjs.pid ]; then "
+        f"  pid=$(cat {session_path}/nextjs.pid); "
+        f"  kill $pid 2>/dev/null; "
+        f"  for _ in $(seq 1 20); do kill -0 $pid 2>/dev/null || break; sleep 1; done; "
+        f"  kill -9 $pid 2>/dev/null; "
+        f"fi; true",
+    )
+
+
+@pytest.fixture(scope="function")
+def webapp_pool_session(_pool_pod: _PoolPod) -> PoolSession:
+    """``pool_session`` with an installed ``outputs/web`` and no dev server.
+
+    Its consumers measure install state; leaving the server up would have it
+    writing into the tree while they snapshot, delete, and restore it.
+    """
+    session = _create_pool_session(_pool_pod, headless=False)
+    start_session_webapp(_pool_pod.k8s_client, session.pod_name, session.session_id)
+    stop_session_webapp(_pool_pod.k8s_client, session.pod_name, session.session_id)
+    return session
 
 
 @pytest.fixture(scope="function")

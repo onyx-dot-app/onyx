@@ -9,7 +9,7 @@ A composite component that wraps `Interactive.Stateful > Interactive.Container >
 ```
 Interactive.Stateful         <- selectVariant, state, interaction, onClick, href, ref
   └─ Interactive.Container   <- width, rounding
-       └─ ContentAction      <- withInteractive, padding="lg"
+       └─ ContentAction      <- withInteractive, padding={2}
             ├─ Content       <- icon, title, description, sizePreset, variant, ...
             └─ rightChildren
 ```
@@ -18,7 +18,7 @@ The row renders as a focusable `<div role="button">` (with Enter/Space activatio
 native `<button>`, so interactive `rightChildren` such as action buttons don't produce invalid
 button-in-button nesting. With `href` it renders an anchor instead.
 
-`padding` is hardcoded to `"lg"` and `withInteractive` is always `true`. These are not exposed as props.
+`padding` is hardcoded to `2` and `withInteractive` is always `true`. These are not exposed as props.
 
 ## Props
 

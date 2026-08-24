@@ -2,12 +2,15 @@ package lazyimports
 
 import (
 	"bufio"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 
+	"github.com/charlievieth/fastwalk"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
@@ -225,12 +228,23 @@ func collectPythonFiles(startPoints []string, backendDir string) ([]string, erro
 		}
 
 		if info.IsDir() {
-			err := filepath.Walk(absPath, func(path string, info os.FileInfo, err error) error {
+			// fastwalk runs the callback on several goroutines, so guard the slice.
+			var mu sync.Mutex
+			err := fastwalk.Walk(nil, absPath, func(path string, d fs.DirEntry, err error) error {
 				if err != nil {
 					return nil // Skip files with errors
 				}
-				if !info.IsDir() && isValidPythonFile(path) {
+				if d.IsDir() {
+					// isValidPythonFile rejects these anyway; pruning avoids the descent.
+					if _, ignored := ignoreDirectories[d.Name()]; ignored || d.Name() == "tests" {
+						return filepath.SkipDir
+					}
+					return nil
+				}
+				if isValidPythonFile(path) {
+					mu.Lock()
 					collected = append(collected, path)
+					mu.Unlock()
 				}
 				return nil
 			})
@@ -244,6 +258,8 @@ func collectPythonFiles(startPoints []string, backendDir string) ([]string, erro
 		}
 	}
 
+	// Walk order is non-deterministic, so sort for stable violation output.
+	sort.Strings(collected)
 	return collected, nil
 }
 

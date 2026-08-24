@@ -32,6 +32,7 @@ from onyx.db.enums import (
     EndpointPolicy,
     ExternalAppType,
     GatedAppKind,
+    Permission,
     SandboxStatus,
     SkillSharePermission,
 )
@@ -76,13 +77,22 @@ def make_user(
     role: UserRole = UserRole.EXT_PERM_USER,
     email_prefix: str = "craft_helper",
 ) -> User:
-    """Create a single ``User`` row with random email + UUID."""
+    """Create a single ``User`` row with random email + UUID.
+
+    ``role`` is kept as the caller-facing knob so the existing craft suite keeps
+    working, but authorization now comes from ``effective_permissions`` and
+    ``is_group_manager`` — the legacy column drives nothing. Translate here so
+    callers get a user whose authority actually matches the role they asked for.
+    """
     helper = PasswordHelper()
     account_type = (
         AccountType.EXT_PERM_USER
         if role == UserRole.EXT_PERM_USER
         else AccountType.STANDARD
     )
+    granted = [Permission.BASIC_ACCESS.value]
+    if role == UserRole.ADMIN:
+        granted.append(Permission.FULL_ADMIN_PANEL_ACCESS.value)
     user = User(
         id=uuid4(),
         email=f"{email_prefix}_{uuid4().hex[:8]}@example.com",
@@ -90,8 +100,10 @@ def make_user(
         is_active=True,
         is_superuser=False,
         is_verified=True,
-        role=role,
         account_type=account_type,
+        effective_permissions=granted,
+        # Curator == group manager; the per-group edge (is_manager) still decides scope.
+        is_group_manager=role in (UserRole.CURATOR, UserRole.GLOBAL_CURATOR),
     )
     db_session.add(user)
     db_session.flush()

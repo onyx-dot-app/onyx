@@ -7,8 +7,6 @@ transport so every request the SDK makes — each redirect hop, discovery,
 registration, and token request — is checked.
 """
 
-from typing import Any
-
 import httpx
 
 from onyx.server.security.models import outbound_ssrf_params
@@ -47,6 +45,38 @@ class _SSRFGuardAsyncTransport(httpx.AsyncHTTPTransport):
         return await super().handle_async_request(request)
 
 
+class _OAuthChallengeTransport(httpx.AsyncBaseTransport):
+    """Drive OAuth with a local challenge and authenticated completion response."""
+
+    def __init__(self, server_url: str, metadata_url: str) -> None:
+        self._server_url = httpx.URL(server_url)
+        self._metadata_url = metadata_url
+        self._challenged = False
+        self._delegate = _SSRFGuardAsyncTransport()
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        if request.method == "GET" and request.url == self._server_url:
+            if not self._challenged:
+                self._challenged = True
+                return httpx.Response(
+                    status_code=401,
+                    headers={
+                        "WWW-Authenticate": (
+                            f'Bearer resource_metadata="{self._metadata_url}"'
+                        )
+                    },
+                    request=request,
+                )
+            # The SDK retries the original request after storing the token. The
+            # OAuth connection is complete; no MCP request is needed here.
+            return httpx.Response(status_code=204, request=request)
+
+        return await self._delegate.handle_async_request(request)
+
+    async def aclose(self) -> None:
+        await self._delegate.aclose()
+
+
 def mcp_ssrf_httpx_client_factory(
     headers: dict[str, str] | None = None,
     timeout: httpx.Timeout | None = None,
@@ -54,14 +84,25 @@ def mcp_ssrf_httpx_client_factory(
 ) -> httpx.AsyncClient:
     """Drop-in replacement for the MCP SDK's default client factory that swaps
     in an SSRF-guarded transport. Signature matches ``McpHttpClientFactory``."""
-    kwargs: dict[str, Any] = {
-        "follow_redirects": True,
-        "transport": _SSRFGuardAsyncTransport(),
-        "timeout": timeout
+    return httpx.AsyncClient(
+        auth=auth,
+        follow_redirects=True,
+        headers=headers,
+        timeout=timeout
         or httpx.Timeout(_MCP_DEFAULT_TIMEOUT, read=_MCP_DEFAULT_SSE_READ_TIMEOUT),
-    }
-    if headers is not None:
-        kwargs["headers"] = headers
-    if auth is not None:
-        kwargs["auth"] = auth
-    return httpx.AsyncClient(**kwargs)
+        transport=_SSRFGuardAsyncTransport(),
+    )
+
+
+def mcp_oauth_challenge_httpx_client_factory(
+    server_url: str,
+    metadata_url: str,
+    auth: httpx.Auth,
+    timeout: httpx.Timeout,
+) -> httpx.AsyncClient:
+    return httpx.AsyncClient(
+        auth=auth,
+        follow_redirects=True,
+        timeout=timeout,
+        transport=_OAuthChallengeTransport(server_url, metadata_url),
+    )

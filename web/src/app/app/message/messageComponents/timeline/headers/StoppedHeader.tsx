@@ -3,7 +3,7 @@ import { SvgFold, SvgExpand } from "@opal/icons";
 import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { noProp } from "@/lib/utils";
-import { cn } from "@opal/utils";
+import { cn, clickOnKeyDown } from "@opal/utils";
 
 export interface StoppedHeaderProps {
   totalSteps: number;
@@ -21,34 +21,50 @@ export const StoppedHeader = React.memo(function StoppedHeader({
 }: StoppedHeaderProps) {
   const isInteractive = collapsible && totalSteps > 0;
 
-  return (
-    <div
-      role={isInteractive ? "button" : undefined}
-      onClick={isInteractive ? onToggle : undefined}
-      className={cn(
-        "flex items-center justify-between w-full rounded-12",
-        isInteractive ? "cursor-pointer" : "cursor-default"
-      )}
-      aria-disabled={isInteractive ? undefined : true}
-    >
-      <div className="px-(--timeline-header-text-padding-x) py-(--timeline-header-text-padding-y)">
-        <Text as="p" mainUiAction text03>
-          Interrupted Thinking
-        </Text>
-      </div>
+  const className = cn(
+    "flex items-center justify-between w-full rounded-12",
+    isInteractive ? "cursor-pointer" : "cursor-default"
+  );
 
-      {isInteractive && (
-        <Button
-          prominence="tertiary"
-          size="md"
-          onClick={noProp(onToggle)}
-          rightIcon={isExpanded ? SvgFold : SvgExpand}
-          aria-label={isExpanded ? "Collapse timeline" : "Expand timeline"}
-          aria-expanded={isExpanded}
-        >
-          {`${totalSteps} ${totalSteps === 1 ? "step" : "steps"}`}
-        </Button>
-      )}
+  const label = (
+    <div className="px-(--timeline-header-text-padding-x) py-(--timeline-header-text-padding-y)">
+      <Text as="p" mainUiAction text03>
+        Interrupted Thinking
+      </Text>
+    </div>
+  );
+
+  if (!isInteractive) {
+    return (
+      <div className={className} aria-disabled>
+        {label}
+      </div>
+    );
+  }
+
+  return (
+    // The row holds its own expand button, so it stays a div with button
+    // semantics rather than a <button> wrapping a <button>.
+    <div
+      role="button"
+      tabIndex={0}
+      aria-label="Toggle timeline"
+      onKeyDown={clickOnKeyDown(onToggle)}
+      onClick={onToggle}
+      className={className}
+    >
+      {label}
+
+      <Button
+        prominence="tertiary"
+        size="md"
+        onClick={noProp(onToggle)}
+        rightIcon={isExpanded ? SvgFold : SvgExpand}
+        aria-label={isExpanded ? "Collapse timeline" : "Expand timeline"}
+        aria-expanded={isExpanded}
+      >
+        {`${totalSteps} ${totalSteps === 1 ? "step" : "steps"}`}
+      </Button>
     </div>
   );
 });

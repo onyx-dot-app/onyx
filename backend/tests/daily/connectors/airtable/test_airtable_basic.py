@@ -185,7 +185,7 @@ def compare_documents(
             f"Number of sections mismatch for document {doc_id}"
         )
         for i, (actual_section, expected_section) in enumerate(
-            zip(actual.sections, expected.sections)
+            zip(actual.sections, expected.sections, strict=True)
         ):
             assert actual_section.text == expected_section.text, (
                 f"Section {i} text mismatch for document {doc_id}"
@@ -345,9 +345,7 @@ def test_airtable_connector_index_all(
 
     all_docs: list[Document] = []
     for batch in connector.load_from_state():
-        for item in batch:
-            if isinstance(item, Document):
-                all_docs.append(item)
+        all_docs.extend(item for item in batch if isinstance(item, Document))
 
     # 2 from Tickets + 4 from Support Categories + 1 from Table 3 = 7
     assert len(all_docs) == 7

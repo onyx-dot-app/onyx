@@ -76,9 +76,7 @@ def generate_dummy_chunk(
         image_file_id=None,
     )
 
-    document_set_names = []
-    for i in range(number_of_document_sets):
-        document_set_names.append(f"Document Set {i}")
+    document_set_names = [f"Document Set {i}" for i in range(number_of_document_sets)]
 
     user_emails: list[str | None] = []
     user_groups: list[str] = []

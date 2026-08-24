@@ -19,9 +19,9 @@ from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager im
 
 def _mgr() -> tuple[KubernetesSandboxManager, MagicMock]:
     mgr: KubernetesSandboxManager = object.__new__(KubernetesSandboxManager)
-    mgr._namespace = "onyx-sandboxes"  # type: ignore[attr-defined]
+    mgr._namespace = "onyx-sandboxes"
     core_api = MagicMock()
-    mgr._core_api = core_api  # type: ignore[attr-defined]
+    mgr._core_api = core_api
     return mgr, core_api
 
 

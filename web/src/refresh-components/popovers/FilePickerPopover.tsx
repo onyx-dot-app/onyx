@@ -1,14 +1,14 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Popover, PopoverMenu } from "@opal/components";
+import { Button, Popover, PopoverMenu } from "@opal/components";
 import { noProp } from "@/lib/utils";
 import { cn } from "@opal/utils";
 import UserFilesModal from "@/sections/modals/UserFilesModal";
 import { useCreateModal } from "@opal/components";
 import { ProjectFile, UserFileStatus } from "@/lib/projects/types";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Hoverable } from "@opal/core";
 import { toast } from "@opal/layouts";
 import { useProjectsContext } from "@/providers/ProjectsContext";
 import Text from "@/refresh-components/texts/Text";
@@ -57,42 +57,45 @@ function FileLineItem({
   );
 
   return (
-    <LineItem
-      key={projectFile.id}
-      onClick={noProp(() => onPickRecent(projectFile))}
-      icon={
-        showLoader
-          ? ({ className }) => (
-              <SvgLoader className={cn(className, "animate-spin")} />
-            )
-          : isImageFile(projectFile.name)
-            ? SvgImage
-            : SvgFileText
-      }
-      rightChildren={
-        <div className="h-4 flex flex-col justify-center">
-          {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
-          <IconButton
-            icon={SvgExternalLink}
-            onClick={noProp(() => onFileClick(projectFile))}
-            tooltip="View File"
-            disabled={disableActionButton}
-            internal
-            className="hidden group-hover/LineItem:flex"
-          />
-          <Text
-            as="p"
-            className="flex group-hover/LineItem:hidden"
-            secondaryBody
-            text03
-          >
-            {getFileExtension(projectFile.name)}
-          </Text>
-        </div>
-      }
-    >
-      {projectFile.name}
-    </LineItem>
+    <Hoverable.Root group="FileLineItem">
+      <LineItem
+        key={projectFile.id}
+        onClick={noProp(() => onPickRecent(projectFile))}
+        icon={
+          showLoader
+            ? ({ className }) => (
+                <SvgLoader className={cn(className, "animate-spin")} />
+              )
+            : isImageFile(projectFile.name)
+              ? SvgImage
+              : SvgFileText
+        }
+        rightChildren={
+          <div className="h-4 flex flex-col justify-center">
+            <Hoverable.Item
+              group="FileLineItem"
+              variant="replace-on-hover"
+              resting={
+                <Text as="p" secondaryBody text03>
+                  {getFileExtension(projectFile.name)}
+                </Text>
+              }
+            >
+              <Button
+                icon={SvgExternalLink}
+                onClick={noProp(() => onFileClick(projectFile))}
+                tooltip="View File"
+                disabled={disableActionButton}
+                prominence="internal"
+                size="sm"
+              />
+            </Hoverable.Item>
+          </div>
+        }
+      >
+        {projectFile.name}
+      </LineItem>
+    </Hoverable.Root>
   );
 }
 

@@ -32,7 +32,7 @@ export default function InputTypeInElementField({
     inputProps.variant === "disabled" || inputProps.variant === "readOnly";
 
   return (
-    <Section flexDirection="row" gap={0.25}>
+    <Section flexDirection="row" gap={1}>
       {/* Input */}
       <InputTypeIn
         {...inputProps}

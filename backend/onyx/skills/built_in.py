@@ -179,6 +179,7 @@ _REGISTRY: Final = BuiltInSkillRegistry(
             ),
         ),
         SeededBuiltInProvider(skill_id="company-search"),
+        SeededBuiltInProvider(skill_id="craft-documentation"),
         SeededBuiltInProvider(
             skill_id="browser",
             is_available=lambda _: ENABLE_BROWSER,

@@ -44,3 +44,25 @@ export async function copyText(text: string): Promise<void> {
     throw new Error("Failed to copy to clipboard");
   }
 }
+
+/**
+ * Builds a keyboard handler that mirrors a click on Enter or Space.
+ *
+ * Pair this with `role="button"` and `tabIndex={0}` on containers that cannot
+ * be a real `<button>` — usually because they wrap other interactive elements,
+ * and nested buttons are invalid HTML.
+ */
+export function clickOnKeyDown(
+  onClick: () => void
+): (event: React.KeyboardEvent) => void {
+  return (event: React.KeyboardEvent) => {
+    // Keyboard events bubble, so a nested button would fire its own action and
+    // this one. Only act when the container itself holds focus.
+    if (event.target !== event.currentTarget) return;
+    if (event.key !== "Enter" && event.key !== " ") return;
+    // A held key repeats, but a real <button> fires one click per press.
+    if (event.repeat) return;
+    event.preventDefault();
+    onClick();
+  };
+}

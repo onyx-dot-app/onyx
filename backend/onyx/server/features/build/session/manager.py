@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session as DBSession
 
 from onyx.cache.factory import get_cache_backend
 from onyx.configs.app_configs import WEB_DOMAIN
+from onyx.configs.constants import MessageType
 from onyx.db.enums import BuildSessionStatus, SandboxStatus, SessionOrigin
 from onyx.db.external_app import get_connectable_apps_for_user
 from onyx.db.llm import fetch_all_accessible_llm_providers
@@ -35,10 +36,10 @@ from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.configs import (
     MAX_TOTAL_UPLOAD_SIZE_BYTES,
     MAX_UPLOAD_FILES_PER_SESSION,
-    OPENCODE_DISABLED_TOOLS,
 )
 from onyx.server.features.build.db.build_session import (
     create_build_session__no_commit,
+    create_message,
     delete_build_session__no_commit,
     finalize_session_initialization__no_commit,
     get_build_session,
@@ -55,13 +56,15 @@ from onyx.server.features.build.db.sandbox import (
     get_snapshots_for_session,
     update_sandbox_heartbeat,
 )
-from onyx.server.features.build.rate_limit import get_user_rate_limit_status
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.sandbox.models import (
     CraftLLMProviderConfig,
     DirectoryListing,
     FilesystemEntry,
     PromptAttachment,
+)
+from onyx.server.features.build.sandbox.nextjs_dev import (
+    WEBAPP_PACKAGE_JSON_PATH,
 )
 from onyx.server.features.build.sandbox.serve_transport import PromptSlot
 from onyx.server.features.build.sandbox.snapshot_manager import SnapshotManager
@@ -76,7 +79,6 @@ from onyx.server.features.build.sandbox.util.opencode_config import (
 )
 from onyx.server.features.build.session import streaming as _streaming
 from onyx.server.features.build.session.errors import (
-    RateLimitError,
     StaleProvisioningAttemptError,
     UploadLimitExceededError,
 )
@@ -99,15 +101,32 @@ from onyx.server.features.build.timeouts import (
     PROMPT_SLOT_KEEP_ALIVE_MAX_SECONDS,
     PROVISION_WAIT_SECONDS,
 )
+from onyx.server.features.build.utils import get_opencode_disabled_tools
 from onyx.server.metrics.craft_sandbox import SandboxReadyOutcome
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import start_thread_with_context
-from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
 _DISPOSE_PENDING_TTL_SECONDS = 24 * 3600
+
+
+def _dispose_pending_key(session_id: UUID) -> str:
+    return f"craft:llm_config_dispose_pending:{session_id}"
+
+
+def mark_opencode_dispose_pending(session_id: UUID) -> None:
+    """Claim the dispose owed to a running instance after rewriting its config.
+
+    ``reconcile_session_llm_config`` performs it on the next turn, and needs the
+    marker because it short-circuits when the file already matches what it would
+    write — which it does after a workspace rebuild.
+    """
+    get_cache_backend().set(
+        _dispose_pending_key(session_id), "1", ex=_DISPOSE_PENDING_TTL_SECONDS
+    )
+
 
 # Webapp-ready probe on the UI-poll hot path; any response (even 404) counts.
 _WEBAPP_PROBE_TIMEOUT_SECONDS = 2.0
@@ -127,6 +146,9 @@ HIDDEN_PATTERNS = {
     "nextjs.log",
     "nextjs.pid",
 }
+
+_WEBAPP_DIRECTORY = str(Path(WEBAPP_PACKAGE_JSON_PATH).parent)
+_WEBAPP_PACKAGE_FILENAME = Path(WEBAPP_PACKAGE_JSON_PATH).name
 
 
 def _sanitize_zip_basename(name: str, *, allow_dots: bool) -> str:
@@ -162,39 +184,6 @@ class SessionManager:
         """
         self._db_session = db_session
         self._sandbox_manager = get_sandbox_manager()
-
-    # =========================================================================
-    # Rate Limiting
-    # =========================================================================
-
-    def check_rate_limit(self, user: User) -> None:
-        """
-        Check build mode rate limits for a user.
-
-        Args:
-            user: The user to check rate limits for
-
-        Raises:
-            RateLimitError: If rate limit is exceeded
-        """
-        # Skip rate limiting for self-hosted deployments
-        if not MULTI_TENANT:
-            return
-
-        rate_limit_status = get_user_rate_limit_status(user, self._db_session)
-        if rate_limit_status.is_limited:
-            raise RateLimitError(
-                message=(
-                    f"Rate limit exceeded. You have used "
-                    f"{rate_limit_status.messages_used}/{rate_limit_status.limit} messages. "
-                    f"Limit resets at {rate_limit_status.reset_timestamp}."
-                    if rate_limit_status.reset_timestamp
-                    else "This is a lifetime limit."
-                ),
-                messages_used=rate_limit_status.messages_used,
-                limit=rate_limit_status.limit,
-                reset_timestamp=rate_limit_status.reset_timestamp,
-            )
 
     # =========================================================================
     # LLM Configuration
@@ -282,7 +271,7 @@ class SessionManager:
         expected = json.dumps(
             build_provider_opencode_config(
                 llm_config,
-                disabled_tools=OPENCODE_DISABLED_TOOLS,
+                disabled_tools=get_opencode_disabled_tools(),
                 mcp_servers=mcp_servers,
                 session_id=str(session.id),
             )
@@ -304,7 +293,7 @@ class SessionManager:
             current = None
 
         cache = get_cache_backend()
-        dispose_pending_key = f"craft:llm_config_dispose_pending:{session.id}"
+        dispose_pending_key = _dispose_pending_key(session.id)
         if current == expected:
             # A matching file does NOT prove the running opencode instance
             # picked it up: a prior reconcile may have written the file and
@@ -330,7 +319,7 @@ class SessionManager:
         # the next reconcile, so the marker is the only thing that tells it to
         # retry the missed dispose. Setting it after the write leaves that exact
         # window uncovered.
-        cache.set(dispose_pending_key, "1", ex=_DISPOSE_PENDING_TTL_SECONDS)
+        mark_opencode_dispose_pending(session.id)
         self._sandbox_manager.regenerate_session_config(
             sandbox_id=sandbox.id,
             session_id=session.id,
@@ -555,6 +544,7 @@ class SessionManager:
     def get_or_create_empty_session(
         self,
         user_id: UUID,
+        name: str | None = None,
         headless: bool = False,
     ) -> BuildSession:
         """Get or create the user's empty (pre-provisioned) session.
@@ -566,6 +556,11 @@ class SessionManager:
         otherwise it is repaired in place — returned to ``INITIALIZING`` and
         its workspace rebuilt under the same committed session ID (never
         deleted and replaced).
+
+        Args:
+            user_id: The user whose empty session should be reserved.
+            name: Optional name to apply to a new or reused empty session.
+            headless: Skip reserving a Next.js preview port when true.
 
         Raises:
             ValueError: If the user is missing
@@ -590,6 +585,7 @@ class SessionManager:
             session = create_build_session__no_commit(
                 user_id,
                 self._db_session,
+                name=name,
                 agent_provider=llm_config.provider,
                 agent_model=llm_config.model_name,
             )
@@ -602,6 +598,8 @@ class SessionManager:
             return session
 
         session = existing
+        if name is not None:
+            session.name = name
         self._db_session.commit()
         logger.info(
             "Found existing empty session %s (status=%s) for user %s",
@@ -1158,6 +1156,44 @@ class SessionManager:
     ) -> None:
         _streaming.finalize_persist(self._db_session, session_id, state, routing_meta)
 
+    def persist_turn_error(
+        self,
+        session_id: UUID,
+        turn_index: int,
+        message: str,
+    ) -> None:
+        """User-visible error row so a failed turn still explains itself
+        after reload (the live SSE error dies with the stream)."""
+        create_message(
+            session_id=session_id,
+            message_type=MessageType.ASSISTANT,
+            turn_index=turn_index,
+            message_metadata={
+                "type": "error",
+                "message": message,
+                "timestamp": datetime.now(tz=timezone.utc).isoformat(),
+            },
+            db_session=self._db_session,
+        )
+
+    def stamp_turn_deadline(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        *,
+        soft_budget_seconds: int,
+        hard_cap_seconds: int,
+    ) -> None:
+        self._sandbox_manager.stamp_turn_deadline(
+            sandbox_id,
+            session_id,
+            soft_budget_seconds=soft_budget_seconds,
+            hard_cap_seconds=hard_cap_seconds,
+        )
+
+    def clear_turn_deadline(self, sandbox_id: UUID, session_id: UUID) -> None:
+        self._sandbox_manager.clear_turn_deadline(sandbox_id, session_id)
+
     # =========================================================================
     # Artifact Operations
     # =========================================================================
@@ -1394,15 +1430,15 @@ class SessionManager:
         path: str,
     ) -> dict[str, Any] | None:
         """
-        Generate slide image previews for a PPTX file.
+        Generate slide image previews for a PowerPoint file.
 
-        Converts the PPTX to individual JPEG slide images using
+        Converts the presentation to individual JPEG slide images using
         soffice + pdftoppm, with caching to avoid re-conversion.
 
         Args:
             session_id: The session UUID
             user_id: The user ID to verify ownership
-            path: Relative path to the PPTX file within session workspace
+            path: Relative path to the PowerPoint file within session workspace
 
         Returns:
             Dict with slide_count, slide_paths, and cached flag,
@@ -1417,8 +1453,8 @@ class SessionManager:
         _, sandbox = resolved
 
         # Validate file extension
-        if not path.lower().endswith(".pptx"):
-            raise ValueError("Only .pptx files are supported for preview")
+        if Path(path).suffix.lower() not in {".ppt", ".pptx"}:
+            raise ValueError("Only .ppt and .pptx files are supported for preview")
 
         # Compute cache directory from path hash
         path_hash = hashlib.sha256(path.encode()).hexdigest()[:12]
@@ -1461,32 +1497,58 @@ class SessionManager:
         sandbox = get_sandbox_by_user_id(self._db_session, user_id)
         if sandbox is None:
             return {
-                "has_webapp": False,
+                "has_webapp": None,
                 "webapp_url": None,
                 "status": "no_sandbox",
                 "ready": False,
                 "sharing_scope": session.sharing_scope,
             }
 
+        has_webapp = (
+            self._has_scaffolded_webapp(sandbox.id, session_id)
+            if sandbox.status == SandboxStatus.RUNNING
+            else None
+        )
         # Return the proxy URL - the proxy handles routing to the correct sandbox
-        # for both local and Kubernetes environments
+        # for both local and Kubernetes environments.
         webapp_url = None
         ready = False
-        if session.nextjs_port:
+        if has_webapp and session.nextjs_port:
             webapp_url = f"{WEB_DOMAIN}/api/build/sessions/{session_id}/webapp"
-
-            # Quick health check: can the API server reach the NextJS dev server?
             ready = self._check_nextjs_ready(
                 sandbox.id, session_id, session.nextjs_port
             )
 
         return {
-            "has_webapp": session.nextjs_port is not None,
+            "has_webapp": has_webapp,
             "webapp_url": webapp_url,
             "status": sandbox.status.value,
             "ready": ready,
             "sharing_scope": session.sharing_scope,
         }
+
+    def _has_scaffolded_webapp(self, sandbox_id: UUID, session_id: UUID) -> bool | None:
+        """Return True if ``outputs/web/package.json`` exists in the session."""
+        try:
+            entries = self._sandbox_manager.list_directory(
+                sandbox_id=sandbox_id,
+                session_id=session_id,
+                path=_WEBAPP_DIRECTORY,
+            )
+        except ValueError:
+            return False
+        except RuntimeError:
+            logger.warning(
+                "Could not check webapp scaffold for session %s",
+                session_id,
+                exc_info=True,
+            )
+            return None
+
+        return any(
+            entry.name == _WEBAPP_PACKAGE_FILENAME and not entry.is_directory
+            for entry in entries
+        )
 
     def _check_nextjs_ready(
         self, sandbox_id: UUID, session_id: UUID, port: int

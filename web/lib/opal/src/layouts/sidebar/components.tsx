@@ -11,11 +11,13 @@ import {
   useRef,
 } from "react";
 import { usePathname } from "next/navigation";
-import { Button, ShadowDiv, Spacer, Text } from "@opal/components";
-import { Disabled, Hoverable } from "@opal/core";
+import { Button, ShadowDiv, Spacer, Text, Tooltip } from "@opal/components";
+import { iconWrapper } from "@opal/components/buttons/icon-wrapper";
+import { Disabled, Hoverable, Interactive } from "@opal/core";
 import { SvgSidebar } from "@opal/icons";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { useSidebarState } from "@opal/layouts/root/components";
+import { SidebarFoldedContext } from "@opal/layouts/sidebar/context";
 import useScreenSize from "@opal/hooks/useScreenSize";
 
 // ---------------------------------------------------------------------------
@@ -43,19 +45,45 @@ interface SidebarRootProps {
 }
 
 function SidebarRoot({ foldable = false, children }: SidebarRootProps) {
-  const { isMobile, isSmallScreen } = useScreenSize();
+  const { isMobile, isSmallScreen, isMounted } = useScreenSize();
   const { folded, setFolded } = useSidebarState();
 
   const closeSidebar = useCallback(() => setFolded(true), [setFolded]);
 
   useEffect(() => {
-    if (!isMobile && !isSmallScreen && !foldable) {
+    // Before mount the screen size reports desktop. Act on the real size only,
+    // or every mount unfolds the overlay on mobile and small screens.
+    if (!isMounted) return;
+
+    if (isMobile || isSmallScreen) {
+      // The overlay hides the page behind it, so it starts closed.
+      setFolded(true);
+    } else if (!foldable) {
+      // A non-foldable desktop sidebar is a column that is always open.
       setFolded(false);
     }
-  }, [isMobile, isSmallScreen, foldable, setFolded]);
+  }, [isMounted, isMobile, isSmallScreen, foldable, setFolded]);
 
   const foldedAttr = String(folded);
-  const inner = <div className="opal-sidebar-root__inner">{children}</div>;
+
+  // The overlays always fold; a desktop column only folds when `foldable`.
+  // Tabs read this derived value, not the app-wide raw state, so tabs outside
+  // a sidebar (and inside a non-foldable one) never collapse.
+  const effectiveFolded = (isMobile || isSmallScreen || foldable) && folded;
+
+  // The same value in two forms: context for the parts that need JS (the
+  // folded-only tooltip), and `data-folded` for the parts CSS can do on its
+  // own. The attribute lets descendants restyle without re-rendering.
+  const inner = (
+    <SidebarFoldedContext.Provider value={effectiveFolded}>
+      <div
+        className="opal-sidebar-root__inner"
+        data-folded={String(effectiveFolded)}
+      >
+        {children}
+      </div>
+    </SidebarFoldedContext.Provider>
+  );
 
   if (isMobile) {
     return (
@@ -68,6 +96,8 @@ function SidebarRoot({ foldable = false, children }: SidebarRootProps) {
           {inner}
         </div>
         <div
+          // Pointer convenience only — the fold button dismisses via keyboard.
+          role="presentation"
           className="opal-sidebar-root__backdrop"
           data-variant="mobile"
           data-folded={foldedAttr}
@@ -89,6 +119,8 @@ function SidebarRoot({ foldable = false, children }: SidebarRootProps) {
           {inner}
         </div>
         <div
+          // Pointer convenience only — the fold button dismisses via keyboard.
+          role="presentation"
           className="opal-sidebar-root__backdrop"
           data-variant="small"
           data-folded={foldedAttr}
@@ -142,22 +174,59 @@ function SidebarHeader({
     [setFolded]
   );
 
+  const foldLabel = folded ? "Open Sidebar" : "Close Sidebar";
+
   const closeButton = useMemo(
     () => (
       <Button
         icon={SvgSidebar}
         prominence="tertiary"
-        tooltip={folded ? "Open Sidebar" : "Close Sidebar"}
+        aria-label={foldLabel}
+        tooltip={foldLabel}
         tooltipSide={folded ? "right" : "bottom"}
         size="md"
         onClick={toggleFolded}
       />
     ),
-    [folded, toggleFolded]
+    [folded, foldLabel, toggleFolded]
   );
 
   const Logo = renderAppLogo(foldable ? folded : false);
   const logoEl = <Logo size={SIDEBAR_LOGO_HEIGHT_PX} />;
+
+  // Folded: the logo *is* the unfold control. The fold icon swaps in on hover
+  // (and on keyboard focus), but the button underneath never changes, so the
+  // sidebar can still be opened where there is no hover to reveal anything —
+  // touch devices and keyboard navigation.
+  const foldedLogoButton = (
+    <Tooltip tooltip={foldLabel} side="right">
+      <Interactive.Stateless
+        prominence="tertiary"
+        type="button"
+        onClick={toggleFolded}
+      >
+        <Interactive.Container
+          type="button"
+          size="fit"
+          rounding="sm"
+          aria-label={foldLabel}
+        >
+          <div
+            className="opal-sidebar-header__logo-swap"
+            style={{
+              height: SIDEBAR_LOGO_HEIGHT_PX,
+              width: SIDEBAR_LOGO_HEIGHT_PX,
+            }}
+          >
+            <div className="opal-sidebar-header__logo-rest">{logoEl}</div>
+            <div className="opal-sidebar-header__logo-fold">
+              {iconWrapper(SvgSidebar, "md", false)}
+            </div>
+          </div>
+        </Interactive.Container>
+      </Interactive.Stateless>
+    </Tooltip>
+  );
 
   return (
     <div className="opal-sidebar-header">
@@ -165,11 +234,8 @@ function SidebarHeader({
         <div className="opal-sidebar-header__topbar-inner">
           {!foldable ? (
             logoEl
-          ) : folded && showLogoWhenFolded && logoEl ? (
-            <>
-              <div className="opal-sidebar-root__logo-default">{logoEl}</div>
-              <div className="opal-sidebar-root__logo-hover">{closeButton}</div>
-            </>
+          ) : folded && showLogoWhenFolded ? (
+            foldedLogoButton
           ) : folded ? (
             closeButton
           ) : (
@@ -201,7 +267,6 @@ interface SidebarBodyProps {
 }
 
 function SidebarBody({ scrollKey, children }: SidebarBodyProps) {
-  const { folded } = useSidebarState();
   const scrollRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
 
@@ -237,9 +302,10 @@ function SidebarBody({ scrollKey, children }: SidebarBodyProps) {
       containerClassName="opal-sidebar-body"
       className="opal-sidebar-body__scroll"
     >
-      <div className="opal-sidebar-body__content" data-folded={String(folded)}>
-        {children}
-      </div>
+      {/* Hidden while folded — see styles.css. The fold state comes from the
+          `data-folded` attribute on the root, so folding re-renders nothing
+          here. */}
+      <div className="opal-sidebar-body__content">{children}</div>
       <div className="opal-sidebar-body__spacer" />
     </ShadowDiv>
   );

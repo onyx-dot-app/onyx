@@ -3,7 +3,6 @@ from uuid import uuid4
 import httpx
 import pytest
 
-from onyx.auth.schemas import UserRole
 from tests.integration.common_utils.constants import API_SERVER_URL, GENERAL_HEADERS
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.chat import ChatSessionManager
@@ -47,7 +46,7 @@ def second_user(admin_user: DATestUser) -> DATestUser:  # noqa: ARG001
                 email=build_email("second_basic_user"),
                 password=DEFAULT_PASSWORD,
                 headers=GENERAL_HEADERS,
-                role=UserRole.BASIC,
+                is_admin=False,
                 is_active=True,
             )
         )
@@ -61,10 +60,10 @@ def _is_user_already_exists_detail(detail: object) -> bool:
             or "register_user_already_exists" in normalized
         )
     if isinstance(detail, dict):
-        code = detail.get("code")  # ty: ignore[invalid-argument-type]
+        code = detail.get("code")
         if isinstance(code, str) and code.lower() == "register_user_already_exists":
             return True
-        message = detail.get("message")  # ty: ignore[invalid-argument-type]
+        message = detail.get("message")
         if isinstance(message, str) and "already exists" in message.lower():
             return True
     return False

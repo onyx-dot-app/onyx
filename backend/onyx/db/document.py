@@ -565,6 +565,7 @@ def get_accessible_documents_for_hierarchy_node_paginated(
     parent_hierarchy_node_id: int,
     user_email: str | None,
     external_group_ids: list[str],
+    user_id: UUID | None,
     limit: int,
     # Sort options
     sort_by_name: bool = False,
@@ -580,7 +581,9 @@ def get_accessible_documents_for_hierarchy_node_paginated(
     stmt = select(DbDocument).where(
         DbDocument.parent_hierarchy_node_id == parent_hierarchy_node_id
     )
-    stmt = apply_document_access_filter(stmt, user_email, external_group_ids)
+    stmt = apply_document_access_filter(
+        stmt, user_email, external_group_ids, user_id=user_id
+    )
 
     # Apply cursor filter based on sort type and direction
     if sort_by_name:
@@ -902,7 +905,7 @@ def upsert_documents(
         # Use COALESCE to preserve existing permissions when new values are NULL.
         # This prevents subsequent indexing runs (which don't fetch permissions)
         # from overwriting permissions set by permission sync jobs.
-        update_set.update(  # ty: ignore[no-matching-overload]
+        update_set.update(
             {
                 "external_user_emails": func.coalesce(
                     insert_stmt.excluded.external_user_emails,
@@ -1678,7 +1681,7 @@ def get_base_llm_doc_information(
 
     documents = []
 
-    for doc_nr, doc in enumerate(results):
+    for _doc_nr, doc in enumerate(results):
         bare_doc = doc[0]
         documents.append(
             f"""* [{bare_doc.semantic_id}]({bare_doc.link}) ({bare_doc.doc_updated_at})"""

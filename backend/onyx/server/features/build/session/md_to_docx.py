@@ -256,7 +256,7 @@ class _Footnotes:
             PackURI(_FOOTNOTES_PARTNAME),
             _FOOTNOTES_CONTENT_TYPE,
             self._element,
-            package,
+            package,  # ty: ignore[invalid-argument-type]
         )
         document.part.relate_to(self._part, _FOOTNOTES_REL_TYPE)
         self._parent = _PartParent(self._part)
@@ -287,7 +287,7 @@ class _Footnotes:
             p_style.set(qn("w:val"), _STYLE_ID_FOOTNOTE_TEXT)
             p_pr.append(p_style)
             p_element.append(p_pr)
-            paragraph = Paragraph(p_element, self._parent)
+            paragraph = Paragraph(p_element, self._parent)  # ty: ignore[invalid-argument-type]
             if position == 0:
                 p_element.append(_reference_run("w:footnoteRef", None))
                 paragraph.add_run(" ")
@@ -590,8 +590,9 @@ def _render_table(
         if section_type == "table_head":
             header_cells = section.get("children", [])
         elif section_type == "table_body":
-            for row in section.get("children", []):
-                body_rows.append(row.get("children", []))
+            body_rows.extend(
+                row.get("children", []) for row in section.get("children", [])
+            )
 
     num_cols = len(header_cells) or (len(body_rows[0]) if body_rows else 0)
     if num_cols == 0:

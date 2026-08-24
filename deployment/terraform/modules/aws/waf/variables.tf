@@ -33,6 +33,18 @@ variable "api_rate_limit_requests_per_5_minutes" {
   default     = 1000
 }
 
+variable "rate_limit_exempt_ip_cidrs" {
+  type        = list(string)
+  description = "Optional IPv4 CIDR ranges exempt from rate limiting rules. Typically office/VPN IPs sharing a single NAT."
+  default     = []
+}
+
+variable "anonymous_ip_list_count_only" {
+  type        = bool
+  description = "If true, set AWSManagedRulesAnonymousIpList to COUNT instead of BLOCK."
+  default     = false
+}
+
 variable "geo_restriction_countries" {
   type        = list(string)
   description = "List of country codes to block. Leave empty to disable geo restrictions"
@@ -47,6 +59,6 @@ variable "enable_logging" {
 
 variable "log_retention_days" {
   type        = number
-  description = "Number of days to retain WAF logs"
-  default     = 90
+  description = "Number of days to retain WAF logs. Default 400 = 12 months + 30-day buffer for the common twelve-month log-retention control."
+  default     = 400
 }

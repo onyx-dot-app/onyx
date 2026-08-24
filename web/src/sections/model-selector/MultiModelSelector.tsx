@@ -178,6 +178,7 @@ export default function MultiModelSelector({
               icon={SvgPlusCircle}
               size="sm"
               tooltip="Add Model"
+              aria-label="Add Model"
               onClick={(e: React.MouseEvent) => {
                 if (noModelsToSelect) return;
                 anchorRef.current = e.currentTarget as HTMLElement;
@@ -195,8 +196,8 @@ export default function MultiModelSelector({
               {!atMax && (
                 <Divider
                   orientation="vertical"
-                  paddingParallel="sm"
-                  paddingPerpendicular="sm"
+                  paddingParallel={2}
+                  paddingPerpendicular={2}
                 />
               )}
               <div className="flex items-center shrink-0">
@@ -216,8 +217,8 @@ export default function MultiModelSelector({
                       {index > 0 && (
                         <Divider
                           orientation="vertical"
-                          paddingParallel="sm"
-                          paddingPerpendicular="sm"
+                          paddingParallel={2}
+                          paddingPerpendicular={2}
                         />
                       )}
                       <SelectButton

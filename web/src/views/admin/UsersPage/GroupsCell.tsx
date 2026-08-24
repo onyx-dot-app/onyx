@@ -8,11 +8,13 @@ import {
   useEffect,
 } from "react";
 import { Hoverable } from "@opal/core";
+import { clickOnKeyDown } from "@opal/utils";
 import { SvgEdit } from "@opal/icons";
 import { Button, Tag } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { Tooltip } from "@opal/components";
 import EditUserModal from "./EditUserModal";
+import { useCanManageGroups } from "@/lib/permissions/hooks";
 import type { UserRow, UserGroupInfo } from "./interfaces";
 
 interface GroupsCellProps {
@@ -37,6 +39,9 @@ export default function GroupsCell({
 }: GroupsCellProps) {
   const [showModal, setShowModal] = useState(false);
   const [visibleCount, setVisibleCount] = useState<number | null>(null);
+  // below Business the editor is empty, so show pills but don't open it
+  const canManageGroups = useCanManageGroups();
+  const editable = Boolean(user.id) && canManageGroups;
   const containerRef = useRef<HTMLDivElement>(null);
 
   const computeVisibleCount = useCallback(() => {
@@ -137,11 +142,21 @@ export default function GroupsCell({
   return (
     <>
       <Hoverable.Root group="tags">
+        {/* The cell holds its own edit button, so it stays a div with button
+        semantics rather than a <button> wrapping a <button>. */}
         <div
           className={`relative flex justify-between items-center w-full min-w-0 ${
-            user.id ? "cursor-pointer" : ""
+            editable ? "cursor-pointer" : ""
           }`}
-          onClick={user.id ? () => setShowModal(true) : undefined}
+          {...(editable
+            ? {
+                role: "button" as const,
+                tabIndex: 0,
+                "aria-label": "Edit groups",
+                onClick: () => setShowModal(true),
+                onKeyDown: clickOnKeyDown(() => setShowModal(true)),
+              }
+            : {})}
         >
           {groups.length === 0 ? (
             <div
@@ -153,10 +168,13 @@ export default function GroupsCell({
               </Text>
             </div>
           ) : (
+            /* Suppressed, not dropped: dropping the tooltip remounts the row,
+            which re-attaches the ref the overflow measurement reads. */
             <Tooltip
               side="bottom"
               align="start"
-              tooltip={hasOverflow ? allGroupsTooltip : undefined}
+              tooltip={allGroupsTooltip}
+              suppressed={!hasOverflow}
               delayDuration={200}
             >
               <div
@@ -167,7 +185,7 @@ export default function GroupsCell({
               </div>
             </Tooltip>
           )}
-          {user.id && (
+          {editable && (
             <Hoverable.Item group="tags" variant="appear-on-hover">
               <Button
                 icon={SvgEdit}

@@ -2,12 +2,13 @@
 
 import { AuthTypeMetadata } from "@/lib/auth/types";
 import LoginText from "@/app/auth/login/LoginText";
+import CloudSSOSignIn from "@/app/auth/login/CloudSSOSignIn";
 import ProviderSignInButton from "@/app/auth/login/ProviderSignInButton";
 import { SignInButton, EmailPasswordForm } from "@/lib/auth/components";
 import { NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED } from "@/lib/constants";
 import { useSendAuthRequiredMessage } from "@/lib/extension/hooks";
-import Text from "@/refresh-components/texts/Text";
 import { Button, MessageCard } from "@opal/components";
+import { AuthLayouts } from "@opal/layouts";
 
 interface LoginPageProps {
   authUrl: string | null;
@@ -48,17 +49,12 @@ export default function LoginPage({
         <div className="w-full justify-center flex flex-col gap-6">
           <LoginText />
           {authUrl && authTypeMetadata && (
-            <>
-              <SignInButton authorizeUrl={authUrl} />
-              <div className="flex flex-row items-center w-full gap-2">
-                <div className="flex-1 border-t border-text-01" />
-                <Text as="p" text03 mainUiMuted>
-                  or
-                </Text>
-                <div className="flex-1 border-t border-text-01" />
-              </div>
-            </>
+            <SignInButton authorizeUrl={authUrl} />
           )}
+          <CloudSSOSignIn nextUrl={effectiveNextUrl} />
+          <AuthLayouts.OrSeparator />
+          {/* Password sign-in is never hidden on cloud: it is the only route
+              that does not need a workspace resolved first. */}
           <EmailPasswordForm
             label="submit"
             shouldVerify={true}
@@ -84,16 +80,7 @@ export default function LoginPage({
                   />
                 ))}
               </div>
-              {passwordAuthEnabled && (
-                /* raw-ok: pre-existing or-divider markup */
-                <div className="flex flex-row items-center w-full gap-2">
-                  <div className="flex-1 border-t border-text-01" />
-                  <Text as="p" text03 mainUiMuted>
-                    or
-                  </Text>
-                  <div className="flex-1 border-t border-text-01" />
-                </div>
-              )}
+              {passwordAuthEnabled && <AuthLayouts.OrSeparator />}
             </>
           )}
           {passwordAuthEnabled && (
@@ -105,7 +92,8 @@ export default function LoginPage({
       {!hidePageRedirect && passwordAuthEnabled && (
         <p className="text-center mt-4">
           Don&apos;t have an account?{" "}
-          <span
+          <button
+            type="button"
             onClick={() => {
               if (typeof window !== "undefined" && window.top) {
                 window.top.location.href = "/auth/signup";
@@ -116,7 +104,7 @@ export default function LoginPage({
             className="text-link font-medium cursor-pointer"
           >
             Create an account
-          </span>
+          </button>
         </p>
       )}
     </div>

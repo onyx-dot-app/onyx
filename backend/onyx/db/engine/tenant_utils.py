@@ -141,6 +141,16 @@ def _tenant_schemas_on(engine: Engine) -> list[str]:
         return [row[0] for row in result if validate_tenant_id(row[0])]
 
 
+def count_tenant_schemas_on_shard(shard_name: str) -> int:
+    """How many tenant schemas one shard is holding.
+
+    Counted per shard rather than through `get_tenant_ids_by_shard` so a caller can
+    isolate a failure to the shard that caused it, instead of losing every count when
+    one database is unreachable.
+    """
+    return len(_tenant_schemas_on(get_engine_for_shard(shard_name)))
+
+
 def get_tenant_ids_by_shard() -> dict[str, list[str]]:
     """Tenant schemas on each configured shard, keyed by shard name.
 

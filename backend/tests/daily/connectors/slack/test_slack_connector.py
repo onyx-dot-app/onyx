@@ -57,8 +57,8 @@ def test_indexing_channels_with_message_count(
     expected_messages: set[str],
     expected_channel_name: str,
 ) -> None:
-    if not slack_connector.client:
-        raise RuntimeError("Web client must be defined")
+    if not slack_connector.slack_client:
+        raise RuntimeError("Source operations gateway must be defined")
 
     result = load_all_from_connector(
         connector=slack_connector,
@@ -114,14 +114,14 @@ def test_indexing_channels_with_message_count(
 def test_indexing_channels_that_dont_exist(
     slack_connector: SlackConnector,
 ) -> None:
-    if not slack_connector.client:
-        raise RuntimeError("Web client must be defined")
+    if not slack_connector.slack_client:
+        raise RuntimeError("Source operations gateway must be defined")
 
     with pytest.raises(
         ValueError,
         match=r"Channel '.*' not found in workspace.*",
     ):
-        load_all_from_connector(
+        _ = load_all_from_connector(
             connector=slack_connector,
             start=0.0,
             end=time.time(),

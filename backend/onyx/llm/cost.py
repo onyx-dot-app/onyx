@@ -101,40 +101,61 @@ def _image_cost_cents(model: str, provider: str | None) -> float:
 
 def _override_cost_cents(
     rates: cost_overrides.CostOverrideRates,
-    input_tokens: int,
-    output_tokens: int,
+    prompt_tokens: int,
+    completion_tokens: int,
     cache_read_tokens: int,
 ) -> tuple[float, float]:
     """Apply admin per-Mtok rates. Cache reads bill at the admin cache rate when
-    set, otherwise at the input rate. Cache cost is folded into the input half."""
+    set, otherwise at the input rate. Cache cost is folded into the input half.
+
+    There is no admin cache-write rate, so cache writes bill at the input
+    rate."""
     input_per_mtok = rates.input_cost_per_mtok
     output_per_mtok = rates.output_cost_per_mtok
     cache_per_mtok = rates.cache_read_cost_per_mtok
     cache_rate = cache_per_mtok if cache_per_mtok is not None else input_per_mtok
+    non_cached_prompt = max(prompt_tokens - cache_read_tokens, 0)
     input_cents = (
-        input_tokens / 1_000_000 * input_per_mtok * 100
+        non_cached_prompt / 1_000_000 * input_per_mtok * 100
         + cache_read_tokens / 1_000_000 * cache_rate * 100
     )
-    output_cents = output_tokens / 1_000_000 * output_per_mtok * 100
+    output_cents = completion_tokens / 1_000_000 * output_per_mtok * 100
     return input_cents, output_cents
 
 
 def compute_cost_cents(
     model: str,
     provider: str | None,
-    input_tokens: int,
-    output_tokens: int,
+    prompt_tokens: int,
+    completion_tokens: int,
+    *,
     cache_read_tokens: int = 0,
+    cache_creation_tokens: int = 0,
     flow: LLMFlow | str | None = None,
     image_count: int = 1,
     db_session: Session | None = None,
 ) -> tuple[float, float]:
     """Return (input_cost_cents, output_cost_cents) for an LLM call.
 
+    prompt_tokens is the cache-inclusive provider total; the cache counts are
+    subsets of it, not additions to it.
+
     Resolution order: image pricing → admin override → litellm → default
     fallback rates (0 unless set). Never raises (usage hot path)."""
     if flow in IMAGE_FLOWS:
         return 0.0, _image_cost_cents(model, provider) * max(image_count, 1)
+
+    if cache_read_tokens + cache_creation_tokens > prompt_tokens:
+        logger.warning(
+            "Cache subsets exceed the reported prompt total for model %s "
+            "(provider %s): %d read + %d write > %d prompt. Pricing the "
+            "reported total; cost may be understated.",
+            model,
+            provider,
+            cache_read_tokens,
+            cache_creation_tokens,
+            prompt_tokens,
+        )
 
     if db_session is not None:
         try:
@@ -144,7 +165,10 @@ def compute_cost_cents(
             rates = None
         if rates is not None:
             return _override_cost_cents(
-                rates, input_tokens, output_tokens, cache_read_tokens
+                rates,
+                prompt_tokens,
+                completion_tokens,
+                cache_read_tokens,
             )
 
     try:
@@ -153,14 +177,15 @@ def compute_cost_cents(
         # custom_llm_provider is required for non-self-identifying model names
         # (bedrock/vertex/anthropic-plain) — without it litellm raises and we'd
         # record $0 for entire provider classes.
-        # input_tokens are non-cached; cache reads are additional prompt tokens
-        # billed at the model's (discounted) cache-read rate, never as output.
+        # litellm re-prices the cache subsets of prompt_tokens at the model's own
+        # cache rates (reads discounted, writes at a premium), never as output.
         prompt_cost_usd, completion_cost_usd = litellm.cost_per_token(
             model=model,
             custom_llm_provider=provider,
-            prompt_tokens=input_tokens + cache_read_tokens,
-            completion_tokens=output_tokens,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
             cache_read_input_tokens=cache_read_tokens,
+            cache_creation_input_tokens=cache_creation_tokens,
         )
         return prompt_cost_usd * 100, completion_cost_usd * 100
     except Exception:
@@ -172,10 +197,9 @@ def compute_cost_cents(
             provider,
             exc_info=True,
         )
-        billed_input = input_tokens + cache_read_tokens
-        input_cents = billed_input / 1_000_000 * DEFAULT_LLM_INPUT_COST_PER_MTOK * 100
+        input_cents = prompt_tokens / 1_000_000 * DEFAULT_LLM_INPUT_COST_PER_MTOK * 100
         output_cents = (
-            output_tokens / 1_000_000 * DEFAULT_LLM_OUTPUT_COST_PER_MTOK * 100
+            completion_tokens / 1_000_000 * DEFAULT_LLM_OUTPUT_COST_PER_MTOK * 100
         )
         if not (DEFAULT_LLM_INPUT_COST_PER_MTOK or DEFAULT_LLM_OUTPUT_COST_PER_MTOK):
             logger.warning(

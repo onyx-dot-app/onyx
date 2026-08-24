@@ -90,7 +90,7 @@ export function createInitialState(nodeId: number): ProcessedMessageState {
   };
 }
 
-function getGroupKey(packet: Packet): string {
+export function getGroupKey(packet: Packet): string {
   const turnIndex = packet.placement.turn_index;
   const tabIndex = packet.placement.tab_index ?? 0;
   return `${turnIndex}-${tabIndex}`;

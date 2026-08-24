@@ -49,6 +49,10 @@ function measure(
 export default function useContainerCenter(): ContainerCenter {
   const pathname = usePathname();
   const { isMediumScreen } = useScreenSize();
+  const [container, setContainer] = useState<HTMLElement | null>(() => {
+    if (typeof document === "undefined") return null;
+    return document.querySelector<HTMLElement>(SELECTOR);
+  });
   const [rect, setRect] = useState<{
     x: number | null;
     y: number | null;
@@ -62,41 +66,48 @@ export default function useContainerCenter(): ContainerCenter {
   });
 
   useEffect(() => {
-    let resizeObserver: ResizeObserver | null = null;
-    let mutationObserver: MutationObserver | null = null;
-
-    const attach = (container: HTMLElement) => {
-      const update = () => setRect(measure(container) ?? NULL_MEASURE);
-      update();
-      resizeObserver = new ResizeObserver(update);
-      resizeObserver.observe(container);
-    };
-
     const existing = document.querySelector<HTMLElement>(SELECTOR);
     if (existing) {
-      attach(existing);
-    } else {
-      // The container can mount after this hook (e.g. a root-level consumer
-      // renders before the auth shell reveals the chrome). Watch for it.
-      setRect(NULL_MEASURE);
-      mutationObserver = new MutationObserver(() => {
-        const el = document.querySelector<HTMLElement>(SELECTOR);
-        if (!el) return;
-        mutationObserver?.disconnect();
-        mutationObserver = null;
-        attach(el);
-      });
-      mutationObserver.observe(document.body, {
-        childList: true,
-        subtree: true,
-      });
+      setContainer(existing);
+      setRect(measure(existing) ?? NULL_MEASURE);
+      return;
     }
 
+    // The container can mount after this hook (e.g. a root-level consumer
+    // renders before the auth shell reveals the chrome). Watch for it.
+    setContainer(null);
+    setRect(NULL_MEASURE);
+
+    const mutationObserver = new MutationObserver(() => {
+      const el = document.querySelector<HTMLElement>(SELECTOR);
+      if (!el) return;
+      setContainer(el);
+      setRect(measure(el) ?? NULL_MEASURE);
+      mutationObserver.disconnect();
+    });
+    mutationObserver.observe(document.body, {
+      childList: true,
+      subtree: true,
+    });
+
     return () => {
-      resizeObserver?.disconnect();
-      mutationObserver?.disconnect();
+      mutationObserver.disconnect();
     };
   }, [pathname]);
+
+  useEffect(() => {
+    if (!container) return;
+
+    const update = () => setRect(measure(container) ?? NULL_MEASURE);
+    update();
+
+    const resizeObserver = new ResizeObserver(update);
+    resizeObserver.observe(container);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, [container]);
 
   return {
     centerX: isMediumScreen ? null : rect.x,

@@ -20,7 +20,7 @@ from sqlalchemy.pool import StaticPool
 
 from onyx.auth.users import current_user
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import Permission
+from onyx.db.enums import AccountType, Permission
 from onyx.db.models import UserUsage
 from onyx.db.user_usage import UsageExportRow, get_usage_export
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
@@ -42,6 +42,8 @@ class _StubUser:
     def __init__(self, permissions: list[str]) -> None:
         self.id = "00000000-0000-0000-0000-000000000001"
         self.effective_permissions = permissions
+        self.account_type = AccountType.STANDARD
+        self.is_group_manager = False
 
 
 _ADMIN = _StubUser([Permission.FULL_ADMIN_PANEL_ACCESS.value])
@@ -107,6 +109,7 @@ def _seed_usage(
     cache_read_tokens: int,
     cost_cents: float,
     window_start: datetime.datetime,
+    cache_creation_tokens: int = 0,
 ) -> None:
     db_session.add(
         UserUsage(
@@ -118,6 +121,7 @@ def _seed_usage(
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             cache_read_tokens=cache_read_tokens,
+            cache_creation_tokens=cache_creation_tokens,
             cost_cents=cost_cents,
         )
     )
@@ -128,7 +132,19 @@ def _seed_two_users(db_session: Session) -> tuple[str, str]:
     alice = _add_user(db_session, "alice@example.com")
     bob = _add_user(db_session, "bob@example.com")
 
-    _seed_usage(db_session, alice, "model-a", "CHAT", "openai", 100, 50, 5, 1.0, _W1)
+    _seed_usage(
+        db_session,
+        alice,
+        "model-a",
+        "CHAT",
+        "openai",
+        100,
+        50,
+        5,
+        1.0,
+        _W1,
+        cache_creation_tokens=7,
+    )
     _seed_usage(db_session, alice, "model-b", "CHAT", "openai", 200, 60, 0, 2.0, _W1)
     _seed_usage(db_session, alice, "model-a", "CHAT", "openai", 300, 70, 0, 3.0, _W2)
     _seed_usage(db_session, bob, "model-a", "CHAT", "anthropic", 400, 80, 0, 4.0, _W2)
@@ -148,37 +164,53 @@ class TestGetUsageExportHelper:
             UsageExportRow(
                 email="alice@example.com",
                 model="model-a",
+                flow="CHAT",
+                provider="openai",
+                incognito=False,
                 day="2026-06-01",
                 input_tokens=100,
                 output_tokens=50,
                 cache_read_tokens=5,
+                cache_creation_tokens=7,
                 cost_cents=1.0,
             ),
             UsageExportRow(
                 email="alice@example.com",
                 model="model-b",
+                flow="CHAT",
+                provider="openai",
+                incognito=False,
                 day="2026-06-01",
                 input_tokens=200,
                 output_tokens=60,
                 cache_read_tokens=0,
+                cache_creation_tokens=0,
                 cost_cents=2.0,
             ),
             UsageExportRow(
                 email="alice@example.com",
                 model="model-a",
+                flow="CHAT",
+                provider="openai",
+                incognito=False,
                 day="2026-06-08",
                 input_tokens=300,
                 output_tokens=70,
                 cache_read_tokens=0,
+                cache_creation_tokens=0,
                 cost_cents=3.0,
             ),
             UsageExportRow(
                 email="bob@example.com",
                 model="model-a",
+                flow="CHAT",
+                provider="anthropic",
+                incognito=False,
                 day="2026-06-08",
                 input_tokens=400,
                 output_tokens=80,
                 cache_read_tokens=0,
+                cache_creation_tokens=0,
                 cost_cents=4.0,
             ),
         ]
@@ -195,6 +227,41 @@ class TestGetUsageExportHelper:
         assert rows[0].model == "model-b"
         assert rows[0].email == "alice@example.com"
 
+    def test_orders_rows_by_flow_and_provider(self, db_session: Session) -> None:
+        user_id = _add_user(db_session, "alice@example.com")
+        _seed_usage(
+            db_session,
+            user_id,
+            "model-a",
+            "CHAT",
+            "openai",
+            100,
+            50,
+            0,
+            1.0,
+            _W1,
+        )
+        _seed_usage(
+            db_session,
+            user_id,
+            "model-a",
+            "BATCH",
+            "anthropic",
+            200,
+            60,
+            0,
+            2.0,
+            _W1,
+        )
+        db_session.commit()
+
+        rows = get_usage_export(db_session, start=_W1, end=_W2)
+
+        assert [(row.flow, row.provider) for row in rows] == [
+            ("BATCH", "anthropic"),
+            ("CHAT", "openai"),
+        ]
+
     def test_date_range_bounds_half_open(self, db_session: Session) -> None:
         _seed_two_users(db_session)
         # [W1, W2) excludes everything in W2.
@@ -204,6 +271,18 @@ class TestGetUsageExportHelper:
 
 
 class TestExportEndpoint:
+    def test_default_range_covers_thirty_calendar_days(
+        self, db_session: Session
+    ) -> None:
+        client = TestClient(_make_app(db_session, _ADMIN))
+
+        body = client.get("/admin/usage/export").json()
+
+        start = datetime.date.fromisoformat(body["start"])
+        end = datetime.date.fromisoformat(body["end"])
+        # Inclusive endpoints differ by 29 days when the range has 30 dates.
+        assert (end - start).days == 29
+
     def test_nested_per_user_with_totals(self, db_session: Session) -> None:
         _seed_two_users(db_session)
         client = TestClient(_make_app(db_session, _ADMIN))
@@ -224,6 +303,7 @@ class TestExportEndpoint:
         assert alice["totals"]["input_tokens"] == 600  # 100 + 200 + 300
         assert alice["totals"]["output_tokens"] == 180  # 50 + 60 + 70
         assert alice["totals"]["cache_read_tokens"] == 5
+        assert alice["totals"]["cache_creation_tokens"] == 7
         assert alice["totals"]["cost_cents"] == pytest.approx(6.0)
 
         bob = users["bob@example.com"]
@@ -242,14 +322,27 @@ class TestExportEndpoint:
         assert all(r["model"] == "model-b" for r in body["users"][0]["records"])
 
     def test_date_range_end_excludes_later_window(self, db_session: Session) -> None:
-        _seed_two_users(db_session)
+        alice, _ = _seed_two_users(db_session)
+        _seed_usage(
+            db_session,
+            alice,
+            "model-a",
+            "CHAT",
+            "openai",
+            500,
+            90,
+            0,
+            5.0,
+            datetime.datetime(2026, 6, 7, tzinfo=datetime.timezone.utc),
+        )
+        db_session.commit()
         client = TestClient(_make_app(db_session, _ADMIN))
         # end=2026-06-07 -> half-open through 06-08 00:00, so W2 (06-08) excluded.
         body = client.get(
             "/admin/usage/export", params={"start": "2026-06-01", "end": "2026-06-07"}
         ).json()
         all_days = {r["day"] for u in body["users"] for r in u["records"]}
-        assert all_days == {"2026-06-01"}
+        assert all_days == {"2026-06-01", "2026-06-07"}
         assert "bob@example.com" not in {u["email"] for u in body["users"]}
 
     def test_non_admin_rejected(self, db_session: Session) -> None:

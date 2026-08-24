@@ -5,7 +5,12 @@ from typing import Any
 from pydantic import BaseModel
 
 from onyx.llm.model_response import ModelResponse, ModelResponseStream
-from onyx.llm.models import LanguageModelInput, ReasoningEffort, ToolChoiceOptions
+from onyx.llm.models import (
+    LanguageModelInput,
+    ReasoningEffort,
+    ToolChoice,
+    ToolChoiceOptions,  # noqa: F401  # re-exported: onyx.chat imports it from here
+)
 from onyx.llm.tracing_wrap import wrap_invoke, wrap_stream
 from onyx.utils.logger import setup_logger
 
@@ -15,6 +20,14 @@ logger = setup_logger()
 class LLMUserIdentity(BaseModel):
     user_id: str | None = None
     session_id: str | None = None
+
+
+class LlmRequestPolicy(BaseModel):
+    """Per-request policy an LLM call must carry (e.g. incognito retention
+    suppression). Merged after every other source so nothing overrides it."""
+
+    headers: dict[str, str] = {}
+    model_kwargs: dict[str, Any] = {}
 
 
 class LLMConfig(BaseModel):
@@ -27,6 +40,9 @@ class LLMConfig(BaseModel):
     deployment_name: str | None = None
     custom_config: dict[str, str] | None = None
     max_input_tokens: int
+    # Here rather than in the chat loop, so every invoke path gets it.
+    reasoning_effort_default: ReasoningEffort | None = None
+    reasoning_effort_max: ReasoningEffort | None = None
     # This disables the "model_" protected namespace for pydantic
     model_config = {"protected_namespaces": ()}
 
@@ -74,12 +90,13 @@ class LLM(abc.ABC):
         self,
         prompt: LanguageModelInput,
         tools: list[dict] | None = None,
-        tool_choice: ToolChoiceOptions | None = None,
+        tool_choice: ToolChoice | None = None,
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
         user_identity: LLMUserIdentity | None = None,
+        total_timeout_override: float | None = None,
     ) -> "ModelResponse":
         raise NotImplementedError
 
@@ -87,7 +104,7 @@ class LLM(abc.ABC):
         self,
         prompt: LanguageModelInput,
         tools: list[dict] | None = None,
-        tool_choice: ToolChoiceOptions | None = None,
+        tool_choice: ToolChoice | None = None,
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,

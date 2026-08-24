@@ -1,21 +1,32 @@
-"""Editing or rotating a key recomputes its permissions: legacy LIMITED
-keys with a blank grant are repaired, and healthy keys keep the
-permissions they already had."""
+"""Editing or rotating a key recomputes its permissions: group-less keys with
+a blank grant are repaired, and healthy keys keep the permissions they
+already had."""
 
 from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from onyx.auth.schemas import UserRole
 from onyx.db.api_key import (
     insert_api_key,
     regenerate_api_key,
     remove_api_key,
     update_api_key,
 )
-from onyx.db.models import User
+from onyx.db.models import User, UserGroup
 from onyx.server.api_key.models import APIKeyArgs
+
+
+def _basic_group_id(db_session: Session) -> int:
+    """The seeded Basic default group — a key in it draws real grants, unlike a
+    group-less key which falls back to the service-account chat scope."""
+    group = db_session.scalar(
+        select(UserGroup).where(
+            UserGroup.name == "Basic", UserGroup.is_default.is_(True)
+        )
+    )
+    assert group is not None
+    return group.id
 
 
 def _get_key_user(db_session: Session, user_id: UUID) -> User:
@@ -34,7 +45,7 @@ def _blank_permissions(db_session: Session, user_id: UUID) -> User:
 
 
 def test_update_repairs_legacy_limited_key(db_session: Session) -> None:
-    args = APIKeyArgs(name="legacy-limited-update", role=UserRole.LIMITED)
+    args = APIKeyArgs(name="legacy-limited-update")
     descriptor = insert_api_key(db_session, args, user_id=None)
     user = _blank_permissions(db_session, descriptor.user_id)
 
@@ -47,7 +58,7 @@ def test_update_repairs_legacy_limited_key(db_session: Session) -> None:
 
 
 def test_regenerate_repairs_legacy_limited_key(db_session: Session) -> None:
-    args = APIKeyArgs(name="legacy-limited-regen", role=UserRole.LIMITED)
+    args = APIKeyArgs(name="legacy-limited-regen")
     descriptor = insert_api_key(db_session, args, user_id=None)
     user = _blank_permissions(db_session, descriptor.user_id)
 
@@ -62,7 +73,7 @@ def test_regenerate_repairs_legacy_limited_key(db_session: Session) -> None:
 def test_update_preserves_limited_key_permissions(db_session: Session) -> None:
     descriptor = insert_api_key(
         db_session,
-        APIKeyArgs(name="limited-rename", role=UserRole.LIMITED),
+        APIKeyArgs(name="limited-rename"),
         user_id=None,
     )
     user = _get_key_user(db_session, descriptor.user_id)
@@ -71,7 +82,7 @@ def test_update_preserves_limited_key_permissions(db_session: Session) -> None:
     update_api_key(
         db_session,
         descriptor.api_key_id,
-        APIKeyArgs(name="limited-renamed", role=UserRole.LIMITED),
+        APIKeyArgs(name="limited-renamed"),
     )
 
     db_session.refresh(user)
@@ -82,7 +93,9 @@ def test_update_preserves_limited_key_permissions(db_session: Session) -> None:
 
 def test_update_preserves_basic_key_permissions(db_session: Session) -> None:
     descriptor = insert_api_key(
-        db_session, APIKeyArgs(name="basic-rename", role=UserRole.BASIC), user_id=None
+        db_session,
+        APIKeyArgs(name="basic-rename", group_ids=[_basic_group_id(db_session)]),
+        user_id=None,
     )
     user = _get_key_user(db_session, descriptor.user_id)
     perms_before = list(user.effective_permissions)
@@ -91,7 +104,7 @@ def test_update_preserves_basic_key_permissions(db_session: Session) -> None:
     update_api_key(
         db_session,
         descriptor.api_key_id,
-        APIKeyArgs(name="basic-renamed", role=UserRole.BASIC),
+        APIKeyArgs(name="basic-renamed", group_ids=[_basic_group_id(db_session)]),
     )
 
     db_session.refresh(user)
@@ -102,7 +115,9 @@ def test_update_preserves_basic_key_permissions(db_session: Session) -> None:
 
 def test_update_role_change_swaps_permission_source(db_session: Session) -> None:
     descriptor = insert_api_key(
-        db_session, APIKeyArgs(name="role-swap", role=UserRole.BASIC), user_id=None
+        db_session,
+        APIKeyArgs(name="role-swap", group_ids=[_basic_group_id(db_session)]),
+        user_id=None,
     )
     user = _get_key_user(db_session, descriptor.user_id)
     basic_perms = list(user.effective_permissions)
@@ -111,7 +126,7 @@ def test_update_role_change_swaps_permission_source(db_session: Session) -> None
     update_api_key(
         db_session,
         descriptor.api_key_id,
-        APIKeyArgs(name="role-swap", role=UserRole.LIMITED),
+        APIKeyArgs(name="role-swap"),
     )
     db_session.refresh(user)
     assert user.effective_permissions == ["write:chat"]
@@ -119,7 +134,7 @@ def test_update_role_change_swaps_permission_source(db_session: Session) -> None
     update_api_key(
         db_session,
         descriptor.api_key_id,
-        APIKeyArgs(name="role-swap", role=UserRole.BASIC),
+        APIKeyArgs(name="role-swap", group_ids=[_basic_group_id(db_session)]),
     )
     db_session.refresh(user)
     assert user.effective_permissions == basic_perms
@@ -129,7 +144,9 @@ def test_update_role_change_swaps_permission_source(db_session: Session) -> None
 
 def test_regenerate_preserves_basic_key_permissions(db_session: Session) -> None:
     descriptor = insert_api_key(
-        db_session, APIKeyArgs(name="basic-regen", role=UserRole.BASIC), user_id=None
+        db_session,
+        APIKeyArgs(name="basic-regen", group_ids=[_basic_group_id(db_session)]),
+        user_id=None,
     )
     user = _get_key_user(db_session, descriptor.user_id)
     perms_before = list(user.effective_permissions)

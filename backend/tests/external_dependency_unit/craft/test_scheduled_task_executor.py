@@ -140,7 +140,7 @@ def test_dispatch_uses_skip_locked_to_avoid_dupes(
     # ``self.app`` is a property on the Celery-generated Task subclass;
     # we patch the property to return a fake whose ``send_task`` is a
     # no-op so the dispatcher never touches a broker.
-    task_instance = dispatch_due_scheduled_tasks.run.__self__  # type: ignore[attr-defined]
+    task_instance = dispatch_due_scheduled_tasks.run.__self__
 
     class _FakeApp:
         def send_task(
@@ -157,7 +157,7 @@ def test_dispatch_uses_skip_locked_to_avoid_dupes(
         try:
             barrier.wait(timeout=5)
             results[idx] = dispatch_due_scheduled_tasks.run(
-                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE  # ty: ignore[invalid-argument-type]
             )
         finally:
             CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
@@ -235,7 +235,7 @@ def test_cleanup_stuck_runs_marks_queued_over_threshold_failed(
     db_session.commit()
 
     marked = cleanup_stuck_scheduled_runs.run(
-        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE  # ty: ignore[invalid-argument-type]
     )
     assert marked >= 1
 
@@ -253,8 +253,8 @@ def test_cleanup_stuck_runs_marks_running_over_threshold_failed(
 ) -> None:
     """A RUNNING run older than the running threshold → ``cleanup_stuck_scheduled_runs`` marks it FAILED.
 
-    Production threshold is ``TURN_BUDGET_SECONDS + TURN_RECLAIM_SLACK_SECONDS``
-    (i.e. 45 min). Backdating ``started_at`` by 50 min puts the run past that.
+    Production threshold is ``SCHEDULED_RUN_HARD_CAP_SECONDS + TURN_RECLAIM_SLACK_SECONDS``
+    (i.e. 75 min). Backdating ``started_at`` by 80 min puts the run past that.
     """
     user = make_user(db_session)
     task = ScheduledTask(
@@ -270,7 +270,7 @@ def test_cleanup_stuck_runs_marks_running_over_threshold_failed(
     db_session.add(task)
     db_session.flush()
     stale_started = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
-        minutes=50
+        minutes=80
     )
     run = ScheduledTaskRun(
         task_id=task.id,
@@ -282,7 +282,7 @@ def test_cleanup_stuck_runs_marks_running_over_threshold_failed(
     db_session.commit()
 
     marked = cleanup_stuck_scheduled_runs.run(
-        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE  # ty: ignore[invalid-argument-type]
     )
     assert marked >= 1
 

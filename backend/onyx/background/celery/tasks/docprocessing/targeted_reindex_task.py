@@ -194,7 +194,7 @@ def run_targeted_reindex(
     )
 
 
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.TARGETED_REINDEX_TASK,
     soft_time_limit=_TARGETED_REINDEX_SOFT_TIME_LIMIT,
     time_limit=_TARGETED_REINDEX_TIME_LIMIT,

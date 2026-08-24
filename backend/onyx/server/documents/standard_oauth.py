@@ -1,12 +1,13 @@
-import json
-import uuid
 from typing import Annotated, cast
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import BaseModel, ValidationError
+from fastapi import APIRouter, Depends, Query, Request
+from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
+from onyx.auth.pkce import generate_pkce_pair
+from onyx.cache.factory import get_cache_backend
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.interfaces import OAuthConnector
@@ -14,20 +15,23 @@ from onyx.db.credentials import create_credential
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import User
-from onyx.redis.redis_pool import get_redis_client
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
+from onyx.oauth.authorization_attempt import (
+    AuthorizationAttemptStore,
+    generate_authorization_state,
+)
 from onyx.server.documents.models import CredentialBase
 from onyx.utils.logger import setup_logger
 from onyx.utils.subclasses import find_all_subclasses_in_package
-from shared_configs.contextvars import get_current_tenant_id
+from onyx.utils.url import sanitize_next_url
 
 logger = setup_logger()
 
 router = APIRouter(prefix="/connector/oauth")
 
-_OAUTH_STATE_KEY_FMT = "oauth_state:{state}"
-_OAUTH_STATE_EXPIRATION_SECONDS = 10 * 60  # 10 minutes
-_DESIRED_RETURN_URL_KEY = "desired_return_url"
-_ADDITIONAL_KWARGS_KEY = "additional_kwargs"
+_OAUTH_STATE_EXPIRATION_SECONDS = 10 * 60
+_OAUTH_ATTEMPT_NAMESPACE_PREFIX = "connector"
 
 # Cache for OAuth connectors, populated at module load time
 _OAUTH_CONNECTORS: dict[DocumentSource, type[OAuthConnector]] = {}
@@ -55,28 +59,138 @@ _discover_oauth_connectors()
 def _get_additional_kwargs(
     request: Request, connector_cls: type[OAuthConnector], args_to_ignore: list[str]
 ) -> dict[str, str]:
-    # get additional kwargs from request
-    # e.g. anything except for desired_return_url
     additional_kwargs_dict = {
         k: v for k, v in request.query_params.items() if k not in args_to_ignore
     }
+    _validate_additional_kwargs(connector_cls, additional_kwargs_dict)
+    return additional_kwargs_dict
+
+
+def _validate_additional_kwargs(
+    connector_cls: type[OAuthConnector], additional_kwargs: dict[str, str]
+) -> None:
     try:
-        # validate
-        connector_cls.AdditionalOauthKwargs(**additional_kwargs_dict)
-    except ValidationError:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"Invalid additional kwargs. Got {additional_kwargs_dict}, expected "
-                f"{connector_cls.AdditionalOauthKwargs.model_json_schema()}"
-            ),
+        connector_cls.AdditionalOauthKwargs(**additional_kwargs)
+    except ValidationError as error:
+        messages = {
+            str(item["msg"]).removeprefix("Value error, ")
+            for item in error.errors(include_url=False, include_input=False)
+        }
+        detail = "Invalid OAuth configuration: " + "; ".join(sorted(messages))
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, detail) from error
+
+
+class _ConnectorOAuthAttemptPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    desired_return_path: str
+    additional_kwargs: dict[str, str]
+    code_verifier: str | None = None
+
+    @field_validator("desired_return_path")
+    @classmethod
+    def validate_return_path(cls, value: str) -> str:
+        if sanitize_next_url(value) != value or any(
+            not character.isprintable() for character in value
+        ):
+            raise ValueError("OAuth return path must be a local application path")
+        return value
+
+
+def _authorization_attempt_store(
+    source: DocumentSource,
+) -> AuthorizationAttemptStore[_ConnectorOAuthAttemptPayload]:
+    return AuthorizationAttemptStore(
+        get_cache_backend(),
+        namespace=f"{_OAUTH_ATTEMPT_NAMESPACE_PREFIX}-{source.value}",
+        payload_type=_ConnectorOAuthAttemptPayload,
+        ttl_seconds=_OAUTH_STATE_EXPIRATION_SECONDS,
+    )
+
+
+def _attempt_payload(
+    desired_return_url: str,
+    additional_kwargs: dict[str, str],
+    code_verifier: str | None,
+) -> _ConnectorOAuthAttemptPayload:
+    try:
+        return_url = urlsplit(desired_return_url)
+    except ValueError as error:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "OAuth return URL is invalid",
+        ) from error
+
+    if return_url.scheme or return_url.netloc:
+        try:
+            web_domain = urlsplit(WEB_DOMAIN)
+            return_origin = (
+                return_url.scheme.lower(),
+                (return_url.hostname or "").lower(),
+                return_url.port
+                or (443 if return_url.scheme.lower() == "https" else 80),
+            )
+            web_origin = (
+                web_domain.scheme.lower(),
+                (web_domain.hostname or "").lower(),
+                web_domain.port
+                or (443 if web_domain.scheme.lower() == "https" else 80),
+            )
+        except ValueError as error:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "OAuth return URL is invalid",
+            ) from error
+        if return_origin != web_origin or (
+            return_url.username is not None or return_url.password is not None
+        ):
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "OAuth return URL must use the Onyx application origin",
+            )
+        desired_return_url = urlunsplit(
+            ("", "", return_url.path or "/", return_url.query, return_url.fragment)
         )
 
-    return additional_kwargs_dict
+    try:
+        return _ConnectorOAuthAttemptPayload(
+            desired_return_path=desired_return_url,
+            additional_kwargs=additional_kwargs,
+            code_verifier=code_verifier,
+        )
+    except ValidationError as error:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "OAuth return path must be a local application path",
+        ) from error
+
+
+def _return_path_with_credential(return_path: str, credential_id: int) -> str:
+    parsed = urlsplit(return_path)
+    query = [
+        (key, value)
+        for key, value in parse_qsl(parsed.query, keep_blank_values=True)
+        if key != "credentialId"
+    ]
+    query.append(("credentialId", str(credential_id)))
+    return urlunsplit(("", "", parsed.path, urlencode(query), parsed.fragment))
 
 
 class AuthorizeResponse(BaseModel):
     redirect_url: str
+
+
+def _get_enabled_oauth_connector(
+    source: DocumentSource,
+) -> type[OAuthConnector]:
+    connector_cls = _discover_oauth_connectors().get(source)
+    if connector_cls is None:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, f"Unknown OAuth source: {source}")
+    if not connector_cls.oauth_enabled():
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT, f"OAuth is not configured for {source}"
+        )
+    return connector_cls
 
 
 @router.get("/authorize/{source}")
@@ -84,46 +198,40 @@ def oauth_authorize(
     request: Request,
     source: DocumentSource,
     desired_return_url: Annotated[str | None, Query()] = None,
-    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> AuthorizeResponse:
     """Initiates the OAuth flow by redirecting to the provider's auth page"""
 
-    tenant_id = get_current_tenant_id()
-    oauth_connectors = _discover_oauth_connectors()
-
-    if source not in oauth_connectors:
-        raise HTTPException(status_code=400, detail=f"Unknown OAuth source: {source}")
-
-    connector_cls = oauth_connectors[source]
+    connector_cls = _get_enabled_oauth_connector(source)
     base_url = WEB_DOMAIN
 
-    # get additional kwargs from request
-    # e.g. anything except for desired_return_url
     additional_kwargs = _get_additional_kwargs(
         request, connector_cls, ["desired_return_url"]
     )
 
-    # store state in redis
     if not desired_return_url:
-        desired_return_url = f"{base_url}/admin/connectors/{source}?step=0"
-    redis_client = get_redis_client(tenant_id=tenant_id)
-    state = str(uuid.uuid4())
-    redis_client.set(
-        _OAUTH_STATE_KEY_FMT.format(state=state),
-        json.dumps(
-            {
-                _DESIRED_RETURN_URL_KEY: desired_return_url,
-                _ADDITIONAL_KWARGS_KEY: additional_kwargs,
-            }
-        ),
-        ex=_OAUTH_STATE_EXPIRATION_SECONDS,
+        desired_return_url = f"/admin/connectors/{source}?step=0"
+    code_verifier = None
+    code_challenge = None
+    if connector_cls.supports_pkce:
+        code_verifier, code_challenge = generate_pkce_pair()
+    payload = _attempt_payload(
+        desired_return_url,
+        additional_kwargs,
+        code_verifier,
     )
 
-    return AuthorizeResponse(
-        redirect_url=connector_cls.oauth_authorization_url(
-            base_url, state, additional_kwargs
-        )
+    state = generate_authorization_state()
+    redirect_url = connector_cls.oauth_authorization_url(
+        base_url, state, additional_kwargs, code_challenge
     )
+    _authorization_attempt_store(source).store(
+        owner_id=str(user.id),
+        state=state,
+        payload=payload,
+    )
+
+    return AuthorizeResponse(redirect_url=redirect_url)
 
 
 class CallbackResponse(BaseModel):
@@ -139,47 +247,36 @@ def oauth_callback(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> CallbackResponse:
     """Handles the OAuth callback and exchanges the code for tokens"""
-    oauth_connectors = _discover_oauth_connectors()
-
-    if source not in oauth_connectors:
-        raise HTTPException(status_code=400, detail=f"Unknown OAuth source: {source}")
-
-    connector_cls = oauth_connectors[source]
-
-    # get state from redis
-    redis_client = get_redis_client()
-    oauth_state_bytes = cast(
-        bytes, redis_client.get(_OAUTH_STATE_KEY_FMT.format(state=state))
+    connector_cls = _get_enabled_oauth_connector(source)
+    attempt = _authorization_attempt_store(source).consume(
+        owner_id=str(user.id),
+        state=state,
     )
-    if not oauth_state_bytes:
-        raise HTTPException(status_code=400, detail="Invalid OAuth state")
-    oauth_state = json.loads(oauth_state_bytes.decode("utf-8"))
+    _validate_additional_kwargs(connector_cls, attempt.payload.additional_kwargs)
+    if connector_cls.supports_pkce and not attempt.payload.code_verifier:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Invalid OAuth state")
 
-    desired_return_url = cast(str, oauth_state[_DESIRED_RETURN_URL_KEY])
-    additional_kwargs = cast(dict[str, str], oauth_state[_ADDITIONAL_KWARGS_KEY])
-
-    base_url = WEB_DOMAIN
-    token_info = connector_cls.oauth_code_to_token(base_url, code, additional_kwargs)
-
-    # Create a new credential with the token info
-    credential_data = CredentialBase(
-        credential_json=token_info,
-        admin_public=True,  # Or based on some logic/parameter
-        source=source,
-        name=f"{source.title()} OAuth Credential",
+    token_info = connector_cls.oauth_code_to_token(
+        WEB_DOMAIN,
+        code,
+        attempt.payload.additional_kwargs,
+        attempt.payload.code_verifier,
     )
-
     credential = create_credential(
-        credential_data=credential_data,
+        credential_data=CredentialBase(
+            credential_json=token_info,
+            admin_public=True,
+            source=source,
+            name=f"{source.title()} OAuth Credential",
+        ),
         user=user,
         db_session=db_session,
     )
-
-    # TODO: use a library for url handling
-    sep = "&" if "?" in desired_return_url else "?"
-    return CallbackResponse(
-        redirect_url=f"{desired_return_url}{sep}credentialId={credential.id}"
+    return_path = _return_path_with_credential(
+        attempt.payload.desired_return_path,
+        credential.id,
     )
+    return CallbackResponse(redirect_url=f"{WEB_DOMAIN.rstrip('/')}{return_path}")
 
 
 class OAuthAdditionalKwargDescription(BaseModel):
@@ -190,6 +287,7 @@ class OAuthAdditionalKwargDescription(BaseModel):
 
 class OAuthDetails(BaseModel):
     oauth_enabled: bool
+    supports_manual_credentials: bool
     additional_kwargs: list[OAuthAdditionalKwargDescription]
 
 
@@ -203,6 +301,7 @@ def oauth_details(
     if source not in oauth_connectors:
         return OAuthDetails(
             oauth_enabled=False,
+            supports_manual_credentials=True,
             additional_kwargs=[],
         )
 
@@ -221,6 +320,7 @@ def oauth_details(
         )
 
     return OAuthDetails(
-        oauth_enabled=True,
+        oauth_enabled=connector_cls.oauth_enabled(),
+        supports_manual_credentials=connector_cls.supports_manual_credentials,
         additional_kwargs=additional_kwarg_descriptions,
     )

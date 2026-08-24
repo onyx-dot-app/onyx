@@ -82,6 +82,8 @@ export interface CreateAgentOptions {
  * **User Groups:**
  * - `getUserGroups()` - Lists all user groups (including default system groups)
  * - `createUserGroup(name)` - Creates a user group
+ * - `addUsersToGroup(groupId, userIds)` - Adds users to a user group
+ * - `setUserGroupPermissions(groupId, permissions)` - Replaces group permission grants
  * - `deleteUserGroup(id)` - Deletes a user group
  *
  * **Tool Providers:**
@@ -93,6 +95,10 @@ export interface CreateAgentOptions {
  * **Chat Sessions:**
  * - `createChatSession(description, personaId?)` - Creates a chat session with a description
  * - `deleteChatSession(chatId)` - Deletes a chat session
+ *
+ * **Service Accounts:**
+ * - `createServiceAccount(name, groupIds?)` - Creates a service account API key
+ * - `deleteServiceAccount(apiKeyId)` - Deletes a service account API key
  *
  * **Projects:**
  * - `createProject(name)` - Creates a project with a name
@@ -294,7 +300,8 @@ export class OnyxApiClient {
    */
   async createFileConnector(
     connectorName: string = "Test File Connector",
-    accessType: "public" | "private" = "public"
+    accessType: "public" | "private" = "public",
+    groups: number[] = []
   ): Promise<number> {
     const response = await this.post(
       "/manage/admin/connector-with-mock-credential",
@@ -309,7 +316,7 @@ export class OnyxApiClient {
         prune_freq: null,
         indexing_start: null,
         access_type: accessType,
-        groups: [],
+        groups,
       }
     );
 
@@ -391,15 +398,16 @@ export class OnyxApiClient {
    */
   async createDocumentSet(
     documentSetName: string,
-    ccPairIds: number[]
+    ccPairIds: number[],
+    options: { isPublic?: boolean; groups?: number[] } = {}
   ): Promise<number> {
     const response = await this.post("/manage/admin/document-set", {
       name: documentSetName,
       description: `Test document set: ${documentSetName}`,
       cc_pair_ids: ccPairIds,
-      is_public: true,
+      is_public: options.isPublic ?? true,
       users: [],
-      groups: [],
+      groups: options.groups ?? [],
       federated_connectors: [],
     });
 
@@ -443,12 +451,16 @@ export class OnyxApiClient {
   }
 
   /**
-   * Deletes a connector-credential pair and waits for deletion to complete.
-   * Fetches the CC pair details to get connector/credential IDs, then initiates deletion
-   * and polls until the deletion is confirmed (waits for 404 response).
+   * Initiates deletion of a connector-credential pair.
+   *
+   * Fetches the CC pair details to get connector/credential IDs, then fires
+   * the deletion-attempt endpoint. Deletion runs asynchronously on a Celery
+   * worker; this method does NOT wait for it to finish, so the pair may
+   * still appear briefly after this resolves. Intended for test-teardown
+   * fire-and-forget cleanup — use `waitForDeletion` directly if a caller
+   * needs to observe the deleted state.
    *
    * @param ccPairId - The connector-credential pair ID to delete
-   * @returns Promise that resolves when deletion is confirmed, or rejects on timeout
    */
   async deleteCCPair(ccPairId: number): Promise<void> {
     // Get CC pair details to extract connector_id and credential_id
@@ -487,12 +499,6 @@ export class OnyxApiClient {
     this.log(
       `Initiated deletion for CC pair: ${ccPairId} (connector: ${connectorId}, credential: ${credentialId})`
     );
-    await this.waitForDeletion(
-      `/manage/admin/cc-pair/${ccPairId}`,
-      "CC pair",
-      ccPairId
-    );
-    this.log(`CC pair ${ccPairId} deletion confirmed`);
   }
 
   /**
@@ -530,6 +536,37 @@ export class OnyxApiClient {
     this.log(
       `Created restricted LLM provider: ${providerName} (ID: ${responseData.id}, Group: ${groupId})`
     );
+    return responseData.id;
+  }
+
+  /**
+   * Creates a public LLM provider and returns its ID.
+   *
+   * @param providerName - Display name for the provider
+   * @returns The provider ID
+   */
+  async createProvider(providerName: string): Promise<number> {
+    const response = await this.request.put(
+      `${this.baseUrl}/admin/llm/provider?is_creation=true`,
+      {
+        data: {
+          name: providerName,
+          provider: "openai",
+          api_key: E2E_LLM_PROVIDER_API_KEY,
+          is_public: true,
+          groups: [],
+          personas: [],
+          model_configurations: [{ name: "gpt-4o", is_visible: true }],
+        },
+      }
+    );
+
+    const responseData = await this.handleResponse<{ id: number }>(
+      response,
+      "Failed to create LLM provider"
+    );
+
+    this.log(`Created LLM provider: ${providerName} (ID: ${responseData.id})`);
     return responseData.id;
   }
 
@@ -646,6 +683,46 @@ export class OnyxApiClient {
   }
 
   /**
+   * Creates or updates a per-model cost override.
+   *
+   * @param model - Model id the negotiated rate applies to
+   * @returns The model id, for asserting the row renders
+   */
+  async upsertCostOverride(model: string): Promise<string> {
+    const response = await this.put("/admin/cost-overrides", {
+      model,
+      input_cost_per_mtok: 2.5,
+      output_cost_per_mtok: 10,
+    });
+
+    await this.handleResponse(
+      response,
+      `Failed to upsert cost override ${model}`
+    );
+
+    this.log(`Upserted cost override: ${model}`);
+    return model;
+  }
+
+  /**
+   * Deletes a per-model cost override.
+   *
+   * @param model - Model id whose override should be removed
+   */
+  async deleteCostOverride(model: string): Promise<void> {
+    const response = await this.delete(
+      `/admin/cost-overrides/${encodeURIComponent(model)}`
+    );
+
+    await this.handleResponseSoft(
+      response,
+      `Failed to delete cost override ${model}`
+    );
+
+    this.log(`Deleted cost override: ${model}`);
+  }
+
+  /**
    * Creates a user group.
    *
    * @param groupName - Name for the user group
@@ -672,6 +749,50 @@ export class OnyxApiClient {
 
     this.log(`Created user group: ${groupName} (ID: ${responseData.id})`);
     return responseData.id;
+  }
+
+  /**
+   * Adds users to an existing user group.
+   *
+   * add-users 404s while the group is still syncing, so settle it first.
+   */
+  async addUsersToGroup(groupId: number, userIds: string[]): Promise<void> {
+    // best-effort like deleteUserGroup: a stalled sync must not fail the caller
+    await this.waitForGroupSync(groupId).catch(() => undefined);
+    const response = await this.post(
+      `/manage/admin/user-group/${groupId}/add-users`,
+      {
+        user_ids: userIds,
+      }
+    );
+
+    await this.handleResponse(
+      response,
+      `Failed to add users to group ${groupId}`
+    );
+    this.log(`Added ${userIds.length} user(s) to user group: ${groupId}`);
+  }
+
+  /**
+   * Replaces the toggleable permissions granted to a user group.
+   */
+  async setUserGroupPermissions(
+    groupId: number,
+    permissions: string[]
+  ): Promise<string[]> {
+    const response = await this.put(
+      `/manage/admin/user-group/${groupId}/permissions`,
+      {
+        permissions,
+      }
+    );
+
+    const updatedPermissions = await this.handleResponse<string[]>(
+      response,
+      `Failed to set permissions for user group ${groupId}`
+    );
+    this.log(`Set permissions for user group ${groupId}`);
+    return updatedPermissions;
   }
 
   /**
@@ -703,19 +824,136 @@ export class OnyxApiClient {
   }
 
   /**
+   * Polls until a document set finishes syncing. Every edit is rejected while
+   * `is_up_to_date` is false, and the create response reports true before the sync
+   * has actually run.
+   */
+  async waitForDocumentSetSync(
+    documentSetId: number,
+    timeout: number = 60000
+  ): Promise<void> {
+    await expect
+      .poll(
+        async () => {
+          const response = await this.get("/manage/document-set");
+          if (!response.ok()) return false;
+          const sets = (await response.json()) as Array<{
+            id: number;
+            is_up_to_date: boolean;
+          }>;
+          return (
+            sets.find((s) => s.id === documentSetId)?.is_up_to_date ?? false
+          );
+        },
+        {
+          timeout,
+          message: `Document set ${documentSetId} never finished syncing`,
+        }
+      )
+      .toBe(true);
+  }
+
+  /**
+   * Strips a document set's groups via the same PATCH the editor sends, leaving it
+   * reachable only through its creator.
+   */
+  async detachDocumentSetGroups(
+    documentSetId: number,
+    name: string,
+    ccPairIds: number[]
+  ): Promise<void> {
+    await this.waitForDocumentSetSync(documentSetId);
+    const response = await this.patch("/manage/admin/document-set", {
+      id: documentSetId,
+      name,
+      description: `Test document set: ${name}`,
+      cc_pair_ids: ccPairIds,
+      is_public: false,
+      users: [],
+      groups: [],
+      federated_connectors: [],
+    });
+
+    await this.handleResponse(
+      response,
+      `Failed to detach groups from document set ${documentSetId}`
+    );
+  }
+
+  /**
+   * Promotes or demotes a group member to group manager. The target must
+   * already be a member of the group.
+   */
+  async setGroupManager(
+    groupId: number,
+    userId: string,
+    isManager: boolean = true
+  ): Promise<void> {
+    const response = await this.put(
+      `/manage/admin/user-group/${groupId}/manager`,
+      { user_id: userId, is_manager: isManager }
+    );
+
+    await this.handleResponse(
+      response,
+      `Failed to set manager on user group ${groupId}`
+    );
+    this.log(`Set manager=${isManager} for ${userId} on group ${groupId}`);
+  }
+
+  private async getGroupUserIds(groupId: number): Promise<string[]> {
+    const response = await this.get("/manage/admin/user-group");
+    const groups = await response.json();
+    const group = groups.find((g: { id: number }) => g.id === groupId);
+    return (group?.users ?? []).map((user: { id: string }) => user.id);
+  }
+
+  async setGroupCcPairs(
+    groupId: number,
+    groupName: string,
+    ccPairIds: number[],
+    options: { waitForSync?: boolean } = {}
+  ): Promise<void> {
+    const response = await this.patch(`/manage/admin/user-group/${groupId}`, {
+      id: groupId,
+      name: groupName,
+      user_ids: await this.getGroupUserIds(groupId),
+      cc_pair_ids: ccPairIds,
+    });
+
+    await this.handleResponse(
+      response,
+      `Failed to set cc_pairs on user group ${groupId}`
+    );
+    // skippable for teardown: nothing reads the group again before it is deleted
+    if (options.waitForSync ?? true) {
+      await this.waitForGroupSync(groupId);
+    }
+  }
+
+  /**
    * Deletes a user group.
    *
    * @param groupId - The user group ID to delete
    */
   async deleteUserGroup(groupId: number): Promise<void> {
-    const response = await this.delete(`/manage/admin/user-group/${groupId}`);
+    let response = await this.delete(`/manage/admin/user-group/${groupId}`);
+
+    // a group still syncing refuses deletion; settle it and retry once rather than
+    // soft-logging a success that never happened and leaking the group
+    if (response.status() === 404) {
+      await this.waitForGroupSync(groupId).catch(() => undefined);
+      response = await this.delete(`/manage/admin/user-group/${groupId}`);
+    }
 
     await this.handleResponseSoft(
       response,
       `Failed to delete user group ${groupId}`
     );
 
-    this.log(`Deleted user group: ${groupId}`);
+    if (response.ok()) {
+      this.log(`Deleted user group: ${groupId}`);
+    }
   }
 
   /**
@@ -730,23 +968,49 @@ export class OnyxApiClient {
     return response.json();
   }
 
-  async setUserRole(
-    email: string,
-    role: "admin" | "curator" | "global_curator" | "basic",
-    explicitOverride = false
-  ): Promise<void> {
-    const response = await this.request.patch(
-      `${this.baseUrl}/manage/set-user-role`,
-      {
-        data: {
-          user_email: email,
-          new_role: role,
-          explicit_override: explicitOverride,
-        },
-      }
+  async getCurrentUserPermissions(): Promise<string[]> {
+    const response = await this.get("/me/permissions");
+    const body = await this.handleResponse<{ permissions: string[] }>(
+      response,
+      "Failed to fetch current user permissions"
     );
-    await this.handleResponse(response, `Failed to set user role for ${email}`);
-    this.log(`Updated role for ${email} to ${role}`);
+    return body.permissions;
+  }
+
+  async addUserToAdminGroup(email: string): Promise<void> {
+    const groups = await this.getUserGroups();
+    const adminGroup = groups.find(
+      (g) => g.is_default === true && g.name === "Admin"
+    );
+    if (!adminGroup) {
+      throw new Error(
+        `Admin default group not found (saw: ${JSON.stringify(
+          groups.map((g) => ({ name: g.name, is_default: g.is_default }))
+        )})`
+      );
+    }
+
+    const usersRes = await this.get("/manage/users/accepted/all");
+    const users = (await usersRes.json()) as Array<{
+      id: string;
+      email: string;
+    }>;
+    const target = users.find(
+      (u) => u.email.toLowerCase() === email.toLowerCase()
+    );
+    if (!target) {
+      throw new Error(`User ${email} not found — cannot add to Admin group`);
+    }
+
+    const response = await this.request.post(
+      `${this.baseUrl}/manage/admin/user-group/${adminGroup.id}/add-users`,
+      { data: { user_ids: [target.id] } }
+    );
+    await this.handleResponse(
+      response,
+      `Failed to add ${email} to Admin group`
+    );
+    this.log(`Added ${email} to Admin group`);
   }
 
   async deleteMcpServer(serverId: number): Promise<boolean> {
@@ -759,6 +1023,89 @@ export class OnyxApiClient {
     );
     if (success) {
       this.log(`Deleted MCP server ${serverId}`);
+    }
+    return success;
+  }
+
+  async createCustomTool(
+    name: string,
+    description: string = "E2E test tool"
+  ): Promise<number> {
+    const response = await this.post("/admin/tool/custom", {
+      name,
+      description,
+      definition: {
+        openapi: "3.0.0",
+        info: { title: name, description: description, version: "1.0.0" },
+        paths: {
+          "/test": {
+            get: {
+              operationId: "testOp",
+              summary: "Test endpoint",
+              responses: { "200": { description: "OK" } },
+            },
+          },
+        },
+        servers: [{ url: "https://example.com" }],
+      },
+      passthrough_auth: false,
+    });
+
+    const data = await this.handleResponse<{ id: number }>(
+      response,
+      "Failed to create custom tool"
+    );
+    this.log(`Created custom tool: ${name} (ID: ${data.id})`);
+    return data.id;
+  }
+
+  async createMcpServer(
+    name: string,
+    serverUrl: string = "https://example.com/mcp"
+  ): Promise<number> {
+    const response = await this.post("/admin/mcp/servers/create", {
+      name,
+      description: "E2E test MCP server",
+      server_url: serverUrl,
+      auth_type: "NONE",
+      auth_performer: "ADMIN",
+    });
+
+    const data = await this.handleResponse<{ server_id: number }>(
+      response,
+      "Failed to create MCP server"
+    );
+    this.log(`Created MCP server: ${name} (ID: ${data.server_id})`);
+    return data.server_id;
+  }
+
+  async createServiceAccount(
+    name: string,
+    groupIds: number[] = []
+  ): Promise<number> {
+    const response = await this.post("/admin/api-key", {
+      name,
+      group_ids: groupIds,
+    });
+
+    const data = await this.handleResponse<{ api_key_id: number }>(
+      response,
+      "Failed to create service account"
+    );
+    this.log(`Created service account: ${name} (ID: ${data.api_key_id})`);
+    return data.api_key_id;
+  }
+
+  async deleteServiceAccount(apiKeyId: number): Promise<boolean> {
+    const response = await this.request.delete(
+      `${this.baseUrl}/admin/api-key/${apiKeyId}`
+    );
+    const success = await this.handleResponseSoft(
+      response,
+      `Failed to delete service account ${apiKeyId}`
+    );
+    if (success) {
+      this.log(`Deleted service account ${apiKeyId}`);
     }
     return success;
   }
@@ -789,6 +1136,34 @@ export class OnyxApiClient {
   ): Promise<{ id: number; name: string; description: string } | null> {
     const tools = await this.listOpenApiTools();
     return tools.find((tool) => tool.name === name) ?? null;
+  }
+
+  async createAgent(
+    name: string,
+    description: string = "",
+    options: {
+      isPublic?: boolean;
+      groups?: number[];
+      toolIds?: number[];
+    } = {}
+  ): Promise<number> {
+    const response = await this.post("/persona", {
+      name,
+      description,
+      system_prompt: "",
+      task_prompt: "",
+      datetime_aware: false,
+      document_set_ids: [],
+      is_public: options.isPublic ?? true,
+      groups: options.groups ?? [],
+      tool_ids: options.toolIds ?? [],
+    });
+    const data = await this.handleResponse<{ id: number }>(
+      response,
+      "Failed to create agent"
+    );
+    this.log(`Created agent: ${name} (ID: ${data.id})`);
+    return data.id;
   }
 
   async deleteAgent(agentId: number): Promise<boolean> {
@@ -1109,26 +1484,6 @@ export class OnyxApiClient {
           role: user.role,
         }
       : null;
-  }
-
-  async setCuratorStatus(
-    userGroupId: string,
-    userId: string,
-    isCurator: boolean = true
-  ): Promise<void> {
-    const response = await this.request.post(
-      `${this.baseUrl}/manage/admin/user-group/${userGroupId}/set-curator`,
-      {
-        data: {
-          user_id: userId,
-          is_curator: isCurator,
-        },
-      }
-    );
-    await this.handleResponse(
-      response,
-      `Failed to update curator status for ${userId}`
-    );
   }
 
   /**

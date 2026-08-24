@@ -24,16 +24,18 @@ When hardcoding a boolean variable to a constant value, remove the variable enti
 
 Code changes must consider both multi-tenant and single-tenant deployments. In multi-tenant mode, preserve tenant isolation, ensure tenant context is propagated correctly, and avoid assumptions that only hold for a single shared schema or globally shared state. In single-tenant mode, avoid introducing unnecessary tenant-specific requirements or cloud-only control-plane dependencies.
 
-## Nginx Routing — New Backend Routes
+## Routing for New Non-/api Backend Routes
 
-Whenever a new backend route is added that does NOT start with `/api`, it must also be explicitly added to ALL nginx configs:
+Whenever a new backend route is added that does NOT start with `/api`, it must be explicitly routed in ALL nginx configs:
 
-- `deployment/helm/charts/onyx/templates/nginx-conf.yaml` (Helm/k8s)
+- `deployment/helm/charts/onyx/templates/nginx-conf.yaml` (Helm/k8s, bundled nginx)
 - `deployment/data/nginx/app.conf.template` (docker-compose dev)
 - `deployment/data/nginx/app.conf.template.prod` (docker-compose prod)
 - `deployment/data/nginx/app.conf.template.no-letsencrypt` (docker-compose no-letsencrypt)
 
-Routes not starting with `/api` are not caught by the existing `^/(api|openapi\.json)` location block and will fall through to `location /`, which proxies to the Next.js web server and returns an HTML 404. The new location block must be placed before the `/api` block. Examples of routes that need this treatment: `/scim`, `/mcp`.
+Routes not starting with `/api` are not caught by the existing `^/(api|openapi\.json)` location block and will fall through to `location /`, which proxies to the Next.js web server and returns an HTML 404. In the nginx configs, the new location block must be placed before the `/api` block. Examples of routes that need this treatment: `/scim`, `/mcp`.
+
+The route must ALSO be covered in Helm ingress mode (`ingress.enabled=true`), which does not use the bundled nginx. Add a dedicated ingress template for the route (see `deployment/helm/charts/onyx/templates/ingress-scim.yaml`). `ingress-api.yaml` cannot host it, since that resource only routes `/api` and its resource-wide rewrite annotation strips other prefixes. If the web app owns a sub-path of the route (for example an IdP callback page), carve that sub-path back out to the webserver with `pathType: Exact`, following `ingress-mcp-oauth-callback.yaml`.
 
 ## Full vs Lite Deployments
 

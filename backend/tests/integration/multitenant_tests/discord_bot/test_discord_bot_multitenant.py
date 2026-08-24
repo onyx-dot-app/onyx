@@ -4,14 +4,12 @@ These tests ensure tenant isolation and prevent data leakage between tenants.
 Tests follow the multi-tenant integration test pattern using API client.
 """
 
-from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
 
 from onyx.db.discord_bot import get_guild_config_by_registration_key, register_guild
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.models import UserRole
 from onyx.onyxbot.discord.cache import DiscordCacheManager
 from onyx.server.manage.discord_bot.utils import (
     REGISTRATION_KEY_PREFIX,
@@ -22,35 +20,6 @@ from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
-
-
-class TestBotConfigIsolationCloudMode:
-    """Tests for bot config isolation in cloud mode."""
-
-    def test_cannot_create_bot_config_in_cloud_mode(self) -> None:
-        """Bot config creation is blocked in cloud mode."""
-        with patch("onyx.server.manage.discord_bot.api.MULTI_TENANT", True):
-            from fastapi import HTTPException
-
-            from onyx.server.manage.discord_bot.api import _check_bot_config_api_access
-
-            with pytest.raises(HTTPException) as exc_info:
-                _check_bot_config_api_access()
-
-            assert exc_info.value.status_code == 403
-            assert "Cloud" in str(exc_info.value.detail)
-
-    def test_bot_token_from_env_only_in_cloud(self) -> None:
-        """Bot token comes from env var in cloud mode, ignores DB."""
-        from onyx.onyxbot.discord.utils import get_bot_token
-
-        with (
-            patch("onyx.onyxbot.discord.utils.DISCORD_BOT_TOKEN", "env_token"),
-            patch("onyx.onyxbot.discord.utils.MULTI_TENANT", True),
-        ):
-            result = get_bot_token()
-
-        assert result == "env_token"
 
 
 class TestGuildRegistrationIsolation:
@@ -109,13 +78,13 @@ class TestGuildDataIsolation:
         admin_user1: DATestUser = UserManager.create(
             email=f"discord_admin1_{unique}@example.com",
         )
-        assert UserManager.is_role(admin_user1, UserRole.ADMIN)
+        assert UserManager.is_admin(admin_user1)
 
         # Create admin user for tenant 2
         admin_user2: DATestUser = UserManager.create(
             email=f"discord_admin2_{unique}@example.com",
         )
-        assert UserManager.is_role(admin_user2, UserRole.ADMIN)
+        assert UserManager.is_admin(admin_user2)
 
         # Create a guild registration key in tenant 1
         response1 = client.post(

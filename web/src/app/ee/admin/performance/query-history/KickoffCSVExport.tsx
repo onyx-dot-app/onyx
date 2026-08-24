@@ -1,7 +1,7 @@
 import { toast } from "@opal/layouts";
 import Button from "@/refresh-components/buttons/Button";
 import { useRef, useState } from "react";
-import { DateRange } from "../../../../../components/dateRangeSelectors/AdminDateRangeSelector";
+import type { DateRange } from "@/refresh-components/DateRangePicker";
 import { withRequestId, withDateRange } from "./utils";
 import {
   CHECK_QUERY_HISTORY_EXPORT_STATUS_URL,
@@ -67,10 +67,12 @@ export default function KickoffCSVExport({
 
     const { request_id } =
       (await response.json()) as StartQueryHistoryExportResponse;
-    const timer = setInterval(
+    // `window.setInterval` returns a number; the bare global resolves to the
+    // Node overload, which returns a `Timeout` object.
+    const timer = window.setInterval(
       () => checkStatus(request_id),
       RETRY_COOLDOWN_MILLISECONDS
-    ) as unknown as number;
+    );
     timerIdRef.current = timer;
     rerender();
   };

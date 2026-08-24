@@ -23,13 +23,12 @@ from onyx.db.enums import (
     ScheduledTaskStatus,
     ScheduledTaskTriggerSource,
 )
-from onyx.db.gated_app import get_or_create_gated_app_id
 from onyx.db.models import (
     BuildSession,
     ExternalApp,
     MCPServer,
     ScheduledTask,
-    ScheduledTaskPreApprovedApp,
+    ScheduledTaskPreApprovedTarget,
     User,
 )
 from onyx.db.scheduled_task import (
@@ -58,11 +57,25 @@ def _make_app(db_session: Session) -> int:
     return app.id
 
 
+def _make_mcp_server(db_session: Session, user: User) -> int:
+    server = MCPServer(
+        owner=user.email,
+        name=f"pre_approval_mcp_{uuid4().hex[:8]}",
+        server_url="https://example.com/mcp",
+        available_in_craft=True,
+        is_public=False,
+    )
+    db_session.add(server)
+    db_session.flush()
+    return server.id
+
+
 def _seed_task(
     db_session: Session,
     user: User,
     *,
     pre_approved_external_app_ids: list[int] | None = None,
+    pre_approved_mcp_server_ids: list[int] | None = None,
     prompt: str = "Summarise yesterday's events",
 ) -> ScheduledTask:
     task = create_scheduled_task(
@@ -74,6 +87,7 @@ def _seed_task(
         editor_mode="advanced",
         status=ScheduledTaskStatus.ACTIVE,
         pre_approved_external_app_ids=pre_approved_external_app_ids,
+        pre_approved_mcp_server_ids=pre_approved_mcp_server_ids,
     )
     db_session.commit()
     db_session.refresh(task)
@@ -93,7 +107,13 @@ def test_grants_returned_for_running_run(
     user = make_user(db_session)
     bs = build_session_with_user(user=user)
     app_a, app_b = _make_app(db_session), _make_app(db_session)
-    task = _seed_task(db_session, user, pre_approved_external_app_ids=[app_a, app_b])
+    server_id = _make_mcp_server(db_session, user)
+    task = _seed_task(
+        db_session,
+        user,
+        pre_approved_external_app_ids=[app_a, app_b],
+        pre_approved_mcp_server_ids=[server_id],
+    )
     run = insert_run(
         db_session=db_session,
         task_id=task.id,
@@ -115,6 +135,7 @@ def test_grants_returned_for_running_run(
     assert granted == {
         (GatedAppKind.EXTERNAL_APP, app_a),
         (GatedAppKind.EXTERNAL_APP, app_b),
+        (GatedAppKind.MCP_SERVER, server_id),
     }
 
 
@@ -306,33 +327,18 @@ def test_mcp_grants_survive_external_app_replacement(
     tenant_context: None,  # noqa: ARG001
     build_session_with_user: Callable[..., BuildSession],
 ) -> None:
-    """``set_pre_approved_apps`` replaces only the given kind's grants: an MCP-server
-    grant (seeded directly — no API writes these yet) survives a wholesale
-    external-app replacement, stays out of ``pre_approved_external_app_ids``, and reaches
-    the gate through ``get_live_scheduled_run_grants`` as its (kind, id) target.
-    """
+    """Each target kind has independent replacement semantics and reaches the gate."""
     user = make_user(db_session)
     bs = build_session_with_user(user=user)
     app_a, app_b = _make_app(db_session), _make_app(db_session)
-    task = _seed_task(db_session, user, pre_approved_external_app_ids=[app_a])
-
-    server = MCPServer(
-        owner=user.email,
-        name=f"pre_approval_mcp_{uuid4().hex[:8]}",
-        server_url="https://example.com/mcp",
-        is_public=False,
+    server_a = _make_mcp_server(db_session, user)
+    server_b = _make_mcp_server(db_session, user)
+    task = _seed_task(
+        db_session,
+        user,
+        pre_approved_external_app_ids=[app_a],
+        pre_approved_mcp_server_ids=[server_a],
     )
-    db_session.add(server)
-    db_session.flush()
-    mcp_gated_app_id = get_or_create_gated_app_id(
-        db_session, GatedAppKind.MCP_SERVER, server.id
-    )
-    db_session.add(
-        ScheduledTaskPreApprovedApp(
-            scheduled_task_id=task.id, gated_app_id=mcp_gated_app_id
-        )
-    )
-    db_session.commit()
 
     updated = update_scheduled_task(
         db_session=db_session,
@@ -343,10 +349,18 @@ def test_mcp_grants_survive_external_app_replacement(
     db_session.commit()
 
     assert updated.pre_approved_external_app_ids == [app_b]  # MCP grant excluded
-    assert {g.gated_app.target_key for g in updated.pre_approved_apps} == {
-        (GatedAppKind.EXTERNAL_APP, app_b),
-        (GatedAppKind.MCP_SERVER, server.id),
-    }
+    assert updated.pre_approved_mcp_server_ids == [server_a]
+
+    updated = update_scheduled_task(
+        db_session=db_session,
+        task_id=task.id,
+        user_id=user.id,
+        pre_approved_mcp_server_ids=[server_b],
+    )
+    db_session.commit()
+
+    assert updated.pre_approved_external_app_ids == [app_b]
+    assert updated.pre_approved_mcp_server_ids == [server_b]
 
     run = insert_run(
         db_session=db_session,
@@ -365,23 +379,31 @@ def test_mcp_grants_survive_external_app_replacement(
     assert grants is not None
     assert grants[1] == {
         (GatedAppKind.EXTERNAL_APP, app_b),
-        (GatedAppKind.MCP_SERVER, server.id),
+        (GatedAppKind.MCP_SERVER, server_b),
     }
 
 
-def test_create_persists_grants(
+def test_create_stores_each_grant_once(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
 ) -> None:
     user = make_user(db_session)
     app_a, app_b = _make_app(db_session), _make_app(db_session)
-    assert app_a < app_b  # ids autoincrement, so the higher id is created last
-    # Insertion order is preserved (not sorted): pass the higher id first.
-    task = _seed_task(db_session, user, pre_approved_external_app_ids=[app_b, app_a])
-    assert task.pre_approved_external_app_ids == [app_b, app_a]
+    server_id = _make_mcp_server(db_session, user)
+    task = _seed_task(
+        db_session,
+        user,
+        pre_approved_external_app_ids=[app_b, app_a, app_b],
+        pre_approved_mcp_server_ids=[server_id, server_id],
+    )
+    assert set(task.pre_approved_external_app_ids) == {app_a, app_b}
+    assert len(task.pre_approved_external_app_ids) == 2
+    assert set(task.pre_approved_mcp_server_ids) == {server_id}
+    assert len(task.pre_approved_mcp_server_ids) == 1
 
     bare = _seed_task(db_session, user)
     assert bare.pre_approved_external_app_ids == []
+    assert bare.pre_approved_mcp_server_ids == []
 
 
 # ---------------------------------------------------------------------------
@@ -405,8 +427,8 @@ def test_deleting_app_drops_grants(
 
     remaining = (
         db_session.execute(
-            select(ScheduledTaskPreApprovedApp).where(
-                ScheduledTaskPreApprovedApp.scheduled_task_id == task.id
+            select(ScheduledTaskPreApprovedTarget).where(
+                ScheduledTaskPreApprovedTarget.scheduled_task_id == task.id
             )
         )
         .scalars()
@@ -451,14 +473,12 @@ def test_deleting_app_nulls_action_approval_fk(
 # ---------------------------------------------------------------------------
 
 
-def test_validated_app_ids_rejects_unknown_and_dedupes(
+def test_validate_app_ids_accepts_known_duplicates_and_reports_unknown_ids_once(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Dedupe is order-preserving; any id outside the tenant's apps raises
-    INVALID_INPUT. Apps are stubbed — only the validation logic is under
-    test, not ``get_external_apps``'s SQL."""
+    """Duplicates are valid, but unknown ids raise INVALID_INPUT."""
 
     class _App:
         def __init__(self, app_id: int) -> None:
@@ -470,9 +490,10 @@ def test_validated_app_ids_rejects_unknown_and_dedupes(
         lambda _db: [_App(7), _App(9)],
     )
 
-    assert scheduled_tasks_api._validated_app_ids(db_session, []) == []
-    assert scheduled_tasks_api._validated_app_ids(db_session, [9, 7, 9]) == [9, 7]
+    scheduled_tasks_api._validate_app_ids(db_session, [])
+    scheduled_tasks_api._validate_app_ids(db_session, [9, 7, 9])
 
     with pytest.raises(OnyxError) as exc_info:
-        scheduled_tasks_api._validated_app_ids(db_session, [7, 123])
+        scheduled_tasks_api._validate_app_ids(db_session, [456, 7, 123, 456])
     assert exc_info.value.error_code == OnyxErrorCode.INVALID_INPUT
+    assert exc_info.value.detail == "Unknown external app id(s): [123, 456]"

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import useSWR, { KeyedMutator } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -17,10 +18,10 @@ import {
   MessageCard,
   PasswordInputTypeIn,
   Tabs,
+  Text,
 } from "@opal/components";
 import { markdown } from "@opal/utils";
-import Text from "@/refresh-components/texts/Text";
-import { Formik, Form } from "formik";
+import { Formik, Form, useFormikContext } from "formik";
 import * as Yup from "yup";
 import { useModal } from "@opal/components";
 import {
@@ -32,9 +33,14 @@ import {
   MCPServer,
   MCPServersResponse,
   MCPAuthTemplate,
-} from "@/lib/tools/interfaces";
+} from "@/lib/tools/types";
 import { PerUserAuthConfig } from "@/sections/actions/PerUserAuthConfig";
-import { updateMCPServerStatus, upsertMCPServer } from "@/lib/tools/mcpService";
+import {
+  getMCPUserOAuthNavigationUrl,
+  MCPUserOAuthStartResponse,
+  updateMCPServerStatus,
+  upsertMCPServer,
+} from "@/lib/tools/mcpService";
 import { toast } from "@opal/layouts";
 import { SvgArrowExchange } from "@opal/icons";
 import { useOAuthPassThroughEnabled } from "@/lib/auth/hooks";
@@ -132,6 +138,26 @@ const validationSchema = Yup.object().shape({
   ),
 });
 
+const getTransportFromUrl = (url: string): MCPTransportType => {
+  const lowerUrl = url.toLowerCase();
+  if (lowerUrl.endsWith("sse")) {
+    return MCPTransportType.SSE;
+  }
+  return MCPTransportType.STREAMABLE_HTTP;
+};
+
+// Formik render props are plain callbacks, not components, so this effect
+// lives in its own child to keep hook order stable.
+function TransportAutoPopulate({ serverUrl }: { serverUrl?: string }) {
+  const { setFieldValue } = useFormikContext<MCPAuthFormValues>();
+  useEffect(() => {
+    if (serverUrl) {
+      setFieldValue("transport", getTransportFromUrl(serverUrl));
+    }
+  }, [serverUrl, setFieldValue]);
+  return null;
+}
+
 export default function MCPAuthenticationModal({
   mcpServer,
   skipOverlay = false,
@@ -178,18 +204,6 @@ export default function MCPAuthenticationModal({
     }
   }, [fullServer]);
 
-  // Helper function to determine transport from URL
-  const getTransportFromUrl = (url: string): MCPTransportType => {
-    const lowerUrl = url.toLowerCase();
-    if (lowerUrl.endsWith("sse")) {
-      return MCPTransportType.SSE;
-    } else if (lowerUrl.endsWith("mcp")) {
-      return MCPTransportType.STREAMABLE_HTTP;
-    }
-    // Default to STREAMABLE_HTTP
-    return MCPTransportType.STREAMABLE_HTTP;
-  };
-
   const initialValues = useMemo<MCPAuthFormValues>(() => {
     if (!fullServer) {
       return {
@@ -200,8 +214,8 @@ export default function MCPAuthenticationModal({
         auth_performer: MCPAuthenticationPerformer.PER_USER,
         api_token: "",
         auth_template: {
-          headers: { Authorization: "Bearer {api_key}" },
-          required_fields: ["api_key"],
+          headers: {},
+          required_fields: [],
         },
         user_credentials: {},
         oauth_client_id: "",
@@ -213,6 +227,13 @@ export default function MCPAuthenticationModal({
         oauth_additional_auth_params: "",
       };
     }
+
+    // Only shared API-token servers return their header substitutions in
+    // `admin_credentials`. For every other auth type that field carries OAuth
+    // client credentials, which must not be replayed as per-user substitutions.
+    const sharedApiToken =
+      fullServer.auth_type === MCPAuthenticationType.API_TOKEN &&
+      fullServer.auth_performer === MCPAuthenticationPerformer.ADMIN;
 
     return {
       transport: fullServer.server_url
@@ -243,12 +264,16 @@ export default function MCPAuthenticationModal({
         : "",
       // Auth Template
       auth_template: (fullServer.auth_template as MCPAuthTemplate) || {
-        headers: { Authorization: "Bearer {api_key}" },
-        required_fields: ["api_key"],
+        headers: {},
+        required_fields: [],
       },
       // User Credentials (substitutions)
       user_credentials:
-        (fullServer.user_credentials as Record<string, string>) || {},
+        (fullServer.user_credentials as Record<string, string>) ||
+        (sharedApiToken
+          ? (fullServer.admin_credentials as Record<string, string>)
+          : undefined) ||
+        {},
     };
   }, [fullServer, mcpServer?.server_url]);
 
@@ -277,10 +302,7 @@ export default function MCPAuthenticationModal({
   const computeAdminCredentialsChangedFlags = (
     values: MCPAuthFormValues
   ): Record<string, boolean> => {
-    if (
-      values.auth_type !== MCPAuthenticationType.API_TOKEN ||
-      values.auth_performer !== MCPAuthenticationPerformer.PER_USER
-    ) {
+    if (!values.auth_template.required_fields.length) {
       return {};
     }
     const current = values.user_credentials || {};
@@ -292,13 +314,30 @@ export default function MCPAuthenticationModal({
     return flags;
   };
 
+  const computeAuthTemplateChangedFlags = (
+    values: MCPAuthFormValues
+  ): Record<string, boolean> => {
+    const initialHeaders = initialValues.auth_template.headers;
+    return Object.fromEntries(
+      Object.entries(values.auth_template.headers).map(([name, value]) => [
+        name,
+        value !== initialHeaders[name],
+      ])
+    );
+  };
+
   const constructServerData = (values: MCPAuthFormValues) => {
     if (!mcpServer) return null;
     const authType = values.auth_type;
     const oauthChangedFlags = computeOAuthChangedFlags(values);
-    const isPerUserApiToken =
-      values.auth_performer === MCPAuthenticationPerformer.PER_USER &&
-      authType === MCPAuthenticationType.API_TOKEN;
+    const hasUserHeaderValues = values.auth_template.required_fields.some(
+      (field) =>
+        !(
+          values.auth_performer === MCPAuthenticationPerformer.ADMIN &&
+          authType === MCPAuthenticationType.API_TOKEN &&
+          field === "api_key"
+        )
+    );
     const isAdminApiToken =
       values.auth_performer === MCPAuthenticationPerformer.ADMIN &&
       authType === MCPAuthenticationType.API_TOKEN;
@@ -345,14 +384,16 @@ export default function MCPAuthenticationModal({
       api_token_changed: isAdminApiToken
         ? values.api_token !== initialValues.api_token
         : false,
-      auth_template:
-        authType === MCPAuthenticationType.API_TOKEN
-          ? values.auth_template
-          : undefined,
-      admin_credentials: isPerUserApiToken
-        ? values.user_credentials || {}
+      auth_template: values.auth_template,
+      auth_template_headers_changed: computeAuthTemplateChangedFlags(values),
+      admin_credentials: hasUserHeaderValues
+        ? Object.fromEntries(
+            Object.entries(values.user_credentials || {}).filter(
+              ([field]) => !isAdminApiToken || field !== "api_key"
+            )
+          )
         : undefined,
-      admin_credentials_changed: isPerUserApiToken
+      admin_credentials_changed: hasUserHeaderValues
         ? computeAdminCredentialsChangedFlags(values)
         : undefined,
       oauth_client_id:
@@ -427,7 +468,7 @@ export default function MCPAuthenticationModal({
             oauth_client_id: values.oauth_client_id,
             oauth_client_secret: values.oauth_client_secret,
             ...oauthChangedFlags,
-            return_path: `/admin/actions/mcp/?server_id=${mcpServer.id}&trigger_fetch=true`,
+            return_path: `${ADMIN_ROUTES.MCP_ACTIONS.path}/?server_id=${mcpServer.id}&trigger_fetch=true`,
             include_resource_param: true,
           }),
         });
@@ -440,15 +481,16 @@ export default function MCPAuthenticationModal({
           throw new Error("Failed to initiate OAuth: " + error.detail);
         }
 
-        const { oauth_url } = await oauthResponse.json();
-        window.location.href = oauth_url;
+        const oauthStart: MCPUserOAuthStartResponse =
+          await oauthResponse.json();
+        window.location.href = getMCPUserOAuthNavigationUrl(oauthStart);
       } else {
         // For non-OAuth authentication, trigger tools fetch in-place (no hard navigation)
         if (onTriggerFetchTools) {
           onTriggerFetchTools(mcpServer.id);
         } else {
           // Fallback to previous behavior if parent didn't provide handler
-          window.location.href = `/admin/actions/mcp/?server_id=${mcpServer.id}&trigger_fetch=true`;
+          window.location.href = `${ADMIN_ROUTES.MCP_ACTIONS.path}/?server_id=${mcpServer.id}&trigger_fetch=true`;
         }
         toggle(false);
       }
@@ -494,16 +536,9 @@ export default function MCPAuthenticationModal({
             isValid,
             dirty,
           }) => {
-            // Auto-populate transport based on URL
-            useEffect(() => {
-              if (mcpServer?.server_url) {
-                const transport = getTransportFromUrl(mcpServer.server_url);
-                setFieldValue("transport", transport);
-              }
-            }, [mcpServer?.server_url, setFieldValue]);
-
             return (
               <Form className="flex flex-col h-full">
+                <TransportAutoPopulate serverUrl={mcpServer?.server_url} />
                 <Modal.Body>
                   <div className="flex flex-col gap-4 p-2">
                     {/* Authentication Type */}
@@ -591,7 +626,7 @@ export default function MCPAuthenticationModal({
                         }}
                       />
                     </FormField>
-                    <Divider paddingPerpendicular="fit" />
+                    <Divider paddingPerpendicular={0} />
                   </div>
 
                   {/* OAuth Section */}
@@ -655,34 +690,32 @@ export default function MCPAuthenticationModal({
 
                       {/* Info Text */}
                       <div className="flex flex-col gap-2">
-                        <Text as="p" text03 secondaryBody>
-                          Client ID and secret are optional if the server
-                          connection supports Dynamic Client Registration (DCR).
+                        <Text as="p" font="secondary-body" color="text-03">
+                          Client ID and secret are optional. During automatic
+                          discovery, Onyx uses a Client ID Metadata Document
+                          (CIMD) when supported and falls back to Dynamic Client
+                          Registration (DCR).
                         </Text>
-                        <Text as="p" text03 secondaryBody>
-                          If your server does not support DCR, you need register
-                          your Onyx instance with the server provider to obtain
-                          these credentials first. Make sure to grant Onyx
-                          necessary scopes/permissions for your actions.
+                        <Text as="p" font="secondary-body" color="text-03">
+                          If your server supports neither method, register your
+                          Onyx instance with the server provider first. Grant
+                          Onyx the necessary scopes for your actions.
                         </Text>
                         {/* Redirect URI */}
                         <div className="flex items-center gap-1 w-full">
                           <Text
                             as="p"
-                            text03
-                            secondaryBody
-                            className="whitespace-nowrap"
+                            font="secondary-body"
+                            color="text-03"
+                            nowrap
                           >
-                            Use{" "}
-                            <span className="font-secondary-action">
-                              redirect URI
-                            </span>
-                            :
+                            {markdown("Use **redirect URI**:")}
                           </Text>
                           <Text
                             as="p"
-                            text04
-                            className="font-mono text-[12px] leading-[16px] truncate"
+                            font="secondary-mono"
+                            color="text-04"
+                            maxLines={1}
                           >
                             {redirectUri}
                           </Text>
@@ -843,12 +876,12 @@ export default function MCPAuthenticationModal({
                                   </FormField.Control>
                                 </FormField>
 
-                                <Text as="p" text03 secondaryBody>
-                                  Known-provider mode requires endpoint
-                                  configuration. Google reference endpoints:
-                                  authorization{" "}
-                                  {GOOGLE_AUTHORIZATION_ENDPOINT_HINT} and token{" "}
-                                  {GOOGLE_TOKEN_ENDPOINT_HINT}.
+                                <Text
+                                  as="p"
+                                  font="secondary-body"
+                                  color="text-03"
+                                >
+                                  {`Known-provider mode requires endpoint configuration. Google reference endpoints: authorization ${GOOGLE_AUTHORIZATION_ENDPOINT_HINT} and token ${GOOGLE_TOKEN_ENDPOINT_HINT}.`}
                                 </Text>
                               </>
                             )}
@@ -933,6 +966,12 @@ export default function MCPAuthenticationModal({
                         </Tabs.Content>
                       </Tabs>
                     </div>
+                  )}
+                  {values.auth_type !== MCPAuthenticationType.API_TOKEN && (
+                    <PerUserAuthConfig
+                      values={values}
+                      setFieldValue={setFieldValue}
+                    />
                   )}
                   {values.auth_type === MCPAuthenticationType.NONE && (
                     <MessageCard

@@ -10,7 +10,7 @@ import AgentMessage, {
   AgentMessageProps,
 } from "@/app/app/message/messageComponents/AgentMessage";
 import { ErrorBanner } from "@/app/app/message/Resubmit";
-import { cn } from "@opal/utils";
+import { cn, clickOnKeyDown } from "@opal/utils";
 import { markdown } from "@opal/utils";
 
 export interface MultiModelPanelProps {
@@ -48,6 +48,8 @@ export interface MultiModelPanelProps {
   errorDetails?: Record<string, any> | null;
   /** Whether any model is still streaming — disables preferred selection */
   isGenerating?: boolean;
+  /** Whether a send is in flight, which disables preferred selection */
+  selectionDisabled?: boolean;
 }
 
 /**
@@ -79,28 +81,33 @@ export default function MultiModelPanel({
   errorStackTrace,
   errorDetails,
   isGenerating,
+  selectionDisabled,
 }: MultiModelPanelProps) {
   const ModelIcon = getModelIcon(provider, modelName);
 
-  const canSelect = !isHidden && !isPreferred && !isGenerating && !readOnly;
+  const canSelect =
+    !isHidden &&
+    !isPreferred &&
+    !isGenerating &&
+    !selectionDisabled &&
+    !readOnly;
 
   const handlePanelClick = useCallback(() => {
     if (canSelect) onSelect();
   }, [canSelect, onSelect]);
 
-  const header = (
-    <div
-      className={cn(
-        "rounded-12 transition-colors",
-        isPreferred ? "bg-background-tint-02" : "bg-background-tint-00",
-        canSelect && "cursor-pointer hover:bg-background-tint-02"
-      )}
-      onClick={handlePanelClick}
-    >
+  const headerClassName = cn(
+    "rounded-12 transition-colors",
+    isPreferred ? "bg-background-tint-02" : "bg-background-tint-00",
+    canSelect && "cursor-pointer hover:bg-background-tint-02"
+  );
+
+  const headerContent = (
+    <>
       <ContentAction
         sizePreset="main-ui"
         variant="body"
-        padding="lg"
+        padding={2}
         icon={ModelIcon}
         title={isHidden ? markdown(`~~${displayName}~~`) : displayName}
         rightChildren={
@@ -153,7 +160,24 @@ export default function MultiModelPanel({
           )
         }
       />
+    </>
+  );
+
+  // The header holds its own buttons, so a selectable header stays a div with
+  // button semantics rather than a <button> wrapping a <button>.
+  const header = canSelect ? (
+    <div
+      className={headerClassName}
+      role="button"
+      tabIndex={0}
+      aria-label={`Select the ${displayName} response`}
+      onKeyDown={clickOnKeyDown(handlePanelClick)}
+      onClick={handlePanelClick}
+    >
+      {headerContent}
     </div>
+  ) : (
+    <div className={headerClassName}>{headerContent}</div>
   );
 
   // Hidden/collapsed panel — just the header row

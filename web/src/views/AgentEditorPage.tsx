@@ -46,6 +46,7 @@ import { useProjectsContext } from "@/providers/ProjectsContext";
 import { useCreateModal } from "@opal/components";
 import UserFilesModal from "@/sections/modals/UserFilesModal";
 import { ProjectFile, UserFileStatus } from "@/lib/projects/types";
+import { ChatFileType } from "@/app/app/interfaces";
 import { Popover, PopoverMenu } from "@opal/components";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import {
@@ -69,19 +70,15 @@ import CustomAgentAvatar, {
 } from "@/refresh-components/avatars/CustomAgentAvatar";
 import InputAvatar from "@/refresh-components/inputs/InputAvatar";
 import SquareButton from "@/refresh-components/buttons/SquareButton";
-import { useAgents, useLabels } from "@/lib/agents/hooks";
+import { useAgents, useAgentLabels } from "@/lib/agents/hooks";
 import { createAgent, updateAgent } from "@/lib/agents/svc";
 import InputChipField from "@/refresh-components/inputs/InputChipField";
 import { AgentUpsertParameters } from "@/lib/agents/types";
-import { useMcpServersForPersonaEditor } from "@/lib/agents/hooks";
+import { useMcpServersForAgent } from "@/lib/tools/hooks";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
-import {
-  AgentEditorMCPServer,
-  MCPTool,
-  ToolSnapshot,
-} from "@/lib/tools/interfaces";
+import { AgentEditorMCPServer, MCPTool, ToolSnapshot } from "@/lib/tools/types";
 import { InputTypeIn } from "@opal/components";
 import useFilter from "@/hooks/useFilter";
 import EnabledCount from "@/refresh-components/EnabledCount";
@@ -96,13 +93,13 @@ import {
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
 import { ConfirmationModalLayout } from "@opal/layouts";
-import ShareAgentModal, {
-  ShareDraftState,
-} from "@/sections/modals/ShareAgentModal";
+import { ShareAgentModal, type ShareDraftState } from "@/lib/agents/components";
 import AgentKnowledgePane from "@/sections/knowledge/AgentKnowledgePane";
-import { ValidSources } from "@/lib/types";
+import { Permission, ValidSources } from "@/lib/types";
 import { useSettings } from "@/lib/settings/hooks";
 import { useUser } from "@/providers/UserProvider";
+import { hasPermission } from "@/lib/permissions";
+import { can } from "@/lib/permissions/resource-actions";
 import { useDraft, draftKey } from "@/hooks/useDraft";
 
 interface AgentIconEditorProps {
@@ -333,28 +330,28 @@ function MCPServerCard({
   if (isLoading) {
     cardContent = (
       <div className="flex flex-col gap-2 p-2">
-        <GeneralLayouts.Section padding={1}>
+        <GeneralLayouts.Section padding={4}>
           <SvgSimpleLoader />
         </GeneralLayouts.Section>
       </div>
     );
   } else if (hasTools) {
     cardContent = (
-      <GeneralLayouts.Section gap={0.5} padding={0.5} alignItems="stretch">
+      <GeneralLayouts.Section gap={2} padding={2} alignItems="stretch">
         {filteredTools.map((tool) => {
           const toolDisabled =
             !tool.isAvailable ||
             !getFieldMeta<boolean>(`${serverFieldName}.enabled`).value;
           return (
             <Disabled key={tool.id} disabled={toolDisabled}>
-              <Card border="solid" rounding="md" padding="sm">
+              <Card border="solid" rounding="md" padding={2}>
                 <ContentAction
                   icon={tool.icon ?? SvgSliders}
                   title={tool.name}
                   description={tool.description}
                   sizePreset="main-ui"
                   variant="section"
-                  padding="fit"
+                  padding={0}
                   rightChildren={
                     <SwitchField
                       name={`${serverFieldName}.tool_${tool.id}`}
@@ -380,12 +377,12 @@ function MCPServerCard({
         expanded={!isFolded}
         border="solid"
         rounding="lg"
-        padding="sm"
+        padding={2}
         expandedContent={cardContent}
       >
         <CardLayout.Header
           bottomChildren={
-            <GeneralLayouts.Section flexDirection="row" gap={0.5}>
+            <GeneralLayouts.Section flexDirection="row" gap={2}>
               <InputTypeIn
                 placeholder="Search tools..."
                 variant="internal"
@@ -412,11 +409,11 @@ function MCPServerCard({
               description={server.description}
               sizePreset="main-ui"
               variant="section"
-              padding="fit"
+              padding={0}
               rightChildren={
                 <GeneralLayouts.Section
                   flexDirection="row"
-                  gap={0.5}
+                  gap={2}
                   alignItems="start"
                 >
                   <EnabledCount
@@ -471,7 +468,7 @@ function AgentStarterMessages() {
   return (
     <FieldArray name="starter_messages">
       {(arrayHelpers) => (
-        <GeneralLayouts.Section gap={0.5}>
+        <GeneralLayouts.Section gap={2}>
           {Array.from({ length: visibleCount }, (_, i) => (
             <InputTypeInElementField
               key={`starter_messages.${i}`}
@@ -552,10 +549,14 @@ export default function AgentEditorPage({
   const { refresh: refreshAgents } = useAgents();
   const shareAgentModal = useCreateModal();
   const deleteAgentModal = useCreateModal();
-  const { isAdmin } = useUser();
-  // Feature/unlist are admin-only surfaces — never shown to non-admin
-  // owners or editors (ENG-4179)
-  const canUpdateFeaturedStatus = isAdmin;
+  const { permissions } = useUser();
+  // Prefer the server's per-agent answer; a new agent has none yet, so fall back to the
+  // global token — which is exactly what the projection stamps for `feature`.
+  const canShare = !existingAgent || can(existingAgent, "share");
+  const canDelete = can(existingAgent, "delete");
+  const canUpdateFeaturedStatus = existingAgent
+    ? can(existingAgent, "feature")
+    : hasPermission(permissions, Permission.MANAGE_AGENTS);
   const { vectorDbEnabled } = useSettings();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
 
@@ -566,7 +567,7 @@ export default function AgentEditorPage({
   const userFileIdsRef = useRef<string[]>([]);
 
   // Labels are edited in the Share Agent section and saved with the form
-  const { labels: allLabels, createLabel } = useLabels();
+  const { labels: allLabels, createLabel } = useAgentLabels();
   const [labelInputValue, setLabelInputValue] = useState("");
   const addAgentLabel = useCallback(
     async (
@@ -620,7 +621,7 @@ export default function AgentEditorPage({
     semantic_identifier: string;
   } | null>(null);
 
-  const { mcpServers, isLoading: isMcpLoading } = useMcpServersForPersonaEditor(
+  const { mcpServers, isLoading: isMcpLoading } = useMcpServersForAgent(
     existingAgent?.id
   );
   const { openApiTools: openApiToolsRaw, isLoading: isOpenApiLoading } =
@@ -1173,6 +1174,10 @@ export default function AgentEditorPage({
             description:
               initialValues.description.length >
               MAX_CHARACTERS_AGENT_DESCRIPTION,
+            // SAFETY: Formik collapses `FormikTouched` for an array of
+            // primitives to a single `boolean`, but it reads a `boolean[]` at
+            // runtime — one entry per element. The value below is that array.
+            // oxlint-disable-next-line anti-slop/no-chained-type-assertions
             starter_messages: initialValues.starter_messages.map(
               (msg) => msg.length > MAX_CHARACTERS_STARTER_MESSAGE
             ) as unknown as boolean,
@@ -1226,13 +1231,16 @@ export default function AgentEditorPage({
                   <UserFilesModal
                     title="User Files"
                     description="All files selected for this agent"
-                    recentFiles={values.user_file_ids
-                      .map((userFileId: string) => {
+                    recentFiles={values.user_file_ids.map(
+                      (userFileId: string) => {
                         const rf = allRecentFiles.find(
                           (f) => f.id === userFileId
                         );
                         if (rf) return rf;
-                        return {
+                        // Placeholder for a selected file that is not in the
+                        // recent-files list. Mirrors the optimistic upload
+                        // placeholder built in `ProjectsContext`.
+                        const placeholder: ProjectFile = {
                           id: userFileId,
                           name: `File ${userFileId.slice(0, 8)}`,
                           status: UserFileStatus.COMPLETED,
@@ -1242,10 +1250,13 @@ export default function AgentEditorPage({
                           user_id: null,
                           file_type: "",
                           last_accessed_at: new Date().toISOString(),
-                          chat_file_type: "file" as const,
-                        } as unknown as ProjectFile;
-                      })
-                      .filter((f): f is ProjectFile => f !== null)}
+                          chat_file_type: ChatFileType.DOCUMENT,
+                          token_count: null,
+                          chunk_count: null,
+                        };
+                        return placeholder;
+                      }
+                    )}
                     selectedFileIds={values.user_file_ids}
                     onPickRecent={(file: ProjectFile) => {
                       if (!values.user_file_ids.includes(file.id)) {
@@ -1304,7 +1315,7 @@ export default function AgentEditorPage({
                       }
                       onClose={() => deleteAgentModal.toggle(false)}
                     >
-                      <GeneralLayouts.Section alignItems="start" gap={0.5}>
+                      <GeneralLayouts.Section alignItems="start" gap={2}>
                         <Text>
                           Anyone using this agent will no longer be able to
                           access it. Deletion cannot be undone.
@@ -1373,7 +1384,7 @@ export default function AgentEditorPage({
 
                       <GeneralLayouts.Section
                         flexDirection="row"
-                        gap={2.5}
+                        gap={10}
                         alignItems="start"
                       >
                         <GeneralLayouts.Section>
@@ -1406,10 +1417,7 @@ export default function AgentEditorPage({
                         </GeneralLayouts.Section>
                       </GeneralLayouts.Section>
 
-                      <Divider
-                        paddingParallel="fit"
-                        paddingPerpendicular="fit"
-                      />
+                      <Divider paddingParallel={0} paddingPerpendicular={0} />
 
                       <GeneralLayouts.Section>
                         <InputVertical
@@ -1437,10 +1445,7 @@ export default function AgentEditorPage({
                         </InputVertical>
                       </GeneralLayouts.Section>
 
-                      <Divider
-                        paddingParallel="fit"
-                        paddingPerpendicular="fit"
-                      />
+                      <Divider paddingParallel={0} paddingPerpendicular={0} />
 
                       <AgentKnowledgePane
                         enableKnowledge={values.enable_knowledge}
@@ -1485,13 +1490,10 @@ export default function AgentEditorPage({
                         vectorDbEnabled={vectorDbEnabled}
                       />
 
-                      <Divider
-                        paddingParallel="fit"
-                        paddingPerpendicular="fit"
-                      />
+                      <Divider paddingParallel={0} paddingPerpendicular={0} />
 
                       <GeneralLayouts.Section
-                        gap={0.5}
+                        gap={2}
                         alignItems="stretch"
                         height="auto"
                       >
@@ -1502,19 +1504,21 @@ export default function AgentEditorPage({
                         />
                         <Card border="solid" rounding="lg">
                           <GeneralLayouts.Section>
-                            <InputHorizontal
-                              title="Share This Agent"
-                              description="with other users, groups, or everyone in your organization."
-                              center
-                            >
-                              <Button
-                                prominence="secondary"
-                                icon={shareStatusIcon}
-                                onClick={() => shareAgentModal.toggle(true)}
+                            {canShare && (
+                              <InputHorizontal
+                                title="Share This Agent"
+                                description="with other users, groups, or everyone in your organization."
+                                center
                               >
-                                Share
-                              </Button>
-                            </InputHorizontal>
+                                <Button
+                                  prominence="secondary"
+                                  icon={shareStatusIcon}
+                                  onClick={() => shareAgentModal.toggle(true)}
+                                >
+                                  Share
+                                </Button>
+                              </InputHorizontal>
+                            )}
                             {canUpdateFeaturedStatus && (
                               <>
                                 <InputHorizontal
@@ -1539,7 +1543,7 @@ export default function AgentEditorPage({
                               </>
                             )}
                             <GeneralLayouts.Section
-                              gap={0.25}
+                              gap={1}
                               alignItems="stretch"
                             >
                               <InputChipField
@@ -1580,10 +1584,7 @@ export default function AgentEditorPage({
                         </Card>
                       </GeneralLayouts.Section>
 
-                      <Divider
-                        paddingParallel="fit"
-                        paddingPerpendicular="fit"
-                      />
+                      <Divider paddingParallel={0} paddingPerpendicular={0} />
 
                       <SimpleCollapsible>
                         <SimpleCollapsible.Header
@@ -1591,10 +1592,7 @@ export default function AgentEditorPage({
                           description="Tools and capabilities available for this agent to use."
                         />
                         <SimpleCollapsible.Content>
-                          <GeneralLayouts.Section
-                            gap={0.5}
-                            alignItems="stretch"
-                          >
+                          <GeneralLayouts.Section gap={2} alignItems="stretch">
                             <Disabled
                               disabled={!isImageGenerationAvailable}
                               tooltip={imageGenerationDisabledTooltip}
@@ -1684,15 +1682,15 @@ export default function AgentEditorPage({
                               {(mcpServersWithVisibleTools.length > 0 ||
                                 openApiTools.length > 0) && (
                                 <Divider
-                                  paddingPerpendicular="xs"
-                                  paddingParallel="fit"
+                                  paddingPerpendicular={1}
+                                  paddingParallel={0}
                                 />
                               )}
 
                               {/* MCP tools */}
                               {mcpServersWithVisibleTools.length > 0 && (
                                 <GeneralLayouts.Section
-                                  gap={0.5}
+                                  gap={2}
                                   alignItems="stretch"
                                 >
                                   {mcpServersWithVisibleTools.map(
@@ -1710,7 +1708,7 @@ export default function AgentEditorPage({
 
                               {/* OpenAPI tools */}
                               {openApiTools.length > 0 && (
-                                <GeneralLayouts.Section gap={0.5}>
+                                <GeneralLayouts.Section gap={2}>
                                   {openApiTools.map((tool) => (
                                     <OpenApiToolCard
                                       key={tool.id}
@@ -1724,10 +1722,7 @@ export default function AgentEditorPage({
                         </SimpleCollapsible.Content>
                       </SimpleCollapsible>
 
-                      <Divider
-                        paddingParallel="fit"
-                        paddingPerpendicular="fit"
-                      />
+                      <Divider paddingParallel={0} paddingPerpendicular={0} />
 
                       <SimpleCollapsible>
                         <SimpleCollapsible.Header
@@ -1780,7 +1775,7 @@ export default function AgentEditorPage({
                               </GeneralLayouts.Section>
                             </Card>
 
-                            <GeneralLayouts.Section gap={0.25}>
+                            <GeneralLayouts.Section gap={1}>
                               <InputVertical
                                 withLabel="reminders"
                                 title="Reminders"
@@ -1806,11 +1801,11 @@ export default function AgentEditorPage({
                         </SimpleCollapsible.Content>
                       </SimpleCollapsible>
 
-                      {existingAgent && (
+                      {existingAgent && canDelete && (
                         <>
                           <Divider
-                            paddingParallel="fit"
-                            paddingPerpendicular="fit"
+                            paddingParallel={0}
+                            paddingPerpendicular={0}
                           />
 
                           <Card border="solid" rounding="lg">

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,7 +13,9 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
+	"github.com/charlievieth/fastwalk"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
@@ -277,15 +280,21 @@ func downloadTraceArtifacts(runID string, project string) (string, error) {
 // findTraces recursively finds all trace.zip files under a directory.
 func findTraces(root string) ([]string, error) {
 	var traces []string
-	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+	// fastwalk runs the callback on several goroutines, so guard the slice.
+	var mu sync.Mutex
+	err := fastwalk.Walk(nil, root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if !info.IsDir() && info.Name() == "trace.zip" {
+		if !d.IsDir() && d.Name() == "trace.zip" {
+			mu.Lock()
 			traces = append(traces, path)
+			mu.Unlock()
 		}
 		return nil
 	})
+	// Walk order is non-deterministic, so sort for a stable trace list.
+	sort.Strings(traces)
 	return traces, err
 }
 
@@ -293,11 +302,13 @@ func findTraces(root string) ([]string, error) {
 // Expects: destDir/{artifact-dir}/{test-dir}/trace.zip
 func findTraceInfos(destDir, runID string) ([]traceInfo, error) {
 	var traces []traceInfo
-	err := filepath.Walk(destDir, func(path string, info os.FileInfo, err error) error {
+	// fastwalk runs the callback on several goroutines, so guard the slice.
+	var mu sync.Mutex
+	err := fastwalk.Walk(nil, destDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if info.IsDir() || info.Name() != "trace.zip" {
+		if d.IsDir() || d.Name() != "trace.zip" {
 			return nil
 		}
 
@@ -311,11 +322,13 @@ func findTraceInfos(destDir, runID string) ([]traceInfo, error) {
 			testDir = parts[1]
 		}
 
+		mu.Lock()
 		traces = append(traces, traceInfo{
 			Path:    path,
 			Project: extractProject(artifactDir, runID),
 			TestDir: testDir,
 		})
+		mu.Unlock()
 		return nil
 	})
 
@@ -324,7 +337,10 @@ func findTraceInfos(destDir, runID string) ([]traceInfo, error) {
 		if pi != pj {
 			return pi < pj
 		}
-		return traces[i].TestDir < traces[j].TestDir
+		if traces[i].TestDir != traces[j].TestDir {
+			return traces[i].TestDir < traces[j].TestDir
+		}
+		return traces[i].Path < traces[j].Path
 	})
 
 	return traces, err

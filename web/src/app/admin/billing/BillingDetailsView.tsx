@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { markdown } from "@opal/utils";
 import { Section } from "@/layouts/general-layouts";
-import { Content, InputErrorText, InputVertical } from "@opal/layouts";
+import { Content, InputErrorText, InputVertical, toast } from "@opal/layouts";
 import Card from "@/refresh-components/cards/Card";
 import Button from "@/refresh-components/buttons/Button";
 import { Button as OpalButton, MessageCard } from "@opal/components";
@@ -32,7 +32,6 @@ import {
   resetStripeConnection,
   updateSeatCount,
   claimLicense,
-  refreshLicenseCache,
 } from "@/lib/billing/svc";
 import { formatDateShort } from "@/lib/dateUtils";
 import { humanReadableFormatShort } from "@opal/time";
@@ -46,6 +45,16 @@ import useUsers from "@/hooks/useUsers";
 // ----------------------------------------------------------------------------
 
 const GRACE_PERIOD_DAYS = 30;
+const MS_PER_DAY = 86_400_000;
+
+/** How much of a trial is left, in words. Rounds up so a partial day still
+ *  reads as a day, and floors at "today" so a lagging status cannot go negative. */
+function trialCountdown(trialEnd: Date, now: number = Date.now()): string {
+  const days = Math.ceil((trialEnd.getTime() - now) / MS_PER_DAY);
+  if (days <= 0) return "Trial ends today";
+  if (days === 1) return "Trial ends tomorrow";
+  return `Trial ends in ${days} days`;
+}
 
 // ----------------------------------------------------------------------------
 // Helpers
@@ -167,7 +176,7 @@ function SubscriptionCard({
 }) {
   const [isReconnecting, setIsReconnecting] = useState(false);
   const [isEndingTrial, setIsEndingTrial] = useState(false);
-  const [endTrialError, setEndTrialError] = useState<string | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   const settings = useSettings();
   const tier = settings.tier;
@@ -185,12 +194,21 @@ function SubscriptionCard({
     (license?.expires_at && new Date(license.expires_at) < new Date());
   const isExpired = isExpiredFromBilling || isExpiredFromLicense;
   const isCanceling = billing?.cancel_at_period_end;
-
+  // The license is the entitlement, so a Stripe snapshot that disagrees with it
+  // would describe a trial this instance is not actually on.
+  const trialEnd = license?.trial_end ? new Date(license.trial_end) : null;
+  const isOnTrial = trialEnd !== null && trialEnd.getTime() > Date.now();
   let subtitle: string;
   if (isExpired) {
     subtitle = `Expired on ${formattedDate}`;
   } else if (isCanceling) {
     subtitle = `Valid until ${formattedDate}`;
+  } else if (isOnTrial) {
+    // The trial ending and the first charge are one event, so both halves of
+    // this line have to come from the same date.
+    subtitle = `${trialCountdown(trialEnd)}. Payment required on ${formatDateShort(
+      license?.trial_end
+    )}`;
   } else if (billing) {
     subtitle = `Next payment on ${formattedDate}`;
   } else {
@@ -222,9 +240,22 @@ function SubscriptionCard({
     }
   };
 
+  const handleSyncLicense = async () => {
+    setIsSyncing(true);
+    try {
+      await claimLicense();
+      await onRefresh?.();
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to sync license"
+      );
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   const handleEndTrial = async () => {
     setIsEndingTrial(true);
-    setEndTrialError(null);
     try {
       await endTrial();
       await onRefresh?.();
@@ -244,12 +275,10 @@ function SubscriptionCard({
           }
         } catch (portalError) {
           console.error("Failed to open customer portal:", portalError);
-          setEndTrialError(
-            "Add a payment method first, then try upgrading again."
-          );
+          toast.error("Add a payment method first, then try upgrading again.");
         }
       } else {
-        setEndTrialError(
+        toast.error(
           error instanceof Error ? error.message : "Failed to end trial"
         );
       }
@@ -258,7 +287,8 @@ function SubscriptionCard({
     }
   };
 
-  const isTrialing =
+  // Only cloud exposes ending a trial early. Self-hosted has no such control.
+  const canEndTrialEarly =
     NEXT_PUBLIC_CLOUD_ENABLED && billing?.status === BillingStatus.TRIALING;
 
   return (
@@ -269,7 +299,7 @@ function SubscriptionCard({
         alignItems="start"
         height="auto"
       >
-        <Section gap={0.25} alignItems="start" height="auto" width="auto">
+        <Section gap={1} alignItems="start" height="auto" width="auto">
           <PlanIcon className="w-5 h-5" />
           <Text headingH3Muted text04>
             {planName}
@@ -280,7 +310,7 @@ function SubscriptionCard({
         </Section>
         <Section
           flexDirection="column"
-          gap={0.25}
+          gap={1}
           alignItems="end"
           height="auto"
           width="fit"
@@ -309,12 +339,12 @@ function SubscriptionCard({
           ) : (
             <Section
               flexDirection="row"
-              gap={0.5}
+              gap={2}
               alignItems="end"
               height="auto"
               width="auto"
             >
-              {isTrialing && (
+              {canEndTrialEarly && (
                 <OpalButton
                   disabled={isEndingTrial}
                   onClick={handleEndTrial}
@@ -323,19 +353,26 @@ function SubscriptionCard({
                   {isEndingTrial ? "Upgrading..." : "Upgrade now"}
                 </OpalButton>
               )}
+              {/* Cloud has no local license to pull. Self-hosted refreshes
+                  itself only inside LICENSE_RECLAIM_WINDOW, so a change made
+                  earlier in the period needs a manual pull. */}
+              {!NEXT_PUBLIC_CLOUD_ENABLED && (
+                <OpalButton
+                  disabled={isSyncing}
+                  prominence="secondary"
+                  onClick={handleSyncLicense}
+                >
+                  {isSyncing ? "Syncing..." : "Sync License"}
+                </OpalButton>
+              )}
               <OpalButton
-                prominence={isTrialing ? "secondary" : "primary"}
+                prominence={canEndTrialEarly ? "secondary" : "primary"}
                 onClick={handleManagePlan}
                 rightIcon={SvgExternalLink}
               >
                 Manage Plan
               </OpalButton>
             </Section>
-          )}
-          {endTrialError && (
-            <Text secondaryBody className="text-status-error-04">
-              {endTrialError}
-            </Text>
           )}
           {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
           <Button tertiary onClick={onViewPlans} className="billing-text-link">
@@ -374,7 +411,11 @@ function SeatsCard({
     includeApiKeys: false,
   });
 
-  const totalSeats = billing?.seats ?? license?.seats ?? 0;
+  // Seat enforcement reads the license, so preferring the billing snapshot can
+  // render a count the instance would refuse to honor. Seats default to 0
+  // without a license, which is not a count to prefer over billing.
+  const licensedSeats = license?.has_license ? license.seats : undefined;
+  const totalSeats = licensedSeats ?? billing?.seats ?? 0;
   const acceptedUsers =
     usersData?.accepted?.filter((u) => u.is_active).length ?? 0;
   const slackUsers =
@@ -414,8 +455,6 @@ function SeatsCard({
         // Wait for control plane to process the subscription update before claiming
         await new Promise((resolve) => setTimeout(resolve, 1500));
         await claimLicense();
-        // Force refresh the Redis cache from the database
-        await refreshLicenseCache();
       }
       await onRefresh?.();
       setIsEditing(false);
@@ -445,7 +484,7 @@ function SeatsCard({
           flexDirection="row"
           justifyContent="between"
           alignItems="start"
-          padding={1}
+          padding={4}
           height="auto"
         >
           <Content
@@ -467,8 +506,8 @@ function SeatsCard({
           <Section
             flexDirection="column"
             alignItems="stretch"
-            gap={0.25}
-            padding={1}
+            gap={1}
+            padding={4}
             height="auto"
           >
             <InputVertical title="Seats" withLabel>
@@ -508,7 +547,7 @@ function SeatsCard({
           flexDirection="row"
           alignItems="center"
           justifyContent="between"
-          padding={1}
+          padding={4}
           height="auto"
         >
           {isAdding ? (
@@ -556,7 +595,7 @@ function SeatsCard({
         alignItems="center"
         height="auto"
       >
-        <Section gap={0.25} alignItems="start" height="auto" width="auto">
+        <Section gap={1} alignItems="start" height="auto" width="auto">
           <Text mainContentMuted text04>
             {totalSeats} Seats
           </Text>
@@ -567,7 +606,7 @@ function SeatsCard({
         </Section>
         <Section
           flexDirection="row"
-          gap={0.5}
+          gap={2}
           justifyContent="end"
           height="auto"
           width="auto"
@@ -621,12 +660,7 @@ function PaymentSection({ billing }: { billing: BillingInformation }) {
     <div className="billing-payment-section">
       <Section alignItems="start" height="auto" width="full">
         <Text mainContentEmphasis>Payment</Text>
-        <Section
-          flexDirection="row"
-          gap={0.5}
-          alignItems="stretch"
-          height="auto"
-        >
+        <Section flexDirection="row" gap={2} alignItems="stretch" height="auto">
           <Card className="billing-payment-card">
             <Section
               flexDirection="row"
@@ -690,6 +724,7 @@ interface BillingDetailsViewProps {
   isManualLicenseOnly?: boolean;
   hasStripeError?: boolean;
   licenseCard?: React.ReactNode;
+  isGraceSyncing?: boolean;
 }
 
 export default function BillingDetailsView({
@@ -701,13 +736,19 @@ export default function BillingDetailsView({
   isManualLicenseOnly,
   hasStripeError,
   licenseCard,
+  isGraceSyncing,
 }: BillingDetailsViewProps) {
   const expirationState = billing ? getExpirationState(billing, license) : null;
   const disableBillingActions =
     isAirGapped || hasStripeError || isManualLicenseOnly;
 
   return (
-    <Section gap={1} height="auto" width="full">
+    <Section gap={4} height="auto" width="full">
+      {/* Renewal fetched on arrival while expired. The page renders regardless:
+          billing is the one route a lapsed instance must always reach. */}
+      {isGraceSyncing && (
+        <MessageCard variant="info" title="Checking for a renewed license…" />
+      )}
       {/* Stripe connection error banner */}
       {hasStripeError && (
         <MessageCard

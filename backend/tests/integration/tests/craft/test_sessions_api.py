@@ -38,6 +38,33 @@ def test_create_session_returns_200_with_session_and_sandbox_shape(
     assert body["sandbox"] is not None
 
 
+def test_create_session_preserves_requested_name(admin_user: DATestUser) -> None:
+    requested_name = f"Named Craft session {uuid4().hex[:8]}"
+
+    session = BuildSessionManager.create(admin_user, name=requested_name)
+
+    assert session.name == requested_name
+
+
+def test_create_session_names_reused_pre_provisioned_session(
+    admin_user: DATestUser,
+) -> None:
+    initial_session = BuildSessionManager.create(admin_user)
+    requested_name = f"Named pre-provisioned session {uuid4().hex[:8]}"
+
+    response = client.post(
+        f"{API_SERVER_URL}/build/sessions",
+        json={"name": requested_name, "headless": True},
+        headers=admin_user.headers,
+        cookies=admin_user.cookies,
+    )
+
+    assert response.status_code == 200
+    renamed_session = response.json()
+    assert renamed_session["id"] == initial_session.id
+    assert renamed_session["name"] == requested_name
+
+
 def test_set_sharing_scope_changes_webapp_visibility(
     admin_user: DATestUser,
     basic_user: DATestUser,

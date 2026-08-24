@@ -5,7 +5,7 @@ import { Formik, Form, useFormikContext } from "formik";
 import type { FormikConfig } from "formik";
 import { cn } from "@opal/utils";
 import { markdown } from "@opal/utils";
-import { Interactive } from "@opal/core";
+import { Hoverable, Interactive } from "@opal/core";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
 import { useAgents } from "@/lib/agents/hooks";
@@ -32,8 +32,17 @@ import {
   InputHorizontal,
   InputPadder,
   InputVertical,
+  Section as OpalSection,
   toast,
 } from "@opal/layouts";
+import {
+  ModelSettingsPopover,
+  type ModelSettingsPatch,
+} from "@/sections/modals/languageModels/ModelSettingsPopover";
+import { setDefaultLlmModelAndRefresh } from "@/lib/languageModels/cache";
+import { modelDisplayName } from "@/lib/languageModels/utils";
+import { useAdminLLMProviders } from "@/lib/languageModels/hooks";
+import { useSWRConfig } from "swr";
 import {
   SvgArrowExchange,
   SvgChevronDown,
@@ -50,11 +59,13 @@ import {
 import SvgOnyxLogo from "@opal/logos/onyx-logo";
 import { Card, EmptyMessageCard } from "@opal/components";
 import { ContentAction } from "@opal/layouts";
+import type { ContentMdEditHandle } from "@opal/layouts/content/ContentMd";
+import { SvgEdit } from "@opal/icons";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import useUsers from "@/hooks/useUsers";
-import { UserRole } from "@/lib/types";
 import { Modal } from "@opal/components";
 import { getProvider } from "@/lib/languageModels";
+import { useSettings } from "@/lib/settings/hooks";
 
 // ─── DisplayNameField ────────────────────────────────────────────────────────
 
@@ -124,7 +135,27 @@ export function APIKeyField({
  * `host.docker.internal`.
  */
 export const CONTAINERIZED_HOST_NOTE =
-  "With Onyx running in a container, `host.docker.internal` acts like `localhost` inside the container.";
+  "With Onyx running in a container, use `host.docker.internal` in place of `localhost` to reach a service on your host.";
+
+/**
+ * Builds the API Base URL `subDescription` for self-hosted and custom
+ * providers. These point at a service on the admin's own machine, which
+ * `localhost` does not reach from inside a container — so when Onyx is
+ * containerized, {@link CONTAINERIZED_HOST_NOTE} goes between `description`
+ * and `suffix`.
+ */
+export function useApiBaseSubDescription(
+  description?: string,
+  suffix?: string
+): RichStr | undefined {
+  const settings = useSettings();
+  const sentences = [
+    description,
+    settings.is_containerized ? CONTAINERIZED_HOST_NOTE : undefined,
+    suffix,
+  ].filter((sentence) => sentence !== undefined);
+  return sentences.length > 0 ? markdown(sentences.join(" ")) : undefined;
+}
 
 export interface APIBaseFieldProps {
   optional?: boolean;
@@ -170,8 +201,7 @@ export function ModelAccessField() {
   const { data: usersData } = useUsers({ includeApiKeys: false });
   const businessTier = useTierAtLeast(Tier.BUSINESS);
 
-  const adminCount =
-    usersData?.accepted.filter((u) => u.role === UserRole.ADMIN).length ?? 0;
+  const adminCount = usersData?.accepted.filter((u) => u.is_admin).length ?? 0;
 
   const isPublic = formikProps.values.is_public;
   const selectedGroupIds = formikProps.values.groups ?? [];
@@ -271,8 +301,8 @@ export function ModelAccessField() {
       </InputPadder>
 
       {!isPublic && (
-        <Card background="light" border="none" padding="sm">
-          <Section gap={0.5}>
+        <Card background="light" border="none" padding={2}>
+          <Section gap={2}>
             <InputComboBox
               placeholder="Add groups and agents"
               value=""
@@ -283,7 +313,7 @@ export function ModelAccessField() {
               searchIcon
             />
 
-            <Card background="heavy" border="none" padding="sm">
+            <Card background="heavy" border="none" padding={2}>
               <ContentAction
                 icon={SvgUserManage}
                 title="Admin"
@@ -297,7 +327,7 @@ export function ModelAccessField() {
                     Always shared
                   </Text>
                 }
-                padding="fit"
+                padding={0}
               />
             </Card>
             {selectedGroupIds.length > 0 && (
@@ -307,7 +337,7 @@ export function ModelAccessField() {
                   const memberCount = group?.users.length ?? 0;
                   return (
                     <div key={`group-${id}`} className="min-w-0">
-                      <Card background="heavy" border="none" padding="sm">
+                      <Card background="heavy" border="none" padding={2}>
                         <ContentAction
                           icon={SvgUsers}
                           title={group?.name ?? `Group ${id}`}
@@ -325,7 +355,7 @@ export function ModelAccessField() {
                               type="button"
                             />
                           }
-                          padding="fit"
+                          padding={0}
                         />
                       </Card>
                     </div>
@@ -342,7 +372,7 @@ export function ModelAccessField() {
                   const agent = agentMap.get(id);
                   return (
                     <div key={`agent-${id}`} className="min-w-0">
-                      <Card background="heavy" border="none" padding="sm">
+                      <Card background="heavy" border="none" padding={2}>
                         <ContentAction
                           icon={
                             agent
@@ -362,7 +392,7 @@ export function ModelAccessField() {
                               type="button"
                             />
                           }
-                          padding="fit"
+                          padding={0}
                         />
                       </Card>
                     </div>
@@ -500,18 +530,20 @@ function modelRightChildren(model: ModelConfiguration): React.ReactNode {
 interface ModelRowProps {
   model: ModelConfiguration;
   isAutoMode: boolean;
+  isDefaultModel: boolean;
   onToggleVisibility: (visible: boolean) => void;
   onRename: (value: string | undefined) => void;
+  onSettingsChange: (patch: ModelSettingsPatch) => void;
+  onSetDefaultModel?: () => void;
 }
 
 /**
  * A single selectable model row.
  *
  * The row is a clickable `<div role="button">` rather than a real `<button>`,
- * because the `editable` title renders its own nested edit `<button>` — and a
- * `<button>` inside a `<button>` is invalid HTML that triggers a React
- * hydration error. Rendering the row as a div keeps the inline rename pencil a
- * real, keyboard-accessible button while preserving the original look and feel.
+ * because it hosts real action buttons (rename, settings, set as default) and
+ * a `<button>` inside a `<button>` is invalid HTML that triggers a React
+ * hydration error.
  *
  * This mirrors `LineItemButton`'s internals (Stateful → Container →
  * ContentAction) but with a typeless `Interactive.Container`, which renders a
@@ -520,29 +552,65 @@ interface ModelRowProps {
 function ModelRow({
   model,
   isAutoMode,
+  isDefaultModel,
   onToggleVisibility,
   onRename,
+  onSettingsChange,
+  onSetDefaultModel,
 }: ModelRowProps) {
-  const displayName =
-    model.custom_display_name || model.display_name || model.name;
+  const editHandle = useRef<ContentMdEditHandle>(null);
+  // Keeps the hover-revealed actions visible while the settings popover,
+  // which is portaled outside the row, is open.
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const displayName = modelDisplayName(model);
   // In auto mode every model is shown, so the row is always "selected" and the
   // visibility toggle is disabled.
   const isSelected = isAutoMode || model.is_visible;
   const toggleVisibility = isAutoMode
     ? undefined
     : () => onToggleVisibility(!model.is_visible);
+  // A click that blurs and commits an inline rename reaches the row after the
+  // edit input unmounts, so the input's presence is sampled at pointerdown.
+  const renamingAtPointerDown = useRef(false);
+  // The row is clickable, but it also hosts real buttons (rename, settings).
+  // Their clicks, including ones the browser synthesizes from Enter, must not
+  // toggle the model.
+  const toggleFromRow = toggleVisibility
+    ? (e: React.MouseEvent) => {
+        if (renamingAtPointerDown.current) return;
+        const interactive = (e.target as HTMLElement).closest(
+          'button, input, textarea, [contenteditable="true"]'
+        );
+        if (interactive) return;
+        toggleVisibility();
+      }
+    : undefined;
 
   return (
-    <div data-model-name={model.name}>
+    <Hoverable.Root
+      group="model-row"
+      interaction={settingsOpen ? "hover" : "rest"}
+      data-model-name={model.name}
+    >
       <Interactive.Stateful
         variant="select-heavy"
         state={isSelected ? "selected" : "empty"}
-        onClick={toggleVisibility}
+        onPointerDownCapture={(e: React.PointerEvent) => {
+          // Scoped to the title row: the checkbox also owns a hidden input.
+          renamingAtPointerDown.current =
+            e.currentTarget.querySelector(".opal-content-md-title-row input") !=
+            null;
+        }}
+        onClick={toggleFromRow}
         role={toggleVisibility ? "button" : undefined}
         tabIndex={toggleVisibility ? 0 : undefined}
         onKeyDown={
           toggleVisibility
             ? (e: React.KeyboardEvent) => {
+                // Only the row itself. React bubbles events from portaled
+                // children too, so a key inside the settings popover would
+                // otherwise toggle the model.
+                if (e.target !== e.currentTarget) return;
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
                   toggleVisibility();
@@ -552,23 +620,79 @@ function ModelRow({
         }
       >
         <Interactive.Container width="full" size="fit" rounding="md">
-          <div className="w-full p-2">
+          <div className="w-full p-1.5">
             <ContentAction
               color="interactive"
               variant="section"
               sizePreset="main-ui"
+              center
               icon={() => <Checkbox checked={isSelected} />}
               title={displayName}
               description={buildModelDescription(model)}
-              rightChildren={modelRightChildren(model)}
+              rightChildren={
+                <OpalSection
+                  flexDirection="row"
+                  width="fit"
+                  height="auto"
+                  gap={1}
+                >
+                  {modelRightChildren(model)}
+                  <Hoverable.Item group="model-row" variant="appear-on-hover">
+                    <OpalSection
+                      flexDirection="row"
+                      width="fit"
+                      height="auto"
+                      gap={1}
+                    >
+                      <Button
+                        icon={SvgEdit}
+                        prominence="internal"
+                        size="sm"
+                        tooltip="Rename"
+                        onClick={(e: React.MouseEvent) => {
+                          e.stopPropagation();
+                          editHandle.current?.startEditing();
+                        }}
+                      />
+                      <ModelSettingsPopover
+                        model={model}
+                        onChange={onSettingsChange}
+                        onOpenChange={setSettingsOpen}
+                      />
+                      {!isDefaultModel && onSetDefaultModel && (
+                        <Button
+                          prominence="internal"
+                          size="sm"
+                          onClick={(e: React.MouseEvent) => {
+                            e.stopPropagation();
+                            onSetDefaultModel();
+                          }}
+                        >
+                          Set as Default
+                        </Button>
+                      )}
+                    </OpalSection>
+                  </Hoverable.Item>
+                  {isDefaultModel && (
+                    <Text
+                      secondaryAction
+                      nowrap
+                      className="px-1.5 py-1 text-action-selection-05"
+                    >
+                      Default Model
+                    </Text>
+                  )}
+                </OpalSection>
+              }
               editable
+              editHandle={editHandle}
               onTitleChange={(newTitle) => onRename(newTitle || undefined)}
-              padding="fit"
+              padding={0}
             />
           </div>
         </Interactive.Container>
       </Interactive.Stateful>
-    </div>
+    </Hoverable.Root>
   );
 }
 
@@ -587,6 +711,9 @@ export function ModelSelectionField({
   emptyMessage,
 }: ModelSelectionFieldProps) {
   const formikProps = useFormikContext<BaseLLMFormValues>();
+  const { mutate } = useSWRConfig();
+  const { defaultText } = useAdminLLMProviders();
+  const providerId = formikProps.values.id;
   const [newModelName, setNewModelName] = useState("");
   const [isExpanded, setIsExpanded] = useState(false);
   // When the auto-update toggle is hidden, auto mode should have no effect —
@@ -620,6 +747,18 @@ export function ModelSelectionField({
     formikProps.setFieldValue("model_configurations", updated);
   }
 
+  function setModelSettings(modelName: string, patch: ModelSettingsPatch) {
+    const updated = models.map((m) =>
+      m.name === modelName ? { ...m, ...patch } : m
+    );
+    formikProps.setFieldValue("model_configurations", updated);
+  }
+
+  async function setDefaultModel(modelName: string) {
+    if (providerId == null) return;
+    await setDefaultLlmModelAndRefresh(providerId, modelName, mutate);
+  }
+
   function setCustomDisplayName(modelName: string, value: string | undefined) {
     const updated = models.map((m) =>
       m.name === modelName
@@ -632,9 +771,19 @@ export function ModelSelectionField({
   function handleToggleAutoMode(nextIsAutoMode: boolean) {
     formikProps.setFieldValue("is_auto_mode", nextIsAutoMode);
     if (nextIsAutoMode) {
+      // Auto mode restores only the snapshot's visibility. Unsaved edits and
+      // models discovered after mount survive the toggle.
+      const originalByName = new Map(
+        originalModelsRef.current.map((m) => [m.name, m])
+      );
       formikProps.setFieldValue(
         "model_configurations",
-        originalModelsRef.current
+        models.map((current) => {
+          const original = originalByName.get(current.name);
+          return original
+            ? { ...current, is_visible: original.is_visible }
+            : current;
+        })
       );
     }
   }
@@ -653,8 +802,8 @@ export function ModelSelectionField({
   const visibleModels = models.filter((m) => m.is_visible);
 
   return (
-    <Card background="light" border="none" padding="sm">
-      <Section gap={0.5}>
+    <Card background="light" border="none" padding={2}>
+      <Section gap={2}>
         <InputHorizontal
           title="Models"
           description="Select models to make available for this provider."
@@ -676,10 +825,10 @@ export function ModelSelectionField({
         {models.length === 0 ? (
           <EmptyMessageCard
             title={emptyMessage ?? "No models available."}
-            padding="sm"
+            padding={2}
           />
         ) : (
-          <Section gap={0.25} alignItems="stretch">
+          <Section gap={1} alignItems="stretch">
             {(() => {
               const baseModels = isAutoMode ? visibleModels : models;
               // Sort alphabetically by id for providers that ship rich model
@@ -693,6 +842,10 @@ export function ModelSelectionField({
                 isFoldable && !isExpanded
                   ? displayModels.slice(0, FOLD_THRESHOLD)
                   : displayModels;
+              const defaultModelName =
+                providerId != null && defaultText?.provider_id === providerId
+                  ? defaultText.model_name
+                  : undefined;
 
               return (
                 <>
@@ -706,6 +859,15 @@ export function ModelSelectionField({
                       }
                       onRename={(value) =>
                         setCustomDisplayName(model.name, value)
+                      }
+                      onSettingsChange={(patch) =>
+                        setModelSettings(model.name, patch)
+                      }
+                      isDefaultModel={model.name === defaultModelName}
+                      onSetDefaultModel={
+                        providerId != null && model.is_visible
+                          ? () => void setDefaultModel(model.name)
+                          : undefined
                       }
                     />
                   ))}
@@ -739,7 +901,7 @@ export function ModelSelectionField({
         )}
 
         {onAddModel && !isAutoMode && (
-          <Section flexDirection="row" gap={0.5}>
+          <Section flexDirection="row" gap={2}>
             <div className="flex-1">
               <InputTypeIn
                 placeholder="Enter model name"
@@ -909,7 +1071,7 @@ function ModalWrapperInner({
             description={description}
             onClose={onClose}
           />
-          <Modal.Body padding={0.5} gap={0}>
+          <Modal.Body padding={2} gap={0}>
             {children}
           </Modal.Body>
           <Modal.Footer>

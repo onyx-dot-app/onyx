@@ -839,7 +839,7 @@ def _merge_field_meta(event: SandboxEvent, extra: dict[str, Any]) -> None:
     existing = getattr(event, "field_meta", None)
     merged: dict[str, Any] = dict(existing) if isinstance(existing, dict) else {}
     merged.update(extra)
-    setattr(event, "field_meta", merged)
+    setattr(event, "field_meta", merged)  # noqa: B010
 
 
 def _emit_tool_events(
@@ -1648,7 +1648,7 @@ class OpencodeServeClient:
                 "type": "file",
                 "mime": attachment.mime_type,
                 "filename": attachment.name,
-                "url": (PurePosixPath(directory) / attachment.path).as_uri(),
+                "url": (PurePosixPath(directory) / attachment.path).as_uri(),  # ty: ignore[deprecated]
             }
             for attachment in attachments or []
         )

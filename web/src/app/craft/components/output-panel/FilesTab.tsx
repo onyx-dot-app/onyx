@@ -345,7 +345,7 @@ export default function FilesTab({
         height="full"
         alignItems="center"
         justifyContent="center"
-        padding={2}
+        padding={8}
       >
         <SvgHardDrive size={48} className="stroke-text-02" />
         <Text font="heading-h3" color="text-03">
@@ -366,7 +366,7 @@ export default function FilesTab({
         height="full"
         alignItems="center"
         justifyContent="center"
-        padding={2}
+        padding={8}
       >
         <SvgHardDrive size={48} className="stroke-text-02" />
         <Text font="heading-h3" color="text-03">
@@ -385,7 +385,7 @@ export default function FilesTab({
         height="full"
         alignItems="center"
         justifyContent="center"
-        padding={2}
+        padding={8}
       >
         <Text font="secondary-body" color="text-03">
           Loading files...
@@ -442,7 +442,7 @@ export default function FilesTab({
             height="full"
             alignItems="center"
             justifyContent="center"
-            padding={2}
+            padding={8}
           >
             <Text font="secondary-body" color="text-03">
               No files in this directory

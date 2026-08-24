@@ -362,17 +362,10 @@ export type FetchToolObj =
   | PacketError;
 
 export type CustomToolObj =
-  | CustomToolStart
-  | CustomToolArgs
-  | CustomToolDelta
-  | SectionEnd
-  | PacketError;
+  CustomToolStart | CustomToolArgs | CustomToolDelta | SectionEnd | PacketError;
 
 export type FileReaderToolObj =
-  | FileReaderStart
-  | FileReaderResult
-  | SectionEnd
-  | PacketError;
+  FileReaderStart | FileReaderResult | SectionEnd | PacketError;
 
 export type MemoryToolObj =
   | MemoryToolStart
@@ -391,22 +384,13 @@ export type NewToolObj =
   | MemoryToolObj;
 
 export type ReasoningObj =
-  | ReasoningStart
-  | ReasoningDelta
-  | ReasoningDone
-  | SectionEnd
-  | PacketError;
+  ReasoningStart | ReasoningDelta | ReasoningDone | SectionEnd | PacketError;
 
 export type CitationObj =
-  | CitationStart
-  | CitationInfo
-  | SectionEnd
-  | PacketError;
+  CitationStart | CitationInfo | SectionEnd | PacketError;
 
 export type DeepResearchPlanObj =
-  | DeepResearchPlanStart
-  | DeepResearchPlanDelta
-  | SectionEnd;
+  DeepResearchPlanStart | DeepResearchPlanDelta | SectionEnd;
 
 export type ResearchAgentObj =
   | ResearchAgentStart
@@ -465,4 +449,15 @@ export interface StreamingError {
   error_code?: string | null;
   is_retryable?: boolean;
   details?: Record<string, unknown> | null;
+}
+
+// A user stop aborts the reader before the backend's own `stop` packet can arrive, so without this
+// the turn keeps looking like it is streaming — live timer included — until a reload, where the
+// backend replays an OverallStop.
+export function buildUserCancelledStopPacket(packets: Packet[]): Packet {
+  const lastPacket = packets[packets.length - 1];
+  return {
+    placement: { turn_index: lastPacket?.placement.turn_index ?? 0 },
+    obj: { type: PacketType.STOP, stop_reason: StopReason.USER_CANCELLED },
+  };
 }

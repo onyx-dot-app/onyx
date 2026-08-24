@@ -278,7 +278,7 @@ export function BuildLLMPopover({
       <Popover.Trigger asChild>{children}</Popover.Trigger>
       <Popover.Content side="bottom" align="start" width="lg">
         <div className="px-3">
-          <Section gap={0.5}>
+          <Section gap={2}>
             <div className="flex items-center justify-between py-3 gap-3 border-b border-border-01 px-1">
               <Text font="secondary-body" color="text-03">
                 Recommended Models Only

@@ -128,6 +128,13 @@ table[data-variant="cards"] .tbl-row:has(:focus-visible) > td {
   @apply bg-action-selection-01;
 }
 
+.tbl-row[data-clickable] {
+  @apply cursor-pointer;
+}
+.tbl-row[data-clickable]:hover > td {
+  @apply bg-background-tint-02;
+}
+
 /* ---- QualifierContainer ---- */
 
 .tbl-qualifier[data-type="head"] {

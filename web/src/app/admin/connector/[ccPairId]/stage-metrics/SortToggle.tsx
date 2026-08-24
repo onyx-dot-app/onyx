@@ -17,7 +17,7 @@ export default function SortToggle({ sortMode, onChange }: SortToggleProps) {
       alignItems="center"
       width="fit"
       height="fit"
-      gap={0.5}
+      gap={2}
     >
       <Text font="secondary-body" color="text-03">
         Sort:

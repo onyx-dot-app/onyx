@@ -68,6 +68,7 @@ export type {
 /* SidebarLayouts */
 export * as SidebarLayouts from "@opal/layouts/sidebar/components";
 export { type SidebarRootProps } from "@opal/layouts/sidebar/components";
+export { useSidebarFolded } from "@opal/layouts/sidebar/context";
 
 /* AuthLayouts */
 export * as AuthLayouts from "@opal/layouts/auth/components";

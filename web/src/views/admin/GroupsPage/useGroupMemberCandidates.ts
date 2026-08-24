@@ -22,7 +22,8 @@ function snapshotToMemberRow(snapshot: FullUserSnapshot): MemberRow {
   return {
     id: snapshot.id,
     email: snapshot.email,
-    role: snapshot.role,
+    account_type: snapshot.account_type,
+    is_admin: snapshot.is_admin,
     status: snapshot.is_active ? UserStatus.ACTIVE : UserStatus.INACTIVE,
     is_active: snapshot.is_active,
     is_scim_synced: snapshot.is_scim_synced,
@@ -41,7 +42,8 @@ function serviceAccountToMemberRow(
   return {
     id: snapshot.id,
     email: "Service Account",
-    role: apiKey?.api_key_role ?? snapshot.role,
+    account_type: AccountType.SERVICE_ACCOUNT,
+    is_admin: false,
     status: UserStatus.ACTIVE,
     is_active: true,
     is_scim_synced: false,

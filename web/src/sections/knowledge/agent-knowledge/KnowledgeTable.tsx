@@ -47,7 +47,7 @@ export function KnowledgeTable<T>({
         flexDirection="row"
         justifyContent="start"
         alignItems="center"
-        gap={0.5}
+        gap={2}
         height="auto"
       >
         {onSearchChange !== undefined && (
@@ -80,7 +80,7 @@ export function KnowledgeTable<T>({
               flexDirection="row"
               justifyContent="start"
               alignItems="center"
-              gap={0.25}
+              gap={1}
               height="auto"
             >
               <Text secondaryBody text03>
@@ -91,10 +91,10 @@ export function KnowledgeTable<T>({
         ))}
       </TableLayouts.TableRow>
 
-      <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+      <Divider paddingParallel={0} paddingPerpendicular={0} />
 
       {items.length === 0 ? (
-        <GeneralLayouts.Section height="auto" padding={1}>
+        <GeneralLayouts.Section height="auto" padding={4}>
           <Text text03 secondaryBody>
             {emptyMessage}
           </Text>
