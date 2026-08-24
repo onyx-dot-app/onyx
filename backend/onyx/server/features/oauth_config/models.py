@@ -14,6 +14,7 @@ class OAuthConfigCreate(BaseModel):
     client_secret: str
     scopes: list[str] | None = None
     additional_params: dict[str, Any] | None = None
+    supports_pkce: bool = False
 
 
 class OAuthConfigUpdate(BaseModel):
@@ -24,6 +25,7 @@ class OAuthConfigUpdate(BaseModel):
     client_secret: str | None = None
     scopes: list[str] | None = None
     additional_params: dict[str, Any] | None = None
+    supports_pkce: bool | None = None
     clear_client_id: bool = False
     clear_client_secret: bool = False
 
@@ -34,6 +36,7 @@ class OAuthConfigSnapshot(BaseModel):
     authorization_url: str
     token_url: str
     scopes: list[str] | None
+    supports_pkce: bool
     has_client_credentials: bool  # NEVER expose actual client_id or client_secret
     tool_count: int  # Number of tools using this config
     created_at: datetime

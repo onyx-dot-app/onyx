@@ -10,6 +10,7 @@ import {
   Divider,
   MessageCard,
   InputPasswordTypeIn,
+  Switch,
 } from "@opal/components";
 import { InputSingleSelect } from "@opal/components";
 import { InputTypeIn } from "@opal/components";
@@ -35,6 +36,7 @@ export interface OpenAPIAuthFormValues {
   clientId: string;
   clientSecret: string;
   scopes: string;
+  supportsPkce: boolean;
   headers: KeyValue[];
 }
 
@@ -62,6 +64,7 @@ const defaultValues: OpenAPIAuthFormValues = {
   clientId: "",
   clientSecret: "",
   scopes: "",
+  supportsPkce: false,
   headers: [
     {
       key: "Authorization",
@@ -235,6 +238,7 @@ export default function OpenAPIAuthenticationModal({
         clientId: shouldMaskCredentials ? MASKED_CREDENTIAL_VALUE : "",
         clientSecret: shouldMaskCredentials ? MASKED_CREDENTIAL_VALUE : "",
         scopes: existingOAuthConfig?.scopes?.join(", ") || "",
+        supportsPkce: existingOAuthConfig?.supports_pkce ?? false,
         headers: baseHeaders,
       };
     }
@@ -601,6 +605,26 @@ export default function OpenAPIAuthenticationModal({
                               error: errors.scopes,
                             }}
                           />
+                        </FormField>
+
+                        <FormField name="supportsPkce">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex flex-col gap-1">
+                              <FormField.Label>Use PKCE</FormField.Label>
+                              <FormField.Description>
+                                Enable only when the OAuth provider supports
+                                PKCE with the S256 challenge method.
+                              </FormField.Description>
+                            </div>
+                            <FormField.Control asChild>
+                              <Switch
+                                checked={values.supportsPkce}
+                                onCheckedChange={(checked) =>
+                                  setFieldValue("supportsPkce", checked)
+                                }
+                              />
+                            </FormField.Control>
+                          </div>
                         </FormField>
 
                         <div className="flex flex-col gap-3 rounded-12 bg-background-tint-01 p-3">

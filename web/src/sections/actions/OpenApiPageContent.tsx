@@ -87,6 +87,7 @@ export default function OpenApiPageContent() {
               authorization_url: values.authorizationUrl,
               token_url: values.tokenUrl,
               scopes: parsedScopes,
+              supports_pkce: values.supportsPkce,
               client_id: trimmedClientId || undefined,
               client_secret: trimmedClientSecret || undefined,
             });
@@ -98,6 +99,7 @@ export default function OpenApiPageContent() {
               client_id: trimmedClientId,
               client_secret: trimmedClientSecret,
               scopes: parsedScopes.length ? parsedScopes : undefined,
+              supports_pkce: values.supportsPkce,
             });
             oauthConfigId = oauthConfig.id;
           }
