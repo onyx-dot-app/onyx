@@ -50,8 +50,6 @@ def get_http_client() -> httpx.AsyncClient:
     """Return a shared async HTTP client."""
     global _http_client
     if _http_client is None:
-        # Default timeout for fast calls (auth, metadata). Long-running tool
-        # calls pass a per-request override in tools/search.py.
         _http_client = httpx.AsyncClient(timeout=60.0)
     return _http_client
 

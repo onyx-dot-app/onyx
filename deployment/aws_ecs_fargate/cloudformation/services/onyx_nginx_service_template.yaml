@@ -130,9 +130,6 @@ Resources:
               Value: !Sub ${Environment}-${OnyxBackendApiServiceName}.${OnyxNamespace}
             - Name: ONYX_WEB_SERVER_HOST
               Value: !Sub ${Environment}-${OnyxWebServerServiceName}.${OnyxNamespace}
-            # Must exceed the ALB idle timeout (300s) per AWS guidance.
-            - Name: NGINX_KEEPALIVE_TIMEOUT
-              Value: "305"
           MountPoints:
             - SourceVolume: efs-volume
               ContainerPath: /etc/nginx/conf.d
@@ -239,14 +236,6 @@ Resources:
       Subnets: !Ref SubnetIDs
       SecurityGroups:
         - !Ref SecurityGroup
-      LoadBalancerAttributes:
-        # Match the 300s nginx proxy timeouts (run-nginx.sh defaults); the
-        # 60s ALB default severs long-running buffered /api responses
-        # (e.g. slow search queries) before nginx's own read timeout applies.
-        # NGINX_KEEPALIVE_TIMEOUT above is set past this value per AWS
-        # guidance (target keep-alive must exceed the ALB idle timeout).
-        - Key: idle_timeout.timeout_seconds
-          Value: "300"
 
   LoadBalancerListener:
     Type: AWS::ElasticLoadBalancingV2::Listener

@@ -54,8 +54,6 @@ async def _post_model(
             "Authorization": f"Bearer {access_token.token}",
             "Content-Type": "application/json",
         },
-        # Tool calls (e.g. document search) can run for minutes; override the
-        # shared client's short default.
         timeout=httpx.Timeout(
             float(MCP_SERVER_API_REQUEST_TIMEOUT_SECONDS), connect=10.0
         ),
