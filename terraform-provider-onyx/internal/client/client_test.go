@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 // capturedRequest records what the test server received.
@@ -32,7 +33,16 @@ func newTestServer(t *testing.T, status int, responseBody string) (*Client, *cap
 		_, _ = w.Write([]byte(responseBody))
 	}))
 	t.Cleanup(server.Close)
-	return NewClient(server.URL, "", "on_test_key"), captured
+	return newFastRetryClient(server.URL), captured
+}
+
+// newFastRetryClient keeps the retry behavior but removes the backoff waits,
+// so tests that assert on a 5xx response do not sleep for seconds.
+func newFastRetryClient(serverURL string) *Client {
+	c := NewClient(Config{ServerURL: serverURL, APIKey: "on_test_key"})
+	c.retry.RetryWaitMin = time.Millisecond
+	c.retry.RetryWaitMax = 2 * time.Millisecond
+	return c
 }
 
 func bodyAsMap(t *testing.T, body []byte) map[string]any {
@@ -56,7 +66,8 @@ func TestNewClientBaseURL(t *testing.T) {
 		{"https://cloud.onyx.app/", "api", "https://cloud.onyx.app/api"},
 	}
 	for _, tt := range tests {
-		if got := NewClient(tt.serverURL, tt.apiPrefix, "k").BaseURL(); got != tt.want {
+		cfg := Config{ServerURL: tt.serverURL, APIPrefix: tt.apiPrefix, APIKey: "k"}
+		if got := NewClient(cfg).BaseURL(); got != tt.want {
 			t.Errorf("NewClient(%q, %q): base URL = %q, want %q", tt.serverURL, tt.apiPrefix, got, tt.want)
 		}
 	}

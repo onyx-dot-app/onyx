@@ -129,7 +129,12 @@ func (p *onyxProvider) Configure(ctx context.Context, req provider.ConfigureRequ
 		return
 	}
 
-	c := client.NewClient(endpoint, apiPrefix, apiKey)
+	c := client.NewClient(client.Config{
+		ServerURL: endpoint,
+		APIPrefix: apiPrefix,
+		APIKey:    apiKey,
+		Version:   p.version,
+	})
 	resp.ResourceData = c
 	resp.DataSourceData = c
 }
@@ -141,6 +146,8 @@ func (p *onyxProvider) Resources(_ context.Context) []func() resource.Resource {
 		NewLLMProviderDefaultResource,
 		NewSettingsResource,
 		NewEmbeddingProviderResource,
+		NewCredentialResource,
+		NewConnectorResource,
 	}
 }
 
@@ -149,6 +156,7 @@ func (p *onyxProvider) DataSources(_ context.Context) []func() datasource.DataSo
 		NewLLMProvidersDataSource,
 		NewEmbeddingProvidersDataSource,
 		NewSettingsDataSource,
+		NewConnectorsDataSource,
 	}
 }
 

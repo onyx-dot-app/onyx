@@ -17,9 +17,12 @@ providers.
 | `onyx_llm_provider_default` | The deployment default (and vision) model — a singleton | `default` |
 | `onyx_settings` | Workspace settings — a singleton, partially managed | `settings` |
 | `onyx_embedding_provider` | Cloud embedding provider credentials | provider type (e.g. `openai`) |
+| `onyx_credential` | Connector credentials (`/manage/credential`) | numeric id |
+| `onyx_connector` | Connector definitions (`/manage/admin/connector`) | numeric id |
 | `data.onyx_llm_providers` | Read-only list of providers + defaults | — |
 | `data.onyx_embedding_providers` | Read-only list of embedding providers | — |
 | `data.onyx_settings` | Read-only current settings (incl. license `tier`) | — |
+| `data.onyx_connectors` | Read-only list of connectors | — |
 
 Generated per-resource docs live in [`docs/`](./docs/).
 
@@ -67,6 +70,22 @@ and on Onyx Cloud the tenant is embedded in the key itself.
 - **`model_configurations` is the list of record.** Models omitted from it are removed
   server-side, and removing the model currently set as deployment default fails — repoint
   `onyx_llm_provider_default` first (references order this correctly).
+- **`onyx_credential` payloads are write-only.** The API always returns `credential_json`
+  masked, so it is never refreshed or diffed. `admin_public`, `curator_public` and `groups`
+  have no update endpoint and force replacement instead.
+- **`onyx_connector` does not own its access control.** `access_type` and `groups` are
+  validated on write but stored on the cc-pair, so Terraform cannot refresh them. Onyx also
+  rewrites an unset `prune_freq` to 7 days on the first update, which the provider then
+  keeps as the value of record.
+- **`onyx_connector` does not set access control.** Onyx applies it when a credential is
+  associated, so it belongs to the connector-credential pair. The connector endpoints still
+  require an `access_type` in the request body but ignore it, so the provider sends a fixed
+  value rather than offering a knob that would do nothing.
+- **A private credential can look deleted.** The API hides a credential with
+  `admin_public = false` from admins other than its creator, and that is indistinguishable
+  from a deleted one, so Terraform would drop it from state and recreate it. Keep
+  `admin_public = true` (the default) for credentials Terraform manages, or run Terraform
+  with the key that created them.
 - **The model list read is the API's display view.** It hides obsolete models and dated
   duplicates, so writes (including the auto-mode pass-through, which is also not atomic
   with its read) cannot preserve rows the API hides. The admin UI round-trips the same
@@ -116,6 +135,24 @@ TF_ACC=1 ONYX_TF_ACC_SERVER_URL=http://localhost:8080 go test ./internal/provide
 
 Without `TF_ACC` these tests skip, so plain `go test ./...` (and the repo's Go CI) stays
 green with no Onyx running.
+
+To test against an API server that does not touch your dev database, give it a database of
+its own. This reuses the running Postgres, Redis, OpenSearch and MinIO containers (the
+container name follows your compose project, so adjust it if yours differs):
+
+```bash
+docker exec onyx-relational_db-1 psql -U postgres -c "CREATE DATABASE onyx_tf_acc;"
+cd backend && POSTGRES_DB=onyx_tf_acc uv run alembic upgrade head
+POSTGRES_DB=onyx_tf_acc AUTH_TYPE=basic LICENSE_ENFORCEMENT_ENABLED=false \
+  ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true \
+  USER_AUTH_SECRET="$(openssl rand -hex 32)" \
+  uv run uvicorn onyx.main:app --port 8081
+```
+
+Each variable earns its place. `AUTH_TYPE=basic` gives the harness a login to bootstrap
+its key with. License enforcement must be off or API key creation answers 402. The
+enterprise features flag registers the user-group routes, which the harness reads to find
+the Admin group its key needs.
 
 ### Docs
 
