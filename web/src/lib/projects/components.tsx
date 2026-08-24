@@ -70,8 +70,10 @@ function useFolderIcon(
         : SvgFolder;
 
   return () => (
-    /* A raw button rather than Opal's: the stacking below needs a className,
-       and Opal's `Button` accepts none by design. */
+    /* Deliberately not an Opal `Button`. This was a div, promoted to a button
+       for its semantics alone — focusable, with a role and keyboard handling.
+       It wants none of the chrome Opal's Button brings: focus ring, padding,
+       sizing, interaction styling. It is a bare glyph. */
     <button
       type="button"
       data-testid="ProjectFolderIcon"
