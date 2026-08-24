@@ -31,6 +31,7 @@ from onyx.db.chat import (
     reserve_message_id,
 )
 from onyx.db.file_record import (
+    FileRecordNotFoundError,
     get_incognito_file_ids,
     get_session_ids_with_incognito_files,
 )
@@ -242,7 +243,7 @@ def test_teardown_deletes_the_stamped_blobs(db_session: Session) -> None:
 
     assert delete_incognito_generated_files(session_id, db_session)
 
-    with pytest.raises(Exception):
+    with pytest.raises(FileRecordNotFoundError):
         file_store.read_file(file_id)
     assert get_incognito_file_ids(str(session_id), db_session) == []
 
@@ -262,5 +263,16 @@ def test_a_refused_deletion_keeps_the_stamp(db_session: Session) -> None:
     assert str(session_id) in get_session_ids_with_incognito_files(db_session)
 
     assert delete_incognito_generated_files(session_id, db_session)
-    with pytest.raises(Exception):
+    with pytest.raises(FileRecordNotFoundError):
         file_store.read_file(file_id)
+
+
+def test_the_sweep_lookup_samples_under_a_limit(db_session: Session) -> None:
+    """The sweep always passes a limit, which turns on random sampling, so the
+    DISTINCT lookup must stay valid Postgres with ORDER BY random() applied."""
+    session_id = uuid4()
+    _content_free_blob(session_id)
+
+    assert len(get_session_ids_with_incognito_files(db_session, limit=1)) == 1
+
+    assert delete_incognito_generated_files(session_id, db_session)
