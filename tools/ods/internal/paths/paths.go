@@ -106,28 +106,42 @@ func BackendDir() (string, error) {
 
 // ResolveInBackend resolves one provided path to an absolute path inside the
 // backend directory, or fails loudly. Relative paths are tried against the
-// working directory first and then against the backend directory, so both the
+// working directory, the backend directory, and the repository root, so the
 // 'backend/onyx/chat' (pre-commit) and 'onyx/chat' (backend-relative) selector
-// forms work from any working directory.
+// forms work from any working directory. Every candidate is checked against the
+// backend boundary, so a selector cannot escape it with '..' segments.
 func ResolveInBackend(p string, backendDir string) (string, os.FileInfo, error) {
 	backendReal, err := filepath.Abs(backendDir)
 	if err != nil {
 		return "", nil, err
 	}
-	absPath, err := filepath.Abs(p)
-	if err == nil {
-		relPath, relErr := filepath.Rel(backendReal, absPath)
-		if relErr == nil && !strings.HasPrefix(relPath, "..") {
-			if info, statErr := os.Stat(absPath); statErr == nil {
-				return absPath, info, nil
-			}
-		}
-	}
+
+	candidates := []string{p}
 	if !filepath.IsAbs(p) {
-		fallback := filepath.Join(backendReal, p)
-		if info, statErr := os.Stat(fallback); statErr == nil {
-			return fallback, info, nil
+		// filepath.Dir(backendReal) is the repository root; BackendDir already
+		// assumes that layout.
+		candidates = append(candidates,
+			filepath.Join(backendReal, p),
+			filepath.Join(filepath.Dir(backendReal), p),
+		)
+	}
+	for _, candidate := range candidates {
+		absPath, err := filepath.Abs(candidate)
+		if err != nil || !insideDir(backendReal, absPath) {
+			continue
+		}
+		if info, statErr := os.Stat(absPath); statErr == nil {
+			return absPath, info, nil
 		}
 	}
 	return "", nil, fmt.Errorf("path %q does not exist inside the backend directory", p)
+}
+
+// insideDir reports whether path is dir itself or contained within it.
+func insideDir(dir string, path string) bool {
+	relPath, err := filepath.Rel(dir, path)
+	if err != nil {
+		return false
+	}
+	return relPath != ".." && !strings.HasPrefix(relPath, ".."+string(filepath.Separator))
 }
