@@ -4,7 +4,7 @@ from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from sqlalchemy.orm import Session
 
-from onyx.auth.users import verify_email_is_invited
+from onyx.auth.users import verify_email_domain, verify_email_is_invited
 from onyx.configs.onyxbot_configs import (
     ONYX_BOT_FEEDBACK_REMINDER,
     ONYX_BOT_REACT_EMOJI,
@@ -27,12 +27,19 @@ from onyx.onyxbot.slack.utils import (
     slack_usage_report,
     update_emote_react,
 )
+from onyx.server.security.store import get_security_settings
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from shared_configs.configs import SLACK_CHANNEL_ID
 from shared_configs.contextvars import get_current_tenant_id
 
 logger_base = setup_logger()
+
+_SEAT_LIMIT_TEXT = (
+    "We weren't able to respond because your organization "
+    "has reached its user seat limit. Please contact your "
+    "Onyx administrator to add more seats."
+)
 
 
 def send_msg_ack_to_user(details: SlackMessageInfo, client: WebClient) -> None:
@@ -267,6 +274,24 @@ def handle_message(
     except SlackApiError as e:
         logger.error("Was not able to react to user message due to: %s", e)
 
+    def _deny(log_msg: str, text: str, ephemeral: bool = False) -> bool:
+        """Tell the sender the bot will not respond. Always returns False."""
+        logger.info(log_msg)
+        respond_in_thread_or_channel(
+            client=client,
+            channel=channel,
+            thread_ts=message_info.msg_to_respond,
+            # Ephemeral for denials about the sender, so they never post
+            # publicly in the channel.
+            receiver_ids=(
+                [message_info.sender_id]
+                if ephemeral and message_info.sender_id
+                else None
+            ),
+            text=text,
+        )
+        return False
+
     with get_session_with_current_tenant() as db_session:
         if message_info.email:
             existing_user = get_user_by_email(message_info.email, db_session)
@@ -278,36 +303,37 @@ def handle_message(
                 existing_user.account_type == AccountType.EXT_PERM_USER
             )
 
-            # Invite-only gates provisioning like any self-serve signup. BOT
+            # Invite-only and email-domain policies gate provisioning like any
+            # self-serve signup (JWT and OAuth pair the same checks). BOT
             # accounts were provisioned by the bot itself, never re-checked.
             if provisions_account:
                 try:
                     verify_email_is_invited(message_info.email)
-                except OnyxError as e:
-                    if e.error_code != OnyxErrorCode.UNAUTHORIZED:
-                        raise
-                    logger.info(
-                        "Blocked Slack-bot provisioning of uninvited user %s: %s",
+                    verify_email_domain(
                         message_info.email,
-                        e.detail,
+                        valid_email_domains=get_security_settings().valid_email_domains,
                     )
-                    respond_in_thread_or_channel(
-                        client=client,
-                        channel=channel,
-                        thread_ts=message_info.msg_to_respond,
-                        # Ephemeral: the denial is about the sender, not the
-                        # channel, so it must not post publicly.
-                        receiver_ids=(
-                            [message_info.sender_id] if message_info.sender_id else None
-                        ),
-                        text=(
+                except OnyxError as e:
+                    if e.error_code not in (
+                        OnyxErrorCode.UNAUTHORIZED,
+                        OnyxErrorCode.INVALID_INPUT,
+                    ):
+                        raise
+                    return _deny(
+                        "Blocked Slack-bot provisioning of "
+                        f"{message_info.email}: {e.detail}",
+                        (
                             "We weren't able to respond because this workspace "
                             "is invite-only and your email has not been "
                             "invited. Please ask your Onyx administrator for "
                             "an invite."
+                            if e.error_code == OnyxErrorCode.UNAUTHORIZED
+                            else "We weren't able to respond because your email "
+                            "address is not allowed in this workspace. Please "
+                            "contact your Onyx administrator."
                         ),
+                        ephemeral=True,
                     )
-                    return False
 
             if existing_user is None:
                 # New user — check seat availability before creating
@@ -319,16 +345,10 @@ def handle_message(
                 # noop returns None when called; real function returns SeatAvailabilityResult
                 seat_result = check_seat_fn(db_session=db_session)
                 if seat_result is not None and not seat_result.available:
-                    logger.info(
-                        "Blocked new Slack user %s: %s",
-                        message_info.email,
-                        seat_result.error_message,
-                    )
-                    respond_in_thread_or_channel(
-                        client=client,
-                        channel=channel,
-                        thread_ts=message_info.msg_to_respond,
-                        text=(
+                    return _deny(
+                        "Blocked new Slack user "
+                        f"{message_info.email}: {seat_result.error_message}",
+                        (
                             "We weren't able to respond because your organization "
                             "has reached its user seat limit. Since this is your "
                             "first time interacting with the bot, a new account "
@@ -336,7 +356,6 @@ def handle_message(
                             "Onyx administrator to add more seats."
                         ),
                     )
-                    return False
 
             elif (
                 not existing_user.is_active
@@ -356,16 +375,10 @@ def handle_message(
                 acquire_lock_fn(db_session, get_current_tenant_id())
                 seat_result = check_seat_fn(db_session=db_session)
                 if seat_result is not None and not seat_result.available:
-                    logger.info(
-                        "Blocked inactive Slack user %s: %s",
-                        message_info.email,
-                        seat_result.error_message,
-                    )
-                    respond_in_thread_or_channel(
-                        client=client,
-                        channel=channel,
-                        thread_ts=message_info.msg_to_respond,
-                        text=(
+                    return _deny(
+                        "Blocked inactive Slack user "
+                        f"{message_info.email}: {seat_result.error_message}",
+                        (
                             "We weren't able to respond because your organization "
                             "has reached its user seat limit. Your account is "
                             "currently deactivated and cannot be reactivated "
@@ -373,7 +386,6 @@ def handle_message(
                             "your Onyx administrator."
                         ),
                     )
-                    return False
 
                 activate_user(existing_user, db_session)
                 invalidate_license_cache_fn = fetch_ee_implementation_or_noop(
@@ -394,22 +406,11 @@ def handle_message(
                 )
                 seat_result = check_seat_fn(db_session=db_session)
                 if seat_result is not None and not seat_result.available:
-                    logger.info(
-                        "Blocked Slack-bot promotion of %s: %s",
-                        message_info.email,
-                        seat_result.error_message,
+                    return _deny(
+                        "Blocked Slack-bot promotion of "
+                        f"{message_info.email}: {seat_result.error_message}",
+                        _SEAT_LIMIT_TEXT,
                     )
-                    respond_in_thread_or_channel(
-                        client=client,
-                        channel=channel,
-                        thread_ts=message_info.msg_to_respond,
-                        text=(
-                            "We weren't able to respond because your organization "
-                            "has reached its user seat limit. Please contact your "
-                            "Onyx administrator to add more seats."
-                        ),
-                    )
-                    return False
 
             # Defense-in-depth: locks + checks on the same session that
             # commits the EXT_PERM_USER -> BOT promotion.
@@ -440,22 +441,11 @@ def handle_message(
             except OnyxError as e:
                 if e.error_code != OnyxErrorCode.SEAT_LIMIT_EXCEEDED:
                     raise
-                logger.info(
-                    "Blocked Slack-bot user creation/promotion for %s: %s",
-                    message_info.email,
-                    e.detail,
+                return _deny(
+                    "Blocked Slack-bot user creation/promotion for "
+                    f"{message_info.email}: {e.detail}",
+                    _SEAT_LIMIT_TEXT,
                 )
-                respond_in_thread_or_channel(
-                    client=client,
-                    channel=channel,
-                    thread_ts=message_info.msg_to_respond,
-                    text=(
-                        "We weren't able to respond because your organization "
-                        "has reached its user seat limit. Please contact your "
-                        "Onyx administrator to add more seats."
-                    ),
-                )
-                return False
             else:
                 if provisions_account:
                     invalidate_fn = fetch_ee_implementation_or_noop(

@@ -278,12 +278,14 @@ class TestHandleMessageSeatCheck:
     def _common_patches(self) -> Any:
         """Patch side-effect-only dependencies that every test needs.
 
-        The invite-only gate is a no-op here; it has its own test class.
+        The invite/domain gate is a no-op here; it has its own test class.
         """
         with (
             patch(f"{_HANDLE_MSG}.slack_usage_report"),
             patch(f"{_HANDLE_MSG}.send_msg_ack_to_user"),
             patch(f"{_HANDLE_MSG}.verify_email_is_invited"),
+            patch(f"{_HANDLE_MSG}.verify_email_domain"),
+            patch(f"{_HANDLE_MSG}.get_security_settings"),
         ):
             yield
 
@@ -382,13 +384,15 @@ class TestHandleMessageSeatCheck:
 
 
 class TestHandleMessageInviteGate:
-    """Invite-only (Restrict Open Sign-Up) gates Slack auto-provisioning."""
+    """Invite-only (Restrict Open Sign-Up) and email-domain policies gate
+    Slack auto-provisioning."""
 
     @pytest.fixture(autouse=True)
     def _common_patches(self) -> Any:
         with (
             patch(f"{_HANDLE_MSG}.slack_usage_report"),
             patch(f"{_HANDLE_MSG}.send_msg_ack_to_user"),
+            patch(f"{_HANDLE_MSG}.get_security_settings"),
         ):
             yield
 
@@ -430,16 +434,43 @@ class TestHandleMessageInviteGate:
         assert mock_respond.call_args[1]["receiver_ids"] == ["U123"]
 
     @pytest.mark.usefixtures("db_session")
+    @patch(f"{_HANDLE_MSG}.respond_in_thread_or_channel")
+    @patch(f"{_HANDLE_MSG}.add_slack_user_if_not_exists")
+    @patch(
+        f"{_HANDLE_MSG}.verify_email_domain",
+        side_effect=OnyxError(OnyxErrorCode.INVALID_INPUT, "Email domain is not valid"),
+    )
+    @patch(f"{_HANDLE_MSG}.verify_email_is_invited")
+    @patch(f"{_HANDLE_MSG}.get_user_by_email", return_value=None)
+    def test_disallowed_domain_provisioning_blocked(
+        self,
+        _mock_get_user: MagicMock,
+        _mock_verify: MagicMock,
+        _mock_domain: MagicMock,
+        mock_add_user: MagicMock,
+        mock_respond: MagicMock,
+    ) -> None:
+        result = _call_handle_message()
+
+        assert result is False
+        mock_add_user.assert_not_called()
+        mock_respond.assert_called_once()
+        assert "not allowed" in mock_respond.call_args[1]["text"]
+        assert mock_respond.call_args[1]["receiver_ids"] == ["U123"]
+
+    @pytest.mark.usefixtures("db_session")
     @patch(f"{_HANDLE_MSG}.handle_regular_answer", return_value=False)
     @patch(f"{_HANDLE_MSG}.handle_standard_answers", return_value=False)
     @patch(f"{_HANDLE_MSG}.add_slack_user_if_not_exists")
     @patch(f"{_HANDLE_MSG}.fetch_ee_implementation_or_noop")
+    @patch(f"{_HANDLE_MSG}.verify_email_domain")
     @patch(f"{_HANDLE_MSG}.verify_email_is_invited")
     @patch(f"{_HANDLE_MSG}.get_user_by_email", return_value=None)
     def test_invited_new_user_provisioned(
         self,
         _mock_get_user: MagicMock,
         mock_verify: MagicMock,
+        mock_domain: MagicMock,
         mock_fetch_ee: MagicMock,
         mock_add_user: MagicMock,
         _mock_standard: MagicMock,
@@ -450,6 +481,7 @@ class TestHandleMessageInviteGate:
         _call_handle_message(email="new@test.com")
 
         mock_verify.assert_called_once_with("new@test.com")
+        mock_domain.assert_called_once()
         mock_add_user.assert_called_once()
 
     @pytest.mark.usefixtures("db_session")
