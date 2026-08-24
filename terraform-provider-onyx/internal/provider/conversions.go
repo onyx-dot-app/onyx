@@ -70,3 +70,24 @@ func int64ListValues(ctx context.Context, list types.List, diags *diag.Diagnosti
 	}
 	return values, true
 }
+
+// int64SetValues converts an optional set attribute into a slice. Like
+// int64ListValues the result is never nil: the API rejects a null where it
+// expects an array. Sets suit id collections — the server returns them in its
+// own order, which must not show up as a diff.
+func int64SetValues(ctx context.Context, set types.Set) ([]int64, diag.Diagnostics) {
+	ids := []int64{}
+	if set.IsNull() || set.IsUnknown() {
+		return ids, nil
+	}
+	return ids, set.ElementsAs(ctx, &ids, false)
+}
+
+// stringSetValues is int64SetValues for sets of strings.
+func stringSetValues(ctx context.Context, set types.Set) ([]string, diag.Diagnostics) {
+	values := []string{}
+	if set.IsNull() || set.IsUnknown() {
+		return values, nil
+	}
+	return values, set.ElementsAs(ctx, &values, false)
+}
