@@ -330,7 +330,8 @@ ods check-lazy-imports
 Checks that backend Python code does not reference the `getattr` builtin, which
 hides attribute access from the type checker. Genuinely dynamic lookups are
 suppressed inline with `# ods: ignore[getattr]` plus a brief justification.
-String literals and comments never match.
+String literal contents and comments never match; replacement fields inside
+f-strings are scanned as code.
 
 ```shell
 ods check-getattr [paths...]

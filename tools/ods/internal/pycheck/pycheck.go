@@ -316,9 +316,16 @@ func collectPythonFiles(startPoints []string, backendDir string) ([]string, erro
 					// Fail closed: an unreadable file must not pass the check.
 					return err
 				}
+				if info.IsDir() {
+					// Do not descend into vendored or cache directories.
+					if _, skip := skipDirectories[info.Name()]; skip {
+						return filepath.SkipDir
+					}
+					return nil
+				}
 				// Symlinked entries are skipped so a link cannot reach a file
 				// outside the backend tree.
-				if !info.IsDir() && info.Mode()&os.ModeSymlink == 0 && isCheckablePythonFile(path) {
+				if info.Mode()&os.ModeSymlink == 0 && isCheckablePythonFile(path) {
 					collected = append(collected, path)
 				}
 				return nil

@@ -25,9 +25,9 @@ same line, plus a brief justification:
 
   value = getattr(obj, field_name)  # ods: ignore[getattr] Dynamic field lookup.
 
-String literals and comments never match. Optionally provide files or
-directories to limit the check; if none are provided, all backend Python
-files are scanned.
+String literal contents and comments never match; replacement fields inside
+f-strings are scanned as code. Optionally provide files or directories to
+limit the check; if none are provided, all backend Python files are scanned.
 
 Examples:
   ods check-getattr                   # Check all backend Python files
