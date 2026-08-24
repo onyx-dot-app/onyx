@@ -426,6 +426,8 @@ class TestHandleMessageInviteGate:
         mock_add_user.assert_not_called()
         mock_respond.assert_called_once()
         assert "invite" in mock_respond.call_args[1]["text"].lower()
+        # _make_message_info() returns sender_id="U123"
+        assert mock_respond.call_args[1]["receiver_ids"] == ["U123"]
 
     @pytest.mark.usefixtures("db_session")
     @patch(f"{_HANDLE_MSG}.handle_regular_answer", return_value=False)

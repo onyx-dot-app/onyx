@@ -295,6 +295,11 @@ def handle_message(
                         client=client,
                         channel=channel,
                         thread_ts=message_info.msg_to_respond,
+                        # Ephemeral: the denial is about the sender, not the
+                        # channel, so it must not post publicly.
+                        receiver_ids=(
+                            [message_info.sender_id] if message_info.sender_id else None
+                        ),
                         text=(
                             "We weren't able to respond because this workspace "
                             "is invite-only and your email has not been "
