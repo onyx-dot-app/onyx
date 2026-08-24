@@ -37,7 +37,7 @@ from onyx.server.manage.llm.models import (
     SyncModelEntry,
     ensure_default_within_max,
 )
-from onyx.utils.encryption import is_masked_credential
+from onyx.utils.encryption import is_masked_credential, mask_string
 from onyx.utils.logger import setup_logger
 from onyx.utils.sensitive import SensitiveValue
 from shared_configs.enums import EmbeddingProvider
@@ -212,17 +212,31 @@ def _resolve_embedding_api_key(
     mask itself as the real credential. Mirrors resolve_masked_credentials in
     onyx/db/external_app.py.
     """
-    if incoming is None or not is_masked_credential(incoming):
+    if incoming is None:
         return incoming
 
     stored = existing.get_value(apply_mask=False) if existing is not None else None
-    if stored is None:
+    if stored is not None:
+        # Compare against this key's own mask rather than the general shape
+        # test, so a real key that happens to look like a placeholder is still
+        # stored instead of being swallowed.
+        if incoming != mask_string(stored):
+            return incoming
+        if is_masked_credential(stored):
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "The stored api_key is a masked placeholder left by an earlier "
+                "write, so there is nothing to restore — provide the actual key.",
+            )
+        return stored
+
+    if is_masked_credential(incoming):
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             "api_key was submitted masked but has no stored value to restore — "
             "provide the actual key.",
         )
-    return stored
+    return incoming
 
 
 def upsert_cloud_embedding_provider(

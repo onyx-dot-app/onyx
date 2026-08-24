@@ -17,6 +17,7 @@ from onyx.db.llm import (
 )
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.manage.embedding.models import CloudEmbeddingProviderCreationRequest
+from onyx.utils.encryption import mask_string
 from shared_configs.enums import EmbeddingProvider
 
 _REAL_KEY = "sk-test-embedding-key-not-a-real-secret"
@@ -86,5 +87,59 @@ def test_a_masked_key_with_nothing_to_restore_is_rejected(db_session: Session) -
             db_session,
             CloudEmbeddingProviderCreationRequest(
                 provider_type=EmbeddingProvider.VOYAGE, api_key="sk-t...cret"
+            ),
+        )
+
+
+def test_a_real_key_shaped_like_a_placeholder_is_stored(db_session: Session) -> None:
+    # "abcd...wxyz" matches the placeholder shape. Judging by shape alone would
+    # swallow it and silently keep the old key, so the check compares against
+    # this key's own mask instead.
+    upsert_cloud_embedding_provider(
+        db_session,
+        CloudEmbeddingProviderCreationRequest(
+            provider_type=EmbeddingProvider.VOYAGE, api_key=_REAL_KEY
+        ),
+    )
+    lookalike = "abcd...wxyz"
+    upsert_cloud_embedding_provider(
+        db_session,
+        CloudEmbeddingProviderCreationRequest(
+            provider_type=EmbeddingProvider.VOYAGE, api_key=lookalike
+        ),
+    )
+
+    assert _stored_key(db_session) == lookalike
+
+
+def test_an_already_masked_stored_key_is_reported(db_session: Session) -> None:
+    # A provider corrupted by the old write path holds a placeholder. Restoring
+    # it would leave the provider quietly unusable, so say so instead.
+    upsert_cloud_embedding_provider(
+        db_session,
+        CloudEmbeddingProviderCreationRequest(
+            provider_type=EmbeddingProvider.VOYAGE, api_key=_REAL_KEY
+        ),
+    )
+    corrupted = mask_string(_REAL_KEY)
+    upsert_cloud_embedding_provider(
+        db_session,
+        CloudEmbeddingProviderCreationRequest(
+            provider_type=EmbeddingProvider.VOYAGE, api_key=corrupted
+        ),
+    )
+    # The guard refused to store it, so corrupt the row directly to model a
+    # provider written before the guard existed.
+    provider = fetch_embedding_provider(db_session, EmbeddingProvider.VOYAGE)
+    assert provider is not None
+    provider.api_key = corrupted  # ty: ignore[invalid-assignment]
+    db_session.commit()
+
+    with pytest.raises(OnyxError):
+        upsert_cloud_embedding_provider(
+            db_session,
+            CloudEmbeddingProviderCreationRequest(
+                provider_type=EmbeddingProvider.VOYAGE,
+                api_key=mask_string(corrupted),
             ),
         )
