@@ -1458,13 +1458,17 @@ class GoogleDriveConnector(
                 drive_id,
                 self.primary_admin_email,
             )
-            # Record the drive being listed before any file is yielded (as the
-            # service account path does), so a page token emitted before the
-            # first yielded file resumes this drive, not the previous one.
-            checkpoint.completion_map[self.primary_admin_email].completed_until = 0
-            checkpoint.completion_map[
-                self.primary_admin_email
-            ].current_folder_or_drive_id = drive_id
+            # Record the stage and drive being listed before any file is
+            # yielded (as the service account path does), so a page token
+            # emitted before the first yielded file resumes this drive, not the
+            # previous one. Without the stage, the resume branch above is
+            # skipped and the token leaks into the first unretrieved drive's
+            # fresh listing.
+            checkpoint.completion_map[self.primary_admin_email].update(
+                stage=DriveRetrievalStage.SHARED_DRIVE_FILES,
+                completed_until=0,
+                current_folder_or_drive_id=drive_id,
+            )
             for file_or_token in _yield_from_drive(drive_id, start):
                 # See the resume loop above: the caller records page tokens.
                 yield file_or_token

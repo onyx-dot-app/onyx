@@ -153,6 +153,33 @@ def test_oauth_shared_drive_retrieval_spans_all_pages(
     _assert_retrieved_exactly(retrieved_ids, files_by_drive)
 
 
+def test_oauth_shared_drive_token_before_any_file_resumes_same_drive(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Token pause before ANY file was ever yielded (empty drive first).
+
+    The per-user stage is still START when the pause happens, so without a
+    proactive stage update the resume branch is skipped, the token leaks into
+    the empty drive's fresh listing, gets cleared there, and the paused drive
+    restarts from page 1 on every span without ever completing.
+    """
+    files_by_drive: dict[str, list[dict[str, Any]]] = {
+        "drive_a": [],
+        "drive_b": [_drive_file(i) for i in range(14)],
+    }
+    connector = _build_oauth_connector(
+        monkeypatch,
+        drive_ids=["drive_a", "drive_b"],
+        fake_retrieval=_make_fake_get_files_in_shared_drive(
+            files_by_drive, filtered_first_span_drives=frozenset({"drive_b"})
+        ),
+    )
+
+    retrieved_ids = _run_all_checkpoint_spans(connector, max_spans=40)
+
+    _assert_retrieved_exactly(retrieved_ids, files_by_drive)
+
+
 def test_oauth_shared_drive_token_before_first_file_resumes_same_drive(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
