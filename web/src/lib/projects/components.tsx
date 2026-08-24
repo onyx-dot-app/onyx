@@ -280,13 +280,6 @@ function ProjectPopoverRow({ match, onNavigate }: ProjectPopoverRowProps) {
   const [open, setOpen] = useState(isActiveProject);
   const folderIcon = useFolderIcon(open, () => setOpen((prev) => !prev));
 
-  // Unfold the project the user is inside, and any project listed because one
-  // of its chats matched the search — otherwise the reason it is listed stays
-  // hidden. Only ever opens, so folding it by hand sticks.
-  useEffect(() => {
-    if (isActiveProject || match.chatMatched) setOpen(true);
-  }, [isActiveProject, match.chatMatched]);
-
   function handleClick() {
     // Navigation closes the popover on its own, but re-selecting the project
     // you are already inside leaves the URL alone.
