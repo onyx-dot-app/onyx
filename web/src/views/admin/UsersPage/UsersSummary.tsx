@@ -7,8 +7,6 @@ import { Section } from "@/layouts/general-layouts";
 import Text from "@/refresh-components/texts/Text";
 import Link from "next/link";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import { useAuthTypeMetadata } from "@/lib/auth/hooks";
-import InviteOnlyCard from "./InviteOnlyCard";
 
 // ---------------------------------------------------------------------------
 // Stats cell — number + label + hover filter icon
@@ -109,7 +107,7 @@ function ScimCard() {
 }
 
 // ---------------------------------------------------------------------------
-// Stats bar — layout varies by SCIM / invite-only status
+// Stats bar: layout varies by SCIM status
 // ---------------------------------------------------------------------------
 
 type UsersSummaryProps = {
@@ -131,8 +129,6 @@ export default function UsersSummary({
   onFilterInvites,
   onFilterRequests,
 }: UsersSummaryProps) {
-  const { authTypeMetadata } = useAuthTypeMetadata();
-  const showInviteOnly = !showScim && authTypeMetadata?.multiTenant === false;
   const showRequests = requests !== null && requests > 0;
 
   const statsCard = (
@@ -161,13 +157,7 @@ export default function UsersSummary({
     </Card>
   );
 
-  const rightCard = showScim ? (
-    <ScimCard />
-  ) : showInviteOnly ? (
-    <InviteOnlyCard />
-  ) : null;
-
-  if (rightCard) {
+  if (showScim) {
     return (
       <Section
         flexDirection="row"
@@ -176,7 +166,7 @@ export default function UsersSummary({
         gap={2}
       >
         {statsCard}
-        {rightCard}
+        <ScimCard />
       </Section>
     );
   }

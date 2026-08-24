@@ -22,6 +22,9 @@ import {
 } from "@opal/layouts";
 import { Card, InputTypeIn, Switch, Text } from "@opal/components";
 import { markdown } from "@opal/utils";
+import { useSettings } from "@/lib/settings/hooks";
+import { Settings, toSettings } from "@/lib/settings/types";
+import { updateAdminSettings } from "@/lib/settings/svc";
 import type { RichStr } from "@opal/types";
 import type {
   IncognitoAvailability,
@@ -144,19 +147,54 @@ export default function SecurityHardeningPage() {
   const isMultiTenant = NEXT_PUBLIC_CLOUD_ENABLED;
   const { authTypeMetadata, isLoading: authTypeLoading } =
     useAuthTypeMetadata();
-  // The kill switch only enforces on single-tenant deployments, so the
-  // card hides where the backend would refuse the save. The explicit === false
+  // Single-tenant at runtime, not just by build flag. The explicit === false
   // waits for the fetch, metadata is undefined while loading or unreachable.
-  const showPasswordLockdown =
-    !isMultiTenant &&
-    !authTypeLoading &&
-    authTypeMetadata?.multiTenant === false;
+  const isSingleTenantRuntime =
+    !authTypeLoading && authTypeMetadata?.multiTenant === false;
+  // The kill switch only enforces on single-tenant deployments, so the
+  // card hides where the backend would refuse the save.
+  const showPasswordLockdown = !isMultiTenant && isSingleTenantRuntime;
 
   const { data: settings, isLoading: settingsLoading } =
     useSWR<SecuritySettings>(
       SWR_KEYS.adminSecuritySettings,
       errorHandlingFetcher
     );
+
+  // Invite-only lives in workspace settings, not SecuritySettings, so it has
+  // its own save path.
+  const workspaceSettings = useSettings();
+  const saveWorkspaceSettings = useCallback(
+    async (updates: Partial<Settings>) => {
+      const newSettings: Settings = {
+        ...toSettings(workspaceSettings),
+        ...updates,
+      };
+      try {
+        await mutate(
+          SWR_KEYS.settings,
+          async () => {
+            await updateAdminSettings(newSettings);
+            return newSettings;
+          },
+          {
+            optimisticData: newSettings,
+            revalidate: true,
+            rollbackOnError: true,
+          }
+        );
+        toast.success("Settings updated");
+      } catch (err) {
+        console.error("Failed to update workspace settings", err);
+        const message =
+          err instanceof Error && err.message
+            ? err.message
+            : "Failed to update settings";
+        toast.error(message);
+      }
+    },
+    [workspaceSettings]
+  );
   const { data: pinnedFields } = useSWR<string[]>(
     SWR_KEYS.adminSecurityPinnedFields,
     errorHandlingFetcher
@@ -326,6 +364,19 @@ export default function SecurityHardeningPage() {
 
               {!isMultiTenant && (
                 <>
+                  {isSingleTenantRuntime && (
+                    <ToggleRow
+                      title="Restrict Open Sign-Up"
+                      description="New users must be invited to join this workspace."
+                      checked={workspaceSettings.invite_only_enabled ?? false}
+                      onCheckedChange={(checked) =>
+                        void saveWorkspaceSettings({
+                          invite_only_enabled: checked,
+                        })
+                      }
+                    />
+                  )}
+
                   <ToggleRow
                     title="Restrict Email Domains"
                     description="Limit new user registrations to specific email domains."
