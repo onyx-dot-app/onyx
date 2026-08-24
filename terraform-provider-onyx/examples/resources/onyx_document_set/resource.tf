@@ -17,21 +17,29 @@ resource "onyx_document_set" "hr_private" {
 
   cc_pair_ids = [onyx_cc_pair.hr_handbook.id]
 
+  # Private sets need Enterprise Edition. Group and user ids come from the
+  # deployment, so read them from the admin panel or pass them in.
   is_public = false
   groups    = [4]
-  users     = ["4f1c8f3e-1a2b-4c5d-8e9f-0a1b2c3d4e5f"]
+  users     = [var.hr_lead_user_id]
 }
 
 # Onyx rejects a set that holds nothing, so a set built only from federated
 # connectors still needs at least one entry there.
-resource "onyx_document_set" "support_tickets" {
-  name        = "support-tickets"
+#
+# `entities` follows the schema of the connector it points at. Slack is the
+# only federated source today, and takes the fields below.
+resource "onyx_document_set" "support_channels" {
+  name        = "support-channels"
   cc_pair_ids = []
 
   federated_connectors = [
     {
-      federated_connector_id = "2"
-      entities               = jsonencode({ ticket_status = "open" })
+      federated_connector_id = var.slack_federated_connector_id
+      entities = jsonencode({
+        search_all_channels = false
+        channels            = ["support", "support-escalations"]
+      })
     },
   ]
 }

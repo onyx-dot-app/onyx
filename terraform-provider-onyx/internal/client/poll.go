@@ -64,7 +64,10 @@ func pollWith(
 	operation string,
 	check func(ctx context.Context) (done bool, lastState string, err error),
 ) error {
-	ctx, cancel := context.WithTimeout(ctx, settings.timeout)
+	// Keep the caller's context: when Terraform cancels the run, both it and
+	// the derived one report Done, and only the caller's says why.
+	caller := ctx
+	ctx, cancel := context.WithTimeout(caller, settings.timeout)
 	defer cancel()
 
 	interval := settings.initialInterval
@@ -72,6 +75,9 @@ func pollWith(
 	for {
 		done, state, err := check(ctx)
 		if err != nil {
+			if callerErr := caller.Err(); callerErr != nil {
+				return callerErr
+			}
 			// A check cancelled by our own deadline is a timeout, not a
 			// transport failure; report it as one.
 			if ctx.Err() != nil {
@@ -90,6 +96,9 @@ func pollWith(
 		select {
 		case <-ctx.Done():
 			timer.Stop()
+			if callerErr := caller.Err(); callerErr != nil {
+				return callerErr
+			}
 			return &TimeoutError{Operation: operation, Timeout: settings.timeout, LastState: lastState}
 		case <-timer.C:
 		}

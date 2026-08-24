@@ -73,14 +73,31 @@ func TestPollPropagatesCheckError(t *testing.T) {
 	}
 }
 
+// A cancelled run is not a timeout. Terraform cancels the caller's context on
+// interrupt, and reporting "timed out after 1s" would name the wrong cause.
 func TestPollRespectsCallerCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	err := pollWith(ctx, fastPoll(time.Second), "the thing", func(ctx context.Context) (bool, string, error) {
+	err := pollWith(ctx, fastPoll(time.Hour), "the thing", func(ctx context.Context) (bool, string, error) {
 		return false, "", ctx.Err()
 	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context.Canceled, got %T: %v", err, err)
+	}
+	var timeoutErr *TimeoutError
+	if errors.As(err, &timeoutErr) {
+		t.Error("a cancelled caller must not be reported as a timeout")
+	}
+}
+
+// The helper's own deadline still reports a timeout.
+func TestPollOwnDeadlineIsATimeout(t *testing.T) {
+	err := pollWith(context.Background(), fastPoll(20*time.Millisecond), "the thing",
+		func(ctx context.Context) (bool, string, error) {
+			return false, "waiting", nil
+		})
 	var timeoutErr *TimeoutError
 	if !errors.As(err, &timeoutErr) {
-		t.Fatalf("expected a timeout error for a cancelled context, got %T: %v", err, err)
+		t.Fatalf("expected *TimeoutError, got %T: %v", err, err)
 	}
 }
