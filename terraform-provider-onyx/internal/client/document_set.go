@@ -97,13 +97,21 @@ func (c *Client) GetDocumentSet(ctx context.Context, id int64) (*DocumentSet, er
 }
 
 // UpdateDocumentSet full-replaces a document set.
+//
+// Not replayable, though it is a PATCH: a committed write leaves the set
+// syncing, and Onyx rejects a change to a syncing set. A replay would report
+// failure for a change that already landed.
 func (c *Client) UpdateDocumentSet(ctx context.Context, req DocumentSetUpdate) error {
-	return c.doJSON(ctx, http.MethodPatch, "/manage/admin/document-set", req, nil)
+	return c.doJSON(nonReplayable(ctx), http.MethodPatch, "/manage/admin/document-set", req, nil)
 }
 
 // DeleteDocumentSet marks a document set for deletion. The row survives until
 // the background sync clears it, so callers poll GetDocumentSet until 404.
+//
+// Not replayable for the same reason as the update: this DELETE is not
+// idempotent, because it leaves the set syncing and Onyx then rejects a second
+// delete.
 func (c *Client) DeleteDocumentSet(ctx context.Context, id int64) error {
 	path := fmt.Sprintf("/manage/admin/document-set/%d", id)
-	return c.doJSON(ctx, http.MethodDelete, path, nil, nil)
+	return c.doJSON(nonReplayable(ctx), http.MethodDelete, path, nil, nil)
 }

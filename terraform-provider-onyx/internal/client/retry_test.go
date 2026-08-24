@@ -82,6 +82,30 @@ func TestRetriesNonCreatingPut(t *testing.T) {
 	}
 }
 
+// A document set write leaves the set syncing, and Onyx rejects a change to a
+// syncing set — so neither mutation may be replayed even though one is a PATCH
+// and the other a DELETE.
+func TestNeverReplaysDocumentSetMutations(t *testing.T) {
+	t.Run("update", func(t *testing.T) {
+		c, attempts := newCountingServer(t, http.StatusBadGateway, http.StatusOK)
+		if err := c.UpdateDocumentSet(context.Background(), DocumentSetUpdate{ID: 1}); err == nil {
+			t.Fatal("a failed document set update must surface, not be replayed")
+		}
+		if attempts.Load() != 1 {
+			t.Errorf("got %d attempts, want 1", attempts.Load())
+		}
+	})
+	t.Run("delete", func(t *testing.T) {
+		c, attempts := newCountingServer(t, http.StatusBadGateway, http.StatusOK)
+		if err := c.DeleteDocumentSet(context.Background(), 1); err == nil {
+			t.Fatal("a failed document set delete must surface, not be replayed")
+		}
+		if attempts.Load() != 1 {
+			t.Errorf("got %d attempts, want 1", attempts.Load())
+		}
+	})
+}
+
 func TestRetriesRateLimitsOnWrites(t *testing.T) {
 	c, attempts := newCountingServer(t, http.StatusTooManyRequests, http.StatusOK)
 	// A 429 is rejected before the handler runs, so replaying is safe.

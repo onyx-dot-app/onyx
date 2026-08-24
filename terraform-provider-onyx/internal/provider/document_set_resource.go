@@ -27,9 +27,12 @@ var (
 	_ resource.ResourceWithValidateConfig = (*documentSetResource)(nil)
 )
 
-// defaultDocumentSetDeleteTimeout bounds the wait for the background sync to
-// drop the row. The name is unique, so a replacement cannot apply until then.
-const defaultDocumentSetDeleteTimeout = 10 * time.Minute
+// Bounds for the background sync waits. Onyx rejects a change to a set that is
+// still syncing, so every mutation waits for the previous one to land.
+const (
+	defaultDocumentSetUpdateTimeout = 10 * time.Minute
+	defaultDocumentSetDeleteTimeout = 10 * time.Minute
+)
 
 // NewDocumentSetResource returns the onyx_document_set resource.
 func NewDocumentSetResource() resource.Resource {
@@ -121,7 +124,8 @@ func (r *documentSetResource) Schema(ctx context.Context, _ resource.SchemaReque
 			"is_up_to_date": schema.BoolAttribute{
 				Computed: true,
 				MarkdownDescription: "Whether Onyx has finished applying the set to the search index. " +
-					"Reads `false` while the background sync is pending.",
+					"Reads `false` while the background sync is pending. Onyx refuses to change or " +
+					"delete a set that is still syncing, so Terraform waits for this before it does either.",
 			},
 			"federated_connectors": schema.SetNestedAttribute{
 				Optional:            true,
@@ -142,7 +146,7 @@ func (r *documentSetResource) Schema(ctx context.Context, _ resource.SchemaReque
 			},
 		},
 		Blocks: map[string]schema.Block{
-			"timeouts": timeouts.Block(ctx, timeouts.Opts{Delete: true}),
+			"timeouts": timeouts.Block(ctx, timeouts.Opts{Update: true, Delete: true}),
 		},
 	}
 }
@@ -174,6 +178,25 @@ func (r *documentSetResource) ValidateConfig(ctx context.Context, req resource.V
 		"Onyx rejects a document set that holds nothing. Give it at least one entry in "+
 			"cc_pair_ids or in federated_connectors.",
 	)
+}
+
+// waitForDocumentSetSync waits until Onyx has applied the set to the search
+// index. Both update and delete are rejected outright while a previous change
+// is still syncing, and a create leaves the set syncing, so every mutation
+// waits first rather than failing an otherwise valid apply.
+func (r *documentSetResource) waitForDocumentSetSync(ctx context.Context, id int64, timeout time.Duration) error {
+	return client.Poll(ctx, timeout, "the document set to finish syncing",
+		func(ctx context.Context) (bool, string, error) {
+			remote, err := r.client.GetDocumentSet(ctx, id)
+			if client.IsNotFound(err) {
+				// Already gone: there is nothing left to sync.
+				return true, "", nil
+			}
+			if err != nil {
+				return false, "", err
+			}
+			return remote.IsUpToDate, "a previous change is still syncing", nil
+		})
 }
 
 // writeFieldsFromModel builds the shared body of the create and update
@@ -390,6 +413,20 @@ func (r *documentSetResource) Update(ctx context.Context, req resource.UpdateReq
 	if !ok {
 		return
 	}
+	updateTimeout, timeoutDiags := plan.Timeouts.Update(ctx, defaultDocumentSetUpdateTimeout)
+	resp.Diagnostics.Append(timeoutDiags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	// One deadline for the whole update, so the wait and the write together
+	// stay inside the configured timeout.
+	ctx, cancel := context.WithTimeout(ctx, updateTimeout)
+	defer cancel()
+
+	if err := r.waitForDocumentSetSync(ctx, id, updateTimeout); err != nil {
+		resp.Diagnostics.AddError("Failed to update Onyx document set", err.Error())
+		return
+	}
 
 	err := r.client.UpdateDocumentSet(ctx, client.DocumentSetUpdate{
 		ID:                  id,
@@ -431,6 +468,15 @@ func (r *documentSetResource) Delete(ctx context.Context, req resource.DeleteReq
 	deleteTimeout, timeoutDiags := state.Timeouts.Delete(ctx, defaultDocumentSetDeleteTimeout)
 	resp.Diagnostics.Append(timeoutDiags...)
 	if resp.Diagnostics.HasError() {
+		return
+	}
+	// One deadline for the whole destroy: the wait for the previous sync, the
+	// delete itself, and the wait for the row to go.
+	ctx, cancel := context.WithTimeout(ctx, deleteTimeout)
+	defer cancel()
+
+	if err := r.waitForDocumentSetSync(ctx, id, deleteTimeout); err != nil {
+		resp.Diagnostics.AddError("Failed to delete Onyx document set", err.Error())
 		return
 	}
 

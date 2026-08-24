@@ -73,13 +73,10 @@ resource "onyx_document_set" "test" {
 				),
 			},
 			{
-				ResourceName:      "onyx_document_set.test",
-				ImportState:       true,
-				ImportStateVerify: true,
-				// The background sync flips this on its own.
-				ImportStateVerifyIgnore: []string{"is_up_to_date"},
-			},
-			{
+				// This runs directly after the create on purpose. A new set is
+				// left syncing, and Onyx rejects a change to a syncing set, so
+				// the update has to wait for convergence before it writes.
+				//
 				// A full-replace update: rename, drop the description, make it
 				// private, and swap the pair it holds. Onyx rejects a set with
 				// no connectors at all, so the list is replaced, not emptied.
@@ -98,6 +95,13 @@ resource "onyx_document_set" "test" {
 					resource.TestCheckTypeSetElemAttrPair(
 						"onyx_document_set.test", "cc_pair_ids.*", "onyx_cc_pair.docset_second", "id"),
 				),
+			},
+			{
+				ResourceName:      "onyx_document_set.test",
+				ImportState:       true,
+				ImportStateVerify: true,
+				// The background sync flips this on its own.
+				ImportStateVerifyIgnore: []string{"is_up_to_date"},
 			},
 		},
 	})
