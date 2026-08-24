@@ -38,11 +38,11 @@ run "defaults_are_private_and_tls_only" {
 run "a_plain_redis_client_can_talk_to_it" {
   command = plan
 
-  # OSSCluster shards and needs a cluster-aware client. Onyx reaches Redis
-  # through redis-py as a Celery broker, which is not one.
+  # Both sharding policies fail with CROSSSLOT on Celery's first publish, so the
+  # non-sharded policy is the only one Onyx runs on unchanged.
   assert {
-    condition     = one(azurerm_managed_redis.this.default_database).clustering_policy == "EnterpriseCluster"
-    error_message = "The single-endpoint mode is what ordinary Redis clients can use."
+    condition     = one(azurerm_managed_redis.this.default_database).clustering_policy == "NoCluster"
+    error_message = "Onyx needs the non-sharded policy; a sharded one breaks Celery with CROSSSLOT."
   }
 }
 
@@ -223,6 +223,21 @@ run "rejects_an_unknown_clustering_policy" {
   }
 
   expect_failures = [var.clustering_policy]
+}
+
+# A caller who has set a hash-tagged kombu `global_keyprefix` can use the sharded
+# single-endpoint policy, so it stays selectable rather than being validated away.
+run "accepts_the_enterprise_clustering_policy" {
+  command = plan
+
+  variables {
+    clustering_policy = "EnterpriseCluster"
+  }
+
+  assert {
+    condition     = one(azurerm_managed_redis.this.default_database).clustering_policy == "EnterpriseCluster"
+    error_message = "EnterpriseCluster must stay selectable for callers that key-prefix around CROSSSLOT."
+  }
 }
 
 run "rejects_a_cache_nothing_can_reach" {

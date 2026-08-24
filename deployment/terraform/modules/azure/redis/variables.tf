@@ -43,17 +43,20 @@ variable "high_availability_enabled" {
   default     = false
 }
 
-# OSSCluster shards across nodes and needs a cluster-aware client. Onyx uses
-# Redis as a Celery broker through redis-py, which is not, so the single-endpoint
-# mode is the compatible default.
+# Onyx reaches Redis through redis-py, which is not cluster-aware, and Celery
+# batches several keys into one MULTI. Both sharding policies therefore fail with
+# CROSSSLOT on the first publish, so NoCluster is the only policy Onyx runs on
+# unchanged. NoCluster caps the cache at 25GB and cannot scale up without a
+# policy change. EnterpriseCluster works only if the caller also sets a kombu
+# `global_keyprefix` that carries a hash tag.
 variable "clustering_policy" {
   type        = string
-  description = "EnterpriseCluster presents one endpoint and works with ordinary Redis clients. OSSCluster shards and requires a cluster-aware client."
-  default     = "EnterpriseCluster"
+  description = "NoCluster does not shard, which is what Onyx needs. EnterpriseCluster presents one endpoint but still shards. OSSCluster shards and requires a cluster-aware client."
+  default     = "NoCluster"
 
   validation {
-    condition     = contains(["EnterpriseCluster", "OSSCluster"], var.clustering_policy)
-    error_message = "clustering_policy must be EnterpriseCluster or OSSCluster."
+    condition     = contains(["NoCluster", "EnterpriseCluster", "OSSCluster"], var.clustering_policy)
+    error_message = "clustering_policy must be NoCluster, EnterpriseCluster or OSSCluster."
   }
 }
 

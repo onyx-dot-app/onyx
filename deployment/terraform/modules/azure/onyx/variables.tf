@@ -409,7 +409,7 @@ variable "create_workload_service_account" {
 
 variable "enable_redis" {
   type        = bool
-  description = "Create an Azure Managed Redis cache. Off by default: Onyx cannot use one. Managed Redis is always clustered, and Celery's pidbox opens a MULTI spanning keys in several hash slots, which clustered Redis rejects with CROSSSLOT. The EnterpriseCluster policy presents a single endpoint but still shards, NoCluster returns NotImplemented, and only database 0 exists where Onyx wants 0, 14 and 15. Run Redis in the cluster instead."
+  description = "Create an Azure Managed Redis cache. Off by default because the in-cluster Redis needs no extra configuration, not because a managed one cannot work. Managed Redis serves only database 0, where Onyx defaults to 0, 14 and 15, so a caller who turns this on must also set REDIS_DB_NUMBER, REDIS_DB_NUMBER_CELERY and REDIS_DB_NUMBER_CELERY_RESULT_BACKEND to 0. The redis module defaults to the NoCluster policy for the same reason: both sharded policies break Celery with CROSSSLOT."
   default     = false
 }
 
