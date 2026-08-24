@@ -23,6 +23,20 @@ output "workload_identity_client_id" {
   value       = module.aks.workload_identity_client_id
 }
 
+# The client id annotates a service account; a role assignment needs the
+# principal id instead. Granting this identity access to anything the
+# composition does not itself create - a key vault, another storage account -
+# is impossible without it.
+output "workload_identity_principal_id" {
+  description = "Principal ID of the workload identity, for granting it roles on resources outside this module"
+  value       = module.aks.workload_identity_principal_id
+}
+
+output "cluster_identity_principal_id" {
+  description = "Principal ID of the cluster identity, for granting it roles on network resources this module does not own -- an ingress public IP, most often"
+  value       = module.aks.cluster_identity_principal_id
+}
+
 output "node_resource_group" {
   description = "Resource group AKS creates for the cluster's own infrastructure"
   value       = module.aks.node_resource_group
@@ -68,19 +82,19 @@ output "postgres_username" {
 
 output "redis_host" {
   description = "Hostname of the cache. Behind its private endpoint this resolves to a private address."
-  value       = module.redis.hostname
+  value       = one(module.redis[*].hostname)
 }
 
 output "redis_ssl_port" {
   description = "TLS port of the cache. The plaintext port is disabled."
-  value       = module.redis.ssl_port
+  value       = one(module.redis[*].ssl_port)
 }
 
 # Azure generates this rather than accepting one, so it comes out of the module
 # rather than going in.
 output "redis_primary_access_key" {
   description = "Generated primary access key for the cache"
-  value       = module.redis.primary_access_key
+  value       = one(module.redis[*].primary_access_key)
   sensitive   = true
 }
 

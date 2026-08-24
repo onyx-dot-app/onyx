@@ -28,8 +28,8 @@ run "medium_is_the_default_tier" {
   }
 
   assert {
-    condition     = local.redis_capacity == 4
-    error_message = "Standard C4 is 13 GB, matching the AWS composition's cache.m6g.xlarge."
+    condition     = local.redis_sku_name == "Balanced_B10"
+    error_message = "Balanced_B10 is about 10 GB, the closest Managed Redis shape to the AWS composition's cache.m6g.xlarge."
   }
 
   assert {
@@ -288,11 +288,11 @@ run "entra_only_needs_no_password" {
 
   variables {
     postgres_password                     = null
-    enable_entra_database_authentication   = true
-    entra_database_authentication_only     = true
-    tenant_id                              = "00000000-0000-0000-0000-000000000000"
-    database_administrator_object_id       = "11111111-1111-1111-1111-111111111111"
-    database_administrator_principal_name  = "onyx-db-admins"
+    enable_entra_database_authentication  = true
+    entra_database_authentication_only    = true
+    tenant_id                             = "00000000-0000-0000-0000-000000000000"
+    database_administrator_object_id      = "11111111-1111-1111-1111-111111111111"
+    database_administrator_principal_name = "onyx-db-admins"
   }
 
   assert {
@@ -309,6 +309,36 @@ run "rejects_a_deployment_with_no_database_password" {
   }
 
   expect_failures = [var.postgres_password]
+}
+
+run "an_empty_api_allowlist_stays_empty" {
+  command = plan
+
+  # Empty means no restriction. Appending the egress address to it would
+  # silently turn "open" into "only the cluster itself", which locks the
+  # operator out of their own API server.
+  variables {
+    api_server_authorized_ip_ranges      = []
+    allow_unrestricted_api_server_access = true
+  }
+
+  assert {
+    condition     = length(local.api_server_authorized_ip_ranges) == 0
+    error_message = "An empty allowlist must stay empty rather than becoming a one-entry allowlist."
+  }
+}
+
+run "the_cluster_trusts_its_own_egress_by_default" {
+  command = plan
+
+  assert {
+    condition     = var.trust_nat_gateway_ip_on_api_server
+    error_message = "A cluster whose API allowlist excludes its own egress cannot bootstrap its nodes, so this defaults on."
+  }
+
+  # That the caller's own range survives the concat is not checkable here: the
+  # egress address is unknown until apply, which makes the whole list unknown.
+  # The empty-stays-empty case above is the one a mocked plan can see.
 }
 
 run "rejects_an_open_control_plane" {
@@ -356,4 +386,34 @@ run "rejects_a_size_that_is_not_a_tier" {
   }
 
   expect_failures = [var.size]
+}
+
+run "no_managed_redis_by_default" {
+  command = plan
+
+  # Managed Redis cannot serve Celery: it is always clustered, and the pidbox
+  # opens a MULTI across hash slots. Provisioning one by default would bill for
+  # a cache that Onyx cannot talk to.
+  assert {
+    condition     = length(module.redis) == 0
+    error_message = "Managed Redis should be off unless asked for, because Onyx cannot use it."
+  }
+
+  assert {
+    condition     = output.redis_host == null
+    error_message = "With no cache there is no hostname to publish."
+  }
+}
+
+run "managed_redis_can_still_be_asked_for" {
+  command = plan
+
+  variables {
+    enable_redis = true
+  }
+
+  assert {
+    condition     = length(module.redis) == 1
+    error_message = "enable_redis should still create the cache for anyone who wants one."
+  }
 }
