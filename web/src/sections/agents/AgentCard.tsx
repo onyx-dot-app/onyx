@@ -5,10 +5,8 @@ import { MinimalAgent } from "@/lib/agents/types";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { Button } from "@opal/components";
 import { useAppRouter } from "@/hooks/appNavigation";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import { usePinnedAgents, useAgent } from "@/lib/agents/hooks";
 import { noProp } from "@/lib/utils";
-import { cn } from "@opal/utils";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { can } from "@/lib/permissions/resource-actions";
@@ -29,7 +27,7 @@ import { ShareAgentModal } from "@/lib/agents/components";
 import { AgentViewerModal } from "@/lib/agents/components";
 import { CardItemLayout } from "@/layouts/general-layouts";
 import { Content } from "@opal/layouts";
-import { Interactive } from "@opal/core";
+import { Hoverable, Interactive } from "@opal/core";
 import { Card } from "@/refresh-components/cards";
 
 export interface AgentCardProps {
@@ -59,6 +57,16 @@ export default function AgentCard({ agent }: AgentCardProps) {
     route({ agentId: agent.id });
   }, [pinned, togglePinnedAgent, agent, route]);
 
+  // Declared once because it renders both bare and wrapped, depending on `pinned`.
+  const pinButton = (
+    <Button
+      icon={pinned ? SvgPinned : SvgPin}
+      prominence="tertiary"
+      onClick={noProp(() => togglePinnedAgent(agent, !pinned))}
+      tooltip={pinned ? "Unpin from Sidebar" : "Pin to Sidebar"}
+    />
+  );
+
   return (
     <>
       <shareAgentModal.Provider>
@@ -74,107 +82,107 @@ export default function AgentCard({ agent }: AgentCardProps) {
         onClick={() => agentViewerModal.toggle(true)}
         group="group/AgentCard"
       >
-        <Card
-          padding={0}
-          gap={0}
-          height="full"
-          className="radial-00 hover:shadow-box-00"
-        >
-          <div className="flex self-stretch h-24">
-            <CardItemLayout
-              icon={(props) => <AgentAvatar agent={agent} {...props} />}
-              title={agent.name}
-              description={agent.description}
-              rightChildren={
-                <>
-                  {can(agent, "view_stats") &&
-                    businessTier && (
-                      // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
-                      <IconButton
-                        icon={SvgBarChart}
-                        tertiary
-                        onClick={noProp(() =>
-                          router.push(`/ee/agents/stats/${agent.id}` as Route)
-                        )}
-                        tooltip="View Agent Stats"
-                        className="hidden group-hover/AgentCard:flex"
-                      />
+        <Hoverable.Root group="AgentCard" height="full">
+          <Card
+            padding={0}
+            gap={0}
+            height="full"
+            className="radial-00 hover:shadow-box-00"
+          >
+            <div className="flex self-stretch h-24">
+              <CardItemLayout
+                icon={(props) => <AgentAvatar agent={agent} {...props} />}
+                title={agent.name}
+                description={agent.description}
+                rightChildren={
+                  <>
+                    {can(agent, "view_stats") && businessTier && (
+                      <Hoverable.Item group="AgentCard">
+                        <Button
+                          icon={SvgBarChart}
+                          prominence="tertiary"
+                          onClick={noProp(() =>
+                            router.push(`/ee/agents/stats/${agent.id}` as Route)
+                          )}
+                          tooltip="View Agent Stats"
+                        />
+                      </Hoverable.Item>
                     )}
-                  {can(agent, "edit") && (
-                    // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
-                    <IconButton
-                      icon={SvgEdit}
-                      tertiary
-                      onClick={noProp(() =>
-                        router.push(`/app/agents/edit/${agent.id}` as Route)
-                      )}
-                      tooltip="Edit Agent"
-                      className="hidden group-hover/AgentCard:flex"
-                    />
-                  )}
-                  {can(agent, "share") && (
-                    // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
-                    <IconButton
-                      icon={SvgShare}
-                      tertiary
-                      onClick={noProp(() => shareAgentModal.toggle(true))}
-                      tooltip="Share Agent"
-                      className="hidden group-hover/AgentCard:flex"
-                    />
-                  )}
-                  {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
-                  <IconButton
-                    icon={pinned ? SvgPinned : SvgPin}
-                    tertiary
-                    onClick={noProp(() => togglePinnedAgent(agent, !pinned))}
-                    tooltip={pinned ? "Unpin from Sidebar" : "Pin to Sidebar"}
-                    className={cn(
-                      !pinned && "hidden group-hover/AgentCard:flex"
+                    {can(agent, "edit") && (
+                      <Hoverable.Item group="AgentCard">
+                        <Button
+                          icon={SvgEdit}
+                          prominence="tertiary"
+                          onClick={noProp(() =>
+                            router.push(`/app/agents/edit/${agent.id}` as Route)
+                          )}
+                          tooltip="Edit Agent"
+                        />
+                      </Hoverable.Item>
                     )}
-                  />
-                </>
-              }
-            />
-          </div>
-
-          {/* Footer section - bg-background-tint-01 */}
-          <div className="bg-background-tint-01 p-1 flex flex-row items-end justify-between w-full">
-            {/* Left side - creator and actions */}
-            <div className="flex flex-col gap-1 py-1 px-2">
-              <Content
-                icon={SvgUser}
-                title={agent.owner?.email || "Onyx"}
-                sizePreset="secondary"
-                variant="body"
-                color="muted"
-              />
-              <Content
-                icon={SvgActions}
-                title={
-                  agent.tools.length > 0
-                    ? `${agent.tools.length} Action${
-                        agent.tools.length > 1 ? "s" : ""
-                      }`
-                    : "No Actions"
+                    {can(agent, "share") && (
+                      <Hoverable.Item group="AgentCard">
+                        <Button
+                          icon={SvgShare}
+                          prominence="tertiary"
+                          onClick={noProp(() => shareAgentModal.toggle(true))}
+                          tooltip="Share Agent"
+                        />
+                      </Hoverable.Item>
+                    )}
+                    {/* A pinned agent shows its pin at rest; an unpinned one
+                      only offers the action on hover. */}
+                    {pinned ? (
+                      pinButton
+                    ) : (
+                      <Hoverable.Item group="AgentCard">
+                        {pinButton}
+                      </Hoverable.Item>
+                    )}
+                  </>
                 }
-                sizePreset="secondary"
-                variant="body"
-                color="muted"
               />
             </div>
 
-            {/* Right side - Start Chat button */}
-            <div className="p-0.5">
-              <Button
-                prominence="tertiary"
-                rightIcon={SvgBubbleText}
-                onClick={noProp(handleStartChat)}
-              >
-                Start Chat
-              </Button>
+            {/* Footer section - bg-background-tint-01 */}
+            <div className="bg-background-tint-01 p-1 flex flex-row items-end justify-between w-full">
+              {/* Left side - creator and actions */}
+              <div className="flex flex-col gap-1 py-1 px-2">
+                <Content
+                  icon={SvgUser}
+                  title={agent.owner?.email || "Onyx"}
+                  sizePreset="secondary"
+                  variant="body"
+                  color="muted"
+                />
+                <Content
+                  icon={SvgActions}
+                  title={
+                    agent.tools.length > 0
+                      ? `${agent.tools.length} Action${
+                          agent.tools.length > 1 ? "s" : ""
+                        }`
+                      : "No Actions"
+                  }
+                  sizePreset="secondary"
+                  variant="body"
+                  color="muted"
+                />
+              </div>
+
+              {/* Right side - Start Chat button */}
+              <div className="p-0.5">
+                <Button
+                  prominence="tertiary"
+                  rightIcon={SvgBubbleText}
+                  onClick={noProp(handleStartChat)}
+                >
+                  Start Chat
+                </Button>
+              </div>
             </div>
-          </div>
-        </Card>
+          </Card>
+        </Hoverable.Root>
       </Interactive.Simple>
     </>
   );

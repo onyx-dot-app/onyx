@@ -1,10 +1,10 @@
 "use client";
 
 import React, { useState } from "react";
+import { Button } from "@opal/components";
 import { cn } from "@opal/utils";
 import { ActionStatus } from "@/lib/tools/types";
 import Text from "@/refresh-components/texts/Text";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
 import type { IconProps } from "@opal/types";
 import Truncated from "@/refresh-components/texts/Truncated";
@@ -116,16 +116,16 @@ function ActionCardHeader({
           )}
           {showRenameIcon && (
             <Hoverable.Item group="action-card" variant="appear-on-hover">
-              {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
-              <IconButton
-                icon={SvgEdit}
-                tooltip="Rename"
-                internal
-                tertiary
-                onClick={handleRenameClick}
-                className="h-6 w-6 opacity-70 hover:opacity-100"
-                aria-label={`Rename ${title}`}
-              />
+              <div className="opacity-70 hover:opacity-100">
+                <Button
+                  icon={SvgEdit}
+                  tooltip="Rename"
+                  prominence="tertiary"
+                  size="sm"
+                  onClick={handleRenameClick}
+                  aria-label={`Rename ${title}`}
+                />
+              </div>
             </Hoverable.Item>
           )}
         </div>
