@@ -63,7 +63,10 @@ Example usage:
 		Args:         cobra.NoArgs,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if opts.Attach != "" {
+			// Changed, not a non-empty value: an empty tag (e.g. an unset shell
+			// variable) must fail validation here, never fall through to the
+			// cut-and-push flow below.
+			if cmd.Flags().Changed("attach") {
 				// Attach mode is watch-only; every other flag configures the
 				// cut-and-push flow and signals a misunderstanding.
 				for _, name := range []string{"ref", "version", "dry-run", "yes", "verify", "no-watch"} {

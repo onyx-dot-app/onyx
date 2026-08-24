@@ -12,7 +12,7 @@ package cmd
 //	E4 counter tag only on origin            -> fetched, counter continues,
 //	                                            tag name returned               TestDeployCloud_fetchesRemoteOnlyCounterTags
 //	E5 --version with leading zeroes         -> rejected before any git work    TestDeployCloud_rejectsLeadingZeroVersion
-//	E6 --attach with malformed tag           -> rejected before any gh work     TestDeployCloud_attachRejectsMalformedTag
+//	E6 --attach with malformed or empty tag  -> rejected before any gh work     TestDeployCloud_attachRejectsMalformedTag
 //	E7 --attach with a cut-flow flag         -> rejected before any gh work     TestDeployCloud_attachRejectsCutFlowFlags
 
 import (
@@ -65,9 +65,9 @@ func TestDeployCloud_tagsOriginMainHead(t *testing.T) {
 }
 
 func TestDeployCloud_fetchesRemoteOnlyCounterTags(t *testing.T) {
-	// Precondition: a counter tag another developer pushed but this clone never
-	// fetched. Computing from local tags alone would mint a colliding
-	// v4.6.0-cloud.3.
+	// Precondition.
+	// A counter tag another developer pushed but this clone never fetched.
+	// Computing from local tags alone would mint a colliding v4.6.0-cloud.3.
 	repo := gittest.SetupReleaseBranchRepo(t)
 	gittest.Git(t, repo.Work, "tag", "v4.6.0-cloud.3", repo.PostCutSHA)
 	gittest.Git(t, repo.Work, "push", "--quiet", "origin", "v4.6.0-cloud.3")
@@ -89,8 +89,9 @@ func TestDeployCloud_fetchesRemoteOnlyCounterTags(t *testing.T) {
 }
 
 func TestDeployCloud_rejectsLeadingZeroVersion(t *testing.T) {
-	// Precondition: SemVer 2.0.0 item 2 forbids leading zeroes in numeric
-	// identifiers; such an override must never become a tag.
+	// Precondition.
+	// SemVer 2.0.0 item 2 forbids leading zeroes in numeric identifiers; such
+	// an override must never become a tag.
 	gittest.SetupReleaseBranchRepo(t)
 
 	// Under test and postcondition.
@@ -103,23 +104,26 @@ func TestDeployCloud_rejectsLeadingZeroVersion(t *testing.T) {
 }
 
 func TestDeployCloud_attachRejectsMalformedTag(t *testing.T) {
-	// Under test: leading zeroes are invalid per SemVer 2.0.0 item 2, so this
-	// must fail validation, not reach the gh-backed watcher.
-	cmd := NewDeployCloudCommand()
-	cmd.SetOut(io.Discard)
-	cmd.SetErr(io.Discard)
-	cmd.SetArgs([]string{"--attach", "v4.7.0-cloud.01"})
-	err := cmd.Execute()
-
-	// Postcondition.
-	if err == nil || !strings.Contains(err.Error(), "is not a cloud tag") {
-		t.Errorf("expected cloud tag validation error, got %v", err)
+	// Under test and postcondition.
+	// Leading zeroes are invalid per SemVer 2.0.0 item 2, and an explicit empty
+	// tag (e.g. an unset shell variable) must fail validation instead of
+	// falling through to the cut flow. Neither may reach the gh-backed watcher.
+	for _, tag := range []string{"v4.7.0-cloud.01", ""} {
+		cmd := NewDeployCloudCommand()
+		cmd.SetOut(io.Discard)
+		cmd.SetErr(io.Discard)
+		cmd.SetArgs([]string{"--attach", tag})
+		err := cmd.Execute()
+		if err == nil || !strings.Contains(err.Error(), "is not a cloud tag") {
+			t.Errorf("expected cloud tag validation error for %q, got %v", tag, err)
+		}
 	}
 }
 
 func TestDeployCloud_attachRejectsCutFlowFlags(t *testing.T) {
-	// Under test and postcondition: the malformed tag keeps a regressed clash
-	// check from reaching the gh-backed watcher.
+	// Under test and postcondition.
+	// The malformed tag keeps a regressed clash check from reaching the
+	// gh-backed watcher.
 	for _, flag := range []string{"--ref=abc", "--version=5.0.0", "--dry-run", "--yes", "--verify", "--no-watch"} {
 		cmd := NewDeployCloudCommand()
 		cmd.SetOut(io.Discard)
@@ -133,7 +137,8 @@ func TestDeployCloud_attachRejectsCutFlowFlags(t *testing.T) {
 }
 
 func TestDeployCloud_pushFailureRollsBackLocalTag(t *testing.T) {
-	// Precondition: origin rejects every push.
+	// Precondition.
+	// Origin rejects every push.
 	repo := gittest.SetupReleaseBranchRepo(t)
 	hook := filepath.Join(repo.Origin, "hooks", "pre-receive")
 	if err := os.WriteFile(hook, []byte("#!/bin/sh\nexit 1\n"), 0755); err != nil {
