@@ -19,7 +19,8 @@ infrastructure for Onyx:
 - `postgres`: a PostgreSQL Flexible Server on a delegated subnet, its private
   DNS zone, and five metric alerts
 - `redis`: an Azure Managed Redis behind a private endpoint, with four metric
-  alerts. Off by default, because Onyx cannot use it -- see below
+  alerts. Off by default, because the in-cluster Redis needs no extra
+  configuration -- see below
 - `storage`: a storage account and container for the Onyx file store, with
   versioning, lifecycle rules and network rules
 - `waf`: a regional Web Application Firewall policy for an Application Gateway
@@ -230,9 +231,8 @@ resource rather than a renamed one, and the differences show:
 - It speaks TLS on **10000**, where the retiring service used 6380. There is no
   plaintext port to disable and no minimum TLS version to set.
 - Eviction policies are spelled `VolatileLRU`, not `volatile-lru`.
-- Clustering is not really a choice. `OSSCluster` shards and needs a
-  cluster-aware client, which redis-py is not, so the module asks for
-  `EnterpriseCluster`.
+- Clustering is not really a choice for Onyx. Every instance shards unless the
+  policy says otherwise, so the module asks for `NoCluster`.
 - Alerts report under `Microsoft.Cache/redisEnterprise`, and the single-thread
   server load metric is replaced by processor time.
 

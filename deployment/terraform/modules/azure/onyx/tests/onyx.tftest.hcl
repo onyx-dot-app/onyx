@@ -391,12 +391,13 @@ run "rejects_a_size_that_is_not_a_tier" {
 run "no_managed_redis_by_default" {
   command = plan
 
-  # Managed Redis cannot serve Celery: it is always clustered, and the pidbox
-  # opens a MULTI across hash slots. Provisioning one by default would bill for
-  # a cache that Onyx cannot talk to.
+  # Onyx can run on Managed Redis, but only on database 0 and only on the
+  # NoCluster policy. The in-cluster Redis keeps databases 0, 14 and 15 and needs
+  # no extra configuration, so provisioning a cache nobody asked for would bill
+  # for something the deployment does not use.
   assert {
     condition     = length(module.redis) == 0
-    error_message = "Managed Redis should be off unless asked for, because Onyx cannot use it."
+    error_message = "Managed Redis should be off unless asked for; the in-cluster Redis is the default."
   }
 
   assert {
