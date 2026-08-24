@@ -70,6 +70,8 @@ function useFolderIcon(
         : SvgFolder;
 
   return () => (
+    /* A raw button rather than Opal's: the stacking below needs a className,
+       and Opal's `Button` accepts none by design. */
     <button
       type="button"
       data-testid="ProjectFolderIcon"
