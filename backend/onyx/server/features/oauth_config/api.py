@@ -63,7 +63,7 @@ class _OAuthConfigAttemptPayload(BaseModel):
     oauth_config_id: int
     return_path: SafeOAuthReturnPath
     configuration_fingerprint: OAuthConfigurationFingerprint
-    code_verifier: PKCECodeVerifier
+    code_verifier: PKCECodeVerifier | None = None
 
 
 _AUTHORIZATION_ATTEMPTS = AuthorizationAttemptStore(
@@ -82,6 +82,7 @@ def _oauth_config_fingerprint(oauth_config: OAuthConfig) -> str:
         {
             "redirect_uri": _oauth_callback_url(),
             "flow": OAuthTokenManager.flow_params(oauth_config).model_dump(mode="json"),
+            "supports_pkce": oauth_config.supports_pkce,
         },
     )
 
@@ -107,6 +108,7 @@ def _oauth_config_to_snapshot(
         authorization_url=oauth_config.authorization_url,
         token_url=oauth_config.token_url,
         scopes=oauth_config.scopes,
+        supports_pkce=oauth_config.supports_pkce,
         has_client_credentials=bool(
             oauth_config.client_id and oauth_config.client_secret
         ),
@@ -154,6 +156,7 @@ def create_oauth_config_endpoint(
             scopes=oauth_data.scopes,
             additional_params=oauth_data.additional_params,
             db_session=db_session,
+            supports_pkce=oauth_data.supports_pkce,
         )
         return _oauth_config_to_snapshot(oauth_config, db_session)
     except ValueError as e:
@@ -217,6 +220,7 @@ def update_oauth_config_endpoint(
             client_secret=oauth_data.client_secret,
             scopes=oauth_data.scopes,
             additional_params=oauth_data.additional_params,
+            supports_pkce=oauth_data.supports_pkce,
             clear_client_id=oauth_data.clear_client_id,
             clear_client_secret=oauth_data.clear_client_secret,
         )
@@ -271,7 +275,10 @@ def initiate_oauth_flow(
         )
 
     _validate_additional_authorization_params(oauth_config)
-    code_verifier, code_challenge = generate_pkce_pair()
+    code_verifier: str | None = None
+    code_challenge: str | None = None
+    if oauth_config.supports_pkce:
+        code_verifier, code_challenge = generate_pkce_pair()
     state = generate_authorization_state()
 
     authorization_url = OAuthTokenManager.build_authorization_url(

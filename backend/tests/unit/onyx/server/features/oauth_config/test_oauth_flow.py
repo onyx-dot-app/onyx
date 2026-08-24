@@ -31,6 +31,7 @@ def _oauth_config() -> OAuthConfig:
             client_secret="client-secret",
             scopes=["read", "write"],
             additional_params={"prompt": "consent"},
+            supports_pkce=False,
         ),
     )
 
@@ -90,6 +91,7 @@ def test_overlapping_attempts_use_their_own_server_side_pkce_verifiers(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     oauth_config, user, db_session, token_post = _configure_flow(monkeypatch)
+    oauth_config.supports_pkce = True
     first_state, first_query = _initiate(
         oauth_config=oauth_config, user=user, db_session=db_session
     )
@@ -127,6 +129,28 @@ def test_overlapping_attempts_use_their_own_server_side_pkce_verifiers(
         assert (
             compute_s256_challenge(body["code_verifier"]) == challenges_by_state[state]
         )
+
+
+def test_flow_omits_pkce_for_provider_without_support(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    oauth_config, user, db_session, token_post = _configure_flow(monkeypatch)
+    state, query = _initiate(
+        oauth_config=oauth_config, user=user, db_session=db_session
+    )
+
+    assert "code_challenge" not in query
+    assert "code_challenge_method" not in query
+
+    result = oauth_config_api.handle_oauth_callback(
+        code="authorization-code",
+        state=state,
+        db_session=db_session,
+        user=user,
+    )
+
+    assert result.redirect_url == "/app?action=17"
+    assert "code_verifier" not in token_post.call_args.kwargs["data"]
 
 
 def test_attempt_is_owner_bound_and_claimed_before_failed_exchange(
@@ -172,7 +196,7 @@ def test_callback_rejects_configuration_changed_after_start(
 ) -> None:
     oauth_config, user, db_session, token_post = _configure_flow(monkeypatch)
     state, _ = _initiate(oauth_config=oauth_config, user=user, db_session=db_session)
-    oauth_config.client_secret = "rotated-client-secret"  # ty: ignore[invalid-assignment]
+    oauth_config.supports_pkce = True
 
     with pytest.raises(
         OnyxError,

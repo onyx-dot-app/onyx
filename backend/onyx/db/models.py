@@ -4070,6 +4070,9 @@ class OAuthConfig(Base):
     additional_params: Mapped[dict[str, Any] | None] = mapped_column(
         postgresql.JSONB(), nullable=True
     )
+    supports_pkce: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
 
     # Metadata
     created_at: Mapped[datetime.datetime] = mapped_column(
