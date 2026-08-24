@@ -2,6 +2,7 @@ package lazyimports
 
 import (
 	"bufio"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -163,7 +164,9 @@ func findEagerImports(filePath string, patterns []modulePatterns) (EagerImportRe
 	}
 
 	if err := scanner.Err(); err != nil {
-		return result, err
+		// Scanner errors do not carry the path; add it so a multi-file run
+		// names the file that needs attention.
+		return result, fmt.Errorf("scanning %s: %w", filePath, err)
 	}
 
 	return result, nil
@@ -199,9 +202,8 @@ func isValidPythonFile(filePath string) bool {
 	return true
 }
 
-// collectPythonFiles collects Python files from a list of start points. A
-// start point that resolves to nothing is an error rather than a silent
-// empty scan.
+// collectPythonFiles collects Python files from a list of start points. A start
+// point that resolves to nothing is an error rather than a silent empty scan.
 func collectPythonFiles(startPoints []string, backendDir string) ([]string, error) {
 	var collected []string
 
