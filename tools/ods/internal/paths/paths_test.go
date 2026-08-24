@@ -27,6 +27,14 @@ func TestResolveInBackend(t *testing.T) {
 	outside := filepath.Join(root, "outside.py")
 	writeFile(t, inside)
 	writeFile(t, outside)
+	escapeLink := filepath.Join(backendDir, "link.py")
+	if err := os.Symlink(outside, escapeLink); err != nil {
+		t.Fatalf("Failed to create symlink: %v", err)
+	}
+	internalLink := filepath.Join(backendDir, "alias.py")
+	if err := os.Symlink(inside, internalLink); err != nil {
+		t.Fatalf("Failed to create symlink: %v", err)
+	}
 
 	tests := []struct {
 		name     string
@@ -40,6 +48,8 @@ func TestResolveInBackend(t *testing.T) {
 		{name: "backend directory itself", selector: backendDir, want: backendDir},
 		{name: "dotdot escape rejected despite existing target", selector: filepath.Join("..", "outside.py"), want: ""},
 		{name: "absolute outside rejected despite existing target", selector: outside, want: ""},
+		{name: "symlink escaping the backend rejected", selector: "link.py", want: ""},
+		{name: "symlink staying inside the backend accepted", selector: "alias.py", want: internalLink},
 		{name: "nonexistent", selector: filepath.Join("nope", "missing.py"), want: ""},
 	}
 

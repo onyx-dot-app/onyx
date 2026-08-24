@@ -202,14 +202,91 @@ value = getattr(obj, name)`,
 	}
 }
 
-func TestCheckContentFStringLimitation(t *testing.T) {
+func TestCheckContentFStringFields(t *testing.T) {
 	// Precondition.
-	// This pins the documented limitation: expressions inside f-string
-	// replacement fields read as string content and are not checked.
-	content := `label = f"{getattr(obj, name)}"`
+	// Replacement fields inside f-strings are code; the literal parts are not.
+	tests := []struct {
+		name    string
+		content string
+		want    []int
+	}{
+		{
+			name:    "call inside a replacement field",
+			content: `label = f"{getattr(obj, name)}"`,
+			want:    []int{1},
+		},
+		{
+			name:    "raw f-string replacement field",
+			content: `label = rf"{getattr(obj, name)}\d"`,
+			want:    []int{1},
+		},
+		{
+			name:    "literal text is not code",
+			content: `label = f"use getattr( wisely"`,
+			want:    nil,
+		},
+		{
+			name:    "escaped braces stay literal",
+			content: `label = f"{{getattr(obj, name)}}"`,
+			want:    nil,
+		},
+		{
+			name:    "nested string inside a field is not code",
+			content: `label = f"{d['getattr']}"`,
+			want:    nil,
+		},
+		{
+			name:    "nested string reusing the outer quote is not code",
+			content: `label = f"{d["getattr"]}"`,
+			want:    nil,
+		},
+		{
+			name: "format spec braces do not derail the scan",
+			content: `label = f"{value:{width}}"
+value = getattr(obj, name)`,
+			want: []int{2},
+		},
+		{
+			name: "field spanning lines in a triple-quoted f-string",
+			content: `label = f"""prefix {
+    getattr(obj, name)
+} suffix"""`,
+			want: []int{2},
+		},
+		{
+			name:    "plain string is still fully literal",
+			content: `label = "{getattr(obj, name)}"`,
+			want:    nil,
+		},
+	}
 
 	// Under test and postcondition.
-	assertLineNums(t, CheckContent(content, getattrRule), nil)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assertLineNums(t, CheckContent(tt.content, getattrRule), tt.want)
+		})
+	}
+}
+
+func TestCheckContentUnicodeIdentifierBoundaries(t *testing.T) {
+	// Precondition.
+	// A non-ASCII letter adjacent to the name makes it a longer identifier.
+	tests := []struct {
+		name    string
+		content string
+		want    []int
+	}{
+		{name: "unicode suffix", content: `getattrñ(obj, name)`, want: nil},
+		{name: "unicode prefix", content: `ñgetattr = 1`, want: nil},
+		{name: "plain reference still flagged", content: `value = getattr(obj, name)`, want: []int{1}},
+	}
+
+	// Under test and postcondition.
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assertLineNums(t, CheckContent(tt.content, getattrRule), tt.want)
+		})
+	}
 }
 
 func TestCheckContentIgnoreMarker(t *testing.T) {
@@ -414,9 +491,15 @@ func TestCollectPythonFilesResolvesSelectors(t *testing.T) {
 	writePythonFile(t, filepath.Join(backendDir, "pkg", "b.txt"))
 	writePythonFile(t, filepath.Join(backendDir, "top.py"))
 	writePythonFile(t, filepath.Join(backendDir, ".venv", "skip.py"))
+	outside := filepath.Join(t.TempDir(), "secret.py")
+	writePythonFile(t, outside)
+	if err := os.Symlink(outside, filepath.Join(backendDir, "pkg", "link.py")); err != nil {
+		t.Fatalf("Failed to create symlink: %v", err)
+	}
 
 	// Under test and postcondition.
-	// A backend-relative selector resolves via the backend fallback.
+	// A backend-relative selector resolves via the backend fallback; the
+	// symlinked entry is skipped.
 	files, err := collectPythonFiles([]string{"pkg"}, backendDir)
 	if err != nil {
 		t.Fatalf("collectPythonFiles failed: %v", err)
@@ -425,7 +508,8 @@ func TestCollectPythonFilesResolvesSelectors(t *testing.T) {
 		t.Fatalf("Expected only pkg/a.py, got %v", files)
 	}
 
-	// A whole-backend scan skips non-Python files and skip directories.
+	// A whole-backend scan skips non-Python files, skip directories, and
+	// symlinked entries.
 	files, err = collectPythonFiles([]string{backendDir}, backendDir)
 	if err != nil {
 		t.Fatalf("collectPythonFiles failed: %v", err)

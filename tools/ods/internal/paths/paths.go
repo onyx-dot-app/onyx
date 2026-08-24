@@ -115,6 +115,11 @@ func ResolveInBackend(p string, backendDir string) (string, os.FileInfo, error) 
 	if err != nil {
 		return "", nil, err
 	}
+	// Canonicalize the boundary so symlinked checkouts compare consistently.
+	backendCanonical := backendReal
+	if resolved, err := filepath.EvalSymlinks(backendReal); err == nil {
+		backendCanonical = resolved
+	}
 
 	candidates := []string{p}
 	if !filepath.IsAbs(p) {
@@ -127,7 +132,14 @@ func ResolveInBackend(p string, backendDir string) (string, os.FileInfo, error) 
 	}
 	for _, candidate := range candidates {
 		absPath, err := filepath.Abs(candidate)
-		if err != nil || !insideDir(backendReal, absPath) {
+		if err != nil {
+			continue
+		}
+		// The boundary check runs on the symlink-resolved path, so neither '..'
+		// segments nor symlinks can escape the backend directory. EvalSymlinks
+		// also fails for paths that do not exist.
+		realPath, err := filepath.EvalSymlinks(absPath)
+		if err != nil || !insideDir(backendCanonical, realPath) {
 			continue
 		}
 		if info, statErr := os.Stat(absPath); statErr == nil {

@@ -1,9 +1,8 @@
 // Package pycheck scans Python source for references to banned builtin names.
 // It is string- and comment-aware but deliberately not a parser: string literal
-// contents and comments never match, and a violation is suppressed by an 'ods:
-// ignore[rule]' marker in a comment on the same physical line. Known
-// limitation: expressions inside f-string replacement fields are treated as
-// string content and are not checked.
+// contents and comments never match, replacement fields inside f-strings are
+// scanned as code, and a violation is suppressed by an 'ods: ignore[rule]'
+// marker in a comment on the same physical line.
 package pycheck
 
 import (
@@ -11,6 +10,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
 )
@@ -22,15 +23,11 @@ type BannedName struct {
 	// Name is the banned identifier and also the rule name accepted by ignore
 	// markers, e.g. 'getattr' is suppressed by '# ods: ignore[getattr]'.
 	Name string
-	re   *regexp.Regexp
 }
 
 // NewBannedName creates a BannedName rule for the given identifier.
 func NewBannedName(name string) BannedName {
-	return BannedName{
-		Name: name,
-		re:   regexp.MustCompile(`\b` + regexp.QuoteMeta(name) + `\b`),
-	}
+	return BannedName{Name: name}
 }
 
 // ViolationLine is a single line that references the banned name.
@@ -50,6 +47,13 @@ type stringState struct {
 	open   bool
 	quote  byte
 	triple bool
+	// fstring marks an f-prefixed literal, whose replacement fields are code.
+	fstring bool
+	// braceDepth is the replacement-field brace nesting depth in an f-string.
+	braceDepth int
+	// fieldQuote is the quote byte of a nested one-line string literal inside a
+	// replacement field, or 0 when not inside one.
+	fieldQuote byte
 }
 
 // scannedLine is the comment/string-aware decomposition of one physical line.
@@ -73,11 +77,53 @@ func scanLine(line string, st stringState) (scannedLine, stringState) {
 	for i < len(line) {
 		if st.open {
 			c := line[i]
+			if st.fstring && st.fieldQuote != 0 {
+				// A nested string literal inside a replacement field.
+				if c == '\\' {
+					i += 2
+					continue
+				}
+				if c == st.fieldQuote {
+					st.fieldQuote = 0
+				}
+				i++
+				continue
+			}
+			if st.fstring && st.braceDepth > 0 {
+				// A replacement field: its text is code.
+				switch c {
+				case '\'', '"':
+					st.fieldQuote = c
+					code.WriteByte(' ')
+				case '{':
+					st.braceDepth++
+					code.WriteByte(' ')
+				case '}':
+					st.braceDepth--
+					code.WriteByte(' ')
+				default:
+					code.WriteByte(c)
+				}
+				i++
+				continue
+			}
 			if c == '\\' {
 				// A backslash always consumes the next character, so an escaped
 				// quote never closes the literal. This holds for raw strings
 				// too: a backslash still blocks the closing quote.
 				i += 2
+				continue
+			}
+			if st.fstring && (c == '{' || c == '}') {
+				if i+1 < len(line) && line[i+1] == c {
+					// An escaped literal brace.
+					i += 2
+					continue
+				}
+				if c == '{' {
+					st.braceDepth = 1
+				}
+				i++
 				continue
 			}
 			if c == st.quote {
@@ -101,14 +147,16 @@ func scanLine(line string, st stringState) (scannedLine, stringState) {
 			break
 		}
 		if c == '\'' || c == '"' {
-			// Replace the whole literal with one space so identifiers on either
-			// side cannot merge across it.
+			fstring := isFStringPrefix(code.String())
+			// Replace the literal with one space so identifiers on either side
+			// cannot merge across it; replacement fields of f-strings are fed
+			// back into the code text as they are scanned.
 			code.WriteByte(' ')
 			if i+2 < len(line) && line[i+1] == c && line[i+2] == c {
-				st = stringState{open: true, quote: c, triple: true}
+				st = stringState{open: true, quote: c, triple: true, fstring: fstring}
 				i += 3
 			} else {
-				st = stringState{open: true, quote: c, triple: false}
+				st = stringState{open: true, quote: c, triple: false, fstring: fstring}
 				i++
 			}
 			continue
@@ -123,7 +171,43 @@ func scanLine(line string, st stringState) (scannedLine, stringState) {
 		// so it cannot poison the rest of the file.
 		st = stringState{}
 	}
+	// A nested field string cannot span physical lines; drop the marker so a
+	// malformed line cannot poison the rest of the file.
+	st.fieldQuote = 0
 	return scannedLine{code: code.String(), comment: comment, endsInString: st.open}, st
+}
+
+// isFStringPrefix reports whether the code text ends in a string prefix that
+// contains 'f', marking the literal that follows as an f-string.
+func isFStringPrefix(codeBefore string) bool {
+	j := len(codeBefore)
+	for j > 0 {
+		c := codeBefore[j-1]
+		if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') {
+			j--
+			continue
+		}
+		break
+	}
+	prefix := codeBefore[j:]
+	if len(prefix) == 0 || len(prefix) > 2 {
+		return false
+	}
+	if j > 0 && (codeBefore[j-1] == '_' || (codeBefore[j-1] >= '0' && codeBefore[j-1] <= '9')) {
+		// The letters are the tail of a longer identifier, not a prefix.
+		return false
+	}
+	hasF := false
+	for k := 0; k < len(prefix); k++ {
+		switch prefix[k] {
+		case 'f', 'F':
+			hasF = true
+		case 'r', 'R', 'b', 'B', 'u', 'U':
+		default:
+			return false
+		}
+	}
+	return hasF
 }
 
 // ignoreMarkerPattern matches 'ods: ignore[rule1, rule2]' inside a comment.
@@ -141,11 +225,34 @@ func suppressed(comment string, rule string) bool {
 	return false
 }
 
+// isIdentifierRune reports whether r can appear in a Python identifier.
+func isIdentifierRune(r rune) bool {
+	return r == '_' || unicode.IsLetter(r) || unicode.IsDigit(r)
+}
+
 // matchesCode reports whether the scanned code text references the banned name,
-// excluding attribute access like 'obj.getattr'.
+// excluding attribute access like 'obj.getattr' and longer identifiers, with
+// Unicode-aware identifier boundaries.
 func (r BannedName) matchesCode(code string) bool {
-	for _, loc := range r.re.FindAllStringIndex(code, -1) {
-		j := loc[0] - 1
+	for start := 0; ; {
+		idx := strings.Index(code[start:], r.Name)
+		if idx < 0 {
+			return false
+		}
+		begin := start + idx
+		end := begin + len(r.Name)
+		start = begin + 1
+		if begin > 0 {
+			if before, _ := utf8.DecodeLastRuneInString(code[:begin]); isIdentifierRune(before) {
+				continue
+			}
+		}
+		if end < len(code) {
+			if after, _ := utf8.DecodeRuneInString(code[end:]); isIdentifierRune(after) {
+				continue
+			}
+		}
+		j := begin - 1
 		for j >= 0 && (code[j] == ' ' || code[j] == '\t') {
 			j--
 		}
@@ -154,7 +261,6 @@ func (r BannedName) matchesCode(code string) bool {
 		}
 		return true
 	}
-	return false
 }
 
 // CheckContent scans Python source text and returns its violation lines.
@@ -210,7 +316,9 @@ func collectPythonFiles(startPoints []string, backendDir string) ([]string, erro
 					// Fail closed: an unreadable file must not pass the check.
 					return err
 				}
-				if !info.IsDir() && isCheckablePythonFile(path) {
+				// Symlinked entries are skipped so a link cannot reach a file
+				// outside the backend tree.
+				if !info.IsDir() && info.Mode()&os.ModeSymlink == 0 && isCheckablePythonFile(path) {
 					collected = append(collected, path)
 				}
 				return nil
