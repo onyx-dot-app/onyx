@@ -234,7 +234,7 @@ Resources:
       Type: application
       Scheme: internet-facing
       Subnets: !Ref SubnetIDs
-      SecurityGroups:
+      SecurityGroups: 
         - !Ref SecurityGroup
 
   LoadBalancerListener:
