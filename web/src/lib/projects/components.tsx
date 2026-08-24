@@ -318,6 +318,72 @@ function ProjectPopoverRow({ match, onNavigate }: ProjectPopoverRowProps) {
 }
 
 /**
+ * What the folded sidebar's Projects popover holds: the search field, the New
+ * Project button, and every project with its chats.
+ *
+ * Its own component so the search term is its own state. Radix unmounts the
+ * popover's content on close, so the term goes with it and every opening starts
+ * from a clean slate, without anything having to remember to clear it.
+ */
+interface FoldedProjectsPopoverContentProps {
+  onNavigate: () => void;
+  onNewProject: () => void;
+}
+function FoldedProjectsPopoverContent({
+  onNavigate,
+  onNewProject,
+}: FoldedProjectsPopoverContentProps) {
+  const [query, setQuery] = useState("");
+  const matches = useProjectSearch(query);
+  const focusOnMount = useFocusOnMount<HTMLInputElement>();
+
+  return (
+    <>
+      <Section flexDirection="row" padding={0} gap={0}>
+        <InputTypeIn
+          data-testid="ProjectsPopover/search"
+          searchIcon
+          clearButton
+          ref={focusOnMount}
+          variant="internal"
+          placeholder="Search projects..."
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          rightChildren={
+            <Button
+              data-testid="ProjectsPopover/new-project"
+              icon={SvgFolderPlus}
+              prominence="internal"
+              size="sm"
+              tooltip="New Project"
+              onClick={noProp(onNewProject)}
+            />
+          }
+        />
+      </Section>
+
+      <PopoverMenu>
+        {matches.length === 0
+          ? [
+              <EmptyMessageCard
+                key="empty"
+                title="No projects found"
+                padding={2}
+              />,
+            ]
+          : matches.map((match) => (
+              <ProjectPopoverRow
+                key={match.project.id}
+                match={match}
+                onNavigate={onNavigate}
+              />
+            ))}
+      </PopoverMenu>
+    </>
+  );
+}
+
+/**
  * The folded sidebar's Projects entry.
  *
  * Folded, the sidebar has no room for the projects tree, and a project's chats
@@ -341,9 +407,6 @@ export function FoldedProjectsPopover({
   onOpenChange,
 }: FoldedProjectsPopoverProps) {
   const appFocus = useAppFocus();
-  const [query, setQuery] = useState("");
-  const matches = useProjectSearch(query);
-  const focusOnMount = useFocusOnMount<HTMLInputElement>();
   const createProjectModal = useCreateModal();
 
   // Any navigation means the popover has done its job. Folding a project's
@@ -384,46 +447,10 @@ export function FoldedProjectsPopover({
           align="start"
           width="lg"
         >
-          <Section flexDirection="row" padding={0} gap={0}>
-            <InputTypeIn
-              data-testid="ProjectsPopover/search"
-              searchIcon
-              clearButton
-              ref={focusOnMount}
-              variant="internal"
-              placeholder="Search projects..."
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              rightChildren={
-                <Button
-                  data-testid="ProjectsPopover/new-project"
-                  icon={SvgFolderPlus}
-                  prominence="internal"
-                  size="sm"
-                  tooltip="New Project"
-                  onClick={noProp(handleNewProject)}
-                />
-              }
-            />
-          </Section>
-
-          <PopoverMenu>
-            {matches.length === 0
-              ? [
-                  <EmptyMessageCard
-                    key="empty"
-                    title="No projects found"
-                    padding={2}
-                  />,
-                ]
-              : matches.map((match) => (
-                  <ProjectPopoverRow
-                    key={match.project.id}
-                    match={match}
-                    onNavigate={() => onOpenChange(false)}
-                  />
-                ))}
-          </PopoverMenu>
+          <FoldedProjectsPopoverContent
+            onNavigate={() => onOpenChange(false)}
+            onNewProject={handleNewProject}
+          />
         </Popover.Content>
       </Popover>
     </>
