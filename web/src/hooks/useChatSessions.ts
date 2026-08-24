@@ -14,7 +14,6 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import { MinimalAgent } from "@/lib/agents/types";
 import useAppFocus from "./useAppFocus";
 import { useAgents } from "@/lib/agents/hooks";
-import { useActiveProject } from "@/lib/projects/hooks";
 import { DEFAULT_AGENT_ID } from "@/lib/constants";
 
 const PAGE_SIZE = 50;
@@ -176,7 +175,6 @@ export default function useChatSessions(): UseChatSessionsOutput {
   );
 
   const appFocus = useAppFocus();
-  const activeProject = useActiveProject();
   const pendingSessions = usePendingSessions();
 
   // Flatten all pages into a single session list
@@ -243,23 +241,10 @@ export default function useChatSessions(): UseChatSessionsOutput {
   }, [allFetchedSessions, pendingSessions]);
 
   const currentChatSessionId = appFocus.isChat() ? appFocus.getId() : null;
-
-  // `chatSessions` is the Recents feed, which excludes project chats on purpose
-  // (`only_non_project_chats` defaults to true on the server). Fall back to the
-  // owning project's session list so a project chat still resolves — otherwise
-  // the header actions, document title, and agent lookup all see `null`.
-  const currentChatSession = useMemo(() => {
-    if (!currentChatSessionId) return null;
-    return (
-      chatSessions.find(
-        (chatSession) => chatSession.id === currentChatSessionId
-      ) ??
-      activeProject?.chat_sessions.find(
-        (chatSession) => chatSession.id === currentChatSessionId
-      ) ??
-      null
-    );
-  }, [chatSessions, activeProject, currentChatSessionId]);
+  const currentChatSession =
+    chatSessions.find(
+      (chatSession) => chatSession.id === currentChatSessionId
+    ) ?? null;
 
   const agentForCurrentChatSession =
     useFindAgentForCurrentChatSession(currentChatSession);
