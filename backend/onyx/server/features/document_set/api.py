@@ -239,12 +239,22 @@ def get_document_set(
     The listing is scoped to the caller, so a client managing a single set had
     to fetch every set and filter. This returns the same shape as the listing.
     """
-    document_set = get_document_set_by_id_for_user(
+    # The two scopes are not nested: the readable filter needs membership or a
+    # public set, while the editable one matches a managed scope and a creator's
+    # groupless set. The listing unions them, so this does too.
+    readable = get_document_set_by_id_for_user(
         db_session=db_session,
         document_set_id=document_set_id,
         user=user,
         get_editable=False,
     )
+    editable = get_document_set_by_id_for_user(
+        db_session=db_session,
+        document_set_id=document_set_id,
+        user=user,
+        get_editable=True,
+    )
+    document_set = readable or editable
     if document_set is None:
         raise OnyxError(
             OnyxErrorCode.DOCUMENT_SET_NOT_FOUND,
@@ -255,15 +265,7 @@ def get_document_set(
         has_permission(user, Permission.MANAGE_DOCUMENT_SETS)
         is PermissionAuthority.GLOBAL
     )
-    is_editable = is_document_sets_admin or (
-        get_document_set_by_id_for_user(
-            db_session=db_session,
-            document_set_id=document_set_id,
-            user=user,
-            get_editable=True,
-        )
-        is not None
-    )
+    is_editable = is_document_sets_admin or editable is not None
     return DocumentSetSummary.from_model(
         document_set,
         permissions=document_set_permissions(

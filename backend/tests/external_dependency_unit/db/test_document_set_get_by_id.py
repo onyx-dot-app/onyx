@@ -11,14 +11,19 @@ import pytest
 from sqlalchemy.orm import Session
 
 from onyx.db.models import DocumentSet as DocumentSetDBModel
+from onyx.db.models import User
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.document_set.api import get_document_set
 from tests.external_dependency_unit.conftest import create_test_user
 
 
-def _document_set(db_session: Session, *, is_public: bool) -> int:
+def _document_set(
+    db_session: Session, *, is_public: bool, owner: User | None = None
+) -> int:
     document_set = DocumentSetDBModel(
-        name=f"ds-{uuid4().hex[:12]}", is_public=is_public
+        name=f"ds-{uuid4().hex[:12]}",
+        is_public=is_public,
+        user_id=owner.id if owner else None,
     )
     db_session.add(document_set)
     db_session.commit()
@@ -56,3 +61,17 @@ def test_a_private_set_stays_hidden_from_a_basic_user(db_session: Session) -> No
         get_document_set(
             document_set_id=document_set_id, user=basic, db_session=db_session
         )
+
+
+def test_a_creators_groupless_set_is_found(db_session: Session) -> None:
+    # The readable filter needs a public set or group membership, so this set
+    # is reachable only through the editable scope. Reading with one scope
+    # would answer not-found for a set its own creator manages.
+    creator = create_test_user(db_session, "docset-get-creator")
+    document_set_id = _document_set(db_session, is_public=False, owner=creator)
+
+    read = get_document_set(
+        document_set_id=document_set_id, user=creator, db_session=db_session
+    )
+
+    assert read.id == document_set_id
