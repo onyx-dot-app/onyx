@@ -219,16 +219,10 @@ def _resolve_embedding_api_key(
     if stored is not None:
         # Compare against this key's own mask rather than the general shape
         # test, so a real key that happens to look like a placeholder is still
-        # stored instead of being swallowed.
-        if incoming != mask_string(stored):
-            return incoming
-        if is_masked_credential(stored):
-            raise OnyxError(
-                OnyxErrorCode.INVALID_INPUT,
-                "The stored api_key is a masked placeholder left by an earlier "
-                "write, so there is nothing to restore — provide the actual key.",
-            )
-        return stored
+        # stored instead of being swallowed. Whatever is stored is preserved:
+        # the stored value cannot be told apart from a real key of the same
+        # shape, so refusing it would break providers holding a valid one.
+        return stored if incoming == mask_string(stored) else incoming
 
     if is_masked_credential(incoming):
         raise OnyxError(
