@@ -222,6 +222,10 @@ def _resolve_embedding_api_key(
         # stored instead of being swallowed. Whatever is stored is preserved:
         # the stored value cannot be told apart from a real key of the same
         # shape, so refusing it would break providers holding a valid one.
+        #
+        # A caller rotating to a key that equals this mask exactly is read as an
+        # unchanged echo, and keeps the old key. Only a changed-flag on the
+        # request can separate the two, as LLMProviderUpsertRequest does.
         return stored if incoming == mask_string(stored) else incoming
 
     if is_masked_credential(incoming):
