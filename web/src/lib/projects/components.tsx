@@ -14,11 +14,7 @@ import {
   useCreateModal,
 } from "@opal/components";
 import useFocusOnMount from "@opal/hooks/useFocusOnMount";
-import {
-  ConfirmationModalLayout,
-  Section,
-  useSidebarState,
-} from "@opal/layouts";
+import { ConfirmationModalLayout, Section } from "@opal/layouts";
 import { cn } from "@opal/utils";
 import type { IconFunctionComponent } from "@opal/types";
 import {
