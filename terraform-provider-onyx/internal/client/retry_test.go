@@ -57,6 +57,31 @@ func TestNeverReplaysPostOnServerError(t *testing.T) {
 	}
 }
 
+// The cc-pair create is a PUT that creates, so it must be excluded from the
+// "any non-POST is safe to replay" rule: a replay answers "already
+// associated" instead of returning the object the first attempt made.
+func TestNeverReplaysCreatingPut(t *testing.T) {
+	c, attempts := newCountingServer(t, http.StatusBadGateway, http.StatusOK)
+	_, err := c.CreateCCPair(context.Background(), 3, 5, CCPairCreate{Name: "docs", AccessType: "public"})
+	if err == nil {
+		t.Fatal("a failed creating PUT must surface, not be replayed")
+	}
+	if attempts.Load() != 1 {
+		t.Errorf("got %d attempts, want 1", attempts.Load())
+	}
+}
+
+// Plain updates stay replayable: they are idempotent.
+func TestRetriesNonCreatingPut(t *testing.T) {
+	c, attempts := newCountingServer(t, http.StatusBadGateway, http.StatusOK)
+	if err := c.SetCCPairStatus(context.Background(), 77, CCPairStatusActive); err != nil {
+		t.Fatalf("an idempotent PUT should survive transient 5xx: %v", err)
+	}
+	if attempts.Load() != 2 {
+		t.Errorf("got %d attempts, want 2", attempts.Load())
+	}
+}
+
 func TestRetriesRateLimitsOnWrites(t *testing.T) {
 	c, attempts := newCountingServer(t, http.StatusTooManyRequests, http.StatusOK)
 	// A 429 is rejected before the handler runs, so replaying is safe.
