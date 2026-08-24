@@ -325,6 +325,20 @@ Check that specified modules are only lazily imported (used for keeping backend 
 ods check-lazy-imports
 ```
 
+### `check-getattr` - Forbids the getattr Builtin
+
+Checks that backend Python code does not reference the `getattr` builtin, which
+hides attribute access from the type checker. Genuinely dynamic lookups are
+suppressed inline with `# ods: ignore[getattr]` plus a brief justification.
+String literal contents and comments never match; replacement fields inside
+f-strings are scanned as code.
+
+```shell
+ods check-getattr [paths...]
+```
+
+`--annotate` appends the ignore marker to every violating line (baseline maintenance).
+
 ### `fmt` - Format Sources
 
 Also available as `ods format`.

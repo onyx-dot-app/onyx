@@ -12,6 +12,10 @@ tests. Additive to the root `AGENTS.md`.
 - OpenSearch is the current document index backend for search and indexing. Some legacy modules,
   Celery task names, and migration helpers still mention Vespa; treat those as compatibility or
   migration artifacts unless the active `DocumentIndex` factory/config path explicitly uses them.
+- Do not use `getattr`: it hides attribute access from the type checker. Use
+  plain attribute access when the name is statically known. A genuinely dynamic
+  lookup needs an `# ods: ignore[getattr]` comment with a brief justification
+  (checked by `ods check-getattr`).
 
 ## Background Workers (Celery)
 
