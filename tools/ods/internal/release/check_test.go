@@ -6,7 +6,7 @@ package release
 //
 // Cloud tag states:
 //
-//	K1 tag just cut by `ods release cloud`   -> valid                          TestCheckTag_freshCloudTagPasses
+//	K1 tag just cut by `ods deploy cloud`   -> valid                          TestCheckTag_freshCloudTagPasses
 //	K2 base disagrees with release branches  -> error naming both bases        TestCheckTag_wrongCloudBaseErrors
 //	K3 counter skipped (cloud.1 without .0)  -> out-of-sequence error          TestCheckTag_skippedCounterErrors
 //	K4 counter superseded by a newer tag     -> out-of-sequence error          TestCheckTag_supersededCounterErrors
@@ -45,7 +45,7 @@ import (
 )
 
 func TestCheckTag_freshCloudTagPasses(t *testing.T) {
-	// Precondition: the tag `ods release cloud` would cut for the post-cut
+	// Precondition: the tag `ods deploy cloud` would cut for the post-cut
 	// commit, pushed to origin.
 	repo := gittest.SetupReleaseBranchRepo(t)
 	gittest.Git(t, repo.Work, "tag", "v4.6.0-cloud.0", repo.PostCutSHA)

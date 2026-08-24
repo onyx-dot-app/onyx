@@ -11,19 +11,20 @@ import (
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/release"
 )
 
-// ReleaseCloudOptions holds options for the release cloud command.
-type ReleaseCloudOptions struct {
+// DeployCloudOptions holds options for the deploy cloud command.
+type DeployCloudOptions struct {
 	Ref     string
 	Version string
 	DryRun  bool
 	Yes     bool
 	Verify  bool
 	NoWatch bool
+	Attach  string
 }
 
-// NewReleaseCloudCommand creates the `ods release cloud` command.
-func NewReleaseCloudCommand() *cobra.Command {
-	opts := &ReleaseCloudOptions{}
+// NewDeployCloudCommand creates the `ods deploy cloud` command.
+func NewDeployCloudCommand() *cobra.Command {
+	opts := &DeployCloudOptions{}
 
 	cmd := &cobra.Command{
 		Use:   "cloud",
@@ -42,22 +43,43 @@ Pushing the tag triggers deployment.yml, which builds the cloud images.
 After the push, the command prints the URL of that deployment run, waits for
 it to finish, and then prints the URL of the version bump PR that the infra
 repo opens for the new tag. All of this is read-only polling through the gh
-CLI: Ctrl-C is safe at any point (the tag is already pushed). Pass --no-watch
-to print the run URL and exit immediately.
+CLI: Ctrl-C is safe at any point (the tag is already pushed), and
+--attach <tag> re-attaches later. Pass --no-watch to print the run URL and
+exit immediately.
+
+With --attach, nothing is cut or pushed: the command only watches the given
+tag's existing pipeline. This also works for releases that already finished.
 
 To validate an existing tag instead of cutting one, see "ods release --check".
 
 Example usage:
 
-    $ ods release cloud
-    $ ods release cloud --dry-run
-    $ ods release cloud --ref 1a2b3c4d
-    $ ods release cloud --version 5.0.0
-    $ ods release cloud --no-watch`,
+    $ ods deploy cloud
+    $ ods deploy cloud --dry-run
+    $ ods deploy cloud --ref 1a2b3c4d
+    $ ods deploy cloud --version 5.0.0
+    $ ods deploy cloud --no-watch
+    $ ods deploy cloud --attach v4.7.0-cloud.3`,
 		Args:         cobra.NoArgs,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			tag, err := releaseCloud(opts)
+			// Changed, not a non-empty value: an empty tag (e.g. an unset shell
+			// variable) must fail validation here, never fall through to the
+			// cut-and-push flow below.
+			if cmd.Flags().Changed("attach") {
+				// Attach mode is watch-only; every other flag configures the
+				// cut-and-push flow and signals a misunderstanding.
+				for _, name := range []string{"ref", "version", "dry-run", "yes", "verify", "no-watch"} {
+					if cmd.Flags().Changed(name) {
+						return fmt.Errorf("--attach cannot be combined with --%s", name)
+					}
+				}
+				if !release.IsCloudTag(opts.Attach) {
+					return fmt.Errorf("%q is not a cloud tag (expected vX.Y.Z-cloud.N)", opts.Attach)
+				}
+				return watchCloudRelease(opts.Attach)
+			}
+			tag, err := deployCloud(opts)
 			if err != nil || tag == "" {
 				return err
 			}
@@ -65,7 +87,7 @@ Example usage:
 				announceCloudRun(tag)
 				return nil
 			}
-			log.Info("Watching the release; Ctrl-C is safe, the tag is already pushed.")
+			log.Infof("Watching the release; Ctrl-C is safe, re-attach with: ods deploy cloud --attach %s", tag)
 			return watchCloudRelease(tag)
 		},
 	}
@@ -76,14 +98,15 @@ Example usage:
 	cmd.Flags().BoolVar(&opts.Yes, "yes", false, "Skip the confirmation prompt")
 	cmd.Flags().BoolVar(&opts.Verify, "verify", false, "Run pre-push hooks when pushing the tag; they are skipped by default")
 	cmd.Flags().BoolVar(&opts.NoWatch, "no-watch", false, "Print the deployment run URL and exit instead of watching for the bump PR")
+	cmd.Flags().StringVar(&opts.Attach, "attach", "", "Watch an already-pushed cloud tag's build and bump PR; cuts nothing")
 
 	return cmd
 }
 
-// releaseCloud computes and pushes the next cloud tag. It returns the pushed
+// deployCloud computes and pushes the next cloud tag. It returns the pushed
 // tag name, or an empty string when nothing was pushed (dry run, declined
 // prompt, or any failure).
-func releaseCloud(opts *ReleaseCloudOptions) (string, error) {
+func deployCloud(opts *DeployCloudOptions) (string, error) {
 	if opts.Version != "" && !release.IsBareVersion(opts.Version) {
 		return "", fmt.Errorf("--version must be X.Y.Z with no leading v, got %q", opts.Version)
 	}
