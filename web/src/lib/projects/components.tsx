@@ -330,11 +330,21 @@ function ProjectPopoverRow({ match, onNavigate }: ProjectPopoverRowProps) {
  *
  * Resolves the sidebar's fold state itself and renders nothing when unfolded, so
  * callers can mount it unconditionally.
+ *
+ * The caller owns whether it is open. Closing happens four ways — the trigger,
+ * navigating, creating a project, picking a row — and while this component held
+ * that state each of them had to remember to reset the search. Now they all say
+ * the same thing to the caller, and the reset hangs off the result.
  */
-export function FoldedProjectsPopover() {
-  const { folded } = useSidebarState();
+export interface FoldedProjectsPopoverProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+export function FoldedProjectsPopover({
+  open,
+  onOpenChange,
+}: FoldedProjectsPopoverProps) {
   const appFocus = useAppFocus();
-  const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const matches = useProjectSearch(query);
   const focusOnMount = useFocusOnMount<HTMLInputElement>();
@@ -342,21 +352,13 @@ export function FoldedProjectsPopover() {
 
   // Any navigation means the popover has done its job. Folding a project's
   // chats never touches the URL, so the folder icon leaves the popover open.
-  useEffect(() => setOpen(false), [appFocus]);
-
-  function handleOpenChange(nextOpen: boolean) {
-    setOpen(nextOpen);
-    // Every opening starts from a clean slate.
-    if (!nextOpen) setQuery("");
-  }
+  useEffect(() => onOpenChange(false), [appFocus]);
 
   function handleNewProject() {
     // The modal traps focus, so the popover has to go first.
-    setOpen(false);
+    onOpenChange(false);
     createProjectModal.toggle(true);
   }
-
-  if (!folded) return null;
 
   return (
     <>
@@ -366,7 +368,7 @@ export function FoldedProjectsPopover() {
         <CreateProjectModal />
       </createProjectModal.Provider>
 
-      <Popover open={open} onOpenChange={handleOpenChange}>
+      <Popover open={open} onOpenChange={onOpenChange}>
         <Popover.Trigger asChild>
           <div data-testid="AppSidebar/projects" tabIndex={-1}>
             <SidebarTab
@@ -422,7 +424,7 @@ export function FoldedProjectsPopover() {
                   <ProjectPopoverRow
                     key={match.project.id}
                     match={match}
-                    onNavigate={() => setOpen(false)}
+                    onNavigate={() => onOpenChange(false)}
                   />
                 ))}
           </PopoverMenu>

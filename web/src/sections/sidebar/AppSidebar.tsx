@@ -491,6 +491,7 @@ export default function AppSidebar() {
   const { hasAdminAccess, adminCapabilities, user } = useUser();
   const activeSidebarTab = useAppFocus();
   const createProjectModal = useCreateModal();
+  const [projectsPopoverOpen, setProjectsPopoverOpen] = useState(false);
   const showLogoWhenFolded = useShowLogoWhenFolded();
   const defaultAppMode =
     (user?.preferences?.default_app_mode?.toLowerCase() as "chat" | "search") ??
@@ -630,7 +631,12 @@ export default function AppSidebar() {
             </div>
           )}
           {folded && moreAgentsButton}
-          <FoldedProjectsPopover />
+          {folded && (
+            <FoldedProjectsPopover
+              open={projectsPopoverOpen}
+              onOpenChange={setProjectsPopoverOpen}
+            />
+          )}
         </SidebarLayouts.Header>
 
         <SidebarLayouts.Body scrollKey="app-sidebar">
