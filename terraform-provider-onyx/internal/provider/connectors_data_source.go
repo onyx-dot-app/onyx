@@ -35,6 +35,7 @@ type connectorSummaryModel struct {
 	ConnectorSpecificConfig jsontypes.Normalized `tfsdk:"connector_specific_config"`
 	RefreshFreq             types.Int64          `tfsdk:"refresh_freq"`
 	PruneFreq               types.Int64          `tfsdk:"prune_freq"`
+	IndexingStart           types.String         `tfsdk:"indexing_start"`
 	CredentialIDs           types.List           `tfsdk:"credential_ids"`
 }
 
@@ -46,6 +47,7 @@ var connectorSummaryAttrTypes = map[string]attr.Type{
 	"connector_specific_config": jsontypes.NormalizedType{},
 	"refresh_freq":              types.Int64Type,
 	"prune_freq":                types.Int64Type,
+	"indexing_start":            types.StringType,
 	"credential_ids":            types.ListType{ElemType: types.Int64Type},
 }
 
@@ -73,8 +75,9 @@ func (d *connectorsDataSource) Schema(_ context.Context, _ datasource.SchemaRequ
 							Computed:   true,
 							CustomType: jsontypes.NormalizedType{},
 						},
-						"refresh_freq": schema.Int64Attribute{Computed: true},
-						"prune_freq":   schema.Int64Attribute{Computed: true},
+						"refresh_freq":   schema.Int64Attribute{Computed: true},
+						"prune_freq":     schema.Int64Attribute{Computed: true},
+						"indexing_start": schema.StringAttribute{Computed: true},
 						"credential_ids": schema.ListAttribute{
 							Computed:    true,
 							ElementType: types.Int64Type,
@@ -120,6 +123,7 @@ func (d *connectorsDataSource) Read(ctx context.Context, _ datasource.ReadReques
 			ConnectorSpecificConfig: config,
 			RefreshFreq:             types.Int64PointerValue(c.RefreshFreq),
 			PruneFreq:               types.Int64PointerValue(c.PruneFreq),
+			IndexingStart:           types.StringPointerValue(c.IndexingStart),
 			CredentialIDs:           credentialIDs,
 		})
 	}

@@ -35,6 +35,7 @@ Read-Only:
 - `connector_specific_config` (String)
 - `credential_ids` (List of Number)
 - `id` (String)
+- `indexing_start` (String)
 - `input_type` (String)
 - `name` (String)
 - `prune_freq` (Number)

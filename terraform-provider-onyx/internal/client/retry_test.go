@@ -4,20 +4,22 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 )
 
 // newCountingServer answers with statuses in order, repeating the last one,
-// and reports how many requests it received.
-func newCountingServer(t *testing.T, statuses ...int) (*Client, *int) {
+// and reports how many requests it received. The counter is atomic because the
+// handler runs on the server's goroutine while the test reads it on its own.
+func newCountingServer(t *testing.T, statuses ...int) (*Client, *atomic.Int64) {
 	t.Helper()
-	attempts := 0
+	attempts := &atomic.Int64{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempt := int(attempts.Add(1)) - 1
 		status := statuses[len(statuses)-1]
-		if attempts < len(statuses) {
-			status = statuses[attempts]
+		if attempt < len(statuses) {
+			status = statuses[attempt]
 		}
-		attempts++
 		body := `{}`
 		if r.Method == http.MethodGet {
 			body = `[]`
@@ -27,7 +29,7 @@ func newCountingServer(t *testing.T, statuses ...int) (*Client, *int) {
 		_, _ = w.Write([]byte(body))
 	}))
 	t.Cleanup(server.Close)
-	return newFastRetryClient(server.URL), &attempts
+	return newFastRetryClient(server.URL), attempts
 }
 
 func TestRetriesServerErrorsOnReads(t *testing.T) {
@@ -35,8 +37,8 @@ func TestRetriesServerErrorsOnReads(t *testing.T) {
 	if _, err := c.ListAPIKeys(context.Background()); err != nil {
 		t.Fatalf("a read should survive transient 5xx: %v", err)
 	}
-	if *attempts != 3 {
-		t.Errorf("got %d attempts, want 3", *attempts)
+	if attempts.Load() != 3 {
+		t.Errorf("got %d attempts, want 3", attempts.Load())
 	}
 }
 
@@ -47,8 +49,8 @@ func TestNeverReplaysPostOnServerError(t *testing.T) {
 		t.Fatal("a failed POST must surface, not be replayed")
 	}
 	// Replaying a POST could create a second object server-side.
-	if *attempts != 1 {
-		t.Errorf("got %d attempts, want 1", *attempts)
+	if attempts.Load() != 1 {
+		t.Errorf("got %d attempts, want 1", attempts.Load())
 	}
 	if apiErr, ok := err.(*APIError); !ok || apiErr.StatusCode != http.StatusBadGateway {
 		t.Errorf("the server status must survive the retry layer, got %v", err)
@@ -61,8 +63,8 @@ func TestRetriesRateLimitsOnWrites(t *testing.T) {
 	if _, err := c.CreateAPIKey(context.Background(), APIKeyArgs{GroupIDs: []int64{}}); err != nil {
 		t.Fatalf("a rate-limited POST should be retried: %v", err)
 	}
-	if *attempts != 2 {
-		t.Errorf("got %d attempts, want 2", *attempts)
+	if attempts.Load() != 2 {
+		t.Errorf("got %d attempts, want 2", attempts.Load())
 	}
 }
 
