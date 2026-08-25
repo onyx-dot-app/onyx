@@ -583,7 +583,7 @@ class TestOAuthDottedGmail:
     @patch("onyx.auth.users.fetch_ee_implementation_or_noop")
     @patch("onyx.auth.users.get_async_session_context_manager")
     @patch("onyx.auth.users.remove_user_from_invited_users")
-    @patch("onyx.auth.users.SQLAlchemyUserDatabase")
+    @patch("onyx.auth.users.SQLAlchemyUserAdminDB")
     async def test_oauth_create_does_not_block_dotted_gmail(
         self,
         mock_user_db_cls: MagicMock,
@@ -700,7 +700,7 @@ class TestOAuthNoAutoLinkExemptions:
     @patch("onyx.auth.users.assign_user_to_default_groups__no_commit")
     @patch("onyx.auth.users._upgrade_will_add_seat", return_value=False)
     @patch("onyx.auth.users.get_session_with_current_tenant")
-    @patch("onyx.auth.users.SQLAlchemyUserDatabase")
+    @patch("onyx.auth.users.SQLAlchemyUserAdminDB")
     async def test_placeholder_promoted_without_auto_link(
         self,
         mock_user_db_cls: MagicMock,
@@ -771,7 +771,7 @@ class TestOAuthNoAutoLinkExemptions:
     @patch("onyx.auth.users.fetch_ee_implementation_or_noop")
     @patch("onyx.auth.users.get_async_session_context_manager")
     @patch("onyx.auth.users.remove_user_from_invited_users")
-    @patch("onyx.auth.users.SQLAlchemyUserDatabase")
+    @patch("onyx.auth.users.SQLAlchemyUserAdminDB")
     async def test_unclaimed_row_is_claimed_by_first_login(
         self,
         mock_user_db_cls: MagicMock,
@@ -820,7 +820,7 @@ class TestOAuthNoAutoLinkExemptions:
     @patch("onyx.auth.users.fetch_ee_implementation_or_noop")
     @patch("onyx.auth.users.get_async_session_context_manager")
     @patch("onyx.auth.users.remove_user_from_invited_users")
-    @patch("onyx.auth.users.SQLAlchemyUserDatabase")
+    @patch("onyx.auth.users.SQLAlchemyUserAdminDB")
     async def test_spoken_for_row_is_rejected(
         self,
         mock_user_db_cls: MagicMock,
@@ -859,7 +859,7 @@ class TestOAuthNoAutoLinkExemptions:
     @patch("onyx.auth.users.fetch_ee_implementation_or_noop")
     @patch("onyx.auth.users.get_async_session_context_manager")
     @patch("onyx.auth.users.remove_user_from_invited_users")
-    @patch("onyx.auth.users.SQLAlchemyUserDatabase")
+    @patch("onyx.auth.users.SQLAlchemyUserAdminDB")
     async def test_deactivated_row_is_not_linked(
         self,
         mock_user_db_cls: MagicMock,
