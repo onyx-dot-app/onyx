@@ -67,8 +67,9 @@ postgresTls:
 # -- Verified TLS connections to Redis.
 # When enabled, the chart mounts one Redis server CA certificate into each
 # backend workload that uses Redis and configures REDIS_SSL with certificate
-# verification. The certificate source must already exist in the release
-# namespace.
+# verification. Use an external Redis service (`redis.enabled: false`), because
+# the bundled Redis does not support TLS. The certificate source must already
+# exist in the release namespace.
 redisTls:
   enabled: false
   # Exactly one of caSecretName / caConfigMapName must be set when enabled.

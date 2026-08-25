@@ -706,6 +706,21 @@ def test_redis_tls_mounts_ca_in_all_enabled_redis_workloads() -> None:
     assert config_map["data"]["REDIS_SSL_CA_CERTS"] == "/etc/redis-tls/root.pem"
 
 
+def test_redis_tls_rejects_bundled_redis() -> None:
+    """Bundled Redis has no TLS listener, so the values cannot be combined."""
+    result = _render_chart(
+        [
+            "--set",
+            "redisTls.enabled=true",
+            "--set",
+            "redisTls.caConfigMapName=redis-ca-config",
+        ]
+    )
+
+    assert result.returncode != 0
+    assert "redisTls.enabled requires redis.enabled=false" in result.stderr
+
+
 def test_redis_tls_disabled_does_not_override_redis_configuration() -> None:
     """The optional feature must not change the default Redis configuration."""
     config_map = yaml.safe_load(_render_config_map_yaml())
