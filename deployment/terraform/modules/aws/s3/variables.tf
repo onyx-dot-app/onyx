@@ -81,6 +81,20 @@ variable "allow_anonymous_read" {
   default     = false
 }
 
+variable "additional_policy_documents" {
+  # Merged via source_policy_documents, so the module's own statements win on a
+  # SID collision. Callers can add statements but cannot replace
+  # DenyInsecureTransport.
+  description = "IAM policy documents (JSON strings) merged into the bucket policy. Use this to keep custom statements that the module does not generate. Give each statement a SID that no other statement uses."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = alltrue([for doc in var.additional_policy_documents : can(jsondecode(doc))])
+    error_message = "Each entry in additional_policy_documents must be a valid JSON policy document."
+  }
+}
+
 variable "s3_vpc_endpoint_id" {
   description = "ID of an S3 gateway VPC endpoint allowed to access this bucket. Leave empty to skip the VPCE policy statement."
   type        = string
