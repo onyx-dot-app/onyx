@@ -1,5 +1,5 @@
 import { SOURCE_METADATA_MAP } from "@/lib/sources";
-import { MCPServer, MethodSpec } from "@/lib/tools/types";
+import { MethodSpec } from "@/lib/tools/types";
 import type { IconProps } from "@opal/types";
 import { SvgFileText, SvgServer } from "@opal/icons";
 
