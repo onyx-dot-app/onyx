@@ -273,17 +273,19 @@ export default function MultiModelSelector({
         </div>
       </Tooltip>
 
-      {!(atMax && replacingIndex === null) && (
-        <Popover.Content side="top" align="end" width="xl">
-          <ModelSelectorContent
-            onSelect={handleSelect}
-            isSelected={isSelected}
-            isDisabled={isDisabled}
-            modelDetail={modelDetail}
-            onDetailSelect={handleDetailSelect}
-          />
-        </Popover.Content>
-      )}
+      {/* Always mounted while open: a settings click that adds the third
+          model (or completes a replacement at max) must not unmount the pane
+          it just opened. Opening at max is still blocked at the entry points:
+          the add button hides and pill clicks set replacingIndex. */}
+      <Popover.Content side="top" align="end" width="xl">
+        <ModelSelectorContent
+          onSelect={handleSelect}
+          isSelected={isSelected}
+          isDisabled={isDisabled}
+          modelDetail={modelDetail}
+          onDetailSelect={handleDetailSelect}
+        />
+      </Popover.Content>
     </Popover>
   );
 }
