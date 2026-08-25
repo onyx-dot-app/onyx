@@ -81,11 +81,11 @@ interface FoldedTooltipProps {
  * This is the one part of the folded look that CSS cannot express, so it is
  * split out: this component subscribes to the fold state, and the tab does
  * not. On a fold toggle React re-renders this wrapper alone — `children` is
- * the same element it received before, so the tab below it never re-renders.
+ * the same element it received before, so nothing below it re-renders.
  *
  * The tooltip stays mounted and is suppressed while unfolded instead of being
  * added and removed. Dropping it would change the tree shape on a fold, which
- * remounts the tab and cuts the label's fade short.
+ * remounts the trigger.
  */
 function FoldedTooltip({ label, folded, children }: FoldedTooltipProps) {
   const foldedFromSidebar = useSidebarFolded();
@@ -164,7 +164,7 @@ function SidebarTab({
     label !== undefined
       ? { "aria-label": label }
       : { "aria-labelledby": labelId };
-  const overlay = disabled ? null : href ? (
+  const control = disabled ? null : href ? (
     <Link
       href={href as Route}
       scroll={false}
@@ -181,7 +181,32 @@ function SidebarTab({
     />
   ) : null;
 
-  const content = (
+  /* The tooltip hangs off the overlay, not the tab. The tab's own tree shape
+  then never depends on whether there is a tooltip to show, so switching
+  `children` between a label and an element (an inline rename input) does not
+  remount the row and drop the element's focus. A tab with no control but
+  something to show gets an inert overlay as the trigger. */
+  const hasTooltip = !!tooltip || label !== undefined;
+  const overlay =
+    control ??
+    (hasTooltip ? (
+      <div aria-hidden="true" className="absolute z-99 inset-0 rounded-08" />
+    ) : null);
+  const trigger =
+    overlay === null ? null : tooltip ? (
+      <Tooltip tooltip={tooltip} side="right">
+        {overlay}
+      </Tooltip>
+    ) : label !== undefined ? (
+      /* Only a string label can stand in as its own folded tooltip. */
+      <FoldedTooltip label={label} folded={folded}>
+        {overlay}
+      </FoldedTooltip>
+    ) : (
+      overlay
+    );
+
+  return (
     <div
       className="opal-sidebar-tab"
       data-folded={folded === undefined ? undefined : String(folded)}
@@ -194,7 +219,7 @@ function SidebarTab({
         group="group/SidebarTab"
       >
         <Interactive.Container rounding="sm" size="lg" width="full">
-          {overlay}
+          {trigger}
 
           {rightChildren && (
             <div className="opal-sidebar-tab__actions">{rightChildren}</div>
@@ -230,23 +255,6 @@ function SidebarTab({
         </Interactive.Container>
       </Interactive.Stateful>
     </div>
-  );
-
-  if (tooltip) {
-    return (
-      <Tooltip tooltip={tooltip} side="right">
-        {content}
-      </Tooltip>
-    );
-  }
-
-  // Only a string label can stand in as its own tooltip.
-  if (label === undefined) return content;
-
-  return (
-    <FoldedTooltip label={label} folded={folded}>
-      {content}
-    </FoldedTooltip>
   );
 }
 
