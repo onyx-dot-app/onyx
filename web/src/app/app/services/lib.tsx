@@ -566,10 +566,10 @@ export function buildChatUrl(
   const finalSearchParamsString = finalSearchParams.join("&");
 
   if (finalSearchParamsString) {
-    return `/${search ? "search" : "chat"}?${finalSearchParamsString}`;
+    return `/${search ? "search" : "app"}?${finalSearchParamsString}`;
   }
 
-  return `/${search ? "search" : "chat"}`;
+  return `/${search ? "search" : "app"}`;
 }
 
 export async function uploadFilesForChat(
