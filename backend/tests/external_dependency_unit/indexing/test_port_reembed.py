@@ -610,7 +610,9 @@ def test_re_embed_preserves_all_fields_swaps_only_vectors() -> None:
     assert result.title_vector == fake_tv
     # every other field is the stored chunk's, unchanged
     for field in DocumentChunkWithoutVectors.model_fields:
-        assert getattr(result, field) == getattr(stored, field), field
+        assert getattr(result, field) == getattr(  # ods: ignore[getattr]
+            stored, field
+        ), field
 
 
 @pytest.mark.skipif(

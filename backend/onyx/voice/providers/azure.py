@@ -233,7 +233,7 @@ class AzureStreamingTranscriber(StreamingTranscriberProtocol):
                 # so this isn't a silent empty transcript.
                 transcriber._logger.info(
                     "Azure STT: no speech recognized in segment (reason=%s)",
-                    getattr(evt.result, "reason", None),
+                    getattr(evt.result, "reason", None),  # ods: ignore[getattr]
                 )
                 return
             if transcriber._loop and not transcriber._closed:
@@ -254,12 +254,12 @@ class AzureStreamingTranscriber(StreamingTranscriberProtocol):
             # connection to Azure, or bad audio format. The diagnostic fields
             # live on evt.cancellation_details (code is a CancellationErrorCode),
             # not on evt itself.
-            details = getattr(evt, "cancellation_details", None)
+            details = getattr(evt, "cancellation_details", None)  # ods: ignore[getattr]
             transcriber._logger.error(
                 "Azure STT canceled: reason=%s code=%s details=%s",
-                getattr(details, "reason", None),
-                getattr(details, "code", None),
-                getattr(details, "error_details", None),
+                getattr(details, "reason", None),  # ods: ignore[getattr]
+                getattr(details, "code", None),  # ods: ignore[getattr]
+                getattr(details, "error_details", None),  # ods: ignore[getattr]
             )
             # A cancel is terminal — no more transcripts will arrive. Signal
             # end-of-stream so the consumer loop stops polling instead of

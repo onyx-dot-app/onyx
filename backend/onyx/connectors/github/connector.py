@@ -172,7 +172,9 @@ def get_nextUrl_key(pag_list: PaginatedList[PullRequest | Issue]) -> str:
 def get_nextUrl(
     pag_list: PaginatedList[PullRequest | Issue], nextUrl_key: str
 ) -> str | None:
-    return getattr(pag_list, nextUrl_key) if nextUrl_key else None
+    return (
+        getattr(pag_list, nextUrl_key) if nextUrl_key else None  # ods: ignore[getattr]
+    )
 
 
 def set_nextUrl(
@@ -320,7 +322,7 @@ def _get_batch_rate_limited(
 def _get_userinfo(user: NamedUser) -> dict[str, str]:
     def _safe_get(attr_name: str) -> str | None:
         try:
-            return cast(str | None, getattr(user, attr_name))
+            return cast(str | None, getattr(user, attr_name))  # ods: ignore[getattr]
         except GithubException:
             logger.debug("Error getting %s for user", attr_name)
             return None
