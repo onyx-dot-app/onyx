@@ -28,6 +28,15 @@ import {
   setUserDefaultModel,
 } from "@/lib/users/svc";
 import { useTheme } from "next-themes";
+import { useRouter } from "next/navigation";
+import Cookies from "js-cookie";
+import {
+  LOCALE_COOKIE_NAME,
+  isSupportedLocale,
+  type Locale,
+} from "@/i18n/config";
+
+const LOCALE_COOKIE_OPTIONS = { expires: 365, sameSite: "lax" as const };
 
 const EMPTY_PERMISSIONS: string[] = [];
 
@@ -73,6 +82,7 @@ export interface UserContextType {
   updateUserThemePreference: (
     themePreference: ThemePreference
   ) => Promise<void>;
+  updateUserLanguage: (language: Locale) => Promise<void>;
   updateUserChatBackground: (chatBackground: string | null) => Promise<void>;
   updateUserDefaultModel: (defaultModel: string | null) => Promise<void>;
   updateUserDefaultAppMode: (mode: "CHAT" | "SEARCH") => Promise<void>;
@@ -228,6 +238,29 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     theme,
     setTheme,
   ]);
+
+  // Sync the user's language preference from DB to the NEXT_LOCALE cookie the
+  // server layout reads (src/i18n/request.ts). The DB is canonical; one
+  // refresh re-renders the tree in the right locale after login.
+  const router = useRouter();
+  const hasSyncedLanguageRef = useRef(false);
+
+  useEffect(() => {
+    // Only sync once per session
+    if (hasSyncedLanguageRef.current) return;
+
+    // Wait for user data to load
+    if (!upToDateUser?.id) return;
+
+    const savedLanguage = upToDateUser.preferences?.language;
+    if (!isSupportedLocale(savedLanguage)) return;
+    hasSyncedLanguageRef.current = true;
+
+    if (Cookies.get(LOCALE_COOKIE_NAME) !== savedLanguage) {
+      Cookies.set(LOCALE_COOKIE_NAME, savedLanguage, LOCALE_COOKIE_OPTIONS);
+      router.refresh();
+    }
+  }, [upToDateUser?.id, upToDateUser?.preferences?.language, router]);
 
   const updateUserTemperatureOverrideEnabled = async (enabled: boolean) => {
     try {
@@ -537,6 +570,55 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const updateUserLanguage = async (language: Locale) => {
+    const previousLanguage = upToDateUser?.preferences?.language;
+    try {
+      setUpToDateUser((prevUser) => {
+        if (prevUser) {
+          return {
+            ...prevUser,
+            preferences: {
+              ...prevUser.preferences,
+              language,
+            },
+          };
+        }
+        return prevUser;
+      });
+
+      // Optimistically switch the locale the server layout renders with.
+      Cookies.set(LOCALE_COOKIE_NAME, language, LOCALE_COOKIE_OPTIONS);
+
+      const response = await fetch(`/api/user/language`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ language }),
+      });
+
+      if (!response.ok) {
+        if (isSupportedLocale(previousLanguage)) {
+          Cookies.set(
+            LOCALE_COOKIE_NAME,
+            previousLanguage,
+            LOCALE_COOKIE_OPTIONS
+          );
+        } else {
+          Cookies.remove(LOCALE_COOKIE_NAME);
+        }
+        await refreshUser();
+        throw new Error("Failed to update language preference");
+      }
+
+      // Re-run the server layout so getLocale()/getMessages() re-resolve.
+      router.refresh();
+    } catch (error) {
+      console.error("Error updating language preference:", error);
+      throw error;
+    }
+  };
+
   const updateUserChatBackground = async (chatBackground: string | null) => {
     try {
       setUpToDateUser((prevUser) => {
@@ -693,6 +775,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         updateUserReasoningEffortDefault,
         updateUserPersonalization,
         updateUserThemePreference,
+        updateUserLanguage,
         updateUserChatBackground,
         updateUserDefaultModel,
         updateUserDefaultAppMode,

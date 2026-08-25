@@ -41,6 +41,7 @@ const mockUserContext: UserContextType = {
   updateUserTemperatureOverrideEnabled: async () => {},
   updateUserPersonalization: async () => {},
   updateUserThemePreference: async () => {},
+  updateUserLanguage: async () => {},
   updateUserChatBackground: async () => {},
   updateUserDefaultModel: async () => {},
   updateUserDefaultAppMode: async () => {},
