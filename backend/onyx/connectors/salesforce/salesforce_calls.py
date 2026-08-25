@@ -172,6 +172,7 @@ def _bulk_retrieve_from_salesforce(
         try:
             results = download()
         except SalesforceExpiredSession:
+            # Refresh can rotate persisted credentials; call it only after rejection.
             sf_client.refresh_session()
             results = download()
 
