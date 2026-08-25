@@ -3,6 +3,16 @@ import { MCPServer, MethodSpec } from "@/lib/tools/types";
 import type { IconProps } from "@opal/types";
 import { SvgFileText, SvgServer } from "@opal/icons";
 
+const SUPPORTED_HTTP_METHODS = new Set([
+  "get",
+  "post",
+  "put",
+  "patch",
+  "delete",
+  "options",
+  "head",
+]);
+
 /**
  * Get an appropriate icon for an MCP server based on its URL and name.
  * Leverages the existing SOURCE_METADATA_MAP for connector icons.
@@ -37,16 +47,6 @@ export function getActionIcon(
 
   return SvgServer;
 }
-
-const SUPPORTED_HTTP_METHODS = new Set([
-  "get",
-  "post",
-  "put",
-  "patch",
-  "delete",
-  "options",
-  "head",
-]);
 
 function isPlainRecord(value: unknown): value is Record<string, any> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
