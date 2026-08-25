@@ -72,6 +72,9 @@ interface FoldedTooltipProps {
   /** Explicit fold state. Falls back to the enclosing sidebar's. */
   folded?: boolean;
 
+  /** Turns the tooltip off regardless of fold state. */
+  suppressed?: boolean;
+
   children: React.ReactElement;
 }
 
@@ -87,7 +90,12 @@ interface FoldedTooltipProps {
  * added and removed. Dropping it would change the tree shape on a fold, which
  * remounts the tab and cuts the label's fade short.
  */
-function FoldedTooltip({ label, folded, children }: FoldedTooltipProps) {
+function FoldedTooltip({
+  label,
+  folded,
+  suppressed,
+  children,
+}: FoldedTooltipProps) {
   const foldedFromSidebar = useSidebarFolded();
 
   const effectiveFolded = folded ?? foldedFromSidebar;
@@ -95,7 +103,11 @@ function FoldedTooltip({ label, folded, children }: FoldedTooltipProps) {
   /* `suppressed`, not a controlled `open`: hover stays Radix's to track, so an
   unfolded tab keeps no hover state of its own that a later fold could act on. */
   return (
-    <Tooltip tooltip={label} side="right" suppressed={!effectiveFolded}>
+    <Tooltip
+      tooltip={label}
+      side="right"
+      suppressed={suppressed || !effectiveFolded}
+    >
       {children}
     </Tooltip>
   );
@@ -240,11 +252,16 @@ function SidebarTab({
     );
   }
 
-  // Only a string label can stand in as its own tooltip.
-  if (label === undefined) return content;
-
+  /* Only a string label can stand in as its own tooltip, but the wrapper stays
+  either way: dropping it when `children` is an element would change the tree
+  shape, and a tab that swaps its label for an inline editor would remount —
+  taking the open actions popover (and the editor's focus) with it. */
   return (
-    <FoldedTooltip label={label} folded={folded}>
+    <FoldedTooltip
+      label={label ?? ""}
+      folded={folded}
+      suppressed={label === undefined}
+    >
       {content}
     </FoldedTooltip>
   );

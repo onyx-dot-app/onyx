@@ -398,7 +398,7 @@ const ChatButton = memo(
     const rightMenu = (
       <>
         <Popover.Trigger asChild onClick={noProp()}>
-          <div>
+          <div data-testid="ChatButton/options">
             {/* While renaming the row is an input, so the menu stays away unless
                 its own popover is already open. */}
             {(!renaming || popoverOpen) && (
@@ -413,7 +413,12 @@ const ChatButton = memo(
             )}
           </div>
         </Popover.Trigger>
-        <Popover.Content side="right" align="start" width="md">
+        <Popover.Content
+          data-testid="ChatButton/popover"
+          side="right"
+          align="start"
+          width="md"
+        >
           <PopoverMenu>{popoverItems}</PopoverMenu>
         </Popover.Content>
       </>
@@ -432,6 +437,7 @@ const ChatButton = memo(
         <Popover.Anchor>
           <Hoverable.Root
             group="ChatButton"
+            data-testid="ChatButton"
             interaction={popoverOpen ? "hover" : "rest"}
           >
             <SidebarTab
