@@ -1,5 +1,5 @@
-export { default as ActionsPopover } from "@/lib/tools/components/ActionsPopover";
-export type { ActionsPopoverProps } from "@/lib/tools/components/ActionsPopover";
+export { default as ToolsPopover } from "@/lib/tools/components/ToolsPopover";
+export type { ToolsPopoverProps } from "@/lib/tools/components/ToolsPopover";
 
 export { default as ActionLineItem } from "@/lib/tools/components/ActionLineItem";
 export type { ActionItemProps } from "@/lib/tools/components/ActionLineItem";

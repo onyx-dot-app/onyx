@@ -9,14 +9,14 @@ import useFocusOnMount from "@opal/hooks/useFocusOnMount";
 import { InputTypeIn, Button, Popover, PopoverMenu } from "@opal/components";
 import { SvgActions, SvgKey, SvgSliders, SvgSimpleLoader } from "@opal/icons";
 import SwitchList, { SwitchListItem } from "@/lib/tools/components/SwitchList";
-import { MinimalAgent } from "@/lib/agents/types";
 import {
   MCPAuthenticationType,
   MCPAuthenticationPerformer,
   SecondaryViewState,
 } from "@/lib/tools/types";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
-import { useAgentPreferences } from "@/lib/agents/hooks";
+import { useActiveAgent, useAgentPreferences } from "@/lib/agents/hooks";
+import { MinimalAgent } from "@/lib/agents/types";
 import { useUser } from "@/providers/UserProvider";
 import { hasPermission } from "@/lib/permissions";
 import { FilterManager, useSourcePreferences } from "@/lib/hooks";
@@ -44,19 +44,47 @@ import {
   startMCPUserOAuth,
 } from "@/lib/tools/svc";
 
-export interface ActionsPopoverProps {
-  activeAgent: MinimalAgent;
+export interface ToolsPopoverProps {
   filterManager: FilterManager;
   availableSources?: ValidSources[];
   disabled?: boolean;
 }
 
-export default function ActionsPopover({
+/**
+ * The actions popover.
+ *
+ * Only resolves the agent. Everything the panel shows is scoped to one — the
+ * rows are its tools, the toggles are its per-agent preferences, the sources
+ * are what it can reach — so there is nothing to render without it, and
+ * {@link AgentTools} is spared having to ask whether it has one.
+ */
+export default function ToolsPopover(props: ToolsPopoverProps) {
+  const activeAgent = useActiveAgent();
+
+  // No agent covers two situations. The agent list is still loading, which is
+  // every cold mount, and the parent keeps this row invisible meanwhile. Or
+  // there is genuinely no agent to act as — the default Assistant disabled
+  // with nothing to replace it — which AppPage answers with NoAgentModal.
+  // Neither wants a tool menu.
+  if (!activeAgent) return null;
+
+  // Keyed, so switching agents starts clean rather than carrying the previous
+  // agent's open panel, search term and half-opened MCP server across.
+  return (
+    <AgentTools key={activeAgent.id} activeAgent={activeAgent} {...props} />
+  );
+}
+
+interface AgentToolsProps extends ToolsPopoverProps {
+  activeAgent: MinimalAgent;
+}
+
+function AgentTools({
   activeAgent,
   filterManager,
   availableSources = [],
   disabled = false,
-}: ActionsPopoverProps) {
+}: AgentToolsProps) {
   const [open, setOpen] = useState(false);
   const [secondaryView, setSecondaryView] = useState<SecondaryViewState | null>(
     null

@@ -31,7 +31,7 @@ import { useActiveProject, useProjects } from "@/lib/projects/hooks";
 import { FileCard } from "@/sections/cards/FileCard";
 import { ProjectFile, UserFileStatus } from "@/lib/projects/types";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
-import { ActionsPopover } from "@/lib/tools/components";
+import { ToolsPopover } from "@/lib/tools/components";
 import {
   getIconForAction,
   hasSearchToolsAvailable,
@@ -112,7 +112,6 @@ const AppInputBar = React.memo(
     currentSessionFileTokenCount,
     availableContextTokens,
     activeAgent,
-
     handleFileUpload,
     llmManager,
     deepResearchEnabled,
@@ -660,14 +659,11 @@ const AppInputBar = React.memo(
               controlsLoading && "invisible"
             )}
           >
-            {activeAgent && activeAgent.tools.length > 0 && (
-              <ActionsPopover
-                activeAgent={activeAgent}
-                filterManager={filterManager}
-                availableSources={memoizedAvailableSources}
-                disabled={disabled}
-              />
-            )}
+            <ToolsPopover
+              filterManager={filterManager}
+              availableSources={memoizedAvailableSources}
+              disabled={disabled}
+            />
             {onToggleTabReading ? (
               <SelectButton
                 disabled={disabled}

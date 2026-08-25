@@ -78,7 +78,7 @@ export class McpCredentialsModal {
   }
 }
 
-export class ActionsPopover {
+export class ToolsPopover {
   readonly page: Page;
   readonly toggle: Locator;
   readonly popover: Locator;
