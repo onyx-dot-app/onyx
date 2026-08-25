@@ -763,7 +763,7 @@ function GeneralSettings() {
                     // SAFETY: the items below only carry SUPPORTED_LOCALES
                     // values, so the select can't emit anything else.
                     updateUserLanguage(value as Locale).catch(() => {
-                      toast.error("Failed to update language preference");
+                      toast.error(t("appearance.language.updateFailed"));
                     });
                   }}
                 >

@@ -58,12 +58,19 @@ export const noRawJsxTextRule = defineRule({
         const propName = node.name.name;
         if (!USER_FACING_PROPS.has(propName)) return;
 
+        // Depending on the AST compat layer, string literals surface as
+        // "Literal" or "StringLiteral" — accept both.
+        const isStringLiteralNode = (candidate: {
+          type: string;
+        }): candidate is { type: string; value: unknown } =>
+          candidate.type === "Literal" || candidate.type === "StringLiteral";
+
         const attributeValue = node.value;
         const literal =
-          attributeValue?.type === "Literal"
+          attributeValue !== null && isStringLiteralNode(attributeValue)
             ? attributeValue
             : attributeValue?.type === "JSXExpressionContainer" &&
-                attributeValue.expression.type === "Literal"
+                isStringLiteralNode(attributeValue.expression)
               ? attributeValue.expression
               : null;
 

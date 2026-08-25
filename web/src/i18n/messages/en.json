@@ -435,7 +435,8 @@
       },
       "language": {
         "description": "Select the language for the UI.",
-        "title": "Language"
+        "title": "Language",
+        "updateFailed": "Failed to update language preference"
       },
       "title": "Appearance"
     },
@@ -523,7 +524,7 @@
       "description": "Connect external tools to the models available to you in Onyx.",
       "guideButton": "Guide",
       "models": {
-        "description": "{count, plural, other {# models are available to your account. Open a provider to copy an ID.}}",
+        "description": "{count, plural, one {# model is available to your account. Open a provider to copy an ID.} other {# models are available to your account. Open a provider to copy an ID.}}",
         "title": "Models"
       },
       "provider": {

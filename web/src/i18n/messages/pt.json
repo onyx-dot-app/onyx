@@ -435,7 +435,8 @@
       },
       "language": {
         "description": "Selecione o idioma da interface.",
-        "title": "Idioma"
+        "title": "Idioma",
+        "updateFailed": "Não foi possível atualizar a preferência de idioma"
       },
       "title": "Aparência"
     },
@@ -523,7 +524,7 @@
       "description": "Conecte ferramentas externas aos modelos disponíveis para você no Onyx.",
       "guideButton": "Guia",
       "models": {
-        "description": "{count, plural, other {# modelos estão disponíveis para sua conta. Abra um provedor para copiar um ID.}}",
+        "description": "{count, plural, one {# modelo está disponível para sua conta. Abra um provedor para copiar um ID.} other {# modelos estão disponíveis para sua conta. Abra um provedor para copiar um ID.}}",
         "title": "Modelos"
       },
       "provider": {

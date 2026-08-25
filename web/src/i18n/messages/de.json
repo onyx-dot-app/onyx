@@ -435,7 +435,8 @@
       },
       "language": {
         "description": "Wählen Sie die Sprache für die Benutzeroberfläche.",
-        "title": "Sprache"
+        "title": "Sprache",
+        "updateFailed": "Die Spracheinstellung konnte nicht aktualisiert werden"
       },
       "title": "Erscheinungsbild"
     },
@@ -523,7 +524,7 @@
       "description": "Verbinden Sie externe Tools mit den Modellen, die Ihnen in Onyx zur Verfügung stehen.",
       "guideButton": "Anleitung",
       "models": {
-        "description": "{count, plural, other {# Modelle sind für Ihr Konto verfügbar. Öffnen Sie einen Anbieter, um eine ID zu kopieren.}}",
+        "description": "{count, plural, one {# Modell ist für Ihr Konto verfügbar. Öffnen Sie einen Anbieter, um eine ID zu kopieren.} other {# Modelle sind für Ihr Konto verfügbar. Öffnen Sie einen Anbieter, um eine ID zu kopieren.}}",
         "title": "Modelle"
       },
       "provider": {
