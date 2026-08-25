@@ -1,6 +1,10 @@
 # Interim replacement for the Enterprise Edition entries that were in .github/CODEOWNERS.
-# It asserts that only organization members change the ee/ directories.
-# TODO: Decide the long-term ownership model for the ee/ directories.
+# It asserts that the PR author and every commit author of changes to the ee/ directories
+# are inside the organization. "Inside the organization" is approximated as "has write
+# access to this repository", because the default GITHUB_TOKEN cannot read org membership.
+# TODO: Decide the long-term ownership model for the ee/ directories. A future version can
+# check true org membership (needs an org-scoped token) and add an explicit-approval path
+# (for example, a maintainer-applied label).
 name: Ensure EE changes come from org members
 concurrency:
   group: Ensure-EE-changes-come-from-org-members-${{ github.workflow }}-${{ github.head_ref || github.run_id }}
@@ -15,33 +19,85 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
   ee-ownership-check:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - name: Check that the PR author is an organization member
+      - name: Check that the PR author and all commit authors are org members
         env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_COMMIT_COUNT: ${{ github.event.pull_request.commits }}
           AUTHOR_ASSOCIATION: ${{ github.event.pull_request.author_association }}
           IGNORED_AUTHORS: |
             dependabot[bot]
             onyx-cherry-pick[bot]
         run: |
-          normalized_author="$(printf '%s' "${PR_AUTHOR}" | tr '[:upper:]' '[:lower:]')"
-          normalized_ignored="$(printf '%s\n' "${IGNORED_AUTHORS}" | tr '[:upper:]' '[:lower:]')"
-          if printf '%s\n' "${normalized_ignored}" | grep -Fxq "${normalized_author}"; then
-            echo "PR author ${PR_AUTHOR} is on the ignorelist. Check passed."
-            exit 0
+          # The pull request commits API returns at most 250 commits.
+          # Fail if the check cannot see every commit.
+          if [ "${PR_COMMIT_COUNT}" -gt 250 ]; then
+            echo "::error::This PR has ${PR_COMMIT_COUNT} commits. The EE ownership check can only inspect 250. Split the PR."
+            exit 1
           fi
 
-          case "${AUTHOR_ASSOCIATION}" in
-            MEMBER|OWNER)
-              echo "PR author ${PR_AUTHOR} is an organization member. Check passed."
-              exit 0
-              ;;
-          esac
+          commits="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/commits?per_page=100" --jq '.[]' | jq -s '.')"
 
-          echo "::error::This PR changes EE code (backend/ee/, web/src/ee/, or web/src/app/ee/), but the author ${PR_AUTHOR} (${AUTHOR_ASSOCIATION}) is not a member of the organization. Ask an organization member to make these changes."
-          exit 1
+          normalized_ignored="$(printf '%s\n' "${IGNORED_AUTHORS}" | tr '[:upper:]' '[:lower:]')"
+
+          # A login is allowed when it is on the ignorelist, is an org-member PR
+          # author, or has write access to this repository.
+          is_allowed() {
+            login="$1"
+            normalized_login="$(printf '%s' "${login}" | tr '[:upper:]' '[:lower:]')"
+            if printf '%s\n' "${normalized_ignored}" | grep -Fxq "${normalized_login}"; then
+              return 0
+            fi
+            if [ "${login}" = "${PR_AUTHOR}" ]; then
+              case "${AUTHOR_ASSOCIATION}" in
+                MEMBER|OWNER) return 0 ;;
+              esac
+            fi
+            permission="$(gh api "repos/${GITHUB_REPOSITORY}/collaborators/${login}/permission" --jq '.permission' 2>/dev/null || echo "unknown")"
+            [ "${permission}" = "admin" ] || [ "${permission}" = "write" ]
+          }
+
+          failures=""
+          add_failure() {
+            if [ -n "${failures}" ]; then
+              failures="${failures}"$'\n'"$1"
+            else
+              failures="$1"
+            fi
+          }
+
+          # Commits whose author email is not linked to any GitHub account
+          # cannot be verified, so they fail the check.
+          unmapped="$(jq -r '.[] | select(.author == null) | "  commit \(.sha[0:10]) has no linked GitHub account (\(.commit.author.name) <\(.commit.author.email)>)"' <<< "${commits}")"
+          if [ -n "${unmapped}" ]; then
+            add_failure "${unmapped}"
+          fi
+
+          commit_logins="$(jq -r '[.[] | select(.author != null) | .author.login] | unique | .[]' <<< "${commits}")"
+          all_logins="$(printf '%s\n%s\n' "${PR_AUTHOR}" "${commit_logins}" | sort -u)"
+
+          while IFS= read -r login; do
+            [ -z "${login}" ] && continue
+            if ! is_allowed "${login}"; then
+              add_failure "  ${login} is not in the organization (no write access to this repository)"
+            fi
+          done <<< "${all_logins}"
+
+          if [ -n "${failures}" ]; then
+            echo "This PR changes EE code (backend/ee/, web/src/ee/, or web/src/app/ee/)."
+            echo "Only organization members can author changes to these directories."
+            echo "Problems found:"
+            echo "${failures}"
+            echo "::error::EE ownership check failed. See the job log for the list of authors."
+            exit 1
+          fi
+
+          echo "The PR author and all commit authors are allowed. Check passed."
