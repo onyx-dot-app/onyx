@@ -480,8 +480,15 @@ def test_pdf_over_token_threshold_rejected(
     assert len(result.acceptable) == 0
 
 
-def test_pdf_with_many_images_accepted_when_image_extraction_disabled(
-    monkeypatch: pytest.MonkeyPatch,
+_IMAGE_BEARING_CASES = [
+    ("many_images.pdf", "count_pdf_embedded_images"),
+    ("many_images.docx", "count_docx_embedded_images"),
+]
+
+
+@pytest.mark.parametrize("filename, counter_name", _IMAGE_BEARING_CASES)
+def test_many_images_accepted_when_image_extraction_disabled(
+    monkeypatch: pytest.MonkeyPatch, filename: str, counter_name: str
 ) -> None:
     """With image extraction off, no image is ever decoded, so the embedded-image
     caps do not apply and the (expensive) count is skipped."""
@@ -490,10 +497,10 @@ def test_pdf_with_many_images_accepted_when_image_extraction_disabled(
         utils, "get_image_extraction_and_analysis_enabled", lambda: False
     )
     counter = MagicMock(return_value=utils.MAX_EMBEDDED_IMAGES_PER_FILE + 1)
-    monkeypatch.setattr(utils, "count_pdf_embedded_images", counter)
+    monkeypatch.setattr(utils, counter_name, counter)
     monkeypatch.setattr(utils, "extract_file_text", lambda **_kwargs: "some text")
 
-    upload = _make_upload("many_images.pdf", size=100)
+    upload = _make_upload(filename, size=100)
     result = utils.categorize_uploaded_files([upload], MagicMock())
 
     assert result.rejected == []
@@ -501,39 +508,39 @@ def test_pdf_with_many_images_accepted_when_image_extraction_disabled(
     counter.assert_not_called()
 
 
-def test_pdf_with_many_images_rejected_when_image_extraction_enabled(
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize("filename, counter_name", _IMAGE_BEARING_CASES)
+def test_many_images_rejected_when_image_extraction_enabled(
+    monkeypatch: pytest.MonkeyPatch, filename: str, counter_name: str
 ) -> None:
     _patch_common_dependencies(monkeypatch, upload_size_mb=1000)
     monkeypatch.setattr(
         utils, "get_image_extraction_and_analysis_enabled", lambda: True
     )
-    monkeypatch.setattr(
-        utils,
-        "count_pdf_embedded_images",
-        lambda *_args: utils.MAX_EMBEDDED_IMAGES_PER_FILE + 1,
-    )
+    counter = MagicMock(return_value=utils.MAX_EMBEDDED_IMAGES_PER_FILE + 1)
+    monkeypatch.setattr(utils, counter_name, counter)
     monkeypatch.setattr(utils, "extract_file_text", lambda **_kwargs: "some text")
 
-    upload = _make_upload("many_images.pdf", size=100)
+    upload = _make_upload(filename, size=100)
     result = utils.categorize_uploaded_files([upload], MagicMock())
 
+    counter.assert_called_once()
     assert result.acceptable == []
     assert len(result.rejected) == 1
     assert "too many embedded images" in result.rejected[0].reason
 
 
-def test_pdf_without_text_rejected_with_image_processing_disabled_reason(
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize("filename", ["scan.pdf", "scan.docx"])
+def test_no_text_rejected_with_image_processing_disabled_reason(
+    monkeypatch: pytest.MonkeyPatch, filename: str
 ) -> None:
-    """A scan-only PDF cannot be indexed when captioning is off; say why."""
+    """A scan-only document cannot be indexed when captioning is off; say why."""
     _patch_common_dependencies(monkeypatch, upload_size_mb=1000)
     monkeypatch.setattr(
         utils, "get_image_extraction_and_analysis_enabled", lambda: False
     )
     monkeypatch.setattr(utils, "extract_file_text", lambda **_kwargs: "")
 
-    upload = _make_upload("scan.pdf", size=100)
+    upload = _make_upload(filename, size=100)
     result = utils.categorize_uploaded_files([upload], MagicMock())
 
     assert result.acceptable == []

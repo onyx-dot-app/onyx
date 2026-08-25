@@ -322,9 +322,9 @@ def categorize_uploaded_files(
                 if not text_content:
                     # Documents with embedded images (e.g. scans) have no
                     # extractable text but can still be indexed via the
-                    # vision-LLM captioning path when image analysis is
-                    # enabled.
-                    if image_bearing_ext and count > 0 and image_extraction_enabled:
+                    # vision-LLM captioning path. `count` is only populated
+                    # when image extraction is enabled.
+                    if image_bearing_ext and count > 0:
                         results.acceptable.append(upload)
                         results.acceptable_file_to_token_count[filename] = 0
                         try:
