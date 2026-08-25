@@ -51,6 +51,10 @@ resource "onyx_persona" "test" {
   tool_ids      = [onyx_custom_tool.persona.id]
   is_listed     = false
 
+  # Onyx ignores this on an update, so changing it in the next step proves
+  # the follow-up call to the display-priority endpoint runs.
+  display_priority = 5
+
   starter_messages = [
     {
       name    = "Refunds"
@@ -73,6 +77,7 @@ resource "onyx_persona" "test" {
 					// follow-up call to the listed endpoint ran.
 					resource.TestCheckResourceAttr("onyx_persona.test", "is_listed", "false"),
 					resource.TestCheckResourceAttr("onyx_persona.test", "is_featured", "false"),
+					resource.TestCheckResourceAttr("onyx_persona.test", "display_priority", "5"),
 					resource.TestCheckResourceAttr("onyx_persona.test", "builtin_persona", "false"),
 					resource.TestCheckResourceAttr("onyx_persona.test", "tool_ids.#", "1"),
 					resource.TestCheckResourceAttr("onyx_persona.test", "starter_messages.#", "2"),
@@ -96,6 +101,8 @@ resource "onyx_persona" "test" {
   system_prompt = "You are a support agent. Be thorough."
   tool_ids      = []
   is_listed     = true
+
+  display_priority = 2
 }
 `,
 				Check: resource.ComposeAggregateTestCheckFunc(
@@ -104,8 +111,12 @@ resource "onyx_persona" "test" {
 					resource.TestCheckResourceAttr("onyx_persona.test", "system_prompt", "You are a support agent. Be thorough."),
 					resource.TestCheckResourceAttr("onyx_persona.test", "task_prompt", ""),
 					resource.TestCheckResourceAttr("onyx_persona.test", "is_listed", "true"),
+					resource.TestCheckResourceAttr("onyx_persona.test", "display_priority", "2"),
 					resource.TestCheckResourceAttr("onyx_persona.test", "tool_ids.#", "0"),
-					resource.TestCheckResourceAttr("onyx_persona.test", "starter_messages.#", "0"),
+					// Dropped from the configuration rather than emptied, so
+					// it goes back to null. Checking a count of "0" would not
+					// prove that: the helper treats "0" and absent alike.
+					resource.TestCheckNoResourceAttr("onyx_persona.test", "starter_messages.#"),
 				),
 			},
 			{

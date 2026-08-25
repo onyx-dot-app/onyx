@@ -101,6 +101,11 @@ and on Onyx Cloud the tenant is embedded in the key itself.
   are cleared by an omitted list, so the provider reads them and sends them back unchanged;
   `search_start_date` is sent but never read back, because Onyx returns it as a parsed
   timestamp that would not match a plain date. Avatar images are not managed at all.
+- **`display_priority` is create-only on the upsert.** Onyx reads it when an agent is
+  created and ignores it on every later write, so the provider applies a change through
+  the display-priority endpoint as a second call. That endpoint only sets a number, so the
+  attribute is computed: removing it from the configuration leaves the last value rather
+  than reporting a difference that never settles.
 - **Two built-in actions are hidden from the API.** `OktaProfileTool` and `MemoryTool` are
   left out of the agent snapshot, so an agent holding one reports fewer `tool_ids` than
   were written and the difference never settles. Attach custom actions and the ordinary

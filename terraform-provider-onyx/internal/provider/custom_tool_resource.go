@@ -181,18 +181,17 @@ func (r *customToolResource) ValidateConfig(ctx context.Context, req resource.Va
 // authorizationHeaderKey reports whether the headers carry an Authorization
 // header, matching the server's case-insensitive check, and returns the key as
 // it was written so the diagnostic can quote it.
+//
+// Only the key decides this, on the server as here, so a header whose value is
+// still unknown at plan time is reported like any other.
 func authorizationHeaderKey(headers types.Map) (string, bool) {
 	if headers.IsNull() || headers.IsUnknown() {
 		return "", false
 	}
-	for key, value := range headers.Elements() {
-		if !strings.EqualFold(key, "authorization") {
-			continue
+	for key := range headers.Elements() {
+		if strings.EqualFold(key, "authorization") {
+			return key, true
 		}
-		if value.IsUnknown() {
-			continue
-		}
-		return key, true
 	}
 	return "", false
 }

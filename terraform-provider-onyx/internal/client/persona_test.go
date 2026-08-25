@@ -170,3 +170,22 @@ func TestLookupPersonaTreatsAMissingAgentAsGone(t *testing.T) {
 		})
 	}
 }
+
+// The upsert ignores display_priority once the agent exists, so it has to go
+// through the endpoint that takes a map of agent id to priority.
+func TestSetPersonaDisplayPriority(t *testing.T) {
+	c, captured := newTestServer(t, http.StatusOK, `null`)
+	if err := c.SetPersonaDisplayPriority(context.Background(), 4, 2); err != nil {
+		t.Fatal(err)
+	}
+	if captured.Method != http.MethodPatch || captured.Path != "/admin/agents/display-priorities" {
+		t.Errorf("%s %s", captured.Method, captured.Path)
+	}
+	priorities, ok := bodyAsMap(t, captured.Body)["display_priority_map"].(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected body: %s", captured.Body)
+	}
+	if priorities["4"] != float64(2) {
+		t.Errorf("display_priority_map = %v, want {\"4\": 2}", priorities)
+	}
+}

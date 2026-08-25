@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strconv"
 )
 
 // StarterMessage is one suggested opening prompt shown on an agent's card.
@@ -243,4 +244,20 @@ type isListedRequest struct {
 func (c *Client) SetPersonaListed(ctx context.Context, id int64, isListed bool) error {
 	path := fmt.Sprintf("/admin/persona/%d/listed", id)
 	return c.doJSON(ctx, http.MethodPatch, path, isListedRequest{IsListed: isListed}, nil)
+}
+
+type displayPriorityRequest struct {
+	DisplayPriorityMap map[string]int64 `json:"display_priority_map"`
+}
+
+// SetPersonaDisplayPriority sets where an agent sorts in the assistant list.
+//
+// This is its own endpoint because the upsert only reads display_priority when
+// it creates an agent; on an update the field is ignored. The endpoint takes a
+// map and touches only the agents named in it.
+func (c *Client) SetPersonaDisplayPriority(ctx context.Context, id, priority int64) error {
+	req := displayPriorityRequest{
+		DisplayPriorityMap: map[string]int64{strconv.FormatInt(id, 10): priority},
+	}
+	return c.doJSON(ctx, http.MethodPatch, "/admin/agents/display-priorities", req, nil)
 }

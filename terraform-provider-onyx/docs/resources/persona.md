@@ -93,7 +93,7 @@ resource "onyx_persona" "onboarding" {
 - `datetime_aware` (Boolean) Tell the agent the current date and time.
 - `default_model_configuration_id` (String) Id of the model configuration the agent uses. Leave unset to use the deployment default.
 - `description` (String) One line describing the agent, shown on its card.
-- `display_priority` (Number) Sort position in the assistant list. Lower sorts first.
+- `display_priority` (Number) Sort position in the assistant list. Lower sorts first. Onyx reads this from the agent only when it is created, so a later change is applied through its own endpoint as a second call. Removing the attribute leaves the last value in place rather than clearing it.
 - `document_set_ids` (Set of String) Ids of the document sets the agent can search, e.g. `[onyx_document_set.handbook.id]`.
 - `groups` (Set of Number) User group ids that may use the agent when it is not public. Enterprise Edition only.
 - `icon_name` (String) Name of the built-in icon shown on the agent's card.

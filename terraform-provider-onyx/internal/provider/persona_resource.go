@@ -159,8 +159,12 @@ func (r *personaResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 				MarkdownDescription: "Whether Onyx promotes the agent to users. Requires agent-management permission.",
 			},
 			"display_priority": schema.Int64Attribute{
-				Optional:            true,
-				MarkdownDescription: "Sort position in the assistant list. Lower sorts first.",
+				Optional: true,
+				Computed: true,
+				MarkdownDescription: "Sort position in the assistant list. Lower sorts first. " +
+					"Onyx reads this from the agent only when it is created, so a later change is " +
+					"applied through its own endpoint as a second call. Removing the attribute " +
+					"leaves the last value in place rather than clearing it.",
 			},
 			"icon_name": schema.StringAttribute{
 				Optional:            true,
@@ -419,6 +423,27 @@ func (r *personaResource) applyListed(ctx context.Context, id int64, desired boo
 	return nil
 }
 
+// applyDisplayPriority applies display_priority, which the upsert ignores once
+// the agent exists, and reports the value that ended up stored.
+//
+// The endpoint can only set a number, so an attribute cleared in the
+// configuration is left as it is. Marking it computed makes that the declared
+// behaviour rather than a difference that never settles.
+func (r *personaResource) applyDisplayPriority(ctx context.Context, id int64, desired types.Int64, remote *client.Persona) error {
+	if desired.IsNull() || desired.IsUnknown() {
+		return nil
+	}
+	if remote.DisplayPriority != nil && *remote.DisplayPriority == desired.ValueInt64() {
+		return nil
+	}
+	if err := r.client.SetPersonaDisplayPriority(ctx, id, desired.ValueInt64()); err != nil {
+		return err
+	}
+	priority := desired.ValueInt64()
+	remote.DisplayPriority = &priority
+	return nil
+}
+
 func (r *personaResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var plan personaResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
@@ -442,6 +467,10 @@ func (r *personaResource) Create(ctx context.Context, req resource.CreateRequest
 	listedErr := r.applyListed(ctx, remote.ID, plan.IsListed.ValueBool(), remote)
 
 	if !applyRemotePersona(ctx, &plan, remote, &resp.Diagnostics) {
+		// Record the id even so. Names are unique, so an agent left out of
+		// state would fail every later apply as a duplicate.
+		plan.ID = types.StringValue(strconv.FormatInt(remote.ID, 10))
+		resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 		return
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
@@ -511,15 +540,20 @@ func (r *personaResource) Update(ctx context.Context, req resource.UpdateRequest
 		return
 	}
 
-	if err := r.applyListed(ctx, id, plan.IsListed.ValueBool(), remote); err != nil {
-		resp.Diagnostics.AddError("Failed to set whether the Onyx agent is listed", err.Error())
-		return
+	// The agent itself is already written, so a failure here is reported after
+	// the state is saved rather than leaving state describing the old agent.
+	listedErr := r.applyListed(ctx, id, plan.IsListed.ValueBool(), remote)
+	if listedErr == nil {
+		listedErr = r.applyDisplayPriority(ctx, id, plan.DisplayPriority, remote)
 	}
 
 	if !applyRemotePersona(ctx, &plan, remote, &resp.Diagnostics) {
 		return
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
+	if listedErr != nil {
+		resp.Diagnostics.AddError("Failed to finish updating the Onyx agent", listedErr.Error())
+	}
 }
 
 func (r *personaResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
