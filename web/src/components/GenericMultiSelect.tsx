@@ -1,9 +1,8 @@
 import { FormikProps, ErrorMessage } from "formik";
 import Text from "@/refresh-components/texts/Text";
-import Button from "@/refresh-components/buttons/Button";
 import InputComboBox from "@/refresh-components/inputs/InputComboBox/InputComboBox";
+import { Tag } from "@opal/components";
 import { Disabled } from "@opal/core";
-import { SvgX } from "@opal/icons";
 export type GenericMultiSelectFormType<T extends string> = {
   [K in T]: number[];
 };
@@ -141,17 +140,13 @@ export function GenericMultiSelect<
       {selectedItems.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {selectedItems.map((item) => (
-            // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
-            <Button
+            <Tag
               key={item.id}
-              secondary
+              size="md"
+              title={item.name}
               disabled={disabled}
-              rightIcon={SvgX}
-              onClick={() => handleRemove(item.id)}
-              className="px-2! py-1!"
-            >
-              {item.name}
-            </Button>
+              onRemove={() => handleRemove(item.id)}
+            />
           ))}
         </div>
       )}
