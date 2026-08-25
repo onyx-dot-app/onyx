@@ -100,8 +100,18 @@ func retryPolicy(ctx context.Context, resp *http.Response, err error) (bool, err
 	return retryablehttp.DefaultRetryPolicy(ctx, resp, err)
 }
 
+// nonReplayable marks a request that may commit a change even when the client
+// never sees the response, so a transport error must not be replayed. POST is
+// treated this way by default; this covers the creating PUTs, where a replay
+// would come back as an "already exists" failure instead of the created object.
+func nonReplayable(ctx context.Context) context.Context {
+	return context.WithValue(ctx, replayableKey{}, false)
+}
+
 func (c *Client) newRequest(ctx context.Context, method, path string, body io.Reader) (*http.Request, error) {
-	ctx = context.WithValue(ctx, replayableKey{}, method != http.MethodPost)
+	if _, set := ctx.Value(replayableKey{}).(bool); !set {
+		ctx = context.WithValue(ctx, replayableKey{}, method != http.MethodPost)
+	}
 	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, body)
 	if err != nil {
 		return nil, err

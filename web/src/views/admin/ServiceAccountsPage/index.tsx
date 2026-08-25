@@ -5,7 +5,19 @@ import useSWR, { mutate } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { SettingsLayouts, toast } from "@opal/layouts";
-import { Button, Tag, Text, MessageCard } from "@opal/components";
+import {
+  BasicModalFooter,
+  Button,
+  Code,
+  LineItemButton,
+  MessageCard,
+  Modal,
+  Popover,
+  PopoverMenu,
+  Table,
+  Tag,
+  Text,
+} from "@opal/components";
 import { Content, IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import {
@@ -21,10 +33,6 @@ import {
 } from "@opal/icons";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import AdminListHeader from "@/sections/admin/AdminListHeader";
-import { BasicModalFooter, Modal } from "@opal/components";
-import { Code } from "@opal/components";
-import { Popover, PopoverMenu } from "@opal/components";
-import LineItem from "@/refresh-components/buttons/LineItem";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import { markdown } from "@opal/utils";
 
@@ -39,7 +47,6 @@ import type { APIKey } from "@/views/admin/ServiceAccountsPage/interfaces";
 import { DISCORD_SERVICE_API_KEY_NAME } from "@/views/admin/ServiceAccountsPage/interfaces";
 import ApiKeyFormModal from "@/views/admin/ServiceAccountsPage/ApiKeyFormModal";
 import EditServiceAccountModal from "@/views/admin/ServiceAccountsPage/EditServiceAccountModal";
-import { Table } from "@opal/components";
 import { createTableColumns } from "@opal/components/table/columns";
 import { Section } from "@/layouts/general-layouts";
 
@@ -189,28 +196,31 @@ export default function ServiceAccountsPage() {
               </Popover.Trigger>
               <Popover.Content side="bottom" align="end" width="md">
                 <PopoverMenu>
-                  <LineItem
+                  <LineItemButton
+                    sizePreset="main-ui"
+                    rounding="sm"
                     icon={SvgUsers}
                     onClick={() => setGroupsRolesTarget(row)}
-                  >
-                    Groups
-                  </LineItem>
-                  <LineItem
+                    title="Groups"
+                  />
+                  <LineItemButton
+                    sizePreset="main-ui"
+                    rounding="sm"
                     icon={SvgUserEdit}
                     onClick={() => {
                       setSelectedApiKey(row);
                       setShowCreateUpdateForm(true);
                     }}
-                  >
-                    Edit Account
-                  </LineItem>
-                  <LineItem
+                    title="Edit Account"
+                  />
+                  <LineItemButton
+                    sizePreset="main-ui"
+                    rounding="sm"
                     icon={SvgTrash}
-                    danger
+                    color="danger"
                     onClick={() => setDeleteTarget(row)}
-                  >
-                    Delete Account
-                  </LineItem>
+                    title="Delete Account"
+                  />
                 </PopoverMenu>
               </Popover.Content>
             </Popover>

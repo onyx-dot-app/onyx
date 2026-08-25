@@ -1,13 +1,17 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Button, Popover, PopoverMenu } from "@opal/components";
+import {
+  Button,
+  LineItemButton,
+  Popover,
+  PopoverMenu,
+  useCreateModal,
+} from "@opal/components";
 import { noProp } from "@/lib/utils";
 import { cn } from "@opal/utils";
 import UserFilesModal from "@/sections/modals/UserFilesModal";
-import { useCreateModal } from "@opal/components";
 import { ProjectFile, UserFileStatus } from "@/lib/projects/types";
-import LineItem from "@/refresh-components/buttons/LineItem";
 import { Hoverable } from "@opal/core";
 import { toast } from "@opal/layouts";
 import { useProjectsContext } from "@/lib/projects/providers";
@@ -58,7 +62,9 @@ function FileLineItem({
 
   return (
     <Hoverable.Root group="FileLineItem">
-      <LineItem
+      <LineItemButton
+        sizePreset="main-ui"
+        rounding="sm"
         key={projectFile.id}
         onClick={noProp(() => onPickRecent(projectFile))}
         icon={
@@ -92,9 +98,8 @@ function FileLineItem({
             </Hoverable.Item>
           </div>
         }
-      >
-        {projectFile.name}
-      </LineItem>
+        title={projectFile.name}
+      />
     </Hoverable.Root>
   );
 }
@@ -124,14 +129,15 @@ function FilePickerPopoverContents({
     <PopoverMenu>
       {[
         // Action button to upload more files
-        <LineItem
+        <LineItemButton
+          sizePreset="main-ui"
+          rounding="sm"
           key="upload-files"
           icon={SvgUploadSquare}
           description="Upload a file from your device"
           onClick={triggerUploadPicker}
-        >
-          Upload Files
-        </LineItem>,
+          title="Upload Files"
+        />,
 
         // Separator
         null,
@@ -157,13 +163,14 @@ function FilePickerPopoverContents({
 
         // Rest of the files
         shouldShowMoreFilesButton && (
-          <LineItem
+          <LineItemButton
+            sizePreset="main-ui"
+            rounding="sm"
             key="more-files"
             icon={SvgMoreHorizontal}
             onClick={openRecentFilesModal}
-          >
-            All Recent Files
-          </LineItem>
+            title="All Recent Files"
+          />
         ),
       ]}
     </PopoverMenu>

@@ -4,6 +4,7 @@ import { useState } from "react";
 import {
   Button,
   Card,
+  LineItemButton,
   Popover,
   PopoverMenu,
   Switch,
@@ -13,7 +14,6 @@ import {
 import { Hoverable } from "@opal/core";
 import { cn } from "@opal/utils";
 // TODO(@raunakab): migrate to Opal LineItemButton once it supports danger variant
-import LineItem from "@/refresh-components/buttons/LineItem";
 import { ConfirmationModalLayout, toast } from "@opal/layouts";
 import { SvgEdit, SvgMoreHorizontal, SvgTrash } from "@opal/icons";
 import { ConfiguredIntegration } from "@/views/admin/ExternalAppsPage/interfaces";
@@ -114,29 +114,31 @@ export default function IntegrationCard({ integration }: IntegrationCardProps) {
                 <PopoverMenu>
                   {[
                     edit ? (
-                      <LineItem
+                      <LineItemButton
+                        sizePreset="main-ui"
+                        rounding="sm"
                         key="edit"
                         icon={SvgEdit}
                         onClick={() => {
                           setMenuOpen(false);
                           edit();
                         }}
-                      >
-                        Edit
-                      </LineItem>
+                        title="Edit"
+                      />
                     ) : undefined,
                     remove ? (
-                      <LineItem
+                      <LineItemButton
+                        sizePreset="main-ui"
+                        rounding="sm"
                         key="delete"
                         icon={SvgTrash}
-                        danger
+                        color="danger"
                         onClick={() => {
                           setMenuOpen(false);
                           setConfirmingRemoval(true);
                         }}
-                      >
-                        Delete
-                      </LineItem>
+                        title="Delete"
+                      />
                     ) : undefined,
                   ]}
                 </PopoverMenu>

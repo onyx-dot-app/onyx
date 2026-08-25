@@ -1,13 +1,18 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useCreateModal } from "@opal/components";
+import {
+  Button,
+  CopyButton,
+  Divider,
+  LineItemButton,
+  Popover,
+  Text,
+  useCreateModal,
+} from "@opal/components";
 import { noProp } from "@/lib/utils";
 import { formatDateTimeLog } from "@/lib/dateUtils";
-import { Button, Divider, Text } from "@opal/components";
 import { Content } from "@opal/layouts";
-import LineItem from "@/refresh-components/buttons/LineItem";
-import { Popover } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import {
   SvgAlertTriangle,
@@ -16,7 +21,6 @@ import {
   SvgXOctagon,
   SvgSimpleLoader,
 } from "@opal/icons";
-import { CopyButton } from "@opal/components";
 import { Hoverable } from "@opal/core";
 import { useHookExecutionLogs } from "@/ee/hooks/useHookExecutionLogs";
 import HookLogsModal from "@/ee/views/admin/HooksPage/HookLogsModal";
@@ -273,16 +277,17 @@ export default function HookStatusPopover({
                   <Divider paddingPerpendicular={0} />
                 )}
 
-                <LineItem
-                  muted
+                <LineItemButton
+                  sizePreset="main-ui"
+                  rounding="sm"
+                  color="muted"
                   icon={SvgMaximize2}
                   onClick={noProp(() => {
                     handleOpenChange(false);
                     logsModal.toggle(true);
                   })}
-                >
-                  View More Lines
-                </LineItem>
+                  title="View More Lines"
+                />
               </>
             ) : hasRecentErrors ? (
               <>
@@ -328,16 +333,17 @@ export default function HookStatusPopover({
                 </Section>
 
                 {/* View More Lines */}
-                <LineItem
-                  muted
+                <LineItemButton
+                  sizePreset="main-ui"
+                  rounding="sm"
+                  color="muted"
                   icon={SvgMaximize2}
                   onClick={noProp(() => {
                     handleOpenChange(false);
                     logsModal.toggle(true);
                   })}
-                >
-                  View More Lines
-                </LineItem>
+                  title="View More Lines"
+                />
               </>
             ) : (
               // No errors state
@@ -355,16 +361,17 @@ export default function HookStatusPopover({
                 <Divider paddingPerpendicular={0} />
 
                 {/* View Older Errors */}
-                <LineItem
-                  muted
+                <LineItemButton
+                  sizePreset="main-ui"
+                  rounding="sm"
+                  color="muted"
                   icon={SvgMaximize2}
                   onClick={noProp(() => {
                     handleOpenChange(false);
                     logsModal.toggle(true);
                   })}
-                >
-                  View Older Errors
-                </LineItem>
+                  title="View Older Errors"
+                />
               </>
             )}
           </Section>

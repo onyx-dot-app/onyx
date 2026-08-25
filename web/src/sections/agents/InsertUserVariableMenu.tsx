@@ -2,8 +2,7 @@
 
 import { useState } from "react";
 import { useFormikContext } from "formik";
-import { Button, Popover, PopoverMenu } from "@opal/components";
-import LineItem from "@/refresh-components/buttons/LineItem";
+import { Button, LineItemButton, Popover, PopoverMenu } from "@opal/components";
 import { SvgBracketCurly } from "@opal/icons";
 import {
   USER_DIRECTORY_PLACEHOLDERS,
@@ -56,14 +55,15 @@ export default function InsertUserVariableMenu({
 
   function renderItem(placeholder: UserPlaceholder) {
     return (
-      <LineItem
+      <LineItemButton
+        sizePreset="main-ui"
+        rounding="sm"
         key={placeholder.key}
         icon={SvgBracketCurly}
         description={userPlaceholderToken(placeholder.key)}
         onClick={() => insertToken(placeholder.key)}
-      >
-        {placeholder.label}
-      </LineItem>
+        title={placeholder.label}
+      />
     );
   }
 
