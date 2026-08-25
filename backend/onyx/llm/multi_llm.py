@@ -731,9 +731,9 @@ class LitellmLLM(LLM):
         # see the same effort the provider will.
         reasoning_effort = resolve_reasoning_effort(
             reasoning_effort,
-            self.config.reasoning_effort_default,
-            self.config.reasoning_effort_user_default,
-            self.config.reasoning_effort_max,
+            default=self.config.reasoning_effort_default,
+            user_default=self.config.reasoning_effort_user_default,
+            maximum=self.config.reasoning_effort_max,
         )
 
         # Note, there is a reasoning_effort parameter in LiteLLM but it is completely jank and does not work for any

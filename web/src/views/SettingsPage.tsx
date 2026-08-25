@@ -1296,46 +1296,49 @@ function ChatPreferencesSettings() {
               </InputHorizontal>
             )}
 
-            {(settings.reasoning_override_enabled ?? true) && (
-              <InputHorizontal
-                title="Default Reasoning Level"
-                description="Starting reasoning level for your new chats. Admin settings on a model always apply, and any single chat can override this in its model settings."
-                withLabel
-              >
-                <div className="flex items-center gap-3">
-                  <Switch
-                    checked={userEffortDefault != null}
-                    onCheckedChange={(checked) => {
-                      void saveEffortDefault(checked ? draftEffortStop : null);
-                    }}
-                  />
-                  {userEffortDefault != null && (
-                    <>
-                      <div className="w-32">
-                        <PaneSlider
-                          compact
-                          value={draftEffortStop}
-                          min={0}
-                          max={ALL_REASONING_STOPS.length - 1}
-                          step={1}
-                          onValueChange={setDraftEffortStop}
-                          onValueCommit={(value) => {
-                            void saveEffortDefault(value);
-                          }}
-                        />
-                      </div>
-                      <Text font="secondary-mono" color="text-04" nowrap>
-                        {
-                          REASONING_STOP_LABELS[
-                            ALL_REASONING_STOPS[draftEffortStop] ?? "medium"
-                          ]
-                        }
-                      </Text>
-                    </>
-                  )}
-                </div>
-              </InputHorizontal>
-            )}
+            {!settings.isLoading &&
+              (settings.reasoning_override_enabled ?? true) && (
+                <InputHorizontal
+                  title="Default Reasoning Level"
+                  description="Starting reasoning level for your new chats. Admin settings on a model always apply, and any single chat can override this in its model settings."
+                  withLabel
+                >
+                  <div className="flex items-center gap-3">
+                    <Switch
+                      checked={userEffortDefault != null}
+                      onCheckedChange={(checked) => {
+                        void saveEffortDefault(
+                          checked ? draftEffortStop : null
+                        );
+                      }}
+                    />
+                    {userEffortDefault != null && (
+                      <>
+                        <div className="w-32">
+                          <PaneSlider
+                            compact
+                            value={draftEffortStop}
+                            min={0}
+                            max={ALL_REASONING_STOPS.length - 1}
+                            step={1}
+                            onValueChange={setDraftEffortStop}
+                            onValueCommit={(value) => {
+                              void saveEffortDefault(value);
+                            }}
+                          />
+                        </div>
+                        <Text font="secondary-mono" color="text-04" nowrap>
+                          {
+                            REASONING_STOP_LABELS[
+                              ALL_REASONING_STOPS[draftEffortStop] ?? "medium"
+                            ]
+                          }
+                        </Text>
+                      </>
+                    )}
+                  </div>
+                </InputHorizontal>
+              )}
 
             <InputHorizontal
               title="Chat Auto-scroll"

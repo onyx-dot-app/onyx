@@ -107,8 +107,6 @@ class UserPreferences(BaseModel):
     # These will default to workspace settings on the frontend if not set
     auto_scroll: bool | None = None
     temperature_override_enabled: bool | None = None
-    # Per-user chat defaults. Sit below an admin's per-model default in the
-    # resolution chain, and the per-model max clamps them.
     temperature_default: float | None = None
     reasoning_effort_default: ReasoningEffort | None = None
     theme_preference: ThemePreference | None = None

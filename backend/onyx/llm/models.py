@@ -83,8 +83,8 @@ def reasoning_effort_exceeds(effort: ReasoningEffort, cap: ReasoningEffort) -> b
 
 
 class UserChatDefaults(BaseModel):
-    """A user's own chat defaults. They sit below the admin's per-model
-    default in the resolution chain, and the per-model max clamps them."""
+    """A user's own chat defaults, resolved below any admin per-model
+    setting. See resolve_reasoning_effort for the reasoning chain."""
 
     temperature_default: float | None = None
     reasoning_effort_default: ReasoningEffort | None = None
@@ -92,6 +92,7 @@ class UserChatDefaults(BaseModel):
 
 def resolve_reasoning_effort(
     requested: ReasoningEffort,
+    *,
     default: ReasoningEffort | None,
     user_default: ReasoningEffort | None,
     maximum: ReasoningEffort | None,

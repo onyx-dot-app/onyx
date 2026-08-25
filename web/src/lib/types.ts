@@ -31,8 +31,6 @@ interface UserPreferences {
   auto_scroll: boolean;
   shortcut_enabled: boolean;
   temperature_override_enabled: boolean;
-  // Per-user chat defaults. Admin per-model defaults outrank them, and the
-  // per-model max clamps them.
   temperature_default?: number | null;
   reasoning_effort_default?: ReasoningEffortOverride | null;
   theme_preference: ThemePreference | null;

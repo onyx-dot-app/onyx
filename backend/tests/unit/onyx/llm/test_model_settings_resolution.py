@@ -102,7 +102,12 @@ class TestResolveReasoningEffort:
         maximum: ReasoningEffort | None,
         expected: ReasoningEffort,
     ) -> None:
-        assert resolve_reasoning_effort(requested, default, None, maximum) == expected
+        assert (
+            resolve_reasoning_effort(
+                requested, default=default, user_default=None, maximum=maximum
+            )
+            == expected
+        )
 
     @pytest.mark.parametrize(
         "maximum,expected",
@@ -122,7 +127,9 @@ class TestResolveReasoningEffort:
         mapping in OPENAI_REASONING_EFFORT.
         """
         assert (
-            resolve_reasoning_effort(ReasoningEffort.AUTO, None, None, maximum)
+            resolve_reasoning_effort(
+                ReasoningEffort.AUTO, default=None, user_default=None, maximum=maximum
+            )
             == expected
         )
 
@@ -190,14 +197,18 @@ class TestResolveReasoningEffort:
         expected: ReasoningEffort,
     ) -> None:
         assert (
-            resolve_reasoning_effort(requested, default, user_default, maximum)
+            resolve_reasoning_effort(
+                requested, default=default, user_default=user_default, maximum=maximum
+            )
             == expected
         )
 
     def test_auto_stays_auto_without_a_cap(self) -> None:
         """No cap means no reason to force a choice the provider can make."""
         assert (
-            resolve_reasoning_effort(ReasoningEffort.AUTO, None, None, None)
+            resolve_reasoning_effort(
+                ReasoningEffort.AUTO, default=None, user_default=None, maximum=None
+            )
             is ReasoningEffort.AUTO
         )
 
