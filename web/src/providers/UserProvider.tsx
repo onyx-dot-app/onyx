@@ -253,18 +253,24 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const lastLanguageSyncUserIdRef = useRef<string | null>(null);
   const languageRequestSeqRef = useRef(0);
+  const languageAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     // Wait for user data to load; sync once per user identity
     if (!upToDateUser?.id) return;
     if (lastLanguageSyncUserIdRef.current === upToDateUser.id) return;
-
-    const savedLanguage = upToDateUser.preferences?.language;
-    if (!isSupportedLocale(savedLanguage)) return;
     lastLanguageSyncUserIdRef.current = upToDateUser.id;
 
-    if (Cookies.get(LOCALE_COOKIE_NAME) !== savedLanguage) {
-      Cookies.set(LOCALE_COOKIE_NAME, savedLanguage, LOCALE_COOKIE_OPTIONS);
+    const savedLanguage = upToDateUser.preferences?.language;
+    if (isSupportedLocale(savedLanguage)) {
+      if (Cookies.get(LOCALE_COOKIE_NAME) !== savedLanguage) {
+        Cookies.set(LOCALE_COOKIE_NAME, savedLanguage, LOCALE_COOKIE_OPTIONS);
+        router.refresh();
+      }
+    } else if (Cookies.get(LOCALE_COOKIE_NAME) !== undefined) {
+      // This user has no stored preference: drop a cookie left behind by a
+      // previous identity in this tab so the default locale renders.
+      Cookies.remove(LOCALE_COOKIE_NAME, { path: "/" });
       router.refresh();
     }
   }, [upToDateUser?.id, upToDateUser?.preferences?.language, router]);
@@ -584,6 +590,11 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     // newer choice.
     const requestId = ++languageRequestSeqRef.current;
     const isLatestRequest = () => requestId === languageRequestSeqRef.current;
+    // Abort any in-flight update so a superseded PATCH can't commit a stale
+    // value to the database after the newer one.
+    languageAbortRef.current?.abort();
+    const abortController = new AbortController();
+    languageAbortRef.current = abortController;
     try {
       setUpToDateUser((prevUser) => {
         if (prevUser) {
@@ -607,6 +618,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ language }),
+        signal: abortController.signal,
       });
 
       if (!response.ok) {
@@ -618,9 +630,26 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         router.refresh();
       }
     } catch (error) {
+      // A superseded request was aborted on purpose; the newer request owns
+      // all state from here, so this is not a failure.
+      if (error instanceof DOMException && error.name === "AbortError") {
+        return;
+      }
       // Roll back the optimistic cookie and in-memory preference on every
       // failure path, including network errors where fetch itself rejects.
       if (isLatestRequest()) {
+        setUpToDateUser((prevUser) => {
+          if (prevUser) {
+            return {
+              ...prevUser,
+              preferences: {
+                ...prevUser.preferences,
+                language: previousLanguage ?? null,
+              },
+            };
+          }
+          return prevUser;
+        });
         if (isSupportedLocale(previousLanguage)) {
           Cookies.set(
             LOCALE_COOKIE_NAME,
@@ -630,7 +659,12 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         } else {
           Cookies.remove(LOCALE_COOKIE_NAME, { path: "/" });
         }
-        await refreshUser();
+        try {
+          await refreshUser();
+        } catch {
+          // Best effort: the direct rollback above already restored local
+          // state, so a failed refetch changes nothing user-visible.
+        }
       }
       console.error("Error updating language preference:", error);
       throw error;
