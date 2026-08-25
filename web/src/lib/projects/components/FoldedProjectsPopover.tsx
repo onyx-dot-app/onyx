@@ -1,6 +1,9 @@
 "use client";
 
-import { useFolderIcon } from "@/lib/projects/components/ProjectFolderButton";
+import {
+  FolderIcon,
+  FolderIconProvider,
+} from "@/lib/projects/components/ProjectFolderButton";
 import CreateProjectModal from "@/lib/projects/components/CreateProjectModal";
 import { useEffect, useState } from "react";
 import {
@@ -42,7 +45,6 @@ function ProjectPopoverRow({ match, onNavigate }: ProjectPopoverRowProps) {
   const activeProject = useActiveProject();
   const isActiveProject = activeProject?.id === match.project.id;
   const [open, setOpen] = useState(isActiveProject);
-  const folderIcon = useFolderIcon(open, () => setOpen((prev) => !prev));
 
   // A project listed because one of its chats matched has to show that chat —
   // a hit you cannot see is no hit at all. Only ever opens, so folding it by
@@ -61,41 +63,43 @@ function ProjectPopoverRow({ match, onNavigate }: ProjectPopoverRowProps) {
   }
 
   return (
-    <Section
-      data-testid="ProjectsPopover/row"
-      gap={1}
-      alignItems="stretch"
-      height="auto"
-    >
-      <SidebarTab
-        icon={folderIcon}
-        // Same rule as the sidebar: while the chats are hidden, the folder
-        // carries the "you are here" mark for them.
-        selected={isActiveProject && (appFocus.isProject() || !open)}
-        onClick={noProp(handleClick)}
+    <FolderIconProvider open={open} onToggle={() => setOpen((prev) => !prev)}>
+      <Section
+        data-testid="ProjectsPopover/row"
+        gap={1}
+        alignItems="stretch"
+        height="auto"
       >
-        {match.project.name}
-      </SidebarTab>
-      {open &&
-        match.chatSessions.map((chatSession) => (
-          <SidebarTab
-            key={chatSession.id}
-            // `nested` supplies the indent that lines a chat up under its
-            // project, so the row needs no icon of its own.
-            nested
-            href={`/app?chatId=${chatSession.id}`}
-            // Opening a chat pins its agent, the same as the sidebar's own
-            // rows — the popover is another way in, not a different one.
-            onClick={() => {
-              pinChatAgent(chatSession);
-              onNavigate();
-            }}
-            selected={appFocus.getId() === chatSession.id}
-          >
-            {chatSession.name || UNNAMED_CHAT}
-          </SidebarTab>
-        ))}
-    </Section>
+        <SidebarTab
+          icon={FolderIcon}
+          // Same rule as the sidebar: while the chats are hidden, the folder
+          // carries the "you are here" mark for them.
+          selected={isActiveProject && (appFocus.isProject() || !open)}
+          onClick={noProp(handleClick)}
+        >
+          {match.project.name}
+        </SidebarTab>
+        {open &&
+          match.chatSessions.map((chatSession) => (
+            <SidebarTab
+              key={chatSession.id}
+              // `nested` supplies the indent that lines a chat up under its
+              // project, so the row needs no icon of its own.
+              nested
+              href={`/app?chatId=${chatSession.id}`}
+              // Opening a chat pins its agent, the same as the sidebar's own
+              // rows — the popover is another way in, not a different one.
+              onClick={() => {
+                pinChatAgent(chatSession);
+                onNavigate();
+              }}
+              selected={appFocus.getId() === chatSession.id}
+            >
+              {chatSession.name || UNNAMED_CHAT}
+            </SidebarTab>
+          ))}
+      </Section>
+    </FolderIconProvider>
   );
 }
 

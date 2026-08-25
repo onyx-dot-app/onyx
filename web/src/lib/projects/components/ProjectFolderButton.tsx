@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { useDroppable } from "@dnd-kit/core";
 import {
   Button,
@@ -11,7 +17,6 @@ import {
 } from "@opal/components";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import { cn } from "@opal/utils";
-import type { IconFunctionComponent } from "@opal/types";
 import {
   SvgEdit,
   SvgFolder,
@@ -31,6 +36,18 @@ import { useProjectsContext } from "@/lib/projects/providers";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
 
 /**
+ * What the folder glyph needs from the row it sits in.
+ *
+ * It arrives by context rather than as props because `SidebarTab` renders
+ * `icon` as a component type and passes it nothing of ours.
+ */
+interface FolderIconState {
+  open: boolean;
+  onToggle: () => void;
+}
+const FolderIconContext = createContext<FolderIconState | null>(null);
+
+/**
  * The folder glyph for a project row: open or closed by fold state, previewing
  * the partial-open folder on hover, and toggling the fold on click without
  * letting the click reach the row underneath.
@@ -38,17 +55,20 @@ import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
  * After a click the preview stays off until the pointer leaves, so the icon does
  * not preview the state the user just left.
  *
- * Shared by both project rows so the glyph cannot drift between them. The state
- * lives here and the returned render function is stateless on purpose:
- * `SidebarTab` reconciles `icon` by function identity, so a stateful component
- * would remount whenever `open` changed and reset the preview mid-hover.
+ * Declared once, at module scope, and that is the point. `SidebarTab` renders
+ * `icon` as a component type, so handing it a fresh function each render would
+ * be handing it a new type: React tears the button down and builds another,
+ * losing keyboard focus the moment you press it and dropping the hover preview
+ * on any unrelated re-render. Hover state lives here, where it re-renders
+ * without changing type, and the fold state comes through the context.
  */
-export function useFolderIcon(
-  open: boolean,
-  onToggle: () => void
-): IconFunctionComponent {
+export function FolderIcon() {
+  const state = useContext(FolderIconContext);
   const [hovering, setHovering] = useState(false);
   const [previewEnabled, setPreviewEnabled] = useState(true);
+
+  if (!state) return null;
+  const { open, onToggle } = state;
 
   const Glyph =
     hovering && previewEnabled
@@ -57,7 +77,7 @@ export function useFolderIcon(
         ? SvgFolderOpen
         : SvgFolder;
 
-  return () => (
+  return (
     /* Deliberately not an Opal `Button`. This was a div, promoted to a button
        for its semantics alone — focusable, with a role and keyboard handling.
        It wants none of the chrome Opal's Button brings: focus ring, padding,
@@ -90,6 +110,26 @@ export function useFolderIcon(
 }
 
 /**
+ * Wrap the row whose `SidebarTab` renders {@link FolderIcon}, so the glyph can
+ * read the fold state without the icon component changing identity.
+ */
+export interface FolderIconProviderProps extends FolderIconState {
+  children: React.ReactNode;
+}
+export function FolderIconProvider({
+  open,
+  onToggle,
+  children,
+}: FolderIconProviderProps) {
+  const value = useMemo(() => ({ open, onToggle }), [open, onToggle]);
+  return (
+    <FolderIconContext.Provider value={value}>
+      {children}
+    </FolderIconContext.Provider>
+  );
+}
+
+/**
  * A project's sidebar row: the folder tab itself plus, when unfolded, the
  * project's chats. Doubles as a drop target for dragging a chat into it.
  */
@@ -107,7 +147,6 @@ export function ProjectFolderButton({ project }: ProjectFolderButtonProps) {
   const { renameProject, deleteProject } = useProjectsContext();
   const [isEditing, setIsEditing] = useState(false);
   const [popoverOpen, setPopoverOpen] = useState(false);
-  const folderIcon = useFolderIcon(open, () => setOpen((prev) => !prev));
 
   // Unfold whichever project the user moves into, so its chats are visible on
   // arrival. Only ever opens — folding it again while still inside the project
@@ -187,52 +226,54 @@ export function ProjectFolderButton({ project }: ProjectFolderButtonProps) {
       )}
 
       {/* Project Folder */}
-      <Popover onOpenChange={setPopoverOpen}>
-        <Popover.Anchor>
-          <SidebarTab
-            icon={folderIcon}
-            // Folded, the project's chats are hidden — and a project chat
-            // appears nowhere else in the sidebar (Recents excludes them), so
-            // the folder itself has to carry the "you are here" mark.
-            selected={isActiveProject && (activeSidebar.isProject() || !open)}
-            /* While renaming, drop the click target so the input stays usable. */
-            onClick={isEditing ? undefined : noProp(handleTextClick)}
-            rightChildren={
-              <>
-                <Popover.Trigger asChild onClick={noProp()}>
-                  <div
-                    className={cn(
-                      !popoverOpen && "hidden",
-                      !isEditing && "group-hover/SidebarTab:flex"
-                    )}
-                  >
-                    <Button
-                      icon={SvgMoreHorizontal}
-                      prominence="internal"
-                      size="sm"
-                      interaction={popoverOpen ? "hover" : "rest"}
-                    />
-                  </div>
-                </Popover.Trigger>
+      <FolderIconProvider open={open} onToggle={() => setOpen((prev) => !prev)}>
+        <Popover onOpenChange={setPopoverOpen}>
+          <Popover.Anchor>
+            <SidebarTab
+              icon={FolderIcon}
+              // Folded, the project's chats are hidden — and a project chat
+              // appears nowhere else in the sidebar (Recents excludes them), so
+              // the folder itself has to carry the "you are here" mark.
+              selected={isActiveProject && (activeSidebar.isProject() || !open)}
+              /* While renaming, drop the click target so the input stays usable. */
+              onClick={isEditing ? undefined : noProp(handleTextClick)}
+              rightChildren={
+                <>
+                  <Popover.Trigger asChild onClick={noProp()}>
+                    <div
+                      className={cn(
+                        !popoverOpen && "hidden",
+                        !isEditing && "group-hover/SidebarTab:flex"
+                      )}
+                    >
+                      <Button
+                        icon={SvgMoreHorizontal}
+                        prominence="internal"
+                        size="sm"
+                        interaction={popoverOpen ? "hover" : "rest"}
+                      />
+                    </div>
+                  </Popover.Trigger>
 
-                <Popover.Content side="right" align="end" width="md">
-                  <PopoverMenu>{popoverItems}</PopoverMenu>
-                </Popover.Content>
-              </>
-            }
-          >
-            {isEditing ? (
-              <ButtonRenaming
-                initialName={project.name}
-                onRename={handleRename}
-                onClose={() => setIsEditing(false)}
-              />
-            ) : (
-              project.name
-            )}
-          </SidebarTab>
-        </Popover.Anchor>
-      </Popover>
+                  <Popover.Content side="right" align="end" width="md">
+                    <PopoverMenu>{popoverItems}</PopoverMenu>
+                  </Popover.Content>
+                </>
+              }
+            >
+              {isEditing ? (
+                <ButtonRenaming
+                  initialName={project.name}
+                  onRename={handleRename}
+                  onClose={() => setIsEditing(false)}
+                />
+              ) : (
+                project.name
+              )}
+            </SidebarTab>
+          </Popover.Anchor>
+        </Popover>
+      </FolderIconProvider>
 
       {/* Project Chat-Sessions */}
       {open &&
