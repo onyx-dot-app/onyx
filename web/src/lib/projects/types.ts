@@ -10,6 +10,19 @@ export interface Project {
   chat_sessions: ChatSession[];
 }
 
+/**
+ * One project that survived a search over project and chat names.
+ *
+ * A chat hit narrows `chatSessions` to the hits and sets `chatMatched`, so the
+ * row can open itself — a match the user cannot see is no match at all. A hit on
+ * the project's own name keeps every chat and leaves the row folded.
+ */
+export interface ProjectSearchMatch {
+  project: Project;
+  chatSessions: ChatSession[];
+  chatMatched: boolean;
+}
+
 export interface CategorizedFiles {
   user_files: ProjectFile[];
   rejected_files: RejectedFile[];
