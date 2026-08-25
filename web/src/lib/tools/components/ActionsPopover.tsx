@@ -1,166 +1,48 @@
 "use client";
 
 import {
-  CODING_AGENT_TOOL_ID,
   FILE_READER_TOOL_ID,
-  IMAGE_GENERATION_TOOL_ID,
-  PYTHON_TOOL_ID,
   SEARCH_TOOL_ID,
-  WEB_SEARCH_TOOL_ID,
 } from "@/app/app/components/tools/constants";
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import useFocusOnMount from "@opal/hooks/useFocusOnMount";
-import { Popover, PopoverMenu } from "@opal/components";
+import { InputTypeIn, Button, Popover, PopoverMenu } from "@opal/components";
+import { SvgActions, SvgKey, SvgSliders, SvgSimpleLoader } from "@opal/icons";
 import SwitchList, { SwitchListItem } from "@/lib/tools/components/SwitchList";
 import { MinimalAgent } from "@/lib/agents/types";
 import {
   MCPAuthenticationType,
   MCPAuthenticationPerformer,
-  ToolSnapshot,
+  SecondaryViewState,
 } from "@/lib/tools/types";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import { useAgentPreferences } from "@/lib/agents/hooks";
 import { useUser } from "@/providers/UserProvider";
 import { hasPermission } from "@/lib/permissions";
 import { FilterManager, useSourcePreferences } from "@/lib/hooks";
-import { getSourceMetadata } from "@/lib/sources";
 import MCPApiKeyModal from "@/components/chat/MCPApiKeyModal";
-import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { Permission, ValidSources } from "@/lib/types";
+import { NO_DISABLED_TOOLS } from "@/lib/tools/constants";
+import { getAdminConfigureInfo, getToolTooltip } from "@/lib/tools/utils";
+import { getConfiguredSources } from "@/lib/sources";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { SourceMetadata } from "@/lib/search/interfaces";
 import { SourceIcon } from "@/components/SourceIcon";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
 import useCCPairs from "@/hooks/useCCPairs";
 import { useLLMProviders } from "@/lib/languageModels/hooks";
 import { useSettings } from "@/lib/settings/hooks";
-import { InputTypeIn } from "@opal/components";
 import { useToolOAuthStatus } from "@/lib/hooks/useToolOAuthStatus";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import ActionLineItem from "@/lib/tools/components/ActionLineItem";
 import MCPLineItem, { MCPServer } from "@/lib/tools/components/MCPLineItem";
 import { useProjectsContext } from "@/lib/projects/providers";
-import {
-  SvgActions,
-  SvgChevronRight,
-  SvgKey,
-  SvgSliders,
-  SvgSimpleLoader,
-} from "@opal/icons";
-import { Button } from "@opal/components";
 import { isAssistant } from "@/lib/agents/utils";
 import {
   getMCPUserOAuthNavigationUrl,
+  saveMCPUserCredentials,
   startMCPUserOAuth,
 } from "@/lib/tools/svc";
-
-function buildTooltipMessage(
-  actionDescription: string,
-  isConfigured: boolean,
-  canManageAction: boolean
-) {
-  const _CONFIGURE_MESSAGE = "Press the settings cog to enable.";
-  const _USER_NOT_ADMIN_MESSAGE = "Ask an admin to configure.";
-
-  if (isConfigured) {
-    return actionDescription;
-  }
-
-  if (canManageAction) {
-    return actionDescription + " " + _CONFIGURE_MESSAGE;
-  }
-
-  return actionDescription + " " + _USER_NOT_ADMIN_MESSAGE;
-}
-
-const TOOL_DESCRIPTIONS: Record<string, string> = {
-  [SEARCH_TOOL_ID]: "Search through connected knowledge to inform the answer.",
-  [IMAGE_GENERATION_TOOL_ID]: "Generate images based on a prompt.",
-  [WEB_SEARCH_TOOL_ID]: "Search the web for up-to-date information.",
-  [PYTHON_TOOL_ID]: "Execute code for complex analysis.",
-  [CODING_AGENT_TOOL_ID]:
-    "Investigate a GitHub repository and answer questions about its code.",
-};
-
-const DEFAULT_TOOL_DESCRIPTION = "This action is not configured yet.";
-
-// Stable fallback so absent preferences never churn dependent callbacks.
-const NO_DISABLED_TOOLS: number[] = [];
-
-function getToolTooltip(
-  tool: ToolSnapshot,
-  isConfigured: boolean,
-  canManageAction: boolean
-): string {
-  const description =
-    (tool.in_code_tool_id && TOOL_DESCRIPTIONS[tool.in_code_tool_id]) ||
-    tool.description ||
-    DEFAULT_TOOL_DESCRIPTION;
-  return buildTooltipMessage(description, isConfigured, canManageAction);
-}
-
-const ADMIN_CONFIG_LINKS: Record<string, { href: string; tooltip: string }> = {
-  [IMAGE_GENERATION_TOOL_ID]: {
-    href: ADMIN_ROUTES.IMAGE_GENERATION.path,
-    tooltip: "Configure Image Generation",
-  },
-  [WEB_SEARCH_TOOL_ID]: {
-    href: ADMIN_ROUTES.WEB_SEARCH.path,
-    tooltip: "Configure Web Search",
-  },
-  [PYTHON_TOOL_ID]: {
-    href: ADMIN_ROUTES.CODE_INTERPRETER.path,
-    tooltip: "Configure Code Interpreter",
-  },
-};
-
-const OPENAPI_ADMIN_CONFIG = {
-  href: ADMIN_ROUTES.OPENAPI_ACTIONS.path,
-  tooltip: "Manage OpenAPI Actions",
-};
-
-const getAdminConfigureInfo = (
-  tool: ToolSnapshot
-): { href: string; tooltip: string } | null => {
-  if (tool.in_code_tool_id && ADMIN_CONFIG_LINKS[tool.in_code_tool_id]) {
-    return ADMIN_CONFIG_LINKS[tool.in_code_tool_id] ?? null;
-  }
-
-  if (!tool.in_code_tool_id && !tool.mcp_server_id) {
-    return OPENAPI_ADMIN_CONFIG;
-  }
-
-  return null;
-};
-
-// Get source metadata for configured sources - deduplicated by source type
-function getConfiguredSources(
-  availableSources: ValidSources[]
-): Array<SourceMetadata & { originalName: string; uniqueKey: string }> {
-  const seen = new Set<string>();
-  const result: Array<
-    SourceMetadata & { originalName: string; uniqueKey: string }
-  > = [];
-
-  for (const sourceName of availableSources) {
-    const cleanName = sourceName.replace("federated_", "") as ValidSources;
-    if (seen.has(cleanName)) continue;
-    seen.add(cleanName);
-
-    const metadata = getSourceMetadata(cleanName);
-    if (metadata.internalName === ValidSources.NotApplicable) continue;
-
-    result.push({
-      ...metadata,
-      originalName: sourceName,
-      uniqueKey: cleanName,
-    });
-  }
-  return result;
-}
-
-type SecondaryViewState =
-  | { type: "sources" }
-  | { type: "mcp"; serverId: number };
 
 export interface ActionsPopoverProps {
   activeAgent: MinimalAgent;
@@ -551,58 +433,15 @@ export default function ActionsPopover({
     }
   };
 
-  const handleMCPApiKeySubmit = async (serverId: number, apiKey: string) => {
-    try {
-      const response = await fetch("/api/mcp/user-credentials", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          server_id: serverId,
-          credentials: { api_key: apiKey },
-          transport: "streamable-http",
-        }),
-      });
+  // Both submit paths are the same request; the API-key form just names its
+  // one field. `saveMCPUserCredentials` owns the endpoint and its errors.
+  const handleMCPApiKeySubmit = (serverId: number, apiKey: string) =>
+    saveMCPUserCredentials(serverId, { api_key: apiKey });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        const errorMessage = errorData.detail || "Failed to save API key";
-        throw new Error(errorMessage);
-      }
-    } catch (error) {
-      console.error("Error saving API key:", error);
-      throw error;
-    }
-  };
-
-  const handleMCPCredentialsSubmit = async (
+  const handleMCPCredentialsSubmit = (
     serverId: number,
     credentials: Record<string, string>
-  ) => {
-    try {
-      const response = await fetch("/api/mcp/user-credentials", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          server_id: serverId,
-          credentials: credentials,
-          transport: "streamable-http",
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        const errorMessage = errorData.detail || "Failed to save credentials";
-        throw new Error(errorMessage);
-      }
-    } catch (error) {
-      console.error("Error saving credentials:", error);
-      throw error;
-    }
-  };
+  ) => saveMCPUserCredentials(serverId, credentials);
 
   const handleServerAuthentication = (
     server: MCPServer,
