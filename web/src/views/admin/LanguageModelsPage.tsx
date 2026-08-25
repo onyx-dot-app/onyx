@@ -177,7 +177,7 @@ function ExistingProviderCard({
         <SelectCard
           state="filled"
           padding={2}
-          rounding="lg"
+          rounding={4}
           onClick={() => setIsOpen(true)}
         >
           <ContentAction
@@ -242,7 +242,7 @@ function NewProviderCard({
     <SelectCard
       state="empty"
       padding={2}
-      rounding="lg"
+      rounding={4}
       onClick={() => setIsOpen(true)}
     >
       <ContentAction
@@ -295,7 +295,7 @@ function NewCustomProviderCard({
       <SelectCard
         state="empty"
         padding={2}
-        rounding="lg"
+        rounding={4}
         onClick={() => setIsOpen(true)}
       >
         <ContentAction
@@ -390,7 +390,7 @@ export default function LanguageModelsPage() {
 
       <SettingsLayouts.Body>
         {hasProviders ? (
-          <Card border="solid" rounding="lg">
+          <Card border="solid" rounding={4}>
             <InputHorizontal
               title="Default Model"
               description="This model will be used by Onyx by default in your chats."

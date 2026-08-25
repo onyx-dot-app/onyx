@@ -33,7 +33,7 @@ export default function ScimSyncCard({
   onRegenerate,
 }: ScimSyncCardProps) {
   return (
-    <Card border="solid" rounding="lg">
+    <Card border="solid" rounding={4}>
       <Section alignItems="start" height="fit" gap={3}>
         <ContentAction
           title="SCIM Sync"

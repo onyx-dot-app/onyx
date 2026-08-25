@@ -85,7 +85,7 @@ export default function LicenseActivationCard({
   // License status view (when license exists and not editing)
   if (hasLicense && !showInput) {
     return (
-      <Card border="solid" padding={4} rounding="lg">
+      <Card border="solid" padding={4} rounding={4}>
         <Section alignItems="stretch" height="fit">
           <Section
             flexDirection="row"
@@ -139,7 +139,7 @@ export default function LicenseActivationCard({
 
   // License input form
   return (
-    <Card border="solid" padding={0} rounding="lg">
+    <Card border="solid" padding={0} rounding={4}>
       <Section alignItems="stretch" height="fit" gap={0}>
         {/* Header */}
         <Section

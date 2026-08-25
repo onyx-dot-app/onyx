@@ -142,7 +142,7 @@ function PeriodMenuItem({ title, onClick, icon }: PeriodMenuItemProps) {
       title={title}
       onClick={onClick}
       {...(icon && { icon })}
-      rounding="md"
+      rounding={3}
       selectVariant="select-heavy"
       sizePreset="main-ui"
       state="empty"

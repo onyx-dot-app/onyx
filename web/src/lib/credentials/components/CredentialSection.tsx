@@ -252,7 +252,7 @@ export default function CredentialSection({
       rounded-lg
       bg-background"
     >
-      <Card padding={6} border="solid" rounding="lg">
+      <Card padding={6} border="solid" rounding={4}>
         <div className="flex items-center">
           <div className="shrink-0 mr-3">
             <SvgKey size={16} className="text-muted-foreground" />

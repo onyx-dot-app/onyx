@@ -70,7 +70,7 @@ function NotificationItem({
         title={notification.title}
         description={notification.description ?? undefined}
         sizePreset="main-ui"
-        rounding="sm"
+        rounding={2}
         color={state === "new" ? undefined : "muted"}
         onClick={onClick}
         rightChildren={

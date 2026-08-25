@@ -619,7 +619,7 @@ function ModelRow({
             : undefined
         }
       >
-        <Interactive.Container width="full" size="fit" rounding="md">
+        <Interactive.Container width="full" size="fit" rounding={3}>
           <div className="w-full p-1.5">
             <ContentAction
               color="interactive"

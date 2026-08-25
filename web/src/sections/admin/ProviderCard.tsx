@@ -101,7 +101,7 @@ export default function ProviderCard({
       <SelectCard
         state={STATUS_TO_STATE[status]}
         padding={2}
-        rounding="lg"
+        rounding={4}
         aria-label={ariaLabel}
         onClick={
           isDisconnected && onConnect

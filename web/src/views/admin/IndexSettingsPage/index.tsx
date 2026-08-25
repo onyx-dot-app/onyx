@@ -396,7 +396,7 @@ function ProviderGroup({
         {models.length === 0 ? (
           <SelectCard
             state="filled"
-            rounding="md"
+            rounding={3}
             padding={2}
             onClick={() => providerCreationModal.toggle(true)}
           >
@@ -524,7 +524,7 @@ function EmbeddingModelCard({
   return (
     <SelectCard
       state={cardState}
-      rounding="md"
+      rounding={3}
       padding={1}
       onClick={isClickable ? onSelect : undefined}
     >
@@ -1240,7 +1240,7 @@ export default function IndexSettingsPage() {
 
                         {NEXT_PUBLIC_CLOUD_ENABLED ? (
                           <CloudDisabled>
-                            <Card border="solid" rounding="lg" padding={2}>
+                            <Card border="solid" rounding={4} padding={2}>
                               <GeneralLayouts.Section padding={2}>
                                 <Content
                                   icon={SvgVector}
@@ -1264,7 +1264,7 @@ export default function IndexSettingsPage() {
                                 expandableContentHeight="fit"
                                 border="solid"
                                 borderColor={statusVariant}
-                                rounding="lg"
+                                rounding={4}
                                 padding={viewAllModelsOpen ? 0 : 2}
                                 expandedContent={
                                   <>
@@ -1417,7 +1417,7 @@ export default function IndexSettingsPage() {
 
                                             <SelectCard
                                               state="filled"
-                                              rounding="md"
+                                              rounding={3}
                                               padding={2}
                                               onClick={() =>
                                                 customModelModal.toggle(true)
@@ -1612,7 +1612,7 @@ export default function IndexSettingsPage() {
                           disabled={!isReindexing}
                           tooltip="Multipass Indexing is disabled temporarily and will be available in the future."
                         >
-                          <Card border="solid" rounding="lg">
+                          <Card border="solid" rounding={4}>
                             <InputHorizontal
                               title="Multipass Indexing"
                               description="Index documents as chunks of varying sizes to better identify relevant sources."
@@ -1645,7 +1645,7 @@ export default function IndexSettingsPage() {
                           <Card
                             border="solid"
                             borderColor={statusVariant}
-                            rounding="lg"
+                            rounding={4}
                           >
                             <GeneralLayouts.Section
                               width="full"
@@ -1716,7 +1716,7 @@ export default function IndexSettingsPage() {
                               : undefined
                           }
                         >
-                          <Card border="solid" rounding="lg">
+                          <Card border="solid" rounding={4}>
                             <GeneralLayouts.Section
                               width="full"
                               alignItems="stretch"

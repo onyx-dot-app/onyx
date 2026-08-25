@@ -124,7 +124,7 @@ function TokenLimitSection({
       />
       <SimpleCollapsible.Content>
         <Disabled disabled={disabled} tooltip={disabledTooltip}>
-          <Card border="solid" rounding="lg">
+          <Card border="solid" rounding={4}>
             <Section alignItems="start" height="fit">
               <Section
                 gap={2}

@@ -44,7 +44,7 @@ function GroupCard({ group }: GroupCardProps) {
   }
 
   return (
-    <Card border="solid" padding={2} data-card rounding="lg">
+    <Card border="solid" padding={2} data-card rounding={4}>
       <Section alignItems="start" height="fit">
         <ContentAction
           icon={isAdmin ? SvgUserManage : SvgUsers}

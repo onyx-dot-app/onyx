@@ -311,7 +311,7 @@ export function useAgentsFilters<T extends MinimalAgent>(
                   <LineItemButton
                     key={creator.id}
                     sizePreset="main-ui"
-                    rounding="sm"
+                    rounding={2}
                     selectVariant="select-heavy"
                     icon={SvgUser}
                     title={creator.email}
@@ -377,7 +377,7 @@ export function useAgentsFilters<T extends MinimalAgent>(
                   <LineItemButton
                     key={key}
                     sizePreset="main-ui"
-                    rounding="sm"
+                    rounding={2}
                     selectVariant="select-heavy"
                     icon={icon}
                     title={action.name}

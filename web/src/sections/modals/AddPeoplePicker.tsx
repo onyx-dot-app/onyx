@@ -199,7 +199,7 @@ export function AddPeoplePicker({
                           <Tag color="gray" title="Shared" />
                         ) : null
                       }
-                      rounding="md"
+                      rounding={3}
                       selectVariant="select-heavy"
                       sizePreset="main-ui"
                       state={suggestion.shared ? "filled" : "empty"}

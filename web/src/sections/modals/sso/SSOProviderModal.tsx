@@ -438,7 +438,7 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
                       description="Register this URL in your IdP as the callback."
                       withLabel
                     >
-                      <Card border="solid" rounding="md">
+                      <Card border="solid" rounding={3}>
                         <Section
                           flexDirection="row"
                           alignItems="center"

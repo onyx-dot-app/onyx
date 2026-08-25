@@ -127,13 +127,13 @@ function MCPServerCard({
       expandable
       expanded={expanded}
       border="solid"
-      rounding="lg"
+      rounding={4}
       padding={2}
       expandedContent={
         hasContent ? (
           <Section gap={2} padding={2}>
             {filteredTools.map((tool) => (
-              <Card key={tool.id} border="solid" rounding="md">
+              <Card key={tool.id} border="solid" rounding={3}>
                 <InputHorizontal
                   icon={tool.icon}
                   title={tool.name}
@@ -922,7 +922,7 @@ export default function ChatPreferencesPage() {
 
         <SettingsLayouts.Body>
           {/* Features */}
-          <Card border="solid" rounding="lg">
+          <Card border="solid" rounding={4}>
             <Section alignItems="stretch">
               <Disabled
                 disabled={!businessTier || uniqueSources.length === 0}
@@ -1196,7 +1196,7 @@ export default function ChatPreferencesPage() {
                   <SimpleCollapsible.Content>
                     <Section gap={2} alignItems="stretch">
                       {vectorDbEnabled && searchTool && (
-                        <Card border="solid" rounding="lg">
+                        <Card border="solid" rounding={4}>
                           <InputHorizontal
                             title="Internal Search"
                             description="Search through your organization's connected knowledge base and documents."
@@ -1216,7 +1216,7 @@ export default function ChatPreferencesPage() {
                         disabled={!imageGenTool}
                         tooltip="Image generation requires a configured model. Set one up under Configuration > Image Generation, or ask an admin."
                       >
-                        <Card border="solid" rounding="lg">
+                        <Card border="solid" rounding={4}>
                           <InputHorizontal
                             title="Image Generation"
                             description="Generate and manipulate images using AI-powered tools."
@@ -1240,7 +1240,7 @@ export default function ChatPreferencesPage() {
                       </Disabled>
 
                       <Disabled disabled={!webSearchTool}>
-                        <Card border="solid" rounding="lg">
+                        <Card border="solid" rounding={4}>
                           <InputHorizontal
                             title="Web Search"
                             description="Search the web for real-time information and up-to-date results."
@@ -1264,7 +1264,7 @@ export default function ChatPreferencesPage() {
                       </Disabled>
 
                       <Disabled disabled={!openURLTool}>
-                        <Card border="solid" rounding="lg">
+                        <Card border="solid" rounding={4}>
                           <InputHorizontal
                             title="Open URL"
                             description="Fetch and read content from web URLs."
@@ -1288,7 +1288,7 @@ export default function ChatPreferencesPage() {
                       </Disabled>
 
                       <Disabled disabled={!codeInterpreterTool}>
-                        <Card border="solid" rounding="lg">
+                        <Card border="solid" rounding={4}>
                           <InputHorizontal
                             title="Code Interpreter"
                             description="Generate and run code."
@@ -1312,7 +1312,7 @@ export default function ChatPreferencesPage() {
                       </Disabled>
 
                       <Disabled disabled={!codingAgentTool}>
-                        <Card border="solid" rounding="lg">
+                        <Card border="solid" rounding={4}>
                           <InputHorizontal
                             title="Coding Agent"
                             description="Investigate a GitHub repository and answer questions about its code."
@@ -1355,7 +1355,7 @@ export default function ChatPreferencesPage() {
                         />
                       ))}
                       {openApiTools.map((tool) => (
-                        <Card key={tool.id} border="solid" rounding="lg">
+                        <Card key={tool.id} border="solid" rounding={4}>
                           <InputHorizontal
                             icon={SvgActions}
                             title={tool.display_name || tool.name}
@@ -1385,7 +1385,7 @@ export default function ChatPreferencesPage() {
             <SimpleCollapsible.Header title="Advanced Options" />
             <SimpleCollapsible.Content>
               <Section gap={4}>
-                <Card border="solid" rounding="lg">
+                <Card border="solid" rounding={4}>
                   <Section alignItems="stretch">
                     <Disabled
                       disabled={!enterpriseTier}
@@ -1457,7 +1457,7 @@ export default function ChatPreferencesPage() {
                   </Section>
                 </Card>
 
-                <Card border="solid" rounding="lg">
+                <Card border="solid" rounding={4}>
                   <InputVertical
                     title="File Attachment Size Limit"
                     description="Files attached in chats and projects must fit within both limits to be accepted. Larger files increase latency, memory usage, and token costs."
@@ -1492,7 +1492,7 @@ export default function ChatPreferencesPage() {
                   </InputVertical>
                 </Card>
 
-                <Card border="solid" rounding="lg">
+                <Card border="solid" rounding={4}>
                   <Section>
                     <InputHorizontal
                       title="Allow Anonymous Users"
