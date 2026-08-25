@@ -31,7 +31,7 @@ import { useActiveProject, useProjects } from "@/lib/projects/hooks";
 import { FileCard } from "@/sections/cards/FileCard";
 import { ProjectFile, UserFileStatus } from "@/lib/projects/types";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
-import ActionsPopover from "@/refresh-components/popovers/ActionsPopover";
+import { ActionsPopover } from "@/lib/tools/components";
 import {
   getIconForAction,
   hasSearchToolsAvailable,

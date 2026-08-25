@@ -11,9 +11,7 @@ import {
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import useFocusOnMount from "@opal/hooks/useFocusOnMount";
 import { Popover, PopoverMenu } from "@opal/components";
-import SwitchList, {
-  SwitchListItem,
-} from "@/refresh-components/popovers/ActionsPopover/SwitchList";
+import SwitchList, { SwitchListItem } from "@/lib/tools/components/SwitchList";
 import { MinimalAgent } from "@/lib/agents/types";
 import {
   MCPAuthenticationType,
@@ -38,10 +36,8 @@ import { useSettings } from "@/lib/settings/hooks";
 import { InputTypeIn } from "@opal/components";
 import { useToolOAuthStatus } from "@/lib/hooks/useToolOAuthStatus";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import ActionLineItem from "@/refresh-components/popovers/ActionsPopover/ActionLineItem";
-import MCPLineItem, {
-  MCPServer,
-} from "@/refresh-components/popovers/ActionsPopover/MCPLineItem";
+import ActionLineItem from "@/lib/tools/components/ActionLineItem";
+import MCPLineItem, { MCPServer } from "@/lib/tools/components/MCPLineItem";
 import { useProjectsContext } from "@/lib/projects/providers";
 import {
   SvgActions,
