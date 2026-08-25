@@ -101,6 +101,8 @@ resource "onyx_persona" "test" {
   system_prompt = "You are a support agent. Be thorough."
   tool_ids      = []
   is_listed     = true
+  is_featured   = true
+  icon_name     = "user"
 
   display_priority = 2
 }
@@ -112,6 +114,9 @@ resource "onyx_persona" "test" {
 					resource.TestCheckResourceAttr("onyx_persona.test", "task_prompt", ""),
 					resource.TestCheckResourceAttr("onyx_persona.test", "is_listed", "true"),
 					resource.TestCheckResourceAttr("onyx_persona.test", "display_priority", "2"),
+					// Featuring an agent needs agent-management permission.
+					resource.TestCheckResourceAttr("onyx_persona.test", "is_featured", "true"),
+					resource.TestCheckResourceAttr("onyx_persona.test", "icon_name", "user"),
 					resource.TestCheckResourceAttr("onyx_persona.test", "tool_ids.#", "0"),
 					// Dropped from the configuration rather than emptied, so
 					// it goes back to null. Checking a count of "0" would not
