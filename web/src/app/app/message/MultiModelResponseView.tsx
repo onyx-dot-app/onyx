@@ -76,6 +76,9 @@ const NARROW_CAROUSEL_GAP = 4;
  *
  * Hidden panels render as a compact header-only strip at `HIDDEN_PANEL_W` in
  * both modes and are excluded from layout width calculations.
+ *
+ * Horizontal clipping uses `overflow-x: clip`, never `hidden`: clip creates no
+ * scrollport, so the panels' sticky headers keep binding to the chat scroller.
  */
 export default function MultiModelResponseView({
   responses,
@@ -259,10 +262,11 @@ export default function MultiModelResponseView({
   const { isSmallScreen } = useScreenSize();
   const requiredSideBySideW =
     visibleResponses.length * MIN_PANEL_W +
-    (visibleResponses.length - 1) * PANEL_GAP;
+    hiddenPanels.size * HIDDEN_PANEL_W +
+    (responses.length - 1) * PANEL_GAP;
   const showNarrowCarousel =
     !readOnly &&
-    visibleResponses.length > 1 &&
+    responses.length > 1 &&
     containerW > 0 &&
     (isSmallScreen || containerW < requiredSideBySideW);
 
@@ -408,7 +412,7 @@ export default function MultiModelResponseView({
         if (to <= from) return;
         // Lock current height, remove maxHeight cap, then animate
         el.style.maxHeight = `${from}px`;
-        el.style.overflow = "hidden";
+        el.style.overflow = "clip";
         const anim = el.animate(
           [{ maxHeight: `${from}px` }, { maxHeight: `${to}px` }],
           {
@@ -525,8 +529,8 @@ export default function MultiModelResponseView({
 
   // Carousel starts on the preferred card when a preference exists, else the
   // first model (the right-most side-by-side panel).
-  const lastCarouselPos = Math.max(0, visibleResponses.length - 1);
-  const preferredCarouselPos = visibleResponses.findIndex(
+  const lastCarouselPos = Math.max(0, responses.length - 1);
+  const preferredCarouselPos = responses.findIndex(
     (r) => r.modelIndex === preferredIndex
   );
   const [carouselPos, setCarouselPos] = useState(
@@ -550,10 +554,15 @@ export default function MultiModelResponseView({
     }
   }, [showNarrowCarousel, preferredCarouselPos]);
   const clampedCarouselPos = Math.min(carouselPos, lastCarouselPos);
-  const currentCarouselResponse = visibleResponses[clampedCarouselPos];
+  const currentCarouselResponse = responses[clampedCarouselPos];
 
   // Feed the send path's response-in-view rule from the carousel position.
-  const currentCarouselMessageId = currentCarouselResponse?.messageId ?? null;
+  // A hidden card in view never becomes the implicit pick.
+  const currentCarouselMessageId =
+    currentCarouselResponse &&
+    !hiddenPanels.has(currentCarouselResponse.modelIndex)
+      ? (currentCarouselResponse.messageId ?? null)
+      : null;
   useEffect(() => {
     if (readOnly || parentNodeId == null || !showNarrowCarousel) return;
     if (currentCarouselMessageId != null) {
@@ -673,7 +682,7 @@ export default function MultiModelResponseView({
     return (
       <div
         ref={trackContainerRef}
-        className="w-full overflow-hidden"
+        className="w-full overflow-x-clip"
         style={
           isActivelySelected
             ? {
@@ -750,12 +759,10 @@ export default function MultiModelResponseView({
     // Full-width cards with off-canvas neighbors, per the mobile design. The
     // current card's header carries the prev/next model nav.
     const prevResponse =
-      clampedCarouselPos > 0
-        ? visibleResponses[clampedCarouselPos - 1]
-        : undefined;
+      clampedCarouselPos > 0 ? responses[clampedCarouselPos - 1] : undefined;
     const nextResponse =
       clampedCarouselPos < lastCarouselPos
-        ? visibleResponses[clampedCarouselPos + 1]
+        ? responses[clampedCarouselPos + 1]
         : undefined;
     const prevNav = prevResponse
       ? {
@@ -774,7 +781,7 @@ export default function MultiModelResponseView({
         }
       : undefined;
     return (
-      <div ref={setRootEl} className="w-full overflow-hidden">
+      <div ref={setRootEl} className="w-full overflow-x-clip">
         {/* raw-ok: transform-driven carousel track matching the sibling selection-layout track. Section's inline gap/width styles fight the px-precise animated geometry */}
         <div
           className="flex items-start"
@@ -792,7 +799,7 @@ export default function MultiModelResponseView({
               setCarouselSliding(false);
           }}
         >
-          {visibleResponses.map((r, i) => {
+          {responses.map((r, i) => {
             const isCurrent = i === clampedCarouselPos;
             return (
               <div
@@ -819,9 +826,15 @@ export default function MultiModelResponseView({
     visibleResponses.length <= 2 ? GEN_PANEL_W_2 : GEN_PANEL_W_3;
 
   return (
-    <div ref={setRootEl} className="overflow-x-auto">
+    <div
+      ref={setRootEl}
+      // The interactive row renders only when everything fits (the carousel
+      // absorbs overflow). The shared view has no carousel and scrolls.
+      className={cn(readOnly ? "overflow-x-auto" : "overflow-x-clip")}
+    >
       {/* raw-ok: equal-width panel row whose children carry px min/max widths, outside Section's rem spacing steps */}
-      <div className="flex gap-6 items-start justify-center w-full">
+      {/* Safe centering start-aligns on overflow so the scroll fallback can reach the leading hidden strip */}
+      <div className="flex gap-6 items-start justify-center-safe w-full">
         {responses.map((r) => {
           const isHidden = hiddenPanels.has(r.modelIndex);
           return (
