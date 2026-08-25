@@ -33,9 +33,21 @@ jobs:
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           PR_COMMIT_COUNT: ${{ github.event.pull_request.commits }}
           AUTHOR_ASSOCIATION: ${{ github.event.pull_request.author_association }}
+          # Automation and AI-agent logins that author commits for org developers.
+          # Note: anyone can run these agents, also on forks. A commit authored by
+          # one of these logins passes without proof of who drove the agent.
           IGNORED_AUTHORS: |
             dependabot[bot]
             onyx-cherry-pick[bot]
+            claude[bot]
+            cursoragent
+            Copilot
+            devin-ai-integration[bot]
+            greptile-apps[bot]
+            cubic-dev-ai[bot]
+          # Bot author emails that are not linked to any GitHub account.
+          IGNORED_AUTHOR_EMAILS: |
+            contact@cubic.dev
         run: |
           # The pull request commits API returns at most 250 commits.
           # Fail if the check cannot see every commit.
@@ -75,11 +87,18 @@ jobs:
           }
 
           # Commits whose author email is not linked to any GitHub account
-          # cannot be verified, so they fail the check.
-          unmapped="$(jq -r '.[] | select(.author == null) | "  commit \(.sha[0:10]) has no linked GitHub account (\(.commit.author.name) <\(.commit.author.email)>)"' <<< "${commits}")"
-          if [ -n "${unmapped}" ]; then
-            add_failure "${unmapped}"
-          fi
+          # cannot be verified, so they fail the check unless the email is
+          # on the email ignorelist.
+          normalized_ignored_emails="$(printf '%s\n' "${IGNORED_AUTHOR_EMAILS}" | tr '[:upper:]' '[:lower:]')"
+          unmapped="$(jq -r '.[] | select(.author == null) | "\(.sha[0:10])\t\(.commit.author.email)\t\(.commit.author.name)"' <<< "${commits}")"
+          while IFS=$'\t' read -r sha email name; do
+            [ -z "${sha}" ] && continue
+            normalized_email="$(printf '%s' "${email}" | tr '[:upper:]' '[:lower:]')"
+            if printf '%s\n' "${normalized_ignored_emails}" | grep -Fxq "${normalized_email}"; then
+              continue
+            fi
+            add_failure "  commit ${sha} has no linked GitHub account (${name} <${email}>)"
+          done <<< "${unmapped}"
 
           commit_logins="$(jq -r '[.[] | select(.author != null) | .author.login] | unique | .[]' <<< "${commits}")"
           all_logins="$(printf '%s\n%s\n' "${PR_AUTHOR}" "${commit_logins}" | sort -u)"
