@@ -36,7 +36,7 @@ import { DRAG_TYPES } from "@/lib/sidebar/constants";
 import { usePinChatAgent } from "@/lib/agents/hooks";
 import { useActiveProject, useProjectSearch } from "@/lib/projects/hooks";
 import type { Project, ProjectSearchMatch } from "@/lib/projects/types";
-import { useProjectsContext } from "@/providers/ProjectsContext";
+import { useProjectsContext } from "@/lib/projects/providers";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
 
 /**

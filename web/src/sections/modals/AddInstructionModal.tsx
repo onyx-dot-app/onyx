@@ -3,7 +3,7 @@
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import { Button } from "@opal/components";
-import { useProjectsContext } from "@/providers/ProjectsContext";
+import { useProjectsContext } from "@/lib/projects/providers";
 import { useModal } from "@opal/components";
 import { SvgAddLines } from "@opal/icons";
 import { Modal } from "@opal/components";

@@ -1,9 +1,6 @@
 import React, { PropsWithChildren } from "react";
 import { act, renderHook } from "@testing-library/react";
-import {
-  ProjectsProvider,
-  useProjectsContext,
-} from "@/providers/ProjectsContext";
+import { ProjectsProvider, useProjectsContext } from "@/lib/projects/providers";
 import type { ProjectFile } from "@/lib/projects/types";
 
 const mockUploadFiles = jest.fn();

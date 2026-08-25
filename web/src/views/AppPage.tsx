@@ -54,7 +54,7 @@ import ChatScrollContainer, {
   ChatScrollContainerHandle,
 } from "@/sections/chat/ChatScrollContainer";
 import ProjectContextPanel from "@/sections/projects/ProjectContextPanel";
-import { useProjectsContext } from "@/providers/ProjectsContext";
+import { useProjectsContext } from "@/lib/projects/providers";
 import { useActiveProject, useProjects } from "@/lib/projects/hooks";
 import { getProjectTokenCount } from "@/lib/projects/svc";
 import ProjectChatSessionList from "@/sections/projects/ProjectChatSessionList";

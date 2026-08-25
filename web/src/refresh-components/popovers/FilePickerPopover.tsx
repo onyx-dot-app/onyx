@@ -10,7 +10,7 @@ import { ProjectFile, UserFileStatus } from "@/lib/projects/types";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import { Hoverable } from "@opal/core";
 import { toast } from "@opal/layouts";
-import { useProjectsContext } from "@/providers/ProjectsContext";
+import { useProjectsContext } from "@/lib/projects/providers";
 import Text from "@/refresh-components/texts/Text";
 import { MAX_FILES_TO_SHOW } from "@/lib/constants";
 import { isImageFile } from "@/lib/utils";
