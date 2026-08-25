@@ -253,7 +253,6 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const lastLanguageSyncUserIdRef = useRef<string | null>(null);
   const languageRequestSeqRef = useRef(0);
-  const languageAbortRef = useRef<AbortController | null>(null);
   const languagePatchChainRef = useRef<Promise<void>>(Promise.resolve());
 
   useEffect(() => {
@@ -591,11 +590,6 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     // newer choice.
     const requestId = ++languageRequestSeqRef.current;
     const isLatestRequest = () => requestId === languageRequestSeqRef.current;
-    // Abort any in-flight update so a superseded PATCH can't commit a stale
-    // value to the database after the newer one.
-    languageAbortRef.current?.abort();
-    const abortController = new AbortController();
-    languageAbortRef.current = abortController;
     try {
       setUpToDateUser((prevUser) => {
         if (prevUser) {
@@ -613,15 +607,15 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       // Optimistically switch the locale the server layout renders with.
       Cookies.set(LOCALE_COOKIE_NAME, language, LOCALE_COOKIE_OPTIONS);
 
-      // Serialize sends behind the previous request's settlement (the abort
-      // above makes that fast): the backend then receives PATCHes in
-      // selection order, so an already-delivered older request can't commit
-      // after this one.
+      // Strictly serialize PATCHes: wait until the in-flight request has a
+      // response (not just a client-side rejection) before sending the next
+      // one, so the backend commits updates in selection order. A selection
+      // superseded while it waits skips its send — the newest one covers it.
       const previousSend = languagePatchChainRef.current;
-      const send = (async () => {
+      const send = (async (): Promise<Response | null> => {
         await previousSend;
-        if (abortController.signal.aborted) {
-          throw new DOMException("The operation was aborted.", "AbortError");
+        if (!isLatestRequest()) {
+          return null;
         }
         return fetch(`/api/user/language`, {
           method: "PATCH",
@@ -629,7 +623,6 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({ language }),
-          signal: abortController.signal,
         });
       })();
       languagePatchChainRef.current = send.then(
@@ -638,6 +631,11 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       );
 
       const response = await send;
+
+      // Superseded while queued: the newer request owns all state from here.
+      if (response === null) {
+        return;
+      }
 
       if (!response.ok) {
         throw new Error("Failed to update language preference");
@@ -648,11 +646,6 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         router.refresh();
       }
     } catch (error) {
-      // A superseded request was aborted on purpose; the newer request owns
-      // all state from here, so this is not a failure.
-      if (error instanceof DOMException && error.name === "AbortError") {
-        return;
-      }
       // Roll back the optimistic cookie and in-memory preference on every
       // failure path, including network errors where fetch itself rejects.
       if (isLatestRequest()) {
