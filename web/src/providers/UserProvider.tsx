@@ -9,6 +9,7 @@ import React, {
   useEffect,
   useRef,
 } from "react";
+import type { ReasoningEffortOverride } from "@/lib/languageModels/types";
 import {
   User,
   UserPersonalization,
@@ -62,6 +63,10 @@ export interface UserContextType {
     isPinned: boolean
   ) => Promise<boolean>;
   updateUserTemperatureOverrideEnabled: (enabled: boolean) => Promise<void>;
+  updateUserTemperatureDefault: (value: number | null) => Promise<void>;
+  updateUserReasoningEffortDefault: (
+    value: ReasoningEffortOverride | null
+  ) => Promise<void>;
   updateUserPersonalization: (
     personalization: UserPersonalization
   ) => Promise<void>;
@@ -255,6 +260,70 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       }
     } catch (error) {
       console.error("Error updating user temperature override setting:", error);
+      throw error;
+    }
+  };
+
+  const updateUserTemperatureDefault = async (value: number | null) => {
+    try {
+      setUpToDateUser((prevUser) => {
+        if (prevUser) {
+          return {
+            ...prevUser,
+            preferences: {
+              ...prevUser.preferences,
+              temperature_default: value,
+            },
+          };
+        }
+        return prevUser;
+      });
+
+      const response = await fetch(`/api/temperature-default`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ temperature_default: value }),
+      });
+
+      if (!response.ok) {
+        await refreshUser();
+        throw new Error("Failed to update user temperature default");
+      }
+    } catch (error) {
+      console.error("Error updating user temperature default:", error);
+      throw error;
+    }
+  };
+
+  const updateUserReasoningEffortDefault = async (
+    value: ReasoningEffortOverride | null
+  ) => {
+    try {
+      setUpToDateUser((prevUser) => {
+        if (prevUser) {
+          return {
+            ...prevUser,
+            preferences: {
+              ...prevUser.preferences,
+              reasoning_effort_default: value,
+            },
+          };
+        }
+        return prevUser;
+      });
+
+      const response = await fetch(`/api/reasoning-effort-default`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reasoning_effort_default: value }),
+      });
+
+      if (!response.ok) {
+        await refreshUser();
+        throw new Error("Failed to update user reasoning default");
+      }
+    } catch (error) {
+      console.error("Error updating user reasoning default:", error);
       throw error;
     }
   };
@@ -620,6 +689,8 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         updateUserShortcuts,
         updateUserPasteAsTile,
         updateUserTemperatureOverrideEnabled,
+        updateUserTemperatureDefault,
+        updateUserReasoningEffortDefault,
         updateUserPersonalization,
         updateUserThemePreference,
         updateUserChatBackground,

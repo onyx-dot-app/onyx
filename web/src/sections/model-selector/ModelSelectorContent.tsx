@@ -115,15 +115,17 @@ export function useModelDetailManagers(
 }
 
 /** Where the slider parks on open: the session's own choice, else the admin
- *  default, bounded by the selected model's slider maximum. */
+ *  default, else the user's own default, bounded by the selected model's
+ *  slider maximum. */
 function initialTemperature(
   option: LLMOption,
-  manager: TemperatureManager | undefined
+  manager: TemperatureManager | undefined,
+  userTemperatureDefault: number | null
 ): number {
   const sessionTemperature = manager?.temperature ?? 0.5;
   if (manager?.hasTemperatureOverride) return sessionTemperature;
   return Math.min(
-    option.temperatureDefault ?? sessionTemperature,
+    option.temperatureDefault ?? userTemperatureDefault ?? sessionTemperature,
     manager?.maxTemperature ?? 2
   );
 }
@@ -156,6 +158,7 @@ interface ModelDetailPaneProps {
 }
 
 function ModelDetailPane({ option, managers, onBack }: ModelDetailPaneProps) {
+  const { user } = useUser();
   // Backend pins temperature to 1 (or omits it) for reasoning models, so
   // the slider is locked at 1.
   const temperatureManager = managers.temperature;
@@ -181,12 +184,18 @@ function ModelDetailPane({ option, managers, onBack }: ModelDetailPaneProps) {
   // temperature is always concrete, so the override flag decides when the
   // admin default applies.
   const [localTemperature, setLocalTemperature] = useState(() =>
-    initialTemperature(option, temperatureManager)
+    initialTemperature(
+      option,
+      temperatureManager,
+      user?.preferences.temperature_default ?? null
+    )
   );
   // A stored level the model doesn't support (e.g. xhigh after switching
   // models) displays clamped to the highest supported stop.
   const storedStop = reasoningStopIndex(
-    reasoningManager?.reasoningEffort ?? option.reasoningEffortDefault
+    reasoningManager?.reasoningEffort ??
+      option.reasoningEffortDefault ??
+      user?.preferences.reasoning_effort_default
   );
   const [localEffortStop, setLocalEffortStop] = useState(
     clampStop(storedStop >= 0 ? storedStop : UNSET_REASONING_STOP)

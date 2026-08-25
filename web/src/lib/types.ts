@@ -1,4 +1,5 @@
 import { Agent } from "@/lib/agents/types";
+import type { ReasoningEffortOverride } from "@/lib/languageModels/types";
 import { Credential } from "./connectors/credentials";
 import { Connector } from "./connectors/connectors";
 import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/types";
@@ -30,6 +31,10 @@ interface UserPreferences {
   auto_scroll: boolean;
   shortcut_enabled: boolean;
   temperature_override_enabled: boolean;
+  // Per-user chat defaults. Admin per-model defaults outrank them, and the
+  // per-model max clamps them.
+  temperature_default?: number | null;
+  reasoning_effort_default?: ReasoningEffortOverride | null;
   theme_preference: ThemePreference | null;
   chat_background: string | null;
   default_app_mode: "AUTO" | "CHAT" | "SEARCH";
