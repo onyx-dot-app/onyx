@@ -258,9 +258,11 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     // Wait for user data to load; sync once per user identity
     if (!upToDateUser?.id) {
-      // Signed out: drop the served identity so pending language requests
-      // neither commit nor roll back against the signed-out state.
+      // Signed out: drop the served identity and advance the sequence so
+      // pending language requests neither commit nor roll back — not now,
+      // and not after the same user signs back in.
       lastLanguageSyncUserIdRef.current = null;
+      languageRequestSeqRef.current++;
       return;
     }
     if (lastLanguageSyncUserIdRef.current === upToDateUser.id) return;
