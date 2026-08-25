@@ -706,6 +706,15 @@ def test_redis_tls_mounts_ca_in_all_enabled_redis_workloads() -> None:
     assert config_map["data"]["REDIS_SSL_CA_CERTS"] == "/etc/redis-tls/root.pem"
 
 
+def test_redis_tls_disabled_does_not_override_redis_configuration() -> None:
+    """The optional feature must not change the default Redis configuration."""
+    config_map = yaml.safe_load(_render_config_map_yaml())
+
+    assert "REDIS_SSL" not in config_map["data"]
+    assert "REDIS_SSL_CERT_REQS" not in config_map["data"]
+    assert "REDIS_SSL_CA_CERTS" not in config_map["data"]
+
+
 def test_missing_container_raises_clear_error_on_version_skew() -> None:
     """A chart/api-server version skew (template missing an expected container)
     must surface as an actionable RuntimeError, not an opaque StopIteration."""
