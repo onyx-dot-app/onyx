@@ -253,12 +253,18 @@ export default function MultiModelResponseView({
     [responses, hiddenPanels]
   );
 
-  // One-at-a-time carousel below the small-screen breakpoint, one step above
-  // the sidebar collapse so it lands before the page chrome swaps. It also
-  // outranks selection mode, a preference change never swaps it out.
+  // Carousel below the small-screen breakpoint (one step above the sidebar
+  // collapse) and whenever the column cannot fit every panel side by side.
+  // Outranks selection mode, a preference change never swaps it out.
   const { isSmallScreen } = useScreenSize();
+  const requiredSideBySideW =
+    visibleResponses.length * MIN_PANEL_W +
+    (visibleResponses.length - 1) * PANEL_GAP;
   const showNarrowCarousel =
-    !readOnly && visibleResponses.length > 1 && containerW > 0 && isSmallScreen;
+    !readOnly &&
+    visibleResponses.length > 1 &&
+    containerW > 0 &&
+    (isSmallScreen || containerW < requiredSideBySideW);
 
   const toggleVisibility = useCallback(
     (modelIndex: number) => {
