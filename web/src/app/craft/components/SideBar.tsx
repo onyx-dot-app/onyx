@@ -13,6 +13,7 @@ import {
 import { CRAFT_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
 import {
   Button,
+  LineItemButton,
   Popover,
   PopoverMenu,
   SidebarTab,
@@ -30,7 +31,6 @@ import { renderSidebarLogo } from "@/lib/sidebar/utils";
 import { useShowLogoWhenFolded } from "@/lib/sidebar/hooks";
 import AccountPopover from "@/sections/sidebar/AccountPopover";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
-import LineItem from "@/refresh-components/buttons/LineItem";
 import { Hoverable } from "@opal/core";
 import { noProp } from "@/lib/utils";
 import {
@@ -182,22 +182,24 @@ function BuildSessionButton({
       <Popover.Content side="right" align="start">
         <PopoverMenu>
           {[
-            <LineItem
+            <LineItemButton
+              sizePreset="main-ui"
+              rounding="sm"
               key="rename"
               icon={SvgEdit}
               onClick={noProp(() => setRenaming(true))}
-            >
-              Rename
-            </LineItem>,
+              title="Rename"
+            />,
             null,
-            <LineItem
+            <LineItemButton
+              sizePreset="main-ui"
+              rounding="sm"
               key="delete"
               icon={SvgTrash}
               onClick={noProp(() => setIsDeleteModalOpen(true))}
-              danger
-            >
-              Delete
-            </LineItem>,
+              color="danger"
+              title="Delete"
+            />,
           ]}
         </PopoverMenu>
       </Popover.Content>

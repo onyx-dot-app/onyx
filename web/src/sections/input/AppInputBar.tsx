@@ -7,7 +7,6 @@ import React, {
   useRef,
   useState,
 } from "react";
-import LineItem from "@/refresh-components/buttons/LineItem";
 import { MinimalAgent } from "@/lib/agents/types";
 import { InputPrompt } from "@/app/app/interfaces";
 import { FilterManager, LlmManager, useFederatedConnectors } from "@/lib/hooks";
@@ -49,12 +48,17 @@ import {
   SvgX,
   SvgSimpleLoader,
 } from "@opal/icons";
-import { Button, SelectButton, Text } from "@opal/components";
-import { Popover } from "@opal/components";
+import {
+  Button,
+  LineItemButton,
+  Popover,
+  SelectButton,
+  Spacer,
+  Text,
+} from "@opal/components";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { Section } from "@/layouts/general-layouts";
 import { useIncognito } from "@/providers/IncognitoProvider";
-import { Spacer } from "@opal/components";
 import MicrophoneButton from "@/sections/input/MicrophoneButton";
 import Waveform from "@/components/voice/Waveform";
 import { useVoiceMode } from "@/providers/VoiceModeProvider";
@@ -990,30 +994,42 @@ const AppInputBar = React.memo(
                   <Popover.Menu>
                     {[
                       ...sortedFilteredPrompts.map((prompt, index) => (
-                        <LineItem
+                        <LineItemButton
+                          sizePreset="main-ui"
+                          rounding="sm"
                           key={prompt.id}
-                          selected={tabbingIconIndex === index}
-                          emphasized={tabbingIconIndex === index}
+                          state={
+                            tabbingIconIndex === index ? "selected" : "empty"
+                          }
+                          selectVariant={
+                            tabbingIconIndex === index
+                              ? "select-heavy"
+                              : "select-light"
+                          }
                           description={prompt.content?.trim()}
                           onClick={() => updateInputPrompt(prompt)}
-                        >
-                          {prompt.prompt}
-                        </LineItem>
+                          title={prompt.prompt}
+                        />
                       )),
                       sortedFilteredPrompts.length > 0 ? null : undefined,
-                      <LineItem
+                      <LineItemButton
+                        sizePreset="main-ui"
+                        rounding="sm"
                         key="create-new"
                         href="/app/settings/chat-preferences"
                         icon={SvgPlus}
-                        selected={
+                        state={
                           tabbingIconIndex === sortedFilteredPrompts.length
+                            ? "selected"
+                            : "empty"
                         }
-                        emphasized={
+                        selectVariant={
                           tabbingIconIndex === sortedFilteredPrompts.length
+                            ? "select-heavy"
+                            : "select-light"
                         }
-                      >
-                        Create New Prompt
-                      </LineItem>,
+                        title="Create New Prompt"
+                      />,
                     ]}
                   </Popover.Menu>
                 </Popover.Content>

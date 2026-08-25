@@ -3,7 +3,6 @@
 import React from "react";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
-import LineItem from "@/refresh-components/buttons/LineItem";
 import Text from "@/refresh-components/texts/Text";
 import Truncated from "@/refresh-components/texts/Truncated";
 import { getSourceMetadata } from "@/lib/sources";
@@ -13,7 +12,13 @@ import type {
 } from "@/lib/hierarchy/interfaces";
 import type { SearchDocWithContent } from "@/lib/search/interfaces";
 import type { ValidSources } from "@/lib/types";
-import { Button, Checkbox, Divider, InputTypeIn } from "@opal/components";
+import {
+  Button,
+  Checkbox,
+  Divider,
+  InputTypeIn,
+  LineItemButton,
+} from "@opal/components";
 import {
   SvgArrowLeft,
   SvgChevronRight,
@@ -120,9 +125,11 @@ export function KnowledgeSearchSidebar({
 
   return (
     <TableLayouts.SidebarLayout aria-label="knowledge-search-sidebar">
-      <LineItem
+      <LineItemButton
+        sizePreset="main-ui"
+        rounding="sm"
         icon={SvgFiles}
-        selected={activeSourceFilter === null}
+        state={activeSourceFilter === null ? "selected" : "empty"}
         onClick={() => onSourceFilterClick(null)}
         rightChildren={
           totalCount > 0 ? (
@@ -131,20 +138,20 @@ export function KnowledgeSearchSidebar({
             </Text>
           ) : undefined
         }
-      >
-        All
-      </LineItem>
+        title="All"
+      />
 
       {vectorDbEnabled &&
         connectedSources.map((cs) => {
           const sourceMetadata = getSourceMetadata(cs.source);
           const count = resultCountBySource.get(cs.source) ?? 0;
           return (
-            <LineItem
+            <LineItemButton
+              sizePreset="main-ui"
+              rounding="sm"
               key={cs.source}
               icon={sourceMetadata.icon}
-              strokeIcon={false}
-              selected={activeSourceFilter === cs.source}
+              state={activeSourceFilter === cs.source ? "selected" : "empty"}
               onClick={() => onSourceFilterClick(cs.source)}
               rightChildren={
                 count > 0 ? (
@@ -153,9 +160,8 @@ export function KnowledgeSearchSidebar({
                   </Text>
                 ) : undefined
               }
-            >
-              {sourceMetadata.displayName}
-            </LineItem>
+              title={sourceMetadata.displayName}
+            />
           );
         })}
     </TableLayouts.SidebarLayout>

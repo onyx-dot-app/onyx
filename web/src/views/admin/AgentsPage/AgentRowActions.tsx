@@ -1,9 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { Button } from "@opal/components";
+import {
+  Button,
+  LineItemButton,
+  Popover,
+  PopoverMenu,
+  useCreateModal,
+} from "@opal/components";
 // TODO(@raunakab): migrate to Opal LineItemButton once it supports danger variant
-import LineItem from "@/refresh-components/buttons/LineItem";
 import { cn, markdown } from "@opal/utils";
 import {
   SvgMoreHorizontal,
@@ -16,7 +21,6 @@ import {
   SvgBarChart,
   SvgTrash,
 } from "@opal/icons";
-import { Popover, PopoverMenu } from "@opal/components";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import Text from "@/refresh-components/texts/Text";
 import { toast } from "@opal/layouts";
@@ -29,7 +33,6 @@ import {
 import type { Agent } from "@/lib/agents/types";
 import type { Route } from "next";
 import { ShareAgentModal } from "@/lib/agents/components";
-import { useCreateModal } from "@opal/components";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
 import { can } from "@/lib/permissions/resource-actions";
@@ -180,7 +183,9 @@ export default function AgentRowActions({
               <PopoverMenu>
                 {[
                   canList ? (
-                    <LineItem
+                    <LineItemButton
+                      sizePreset="main-ui"
+                      rounding="sm"
                       key="visibility"
                       icon={agent.is_listed ? SvgEyeOff : SvgEye}
                       onClick={() => {
@@ -194,46 +199,48 @@ export default function AgentRowActions({
                           );
                         }
                       }}
-                    >
-                      {agent.is_listed ? "Unlist Agent" : "List Agent"}
-                    </LineItem>
+                      title={agent.is_listed ? "Unlist Agent" : "List Agent"}
+                    />
                   ) : undefined,
                   canShare ? (
-                    <LineItem
+                    <LineItemButton
+                      sizePreset="main-ui"
+                      rounding="sm"
                       key="share"
                       icon={SvgShare}
                       onClick={() => {
                         setPopoverOpen(false);
                         shareModal.toggle(true);
                       }}
-                    >
-                      Share
-                    </LineItem>
+                      title="Share"
+                    />
                   ) : undefined,
                   businessTier && canViewStats ? (
-                    <LineItem
+                    <LineItemButton
+                      sizePreset="main-ui"
+                      rounding="sm"
                       key="stats"
                       icon={SvgBarChart}
                       onClick={() => {
                         setPopoverOpen(false);
                         router.push(`/ee/agents/stats/${agent.id}` as Route);
                       }}
-                    >
-                      Stats
-                    </LineItem>
+                      title="Stats"
+                    />
                   ) : undefined,
                   canDeleteRow ? (
-                    <LineItem
+                    <LineItemButton
+                      sizePreset="main-ui"
+                      rounding="sm"
                       key="delete"
                       icon={SvgTrash}
-                      danger
+                      color="danger"
                       onClick={() => {
                         setPopoverOpen(false);
                         setDeleteOpen(true);
                       }}
-                    >
-                      Delete
-                    </LineItem>
+                      title="Delete"
+                    />
                   ) : undefined,
                 ]}
               </PopoverMenu>

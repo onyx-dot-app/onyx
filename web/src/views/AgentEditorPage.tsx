@@ -4,7 +4,18 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { SettingsLayouts, toast } from "@opal/layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
-import { Button, Card, Divider, MessageCard } from "@opal/components";
+import {
+  Button,
+  Card,
+  Divider,
+  InputTypeIn,
+  LineItemButton,
+  MessageCard,
+  Popover,
+  PopoverMenu,
+  Tooltip,
+  useCreateModal,
+} from "@opal/components";
 import { Hoverable, Disabled } from "@opal/core";
 import { FullAgent, PersonaSharingStatus } from "@/lib/agents/types";
 import { buildAgentAvatarUrl } from "@/lib/agents/utils";
@@ -40,15 +51,11 @@ import {
 import Text from "@/refresh-components/texts/Text";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
 import SwitchField from "@/refresh-components/form/SwitchField";
-import { Tooltip } from "@opal/components";
 import { useDocumentSets } from "@/app/admin/documents/sets/hooks";
 import { useProjectsContext } from "@/lib/projects/providers";
-import { useCreateModal } from "@opal/components";
 import UserFilesModal from "@/sections/modals/UserFilesModal";
 import { ProjectFile, UserFileStatus } from "@/lib/projects/types";
 import { ChatFileType } from "@/app/app/interfaces";
-import { Popover, PopoverMenu } from "@opal/components";
-import LineItem from "@/refresh-components/buttons/LineItem";
 import {
   SvgActions,
   SvgExpand,
@@ -79,7 +86,6 @@ import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
 import { getActionIcon } from "@/lib/tools/mcpUtils";
 import { AgentEditorMCPServer, MCPTool, ToolSnapshot } from "@/lib/tools/types";
-import { InputTypeIn } from "@opal/components";
 import useFilter from "@/hooks/useFilter";
 import EnabledCount from "@/refresh-components/EnabledCount";
 import { useAppRouter } from "@/hooks/appNavigation";
@@ -239,14 +245,15 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
         <Popover.Content>
           <PopoverMenu>
             {[
-              <LineItem
+              <LineItemButton
+                sizePreset="main-ui"
+                rounding="sm"
                 key="upload-image"
                 icon={SvgImage}
                 onClick={() => fileInputRef.current?.click()}
-                emphasized
-              >
-                Upload Image
-              </LineItem>,
+                selectVariant="select-heavy"
+                title="Upload Image"
+              />,
               null,
               <div key="icon-grid" className="grid grid-cols-4 gap-1">
                 <SquareButton

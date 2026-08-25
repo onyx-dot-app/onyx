@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Button, Text } from "@opal/components";
+import { Button, LineItemButton, Text } from "@opal/components";
 import type { RichStr } from "@opal/types";
 import {
   SvgChevronRight,
@@ -13,7 +13,6 @@ import {
 import { cn } from "@opal/utils";
 import { formatBytes } from "@/lib/utils";
 import type { SkillBundleFile } from "@/lib/skills/types";
-import LineItem from "@/refresh-components/buttons/LineItem";
 
 interface SkillFileTreeNode {
   name: string;
@@ -53,8 +52,9 @@ function SkillFileTreeNodes({
     return (
       <div key={node.path}>
         <div style={{ paddingLeft: `${depth * 20}px` }}>
-          <LineItem
-            interactive={isDirectory}
+          <LineItemButton
+            sizePreset="main-ui"
+            rounding="sm"
             icon={FileIcon}
             onClick={isDirectory ? () => onToggle(node.path) : undefined}
             rightChildren={
@@ -86,9 +86,8 @@ function SkillFileTreeNodes({
                 </div>
               )
             }
-          >
-            {node.name}
-          </LineItem>
+            title={node.name}
+          />
         </div>
         {isDirectory && isExpanded && (
           <SkillFileTreeNodes

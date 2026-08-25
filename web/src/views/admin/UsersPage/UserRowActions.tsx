@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Button, Divider } from "@opal/components";
+import { Button, Divider, LineItemButton, Popover } from "@opal/components";
 import {
   SvgMoreHorizontal,
   SvgUsers,
@@ -13,8 +13,6 @@ import {
   SvgUserManage,
 } from "@opal/icons";
 import { Disabled } from "@opal/core";
-import LineItem from "@/refresh-components/buttons/LineItem";
-import { Popover } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import Text from "@/refresh-components/texts/Text";
 import { AccountType, UserStatus } from "@/lib/types";
@@ -91,9 +89,13 @@ export default function UserRowActions({
   };
 
   const adminAccessItem = user.account_type === AccountType.STANDARD && (
-    <LineItem icon={SvgUserManage} onClick={toggleAdminAccess}>
-      {user.is_admin ? "Remove Admin Access" : "Make Admin"}
-    </LineItem>
+    <LineItemButton
+      sizePreset="main-ui"
+      rounding="sm"
+      icon={SvgUserManage}
+      onClick={toggleAdminAccess}
+      title={user.is_admin ? "Remove Admin Access" : "Make Admin"}
+    />
   );
 
   // Status-aware action menus
@@ -104,17 +106,22 @@ export default function UserRowActions({
       return (
         <>
           {user.id && canManageGroups && (
-            <LineItem
+            <LineItemButton
+              sizePreset="main-ui"
+              rounding="sm"
               icon={SvgUsers}
               onClick={() => openModal(Modal.EDIT_GROUPS)}
-            >
-              Groups &amp; Roles
-            </LineItem>
+              title="Groups & Roles"
+            />
           )}
           <Disabled disabled>
-            <LineItem danger icon={SvgUserX}>
-              Deactivate User
-            </LineItem>
+            <LineItemButton
+              sizePreset="main-ui"
+              rounding="sm"
+              color="danger"
+              icon={SvgUserX}
+              title="Deactivate User"
+            />
           </Disabled>
           <Divider paddingPerpendicular={4} />
           <Text as="p" secondaryBody text03 className="px-3 py-1">
@@ -127,18 +134,21 @@ export default function UserRowActions({
     switch (user.status) {
       case UserStatus.INVITED:
         return (
-          <LineItem
-            danger
+          <LineItemButton
+            sizePreset="main-ui"
+            rounding="sm"
+            color="danger"
             icon={SvgXCircle}
             onClick={() => openModal(Modal.CANCEL_INVITE)}
-          >
-            Cancel Invite
-          </LineItem>
+            title="Cancel Invite"
+          />
         );
 
       case UserStatus.REQUESTED:
         return (
-          <LineItem
+          <LineItemButton
+            sizePreset="main-ui"
+            rounding="sm"
             icon={SvgUserCheck}
             onClick={() => {
               setPopoverOpen(false);
@@ -154,37 +164,39 @@ export default function UserRowActions({
                 }
               })();
             }}
-          >
-            Approve
-          </LineItem>
+            title="Approve"
+          />
         );
 
       case UserStatus.ACTIVE:
         return (
           <>
             {user.id && canManageGroups && (
-              <LineItem
+              <LineItemButton
+                sizePreset="main-ui"
+                rounding="sm"
                 icon={SvgUsers}
                 onClick={() => openModal(Modal.EDIT_GROUPS)}
-              >
-                Groups &amp; Roles
-              </LineItem>
+                title="Groups & Roles"
+              />
             )}
             {user.id && adminAccessItem}
-            <LineItem
+            <LineItemButton
+              sizePreset="main-ui"
+              rounding="sm"
               icon={SvgKey}
               onClick={() => openModal(Modal.RESET_PASSWORD)}
-            >
-              Reset Password
-            </LineItem>
+              title="Reset Password"
+            />
             <Divider paddingPerpendicular={4} />
-            <LineItem
-              danger
+            <LineItemButton
+              sizePreset="main-ui"
+              rounding="sm"
+              color="danger"
               icon={SvgUserX}
               onClick={() => openModal(Modal.DEACTIVATE)}
-            >
-              Deactivate User
-            </LineItem>
+              title="Deactivate User"
+            />
           </>
         );
 
@@ -192,35 +204,39 @@ export default function UserRowActions({
         return (
           <>
             {user.id && canManageGroups && (
-              <LineItem
+              <LineItemButton
+                sizePreset="main-ui"
+                rounding="sm"
                 icon={SvgUsers}
                 onClick={() => openModal(Modal.EDIT_GROUPS)}
-              >
-                Groups &amp; Roles
-              </LineItem>
+                title="Groups & Roles"
+              />
             )}
             {user.id && adminAccessItem}
-            <LineItem
+            <LineItemButton
+              sizePreset="main-ui"
+              rounding="sm"
               icon={SvgKey}
               onClick={() => openModal(Modal.RESET_PASSWORD)}
-            >
-              Reset Password
-            </LineItem>
+              title="Reset Password"
+            />
             <Divider paddingPerpendicular={4} />
-            <LineItem
+            <LineItemButton
+              sizePreset="main-ui"
+              rounding="sm"
               icon={SvgUserPlus}
               onClick={() => openModal(Modal.ACTIVATE)}
-            >
-              Activate User
-            </LineItem>
+              title="Activate User"
+            />
             <Divider paddingPerpendicular={4} />
-            <LineItem
-              danger
+            <LineItemButton
+              sizePreset="main-ui"
+              rounding="sm"
+              color="danger"
               icon={SvgUserX}
               onClick={() => openModal(Modal.DELETE)}
-            >
-              Delete User
-            </LineItem>
+              title="Delete User"
+            />
           </>
         );
 

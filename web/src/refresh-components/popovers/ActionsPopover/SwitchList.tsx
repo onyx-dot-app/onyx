@@ -5,11 +5,11 @@ import useFocusOnMount from "@opal/hooks/useFocusOnMount";
 import {
   Button,
   InputTypeIn,
+  LineItemButton,
   PopoverMenu,
   Switch,
   Tooltip,
 } from "@opal/components";
-import LineItem from "@/refresh-components/buttons/LineItem";
 import type { IconProps } from "@opal/types";
 import { SvgChevronLeft, SvgPlug, SvgUnplug } from "@opal/icons";
 
@@ -82,13 +82,14 @@ export default function SwitchList({
           />
         </div>,
 
-        <LineItem
+        <LineItemButton
+          sizePreset="main-ui"
+          rounding="sm"
           key="enable-disable-all"
           icon={allDisabled ? SvgPlug : SvgUnplug}
           onClick={allDisabled ? onEnableAll : onDisableAll}
-        >
-          {allDisabled ? "Enable All" : "Disable All"}
-        </LineItem>,
+          title={allDisabled ? "Enable All" : "Disable All"}
+        />,
 
         ...filteredItems.map((item) => {
           const tooltip = item.disabled
@@ -96,14 +97,15 @@ export default function SwitchList({
             : item.description;
           return (
             <Tooltip key={item.id} tooltip={tooltip}>
-              <LineItem
+              <LineItemButton
+                sizePreset="main-ui"
+                rounding="sm"
                 icon={
                   item.leading
                     ? ((() =>
                         item.leading) as React.FunctionComponent<IconProps>)
                     : undefined
                 }
-                strokeIcon={false}
                 rightChildren={
                   <Switch
                     checked={item.isEnabled}
@@ -112,9 +114,8 @@ export default function SwitchList({
                     disabled={item.disabled}
                   />
                 }
-              >
-                {item.label}
-              </LineItem>
+                title={item.label}
+              />
             </Tooltip>
           );
         }),

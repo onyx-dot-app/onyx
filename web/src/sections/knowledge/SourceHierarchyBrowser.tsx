@@ -9,14 +9,19 @@ import React, {
 } from "react";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
-import { Button, CopyButton, Divider as OpalDivider } from "@opal/components";
+import {
+  Button,
+  Checkbox,
+  CopyButton,
+  Divider as OpalDivider,
+  InputTypeIn,
+  LineItemButton,
+  Popover,
+  Spacer,
+} from "@opal/components";
 import { Hoverable } from "@opal/core";
 import Text from "@/refresh-components/texts/Text";
 import Truncated from "@/refresh-components/texts/Truncated";
-import { Checkbox } from "@opal/components";
-import { InputTypeIn } from "@opal/components";
-import { Popover } from "@opal/components";
-import LineItem from "@/refresh-components/buttons/LineItem";
 import SelectButton from "@/refresh-components/buttons/SelectButton";
 import Divider from "@/refresh-components/Divider";
 import {
@@ -47,7 +52,6 @@ import {
 } from "@/lib/hierarchy/svc";
 import { AgentAttachedDocument } from "@/lib/agents/types";
 import { timeAgo } from "@opal/time";
-import { Spacer } from "@opal/components";
 
 // Compact, human-readable form of a node/document link, used as a secondary
 // label so siblings that share a display name (common for orphaned nodes that
@@ -822,72 +826,78 @@ export default function SourceHierarchyBrowser({
               <Popover.Menu>
                 {/* Sort by section */}
                 <Divider showTitle text="Sort by" dividerLine={false} />
-                <LineItem
-                  selected={sortField === "name"}
+                <LineItemButton
+                  sizePreset="main-ui"
+                  rounding="sm"
+                  state={sortField === "name" ? "selected" : "empty"}
                   onClick={() => setSortField("name")}
                   rightChildren={
                     sortField === "name" ? <SvgCheck size={16} /> : undefined
                   }
-                >
-                  Name
-                </LineItem>
-                <LineItem
-                  selected={sortField === "last_updated"}
+                  title="Name"
+                />
+                <LineItemButton
+                  sizePreset="main-ui"
+                  rounding="sm"
+                  state={sortField === "last_updated" ? "selected" : "empty"}
                   onClick={() => setSortField("last_updated")}
                   rightChildren={
                     sortField === "last_updated" ? (
                       <SvgCheck size={16} />
                     ) : undefined
                   }
-                >
-                  Last Updated
-                </LineItem>
+                  title="Last Updated"
+                />
                 {/* Sorting Order section */}
                 <Divider showTitle text="Sorting Order" dividerLine={false} />
-                <LineItem
-                  selected={sortDirection === "desc"}
+                <LineItemButton
+                  sizePreset="main-ui"
+                  rounding="sm"
+                  state={sortDirection === "desc" ? "selected" : "empty"}
                   onClick={() => setSortDirection("desc")}
                   rightChildren={
                     sortDirection === "desc" ? (
                       <SvgCheck size={16} />
                     ) : undefined
                   }
-                >
-                  {sortField === "name" ? "Z to A" : "Recent to Old"}
-                </LineItem>
-                <LineItem
-                  selected={sortDirection === "asc"}
+                  title={sortField === "name" ? "Z to A" : "Recent to Old"}
+                />
+                <LineItemButton
+                  sizePreset="main-ui"
+                  rounding="sm"
+                  state={sortDirection === "asc" ? "selected" : "empty"}
                   onClick={() => setSortDirection("asc")}
                   rightChildren={
                     sortDirection === "asc" ? <SvgCheck size={16} /> : undefined
                   }
-                >
-                  {sortField === "name" ? "A to Z" : "Old to Recent"}
-                </LineItem>
+                  title={sortField === "name" ? "A to Z" : "Old to Recent"}
+                />
                 {/* Folders section */}
                 <Divider showTitle text="Folders" dividerLine={false} />
-                <LineItem
-                  selected={folderPosition === "on_top"}
+                <LineItemButton
+                  sizePreset="main-ui"
+                  rounding="sm"
+                  state={folderPosition === "on_top" ? "selected" : "empty"}
                   onClick={() => setFolderPosition("on_top")}
                   rightChildren={
                     folderPosition === "on_top" ? (
                       <SvgCheck size={16} />
                     ) : undefined
                   }
-                >
-                  On top
-                </LineItem>
-                <LineItem
-                  selected={folderPosition === "mixed"}
+                  title="On top"
+                />
+                <LineItemButton
+                  sizePreset="main-ui"
+                  rounding="sm"
+                  state={folderPosition === "mixed" ? "selected" : "empty"}
                   onClick={() => setFolderPosition("mixed")}
                   rightChildren={
                     folderPosition === "mixed" ? (
                       <SvgCheck size={16} />
                     ) : undefined
                   }
-                >
-                  Mixed with Files
-                </LineItem>
+                  title="Mixed with Files"
+                />
               </Popover.Menu>
             </Popover.Content>
           </Popover>
