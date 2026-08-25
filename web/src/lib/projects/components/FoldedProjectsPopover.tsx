@@ -1,6 +1,6 @@
 "use client";
 
-import { useFolderIcon } from "@/lib/projects/components/useFolderIcon";
+import { useFolderIcon } from "@/lib/projects/components/ProjectFolderButton";
 import CreateProjectModal from "@/lib/projects/components/CreateProjectModal";
 import { useEffect, useState } from "react";
 import {

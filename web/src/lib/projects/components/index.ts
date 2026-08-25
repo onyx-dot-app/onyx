@@ -1,4 +1,3 @@
-export { useFolderIcon } from "@/lib/projects/components/useFolderIcon";
 export {
   ProjectFolderButton,
   type ProjectFolderButtonProps,
