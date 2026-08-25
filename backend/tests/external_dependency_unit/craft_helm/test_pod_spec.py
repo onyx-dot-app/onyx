@@ -134,21 +134,6 @@ def _render_pod_template_yaml(extra_args: list[str] | None = None) -> str:
     return result.stdout
 
 
-def _render_sandbox_proxy_deployment_yaml(
-    extra_args: list[str] | None = None,
-) -> str:
-    """Render the Craft sandbox-proxy Deployment from the chart."""
-    cmd = [
-        *_helm_template_cmd(extra_args),
-        "--show-only",
-        "templates/sandbox-proxy/deployment.yaml",
-    ]
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        _skip_or_fail(f"helm template failed (chart deps?): {result.stderr.strip()}")
-    return result.stdout
-
-
 def _render_config_map_yaml(extra_args: list[str] | None = None) -> str:
     """Render the shared runtime ConfigMap from the chart."""
     cmd = [
@@ -666,8 +651,8 @@ def test_ca_bundle_mounted_read_only_on_both_containers(pod: client.V1Pod) -> No
         assert mount.mount_path == "/etc/ssl/sandbox"
 
 
-def test_redis_tls_mounts_ca_in_craft_sandbox_proxy() -> None:
-    """The proxy needs the Redis CA because it shares Craft approval state."""
+def test_redis_tls_mounts_ca_in_all_enabled_redis_workloads() -> None:
+    """Every enabled Redis client must receive the configured server CA."""
     redis_tls_args = [
         "--set",
         "redisTls.enabled=true",
@@ -678,31 +663,43 @@ def test_redis_tls_mounts_ca_in_craft_sandbox_proxy() -> None:
         "--set",
         "redisTls.caMountPath=/etc/redis-tls/root.pem",
     ]
-    rendered = list(
-        yaml.safe_load_all(_render_sandbox_proxy_deployment_yaml(redis_tls_args))
-    )
-    deployment = next(doc for doc in rendered if doc["kind"] == "Deployment")
-    pod_spec = deployment["spec"]["template"]["spec"]
-    proxy = next(
-        container
-        for container in pod_spec["containers"]
-        if container["name"] == "sandbox-proxy"
-    )
-    mount = next(item for item in proxy["volumeMounts"] if item["name"] == "redis-ca")
-    volume = next(item for item in pod_spec["volumes"] if item["name"] == "redis-ca")
+    rendered = _render_chart(redis_tls_args)
+    assert rendered.returncode == 0, rendered.stderr
+    deployments = {
+        doc["metadata"]["name"]: doc
+        for doc in yaml.safe_load_all(rendered.stdout)
+        if doc and doc.get("kind") == "Deployment"
+    }
+    redis_workload_names = {
+        "onyx-api-server",
+        "onyx-celery-beat",
+        "onyx-celery-worker-primary",
+        "onyx-celery-worker-light",
+        "onyx-celery-worker-heavy",
+        "onyx-celery-worker-scheduled-tasks",
+        "onyx-sandbox-proxy",
+    }
+    assert redis_workload_names <= deployments.keys()
 
-    assert mount == {
-        "name": "redis-ca",
-        "mountPath": "/etc/redis-tls",
-        "readOnly": True,
-    }
-    assert volume == {
-        "name": "redis-ca",
-        "configMap": {
-            "name": "redis-ca-config",
-            "items": [{"key": "redis-root.pem", "path": "root.pem"}],
-        },
-    }
+    for workload_name in redis_workload_names:
+        pod_spec = deployments[workload_name]["spec"]["template"]["spec"]
+        volume = next(
+            item for item in pod_spec["volumes"] if item["name"] == "redis-ca"
+        )
+        assert volume == {
+            "name": "redis-ca",
+            "configMap": {
+                "name": "redis-ca-config",
+                "items": [{"key": "redis-root.pem", "path": "root.pem"}],
+            },
+        }
+        for container in pod_spec["containers"]:
+            assert {
+                "name": "redis-ca",
+                "mountPath": "/etc/redis-tls",
+                "readOnly": True,
+            } in container["volumeMounts"]
+
     config_map = yaml.safe_load(_render_config_map_yaml(redis_tls_args))
     assert config_map["data"]["REDIS_SSL"] == "true"
     assert config_map["data"]["REDIS_SSL_CERT_REQS"] == "required"
