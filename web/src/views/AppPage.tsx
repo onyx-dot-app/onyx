@@ -53,11 +53,13 @@ import FederatedOAuthModal from "@/components/chat/FederatedOAuthModal";
 import ChatScrollContainer, {
   ChatScrollContainerHandle,
 } from "@/sections/chat/ChatScrollContainer";
-import { ProjectContextPanel } from "@/lib/projects/components";
+import {
+  ProjectContextPanel,
+  ProjectChatSessionList,
+} from "@/lib/projects/components";
 import { useProjectsContext } from "@/lib/projects/providers";
 import { useActiveProject, useProjects } from "@/lib/projects/hooks";
 import { getProjectTokenCount } from "@/lib/projects/svc";
-import { ProjectChatSessionList } from "@/lib/projects/components";
 import { cn } from "@opal/utils";
 import Suggestions from "@/sections/Suggestions";
 import OnboardingFlow from "@/sections/onboarding/OnboardingFlow";
