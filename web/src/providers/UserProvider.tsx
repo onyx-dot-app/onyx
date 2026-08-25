@@ -36,7 +36,13 @@ import {
   type Locale,
 } from "@/i18n/config";
 
-const LOCALE_COOKIE_OPTIONS = { expires: 365, sameSite: "lax" as const };
+// path "/" (js-cookie's default, made explicit) so every route sees the
+// locale, not just the tree the settings page lives under.
+const LOCALE_COOKIE_OPTIONS = {
+  expires: 365,
+  sameSite: "lax" as const,
+  path: "/",
+};
 
 const EMPTY_PERMISSIONS: string[] = [];
 
@@ -241,20 +247,21 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
   // Sync the user's language preference from DB to the NEXT_LOCALE cookie the
   // server layout reads (src/i18n/request.ts). The DB is canonical; one
-  // refresh re-renders the tree in the right locale after login.
+  // refresh re-renders the tree in the right locale after login. Keyed by user
+  // id so switching identities without a remount (e.g. impersonation) re-syncs
+  // the new user's preference.
   const router = useRouter();
-  const hasSyncedLanguageRef = useRef(false);
+  const lastLanguageSyncUserIdRef = useRef<string | null>(null);
+  const languageRequestSeqRef = useRef(0);
 
   useEffect(() => {
-    // Only sync once per session
-    if (hasSyncedLanguageRef.current) return;
-
-    // Wait for user data to load
+    // Wait for user data to load; sync once per user identity
     if (!upToDateUser?.id) return;
+    if (lastLanguageSyncUserIdRef.current === upToDateUser.id) return;
 
     const savedLanguage = upToDateUser.preferences?.language;
     if (!isSupportedLocale(savedLanguage)) return;
-    hasSyncedLanguageRef.current = true;
+    lastLanguageSyncUserIdRef.current = upToDateUser.id;
 
     if (Cookies.get(LOCALE_COOKIE_NAME) !== savedLanguage) {
       Cookies.set(LOCALE_COOKIE_NAME, savedLanguage, LOCALE_COOKIE_OPTIONS);
@@ -572,6 +579,11 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
   const updateUserLanguage = async (language: Locale) => {
     const previousLanguage = upToDateUser?.preferences?.language;
+    // Guards overlapping updates: only the newest request may commit,
+    // roll back, or refresh, so a slow older request can't clobber a
+    // newer choice.
+    const requestId = ++languageRequestSeqRef.current;
+    const isLatestRequest = () => requestId === languageRequestSeqRef.current;
     try {
       setUpToDateUser((prevUser) => {
         if (prevUser) {
@@ -598,6 +610,17 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (!response.ok) {
+        throw new Error("Failed to update language preference");
+      }
+
+      if (isLatestRequest()) {
+        // Re-run the server layout so getLocale()/getMessages() re-resolve.
+        router.refresh();
+      }
+    } catch (error) {
+      // Roll back the optimistic cookie and in-memory preference on every
+      // failure path, including network errors where fetch itself rejects.
+      if (isLatestRequest()) {
         if (isSupportedLocale(previousLanguage)) {
           Cookies.set(
             LOCALE_COOKIE_NAME,
@@ -605,15 +628,10 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
             LOCALE_COOKIE_OPTIONS
           );
         } else {
-          Cookies.remove(LOCALE_COOKIE_NAME);
+          Cookies.remove(LOCALE_COOKIE_NAME, { path: "/" });
         }
         await refreshUser();
-        throw new Error("Failed to update language preference");
       }
-
-      // Re-run the server layout so getLocale()/getMessages() re-resolve.
-      router.refresh();
-    } catch (error) {
       console.error("Error updating language preference:", error);
       throw error;
     }

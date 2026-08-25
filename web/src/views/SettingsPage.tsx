@@ -731,7 +731,9 @@ function GeneralSettings() {
                   onValueChange={(value) => {
                     // SAFETY: the items below only carry SUPPORTED_LOCALES
                     // values, so the select can't emit anything else.
-                    void updateUserLanguage(value as Locale);
+                    updateUserLanguage(value as Locale).catch(() => {
+                      toast.error("Failed to update language preference");
+                    });
                   }}
                 >
                   <InputSelect.Trigger />
