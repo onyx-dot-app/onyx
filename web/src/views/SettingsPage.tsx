@@ -588,7 +588,7 @@ function GeneralSettings() {
             variant="section"
             width="full"
           />
-          <Card border="solid" rounding="lg">
+          <Card border="solid" rounding={4}>
             <Section alignItems="start" height="fit">
               <InputHorizontal
                 title="Full Name"
@@ -655,7 +655,7 @@ function GeneralSettings() {
             variant="section"
             width="full"
           />
-          <Card border="solid" rounding="lg">
+          <Card border="solid" rounding={4}>
             <Section alignItems="start" height="fit">
               <InputHorizontal
                 title="Color Mode"
@@ -764,7 +764,7 @@ function GeneralSettings() {
             variant="section"
             width="full"
           />
-          <Card border="solid" rounding="lg">
+          <Card border="solid" rounding={4}>
             <Section alignItems="start" height="fit">
               <InputHorizontal
                 title="Delete All Chats"
@@ -1158,7 +1158,7 @@ function ChatPreferencesSettings() {
           variant="section"
           width="full"
         />
-        <Card border="solid" rounding="lg">
+        <Card border="solid" rounding={4}>
           <Section alignItems="start" height="fit">
             <InputHorizontal
               title="Default Model"
@@ -1301,7 +1301,7 @@ function ChatPreferencesSettings() {
           variant="section"
           width="full"
         />
-        <Card border="solid" rounding="lg">
+        <Card border="solid" rounding={4}>
           <Section alignItems="start" height="fit">
             <InputHorizontal
               title="Reference Stored Memories"
@@ -1351,7 +1351,7 @@ function ChatPreferencesSettings() {
           variant="section"
           width="full"
         />
-        <Card border="solid" rounding="lg">
+        <Card border="solid" rounding={4}>
           <Section alignItems="start" height="fit">
             <InputHorizontal
               title="Use Prompt Shortcuts"
@@ -1378,7 +1378,7 @@ function ChatPreferencesSettings() {
           variant="section"
           width="full"
         />
-        <Card border="solid" rounding="lg">
+        <Card border="solid" rounding={4}>
           <Section alignItems="start" height="fit">
             <InputHorizontal
               title="Auto-Send on Pause"
@@ -1549,7 +1549,7 @@ function GatewayAccessSection({
           </Button>
         }
       />
-      <Card border="solid" rounding="lg" padding={3}>
+      <Card border="solid" rounding={4} padding={3}>
         <Section alignItems="start" height="fit" gap={3}>
           <InputHorizontal
             title="Gateway URL"
@@ -1997,7 +1997,7 @@ function AccountsAccessSettings() {
             variant="section"
             width="full"
           />
-          <Card border="solid" rounding="lg">
+          <Card border="solid" rounding={4}>
             <Section alignItems="start" height="fit">
               <InputHorizontal
                 title="Email"
@@ -2036,7 +2036,7 @@ function AccountsAccessSettings() {
               width="full"
             />
             {canCreateTokens ? (
-              <Card border="solid" padding={1} rounding="lg">
+              <Card border="solid" padding={1} rounding={4}>
                 <Section alignItems="start" height="fit">
                   <Section gap={0}>
                     <Section flexDirection="row" padding={1} gap={2}>
@@ -2149,7 +2149,7 @@ function AccountsAccessSettings() {
                 </Section>
               </Card>
             ) : (
-              <Card border="solid" rounding="lg">
+              <Card border="solid" rounding={4}>
                 <Section alignItems="start" height="fit">
                   <Section flexDirection="row" justifyContent="between">
                     <Text font="secondary-body" color="text-03">
@@ -2178,7 +2178,7 @@ function IndexedConnectorCard({ source, isActive }: IndexedConnectorCardProps) {
   const sourceMetadata = getSourceMetadata(source);
 
   return (
-    <Card border="solid" rounding="lg">
+    <Card border="solid" rounding={4}>
       <Section alignItems="start" height="fit">
         <Content
           icon={sourceMetadata.icon}
@@ -2256,7 +2256,7 @@ function FederatedConnectorCard({
         </ConfirmationModalLayout>
       )}
 
-      <Card border="solid" padding={2} rounding="lg">
+      <Card border="solid" padding={2} rounding={4}>
         <Section alignItems="start" height="fit">
           <ContentAction
             icon={sourceMetadata.icon}

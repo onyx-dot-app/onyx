@@ -56,7 +56,7 @@ export default function IntegrationCard({ integration }: IntegrationCardProps) {
 
   return (
     <Hoverable.Root group="integration-row">
-      <Card background="light" border="solid" rounding="lg">
+      <Card background="light" border="solid" rounding={4}>
         <div className="flex items-center gap-3 w-full">
           {/* Off rows read as inert at a glance; controls keep full opacity. */}
           <div
@@ -116,7 +116,7 @@ export default function IntegrationCard({ integration }: IntegrationCardProps) {
                     edit ? (
                       <LineItemButton
                         sizePreset="main-ui"
-                        rounding="sm"
+                        rounding={2}
                         key="edit"
                         icon={SvgEdit}
                         onClick={() => {
@@ -129,7 +129,7 @@ export default function IntegrationCard({ integration }: IntegrationCardProps) {
                     remove ? (
                       <LineItemButton
                         sizePreset="main-ui"
-                        rounding="sm"
+                        rounding={2}
                         key="delete"
                         icon={SvgTrash}
                         color="danger"

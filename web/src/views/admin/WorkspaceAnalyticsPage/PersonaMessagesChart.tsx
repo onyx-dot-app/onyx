@@ -71,7 +71,7 @@ function PersonaPicker({
               <Popover.Close asChild key={agent.id}>
                 <LineItemButton
                   sizePreset="main-ui"
-                  rounding="sm"
+                  rounding={2}
                   selectVariant="select-heavy"
                   icon={SvgOnyxOctagon}
                   title={agent.name}

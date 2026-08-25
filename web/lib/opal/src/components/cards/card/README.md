@@ -16,22 +16,22 @@ import { Card } from "@opal/components";
 
 <Card padding={4} border="solid">
   <p>Hello</p>
-</Card>
+</Card>;
 ```
 
 ### Plain mode props
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `padding` | `Spacing` | `4` | Padding, as a spacing step (`N / 4` rem) |
-| `rounding` | `RoundingVariants` | `"md"` | Border-radius preset |
-| `background` | `"none" \| "light" \| "heavy"` | `"light"` | Background fill intensity |
-| `border` | `"none" \| "dashed" \| "solid"` | `"none"` | Border style |
-| `borderColor` | `StatusVariants` | `"default"` | Status-palette border color (needs `border` ≠ `"none"`) |
-| `disabled` | `boolean` | `false` | Dims the card and shows a not-allowed cursor. Visual only — see below. |
-| `ref` | `React.Ref<HTMLDivElement>` | — | Ref forwarded to the root div |
-| `children` | `React.ReactNode` | — | Card content |
-| `data-*` | `string \| boolean` | — | Forwarded to the root. See below. |
+| Prop          | Type                            | Default     | Description                                                            |
+| ------------- | ------------------------------- | ----------- | ---------------------------------------------------------------------- |
+| `padding`     | `Spacing`                       | `4`         | Padding, as a spacing step (`N / 4` rem)                               |
+| `rounding`    | `Rounding`                      | `3`         | Corner radius step (`N / 4` rem, or `"full"`)                          |
+| `background`  | `"none" \| "light" \| "heavy"`  | `"light"`   | Background fill intensity                                              |
+| `border`      | `"none" \| "dashed" \| "solid"` | `"none"`    | Border style                                                           |
+| `borderColor` | `StatusVariants`                | `"default"` | Status-palette border color (needs `border` ≠ `"none"`)                |
+| `disabled`    | `boolean`                       | `false`     | Dims the card and shows a not-allowed cursor. Visual only — see below. |
+| `ref`         | `React.Ref<HTMLDivElement>`     | —           | Ref forwarded to the root div                                          |
+| `children`    | `React.ReactNode`               | —           | Card content                                                           |
+| `data-*`      | `string \| boolean`             | —           | Forwarded to the root. See below.                                      |
 
 ### `disabled`
 
@@ -85,12 +85,18 @@ uses. So `padding={2}` is the same distance as `p-2`, and the default `4` is `1r
 
 ### Rounding scale
 
-| `rounding` | Class        |
-|------------|--------------|
-| `"xs"`     | `rounded-04` |
-| `"sm"`     | `rounded-08` |
-| `"md"`     | `rounded-12` |
-| `"lg"`     | `rounded-16` |
+`Rounding` is on the same scale as `Spacing`: `N` is `N / 4` rem, so
+`rounding={2}` is the same distance as `padding={2}`.
+
+| `rounding` | rem     | px   |
+| ---------- | ------- | ---- |
+| `0.5`      | `0.125` | 2    |
+| `1`        | `0.25`  | 4    |
+| `2`        | `0.5`   | 8    |
+| `3`        | `0.75`  | 12   |
+| `4`        | `1`     | 16   |
+| `5`        | `1.25`  | 20   |
+| `"full"`   | —       | pill |
 
 ## Expandable mode
 
@@ -109,7 +115,7 @@ function ProviderCard() {
       expanded={open}
       expandedContent={<ModelList />}
       border="solid"
-      rounding="lg"
+      rounding={4}
     >
       {/* always visible — the header region */}
       <div
@@ -130,11 +136,11 @@ function ProviderCard() {
 
 Everything from plain mode, **plus**:
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `expandable` | `true` | — | Required to enable the expandable variant |
-| `expanded` | `boolean` | `false` | Controlled expanded state. Card never mutates this. |
-| `expandedContent` | `React.ReactNode` | — | The body that animates open/closed below the header |
+| Prop              | Type              | Default | Description                                         |
+| ----------------- | ----------------- | ------- | --------------------------------------------------- |
+| `expandable`      | `true`            | —       | Required to enable the expandable variant           |
+| `expanded`        | `boolean`         | `false` | Controlled expanded state. Card never mutates this. |
+| `expandedContent` | `React.ReactNode` | —       | The body that animates open/closed below the header |
 
 ### Behavior
 
@@ -155,7 +161,7 @@ Because Card doesn't own the trigger, it also doesn't generate IDs or ARIA attri
 ```ts
 type CardBaseProps = {
   padding?: Spacing;
-  rounding?: RoundingVariants;
+  rounding?: Rounding;
   background?: "none" | "light" | "heavy";
   border?: "none" | "dashed" | "solid";
   borderColor?: StatusVariants;

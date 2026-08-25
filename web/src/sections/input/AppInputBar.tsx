@@ -996,7 +996,7 @@ const AppInputBar = React.memo(
                       ...sortedFilteredPrompts.map((prompt, index) => (
                         <LineItemButton
                           sizePreset="main-ui"
-                          rounding="sm"
+                          rounding={2}
                           key={prompt.id}
                           state={
                             tabbingIconIndex === index ? "selected" : "empty"
@@ -1014,7 +1014,7 @@ const AppInputBar = React.memo(
                       sortedFilteredPrompts.length > 0 ? null : undefined,
                       <LineItemButton
                         sizePreset="main-ui"
-                        rounding="sm"
+                        rounding={2}
                         key="create-new"
                         href="/app/settings/chat-preferences"
                         icon={SvgPlus}

@@ -167,7 +167,7 @@ export function AnalyticsChart({
   yAxisFormatter,
 }: AnalyticsChartProps) {
   return (
-    <Card border="solid" rounding="lg" padding={6}>
+    <Card border="solid" rounding={4} padding={6}>
       <Section
         flexDirection="column"
         justifyContent="start"

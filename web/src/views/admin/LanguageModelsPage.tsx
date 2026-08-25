@@ -177,7 +177,11 @@ function ExistingProviderCard({
         <SelectCard
           state="filled"
           padding={2}
-          rounding="lg"
+          rounding={4}
+          // A name to select the card by. The Edit and Delete buttons inside
+          // are labelled "Edit <name>" / "Delete <name>", so an exact match on
+          // the bare name reaches the card alone.
+          aria-label={providerDisplayName(provider)}
           onClick={() => setIsOpen(true)}
         >
           <ContentAction
@@ -242,7 +246,11 @@ function NewProviderCard({
     <SelectCard
       state="empty"
       padding={2}
-      rounding="lg"
+      rounding={4}
+      // A name to select the card by. It carries the company as well as the
+      // product, because the card reads "GPT" with "OpenAI" underneath and
+      // callers look for the company.
+      aria-label={`Add ${companyName} ${productName}`}
       onClick={() => setIsOpen(true)}
     >
       <ContentAction
@@ -295,7 +303,7 @@ function NewCustomProviderCard({
       <SelectCard
         state="empty"
         padding={2}
-        rounding="lg"
+        rounding={4}
         onClick={() => setIsOpen(true)}
       >
         <ContentAction
@@ -390,7 +398,7 @@ export default function LanguageModelsPage() {
 
       <SettingsLayouts.Body>
         {hasProviders ? (
-          <Card border="solid" rounding="lg">
+          <Card border="solid" rounding={4}>
             <InputHorizontal
               title="Default Model"
               description="This model will be used by Onyx by default in your chats."

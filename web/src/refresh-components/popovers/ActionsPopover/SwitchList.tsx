@@ -85,7 +85,7 @@ export default function SwitchList({
 
         <LineItemButton
           sizePreset="main-ui"
-          rounding="sm"
+          rounding={2}
           key="enable-disable-all"
           icon={allDisabled ? SvgPlug : SvgUnplug}
           onClick={allDisabled ? onEnableAll : onDisableAll}

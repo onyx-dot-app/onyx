@@ -250,14 +250,14 @@ export default function AssociatedSkillsEditor({
       </div>
 
       {selectedSkillIds.length === 0 ? (
-        <Card border="solid" rounding="lg" padding={2}>
+        <Card border="solid" rounding={4} padding={2}>
           <Text font="secondary-body" color="text-03">
             No skills are associated yet. This app can still be saved and used
             without one.
           </Text>
         </Card>
       ) : (
-        <Card border="solid" rounding="sm" padding={0}>
+        <Card border="solid" rounding={2} padding={0}>
           <div className="flex max-h-48 flex-col divide-y divide-border-01 overflow-y-auto overscroll-contain">
             {selectedSkillIds.map((skillId) => {
               const skill = customSkillById.get(skillId);

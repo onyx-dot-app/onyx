@@ -155,7 +155,7 @@ export default function SSOProvidersPage() {
               const isPending = pendingProviderId === provider.id;
 
               return (
-                <Card key={provider.id} border="solid" rounding="lg">
+                <Card key={provider.id} border="solid" rounding={4}>
                   <ContentAction
                     icon={SSO_PROVIDER_DETAILS[provider.provider_type].icon}
                     title={provider.display_name}

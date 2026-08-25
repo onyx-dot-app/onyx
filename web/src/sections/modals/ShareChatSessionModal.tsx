@@ -64,7 +64,7 @@ function PrivacyOption({
     <SelectCard
       state={selected ? "filled" : "empty"}
       padding={2}
-      rounding="sm"
+      rounding={2}
       border="none"
       onClick={onClick}
       aria-label={ariaLabel}

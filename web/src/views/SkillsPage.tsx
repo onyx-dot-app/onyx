@@ -294,7 +294,7 @@ export default function SkillsPage() {
               <Popover.Menu>
                 <LineItemButton
                   sizePreset="main-ui"
-                  rounding="sm"
+                  rounding={2}
                   icon={SvgEdit}
                   description="Write the instructions and add supporting files in Onyx."
                   onClick={() => {
@@ -305,7 +305,7 @@ export default function SkillsPage() {
                 />
                 <LineItemButton
                   sizePreset="main-ui"
-                  rounding="sm"
+                  rounding={2}
                   icon={SvgUploadCloud}
                   description="Import a SKILL.md file, ZIP file, or skill folder."
                   onClick={() => {
@@ -316,7 +316,7 @@ export default function SkillsPage() {
                 />
                 <LineItemButton
                   sizePreset="main-ui"
-                  rounding="sm"
+                  rounding={2}
                   icon={SvgGithub}
                   description="Import one or more skills from a repository."
                   onClick={() => {

@@ -42,7 +42,7 @@ const OnboardingHeader = React.memo(
         border="solid"
         padding={2}
         data-label="onboarding-header"
-        rounding="lg"
+        rounding={4}
       >
         <Section alignItems="start" height="fit">
           <ContentAction

@@ -193,7 +193,7 @@ const ChatButton = memo(
           <LineItemButton
             key="share"
             sizePreset="main-ui"
-            rounding="sm"
+            rounding={2}
             icon={SvgShare}
             title="Share"
             onClick={noProp(() => setShowShareModal(true))}
@@ -201,7 +201,7 @@ const ChatButton = memo(
           <LineItemButton
             key="rename"
             sizePreset="main-ui"
-            rounding="sm"
+            rounding={2}
             icon={SvgEdit}
             title="Rename"
             onClick={noProp(() => setRenaming(true))}
@@ -209,7 +209,7 @@ const ChatButton = memo(
           <LineItemButton
             key="move"
             sizePreset="main-ui"
-            rounding="sm"
+            rounding={2}
             icon={SvgFolderIn}
             title="Move to Project"
             onClick={noProp(() => setShowMoveOptions(true))}
@@ -218,7 +218,7 @@ const ChatButton = memo(
             <LineItemButton
               key="remove"
               sizePreset="main-ui"
-              rounding="sm"
+              rounding={2}
               icon={SvgFolder}
               title={`Remove from ${project.name}`}
               onClick={noProp(() => handleRemoveFromProject())}
@@ -228,7 +228,7 @@ const ChatButton = memo(
           <LineItemButton
             key="delete"
             sizePreset="main-ui"
-            rounding="sm"
+            rounding={2}
             color="danger"
             icon={SvgTrash}
             title="Delete"
@@ -251,7 +251,7 @@ const ChatButton = memo(
             <LineItemButton
               key={targetProject.id}
               sizePreset="main-ui"
-              rounding="sm"
+              rounding={2}
               icon={SvgFolder}
               title={targetProject.name}
               onClick={noProp(() => handleChatMove(targetProject))}
@@ -264,7 +264,7 @@ const ChatButton = memo(
                 <LineItemButton
                   key="create-new"
                   sizePreset="main-ui"
-                  rounding="sm"
+                  rounding={2}
                   icon={SvgFolderPlus}
                   title={`Create ${searchTerm.trim()}`}
                   onClick={noProp(() =>

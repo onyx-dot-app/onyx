@@ -290,7 +290,7 @@ function SharedGroupResources({
         description="Share connectors, document sets, agents with members of this group."
       />
       <SimpleCollapsible.Content>
-        <Card border="solid" rounding="lg">
+        <Card border="solid" rounding={4}>
           <Section alignItems="start" height="fit">
             <Section
               gap={4}

@@ -59,7 +59,7 @@ function EmptyMessageCard(props: EmptyMessageCardProps) {
       background="none"
       border="dashed"
       padding={padding}
-      rounding="md"
+      rounding={3}
     >
       {sizePreset === "secondary" ? (
         <Content

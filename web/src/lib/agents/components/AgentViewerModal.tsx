@@ -56,7 +56,7 @@ function ViewerMCPServerCard({ server, tools }: ViewerMCPServerCardProps) {
       expandable
       expanded={expanded}
       border="solid"
-      rounding="lg"
+      rounding={4}
       padding={2}
       expandedContent={
         tools.length > 0 ? (
@@ -102,7 +102,7 @@ function ViewerMCPServerCard({ server, tools }: ViewerMCPServerCardProps) {
  */
 function ViewerOpenApiToolCard({ tool }: { tool: ToolSnapshot }) {
   return (
-    <Card border="solid" rounding="lg" padding={4}>
+    <Card border="solid" rounding={4} padding={4}>
       <Content
         icon={SvgActions}
         title={tool.display_name}

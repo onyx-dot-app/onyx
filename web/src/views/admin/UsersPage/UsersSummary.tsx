@@ -80,7 +80,7 @@ function StatCell({ value, label, onFilter }: StatCellProps) {
 
 function ScimCard() {
   return (
-    <Card border="solid" padding={3} rounding="lg">
+    <Card border="solid" padding={3} rounding={4}>
       <Section alignItems="start" height="fit" gap={2}>
         <ContentAction
           icon={SvgUserSync}
@@ -132,7 +132,7 @@ export default function UsersSummary({
   const showRequests = requests !== null && requests > 0;
 
   const statsCard = (
-    <Card border="solid" padding={2} rounding="lg">
+    <Card border="solid" padding={2} rounding={4}>
       <Section alignItems="start" height="fit">
         <Section flexDirection="row" gap={0}>
           <StatCell

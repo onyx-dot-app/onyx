@@ -127,7 +127,7 @@ export function KnowledgeSearchSidebar({
     <TableLayouts.SidebarLayout aria-label="knowledge-search-sidebar">
       <LineItemButton
         sizePreset="main-ui"
-        rounding="sm"
+        rounding={2}
         icon={SvgFiles}
         state={activeSourceFilter === null ? "selected" : "empty"}
         onClick={() => onSourceFilterClick(null)}
@@ -148,7 +148,7 @@ export function KnowledgeSearchSidebar({
           return (
             <LineItemButton
               sizePreset="main-ui"
-              rounding="sm"
+              rounding={2}
               key={cs.source}
               icon={sourceMetadata.icon}
               state={activeSourceFilter === cs.source ? "selected" : "empty"}

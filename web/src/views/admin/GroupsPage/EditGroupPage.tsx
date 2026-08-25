@@ -736,7 +736,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
               )}
 
               {canManage && showIncognitoField && (
-                <Card border="solid" rounding="lg">
+                <Card border="solid" rounding={4}>
                   <Section alignItems="start" height="fit">
                     <InputHorizontal
                       title="Incognito Chats"
@@ -754,7 +754,7 @@ function EditGroupPage({ groupId }: EditGroupPageProps) {
 
               {/* Delete This Group */}
               {canDelete && (
-                <Card border="solid" rounding="lg">
+                <Card border="solid" rounding={4}>
                   <Section alignItems="start" height="fit">
                     <InputHorizontal
                       title="Delete This Group"

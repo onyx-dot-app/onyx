@@ -37,7 +37,7 @@ export function BotConfigCard() {
   // Show loading while fetching initial state
   if (isLoading) {
     return (
-      <Card border="solid" rounding="lg">
+      <Card border="solid" rounding={4}>
         <Section alignItems="start" height="fit">
           <Section
             flexDirection="row"
@@ -108,7 +108,7 @@ export function BotConfigCard() {
           additionalDetails="This will disconnect your Discord bot. You will need to re-enter the token to use the bot again."
         />
       )}
-      <Card border="solid" rounding="lg">
+      <Card border="solid" rounding={4}>
         <Section alignItems="start" height="fit">
           <Section flexDirection="row" justifyContent="between">
             <Section flexDirection="row" gap={2} width="fit">

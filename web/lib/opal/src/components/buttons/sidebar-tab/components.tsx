@@ -220,7 +220,7 @@ function SidebarTab({
         type="button"
         group="group/SidebarTab"
       >
-        <Interactive.Container rounding="sm" size="lg" width="full">
+        <Interactive.Container rounding={2} size="lg" width="full">
           {trigger}
 
           {rightChildren && (

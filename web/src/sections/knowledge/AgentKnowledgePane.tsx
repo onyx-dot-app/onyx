@@ -523,7 +523,7 @@ export default function AgentKnowledgePane({
         variant="section"
       />
 
-      <Card border="solid" rounding="lg">
+      <Card border="solid" rounding={4}>
         <Section alignItems="start" height="fit">
           <GeneralLayouts.Section gap={2} alignItems="stretch" height="auto">
             <InputHorizontal

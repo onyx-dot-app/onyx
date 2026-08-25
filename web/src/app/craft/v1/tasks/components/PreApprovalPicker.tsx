@@ -74,7 +74,7 @@ export default function PreApprovalPicker({
 
   if ((appsLoading || mcpLoading) && !hasOptions) {
     return (
-      <Card background="none" border="dashed" rounding="lg">
+      <Card background="none" border="dashed" rounding={4}>
         <Text font="secondary-body" color="text-03">
           Loading apps and MCP servers…
         </Text>
@@ -84,7 +84,7 @@ export default function PreApprovalPicker({
 
   if ((appsError || mcpError) && !hasOptions) {
     return (
-      <Card background="none" border="dashed" rounding="lg">
+      <Card background="none" border="dashed" rounding={4}>
         <Text font="secondary-body" color="text-03">
           Couldn’t load apps and MCP servers. Refresh to try again.
         </Text>
@@ -94,7 +94,7 @@ export default function PreApprovalPicker({
 
   if (!hasOptions) {
     return (
-      <Card background="none" border="dashed" rounding="lg">
+      <Card background="none" border="dashed" rounding={4}>
         <Text font="secondary-body" color="text-03">
           No apps or MCP servers are available in Craft yet.
         </Text>
@@ -108,7 +108,7 @@ export default function PreApprovalPicker({
       data-testid="pre-approval-picker"
     >
       {(appsError || mcpError) && (
-        <Card background="none" border="dashed" rounding="lg">
+        <Card background="none" border="dashed" rounding={4}>
           <Text font="secondary-body" color="text-03">
             Some pre-approval options couldn’t load. Refresh to try again.
           </Text>
@@ -195,7 +195,7 @@ function PreApprovalRow({ option, checked, onToggle }: PreApprovalRowProps) {
       )}
       data-testid={option.testId}
     >
-      <Card background="light" border="solid" rounding="lg">
+      <Card background="light" border="solid" rounding={4}>
         <label
           className="flex w-full cursor-pointer items-center gap-3"
           htmlFor={checkboxId}

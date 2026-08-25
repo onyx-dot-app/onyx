@@ -208,7 +208,7 @@ function SidebarHeader({
         <Interactive.Container
           type="button"
           size="fit"
-          rounding="sm"
+          rounding={2}
           aria-label={foldLabel}
         >
           <div

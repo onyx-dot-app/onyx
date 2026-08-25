@@ -185,7 +185,7 @@ export default function AgentRowActions({
                   canList ? (
                     <LineItemButton
                       sizePreset="main-ui"
-                      rounding="sm"
+                      rounding={2}
                       key="visibility"
                       icon={agent.is_listed ? SvgEyeOff : SvgEye}
                       onClick={() => {
@@ -205,7 +205,7 @@ export default function AgentRowActions({
                   canShare ? (
                     <LineItemButton
                       sizePreset="main-ui"
-                      rounding="sm"
+                      rounding={2}
                       key="share"
                       icon={SvgShare}
                       onClick={() => {
@@ -218,7 +218,7 @@ export default function AgentRowActions({
                   businessTier && canViewStats ? (
                     <LineItemButton
                       sizePreset="main-ui"
-                      rounding="sm"
+                      rounding={2}
                       key="stats"
                       icon={SvgBarChart}
                       onClick={() => {
@@ -231,7 +231,7 @@ export default function AgentRowActions({
                   canDeleteRow ? (
                     <LineItemButton
                       sizePreset="main-ui"
-                      rounding="sm"
+                      rounding={2}
                       key="delete"
                       icon={SvgTrash}
                       color="danger"

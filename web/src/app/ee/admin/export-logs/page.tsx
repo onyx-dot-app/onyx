@@ -327,7 +327,7 @@ export default function ExportLogsPage() {
           title="Logs may contain sensitive data"
           description="Log files can include user emails, document titles, search queries, and error payloads. Review the contents before sharing them outside your organization."
         />
-        <Card border="solid" rounding="lg">
+        <Card border="solid" rounding={4}>
           <Section alignItems="start" height="fit">
             <ContentAction
               sizePreset="main-ui"
@@ -348,7 +348,7 @@ export default function ExportLogsPage() {
           </Section>
         </Card>
         {exportId !== null && (
-          <Card border="solid" rounding="lg">
+          <Card border="solid" rounding={4}>
             <Section alignItems="start" height="fit">
               {workerRows.length === 0 ? (
                 <Text font="main-ui-body" color="text-02">

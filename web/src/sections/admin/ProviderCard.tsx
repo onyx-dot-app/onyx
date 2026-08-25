@@ -89,6 +89,10 @@ export default function ProviderCard({
   selectedLabel = "Current Default",
   "aria-label": ariaLabel,
 }: ProviderCardProps) {
+  // A name to select the card by — one that says which provider it is rather
+  // than what it looks like. Not an accessibility fix: the card is a roleless
+  // div with an onClick, so a label alone leaves it pointer-only.
+  const label = ariaLabel ?? title;
   const isDisconnected = status === "disconnected";
   const isConnected = status === "connected";
   const isSelected = status === "selected";
@@ -101,8 +105,8 @@ export default function ProviderCard({
       <SelectCard
         state={STATUS_TO_STATE[status]}
         padding={2}
-        rounding="lg"
-        aria-label={ariaLabel}
+        rounding={4}
+        aria-label={label}
         onClick={
           isDisconnected && onConnect
             ? onConnect

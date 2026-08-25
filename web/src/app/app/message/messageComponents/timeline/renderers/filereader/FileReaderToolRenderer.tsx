@@ -127,12 +127,7 @@ export const FileReaderToolRenderer: MessageRenderer<
                 </Text>
               </Section>
               {hasPreview && (
-                <Card
-                  background="none"
-                  border="solid"
-                  padding={2}
-                  rounding="lg"
-                >
+                <Card background="none" border="solid" padding={2} rounding={4}>
                   <Section alignItems="start" height="fit" gap={1}>
                     <Text as="span" secondaryMono text04>
                       {state.previewStart}

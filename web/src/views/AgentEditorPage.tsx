@@ -247,7 +247,7 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
             {[
               <LineItemButton
                 sizePreset="main-ui"
-                rounding="sm"
+                rounding={2}
                 key="upload-image"
                 icon={SvgImage}
                 onClick={() => fileInputRef.current?.click()}
@@ -291,7 +291,7 @@ function OpenApiToolCard({ tool }: OpenApiToolCardProps) {
   const toolFieldName = `openapi_tool_${tool.id}`;
 
   return (
-    <Card border="solid" rounding="lg">
+    <Card border="solid" rounding={4}>
       <InputHorizontal
         icon={SvgActions}
         title={tool.display_name || tool.name}
@@ -351,7 +351,7 @@ function MCPServerCard({
             !getFieldMeta<boolean>(`${serverFieldName}.enabled`).value;
           return (
             <Disabled key={tool.id} disabled={toolDisabled}>
-              <Card border="solid" rounding="md" padding={2}>
+              <Card border="solid" rounding={3} padding={2}>
                 <ContentAction
                   icon={tool.icon ?? SvgSliders}
                   title={tool.name}
@@ -383,7 +383,7 @@ function MCPServerCard({
         expandable
         expanded={!isFolded}
         border="solid"
-        rounding="lg"
+        rounding={4}
         padding={2}
         expandedContent={cardContent}
       >
@@ -1509,7 +1509,7 @@ export default function AgentEditorPage({
                           sizePreset="main-content"
                           variant="section"
                         />
-                        <Card border="solid" rounding="lg">
+                        <Card border="solid" rounding={4}>
                           <GeneralLayouts.Section>
                             {canShare && (
                               <InputHorizontal
@@ -1604,7 +1604,7 @@ export default function AgentEditorPage({
                               disabled={!isImageGenerationAvailable}
                               tooltip={imageGenerationDisabledTooltip}
                             >
-                              <Card border="solid" rounding="lg">
+                              <Card border="solid" rounding={4}>
                                 <InputHorizontal
                                   withLabel="image_generation"
                                   title="Image Generation"
@@ -1620,7 +1620,7 @@ export default function AgentEditorPage({
                             </Disabled>
 
                             <Disabled disabled={!webSearchTool}>
-                              <Card border="solid" rounding="lg">
+                              <Card border="solid" rounding={4}>
                                 <InputHorizontal
                                   withLabel="web_search"
                                   title="Web Search"
@@ -1636,7 +1636,7 @@ export default function AgentEditorPage({
                             </Disabled>
 
                             <Disabled disabled={!openURLTool}>
-                              <Card border="solid" rounding="lg">
+                              <Card border="solid" rounding={4}>
                                 <InputHorizontal
                                   withLabel="open_url"
                                   title="Open URL"
@@ -1652,7 +1652,7 @@ export default function AgentEditorPage({
                             </Disabled>
 
                             <Disabled disabled={!codeInterpreterTool}>
-                              <Card border="solid" rounding="lg">
+                              <Card border="solid" rounding={4}>
                                 <InputHorizontal
                                   withLabel="code_interpreter"
                                   title="Code Interpreter"
@@ -1668,7 +1668,7 @@ export default function AgentEditorPage({
                             </Disabled>
 
                             <Disabled disabled={!codingAgentTool}>
-                              <Card border="solid" rounding="lg">
+                              <Card border="solid" rounding={4}>
                                 <InputHorizontal
                                   withLabel="coding_agent"
                                   title="Coding Agent"
@@ -1738,7 +1738,7 @@ export default function AgentEditorPage({
                         />
                         <SimpleCollapsible.Content>
                           <GeneralLayouts.Section>
-                            <Card border="solid" rounding="lg">
+                            <Card border="solid" rounding={4}>
                               <GeneralLayouts.Section>
                                 <InputHorizontal
                                   withLabel="llm_model"
@@ -1815,7 +1815,7 @@ export default function AgentEditorPage({
                             paddingPerpendicular={0}
                           />
 
-                          <Card border="solid" rounding="lg">
+                          <Card border="solid" rounding={4}>
                             <GeneralLayouts.Section>
                               {canUpdateFeaturedStatus && (
                                 <InputHorizontal
