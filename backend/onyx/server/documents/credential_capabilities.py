@@ -23,6 +23,7 @@ from onyx.db.credential_capability import (
     get_capability_report_rows_for_source,
 )
 from onyx.db.credentials import (
+    fetch_credential_by_id,
     fetch_credential_by_id_for_user,
     fetch_credentials_by_source_for_user,
 )
@@ -107,11 +108,23 @@ def get_capability_report(
     config-less credential-scoped row is returned. A connector-scoped row the
     caller may not see reads as absent.
     """
-    # GATE 2 for ``allow_scope``: the user-filtered fetch is the visibility
-    # check, and an unknown credential is indistinguishable from an
-    # inaccessible one.
-    credential = fetch_credential_by_id_for_user(credential_id, user, db_session)
-    if credential is None:
+    # GATE 2 for ``allow_scope``: credential visibility authorizes the
+    # credential scope; pairing visibility authorizes the connector scope on its
+    # own, so a pairing manager reads its report even when the credential is
+    # outside their credential visibility (admin-created for a scoped manager,
+    # another user's private credential for a global one). An unknown credential
+    # is indistinguishable from an inaccessible one.
+    pairing_visible = connector_id is not None and _connector_pairing_visible(
+        db_session, connector_id, credential_id, user
+    )
+    credential_visible = (
+        fetch_credential_by_id_for_user(credential_id, user, db_session) is not None
+    )
+    if not credential_visible and (
+        # The global-manager pairing shortcut checks nothing, so the unfiltered
+        # fetch keeps an unknown credential a 404 for them too.
+        not pairing_visible or fetch_credential_by_id(credential_id, db_session) is None
+    ):
         raise OnyxError(
             OnyxErrorCode.CREDENTIAL_NOT_FOUND,
             f"Credential {credential_id} does not exist or is not accessible.",
@@ -119,9 +132,7 @@ def get_capability_report(
     row = get_capability_report_row(db_session, credential_id, connector_id)
     if row is None:
         return None
-    if connector_id is not None and not _connector_pairing_visible(
-        db_session, connector_id, credential_id, user
-    ):
+    if connector_id is not None and not pairing_visible:
         # Same shape as no row at all: pairing existence must not leak.
         return None
     return CapabilityReportSnapshot.from_row(row)
@@ -135,9 +146,13 @@ def list_capability_reports_for_source(
     ),
     db_session: Session = Depends(get_session),
 ) -> list[CapabilityReportSnapshot]:
-    """Returns the report rows for a source's visible credentials, newest first."""
-    # GATE 2 for ``allow_scope``: only rows of credentials the caller can see,
-    # via the same user-filtered fetch the credential listings use.
+    """Returns the source's report rows visible to the caller, newest first."""
+    # GATE 2 for ``allow_scope``, mirroring the single-report endpoint:
+    # credential-scoped rows follow credential visibility (the same
+    # user-filtered fetch the credential listings use); connector-scoped rows
+    # are pairing outcomes and follow pairing visibility alone, so a pairing
+    # manager sees them even when the credential is outside their credential
+    # visibility.
     visible_credential_ids = {
         credential.id
         for credential in fetch_credentials_by_source_for_user(
@@ -146,14 +161,8 @@ def list_capability_reports_for_source(
             document_source=source,
         )
     }
-    rows = [
-        row
-        for row in get_capability_report_rows_for_source(db_session, source)
-        if row.credential_id in visible_credential_ids
-    ]
-    # GATE 2 for the connector scope, mirroring the single-report endpoint:
-    # scoped managers only see connector rows for pairings they manage (the
-    # read filter would admit every public and sync pair).
+    # None: every pairing is visible (global managers, orphan rows included).
+    visible_pairings: set[tuple[int, int]] | None = None
     if not has_global_permission(user, Permission.MANAGE_CONNECTORS):
         visible_pairings = {
             (pair.connector_id, pair.credential_id)
@@ -166,10 +175,15 @@ def list_capability_reports_for_source(
                 processing_mode=None,
             )
         }
-        rows = [
-            row
-            for row in rows
-            if row.connector_id is None
-            or (row.connector_id, row.credential_id) in visible_pairings
-        ]
+    rows = []
+    for row in get_capability_report_rows_for_source(db_session, source):
+        if row.connector_id is None:
+            visible = row.credential_id in visible_credential_ids
+        else:
+            visible = (
+                visible_pairings is None
+                or (row.connector_id, row.credential_id) in visible_pairings
+            )
+        if visible:
+            rows.append(row)
     return [CapabilityReportSnapshot.from_row(row) for row in rows]

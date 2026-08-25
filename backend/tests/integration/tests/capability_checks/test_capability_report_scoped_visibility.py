@@ -1,12 +1,15 @@
 """EE-only visibility tests: connector-scoped reports are management data.
 
-A scoped group manager reaches the report endpoints via ``allow_scope`` GATE 1
-and passes the credential gate only for credentials they own. The connector
-scope needs its own GATE 2 bound to the caller's MANAGED scope: read
-visibility would surface pairing outcomes (verdicts, probe errors, config
-hash) from every public or sync pairing, and is skipped entirely for
-READ_CONNECTORS holders. Failed-creation orphan rows (no cc-pair was ever
-created) stay a global-manager support surface.
+A scoped group manager reaches the report endpoints via ``allow_scope`` GATE 1.
+GATE 2 splits by scope: the credential scope follows credential visibility
+(creator-only for scoped managers), while the connector scope follows pairing
+visibility alone, bound to the caller's MANAGED scope -- read visibility would
+surface pairing outcomes (verdicts, probe errors, config hash) from every
+public or sync pairing, and is skipped entirely for READ_CONNECTORS holders.
+Pairing visibility does not require credential visibility: whoever manages the
+pairing may read its outcomes, as on the cc-pair detail endpoint.
+Failed-creation orphan rows (no cc-pair was ever created) stay a
+global-manager support surface.
 """
 
 import os
@@ -206,3 +209,84 @@ def test_scoped_manager_sees_only_their_groups_pairings(
     # Global managers are unaffected, the orphan included (support surface).
     for connector_id in (in_group_connector.id, *hidden_connector_ids):
         assert _get_report(credential.id, connector_id, admin_user) is not None
+
+
+@pytest.mark.skipif(
+    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    reason="Scoped group managers are enterprise only",
+)
+def test_managed_pairing_is_readable_without_credential_visibility(
+    admin_user: DATestUser,
+) -> None:
+    # Precondition. An admin-created credential paired into the manager's
+    # managed group. The credential filter is creator-only for scoped
+    # managers (``admin_public`` notwithstanding), so the credential itself
+    # is invisible to them; only pairing visibility can admit its report.
+    suffix = uuid4().hex[:8]
+    manager = UserManager.create(name=f"scoped_manager_{suffix}")
+    managed_group = UserGroupManager.create(
+        name=f"managed_group_{suffix}",
+        user_ids=[manager.id],
+        cc_pair_ids=[],
+        user_performing_action=admin_user,
+    )
+    UserGroupManager.wait_for_sync(
+        user_groups_to_check=[managed_group],
+        user_performing_action=admin_user,
+    )
+    set_manager_response = UserGroupManager.set_manager(
+        user_group=managed_group,
+        user=manager,
+        is_manager=True,
+        user_performing_action=admin_user,
+    )
+    assert set_manager_response.status_code == 200
+    # Group edits mark the group as syncing; cc-pair creation refuses to
+    # relate a group mid-sync, so wait again before pairing.
+    UserGroupManager.wait_for_sync(
+        user_groups_to_check=[managed_group],
+        user_performing_action=admin_user,
+    )
+    credential = CredentialManager.create(
+        source=DocumentSource.SLACK,
+        admin_public=True,
+        curator_public=False,
+        groups=[],
+        user_performing_action=admin_user,
+    )
+    connector = ConnectorManager.create(
+        source=DocumentSource.SLACK,
+        input_type=InputType.POLL,
+        connector_specific_config=_CONNECTOR_CONFIG,
+        user_performing_action=admin_user,
+    )
+    CCPairManager.create(
+        connector_id=connector.id,
+        credential_id=credential.id,
+        access_type=AccessType.PRIVATE,
+        groups=[managed_group.id],
+        user_performing_action=admin_user,
+    )
+    _seed_report_row(credential.id, connector.id)
+
+    # Under test and postcondition. Pairing visibility alone authorizes the
+    # connector-scoped read; the credential scope stays gated on credential
+    # visibility and reads as inaccessible.
+    assert _get_report(credential.id, connector.id, manager) is not None
+    credential_scope_response = client.get(
+        f"{API_SERVER_URL}/manage/admin/credential/{credential.id}/capability-report",
+        headers=manager.headers,
+    )
+    assert credential_scope_response.status_code == 404
+    error_code = credential_scope_response.json()["error_code"]
+    assert error_code == "CREDENTIAL_NOT_FOUND"
+
+    # The per-source listing admits the managed pairing's row the same way.
+    listing_response = client.get(
+        _REPORTS_FOR_SOURCE_URL,
+        params={"source": DocumentSource.SLACK.value},
+        headers=manager.headers,
+    )
+    listing_response.raise_for_status()
+    listed_connector_ids = {row["connector_id"] for row in listing_response.json()}
+    assert connector.id in listed_connector_ids
