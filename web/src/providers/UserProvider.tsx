@@ -254,6 +254,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const lastLanguageSyncUserIdRef = useRef<string | null>(null);
   const languageRequestSeqRef = useRef(0);
   const languageAbortRef = useRef<AbortController | null>(null);
+  const languagePatchChainRef = useRef<Promise<void>>(Promise.resolve());
 
   useEffect(() => {
     // Wait for user data to load; sync once per user identity
@@ -612,14 +613,31 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       // Optimistically switch the locale the server layout renders with.
       Cookies.set(LOCALE_COOKIE_NAME, language, LOCALE_COOKIE_OPTIONS);
 
-      const response = await fetch(`/api/user/language`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ language }),
-        signal: abortController.signal,
-      });
+      // Serialize sends behind the previous request's settlement (the abort
+      // above makes that fast): the backend then receives PATCHes in
+      // selection order, so an already-delivered older request can't commit
+      // after this one.
+      const previousSend = languagePatchChainRef.current;
+      const send = (async () => {
+        await previousSend;
+        if (abortController.signal.aborted) {
+          throw new DOMException("The operation was aborted.", "AbortError");
+        }
+        return fetch(`/api/user/language`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ language }),
+          signal: abortController.signal,
+        });
+      })();
+      languagePatchChainRef.current = send.then(
+        () => undefined,
+        () => undefined
+      );
+
+      const response = await send;
 
       if (!response.ok) {
         throw new Error("Failed to update language preference");
