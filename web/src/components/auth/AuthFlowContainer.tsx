@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { SvgOnyxLogo } from "@opal/logos";
 import { useSettings } from "@/lib/settings/hooks";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 
 export default function AuthFlowContainer({
   children,
@@ -41,8 +41,8 @@ export default function AuthFlowContainer({
         <div className="text-sm mt-6 text-center w-full text-text-03 mainUiBody mx-auto">
           {footerContent ?? (
             <>
-              <Text as="span" text03 mainUiBody>
-                New to {appName}?
+              <Text font="main-ui-body" color="text-03">
+                {`New to ${appName}?`}
               </Text>{" "}
               <Link
                 href="/auth/signup"
