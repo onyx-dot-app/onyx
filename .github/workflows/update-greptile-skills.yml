@@ -1,8 +1,7 @@
 ### Syncs the vendored .cursor/skills/greptile directory (plus its top-level
 ### skill symlinks) from github.com/greptileai/skills via
 ### .cursor/skills/sync-greptile-skills.sh, and opens a reviewed PR when
-### upstream changed. The PR title carries the upstream commit, so provenance
-### survives the squash merge.
+### upstream changed.
 
 name: Update Greptile Skills
 
@@ -63,9 +62,8 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         # Fixed branch + force-push: an already-open sync PR should be
-        # refreshed with the newest upstream state, not left stale. The sync
-        # commit subject (chore(skills): sync greptile skills to
-        # greptileai/skills@<sha>) becomes the PR title.
+        # refreshed with the newest upstream state, not left stale. The
+        # sync commit subject becomes the PR title.
         run: |
           branch="auto/update-greptile-skills"
           title="$(git log -1 --format=%s)"

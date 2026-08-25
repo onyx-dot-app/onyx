@@ -5,13 +5,6 @@
 ### skills at <skills-dir>/<name>/SKILL.md, so a multi-skill repo needs one
 ### symlink per skill).
 ###
-### The directory was first imported with `git subtree add --squash`. This
-### script does NOT use `git subtree pull`: that command needs the
-### git-subtree-dir/git-subtree-split markers of the previous import in
-### history, and this repo squash-merges every PR, which strips them. So the
-### script swaps the prefix tree by hand instead — same content as a subtree
-### pull, but it only compares trees and never reads history.
-###
 ### Run it from anywhere inside the repo with a clean working tree. It
 ### commits the sync (with the upstream commit in the subject) when upstream
 ### changed, and exits quietly when already in sync. CI runs it weekly via
@@ -26,7 +19,7 @@ PREFIX="${SKILLS_DIR}/greptile"
 
 cd "$(git rev-parse --show-toplevel)"
 
-# Like `git subtree`, refuse to mix the sync commit with local changes.
+# Refuse to mix the sync commit with local changes.
 if ! git diff-index --quiet HEAD --; then
   echo "error: working tree has modifications; commit or stash them first" >&2
   exit 1
