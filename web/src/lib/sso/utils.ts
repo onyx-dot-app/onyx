@@ -175,6 +175,16 @@ export const CONFIG_FIELDS_BY_TYPE: Record<SSOProviderType, SSOConfigField[]> =
         optional: true,
         placeholder: "email",
       },
+      {
+        name: "request_authn_context",
+        label: "Require Exact-Match Authentication Context",
+        kind: "switch",
+        description:
+          "Request PasswordProtectedTransport specifically at sign-in. " +
+          "Turn off for IdPs that enforce MFA or FIDO2 (such as Microsoft " +
+          "Entra ID with Conditional Access), which reject the exact match " +
+          "with AADSTS75011.",
+      },
     ],
   };
 
