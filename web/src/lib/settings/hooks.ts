@@ -63,15 +63,12 @@ export function useSettings(): AppSettings {
   );
 
   const core = rawSettings ?? DEFAULT_SETTINGS;
-  // On /auth/* the core fetch is skipped, so fall back to EE_ENABLED only —
-  // mirrors the pre-gating behavior where the core 403 disabled the derived
-  // check (avoids a new enterprise-settings fetch/404 on non-EE login pages).
+  // Auth pages need branding pre-sign-in but standard web images lack the EE
+  // flag, so probe the endpoint. A CE backend 404s once (no retry below).
   const shouldFetchEnterprise =
     EE_ENABLED ||
-    (!onAuthPath &&
-      !settingsLoading &&
-      !settingsError &&
-      core.ee_features_enabled !== false);
+    onAuthPath ||
+    (!settingsLoading && !settingsError && core.ee_features_enabled !== false);
 
   const {
     data: enterprise,
@@ -86,6 +83,9 @@ export function useSettings(): AppSettings {
       revalidateIfStale: false,
       dedupingInterval: 30_000,
       errorRetryInterval: SETTINGS_ERROR_RETRY_INTERVAL,
+      // No retry on auth pages: a CE backend 404s this endpoint and the login
+      // page should settle on default branding instead of re-fetching.
+      shouldRetryOnError: !onAuthPath,
       // Referential equality — logo can change without JSON changing, so
       // mutate() must propagate a new reference for cache-busters.
       compare: (a, b) => a === b,

@@ -52,6 +52,9 @@ class EnterpriseSettings(BaseModel):
     consent_screen_prompt: str | None = None
     show_first_visit_notice: bool | None = None
     custom_greeting_message: str | None = None
+    # login page subtitle under the "Welcome to <app name>" heading. Blank
+    # falls back to the default Onyx tagline.
+    custom_login_subtitle: str | None = None
 
     # custom help link surfaced in the profile dropdown alongside the
     # built-in "Help & FAQ" item
