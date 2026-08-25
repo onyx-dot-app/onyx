@@ -1,5 +1,5 @@
 import { toast } from "@opal/layouts";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { useRef, useState } from "react";
 import type { DateRange } from "@/refresh-components/DateRangePicker";
 import { withRequestId, withDateRange } from "./utils";
@@ -113,21 +113,26 @@ export default function KickoffCSVExport({
 
   return (
     <div className="flex flex-1 flex-col w-full justify-center">
-      {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
-      <Button
-        className="ml-auto"
-        onClick={startExport}
-        danger={spinnerStatus === "spinning"}
-        leftIcon={
-          spinnerStatus === "spinning"
-            ? ({ className }) => (
-                <SvgLoader className={cn(className, "animate-spin")} />
-              )
-            : SvgPlayCircle
-        }
-      >
-        {spinnerStatus === "spinning" ? "Cancel" : "Kickoff Export"}
-      </Button>
+      <div className="ml-auto">
+        <Button
+          onClick={startExport}
+          variant={spinnerStatus === "spinning" ? "danger" : "default"}
+          icon={
+            spinnerStatus === "spinning"
+              ? // `style` carries the icon sizing that opal's `iconWrapper`
+                // applies, so an icon function has to forward it.
+                ({ className, style }) => (
+                  <SvgLoader
+                    className={cn(className, "animate-spin")}
+                    style={style}
+                  />
+                )
+              : SvgPlayCircle
+          }
+        >
+          {spinnerStatus === "spinning" ? "Cancel" : "Kickoff Export"}
+        </Button>
+      </div>
     </div>
   );
 }

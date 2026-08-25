@@ -4,7 +4,6 @@ import { useState } from "react";
 import { toast } from "@opal/layouts";
 import { StandardAnswerCategory, StandardAnswer } from "@/lib/types";
 import CardSection from "@/components/admin/CardSection";
-import Button from "@/refresh-components/buttons/Button";
 import { Form, Formik, ErrorMessage } from "formik";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
@@ -23,7 +22,7 @@ import {
   Label,
 } from "@/components/Field";
 import InputChipField from "@/refresh-components/inputs/InputChipField";
-import { Text } from "@opal/components";
+import { Button, Text } from "@opal/components";
 
 function mapKeywordSelectToMatchAny(keywordSelect: "any" | "all"): boolean {
   return keywordSelect == "any";
@@ -242,13 +241,8 @@ export const StandardAnswerCreationForm = ({
                   )}
                 </ErrorMessage>
               </div>
-              <div className="py-4 flex">
-                {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
-                <Button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="mx-auto w-64"
-                >
+              <div className="py-4 mx-auto w-64">
+                <Button type="submit" disabled={isSubmitting} width="full">
                   {isUpdate ? "Update!" : "Create!"}
                 </Button>
               </div>

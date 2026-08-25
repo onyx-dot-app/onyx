@@ -13,7 +13,7 @@ import CreateConnectorSidebar, {
 } from "@/sections/sidebar/CreateConnectorSidebar";
 import { AdminCustomSidebarPortal } from "@/layouts/chromes/AdminChrome";
 import { HeaderTitle } from "@/components/header/HeaderTitle";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { isValidSource, getSourceMetadata } from "@/lib/sources";
 import { FederatedConnectorForm } from "@/components/admin/federated/FederatedConnectorForm";
 import { useSearchParams } from "next/navigation";
@@ -52,14 +52,13 @@ export default function ConnectorWrapper({
             <HeaderTitle>
               <p>&lsquo;{connector}&rsquo; is not a valid Connector Type!</p>
             </HeaderTitle>
-            {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
-            <Button
-              onClick={() => window.open("/admin/indexing/status", "_self")}
-              className="mr-auto"
-            >
-              {" "}
-              Go home{" "}
-            </Button>
+            <div className="mr-auto">
+              <Button
+                onClick={() => window.open("/admin/indexing/status", "_self")}
+              >
+                Go home
+              </Button>
+            </div>
           </div>
         </div>
       </FormProvider>
