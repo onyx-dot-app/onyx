@@ -1,0 +1,181 @@
+### Refreshes the pinned base image digests across the repository and opens one
+### reviewed PR per base family when any of them moved.
+###
+### This replaces Dependabot's `docker` ecosystem, which cannot cover this repo:
+### its Dockerfile parser rejects any `FROM` line that interpolates a variable,
+### and every base image here is prefixed with `${BASE_IMAGE_REGISTRY}` so CI can
+### route through the ECR pull-through cache. The Docker Hardened Image digests
+### are not in a Dockerfile at all -- they live in a shell heredoc in
+### .github/actions/dhi-base-images/action.yml, which no Dependabot ecosystem
+### reads.
+###
+### A family is the last segment of an image name, so a public base and its DHI
+### counterpart land in the same PR. That keeps the default base and the hardened
+### image CI substitutes for it from drifting apart, while still letting a node
+### bump merge without waiting on a python bump.
+
+name: Update Base Image Digests
+
+on:
+  schedule:
+    - cron: "0 15 * * 1" # weekly, Monday 15:00 UTC (off the 13:00 recommended-models slot)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: update-base-image-digests
+  cancel-in-progress: false
+
+jobs:
+  update-base-image-digests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Mint GitHub App installation token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+        with:
+          client-id: ${{ vars.CHERRY_PICK_APP_ID }}
+          private-key: ${{ secrets.CHERRY_PICK_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: true
+          ref: main
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Configure git identity as App
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+        run: |
+          bot_user_id="$(gh api "/users/${APP_SLUG}[bot]" --jq .id)"
+          git config user.name "${APP_SLUG}[bot]"
+          git config user.email "${bot_user_id}+${APP_SLUG}[bot]@users.noreply.github.com"
+
+      # Built from source rather than the published `onyx-devtools` wheel, so a fix
+      # to the refresher ships without waiting on an `ods/v*` release.
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # zizmor: ignore[cache-poisoning]
+        with:
+          go-version-file: tools/ods/go.mod
+          cache-dependency-path: tools/ods/go.sum
+
+      # Authenticated Docker Hub pulls dodge the anonymous rate limit, which a run
+      # resolving this many tags would otherwise hit. `ods` reads the credentials
+      # these steps write to the Docker config.
+      - name: Login to Docker Hub
+        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+
+      # The DHI catalog is private. Without this the refresh fails on the dhi.io
+      # references rather than leaving them silently stale.
+      - name: Login to Docker Hardened Images (dhi.io)
+        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
+        with:
+          registry: dhi.io
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+
+      # Every family resolves against this one snapshot, so a tag that moves while
+      # the run is in flight cannot leave two PRs pinning different digests.
+      - name: Resolve current digests
+        working-directory: tools/ods
+        env:
+          CACHE_FILE: ${{ runner.temp }}/digests.json
+        run: |
+          go run . update-base-digests --cache-file "${CACHE_FILE}"
+          go run . update-base-digests --cache-file "${CACHE_FILE}" \
+            --list-stale-families > "${RUNNER_TEMP}/stale-families.txt"
+          {
+            echo "## Stale base families"
+            echo
+            sed 's/^/- /' "${RUNNER_TEMP}/stale-families.txt"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      # A fixed branch per family, force-pushed, matching update-recommended-models:
+      # the digests move week over week, so an already-open PR should carry the
+      # latest resolution rather than go stale behind a second one.
+      - name: Open or update a PR per family
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          CACHE_FILE: ${{ runner.temp }}/digests.json
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ ! -s "${RUNNER_TEMP}/stale-families.txt" ]; then
+            echo "All pinned digests are current. Nothing to do."
+            exit 0
+          fi
+
+          # Read the list up front. `gh` and `git` in the body would otherwise
+          # compete with the loop for stdin.
+          mapfile -t families < "${RUNNER_TEMP}/stale-families.txt"
+
+          for family in "${families[@]}"; do
+            [ -n "${family}" ] || continue
+            branch="auto/base-image-digests/${family}"
+            git switch -C "${branch}" main
+
+            (cd tools/ods && go run . update-base-digests \
+              --write --family "${family}" --cache-file "${CACHE_FILE}" \
+              --summary-file "${RUNNER_TEMP}/summary-${family}.md")
+
+            if git diff --quiet; then
+              echo "No change for ${family}, skipping."
+              continue
+            fi
+
+            git commit --all -m "chore(deps): update ${family} base image digests"
+            git push --force origin "${branch}"
+
+            {
+              echo "Generated by the [Update Base Image Digests workflow run](${RUN_URL})."
+              echo
+              cat "${RUNNER_TEMP}/summary-${family}.md"
+              echo
+              echo "Refreshes digests only. A base pinned to an immutable patch tag"
+              echo "(for example \`golang:1.26.5-alpine\`) needs a manual tag bump."
+            } > "${RUNNER_TEMP}/pr-body-${family}.md"
+
+            title="chore(deps): update ${family} base image digests"
+            existing_pr="$(gh pr list --state open --head "${branch}" --json number --jq '.[0].number')"
+            if [ -n "${existing_pr}" ]; then
+              gh pr edit "${existing_pr}" --body-file "${RUNNER_TEMP}/pr-body-${family}.md"
+              echo "Refreshed existing PR #${existing_pr} via force-push."
+            else
+              gh pr create \
+                --base main \
+                --head "${branch}" \
+                --title "${title}" \
+                --body-file "${RUNNER_TEMP}/pr-body-${family}.md"
+            fi
+          done
+
+          git switch --force main
+
+  notify-slack-on-failure:
+    needs:
+      - update-base-image-digests
+    if: always() && needs.update-base-image-digests.result == 'failure'
+    runs-on: ubuntu-latest
+    environment: ci-protected
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/actions/slack-notify
+
+      - name: Notify Slack about update failure
+        uses: ./.github/actions/slack-notify
+        with:
+          webhook-url: ${{ secrets.MONITOR_DEPLOYMENTS_WEBHOOK }}
+          title: "🚨 Update Base Image Digests workflow failed"
+          details: "*The weekly base image digest refresh failed.* Check the run logs."

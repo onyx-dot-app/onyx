@@ -5,6 +5,7 @@ go 1.26.4
 require (
 	github.com/charlievieth/fastwalk v1.0.14
 	github.com/gdamore/tcell/v2 v2.13.8
+	github.com/google/go-containerregistry v0.21.6
 	github.com/google/osv-scalibr v0.4.6-0.20260612031204-164402d9140e
 	github.com/google/osv-scanner/v2 v2.4.0
 	github.com/hashicorp/hcl/v2 v2.24.0
@@ -80,7 +81,6 @@ require (
 	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
-	github.com/google/go-containerregistry v0.21.6 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/ianlancetaylor/demangle v0.0.0-20260505044615-1ff4bf46051f // indirect
 	github.com/icholy/digest v1.1.0 // indirect
