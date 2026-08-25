@@ -10,6 +10,7 @@ import {
   Switch,
   Tooltip,
 } from "@opal/components";
+import { ContentAction } from "@opal/layouts";
 import type { IconProps } from "@opal/types";
 import { SvgChevronLeft, SvgPlug, SvgUnplug } from "@opal/icons";
 
@@ -97,25 +98,30 @@ export default function SwitchList({
             : item.description;
           return (
             <Tooltip key={item.id} tooltip={tooltip}>
-              <LineItemButton
-                sizePreset="main-ui"
-                rounding="sm"
-                icon={
-                  item.leading
-                    ? ((() =>
-                        item.leading) as React.FunctionComponent<IconProps>)
-                    : undefined
-                }
-                rightChildren={
-                  <Switch
-                    checked={item.isEnabled}
-                    onCheckedChange={item.onToggle}
-                    aria-label={`Toggle ${item.label}`}
-                    disabled={item.disabled}
-                  />
-                }
-                title={item.label}
-              />
+              {/* The row does nothing when pressed — the Switch beside it is
+                  the control — so it is a label, not a button. Padding matches
+                  LineItemButton so it lines up with the rows around it. */}
+              <div className="w-full p-1.5">
+                <ContentAction
+                  sizePreset="main-ui"
+                  padding={0.5}
+                  icon={
+                    item.leading
+                      ? ((() =>
+                          item.leading) as React.FunctionComponent<IconProps>)
+                      : undefined
+                  }
+                  rightChildren={
+                    <Switch
+                      checked={item.isEnabled}
+                      onCheckedChange={item.onToggle}
+                      aria-label={`Toggle ${item.label}`}
+                      disabled={item.disabled}
+                    />
+                  }
+                  title={item.label}
+                />
+              </div>
             </Tooltip>
           );
         }),

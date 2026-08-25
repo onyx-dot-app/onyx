@@ -16,7 +16,7 @@ import { Disabled } from "@opal/core";
 import { Section } from "@/layouts/general-layouts";
 import Text from "@/refresh-components/texts/Text";
 import { AccountType, UserStatus } from "@/lib/types";
-import { toast } from "@opal/layouts";
+import { ContentAction, toast } from "@opal/layouts";
 import { approveRequest, setUserAdminAccess } from "./svc";
 import { useCanManageGroups } from "@/lib/permissions/hooks";
 import EditUserModal from "./EditUserModal";
@@ -114,14 +114,19 @@ export default function UserRowActions({
               title="Groups & Roles"
             />
           )}
+          {/* Shown so a SCIM admin can see the action exists, but it never
+              fires — so it is a label, not a button. Padding matches
+              LineItemButton so it lines up with the rows above. */}
           <Disabled disabled>
-            <LineItemButton
-              sizePreset="main-ui"
-              rounding="sm"
-              color="danger"
-              icon={SvgUserX}
-              title="Deactivate User"
-            />
+            <div className="w-full p-1.5">
+              <ContentAction
+                sizePreset="main-ui"
+                padding={0.5}
+                color="danger"
+                icon={SvgUserX}
+                title="Deactivate User"
+              />
+            </div>
           </Disabled>
           <Divider paddingPerpendicular={4} />
           <Text as="p" secondaryBody text03 className="px-3 py-1">

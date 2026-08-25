@@ -10,6 +10,7 @@ import {
   SvgFolderOpen,
   SvgTrash,
 } from "@opal/icons";
+import { ContentAction } from "@opal/layouts";
 import { cn } from "@opal/utils";
 import { formatBytes } from "@/lib/utils";
 import type { SkillBundleFile } from "@/lib/skills/types";
@@ -49,45 +50,61 @@ function SkillFileTreeNodes({
         : SvgFolder
       : SvgFileText;
 
+    const rightChildren = isDirectory ? (
+      <SvgChevronRight
+        size={14}
+        className={cn(
+          "stroke-text-03 transition-transform",
+          isExpanded && "rotate-90"
+        )}
+      />
+    ) : (
+      <div className="flex items-center gap-1">
+        <Text font="secondary-body" color="text-02">
+          {formatBytes(node.size!, 1)}
+        </Text>
+        {onRemove && (
+          <Button
+            type="button"
+            icon={SvgTrash}
+            size="sm"
+            prominence="tertiary"
+            aria-label={`Remove ${node.name}`}
+            tooltip={`Remove ${node.name}`}
+            disabled={removeDisabled || removingPath !== null}
+            onClick={() => onRemove(node.path)}
+          />
+        )}
+      </div>
+    );
+
     return (
       <div key={node.path}>
         <div style={{ paddingLeft: `${depth * 20}px` }}>
-          <LineItemButton
-            sizePreset="main-ui"
-            rounding="sm"
-            icon={FileIcon}
-            onClick={isDirectory ? () => onToggle(node.path) : undefined}
-            rightChildren={
-              isDirectory ? (
-                <SvgChevronRight
-                  size={14}
-                  className={cn(
-                    "stroke-text-03 transition-transform",
-                    isExpanded && "rotate-90"
-                  )}
-                />
-              ) : (
-                <div className="flex items-center gap-1">
-                  <Text font="secondary-body" color="text-02">
-                    {formatBytes(node.size!, 1)}
-                  </Text>
-                  {onRemove && (
-                    <Button
-                      type="button"
-                      icon={SvgTrash}
-                      size="sm"
-                      prominence="tertiary"
-                      aria-label={`Remove ${node.name}`}
-                      tooltip={`Remove ${node.name}`}
-                      disabled={removeDisabled || removingPath !== null}
-                      onClick={() => onRemove(node.path)}
-                    />
-                  )}
-                </div>
-              )
-            }
-            title={node.name}
-          />
+          {isDirectory ? (
+            <LineItemButton
+              sizePreset="main-ui"
+              rounding="sm"
+              icon={FileIcon}
+              onClick={() => onToggle(node.path)}
+              rightChildren={rightChildren}
+              title={node.name}
+            />
+          ) : (
+            // A file row does nothing when pressed. Only the directory rows
+            // toggle, so only they are buttons — the file row is a label with
+            // its own controls beside it. The padding matches what
+            // LineItemButton applies, so the two line up.
+            <div className="w-full p-1.5">
+              <ContentAction
+                sizePreset="main-ui"
+                padding={0.5}
+                icon={FileIcon}
+                rightChildren={rightChildren}
+                title={node.name}
+              />
+            </div>
+          )}
         </div>
         {isDirectory && isExpanded && (
           <SkillFileTreeNodes
