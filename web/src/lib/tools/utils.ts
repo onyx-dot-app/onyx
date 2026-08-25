@@ -48,8 +48,9 @@ const SUPPORTED_HTTP_METHODS = new Set([
   "head",
 ]);
 
-const isPlainRecord = (value: unknown): value is Record<string, any> =>
-  Boolean(value) && typeof value === "object" && !Array.isArray(value);
+function isPlainRecord(value: unknown): value is Record<string, any> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
 
 export function extractMethodSpecsFromDefinition(
   definition?: Record<string, any> | null
