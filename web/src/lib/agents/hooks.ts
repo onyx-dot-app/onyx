@@ -14,6 +14,7 @@ import {
   UserSpecificAgentPreference,
   UserSpecificAgentPreferences,
 } from "@/lib/types";
+import { toast } from "@opal/layouts";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { buildApiPath } from "@/lib/urlBuilder";
 import { pinAgents } from "@/lib/agents/svc";
@@ -156,23 +157,40 @@ export function usePinnedAgents() {
 
   const togglePinnedAgent = useCallback(
     async (agent: MinimalAgent, shouldPin: boolean) => {
+      // Shown before the server agrees, so a failed write has to put it back —
+      // otherwise callers keep reading a pin that never happened, and the ones
+      // that check before pinning refuse to try again.
+      const previous = localPinnedAgents;
       const newPinned = shouldPin
         ? [...localPinnedAgents, agent]
         : localPinnedAgents.filter((a) => a.id !== agent.id);
       setLocalPinnedAgents(newPinned);
-      await pinAgents(newPinned.map((a) => a.id));
-      refreshUser();
+
+      try {
+        await pinAgents(newPinned.map((a) => a.id));
+        refreshUser();
+      } catch (error) {
+        setLocalPinnedAgents(previous);
+        throw error;
+      }
     },
     [localPinnedAgents, refreshUser]
   );
 
   const updatePinnedAgents = useCallback(
     async (newPinnedAgents: MinimalAgent[]) => {
+      const previous = localPinnedAgents;
       setLocalPinnedAgents(newPinnedAgents);
-      await pinAgents(newPinnedAgents.map((a) => a.id));
-      refreshUser();
+
+      try {
+        await pinAgents(newPinnedAgents.map((a) => a.id));
+        refreshUser();
+      } catch (error) {
+        setLocalPinnedAgents(previous);
+        throw error;
+      }
     },
-    [refreshUser]
+    [localPinnedAgents, refreshUser]
   );
 
   return {
@@ -195,9 +213,9 @@ export function usePinnedAgents() {
  * and a plain chat, because the sidebar filters the Assistant out of the
  * pinned list, so pinning it would write a row that is never drawn.
  *
- * A failed pin is swallowed. Opening the chat is what the user asked for and it
- * has already happened by now — the pin rides along, and losing it is not worth
- * an error the user cannot act on.
+ * A failed pin is reported and dropped. Opening the chat is what the user asked
+ * for and has already happened by now, so the pin does not block anything — but
+ * the sidebar will be missing an agent they expected, so they are told.
  */
 export function usePinChatAgent() {
   const { agents } = useAgents();
@@ -211,8 +229,8 @@ export function usePinChatAgent() {
 
       try {
         await togglePinnedAgent(agent, true);
-      } catch (error) {
-        console.error("Failed to pin the chat's agent", error);
+      } catch {
+        toast.error("Failed to pin the chat's agent");
       }
     },
     [agents, pinnedAgents, togglePinnedAgent]
