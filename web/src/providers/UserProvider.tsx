@@ -585,11 +585,23 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
   const updateUserLanguage = async (language: Locale) => {
     const previousLanguage = upToDateUser?.preferences?.language;
-    // Guards overlapping updates: only the newest request may commit,
-    // roll back, or refresh, so a slow older request can't clobber a
-    // newer choice.
+    // No signed-in identity to persist for — the picker is only rendered for
+    // signed-in users, so there is nothing to do.
+    const requestUserId = upToDateUser?.id ?? null;
+    if (requestUserId === null) {
+      return;
+    }
+    // Guards overlapping updates: only the newest request may commit, roll
+    // back, or refresh, so a slow older request can't clobber a newer choice.
+    // Also bound to the identity that issued it: after an in-place identity
+    // switch (impersonation), a queued request must neither PATCH the new
+    // identity's preference row nor roll back the new identity's cookie.
+    // lastLanguageSyncUserIdRef tracks the identity this provider currently
+    // serves (updated by the sync effect above on every id change).
     const requestId = ++languageRequestSeqRef.current;
-    const isLatestRequest = () => requestId === languageRequestSeqRef.current;
+    const isLatestRequest = () =>
+      requestId === languageRequestSeqRef.current &&
+      requestUserId === lastLanguageSyncUserIdRef.current;
     try {
       setUpToDateUser((prevUser) => {
         if (prevUser) {
