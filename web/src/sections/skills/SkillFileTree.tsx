@@ -84,7 +84,7 @@ function SkillFileTreeNodes({
           {isDirectory ? (
             <LineItemButton
               sizePreset="main-ui"
-              rounding="sm"
+              rounding={2}
               icon={FileIcon}
               onClick={() => onToggle(node.path)}
               rightChildren={rightChildren}

@@ -186,7 +186,7 @@ export default function UserFilters({
           <div className="flex flex-col gap-1 p-1 min-w-[200px]">
             <LineItemButton
               sizePreset="main-ui"
-              rounding="sm"
+              rounding={2}
               icon={!hasTypeFilter ? SvgCheck : SvgUsers}
               state={!hasTypeFilter ? "selected" : "empty"}
               selectVariant={!hasTypeFilter ? "select-heavy" : "select-light"}
@@ -199,7 +199,7 @@ export default function UserFilters({
               return (
                 <LineItemButton
                   sizePreset="main-ui"
-                  rounding="sm"
+                  rounding={2}
                   key={type}
                   icon={isSelected ? SvgCheck : typeIcon}
                   state={isSelected ? "selected" : "empty"}
@@ -243,7 +243,7 @@ export default function UserFilters({
             />
             <LineItemButton
               sizePreset="main-ui"
-              rounding="sm"
+              rounding={2}
               icon={!hasGroupFilter ? SvgCheck : SvgUsers}
               state={!hasGroupFilter ? "selected" : "empty"}
               selectVariant={!hasGroupFilter ? "select-heavy" : "select-light"}
@@ -256,7 +256,7 @@ export default function UserFilters({
                 return (
                   <LineItemButton
                     sizePreset="main-ui"
-                    rounding="sm"
+                    rounding={2}
                     key={group.id}
                     icon={isSelected ? SvgCheck : SvgUsers}
                     state={isSelected ? "selected" : "empty"}
@@ -293,7 +293,7 @@ export default function UserFilters({
           <div className="flex flex-col gap-1 p-1 min-w-[200px]">
             <LineItemButton
               sizePreset="main-ui"
-              rounding="sm"
+              rounding={2}
               icon={!hasStatusFilter ? SvgCheck : SvgUser}
               state={!hasStatusFilter ? "selected" : "empty"}
               selectVariant={!hasStatusFilter ? "select-heavy" : "select-light"}
@@ -306,7 +306,7 @@ export default function UserFilters({
               return (
                 <LineItemButton
                   sizePreset="main-ui"
-                  rounding="sm"
+                  rounding={2}
                   key={status}
                   icon={isSelected ? SvgCheck : SvgUser}
                   state={isSelected ? "selected" : "empty"}

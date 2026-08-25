@@ -116,7 +116,7 @@ export default function IntegrationCard({ integration }: IntegrationCardProps) {
                     edit ? (
                       <LineItemButton
                         sizePreset="main-ui"
-                        rounding="sm"
+                        rounding={2}
                         key="edit"
                         icon={SvgEdit}
                         onClick={() => {
@@ -129,7 +129,7 @@ export default function IntegrationCard({ integration }: IntegrationCardProps) {
                     remove ? (
                       <LineItemButton
                         sizePreset="main-ui"
-                        rounding="sm"
+                        rounding={2}
                         key="delete"
                         icon={SvgTrash}
                         color="danger"

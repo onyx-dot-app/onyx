@@ -91,7 +91,7 @@ export default function UserRowActions({
   const adminAccessItem = user.account_type === AccountType.STANDARD && (
     <LineItemButton
       sizePreset="main-ui"
-      rounding="sm"
+      rounding={2}
       icon={SvgUserManage}
       onClick={toggleAdminAccess}
       title={user.is_admin ? "Remove Admin Access" : "Make Admin"}
@@ -108,7 +108,7 @@ export default function UserRowActions({
           {user.id && canManageGroups && (
             <LineItemButton
               sizePreset="main-ui"
-              rounding="sm"
+              rounding={2}
               icon={SvgUsers}
               onClick={() => openModal(Modal.EDIT_GROUPS)}
               title="Groups & Roles"
@@ -141,7 +141,7 @@ export default function UserRowActions({
         return (
           <LineItemButton
             sizePreset="main-ui"
-            rounding="sm"
+            rounding={2}
             color="danger"
             icon={SvgXCircle}
             onClick={() => openModal(Modal.CANCEL_INVITE)}
@@ -153,7 +153,7 @@ export default function UserRowActions({
         return (
           <LineItemButton
             sizePreset="main-ui"
-            rounding="sm"
+            rounding={2}
             icon={SvgUserCheck}
             onClick={() => {
               setPopoverOpen(false);
@@ -179,7 +179,7 @@ export default function UserRowActions({
             {user.id && canManageGroups && (
               <LineItemButton
                 sizePreset="main-ui"
-                rounding="sm"
+                rounding={2}
                 icon={SvgUsers}
                 onClick={() => openModal(Modal.EDIT_GROUPS)}
                 title="Groups & Roles"
@@ -188,7 +188,7 @@ export default function UserRowActions({
             {user.id && adminAccessItem}
             <LineItemButton
               sizePreset="main-ui"
-              rounding="sm"
+              rounding={2}
               icon={SvgKey}
               onClick={() => openModal(Modal.RESET_PASSWORD)}
               title="Reset Password"
@@ -196,7 +196,7 @@ export default function UserRowActions({
             <Divider paddingPerpendicular={4} />
             <LineItemButton
               sizePreset="main-ui"
-              rounding="sm"
+              rounding={2}
               color="danger"
               icon={SvgUserX}
               onClick={() => openModal(Modal.DEACTIVATE)}
@@ -211,7 +211,7 @@ export default function UserRowActions({
             {user.id && canManageGroups && (
               <LineItemButton
                 sizePreset="main-ui"
-                rounding="sm"
+                rounding={2}
                 icon={SvgUsers}
                 onClick={() => openModal(Modal.EDIT_GROUPS)}
                 title="Groups & Roles"
@@ -220,7 +220,7 @@ export default function UserRowActions({
             {user.id && adminAccessItem}
             <LineItemButton
               sizePreset="main-ui"
-              rounding="sm"
+              rounding={2}
               icon={SvgKey}
               onClick={() => openModal(Modal.RESET_PASSWORD)}
               title="Reset Password"
@@ -228,7 +228,7 @@ export default function UserRowActions({
             <Divider paddingPerpendicular={4} />
             <LineItemButton
               sizePreset="main-ui"
-              rounding="sm"
+              rounding={2}
               icon={SvgUserPlus}
               onClick={() => openModal(Modal.ACTIVATE)}
               title="Activate User"
@@ -236,7 +236,7 @@ export default function UserRowActions({
             <Divider paddingPerpendicular={4} />
             <LineItemButton
               sizePreset="main-ui"
-              rounding="sm"
+              rounding={2}
               color="danger"
               icon={SvgUserX}
               onClick={() => openModal(Modal.DELETE)}

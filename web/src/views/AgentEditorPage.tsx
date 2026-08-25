@@ -247,7 +247,7 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
             {[
               <LineItemButton
                 sizePreset="main-ui"
-                rounding="sm"
+                rounding={2}
                 key="upload-image"
                 icon={SvgImage}
                 onClick={() => fileInputRef.current?.click()}

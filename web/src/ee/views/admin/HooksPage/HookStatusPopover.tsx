@@ -279,7 +279,7 @@ export default function HookStatusPopover({
 
                 <LineItemButton
                   sizePreset="main-ui"
-                  rounding="sm"
+                  rounding={2}
                   color="muted"
                   icon={SvgMaximize2}
                   onClick={noProp(() => {
@@ -335,7 +335,7 @@ export default function HookStatusPopover({
                 {/* View More Lines */}
                 <LineItemButton
                   sizePreset="main-ui"
-                  rounding="sm"
+                  rounding={2}
                   color="muted"
                   icon={SvgMaximize2}
                   onClick={noProp(() => {
@@ -363,7 +363,7 @@ export default function HookStatusPopover({
                 {/* View Older Errors */}
                 <LineItemButton
                   sizePreset="main-ui"
-                  rounding="sm"
+                  rounding={2}
                   color="muted"
                   icon={SvgMaximize2}
                   onClick={noProp(() => {

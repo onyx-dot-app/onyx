@@ -64,7 +64,7 @@ function FileLineItem({
     <Hoverable.Root group="FileLineItem">
       <LineItemButton
         sizePreset="main-ui"
-        rounding="sm"
+        rounding={2}
         key={projectFile.id}
         onClick={noProp(() => onPickRecent(projectFile))}
         icon={
@@ -131,7 +131,7 @@ function FilePickerPopoverContents({
         // Action button to upload more files
         <LineItemButton
           sizePreset="main-ui"
-          rounding="sm"
+          rounding={2}
           key="upload-files"
           icon={SvgUploadSquare}
           description="Upload a file from your device"
@@ -165,7 +165,7 @@ function FilePickerPopoverContents({
         shouldShowMoreFilesButton && (
           <LineItemButton
             sizePreset="main-ui"
-            rounding="sm"
+            rounding={2}
             key="more-files"
             icon={SvgMoreHorizontal}
             onClick={openRecentFilesModal}
