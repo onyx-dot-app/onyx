@@ -71,6 +71,19 @@ export const IMAGE_PROVIDER_GROUPS: ProviderGroup[] = [
     ],
   },
   {
+    name: "OpenRouter",
+    providers: [
+      {
+        image_provider_id: "openrouter_image",
+        model_name: "google/gemini-3.1-flash-image",
+        provider_name: "openrouter",
+        title: "OpenRouter Image Model",
+        description:
+          "Generate images through OpenRouter using any supported image model slug.",
+      },
+    ],
+  },
+  {
     name: "Google Cloud Vertex AI",
     providers: [
       {
