@@ -26,27 +26,9 @@ logger = getLogger(__name__)
 # from datetime import datetime
 # from enum import Enum
 
-# class UserRole(str, Enum):
-#     """
-#     User roles
-#     - Basic can't perform any admin actions
-#     - Admin can perform all admin actions
-#     - Curator can perform admin actions for
-#         groups they are curators of
-#     - Global Curator can perform admin actions
-#         for all groups they are a member of
-#     """
-
-#     BASIC = "basic"
-#     ADMIN = "admin"
-#     CURATOR = "curator"
-#     GLOBAL_CURATOR = "global_curator"
-
-
 # class FullUserSnapshot(BaseModel):
 #     id: UUID
 #     email: str
-#     role: UserRole
 #     is_active: bool
 
 

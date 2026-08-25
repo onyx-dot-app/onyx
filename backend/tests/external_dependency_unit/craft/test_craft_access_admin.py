@@ -7,7 +7,6 @@ from __future__ import annotations
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.auth.schemas import UserRole
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.feature_flags.interface import NoOpFeatureFlagProvider
@@ -35,9 +34,9 @@ def test_admin_batch_disable_and_reset_to_default(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _enable_craft_deployment(monkeypatch)
-    admin = make_user(db_session, role=UserRole.ADMIN, email_prefix="craft_admin")
-    target_a = make_user(db_session, role=UserRole.BASIC, email_prefix="craft_a")
-    target_b = make_user(db_session, role=UserRole.BASIC, email_prefix="craft_b")
+    admin = make_user(db_session, is_admin=True, email_prefix="craft_admin")
+    target_a = make_user(db_session, standard_account=True, email_prefix="craft_a")
+    target_b = make_user(db_session, standard_account=True, email_prefix="craft_b")
 
     # No override: everyone follows the workspace default (True out of the box).
     assert target_a.craft_enabled is None
@@ -84,8 +83,8 @@ def test_unknown_user_rejects_whole_batch(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
 ) -> None:
-    admin = make_user(db_session, role=UserRole.ADMIN, email_prefix="craft_admin")
-    target = make_user(db_session, role=UserRole.BASIC, email_prefix="craft_known")
+    admin = make_user(db_session, is_admin=True, email_prefix="craft_admin")
+    target = make_user(db_session, standard_account=True, email_prefix="craft_known")
 
     with pytest.raises(OnyxError) as exc_info:
         set_user_craft_access(

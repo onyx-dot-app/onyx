@@ -539,10 +539,10 @@ function UserCard({ user, showActions = false, onEdit }: UserCardProps) {
 export interface User {
   id: string
   name: string
-  role: UserRole
+  accessLevel: AccessLevel
 }
 
-export type UserRole = "admin" | "member" | "viewer"
+export type AccessLevel = "admin" | "member" | "viewer"
 
 // ❌ Bad — inline prop types
 function UserCard({

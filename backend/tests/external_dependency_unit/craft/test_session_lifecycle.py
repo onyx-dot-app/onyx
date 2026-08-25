@@ -17,7 +17,6 @@ import pytest
 from fastapi_users.password import PasswordHelper
 from sqlalchemy.orm import Query, Session
 
-from onyx.auth.schemas import UserRole
 from onyx.configs.constants import FileOrigin, MessageType
 from onyx.db.enums import (
     AccountType,
@@ -1103,7 +1102,6 @@ class TestPortAllocator:
             hashed_password=password_helper.hash(password_helper.generate()),
             is_active=True,
             is_verified=True,
-            role=UserRole.EXT_PERM_USER,
             account_type=AccountType.EXT_PERM_USER,
         )
         db_session.add(other_user)

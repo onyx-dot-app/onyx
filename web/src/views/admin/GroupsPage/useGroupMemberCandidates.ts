@@ -69,11 +69,10 @@ interface UseGroupMemberCandidatesResult {
 /**
  * Returns the candidate list for the group create/edit member pickers.
  *
- * Hits `/api/manage/users?include_api_keys=true`, which is gated by
- * `current_curator_or_admin_user` on the backend, so this works for both
- * admins and global curators (the admin-only `/accepted/all` and `/invited`
- * endpoints used to be called here, which 403'd for global curators and broke
- * the Edit Group page entirely).
+ * Hits `/api/manage/users?include_api_keys=true`, which is gated by scoped
+ * READ_USERS permission on the backend. This works for admins and group
+ * managers. The admin-only `/accepted/all` and `/invited` endpoints used to be
+ * called here, which 403'd for group managers and broke the Edit Group page.
  *
  * For admins, we additionally fetch `/admin/api-key` to enrich service-account
  * rows with the masked api-key display string. That call is admin-only and is
