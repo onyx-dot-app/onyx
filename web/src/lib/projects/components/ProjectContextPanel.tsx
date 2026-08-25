@@ -2,7 +2,7 @@
 
 import React, { useCallback } from "react";
 import { useDropzone } from "react-dropzone";
-import { useProjectsContext } from "@/providers/ProjectsContext";
+import { useProjectsContext } from "@/lib/projects/providers";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
 import { UserFileStatus, type ProjectFile } from "@/lib/projects/types";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";

@@ -9,7 +9,7 @@ import CommandMenu, {
 } from "@/refresh-components/commandmenu/CommandMenu";
 import { useProjects } from "@/lib/projects/hooks";
 import { useCreateModal } from "@opal/components";
-import CreateProjectModal from "@/sections/modals/CreateProjectModal";
+import { CreateProjectModal } from "@/lib/projects/components";
 import { timeAgo } from "@opal/time";
 import { highlightMatch } from "@/lib/sidebar/utils";
 import Text from "@/refresh-components/texts/Text";

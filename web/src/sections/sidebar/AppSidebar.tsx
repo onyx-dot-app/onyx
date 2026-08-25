@@ -43,9 +43,9 @@ import {
   FoldedProjectsPopover,
   ProjectFolderButton,
 } from "@/lib/projects/components";
-import CreateProjectModal from "@/sections/modals/CreateProjectModal";
+import { CreateProjectModal } from "@/lib/projects/components";
 import { MoveCustomAgentChatModal } from "@/lib/agents/components";
-import { useProjectsContext } from "@/providers/ProjectsContext";
+import { useProjectsContext } from "@/lib/projects/providers";
 import { removeChatSessionFromProject } from "@/lib/projects/svc";
 import type { Project } from "@/lib/projects/types";
 import { SidebarLayouts, useSidebarState } from "@opal/layouts";

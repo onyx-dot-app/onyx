@@ -3,7 +3,7 @@
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import { Button } from "@opal/components";
-import { useProjectsContext } from "@/providers/ProjectsContext";
+import { useProjectsContext } from "@/lib/projects/providers";
 import { InputVertical, toast } from "@opal/layouts";
 import { useAppRouter } from "@/hooks/appNavigation";
 import { useModal } from "@opal/components";

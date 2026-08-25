@@ -42,7 +42,7 @@ import ActionLineItem from "@/refresh-components/popovers/ActionsPopover/ActionL
 import MCPLineItem, {
   MCPServer,
 } from "@/refresh-components/popovers/ActionsPopover/MCPLineItem";
-import { useProjectsContext } from "@/providers/ProjectsContext";
+import { useProjectsContext } from "@/lib/projects/providers";
 import {
   SvgActions,
   SvgChevronRight,
