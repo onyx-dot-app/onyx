@@ -1,6 +1,8 @@
 import json
 import re
 
+from pydantic import BaseModel
+
 from onyx.configs.chat_configs import SECONDARY_LLM_FLOW_TIMEOUT_S
 from onyx.context.search.models import (
     ContextExpansionType,
@@ -10,6 +12,7 @@ from onyx.context.search.models import (
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import ReasoningEffort, UserMessage
 from onyx.prompts.search_prompts import (
+    CODE_CONTEXT_SELECTION_PROMPT,
     DOCUMENT_CONTEXT_SELECTION_PROMPT,
     DOCUMENT_SELECTION_PROMPT,
     TRY_TO_FILL_TO_MAX_INSTRUCTIONS,
@@ -21,6 +24,38 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.timing import log_function_time
 
 logger = setup_logger()
+
+
+class _ContextClassificationSpec(BaseModel):
+    """Prompt + parsing rules for one section-relevance classification mode."""
+
+    prompt_template: str
+    situation_pattern: str
+    situation_to_type: dict[int, ContextExpansionType]
+
+
+_TEXT_CONTEXT_SPEC = _ContextClassificationSpec(
+    prompt_template=DOCUMENT_CONTEXT_SELECTION_PROMPT,
+    situation_pattern=r"\b[0-3]\b",
+    situation_to_type={
+        0: ContextExpansionType.NOT_RELEVANT,
+        1: ContextExpansionType.MAIN_SECTION_ONLY,
+        2: ContextExpansionType.INCLUDE_ADJACENT_SECTIONS,
+        3: ContextExpansionType.FULL_DOCUMENT,
+    },
+)
+
+_CODE_CONTEXT_SPEC = _ContextClassificationSpec(
+    prompt_template=CODE_CONTEXT_SELECTION_PROMPT,
+    situation_pattern=r"\b[0-4]\b",
+    situation_to_type={
+        0: ContextExpansionType.NOT_RELEVANT,
+        1: ContextExpansionType.MAIN_SECTION_ONLY,
+        2: ContextExpansionType.INCLUDE_ADJACENT_SECTIONS,
+        3: ContextExpansionType.FULL_FILE,
+        4: ContextExpansionType.REPO_ANALYSIS,
+    },
+)
 
 
 def select_chunks_for_relevance(
@@ -102,6 +137,7 @@ def classify_section_relevance(
     llm: LLM,
     section_above_text: str | None,
     section_below_text: str | None,
+    is_code: bool = False,
 ) -> ContextExpansionType:
     """Use LLM to classify section relevance and determine context expansion type.
 
@@ -111,12 +147,18 @@ def classify_section_relevance(
         llm: LLM instance to use for classification
         section_above_text: Text content from chunks above the section
         section_below_text: Text content from chunks below the section
+        is_code: Use the code-chunk prompt, which adds FULL_FILE and
+            REPO_ANALYSIS outcomes
 
     Returns:
         ContextExpansionType indicating how the section should be expanded
     """
+    spec: _ContextClassificationSpec = (
+        _CODE_CONTEXT_SPEC if is_code else _TEXT_CONTEXT_SPEC
+    )
+
     # Build the prompt
-    prompt_text = DOCUMENT_CONTEXT_SELECTION_PROMPT.format(
+    prompt_text = spec.prompt_template.format(
         document_title=document_title,
         main_section=section_text,
         section_above=section_above_text if section_above_text else "N/A",
@@ -149,18 +191,11 @@ def classify_section_relevance(
             )
             classification = default_classification
         else:
-            # Parse the response to extract the situation number (0-3)
-            numbers = re.findall(r"\b[0-3]\b", llm_response)
+            # Parse the response to extract the situation number
+            numbers = re.findall(spec.situation_pattern, llm_response)
             if numbers:
                 situation = int(numbers[-1])
-                # Map situation number to ContextExpansionType
-                situation_to_type = {
-                    0: ContextExpansionType.NOT_RELEVANT,
-                    1: ContextExpansionType.MAIN_SECTION_ONLY,
-                    2: ContextExpansionType.INCLUDE_ADJACENT_SECTIONS,
-                    3: ContextExpansionType.FULL_DOCUMENT,
-                }
-                classification = situation_to_type.get(
+                classification = spec.situation_to_type.get(
                     situation, default_classification
                 )
             else:
@@ -174,11 +209,17 @@ def classify_section_relevance(
         logger.error("Error calling LLM for context selection: %s", e)
         classification = default_classification
 
-    # To save some effort down the line, if there is nothing surrounding, don't allow a classification of adjacent or whole doc
+    # To save some effort down the line, if there is nothing surrounding, don't allow a classification of adjacent or whole doc.
+    # REPO_ANALYSIS survives — it asks for context beyond this file, so an
+    # exhausted file is no reason to downgrade it.
     if (
         not section_above_text
         and not section_below_text
-        and classification != ContextExpansionType.NOT_RELEVANT
+        and classification
+        not in (
+            ContextExpansionType.NOT_RELEVANT,
+            ContextExpansionType.REPO_ANALYSIS,
+        )
     ):
         classification = ContextExpansionType.MAIN_SECTION_ONLY
 

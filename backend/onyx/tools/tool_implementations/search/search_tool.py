@@ -49,6 +49,7 @@ from onyx.context.search.models import (
     BaseFilters,
     ChunkIndexRequest,
     ChunkSearchRequest,
+    ContextExpansionType,
     IndexFilters,
     InferenceChunk,
     InferenceSection,
@@ -123,6 +124,7 @@ from onyx.tools.tool_implementations.search.constants import (
     SELECTION_TOKEN_BUDGET_MULTIPLIER,
 )
 from onyx.tools.tool_implementations.search.search_utils import (
+    SectionExpansionResult,
     expand_section_with_context,
     merge_overlapping_sections,
     weighted_reciprocal_rank_fusion,
@@ -165,6 +167,46 @@ def _build_scope_note(
     return (
         f"(This internal search covered only: {searched}. Queries run: {queries_str}. "
         "Call internal_search again with different query terms to keep searching.)"
+    )
+
+
+def _build_repo_analysis_note(escalation_chunks: list[InferenceChunk]) -> str:
+    """LLM-facing hint listing code files whose question likely needs
+    repository-wide analysis, with the repo pointer needed to escalate."""
+
+    def _meta_str(chunk: InferenceChunk, key: str) -> str | None:
+        value = chunk.metadata.get(key)
+        if isinstance(value, list):
+            return value[0] if value else None
+        return value
+
+    lines: list[str] = []
+    any_github: bool = False
+    for chunk in escalation_chunks:
+        pointer = f"- file: {chunk.semantic_identifier}"
+        pointer += f", platform: {chunk.source_type.value}"
+        any_github = any_github or chunk.source_type == DocumentSource.GITHUB
+        for key in ("repo", "branch", "commit_sha"):
+            value = _meta_str(chunk, key)
+            if value:
+                pointer += f", {key}: {value}"
+        lines.append(pointer)
+
+    # The coding agent currently supports GitHub repos only; suggest it only
+    # when it can actually act on one of the listed files.
+    escalation_advice = (
+        "If a coding agent tool (e.g. `coding_agent`) is available, consider "
+        "calling it with the GitHub repository listed above and the user's "
+        "question. Otherwise answer from the retrieved code and say what "
+        "could not be verified."
+        if any_github
+        else "Answer from the retrieved code and say what could not be verified."
+    )
+
+    return (
+        "\n\nNOTE: These code files are relevant, but fully answering likely "
+        "requires repository-wide analysis (callers, cross-file flow, "
+        "configuration):\n" + "\n".join(lines) + "\n" + escalation_advice
     )
 
 
@@ -1144,24 +1186,32 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             llm: LLM,
             document_index: DocumentIndex,
             expand_override: bool,
-        ) -> InferenceSection:
+        ) -> SectionExpansionResult:
             """Wrapper that handles exceptions and returns original section on error."""
             try:
-                expanded_section = expand_section_with_context(
+                result = expand_section_with_context(
                     section=section,
                     user_query=user_query,
                     llm=llm,
                     document_index=document_index,
                     expand_override=expand_override,
                 )
-                # Return expanded section if not None, otherwise original
-                return expanded_section if expanded_section is not None else section
+                if result.section is None:
+                    # NOT_RELEVANT — the selection step already vetted this
+                    # section, so keep the original rather than dropping it.
+                    return SectionExpansionResult(
+                        section=section, classification=result.classification
+                    )
+                return result
             except Exception as e:
                 logger.warning(
                     "Error processing section context expansion: %s. Using original section.",
                     e,
                 )
-                return section
+                return SectionExpansionResult(
+                    section=section,
+                    classification=ContextExpansionType.MAIN_SECTION_ONLY,
+                )
 
         # Build parallel function calls for all sections
         expansion_functions: list[tuple[Callable, tuple]] = [
@@ -1182,7 +1232,12 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         document_expansion_start_time = time.time()
 
         # Run all expansions in parallel
-        expanded_sections = run_functions_tuples_in_parallel(expansion_functions)
+        expansion_results: list[SectionExpansionResult] = (
+            run_functions_tuples_in_parallel(expansion_functions)
+        )
+        expanded_sections = [
+            result.section for result in expansion_results if result.section
+        ]
 
         # End timing for document expansion
         document_expansion_elapsed = time.time() - document_expansion_start_time
@@ -1199,13 +1254,36 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # This prevents duplicate content and reduces token usage
         merged_sections = merge_overlapping_sections(expanded_sections)
 
+        # Expansion can grow a selected section to MAX_FULL_FILE_CHUNKS
+        # chunks, so re-trim to the same budget the selection ran under —
+        # the converter's `limit` bounds section count, not tokens.
+        merged_sections = _trim_sections_by_tokens(
+            sections=merged_sections,
+            max_tokens=max_tokens_for_selection,
+            token_counter=token_counter,
+        )
+
+        # Code-aware expansion can classify a section as needing repo-wide
+        # analysis; surface those as an escalation hint for the main LLM
+        # loop. Carried inside the JSON payload's `note` field — appending
+        # text after the payload would corrupt it for JSON consumers.
+        escalation_chunks: list[InferenceChunk] = [
+            result.section.center_chunk
+            for result in expansion_results
+            if result.classification == ContextExpansionType.REPO_ANALYSIS
+            and result.section
+        ]
+        combined_note = (scope_note or "") + (
+            _build_repo_analysis_note(escalation_chunks) if escalation_chunks else ""
+        )
+
         docs_str, citation_mapping = convert_inference_sections_to_llm_string(
             top_sections=merged_sections,
             citation_start=override_kwargs.starting_citation_num,
             limit=override_kwargs.max_llm_chunks,
             include_document_id=False,
             include_link=override_kwargs.include_link,
-            note=scope_note or None,
+            note=combined_note or None,
         )
 
         # End overall timing

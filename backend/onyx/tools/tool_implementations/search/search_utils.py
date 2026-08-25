@@ -2,6 +2,11 @@ from collections import defaultdict
 from collections.abc import Callable
 from typing import TypeVar
 
+from pydantic import BaseModel
+
+from onyx.connectors.cross_connector_utils.code_file_utils import (
+    CODE_FILE_METADATA_TYPE,
+)
 from onyx.context.search.models import (
     ContextExpansionType,
     IndexFilters,
@@ -18,6 +23,7 @@ from onyx.prompts.prompt_utils import clean_up_source
 from onyx.secondary_llm_flows.document_filter import classify_section_relevance
 from onyx.tools.tool_implementations.search.constants import (
     FULL_DOC_NUM_CHUNKS_AROUND,
+    MAX_FULL_FILE_CHUNKS,
     RRF_K_VALUE,
 )
 from onyx.utils.logger import setup_logger
@@ -210,6 +216,34 @@ def _retrieve_adjacent_chunks(
     return chunks_above, chunks_below
 
 
+def _retrieve_full_document_chunks(
+    document_id: str,
+    document_index: DocumentIndex,
+) -> list[InferenceChunk]:
+    """Fetch every chunk of a document (no chunk bounds), sorted by chunk_id.
+
+    Permissions were enforced at retrieval time, so the fetch runs without ACL
+    filters like the adjacent-chunk expansion above.
+    """
+    request = DocumentSectionRequest(
+        document_id=replace_invalid_doc_id_characters(document_id),
+        # Cap + 1 chunk: callers detect files exceeding MAX_FULL_FILE_CHUNKS
+        # via len() without pulling every chunk of an arbitrarily large file.
+        max_chunk_ind=MAX_FULL_FILE_CHUNKS,
+    )
+    try:
+        chunks = document_index.id_based_retrieval(
+            chunk_requests=[request],
+            filters=IndexFilters(access_control_list=None),
+            batch_retrieval=True,
+        )
+    except Exception as e:
+        logger.warning("Failed to retrieve full document %s: %s", document_id, e)
+        return []
+    chunks.sort(key=lambda c: c.chunk_id)
+    return chunks
+
+
 def merge_overlapping_sections(
     sections: list[InferenceSection],
 ) -> list[InferenceSection]:
@@ -353,30 +387,79 @@ def merge_overlapping_sections(
     return result
 
 
+def _is_code_section(section: InferenceSection) -> bool:
+    """Code detection rests on the document-metadata contract alone:
+    connectors that index source files set `type: CodeFile`. Extensions and
+    semantic_identifier are deliberately not consulted — a doc file's path
+    (README.md) or an issue titled "fix foo.py" must not classify as code."""
+    value = section.center_chunk.metadata.get("type")
+    if isinstance(value, list):
+        return CODE_FILE_METADATA_TYPE in value
+    return value == CODE_FILE_METADATA_TYPE
+
+
+class SectionExpansionResult(BaseModel):
+    """Outcome of classify-and-expand for one section.
+
+    ``section`` is None when the section was classified NOT_RELEVANT. The
+    classification is returned so callers can react to it (e.g. recommend
+    repo-wide analysis for REPO_ANALYSIS) without side channels.
+    """
+
+    section: InferenceSection | None
+    classification: ContextExpansionType
+
+
+def _expand_with_window(
+    section: InferenceSection,
+    document_index: DocumentIndex,
+) -> InferenceSection:
+    """Expand a section with FULL_DOC_NUM_CHUNKS_AROUND chunks on each side."""
+    chunks_above, chunks_below = _retrieve_adjacent_chunks(
+        section=section,
+        document_index=document_index,
+        num_chunks_above=FULL_DOC_NUM_CHUNKS_AROUND,
+        num_chunks_below=FULL_DOC_NUM_CHUNKS_AROUND,
+    )
+
+    all_chunks = chunks_above + section.chunks + chunks_below
+    if not all_chunks:
+        logger.warning(
+            "No chunks found for windowed context expansion: %s",
+            section.center_chunk.semantic_identifier,
+        )
+        return section
+
+    expanded_section = inference_section_from_chunks(
+        center_chunk=section.center_chunk,
+        chunks=all_chunks,
+    )
+    return expanded_section if expanded_section else section
+
+
 def expand_section_with_context(
     section: InferenceSection,
     user_query: str,
     llm: LLM,
     document_index: DocumentIndex,
     expand_override: bool = False,
-) -> InferenceSection | None:
+) -> SectionExpansionResult:
     """Use LLM to classify section relevance and return expanded section with appropriate context.
 
     This function combines classification and expansion into a single operation:
     1. Retrieves chunks needed for classification (2 chunks for prompt)
-    2. Uses LLM to classify relevance (situations 1-4) unless expand_override is True
-    3. For FULL_DOCUMENT, fetches additional chunks (5 total above/below)
-    4. Returns the expanded section or None if not relevant
+    2. Uses LLM to classify relevance unless expand_override is True
+    3. For FULL_DOCUMENT (and code FULL_FILE / REPO_ANALYSIS), fetches
+       additional chunks
+    4. Returns the expanded section (None if not relevant) plus the
+       classification
 
     Args:
         section: The InferenceSection to classify and expand
-        search_query: The user's search query
+        user_query: The user's search query
         llm: LLM instance to use for classification
         document_index: Document index for retrieving adjacent chunks
         expand_override: If True, skip LLM classification and use FULL_DOCUMENT expansion
-
-    Returns:
-        Expanded InferenceSection with appropriate context, or None if NOT_RELEVANT
     """
     chunks_above_for_prompt: list[InferenceChunk] = []
     chunks_below_for_prompt: list[InferenceChunk] = []
@@ -406,7 +489,8 @@ def expand_section_with_context(
             else None
         )
 
-        # Classify section relevance using LLM
+        # Classify section relevance using LLM. Code chunks get the code-aware
+        # prompt with the FULL_FILE and REPO_ANALYSIS outcomes.
         classification = classify_section_relevance(
             document_title=section.center_chunk.semantic_identifier,
             section_text=section.combined_content,
@@ -414,81 +498,78 @@ def expand_section_with_context(
             llm=llm,
             section_above_text=section_above_text,
             section_below_text=section_below_text,
+            is_code=_is_code_section(section),
+        )
+
+    if expand_override:
+        logger.debug(
+            "Section marked for FULL_DOCUMENT expansion (override): %s",
+            section.center_chunk.semantic_identifier,
+        )
+    else:
+        logger.debug(
+            "LLM classified section as %s: %s",
+            classification.value,
+            section.center_chunk.semantic_identifier,
         )
 
     # Now build the expanded section based on classification
     if classification == ContextExpansionType.NOT_RELEVANT:
         # Filter out this section
-        logger.debug(
-            "LLM classified section as NOT_RELEVANT: %s",
-            section.center_chunk.semantic_identifier,
-        )
-        return None
+        return SectionExpansionResult(section=None, classification=classification)
 
     elif classification == ContextExpansionType.MAIN_SECTION_ONLY:
         # Return original section unchanged
-        logger.debug(
-            "LLM classified section as MAIN_SECTION_ONLY: %s",
-            section.center_chunk.semantic_identifier,
-        )
-        return section
+        return SectionExpansionResult(section=section, classification=classification)
 
     elif classification == ContextExpansionType.INCLUDE_ADJACENT_SECTIONS:
         # Use the 2 chunks we already retrieved for the prompt
-        logger.debug(
-            "LLM classified section as INCLUDE_ADJACENT_SECTIONS: %s",
-            section.center_chunk.semantic_identifier,
-        )
-
         all_chunks = chunks_above_for_prompt + section.chunks + chunks_below_for_prompt
         if not all_chunks:
-            return section
+            return SectionExpansionResult(
+                section=section, classification=classification
+            )
 
-        # Create new InferenceSection with expanded chunks
         expanded_section = inference_section_from_chunks(
             center_chunk=section.center_chunk,
             chunks=all_chunks,
         )
+        return SectionExpansionResult(
+            section=expanded_section if expanded_section else section,
+            classification=classification,
+        )
 
-        return expanded_section if expanded_section else section
+    elif classification in (
+        ContextExpansionType.FULL_FILE,
+        ContextExpansionType.REPO_ANALYSIS,
+    ):
+        # Both outcomes give the fullest inline context; the caller reacts to
+        # REPO_ANALYSIS via the returned classification.
+        all_chunks: list[InferenceChunk] = _retrieve_full_document_chunks(
+            document_id=section.center_chunk.document_id,
+            document_index=document_index,
+        )
+        if not all_chunks or len(all_chunks) > MAX_FULL_FILE_CHUNKS:
+            # Too large (or fetch failed) — fall back to the windowed expansion.
+            return SectionExpansionResult(
+                section=_expand_with_window(section, document_index),
+                classification=classification,
+            )
+
+        expanded_section = inference_section_from_chunks(
+            center_chunk=section.center_chunk,
+            chunks=all_chunks,
+        )
+        return SectionExpansionResult(
+            section=expanded_section if expanded_section else section,
+            classification=classification,
+        )
 
     elif classification == ContextExpansionType.FULL_DOCUMENT:
-        # Fetch 5 chunks above and below (optimal single retrieval)
-        if expand_override:
-            logger.debug(
-                "Section marked for FULL_DOCUMENT expansion (override): %s",
-                section.center_chunk.semantic_identifier,
-            )
-        else:
-            logger.debug(
-                "LLM classified section as FULL_DOCUMENT: %s",
-                section.center_chunk.semantic_identifier,
-            )
-
-        chunks_above_full, chunks_below_full = _retrieve_adjacent_chunks(
-            section=section,
-            document_index=document_index,
-            num_chunks_above=FULL_DOC_NUM_CHUNKS_AROUND,
-            num_chunks_below=FULL_DOC_NUM_CHUNKS_AROUND,
+        return SectionExpansionResult(
+            section=_expand_with_window(section, document_index),
+            classification=classification,
         )
-
-        # Combine all chunks: 5 above + section + 5 below
-        all_chunks = chunks_above_full + section.chunks + chunks_below_full
-
-        if not all_chunks:
-            logger.warning(
-                "No chunks found for full document context expansion: %s",
-                section.center_chunk.semantic_identifier,
-            )
-            return section
-
-        # Create new InferenceSection with full context
-        expanded_section = inference_section_from_chunks(
-            center_chunk=section.center_chunk,
-            chunks=all_chunks,
-        )
-
-        return expanded_section if expanded_section else section
 
     else:
         # Unknown classification - default to returning original section
@@ -496,4 +577,4 @@ def expand_section_with_context(
             "Unknown context classification %s, returning original section",
             classification,
         )
-        return section
+        return SectionExpansionResult(section=section, classification=classification)

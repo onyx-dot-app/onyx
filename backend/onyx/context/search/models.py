@@ -195,6 +195,10 @@ class ContextExpansionType(str, Enum):
     MAIN_SECTION_ONLY = "main_section_only"
     INCLUDE_ADJACENT_SECTIONS = "include_adjacent_sections"
     FULL_DOCUMENT = "full_document"
+    # Code-only: fetch every chunk of the file, not a windowed expansion.
+    FULL_FILE = "full_file"
+    # Code-only: the chunk is on topic but answering needs repo-wide analysis.
+    REPO_ANALYSIS = "repo_analysis"
 
 
 class InferenceChunk(BaseChunk):
