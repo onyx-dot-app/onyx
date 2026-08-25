@@ -1277,7 +1277,7 @@ function ChatPreferencesSettings() {
                       }}
                     />
                   </Section>
-                  <Section width={4} height="auto" alignItems="start">
+                  <Section width={4} height="auto" alignItems="end">
                     <Text font="secondary-mono" color="text-04" nowrap>
                       {draftTemperature.toFixed(1)}
                     </Text>
@@ -1312,7 +1312,7 @@ function ChatPreferencesSettings() {
                         }}
                       />
                     </Section>
-                    <Section width={4} height="auto" alignItems="start">
+                    <Section width={4} height="auto" alignItems="end">
                       <Text font="secondary-mono" color="text-04" nowrap>
                         {
                           REASONING_STOP_LABELS[
