@@ -1277,9 +1277,11 @@ function ChatPreferencesSettings() {
                       }}
                     />
                   </Section>
-                  <Text font="secondary-mono" color="text-04" nowrap>
-                    {draftTemperature.toFixed(1)}
-                  </Text>
+                  <Section width={4} height="auto" alignItems="start">
+                    <Text font="secondary-mono" color="text-04" nowrap>
+                      {draftTemperature.toFixed(1)}
+                    </Text>
+                  </Section>
                 </Section>
               </InputHorizontal>
             )}
@@ -1310,13 +1312,15 @@ function ChatPreferencesSettings() {
                         }}
                       />
                     </Section>
-                    <Text font="secondary-mono" color="text-04" nowrap>
-                      {
-                        REASONING_STOP_LABELS[
-                          ALL_REASONING_STOPS[draftEffortStop] ?? "medium"
-                        ]
-                      }
-                    </Text>
+                    <Section width={4} height="auto" alignItems="start">
+                      <Text font="secondary-mono" color="text-04" nowrap>
+                        {
+                          REASONING_STOP_LABELS[
+                            ALL_REASONING_STOPS[draftEffortStop] ?? "medium"
+                          ]
+                        }
+                      </Text>
+                    </Section>
                   </Section>
                 </InputHorizontal>
               )}
