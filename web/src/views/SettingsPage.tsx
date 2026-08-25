@@ -1136,7 +1136,7 @@ function ChatPreferencesSettings() {
   const userTemperatureDefault = user?.preferences.temperature_default ?? null;
   const userEffortDefault = user?.preferences.reasoning_effort_default ?? null;
   const [draftTemperature, setDraftTemperature] = useState(
-    userTemperatureDefault ?? 0.7
+    userTemperatureDefault ?? 0.5
   );
   const [draftEffortStop, setDraftEffortStop] = useState(() => {
     const stop = reasoningStopIndex(userEffortDefault);
@@ -1154,7 +1154,7 @@ function ChatPreferencesSettings() {
   }, [userEffortDefault]);
 
   const saveTemperatureDefault = useCallback(
-    async (value: number | null): Promise<void> => {
+    async (value: number): Promise<void> => {
       try {
         await updateUserTemperatureDefault(value);
         toast.success("Preferences saved");
@@ -1166,10 +1166,10 @@ function ChatPreferencesSettings() {
   );
 
   const saveEffortDefault = useCallback(
-    async (effortStop: number | null): Promise<void> => {
+    async (effortStop: number): Promise<void> => {
       try {
         await updateUserReasoningEffortDefault(
-          effortStop != null ? (ALL_REASONING_STOPS[effortStop] ?? null) : null
+          ALL_REASONING_STOPS[effortStop] ?? null
         );
         toast.success("Preferences saved");
       } catch {
@@ -1263,36 +1263,24 @@ function ChatPreferencesSettings() {
                 description="Starting temperature for your new chats. Admin settings on a model always apply, and any single chat can override this in its model settings."
                 withLabel
               >
-                <div className="flex items-center gap-3">
-                  <Switch
-                    checked={userTemperatureDefault != null}
-                    onCheckedChange={(checked) => {
-                      void saveTemperatureDefault(
-                        checked ? draftTemperature : null
-                      );
-                    }}
-                  />
-                  {userTemperatureDefault != null && (
-                    <>
-                      <div className="w-32">
-                        <PaneSlider
-                          compact
-                          value={draftTemperature}
-                          min={0}
-                          max={2}
-                          step={0.1}
-                          onValueChange={setDraftTemperature}
-                          onValueCommit={(value) => {
-                            void saveTemperatureDefault(value);
-                          }}
-                        />
-                      </div>
-                      <Text font="secondary-mono" color="text-04" nowrap>
-                        {draftTemperature.toFixed(1)}
-                      </Text>
-                    </>
-                  )}
-                </div>
+                <Section flexDirection="row" width="fit" height="auto" gap={3}>
+                  <Section width={8} height="auto">
+                    <PaneSlider
+                      compact
+                      value={draftTemperature}
+                      min={0}
+                      max={2}
+                      step={0.1}
+                      onValueChange={setDraftTemperature}
+                      onValueCommit={(value) => {
+                        void saveTemperatureDefault(value);
+                      }}
+                    />
+                  </Section>
+                  <Text font="secondary-mono" color="text-04" nowrap>
+                    {draftTemperature.toFixed(1)}
+                  </Text>
+                </Section>
               </InputHorizontal>
             )}
 
@@ -1303,40 +1291,33 @@ function ChatPreferencesSettings() {
                   description="Starting reasoning level for your new chats. Admin settings on a model always apply, and any single chat can override this in its model settings."
                   withLabel
                 >
-                  <div className="flex items-center gap-3">
-                    <Switch
-                      checked={userEffortDefault != null}
-                      onCheckedChange={(checked) => {
-                        void saveEffortDefault(
-                          checked ? draftEffortStop : null
-                        );
-                      }}
-                    />
-                    {userEffortDefault != null && (
-                      <>
-                        <div className="w-32">
-                          <PaneSlider
-                            compact
-                            value={draftEffortStop}
-                            min={0}
-                            max={ALL_REASONING_STOPS.length - 1}
-                            step={1}
-                            onValueChange={setDraftEffortStop}
-                            onValueCommit={(value) => {
-                              void saveEffortDefault(value);
-                            }}
-                          />
-                        </div>
-                        <Text font="secondary-mono" color="text-04" nowrap>
-                          {
-                            REASONING_STOP_LABELS[
-                              ALL_REASONING_STOPS[draftEffortStop] ?? "medium"
-                            ]
-                          }
-                        </Text>
-                      </>
-                    )}
-                  </div>
+                  <Section
+                    flexDirection="row"
+                    width="fit"
+                    height="auto"
+                    gap={3}
+                  >
+                    <Section width={8} height="auto">
+                      <PaneSlider
+                        compact
+                        value={draftEffortStop}
+                        min={0}
+                        max={ALL_REASONING_STOPS.length - 1}
+                        step={1}
+                        onValueChange={setDraftEffortStop}
+                        onValueCommit={(value) => {
+                          void saveEffortDefault(value);
+                        }}
+                      />
+                    </Section>
+                    <Text font="secondary-mono" color="text-04" nowrap>
+                      {
+                        REASONING_STOP_LABELS[
+                          ALL_REASONING_STOPS[draftEffortStop] ?? "medium"
+                        ]
+                      }
+                    </Text>
+                  </Section>
                 </InputHorizontal>
               )}
 
