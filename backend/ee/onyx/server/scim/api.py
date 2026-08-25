@@ -12,7 +12,7 @@ require a valid SCIM bearer token.
 from __future__ import annotations
 
 import re
-from typing import NamedTuple
+from typing import Any, NamedTuple
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, FastAPI, Query, Request, Response
@@ -72,10 +72,67 @@ from onyx.db.permissions import (
 )
 from onyx.db.users import assign_user_to_default_groups__no_commit, user_is_admin
 from onyx.db.utils import is_unique_violation
+from onyx.utils.audit import (
+    AuditAction,
+    AuditActor,
+    AuditOutcome,
+    emit_audit_event,
+)
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
+
+
+def _scim_actor(token: ScimToken) -> AuditActor:
+    """The ``scim_token:`` prefix keeps this id from colliding with the numeric
+    api-key ids that share the same field."""
+    return AuditActor(api_key_id=f"scim_token:{token.id}", auth_type="scim")
+
+
+def _scim_extra(token: ScimToken, **fields: Any) -> dict[str, Any]:
+    return {"source": "scim", "scim_token_name": token.name, **fields}
+
+
+def _emit_scim_group_update(
+    token: ScimToken,
+    *,
+    group_id: int,
+    group_name: str,
+    previous_name: str,
+    added_user_ids: list[UUID],
+    removed_user_ids: list[UUID],
+) -> None:
+    """Both emits are gated on a real change. IdPs re-PUT a group's full state on
+    routine reconciliation, so an ungated emit would fire on every no-op sync.
+    """
+    if group_name != previous_name:
+        emit_audit_event(
+            AuditAction.USER_GROUP_RENAME,
+            AuditOutcome.SUCCESS,
+            actor=_scim_actor(token),
+            resource_type="user_group",
+            resource_id=group_id,
+            extra=_scim_extra(token, previous_name=previous_name, new_name=group_name),
+        )
+
+    if added_user_ids or removed_user_ids:
+        emit_audit_event(
+            AuditAction.USER_GROUP_CHANGE,
+            AuditOutcome.SUCCESS,
+            actor=_scim_actor(token),
+            resource_type="user_group",
+            resource_id=group_id,
+            extra=_scim_extra(
+                token,
+                group_name=group_name,
+                # SCIM refuses reserved names, so it can never reach a default group.
+                is_default=False,
+                added_user_ids=[str(uid) for uid in added_user_ids],
+                removed_user_ids=[str(uid) for uid in removed_user_ids],
+            ),
+        )
+
 
 # Group names reserved for system default groups (seeded by migration).
 _RESERVED_GROUP_NAMES = frozenset({"Admin", "Basic"})
@@ -1314,6 +1371,20 @@ def create_group(
 
     dal.commit()
 
+    emit_audit_event(
+        AuditAction.USER_GROUP_CREATE,
+        AuditOutcome.SUCCESS,
+        actor=_scim_actor(_token),
+        resource_type="user_group",
+        resource_id=db_group.id,
+        extra=_scim_extra(
+            _token,
+            name=group_resource.displayName,
+            user_ids=[str(uid) for uid in member_uuids],
+            cc_pair_ids=[],
+        ),
+    )
+
     members = dal.get_group_members(db_group.id)
     return _scim_resource_response(
         provider.build_group_resource(db_group, members, external_id),
@@ -1359,6 +1430,8 @@ def replace_group(
     # permissions after they are removed from the group.
     old_member_ids = {uid for uid, _ in dal.get_group_members(group.id)}
 
+    previous_name = group.name
+
     dal.update_group(group, name=group_resource.displayName)
     dal.replace_group_members(group.id, member_uuids)
     dal.sync_group_external_id(group.id, group_resource.externalId)
@@ -1369,6 +1442,16 @@ def replace_group(
     recompute_user_permissions__no_commit(removed_ids, db_session)
 
     dal.commit()
+
+    added_ids = sorted(set(member_uuids) - old_member_ids)
+    _emit_scim_group_update(
+        _token,
+        group_id=group.id,
+        group_name=group_resource.displayName,
+        previous_name=previous_name,
+        added_user_ids=added_ids,
+        removed_user_ids=sorted(removed_ids),
+    )
 
     members = dal.get_group_members(group.id)
     return _scim_resource_response(
@@ -1419,9 +1502,13 @@ def patch_group(
     if new_name and new_name in _RESERVED_GROUP_NAMES:
         return _scim_error_response(409, f"'{new_name}' is a reserved group name.")
 
+    previous_name = group.name
+
     dal.update_group(group, name=new_name)
 
     affected_uuids: list[UUID] = []
+    applied_added: list[UUID] = []
+    applied_removed: list[UUID] = []
 
     if added_ids:
         add_uuids = [UUID(mid) for mid in added_ids if _is_valid_uuid(mid)]
@@ -1434,17 +1521,30 @@ def patch_group(
                 )
             dal.upsert_group_members(group.id, add_uuids)
             affected_uuids.extend(add_uuids)
+            applied_added = add_uuids
 
     if removed_ids:
         remove_uuids = [UUID(mid) for mid in removed_ids if _is_valid_uuid(mid)]
         dal.remove_group_members(group.id, remove_uuids)
         affected_uuids.extend(remove_uuids)
+        applied_removed = remove_uuids
 
     # Recompute permissions for all users whose group membership changed.
     recompute_user_permissions__no_commit(affected_uuids, db_session)
 
     dal.sync_group_external_id(group.id, patched.externalId)
     dal.commit()
+
+    # Report the validated sets that were applied, not the raw added_ids /
+    # removed_ids from the request, which can contain entries that were rejected.
+    _emit_scim_group_update(
+        _token,
+        group_id=group.id,
+        group_name=patched.displayName,
+        previous_name=previous_name,
+        added_user_ids=applied_added,
+        removed_user_ids=applied_removed,
+    )
 
     members = dal.get_group_members(group.id)
     return _scim_resource_response(
@@ -1477,12 +1577,28 @@ def delete_group(
     if mapping:
         dal.delete_group_mapping(mapping.id)
 
+    deleted_group_id = group.id
+    group_name = group.name
     dal.delete_group_with_members(group)
 
     # Recompute permissions for users who lost this group membership.
     recompute_user_permissions__no_commit(affected_user_ids, db_session)
 
     dal.commit()
+
+    emit_audit_event(
+        AuditAction.USER_GROUP_DELETE,
+        AuditOutcome.SUCCESS,
+        actor=_scim_actor(_token),
+        resource_type="user_group",
+        resource_id=deleted_group_id,
+        extra=_scim_extra(
+            _token,
+            name=group_name,
+            member_ids=[str(uid) for uid in affected_user_ids],
+            member_count=len(affected_user_ids),
+        ),
+    )
 
     return Response(status_code=204)
 

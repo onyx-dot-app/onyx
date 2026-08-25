@@ -7,6 +7,7 @@ scope — the bundle guard and the write-side gate. DB access itself lives in
 """
 
 from collections.abc import Collection
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -20,6 +21,35 @@ from onyx.db.models import User
 from onyx.db.scoped_permissions import fetch_managed_group_ids
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.utils.audit import (
+    AuditAction,
+    AuditOutcome,
+    actor_from_user,
+    emit_audit_event,
+)
+
+# Deliberately shorter than the 600s default: a burst of attempts should stay
+# visible rather than collapse into one line.
+_DENIAL_DEDUP_TTL_SECONDS = 60
+
+
+def _emit_denial(
+    user: User,
+    gate: str,
+    *,
+    group_id: int | None = None,
+    extra: dict[str, Any],
+) -> None:
+    emit_audit_event(
+        AuditAction.PERMISSION_DENIED,
+        AuditOutcome.DENIED,
+        actor=actor_from_user(user),
+        resource_type="user_group" if group_id is not None else None,
+        resource_id=group_id,
+        dedup_key=f"permission_denied:{user.id}:{gate}:{group_id}",
+        dedup_ttl_seconds=_DENIAL_DEDUP_TTL_SECONDS,
+        extra={"gate": gate, **extra},
+    )
 
 
 def get_scoped_groups(
@@ -98,6 +128,16 @@ def assert_within_scope(
         requested_group_ids=requested_group_ids,
         is_non_public=is_non_public,
     ):
+        _emit_denial(
+            user,
+            "within_scope",
+            extra={
+                "permission": permission.value,
+                "current_group_ids": sorted(current_group_ids),
+                "requested_group_ids": sorted(requested_group_ids),
+                "is_non_public": is_non_public,
+            },
+        )
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "Group managers can only act on private resources "
@@ -132,6 +172,12 @@ def assert_manages_group(user: User, db_session: Session, *, group_id: int) -> N
     assignment): a GLOBAL ``MANAGE_USER_GROUPS`` holder bypasses; a scoped manager
     passes only for a group they manage. NONE, or out-of-scope, rejects."""
     if not manages_group(user, db_session, group_id=group_id):
+        _emit_denial(
+            user,
+            "manages_group",
+            group_id=group_id,
+            extra={"permission": Permission.MANAGE_USER_GROUPS.value},
+        )
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "Group managers can only act within the groups they manage.",
@@ -143,6 +189,7 @@ def assert_global(user: User, *, permission: Permission) -> None:
     scoped create/update: the route admits a SCOPED manager, this rejects them —
     only GLOBAL authority passes."""
     if has_permission(user, permission) is not PermissionAuthority.GLOBAL:
+        _emit_denial(user, "global_only", extra={"permission": permission.value})
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "This action is restricted to administrators.",

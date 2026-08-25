@@ -1,6 +1,7 @@
 from collections import defaultdict
 from collections.abc import Sequence
 from operator import and_
+from typing import NamedTuple
 from uuid import UUID
 
 from sqlalchemy import Select, delete, func, select
@@ -880,6 +881,9 @@ def update_user_group(
 
     db_session.commit()
 
+    group_name = db_user_group.name
+    group_is_default = db_user_group.is_default
+
     # Core writes above leave the loaded ORM collections stale, and sessions run
     # expire_on_commit=False — without this the caller serializes pre-update membership.
     db_session.expire(db_user_group)
@@ -892,6 +896,8 @@ def update_user_group(
             resource_type="user_group",
             resource_id=user_group_id,
             extra={
+                "group_name": group_name,
+                "is_default": group_is_default,
                 "added_user_ids": [str(uid) for uid in added_user_ids],
                 "removed_user_ids": [str(uid) for uid in removed_user_ids],
             },
@@ -1087,12 +1093,23 @@ def delete_user_group_cc_pair_relationship__no_commit(
     db_session.execute(delete_stmt)
 
 
+class PermissionChange(NamedTuple):
+    """The diff is computed here, not by the caller, because this is the only place
+    holding the row lock. A caller diffing before and after would race a concurrent
+    save and would read whatever the ORM had already cached.
+    """
+
+    enabled: list[Permission]
+    added: list[Permission]
+    removed: list[Permission]
+
+
 def set_group_permissions_bulk__no_commit(
     group_id: int,
     desired_permissions: set[Permission],
     granted_by: UUID,
     db_session: Session,
-) -> list[Permission]:
+) -> PermissionChange:
     """Set the full desired permission state for a group in one pass.
 
     Enables permissions in `desired_permissions`, disables any toggleable
@@ -1102,8 +1119,6 @@ def set_group_permissions_bulk__no_commit(
     Grants are soft-deleted: revoking flips `is_deleted`, re-granting flips it back and
     re-stamps `granted_by`/`granted_at`, so a row is INSERTed only once per group and the
     grant history survives. Readers must filter `is_deleted.is_(False)`.
-
-    Returns the resulting list of enabled permissions.
     """
 
     existing_grants = (
@@ -1124,6 +1139,9 @@ def set_group_permissions_bulk__no_commit(
     # not managed here — never enabled, never disabled.
     desired_permissions = desired_permissions - NON_TOGGLEABLE_PERMISSIONS
 
+    added: list[Permission] = []
+    removed: list[Permission] = []
+
     # Enable desired permissions
     for perm in desired_permissions:
         existing = grant_map.get(perm)
@@ -1132,6 +1150,7 @@ def set_group_permissions_bulk__no_commit(
                 existing.is_deleted = False
                 existing.granted_by = granted_by
                 existing.granted_at = func.now()
+                added.append(perm)
         else:
             db_session.add(
                 PermissionGrant(
@@ -1141,6 +1160,7 @@ def set_group_permissions_bulk__no_commit(
                     granted_by=granted_by,
                 )
             )
+            added.append(perm)
 
     # Disable toggleable permissions not in the desired set
     for perm, grant in grant_map.items():
@@ -1150,12 +1170,12 @@ def set_group_permissions_bulk__no_commit(
             and not grant.is_deleted
         ):
             grant.is_deleted = True
+            removed.append(perm)
 
     db_session.flush()
     recompute_permissions_for_group__no_commit(group_id, db_session)
 
-    # Return the resulting enabled set
-    return [
+    enabled = [
         g.permission
         for g in db_session.execute(
             select(PermissionGrant).where(
@@ -1166,3 +1186,8 @@ def set_group_permissions_bulk__no_commit(
         .scalars()
         .all()
     ]
+    return PermissionChange(
+        enabled=enabled,
+        added=sorted(added, key=lambda p: p.value),
+        removed=sorted(removed, key=lambda p: p.value),
+    )

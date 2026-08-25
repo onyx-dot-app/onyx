@@ -178,6 +178,7 @@ def set_user_admin_access_endpoint(
         resource_id=str(target.id),
         extra={
             "target_email": target.email,
+            "previous_is_admin": was_admin,
             "is_admin": admin_access_update_request.is_admin,
         },
     )
