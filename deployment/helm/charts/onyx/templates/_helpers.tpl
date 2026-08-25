@@ -359,19 +359,18 @@ Emits a single line ending with a comma.
 {{- end }}
 
 {{/*
-Render a CA volume from a TLS configuration. The consumer validates the
-configured path at startup, so mount exactly the configured key at its
-expected filename.
+Volume sourcing the PostgreSQL server CA. The backend validates the configured
+path at startup, so mount exactly the configured key at its expected filename.
 */}}
-{{- define "onyx.tlsCA.volume" -}}
-{{- $tls := .tls -}}
-{{- $feature := .feature -}}
+{{- define "onyx.postgresTls.volume" -}}
+{{- if include "onyx.postgresTls.enabled" . -}}
+{{- $tls := .Values.postgresTls -}}
 {{- if and $tls.caSecretName $tls.caConfigMapName -}}
-{{- fail (printf "%s.caSecretName and %s.caConfigMapName are mutually exclusive; set exactly one" $feature $feature) -}}
+{{- fail "postgresTls.caSecretName and postgresTls.caConfigMapName are mutually exclusive; set exactly one" -}}
 {{- end -}}
-{{- $caPath := $tls.caMountPath | default .defaultMountPath -}}
+{{- $caPath := $tls.caMountPath | default "/etc/postgres-ca/ca.crt" -}}
 {{- $caKey := $tls.caKey | default "ca.crt" -}}
-- name: {{ .volumeName }}
+- name: postgres-ca
   {{- if $tls.caSecretName }}
   secret:
     secretName: {{ $tls.caSecretName }}
@@ -385,29 +384,18 @@ expected filename.
       - key: {{ $caKey }}
         path: {{ base $caPath }}
   {{- else -}}
-  {{- fail (printf "%s.enabled is true but neither %s.caSecretName nor %s.caConfigMapName is set" $feature $feature $feature) -}}
+  {{- fail "postgresTls.enabled is true but neither postgresTls.caSecretName nor postgresTls.caConfigMapName is set" -}}
   {{- end }}
-{{- end }}
-
-{{/* Render the matching read-only CA volume mount. */}}
-{{- define "onyx.tlsCA.volumeMount" -}}
-{{- $caPath := .tls.caMountPath | default .defaultMountPath -}}
-- name: {{ .volumeName }}
-  mountPath: {{ dir $caPath }}
-  readOnly: true
-{{- end -}}
-
-{{/* Volume sourcing the PostgreSQL server CA. */}}
-{{- define "onyx.postgresTls.volume" -}}
-{{- if include "onyx.postgresTls.enabled" . -}}
-{{- include "onyx.tlsCA.volume" (dict "tls" .Values.postgresTls "feature" "postgresTls" "volumeName" "postgres-ca" "defaultMountPath" "/etc/postgres-ca/ca.crt") -}}
 {{- end -}}
 {{- end }}
 
 {{/* Mount for the PostgreSQL server CA. */}}
 {{- define "onyx.postgresTls.volumeMount" -}}
 {{- if include "onyx.postgresTls.enabled" . -}}
-{{- include "onyx.tlsCA.volumeMount" (dict "tls" .Values.postgresTls "volumeName" "postgres-ca" "defaultMountPath" "/etc/postgres-ca/ca.crt") -}}
+{{- $caPath := .Values.postgresTls.caMountPath | default "/etc/postgres-ca/ca.crt" -}}
+- name: postgres-ca
+  mountPath: {{ dir $caPath }}
+  readOnly: true
 {{- end -}}
 {{- end }}
 
@@ -419,18 +407,43 @@ expected filename.
 {{- end }}
 
 {{/*
-Volume sourcing the Redis server CA.
+Volume sourcing the Redis server CA. The backend uses the configured path for
+REDIS_SSL_CA_CERTS, so mount exactly the configured key at its expected name.
 */}}
 {{- define "onyx.redisTls.volume" -}}
 {{- if include "onyx.redisTls.enabled" . -}}
-{{- include "onyx.tlsCA.volume" (dict "tls" .Values.redisTls "feature" "redisTls" "volumeName" "redis-ca" "defaultMountPath" "/etc/redis-ca/ca.crt") -}}
+{{- $tls := .Values.redisTls -}}
+{{- if and $tls.caSecretName $tls.caConfigMapName -}}
+{{- fail "redisTls.caSecretName and redisTls.caConfigMapName are mutually exclusive; set exactly one" -}}
+{{- end -}}
+{{- $caPath := $tls.caMountPath | default "/etc/redis-ca/ca.crt" -}}
+{{- $caKey := $tls.caKey | default "ca.crt" -}}
+- name: redis-ca
+  {{- if $tls.caSecretName }}
+  secret:
+    secretName: {{ $tls.caSecretName }}
+    items:
+      - key: {{ $caKey }}
+        path: {{ base $caPath }}
+  {{- else if $tls.caConfigMapName }}
+  configMap:
+    name: {{ $tls.caConfigMapName }}
+    items:
+      - key: {{ $caKey }}
+        path: {{ base $caPath }}
+  {{- else -}}
+  {{- fail "redisTls.enabled is true but neither redisTls.caSecretName nor redisTls.caConfigMapName is set" -}}
+  {{- end }}
 {{- end -}}
 {{- end }}
 
 {{/* Mount for the Redis server CA. */}}
 {{- define "onyx.redisTls.volumeMount" -}}
 {{- if include "onyx.redisTls.enabled" . -}}
-{{- include "onyx.tlsCA.volumeMount" (dict "tls" .Values.redisTls "volumeName" "redis-ca" "defaultMountPath" "/etc/redis-ca/ca.crt") -}}
+{{- $caPath := .Values.redisTls.caMountPath | default "/etc/redis-ca/ca.crt" -}}
+- name: redis-ca
+  mountPath: {{ dir $caPath }}
+  readOnly: true
 {{- end -}}
 {{- end }}
 
