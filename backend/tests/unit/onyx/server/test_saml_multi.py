@@ -19,6 +19,7 @@ from onyx.db.models import SSOProvider
 from onyx.db.sso_provider import SAMLProviderConfig
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server import saml_multi
+from onyx.server.saml import _sanitize_relay_state
 from onyx.utils.sensitive import make_mock_sensitive_value
 
 _IDP = {
@@ -341,3 +342,55 @@ async def test_process_saml_callback_rejects_external_relay_state(
     )
 
     assert response.headers["location"] == "/app"
+
+
+@pytest.mark.asyncio
+async def test_process_saml_callback_rejects_protocol_relative_relay_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # "///evil.example" has no netloc under urlparse, but some browsers still
+    # resolve it as scheme-relative navigation to evil.example.
+    _stub_callback_dependencies(monkeypatch, relay_state="///evil.example")
+
+    async def _fake_on_after_login(*_args: Any, **_kwargs: Any) -> None:
+        pass
+
+    user_manager = cast(Any, SimpleNamespace(on_after_login=_fake_on_after_login))
+    response = await saml_multi._process_saml_callback(
+        cast(Any, SimpleNamespace()), _DB, cast(Any, None), user_manager
+    )
+
+    assert response.headers["location"] == "/app"
+
+
+# ---------------------------------------------------------------------------
+# _sanitize_relay_state: internal-path guard shared by the /authorize `next`
+# param and the callback's RelayState handling.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "candidate",
+    [
+        None,
+        "",
+        "relative/no-leading-slash",
+        "//evil.example",
+        "///evil.example",
+        "////evil.example",
+        "/\\evil.example",
+        "/path:with-colon",
+        "https://evil.example/steal",
+        "javascript:alert(1)",
+    ],
+)
+def test_sanitize_relay_state_rejects_unsafe_values(candidate: str | None) -> None:
+    assert _sanitize_relay_state(candidate) is None
+
+
+@pytest.mark.parametrize(
+    "candidate",
+    ["/app", "/settings?x=1", "/path#fragment"],
+)
+def test_sanitize_relay_state_accepts_internal_paths(candidate: str) -> None:
+    assert _sanitize_relay_state(candidate) == candidate

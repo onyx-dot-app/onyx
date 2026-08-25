@@ -53,6 +53,11 @@ export interface SSOConfigField {
   description: string;
   optional?: boolean;
   placeholder?: string;
+  // Value a "switch" field starts at when the stored config has no key for
+  // it yet (a row saved before the field existed, or a brand-new provider).
+  // Must match the backend model's default so re-saving an untouched
+  // provider round-trips its value instead of silently overriding it.
+  switchDefault?: boolean;
 }
 
 const CLIENT_ID_FIELD: SSOConfigField = {
@@ -184,6 +189,10 @@ export const CONFIG_FIELDS_BY_TYPE: Record<SSOProviderType, SSOConfigField[]> =
           "Turn off for IdPs that enforce MFA or FIDO2 (such as Microsoft " +
           "Entra ID with Conditional Access), which reject the exact match " +
           "with AADSTS75011.",
+        // Matches SAMLProviderConfig.request_authn_context's backend default,
+        // so a provider saved before this field existed keeps behaving the
+        // same way the first time its form is opened and re-saved.
+        switchDefault: true,
       },
     ],
   };
