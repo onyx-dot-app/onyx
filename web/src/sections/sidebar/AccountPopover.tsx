@@ -105,7 +105,7 @@ function SettingsPopover({
           <LineItemButton
             sizePreset="main-ui"
             variant="section"
-            rounding="sm"
+            rounding={2}
             icon={SvgSliders}
             title="Settings"
             href="/app/settings"
@@ -116,7 +116,7 @@ function SettingsPopover({
           key="notifications"
           sizePreset="main-ui"
           variant="section"
-          rounding="sm"
+          rounding={2}
           icon={SvgBell}
           title="Notifications"
           onClick={onOpenNotifications}
@@ -130,7 +130,7 @@ function SettingsPopover({
           key="help-faq"
           sizePreset="main-ui"
           variant="section"
-          rounding="sm"
+          rounding={2}
           icon={SvgHelpCircle}
           title="Help & FAQ"
           href="https://docs.onyx.app"
@@ -141,7 +141,7 @@ function SettingsPopover({
             key="custom-help-link"
             sizePreset="main-ui"
             variant="section"
-            rounding="sm"
+            rounding={2}
             icon={SvgExternalLink}
             title={
               enterpriseSettings.custom_help_link_label ||
@@ -156,7 +156,7 @@ function SettingsPopover({
             key="log-in"
             sizePreset="main-ui"
             variant="section"
-            rounding="sm"
+            rounding={2}
             icon={SvgUser}
             title="Log in"
             onClick={handleLogin}
@@ -168,7 +168,7 @@ function SettingsPopover({
             sizePreset="main-ui"
             variant="section"
             color="danger"
-            rounding="sm"
+            rounding={2}
             icon={SvgLogOut}
             title="Log Out"
             onClick={handleLogout}

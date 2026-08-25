@@ -344,7 +344,7 @@ function AppsAdminContent({
 
 function LoadingCard() {
   return (
-    <Card background="none" border="dashed" rounding="lg">
+    <Card background="none" border="dashed" rounding={4}>
       <Text font="main-content-body">Loading…</Text>
     </Card>
   );

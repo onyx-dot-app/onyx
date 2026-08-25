@@ -113,7 +113,7 @@ function ScopeOption({
     <SelectCard
       state={selected ? "selected" : "empty"}
       padding={2}
-      rounding="sm"
+      rounding={2}
       role="radio"
       aria-checked={selected}
       aria-label={option.title}
@@ -185,7 +185,7 @@ function GroupMenuContent({
               <Popover.Close asChild key={group.value}>
                 <LineItemButton
                   onClick={() => onSelectGroup(group.value)}
-                  rounding="md"
+                  rounding={3}
                   selectVariant="select-heavy"
                   sizePreset="main-ui"
                   state={group.value === selectedGroupId ? "selected" : "empty"}

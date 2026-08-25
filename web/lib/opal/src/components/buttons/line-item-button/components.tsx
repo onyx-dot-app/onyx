@@ -1,10 +1,10 @@
 import type React from "react";
-import {
-  Interactive,
-  type InteractiveStatefulProps,
-  InteractiveContainerRoundingVariant,
-} from "@opal/core";
-import type { ExtremaSizeVariants, DistributiveOmit } from "@opal/types";
+import { Interactive, type InteractiveStatefulProps } from "@opal/core";
+import type {
+  ExtremaSizeVariants,
+  DistributiveOmit,
+  Rounding,
+} from "@opal/types";
 import { Tooltip, type TooltipSide } from "@opal/components";
 import { type ContentActionProps, ContentAction } from "@opal/layouts";
 
@@ -24,8 +24,8 @@ type LineItemButtonOwnProps = Pick<
   /** Interactive select variant. @default "select-light" */
   selectVariant?: "select-light" | "select-heavy";
 
-  /** Corner rounding preset (height is always content-driven). @default "md" */
-  rounding?: InteractiveContainerRoundingVariant;
+  /** Corner rounding step (height is always content-driven). @default 3 */
+  rounding?: Rounding;
 
   /** Container width. @default "full" */
   width?: ExtremaSizeVariants;
@@ -91,7 +91,7 @@ function LineItemButton({
   ref,
 
   // Sizing
-  rounding = "md",
+  rounding = 3,
   width = "full",
   padding = 0.5,
   tooltip,

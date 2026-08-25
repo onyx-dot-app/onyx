@@ -132,7 +132,7 @@ function ProjectChatItem({
         <LineItemButton
           key="move"
           sizePreset="main-ui"
-          rounding="sm"
+          rounding={2}
           icon={SvgFolderIn}
           title="Move to Project"
           onClick={noProp(() => setShowMoveOptions(true))}
@@ -140,7 +140,7 @@ function ProjectChatItem({
         <LineItemButton
           key="remove"
           sizePreset="main-ui"
-          rounding="sm"
+          rounding={2}
           icon={SvgFolder}
           title={`Remove from ${projects.find((p) => p.id === projectId)?.name ?? "Project"}`}
           onClick={noProp(handleRemoveFromProject)}
@@ -149,7 +149,7 @@ function ProjectChatItem({
         <LineItemButton
           key="delete"
           sizePreset="main-ui"
-          rounding="sm"
+          rounding={2}
           color="danger"
           icon={SvgTrash}
           title="Delete"
@@ -169,7 +169,7 @@ function ProjectChatItem({
           <LineItemButton
             key={target.id}
             sizePreset="main-ui"
-            rounding="sm"
+            rounding={2}
             icon={SvgFolder}
             title={target.name}
             onClick={noProp(() =>
@@ -302,7 +302,7 @@ export default function ProjectChatSessionList() {
         {isLoadingProjectDetails && !currentProjectDetails ? (
           <SvgSimpleLoader className="mx-4" />
         ) : projectChats.length === 0 ? (
-          <Card rounding="md" border="dashed" background="none" padding={2}>
+          <Card rounding={3} border="dashed" background="none" padding={2}>
             <div className="p-1">
               <Text as="p" font="secondary-body" color="text-02">
                 No chats yet.

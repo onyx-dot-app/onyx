@@ -46,20 +46,27 @@ export type SizeVariants =
 export type ContainerSizeVariants = Exclude<SizeVariants, "full" | "xl">;
 
 /**
- * Rounding size variants.
+ * A corner radius, on the same scale as {@link Spacing}: `N` is `N / 4` rem, so
+ * `rounding={2}` is the same distance as `padding={2}`.
  *
- * | Variant | Class        |
- * |---------|--------------|
- * | `xl`    | `rounded-20` |
- * | `lg`    | `rounded-16` |
- * | `md`    | `rounded-12` |
- * | `sm`    | `rounded-08` |
- * | `xs`    | `rounded-04` |
+ * | Step     | rem     | px  |
+ * |----------|---------|-----|
+ * | `0.5`    | `0.125` | 2   |
+ * | `1`      | `0.25`  | 4   |
+ * | `2`      | `0.5`   | 8   |
+ * | `3`      | `0.75`  | 12  |
+ * | `4`      | `1`     | 16  |
+ * | `5`      | `1.25`  | 20  |
+ * | `"full"` | —       | pill (`--radius-round`) |
+ *
+ * Closed, where `Spacing` is an open number: the radius tokens are a fixed
+ * design set, and an arbitrary radius is never what a caller wants. `"full"` is
+ * a string rather than `Infinity` because TypeScript has no literal type for
+ * `Infinity` — including it would widen the whole union back to `number`.
+ *
+ * Converted with {@link roundingToRem}, not looked up as a class.
  */
-export type RoundingVariants = Extract<
-  SizeVariants,
-  "xl" | "lg" | "md" | "sm" | "xs"
->;
+export type Rounding = 0.5 | 1 | 2 | 3 | 4 | 5 | "full";
 
 /**
  * Extreme size variants ("fit" and "full" only).

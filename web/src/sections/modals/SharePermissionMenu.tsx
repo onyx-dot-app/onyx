@@ -88,7 +88,7 @@ export function SharePermissionMenu<T extends string>({
               <LineItemButton
                 icon={option.icon}
                 onClick={() => onChange?.(option.value)}
-                rounding="md"
+                rounding={3}
                 selectVariant="select-heavy"
                 sizePreset="main-ui"
                 state={option.value === value ? "selected" : "empty"}
@@ -105,7 +105,7 @@ export function SharePermissionMenu<T extends string>({
                 color="danger"
                 icon={SvgMinusCircle}
                 onClick={onRemove}
-                rounding="md"
+                rounding={3}
                 selectVariant="select-heavy"
                 sizePreset="main-ui"
                 title={removeLabel}

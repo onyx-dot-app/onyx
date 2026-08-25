@@ -149,7 +149,7 @@ export function AgentStats({ agentId }: AgentStatsProps) {
         height="fit"
       >
         <div className="min-w-0 flex-1 basis-64">
-          <Card border="solid" rounding="lg" padding={4}>
+          <Card border="solid" rounding={4} padding={4}>
             <Section
               flexDirection="row"
               justifyContent="start"
@@ -176,7 +176,7 @@ export function AgentStats({ agentId }: AgentStatsProps) {
           </Card>
         </div>
         <div className="min-w-0 flex-1 basis-64">
-          <Card border="solid" rounding="lg" padding={4}>
+          <Card border="solid" rounding={4} padding={4}>
             <Section
               flexDirection="row"
               justifyContent="start"

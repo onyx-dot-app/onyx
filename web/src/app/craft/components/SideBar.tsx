@@ -184,7 +184,7 @@ function BuildSessionButton({
           {[
             <LineItemButton
               sizePreset="main-ui"
-              rounding="sm"
+              rounding={2}
               key="rename"
               icon={SvgEdit}
               onClick={noProp(() => setRenaming(true))}
@@ -193,7 +193,7 @@ function BuildSessionButton({
             null,
             <LineItemButton
               sizePreset="main-ui"
-              rounding="sm"
+              rounding={2}
               key="delete"
               icon={SvgTrash}
               onClick={noProp(() => setIsDeleteModalOpen(true))}

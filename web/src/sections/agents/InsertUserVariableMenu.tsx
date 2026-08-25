@@ -57,7 +57,7 @@ export default function InsertUserVariableMenu({
     return (
       <LineItemButton
         sizePreset="main-ui"
-        rounding="sm"
+        rounding={2}
         key={placeholder.key}
         icon={SvgBracketCurly}
         description={userPlaceholderToken(placeholder.key)}

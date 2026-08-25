@@ -134,7 +134,7 @@ export default function FederatedOAuthModal() {
               <Card
                 border="solid"
                 key={connector.federated_connector_id}
-                rounding="lg"
+                rounding={4}
               >
                 <Section alignItems="start" height="fit">
                   <ContentAction

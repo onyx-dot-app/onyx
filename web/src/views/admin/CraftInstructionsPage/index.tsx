@@ -157,7 +157,7 @@ export default function CraftInstructionsPage() {
     <SettingsLayouts.Root>
       {header}
       <SettingsLayouts.Body>
-        <Card border="solid" rounding="lg">
+        <Card border="solid" rounding={4}>
           <Section alignItems="stretch" gap={1}>
             <InputVertical
               title="Workspace instructions"

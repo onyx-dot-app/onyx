@@ -177,7 +177,7 @@ export function ProjectFolderButton({ project }: ProjectFolderButtonProps) {
     <LineItemButton
       key="rename-project"
       sizePreset="main-ui"
-      rounding="sm"
+      rounding={2}
       icon={SvgEdit}
       title="Rename Project"
       onClick={noProp(() => setIsEditing(true))}
@@ -186,7 +186,7 @@ export function ProjectFolderButton({ project }: ProjectFolderButtonProps) {
     <LineItemButton
       key="delete-project"
       sizePreset="main-ui"
-      rounding="sm"
+      rounding={2}
       color="danger"
       icon={SvgTrash}
       title="Delete Project"

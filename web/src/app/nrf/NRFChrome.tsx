@@ -106,7 +106,7 @@ export default function NRFChrome() {
                 <Popover.Menu>
                   <LineItemButton
                     sizePreset="main-ui"
-                    rounding="sm"
+                    rounding={2}
                     icon={SvgSearchMenu}
                     state={effectiveMode === "search" ? "selected" : "empty"}
                     description="Quick search for documents"
@@ -118,7 +118,7 @@ export default function NRFChrome() {
                   />
                   <LineItemButton
                     sizePreset="main-ui"
-                    rounding="sm"
+                    rounding={2}
                     icon={SvgBubbleText}
                     state={effectiveMode === "chat" ? "selected" : "empty"}
                     description="Conversation and research"

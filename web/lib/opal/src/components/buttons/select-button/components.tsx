@@ -98,7 +98,7 @@ function SelectButton({
         type={type}
         size={size}
         width={width}
-        rounding={isLarge ? "md" : size === "2xs" ? "xs" : "sm"}
+        rounding={isLarge ? 3 : size === "2xs" ? 1 : 2}
       >
         <div
           className={cn(

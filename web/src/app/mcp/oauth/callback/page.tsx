@@ -185,7 +185,7 @@ export default function MCPOAuthCallbackPage() {
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
       <div className="w-full max-w-md">
-        <Card padding={6} rounding="lg" background="light" border="solid">
+        <Card padding={6} rounding={4} background="light" border="solid">
           <div className="flex flex-col items-stretch gap-4">
             {state.phase === "processing" && (
               <div className="flex flex-col items-center gap-3 p-5 text-center">

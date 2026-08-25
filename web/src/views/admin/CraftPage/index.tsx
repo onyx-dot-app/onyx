@@ -197,7 +197,7 @@ export default function CraftPage() {
     <SettingsLayouts.Root>
       {header}
       <SettingsLayouts.Body>
-        <Card border="solid" rounding="lg">
+        <Card border="solid" rounding={4}>
           <Section alignItems="stretch" gap={2}>
             <InputHorizontal
               title="Enable Craft by default"

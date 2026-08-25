@@ -198,14 +198,14 @@ export default function ServiceAccountsPage() {
                 <PopoverMenu>
                   <LineItemButton
                     sizePreset="main-ui"
-                    rounding="sm"
+                    rounding={2}
                     icon={SvgUsers}
                     onClick={() => setGroupsRolesTarget(row)}
                     title="Groups"
                   />
                   <LineItemButton
                     sizePreset="main-ui"
-                    rounding="sm"
+                    rounding={2}
                     icon={SvgUserEdit}
                     onClick={() => {
                       setSelectedApiKey(row);
@@ -215,7 +215,7 @@ export default function ServiceAccountsPage() {
                   />
                   <LineItemButton
                     sizePreset="main-ui"
-                    rounding="sm"
+                    rounding={2}
                     icon={SvgTrash}
                     color="danger"
                     onClick={() => setDeleteTarget(row)}

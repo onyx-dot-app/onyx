@@ -67,7 +67,7 @@ interface DomainCardProps {
 
 function DomainCard({ status, busy, onVerify }: DomainCardProps) {
   return (
-    <Card border="solid" rounding="lg">
+    <Card border="solid" rounding={4}>
       <Section flexDirection="column" alignItems="stretch" height="fit" gap={3}>
         <Section
           flexDirection="row"
@@ -94,7 +94,7 @@ function DomainCard({ status, busy, onVerify }: DomainCardProps) {
             <Text font="secondary-body" color="text-03" as="span">
               Add this TXT record at your DNS provider, then verify.
             </Text>
-            <Card border="solid" rounding="md" padding={0}>
+            <Card border="solid" rounding={3} padding={0}>
               <Section
                 flexDirection="column"
                 alignItems="stretch"
@@ -196,7 +196,7 @@ export default function SSODomainVerification({
             keeps the last rows, and showing them as current would hide that
             their verified state is no longer known. */}
         {error && (
-          <Card border="solid" rounding="lg">
+          <Card border="solid" rounding={4}>
             <Section
               flexDirection="row"
               alignItems="center"

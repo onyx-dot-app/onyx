@@ -828,7 +828,7 @@ export default function SourceHierarchyBrowser({
                 <Divider showTitle text="Sort by" dividerLine={false} />
                 <LineItemButton
                   sizePreset="main-ui"
-                  rounding="sm"
+                  rounding={2}
                   state={sortField === "name" ? "selected" : "empty"}
                   onClick={() => setSortField("name")}
                   rightChildren={
@@ -838,7 +838,7 @@ export default function SourceHierarchyBrowser({
                 />
                 <LineItemButton
                   sizePreset="main-ui"
-                  rounding="sm"
+                  rounding={2}
                   state={sortField === "last_updated" ? "selected" : "empty"}
                   onClick={() => setSortField("last_updated")}
                   rightChildren={
@@ -852,7 +852,7 @@ export default function SourceHierarchyBrowser({
                 <Divider showTitle text="Sorting Order" dividerLine={false} />
                 <LineItemButton
                   sizePreset="main-ui"
-                  rounding="sm"
+                  rounding={2}
                   state={sortDirection === "desc" ? "selected" : "empty"}
                   onClick={() => setSortDirection("desc")}
                   rightChildren={
@@ -864,7 +864,7 @@ export default function SourceHierarchyBrowser({
                 />
                 <LineItemButton
                   sizePreset="main-ui"
-                  rounding="sm"
+                  rounding={2}
                   state={sortDirection === "asc" ? "selected" : "empty"}
                   onClick={() => setSortDirection("asc")}
                   rightChildren={
@@ -876,7 +876,7 @@ export default function SourceHierarchyBrowser({
                 <Divider showTitle text="Folders" dividerLine={false} />
                 <LineItemButton
                   sizePreset="main-ui"
-                  rounding="sm"
+                  rounding={2}
                   state={folderPosition === "on_top" ? "selected" : "empty"}
                   onClick={() => setFolderPosition("on_top")}
                   rightChildren={
@@ -888,7 +888,7 @@ export default function SourceHierarchyBrowser({
                 />
                 <LineItemButton
                   sizePreset="main-ui"
-                  rounding="sm"
+                  rounding={2}
                   state={folderPosition === "mixed" ? "selected" : "empty"}
                   onClick={() => setFolderPosition("mixed")}
                   rightChildren={

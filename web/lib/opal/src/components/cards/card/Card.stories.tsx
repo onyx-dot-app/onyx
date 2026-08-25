@@ -5,7 +5,7 @@ import { Button, Card } from "@opal/components";
 const BACKGROUND_VARIANTS = ["none", "light", "heavy"] as const;
 const BORDER_VARIANTS = ["none", "dashed", "solid"] as const;
 const PADDING_VARIANTS = [0, 0.5, 1, 2, 4, 6] as const;
-const ROUNDING_VARIANTS = ["xs", "sm", "md", "lg"] as const;
+const ROUNDING_VARIANTS = [1, 2, 3, 4] as const;
 
 const meta: Meta<typeof Card> = {
   title: "opal/components/Card",
@@ -156,7 +156,7 @@ export const ExpandableNoContent: Story = {
 export const ExpandableRoundingVariants: Story = {
   render: function ExpandableRoundingStory() {
     const [openKey, setOpenKey] =
-      useState<(typeof ROUNDING_VARIANTS)[number]>("md");
+      useState<(typeof ROUNDING_VARIANTS)[number]>(3);
     return (
       <div className="flex flex-col gap-4 w-96">
         {ROUNDING_VARIANTS.map((rounding) => (

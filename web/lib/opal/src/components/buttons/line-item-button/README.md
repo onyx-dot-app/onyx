@@ -29,37 +29,37 @@ row's label lines up with an adjacent button. A step outside that set is a type 
 
 ### Interactive surface
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `selectVariant` | `"select-light" \| "select-heavy"` | `"select-light"` | Interactive select variant |
-| `state` | `InteractiveStatefulState` | `"empty"` | Value state (`"empty"`, `"filled"`, `"selected"`) |
-| `interaction` | `InteractiveStatefulInteraction` | `"rest"` | JS-controlled interaction state override |
-| `onClick` | `MouseEventHandler<HTMLElement>` | — | Click handler |
-| `href` | `string` | — | Renders an anchor instead of a div |
-| `target` | `string` | — | Anchor target (e.g. `"_blank"`) |
-| `group` | `string` | — | Interactive group key |
-| `ref` | `React.Ref<HTMLElement>` | — | Forwarded ref |
+| Prop            | Type                               | Default          | Description                                       |
+| --------------- | ---------------------------------- | ---------------- | ------------------------------------------------- |
+| `selectVariant` | `"select-light" \| "select-heavy"` | `"select-light"` | Interactive select variant                        |
+| `state`         | `InteractiveStatefulState`         | `"empty"`        | Value state (`"empty"`, `"filled"`, `"selected"`) |
+| `interaction`   | `InteractiveStatefulInteraction`   | `"rest"`         | JS-controlled interaction state override          |
+| `onClick`       | `MouseEventHandler<HTMLElement>`   | —                | Click handler                                     |
+| `href`          | `string`                           | —                | Renders an anchor instead of a div                |
+| `target`        | `string`                           | —                | Anchor target (e.g. `"_blank"`)                   |
+| `group`         | `string`                           | —                | Interactive group key                             |
+| `ref`           | `React.Ref<HTMLElement>`           | —                | Forwarded ref                                     |
 
 ### Sizing
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `rounding` | `InteractiveContainerRoundingVariant` | `"md"` | Corner rounding preset (height is content-driven) |
-| `width` | `WidthVariant` | `"full"` | Container width |
-| `padding` | `0 \| 0.5 \| 1 \| 2` | `0.5` | Padding around the inner `ContentAction`, as a spacing step (`N / 4` rem) |
-| `tooltip` | `string` | — | Tooltip text shown on hover |
-| `tooltipSide` | `TooltipSide` | `"top"` | Tooltip side |
+| Prop          | Type                 | Default  | Description                                                               |
+| ------------- | -------------------- | -------- | ------------------------------------------------------------------------- |
+| `rounding`    | `Rounding`           | `3`      | Corner radius step (`N / 4` rem, or `"full"`); height is content-driven   |
+| `width`       | `WidthVariant`       | `"full"` | Container width                                                           |
+| `padding`     | `0 \| 0.5 \| 1 \| 2` | `0.5`    | Padding around the inner `ContentAction`, as a spacing step (`N / 4` rem) |
+| `tooltip`     | `string`             | —        | Tooltip text shown on hover                                               |
+| `tooltipSide` | `TooltipSide`        | `"top"`  | Tooltip side                                                              |
 
 ### Content (pass-through to ContentAction)
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `title` | `string` | **(required)** | Row label |
-| `icon` | `IconFunctionComponent` | — | Left icon |
-| `description` | `string` | — | Description below the title |
-| `sizePreset` | `SizePreset` | `"headline"` | Content size preset |
-| `variant` | `ContentVariant` | `"heading"` | Content layout variant |
-| `rightChildren` | `ReactNode` | — | Content after the label (e.g. action button) |
+| Prop            | Type                    | Default        | Description                                  |
+| --------------- | ----------------------- | -------------- | -------------------------------------------- |
+| `title`         | `string`                | **(required)** | Row label                                    |
+| `icon`          | `IconFunctionComponent` | —              | Left icon                                    |
+| `description`   | `string`                | —              | Description below the title                  |
+| `sizePreset`    | `SizePreset`            | `"headline"`   | Content size preset                          |
+| `variant`       | `ContentVariant`        | `"heading"`    | Content layout variant                       |
+| `rightChildren` | `ReactNode`             | —              | Content after the label (e.g. action button) |
 
 All other `ContentAction` / `Content` props (`editable`, `onTitleChange`, `optional`, `auxIcon`, `tag`, etc.) are also passed through. Note: `withInteractive` is always `true` inside `LineItemButton` and cannot be overridden.
 
@@ -72,7 +72,7 @@ import { LineItemButton } from "@opal/components";
 <LineItemButton
   selectVariant="select-heavy"
   state={isSelected ? "selected" : "empty"}
-  rounding="sm"
+  rounding={2}
   onClick={handleClick}
   title="gpt-4o"
   sizePreset="main-ui"

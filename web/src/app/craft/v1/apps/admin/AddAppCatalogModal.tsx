@@ -90,7 +90,7 @@ function CatalogCard({
   onClick,
 }: CatalogCardProps) {
   return (
-    <Card background="light" border="solid" rounding="lg">
+    <Card background="light" border="solid" rounding={4}>
       {/* h-full centers the row inside grid-stretched cards of uneven height. */}
       <div className="h-full flex items-center gap-3 w-full">
         <Icon className="w-8 h-8 shrink-0" />

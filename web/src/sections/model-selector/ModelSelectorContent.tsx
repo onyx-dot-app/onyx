@@ -498,7 +498,7 @@ export default function ModelSelectorContent({
               ) : null
             }
             sizePreset="main-ui"
-            rounding="sm"
+            rounding={2}
           />
         </Hoverable.Root>
       </Disabled>
@@ -540,7 +540,7 @@ export default function ModelSelectorContent({
                   description={globalDefaultDisplayName ?? undefined}
                   onClick={() => onSelect(GLOBAL_DEFAULT_LLM_OPTION)}
                   sizePreset="main-ui"
-                  rounding="sm"
+                  rounding={2}
                 />,
               ]
             : []),
@@ -576,7 +576,7 @@ export default function ModelSelectorContent({
                           <Interactive.Stateless prominence="tertiary">
                             <Interactive.Container
                               size="fit"
-                              rounding="sm"
+                              rounding={2}
                               width="full"
                             >
                               <div className="pl-2 pr-1 py-1 w-full rounded-08 bg-background-tint-01">

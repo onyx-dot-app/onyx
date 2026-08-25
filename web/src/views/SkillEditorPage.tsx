@@ -551,7 +551,7 @@ export default function SkillEditorPage({
               {isCreating && !creationDraft && (
                 <>
                   <Section gap={2} alignItems="stretch" height="auto">
-                    <Card border="solid" rounding="lg" padding={2}>
+                    <Card border="solid" rounding={4} padding={2}>
                       <Section gap={2} alignItems="stretch" height="auto">
                         <Content
                           title="Have an existing skill?"
@@ -657,7 +657,7 @@ export default function SkillEditorPage({
                   />
                 </div>
 
-                <Card border="solid" rounding="lg" padding={2}>
+                <Card border="solid" rounding={4} padding={2}>
                   {instructionsDisplayMode === "raw" ? (
                     <InputTextArea
                       id="instructions_markdown"
@@ -689,7 +689,7 @@ export default function SkillEditorPage({
                   sizePreset="main-content"
                   variant="section"
                 />
-                <Card border="solid" rounding="lg">
+                <Card border="solid" rounding={4}>
                   <SkillFileTree
                     files={displayedFiles}
                     onRemove={
@@ -736,7 +736,7 @@ export default function SkillEditorPage({
                       sizePreset="main-content"
                       variant="section"
                     />
-                    <Card border="solid" rounding="lg">
+                    <Card border="solid" rounding={4}>
                       <Section>
                         {skill.external_app && (
                           <InputHorizontal
@@ -803,7 +803,7 @@ export default function SkillEditorPage({
                     <>
                       <Divider paddingParallel={0} paddingPerpendicular={0} />
 
-                      <Card border="solid" rounding="lg">
+                      <Card border="solid" rounding={4}>
                         <Section>
                           <InputHorizontal
                             title="Delete this skill"

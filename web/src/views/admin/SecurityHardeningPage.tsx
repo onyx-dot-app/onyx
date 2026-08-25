@@ -351,7 +351,7 @@ export default function SecurityHardeningPage() {
             variant="section"
           />
 
-          <Card border="solid" rounding="lg">
+          <Card border="solid" rounding={4}>
             <Section>
               <ToggleRow
                 title="Sync Session Expiry with Identity Provider"
@@ -426,7 +426,7 @@ export default function SecurityHardeningPage() {
 
           {/* Password policy (single-tenant only) */}
           {!isMultiTenant && (
-            <Card border="solid" rounding="lg">
+            <Card border="solid" rounding={4}>
               <Section>
                 <Content
                   title="Password Policy"
@@ -515,7 +515,7 @@ export default function SecurityHardeningPage() {
           {/* External JWT auth (single-tenant only). Absent while the
               pinned state is unknown, editability must never fail open. */}
           {!isMultiTenant && pinnedFields && (
-            <Card border="solid" rounding="lg">
+            <Card border="solid" rounding={4}>
               <Section>
                 <Content
                   title="External JWT Authentication"
@@ -569,7 +569,7 @@ export default function SecurityHardeningPage() {
             variant="section"
           />
 
-          <Card border="solid" rounding="lg">
+          <Card border="solid" rounding={4}>
             <Section>
               <InputHorizontal
                 title="Full User Directory Visibility"
@@ -744,7 +744,7 @@ export default function SecurityHardeningPage() {
             variant="section"
           />
 
-          <Card border="solid" rounding="lg">
+          <Card border="solid" rounding={4}>
             <Section>
               <ToggleRow
                 title="LLM Environment Variable Injection"

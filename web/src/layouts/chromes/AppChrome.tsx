@@ -281,7 +281,7 @@ function Header() {
           <LineItemButton
             key={project.id}
             sizePreset="main-ui"
-            rounding="sm"
+            rounding={2}
             icon={SvgFolderIn}
             title={project.name}
             onClick={noProp(() => handleMoveClick(project.id))}
@@ -293,7 +293,7 @@ function Header() {
         <LineItemButton
           key="export-back"
           sizePreset="main-ui"
-          rounding="sm"
+          rounding={2}
           icon={SvgChevronLeft}
           title="Export As…"
           onClick={noProp(() => setShowExportOptions(false))}
@@ -301,7 +301,7 @@ function Header() {
         <Popover.Close asChild key="export-plaintext">
           <LineItemButton
             sizePreset="main-ui"
-            rounding="sm"
+            rounding={2}
             icon={SvgFileText}
             title="Plaintext"
             onClick={noProp(() => handleExport("text"))}
@@ -310,7 +310,7 @@ function Header() {
         <Popover.Close asChild key="export-markdown">
           <LineItemButton
             sizePreset="main-ui"
-            rounding="sm"
+            rounding={2}
             icon={SvgHash}
             title="Markdown"
             onClick={noProp(() => handleExport("markdown"))}
@@ -322,7 +322,7 @@ function Header() {
         <LineItemButton
           key="move"
           sizePreset="main-ui"
-          rounding="sm"
+          rounding={2}
           icon={SvgFolderIn}
           title="Move to Project"
           onClick={noProp(() => setShowMoveOptions(true))}
@@ -330,7 +330,7 @@ function Header() {
         <LineItemButton
           key="export"
           sizePreset="main-ui"
-          rounding="sm"
+          rounding={2}
           icon={SvgDownload}
           title="Export As…"
           onClick={noProp(() => setShowExportOptions(true))}
@@ -339,7 +339,7 @@ function Header() {
         <LineItemButton
           key="delete"
           sizePreset="main-ui"
-          rounding="sm"
+          rounding={2}
           color="danger"
           icon={SvgTrash}
           title="Delete"
@@ -459,7 +459,7 @@ function Header() {
                         <Popover.Menu>
                           <LineItemButton
                             sizePreset="main-ui"
-                            rounding="sm"
+                            rounding={2}
                             icon={SvgSearchMenu}
                             state={
                               effectiveMode === "search" ? "selected" : "empty"
@@ -473,7 +473,7 @@ function Header() {
                           />
                           <LineItemButton
                             sizePreset="main-ui"
-                            rounding="sm"
+                            rounding={2}
                             icon={SvgBubbleText}
                             state={
                               effectiveMode === "chat" ? "selected" : "empty"
