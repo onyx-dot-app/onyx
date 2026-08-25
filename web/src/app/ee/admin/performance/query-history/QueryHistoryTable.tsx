@@ -1,3 +1,5 @@
+"use client";
+
 import {
   Table,
   TableHead,
@@ -47,6 +49,7 @@ import {
   SvgThumbsDown,
   SvgThumbsUp,
 } from "@opal/icons";
+
 function QueryHistoryTableRow({
   chatSessionMinimal,
 }: {

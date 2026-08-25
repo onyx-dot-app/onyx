@@ -1,3 +1,5 @@
+"use client";
+
 import { toast } from "@opal/layouts";
 import { Button } from "@opal/components";
 import { useRef, useState } from "react";
@@ -15,8 +17,8 @@ import {
   SpinnerStatus,
   StartQueryHistoryExportResponse,
 } from "./types";
-import { cn } from "@opal/utils";
-import { SvgLoader, SvgPlayCircle } from "@opal/icons";
+import { SvgPlayCircle, SvgSimpleLoader } from "@opal/icons";
+
 export default function KickoffCSVExport({
   dateRange,
 }: {
@@ -117,18 +119,7 @@ export default function KickoffCSVExport({
         <Button
           onClick={startExport}
           variant={spinnerStatus === "spinning" ? "danger" : "default"}
-          icon={
-            spinnerStatus === "spinning"
-              ? // `style` carries the icon sizing that opal's `iconWrapper`
-                // applies, so an icon function has to forward it.
-                ({ className, style }) => (
-                  <SvgLoader
-                    className={cn(className, "animate-spin")}
-                    style={style}
-                  />
-                )
-              : SvgPlayCircle
-          }
+          icon={spinnerStatus === "spinning" ? SvgSimpleLoader : SvgPlayCircle}
         >
           {spinnerStatus === "spinning" ? "Cancel" : "Kickoff Export"}
         </Button>
