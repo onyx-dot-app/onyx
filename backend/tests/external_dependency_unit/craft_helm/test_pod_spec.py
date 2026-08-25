@@ -655,6 +655,8 @@ def test_redis_tls_mounts_ca_in_all_enabled_redis_workloads() -> None:
     """Every enabled Redis client must receive the configured server CA."""
     redis_tls_args = [
         "--set",
+        "redis.enabled=false",
+        "--set",
         "redisTls.enabled=true",
         "--set",
         "redisTls.caConfigMapName=redis-ca-config",
