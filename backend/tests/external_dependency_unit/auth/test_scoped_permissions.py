@@ -608,48 +608,38 @@ def test_each_gate_records_its_refusal(
 
 
 @pytest.mark.usefixtures("audit_stream")
-def test_denials_are_deduped_per_attempt_not_per_gate(
+def test_every_refusal_is_recorded(
     db_session: Session, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """A manager walking several resources must produce one event each. Keying the
-    dedup window on the gate alone would record only the first and hide the walk."""
+    """A manager walking several resources produces one event each. These gates see
+    no resource identity, so nothing here may be suppressed as a duplicate — a bulk
+    update refusing two look-alike document sets is two separate attempts."""
     manager = create_test_user(db_session, "denial-walk")
     manager.effective_permissions = []
     managed = _make_group(db_session)
     first = _make_group(db_session)
     second = _make_group(db_session)
-    third = _make_group(db_session)
     _manage(db_session, manager, managed)
 
-    for target in (first, second):
+    def refuse(target_group_id: int) -> None:
         with pytest.raises(OnyxError):
             assert_within_scope(
                 manager,
                 db_session,
                 permission=Permission.MANAGE_DOCUMENT_SETS,
                 current_group_ids=[managed.id],
-                requested_group_ids=[target.id],
+                requested_group_ids=[target_group_id],
                 is_non_public=True,
             )
+
+    refuse(first.id)
+    refuse(second.id)
+    # Indistinguishable from the first at this gate, but a distinct attempt.
+    refuse(first.id)
 
     events = events_for(caplog, "permission.denied")
     assert [e["extra"]["requested_group_ids"] for e in events] == [
         [first.id],
         [second.id],
+        [first.id],
     ]
-
-    # A genuine retry — same permission, same groups — still collapses. Uses an
-    # untouched group, since the attempts above already claimed their windows.
-    caplog.clear()
-    for _ in range(2):
-        with pytest.raises(OnyxError):
-            assert_within_scope(
-                manager,
-                db_session,
-                permission=Permission.MANAGE_DOCUMENT_SETS,
-                current_group_ids=[managed.id],
-                requested_group_ids=[third.id],
-                is_non_public=True,
-            )
-
-    assert len(events_for(caplog, "permission.denied")) == 1

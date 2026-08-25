@@ -6,8 +6,6 @@ scope — the bundle guard and the write-side gate. DB access itself lives in
 ``onyx/db/scoped_permissions.py``; this layer only consumes that interface.
 """
 
-import hashlib
-import json
 from collections.abc import Collection
 from typing import Any
 
@@ -30,10 +28,6 @@ from onyx.utils.audit import (
     emit_audit_event,
 )
 
-# Deliberately shorter than the 600s default: a burst of attempts should stay
-# visible rather than collapse into one line.
-_DENIAL_DEDUP_TTL_SECONDS = 60
-
 
 def _emit_denial(
     user: User,
@@ -42,21 +36,12 @@ def _emit_denial(
     group_id: int | None = None,
     extra: dict[str, Any],
 ) -> None:
-    # Dedup on the whole attempt. Keying on the gate alone would collapse every
-    # refusal a user hits in the window into one line, hiding a walk across
-    # resources — which is the pattern this event exists to surface. Hashing keeps
-    # the key bounded and stays complete if a caller adds a field.
-    fingerprint = hashlib.sha256(
-        json.dumps([group_id, extra], sort_keys=True, default=str).encode()
-    ).hexdigest()[:16]
     emit_audit_event(
         AuditAction.PERMISSION_DENIED,
         AuditOutcome.DENIED,
         actor=actor_from_user(user),
         resource_type="user_group" if group_id is not None else None,
         resource_id=group_id,
-        dedup_key=f"permission_denied:{user.id}:{gate}:{fingerprint}",
-        dedup_ttl_seconds=_DENIAL_DEDUP_TTL_SECONDS,
         extra={"gate": gate, **extra},
     )
 

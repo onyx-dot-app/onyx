@@ -98,9 +98,9 @@ gate refused: `within_scope`, `manages_group`, or `global_only`. Plain 403s from
 route-level permission check are not audited; they are ordinary access control, not
 an escalation signal.
 
-Denials are deduped per (user, gate, resource) on a 60-second window, so a retrying
-client collapses to one line while a scan across many resources still records each
-one.
+Every refusal is recorded. These gates see no resource identity, so suppressing
+repeats would also drop distinct attempts — a bulk update refusing two look-alike
+document sets is two separate events.
 
 ### SCIM-sourced events
 
