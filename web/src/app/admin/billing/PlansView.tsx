@@ -21,8 +21,7 @@ import {
 import "@/app/admin/billing/billing.css";
 import type { IconProps } from "@opal/types";
 import Card from "@/refresh-components/cards/Card";
-import Button from "@/refresh-components/buttons/Button";
-import { Button as OpalButton } from "@opal/components";
+import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import { Section } from "@/layouts/general-layouts";
 
@@ -144,32 +143,36 @@ function PlanCard({
         {/* Button */}
         <div className="plan-card-button">
           {isCurrentPlan ? (
-            // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
-            <Button tertiary transient className="pointer-events-none">
+            // Not a button: it states which plan you are on. It only ever
+            // wore a button so it would fill the same slot, which `w-full` and
+            // the shared 2.25rem box now do directly.
+            <div className="w-full flex items-center justify-center rounded-12 p-2 bg-background-tint-00">
               <Text mainUiAction text03>
                 Your Current Plan
               </Text>
-            </Button>
+            </div>
           ) : href ? (
-            <OpalButton
+            <Button
               prominence="secondary"
               href={href}
               target="_blank"
               rel="noopener noreferrer"
             >
               {buttonLabel}
-            </OpalButton>
+            </Button>
           ) : onClick ? (
-            <OpalButton onClick={onClick} icon={ButtonIcon}>
+            <Button onClick={onClick} icon={ButtonIcon}>
               {buttonLabel}
-            </OpalButton>
+            </Button>
           ) : (
-            // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
-            <Button tertiary transient className="pointer-events-none">
+            // Not a button: it states which plan you are on. It only ever
+            // wore a button so it would fill the same slot, which `w-full` and
+            // the shared 2.25rem box now do directly.
+            <div className="w-full flex items-center justify-center rounded-12 p-2 bg-background-tint-00">
               <Text mainUiAction text03>
                 Included in your plan
               </Text>
-            </Button>
+            </div>
           )}
         </div>
       </Section>

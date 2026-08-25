@@ -1,8 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Button from "@/refresh-components/buttons/Button";
-import { Button as OpalButton, Divider } from "@opal/components";
+import { Button, Checkbox, Divider, Tooltip } from "@opal/components";
 import {
   ConfigurableSources,
   CredentialFieldSpec,
@@ -29,9 +28,7 @@ import { DropdownMenuItemWithTooltip } from "@/components/ui/dropdown-menu-with-
 import { toast } from "@opal/layouts";
 
 import { Badge } from "@/components/ui/badge";
-import { Tooltip } from "@opal/components";
 import { ListFieldInput } from "@/refresh-components/inputs/ListFieldInput";
-import { Checkbox } from "@opal/components";
 import { SvgSettings, SvgSimpleLoader } from "@opal/icons";
 
 export interface FederatedConnectorFormProps {
@@ -796,9 +793,9 @@ export function FederatedConnectorForm({
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <div>
-                  <OpalButton prominence="secondary" icon={SvgSettings}>
+                  <Button prominence="secondary" icon={SvgSettings}>
                     Manage
-                  </OpalButton>
+                  </Button>
                 </div>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
@@ -855,22 +852,20 @@ export function FederatedConnectorForm({
                 </div>
               )}
 
-              {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
-              <Button
-                type="button"
-                secondary
-                onClick={handleValidateCredentials}
-                disabled={isValidating || !formState.schema}
-                className="flex ml-auto"
-              >
-                {isValidating ? "Validating..." : "Validate"}
-              </Button>
-              {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
+              <div className="ml-auto">
+                <Button
+                  type="button"
+                  prominence="secondary"
+                  onClick={handleValidateCredentials}
+                  disabled={isValidating || !formState.schema}
+                >
+                  {isValidating ? "Validating..." : "Validate"}
+                </Button>
+              </div>
               <Button
                 type="submit"
                 disabled={isSubmitting || !formState.schema}
-                className="flex"
-                leftIcon={isSubmitting ? SvgSimpleLoader : undefined}
+                icon={isSubmitting ? SvgSimpleLoader : undefined}
               >
                 {isSubmitting
                   ? isEditMode

@@ -5,8 +5,7 @@ import { markdown } from "@opal/utils";
 import { Section } from "@/layouts/general-layouts";
 import { Content, InputErrorText, InputVertical, toast } from "@opal/layouts";
 import Card from "@/refresh-components/cards/Card";
-import Button from "@/refresh-components/buttons/Button";
-import { Button as OpalButton, MessageCard } from "@opal/components";
+import { Button, MessageCard } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import InfoBlock from "@/refresh-components/messages/InfoBlock";
 import InputNumber from "@/refresh-components/inputs/InputNumber";
@@ -328,14 +327,14 @@ function SubscriptionCard({
               to make changes.
             </Text>
           ) : disabled ? (
-            <OpalButton
+            <Button
               disabled={isReconnecting}
               prominence="secondary"
               onClick={handleReconnect}
               rightIcon={SvgArrowRight}
             >
               {isReconnecting ? "Connecting..." : "Connect to Stripe"}
-            </OpalButton>
+            </Button>
           ) : (
             <Section
               flexDirection="row"
@@ -345,40 +344,37 @@ function SubscriptionCard({
               width="auto"
             >
               {canEndTrialEarly && (
-                <OpalButton
+                <Button
                   disabled={isEndingTrial}
                   onClick={handleEndTrial}
                   rightIcon={SvgArrowRight}
                 >
                   {isEndingTrial ? "Upgrading..." : "Upgrade now"}
-                </OpalButton>
+                </Button>
               )}
               {/* Cloud has no local license to pull. Self-hosted refreshes
                   itself only inside LICENSE_RECLAIM_WINDOW, so a change made
                   earlier in the period needs a manual pull. */}
               {!NEXT_PUBLIC_CLOUD_ENABLED && (
-                <OpalButton
+                <Button
                   disabled={isSyncing}
                   prominence="secondary"
                   onClick={handleSyncLicense}
                 >
                   {isSyncing ? "Syncing..." : "Sync License"}
-                </OpalButton>
+                </Button>
               )}
-              <OpalButton
+              <Button
                 prominence={canEndTrialEarly ? "secondary" : "primary"}
                 onClick={handleManagePlan}
                 rightIcon={SvgExternalLink}
               >
                 Manage Plan
-              </OpalButton>
+              </Button>
             </Section>
           )}
-          {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
-          <Button tertiary onClick={onViewPlans} className="billing-text-link">
-            <Text secondaryBody text03>
-              View Plan Details
-            </Text>
+          <Button prominence="tertiary" onClick={onViewPlans}>
+            View Plan Details
           </Button>
         </Section>
       </Section>
@@ -493,13 +489,13 @@ function SeatsCard({
             sizePreset="main-content"
             variant="section"
           />
-          <OpalButton
+          <Button
             disabled={isSubmitting}
             prominence="secondary"
             onClick={handleCancel}
           >
             Cancel
-          </OpalButton>
+          </Button>
         </Section>
 
         <div className="billing-content-area">
@@ -574,14 +570,14 @@ function SeatsCard({
               No changes to your billing.
             </Text>
           )}
-          <OpalButton
+          <Button
             disabled={
               isSubmitting || newSeatCount === totalSeats || isBelowMinimum
             }
             onClick={handleConfirm}
           >
             {isSubmitting ? "Saving..." : "Confirm Change"}
-          </OpalButton>
+          </Button>
         </Section>
       </Card>
     );
@@ -611,22 +607,22 @@ function SeatsCard({
           height="auto"
           width="auto"
         >
-          <OpalButton
+          <Button
             prominence="tertiary"
             href="/admin/users"
             icon={SvgExternalLink}
           >
             View Users
-          </OpalButton>
+          </Button>
           {!hideUpdateSeats && (
-            <OpalButton
+            <Button
               disabled={isLoadingUsers || disabled || !billing}
               prominence="secondary"
               onClick={handleStartEdit}
               icon={SvgPlus}
             >
               Update Seats
-            </OpalButton>
+            </Button>
           )}
         </Section>
       </Section>
@@ -673,13 +669,13 @@ function PaymentSection({ billing }: { billing: BillingInformation }) {
                 title="Visa ending in 1234"
                 description="Payment method"
               />
-              <OpalButton
+              <Button
                 prominence="tertiary"
                 onClick={handleOpenPortal}
                 rightIcon={SvgExternalLink}
               >
                 Update
-              </OpalButton>
+              </Button>
             </Section>
           </Card>
           {lastPaymentDate && (
@@ -695,13 +691,13 @@ function PaymentSection({ billing }: { billing: BillingInformation }) {
                   title={lastPaymentDate}
                   description="Last payment"
                 />
-                <OpalButton
+                <Button
                   prominence="tertiary"
                   onClick={handleOpenPortal}
                   rightIcon={SvgExternalLink}
                 >
                   View Invoice
-                </OpalButton>
+                </Button>
               </Section>
             </Card>
           )}

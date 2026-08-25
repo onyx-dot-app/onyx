@@ -1,4 +1,4 @@
-import { Modal } from "@opal/components";
+import { Button, Modal } from "@opal/components";
 import {
   Table,
   TableBody,
@@ -9,7 +9,6 @@ import {
 } from "@/components/ui/table";
 import { IndexAttemptError } from "./types";
 import { localizeAndPrettify } from "@opal/time";
-import Button from "@/refresh-components/buttons/Button";
 import Text from "@/refresh-components/texts/Text";
 import { PageSelector } from "@/components/PageSelector";
 import { useMemo } from "react";
@@ -145,10 +144,9 @@ export default function IndexAttemptErrorsModal({
         </Modal.Body>
         <Modal.Footer>
           {hasUnresolvedErrors && (
-            // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
-            <Button onClick={onResolveAll} className="ml-4 whitespace-nowrap">
-              Resolve All
-            </Button>
+            <div className="ml-4">
+              <Button onClick={onResolveAll}>Resolve All</Button>
+            </div>
           )}
         </Modal.Footer>
       </Modal.Content>

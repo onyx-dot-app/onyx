@@ -409,15 +409,14 @@ interface InfoCardProps {
 
 ```typescript
 // ✅ Good
-import Button from '@/refresh-components/buttons/Button'
-import InputTypeIn from '@/refresh-components/inputs/InputTypeIn'
-import SvgPlusCircle from '@/icons/plus-circle'
+import { Button, InputTypeIn } from '@opal/components'
+import { SvgPlusCircle } from '@opal/icons'
 
 function ContactForm() {
   return (
     <form>
       <InputTypeIn placeholder="Search..." />
-      <Button type="submit" leftIcon={SvgPlusCircle}>Submit</Button>
+      <Button type="submit" icon={SvgPlusCircle}>Submit</Button>
     </form>
   )
 }

@@ -17,7 +17,7 @@ import {
   Permission,
 } from "@/lib/types";
 import { TextFormField } from "@/components/Field";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
 import { IsPublicGroupSelector } from "@/components/IsPublicGroupSelector";
@@ -262,15 +262,15 @@ export const DocumentSetCreationForm = ({
               </div>
 
               <div className="flex mt-6 pt-4 border-t border-border-02">
-                {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
-                <Button
-                  type="submit"
-                  disabled={props.isSubmitting}
-                  className="w-56 mx-auto"
-                  primary
-                >
-                  {isUpdate ? "Update Document Set" : "Create Document Set"}
-                </Button>
+                <div className="mx-auto w-56">
+                  <Button
+                    type="submit"
+                    disabled={props.isSubmitting}
+                    width="full"
+                  >
+                    {isUpdate ? "Update Document Set" : "Create Document Set"}
+                  </Button>
+                </div>
               </div>
             </Form>
           );

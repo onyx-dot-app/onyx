@@ -3,14 +3,14 @@
 import React from "react";
 import { DayButton, DayPicker, getDefaultClassNames } from "react-day-picker";
 import { cn } from "@opal/utils";
-import { Button as OpalButton } from "@opal/components";
+import { Button } from "@opal/components";
 import { SvgChevronDown, SvgChevronLeft, SvgChevronRight } from "@opal/icons";
-import Button from "@/refresh-components/buttons/Button";
 
 function CalendarDayButton({
   className,
   day,
   modifiers,
+  children,
   ...props
 }: React.ComponentProps<typeof DayButton>) {
   const ref = React.useRef<HTMLButtonElement>(null);
@@ -19,12 +19,11 @@ function CalendarDayButton({
   }, [modifiers.focused]);
 
   return (
-    // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
     <Button
       ref={ref}
-      tertiary
-      className="w-full"
-      transient={modifiers.selected}
+      prominence="tertiary"
+      width="full"
+      interaction={modifiers.selected ? "hover" : "rest"}
       data-day={day.date.toLocaleDateString()}
       data-selected-single={
         modifiers.selected &&
@@ -36,7 +35,12 @@ function CalendarDayButton({
       data-range-end={modifiers.range_end}
       data-range-middle={modifiers.range_middle}
       {...props}
-    />
+    >
+      {/* DayPicker passes the day through `formatDay`, which is declared to
+          return a string — but it types this slot as `ReactNode`, which the
+          Button does not take. Narrow it, and fall back to the date itself. */}
+      {typeof children === "string" ? children : String(day.date.getDate())}
+    </Button>
   );
 }
 
@@ -144,26 +148,14 @@ export default function Calendar({
         Chevron: ({ className, orientation, size: _size, ...props }) => {
           if (orientation === "left")
             return (
-              <OpalButton
-                icon={SvgChevronLeft}
-                prominence="tertiary"
-                {...props}
-              />
+              <Button icon={SvgChevronLeft} prominence="tertiary" {...props} />
             );
           if (orientation === "right")
             return (
-              <OpalButton
-                icon={SvgChevronRight}
-                prominence="tertiary"
-                {...props}
-              />
+              <Button icon={SvgChevronRight} prominence="tertiary" {...props} />
             );
           return (
-            <OpalButton
-              icon={SvgChevronDown}
-              prominence="tertiary"
-              {...props}
-            />
+            <Button icon={SvgChevronDown} prominence="tertiary" {...props} />
           );
         },
         DayButton: CalendarDayButton,
