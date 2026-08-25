@@ -6,6 +6,7 @@ import type { Route } from "next";
 import {
   Button,
   InputTypeIn,
+  LineItemButton,
   MessageCard,
   Popover,
   Text,
@@ -38,7 +39,6 @@ import ImportSkillsFromGitHubModal from "@/sections/modals/skills/ImportSkillsFr
 import SkillPreviewModal from "@/sections/modals/SkillPreviewModal";
 import type { BuiltinSkill, CustomSkill } from "@/lib/skills/types";
 import { stageSkillCreationDraft } from "@/lib/skills/creationDraft";
-import LineItem from "@/refresh-components/buttons/LineItem";
 import { isSkillNameConflict, setSkillEnabled } from "@/lib/skills/api";
 
 // ---------------------------------------------------------------------------
@@ -292,39 +292,39 @@ export default function SkillsPage() {
             </Popover.Trigger>
             <Popover.Content align="end" sideOffset={4} width="xl">
               <Popover.Menu>
-                <LineItem
+                <LineItemButton
+                  sizePreset="main-ui"
+                  rounding="sm"
                   icon={SvgEdit}
                   description="Write the instructions and add supporting files in Onyx."
-                  wrapDescription
                   onClick={() => {
                     setCreateMenuOpen(false);
                     router.push("/craft/v1/skills/new" as Route);
                   }}
-                >
-                  Start from scratch
-                </LineItem>
-                <LineItem
+                  title="Start from scratch"
+                />
+                <LineItemButton
+                  sizePreset="main-ui"
+                  rounding="sm"
                   icon={SvgUploadCloud}
                   description="Import a SKILL.md file, ZIP file, or skill folder."
-                  wrapDescription
                   onClick={() => {
                     setCreateMenuOpen(false);
                     setCreateOpen(true);
                   }}
-                >
-                  Upload a skill
-                </LineItem>
-                <LineItem
+                  title="Upload a skill"
+                />
+                <LineItemButton
+                  sizePreset="main-ui"
+                  rounding="sm"
                   icon={SvgGithub}
                   description="Import one or more skills from a repository."
-                  wrapDescription
                   onClick={() => {
                     setCreateMenuOpen(false);
                     setGitHubImportOpen(true);
                   }}
-                >
-                  Import from GitHub
-                </LineItem>
+                  title="Import from GitHub"
+                />
               </Popover.Menu>
             </Popover.Content>
           </Popover>

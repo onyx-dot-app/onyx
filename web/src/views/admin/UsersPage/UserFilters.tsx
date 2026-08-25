@@ -10,12 +10,14 @@ import {
   SvgUsers,
 } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
-import { FilterButton } from "@opal/components";
-import { Popover } from "@opal/components";
-import { InputTypeIn } from "@opal/components";
-import LineItem from "@/refresh-components/buttons/LineItem";
+import {
+  FilterButton,
+  InputTypeIn,
+  LineItemButton,
+  Popover,
+  ShadowDiv,
+} from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
-import { ShadowDiv } from "@opal/components";
 import {
   AccountType,
   ACCOUNT_TYPE_LABELS,
@@ -182,28 +184,30 @@ export default function UserFilters({
         </Popover.Trigger>
         <Popover.Content align="start">
           <div className="flex flex-col gap-1 p-1 min-w-[200px]">
-            <LineItem
+            <LineItemButton
+              sizePreset="main-ui"
+              rounding="sm"
               icon={!hasTypeFilter ? SvgCheck : SvgUsers}
-              selected={!hasTypeFilter}
-              emphasized={!hasTypeFilter}
+              state={!hasTypeFilter ? "selected" : "empty"}
+              selectVariant={!hasTypeFilter ? "select-heavy" : "select-light"}
               onClick={() => onAccountTypesChange([])}
-            >
-              All Account Types
-            </LineItem>
+              title="All Account Types"
+            />
             {FILTERABLE_ACCOUNT_TYPES.map(([type, label]) => {
               const isSelected = selectedAccountTypes.includes(type);
               const typeIcon = ACCOUNT_TYPE_ICONS[type] ?? SvgUser;
               return (
-                <LineItem
+                <LineItemButton
+                  sizePreset="main-ui"
+                  rounding="sm"
                   key={type}
                   icon={isSelected ? SvgCheck : typeIcon}
-                  selected={isSelected}
-                  emphasized={isSelected}
+                  state={isSelected ? "selected" : "empty"}
+                  selectVariant={isSelected ? "select-heavy" : "select-light"}
                   onClick={() => toggleAccountType(type)}
                   rightChildren={<CountBadge count={accountTypeCounts[type]} />}
-                >
-                  {label}
-                </LineItem>
+                  title={label}
+                />
               );
             })}
           </div>
@@ -237,28 +241,30 @@ export default function UserFilters({
               searchIcon
               variant="internal"
             />
-            <LineItem
+            <LineItemButton
+              sizePreset="main-ui"
+              rounding="sm"
               icon={!hasGroupFilter ? SvgCheck : SvgUsers}
-              selected={!hasGroupFilter}
-              emphasized={!hasGroupFilter}
+              state={!hasGroupFilter ? "selected" : "empty"}
+              selectVariant={!hasGroupFilter ? "select-heavy" : "select-light"}
               onClick={() => onGroupsChange([])}
-            >
-              All Groups
-            </LineItem>
+              title="All Groups"
+            />
             <ShadowDiv className="flex flex-col gap-1 max-h-[240px]">
               {filteredGroups.map((group) => {
                 const isSelected = selectedGroups.includes(group.id);
                 return (
-                  <LineItem
+                  <LineItemButton
+                    sizePreset="main-ui"
+                    rounding="sm"
                     key={group.id}
                     icon={isSelected ? SvgCheck : SvgUsers}
-                    selected={isSelected}
-                    emphasized={isSelected}
+                    state={isSelected ? "selected" : "empty"}
+                    selectVariant={isSelected ? "select-heavy" : "select-light"}
                     onClick={() => toggleGroup(group.id)}
                     rightChildren={<CountBadge count={group.memberCount} />}
-                  >
-                    {group.name}
-                  </LineItem>
+                    title={group.name}
+                  />
                 );
               })}
               {filteredGroups.length === 0 && (
@@ -285,28 +291,30 @@ export default function UserFilters({
         </Popover.Trigger>
         <Popover.Content align="start">
           <div className="flex flex-col gap-1 p-1 min-w-[200px]">
-            <LineItem
+            <LineItemButton
+              sizePreset="main-ui"
+              rounding="sm"
               icon={!hasStatusFilter ? SvgCheck : SvgUser}
-              selected={!hasStatusFilter}
-              emphasized={!hasStatusFilter}
+              state={!hasStatusFilter ? "selected" : "empty"}
+              selectVariant={!hasStatusFilter ? "select-heavy" : "select-light"}
               onClick={() => onStatusesChange([])}
-            >
-              All Status
-            </LineItem>
+              title="All Status"
+            />
             {FILTERABLE_STATUSES.map(([status, label]) => {
               const isSelected = selectedStatuses.includes(status);
               const countKey = STATUS_COUNT_KEY[status];
               return (
-                <LineItem
+                <LineItemButton
+                  sizePreset="main-ui"
+                  rounding="sm"
                   key={status}
                   icon={isSelected ? SvgCheck : SvgUser}
-                  selected={isSelected}
-                  emphasized={isSelected}
+                  state={isSelected ? "selected" : "empty"}
+                  selectVariant={isSelected ? "select-heavy" : "select-light"}
                   onClick={() => toggleStatus(status)}
                   rightChildren={<CountBadge count={statusCounts[countKey]} />}
-                >
-                  {label}
-                </LineItem>
+                  title={label}
+                />
               );
             })}
           </div>
