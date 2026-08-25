@@ -2,16 +2,19 @@
 # It asserts that the PR author and every commit author of changes to the ee/ directories
 # are inside the organization. "Inside the organization" is approximated as "has write
 # access to this repository", because the default GITHUB_TOKEN cannot read org membership.
-# TODO: Decide the long-term ownership model for the ee/ directories. A future version can
-# check true org membership (needs an org-scoped token) and add an explicit-approval path
-# (for example, a maintainer-applied label).
+# TODO(jmelahman): Decide the long-term ownership model for the ee/ directories. A future
+# version can check true org membership (needs an org-scoped token) and add an
+# explicit-approval path (for example, a maintainer-applied label).
 name: Ensure EE changes come from org members
 concurrency:
-  group: Ensure-EE-changes-come-from-org-members-${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  group: Ensure-EE-changes-come-from-org-members-${{ github.workflow }}-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 on:
-  pull_request:
+  # pull_request_target runs the base-branch version of this workflow, so a PR
+  # cannot edit this file to bypass the check. This is safe ONLY because the job
+  # never checks out or executes PR code. Do not add a checkout step.
+  pull_request_target: # zizmor: ignore[dangerous-triggers]
     paths:
       - "backend/ee/**"
       - "web/src/ee/**"
