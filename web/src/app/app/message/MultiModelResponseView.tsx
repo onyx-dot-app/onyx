@@ -20,6 +20,7 @@ import {
   setMostVisibleResponseId,
 } from "@/app/app/message/multiModel";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
+import useScreenSize from "@/hooks/useScreenSize";
 import { cn } from "@opal/utils";
 
 export interface MultiModelResponseViewProps {
@@ -252,17 +253,12 @@ export default function MultiModelResponseView({
     [responses, hiddenPanels]
   );
 
-  // One-at-a-time carousel when the panels can't all fit side by side. Narrow
-  // width outranks selection mode, so picking or clearing a preference never
-  // swaps the carousel out from under the user.
-  const requiredSideBySideW =
-    visibleResponses.length * MIN_PANEL_W +
-    (visibleResponses.length - 1) * PANEL_GAP;
+  // One-at-a-time carousel below the small-screen breakpoint, one step above
+  // the sidebar collapse so it lands before the page chrome swaps. It also
+  // outranks selection mode, a preference change never swaps it out.
+  const { isSmallScreen } = useScreenSize();
   const showNarrowCarousel =
-    !readOnly &&
-    visibleResponses.length > 1 &&
-    containerW > 0 &&
-    containerW < requiredSideBySideW;
+    !readOnly && visibleResponses.length > 1 && containerW > 0 && isSmallScreen;
 
   const toggleVisibility = useCallback(
     (modelIndex: number) => {
@@ -490,6 +486,25 @@ export default function MultiModelResponseView({
     !showNarrowCarousel &&
     (isActivelySelected || hasEnteredSelection);
 
+  // Crossing between layouts swaps instantly, a short fade covers the swap.
+  // In-layout animations (select, switch, deselect) are untouched.
+  const layoutKind = showSelectionMode
+    ? "selection"
+    : showNarrowCarousel
+      ? "carousel"
+      : "row";
+  const layoutKindRef = useRef(layoutKind);
+  useEffect(() => {
+    if (layoutKindRef.current === layoutKind) return;
+    layoutKindRef.current = layoutKind;
+    if (readOnly || !rootEl) return;
+    const anim = rootEl.animate([{ opacity: 0.5 }, { opacity: 1 }], {
+      duration: 150,
+      easing: "ease-out",
+    });
+    return () => anim.cancel();
+  }, [layoutKind, rootEl, readOnly]);
+
   // Trigger the slide-out animation one frame after a preferred panel is selected.
   // Uses isActivelySelected (not showSelectionMode) so re-selecting after a
   // deselect still triggers the animation.
@@ -511,6 +526,13 @@ export default function MultiModelResponseView({
   const [carouselPos, setCarouselPos] = useState(
     preferredCarouselPos !== -1 ? preferredCarouselPos : lastCarouselPos
   );
+  // The track transform animates only for arrow navigation. Entry snaps and
+  // resizes reposition instantly so crossing the break never plays a slide.
+  const [carouselSliding, setCarouselSliding] = useState(false);
+  const navToCarouselPos = useCallback((pos: number) => {
+    setCarouselSliding(true);
+    setCarouselPos(pos);
+  }, []);
   // Breaking into the carousel keeps continuity with the wide layout: land on
   // the preferred card when one exists, else keep the last carousel position.
   const wasNarrowRef = useRef(showNarrowCarousel);
@@ -734,7 +756,7 @@ export default function MultiModelResponseView({
           provider: prevResponse.provider,
           modelName: prevResponse.modelName,
           displayName: prevResponse.displayName,
-          onClick: () => setCarouselPos(clampedCarouselPos - 1),
+          onClick: () => navToCarouselPos(clampedCarouselPos - 1),
         }
       : undefined;
     const nextNav = nextResponse
@@ -742,7 +764,7 @@ export default function MultiModelResponseView({
           provider: nextResponse.provider,
           modelName: nextResponse.modelName,
           displayName: nextResponse.displayName,
-          onClick: () => setCarouselPos(clampedCarouselPos + 1),
+          onClick: () => navToCarouselPos(clampedCarouselPos + 1),
         }
       : undefined;
     return (
@@ -755,7 +777,13 @@ export default function MultiModelResponseView({
             transform: `translateX(-${
               clampedCarouselPos * (containerW + NARROW_CAROUSEL_GAP)
             }px)`,
-            transition: "transform 0.45s cubic-bezier(0.2, 0, 0, 1)",
+            transition: carouselSliding
+              ? "transform 0.45s cubic-bezier(0.2, 0, 0, 1)"
+              : "none",
+          }}
+          onTransitionEnd={(e) => {
+            if (e.target === e.currentTarget && e.propertyName === "transform")
+              setCarouselSliding(false);
           }}
         >
           {visibleResponses.map((r, i) => {
