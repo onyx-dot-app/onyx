@@ -94,7 +94,7 @@ export default function CreateConnectorSidebar() {
 
   return (
     <CreateConnectorSidebarShell>
-      <div className="relative mx-2 flex flex-col">
+      <div className="relative mx-2 flex flex-col mt-2">
         {settingSteps.map((step, index) => {
           // The form numbers steps absolutely (0 = Credential, 1 = Connector,
           // 2 = Advanced) and clamps `formStep` to >= 1 when there's no

@@ -363,7 +363,7 @@ function SidebarSection({
           </Disabled>
         </Hoverable.Root>
       ) : (
-        <Spacer rem={0.5} />
+        <Spacer rem={1} />
       )}
       {children}
     </div>
