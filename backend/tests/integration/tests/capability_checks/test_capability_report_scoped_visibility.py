@@ -405,3 +405,80 @@ def test_scoped_manager_cannot_trigger_foreign_pairings(
     accepted = response.json()
     assert accepted["run_status"] == CapabilityReportRunStatus.RUNNING.value
     assert accepted["connector_id"] == in_group_connector.id
+
+
+@pytest.mark.skipif(
+    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    reason="Scoped group managers are enterprise only",
+)
+def test_managed_pairing_is_triggerable_without_credential_visibility(
+    admin_user: DATestUser,
+) -> None:
+    # Precondition. An admin-created credential paired into the manager's
+    # managed group: the trigger-side mirror of the read test above. The
+    # credential filter is creator-only for scoped managers, so only pairing
+    # visibility can admit the run.
+    suffix = uuid4().hex[:8]
+    manager = UserManager.create(name=f"trigger_manager_{suffix}")
+    managed_group = UserGroupManager.create(
+        name=f"trigger_managed_{suffix}",
+        user_ids=[manager.id],
+        cc_pair_ids=[],
+        user_performing_action=admin_user,
+    )
+    UserGroupManager.wait_for_sync(
+        user_groups_to_check=[managed_group],
+        user_performing_action=admin_user,
+    )
+    set_manager_response = UserGroupManager.set_manager(
+        user_group=managed_group,
+        user=manager,
+        is_manager=True,
+        user_performing_action=admin_user,
+    )
+    assert set_manager_response.status_code == 200
+    # Group edits mark the group as syncing; cc-pair creation refuses to
+    # relate a group mid-sync, so wait again before pairing.
+    UserGroupManager.wait_for_sync(
+        user_groups_to_check=[managed_group],
+        user_performing_action=admin_user,
+    )
+    credential = CredentialManager.create(
+        source=DocumentSource.MOCK_CONNECTOR,
+        admin_public=True,
+        curator_public=False,
+        groups=[],
+        user_performing_action=admin_user,
+    )
+    connector = ConnectorManager.create(
+        source=DocumentSource.MOCK_CONNECTOR,
+        input_type=InputType.POLL,
+        connector_specific_config=_MOCK_CONFIG,
+        user_performing_action=admin_user,
+    )
+    CCPairManager.create(
+        connector_id=connector.id,
+        credential_id=credential.id,
+        access_type=AccessType.PRIVATE,
+        groups=[managed_group.id],
+        user_performing_action=admin_user,
+    )
+
+    # Under test and postcondition. Pairing visibility alone authorizes the
+    # connector-scoped trigger; the credential-scoped trigger stays gated on
+    # credential visibility and reads as inaccessible.
+    response = client.post(
+        _check_url(credential.id),
+        json={"connector_id": connector.id},
+        headers=manager.headers,
+    )
+    response.raise_for_status()
+    accepted = response.json()
+    assert accepted["run_status"] == CapabilityReportRunStatus.RUNNING.value
+    assert accepted["connector_id"] == connector.id
+    credential_scope_response = client.post(
+        _check_url(credential.id), json={}, headers=manager.headers
+    )
+    assert credential_scope_response.status_code == 404
+    error_code = credential_scope_response.json()["error_code"]
+    assert error_code == "CREDENTIAL_NOT_FOUND"

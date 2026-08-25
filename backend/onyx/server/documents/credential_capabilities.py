@@ -46,7 +46,10 @@ from onyx.db.enums import CapabilityCheckTrigger, CapabilityReportRunStatus, Per
 from onyx.db.models import CredentialCapabilityReportRow, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
+
+logger = setup_logger()
 
 router = APIRouter(prefix="/manage")
 
@@ -139,10 +142,20 @@ def trigger_capability_check(
     the staleness bound makes this a no-op returning the standing row. A
     connector-scoped trigger requires the pairing to be visible to the caller.
     """
-    # GATE 2 for ``allow_scope``: the user-filtered fetch is the visibility
-    # check, and an unknown credential is indistinguishable from an
-    # inaccessible one.
+    # GATE 2 for ``allow_scope``, mirroring the report reads: credential
+    # visibility authorizes the credential scope; pairing visibility authorizes
+    # the connector scope on its own, so a pairing manager triggers its run
+    # even when the credential is outside their credential visibility. An
+    # unknown credential is indistinguishable from an inaccessible one.
+    pairing_visible = request.connector_id is not None and _connector_pairing_visible(
+        db_session, request.connector_id, credential_id, user
+    )
     credential = fetch_credential_by_id_for_user(credential_id, user, db_session)
+    if credential is None and pairing_visible:
+        # The run needs the credential row itself; the unfiltered fetch also
+        # keeps an unknown credential a 404 for global managers, whose pairing
+        # shortcut checks nothing.
+        credential = fetch_credential_by_id(credential_id, db_session)
     if credential is None:
         raise OnyxError(
             OnyxErrorCode.CREDENTIAL_NOT_FOUND,
@@ -156,12 +169,10 @@ def trigger_capability_check(
         )
     if request.connector_id is not None:
         connector = fetch_connector_by_id(request.connector_id, db_session)
-        # GATE 2 for the connector scope, mirroring the report reads: one
-        # shape for missing and inaccessible, so neither connector existence
-        # nor pairing membership leaks. The source check stays behind it.
-        if connector is None or not _connector_pairing_visible(
-            db_session, request.connector_id, credential_id, user
-        ):
+        # One shape for missing and inaccessible, so neither connector
+        # existence nor pairing membership leaks. The source check stays
+        # behind it.
+        if connector is None or not pairing_visible:
             raise OnyxError(
                 OnyxErrorCode.CONNECTOR_NOT_FOUND,
                 f"Connector {request.connector_id} does not exist or is not "
@@ -216,6 +227,13 @@ def trigger_capability_check(
             expires=CAPABILITY_CHECK_RUN_STALENESS_SECONDS,
         )
     except Exception:
+        # The 503 handler logs no traceback, so record the cause here (broker
+        # down and a bad task payload must stay distinguishable in the logs).
+        logger.exception(
+            "Capability check enqueue failed for credential %s, connector %s.",
+            credential_id,
+            request.connector_id,
+        )
         # No run was enqueued: FAILED_TO_RUN is the truth pollers should read,
         # and it does not block an immediate re-trigger.
         mark_capability_run_failed(
