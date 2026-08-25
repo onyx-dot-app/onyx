@@ -44,7 +44,7 @@ export default getRequestConfig(async () => {
   }
 
   // SAFETY: same catalog shape as en.json, enforced by the i18n catalog test.
-  const overlay = (await import(`./messages/${locale}.json`))
+  const overlay = (await import(`@/i18n/messages/${locale}.json`))
     .default as MessageTree;
   return { locale, messages: withEnglishFallback(english, overlay) };
 });

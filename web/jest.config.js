@@ -169,6 +169,7 @@ module.exports = {
         "**/src/app/**/hooks/*.test.ts", // Pure packet processor tests
         "**/src/app/**/__tests__/*.test.ts",
         "**/src/hooks/**/*.test.ts",
+        "**/src/i18n/**/*.test.ts",
         "**/src/refresh-components/**/*.test.ts",
         "**/src/refresh-pages/**/*.test.ts",
         "**/src/sections/**/*.test.ts",
