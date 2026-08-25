@@ -162,6 +162,9 @@ it("shows an explicit tooltip on a disabled tab", async () => {
   const tab = screen.getByText("Groups").closest(".opal-sidebar-tab")!;
   const overlay = tab.querySelector('[aria-hidden="true"].inset-0');
   expect(overlay).not.toBeNull();
+  // Disabled is `aria-disabled` on a div, never a native disabled control:
+  // browsers drop pointer events inside one, which would mute the trigger.
+  expect(tab.querySelector("button[disabled]")).toBeNull();
   await user.hover(overlay!);
   await waitFor(() => {
     expect(screen.getByRole("tooltip")).toHaveTextContent("Enterprise only");
