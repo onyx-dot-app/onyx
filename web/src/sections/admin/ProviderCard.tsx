@@ -89,9 +89,9 @@ export default function ProviderCard({
   selectedLabel = "Current Default",
   "aria-label": ariaLabel,
 }: ProviderCardProps) {
-  // The card is a clickable div, so it has no implicit accessible name. Falling
-  // back to the title gives every card one, and gives tests something to select
-  // by that describes the card rather than how it looks.
+  // A name to select the card by — one that says which provider it is rather
+  // than what it looks like. Not an accessibility fix: the card is a roleless
+  // div with an onClick, so a label alone leaves it pointer-only.
   const label = ariaLabel ?? title;
   const isDisconnected = status === "disconnected";
   const isConnected = status === "connected";
