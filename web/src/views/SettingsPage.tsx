@@ -1135,8 +1135,10 @@ function ChatPreferencesSettings() {
   const settings = useSettings();
   const userTemperatureDefault = user?.preferences.temperature_default ?? null;
   const userEffortDefault = user?.preferences.reasoning_effort_default ?? null;
+  // 0 mirrors the backend GEN_AI_TEMPERATURE fallback an untouched chat
+  // actually runs with, so the parked slider never overstates the default.
   const [draftTemperature, setDraftTemperature] = useState(
-    userTemperatureDefault ?? 0.5
+    userTemperatureDefault ?? 0
   );
   const [draftEffortStop, setDraftEffortStop] = useState(() => {
     const stop = reasoningStopIndex(userEffortDefault);
