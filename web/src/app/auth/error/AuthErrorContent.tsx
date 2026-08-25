@@ -3,32 +3,38 @@
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import Text from "@/refresh-components/texts/Text";
 import { Button } from "@opal/components";
+import { useTranslations } from "next-intl";
 
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 
-// Maps raw IdP/OAuth error codes to user-friendly messages.
-// If the message is a known code, we replace it; otherwise show it as-is.
-const ERROR_CODE_MESSAGES: Record<string, string> = {
-  OAUTH_USER_ALREADY_EXISTS:
-    "An account with this email already exists under a different sign-in method. Sign in the way you first did, or ask your admin to link this provider.",
-  LOGIN_BAD_CREDENTIALS:
-    "This account can't sign in. It may be deactivated. Contact your workspace admin.",
-  access_denied: "Access was denied by your identity provider.",
-  login_required: "You need to log in with your identity provider first.",
-  consent_required:
-    "Your identity provider requires consent before continuing.",
-  interaction_required:
-    "Additional interaction with your identity provider is required.",
-  invalid_scope: "The requested permissions are not available.",
-  server_error:
-    "Your identity provider encountered an error. Please try again.",
-  temporarily_unavailable:
-    "Your identity provider is temporarily unavailable. Please try again later.",
-};
+// Raw IdP/OAuth error codes that map to a friendlier translated message.
+// Any other code is shown to the user as-is.
+const KNOWN_ERROR_CODES = [
+  "OAUTH_USER_ALREADY_EXISTS",
+  "LOGIN_BAD_CREDENTIALS",
+  "access_denied",
+  "login_required",
+  "consent_required",
+  "interaction_required",
+  "invalid_scope",
+  "server_error",
+  "temporarily_unavailable",
+] as const;
 
-function resolveMessage(raw: string | null): string | null {
+type KnownErrorCode = (typeof KNOWN_ERROR_CODES)[number];
+
+function isKnownErrorCode(value: string): value is KnownErrorCode {
+  // SAFETY: the cast only widens the argument for the readonly-array
+  // `includes` signature; membership is still checked at runtime.
+  return KNOWN_ERROR_CODES.includes(value as KnownErrorCode);
+}
+
+function resolveMessage(
+  raw: string | null,
+  messages: Record<KnownErrorCode, string>
+): string | null {
   if (!raw) return null;
-  return ERROR_CODE_MESSAGES[raw] ?? raw;
+  return isKnownErrorCode(raw) ? messages[raw] : raw;
 }
 
 interface AuthErrorContentProps {
@@ -36,15 +42,27 @@ interface AuthErrorContentProps {
 }
 
 function AuthErrorContent({ message: rawMessage }: AuthErrorContentProps) {
-  const message = resolveMessage(rawMessage);
+  const t = useTranslations("auth");
+  const errorCodeMessages = {
+    OAUTH_USER_ALREADY_EXISTS: t("error.code.oauthUserAlreadyExists"),
+    LOGIN_BAD_CREDENTIALS: t("error.code.loginBadCredentials"),
+    access_denied: t("error.code.accessDenied"),
+    login_required: t("error.code.loginRequired"),
+    consent_required: t("error.code.consentRequired"),
+    interaction_required: t("error.code.interactionRequired"),
+    invalid_scope: t("error.code.invalidScope"),
+    server_error: t("error.code.serverError"),
+    temporarily_unavailable: t("error.code.temporarilyUnavailable"),
+  } satisfies Record<KnownErrorCode, string>;
+  const message = resolveMessage(rawMessage, errorCodeMessages);
   return (
     <AuthFlowContainer>
       <div className="flex flex-col items-center gap-4">
         <Text headingH2 text05>
-          Authentication Error
+          {t("error.heading.title")}
         </Text>
         <Text mainContentBody text03>
-          There was a problem with your login attempt.
+          {t("error.heading.description")}
         </Text>
         {/* TODO: Error card component */}
         <div className="w-full rounded-12 border border-status-error-05 bg-status-error-00 p-4">
@@ -55,40 +73,38 @@ function AuthErrorContent({ message: rawMessage }: AuthErrorContentProps) {
           ) : (
             <div className="flex flex-col gap-2 px-4">
               <Text mainContentEmphasis className="text-status-error-05">
-                Possible Issues:
+                {t("error.possibleIssues.title")}
               </Text>
               <Text as="li" mainContentBody className="text-status-error-05">
-                Incorrect or expired login credentials
+                {t("error.credentialsIssue.description")}
               </Text>
               <Text as="li" mainContentBody className="text-status-error-05">
-                Temporary authentication system disruption
+                {t("error.systemDisruptionIssue.description")}
               </Text>
               <Text as="li" mainContentBody className="text-status-error-05">
-                Account access restrictions or permissions
+                {t("error.accessRestrictionIssue.description")}
               </Text>
             </div>
           )}
         </div>
 
         <Button href="/auth/login" width="full">
-          Return to Login Page
+          {t("error.returnToLoginButton.label")}
         </Button>
 
         <Text mainContentBody text04>
-          {NEXT_PUBLIC_CLOUD_ENABLED ? (
-            <>
-              If you continue to experience problems, please reach out to the
-              Onyx team at{" "}
-              <a
-                href="mailto:support@onyx.app"
-                className="text-action-selection-05"
-              >
-                support@onyx.app
-              </a>
-            </>
-          ) : (
-            "If you continue to experience problems, please reach out to your system administrator for assistance."
-          )}
+          {NEXT_PUBLIC_CLOUD_ENABLED
+            ? t.rich("error.cloudSupportPrompt.text", {
+                link: (chunks) => (
+                  <a
+                    href="mailto:support@onyx.app"
+                    className="text-action-selection-05"
+                  >
+                    {chunks}
+                  </a>
+                ),
+              })
+            : t("error.selfHostedSupportPrompt.text")}
         </Text>
       </div>
     </AuthFlowContainer>

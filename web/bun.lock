@@ -80,6 +80,7 @@
         "zustand": "^5.0.8",
       },
       "devDependencies": {
+        "@formatjs/icu-messageformat-parser": "^3.5.17",
         "@oxlint/plugins": "^1.71.0",
         "@playwright/test": "^1.39.0",
         "@storybook/addon-docs": "10.5.0",
