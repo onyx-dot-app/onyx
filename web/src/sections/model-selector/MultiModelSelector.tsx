@@ -114,14 +114,16 @@ export default function MultiModelSelector({
     return !selectedKeys.has(key) && atMax;
   };
 
+  const toSelectedModel = (option: LLMOption): SelectedModel => ({
+    name: option.name,
+    provider: option.provider,
+    modelName: option.modelName,
+    modelConfigurationId: option.modelConfigurationId ?? null,
+    displayName: option.displayName,
+  });
+
   const handleSelect = (option: LLMOption) => {
-    const model: SelectedModel = {
-      name: option.name,
-      provider: option.provider,
-      modelName: option.modelName,
-      modelConfigurationId: option.modelConfigurationId ?? null,
-      displayName: option.displayName,
-    };
+    const model = toSelectedModel(option);
 
     if (replacingIndex !== null) {
       onReplace(replacingIndex, model);
@@ -141,6 +143,20 @@ export default function MultiModelSelector({
       if (selectedModels.length + 1 >= MAX_MODELS) {
         setOpen(false);
       }
+    }
+  };
+
+  // The settings button selects its model but keeps the popover open for the
+  // pane, and it never deselects: opening settings must not remove a model.
+  const handleDetailSelect = (option: LLMOption) => {
+    if (replacingIndex !== null) {
+      onReplace(replacingIndex, toSelectedModel(option));
+      setReplacingIndex(null);
+      return;
+    }
+    const key = llmOptionKey(option);
+    if (!selectedModels.some((m) => llmOptionKey(m) === key) && !atMax) {
+      onAdd(toSelectedModel(option));
     }
   };
 
@@ -264,6 +280,7 @@ export default function MultiModelSelector({
             isSelected={isSelected}
             isDisabled={isDisabled}
             modelDetail={modelDetail}
+            onDetailSelect={handleDetailSelect}
           />
         </Popover.Content>
       )}
