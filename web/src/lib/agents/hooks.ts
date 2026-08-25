@@ -190,8 +190,14 @@ export function usePinnedAgents() {
  * opening one owes this — the sidebar's own rows and the folded projects
  * popover both. It lives here so the two cannot drift.
  *
- * Does nothing for a chat whose agent is gone or not visible to this user,
- * which is how a deleted or inaccessible agent degrades.
+ * Three chats pin nothing: one whose agent is gone or invisible to this user,
+ * which is how a deleted or inaccessible agent degrades; one already pinned;
+ * and a plain chat, because the sidebar filters the Assistant out of the
+ * pinned list, so pinning it would write a row that is never drawn.
+ *
+ * A failed pin is swallowed. Opening the chat is what the user asked for and it
+ * has already happened by now — the pin rides along, and losing it is not worth
+ * an error the user cannot act on.
  */
 export function usePinChatAgent() {
   const { agents } = useAgents();
@@ -200,9 +206,14 @@ export function usePinChatAgent() {
   return useCallback(
     async (chatSession: ChatSession) => {
       const agent = agents.find((a) => a.id === chatSession.persona_id);
-      if (!agent) return;
+      if (!agent || agent.id === DEFAULT_AGENT_ID) return;
       if (pinnedAgents.some((a) => a.id === agent.id)) return;
-      await togglePinnedAgent(agent, true);
+
+      try {
+        await togglePinnedAgent(agent, true);
+      } catch (error) {
+        console.error("Failed to pin the chat's agent", error);
+      }
     },
     [agents, pinnedAgents, togglePinnedAgent]
   );
