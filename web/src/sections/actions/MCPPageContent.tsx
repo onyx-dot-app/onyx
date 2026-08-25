@@ -6,7 +6,7 @@ import { KeyedMutator } from "swr";
 import MCPActionCard from "@/sections/actions/MCPActionCard";
 import AdminListHeader from "@/sections/admin/AdminListHeader";
 import ActionCardSkeleton from "@/sections/actions/skeleton/ActionCardSkeleton";
-import { getActionIcon } from "@/lib/tools/mcpUtils";
+import { getActionIcon } from "@/lib/tools/utils";
 import {
   ActionStatus,
   MCPServerStatus,
@@ -25,7 +25,7 @@ import {
   updateMCPServerStatus,
   updateMCPServer,
   updateToolsStatus,
-} from "@/lib/tools/mcpService";
+} from "@/lib/tools/svc";
 import { useSearchParams } from "next/navigation";
 import { useRouter } from "next/navigation";
 import { useAdminMcpServers } from "@/lib/tools/hooks";

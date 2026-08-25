@@ -55,7 +55,7 @@ import { isAssistant } from "@/lib/agents/utils";
 import {
   getMCPUserOAuthNavigationUrl,
   startMCPUserOAuth,
-} from "@/lib/tools/mcpService";
+} from "@/lib/tools/svc";
 
 function buildTooltipMessage(
   actionDescription: string,

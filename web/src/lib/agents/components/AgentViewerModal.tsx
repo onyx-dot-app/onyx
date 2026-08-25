@@ -22,7 +22,7 @@ import {
   SvgUser,
 } from "@opal/icons";
 import { useMcpServers } from "@/lib/tools/hooks";
-import { getActionIcon } from "@/lib/tools/mcpUtils";
+import { getActionIcon } from "@/lib/tools/utils";
 import { MCPServer, ToolSnapshot } from "@/lib/tools/types";
 import { EmptyMessageCard } from "@opal/components";
 import { Switch } from "@opal/components";

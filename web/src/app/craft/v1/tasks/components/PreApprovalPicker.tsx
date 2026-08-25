@@ -6,7 +6,7 @@ import type { IconFunctionComponent } from "@opal/types";
 import { cn } from "@opal/utils";
 import useUserExternalApps from "@/hooks/useUserExternalApps";
 import { useCraftMcpServers } from "@/lib/tools/hooks";
-import { getActionIcon } from "@/lib/tools/mcpUtils";
+import { getActionIcon } from "@/lib/tools/utils";
 import { getAppTypeLogo } from "@/app/craft/v1/apps/registry";
 
 interface PreApprovalPickerProps {

@@ -13,7 +13,7 @@ import {
   SvgUnPlugged,
 } from "@opal/illustrations";
 import type { IconFunctionComponent } from "@opal/types";
-import { completeMCPUserOAuth } from "@/lib/tools/mcpService";
+import { completeMCPUserOAuth } from "@/lib/tools/svc";
 
 const AUTO_REDIRECT_DELAY_MS = 2000;
 const DEFAULT_REDIRECT_PATH = "/app";
