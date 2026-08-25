@@ -364,6 +364,18 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     temperature_override_enabled: Mapped[bool | None] = mapped_column(
         Boolean, default=None
     )
+    # Per-user chat defaults. Applied below an admin's per-model default and
+    # clamped by the per-model max, see resolve_reasoning_effort.
+    temperature_default: Mapped[float | None] = mapped_column(Float, default=None)
+    reasoning_effort_default: Mapped[ReasoningEffort | None] = mapped_column(
+        Enum(
+            ReasoningEffort,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=True,
+        default=None,
+    )
     auto_scroll: Mapped[bool | None] = mapped_column(Boolean, default=None)
     shortcut_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     theme_preference: Mapped[ThemePreference | None] = mapped_column(
