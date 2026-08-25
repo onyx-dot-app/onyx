@@ -896,10 +896,19 @@ def _extract_text_and_images(
     # Default processing
     try:
         extension = get_file_ext(file_name)
+
+        # The "Extract & Caption Images" workspace setting gates *all* embedded
+        # image extraction, not just PDFs. Resolved once here so every
+        # image-bearing branch below agrees and we only hit the KV store once.
+        extract_images = get_image_extraction_and_analysis_enabled()
+
         # docx example for embedded images
         if extension == ".docx":
             text_content, images = read_docx_file(
-                file, file_name, extract_images=True, image_callback=image_callback
+                file,
+                file_name,
+                extract_images=extract_images,
+                image_callback=image_callback if extract_images else None,
             )
             return ExtractionResult(
                 text_content=text_content, embedded_images=images, metadata={}
@@ -911,8 +920,8 @@ def _extract_text_and_images(
             text_content, pdf_metadata, images = read_pdf_file(
                 file,
                 pdf_pass,
-                extract_images=get_image_extraction_and_analysis_enabled(),
-                image_callback=image_callback,
+                extract_images=extract_images,
+                image_callback=image_callback if extract_images else None,
             )
             return ExtractionResult(
                 text_content=text_content, embedded_images=images, metadata=pdf_metadata
@@ -920,7 +929,10 @@ def _extract_text_and_images(
 
         if extension == ".pptx":
             text_content, images = read_pptx_file(
-                file, file_name, extract_images=True, image_callback=image_callback
+                file,
+                file_name,
+                extract_images=extract_images,
+                image_callback=image_callback if extract_images else None,
             )
             return ExtractionResult(
                 text_content=text_content, embedded_images=images, metadata={}
