@@ -4,6 +4,7 @@ CODING_AGENT_IN_CODE_ID = "CodingAgent"
 CODING_AGENT_TOOL_NAME = "coding_agent"
 CODING_AGENT_QUERY_KEY = "query"
 CODING_AGENT_REPO_KEY = "github_repo"
+CODING_AGENT_REF_KEY = "ref"
 
 BASH_TOOL_NAME = "bash"
 BASH_TOOL_CMD_KEY = "cmd"
@@ -17,9 +18,18 @@ CODING_AGENT_TOOL_DESCRIPTION = {
     "function": {
         "name": CODING_AGENT_TOOL_NAME,
         "description": (
-            "Investigate and answer a coding question against a specific GitHub "
-            "repository. The agent clones the repo into an isolated sandbox and "
-            "explores it via shell commands before returning a text answer."
+            "Deep investigation of a GitHub repository. The agent extracts a "
+            "tarball of the repo at one revision into an isolated sandbox "
+            "(no .git metadata — git commands are unavailable) and explores "
+            "the source tree with shell commands before returning a text "
+            "answer. This is a "
+            "slow, expensive multi-step agent run (tens of seconds to "
+            "minutes). Use it only when the question needs cross-file "
+            "tracing, verification against the exact current code, or "
+            "analysis the code search index cannot provide. Do NOT use it "
+            "for simple lookups the internal search tool already answers "
+            "(where something is defined, a config default, what one "
+            "function does)."
         ),
         "parameters": {
             "type": "object",
@@ -36,6 +46,15 @@ CODING_AGENT_TOOL_DESCRIPTION = {
                         "GitHub repository URL or 'owner/repo' identifier "
                         "(e.g. 'https://github.com/onyx-dot-app/onyx' or "
                         "'onyx-dot-app/onyx')."
+                    ),
+                },
+                CODING_AGENT_REF_KEY: {
+                    "type": "string",
+                    "description": (
+                        "Optional branch or commit SHA to analyze. Defaults "
+                        "to the latest default-branch state. Pass the commit "
+                        "SHA from retrieved code chunks when the answer must "
+                        "match the indexed revision."
                     ),
                 },
             },

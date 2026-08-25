@@ -1,10 +1,11 @@
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+from onyx.coding_agent.repo_cache import RepoArchive
 from onyx.tools.fake_tools import coding_agent
 
 
-def test_coding_agent_downloads_and_extracts_repo_with_existing_policy() -> None:
+def test_coding_agent_fetches_and_extracts_repo_with_existing_policy() -> None:
     client = MagicMock()
     client.__enter__.return_value = client
     client.__exit__.return_value = False
@@ -18,22 +19,26 @@ def test_coding_agent_downloads_and_extracts_repo_with_existing_policy() -> None
     with (
         patch.object(
             coding_agent,
-            "download_github_archive",
-            return_value=b"repository archive",
-        ) as download_archive,
+            "fetch_repo_archive",
+            return_value=RepoArchive(
+                archive=b"repository archive",
+                commit_sha="a" * 40,
+            ),
+        ) as fetch_archive,
         patch.object(coding_agent, "CodeInterpreterClient", return_value=client),
         coding_agent._setup_session(
             repo="git@github.com:onyx-dot-app/onyx.git",
             github_token="secret",
-        ) as session_id,
+        ) as (session_id, commit_sha),
     ):
         assert session_id == "session-id"
+        assert commit_sha == "a" * 40
 
-    source, revision, authorization = download_archive.call_args.args
+    source, ref, authorization = fetch_archive.call_args.args
     assert (source.owner, source.repo) == ("onyx-dot-app", "onyx")
-    assert revision == "HEAD"
+    assert ref is None
     assert authorization == "Bearer secret"
-    assert download_archive.call_args.kwargs == {
+    assert fetch_archive.call_args.kwargs == {
         "max_size_bytes": 500 * 1024 * 1024,
         "timeout": (30, 300),
     }
