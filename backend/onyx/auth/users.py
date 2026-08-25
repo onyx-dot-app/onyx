@@ -540,7 +540,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         previous_user_db = self.user_db
         try:
             async with get_async_session_context_manager(tenant_id) as db_session:
-                self.user_db = SQLAlchemyUserDatabase[User, uuid.UUID](
+                # Admin adapter: only its create() assigns role, which has no
+                # column default (the default= on its Enum type is dead).
+                self.user_db = SQLAlchemyUserAdminDB[User, uuid.UUID](
                     db_session, User, OAuthAccount
                 )
                 yield db_session
