@@ -64,6 +64,20 @@ postgresTls:
   # Full path exposed to POSTGRES_SSLROOTCERT.
   caMountPath: /etc/postgres-ca/ca.crt
 
+# -- Verified TLS connections to Redis.
+# When enabled, the chart mounts one Redis server CA certificate into each
+# backend workload that uses Redis and configures REDIS_SSL with certificate
+# verification. The certificate source must already exist in the release
+# namespace.
+redisTls:
+  enabled: false
+  # Exactly one of caSecretName / caConfigMapName must be set when enabled.
+  caSecretName: ""
+  caConfigMapName: ""
+  caKey: ca.crt
+  # Full path exposed to REDIS_SSL_CA_CERTS.
+  caMountPath: /etc/redis-ca/ca.crt
+
 # Uncomment to skip the bundled CNPG operator and its CRDs, and let an existing
 # cluster-managed CloudNativePG operator reconcile the Cluster CR below (keep
 # postgresql.enabled: true). Two operators/CRD copies on one cluster drift in

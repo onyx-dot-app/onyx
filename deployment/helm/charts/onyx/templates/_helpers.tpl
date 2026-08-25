@@ -180,8 +180,9 @@ checksum/pginto: {{ include (print $.Template.BasePath "/tooling-pginto-configma
 {{- $pginto := include "onyx.pgInto.volumeMount" .ctx -}}
 {{- $ca := include "onyx.customCACerts.volumeMount" .ctx -}}
 {{- $postgresTls := include "onyx.postgresTls.volumeMount" .ctx -}}
+{{- $redisTls := include "onyx.redisTls.volumeMount" .ctx -}}
 {{- $existing := .volumeMounts -}}
-{{- if or $pginto $ca $postgresTls $existing -}}
+{{- if or $pginto $ca $postgresTls $redisTls $existing -}}
 volumeMounts:
 {{- if $pginto }}
 {{ $pginto | nindent 2 }}
@@ -195,6 +196,9 @@ volumeMounts:
 {{- if $postgresTls }}
 {{ $postgresTls | nindent 2 }}
 {{- end }}
+{{- if $redisTls }}
+{{ $redisTls | nindent 2 }}
+{{- end }}
 {{- end -}}
 {{- end }}
 
@@ -202,8 +206,9 @@ volumeMounts:
 {{- $pginto := include "onyx.pgInto.volume" .ctx -}}
 {{- $ca := include "onyx.customCACerts.volume" .ctx -}}
 {{- $postgresTls := include "onyx.postgresTls.volume" .ctx -}}
+{{- $redisTls := include "onyx.redisTls.volume" .ctx -}}
 {{- $existing := .volumes -}}
-{{- if or $pginto $ca $postgresTls $existing -}}
+{{- if or $pginto $ca $postgresTls $redisTls $existing -}}
 volumes:
 {{- if $pginto }}
 {{ $pginto | nindent 2 }}
@@ -216,6 +221,9 @@ volumes:
 {{- end }}
 {{- if $postgresTls }}
 {{ $postgresTls | nindent 2 }}
+{{- end }}
+{{- if $redisTls }}
+{{ $redisTls | nindent 2 }}
 {{- end }}
 {{- end -}}
 {{- end }}
@@ -392,6 +400,54 @@ path at startup, so mount exactly the configured key at its expected filename.
 {{- end }}
 
 {{/*
+"true" when Redis TLS settings and a CA certificate source are configured.
+*/}}
+{{- define "onyx.redisTls.enabled" -}}
+{{- if and .Values.redisTls .Values.redisTls.enabled }}true{{- end -}}
+{{- end }}
+
+{{/*
+Volume sourcing the Redis server CA. The backend uses the configured path for
+REDIS_SSL_CA_CERTS, so mount exactly the configured key at its expected name.
+*/}}
+{{- define "onyx.redisTls.volume" -}}
+{{- if include "onyx.redisTls.enabled" . -}}
+{{- $tls := .Values.redisTls -}}
+{{- if and $tls.caSecretName $tls.caConfigMapName -}}
+{{- fail "redisTls.caSecretName and redisTls.caConfigMapName are mutually exclusive; set exactly one" -}}
+{{- end -}}
+{{- $caPath := $tls.caMountPath | default "/etc/redis-ca/ca.crt" -}}
+{{- $caKey := $tls.caKey | default "ca.crt" -}}
+- name: redis-ca
+  {{- if $tls.caSecretName }}
+  secret:
+    secretName: {{ $tls.caSecretName }}
+    items:
+      - key: {{ $caKey }}
+        path: {{ base $caPath }}
+  {{- else if $tls.caConfigMapName }}
+  configMap:
+    name: {{ $tls.caConfigMapName }}
+    items:
+      - key: {{ $caKey }}
+        path: {{ base $caPath }}
+  {{- else -}}
+  {{- fail "redisTls.enabled is true but neither redisTls.caSecretName nor redisTls.caConfigMapName is set" -}}
+  {{- end }}
+{{- end -}}
+{{- end }}
+
+{{/* Mount for the Redis server CA. */}}
+{{- define "onyx.redisTls.volumeMount" -}}
+{{- if include "onyx.redisTls.enabled" . -}}
+{{- $caPath := .Values.redisTls.caMountPath | default "/etc/redis-ca/ca.crt" -}}
+- name: redis-ca
+  mountPath: {{ dir $caPath }}
+  readOnly: true
+{{- end -}}
+{{- end }}
+
+{{/*
 Model-server variant of the custom-CA env. The model servers run on a distroless
 image with no shell to run update-ca-certificates, so instead of pointing at the
 merged system store they hand the mount directory to the Python entrypoint, which
@@ -461,8 +517,9 @@ mount. Usage: include "onyx.volumeMountsWithCA" (dict "ctx" . "volumeMounts" <li
 {{- define "onyx.volumeMountsWithCA" -}}
 {{- $ca := include "onyx.customCACerts.volumeMount" .ctx -}}
 {{- $postgresTls := include "onyx.postgresTls.volumeMount" .ctx -}}
+{{- $redisTls := include "onyx.redisTls.volumeMount" .ctx -}}
 {{- $existing := .volumeMounts -}}
-{{- if or $ca $postgresTls $existing -}}
+{{- if or $ca $postgresTls $redisTls $existing -}}
 volumeMounts:
 {{- if $existing }}
 {{ toYaml $existing | nindent 2 }}
@@ -472,6 +529,9 @@ volumeMounts:
 {{- end }}
 {{- if $postgresTls }}
 {{ $postgresTls | nindent 2 }}
+{{- end }}
+{{- if $redisTls }}
+{{ $redisTls | nindent 2 }}
 {{- end }}
 {{- end -}}
 {{- end }}
@@ -483,8 +543,9 @@ volume. Usage: include "onyx.volumesWithCA" (dict "ctx" . "volumes" <list>)
 {{- define "onyx.volumesWithCA" -}}
 {{- $ca := include "onyx.customCACerts.volume" .ctx -}}
 {{- $postgresTls := include "onyx.postgresTls.volume" .ctx -}}
+{{- $redisTls := include "onyx.redisTls.volume" .ctx -}}
 {{- $existing := .volumes -}}
-{{- if or $ca $postgresTls $existing -}}
+{{- if or $ca $postgresTls $redisTls $existing -}}
 volumes:
 {{- if $existing }}
 {{ toYaml $existing | nindent 2 }}
@@ -494,6 +555,9 @@ volumes:
 {{- end }}
 {{- if $postgresTls }}
 {{ $postgresTls | nindent 2 }}
+{{- end }}
+{{- if $redisTls }}
+{{ $redisTls | nindent 2 }}
 {{- end }}
 {{- end -}}
 {{- end }}
