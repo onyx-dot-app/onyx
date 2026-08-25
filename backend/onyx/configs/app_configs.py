@@ -1381,6 +1381,19 @@ GONG_CONNECTOR_START_TIME = os.environ.get("GONG_CONNECTOR_START_TIME")
 
 GITHUB_CONNECTOR_BASE_URL = os.environ.get("GITHUB_CONNECTOR_BASE_URL") or None
 
+# Repo archive snapshots for connectors that index source files. Snapshots
+# live under the system temp dir and idle ones are pruned after the TTL. The
+# caps bound worker disk against small, highly compressible archives.
+REPO_SNAPSHOT_TTL_SECONDS = int(
+    os.environ.get("REPO_SNAPSHOT_TTL_SECONDS") or 6 * 60 * 60
+)
+REPO_SNAPSHOT_MAX_ARCHIVE_MEMBERS = int(
+    os.environ.get("REPO_SNAPSHOT_MAX_ARCHIVE_MEMBERS") or 200_000
+)
+REPO_SNAPSHOT_MAX_EXTRACTED_BYTES = int(
+    os.environ.get("REPO_SNAPSHOT_MAX_EXTRACTED_BYTES") or 2 * 1024**3
+)
+
 GITLAB_CONNECTOR_INCLUDE_CODE_FILES = (
     os.environ.get("GITLAB_CONNECTOR_INCLUDE_CODE_FILES", "").lower() == "true"
 )
