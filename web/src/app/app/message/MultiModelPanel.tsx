@@ -4,7 +4,7 @@ import { useCallback } from "react";
 import { Button } from "@opal/components";
 import { Text } from "@opal/components";
 import { ContentAction } from "@opal/layouts";
-import { SvgEyeOff, SvgX } from "@opal/icons";
+import { SvgChevronLeft, SvgChevronRight, SvgEyeOff, SvgX } from "@opal/icons";
 import { getModelIcon } from "@/lib/languageModels";
 import AgentMessage, {
   AgentMessageProps,
@@ -50,6 +50,17 @@ export interface MultiModelPanelProps {
   isGenerating?: boolean;
   /** Whether a send is in flight, which disables preferred selection */
   selectionDisabled?: boolean;
+  /** Narrow-carousel nav to the previous model, flanking the header left */
+  carouselPrev?: CarouselNeighbor;
+  /** Narrow-carousel nav to the next model, flanking the header right */
+  carouselNext?: CarouselNeighbor;
+}
+
+export interface CarouselNeighbor {
+  provider: string;
+  modelName: string;
+  displayName: string;
+  onClick: () => void;
 }
 
 /**
@@ -82,6 +93,8 @@ export default function MultiModelPanel({
   errorDetails,
   isGenerating,
   selectionDisabled,
+  carouselPrev,
+  carouselNext,
 }: MultiModelPanelProps) {
   const ModelIcon = getModelIcon(provider, modelName);
 
@@ -180,14 +193,50 @@ export default function MultiModelPanel({
     <div className={headerClassName}>{headerContent}</div>
   );
 
+  // Narrow-carousel header row: prev/next model nav flanks the model pill.
+  const headerWithNav =
+    carouselPrev || carouselNext ? (
+      // raw-ok: nav row around a flex-1 min-w-0 pill slot, grow semantics no Section width preset can express
+      <div className="flex items-center gap-1">
+        {carouselPrev ? (
+          <Button
+            prominence="tertiary"
+            icon={getModelIcon(carouselPrev.provider, carouselPrev.modelName)}
+            rightIcon={SvgChevronLeft}
+            onClick={carouselPrev.onClick}
+            tooltip={carouselPrev.displayName}
+            aria-label={`Show the ${carouselPrev.displayName} response`}
+          />
+        ) : null}
+        {/* raw-ok: flex-1 slot for the pill inside the nav row, no layout primitive exposes a bare grow wrapper */}
+        <div className="flex-1 min-w-0">{header}</div>
+        {carouselNext ? (
+          <Button
+            prominence="tertiary"
+            icon={SvgChevronRight}
+            rightIcon={getModelIcon(
+              carouselNext.provider,
+              carouselNext.modelName
+            )}
+            onClick={carouselNext.onClick}
+            tooltip={carouselNext.displayName}
+            aria-label={`Show the ${carouselNext.displayName} response`}
+          />
+        ) : null}
+      </div>
+    ) : (
+      header
+    );
+
   // Hidden/collapsed panel — just the header row
   if (isHidden) {
-    return header;
+    return headerWithNav;
   }
 
   return (
+    // raw-ok: panel column, min-w-0 shrink semantics no Section width preset provides
     <div className="flex flex-col gap-3 min-w-0 rounded-16">
-      {header}
+      {headerWithNav}
       {errorMessage ? (
         <div className="p-4">
           <ErrorBanner
