@@ -2,7 +2,7 @@
 # It asserts that the PR author and every commit author of changes to the ee/ directories
 # are inside the organization. "Inside the organization" is approximated as "has write
 # access to this repository", because the default GITHUB_TOKEN cannot read org membership.
-# TODO(jmelahman): Decide the long-term ownership model for the ee/ directories. A future
+# TODO: Decide the long-term ownership model for the ee/ directories. A future
 # version can check true org membership (needs an org-scoped token) and add an
 # explicit-approval path (for example, a maintainer-applied label).
 name: Ensure EE changes come from org members
