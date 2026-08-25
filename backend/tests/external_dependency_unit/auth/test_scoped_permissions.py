@@ -605,3 +605,51 @@ def test_each_gate_records_its_refusal(
     assert_manages_group(admin, db_session, group_id=unmanaged.id)
     assert_global(admin, permission=Permission.MANAGE_DOCUMENT_SETS)
     assert events_for(caplog, "permission.denied") == []
+
+
+@pytest.mark.usefixtures("audit_stream")
+def test_denials_are_deduped_per_attempt_not_per_gate(
+    db_session: Session, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A manager walking several resources must produce one event each. Keying the
+    dedup window on the gate alone would record only the first and hide the walk."""
+    manager = create_test_user(db_session, "denial-walk")
+    manager.effective_permissions = []
+    managed = _make_group(db_session)
+    first = _make_group(db_session)
+    second = _make_group(db_session)
+    third = _make_group(db_session)
+    _manage(db_session, manager, managed)
+
+    for target in (first, second):
+        with pytest.raises(OnyxError):
+            assert_within_scope(
+                manager,
+                db_session,
+                permission=Permission.MANAGE_DOCUMENT_SETS,
+                current_group_ids=[managed.id],
+                requested_group_ids=[target.id],
+                is_non_public=True,
+            )
+
+    events = events_for(caplog, "permission.denied")
+    assert [e["extra"]["requested_group_ids"] for e in events] == [
+        [first.id],
+        [second.id],
+    ]
+
+    # A genuine retry — same permission, same groups — still collapses. Uses an
+    # untouched group, since the attempts above already claimed their windows.
+    caplog.clear()
+    for _ in range(2):
+        with pytest.raises(OnyxError):
+            assert_within_scope(
+                manager,
+                db_session,
+                permission=Permission.MANAGE_DOCUMENT_SETS,
+                current_group_ids=[managed.id],
+                requested_group_ids=[third.id],
+                is_non_public=True,
+            )
+
+    assert len(events_for(caplog, "permission.denied")) == 1
