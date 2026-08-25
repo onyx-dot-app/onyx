@@ -186,6 +186,18 @@ variable "s3_vpc_endpoint_id" {
   }
 }
 
+variable "s3_additional_policy_documents" {
+  type        = list(string)
+  description = "IAM policy documents (JSON strings) merged into the main bucket's policy. See additional_policy_documents on the s3 module."
+  default     = []
+}
+
+variable "s3_upload_additional_policy_documents" {
+  type        = list(string)
+  description = "IAM policy documents (JSON strings) merged into the upload bucket's policy. Only used when enable_upload_bucket is true."
+  default     = []
+}
+
 variable "rds_db_connect_arn" {
   type        = string
   description = "Full rds-db:connect ARN to pass to the EKS module. Required when enable_rds_iam_auth is true."

@@ -275,8 +275,11 @@ Key inputs include:
 - Always attaches a module-owned bucket policy with a `DenyInsecureTransport`
   statement, so the bucket rejects requests that do not use TLS. The module owns
   the whole policy: do not edit it outside Terraform, or the next apply replaces
-  your changes. Do not serve a module bucket through an S3 static website
-  endpoint; those endpoints are HTTP-only, so the deny blocks them
+  your changes. To keep custom statements, pass them as JSON documents via
+  `additional_policy_documents`; the module merges them into its policy. Custom
+  statements cannot replace the module's own statements — on a SID collision the
+  module statement wins. Do not serve a module bucket through an S3 static
+  website endpoint; those endpoints are HTTP-only, so the deny blocks them
 - Access can be scoped to an S3 gateway VPC endpoint (`s3_vpc_endpoint_id`), and
   optionally to source IPs or VPCs (`allow_anonymous_read` with
   `allowed_source_ips` / `allowed_vpc_ids`)
@@ -311,7 +314,9 @@ modules add settings the old ones did not manage:
 - `s3` now attaches a bucket policy to every bucket, not only when anonymous
   read or a VPC endpoint grant is configured. The policy denies non-TLS
   requests. If you attached your own policy to a module bucket outside
-  Terraform, the apply replaces it — merge those statements first
+  Terraform, the apply replaces it. Before you apply, move those statements
+  into `additional_policy_documents` on the `s3` module (on the `onyx` module:
+  `s3_additional_policy_documents` / `s3_upload_additional_policy_documents`)
 - `vpc` now creates flow logs and their IAM role
 - `postgres`, `redis`, and `opensearch` now create CloudWatch alarms
 - `postgres` now manages Multi-AZ (default false). If you enabled a standby

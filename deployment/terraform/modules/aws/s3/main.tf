@@ -97,6 +97,10 @@ data "aws_iam_policy_document" "anonymous_read" {
   # is historical — this address has already been renamed once (see the moved
   # blocks at the top of this file), so it is left alone.
 
+  # Caller-supplied statements. On a SID collision the inline statements below
+  # win, so these cannot weaken DenyInsecureTransport.
+  source_policy_documents = var.additional_policy_documents
+
   # Reject any request that did not arrive over TLS. Additive and safe: it
   # denies only traffic that is already plaintext. Required by SOC 2 (Vanta
   # test `aws-storage-buckets-enforce-https`).

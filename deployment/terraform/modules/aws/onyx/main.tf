@@ -197,18 +197,20 @@ module "postgres" {
 }
 
 module "s3" {
-  source             = "../s3"
-  bucket_name        = local.bucket_name
-  tags               = local.merged_tags
-  s3_vpc_endpoint_id = var.create_vpc ? module.vpc[0].s3_vpc_endpoint_id : var.s3_vpc_endpoint_id
+  source                      = "../s3"
+  bucket_name                 = local.bucket_name
+  tags                        = local.merged_tags
+  s3_vpc_endpoint_id          = var.create_vpc ? module.vpc[0].s3_vpc_endpoint_id : var.s3_vpc_endpoint_id
+  additional_policy_documents = var.s3_additional_policy_documents
 }
 
 module "s3_upload" {
-  count              = var.enable_upload_bucket ? 1 : 0
-  source             = "../s3"
-  bucket_name        = local.upload_bucket_name
-  tags               = local.merged_tags
-  s3_vpc_endpoint_id = var.create_vpc ? module.vpc[0].s3_vpc_endpoint_id : var.s3_vpc_endpoint_id
+  count                       = var.enable_upload_bucket ? 1 : 0
+  source                      = "../s3"
+  bucket_name                 = local.upload_bucket_name
+  tags                        = local.merged_tags
+  s3_vpc_endpoint_id          = var.create_vpc ? module.vpc[0].s3_vpc_endpoint_id : var.s3_vpc_endpoint_id
+  additional_policy_documents = var.s3_upload_additional_policy_documents
 }
 
 module "eks" {
