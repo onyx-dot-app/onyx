@@ -141,16 +141,18 @@ const ChatButton = memo(
 
     // Drag and drop setup for chat sessions
     const dragId = `${DRAG_TYPES.CHAT}-${chatSession.id}`;
-    const { attributes, listeners, setNodeRef, transform, isDragging } =
-      useDraggable({
-        id: dragId,
-        data: {
-          type: DRAG_TYPES.CHAT,
-          chatSession,
-          projectId: project?.id,
-        },
-        disabled: !draggable || renaming,
-      });
+    // `attributes` is intentionally dropped: it turns the wrapper into a
+    // focusable role="button", which adds a second tab stop per row and lets
+    // Enter/Space start a keyboard drag that looks like the chat is disabled.
+    const { listeners, setNodeRef, transform, isDragging } = useDraggable({
+      id: dragId,
+      data: {
+        type: DRAG_TYPES.CHAT,
+        chatSession,
+        projectId: project?.id,
+      },
+      disabled: !draggable || renaming,
+    });
 
     // Sync local name state when chatSession.name changes (e.g., after auto-naming)
     useEffect(() => {
@@ -402,7 +404,7 @@ const ChatButton = memo(
     const rightMenu = (
       <>
         <Popover.Trigger asChild onClick={noProp()}>
-          <div>
+          <div data-testid="ChatButton/options">
             {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
             <IconButton
               icon={SvgMoreHorizontal}
@@ -415,7 +417,12 @@ const ChatButton = memo(
             />
           </div>
         </Popover.Trigger>
-        <Popover.Content side="right" align="start" width="md">
+        <Popover.Content
+          data-testid="ChatButton/popover"
+          side="right"
+          align="start"
+          width="md"
+        >
           <PopoverMenu>{popoverItems}</PopoverMenu>
         </Popover.Content>
       </>
@@ -431,7 +438,7 @@ const ChatButton = memo(
           }
         }}
       >
-        <Popover.Anchor>
+        <Popover.Anchor data-testid="ChatButton">
           <SidebarTab
             /* While renaming, drop the click target so the input stays usable. */
             href={
@@ -528,7 +535,6 @@ const ChatButton = memo(
                 : undefined,
               opacity: isDragging ? 0.5 : 1,
             }}
-            {...(mounted ? attributes : {})}
             {...(mounted ? listeners : {})}
           >
             {popover}
