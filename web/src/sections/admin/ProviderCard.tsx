@@ -89,6 +89,10 @@ export default function ProviderCard({
   selectedLabel = "Current Default",
   "aria-label": ariaLabel,
 }: ProviderCardProps) {
+  // The card is a clickable div, so it has no implicit accessible name. Falling
+  // back to the title gives every card one, and gives tests something to select
+  // by that describes the card rather than how it looks.
+  const label = ariaLabel ?? title;
   const isDisconnected = status === "disconnected";
   const isConnected = status === "connected";
   const isSelected = status === "selected";
@@ -102,7 +106,7 @@ export default function ProviderCard({
         state={STATUS_TO_STATE[status]}
         padding={2}
         rounding={4}
-        aria-label={ariaLabel}
+        aria-label={label}
         onClick={
           isDisconnected && onConnect
             ? onConnect

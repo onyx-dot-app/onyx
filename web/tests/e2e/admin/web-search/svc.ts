@@ -42,10 +42,7 @@ export const FAKE_CONTENT_PROVIDERS = {
 };
 
 export function findProviderCard(page: Page, providerLabel: string): Locator {
-  return page
-    .locator("div.rounded-16")
-    .filter({ hasText: providerLabel })
-    .first();
+  return page.getByLabel(providerLabel, { exact: true }).first();
 }
 
 export function mainContainer(page: Page): Locator {

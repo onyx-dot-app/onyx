@@ -211,18 +211,13 @@ async function findProviderCard(
   page: Page,
   providerName: string
 ): Promise<Locator> {
-  return page
-    .locator("div.rounded-16")
-    .filter({ hasText: providerName })
-    .first();
+  // Exact, because the Edit and Delete buttons inside the card are labelled
+  // "Edit <name>" / "Delete <name>" and would match a substring.
+  return page.getByLabel(providerName, { exact: true }).first();
 }
 
 async function openOpenAiSetupModal(page: Page): Promise<Locator> {
-  const openAiCard = page
-    .locator("div.rounded-16")
-    .filter({ hasText: "OpenAI" })
-    .filter({ has: page.getByRole("button", { name: "Connect" }) })
-    .first();
+  const openAiCard = page.getByLabel(/^Add OpenAI/).first();
 
   await expect(openAiCard).toBeVisible({ timeout: 10000 });
   await openAiCard.getByRole("button", { name: "Connect" }).click();

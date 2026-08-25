@@ -178,6 +178,10 @@ function ExistingProviderCard({
           state="filled"
           padding={2}
           rounding={4}
+          // A clickable div has no implicit accessible name. The Edit and
+          // Delete buttons inside are labelled "Edit <name>" / "Delete <name>",
+          // so an exact match on the bare name reaches the card alone.
+          aria-label={providerDisplayName(provider)}
           onClick={() => setIsOpen(true)}
         >
           <ContentAction
@@ -243,6 +247,9 @@ function NewProviderCard({
       state="empty"
       padding={2}
       rounding={4}
+      // Names the company as well as the product: the card reads "GPT" with
+      // "OpenAI" underneath, and callers look for the company.
+      aria-label={`Add ${companyName} ${productName}`}
       onClick={() => setIsOpen(true)}
     >
       <ContentAction
