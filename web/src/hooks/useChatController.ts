@@ -10,6 +10,7 @@ import {
 import {
   applyPreferredResponse,
   chooseImplicitPreferred,
+  getMostVisibleResponseId,
   getMultiModelChildren,
   getUnresolvedMultiModelTurn,
 } from "@/app/app/message/multiModel";
@@ -664,7 +665,8 @@ export default function useChatController({
           ? chooseImplicitPreferred(
               currentHistory,
               currentMessageTreeLocal,
-              unresolvedTurn
+              unresolvedTurn,
+              getMostVisibleResponseId(unresolvedTurn.userMessage.nodeId)
             )
           : null;
         if (

@@ -159,6 +159,34 @@ describe("chooseImplicitPreferred", () => {
     );
   });
 
+  it("prefers the response in view over the prior turn's model", () => {
+    const tree = new Map<number, Message>();
+    const first = buildTurn(tree, ["gemini-3", "gpt-5"], {
+      preferredModel: "gemini-3",
+    });
+    const second = buildTurn(tree, ["gemini-3", "gpt-5"], {
+      parent: first.responses[0],
+    });
+    const turn = getUnresolvedMultiModelTurn(chainOf(tree), tree)!;
+    expect(
+      chooseImplicitPreferred(
+        chainOf(tree),
+        tree,
+        turn,
+        second.responses[1]!.messageId!
+      )
+    ).toBe(second.responses[1]);
+  });
+
+  it("ignores a visible id that matches no candidate", () => {
+    const tree = new Map<number, Message>();
+    const { responses } = buildTurn(tree, ["gemini-3", "gpt-5"]);
+    const turn = getUnresolvedMultiModelTurn(chainOf(tree), tree)!;
+    expect(chooseImplicitPreferred(chainOf(tree), tree, turn, 999999)).toBe(
+      responses[1]
+    );
+  });
+
   it("never assumes an errored response", () => {
     const tree = new Map<number, Message>();
     const { responses } = buildTurn(tree, [

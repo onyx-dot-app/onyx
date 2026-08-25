@@ -107,17 +107,42 @@ function findPriorPreferredModel(
   );
 }
 
-// The response a send assumes as preferred: the prior turn's preferred model
-// when it answered this turn too, else the first model (right-most panel,
-// last child). Errored responses can't continue the chain, never assumed.
+// The response in view per turn (user message nodeId), written by the panel
+// view's narrow-screen carousel and read at send time. An entry exists only
+// while the carousel shows one response at a time.
+const mostVisibleResponseByTurn = new Map<number, number>();
+
+export function setMostVisibleResponseId(
+  userNodeId: number,
+  responseMessageId: number | null
+): void {
+  if (responseMessageId == null) {
+    mostVisibleResponseByTurn.delete(userNodeId);
+  } else {
+    mostVisibleResponseByTurn.set(userNodeId, responseMessageId);
+  }
+}
+
+export function getMostVisibleResponseId(userNodeId: number): number | null {
+  return mostVisibleResponseByTurn.get(userNodeId) ?? null;
+}
+
+// The response a send assumes as preferred: the response in view on narrow
+// screens, else the prior turn's preferred model when it answered this turn
+// too, else the first model (right-most, last child). Errors never assumed.
 export function chooseImplicitPreferred(
   chain: Message[],
   messageTree: Map<number, Message>,
-  turn: UnresolvedMultiModelTurn
+  turn: UnresolvedMultiModelTurn,
+  visibleResponseId: number | null = null
 ): Message | null {
   const candidates = turn.responses.filter(
     (r) => r.type === "assistant" && r.messageId != null
   );
+  if (visibleResponseId != null) {
+    const visible = candidates.find((r) => r.messageId === visibleResponseId);
+    if (visible) return visible;
+  }
   const priorModel = findPriorPreferredModel(
     chain,
     messageTree,

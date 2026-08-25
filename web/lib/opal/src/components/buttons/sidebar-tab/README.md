@@ -10,7 +10,7 @@ A sidebar navigation tab built on `Interactive.Stateful` > `Interactive.Containe
 div.opal-sidebar-tab      <- folded styling hook (see styles.css)
   └─ Interactive.Stateful        <- variant (sidebar-heavy | sidebar-light), state, disabled
        └─ Interactive.Container  <- rounding, height, width
-            ├─ Link | button?    (absolute overlay — the click target)
+            ├─ Link | button?    (absolute overlay — the click target; also the tooltip trigger)
             ├─ rightChildren?    (absolute, above the overlay for inline actions)
             └─ ContentAction     (icon + title + truncation spacer)
 ```
@@ -30,6 +30,8 @@ The label stays in the DOM while folded. It is hidden with `visibility: hidden`,
 Pass `folded` only to override the sidebar — outside a sidebar, in Storybook, or in a skeleton. It sets `data-folded` on the tab itself, which wins over the sidebar.
 
 The folded-name tooltip is the one part that stays in JS: CSS cannot arm a tooltip. It lives in a small wrapper that subscribes to the fold state on the tab's behalf, so a fold re-renders the wrapper and nothing below it. The wrapper keeps the tooltip mounted and passes `suppressed` while the tab is unfolded, so hover stays Radix's to track and an unfolded tab holds no hover state of its own.
+
+Both tooltips (the folded name and an explicit `tooltip`) wrap the overlay control, not the tab. The tab's own tree shape therefore never depends on whether there is a tooltip, so `children` can switch from a label to an element — an inline rename input — without remounting the row and dropping focus. A disabled tab has no control, so it renders an inert overlay as the trigger when it has a tooltip.
 
 ## Props
 

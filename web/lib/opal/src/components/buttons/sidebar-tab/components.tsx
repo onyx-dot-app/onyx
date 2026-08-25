@@ -8,6 +8,7 @@ import { Interactive, type InteractiveStatefulVariant } from "@opal/core";
 import { ContentAction } from "@opal/layouts";
 import { useSidebarFolded } from "@opal/layouts/sidebar/context";
 import { Tooltip } from "@opal/components";
+import { cn } from "@opal/utils";
 import Link from "next/link";
 
 // ---------------------------------------------------------------------------
@@ -81,11 +82,11 @@ interface FoldedTooltipProps {
  * This is the one part of the folded look that CSS cannot express, so it is
  * split out: this component subscribes to the fold state, and the tab does
  * not. On a fold toggle React re-renders this wrapper alone — `children` is
- * the same element it received before, so the tab below it never re-renders.
+ * the same element it received before, so nothing below it re-renders.
  *
  * The tooltip stays mounted and is suppressed while unfolded instead of being
  * added and removed. Dropping it would change the tree shape on a fold, which
- * remounts the tab and cuts the label's fade short.
+ * remounts the trigger.
  */
 function FoldedTooltip({ label, folded, children }: FoldedTooltipProps) {
   const foldedFromSidebar = useSidebarFolded();
@@ -146,14 +147,6 @@ function SidebarTab({
     <div className="w-0 group-hover/SidebarTab:w-6" />
   );
 
-  /* The click target is an overlay that covers the whole row: a `Link` when
-  `href` is set, a `button` otherwise. It stays a sibling of the content so that
-  `rightChildren` and interactive icons remain valid nested controls. The focus
-  outline is inset because the container clips its overflow. `cursor-pointer` is
-  explicit because the UA stylesheet gives `button` a default cursor, which wins
-  over the value inherited from `.interactive`. */
-  const overlayClassName =
-    "absolute z-99 inset-0 rounded-08 cursor-pointer outline-border-04 outline-offset-[-2px] focus-visible:outline-2";
   /* The overlay holds no text of its own, and a folded tab hides its label, so
   name the overlay explicitly. String children name it directly. Other content
   (truncated or animated titles) names it through the element that renders the
@@ -164,24 +157,58 @@ function SidebarTab({
     label !== undefined
       ? { "aria-label": label }
       : { "aria-labelledby": labelId };
-  const overlay = disabled ? null : href ? (
-    <Link
-      href={href as Route}
-      scroll={false}
-      onClick={onClick}
-      {...labelProps}
-      className={overlayClassName}
-    />
-  ) : onClick ? (
-    <button
-      type={type ?? "button"}
-      onClick={onClick}
-      {...labelProps}
-      className={overlayClassName}
-    />
-  ) : null;
 
-  const content = (
+  /* The click target is an overlay that covers the whole row: a `Link` when
+  `href` is set, a `button` otherwise. It stays a sibling of the content so that
+  `rightChildren` and interactive icons remain valid nested controls. The focus
+  outline is inset because the container clips its overflow. `cursor-pointer` is
+  explicit because the UA stylesheet gives `button` a default cursor, which wins
+  over the value inherited from `.interactive`. */
+  const overlayClassName = "absolute z-99 inset-0 rounded-08";
+  const controlClassName = cn(
+    overlayClassName,
+    "cursor-pointer outline-border-04 outline-offset-[-2px] focus-visible:outline-2"
+  );
+  /* The tooltip hangs off the overlay, not the tab, so the tab's tree shape
+  never depends on whether there is one. Swapping `children` between a label and
+  an element (an inline rename input) then re-renders the row instead of
+  remounting it. A tab without a control gets an inert overlay as the trigger
+  when it has a tooltip to show. */
+  const overlay =
+    !disabled && href ? (
+      <Link
+        href={href as Route}
+        scroll={false}
+        onClick={onClick}
+        {...labelProps}
+        className={controlClassName}
+      />
+    ) : !disabled && onClick ? (
+      <button
+        type={type ?? "button"}
+        onClick={onClick}
+        {...labelProps}
+        className={controlClassName}
+      />
+    ) : tooltip || label !== undefined ? (
+      <div aria-hidden="true" className={overlayClassName} />
+    ) : null;
+  const trigger =
+    overlay &&
+    (tooltip ? (
+      <Tooltip tooltip={tooltip} side="right">
+        {overlay}
+      </Tooltip>
+    ) : label !== undefined ? (
+      // Only a string label can stand in as its own folded tooltip.
+      <FoldedTooltip label={label} folded={folded}>
+        {overlay}
+      </FoldedTooltip>
+    ) : (
+      overlay
+    ));
+
+  return (
     <div
       className="opal-sidebar-tab"
       data-folded={folded === undefined ? undefined : String(folded)}
@@ -194,16 +221,16 @@ function SidebarTab({
         group="group/SidebarTab"
       >
         <Interactive.Container rounding="sm" size="lg" width="full">
-          {overlay}
+          {trigger}
 
           {rightChildren && (
             <div className="opal-sidebar-tab__actions">{rightChildren}</div>
           )}
 
-          {typeof children === "string" ? (
+          {label !== undefined ? (
             <ContentAction
               icon={Icon ?? undefined}
-              title={children}
+              title={label}
               sizePreset="main-ui"
               variant="body"
               color="interactive"
@@ -230,23 +257,6 @@ function SidebarTab({
         </Interactive.Container>
       </Interactive.Stateful>
     </div>
-  );
-
-  if (tooltip) {
-    return (
-      <Tooltip tooltip={tooltip} side="right">
-        {content}
-      </Tooltip>
-    );
-  }
-
-  // Only a string label can stand in as its own tooltip.
-  if (label === undefined) return content;
-
-  return (
-    <FoldedTooltip label={label} folded={folded}>
-      {content}
-    </FoldedTooltip>
   );
 }
 

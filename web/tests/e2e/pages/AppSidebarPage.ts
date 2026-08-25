@@ -86,12 +86,70 @@ export class ProjectsPopover {
   }
 }
 
+/** A chat session row in the sidebar (Recents or an unfolded project). */
+export class SidebarChatRow {
+  constructor(
+    readonly page: Page,
+    readonly name: string
+  ) {}
+
+  /**
+   * The row container. Matched by the visible label, so it matches nothing
+   * while the row shows the inline rename editor.
+   */
+  get root(): Locator {
+    return this.page.getByTestId("ChatButton").filter({ hasText: this.name });
+  }
+
+  /** The "..." button that opens the row's options popover. */
+  get optionsButton(): Locator {
+    return this.root.getByTestId("ChatButton/options");
+  }
+
+  /** The options popover. Only one row's popover is open at a time. */
+  get optionsPopover(): Locator {
+    return this.page.getByTestId("ChatButton/popover");
+  }
+
+  /**
+   * The inline rename editor. The editor replaces the row's label, so this
+   * cannot be scoped to the row by name; only one row renames at a time.
+   */
+  get renameInput(): Locator {
+    return this.page.getByTestId("ChatButton").getByRole("textbox");
+  }
+
+  /** Reveals the row's actions and opens the options popover. */
+  async openOptions(): Promise<void> {
+    await this.root.hover();
+    await this.optionsButton.click();
+    await expect(this.optionsPopover).toBeVisible();
+  }
+
+  /** Opens the options popover and clicks "Rename". */
+  async startRename(): Promise<void> {
+    await this.openOptions();
+    await this.optionsPopover.getByRole("button", { name: "Rename" }).click();
+  }
+
+  /** Types a new name into the rename editor and submits it. */
+  async submitRename(newName: string): Promise<void> {
+    await this.renameInput.fill(newName);
+    await this.renameInput.press("Enter");
+  }
+}
+
 /** The main application sidebar. */
 export class AppSidebarPage {
   readonly projectsPopover: ProjectsPopover;
 
   constructor(private readonly page: Page) {
     this.projectsPopover = new ProjectsPopover(page);
+  }
+
+  /** A chat session row, looked up by its visible name. */
+  chatRow(name: string): SidebarChatRow {
+    return new SidebarChatRow(this.page, name);
   }
 
   async goto(): Promise<void> {
