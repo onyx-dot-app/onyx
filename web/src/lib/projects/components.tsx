@@ -33,6 +33,7 @@ import useAppFocus from "@/hooks/useAppFocus";
 import { noProp } from "@/lib/utils";
 import { UNNAMED_CHAT } from "@/lib/constants";
 import { DRAG_TYPES } from "@/lib/sidebar/constants";
+import { usePinChatAgent } from "@/lib/agents/hooks";
 import { useActiveProject, useProjectSearch } from "@/lib/projects/hooks";
 import type { Project, ProjectSearchMatch } from "@/lib/projects/types";
 import { useProjectsContext } from "@/providers/ProjectsContext";
@@ -271,6 +272,7 @@ interface ProjectPopoverRowProps {
 function ProjectPopoverRow({ match, onNavigate }: ProjectPopoverRowProps) {
   const route = useAppRouter();
   const appFocus = useAppFocus();
+  const pinChatAgent = usePinChatAgent();
   const activeProject = useActiveProject();
   const isActiveProject = activeProject?.id === match.project.id;
   const [open, setOpen] = useState(isActiveProject);
@@ -307,7 +309,12 @@ function ProjectPopoverRow({ match, onNavigate }: ProjectPopoverRowProps) {
             // project, so the row needs no icon of its own.
             nested
             href={`/app?chatId=${chatSession.id}`}
-            onClick={onNavigate}
+            // Opening a chat pins its agent, the same as the sidebar's own
+            // rows — the popover is another way in, not a different one.
+            onClick={() => {
+              pinChatAgent(chatSession);
+              onNavigate();
+            }}
             selected={appFocus.getId() === chatSession.id}
           >
             {chatSession.name || UNNAMED_CHAT}

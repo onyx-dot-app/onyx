@@ -17,6 +17,7 @@ import {
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { buildApiPath } from "@/lib/urlBuilder";
 import { pinAgents } from "@/lib/agents/svc";
+import type { ChatSession } from "@/app/app/interfaces";
 import { useUser } from "@/providers/UserProvider";
 import { useSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
@@ -180,6 +181,31 @@ export function usePinnedAgents() {
     updatePinnedAgents,
     isLoading: isLoadingAgents,
   };
+}
+
+/**
+ * Pins the agent behind a chat, unless it is pinned already.
+ *
+ * Opening a chat is how its agent earns a place in the sidebar, so every way of
+ * opening one owes this — the sidebar's own rows and the folded projects
+ * popover both. It lives here so the two cannot drift.
+ *
+ * Does nothing for a chat whose agent is gone or not visible to this user,
+ * which is how a deleted or inaccessible agent degrades.
+ */
+export function usePinChatAgent() {
+  const { agents } = useAgents();
+  const { pinnedAgents, togglePinnedAgent } = usePinnedAgents();
+
+  return useCallback(
+    async (chatSession: ChatSession) => {
+      const agent = agents.find((a) => a.id === chatSession.persona_id);
+      if (!agent) return;
+      if (pinnedAgents.some((a) => a.id === agent.id)) return;
+      await togglePinnedAgent(agent, true);
+    },
+    [agents, pinnedAgents, togglePinnedAgent]
+  );
 }
 
 // ── Agent resolution ──────────────────────────────────────────────────────────

@@ -41,7 +41,7 @@ import {
   SvgTrash,
 } from "@opal/icons";
 import useOnMount from "@/hooks/useOnMount";
-import { useAgents, usePinnedAgents } from "@/lib/agents/hooks";
+import { usePinChatAgent } from "@/lib/agents/hooks";
 
 export interface PopoverSearchInputProps {
   setShowMoveOptions: (show: boolean) => void;
@@ -129,8 +129,7 @@ const ChatButton = memo(
       currentProjectId,
       createProject,
     } = useProjectsContext();
-    const { agents } = useAgents();
-    const { pinnedAgents, togglePinnedAgent } = usePinnedAgents();
+    const pinChatAgent = usePinChatAgent();
     const [popoverOpen, setPopoverOpen] = useState(false);
     const [pendingMoveProjectId, setPendingMoveProjectId] = useState<
       number | null
@@ -292,13 +291,7 @@ const ChatButton = memo(
 
     // Pin the chat's agent when clicking on the conversation
     async function handleClick() {
-      const agent = agents.find((a) => a.id === chatSession.persona_id);
-      if (agent) {
-        const isAlreadyPinned = pinnedAgents.some((a) => a.id === agent.id);
-        if (!isAlreadyPinned) {
-          await togglePinnedAgent(agent, true);
-        }
-      }
+      await pinChatAgent(chatSession);
     }
 
     async function handleRename(newName: string) {
