@@ -896,22 +896,26 @@ def _extract_text_and_images(
     # Default processing
     try:
         extension = get_file_ext(file_name)
-        # docx example for embedded images
+        # One setting read per file. With extraction off, no image is decoded
+        # for any format, which is what lets upload validation skip its caps.
+        extract_images = get_image_extraction_and_analysis_enabled()
+
         if extension == ".docx":
             text_content, images = read_docx_file(
-                file, file_name, extract_images=True, image_callback=image_callback
+                file,
+                file_name,
+                extract_images=extract_images,
+                image_callback=image_callback,
             )
             return ExtractionResult(
                 text_content=text_content, embedded_images=images, metadata={}
             )
 
-        # PDF example: we do not show complicated PDF image extraction here
-        # so we simply extract text for now and skip images.
         if extension == ".pdf":
             text_content, pdf_metadata, images = read_pdf_file(
                 file,
                 pdf_pass,
-                extract_images=get_image_extraction_and_analysis_enabled(),
+                extract_images=extract_images,
                 image_callback=image_callback,
             )
             return ExtractionResult(
@@ -920,7 +924,10 @@ def _extract_text_and_images(
 
         if extension == ".pptx":
             text_content, images = read_pptx_file(
-                file, file_name, extract_images=True, image_callback=image_callback
+                file,
+                file_name,
+                extract_images=extract_images,
+                image_callback=image_callback,
             )
             return ExtractionResult(
                 text_content=text_content, embedded_images=images, metadata={}
