@@ -16,7 +16,7 @@ import {
   validateToolDefinition,
   createCustomTool,
   updateCustomTool,
-} from "@/lib/tools/openApiService";
+} from "@/lib/tools/svc";
 import ToolItem from "@/sections/actions/ToolItem";
 import debounce from "lodash/debounce";
 import { DOCS_ADMINS_PATH } from "@/lib/constants";
@@ -31,7 +31,7 @@ import {
   SvgUnplug,
 } from "@opal/icons";
 import InfoBlock from "@/refresh-components/messages/InfoBlock";
-import { getActionIcon } from "@/lib/tools/mcpUtils";
+import { getActionIcon } from "@/lib/tools/utils";
 import { Section } from "@/layouts/general-layouts";
 import { EmptyMessageCard } from "@opal/components";
 

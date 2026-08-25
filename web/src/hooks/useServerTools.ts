@@ -2,7 +2,7 @@
 
 import useSWR, { KeyedMutator } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { getActionIcon } from "@/lib/tools/mcpUtils";
+import { getActionIcon } from "@/lib/tools/utils";
 import { MCPServer, MCPTool, ToolSnapshot } from "@/lib/tools/types";
 
 /**

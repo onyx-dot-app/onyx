@@ -40,7 +40,7 @@ import {
   MCPUserOAuthStartResponse,
   updateMCPServerStatus,
   upsertMCPServer,
-} from "@/lib/tools/mcpService";
+} from "@/lib/tools/svc";
 import { toast } from "@opal/layouts";
 import { SvgArrowExchange } from "@opal/icons";
 import { useOAuthPassThroughEnabled } from "@/lib/auth/hooks";

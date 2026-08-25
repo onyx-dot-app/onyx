@@ -8,7 +8,7 @@ import { Modal } from "@opal/components";
 import { InputVertical, toast } from "@opal/layouts";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
-import { createMCPServer, updateMCPServer } from "@/lib/tools/mcpService";
+import { createMCPServer, updateMCPServer } from "@/lib/tools/svc";
 import {
   MCPServerCreateRequest,
   MCPServerStatus,
