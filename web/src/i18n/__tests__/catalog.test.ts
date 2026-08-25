@@ -23,16 +23,14 @@ type MessageTree = { [key: string]: string | MessageTree };
 
 const TARGET_LOCALES: Record<string, MessageTree> = { de, es, fr, pt };
 
-function flatten(tree: MessageTree, prefix = ""): Map<string, string> {
-  const flat = new Map<string, string>();
+function flatten(tree: MessageTree, prefix = ""): Record<string, string> {
+  const flat: Record<string, string> = {};
   for (const [key, value] of Object.entries(tree)) {
     const path = prefix ? `${prefix}.${key}` : key;
     if (typeof value === "string") {
-      flat.set(path, value);
+      flat[path] = value;
     } else {
-      for (const [nestedPath, nestedValue] of flatten(value, path)) {
-        flat.set(nestedPath, nestedValue);
-      }
+      Object.assign(flat, flatten(value, path));
     }
   }
   return flat;
@@ -68,11 +66,15 @@ function collectArguments(
   return into;
 }
 
+function sortedArguments(message: string): string[] {
+  return Array.from(collectArguments(parse(message), new Set<string>())).sort();
+}
+
 const flatEnglish = flatten(en as MessageTree);
 
 describe("i18n message catalogs", () => {
   test("every English message is valid ICU", () => {
-    for (const [key, message] of flatEnglish) {
+    for (const [key, message] of Object.entries(flatEnglish)) {
       expect(() => parse(message)).not.toThrow();
       expect(key).not.toBe("");
     }
@@ -83,34 +85,28 @@ describe("i18n message catalogs", () => {
       const flatLocale = flatten(catalog);
 
       test("has no keys that are missing from en.json", () => {
-        const orphans = [...flatLocale.keys()].filter(
-          (key) => !flatEnglish.has(key)
+        const orphans = Object.keys(flatLocale).filter(
+          (key) => !(key in flatEnglish)
         );
         expect(orphans).toEqual([]);
       });
 
       test("every message is valid ICU with the same placeholders as English", () => {
-        for (const [key, message] of flatLocale) {
-          const englishMessage = flatEnglish.get(key);
+        for (const [key, message] of Object.entries(flatLocale)) {
+          const englishMessage = flatEnglish[key];
           if (englishMessage === undefined) continue; // covered by orphan test
 
-          let elements: MessageFormatElement[];
-          expect(() => (elements = parse(message))).not.toThrow();
-          const localeArguments = collectArguments(parse(message), new Set());
-          const englishArguments = collectArguments(
-            parse(englishMessage),
-            new Set()
-          );
-          expect({ key, placeholders: [...localeArguments].sort() }).toEqual({
+          expect(() => parse(message)).not.toThrow();
+          expect({ key, placeholders: sortedArguments(message) }).toEqual({
             key,
-            placeholders: [...englishArguments].sort(),
+            placeholders: sortedArguments(englishMessage),
           });
         }
       });
 
       test("reports untranslated keys without failing", () => {
-        const untranslated = [...flatEnglish.keys()].filter(
-          (key) => !flatLocale.has(key)
+        const untranslated = Object.keys(flatEnglish).filter(
+          (key) => !(key in flatLocale)
         );
         if (untranslated.length > 0) {
           console.warn(
