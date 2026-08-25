@@ -65,6 +65,12 @@ from onyx.db.user_group import assert_group_config_is_editable
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.security.store import get_security_settings
+from onyx.utils.audit import (
+    AuditAction,
+    AuditOutcome,
+    actor_from_user,
+    emit_audit_event,
+)
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -197,7 +203,9 @@ def set_user_group_permissions(
             f"Permissions {non_toggleable} cannot be toggled via this endpoint",
         )
 
-    result = set_group_permissions_bulk__no_commit(
+    group_name = group.name
+
+    change = set_group_permissions_bulk__no_commit(
         group_id=user_group_id,
         desired_permissions=set(request.permissions),
         granted_by=user.id,
@@ -205,13 +213,26 @@ def set_user_group_permissions(
     )
     db_session.commit()
 
-    return result
+    emit_audit_event(
+        AuditAction.USER_GROUP_PERMISSION_CHANGE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(user),
+        resource_type="user_group",
+        resource_id=user_group_id,
+        extra={
+            "group_name": group_name,
+            "added": [permission.value for permission in change.added],
+            "removed": [permission.value for permission in change.removed],
+        },
+    )
+
+    return change.enabled
 
 
 @router.post("/admin/user-group")
 def create_user_group(
     user_group: UserGroupCreate,
-    _: User = Depends(require_permission(Permission.MANAGE_USER_GROUPS)),
+    user: User = Depends(require_permission(Permission.MANAGE_USER_GROUPS)),
     db_session: Session = Depends(get_session),
 ) -> UserGroup:
     try:
@@ -222,6 +243,20 @@ def create_user_group(
             f"User group with name '{user_group.name}' already exists. Please "
             "choose a different name.",
         )
+
+    emit_audit_event(
+        AuditAction.USER_GROUP_CREATE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(user),
+        resource_type="user_group",
+        resource_id=db_user_group.id,
+        extra={
+            "name": user_group.name,
+            "user_ids": [str(uid) for uid in user_group.user_ids],
+            "cc_pair_ids": list(user_group.cc_pair_ids),
+        },
+    )
+
     return UserGroup.from_model(
         db_user_group,
         mask_credential_prefix=get_security_settings().mask_credential_prefix,
@@ -239,13 +274,26 @@ def rename_user_group_endpoint(
     # GATE 2: rename's DB fn takes no user and re-reads nothing, so gate here.
     assert_manages_group(user, db_session, group_id=rename_request.id)
     assert_group_config_is_editable(db_session, rename_request.id, "rename")
+
+    existing = fetch_user_group(db_session, rename_request.id)
+    previous_name = existing.name if existing else None
+
     try:
+        renamed = rename_user_group(
+            db_session=db_session,
+            user_group_id=rename_request.id,
+            new_name=rename_request.name,
+        )
+        emit_audit_event(
+            AuditAction.USER_GROUP_RENAME,
+            AuditOutcome.SUCCESS,
+            actor=actor_from_user(user),
+            resource_type="user_group",
+            resource_id=rename_request.id,
+            extra={"previous_name": previous_name, "new_name": rename_request.name},
+        )
         return UserGroup.from_model(
-            rename_user_group(
-                db_session=db_session,
-                user_group_id=rename_request.id,
-                new_name=rename_request.name,
-            ),
+            renamed,
             mask_credential_prefix=get_security_settings().mask_credential_prefix,
         )
     except IntegrityError:
@@ -334,15 +382,34 @@ def add_users(
 @router.delete("/admin/user-group/{user_group_id}")
 def delete_user_group(
     user_group_id: int,
-    _: User = Depends(require_permission(Permission.MANAGE_USER_GROUPS)),
+    user: User = Depends(require_permission(Permission.MANAGE_USER_GROUPS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     assert_group_config_is_editable(db_session, user_group_id, "delete")
     assert_group_membership_survives_deletion(db_session, user_group_id)
+
+    # Deletion drops every membership, so capture the roster before it runs.
+    existing = fetch_user_group(db_session, user_group_id)
+    group_name = existing.name if existing else None
+    member_ids = [str(member.id) for member in existing.users] if existing else []
+
     try:
         prepare_user_group_for_deletion(db_session, user_group_id)
     except ValueError as e:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, str(e))
+
+    emit_audit_event(
+        AuditAction.USER_GROUP_DELETE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(user),
+        resource_type="user_group",
+        resource_id=user_group_id,
+        extra={
+            "name": group_name,
+            "member_ids": member_ids,
+            "member_count": len(member_ids),
+        },
+    )
 
     if DISABLE_VECTOR_DB:
         user_group = fetch_user_group(db_session, user_group_id)
@@ -521,6 +588,14 @@ def set_group_manager(
     # a manager can delegate within their own group but not beyond it.
     assert_manages_group(user, db_session, group_id=user_group_id)
     assert_group_config_is_editable(db_session, user_group_id, "assign a manager on")
+
+    group = fetch_user_group(db_session, user_group_id)
+    target = (
+        next((member for member in group.users if member.id == request.user_id), None)
+        if group
+        else None
+    )
+
     try:
         if request.is_manager:
             make_group_manager(db_session, request.user_id, user_group_id)
@@ -530,3 +605,17 @@ def set_group_manager(
         # Target isn't a member of the group (a manager is always a member).
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))
     db_session.commit()
+
+    emit_audit_event(
+        AuditAction.USER_GROUP_MANAGER_CHANGE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(user),
+        resource_type="user_group",
+        resource_id=user_group_id,
+        extra={
+            "group_name": group.name if group else None,
+            "target_user_id": str(request.user_id),
+            "target_email": target.email if target else None,
+            "is_manager": request.is_manager,
+        },
+    )

@@ -1224,6 +1224,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         tenant_id = await resolve_tenant_for_user(user.email, request)
 
         user_count = None
+        is_admin = False
         token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
         try:
             user_count = await get_user_count()
@@ -1327,6 +1328,10 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             AuditAction.REGISTER,
             AuditOutcome.SUCCESS,
             actor=AuditActor(user_id=str(user.id), email=user.email),
+            # This is the only record of the first-user and
+            # DEFAULT_ADMIN_USER_EMAILS admin grants; neither one goes through
+            # the admin-access route.
+            extra={"is_admin": is_admin},
         )
 
     async def on_after_forgot_password(

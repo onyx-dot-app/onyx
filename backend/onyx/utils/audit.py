@@ -3,8 +3,9 @@
 Emits one JSON line per security-relevant action (auth, admin-config /
 access-control change, credential access) on the ``onyx.audit`` logger tree.
 Field names and the action taxonomy are shaped toward OCSF so the stream maps
-onto OCSF event classes (Authentication / Account Change / API Activity) and
-drops into any SIEM. See ``docs/AUDIT_LOGGING.md`` for the schema + export path.
+onto OCSF event classes (Authentication / Account Change / User Access
+Management / Group Management / API Activity) and drops into any SIEM. See
+``docs/AUDIT_LOGGING.md`` for the schema + export path.
 
 Invariants (from the ``credential_audit`` seed): never raise into the caller
 (emission sits on hot paths), never log a secret, always tenant-tag, and dedup
@@ -38,6 +39,8 @@ class OCSFEventClass(str, Enum):
 
     AUTHENTICATION = "authentication"  # OCSF class_uid 3002
     ACCOUNT_CHANGE = "account_change"  # OCSF class_uid 3001
+    USER_ACCESS_MANAGEMENT = "user_access_management"  # OCSF class_uid 3005
+    GROUP_MANAGEMENT = "group_management"  # OCSF class_uid 3006
     API_ACTIVITY = "api_activity"  # OCSF class_uid 6003
 
 
@@ -66,9 +69,18 @@ class AuditAction(str, Enum):
     USER_DELETE = "user.delete"
     USER_DEACTIVATE = "user.deactivate"
     USER_REACTIVATE = "user.reactivate"
+
+    # User access management
     USER_ROLE_CHANGE = "user.role_change"
-    USER_GROUP_CHANGE = "user.group_change"
     USER_CRAFT_ACCESS_CHANGE = "user.craft_access_change"
+
+    # Group management
+    USER_GROUP_CHANGE = "user.group_change"
+    USER_GROUP_CREATE = "user_group.create"
+    USER_GROUP_RENAME = "user_group.rename"
+    USER_GROUP_DELETE = "user_group.delete"
+    USER_GROUP_PERMISSION_CHANGE = "user_group.permission_change"
+    USER_GROUP_MANAGER_CHANGE = "user_group.manager_change"
 
     # API activity (admin config + resource CRUD)
     CRAFT_DEFAULT_CHANGE = "settings.craft_default_change"
@@ -85,11 +97,15 @@ class AuditAction(str, Enum):
     CC_PAIR_DELETE = "cc_pair.delete"
     API_KEY_CREATE = "api_key.create"
     API_KEY_REGENERATE = "api_key.regenerate"
+    API_KEY_UPDATE = "api_key.update"
     API_KEY_DELETE = "api_key.delete"
     CREDENTIAL_CREATE = "credential.create"
     CREDENTIAL_UPDATE = "credential.update"
     CREDENTIAL_DELETE = "credential.delete"
     CREDENTIAL_ACCESS = "credential.access"
+    # Fires only when a scoped write gate refuses an actor who already holds
+    # partial authority, not on every 403.
+    PERMISSION_DENIED = "permission.denied"
 
 
 _OCSF_CLASS_BY_ACTION: dict[AuditAction, OCSFEventClass] = {
@@ -105,9 +121,14 @@ _OCSF_CLASS_BY_ACTION: dict[AuditAction, OCSFEventClass] = {
     AuditAction.USER_DELETE: OCSFEventClass.ACCOUNT_CHANGE,
     AuditAction.USER_DEACTIVATE: OCSFEventClass.ACCOUNT_CHANGE,
     AuditAction.USER_REACTIVATE: OCSFEventClass.ACCOUNT_CHANGE,
-    AuditAction.USER_ROLE_CHANGE: OCSFEventClass.ACCOUNT_CHANGE,
-    AuditAction.USER_GROUP_CHANGE: OCSFEventClass.ACCOUNT_CHANGE,
-    AuditAction.USER_CRAFT_ACCESS_CHANGE: OCSFEventClass.ACCOUNT_CHANGE,
+    AuditAction.USER_ROLE_CHANGE: OCSFEventClass.USER_ACCESS_MANAGEMENT,
+    AuditAction.USER_CRAFT_ACCESS_CHANGE: OCSFEventClass.USER_ACCESS_MANAGEMENT,
+    AuditAction.USER_GROUP_CHANGE: OCSFEventClass.GROUP_MANAGEMENT,
+    AuditAction.USER_GROUP_CREATE: OCSFEventClass.GROUP_MANAGEMENT,
+    AuditAction.USER_GROUP_RENAME: OCSFEventClass.GROUP_MANAGEMENT,
+    AuditAction.USER_GROUP_DELETE: OCSFEventClass.GROUP_MANAGEMENT,
+    AuditAction.USER_GROUP_PERMISSION_CHANGE: OCSFEventClass.GROUP_MANAGEMENT,
+    AuditAction.USER_GROUP_MANAGER_CHANGE: OCSFEventClass.GROUP_MANAGEMENT,
     AuditAction.CRAFT_DEFAULT_CHANGE: OCSFEventClass.API_ACTIVITY,
     AuditAction.SECURITY_SETTINGS_CHANGE: OCSFEventClass.API_ACTIVITY,
     AuditAction.CONTEXTUAL_RAG_MODEL_UPDATE: OCSFEventClass.API_ACTIVITY,
@@ -122,11 +143,15 @@ _OCSF_CLASS_BY_ACTION: dict[AuditAction, OCSFEventClass] = {
     AuditAction.CC_PAIR_DELETE: OCSFEventClass.API_ACTIVITY,
     AuditAction.API_KEY_CREATE: OCSFEventClass.API_ACTIVITY,
     AuditAction.API_KEY_REGENERATE: OCSFEventClass.API_ACTIVITY,
+    AuditAction.API_KEY_UPDATE: OCSFEventClass.API_ACTIVITY,
     AuditAction.API_KEY_DELETE: OCSFEventClass.API_ACTIVITY,
     AuditAction.CREDENTIAL_CREATE: OCSFEventClass.API_ACTIVITY,
     AuditAction.CREDENTIAL_UPDATE: OCSFEventClass.API_ACTIVITY,
     AuditAction.CREDENTIAL_DELETE: OCSFEventClass.API_ACTIVITY,
     AuditAction.CREDENTIAL_ACCESS: OCSFEventClass.API_ACTIVITY,
+    # OCSF has no authorization-denial class, so a refused request maps onto the
+    # request surface instead.
+    AuditAction.PERMISSION_DENIED: OCSFEventClass.API_ACTIVITY,
 }
 
 # Guard: every action must map to a class, so a new action can't ship untagged.
