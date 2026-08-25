@@ -1,6 +1,5 @@
 @import "@onyx-ai/opal/root.css";
 @import "./css/attachment-item.css" layer(base);
-@import "./css/button.css" layer(base);
 @import "./css/content-editable.css" layer(base);
 @import "./css/card.css" layer(base);
 @import "./css/comet.css" layer(base);
