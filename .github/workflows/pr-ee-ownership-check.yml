@@ -48,6 +48,7 @@ jobs:
           # Bot author emails that are not linked to any GitHub account.
           IGNORED_AUTHOR_EMAILS: |
             contact@cubic.dev
+            omx@oh-my-codex.dev
         run: |
           # The pull request commits API returns at most 250 commits.
           # Fail if the check cannot see every commit.
