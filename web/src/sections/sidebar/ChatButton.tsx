@@ -402,7 +402,7 @@ const ChatButton = memo(
     const rightMenu = (
       <>
         <Popover.Trigger asChild onClick={noProp()}>
-          <div>
+          <div data-testid="ChatButton/options">
             {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
             <IconButton
               icon={SvgMoreHorizontal}
@@ -415,7 +415,12 @@ const ChatButton = memo(
             />
           </div>
         </Popover.Trigger>
-        <Popover.Content side="right" align="start" width="md">
+        <Popover.Content
+          data-testid="ChatButton/popover"
+          side="right"
+          align="start"
+          width="md"
+        >
           <PopoverMenu>{popoverItems}</PopoverMenu>
         </Popover.Content>
       </>
@@ -431,7 +436,7 @@ const ChatButton = memo(
           }
         }}
       >
-        <Popover.Anchor>
+        <Popover.Anchor data-testid="ChatButton">
           <SidebarTab
             /* While renaming, drop the click target so the input stays usable. */
             href={
