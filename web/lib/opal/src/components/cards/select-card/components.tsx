@@ -21,14 +21,10 @@ type SelectCardProps = Omit<InteractiveStatefulProps, "variant"> & {
   /**
    * Border-radius preset.
    *
-   * | Value  | Class        |
-   * |--------|--------------|
-   * | `"xs"` | `rounded-04` |
-   * | `"sm"` | `rounded-08` |
-   * | `"md"` | `rounded-12` |
-   * | `"lg"` | `rounded-16` |
+   * `N` is `N / 4` rem, so `rounding={2}` is the same distance as
+   * `padding={2}`. `"full"` is a pill.
    *
-   * @default "md"
+   * @default 3
    */
   rounding?: Rounding;
 

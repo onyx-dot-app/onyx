@@ -41,17 +41,14 @@ type CardBaseProps = {
    *
    * | Value  | Class        |
    * |--------|--------------|
-   * | `"xs"` | `rounded-04` |
-   * | `"sm"` | `rounded-08` |
-   * | `"md"` | `rounded-12` |
-   * | `"lg"` | `rounded-16` |
-   * | `"xl"` | `rounded-20` |
+   * `N` is `N / 4` rem, so `rounding={2}` is the same distance as
+   * `padding={2}`. `"full"` is a pill.
    *
    * In expandable mode when expanded, rounding applies only to the header's
    * top corners and the expandedContent's bottom corners so the two join seamlessly.
    * When collapsed, rounding applies to all four corners of the header.
    *
-   * @default "md"
+   * @default 3
    */
   rounding?: Rounding;
 

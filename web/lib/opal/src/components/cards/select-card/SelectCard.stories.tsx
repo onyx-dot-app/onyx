@@ -14,7 +14,7 @@ import { Interactive } from "@opal/core";
 
 const STATES = ["empty", "filled", "selected"] as const;
 const PADDING_VARIANTS = [0, 0.5, 1, 2, 4, 6] as const;
-const ROUNDING_VARIANTS = ["xs", "sm", "md", "lg"] as const;
+const ROUNDING_VARIANTS = [1, 2, 3, 4] as const;
 
 const meta = {
   title: "opal/components/SelectCard",

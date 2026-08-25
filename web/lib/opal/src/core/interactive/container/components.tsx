@@ -48,9 +48,10 @@ interface InteractiveContainerProps extends WithoutStyles<
   border?: boolean;
 
   /**
-   * Border-radius preset controlling corner rounding.
+   * Corner radius, on the same scale as `Spacing`: `N` is `N / 4` rem, so
+   * `rounding={2}` is the same distance as `padding={2}`. `"full"` is a pill.
    *
-   * @default "default"
+   * @default 3
    */
   rounding?: Rounding;
 
