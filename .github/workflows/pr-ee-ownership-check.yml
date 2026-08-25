@@ -1,0 +1,47 @@
+# Interim replacement for the Enterprise Edition entries that were in .github/CODEOWNERS.
+# It asserts that only organization members change the ee/ directories.
+# TODO: Decide the long-term ownership model for the ee/ directories.
+name: Ensure EE changes come from org members
+concurrency:
+  group: Ensure-EE-changes-come-from-org-members-${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+on:
+  pull_request:
+    paths:
+      - "backend/ee/**"
+      - "web/src/ee/**"
+      - "web/src/app/ee/**"
+
+permissions:
+  contents: read
+
+jobs:
+  ee-ownership-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check that the PR author is an organization member
+        env:
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          AUTHOR_ASSOCIATION: ${{ github.event.pull_request.author_association }}
+          IGNORED_AUTHORS: |
+            dependabot[bot]
+            onyx-cherry-pick[bot]
+        run: |
+          normalized_author="$(printf '%s' "${PR_AUTHOR}" | tr '[:upper:]' '[:lower:]')"
+          normalized_ignored="$(printf '%s\n' "${IGNORED_AUTHORS}" | tr '[:upper:]' '[:lower:]')"
+          if printf '%s\n' "${normalized_ignored}" | grep -Fxq "${normalized_author}"; then
+            echo "PR author ${PR_AUTHOR} is on the ignorelist. Check passed."
+            exit 0
+          fi
+
+          case "${AUTHOR_ASSOCIATION}" in
+            MEMBER|OWNER)
+              echo "PR author ${PR_AUTHOR} is an organization member. Check passed."
+              exit 0
+              ;;
+          esac
+
+          echo "::error::This PR changes EE code (backend/ee/, web/src/ee/, or web/src/app/ee/), but the author ${PR_AUTHOR} (${AUTHOR_ASSOCIATION}) is not a member of the organization. Ask an organization member to make these changes."
+          exit 1
