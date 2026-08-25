@@ -1,10 +1,12 @@
 import { RichStr } from "@opal/types";
 import { markdown } from "@opal/utils";
 
-export function welcomeCardCopy(appName: string) {
+export const DEFAULT_LOGIN_SUBTITLE = "Your open source AI platform for work";
+
+export function welcomeCardCopy(appName: string, subtitle?: string | null) {
   return {
     title: `Welcome to ${appName}`,
-    description: "Your open source AI platform for work",
+    description: subtitle?.trim() || DEFAULT_LOGIN_SUBTITLE,
   } as const;
 }
 

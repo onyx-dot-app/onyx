@@ -23,6 +23,7 @@ const route = ADMIN_ROUTES.THEME;
 const CHAR_LIMITS = {
   application_name: 50,
   custom_greeting_message: 50,
+  custom_login_subtitle: 100,
   custom_header_content: 100,
   custom_lower_disclaimer_content: 200,
   custom_popup_header: 100,
@@ -105,6 +106,12 @@ export default function ThemePage() {
       .max(
         CHAR_LIMITS.custom_greeting_message,
         `Maximum ${CHAR_LIMITS.custom_greeting_message} characters`
+      )
+      .nullable(),
+    custom_login_subtitle: Yup.string()
+      .max(
+        CHAR_LIMITS.custom_login_subtitle,
+        `Maximum ${CHAR_LIMITS.custom_login_subtitle} characters`
       )
       .nullable(),
     custom_header_content: Yup.string()
@@ -209,6 +216,7 @@ export default function ThemePage() {
         use_custom_logo: enterpriseSettings?.use_custom_logo || false,
         custom_greeting_message:
           enterpriseSettings?.custom_greeting_message || "",
+        custom_login_subtitle: enterpriseSettings?.custom_login_subtitle || "",
         custom_header_content: enterpriseSettings?.custom_header_content || "",
         custom_lower_disclaimer_content:
           enterpriseSettings?.custom_lower_disclaimer_content || "",
@@ -262,6 +270,7 @@ export default function ThemePage() {
           logo_display_style: values.logo_display_style || null,
           custom_nav_items: enterpriseSettings?.custom_nav_items || [],
           custom_greeting_message: values.custom_greeting_message || null,
+          custom_login_subtitle: values.custom_login_subtitle?.trim() || null,
           custom_header_content: values.custom_header_content || null,
           custom_lower_disclaimer_content:
             values.custom_lower_disclaimer_content || null,

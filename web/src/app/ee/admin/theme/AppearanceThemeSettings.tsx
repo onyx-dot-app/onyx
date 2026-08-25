@@ -25,6 +25,7 @@ import {
 } from "react";
 import type { PreviewHighlightTarget } from "./Preview";
 import { SvgEdit } from "@opal/icons";
+import { DEFAULT_LOGIN_SUBTITLE } from "@/lib/auth/copies";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
 import { planTagProps } from "@/lib/tier-badge";
@@ -36,6 +37,7 @@ interface AppearanceThemeSettingsProps {
   charLimits: {
     application_name: number;
     custom_greeting_message: number;
+    custom_login_subtitle: number;
     custom_header_content: number;
     custom_lower_disclaimer_content: number;
     custom_popup_header: number;
@@ -62,6 +64,7 @@ export const AppearanceThemeSettings = forwardRef<
   const fileInputRef = useRef<HTMLInputElement>(null);
   const applicationNameInputRef = useRef<HTMLInputElement>(null);
   const greetingMessageInputRef = useRef<HTMLInputElement>(null);
+  const loginSubtitleInputRef = useRef<HTMLInputElement>(null);
   const headerContentInputRef = useRef<HTMLInputElement>(null);
   const lowerDisclaimerInputRef = useRef<HTMLTextAreaElement>(null);
   const noticeHeaderInputRef = useRef<HTMLInputElement>(null);
@@ -110,6 +113,7 @@ export const AppearanceThemeSettings = forwardRef<
           name: "custom_lower_disclaimer_content",
           ref: lowerDisclaimerInputRef,
         },
+        { name: "custom_login_subtitle", ref: loginSubtitleInputRef },
         { name: "custom_popup_header", ref: noticeHeaderInputRef },
         { name: "custom_popup_content", ref: noticeContentInputRef },
         { name: "consent_screen_prompt", ref: consentPromptTextAreaRef },
@@ -478,6 +482,38 @@ export const AppearanceThemeSettings = forwardRef<
         </FormField.Description>
         <FormField.Message
           messages={{ error: errors.custom_lower_disclaimer_content as string }}
+        />
+      </FormField>
+
+      <FormField state={errors.custom_login_subtitle ? "error" : "idle"}>
+        <FormField.Label
+          rightAction={
+            <CharacterCount
+              value={values.custom_login_subtitle}
+              limit={charLimits.custom_login_subtitle}
+            />
+          }
+        >
+          Login Page Subtitle
+        </FormField.Label>
+        <FormField.Control asChild>
+          <InputTypeIn
+            ref={loginSubtitleInputRef}
+            data-label="login-subtitle-input"
+            clearButton
+            placeholder={DEFAULT_LOGIN_SUBTITLE}
+            variant={errors.custom_login_subtitle ? "error" : undefined}
+            value={values.custom_login_subtitle}
+            onChange={(e) =>
+              setFieldValue("custom_login_subtitle", e.target.value)
+            }
+          />
+        </FormField.Control>
+        <FormField.Description>
+          Replace the tagline under the welcome heading on the login page.
+        </FormField.Description>
+        <FormField.Message
+          messages={{ error: errors.custom_login_subtitle as string }}
         />
       </FormField>
 
