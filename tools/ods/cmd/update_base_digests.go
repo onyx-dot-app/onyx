@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 
 	log "github.com/sirupsen/logrus"
@@ -135,25 +136,39 @@ func runUpdateBaseDigests(write bool, summaryFile, family string, listStaleFamil
 // The cache lets a caller resolve once and then rewrite one family at a time
 // against that single snapshot, so every branch of a run pins the same digests
 // even if a tag moves while the run is in flight.
+//
+// A cache written before a new base image was added covers only part of the
+// references. The entries it does have still hold the snapshot together, so the
+// missing ones are resolved and merged in rather than discarding the file.
 func resolveWithCache(refs []basedigest.Ref, cacheFile string) (map[string]string, error) {
+	cached := map[string]string{}
 	if cacheFile != "" {
 		data, err := os.ReadFile(cacheFile)
-		if err == nil {
-			var cached map[string]string
+		switch {
+		case err == nil:
 			if err := json.Unmarshal(data, &cached); err != nil {
 				return nil, fmt.Errorf("read cache %s: %w", cacheFile, err)
 			}
-			return cached, nil
-		}
-		if !os.IsNotExist(err) {
+		case !os.IsNotExist(err):
 			return nil, fmt.Errorf("read cache %s: %w", cacheFile, err)
 		}
 	}
 
-	resolved, err := basedigest.ResolveAll(refs)
+	missing := make([]basedigest.Ref, 0, len(refs))
+	for _, ref := range refs {
+		if _, ok := cached[ref.Query()]; !ok {
+			missing = append(missing, ref)
+		}
+	}
+	if len(missing) == 0 {
+		return cached, nil
+	}
+
+	resolved, err := basedigest.ResolveAll(missing)
 	if err != nil {
 		return nil, err
 	}
+	maps.Copy(resolved, cached)
 
 	if cacheFile != "" {
 		data, err := json.MarshalIndent(resolved, "", "  ")

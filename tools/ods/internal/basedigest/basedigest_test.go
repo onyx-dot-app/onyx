@@ -118,6 +118,30 @@ func TestRewriteReplacesOnlyDigests(t *testing.T) {
 	}
 }
 
+// A resolution map missing an entry must abort the write. Substituting the empty
+// string would leave `name:tag@` in a Dockerfile, which is worse than a stale pin.
+func TestRewriteRejectsMissingDigest(t *testing.T) {
+	const path = "Dockerfile"
+	original := "FROM ${BASE_IMAGE_REGISTRY}/library/ubuntu:26.04@" + digestA + "\n"
+	root := writeFile(t, path, original)
+
+	refs, err := FindRefs(root, []string{path})
+	if err != nil {
+		t.Fatalf("FindRefs: %v", err)
+	}
+	if err := Rewrite(root, refs, map[string]string{}); err == nil {
+		t.Fatal("Rewrite with an empty resolution map returned nil, want an error")
+	}
+
+	got, err := os.ReadFile(filepath.Join(root, path))
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if string(got) != original {
+		t.Errorf("file was modified despite the error:\n%s", got)
+	}
+}
+
 func TestStaleAndFamilyHelpers(t *testing.T) {
 	refs := []Ref{
 		{Name: "library/python", Tag: "3.13-slim", Digest: digestA},

@@ -239,8 +239,21 @@ func FilterFamily(refs []Ref, family string) []Ref {
 	return kept
 }
 
+// digestOnly matches a well-formed digest, and nothing else.
+var digestOnly = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
+
 // Rewrite applies the resolved digests to the files the given references live in.
 func Rewrite(root string, refs []Ref, resolved map[string]string) error {
+	// Refuse the whole write unless every replacement is a real digest. A missing
+	// entry would otherwise substitute the empty string and leave `name:tag@` in a
+	// Dockerfile, which is worse than the stale pin this package replaces.
+	for _, ref := range refs {
+		if !digestOnly.MatchString(resolved[ref.Query()]) {
+			return fmt.Errorf("refusing to write %s at %s:%d: resolved digest %q is not valid",
+				ref.Display(), ref.Path, ref.Line, resolved[ref.Query()])
+		}
+	}
+
 	byPath := map[string][]Ref{}
 	for _, ref := range refs {
 		byPath[ref.Path] = append(byPath[ref.Path], ref)

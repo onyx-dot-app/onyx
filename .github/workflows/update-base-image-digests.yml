@@ -41,6 +41,10 @@ jobs:
           private-key: ${{ secrets.CHERRY_PICK_APP_PRIVATE_KEY }}
           permission-contents: write
           permission-pull-requests: write
+          # release-opal.yml pins its own `node:24` container image, so the node
+          # family touches a workflow file. GitHub rejects a push from an App that
+          # changes .github/workflows/** without this.
+          permission-workflows: write
 
       - name: Checkout repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
