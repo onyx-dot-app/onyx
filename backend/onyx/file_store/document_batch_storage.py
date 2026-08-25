@@ -7,7 +7,12 @@ from typing import List, Optional, TypeAlias
 from pydantic import BaseModel
 
 from onyx.configs.constants import FileOrigin
-from onyx.connectors.models import DocExtractionContext, DocIndexingContext, Document
+from onyx.connectors.models import (
+    DocExtractionContext,
+    DocIndexingContext,
+    Document,
+    SectionType,
+)
 from onyx.file_store.file_store import FileStore, get_default_file_store
 from onyx.utils.logger import setup_logger
 
@@ -25,6 +30,19 @@ def _has_legacy_tabular_section(doc_dict: dict) -> bool:
     return any(
         isinstance(s, dict) and s.get("type") == "tabular" and not s.get("csv_file_id")
         for s in sections
+    )
+
+
+def _has_unknown_section_type(doc_dict: dict) -> bool:
+    """True if a section carries a `type` this worker's models don't know.
+    Such a doc was staged by a newer docfetcher during rolling-deploy skew;
+    we skip it rather than fail the whole batch on `model_validate`."""
+    known_types = {t.value for t in SectionType}
+    sections = doc_dict.get("sections")
+    if not isinstance(sections, list):
+        return False
+    return any(
+        isinstance(s, dict) and s.get("type") not in known_types for s in sections
     )
 
 
@@ -105,6 +123,13 @@ class DocumentBatchStorage(ABC):
                 logger.warning(
                     "Skipping doc %s with a legacy inline tabular section "
                     "(no csv_file_id); it re-indexes on the next attempt",
+                    doc_dict.get("id", "unknown"),
+                )
+                continue
+            if _has_unknown_section_type(doc_dict):
+                logger.warning(
+                    "Skipping doc %s with an unknown section type (staged by a "
+                    "newer worker); it re-indexes on the next attempt",
                     doc_dict.get("id", "unknown"),
                 )
                 continue

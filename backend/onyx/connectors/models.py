@@ -4,7 +4,7 @@ import sys
 from collections.abc import Sequence
 from datetime import datetime
 from enum import Enum
-from typing import Any, Literal, cast
+from typing import Any, Literal, TypeGuard, cast
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -35,6 +35,7 @@ class SectionType(str, Enum):
     TEXT = "text"
     IMAGE = "image"
     TABULAR = "tabular"
+    CODE = "code"
 
 
 class Section(BaseModel):
@@ -94,6 +95,33 @@ class TabularSection(Section):
             self.csv_file_id, use_tempfile=True
         ) as raw:
             return raw.read().decode("utf-8", errors="replace")
+
+
+class CodeSection(Section):
+    """Source code from a repository file. Carries the language and the
+    repo-relative path so chunking can split at syntactic boundaries and
+    cite line ranges."""
+
+    type: Literal[SectionType.CODE] = SectionType.CODE
+    text: str
+    language: str | None = None
+    file_path: str | None = None
+
+    def __sizeof__(self) -> int:
+        return (
+            sys.getsizeof(self.text)
+            + sys.getsizeof(self.link)
+            + sys.getsizeof(self.language)
+            + sys.getsizeof(self.file_path)
+        )
+
+
+TextBearingSection = TextSection | CodeSection
+
+
+def is_text_bearing(section: "Section") -> TypeGuard[TextBearingSection]:
+    """Sections whose content is a text string (extend when adding one)."""
+    return isinstance(section, (TextSection, CodeSection))
 
 
 class BasicExpertInfo(BaseModel):
@@ -197,7 +225,7 @@ class DocumentBase(BaseModel):
     """Used for Onyx ingestion api, the ID is inferred before use if not provided"""
 
     id: str | None = None
-    sections: Sequence[TextSection | ImageSection | TabularSection]
+    sections: Sequence[TextSection | ImageSection | TabularSection | CodeSection]
     source: DocumentSource | None = None
     semantic_identifier: str  # displayed in the UI as the main identifier for the doc
     # TODO(andrei): Ideally we could improve this to where each value is just a
@@ -308,7 +336,7 @@ class DocumentBase(BaseModel):
         """
         parts = []
         for s in self.sections:
-            if isinstance(s, TextSection) and s.text:
+            if is_text_bearing(s) and s.text:
                 parts.append(s.text)
             elif isinstance(s, ImageSection) and s.image_file_id:
                 parts.append(f"[img:{s.image_file_id}]")
@@ -448,7 +476,7 @@ class IndexingDocument(Document):
             section_len = sum(
                 len(section.text) if section.text is not None else 0
                 for section in self.sections
-                if isinstance(section, (TextSection, TabularSection))
+                if isinstance(section, (TextSection, TabularSection, CodeSection))
             )
 
         return title_len + section_len

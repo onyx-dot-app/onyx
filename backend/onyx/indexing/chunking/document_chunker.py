@@ -6,6 +6,7 @@ from onyx.connectors.models import (
     SectionType,
     TabularSection,
 )
+from onyx.indexing.chunking.code_section_chunker import CodeChunker
 from onyx.indexing.chunking.image_section_chunker import ImageChunker
 from onyx.indexing.chunking.section_chunker import (
     AccumulatorState,
@@ -45,6 +46,7 @@ class DocumentChunker:
             ),
             SectionType.IMAGE: ImageChunker(),
             SectionType.TABULAR: TabularChunker(tokenizer=tokenizer),
+            SectionType.CODE: CodeChunker(tokenizer=tokenizer),
         }
 
     def chunk(

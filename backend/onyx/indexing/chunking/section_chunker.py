@@ -37,6 +37,8 @@ class ChunkPayload(BaseModel):
     links: dict[int, str]
     is_continuation: bool = False
     image_file_id: str | None = None
+    # Set by chunkers whose content doesn't split on sentence boundaries.
+    skip_mini_chunks: bool = False
 
     def to_doc_aware_chunk(
         self,
@@ -59,7 +61,11 @@ class ChunkPayload(BaseModel):
             title_prefix=title_prefix,
             metadata_suffix_semantic=metadata_suffix_semantic,
             metadata_suffix_keyword=metadata_suffix_keyword,
-            mini_chunk_texts=get_mini_chunk_texts(self.text, mini_chunk_splitter),
+            mini_chunk_texts=(
+                None
+                if self.skip_mini_chunks
+                else get_mini_chunk_texts(self.text, mini_chunk_splitter)
+            ),
             large_chunk_id=None,
             doc_summary="",
             chunk_context="",

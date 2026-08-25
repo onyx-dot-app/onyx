@@ -32,6 +32,7 @@ from onyx.connectors.models import (
     Section,
     SectionType,
     TextSection,
+    is_text_bearing,
 )
 from onyx.db.connector_credential_pair import get_connector_credential_pair
 from onyx.db.document import (
@@ -625,7 +626,7 @@ def filter_documents(
 
     for document in document_batch:
         empty_contents = not any(
-            isinstance(section, TextSection)
+            is_text_bearing(section)
             and section.text is not None
             and section.text.strip()
             for section in document.sections
@@ -656,7 +657,7 @@ def filter_documents(
         section_chars = sum(
             (
                 len(section.text)
-                if isinstance(section, TextSection) and section.text is not None
+                if is_text_bearing(section) and section.text is not None
                 else 0
             )
             for section in document.sections
@@ -1079,7 +1080,7 @@ def _apply_document_ingestion_hook(
             source=doc.source.value if doc.source is not None else "",
             sections=[
                 DocumentIngestionSection(
-                    text=s.text if isinstance(s, TextSection) else None,
+                    text=s.text if is_text_bearing(s) else None,
                     link=s.link,
                     image_file_id=(
                         s.image_file_id if isinstance(s, ImageSection) else None
@@ -1233,7 +1234,7 @@ def _maybe_push_documents(
             if doc is None:
                 continue
             content = " ".join(
-                s.text for s in doc.sections if isinstance(s, TextSection) and s.text
+                s.text for s in doc.sections if is_text_bearing(s) and s.text
             )
             payload = DocumentPushPayload(
                 document_id=doc_id,
@@ -1241,11 +1242,7 @@ def _maybe_push_documents(
                 content=content,
                 source=str(doc.source.value) if doc.source else "unknown",
                 url=next(
-                    (
-                        s.link
-                        for s in doc.sections
-                        if isinstance(s, TextSection) and s.link
-                    ),
+                    (s.link for s in doc.sections if is_text_bearing(s) and s.link),
                     None,
                 ),
                 doc_updated_at=(
