@@ -55,7 +55,7 @@ Examples:
 
 	cmd.Flags().BoolVar(&write, "write", false, "rewrite the files; without it the command only reports")
 	cmd.Flags().StringVar(&summaryFile, "summary-file", "", "write a markdown summary of the changes to this path")
-	cmd.Flags().StringVar(&family, "family", "", "only act on one base family, for example `python` or `node`")
+	cmd.Flags().StringVar(&family, "family", "", "only act on one base family, for example python or node")
 	cmd.Flags().BoolVar(&listStaleFamilies, "list-stale-families", false, "print the families that have a stale digest, one per line, and exit")
 	cmd.Flags().StringVar(&cacheFile, "cache-file", "", "read resolved digests from this path, or write them there if absent")
 

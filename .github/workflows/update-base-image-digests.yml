@@ -145,6 +145,10 @@ jobs:
               echo
               echo "Refreshes digests only. A base pinned to an immutable patch tag"
               echo "(for example \`golang:1.26.5-alpine\`) needs a manual tag bump."
+              echo
+              echo "Some families touch adjacent lines of the same file, so this PR"
+              echo "can conflict after another family PR merges. Re-run the workflow"
+              echo "to regenerate it instead of resolving by hand."
             } > "${RUNNER_TEMP}/pr-body-${family}.md"
 
             title="chore(deps): update ${family} base image digests"
