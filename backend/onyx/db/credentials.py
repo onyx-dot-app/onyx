@@ -7,8 +7,9 @@ from sqlalchemy.sql.expression import and_, or_
 from onyx.auth.permissions import get_effective_permissions
 from onyx.configs.constants import DocumentSource, NotificationType
 from onyx.db.connector_alerts import clear_connector_alerts__no_commit
-from onyx.db.enums import ConnectorCredentialPairStatus, Permission
+from onyx.db.enums import AccessType, ConnectorCredentialPairStatus, Permission
 from onyx.db.models import (
+    Connector,
     ConnectorCredentialPair,
     Credential,
     Credential__UserGroup,
@@ -133,6 +134,71 @@ def fetch_credentials_by_source(
     base_query = select(Credential).where(Credential.source == document_source)
     credentials = db_session.execute(base_query).scalars().all()
     return list(credentials)
+
+
+def fetch_github_access_token_for_repo(
+    db_session: Session,
+    repo_owner: str,
+    repo_name: str | None = None,
+) -> str | None:
+    """Access token of the GitHub connector credential that indexes the repo.
+
+    The token unlocks the repo's FULL source for the caller, which is more
+    than indexing exposes, so eligibility is deliberately narrow. A pair
+    qualifies only when the admin both:
+    - made it org-public (AccessType.PUBLIC) — permission-synced or private
+      pairs are skipped since the coding agent has no per-user access check;
+    - named the repo explicitly in the connector's `repositories` config.
+      Owner-wide connectors do NOT qualify: they would extend one PAT to
+      every repo of the owner.
+
+    Returns None when no eligible pair matches (public-repo access only).
+    """
+    if not repo_name:
+        return None
+
+    stmt = (
+        select(Credential, Connector)
+        .join(
+            ConnectorCredentialPair,
+            ConnectorCredentialPair.credential_id == Credential.id,
+        )
+        .join(Connector, Connector.id == ConnectorCredentialPair.connector_id)
+        .where(
+            Connector.source == DocumentSource.GITHUB,
+            ConnectorCredentialPair.access_type == AccessType.PUBLIC,
+            # Active pairs only: a paused or invalid pair must not keep
+            # granting its PAT (and its index is going stale anyway).
+            ConnectorCredentialPair.status.in_(
+                ConnectorCredentialPairStatus.active_statuses()
+            ),
+        )
+    )
+
+    owner_lower = repo_owner.lower()
+    repo_lower = repo_name.lower()
+
+    for credential, connector in db_session.execute(stmt).all():
+        config = connector.connector_specific_config or {}
+        if str(config.get("repo_owner", "")).lower() != owner_lower:
+            continue
+
+        named_repos = {
+            r.strip().lower()
+            for r in str(config.get("repositories") or "").split(",")
+            if r.strip()
+        }
+        if repo_lower not in named_repos:
+            continue
+
+        if credential.credential_json is None:
+            continue
+        credential_dict = credential.credential_json.get_value(apply_mask=False)
+        token = credential_dict.get("github_access_token")
+        if token:
+            return token
+
+    return None
 
 
 def swap_credentials_connector(
