@@ -1,7 +1,6 @@
 import copy
 import os
 from collections.abc import Callable, Generator
-from contextlib import AbstractContextManager
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from io import BytesIO
@@ -17,9 +16,14 @@ from pydantic import BaseModel
 from typing_extensions import override
 
 from onyx.access.models import ExternalAccess
-from onyx.configs.app_configs import GITHUB_CONNECTOR_BASE_URL
+from onyx.configs.app_configs import (
+    GITHUB_CONNECTOR_BASE_URL,
+    REPO_ARCHIVE_FETCH_TIMEOUT,
+    REPO_ARCHIVE_MAX_BYTES,
+)
 from onyx.configs.constants import (
     CODE_FILE_BRANCH_KEY,
+    CODE_FILE_COMMIT_SHA_KEY,
     CODE_FILE_LANGUAGE_KEY,
     CODE_FILE_METADATA_TYPE,
     CODE_FILE_PATH_KEY,
@@ -76,9 +80,7 @@ from onyx.file_processing.extract_file_text import (
     is_text_file,
 )
 from onyx.repo_archives.github import GitHubArchiveProvider
-from onyx.repo_archives.models import RepoArchive, RepoRevision
-from onyx.repo_archives.snapshot import RepoSnapshot, get_or_create_snapshot
-from onyx.repo_archives.tarball_cache import open_revision_archive, resolve_revision
+from onyx.repo_archives.snapshot import RepoSnapshot, snapshot_or_none
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -146,9 +148,6 @@ GITHUB_PATH_DENYLIST = {
 }
 # Skip files larger than this (checked against the git tree size before fetching).
 GITHUB_MAX_FILE_SIZE_BYTES = 1_000_000
-# Cap on the one-request tarball download that serves the FILES stage.
-GITHUB_REPO_ARCHIVE_MAX_BYTES = 500 * 1024 * 1024
-GITHUB_REPO_ARCHIVE_TIMEOUT = (30, 300)
 # Number of files emitted per checkpoint batch in the FILES stage.
 FILE_BATCH_SIZE = 100
 
@@ -619,7 +618,7 @@ def _convert_file_to_document(
     if commit_sha:
         # The exact revision indexed; lets downstream consumers (e.g. the
         # coding agent) pin their analysis to it.
-        metadata["commit_sha"] = commit_sha
+        metadata[CODE_FILE_COMMIT_SHA_KEY] = commit_sha
 
     # Source-code files become CodeSections so they chunk at syntactic
     # boundaries; everything else stays prose.
@@ -783,42 +782,17 @@ class GithubConnector(
         if cache_key in self._snapshot_cache:
             return self._snapshot_cache[cache_key]
 
-        provider = GitHubArchiveProvider(
-            f"Bearer {self._github_token}" if self._github_token else None
-        )
+        provider = GitHubArchiveProvider.from_token(self._github_token)
         owner, _, name = repo.full_name.partition("/")
-        snapshot: RepoSnapshot | None = None
-        try:
-            # No resolved SHA, no snapshot: a branch-keyed cache could serve
-            # a stale tree after the branch moves.
-            revision = resolve_revision(
-                provider, provider.repo_ref(owner, name), branch
-            )
-            if revision is not None:
-                snapshot = get_or_create_snapshot(
-                    revision, lambda: self._open_archive(provider, revision)
-                )
-        except Exception:
-            logger.warning(
-                "Snapshot of %s@%s failed; falling back to the GitHub content "
-                "API for file fetching",
-                repo.full_name,
-                branch,
-                exc_info=True,
-            )
+        snapshot = snapshot_or_none(
+            provider,
+            provider.repo_ref(owner, name),
+            branch,
+            max_size_bytes=REPO_ARCHIVE_MAX_BYTES,
+            timeout=REPO_ARCHIVE_FETCH_TIMEOUT,
+        )
         self._snapshot_cache[cache_key] = snapshot
         return snapshot
-
-    @staticmethod
-    def _open_archive(
-        provider: GitHubArchiveProvider, revision: RepoRevision
-    ) -> AbstractContextManager[RepoArchive]:
-        return open_revision_archive(
-            provider,
-            revision,
-            max_size_bytes=GITHUB_REPO_ARCHIVE_MAX_BYTES,
-            timeout=GITHUB_REPO_ARCHIVE_TIMEOUT,
-        )
 
     def get_github_repo(
         self, github_client: Github, attempt_num: int = 0
@@ -1560,9 +1534,6 @@ class GithubConnector(
                     validation_errors = []
 
                     for repo_name in repo_names:
-                        if not repo_name:
-                            continue
-
                         try:
                             test_repo = self.github_client.get_repo(
                                 f"{self.repo_owner}/{repo_name}"

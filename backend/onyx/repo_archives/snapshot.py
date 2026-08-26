@@ -30,7 +30,8 @@ from onyx.configs.app_configs import (
     REPO_SNAPSHOT_MAX_TOTAL_BYTES,
     REPO_SNAPSHOT_TTL_SECONDS,
 )
-from onyx.repo_archives.models import RepoArchive, RepoRevision
+from onyx.repo_archives.models import RepoArchive, RepoRef, RepoRevision
+from onyx.repo_archives.provider import RepoArchiveProvider
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -274,3 +275,43 @@ def get_or_create_snapshot(
         archive_size,
     )
     return RepoSnapshot(dest, revision)
+
+
+def snapshot_or_none(
+    provider: RepoArchiveProvider,
+    repo: RepoRef,
+    ref: str | None,
+    *,
+    max_size_bytes: int,
+    timeout: float | tuple[float, float],
+) -> RepoSnapshot | None:
+    """Snapshot of `repo` at `ref`, or None when one cannot be produced;
+    callers then fall back to their per-file path.
+
+    No resolved SHA, no snapshot: a ref-keyed cache could serve a stale tree
+    after the ref moves.
+    """
+    # Imported here so the tarball cache can depend on this module later.
+    from onyx.repo_archives.tarball_cache import (
+        open_revision_archive,
+        resolve_revision,
+    )
+
+    try:
+        pinned = resolve_revision(provider, repo, ref)
+        if pinned is None:
+            return None
+        return get_or_create_snapshot(
+            pinned,
+            lambda: open_revision_archive(
+                provider, pinned, max_size_bytes=max_size_bytes, timeout=timeout
+            ),
+        )
+    except Exception:
+        logger.warning(
+            "Snapshot of %s@%s failed; falling back to per-file fetching",
+            repo.display,
+            ref or "HEAD",
+            exc_info=True,
+        )
+        return None

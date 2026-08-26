@@ -1,6 +1,9 @@
 from io import BytesIO
 from unittest.mock import patch
 
+import pytest
+
+from onyx.error_handling.exceptions import OnyxError
 from onyx.repo_archives.github import GitHubArchiveProvider
 from onyx.utils.github import GitHubRevision, GitHubSource
 
@@ -35,11 +38,34 @@ def test_resolve_branch_and_default_branch() -> None:
         assert resolve.call_args.args[0] == GitHubSource(owner="org", repo="repo")
 
 
-def test_pinned_sha_is_kept_but_access_is_checked() -> None:
+def test_pinned_sha_is_resolved_and_access_is_checked() -> None:
+    """A SHA goes through the same commits call as a branch: it both confirms
+    the commit exists and proves the caller can read the repo."""
     provider = GitHubArchiveProvider()
-    with patch(f"{MODULE}.resolve_github_revision") as resolve:
+    with patch(
+        f"{MODULE}.resolve_github_revision",
+        return_value=GitHubRevision(revision=SHA, subpath=None),
+    ) as resolve:
         assert provider.resolve_commit(REPO, SHA.upper()) == SHA
-    resolve.assert_called_once_with(GitHubSource(owner="org", repo="repo"), None)
+    resolve.assert_called_once_with(
+        GitHubSource(owner="org", repo="repo", tree_tail=(SHA.upper(),)), None
+    )
+
+
+def test_from_token_and_repo_ref_from_url() -> None:
+    assert GitHubArchiveProvider.from_token("t")._authorization_header == "Bearer t"
+    assert GitHubArchiveProvider.from_token(None)._authorization_header is None
+
+    for source in (
+        "https://github.com/org/repo",
+        "https://github.com/org/repo.git",
+        "org/repo",
+        "git@github.com:org/repo.git",
+    ):
+        assert GitHubArchiveProvider.repo_ref_from_url(source) == REPO
+
+    with pytest.raises(OnyxError):
+        GitHubArchiveProvider.repo_ref_from_url("https://example.com/org/repo")
 
 
 def test_stream_archive_delegates() -> None:

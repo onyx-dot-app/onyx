@@ -1,13 +1,16 @@
-from dataclasses import replace
 from typing import BinaryIO
 
 from onyx.repo_archives.models import RepoRef
 from onyx.utils.github import (
-    GITHUB_COMMIT_SHA_PATTERN,
     GitHubSource,
+    parse_github_source,
     resolve_github_revision,
     stream_github_archive,
 )
+
+
+def _source(repo: RepoRef, tree_tail: tuple[str, ...] = ()) -> GitHubSource:
+    return GitHubSource(owner=repo.owner, repo=repo.name, tree_tail=tree_tail)
 
 
 class GitHubArchiveProvider:
@@ -20,23 +23,29 @@ class GitHubArchiveProvider:
         self._authorization_header = authorization_header
 
     @classmethod
+    def from_token(cls, token: str | None) -> "GitHubArchiveProvider":
+        """Provider for a GitHub access token; anonymous when None."""
+        return cls(f"Bearer {token}" if token else None)
+
+    @classmethod
     def repo_ref(cls, owner: str, name: str) -> RepoRef:
         return RepoRef(provider=cls.PROVIDER, host=cls.HOST, owner=owner, name=name)
+
+    @classmethod
+    def repo_ref_from_url(cls, repo_url: str) -> RepoRef:
+        """Identity of the repo named by a URL, `owner/repo`, or SSH remote.
+        Raises OnyxError when the source cannot be parsed."""
+        source = parse_github_source(repo_url, allow_ssh=True)
+        return cls.repo_ref(source.owner, source.repo)
 
     @property
     def authenticated(self) -> bool:
         return self._authorization_header is not None
 
     def resolve_commit(self, repo: RepoRef, ref: str | None) -> str:
-        source = GitHubSource(owner=repo.owner, repo=repo.name)
-        if ref and GITHUB_COMMIT_SHA_PATTERN.fullmatch(ref):
-            # A pinned SHA needs no resolution, but one authenticated repo
-            # call still runs so a caller without access cannot read cached
-            # source. On failure the download path enforces access itself.
-            resolve_github_revision(source, self._authorization_header)
-            return ref.lower()
-        if ref:
-            source = replace(source, tree_tail=(ref,))
+        # GitHub's commits endpoint accepts a branch, tag, or SHA, so one call
+        # both resolves `ref` and proves the caller can access the repo.
+        source = _source(repo, tree_tail=(ref,) if ref else ())
         return resolve_github_revision(source, self._authorization_header).revision
 
     def stream_archive(
@@ -49,7 +58,7 @@ class GitHubArchiveProvider:
         timeout: float | tuple[float, float],
     ) -> int:
         return stream_github_archive(
-            GitHubSource(owner=repo.owner, repo=repo.name),
+            _source(repo),
             revision,
             self._authorization_header,
             max_size_bytes=max_size_bytes,
