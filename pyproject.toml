@@ -7,7 +7,7 @@ dependencies = [
     "aioboto3==15.1.0",
     "cohere==7.0.5",
     "fastapi==0.133.1",
-    "google-genai==1.52.0",
+    "google-genai==2.18.1",
     "huggingface-hub==1.26.0",
     "litellm[google]==1.93.0",
     "openai==2.38.0",
