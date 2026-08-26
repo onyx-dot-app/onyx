@@ -45,45 +45,14 @@ import {
   startMCPUserOAuth,
 } from "@/lib/tools/svc";
 
-export interface ToolsPopoverProps {
-  filterManager: FilterManager;
-  disabled?: boolean;
-}
-
-/**
- * The actions popover.
- *
- * Only resolves the agent. Everything the panel shows is scoped to one — the
- * rows are its tools, the toggles are its per-agent preferences, the sources
- * are what it can reach — so there is nothing to render without it, and
- * {@link AgentTools} is spared having to ask whether it has one.
- */
-export default function ToolsPopover(props: ToolsPopoverProps) {
-  const activeAgent = useActiveAgent();
-
-  // No agent covers two situations. The agent list is still loading, which is
-  // every cold mount, and the parent keeps this row invisible meanwhile. Or
-  // there is genuinely no agent to act as — the default Assistant disabled
-  // with nothing to replace it — which AppPage answers with NoAgentModal.
-  // Neither wants a tool menu.
-  if (!activeAgent) return null;
-
-  // Keyed, so switching agents starts clean rather than carrying the previous
-  // agent's open panel, search term and half-opened MCP server across.
-  return (
-    <AgentTools key={activeAgent.id} activeAgent={activeAgent} {...props} />
-  );
-}
-
-interface AgentToolsProps extends ToolsPopoverProps {
+interface ToolsPopoverInnerProps extends ToolsPopoverProps {
   activeAgent: MinimalAgent;
 }
-
-function AgentTools({
+function ToolsPopoverInner({
   activeAgent,
   filterManager,
   disabled = false,
-}: AgentToolsProps) {
+}: ToolsPopoverInnerProps) {
   const { availableSources } = useAvailableSources();
   const [open, setOpen] = useState(false);
   const [secondaryView, setSecondaryView] = useState<SecondaryViewState | null>(
@@ -918,5 +887,38 @@ function AgentTools({
         />
       )}
     </>
+  );
+}
+
+/**
+ * The actions popover.
+ *
+ * Only resolves the agent. Everything the panel shows is scoped to one — the
+ * rows are its tools, the toggles are its per-agent preferences, the sources
+ * are what it can reach — so there is nothing to render without it, and
+ * {@link ToolsPopoverInner} is spared having to ask whether it has one.
+ */
+export interface ToolsPopoverProps {
+  filterManager: FilterManager;
+  disabled?: boolean;
+}
+export default function ToolsPopover(props: ToolsPopoverProps) {
+  const activeAgent = useActiveAgent();
+
+  // No agent covers two situations. The agent list is still loading, which is
+  // every cold mount, and the parent keeps this row invisible meanwhile. Or
+  // there is genuinely no agent to act as — the default Assistant disabled
+  // with nothing to replace it — which AppPage answers with NoAgentModal.
+  // Neither wants a tool menu.
+  if (!activeAgent) return null;
+
+  // Keyed, so switching agents starts clean rather than carrying the previous
+  // agent's open panel, search term and half-opened MCP server across.
+  return (
+    <ToolsPopoverInner
+      key={activeAgent.id}
+      activeAgent={activeAgent}
+      {...props}
+    />
   );
 }
