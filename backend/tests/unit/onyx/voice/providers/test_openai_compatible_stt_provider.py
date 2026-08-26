@@ -24,6 +24,11 @@ from onyx.voice.types import VoiceProviderType
         ("http://stt.example/", "http://stt.example/v1"),
         ("http://stt.example/v1", "http://stt.example/v1"),
         ("http://stt.example/v1/", "http://stt.example/v1"),
+        (
+            "http://stt.example/root?tenant=one",
+            "http://stt.example/root/v1?tenant=one",
+        ),
+        ("http://stt.example/v1?tenant=one", "http://stt.example/v1?tenant=one"),
     ],
 )
 def test_openai_compatible_api_base_normalization(api_base: str, expected: str) -> None:
