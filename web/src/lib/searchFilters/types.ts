@@ -29,8 +29,13 @@ export interface TimeRange {
   end: Date | string | null;
 }
 
-/** The frozen form of a {@link SearchFilters}, as the backend receives it. */
-export interface Filters {
+/**
+ * The frozen form of a {@link SearchFilters}, as the backend receives it.
+ *
+ * Built by `buildFilters` at send time: rich objects become identifiers,
+ * empty selections become null, and the setters and methods fall away.
+ */
+export interface SearchFiltersRequest {
   source_type: string[] | null;
   document_set: string[] | null;
   updated_at_range: TimeRange | null;

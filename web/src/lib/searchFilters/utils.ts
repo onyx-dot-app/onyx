@@ -1,7 +1,7 @@
 import type { Tag } from "@/lib/types";
 import type { SourceMetadata } from "@/lib/search/interfaces";
 import type { DateRangePickerValue } from "@/refresh-components/DateRangePicker";
-import type { Filters } from "@/lib/searchFilters/types";
+import type { SearchFiltersRequest } from "@/lib/searchFilters/types";
 
 /** Freezes a live selection into the shape the backend receives. */
 export function buildFilters(
@@ -9,7 +9,7 @@ export function buildFilters(
   documentSets: string[],
   timeRange: DateRangePickerValue | null,
   tags: Tag[]
-): Filters {
+): SearchFiltersRequest {
   return {
     source_type:
       sources.length > 0 ? sources.map((source) => source.internalName) : null,

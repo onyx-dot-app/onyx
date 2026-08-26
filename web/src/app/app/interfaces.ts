@@ -3,7 +3,7 @@ import {
   SearchOnyxDocument,
   StreamStopReason,
 } from "@/lib/search/interfaces";
-import type { Filters } from "@/lib/searchFilters/types";
+import type { SearchFiltersRequest } from "@/lib/searchFilters/types";
 import { Packet } from "./services/streamingModels";
 import { ReasoningEffortOverride } from "@/lib/languageModels/types";
 
@@ -81,7 +81,7 @@ export const BUFFER_COUNT = 35;
 export interface RetrievalDetails {
   run_search: "always" | "never" | "auto";
   real_time: boolean;
-  filters?: Filters;
+  filters?: SearchFiltersRequest;
   enable_auto_detect_filters?: boolean | null;
 }
 

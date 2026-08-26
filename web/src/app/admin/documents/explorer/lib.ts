@@ -1,6 +1,9 @@
-import { Filters } from "@/lib/searchFilters/types";
+import { SearchFiltersRequest } from "@/lib/searchFilters/types";
 
-export const adminSearch = async (query: string, filters: Filters) => {
+export const adminSearch = async (
+  query: string,
+  filters: SearchFiltersRequest
+) => {
   const response = await fetch("/api/admin/search", {
     method: "POST",
     headers: {
