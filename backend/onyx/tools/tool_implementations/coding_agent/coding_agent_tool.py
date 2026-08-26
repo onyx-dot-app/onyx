@@ -22,6 +22,7 @@ from onyx.configs.constants import (
 )
 from onyx.db.credentials import fetch_github_access_token_for_repo
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
+from onyx.db.models import User
 from onyx.llm.factory import get_llm_token_counter
 from onyx.llm.interfaces import LLM
 from onyx.repo_archives.github import GitHubArchiveProvider
@@ -70,10 +71,15 @@ class CodingAgentTool(Tool[CodingAgentToolOverrideKwargs]):
         tool_id: int,
         emitter: Emitter,
         llm: LLM,
+        user: User,
     ) -> None:
+        """``user`` is the actor for both index reads and the credential audit
+        trail. Seed retrieval runs under this user's ACL.
+        """
         super().__init__(emitter=emitter)
         self._id = tool_id
         self._llm = llm
+        self._user = user
 
     @property
     def id(self) -> int:
@@ -108,8 +114,8 @@ class CodingAgentTool(Tool[CodingAgentToolOverrideKwargs]):
         # there, mirroring PythonTool's pattern.
         return
 
-    @staticmethod
     def _fetch_seed_paths(
+        self,
         db_session: Session,
         query: str,
         repo_ref: RepoRef,
@@ -118,15 +124,18 @@ class CodingAgentTool(Tool[CodingAgentToolOverrideKwargs]):
         """File paths from the code index most relevant to ``query``.
 
         Keyword retrieval over indexed GitHub source-code docs, restricted to
-        ``repo_ref``. The query runs without a per-user ACL, so callers must
-        only invoke this for repos whose indexed docs are org-visible —
-        ``run()`` gates on the org-public connector-token eligibility for
-        exactly this reason. Failures degrade to an unseeded run.
+        ``repo_ref`` and to what this user may already read: the retrieval
+        carries the same per-user ACL every other tool uses, so it returns
+        only paths the user could reach through ordinary search. Failures
+        degrade to an unseeded run.
         """
         # Imported lazily: the document-index/search stack must stay off the
         # tool-construction import path.
         from onyx.configs.constants import DocumentSource
         from onyx.context.search.models import IndexFilters, Tag
+        from onyx.context.search.preprocessing.access_filters import (
+            build_access_filters_for_user,
+        )
         from onyx.db.search_settings import get_current_search_settings
         from onyx.document_index.factory import get_default_document_index
         from shared_configs.contextvars import get_current_tenant_id
@@ -150,7 +159,9 @@ class CodingAgentTool(Tool[CodingAgentToolOverrideKwargs]):
                             tag_value=CODE_FILE_METADATA_TYPE,
                         )
                     ],
-                    access_control_list=None,
+                    access_control_list=build_access_filters_for_user(
+                        self._user, db_session
+                    ),
                     tenant_id=get_current_tenant_id(),
                 ),
                 num_to_retrieve=SEED_PATH_CHUNKS_TO_RETRIEVE,
@@ -178,17 +189,20 @@ class CodingAgentTool(Tool[CodingAgentToolOverrideKwargs]):
                 break
         return paths
 
-    @staticmethod
-    def _fetch_connector_token(db_session: Session, repo_ref: RepoRef) -> str | None:
+    def _fetch_connector_token(
+        self, db_session: Session, repo_ref: RepoRef
+    ) -> str | None:
         """Token of the GitHub connector that indexes ``repo_ref``, from the DB.
 
-        Only org-public connector pairs are eligible (see
+        The admin must have opted the connector in to coding-agent use, on top
+        of the other narrowing checks (see
         fetch_github_access_token_for_repo). None → public-repo access only.
         """
         token = fetch_github_access_token_for_repo(
             db_session=db_session,
             repo_owner=repo_ref.owner,
             repo_name=repo_ref.name,
+            user=self._user,
         )
         if token:
             logger.info(
@@ -244,23 +258,15 @@ class CodingAgentTool(Tool[CodingAgentToolOverrideKwargs]):
             )
         )
 
-        # Imported lazily to avoid a circular import: coding_agent.py imports
-        # the BashTool which lives in tool_implementations alongside us.
+        # Imported lazily to break a circular import: fake_tools.coding_agent
+        # -> chat.llm_loop -> tools.built_in_tools -> this module.
         from onyx.tools.fake_tools.coding_agent import run_coding_agent_call
 
         with get_session_with_current_tenant() as db_session:
+            # Separate gates: seeding reads the index under the user's own
+            # ACL, while the token lends a credential and exposes the tree.
             connector_token = self._fetch_connector_token(db_session, repo_ref)
-            # Seed only when an org-public connector pair covers this repo:
-            # seed retrieval runs without a per-user ACL, so it must be
-            # limited to repos whose indexed docs every org member may see. A
-            # None token means no such pair exists (permission-synced or
-            # unindexed repo) — run unseeded rather than leak file paths
-            # through the agent prompt.
-            seed_paths = (
-                self._fetch_seed_paths(db_session, query, repo_ref)
-                if connector_token
-                else []
-            )
+            seed_paths = self._fetch_seed_paths(db_session, query, repo_ref)
 
         synthetic_call = ToolCallKickoff(
             tool_call_id=str(uuid4()),

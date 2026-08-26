@@ -18,7 +18,7 @@ def test_coding_agent_fetches_and_extracts_repo_with_existing_policy(
         path=archive_path,
         size=archive_path.stat().st_size,
         revision=RepoRevision(
-            repo=GitHubArchiveProvider.repo_ref("onyx-dot-app", "onyx"),
+            repo=GitHubArchiveProvider.repo_ref_from_url("onyx-dot-app/onyx"),
             commit_sha="a" * 40,
         ),
     )
@@ -38,7 +38,7 @@ def test_coding_agent_fetches_and_extracts_repo_with_existing_policy(
         ) as open_archive,
         patch.object(coding_agent, "CodeInterpreterClient", return_value=client),
         coding_agent._setup_session(
-            repo_ref=GitHubArchiveProvider.repo_ref("onyx-dot-app", "onyx"),
+            repo_ref=GitHubArchiveProvider.repo_ref_from_url("onyx-dot-app/onyx"),
             github_token="secret",
         ) as (session_id, commit_sha),
     ):
