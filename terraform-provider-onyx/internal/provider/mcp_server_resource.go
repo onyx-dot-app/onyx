@@ -320,7 +320,6 @@ func (r *mcpServerResource) writeFromModel(
 	ctx context.Context,
 	plan mcpServerResourceModel,
 	id *int64,
-	secretsChanged bool,
 	diags *diag.Diagnostics,
 ) (client.MCPServerWrite, bool) {
 	write := client.MCPServerWrite{
@@ -332,7 +331,7 @@ func (r *mcpServerResource) writeFromModel(
 		AuthPerformer:    plan.AuthPerformer.ValueString(),
 		Transport:        plan.Transport.ValueString(),
 		APIToken:         plan.APIToken.ValueStringPointer(),
-		APITokenChanged:  secretsChanged && !plan.APIToken.IsNull(),
+		APITokenChanged:  !plan.APIToken.IsNull(),
 		IsPublic:         plan.IsPublic.ValueBoolPointer(),
 	}
 
@@ -345,13 +344,11 @@ func (r *mcpServerResource) writeFromModel(
 		credentials := map[string]string{}
 		diags.Append(plan.AdminCredentials.ElementsAs(ctx, &credentials, false)...)
 		write.AdminCredentials = credentials
-		if secretsChanged {
-			changed := make(map[string]bool, len(credentials))
-			for key := range credentials {
-				changed[key] = true
-			}
-			write.AdminCredentialsChanged = changed
+		changed := make(map[string]bool, len(credentials))
+		for key := range credentials {
+			changed[key] = true
 		}
+		write.AdminCredentialsChanged = changed
 	}
 
 	// Null leaves the stored access alone, so only send a list the
@@ -460,7 +457,7 @@ func (r *mcpServerResource) Create(ctx context.Context, req resource.CreateReque
 		return
 	}
 
-	write, ok := r.writeFromModel(ctx, plan, nil, true, &resp.Diagnostics)
+	write, ok := r.writeFromModel(ctx, plan, nil, &resp.Diagnostics)
 	if !ok {
 		return
 	}
@@ -533,7 +530,7 @@ func (r *mcpServerResource) Update(ctx context.Context, req resource.UpdateReque
 		return
 	}
 
-	write, ok := r.writeFromModel(ctx, plan, &id, true, &resp.Diagnostics)
+	write, ok := r.writeFromModel(ctx, plan, &id, &resp.Diagnostics)
 	if !ok {
 		return
 	}

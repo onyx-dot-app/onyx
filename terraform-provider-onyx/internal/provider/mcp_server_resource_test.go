@@ -192,6 +192,79 @@ resource "onyx_mcp_server" "missing" {
 	})
 }
 
+// A per-user server: the admin declares the header template that names the
+// fields, and supplies their own values for them. Onyx stores those against the
+// identity that applied rather than against the server, so they are write-only
+// here for a second reason on top of the masking.
+func TestAccMCPServerResourcePerUserAuth(t *testing.T) {
+	name := acctest.RandomWithPrefix("tf-acc-mcp-per-user")
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		CheckDestroy:             testAccCheckMCPServerDestroyed(t),
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+resource "onyx_mcp_server" "per_user" {
+  name           = %q
+  server_url     = %q
+  auth_type      = "API_TOKEN"
+  auth_performer = "PER_USER"
+
+  auth_template_headers = {
+    "X-Api-Key" = "{api_key}"
+  }
+  admin_credentials = {
+    api_key = "the-admins-own-key"
+  }
+}
+`, name, mcpServerURL),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("onyx_mcp_server.per_user", "auth_performer", "PER_USER"),
+					// The template survives the round trip as written, rather
+					// than being replaced by the shared-token one Onyx writes
+					// for an ADMIN performer.
+					resource.TestCheckResourceAttr("onyx_mcp_server.per_user", "auth_template_headers.X-Api-Key", "{api_key}"),
+					resource.TestCheckResourceAttr("onyx_mcp_server.per_user", "admin_credentials.api_key", "the-admins-own-key"),
+				),
+			},
+			{
+				ResourceName:      "onyx_mcp_server.per_user",
+				ImportState:       true,
+				ImportStateVerify: true,
+				// Onyx returns these masked, and partially rather than fully,
+				// so an imported server carries neither.
+				ImportStateVerifyIgnore: []string{"admin_credentials"},
+			},
+		},
+	})
+}
+
+// A per-user server needs the header template naming the fields users fill in.
+// auth_template_headers is optional-and-computed, so this also proves the check
+// reads the configuration rather than the plan: a computed attribute is unknown
+// in the plan, and an unknown value is deliberately not reported.
+func TestAccMCPServerResourceRequiresATemplateForPerUserAuth(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+resource "onyx_mcp_server" "per_user" {
+  name           = "tf-acc-mcp-per-user"
+  server_url     = %q
+  auth_type      = "API_TOKEN"
+  auth_performer = "PER_USER"
+}
+`, mcpServerURL),
+				ExpectError: regexp.MustCompile(`(?s)Missing auth_template_headers`),
+			},
+		},
+	})
+}
+
 // testAccCheckMCPServerHasStoredCredentials proves the server still holds a
 // token. The value reads back masked, so its presence is all that can be
 // checked from outside — but a token dropped by an update would show up here.
