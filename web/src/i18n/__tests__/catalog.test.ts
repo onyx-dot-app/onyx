@@ -1,11 +1,11 @@
 /**
- * Guards the message catalogs:
+ * Guards what the type system cannot see inside the message strings:
  * - every message in every locale parses as ICU,
- * - non-English catalogs contain no keys that are missing from en.json,
- * - shared keys use exactly the same ICU placeholders as the English source.
+ * - each translation uses exactly the same ICU placeholders as its English
+ *   source.
  *
- * Keys present in en.json but not yet translated are reported, not failed —
- * that is the expected lag window before the translation pipeline runs.
+ * Key parity (no missing or extra keys per locale) is a compile-time check —
+ * see src/i18n/messages/keyParity.ts.
  */
 import {
   parse,
@@ -81,42 +81,18 @@ describe("i18n message catalogs", () => {
   });
 
   for (const [locale, catalog] of Object.entries(TARGET_LOCALES)) {
-    describe(locale, () => {
-      const flatLocale = flatten(catalog);
+    test(`${locale}: every message is valid ICU with the same placeholders as English`, () => {
+      for (const [key, message] of Object.entries(flatten(catalog))) {
+        const englishMessage = flatEnglish[key];
+        // Key parity is compile-time checked (messages/keyParity.ts).
+        if (englishMessage === undefined) continue;
 
-      test("has no keys that are missing from en.json", () => {
-        const orphans = Object.keys(flatLocale).filter(
-          (key) => !(key in flatEnglish)
-        );
-        expect(orphans).toEqual([]);
-      });
-
-      test("every message is valid ICU with the same placeholders as English", () => {
-        for (const [key, message] of Object.entries(flatLocale)) {
-          const englishMessage = flatEnglish[key];
-          if (englishMessage === undefined) continue; // covered by orphan test
-
-          expect(() => parse(message)).not.toThrow();
-          expect({ key, placeholders: sortedArguments(message) }).toEqual({
-            key,
-            placeholders: sortedArguments(englishMessage),
-          });
-        }
-      });
-
-      test("reports untranslated keys without failing", () => {
-        const untranslated = Object.keys(flatEnglish).filter(
-          (key) => !(key in flatLocale)
-        );
-        if (untranslated.length > 0) {
-          console.warn(
-            `[i18n] ${locale}: ${untranslated.length} untranslated key(s) ` +
-              `(English fallback renders until the translation pipeline runs): ` +
-              untranslated.slice(0, 20).join(", ")
-          );
-        }
-        expect(true).toBe(true);
-      });
+        expect(() => parse(message)).not.toThrow();
+        expect({ key, placeholders: sortedArguments(message) }).toEqual({
+          key,
+          placeholders: sortedArguments(englishMessage),
+        });
+      }
     });
   }
 });

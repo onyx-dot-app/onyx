@@ -483,10 +483,11 @@ The UI is being migrated to next-intl. English message catalogs live in
   violations.
 - **Update every locale when you touch a key.** `en.json` is the source of
   truth. When you add or change a key, also give `es/pt/fr/de.json` your best
-  translation of the English value. Keep the ICU shape (arguments, tags,
+  translation of the English value. Key parity is a compile-time check:
+  `src/i18n/messages/keyParity.ts` makes a missing or extra locale key fail
+  `types:check` (pre-commit, CI, IDE). Keep the ICU shape (arguments, tags,
   plurals) identical across locales — `web/src/i18n/__tests__/catalog.test.ts`
-  enforces this. Keys missing from a locale fall back to English at runtime.
-  A future translation pipeline will validate these translations.
+  enforces this.
 - Keys are stable identifiers, not English sentences:
   `<namespace>.<section>.<element>.<role>` in camelCase
   (e.g. `settings.appearance.colorMode.title`). Rewording English copy must not

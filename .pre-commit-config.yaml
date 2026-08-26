@@ -340,7 +340,9 @@ repos:
 
         language: system
         pass_filenames: false
-        files: ^web/.*\.(ts|tsx)$
+        # The i18n catalogs are part of the type graph: keyParity.ts turns a
+        # missing or extra locale key into a compile error.
+        files: ^web/(.*\.(ts|tsx)|src/i18n/messages/.*\.json)$
 
       - id: widget-typescript-check
         name: widget TypeScript type check
