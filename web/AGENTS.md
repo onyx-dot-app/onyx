@@ -481,9 +481,12 @@ The UI is being migrated to next-intl. English message catalogs live in
   `await getTranslations("<namespace>")` (server) and add the English value to
   `en.json`. The oxlint rule and the `types:check` key augmentation both fail on
   violations.
-- **Only edit `en.json` by hand.** The other locale files (`es/pt/fr/de.json`)
-  are owned by the translation pipeline — do not hand-edit them; untranslated
-  keys fall back to English at runtime.
+- **Update every locale when you touch a key.** `en.json` is the source of
+  truth. When you add or change a key, also give `es/pt/fr/de.json` your best
+  translation of the English value. Keep the ICU shape (arguments, tags,
+  plurals) identical across locales — `web/src/i18n/__tests__/catalog.test.ts`
+  enforces this. Keys missing from a locale fall back to English at runtime.
+  A future translation pipeline will validate these translations.
 - Keys are stable identifiers, not English sentences:
   `<namespace>.<section>.<element>.<role>` in camelCase
   (e.g. `settings.appearance.colorMode.title`). Rewording English copy must not
