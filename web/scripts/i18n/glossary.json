@@ -1,0 +1,17 @@
+{
+  "doNotTranslate": ["Onyx", "Chat"],
+  "terms": {
+    "Connector": {
+      "es": "Conector",
+      "pt": "Conector",
+      "fr": "Connecteur",
+      "de": "Konnektor"
+    }
+  },
+  "localeStyle": {
+    "es": "Spanish. Informal register (tú), matching the existing catalog.",
+    "pt": "Brazilian Portuguese. Informal register (você), matching the existing catalog.",
+    "fr": "French. Formal register (vous), matching the existing catalog.",
+    "de": "German. Formal register (Sie), matching the existing catalog."
+  }
+}

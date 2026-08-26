@@ -1,122 +1,96 @@
 /**
- * Guards the message catalogs:
- * - every message in every locale parses as ICU,
- * - non-English catalogs contain no keys that are missing from en.json,
- * - shared keys use exactly the same ICU placeholders as the English source.
- *
- * Keys present in en.json but not yet translated are reported, not failed —
- * that is the expected lag window before the translation pipeline runs.
+ * Guards the message catalogs via the shared validator (`@/i18n/validation`),
+ * which the pipeline CLIs in `web/scripts/i18n/` also use:
+ * - blocking: every message parses as ICU, no orphan keys, and shared keys use
+ *   exactly the same ICU placeholders as the English source;
+ * - advisory: untranslated or stale keys are reported, not failed — authors
+ *   translate by hand and the nightly translation workflow backfills the rest.
  */
-import {
-  parse,
-  TYPE,
-  type MessageFormatElement,
-} from "@formatjs/icu-messageformat-parser";
-
 import de from "@/i18n/messages/de.json";
 import en from "@/i18n/messages/en.json";
 import es from "@/i18n/messages/es.json";
 import fr from "@/i18n/messages/fr.json";
 import pt from "@/i18n/messages/pt.json";
-
-type MessageTree = { [key: string]: string | MessageTree };
-
-const TARGET_LOCALES: Record<string, MessageTree> = { de, es, fr, pt };
-
-function flatten(tree: MessageTree, prefix = ""): Record<string, string> {
-  const flat: Record<string, string> = {};
-  for (const [key, value] of Object.entries(tree)) {
-    const path = prefix ? `${prefix}.${key}` : key;
-    if (typeof value === "string") {
-      flat[path] = value;
-    } else {
-      Object.assign(flat, flatten(value, path));
-    }
-  }
-  return flat;
-}
-
-function collectArguments(
-  elements: MessageFormatElement[],
-  into: Set<string>
-): Set<string> {
-  for (const element of elements) {
-    switch (element.type) {
-      case TYPE.argument:
-      case TYPE.number:
-      case TYPE.date:
-      case TYPE.time:
-        into.add(element.value);
-        break;
-      case TYPE.plural:
-      case TYPE.select:
-        into.add(element.value);
-        for (const option of Object.values(element.options)) {
-          collectArguments(option.value, into);
-        }
-        break;
-      case TYPE.tag:
-        into.add(element.value);
-        collectArguments(element.children, into);
-        break;
-      default:
-        break;
-    }
-  }
-  return into;
-}
-
-function sortedArguments(message: string): string[] {
-  return Array.from(collectArguments(parse(message), new Set<string>())).sort();
-}
-
-const flatEnglish = flatten(en as MessageTree);
+import meta from "@/i18n/catalog.meta.json";
+import {
+  buildStamp,
+  flattenMessages,
+  hashMessageSource,
+  planTranslationWork,
+  validateCatalogs,
+  type MessageTree,
+} from "@/i18n/validation";
 
 describe("i18n message catalogs", () => {
-  test("every English message is valid ICU", () => {
-    for (const [key, message] of Object.entries(flatEnglish)) {
-      expect(() => parse(message)).not.toThrow();
-      expect(key).not.toBe("");
-    }
+  const report = validateCatalogs({
+    english: flattenMessages(en as MessageTree),
+    locales: {
+      de: flattenMessages(de as MessageTree),
+      es: flattenMessages(es as MessageTree),
+      fr: flattenMessages(fr as MessageTree),
+      pt: flattenMessages(pt as MessageTree),
+    },
+    meta,
   });
 
-  for (const [locale, catalog] of Object.entries(TARGET_LOCALES)) {
-    describe(locale, () => {
-      const flatLocale = flatten(catalog);
+  test("no blocking issues: valid ICU, no orphans, placeholder parity", () => {
+    expect(report.errors).toEqual([]);
+  });
 
-      test("has no keys that are missing from en.json", () => {
-        const orphans = Object.keys(flatLocale).filter(
-          (key) => !(key in flatEnglish)
+  test("reports untranslated and stale keys without failing", () => {
+    if (report.warnings.length > 0) {
+      const preview = report.warnings
+        .slice(0, 20)
+        .map((warning) =>
+          warning.locale
+            ? `${warning.locale}:${warning.key} — ${warning.message}`
+            : `${warning.key} — ${warning.message}`
         );
-        expect(orphans).toEqual([]);
-      });
+      console.warn(
+        `[i18n] ${report.warnings.length} advisory issue(s); ` +
+          `the nightly translation workflow repairs these:\n` +
+          preview.join("\n")
+      );
+    }
+    expect(true).toBe(true);
+  });
+});
 
-      test("every message is valid ICU with the same placeholders as English", () => {
-        for (const [key, message] of Object.entries(flatLocale)) {
-          const englishMessage = flatEnglish[key];
-          if (englishMessage === undefined) continue; // covered by orphan test
+describe("translation planning", () => {
+  const english = { "a.one": "One", "a.two": "Two {name}", "a.three": "Three" };
+  const meta = {
+    "a.one": hashMessageSource("One"),
+    "a.two": hashMessageSource("an older English source"),
+    "a.gone": hashMessageSource("Gone"),
+  };
+  const locales = {
+    es: { "a.one": "Uno", "a.two": "Dos {name}" },
+    fr: { "a.one": "Un", "a.two": "Deux {name}", "a.three": "Trois" },
+  };
 
-          expect(() => parse(message)).not.toThrow();
-          expect({ key, placeholders: sortedArguments(message) }).toEqual({
-            key,
-            placeholders: sortedArguments(englishMessage),
-          });
-        }
-      });
+  test("plans missing, stale, and orphan-meta work", () => {
+    const plan = planTranslationWork({ english, locales, meta });
+    expect(plan.missing).toEqual({ es: ["a.three"], fr: [] });
+    expect(plan.stale).toEqual(["a.two"]);
+    expect(plan.orphanMetaKeys).toEqual(["a.gone"]);
+  });
 
-      test("reports untranslated keys without failing", () => {
-        const untranslated = Object.keys(flatEnglish).filter(
-          (key) => !(key in flatLocale)
-        );
-        if (untranslated.length > 0) {
-          console.warn(
-            `[i18n] ${locale}: ${untranslated.length} untranslated key(s) ` +
-              `(English fallback renders until the translation pipeline runs): ` +
-              untranslated.slice(0, 20).join(", ")
-          );
-        }
-        expect(true).toBe(true);
-      });
+  test("stamps fully translated keys, keeps partial keys unstamped", () => {
+    expect(buildStamp({ english, locales, meta })).toEqual({
+      "a.one": hashMessageSource("One"),
+      "a.two": hashMessageSource("Two {name}"),
     });
-  }
+  });
+
+  test("keepStaleKeys preserves the previous stamp for failed keys", () => {
+    const stamp = buildStamp({ english, locales, meta }, new Set(["a.two"]));
+    expect(stamp["a.two"]).toBe(hashMessageSource("an older English source"));
+  });
+
+  test("flags stale and untranslated keys as warnings, not errors", () => {
+    const report = validateCatalogs({ english, locales, meta });
+    expect(report.errors).toEqual([]);
+    const warned = report.warnings.map((warning) => warning.key).sort();
+    expect(warned).toEqual(["a.gone", "a.three", "a.two"]);
+  });
 });

@@ -329,6 +329,14 @@ repos:
         pass_filenames: false
         types_or: [javascript, ts, tsx]
 
+      - id: i18n-catalog-check
+        name: i18n catalog check
+        description: "Validate message catalogs: ICU shape, key parity, staleness meta"
+        entry: bash -c 'cd web && bun scripts/i18n/check.ts'
+        language: system
+        pass_filenames: false
+        files: ^web/src/i18n/
+
       # Type checks with the native TypeScript compiler (~10x faster than classic
       # tsc). web and web/lib/shared use the stable typescript@7 release (web
       # aliases it as `typescript-7` since Next.js still needs typescript@5); the

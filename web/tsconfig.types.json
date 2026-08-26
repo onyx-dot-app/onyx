@@ -12,6 +12,7 @@
   },
   "include": [
     "next-env.d.ts",
+    "scripts/**/*",
     "src/**/*",
     "tests/**/*",
     ".next/types/**/*.ts",

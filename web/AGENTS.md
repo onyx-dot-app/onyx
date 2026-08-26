@@ -483,10 +483,15 @@ The UI is being migrated to next-intl. English message catalogs live in
   violations.
 - **Update every locale when you touch a key.** `en.json` is the source of
   truth. When you add or change a key, also give `es/pt/fr/de.json` your best
-  translation of the English value. Keep the ICU shape (arguments, tags,
-  plurals) identical across locales — `web/src/i18n/__tests__/catalog.test.ts`
-  enforces this. Keys missing from a locale fall back to English at runtime.
-  A future translation pipeline will validate these translations.
+  translation of the English value, following the register and pinned terms in
+  `web/scripts/i18n/glossary.json`. Then run `bun run i18n:stamp` to record
+  (in `src/i18n/catalog.meta.json`) which English source the translations are
+  in sync with — never stamp translations you did not actually update. Keep
+  the ICU shape (arguments, tags, plurals) identical across locales —
+  `bun run i18n:check` and `web/src/i18n/__tests__/catalog.test.ts` enforce
+  this. Keys missing from a locale fall back to English at runtime; the
+  nightly `i18n-translate` workflow backfills missing and stale translations
+  (`bun run i18n:translate`) and opens a reviewed sync PR.
 - Keys are stable identifiers, not English sentences:
   `<namespace>.<section>.<element>.<role>` in camelCase
   (e.g. `settings.appearance.colorMode.title`). Rewording English copy must not
