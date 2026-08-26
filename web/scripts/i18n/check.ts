@@ -1,16 +1,22 @@
 /**
- * Validate the i18n message catalogs, and stamp the staleness meta.
+ * Validate the i18n message catalogs.
  *
- *   bun run i18n:check          # report; exit 1 on blocking errors
- *   bun run i18n:check --strict # also exit 1 on warnings (CI for the bot PR)
- *   bun run i18n:stamp          # rewrite src/i18n/catalog.meta.json
+ *   bun run i18n:check           # exit 1 on any catalog error
+ *   bun scripts/i18n/check.ts --update
  *
- * Stamping records the hash of the English source each key's translations are
- * in sync with. Run it after you translate — never to silence a stale warning
- * you have not actually fixed.
+ * The blocking contract for authors: every en.json key has a translation in
+ * every locale, every message is valid ICU, and placeholders match English.
+ * Runs in pre-commit (on web/src/i18n/ changes) and via the Jest catalog
+ * test in CI.
+ *
+ * `--update` rewrites `src/i18n/catalog.meta.json`, which records the English
+ * source each key was last QA-reviewed against. The weekly QA pipeline owns
+ * that file; the flag exists for the pipeline itself and for re-baselining
+ * after a manual review — not for regular authoring.
  */
 import {
   buildStamp,
+  planTranslationWork,
   validateCatalogs,
   type CatalogIssue,
 } from "@/i18n/validation";
@@ -27,17 +33,14 @@ function printIssues(label: string, issues: CatalogIssue[]): void {
 
 function main(): void {
   const update = process.argv.includes("--update");
-  const strict = process.argv.includes("--strict");
 
   const catalogs = loadCatalogs();
   const report = validateCatalogs(catalogs);
-
   printIssues("Errors", report.errors);
-  printIssues("Warnings", report.warnings);
-
   if (report.errors.length > 0) {
     console.error(
-      "Blocking catalog errors — fix these before stamping or translating."
+      "Catalog errors — translate every key you touch in every locale " +
+        "(see web/AGENTS.md §7)."
     );
     process.exit(1);
   }
@@ -49,13 +52,17 @@ function main(): void {
     return;
   }
 
-  if (strict && report.warnings.length > 0) {
-    console.error("Warnings present and --strict was given.");
-    process.exit(1);
-  }
-
-  if (report.warnings.length === 0) {
-    console.log("Catalogs are complete and in sync.");
+  const plan = planTranslationWork(catalogs);
+  const pending =
+    plan.stale.length + plan.unreviewed.length + plan.orphanMetaKeys.length;
+  if (pending > 0) {
+    console.log(
+      `Catalogs are valid. Awaiting weekly QA: ${plan.unreviewed.length} ` +
+        `new, ${plan.stale.length} changed, ${plan.orphanMetaKeys.length} ` +
+        `removed key(s).`
+    );
+  } else {
+    console.log("Catalogs are valid and fully QA-reviewed.");
   }
 }
 

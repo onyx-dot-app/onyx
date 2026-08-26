@@ -1,15 +1,16 @@
 /**
- * Shared catalog validation and translation planning.
+ * Shared catalog validation and QA planning.
  *
  * Used by the Jest guard (`__tests__/catalog.test.ts`) and the pipeline CLIs
  * (`web/scripts/i18n/`). Pure functions only: callers load the catalogs and
- * the staleness meta (`catalog.meta.json`) and pass them in.
+ * the review meta (`catalog.meta.json`) and pass them in.
  *
- * Staleness model: `catalog.meta.json` maps each flat key to a hash of the
- * English source its translations were last synced against. One hash per key,
- * not per locale — authors update every locale together, then re-stamp with
- * `bun run i18n:stamp`. A hash mismatch means the English changed and the
- * translations were not re-synced.
+ * Validation is the blocking author-facing contract: every English key has a
+ * translation in every locale with the same ICU shape. The review meta is
+ * owned by the weekly QA pipeline, not by authors: it maps each flat key to a
+ * hash of the English source the translations were last QA-reviewed against,
+ * so the weekly run only revisits new keys (no stamp) and changed keys (hash
+ * mismatch).
  */
 import {
   parse,
@@ -28,17 +29,17 @@ export interface CatalogIssue {
 }
 
 export interface CatalogReport {
-  /** Blocking: malformed ICU, orphan keys, placeholder drift. */
+  /** Blocking: malformed ICU, orphan keys, untranslated keys, placeholder drift. */
   errors: CatalogIssue[];
-  /** Advisory: untranslated or stale keys — the nightly pipeline fills these. */
-  warnings: CatalogIssue[];
 }
 
 export interface TranslationPlan {
-  /** Per locale: keys with no translation yet. */
+  /** Per locale: keys with no translation yet (normally blocked by CI). */
   missing: Record<string, string[]>;
-  /** Keys whose English source changed since the last stamp (all locales). */
+  /** Keys whose English source changed since the last QA review (all locales). */
   stale: string[];
+  /** Keys never QA-reviewed: present in en.json but absent from the meta. */
+  unreviewed: string[];
   /** Meta entries for keys that no longer exist in en.json. */
   orphanMetaKeys: string[];
 }
@@ -114,10 +115,8 @@ export interface CatalogInput {
 export function validateCatalogs({
   english,
   locales,
-  meta,
-}: CatalogInput): CatalogReport {
+}: Pick<CatalogInput, "english" | "locales">): CatalogReport {
   const errors: CatalogIssue[] = [];
-  const warnings: CatalogIssue[] = [];
 
   const englishArguments: Record<string, string[]> = {};
   for (const [key, message] of Object.entries(english)) {
@@ -170,37 +169,23 @@ export function validateCatalogs({
 
     for (const key of Object.keys(english)) {
       if (!(key in catalog)) {
-        warnings.push({
+        errors.push({
           key,
           locale,
-          message: "untranslated: English fallback renders at runtime",
+          message:
+            "untranslated: every en.json key needs a translation in every locale",
         });
       }
     }
   }
 
-  const plan = planTranslationWork({ english, locales, meta });
-  for (const key of plan.stale) {
-    warnings.push({
-      key,
-      message:
-        "stale: en.json changed since the last stamp — retranslate and run `bun run i18n:stamp`",
-    });
-  }
-  for (const key of plan.orphanMetaKeys) {
-    warnings.push({
-      key,
-      message:
-        "orphan meta entry: key no longer in en.json — run `bun run i18n:stamp`",
-    });
-  }
-
-  return { errors, warnings };
+  return { errors };
 }
 
 /**
- * Work list for the translation backstop: which keys each locale is missing,
- * which keys are stale everywhere, and which meta entries to prune.
+ * Work list for the weekly QA run: which keys each locale is missing, which
+ * keys changed since their last review, which were never reviewed, and which
+ * meta entries to prune.
  */
 export function planTranslationWork({
   english,
@@ -212,18 +197,20 @@ export function planTranslationWork({
     missing[locale] = Object.keys(english).filter((key) => !(key in catalog));
   }
 
-  const stale = Object.entries(english)
-    .filter(([key, source]) => {
-      const stamp = meta[key];
-      return stamp !== undefined && stamp !== hashMessageSource(source);
-    })
-    .map(([key]) => key);
+  const stale: string[] = [];
+  const unreviewed: string[] = [];
+  for (const [key, source] of Object.entries(english)) {
+    const stamp = meta[key];
+    if (stamp === undefined) {
+      unreviewed.push(key);
+    } else if (stamp !== hashMessageSource(source)) {
+      stale.push(key);
+    }
+  }
 
-  // Unstamped keys count as missing-stamp, not stale: they are new keys whose
-  // translations (if any) were authored against the current English source.
   const orphanMetaKeys = Object.keys(meta).filter((key) => !(key in english));
 
-  return { missing, stale, orphanMetaKeys };
+  return { missing, stale, unreviewed, orphanMetaKeys };
 }
 
 /**

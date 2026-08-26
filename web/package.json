@@ -29,8 +29,7 @@
     "test:diff": "jest --changedSince=main",
     "test:debug": "node --inspect-brk node_modules/.bin/jest --runInBand",
     "i18n:check": "bun scripts/i18n/check.ts",
-    "i18n:stamp": "bun scripts/i18n/check.ts --update",
-    "i18n:translate": "bun scripts/i18n/translate.ts",
+    "i18n:qa": "bun scripts/i18n/qa.ts",
     "storybook": "storybook dev -p 6006",
     "storybook:build": "storybook build -o storybook-static"
   },

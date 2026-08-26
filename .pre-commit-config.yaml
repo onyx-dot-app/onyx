@@ -331,7 +331,7 @@ repos:
 
       - id: i18n-catalog-check
         name: i18n catalog check
-        description: "Validate message catalogs: ICU shape, key parity, staleness meta"
+        description: "Validate message catalogs: key parity across locales and ICU shape"
         entry: bash -c 'cd web && bun scripts/i18n/check.ts'
         language: system
         pass_filenames: false

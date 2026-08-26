@@ -1,14 +1,16 @@
 /**
- * Backstop translator for the message catalogs.
+ * Weekly QA reviewer for the message catalogs.
  *
- * Authors translate every key they touch by hand (web/AGENTS.md §7). This
- * script repairs whatever slipped through: it fills keys missing from target
- * locales and retranslates keys whose English source changed since the last
- * stamp, then rewrites `catalog.meta.json`. The nightly i18n-translate
- * workflow runs it and opens a reviewed PR with the result.
+ * Authors hand-translate every key they touch, and CI blocks on key parity
+ * (web/AGENTS.md §7). This script is the quality pass behind that: it sends
+ * new keys (never reviewed) and changed keys (English source differs from the
+ * last review, per `catalog.meta.json`) to Claude, which keeps acceptable
+ * translations as-is and corrects genuine defects. Missing translations —
+ * possible only outside the normal PR flow — are filled the same way. The
+ * i18n-qa workflow runs this weekly and opens a reviewed PR with the result.
  *
- *   ANTHROPIC_API_KEY=... bun run i18n:translate
- *   bun run i18n:translate -- --dry-run   # print the work list, no API calls
+ *   ANTHROPIC_API_KEY=... bun run i18n:qa
+ *   bun run i18n:qa -- --dry-run   # print the review list, no API calls
  */
 import {
   buildStamp,
@@ -33,12 +35,19 @@ import { DEFAULT_LOCALE } from "@/i18n/config";
 
 const BATCH_SIZE = 40;
 const MAX_ATTEMPTS = 2;
-const MODEL = process.env.ONYX_I18N_TRANSLATION_MODEL ?? "claude-sonnet-5";
+const MODEL = process.env.ONYX_I18N_QA_MODEL ?? "claude-sonnet-5";
+
+interface ReviewItem {
+  source: string;
+  translation: string | null;
+}
+
+type ReviewBatch = Record<string, ReviewItem>;
 
 function buildPrompt(
   locale: string,
   glossary: Glossary,
-  batch: FlatMessages
+  batch: ReviewBatch
 ): string {
   const termLines = Object.entries(glossary.terms)
     .map(([term, byLocale]) => {
@@ -48,12 +57,16 @@ function buildPrompt(
     .filter((line): line is string => line !== null);
 
   return [
-    "You translate UI strings for Onyx, an enterprise AI search and chat product.",
+    "You are QA-reviewing UI translations for Onyx, an enterprise AI search and chat product.",
     "",
     `Target locale: "${locale}". ${glossary.localeStyle[locale] ?? ""}`,
     "",
+    "Each key maps to the English `source` and the current `translation` (null if none exists yet).",
+    "",
     "Rules:",
-    "- Values are ICU MessageFormat. Keep every {argument} name, plural/select structure, and <tag></tag> name exactly as in the source; translate only the human-readable text.",
+    "- Return the final translation for every key. Keep the existing translation verbatim unless it has a genuine defect: meaning that no longer matches the source, wrong register, a glossary violation, or broken ICU. Do not restyle acceptable translations.",
+    "- If `translation` is null, translate the source.",
+    "- Messages are ICU MessageFormat. Keep every {argument} name, plural/select structure, and <tag></tag> name exactly as in the source; translate only the human-readable text.",
     `- Keep brand and product names in English (LinkedIn, YouTube, Slack, ${glossary.doNotTranslate.join(", ")}, ...).`,
     ...(termLines.length > 0
       ? [`- Glossary, use these exact translations: ${termLines.join("; ")}`]
@@ -61,14 +74,14 @@ function buildPrompt(
     "- Keys are stable identifiers whose dot-path hints at the UI context (namespace.section.element.role). Never alter keys.",
     "- Match the tone and brevity of product UI copy.",
     "",
-    "Translate the values of this JSON object:",
+    "Review this JSON object:",
     JSON.stringify(batch, null, 2),
     "",
-    "Reply with only a JSON object containing exactly the same keys, with translated values.",
+    "Reply with only a JSON object mapping every input key to its final translation string.",
   ].join("\n");
 }
 
-async function requestTranslations(
+async function requestReview(
   apiKey: string,
   prompt: string
 ): Promise<FlatMessages> {
@@ -126,19 +139,16 @@ async function requestTranslations(
   return translations;
 }
 
-async function translateBatch(
+async function reviewBatch(
   apiKey: string,
   locale: string,
   glossary: Glossary,
-  batch: FlatMessages
+  batch: ReviewBatch
 ): Promise<FlatMessages> {
   let lastError: unknown;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
-      return await requestTranslations(
-        apiKey,
-        buildPrompt(locale, glossary, batch)
-      );
+      return await requestReview(apiKey, buildPrompt(locale, glossary, batch));
     } catch (error) {
       lastError = error;
       console.warn(
@@ -164,18 +174,19 @@ async function main(): Promise<void> {
   const report = validateCatalogs(catalogs);
   if (report.errors.length > 0) {
     for (const issue of report.errors) {
-      console.error(
-        `${issue.locale ?? "meta"}:${issue.key} — ${issue.message}`
-      );
+      console.error(`${issue.locale ?? "en"}:${issue.key} — ${issue.message}`);
     }
-    console.error("Blocking catalog errors — fix these before translating.");
+    console.error("Blocking catalog errors — fix these before running QA.");
     process.exit(1);
   }
 
   const plan = planTranslationWork(catalogs);
+  const reviewKeys = Array.from(
+    new Set([...plan.stale, ...plan.unreviewed])
+  ).sort();
   const workByLocale: Record<string, string[]> = {};
   for (const locale of TARGET_LOCALES) {
-    const keys = new Set([...(plan.missing[locale] ?? []), ...plan.stale]);
+    const keys = new Set([...(plan.missing[locale] ?? []), ...reviewKeys]);
     workByLocale[locale] = Array.from(keys).sort();
   }
   const totalWork = Object.values(workByLocale).reduce(
@@ -184,20 +195,23 @@ async function main(): Promise<void> {
   );
 
   if (totalWork === 0 && plan.orphanMetaKeys.length === 0) {
-    console.log("Catalogs are complete and in sync. Nothing to translate.");
+    console.log("Catalogs are fully QA-reviewed. Nothing to do.");
     return;
   }
 
-  for (const [locale, keys] of Object.entries(workByLocale)) {
-    console.log(`[${locale}] ${keys.length} key(s) to translate`);
-    if (dryRun) {
-      for (const key of keys) console.log(`  ${key}`);
-    }
-  }
+  console.log(
+    `${plan.unreviewed.length} new and ${plan.stale.length} changed key(s) to review`
+  );
   if (plan.orphanMetaKeys.length > 0) {
     console.log(`pruning ${plan.orphanMetaKeys.length} orphan meta entr(ies)`);
   }
-  if (dryRun) return;
+  if (dryRun) {
+    for (const [locale, keys] of Object.entries(workByLocale)) {
+      console.log(`[${locale}] ${keys.length} key(s):`);
+      for (const key of keys) console.log(`  ${key}`);
+    }
+    return;
+  }
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (apiKey === undefined || apiKey === "") {
@@ -207,9 +221,11 @@ async function main(): Promise<void> {
   const glossary = readJsonFile<Glossary>(GLOSSARY_PATH);
   const englishTree = loadMessageTree(DEFAULT_LOCALE);
 
-  // Keys that keep their previous stamp: a failed or rejected translation
-  // must stay visible as missing/stale for the next run.
+  // Keys that keep their previous meta entry: a failed or rejected review
+  // must stay visible as new/changed for the next run.
   const incompleteKeys = new Set<string>();
+  let corrected = 0;
+  let kept = 0;
 
   for (const locale of TARGET_LOCALES) {
     const keys = workByLocale[locale] ?? [];
@@ -218,15 +234,17 @@ async function main(): Promise<void> {
     if (catalog === undefined) continue;
 
     for (const batchKeys of chunk(keys, BATCH_SIZE)) {
-      const batch: FlatMessages = {};
+      const batch: ReviewBatch = {};
       for (const key of batchKeys) {
         const source = catalogs.english[key];
-        if (source !== undefined) batch[key] = source;
+        if (source !== undefined) {
+          batch[key] = { source, translation: catalog[key] ?? null };
+        }
       }
 
-      let translations: FlatMessages;
+      let reviewed: FlatMessages;
       try {
-        translations = await translateBatch(apiKey, locale, glossary, batch);
+        reviewed = await reviewBatch(apiKey, locale, glossary, batch);
       } catch {
         for (const key of batchKeys) incompleteKeys.add(key);
         console.error(
@@ -236,16 +254,16 @@ async function main(): Promise<void> {
       }
 
       for (const key of batchKeys) {
-        const translation = translations[key];
+        const final = reviewed[key];
         const source = catalogs.english[key];
-        if (translation === undefined || source === undefined) {
+        if (final === undefined || source === undefined) {
           incompleteKeys.add(key);
-          console.warn(`[${locale}] ${key}: no translation returned`);
+          console.warn(`[${locale}] ${key}: no reply for this key`);
           continue;
         }
         try {
           const parity =
-            JSON.stringify(icuArguments(translation)) ===
+            JSON.stringify(icuArguments(final)) ===
             JSON.stringify(icuArguments(source));
           if (!parity) throw new Error("placeholder mismatch");
         } catch (error) {
@@ -253,7 +271,13 @@ async function main(): Promise<void> {
           console.warn(`[${locale}] ${key}: rejected — ${String(error)}`);
           continue;
         }
-        catalog[key] = translation;
+        if (catalog[key] === final) {
+          kept += 1;
+        } else {
+          corrected += 1;
+          console.log(`[${locale}] ${key}: corrected`);
+        }
+        catalog[key] = final;
       }
     }
 
@@ -261,21 +285,18 @@ async function main(): Promise<void> {
       messagesPath(locale),
       toNestedInEnglishOrder(englishTree, catalog)
     );
-    console.log(`[${locale}] wrote ${messagesPath(locale)}`);
   }
 
   writeJsonFile(META_PATH, buildStamp(catalogs, incompleteKeys));
-  console.log(`stamped ${META_PATH}`);
+  console.log(
+    `QA complete: ${kept} kept, ${corrected} corrected, ` +
+      `${incompleteKeys.size} deferred to the next run. Stamped ${META_PATH}.`
+  );
 
   const finalReport = validateCatalogs(loadCatalogs());
   if (finalReport.errors.length > 0) {
-    console.error("Post-translation validation failed — inspect the diff.");
+    console.error("Post-QA validation failed — inspect the diff.");
     process.exit(1);
-  }
-  if (finalReport.warnings.length > 0) {
-    console.warn(
-      `${finalReport.warnings.length} advisory issue(s) remain for the next run.`
-    );
   }
 }
 
