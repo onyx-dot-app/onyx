@@ -9,7 +9,6 @@ from onyx.configs.constants import DocumentSource, NotificationType
 from onyx.db.connector_alerts import clear_connector_alerts__no_commit
 from onyx.db.enums import AccessType, ConnectorCredentialPairStatus, Permission
 from onyx.db.models import (
-    Connector,
     ConnectorCredentialPair,
     Credential,
     Credential__UserGroup,
@@ -20,6 +19,7 @@ from onyx.db.user_group import assert_not_shared_with_default_group
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.documents.models import CredentialBase
+from onyx.utils.credential_audit import emit_credential_access
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -139,7 +139,7 @@ def fetch_credentials_by_source(
 def fetch_github_access_token_for_repo(
     db_session: Session,
     repo_owner: str,
-    repo_name: str | None = None,
+    repo_name: str,
 ) -> str | None:
     """Access token of the GitHub connector credential that indexes the repo.
 
@@ -157,50 +157,52 @@ def fetch_github_access_token_for_repo(
 
     Returns None when no eligible pair matches (public-repo access only).
     """
-    if not repo_name:
-        return None
-
-    stmt = (
-        select(Credential, Connector)
-        .join(
-            ConnectorCredentialPair,
-            ConnectorCredentialPair.credential_id == Credential.id,
-        )
-        .join(Connector, Connector.id == ConnectorCredentialPair.connector_id)
-        .where(
-            Connector.source == DocumentSource.GITHUB,
-            ConnectorCredentialPair.access_type == AccessType.PUBLIC,
-            # Active pairs only: a paused or invalid pair must not keep
-            # granting its PAT (and its index is going stale anyway).
-            ConnectorCredentialPair.status.in_(
-                ConnectorCredentialPairStatus.active_statuses()
-            ),
-        )
+    # Imported lazily: connector_credential_pair imports this module, and the
+    # GitHub connector utils pull in PyGithub.
+    from onyx.connectors.github.utils import parse_repositories_config
+    from onyx.db.connector_credential_pair import (
+        get_connector_credential_pairs_for_source,
     )
 
     owner_lower = repo_owner.lower()
     repo_lower = repo_name.lower()
 
-    for credential, connector in db_session.execute(stmt).all():
-        config = connector.connector_specific_config or {}
+    cc_pairs = get_connector_credential_pairs_for_source(
+        db_session, DocumentSource.GITHUB
+    )
+
+    for cc_pair in cc_pairs:
+        if cc_pair.access_type != AccessType.PUBLIC:
+            continue
+        # Active pairs only: a paused or invalid pair must not keep granting
+        # its PAT (and its index is going stale anyway).
+        if not cc_pair.status.is_active():
+            continue
+
+        config = cc_pair.connector.connector_specific_config or {}
         if not config.get("include_code_files"):
             continue
         if str(config.get("repo_owner", "")).lower() != owner_lower:
             continue
 
         named_repos = {
-            r.strip().lower()
-            for r in str(config.get("repositories") or "").split(",")
-            if r.strip()
+            name.lower()
+            for name in parse_repositories_config(config.get("repositories"))
         }
         if repo_lower not in named_repos:
             continue
 
+        credential = cc_pair.credential
         if credential.credential_json is None:
             continue
         credential_dict = credential.credential_json.get_value(apply_mask=False)
         token = credential_dict.get("github_access_token")
         if token:
+            emit_credential_access(
+                credential_type="connector",
+                provider=DocumentSource.GITHUB.value,
+                row_id=credential.id,
+            )
             return token
 
     return None
