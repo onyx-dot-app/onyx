@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import * as Yup from "yup";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
@@ -26,6 +27,7 @@ export const DriveAuthSection = ({
   refreshCredentials,
   user,
 }: DriveCredentialSectionProps) => {
+  const t = useTranslations("admin.connectorsList");
   const router = useRouter();
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [justCreated, setJustCreated] = useState(false);
@@ -48,11 +50,10 @@ export const DriveAuthSection = ({
         className="mt-4 rounded-sm border border-border-02 bg-background-tint-02 px-4 py-3"
       >
         <Text as="p" font="main-ui-action">
-          Authentication Complete
+          {t("gdrive.authComplete.title")}
         </Text>
         <Text as="p" font="secondary-body" color="text-03">
-          Your Google Drive credential was created. Manage or revoke it from the
-          credential list.
+          {t("gdrive.authComplete.description")}
         </Text>
       </Section>
     );
@@ -61,20 +62,22 @@ export const DriveAuthSection = ({
   return (
     <Section alignItems="start" justifyContent="start" gap={4}>
       <Text as="h3" font="heading-h2">
-        Google Drive Authentication
+        {t("gdrive.section.title")}
       </Text>
       <Section alignItems="start" justifyContent="start" gap={4}>
         <Text as="p" font="main-ui-action">
-          Option 1: OAuth app
+          {t("gdrive.oauthOption.title")}
         </Text>
         <Text as="p" font="secondary-body" color="text-03">
           {markdown(
-            `Upload the OAuth app JSON from Google Cloud Console ([setup instructions](${DOCS_ADMINS_PATH}/connectors/official/google_drive/overview)), then authenticate with the Google account whose Drive you want to index.`
+            t("gdrive.oauthOption.description", {
+              docsUrl: `${DOCS_ADMINS_PATH}/connectors/official/google_drive/overview`,
+            })
           )}
         </Text>
         <InputFile
           accept="application/json"
-          placeholder="Upload or paste your OAuth app JSON"
+          placeholder={t("gdrive.oauthUpload.placeholder")}
           setValue={(value) => {
             setOauthAppCredential(
               value ? parseOauthAppCredentialJson(value) : null
@@ -103,23 +106,23 @@ export const DriveAuthSection = ({
                 }
               } catch (error) {
                 toast.error(
-                  `Failed to authenticate with Google Drive - ${error}`
+                  t("gdrive.authFailed.toast", { error: String(error) })
                 );
                 setIsAuthenticating(false);
               }
             }}
           >
             {isAuthenticating
-              ? "Authenticating..."
-              : "Authenticate with Google Drive"}
+              ? t("gdrive.authenticateButton.pendingLabel")
+              : t("gdrive.authenticateButton.label")}
           </Button>
         </Section>
         <Text as="p" font="main-ui-action">
-          Option 2: Service account
+          {t("gdrive.serviceAccountOption.title")}
         </Text>
         <InputFile
           accept="application/json"
-          placeholder="Upload or paste your service account JSON key"
+          placeholder={t("gdrive.serviceAccountUpload.placeholder")}
           setValue={(value) => {
             if (!value) {
               setServiceAccountKey(null);
@@ -128,15 +131,15 @@ export const DriveAuthSection = ({
             try {
               const parsed = JSON.parse(value) as Record<string, unknown>;
               if (parsed.type !== "service_account") {
-                toast.error(
-                  "Invalid file provided - expected a Service Account JSON key"
-                );
+                toast.error(t("gdrive.invalidServiceAccountFile.toast"));
                 setServiceAccountKey(null);
                 return;
               }
               setServiceAccountKey(parsed);
             } catch (error) {
-              toast.error(`Invalid file provided - ${error}`);
+              toast.error(
+                t("gdrive.invalidFile.toast", { error: String(error) })
+              );
               setServiceAccountKey(null);
             }
           }}
@@ -148,16 +151,14 @@ export const DriveAuthSection = ({
           }}
           validationSchema={Yup.object().shape({
             google_primary_admin: Yup.string()
-              .email("Must be a valid email")
-              .required("Required"),
+              .email(t("gdrive.primaryAdmin.invalidEmail"))
+              .required(t("gdrive.primaryAdmin.required")),
           })}
           onSubmit={async (values, formikHelpers) => {
             formikHelpers.setSubmitting(true);
 
             if (!serviceAccountKey) {
-              toast.error(
-                "Please upload a service account key before creating a credential"
-              );
+              toast.error(t("gdrive.missingServiceAccountKey.toast"));
               formikHelpers.setSubmitting(false);
               return;
             }
@@ -178,20 +179,22 @@ export const DriveAuthSection = ({
               );
 
               if (response.ok) {
-                toast.success(
-                  "Successfully created service account credential"
-                );
+                toast.success(t("gdrive.serviceAccountCreated.toast"));
                 setJustCreated(true);
                 refreshCredentials();
               } else {
                 const errorMsg = await response.text();
                 toast.error(
-                  `Failed to create service account credential - ${errorMsg}`
+                  t("gdrive.serviceAccountCreateFailed.toast", {
+                    error: errorMsg,
+                  })
                 );
               }
             } catch (error) {
               toast.error(
-                `Failed to create service account credential - ${error}`
+                t("gdrive.serviceAccountCreateFailed.toast", {
+                  error: String(error),
+                })
               );
             } finally {
               formikHelpers.setSubmitting(false);
@@ -202,15 +205,14 @@ export const DriveAuthSection = ({
             <Form className="w-full">
               <Section alignItems="start" justifyContent="start" gap={1}>
                 <Text font="main-ui-body" color="text-03">
-                  Primary Admin Email
+                  {t("gdrive.primaryAdmin.label")}
                 </Text>
                 <InputTypeInField
                   name="google_primary_admin"
                   placeholder="admin@yourcompany.com"
                 />
                 <Text font="secondary-body" color="text-03">
-                  Enter the email of an admin or owner of the Google
-                  Organization that owns the Google Drive(s) you want to index.
+                  {t("gdrive.primaryAdmin.description")}
                 </Text>
               </Section>
               <Section
@@ -219,7 +221,9 @@ export const DriveAuthSection = ({
                 className="pt-2"
               >
                 <Button disabled={isSubmitting} type="submit">
-                  {isSubmitting ? "Creating..." : "Create Credential"}
+                  {isSubmitting
+                    ? t("gdrive.createButton.pendingLabel")
+                    : t("gdrive.createButton.label")}
                 </Button>
               </Section>
             </Form>

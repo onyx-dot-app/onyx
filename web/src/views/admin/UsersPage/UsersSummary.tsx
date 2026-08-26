@@ -1,3 +1,4 @@
+import { useTranslations } from "next-intl";
 import { SvgArrowUpRight, SvgFilterPlus, SvgUserSync } from "@opal/icons";
 import { ContentAction } from "@opal/layouts";
 import { Button, Card } from "@opal/components";
@@ -19,6 +20,7 @@ type StatCellProps = {
 };
 
 function StatCell({ value, label, onFilter }: StatCellProps) {
+  const t = useTranslations("admin.users");
   const display = value === null ? "\u2014" : value.toLocaleString();
 
   const cellClassName = `relative flex flex-col items-start gap-0.5 w-full p-2 rounded-08 transition-colors ${
@@ -39,7 +41,7 @@ function StatCell({ value, label, onFilter }: StatCellProps) {
             <Button
               prominence="tertiary"
               icon={SvgFilterPlus}
-              tooltip="Add Filter"
+              tooltip={t("summary.filterButton.tooltip")}
               tooltipSide="left"
               onClick={(e) => {
                 e.stopPropagation();
@@ -61,7 +63,7 @@ function StatCell({ value, label, onFilter }: StatCellProps) {
           className={cellClassName}
           role="button"
           tabIndex={0}
-          aria-label={`Filter by ${label}`}
+          aria-label={t("summary.statCell.ariaLabel", { label })}
           onKeyDown={clickOnKeyDown(onFilter)}
           onClick={onFilter}
         >
@@ -79,13 +81,14 @@ function StatCell({ value, label, onFilter }: StatCellProps) {
 // ---------------------------------------------------------------------------
 
 function ScimCard() {
+  const t = useTranslations("admin.users");
   return (
     <Card border="solid" padding={3} rounding={4}>
       <Section alignItems="start" height="fit" gap={2}>
         <ContentAction
           icon={SvgUserSync}
-          title="SCIM Sync"
-          description="Users are synced from your identity provider."
+          title={t("summary.scim.title")}
+          description={t("summary.scim.description")}
           sizePreset="main-ui"
           variant="section"
           padding={0}
@@ -96,7 +99,7 @@ function ScimCard() {
                 rightIcon={SvgArrowUpRight}
                 size="sm"
               >
-                Manage
+                {t("summary.scim.manageButton.label")}
               </Button>
             </Link>
           }
@@ -129,6 +132,7 @@ export default function UsersSummary({
   onFilterInvites,
   onFilterRequests,
 }: UsersSummaryProps) {
+  const t = useTranslations("admin.users");
   const showRequests = requests !== null && requests > 0;
 
   const statsCard = (
@@ -137,18 +141,18 @@ export default function UsersSummary({
         <Section flexDirection="row" gap={0}>
           <StatCell
             value={activeUsers}
-            label="active users"
+            label={t("summary.activeUsers.label")}
             onFilter={onFilterActive}
           />
           <StatCell
             value={pendingInvites}
-            label="pending invites"
+            label={t("summary.pendingInvites.label")}
             onFilter={onFilterInvites}
           />
           {showRequests && (
             <StatCell
               value={requests}
-              label="requests to join"
+              label={t("summary.requests.label")}
               onFilter={onFilterRequests}
             />
           )}

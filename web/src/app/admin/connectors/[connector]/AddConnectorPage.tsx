@@ -69,6 +69,7 @@ import Text from "@/refresh-components/texts/Text";
 import { SvgKey, SvgAlertCircle } from "@opal/icons";
 import { Tooltip } from "@opal/components";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 
 export interface AdvancedConfig {
   refreshFreq: number;
@@ -78,7 +79,6 @@ export interface AdvancedConfig {
 
 const BASE_CONNECTOR_URL = "/api/manage/admin/connector";
 const CONNECTOR_CREATION_TIMEOUT_MS = 10000; // ~10 seconds is reasonable for longer connector validation
-const OAUTH_REDIRECT_ERROR = "Unable to start OAuth";
 
 export async function submitConnector<T>(
   connector: ConnectorBase<T>,
@@ -139,6 +139,7 @@ export default function AddConnector({
 }: {
   connector: ConfigurableSources;
 }) {
+  const t = useTranslations("admin.connectorsList");
   const [currentPageUrl, setCurrentPageUrl] = useState<string | null>(null);
   const [oauthUrl, setOauthUrl] = useState<string | null>(null);
   const [isAuthorizing, setIsAuthorizing] = useState(false);
@@ -254,7 +255,7 @@ export default function AddConnector({
   const onDeleteCredential = async (credential: Credential<any | null>) => {
     const response = await deleteCredential(credential.id, true);
     if (response.ok) {
-      toast.success("Credential deleted successfully!");
+      toast.success(t("add.credentialDeleted.toast"));
     } else {
       const errorData = await response.json();
       toast.error(errorData.detail || errorData.message);
@@ -264,7 +265,7 @@ export default function AddConnector({
   const onSwap = async (selectedCredential: Credential<any>) => {
     setCurrentCredential(selectedCredential);
     setAllowCreate(true);
-    toast.success("Swapped credential successfully!");
+    toast.success(t("add.credentialSwapped.toast"));
     refresh();
   };
 
@@ -280,7 +281,7 @@ export default function AddConnector({
       window.location.href = redirectUrl;
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : OAUTH_REDIRECT_ERROR
+        error instanceof Error ? error.message : t("add.oauthStartFailed.toast")
       );
     }
   };
@@ -318,15 +319,15 @@ export default function AddConnector({
         setOauthUrl(response.url);
         window.open(response.url, "_blank", "noopener,noreferrer");
       } else {
-        toast.error("Failed to fetch OAuth URL");
+        toast.error(t("add.oauthUrlFailed.toast"));
       }
     } catch (error: unknown) {
       // Narrow the type of error
       if (error instanceof Error) {
-        toast.error(`Error: ${error.message}`);
+        toast.error(t("add.error.toast", { detail: error.message }));
       } else {
         // Handle non-standard errors
-        toast.error("An unknown error occurred");
+        toast.error(t("add.unknownError.toast"));
       }
     } finally {
       setIsAuthorizing(false);
@@ -425,7 +426,7 @@ export default function AddConnector({
               onSuccess();
             }
           } catch (error) {
-            toast.error("Error uploading files");
+            toast.error(t("add.fileUploadFailed.toast"));
           } finally {
             setUploading(false);
           }
@@ -518,9 +519,9 @@ export default function AddConnector({
           if (result.isTimeout) {
             timeoutErrorHappenedRef.current = true;
             toast.error(
-              `Operation timed out after ${
-                CONNECTOR_CREATION_TIMEOUT_MS / 1000
-              } seconds. Check your configuration for errors?`
+              t("add.timeout.toast", {
+                seconds: CONNECTOR_CREATION_TIMEOUT_MS / 1000,
+              })
             );
 
             if (connectorIdRef.current) {
@@ -551,15 +552,13 @@ export default function AddConnector({
                     tooltip={
                       <div className="flex flex-col gap-2">
                         <Text as="p" textLight05>
-                          A federated search option is available for this
-                          connector. It will result in greater latency and
-                          reduced search quality.
+                          {t("add.federated.tooltip.description")}
                         </Text>
                         <Link
                           href={`/admin/connectors/${connector}?mode=federated`}
                           className="text-action-selection-04 hover:underline text-sm"
                         >
-                          Use federated version instead →
+                          {t("add.federated.tooltip.link.label")}
                         </Link>
                       </div>
                     }
@@ -579,7 +578,7 @@ export default function AddConnector({
           {formStep == 0 && (
             <CardSection>
               <Text as="p" headingH3 className="pb-2">
-                Select a credential
+                {t("add.credentialStep.title")}
               </Text>
 
               <>
@@ -600,7 +599,9 @@ export default function AddConnector({
                     className="mt-6"
                   >
                     {oauthDetailsLoading ? (
-                      <Button disabled>Create New</Button>
+                      <Button disabled>
+                        {t("add.createCredentialButton.label")}
+                      </Button>
                     ) : (
                       credentialCreationMethods.map((method) => (
                         <Button
@@ -624,10 +625,10 @@ export default function AddConnector({
                           hidden={!isAuthorizeVisible}
                         >
                           {isAuthorizing
-                            ? "Authorizing..."
-                            : `Authorize with ${getSourceDisplayName(
-                                connector
-                              )}`}
+                            ? t("add.authorizeButton.pendingLabel")
+                            : t("add.authorizeButton.label", {
+                                source: displayName,
+                              })}
                         </Button>
                       )}
                   </Section>
@@ -638,9 +639,9 @@ export default function AddConnector({
                     <Modal.Content>
                       <Modal.Header
                         icon={SvgKey}
-                        title={`Create a ${getSourceDisplayName(
-                          connector
-                        )} credential`}
+                        title={t("add.credentialModal.title", {
+                          source: displayName,
+                        })}
                         onClose={closeCredentialModal}
                       />
                       <Modal.Body alignItems="stretch">
@@ -655,12 +656,12 @@ export default function AddConnector({
                                 font="main-ui-body"
                                 color="text-03"
                               >
-                                {`We couldn't redirect you to sign in with ${getSourceDisplayName(
-                                  connector
-                                )}. Please try again.`}
+                                {t("add.oauthRedirectFailed.message", {
+                                  source: displayName,
+                                })}
                               </OpalText>
                               <Button onClick={attemptOauthRedirect}>
-                                Retry
+                                {t("add.retryButton.label")}
                               </Button>
                             </Section>
                           ) : (

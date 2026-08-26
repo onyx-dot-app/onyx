@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { Button, Card } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import InputFile from "@/refresh-components/inputs/InputFile";
@@ -28,6 +29,7 @@ export default function LicenseActivationCard({
   license,
   hideClose,
 }: LicenseActivationCardProps) {
+  const t = useTranslations("admin.billing");
   const [licenseKey, setLicenseKey] = useState("");
   const [isActivating, setIsActivating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -48,7 +50,7 @@ export default function LicenseActivationCard({
 
   const handleActivate = async () => {
     if (!licenseKey.trim()) {
-      setError("Please enter a license key");
+      setError(t("license.emptyKey.error"));
       return;
     }
 
@@ -65,7 +67,7 @@ export default function LicenseActivationCard({
     } catch (err) {
       console.error("Error activating license:", err);
       setError(
-        err instanceof Error ? err.message : "Failed to activate license"
+        err instanceof Error ? err.message : t("license.activateFailed.error")
       );
     } finally {
       setIsActivating(false);
@@ -109,25 +111,25 @@ export default function LicenseActivationCard({
                 />
               )}
               <Text secondaryBody text03>
-                {isExpired ? (
-                  <>License key expired</>
-                ) : (
-                  <>
-                    License key active until{" "}
-                    <Text secondaryBody text04>
-                      {expirationDate}
-                    </Text>
-                  </>
-                )}
+                {isExpired
+                  ? t("license.expired.label")
+                  : t.rich("license.activeUntil.label", {
+                      date: expirationDate ?? "",
+                      value: (chunks) => (
+                        <Text secondaryBody text04>
+                          {chunks}
+                        </Text>
+                      ),
+                    })}
               </Text>
             </Section>
             <Section flexDirection="row" gap={2} height="auto" width="auto">
               <Button prominence="secondary" onClick={() => setShowInput(true)}>
-                Update Key
+                {t("license.updateKey.label")}
               </Button>
               {!hideClose && (
                 <Button prominence="tertiary" onClick={handleClose}>
-                  Close
+                  {t("license.close.label")}
                 </Button>
               )}
             </Section>
@@ -154,18 +156,20 @@ export default function LicenseActivationCard({
             alignItems="center"
           >
             <Text headingH3>
-              {hasLicense ? "Update License Key" : "Activate License Key"}
+              {hasLicense
+                ? t("license.updateTitle.title")
+                : t("license.activateTitle.title")}
             </Text>
             <Button
               disabled={isActivating}
               prominence="secondary"
               onClick={handleClose}
             >
-              Cancel
+              {t("license.cancel.label")}
             </Button>
           </Section>
           <Text secondaryBody text03>
-            Manually add and activate a license for this Onyx instance.
+            {t("license.description")}
           </Text>
         </Section>
 
@@ -180,17 +184,17 @@ export default function LicenseActivationCard({
             {success && (
               <div className="billing-success-message">
                 <Text secondaryBody>
-                  License {hasLicense ? "updated" : "activated"} successfully!
+                  {hasLicense
+                    ? t("license.updateSuccess.message")
+                    : t("license.activateSuccess.message")}
                 </Text>
               </div>
             )}
 
             <InputVertical
-              title="License Key"
+              title={t("license.keyField.title")}
               subDescription={
-                error
-                  ? undefined
-                  : "Paste or attach your license key file you received from Onyx."
+                error ? undefined : t("license.keyField.description")
               }
               withLabel
             >
@@ -214,15 +218,19 @@ export default function LicenseActivationCard({
                     <SvgXCircle size={12} />
                   </div>
                   <Text secondaryBody text04>
-                    {error}.{" "}
-                    <a
-                      href={BILLING_HELP_URL}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="billing-help-link"
-                    >
-                      Billing Help
-                    </a>
+                    {t.rich("license.error.text", {
+                      error,
+                      link: (chunks) => (
+                        <a
+                          href={BILLING_HELP_URL}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="billing-help-link"
+                        >
+                          {chunks}
+                        </a>
+                      ),
+                    })}
                   </Text>
                 </Section>
               )}
@@ -237,10 +245,10 @@ export default function LicenseActivationCard({
             onClick={handleActivate}
           >
             {isActivating
-              ? "Activating..."
+              ? t("license.activating.label")
               : hasLicense
-                ? "Update License"
-                : "Activate License"}
+                ? t("license.updateLicense.label")
+                : t("license.activateLicense.label")}
           </Button>
         </Section>
       </Section>

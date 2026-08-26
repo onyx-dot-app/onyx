@@ -292,7 +292,15 @@ ignore = [
     "B904", # raise-without-from-inside-except (~465 existing violations).
 ]
 # G004: f-strings in logging break Sentry's message-pattern grouping.
-select = ["ARG", "B", "E", "F", "G004", "I", "PERF", "S", "W"]
+select = ["ARG", "B", "C901", "E", "F", "G004", "I", "PERF", "S", "W"]
+
+[tool.ruff.lint.mccabe]
+# Ruff's default is 10, which flags 429 functions. 20 is a ratchet: it stops new
+# highly-branched functions without a repo-wide refactor. The 82 functions above
+# it are listed in per-file-ignores below. Lower this as those get simplified.
+# NOTE: ruff counts a nested function's branches toward the function that
+# encloses it, so lifting closures to module scope often fixes a violation.
+max-complexity = 20
 
 [tool.ruff.lint.flake8-bugbear]
 # FastAPI dependency-injection markers are the intended way to write these
@@ -322,3 +330,73 @@ known-first-party = ["onyx", "ee", "tests", "shared_configs", "model_server"]
 # pipe shell commands, and build ad-hoc SQL against trusted internal inputs
 # (tenant IDs, schema names). Other S rules still apply.
 "backend/scripts/**" = ["S108", "S602", "S608"]
+# Functions above the max-complexity of 20 when C901 was enabled. The trailing
+# number is the highest complexity in that file at the time. Remove an entry
+# once its functions are simplified. NOTE: the ignore is per file, so it also
+# hides new complex functions added to these files. Tracked in #2403.
+"backend/ee/onyx/background/celery/tasks/doc_permission_syncing/tasks.py" = ["C901"] # 21
+"backend/ee/onyx/external_permissions/google_drive/doc_sync.py" = ["C901"] # 21
+"backend/ee/onyx/server/gateway/anthropic_passthrough.py" = ["C901"] # 23
+"backend/ee/onyx/server/gateway/api.py" = ["C901"] # 27
+"backend/ee/onyx/server/gateway/openai_passthrough.py" = ["C901"] # 32
+"backend/onyx/auth/users.py" = ["C901"] # 30
+"backend/onyx/background/celery/tasks/docfetching/tasks.py" = ["C901"] # 43
+"backend/onyx/background/celery/tasks/docprocessing/tasks.py" = ["C901"] # 24
+"backend/onyx/background/celery/tasks/port/tasks.py" = ["C901"] # 27
+"backend/onyx/background/indexing/run_docfetching.py" = ["C901"] # 33
+"backend/onyx/chat/citation_processor.py" = ["C901"] # 30
+"backend/onyx/chat/llm_loop.py" = ["C901"] # 46
+"backend/onyx/chat/llm_step.py" = ["C901"] # 51
+"backend/onyx/chat/process_message.py" = ["C901"] # 47
+"backend/onyx/connectors/blob/connector.py" = ["C901"] # 24
+"backend/onyx/connectors/confluence/connector.py" = ["C901"] # 22
+"backend/onyx/connectors/confluence/onyx_confluence.py" = ["C901"] # 22
+"backend/onyx/connectors/connector_runner.py" = ["C901"] # 26
+"backend/onyx/connectors/drupal_wiki/connector.py" = ["C901"] # 21
+"backend/onyx/connectors/github/connector.py" = ["C901"] # 28
+"backend/onyx/connectors/gitlab/connector.py" = ["C901"] # 22
+"backend/onyx/connectors/google_drive/connector.py" = ["C901"] # 22
+"backend/onyx/connectors/google_drive/doc_conversion.py" = ["C901"] # 24
+"backend/onyx/connectors/hubspot/connector.py" = ["C901"] # 23
+"backend/onyx/connectors/notion/connector.py" = ["C901"] # 22
+"backend/onyx/connectors/sharepoint/connector.py" = ["C901"] # 34
+"backend/onyx/connectors/slack/connector.py" = ["C901"] # 26
+"backend/onyx/connectors/testrail/connector.py" = ["C901"] # 21
+"backend/onyx/connectors/web/connector.py" = ["C901"] # 23
+"backend/onyx/context/search/federated/slack_search.py" = ["C901"] # 31
+"backend/onyx/db/persona.py" = ["C901"] # 49
+"backend/onyx/deep_research/dr_loop.py" = ["C901"] # 26
+"backend/onyx/document_index/opensearch/search.py" = ["C901"] # 48
+"backend/onyx/document_index/vespa/shared_utils/vespa_request_builders.py" = ["C901"] # 41
+"backend/onyx/federated_connectors/federated_retrieval.py" = ["C901"] # 21
+"backend/onyx/kg/extractions/extraction_processing.py" = ["C901"] # 30
+"backend/onyx/llm/multi_llm.py" = ["C901"] # 45
+"backend/onyx/llm/utils.py" = ["C901"] # 30
+"backend/onyx/onyxbot/slack/handlers/handle_message.py" = ["C901"] # 34
+"backend/onyx/onyxbot/slack/handlers/handle_regular_answer.py" = ["C901"] # 22
+"backend/onyx/onyxbot/slack/listener.py" = ["C901"] # 28
+"backend/onyx/secondary_llm_flows/document_filter.py" = ["C901"] # 31
+"backend/onyx/server/documents/connector.py" = ["C901"] # 28
+"backend/onyx/server/features/build/interactive_turns/api.py" = ["C901"] # 22
+"backend/onyx/server/features/build/interactive_turns/executor.py" = ["C901"] # 35
+"backend/onyx/server/features/build/sandbox/opencode/serve_client.py" = ["C901"] # 56
+"backend/onyx/server/features/build/session/streaming.py" = ["C901"] # 24
+"backend/onyx/server/features/mcp/api.py" = ["C901"] # 33
+"backend/onyx/server/manage/users.py" = ["C901"] # 22
+"backend/onyx/server/manage/voice/websocket_api.py" = ["C901"] # 29
+"backend/onyx/server/query_and_chat/session_loading.py" = ["C901"] # 42
+"backend/onyx/skills/builtin/gmail/gmail_api.py" = ["C901"] # 23
+"backend/onyx/skills/builtin/google-drive/gdrive_api.py" = ["C901"] # 26
+"backend/onyx/skills/builtin/notion/notion_api.py" = ["C901"] # 28
+"backend/onyx/skills/ingest_from_github.py" = ["C901"] # 27
+"backend/onyx/tools/tool_constructor.py" = ["C901"] # 40
+"backend/onyx/tools/tool_implementations/search/search_tool.py" = ["C901"] # 25
+"backend/onyx/tools/tool_runner.py" = ["C901"] # 21
+"backend/onyx/utils/jsonriver/tokenize.py" = ["C901"] # 22
+"backend/onyx/voice/providers/elevenlabs.py" = ["C901"] # 21
+"backend/scripts/rotate_llm_provider_keys.py" = ["C901"] # 25
+"backend/scripts/tenant_cleanup/cleanup_tenants.py" = ["C901"] # 27
+"backend/scripts/tenant_cleanup/mark_connectors_for_deletion.py" = ["C901"] # 31
+"backend/scripts/tenant_cleanup/no_bastion_cleanup_tenants.py" = ["C901"] # 49
+"backend/scripts/tenant_cleanup/no_bastion_mark_connectors.py" = ["C901"] # 39
+"backend/tests/unit/onyx/connectors/salesforce/test_salesforce_sqlite.py" = ["C901"] # 24

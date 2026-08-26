@@ -106,6 +106,31 @@ func TestNeverReplaysDocumentSetMutations(t *testing.T) {
 	})
 }
 
+// Every user group write that passes through the sync gate leaves the group
+// syncing once it commits, so a replay meets the gate the first attempt set
+// and reports a failure for a change that landed. Same shape as the document
+// set mutations above.
+func TestNeverReplaysGatedUserGroupWrites(t *testing.T) {
+	t.Run("rename", func(t *testing.T) {
+		c, attempts := newCountingServer(t, http.StatusBadGateway, http.StatusOK)
+		if _, err := c.RenameUserGroup(context.Background(), 4, "platform"); err == nil {
+			t.Fatal("a failed rename must surface, not be replayed")
+		}
+		if attempts.Load() != 1 {
+			t.Errorf("got %d attempts, want 1", attempts.Load())
+		}
+	})
+	t.Run("delete", func(t *testing.T) {
+		c, attempts := newCountingServer(t, http.StatusBadGateway, http.StatusOK)
+		if err := c.DeleteUserGroup(context.Background(), 4); err == nil {
+			t.Fatal("a failed delete must surface, not be replayed")
+		}
+		if attempts.Load() != 1 {
+			t.Errorf("got %d attempts, want 1", attempts.Load())
+		}
+	})
+}
+
 func TestRetriesRateLimitsOnWrites(t *testing.T) {
 	c, attempts := newCountingServer(t, http.StatusTooManyRequests, http.StatusOK)
 	// A 429 is rejected before the handler runs, so replaying is safe.

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import { notFound } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { useFederatedConnector } from "./useFederatedConnector";
@@ -9,6 +10,7 @@ import { FederatedConnectorForm } from "@/components/admin/federated/FederatedCo
 export default function EditFederatedConnectorPage(props: {
   params: Promise<{ id: string }>;
 }) {
+  const t = useTranslations("admin.federated");
   const [params, setParams] = useState<{ id: string } | null>(null);
 
   useEffect(() => {
@@ -26,10 +28,10 @@ export default function EditFederatedConnectorPage(props: {
             <Loader2 className="h-8 w-8 animate-spin text-blue-500 mb-4" />
             <div className="text-center">
               <p className="text-lg font-medium text-gray-700 mb-2">
-                Loading connector configuration...
+                {t("loading.title")}
               </p>
               <p className="text-sm text-gray-500">
-                Retrieving connector details and credential schema
+                {t("loading.description")}
               </p>
             </div>
           </div>
@@ -43,7 +45,9 @@ export default function EditFederatedConnectorPage(props: {
       <div className="flex justify-center w-full h-full">
         <div className="mt-12 w-full max-w-4xl mx-auto">
           <div className="text-center">
-            <h1 className="text-2xl font-bold text-red-600 mb-4">Error</h1>
+            <h1 className="text-2xl font-bold text-red-600 mb-4">
+              {t("error.title")}
+            </h1>
             <p className="text-gray-600">{error}</p>
           </div>
         </div>

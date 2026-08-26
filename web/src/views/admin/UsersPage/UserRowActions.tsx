@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { Button, Divider, LineItemButton, Popover } from "@opal/components";
 import {
   SvgMoreHorizontal,
@@ -55,6 +56,7 @@ export default function UserRowActions({
   user,
   onMutate,
 }: UserRowActionsProps) {
+  const t = useTranslations("admin.users");
   const [modal, setModal] = useState<Modal | null>(null);
   const [popoverOpen, setPopoverOpen] = useState(false);
   // below Business the group editor is empty, so don't offer it
@@ -80,10 +82,14 @@ export default function UserRowActions({
         await setUserAdminAccess(user.email, !user.is_admin);
         onMutate();
         toast.success(
-          user.is_admin ? "Admin access removed" : "User is now an admin"
+          user.is_admin
+            ? t("rowActions.toasts.adminAccessRemoved")
+            : t("rowActions.toasts.adminAccessGranted")
         );
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : "An error occurred");
+        toast.error(
+          err instanceof Error ? err.message : t("rowActions.toasts.error")
+        );
       }
     })();
   };
@@ -94,7 +100,11 @@ export default function UserRowActions({
       rounding={2}
       icon={SvgUserManage}
       onClick={toggleAdminAccess}
-      title={user.is_admin ? "Remove Admin Access" : "Make Admin"}
+      title={
+        user.is_admin
+          ? t("rowActions.removeAdmin.label")
+          : t("rowActions.makeAdmin.label")
+      }
     />
   );
 
@@ -111,7 +121,7 @@ export default function UserRowActions({
               rounding={2}
               icon={SvgUsers}
               onClick={() => openModal(Modal.EDIT_GROUPS)}
-              title="Groups & Roles"
+              title={t("rowActions.editGroups.label")}
             />
           )}
           {/* Shown so a SCIM admin can see the action exists, but it never
@@ -124,13 +134,13 @@ export default function UserRowActions({
                 padding={0.5}
                 color="danger"
                 icon={SvgUserX}
-                title="Deactivate User"
+                title={t("rowActions.deactivate.label")}
               />
             </div>
           </Disabled>
           <Divider paddingPerpendicular={4} />
           <Text as="p" secondaryBody text03 className="px-3 py-1">
-            This is a synced SCIM user managed by your identity provider.
+            {t("rowActions.scimNotice.description")}
           </Text>
         </>
       );
@@ -145,7 +155,7 @@ export default function UserRowActions({
             color="danger"
             icon={SvgXCircle}
             onClick={() => openModal(Modal.CANCEL_INVITE)}
-            title="Cancel Invite"
+            title={t("rowActions.cancelInvite.label")}
           />
         );
 
@@ -161,15 +171,17 @@ export default function UserRowActions({
                 try {
                   await approveRequest(user.email);
                   onMutate();
-                  toast.success("Request approved");
+                  toast.success(t("rowActions.toasts.requestApproved"));
                 } catch (err) {
                   toast.error(
-                    err instanceof Error ? err.message : "An error occurred"
+                    err instanceof Error
+                      ? err.message
+                      : t("rowActions.toasts.error")
                   );
                 }
               })();
             }}
-            title="Approve"
+            title={t("rowActions.approve.label")}
           />
         );
 
@@ -182,7 +194,7 @@ export default function UserRowActions({
                 rounding={2}
                 icon={SvgUsers}
                 onClick={() => openModal(Modal.EDIT_GROUPS)}
-                title="Groups & Roles"
+                title={t("rowActions.editGroups.label")}
               />
             )}
             {user.id && adminAccessItem}
@@ -191,7 +203,7 @@ export default function UserRowActions({
               rounding={2}
               icon={SvgKey}
               onClick={() => openModal(Modal.RESET_PASSWORD)}
-              title="Reset Password"
+              title={t("rowActions.resetPassword.label")}
             />
             <Divider paddingPerpendicular={4} />
             <LineItemButton
@@ -200,7 +212,7 @@ export default function UserRowActions({
               color="danger"
               icon={SvgUserX}
               onClick={() => openModal(Modal.DEACTIVATE)}
-              title="Deactivate User"
+              title={t("rowActions.deactivate.label")}
             />
           </>
         );
@@ -214,7 +226,7 @@ export default function UserRowActions({
                 rounding={2}
                 icon={SvgUsers}
                 onClick={() => openModal(Modal.EDIT_GROUPS)}
-                title="Groups & Roles"
+                title={t("rowActions.editGroups.label")}
               />
             )}
             {user.id && adminAccessItem}
@@ -223,7 +235,7 @@ export default function UserRowActions({
               rounding={2}
               icon={SvgKey}
               onClick={() => openModal(Modal.RESET_PASSWORD)}
-              title="Reset Password"
+              title={t("rowActions.resetPassword.label")}
             />
             <Divider paddingPerpendicular={4} />
             <LineItemButton
@@ -231,7 +243,7 @@ export default function UserRowActions({
               rounding={2}
               icon={SvgUserPlus}
               onClick={() => openModal(Modal.ACTIVATE)}
-              title="Activate User"
+              title={t("rowActions.activate.label")}
             />
             <Divider paddingPerpendicular={4} />
             <LineItemButton
@@ -240,7 +252,7 @@ export default function UserRowActions({
               color="danger"
               icon={SvgUserX}
               onClick={() => openModal(Modal.DELETE)}
-              title="Delete User"
+              title={t("rowActions.delete.label")}
             />
           </>
         );

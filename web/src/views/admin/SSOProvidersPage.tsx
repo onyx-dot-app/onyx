@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import useSWR from "swr";
 import { Button, Card, MessageCard, Switch } from "@opal/components";
 import { SvgCopy, SvgPlus, SvgSettings } from "@opal/icons";
@@ -26,7 +27,6 @@ import { useCreateModal } from "@opal/components";
 import { SSOProviderModal } from "@/sections/modals/sso/SSOProviderModal";
 
 const route = ADMIN_ROUTES.SSO_PROVIDERS;
-const DESCRIPTION = "Let users sign in through your identity provider.";
 
 interface ShellProps {
   children: React.ReactNode;
@@ -35,25 +35,23 @@ interface ShellProps {
 }
 
 function Shell({ children, onAddProvider, addGated }: ShellProps) {
+  const t = useTranslations("admin.ssoProviders");
+
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={route.icon}
         title={route.title}
-        description={DESCRIPTION}
+        description={t("page.description")}
         divider
         rightChildren={
           <Button
             icon={SvgPlus}
             onClick={onAddProvider}
             disabled={addGated}
-            tooltip={
-              addGated
-                ? "Multiple enabled SSO providers are available on the Business or Enterprise plan."
-                : undefined
-            }
+            tooltip={addGated ? t("addProvider.gatedTooltip") : undefined}
           >
-            Add Provider
+            {t("addProvider.button.label")}
           </Button>
         }
       />
@@ -63,6 +61,7 @@ function Shell({ children, onAddProvider, addGated }: ShellProps) {
 }
 
 export default function SSOProvidersPage() {
+  const t = useTranslations("admin.ssoProviders");
   const [editProvider, setEditProvider] = useState<SSOProviderResponse | null>(
     null
   );
@@ -108,7 +107,7 @@ export default function SSOProvidersPage() {
       await mutate();
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Unexpected error occurred."
+        error instanceof Error ? error.message : t("toasts.unexpectedError")
       );
     } finally {
       setPendingProviderId(null);
@@ -125,8 +124,8 @@ export default function SSOProvidersPage() {
       <Shell onAddProvider={openCreateModal} addGated={addGated}>
         <MessageCard
           variant="error"
-          title="Failed to load SSO providers"
-          description={detail ?? "Unable to load SSO providers."}
+          title={t("loadError.title")}
+          description={detail ?? t("loadError.description")}
         />
       </Shell>
     );
@@ -146,8 +145,8 @@ export default function SSOProvidersPage() {
         {!providers?.length ? (
           <IllustrationContent
             illustration={SvgNoResult}
-            title="No SSO providers yet"
-            description="Add a provider to let users sign in with Google, OIDC, or SAML."
+            title={t("empty.title")}
+            description={t("empty.description")}
           />
         ) : (
           <div className={cn("flex w-full flex-col gap-2")}>
@@ -174,7 +173,7 @@ export default function SSOProvidersPage() {
                           icon={SvgCopy}
                           prominence="tertiary"
                           size="sm"
-                          tooltip="Copy redirect URI"
+                          tooltip={t("copyRedirectUri.tooltip")}
                           disabled={isPending}
                           onClick={() => {
                             void copyRedirectUri(provider.redirect_uri);
@@ -191,7 +190,7 @@ export default function SSOProvidersPage() {
                           icon={SvgSettings}
                           prominence="tertiary"
                           size="sm"
-                          tooltip="Edit"
+                          tooltip={t("editProvider.tooltip")}
                           disabled={isPending}
                           onClick={() => {
                             openEditModal(provider);

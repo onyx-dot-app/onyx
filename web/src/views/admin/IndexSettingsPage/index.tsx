@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Formik } from "formik";
 import { markdown } from "@opal/utils";
+import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { mutate } from "swr";
 import { PageLoader } from "@opal/layouts";
@@ -96,9 +97,8 @@ const route = ADMIN_ROUTES.INDEX_SETTINGS;
 
 const MODEL_TAB_CLOUD = "cloud-based";
 const MODEL_TAB_SELF = "self-hosted";
-const CLOUD_TOOLTIP = "This setting is managed by Onyx Cloud.";
-const CONTEXTUAL_MODEL_UPDATE_ERROR =
-  "Failed to update Contextual Retrieval LLM";
+// Developer-facing log label only; the user-visible copy comes from `t`.
+const CONTEXTUAL_MODEL_UPDATE_LOG = "Failed to update Contextual Retrieval LLM";
 
 /**
  * Wrapper that disables its children when either:
@@ -115,8 +115,11 @@ function CloudDisabled({
   tooltip: tooltipProp,
   children,
 }: CloudDisabledProps) {
+  const t = useTranslations("admin.indexSettings");
   const isDisabled = NEXT_PUBLIC_CLOUD_ENABLED || disabled;
-  const tooltip = NEXT_PUBLIC_CLOUD_ENABLED ? CLOUD_TOOLTIP : tooltipProp;
+  const tooltip = NEXT_PUBLIC_CLOUD_ENABLED
+    ? t("cloudDisabled.tooltip")
+    : tooltipProp;
 
   return (
     <Disabled disabled={isDisabled} tooltip={tooltip} tooltipSide="right">
@@ -130,11 +133,13 @@ interface EmbeddingProviderInfoProps {
 }
 
 function EmbeddingProviderInfo({ providerName }: EmbeddingProviderInfoProps) {
+  const t = useTranslations("admin.indexSettings");
+
   if (!isCloudBased(providerName)) {
     return (
       <Content
         icon={SvgServer}
-        title="Self-hosted"
+        title={t("providerInfo.selfHosted.title")}
         sizePreset="secondary"
         variant="body"
         color="muted"
@@ -149,7 +154,7 @@ function EmbeddingProviderInfo({ providerName }: EmbeddingProviderInfoProps) {
     <>
       <Content
         icon={SvgCloud}
-        title="Cloud Provider"
+        title={t("providerInfo.cloudProvider.title")}
         sizePreset="secondary"
         variant="body"
         color="muted"
@@ -157,12 +162,12 @@ function EmbeddingProviderInfo({ providerName }: EmbeddingProviderInfoProps) {
       />
       {provider.costslink && (
         <LinkButton href={provider.costslink} target="_blank">
-          Pricing
+          {t("providerInfo.pricingLink.label")}
         </LinkButton>
       )}
       {provider.docsLink && (
         <LinkButton href={provider.docsLink} target="_blank">
-          Docs
+          {t("providerInfo.docsLink.label")}
         </LinkButton>
       )}
     </>
@@ -209,6 +214,7 @@ function ProviderGroup({
   onSelectModel,
   onDeselectModel,
 }: ProviderGroupProps) {
+  const t = useTranslations("admin.indexSettings");
   const models = provider.embeddingModels;
   const isConfigured = isCloud ? !!existingCredentials : true;
   const disconnectModal = useCreateModal();
@@ -225,12 +231,20 @@ function ProviderGroup({
     if (!isCloud) return;
     try {
       await disconnectEmbeddingProvider(provider.providerName);
-      toast.success(`Disconnected ${provider.displayName}`);
+      toast.success(
+        t("providerGroup.disconnect.successToast", {
+          provider: provider.displayName,
+        })
+      );
       await mutate(SWR_KEYS.embeddingProviders);
       onDeselectModel();
       disconnectModal.toggle(false);
     } catch {
-      toast.error(`Failed to disconnect ${provider.displayName}`);
+      toast.error(
+        t("providerGroup.disconnect.errorToast", {
+          provider: provider.displayName,
+        })
+      );
     }
   }, [
     isCloud,
@@ -238,6 +252,7 @@ function ProviderGroup({
     provider.displayName,
     onDeselectModel,
     disconnectModal,
+    t,
   ]);
 
   const getModelState = useCallback(
@@ -286,16 +301,20 @@ function ProviderGroup({
           <disconnectModal.Provider>
             <ConfirmationModalLayout
               icon={SvgUnplug}
-              title={`Disconnect ${provider.displayName}`}
+              title={t("providerGroup.disconnectModal.title", {
+                provider: provider.displayName,
+              })}
               submit={
                 <Button variant="danger" onClick={handleDisconnect}>
-                  Disconnect
+                  {t("providerGroup.disconnectModal.submit.label")}
                 </Button>
               }
             >
               <Text font="main-ui-body" color="text-03" as="p">
                 {markdown(
-                  `This will disconnect all embedding models from provider **${provider.displayName}**.`
+                  t("providerGroup.disconnectModal.description", {
+                    provider: provider.displayName,
+                  })
                 )}
               </Text>
             </ConfirmationModalLayout>
@@ -360,7 +379,11 @@ function ProviderGroup({
                       )
                     : provider.displayName
                 }
-                suffix={provider.deprecated ? "(deprecated)" : undefined}
+                suffix={
+                  provider.deprecated
+                    ? t("providerGroup.deprecated.suffix")
+                    : undefined
+                }
                 sizePreset="secondary"
               />
 
@@ -373,7 +396,7 @@ function ProviderGroup({
                     disabled={providerGroupContainsCurrentModelName}
                     tooltip={
                       providerGroupContainsCurrentModelName
-                        ? "Cannot disconnect this embedding model because it is the current default. Select a new one before proceeding."
+                        ? t("providerGroup.disconnectButton.disabledTooltip")
                         : undefined
                     }
                     onClick={() => disconnectModal.toggle(true)}
@@ -382,8 +405,8 @@ function ProviderGroup({
                     icon={SvgSettings}
                     prominence="tertiary"
                     size="sm"
-                    aria-label="Edit credentials"
-                    tooltip="Edit credentials"
+                    aria-label={t("providerGroup.editCredentialsButton.label")}
+                    tooltip={t("providerGroup.editCredentialsButton.label")}
                     onClick={() => editCredentialsModal.toggle(true)}
                   />
                   <Spacer orientation="horizontal" rem={0.25} />
@@ -401,7 +424,9 @@ function ProviderGroup({
             onClick={() => providerCreationModal.toggle(true)}
           >
             <ContentAction
-              title={`Add configs for your ${provider.displayName} embedding providers.`}
+              title={t("providerGroup.addConfig.title", {
+                provider: provider.displayName,
+              })}
               sizePreset="secondary"
               variant="body"
               color="muted"
@@ -412,7 +437,7 @@ function ProviderGroup({
                   rightIcon={SvgPlusCircle}
                   onClick={() => providerCreationModal.toggle(true)}
                 >
-                  Add Configuration
+                  {t("providerGroup.addConfig.button.label")}
                 </Button>
               }
               center
@@ -456,6 +481,7 @@ function EmbeddingModelCard({
   cardState,
   onSelect,
 }: EmbeddingModelCardProps) {
+  const t = useTranslations("admin.indexSettings");
   const topRightButton = (() => {
     switch (modelState) {
       case "unconnected":
@@ -467,11 +493,11 @@ function EmbeddingModelCard({
             disabled={provider.deprecated}
             tooltip={
               provider.deprecated
-                ? "This embedding model is deprecated and cannot be connected to."
+                ? t("modelCard.deprecated.connectTooltip")
                 : undefined
             }
           >
-            Connect
+            {t("modelCard.connectButton.label")}
           </Button>
         );
       case "connected":
@@ -482,11 +508,11 @@ function EmbeddingModelCard({
             disabled={provider.deprecated}
             tooltip={
               provider.deprecated
-                ? "This embedding model is deprecated and cannot be selected."
+                ? t("modelCard.deprecated.selectTooltip")
                 : undefined
             }
           >
-            Select Model
+            {t("modelCard.selectButton.label")}
           </Button>
         );
       case "current":
@@ -497,7 +523,7 @@ function EmbeddingModelCard({
             rightIcon={SvgCheckSquare}
             onClick={onSelect}
           >
-            Current Model
+            {t("modelCard.currentButton.label")}
           </Button>
         );
       case "selected":
@@ -508,7 +534,7 @@ function EmbeddingModelCard({
             rightIcon={SvgCheckSquare}
             onClick={onSelect}
           >
-            Selected
+            {t("modelCard.selectedButton.label")}
           </Button>
         );
     }
@@ -588,6 +614,7 @@ function isContextualModelOnlyChange(
 }
 
 export default function IndexSettingsPage() {
+  const t = useTranslations("admin.indexSettings");
   const router = useRouter();
   const settings = useSettings();
   const editModal = useCreateModal();
@@ -635,12 +662,12 @@ export default function IndexSettingsPage() {
         await saveAdminSettings({ ...toSettings(settings), ...updates });
         router.refresh();
         await mutate(SWR_KEYS.settings);
-        toast.success("Settings updated");
+        toast.success(t("toasts.settingsUpdated"));
       } catch {
-        toast.error("Failed to update settings");
+        toast.error(t("toasts.settingsUpdateFailed"));
       }
     },
-    [settings, router]
+    [settings, router, t]
   );
 
   const imageProcessingEnabled =
@@ -740,7 +767,7 @@ export default function IndexSettingsPage() {
     }) => {
       const provider = llmProviders?.find((p) => p.name === providerName);
       if (!provider) {
-        toast.error("Could not resolve provider");
+        toast.error(t("toasts.providerResolveFailed"));
         return;
       }
       try {
@@ -754,18 +781,18 @@ export default function IndexSettingsPage() {
         });
         if (!response.ok) {
           throw new Error(
-            (await response.json()).detail ?? "Failed to update captioning LLM"
+            (await response.json()).detail ?? t("toasts.captioningUpdateFailed")
           );
         }
         await mutate(SWR_KEYS.llmProviders);
-        toast.success("Captioning LLM updated");
+        toast.success(t("toasts.captioningUpdated"));
       } catch (error) {
         toast.error(
-          error instanceof Error ? error.message : "An unknown error occurred"
+          error instanceof Error ? error.message : t("toasts.unknownError")
         );
       }
     },
-    [llmProviders]
+    [llmProviders, t]
   );
 
   // Resolve defaultVision (name-based) to a model_configuration_id for ModelSelector
@@ -804,32 +831,35 @@ export default function IndexSettingsPage() {
         });
         if (!response.ok) {
           toast.error(
-            await parseErrorDetail(response, CONTEXTUAL_MODEL_UPDATE_ERROR)
+            await parseErrorDetail(
+              response,
+              t("toasts.contextualModelUpdateFailed")
+            )
           );
           return false;
         }
 
         await mutate(SWR_KEYS.currentSearchSettings);
         forwardOnlyModal.toggle(false);
-        toast.success("Contextual Retrieval LLM updated");
+        toast.success(t("toasts.contextualModelUpdated"));
         return true;
       } catch (error) {
-        console.error(CONTEXTUAL_MODEL_UPDATE_ERROR, error);
-        toast.error(CONTEXTUAL_MODEL_UPDATE_ERROR);
+        console.error(CONTEXTUAL_MODEL_UPDATE_LOG, error);
+        toast.error(t("toasts.contextualModelUpdateFailed"));
         return false;
       }
     },
-    [forwardOnlyModal, searchSettings]
+    [forwardOnlyModal, searchSettings, t]
   );
 
   const handleCancelReindex = useCallback(async () => {
     const response = await cancelNewEmbedding();
     if (!response.ok) {
-      toast.error("Failed to cancel re-indexing");
+      toast.error(t("toasts.cancelReindexFailed"));
       return;
     }
     cancelReindexModal.toggle(false);
-    toast.success("Re-indexing canceled");
+    toast.success(t("toasts.reindexCanceled"));
     await Promise.all([
       mutate(SWR_KEYS.currentSearchSettings),
       mutate(SWR_KEYS.secondarySearchSettings),
@@ -837,7 +867,7 @@ export default function IndexSettingsPage() {
       mutate(SWR_KEYS.reindexProgress),
       mutate(SWR_KEYS.reindexErrors),
     ]);
-  }, [cancelReindexModal]);
+  }, [cancelReindexModal, t]);
 
   if (
     isLoadingCurrentModel ||
@@ -875,16 +905,15 @@ export default function IndexSettingsPage() {
       <cancelReindexModal.Provider>
         <ConfirmationModalLayout
           icon={SvgRevert}
-          title="Cancel Re-index"
+          title={t("cancelReindexModal.title")}
           submit={
             <Button variant="danger" onClick={handleCancelReindex}>
-              Cancel
+              {t("cancelReindexModal.submit.label")}
             </Button>
           }
         >
           <Text font="main-ui-body" color="text-03" as="p">
-            Cancelling will revert to the previous embedding model and all
-            re-indexing progress will be lost.
+            {t("cancelReindexModal.description")}
           </Text>
         </ConfirmationModalLayout>
       </cancelReindexModal.Provider>
@@ -893,7 +922,7 @@ export default function IndexSettingsPage() {
         <SettingsLayouts.Header
           icon={route.icon}
           title={route.title}
-          description="Configure how documents are indexed, embedded, and prepared for search and retrieval."
+          description={t("header.description")}
           divider
         />
 
@@ -908,9 +937,7 @@ export default function IndexSettingsPage() {
                 values.enable_contextual_rag &&
                 values.contextual_rag_model_configuration_id === null
               ) {
-                toast.error(
-                  "Select a Contextual Retrieval LLM before re-indexing."
-                );
+                toast.error(t("toasts.contextualModelRequired"));
                 return;
               }
               // Custom self-hosted models live outside the static registry,
@@ -922,7 +949,7 @@ export default function IndexSettingsPage() {
               const stagedModel =
                 values.custom_model ?? findRegistryModel(values.model_name);
               if (!stagedModel) {
-                toast.error("Could not find the selected model");
+                toast.error(t("toasts.modelNotFound"));
                 return;
               }
               // A staged custom model from a no-registry cloud provider
@@ -944,11 +971,11 @@ export default function IndexSettingsPage() {
               });
 
               if (!response.ok) {
-                toast.error("Failed to apply settings");
+                toast.error(t("toasts.applyFailed"));
                 return;
               }
 
-              toast.success("Re-indexing started");
+              toast.success(t("toasts.reindexStarted"));
               setSwitchoverType(SwitchoverType.REINDEX);
               await Promise.all([
                 mutate(SWR_KEYS.currentSearchSettings),
@@ -975,31 +1002,33 @@ export default function IndexSettingsPage() {
                   value={switchoverType}
                   onValueChange={(v) => setSwitchoverType(v as SwitchoverType)}
                 >
-                  <InputSelect.Trigger placeholder="Select a switchover strategy" />
+                  <InputSelect.Trigger
+                    placeholder={t("switchover.placeholder")}
+                  />
                   <InputSelect.Content>
                     <InputSelect.Item
                       value={SwitchoverType.REINDEX}
                       icon={SvgClock}
                       wrapDescription
-                      description="Safest option. Continue using the current document index with existing settings until all connectors have completed a successful index attempt."
+                      description={t("switchover.reindexAll.description")}
                     >
-                      Re-index All Connectors Then Switch
+                      {t("switchover.reindexAll.label")}
                     </InputSelect.Item>
                     <InputSelect.Item
                       value={SwitchoverType.ACTIVE_ONLY}
                       icon={SvgSlowTime}
                       wrapDescription
-                      description="Continue using the current document index with existing settings until all active (not paused/deleting) connectors have completed a successful index attempt."
+                      description={t("switchover.activeOnly.description")}
                     >
-                      Re-index Active Connectors Then Switch
+                      {t("switchover.activeOnly.label")}
                     </InputSelect.Item>
                     <InputSelect.Item
                       value={SwitchoverType.INSTANT}
                       icon={SvgEmpty}
                       wrapDescription
-                      description="Immediately clear the current document index and switch to the new settings. Requires re-indexing all connectors before the index is repopulated for search."
+                      description={t("switchover.instant.description")}
                     >
-                      Switch Before Re-index
+                      {t("switchover.instant.label")}
                     </InputSelect.Item>
                   </InputSelect.Content>
                 </InputSelect>
@@ -1012,7 +1041,7 @@ export default function IndexSettingsPage() {
                     setSwitchoverType(SwitchoverType.REINDEX);
                   }}
                 >
-                  Revert
+                  {t("actions.revert.label")}
                 </Button>
               );
               const rebuildButton = (
@@ -1021,8 +1050,8 @@ export default function IndexSettingsPage() {
                   disabled={contextualRagModelMissing}
                 >
                   {contextualModelOnlyChange
-                    ? "Rebuild all existing documents"
-                    : "Apply & Re-index"}
+                    ? t("actions.rebuildAll.label")
+                    : t("actions.applyReindex.label")}
                 </Button>
               );
 
@@ -1031,7 +1060,7 @@ export default function IndexSettingsPage() {
                   <forwardOnlyModal.Provider>
                     <ConfirmationModalLayout
                       icon={SvgArrowExchange}
-                      title="Apply Contextual Retrieval LLM going forward"
+                      title={t("forwardOnlyModal.title")}
                       submit={
                         <Button
                           onClick={async () => {
@@ -1048,15 +1077,12 @@ export default function IndexSettingsPage() {
                             }
                           }}
                         >
-                          Apply to new and updated documents
+                          {t("actions.applyForward.label")}
                         </Button>
                       }
                     >
                       <Text font="main-ui-body" color="text-03" as="p">
-                        Existing documents will keep context generated by the
-                        previous model. The new model will apply only when
-                        documents are added or updated. Contextual enrichment
-                        can differ between documents.
+                        {t("forwardOnlyModal.description")}
                       </Text>
                     </ConfirmationModalLayout>
                   </forwardOnlyModal.Provider>
@@ -1102,9 +1128,11 @@ export default function IndexSettingsPage() {
                       <MessageCard
                         variant="warning"
                         headerPadding={2}
-                        title="Re-indexing in progress"
+                        title={t("reindexBanner.title")}
                         description={markdown(
-                          `Switching to **${secondarySearchSettings?.model_name}**. Existing documents are being re-embedded — this may take hours or days depending on corpus size. The previous model continues to serve queries until the switchover completes.`
+                          t("reindexBanner.description", {
+                            model: secondarySearchSettings?.model_name ?? "",
+                          })
                         )}
                         bottomChildren={
                           <GeneralLayouts.Section
@@ -1117,14 +1145,14 @@ export default function IndexSettingsPage() {
                               icon={SvgExternalLink}
                               href={ADMIN_ROUTES.INDEXING_STATUS.path}
                             >
-                              See Connectors
+                              {t("reindexBanner.seeConnectors.label")}
                             </Button>
                             <Button
                               variant="danger"
                               prominence="secondary"
                               onClick={() => cancelReindexModal.toggle(true)}
                             >
-                              Cancel Re-index
+                              {t("reindexBanner.cancelReindex.label")}
                             </Button>
                           </GeneralLayouts.Section>
                         }
@@ -1139,17 +1167,21 @@ export default function IndexSettingsPage() {
                         headerPadding={2}
                         title={
                           contextualRagModelMissing
-                            ? "Select a Contextual Retrieval LLM"
+                            ? t("changesBanner.contextualModelMissing.title")
                             : contextualModelOnlyChange
-                              ? "Choose how to apply this Contextual Retrieval LLM"
-                              : "Changes require a full re-index."
+                              ? t("changesBanner.contextualModelOnly.title")
+                              : t("changesBanner.default.title")
                         }
                         description={markdown(
                           contextualRagModelMissing
-                            ? "Contextual Retrieval is enabled but no model is selected. Pick a Contextual Retrieval LLM below before re-indexing — without one, the re-index cannot run."
+                            ? t(
+                                "changesBanner.contextualModelMissing.description"
+                              )
                             : contextualModelOnlyChange
-                              ? "Apply the model only to new and updated documents, or rebuild all documents for uniform contextual enrichment."
-                              : "Modifying embedding or retrieval settings requires a full re-index of all documents to take effect, which may take **hours or days** depending on corpus size. [Learn More](https://docs.onyx.app/security/architecture/data_flows)"
+                              ? t(
+                                  "changesBanner.contextualModelOnly.description"
+                                )
+                              : t("changesBanner.default.description")
                         )}
                         bottomChildren={
                           dirty ? (
@@ -1174,7 +1206,7 @@ export default function IndexSettingsPage() {
                                       forwardOnlyModal.toggle(true)
                                     }
                                   >
-                                    Apply to new and updated documents
+                                    {t("actions.applyForward.label")}
                                   </Button>
                                 </GeneralLayouts.Section>
                                 <Text
@@ -1182,7 +1214,7 @@ export default function IndexSettingsPage() {
                                   color="text-03"
                                   nowrap
                                 >
-                                  or
+                                  {t("changesBanner.orSeparator.label")}
                                 </Text>
                                 <GeneralLayouts.Section
                                   flexDirection="row"
@@ -1221,7 +1253,7 @@ export default function IndexSettingsPage() {
                       disabled opacity doesn't compound to 25% under this one. */}
                   <Disabled
                     disabled={isReindexing}
-                    tooltip="A re-index is in progress. Cancel it to make changes."
+                    tooltip={t("reindexing.disabledTooltip")}
                   >
                     <div className="flex w-full flex-col gap-8">
                       {/* ── Embedding Model ── */}
@@ -1232,8 +1264,8 @@ export default function IndexSettingsPage() {
                         justifyContent="start"
                       >
                         <Content
-                          title="Embedding Model"
-                          description="Onyx uses this model to encode documents for search and retrieval."
+                          title={t("embeddingModel.title")}
+                          description={t("embeddingModel.description")}
                           sizePreset="main-content"
                           variant="section"
                         />
@@ -1244,7 +1276,7 @@ export default function IndexSettingsPage() {
                               <GeneralLayouts.Section padding={2}>
                                 <Content
                                   icon={SvgVector}
-                                  title="Embedding model and settings are managed by Onyx Cloud."
+                                  title={t("embeddingModel.cloudManaged.title")}
                                   sizePreset="main-ui"
                                   variant="section"
                                 />
@@ -1339,8 +1371,12 @@ export default function IndexSettingsPage() {
                                       ) : (
                                         <IllustrationContent
                                           illustration={SvgNoResult}
-                                          title="No cloud-based models found"
-                                          description="Try a different search term."
+                                          title={t(
+                                            "modelPicker.noCloudResults.title"
+                                          )}
+                                          description={t(
+                                            "modelPicker.noResults.description"
+                                          )}
                                         />
                                       )}
                                     </Tabs.Content>
@@ -1408,7 +1444,9 @@ export default function IndexSettingsPage() {
                                                 <div className="flex flex-row justify-between items-center w-full py-1">
                                                   <Content
                                                     icon={CUSTOM_PROVIDER.icon}
-                                                    title="Custom Models"
+                                                    title={t(
+                                                      "modelPicker.customModels.title"
+                                                    )}
                                                     sizePreset="secondary"
                                                   />
                                                 </div>
@@ -1424,7 +1462,9 @@ export default function IndexSettingsPage() {
                                               }
                                             >
                                               <ContentAction
-                                                title="Set up a custom embedding model."
+                                                title={t(
+                                                  "modelPicker.customModel.title"
+                                                )}
                                                 sizePreset="secondary"
                                                 variant="body"
                                                 color="muted"
@@ -1439,7 +1479,9 @@ export default function IndexSettingsPage() {
                                                       )
                                                     }
                                                   >
-                                                    Add Custom Model
+                                                    {t(
+                                                      "modelPicker.addCustomModel.label"
+                                                    )}
                                                   </Button>
                                                 }
                                                 center
@@ -1450,8 +1492,12 @@ export default function IndexSettingsPage() {
                                       ) : (
                                         <IllustrationContent
                                           illustration={SvgNoResult}
-                                          title="No self-hosted models found"
-                                          description="Try a different search term."
+                                          title={t(
+                                            "modelPicker.noSelfHostedResults.title"
+                                          )}
+                                          description={t(
+                                            "modelPicker.noResults.description"
+                                          )}
                                         />
                                       )}
                                     </Tabs.Content>
@@ -1462,7 +1508,9 @@ export default function IndexSettingsPage() {
                                   <div className="pt-1 px-1">
                                     <div className="pt-2 pb-1 px-2 flex flex-row items-center justify-between">
                                       <InputTypeIn
-                                        placeholder="Search models..."
+                                        placeholder={t(
+                                          "modelPicker.search.placeholder"
+                                        )}
                                         variant="internal"
                                         searchIcon
                                         value={query}
@@ -1475,7 +1523,9 @@ export default function IndexSettingsPage() {
                                           <Button
                                             icon={SvgRevert}
                                             prominence="internal"
-                                            tooltip="Revert embedding model selection"
+                                            tooltip={t(
+                                              "modelPicker.revertSelection.tooltip"
+                                            )}
                                             onClick={() => {
                                               void setFieldValue(
                                                 "model_name",
@@ -1499,7 +1549,7 @@ export default function IndexSettingsPage() {
                                           }
                                           rightIcon={SvgFold}
                                         >
-                                          Fold Models
+                                          {t("modelPicker.foldModels.label")}
                                         </Button>
                                       </div>
                                     </div>
@@ -1507,10 +1557,10 @@ export default function IndexSettingsPage() {
                                     <div className="px-2">
                                       <Tabs.List>
                                         <Tabs.Trigger value={MODEL_TAB_CLOUD}>
-                                          Cloud-based
+                                          {t("modelPicker.cloudTab.label")}
                                         </Tabs.Trigger>
                                         <Tabs.Trigger value={MODEL_TAB_SELF}>
-                                          Self-hosted
+                                          {t("modelPicker.selfHostedTab.label")}
                                         </Tabs.Trigger>
                                       </Tabs.List>
                                     </div>
@@ -1569,7 +1619,7 @@ export default function IndexSettingsPage() {
                                           setViewAllModelsOpen(true);
                                         }}
                                       >
-                                        View All Models
+                                        {t("modelPicker.viewAllModels.label")}
                                       </Button>
                                       {isCurrentCloudBased && (
                                         <div className="p-1">
@@ -1602,22 +1652,22 @@ export default function IndexSettingsPage() {
                         justifyContent="start"
                       >
                         <Content
-                          title="Retrieval Optimization"
-                          description="Additional indexing features that improve search accuracy by configuring how documents are chunked and contextualized. These can increase embedding cost."
+                          title={t("retrieval.title")}
+                          description={t("retrieval.description")}
                           sizePreset="main-content"
                           variant="section"
                         />
 
                         <CloudDisabled
                           disabled={!isReindexing}
-                          tooltip="Multipass Indexing is disabled temporarily and will be available in the future."
+                          tooltip={t("multipass.disabledTooltip")}
                         >
                           <Card border="solid" rounding={4}>
                             <InputHorizontal
-                              title="Multipass Indexing"
-                              description="Index documents as chunks of varying sizes to better identify relevant sources."
+                              title={t("multipass.title")}
+                              description={t("multipass.description")}
                               tag={{
-                                title: "temporarily unavailable",
+                                title: t("multipass.tag.label"),
                                 color: "gray",
                               }}
                               withLabel
@@ -1637,7 +1687,9 @@ export default function IndexSettingsPage() {
                           tooltip={
                             !hasAnyLlm
                               ? markdown(
-                                  `Contextual Retrieval is disabled because you have no models configured. Set up a [Language Model](${ADMIN_ROUTES.LLM_MODELS.path}) first.`
+                                  t("contextualRetrieval.noModelsTooltip", {
+                                    link: ADMIN_ROUTES.LLM_MODELS.path,
+                                  })
                                 )
                               : undefined
                           }
@@ -1652,8 +1704,10 @@ export default function IndexSettingsPage() {
                               alignItems="stretch"
                             >
                               <InputHorizontal
-                                title="Contextual Retrieval"
-                                description="Add document-level context to every indexed chunk to improve hybrid search relevance. This can increase embedding cost significantly."
+                                title={t("contextualRetrieval.title")}
+                                description={t(
+                                  "contextualRetrieval.description"
+                                )}
                                 withLabel
                               >
                                 <SwitchField name="enable_contextual_rag" />
@@ -1663,11 +1717,11 @@ export default function IndexSettingsPage() {
                                 disabled={
                                   !values.enable_contextual_rag && !isReindexing
                                 }
-                                tooltip="Cannot modify while Contextual Retrieval is off."
+                                tooltip={t("contextualModel.disabledTooltip")}
                               >
                                 <InputHorizontal
-                                  title="Contextual Retrieval LLM"
-                                  description="This model will be used to generate context for chunks."
+                                  title={t("contextualModel.title")}
+                                  description={t("contextualModel.description")}
                                   disabled={!values.enable_contextual_rag}
                                   withLabel
                                 >
@@ -1700,8 +1754,8 @@ export default function IndexSettingsPage() {
                         justifyContent="start"
                       >
                         <Content
-                          title="Image Processing"
-                          description="Use LLM model to analyze and add descriptions to images during indexing."
+                          title={t("imageProcessing.title")}
+                          description={t("imageProcessing.description")}
                           sizePreset="main-content"
                           variant="section"
                         />
@@ -1711,7 +1765,9 @@ export default function IndexSettingsPage() {
                           tooltip={
                             !hasAnyVisionLlm
                               ? markdown(
-                                  `Image Processing is disabled because you have no vision-capable models configured. Set up a vision-capable [Language Model](${ADMIN_ROUTES.LLM_MODELS.path}) first.`
+                                  t("imageProcessing.noVisionModelsTooltip", {
+                                    link: ADMIN_ROUTES.LLM_MODELS.path,
+                                  })
                                 )
                               : undefined
                           }
@@ -1722,8 +1778,8 @@ export default function IndexSettingsPage() {
                               alignItems="stretch"
                             >
                               <InputHorizontal
-                                title="Extract & Caption Images"
-                                description="Extract embedded images from uploaded files (PDFs, DOCX, etc.) and summarize them with a vision-capable LLM so image-only documents become searchable and answerable. Requires a vision-capable default LLM."
+                                title={t("imageExtraction.title")}
+                                description={t("imageExtraction.description")}
                                 withLabel
                               >
                                 <Switch
@@ -1741,11 +1797,13 @@ export default function IndexSettingsPage() {
                                 disabled={
                                   !imageProcessingEnabled && !isReindexing
                                 }
-                                tooltip="Enable Extract & Caption Images to configure this."
+                                tooltip={t(
+                                  "imageProcessing.enableFirstTooltip"
+                                )}
                               >
                                 <InputHorizontal
-                                  title="Captioning LLM"
-                                  description="This model will be used to analyze images during indexing. Only vision-capable models can be selected. Updates apply to documents indexed going forward — existing captions are baked into prior embeddings."
+                                  title={t("captioningModel.title")}
+                                  description={t("captioningModel.description")}
                                   disabled={!imageProcessingEnabled}
                                   withLabel
                                 >
@@ -1767,12 +1825,14 @@ export default function IndexSettingsPage() {
                                 disabled={
                                   !imageProcessingEnabled && !isReindexing
                                 }
-                                tooltip="Enable Extract & Caption Images to configure this."
+                                tooltip={t(
+                                  "imageProcessing.enableFirstTooltip"
+                                )}
                               >
                                 <InputHorizontal
-                                  title="Max Image Size for Analysis"
-                                  suffix="(MB)"
-                                  description="Images above this size will be skipped to limit resource usage."
+                                  title={t("maxImageSize.title")}
+                                  suffix={t("maxImageSize.suffix")}
+                                  description={t("maxImageSize.description")}
                                   disabled={!imageProcessingEnabled}
                                   withLabel
                                 >

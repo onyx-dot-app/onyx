@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { SvgPlusCircle, SvgMinusCircle } from "@opal/icons";
 import { Button, Card } from "@opal/components";
 import { Disabled } from "@opal/core";
@@ -42,6 +43,7 @@ function TokenLimitSection({
   disabled,
   disabledTooltip,
 }: TokenLimitSectionProps) {
+  const t = useTranslations("admin.groups");
   const [rowKeys, setRowKeys] = useState<{
     keys: number[];
     nextKey: number;
@@ -116,8 +118,8 @@ function TokenLimitSection({
   return (
     <SimpleCollapsible>
       <SimpleCollapsible.Header
-        title="Token Rate Limit"
-        description="Limit number of tokens this group can use within a given time period."
+        title={t("tokenLimits.section.title")}
+        description={t("tokenLimits.section.description")}
         tag={
           disabled ? { ...planTagProps("enterprise"), size: "sm" } : undefined
         }
@@ -137,26 +139,26 @@ function TokenLimitSection({
                 <div className="flex flex-wrap items-center gap-1 pr-[40px]">
                   <div className="flex-1 flex items-center min-w-[160px]">
                     <Text mainUiAction text04>
-                      Token Limit
+                      {t("tokenLimits.tokenLimit.header")}
                     </Text>
                     <Text mainUiMuted text03 className="ml-0.5">
-                      (thousands)
+                      {t("tokenLimits.tokenLimit.unit")}
                     </Text>
                   </div>
                   <div className="flex-1 flex items-center min-w-[160px]">
                     <Text mainUiAction text04>
-                      Cost Limit
+                      {t("tokenLimits.costLimit.header")}
                     </Text>
                     <Text mainUiMuted text03 className="ml-0.5">
-                      (USD)
+                      {t("tokenLimits.costLimit.unit")}
                     </Text>
                   </div>
                   <div className="flex-1 flex items-center min-w-[160px]">
                     <Text mainUiAction text04>
-                      Time Window
+                      {t("tokenLimits.timeWindow.header")}
                     </Text>
                     <Text mainUiMuted text03 className="ml-0.5">
-                      (UTC days)
+                      {t("tokenLimits.timeWindow.unit")}
                     </Text>
                   </div>
                 </div>
@@ -172,7 +174,7 @@ function TokenLimitSection({
                         value={limit.tokenBudget}
                         onChange={(v) => updateLimit(i, "tokenBudget", v)}
                         min={1}
-                        placeholder="Token limit (thousands)"
+                        placeholder={t("tokenLimits.tokenLimit.placeholder")}
                       />
                     </div>
                     <div className="flex-1">
@@ -182,7 +184,7 @@ function TokenLimitSection({
                         min={0.01}
                         step={0.01}
                         decimalPlaces={2}
-                        placeholder="Cost limit"
+                        placeholder={t("tokenLimits.costLimit.placeholder")}
                       />
                     </div>
                     <div className="flex-1">
@@ -209,7 +211,7 @@ function TokenLimitSection({
                   size="md"
                   onClick={addLimit}
                 >
-                  Add Limit
+                  {t("tokenLimits.addLimit.label")}
                 </Button>
               </Section>
             </Section>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import { SettingsLayouts, toast } from "@opal/layouts";
 import {
   SvgArrowExchange,
@@ -26,22 +27,28 @@ import { cn } from "@opal/utils";
 
 const route = ADMIN_ROUTES.CODE_INTERPRETER;
 
+// Message keys, not copy — the literal union keeps `t()` statically checked.
+type StatusLabelKey =
+  | "status.healthy.label"
+  | "status.unhealthy.label"
+  | "status.connectionLost.label";
+
 const STATUS_CONFIG: Record<
   CodeInterpreterHealthStatus,
-  { label: string; icon: typeof SvgCheckCircle; iconColor: string }
+  { labelKey: StatusLabelKey; icon: typeof SvgCheckCircle; iconColor: string }
 > = {
   healthy: {
-    label: "Connected",
+    labelKey: "status.healthy.label",
     icon: SvgCheckCircle,
     iconColor: "text-status-success-05!",
   },
   unhealthy: {
-    label: "Unhealthy",
+    labelKey: "status.unhealthy.label",
     icon: SvgXOctagon,
     iconColor: "text-status-error-05!",
   },
   connection_lost: {
-    label: "Connection Lost",
+    labelKey: "status.connectionLost.label",
     icon: SvgXOctagon,
     iconColor: "text-status-error-05!",
   },
@@ -52,6 +59,8 @@ const STATUS_CONFIG: Record<
 // ---------------------------------------------------------------------------
 
 function CheckingStatus() {
+  const t = useTranslations("admin.codeInterpreter");
+
   return (
     <Section
       flexDirection="row"
@@ -61,7 +70,7 @@ function CheckingStatus() {
       padding={2}
     >
       <Text mainUiAction text03>
-        Checking...
+        {t("status.checking.label")}
       </Text>
       <SvgSimpleLoader />
     </Section>
@@ -79,11 +88,13 @@ function ConnectionStatus({
   isLoading,
   onIconHover,
 }: ConnectionStatusProps) {
+  const t = useTranslations("admin.codeInterpreter");
+
   if (isLoading || !status) {
     return <CheckingStatus />;
   }
 
-  const { label, icon: Icon, iconColor } = STATUS_CONFIG[status];
+  const { labelKey, icon: Icon, iconColor } = STATUS_CONFIG[status];
   const hasError = status !== "healthy";
 
   return (
@@ -95,7 +106,7 @@ function ConnectionStatus({
       padding={2}
     >
       <Text mainUiAction text03>
-        {label}
+        {t(labelKey)}
       </Text>
       <div
         onMouseEnter={() => hasError && onIconHover(true)}
@@ -113,6 +124,7 @@ function ConnectionStatus({
 // ---------------------------------------------------------------------------
 
 export default function CodeInterpreterPage() {
+  const t = useTranslations("admin.codeInterpreter");
   const { status, error, isEnabled, isLoading, refetch } = useCodeInterpreter();
   const isHealthy = status === "healthy";
   const [showDisconnectModal, setShowDisconnectModal] = useState(false);
@@ -136,12 +148,15 @@ export default function CodeInterpreterPage() {
   }
 
   async function handleToggle(enabled: boolean) {
-    const action = enabled ? "reconnect" : "disconnect";
     setIsReconnecting(enabled);
     try {
       const response = await updateCodeInterpreter({ enabled });
       if (!response.ok) {
-        toast.error(`Failed to ${action} Code Interpreter`);
+        toast.error(
+          enabled
+            ? t("toggleError.reconnect.message")
+            : t("toggleError.disconnect.message")
+        );
         return;
       }
       setShowDisconnectModal(false);
@@ -163,8 +178,8 @@ export default function CodeInterpreterPage() {
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={route.icon}
-        title={route.title}
-        description="Safe and sandboxed Python runtime available to your LLM. See docs for more details."
+        title={t("header.title")}
+        description={t("header.description")}
         divider
       />
 
@@ -180,8 +195,8 @@ export default function CodeInterpreterPage() {
                   sizePreset="main-ui"
                   variant="section"
                   icon={SvgTerminal}
-                  title="Code Interpreter"
-                  description="Built-in Python runtime"
+                  title={t("card.title")}
+                  description={t("card.description")}
                   padding={2}
                   rightChildren={
                     <Section alignItems="end" gap={0}>
@@ -203,7 +218,7 @@ export default function CodeInterpreterPage() {
                                 size="md"
                                 icon={SvgUnplug}
                                 onClick={() => setShowDisconnectModal(true)}
-                                tooltip="Disconnect"
+                                tooltip={t("card.disconnectButton.tooltip")}
                               />
                             </Hoverable.Item>
                           </Disabled>
@@ -213,7 +228,7 @@ export default function CodeInterpreterPage() {
                             size="md"
                             icon={SvgRefreshCw}
                             onClick={refetch}
-                            tooltip="Refresh"
+                            tooltip={t("card.refreshButton.tooltip")}
                           />
                         </Section>
                       </div>
@@ -234,8 +249,8 @@ export default function CodeInterpreterPage() {
               sizePreset="main-ui"
               variant="section"
               icon={SvgTerminal}
-              title="Code Interpreter (Disconnected)"
-              description="Built-in Python runtime"
+              title={t("card.disconnectedTitle")}
+              description={t("card.description")}
               padding={2}
               rightChildren={
                 isReconnecting ? (
@@ -249,7 +264,7 @@ export default function CodeInterpreterPage() {
                       handleToggle(true);
                     }}
                   >
-                    Reconnect
+                    {t("card.reconnectButton.label")}
                   </Button>
                 )
               }
@@ -274,8 +289,8 @@ export default function CodeInterpreterPage() {
                   )}
                   title={
                     status === "connection_lost"
-                      ? "Connection Lost Error"
-                      : "Code Interpreter Error"
+                      ? t("errorCard.connectionLost.title")
+                      : t("errorCard.generic.title")
                   }
                   description={error}
                   variant="section"
@@ -290,21 +305,22 @@ export default function CodeInterpreterPage() {
       {showDisconnectModal && (
         <ConfirmationModalLayout
           icon={SvgUnplug}
-          title="Disconnect Code Interpreter"
+          title={t("disconnectModal.header.title")}
           onClose={() => setShowDisconnectModal(false)}
           submit={
             <Button variant="danger" onClick={() => handleToggle(false)}>
-              Disconnect
+              {t("disconnectModal.submitButton.label")}
             </Button>
           }
         >
           <Text as="p" text03>
-            All running sessions connected to{" "}
-            <Text as="span" mainContentEmphasis text03>
-              Code Interpreter
-            </Text>{" "}
-            will stop working. Note that this will not remove any data from your
-            runtime. You can reconnect to this runtime later if needed.
+            {t.rich("disconnectModal.body.description", {
+              emphasis: (chunks) => (
+                <Text as="span" mainContentEmphasis text03>
+                  {chunks}
+                </Text>
+              ),
+            })}
           </Text>
         </ConfirmationModalLayout>
       )}

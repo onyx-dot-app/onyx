@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { Tag, Tooltip } from "@opal/components";
 import type { TagColor } from "@opal/components";
 import type { IconFunctionComponent } from "@opal/types";
@@ -36,49 +37,59 @@ import { PermissionSyncStatusEnum } from "./types";
  * offered.
  */
 
+/** Message keys inside the `admin.connector` namespace. */
+type BadgeLabelKey =
+  | "permissionSyncStatus.success.label"
+  | "permissionSyncStatus.completedWithErrors.label"
+  | "permissionSyncStatus.failed.label"
+  | "permissionSyncStatus.inProgress.label"
+  | "permissionSyncStatus.notStarted.label"
+  | "permissionSyncStatus.canceled.label"
+  | "permissionSyncStatus.fallback.label";
+
 interface BadgeConfig {
   color: TagColor;
   icon: IconFunctionComponent;
-  label: string;
+  labelKey: BadgeLabelKey;
 }
 
 const STATUS_CONFIG: Record<PermissionSyncStatusEnum, BadgeConfig> = {
   [PermissionSyncStatusEnum.SUCCESS]: {
     color: "green",
     icon: SvgCheckCircle,
-    label: "Succeeded",
+    labelKey: "permissionSyncStatus.success.label",
   },
   [PermissionSyncStatusEnum.COMPLETED_WITH_ERRORS]: {
     color: "amber",
     icon: SvgAlertTriangle,
-    label: "Completed with errors",
+    labelKey: "permissionSyncStatus.completedWithErrors.label",
   },
   [PermissionSyncStatusEnum.FAILED]: {
     color: "amber",
     icon: SvgXOctagon,
-    label: "Failed",
+    labelKey: "permissionSyncStatus.failed.label",
   },
   [PermissionSyncStatusEnum.IN_PROGRESS]: {
     color: "blue",
     icon: SvgClock,
-    label: "In Progress",
+    labelKey: "permissionSyncStatus.inProgress.label",
   },
   [PermissionSyncStatusEnum.NOT_STARTED]: {
     color: "gray",
     icon: SvgClock,
-    label: "Scheduled",
+    labelKey: "permissionSyncStatus.notStarted.label",
   },
   [PermissionSyncStatusEnum.CANCELED]: {
     color: "gray",
     icon: SvgClock,
-    label: "Canceled",
+    labelKey: "permissionSyncStatus.canceled.label",
   },
 };
 
 const FALLBACK_CONFIG: BadgeConfig = {
   color: "gray",
   icon: SvgClock,
-  label: "Not Started",
+  labelKey: "permissionSyncStatus.fallback.label",
 };
 
 const STATUSES_WITH_ERROR_TOOLTIP: ReadonlySet<PermissionSyncStatusEnum> =
@@ -97,9 +108,10 @@ export function PermissionSyncStatusBadge({
   status,
   errorMsg,
 }: PermissionSyncStatusBadgeProps) {
+  const t = useTranslations("admin.connector");
   const config = (status && STATUS_CONFIG[status]) ?? FALLBACK_CONFIG;
   const tag = (
-    <Tag color={config.color} icon={config.icon} title={config.label} />
+    <Tag color={config.color} icon={config.icon} title={t(config.labelKey)} />
   );
 
   if (status && STATUSES_WITH_ERROR_TOOLTIP.has(status) && errorMsg) {
