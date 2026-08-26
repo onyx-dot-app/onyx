@@ -250,6 +250,12 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   // refresh re-renders the tree in the right locale after login. Keyed by user
   // id so switching identities without a remount (e.g. impersonation) re-syncs
   // the new user's preference.
+  //
+  // TODO: move the NEXT_LOCALE write to the backend — PATCH /user/language and
+  // session establishment should Set-Cookie so the server owns reconciliation.
+  // That deletes the sequencing/identity guards below (client becomes "PATCH,
+  // then router.refresh()") and removes the first-paint language flash on new
+  // sessions. Do this before another preference copies this pattern.
   const router = useRouter();
   const lastLanguageSyncUserIdRef = useRef<string | null>(null);
   const languageRequestSeqRef = useRef(0);
