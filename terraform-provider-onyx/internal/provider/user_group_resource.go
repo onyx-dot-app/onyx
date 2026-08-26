@@ -59,8 +59,9 @@ func (r *userGroupResource) Metadata(_ context.Context, req resource.MetadataReq
 }
 
 // emptyStringSet is the default for every collection the configuration owns.
-// Optional-and-computed with no default would read an unset list as "leave the
-// stored one alone", which is not what an absent block means here.
+// Optional-and-computed with no default leaves an unset list unknown and makes
+// the resource invent a meaning for it. An explicit empty default says plainly
+// that an absent list means an empty one.
 func emptyStringSet() types.Set {
 	return types.SetValueMust(types.StringType, nil)
 }
@@ -178,10 +179,12 @@ func (r *userGroupResource) ValidateConfig(ctx context.Context, req resource.Val
 		return
 	}
 
-	// Unknown values only resolve during apply, so a set that is still unknown
-	// may yet satisfy this.
-	if config.ManagerIDs.IsNull() || config.ManagerIDs.IsUnknown() ||
-		config.UserIDs.IsNull() || config.UserIDs.IsUnknown() {
+	// Unknown values only resolve during apply, so anything still unknown may
+	// yet satisfy this. That covers a single unknown id inside an otherwise
+	// known list as well: reading one out fails the plan outright, which would
+	// turn a perfectly good configuration into an error.
+	if config.ManagerIDs.IsNull() || config.UserIDs.IsNull() ||
+		setIsNotFullyKnown(config.ManagerIDs) || setIsNotFullyKnown(config.UserIDs) {
 		return
 	}
 
@@ -208,6 +211,20 @@ func (r *userGroupResource) ValidateConfig(ctx context.Context, req resource.Val
 			)
 		}
 	}
+}
+
+// setIsNotFullyKnown reports whether the set, or any id in it, is still
+// unknown.
+func setIsNotFullyKnown(set types.Set) bool {
+	if set.IsUnknown() {
+		return true
+	}
+	for _, element := range set.Elements() {
+		if element.IsUnknown() {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *userGroupResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -387,17 +404,12 @@ func (r *userGroupResource) Delete(ctx context.Context, req resource.DeleteReque
 	ctx, cancel := context.WithTimeout(ctx, deleteTimeout)
 	defer cancel()
 
-	// The delete passes through the sync gate as well.
-	if err := r.client.WaitForUserGroupSettled(ctx, id, deleteTimeout); err != nil {
+	alreadyGone, err := r.deleteUserGroup(ctx, id, deleteTimeout)
+	if err != nil {
 		resp.Diagnostics.AddError("Unable to delete the user group", err.Error())
 		return
 	}
-
-	if err := r.client.DeleteUserGroup(ctx, id); err != nil {
-		if client.IsNotFound(err) {
-			return
-		}
-		resp.Diagnostics.AddError("Unable to delete the user group", err.Error())
+	if alreadyGone {
 		return
 	}
 
@@ -407,6 +419,43 @@ func (r *userGroupResource) Delete(ctx context.Context, req resource.DeleteReque
 	if err := r.client.WaitForUserGroupDeleted(ctx, id, deleteTimeout); err != nil {
 		resp.Diagnostics.AddError("Unable to delete the user group", err.Error())
 	}
+}
+
+// deleteUserGroup asks Onyx to delete the group and reports whether it had
+// already gone.
+//
+// The delete passes through the sync gate, and the route funnels every
+// ValueError into not-found — the gate's "currently syncing" included. So a 404
+// here does not prove the group has gone, and trusting one would drop a live
+// group out of state and leave the next apply failing on the name it still
+// holds. Each 404 is confirmed against the listing, and a group that turns out
+// to be syncing is waited on and deleted once more.
+func (r *userGroupResource) deleteUserGroup(ctx context.Context, id int64, timeout time.Duration) (alreadyGone bool, err error) {
+	for attempt := 0; attempt < 2; attempt++ {
+		if err := r.client.WaitForUserGroupSettled(ctx, id, timeout); err != nil {
+			return false, err
+		}
+
+		err := r.client.DeleteUserGroup(ctx, id)
+		if err == nil {
+			return false, nil
+		}
+		if !client.IsNotFound(err) {
+			return false, err
+		}
+
+		_, found, lookupErr := r.client.LookupUserGroup(ctx, id)
+		if lookupErr != nil {
+			return false, lookupErr
+		}
+		if !found {
+			return true, nil
+		}
+	}
+	return false, fmt.Errorf(
+		"user group %d is still listed after Onyx answered not found, which is what a group "+
+			"reports while it is syncing — it started syncing again between the check and the "+
+			"delete, so re-run the destroy", id)
 }
 
 func (r *userGroupResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {

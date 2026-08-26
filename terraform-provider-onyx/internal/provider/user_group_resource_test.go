@@ -273,6 +273,40 @@ resource "onyx_user_group" "test" {
 	})
 }
 
+// An id that is only known at apply time must not fail the plan.
+//
+// The manager-is-a-member check reads both lists at plan time, and reading an
+// unknown id out of a set is an error rather than a skip, so an otherwise valid
+// configuration whose ids come from another resource would be rejected before
+// it ever ran. Plan-only: nothing is created.
+func TestAccUserGroupAcceptsIDsThatAreUnknownAtPlanTime(t *testing.T) {
+	testAccPreCheck(t)
+	testAccRequireEE(t)
+	name := acctest.RandomWithPrefix("tf-acc-group-unknown")
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: `
+resource "onyx_user_group" "anchor" {
+  name = "` + name + `-anchor"
+}
+
+resource "onyx_user_group" "test" {
+  name        = "` + name + `"
+  user_ids    = [onyx_user_group.anchor.id]
+  manager_ids = [onyx_user_group.anchor.id]
+}
+`,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
+			},
+		},
+	})
+}
+
 // A seeded default group holds members and nothing else. Asserted against the
 // API rather than through Terraform: managing one would put the Admin group
 // into state, and the destroy at the end of the test would try to delete it.

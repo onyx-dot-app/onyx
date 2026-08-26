@@ -63,7 +63,7 @@ func (g *UserGroup) CCPairIDs() []int64 {
 	return ids
 }
 
-// UserGroupCreate mirrors UserGroupCreate.
+// UserGroupCreate mirrors the backend's UserGroupCreate model.
 type UserGroupCreate struct {
 	Name      string   `json:"name"`
 	UserIDs   []string `json:"user_ids"`
@@ -238,12 +238,13 @@ func (c *Client) DeleteUserGroup(ctx context.Context, id int64) error {
 	return c.doJSON(ctx, http.MethodDelete, path, nil, nil)
 }
 
-// WaitForUserGroupSettled waits until the group accepts writes again.
+// WaitForUserGroupSettled waits until the group accepts gated writes again.
 //
-// Onyx refuses every configuration write — rename, membership, incognito,
-// permissions and delete alike — while a group is syncing, and a newly created
-// group starts out syncing. A group that has already gone counts as settled,
-// so a caller waiting before a delete does not fail on a finished one.
+// Onyx refuses a membership change, a rename and a delete while a group is
+// syncing, and a newly created group starts out syncing. Managers, incognito
+// and permissions are not gated, so they need no wait. A group that has
+// already gone counts as settled, so a caller waiting before a delete does not
+// fail on a finished one.
 func (c *Client) WaitForUserGroupSettled(ctx context.Context, id int64, timeout time.Duration) error {
 	return Poll(ctx, timeout, "the user group to finish syncing",
 		func(ctx context.Context) (bool, string, error) {

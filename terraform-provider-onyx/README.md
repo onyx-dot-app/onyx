@@ -135,9 +135,11 @@ and on Onyx Cloud the tenant is embedded in the key itself.
   incognito and permissions are not gated. **The user group tests therefore need Celery
   beat as well as the workers** — the sync that clears the gate is beat-scheduled every 20
   seconds, so without beat every one of those writes waits until it times out.
-- **A syncing group answers HTTP 404 on the membership routes**, not a conflict, because
-  the handler maps every `ValueError` to not-found. The rename route gets this right. Until
-  the backend is fixed, a 404 from a membership write does not mean the group is gone.
+- **A syncing group answers HTTP 404**, not a conflict, on the membership routes *and on
+  delete*, because those handlers map every `ValueError` to not-found. The rename route gets
+  this right. So a 404 from any of them does not mean the group is gone — the destroy
+  confirms each one against the listing before reporting success, since trusting it would
+  drop a live group out of state and leave the next apply failing on the name it still holds.
 - **`onyx_user_group` permissions use Onyx's wire tokens**, for example `manage:connectors`,
   not the enum names. Only toggleable permissions can be set; `basic`, `admin`,
   `craft_sandbox`, `manage:skills` and the implied read tokens are managed by Onyx and are
