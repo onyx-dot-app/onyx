@@ -9,7 +9,7 @@ dependencies = [
     "fastapi==0.133.1",
     "google-genai==2.18.1",
     "huggingface-hub==1.26.0",
-    "litellm[google]==1.93.0",
+    "litellm[google]==1.97.0",
     "openai==2.38.0",
     "pydantic==2.12.5",
     # Shared so structured JSON logging (LOG_FORMAT=json) works in the
