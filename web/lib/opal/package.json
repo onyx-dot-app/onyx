@@ -49,6 +49,10 @@
       "types": "./dist/logos/index.d.ts",
       "import": "./dist/logos/index.js"
     },
+    "./hooks": {
+      "types": "./dist/hooks/index.d.ts",
+      "import": "./dist/hooks/index.js"
+    },
     "./time": {
       "types": "./dist/time.d.ts",
       "import": "./dist/time.js"
