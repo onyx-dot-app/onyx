@@ -279,6 +279,12 @@ jobs:
         run: |
           set -uo pipefail
           programs="celery_beat celery_worker_primary celery_worker_light"
+          # -c is required. supervisorctl only searches <exec>/etc, ./etc,
+          # /etc/supervisord.conf and /etc/supervisor/supervisord.conf, and the
+          # image puts the file in /etc/supervisor/conf.d/ -- so without this it
+          # silently falls back to its built-in http://localhost:9001 and
+          # reports a refused connection. Same path the entrypoint uses.
+          supervisor_conf=/etc/supervisor/conf.d/supervisord.conf
           # `background` declares no healthcheck, so `--wait` returns as soon as
           # the container starts and every worker still has the whole app to
           # import. 150 x 2s covers a cold runner; a healthy stack exits in
@@ -286,7 +292,8 @@ jobs:
           for _ in $(seq 150); do
             status=$(docker compose -f docker-compose.yml -f docker-compose.dev.yml \
               --env-file env.template \
-              exec -T background supervisorctl status ${programs} 2>/dev/null || true)
+              exec -T background \
+              supervisorctl -c "${supervisor_conf}" status ${programs} 2>&1 || true)
             if [ "$(echo "${status}" | grep -c RUNNING)" -eq 3 ]; then
               echo "${status}"
               exit 0
