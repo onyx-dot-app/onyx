@@ -113,6 +113,18 @@ def test_is_indexable_path_code_only_excludes_docs() -> None:
     )
 
 
+@pytest.fixture(autouse=True)
+def no_snapshot(monkeypatch: pytest.MonkeyPatch) -> None:
+    """These tests exercise the API fetching path; snapshot-based fetching is
+    covered in test_github_snapshot_stage.py."""
+
+    def _no_snapshot(self: GithubConnector, repo: object) -> None:
+        del self, repo
+        return None
+
+    monkeypatch.setattr(GithubConnector, "_ensure_snapshot", _no_snapshot)
+
+
 @pytest.fixture
 def create_mock_repo() -> Callable[..., MagicMock]:
     def _create(
