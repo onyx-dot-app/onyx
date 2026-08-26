@@ -4,10 +4,11 @@ import { useCallback, useState } from "react";
 import { Button, Text } from "@opal/components";
 import { SvgUploadCloud } from "@opal/icons";
 import { cn } from "@opal/utils";
-import { useDropzone, type FileWithPath } from "react-dropzone";
+import { useDropzone } from "react-dropzone";
 import {
   prepareSkillFilesUpload,
   type PreparedSkillFilesUpload,
+  type SkillUploadFile,
 } from "@/lib/skills/bundleUpload";
 
 interface SkillFilesPickerProps {
@@ -36,7 +37,7 @@ export default function SkillFilesPicker({
   const [preparing, setPreparing] = useState(false);
 
   const handleDrop = useCallback(
-    async (files: FileWithPath[]) => {
+    async (files: SkillUploadFile[]) => {
       if (files.length === 0) return;
       setPreparing(true);
       onPreparingChange?.(true);
