@@ -11,7 +11,7 @@ from collections import deque
 from collections.abc import Callable, Generator, Iterable
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, cast
+from typing import Any, TypeAlias, cast
 from urllib.parse import quote, unquote, urlsplit
 
 import msal
@@ -1262,6 +1262,13 @@ def _convert_sitepage_to_slim_document(
         parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
         doc_created_at=_parse_sharepoint_datetime(site_page.get("createdDateTime")),
     )
+
+
+# One phase of `_load_from_checkpoint`. It yields connector output and returns
+# True when the caller must stop and persist the checkpoint.
+_PhaseOutput: TypeAlias = Generator[
+    Document | HierarchyNode | ConnectorFailure, None, bool
+]
 
 
 class SharepointConnector(
@@ -2924,19 +2931,12 @@ class SharepointConnector(
             )
             yield _create_document_failure(driveitem, f"Failed to process: {str(e)}", e)
 
-    def _load_from_checkpoint(
+    def _phase_init_sites(
         self,
-        start: SecondsSinceUnixEpoch,
-        end: SecondsSinceUnixEpoch,
         checkpoint: SharepointConnectorCheckpoint,
-        include_permissions: bool = False,
-    ) -> CheckpointOutput[SharepointConnectorCheckpoint]:
-        if self._graph_client is None:
-            raise ConnectorMissingCredentialError("Sharepoint")
-
-        checkpoint = copy.deepcopy(checkpoint)
-
-        # Phase 1: Initialize cached_site_descriptors if needed
+        include_permissions: bool,
+    ) -> _PhaseOutput:
+        """Phase 1: cache the sites to process and select the first one."""
         if (
             checkpoint.has_more
             and checkpoint.cached_site_descriptors is None
@@ -2953,7 +2953,7 @@ class SharepointConnector(
                     "No SharePoint sites found or accessible - nothing to process"
                 )
                 checkpoint.has_more = False
-                return checkpoint
+                return True
 
             logger.info(
                 "Found %s sites to process", len(checkpoint.cached_site_descriptors)
@@ -2972,15 +2972,23 @@ class SharepointConnector(
                     checkpoint,
                     include_permissions=include_permissions,
                 )
-                return checkpoint
+                return True
 
-        # Phase 2: Initialize cached_drive_names for current site if needed
+        return False
+
+    def _phase_init_drive_names(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: SharepointConnectorCheckpoint,
+    ) -> _PhaseOutput:
+        """Phase 2: cache the drive names of the current site."""
         if checkpoint.current_site_descriptor and checkpoint.cached_drive_names is None:
             # If site documents flag is False, set empty drive list to skip document processing
             if not self.include_site_documents:
                 logger.debug("Documents disabled, skipping drive initialization")
                 checkpoint.cached_drive_names = deque()
-                return checkpoint
+                return True
 
             logger.info(
                 "Initializing drives for site: %s",
@@ -3039,193 +3047,232 @@ class SharepointConnector(
                         checkpoint.cached_site_descriptors.popleft()
                     )
                     checkpoint.cached_drive_names = None  # Reset for new site
-                    return checkpoint
                 else:
                     # No more sites - we're done
                     checkpoint.has_more = False
-                    return checkpoint
+                return True
 
             # Return checkpoint to allow persistence after drive initialization
-            return checkpoint
+            return True
 
-        # Phase 3a: Initialize the next drive for processing
+        return False
+
+    def _phase_start_next_drive(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: SharepointConnectorCheckpoint,
+        include_permissions: bool,
+    ) -> _PhaseOutput:
+        """Phase 3a: resolve the next drive of the current site."""
+        site_descriptor = checkpoint.current_site_descriptor
+        drive_names = checkpoint.cached_drive_names
         if (
-            checkpoint.current_site_descriptor
-            and checkpoint.cached_drive_names
-            and len(checkpoint.cached_drive_names) > 0
-            and checkpoint.current_drive_name is None
+            site_descriptor is None
+            or not drive_names
+            or checkpoint.current_drive_name is not None
         ):
-            checkpoint.current_drive_name = checkpoint.cached_drive_names.popleft()
+            return False
 
-            start_dt = datetime.fromtimestamp(start, tz=timezone.utc)
-            end_dt = datetime.fromtimestamp(end, tz=timezone.utc)
-            site_descriptor = checkpoint.current_site_descriptor
+        checkpoint.current_drive_name = drive_names.popleft()
 
-            logger.info(
-                "Processing drive '%s' in site: %s",
-                checkpoint.current_drive_name,
+        start_dt = datetime.fromtimestamp(start, tz=timezone.utc)
+        end_dt = datetime.fromtimestamp(end, tz=timezone.utc)
+
+        logger.info(
+            "Processing drive '%s' in site: %s",
+            checkpoint.current_drive_name,
+            site_descriptor.url,
+        )
+        logger.debug("Time range: %s to %s", start_dt, end_dt)
+
+        current_drive_name = checkpoint.current_drive_name
+        if current_drive_name is None:
+            logger.warning("Current drive name is None, skipping")
+            return True
+
+        try:
+            logger.info("Fetching drive items for drive name: %s", current_drive_name)
+            result = self._resolve_drive(site_descriptor, current_drive_name)
+            if result is None:
+                logger.warning("Drive '%s' not found, skipping", current_drive_name)
+                self._clear_drive_checkpoint_state(checkpoint)
+                return True
+
+            drive_id, drive_web_url = result
+            checkpoint.current_drive_id = drive_id
+            checkpoint.current_drive_web_url = drive_web_url
+        except Exception as e:
+            logger.error(
+                "Failed to retrieve items from drive '%s' in site: %s: %s",
+                current_drive_name,
+                site_descriptor.url,
+                e,
+            )
+            yield _create_entity_failure(
+                f"{site_descriptor.url}|{current_drive_name}",
+                f"Failed to access drive '{current_drive_name}' in site '{site_descriptor.url}': {str(e)}",
+                (start_dt, end_dt),
+                e,
+            )
+            self._clear_drive_checkpoint_state(checkpoint)
+            return True
+
+        display_drive_name = SHARED_DOCUMENTS_MAP.get(
+            current_drive_name, current_drive_name
+        )
+
+        if drive_web_url:
+            yield from self._yield_drive_hierarchy_node(
+                site_descriptor.url,
+                drive_web_url,
+                display_drive_name,
+                checkpoint,
+                include_permissions=include_permissions,
+            )
+
+        # For non-folder-scoped drives, use delta API with per-page
+        # checkpointing.  Build the initial URL and fall through to 3b.
+        if not site_descriptor.folder_path:
+            checkpoint.current_drive_delta_next_link = self._build_delta_start_url(
+                drive_id, start_dt
+            )
+        # else: BFS path — delta_next_link stays None;
+        # Phase 3b will use _iter_drive_items_paged.
+
+        return False
+
+    def _fetch_current_drive_items(
+        self,
+        checkpoint: SharepointConnectorCheckpoint,
+        drive_id: str,
+        site_descriptor: SiteDescriptor,
+        drive_name: str,
+        time_range: tuple[datetime, datetime],
+    ) -> Generator[ConnectorFailure, None, tuple[Iterable[DriveItemData], bool] | None]:
+        """Resolve the items of the current drive.
+
+        Returns the items plus whether more delta pages remain, or None when the
+        drive must be abandoned.
+        """
+        start_dt, end_dt = time_range
+        if not checkpoint.current_drive_delta_next_link:
+            # BFS path (folder-scoped): process all items at once
+            driveitems = self._iter_drive_items_paged(
+                drive_id=drive_id,
+                folder_path=site_descriptor.folder_path,
+                start=start_dt,
+                end=end_dt,
+            )
+            return driveitems, False
+
+        # Delta path: fetch one page at a time for checkpointing
+        try:
+            page_items, next_url = self._fetch_one_delta_page(
+                page_url=checkpoint.current_drive_delta_next_link,
+                drive_id=drive_id,
+                start=start_dt,
+                end=end_dt,
+            )
+        except Exception as e:
+            logger.error(
+                "Failed to fetch delta page for drive '%s': %s",
+                drive_name,
+                e,
+            )
+            yield _create_entity_failure(
+                f"{site_descriptor.url}|{drive_name}",
+                f"Failed to fetch delta page for drive '{drive_name}': {str(e)}",
+                (start_dt, end_dt),
+                e,
+            )
+            self._clear_drive_checkpoint_state(checkpoint)
+            return None
+
+        if next_url:
+            checkpoint.current_drive_delta_next_link = next_url
+        return page_items, next_url is not None
+
+    def _phase_process_current_drive(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: SharepointConnectorCheckpoint,
+        include_permissions: bool,
+    ) -> _PhaseOutput:
+        """Phase 3b: process the items of the current drive."""
+        site_descriptor = checkpoint.current_site_descriptor
+        drive_name = checkpoint.current_drive_name
+        drive_id = checkpoint.current_drive_id
+        if site_descriptor is None or drive_name is None or drive_id is None:
+            return False
+
+        start_dt = datetime.fromtimestamp(start, tz=timezone.utc)
+        end_dt = datetime.fromtimestamp(end, tz=timezone.utc)
+        current_drive_name = SHARED_DOCUMENTS_MAP.get(drive_name, drive_name)
+        drive_web_url = checkpoint.current_drive_web_url
+
+        # --- determine item source ---
+        fetched = yield from self._fetch_current_drive_items(
+            checkpoint,
+            drive_id,
+            site_descriptor,
+            current_drive_name,
+            (start_dt, end_dt),
+        )
+        if fetched is None:
+            return True
+        driveitems, has_more_delta_pages = fetched
+
+        item_count = 0
+        # Outer try catches BFS-generator failures mid-iteration;
+        # per-item errors are still caught by the inner try below.
+        try:
+            for driveitem in driveitems:
+                item_count += 1
+                yield from self._process_drive_item(
+                    driveitem,
+                    current_drive_name,
+                    drive_web_url,
+                    site_descriptor.url,
+                    checkpoint,
+                    include_permissions,
+                )
+        except Exception as e:
+            logger.exception(
+                "Failed mid-iteration for drive '%s' in site '%s'",
+                current_drive_name,
                 site_descriptor.url,
             )
-            logger.debug("Time range: %s to %s", start_dt, end_dt)
-
-            current_drive_name = checkpoint.current_drive_name
-            if current_drive_name is None:
-                logger.warning("Current drive name is None, skipping")
-                return checkpoint
-
-            try:
-                logger.info(
-                    "Fetching drive items for drive name: %s", current_drive_name
-                )
-                result = self._resolve_drive(site_descriptor, current_drive_name)
-                if result is None:
-                    logger.warning("Drive '%s' not found, skipping", current_drive_name)
-                    self._clear_drive_checkpoint_state(checkpoint)
-                    return checkpoint
-
-                drive_id, drive_web_url = result
-                checkpoint.current_drive_id = drive_id
-                checkpoint.current_drive_web_url = drive_web_url
-            except Exception as e:
-                logger.error(
-                    "Failed to retrieve items from drive '%s' in site: %s: %s",
-                    current_drive_name,
-                    site_descriptor.url,
-                    e,
-                )
-                yield _create_entity_failure(
-                    f"{site_descriptor.url}|{current_drive_name}",
-                    f"Failed to access drive '{current_drive_name}' in site '{site_descriptor.url}': {str(e)}",
-                    (start_dt, end_dt),
-                    e,
-                )
-                self._clear_drive_checkpoint_state(checkpoint)
-                return checkpoint
-
-            display_drive_name = SHARED_DOCUMENTS_MAP.get(
-                current_drive_name, current_drive_name
+            yield _create_entity_failure(
+                f"{site_descriptor.url}|{current_drive_name}|bfs_iter",
+                f"Failed to iterate drive items after {item_count}: {e}",
+                (start_dt, end_dt),
+                e,
             )
-
-            if drive_web_url:
-                yield from self._yield_drive_hierarchy_node(
-                    site_descriptor.url,
-                    drive_web_url,
-                    display_drive_name,
-                    checkpoint,
-                    include_permissions=include_permissions,
-                )
-
-            # For non-folder-scoped drives, use delta API with per-page
-            # checkpointing.  Build the initial URL and fall through to 3b.
-            if not site_descriptor.folder_path:
-                checkpoint.current_drive_delta_next_link = self._build_delta_start_url(
-                    drive_id, start_dt
-                )
-            # else: BFS path — delta_next_link stays None;
-            # Phase 3b will use _iter_drive_items_paged.
-
-        # Phase 3b: Process items from the current drive
-        if (
-            checkpoint.current_site_descriptor
-            and checkpoint.current_drive_name is not None
-            and checkpoint.current_drive_id is not None
-        ):
-            site_descriptor = checkpoint.current_site_descriptor
-            start_dt = datetime.fromtimestamp(start, tz=timezone.utc)
-            end_dt = datetime.fromtimestamp(end, tz=timezone.utc)
-            current_drive_name = SHARED_DOCUMENTS_MAP.get(
-                checkpoint.current_drive_name, checkpoint.current_drive_name
-            )
-            drive_web_url = checkpoint.current_drive_web_url
-
-            # --- determine item source ---
-            driveitems: Iterable[DriveItemData]
-            has_more_delta_pages = False
-
-            if checkpoint.current_drive_delta_next_link:
-                # Delta path: fetch one page at a time for checkpointing
-                try:
-                    page_items, next_url = self._fetch_one_delta_page(
-                        page_url=checkpoint.current_drive_delta_next_link,
-                        drive_id=checkpoint.current_drive_id,
-                        start=start_dt,
-                        end=end_dt,
-                    )
-                except Exception as e:
-                    logger.error(
-                        "Failed to fetch delta page for drive '%s': %s",
-                        current_drive_name,
-                        e,
-                    )
-                    yield _create_entity_failure(
-                        f"{site_descriptor.url}|{current_drive_name}",
-                        f"Failed to fetch delta page for drive '{current_drive_name}': {str(e)}",
-                        (start_dt, end_dt),
-                        e,
-                    )
-                    self._clear_drive_checkpoint_state(checkpoint)
-                    return checkpoint
-
-                driveitems = page_items
-                has_more_delta_pages = next_url is not None
-                if next_url:
-                    checkpoint.current_drive_delta_next_link = next_url
-            else:
-                # BFS path (folder-scoped): process all items at once
-                driveitems = self._iter_drive_items_paged(
-                    drive_id=checkpoint.current_drive_id,
-                    folder_path=site_descriptor.folder_path,
-                    start=start_dt,
-                    end=end_dt,
-                )
-
-            item_count = 0
-            # Outer try catches BFS-generator failures mid-iteration;
-            # per-item errors are still caught by the inner try below.
-            try:
-                for driveitem in driveitems:
-                    item_count += 1
-                    yield from self._process_drive_item(
-                        driveitem,
-                        current_drive_name,
-                        drive_web_url,
-                        site_descriptor.url,
-                        checkpoint,
-                        include_permissions,
-                    )
-            except Exception as e:
-                logger.exception(
-                    "Failed mid-iteration for drive '%s' in site '%s'",
-                    current_drive_name,
-                    site_descriptor.url,
-                )
-                yield _create_entity_failure(
-                    f"{site_descriptor.url}|{current_drive_name}|bfs_iter",
-                    f"Failed to iterate drive items after {item_count}: {e}",
-                    (start_dt, end_dt),
-                    e,
-                )
-                # Clear drive state to avoid resuming on the same broken drive.
-                self._clear_drive_checkpoint_state(checkpoint)
-                return checkpoint
-
-            logger.info(
-                "Processed %s items in drive '%s'", item_count, current_drive_name
-            )
-
-            if has_more_delta_pages:
-                return checkpoint
-
+            # Clear drive state to avoid resuming on the same broken drive.
             self._clear_drive_checkpoint_state(checkpoint)
+            return True
 
-        # Phase 4: Progression logic - determine next step
+        logger.info("Processed %s items in drive '%s'", item_count, current_drive_name)
+
+        if has_more_delta_pages:
+            return True
+
+        self._clear_drive_checkpoint_state(checkpoint)
+        return False
+
+    def _phase_advance_within_site(
+        self, checkpoint: SharepointConnectorCheckpoint
+    ) -> bool:
+        """Phase 4: persist the checkpoint before the next drive or site pages."""
         # If we have more drives in current site, continue with current site
         if checkpoint.cached_drive_names and len(checkpoint.cached_drive_names) > 0:
             logger.debug(
                 "Continuing with %s remaining drives in current site",
                 len(checkpoint.cached_drive_names),
             )
-            return checkpoint
+            return True
 
         if (
             self.include_site_pages
@@ -3237,122 +3284,145 @@ class SharepointConnector(
                 checkpoint.current_site_descriptor.url,
             )
             checkpoint.process_site_pages = True
-            return checkpoint
+            return True
 
-        # Phase 5: Process site pages
-        if (
-            checkpoint.process_site_pages
-            and checkpoint.current_site_descriptor is not None
-        ):
-            # Fetch SharePoint site pages (.aspx files)
-            site_descriptor = checkpoint.current_site_descriptor
-            start_dt = datetime.fromtimestamp(start, tz=timezone.utc)
-            end_dt = datetime.fromtimestamp(end, tz=timezone.utc)
-            try:
-                site_pages = self._fetch_site_pages(
-                    site_descriptor, start=start_dt, end=end_dt
+        return False
+
+    def _yield_site_page(
+        self,
+        site_page: dict[str, Any],
+        site_descriptor: SiteDescriptor,
+        checkpoint: SharepointConnectorCheckpoint,
+        include_permissions: bool,
+        time_range: tuple[datetime, datetime],
+    ) -> Generator[Document | ConnectorFailure, None, None]:
+        """Convert one site page into a Document, or a ConnectorFailure on error."""
+        page_id = site_page.get("id")
+        page_label = site_page.get("webUrl", site_page.get("name", "Unknown"))
+        # Skip a single broken page instead of aborting the
+        # rest of the site (perm-sync error, malformed field,
+        # token refresh blip, etc.).
+        try:
+            logger.debug("Processing site page: %s", page_label)
+            client_ctx: ClientContext | None = None
+            if include_permissions:
+                client_ctx = self._create_rest_client_context(site_descriptor.url)
+            yield (
+                _convert_sitepage_to_document(
+                    site_page,
+                    site_descriptor.drive_name,
+                    client_ctx,
+                    self.graph_client,
+                    permission_cache=checkpoint.permission_cache,
+                    include_permissions=include_permissions,
+                    # Site pages have the site as their parent
+                    parent_hierarchy_raw_node_id=site_descriptor.url,
+                    treat_sharing_link_as_public=self.treat_sharing_link_as_public,
                 )
-                for site_page in site_pages:
-                    page_id = site_page.get("id")
-                    page_label = site_page.get(
-                        "webUrl", site_page.get("name", "Unknown")
-                    )
-                    # Skip a single broken page instead of aborting the
-                    # rest of the site (perm-sync error, malformed field,
-                    # token refresh blip, etc.).
-                    try:
-                        logger.debug("Processing site page: %s", page_label)
-                        client_ctx: ClientContext | None = None
-                        if include_permissions:
-                            client_ctx = self._create_rest_client_context(
-                                site_descriptor.url
-                            )
-                        yield (
-                            _convert_sitepage_to_document(
-                                site_page,
-                                site_descriptor.drive_name,
-                                client_ctx,
-                                self.graph_client,
-                                permission_cache=checkpoint.permission_cache,
-                                include_permissions=include_permissions,
-                                # Site pages have the site as their parent
-                                parent_hierarchy_raw_node_id=site_descriptor.url,
-                                treat_sharing_link_as_public=self.treat_sharing_link_as_public,
-                            )
-                        )
-                    except Exception as e:
-                        logger.warning(
-                            "Failed to process site page '%s' in site %s: %s",
-                            page_label,
-                            site_descriptor.url,
-                            e,
-                            exc_info=True,
-                        )
-                        if page_id:
-                            page_link = (
-                                page_label if isinstance(page_label, str) else None
-                            )
-                            yield ConnectorFailure(
-                                failed_document=DocumentFailure(
-                                    document_id=page_id,
-                                    document_link=page_link,
-                                ),
-                                failure_message=(
-                                    f"SharePoint site page '{page_label}': {e}"
-                                ),
-                                exception=e,
-                            )
-                        else:
-                            yield _create_entity_failure(
-                                f"{site_descriptor.url}|site_page|{page_label}",
-                                f"Failed to process site page '{page_label}': {e}",
-                                (start_dt, end_dt),
-                                e,
-                            )
-                logger.info(
-                    "Finished processing site pages for site: %s",
-                    site_descriptor.url,
+            )
+        except Exception as e:
+            logger.warning(
+                "Failed to process site page '%s' in site %s: %s",
+                page_label,
+                site_descriptor.url,
+                e,
+                exc_info=True,
+            )
+            if page_id:
+                page_link = page_label if isinstance(page_label, str) else None
+                yield ConnectorFailure(
+                    failed_document=DocumentFailure(
+                        document_id=page_id,
+                        document_link=page_link,
+                    ),
+                    failure_message=(f"SharePoint site page '{page_label}': {e}"),
+                    exception=e,
                 )
-            except Exception as e:
-                # Broadened from per-site Graph 4xx to any Exception:
-                # _fetch_site_pages failures skip the site-pages stage
-                # instead of failing the attempt. Per-page errors are
-                # caught above.
-                if (
-                    isinstance(e, (ClientRequestException, HTTPError))
-                    and e.response is not None
-                ):
-                    logger.warning(
-                        "Skipping site pages for %s: Graph returned %s (%s)",
-                        site_descriptor.url,
-                        e.response.status_code,
-                        _graph_error_code(e.response),
-                        exc_info=True,
-                    )
-                else:
-                    logger.warning(
-                        "Skipping site pages for %s: %s",
-                        site_descriptor.url,
-                        e,
-                        exc_info=True,
-                    )
+            else:
                 yield _create_entity_failure(
-                    site_descriptor.url,
-                    f"Failed to fetch site pages: {e}",
-                    (start_dt, end_dt),
+                    f"{site_descriptor.url}|site_page|{page_label}",
+                    f"Failed to process site page '{page_label}': {e}",
+                    time_range,
                     e,
                 )
+
+    def _phase_process_site_pages(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: SharepointConnectorCheckpoint,
+        include_permissions: bool,
+    ) -> Generator[Document | ConnectorFailure, None, None]:
+        """Phase 5: fetch and yield the SharePoint site pages (.aspx files)."""
+        site_descriptor = checkpoint.current_site_descriptor
+        if not checkpoint.process_site_pages or site_descriptor is None:
+            return
+
+        start_dt = datetime.fromtimestamp(start, tz=timezone.utc)
+        end_dt = datetime.fromtimestamp(end, tz=timezone.utc)
+        try:
+            site_pages = self._fetch_site_pages(
+                site_descriptor, start=start_dt, end=end_dt
+            )
+            for site_page in site_pages:
+                yield from self._yield_site_page(
+                    site_page,
+                    site_descriptor,
+                    checkpoint,
+                    include_permissions,
+                    (start_dt, end_dt),
+                )
+            logger.info(
+                "Finished processing site pages for site: %s",
+                site_descriptor.url,
+            )
+        except Exception as e:
+            # Broadened from per-site Graph 4xx to any Exception:
+            # _fetch_site_pages failures skip the site-pages stage
+            # instead of failing the attempt. Per-page errors are
+            # caught above.
+            if (
+                isinstance(e, (ClientRequestException, HTTPError))
+                and e.response is not None
+            ):
+                logger.warning(
+                    "Skipping site pages for %s: Graph returned %s (%s)",
+                    site_descriptor.url,
+                    e.response.status_code,
+                    _graph_error_code(e.response),
+                    exc_info=True,
+                )
+            else:
+                logger.warning(
+                    "Skipping site pages for %s: %s",
+                    site_descriptor.url,
+                    e,
+                    exc_info=True,
+                )
+            yield _create_entity_failure(
+                site_descriptor.url,
+                f"Failed to fetch site pages: {e}",
+                (start_dt, end_dt),
+                e,
+            )
+
+    def _phase_advance_to_next_site(
+        self,
+        checkpoint: SharepointConnectorCheckpoint,
+        include_permissions: bool,
+    ) -> Generator[HierarchyNode, None, None]:
+        """Phase 6: move to the next site, or mark the run complete."""
+        current_site = (
+            checkpoint.current_site_descriptor.url
+            if checkpoint.current_site_descriptor
+            else "unknown"
+        )
 
         # If no more drives, move to next site if available
         if (
             checkpoint.cached_site_descriptors
             and len(checkpoint.cached_site_descriptors) > 0
         ):
-            current_site = (
-                checkpoint.current_site_descriptor.url
-                if checkpoint.current_site_descriptor
-                else "unknown"
-            )
             checkpoint.current_site_descriptor = (
                 checkpoint.cached_site_descriptors.popleft()
             )
@@ -3373,18 +3443,56 @@ class SharepointConnector(
                 checkpoint,
                 include_permissions=include_permissions,
             )
-            return checkpoint
+            return
 
         # No more sites or drives - we're done
-        current_site = (
-            checkpoint.current_site_descriptor.url
-            if checkpoint.current_site_descriptor
-            else "unknown"
-        )
         logger.info(
             "SharePoint processing complete. Finished last site: %s", current_site
         )
         checkpoint.has_more = False
+
+    def _load_from_checkpoint(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: SharepointConnectorCheckpoint,
+        include_permissions: bool = False,
+    ) -> CheckpointOutput[SharepointConnectorCheckpoint]:
+        if self._graph_client is None:
+            raise ConnectorMissingCredentialError("Sharepoint")
+
+        checkpoint = copy.deepcopy(checkpoint)
+
+        # Every phase updates `checkpoint` in place. A phase returns True when the
+        # run must stop here so the checkpoint gets persisted.
+        if (yield from self._phase_init_sites(checkpoint, include_permissions)):
+            return checkpoint
+
+        if (yield from self._phase_init_drive_names(start, end, checkpoint)):
+            return checkpoint
+
+        if (
+            yield from self._phase_start_next_drive(
+                start, end, checkpoint, include_permissions
+            )
+        ):
+            return checkpoint
+
+        if (
+            yield from self._phase_process_current_drive(
+                start, end, checkpoint, include_permissions
+            )
+        ):
+            return checkpoint
+
+        if self._phase_advance_within_site(checkpoint):
+            return checkpoint
+
+        yield from self._phase_process_site_pages(
+            start, end, checkpoint, include_permissions
+        )
+
+        yield from self._phase_advance_to_next_site(checkpoint, include_permissions)
         return checkpoint
 
     def load_from_checkpoint(

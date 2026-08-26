@@ -4,7 +4,7 @@ import secrets
 import time
 from collections.abc import Mapping
 from enum import Enum
-from typing import Literal
+from typing import Literal, NamedTuple
 from urllib.parse import urlparse
 from uuid import UUID
 
@@ -1693,385 +1693,502 @@ def _invalidate_mcp_user_credentials(
     return affected_users
 
 
-def _upsert_mcp_server(
-    request: MCPToolCreateRequest,
-    db_session: Session,
+class _UpdateChangeFlags(NamedTuple):
+    """Which parts of a stored server the edit changes."""
+
+    changing_connection_config: bool
+    header_template_changed: bool
+    auth_scheme_changed: bool
+    server_url_changed: bool
+
+
+class _ResolvedUpsertInputs(NamedTuple):
+    """Effective auth inputs for an upsert after masked placeholders are
+    replaced by the values already stored on the server."""
+
+    oauth_client_id: str | None
+    oauth_client_secret: str | None
+    auth_template: MCPAuthTemplate | None
+    admin_credentials: dict[str, str] | None
+    api_token: str | None
+    client_info: OAuthClientInformationFull | None
+    changing_connection_config: bool
+    users_to_reload: set[UUID]
+
+
+def _is_admin_api_token(request: MCPToolCreateRequest) -> bool:
+    """True when one shared API token, owned by the admin, authenticates everyone."""
+    return (
+        request.auth_type == MCPAuthenticationType.API_TOKEN
+        and request.auth_performer == MCPAuthenticationPerformer.ADMIN
+    )
+
+
+def _load_mcp_server_for_update(
+    existing_server_id: int,
     user: User,
-) -> DbMCPServer:
-    """
-    Creates a new or edits an existing MCP server. Returns the DB model
-    """
-    _validate_mcp_server_url(request.server_url, "server_url", require_https=False)
-    _validate_mcp_server_url(
-        request.oauth_authorization_endpoint,
-        "oauth_authorization_endpoint",
-        require_https=True,
-    )
-    _validate_mcp_server_url(
-        request.oauth_token_endpoint, "oauth_token_endpoint", require_https=True
-    )
+    db_session: Session,
+) -> tuple[DbMCPServer, MCPConnectionData, OAuthClientInformationFull | None]:
+    """Load the server being edited with its stored admin config and OAuth client."""
+    try:
+        mcp_server = get_mcp_server_by_id(existing_server_id, db_session)
+    except ValueError:
+        raise HTTPException(
+            status_code=404,
+            detail=f"MCP server with ID {existing_server_id} not found",
+        )
+    _ensure_mcp_server_owner_or_admin(mcp_server, user)
 
-    mcp_server = None
-    admin_config = None
+    existing_admin_config: MCPConnectionData = MCPConnectionData(headers={})
     client_info: OAuthClientInformationFull | None = None
-    oauth_client_id = request.oauth_client_id
-    oauth_client_secret = request.oauth_client_secret
+    if mcp_server.admin_connection_config:
+        existing_admin_config = extract_connection_data(
+            mcp_server.admin_connection_config, apply_mask=False
+        )
+        client_info_raw = existing_admin_config.get(MCPOAuthKeys.CLIENT_INFO.value)
+        if client_info_raw:
+            client_info = OAuthClientInformationFull.model_validate(client_info_raw)
+    return mcp_server, existing_admin_config, client_info
+
+
+def _resolve_update_auth_template(
+    request: MCPToolCreateRequest,
+    mcp_server: DbMCPServer,
+    existing_admin_config: MCPConnectionData,
+) -> tuple[MCPAuthTemplate | None, dict[str, str], dict[str, str]]:
+    """Resolve the editing admin's own template values per field, plus the stored
+    headers the change detection compares against."""
     auth_template = request.auth_template
-    admin_credentials = request.admin_credentials
-    api_token = request.api_token
+    if not mcp_server.admin_connection_config:
+        return auth_template, {}, {}
 
-    changing_connection_config = True
-    users_to_reload: set[UUID] = set()
-
-    # Handle existing server update
-    if request.existing_server_id:
-        try:
-            mcp_server = get_mcp_server_by_id(request.existing_server_id, db_session)
-        except ValueError:
-            raise HTTPException(
-                status_code=404,
-                detail=f"MCP server with ID {request.existing_server_id} not found",
-            )
-        _ensure_mcp_server_owner_or_admin(mcp_server, user)
-        existing_admin_config_dict: MCPConnectionData = MCPConnectionData(headers={})
-        if mcp_server.admin_connection_config:
-            existing_admin_config_dict = extract_connection_data(
-                mcp_server.admin_connection_config, apply_mask=False
-            )
-            client_info_raw = existing_admin_config_dict.get(
-                MCPOAuthKeys.CLIENT_INFO.value
-            )
-            if client_info_raw:
-                client_info = OAuthClientInformationFull.model_validate(client_info_raw)
-
-        # Resolve the effective OAuth credentials, falling back to the stored
-        # values for any field the frontend marked as unchanged. This protects
-        # the change-detection comparison below from spurious diffs caused by
-        # masked placeholders being replayed.
-        if client_info and request.auth_type == MCPAuthenticationType.OAUTH:
-            oauth_client_id, oauth_client_secret = _resolve_oauth_credentials(
-                request_client_id=request.oauth_client_id,
-                request_client_id_changed=request.oauth_client_id_changed,
-                request_client_secret=request.oauth_client_secret,
-                request_client_secret_changed=request.oauth_client_secret_changed,
-                existing_client=client_info,
-            )
-
-        # Resolve the editing admin's own template values per field.
-        existing_admin_per_user_creds: dict[str, str] = {}
-        existing_template_headers: dict[str, str] = {}
-        existing_shared_template_headers: dict[str, str] = {}
-        existing_template: MCPAuthTemplate | None = None
-        if mcp_server.admin_connection_config:
-            existing_template = get_mcp_auth_template(mcp_server)
-            existing_template_headers = (
-                existing_template.headers if existing_template else {}
-            )
-            existing_shared_template_headers = (
-                existing_admin_config_dict.get("header_template")
-                or _default_shared_api_token_template().headers
-            )
-            if auth_template is not None:
-                auth_template = _resolve_auth_template(
-                    auth_template,
-                    request.auth_template_headers_changed,
-                    existing_template,
-                )
-            elif existing_template is not None:
-                auth_template = existing_template
-
-        if (
-            request.auth_type == MCPAuthenticationType.API_TOKEN
-            and request.auth_performer == MCPAuthenticationPerformer.ADMIN
-        ):
-            if admin_credentials is not None:
-                admin_credentials = _resolve_admin_credentials(
-                    request_credentials=admin_credentials,
-                    request_credentials_changed=request.admin_credentials_changed,
-                    existing_user_credentials=existing_admin_config_dict.get(
-                        HEADER_SUBSTITUTIONS, {}
-                    ),
-                )
-            auth_template = _resolve_shared_api_token_template(
-                request_template=auth_template,
-                existing_config=(
-                    existing_admin_config_dict
-                    if mcp_server.admin_connection_config
-                    else None
-                ),
-            )
-            api_token = _resolve_shared_api_token(
-                request_api_token=api_token,
-                request_api_token_changed=request.api_token_changed,
-                existing_config=(
-                    existing_admin_config_dict
-                    if mcp_server.admin_connection_config
-                    else None
-                ),
-            )
-            # The validator allows an omitted token on update so the stored
-            # one can be reused; enforce that a token actually resolved.
-            if not api_token:
-                raise OnyxError(
-                    OnyxErrorCode.INVALID_INPUT,
-                    "A shared API token is required for admin-managed API-token servers.",
-                )
-        if (
-            not (
-                request.auth_type == MCPAuthenticationType.API_TOKEN
-                and request.auth_performer == MCPAuthenticationPerformer.ADMIN
-            )
-            and user.email
-        ):
-            existing_admin_per_user_config = get_user_connection_config(
-                mcp_server.id, user.email, db_session
-            )
-            if existing_admin_per_user_config:
-                existing_admin_per_user_dict = extract_connection_data(
-                    existing_admin_per_user_config, apply_mask=False
-                )
-                existing_admin_per_user_creds = (
-                    existing_admin_per_user_dict.get(HEADER_SUBSTITUTIONS) or {}
-                )
-            if admin_credentials is not None:
-                admin_credentials = _resolve_admin_credentials(
-                    request_credentials=admin_credentials,
-                    request_credentials_changed=request.admin_credentials_changed,
-                    existing_user_credentials=existing_admin_per_user_creds,
-                )
-
-        api_token_creds_changed = (
-            request.auth_type == MCPAuthenticationType.API_TOKEN
-            and request.auth_performer == MCPAuthenticationPerformer.PER_USER
-            and existing_admin_per_user_creds != (admin_credentials or {})
+    existing_template = get_mcp_auth_template(mcp_server)
+    existing_template_headers = existing_template.headers if existing_template else {}
+    existing_shared_template_headers = (
+        existing_admin_config.get("header_template")
+        or _default_shared_api_token_template().headers
+    )
+    if auth_template is not None:
+        auth_template = _resolve_auth_template(
+            auth_template,
+            request.auth_template_headers_changed,
+            existing_template,
         )
-        header_template_changed = (
-            not (
-                request.auth_type == MCPAuthenticationType.API_TOKEN
-                and request.auth_performer == MCPAuthenticationPerformer.ADMIN
-            )
-            and auth_template is not None
-            and auth_template.headers != existing_template_headers
+    elif existing_template is not None:
+        auth_template = existing_template
+    return auth_template, existing_template_headers, existing_shared_template_headers
+
+
+def _resolve_shared_api_token_inputs(
+    *,
+    request: MCPToolCreateRequest,
+    mcp_server: DbMCPServer,
+    existing_admin_config: MCPConnectionData,
+    auth_template: MCPAuthTemplate | None,
+    admin_credentials: dict[str, str] | None,
+) -> tuple[MCPAuthTemplate | None, dict[str, str] | None, str | None]:
+    """Resolve template, credentials, and token for an admin-managed API-token
+    server, reusing stored values for fields the frontend marked unchanged."""
+    if admin_credentials is not None:
+        admin_credentials = _resolve_admin_credentials(
+            request_credentials=admin_credentials,
+            request_credentials_changed=request.admin_credentials_changed,
+            existing_user_credentials=existing_admin_config.get(
+                HEADER_SUBSTITUTIONS, {}
+            ),
         )
-        shared_api_token_template_changed = (
-            request.auth_type == MCPAuthenticationType.API_TOKEN
-            and request.auth_performer == MCPAuthenticationPerformer.ADMIN
-            and auth_template is not None
-            and auth_template.headers != existing_shared_template_headers
+    stored_config = (
+        existing_admin_config if mcp_server.admin_connection_config else None
+    )
+    auth_template = _resolve_shared_api_token_template(
+        request_template=auth_template,
+        existing_config=stored_config,
+    )
+    api_token = _resolve_shared_api_token(
+        request_api_token=request.api_token,
+        request_api_token_changed=request.api_token_changed,
+        existing_config=stored_config,
+    )
+    # The validator allows an omitted token on update so the stored
+    # one can be reused; enforce that a token actually resolved.
+    if not api_token:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "A shared API token is required for admin-managed API-token servers.",
         )
-        shared_api_token_credentials_changed = (
-            request.auth_type == MCPAuthenticationType.API_TOKEN
-            and request.auth_performer == MCPAuthenticationPerformer.ADMIN
-            and admin_credentials is not None
-            and admin_credentials
-            != existing_admin_config_dict.get(HEADER_SUBSTITUTIONS, {})
+    return auth_template, admin_credentials, api_token
+
+
+def _resolve_per_user_admin_credentials(
+    *,
+    request: MCPToolCreateRequest,
+    mcp_server: DbMCPServer,
+    user_email: str,
+    admin_credentials: dict[str, str] | None,
+    db_session: Session,
+) -> tuple[dict[str, str], dict[str, str] | None]:
+    """Resolve the editing admin's per-user credentials against their stored ones.
+    Returns the stored credentials and the resolved request credentials."""
+    existing_creds: dict[str, str] = {}
+    existing_config = get_user_connection_config(mcp_server.id, user_email, db_session)
+    if existing_config:
+        existing_data = extract_connection_data(existing_config, apply_mask=False)
+        existing_creds = existing_data.get(HEADER_SUBSTITUTIONS) or {}
+    if admin_credentials is not None:
+        admin_credentials = _resolve_admin_credentials(
+            request_credentials=admin_credentials,
+            request_credentials_changed=request.admin_credentials_changed,
+            existing_user_credentials=existing_creds,
         )
-        api_token_scheme_changed = (
-            request.auth_type == MCPAuthenticationType.API_TOKEN
-            and (
-                request.auth_type != mcp_server.auth_type
-                or request.auth_performer != mcp_server.auth_performer
-            )
-        )
-        auth_scheme_changed = (
+    return existing_creds, admin_credentials
+
+
+def _compute_update_change_flags(
+    *,
+    request: MCPToolCreateRequest,
+    mcp_server: DbMCPServer,
+    client_info: OAuthClientInformationFull | None,
+    oauth_client_id: str | None,
+    oauth_client_secret: str | None,
+    auth_template: MCPAuthTemplate | None,
+    admin_credentials: dict[str, str] | None,
+    existing_admin_config: MCPConnectionData,
+    existing_admin_per_user_creds: dict[str, str],
+    existing_template_headers: dict[str, str],
+    existing_shared_template_headers: dict[str, str],
+) -> _UpdateChangeFlags:
+    """Compare the request against the stored server to decide whether the admin
+    connection config must be rebuilt and which stored credentials it invalidates."""
+    is_admin_api_token = _is_admin_api_token(request)
+    api_token_creds_changed = (
+        request.auth_type == MCPAuthenticationType.API_TOKEN
+        and request.auth_performer == MCPAuthenticationPerformer.PER_USER
+        and existing_admin_per_user_creds != (admin_credentials or {})
+    )
+    header_template_changed = (
+        not is_admin_api_token
+        and auth_template is not None
+        and auth_template.headers != existing_template_headers
+    )
+    shared_api_token_template_changed = (
+        is_admin_api_token
+        and auth_template is not None
+        and auth_template.headers != existing_shared_template_headers
+    )
+    shared_api_token_credentials_changed = (
+        is_admin_api_token
+        and admin_credentials is not None
+        and admin_credentials != existing_admin_config.get(HEADER_SUBSTITUTIONS, {})
+    )
+    api_token_scheme_changed = (
+        request.auth_type == MCPAuthenticationType.API_TOKEN
+        and (
             request.auth_type != mcp_server.auth_type
             or request.auth_performer != mcp_server.auth_performer
         )
-        server_url_changed = request.server_url != mcp_server.server_url
-        # Known-provider OAuth settings (endpoints/mode/scopes/extra params)
-        # determine where and with what scope user tokens are minted. A change
-        # to any of them invalidates existing user tokens, so it must trigger
-        # the same re-handshake wipe as a client_id/secret change.
-        oauth_provider_config_changed = (
+    )
+    auth_scheme_changed = (
+        request.auth_type != mcp_server.auth_type
+        or request.auth_performer != mcp_server.auth_performer
+    )
+    server_url_changed = request.server_url != mcp_server.server_url
+    # Known-provider OAuth settings (endpoints/mode/scopes/extra params)
+    # determine where and with what scope user tokens are minted. A change
+    # to any of them invalidates existing user tokens, so it must trigger
+    # the same re-handshake wipe as a client_id/secret change.
+    oauth_provider_config_changed = (
+        request.auth_type == MCPAuthenticationType.OAUTH
+        and (
+            request.oauth_provider_mode != mcp_server.oauth_provider_mode
+            or request.oauth_authorization_endpoint
+            != mcp_server.oauth_authorization_endpoint
+            or request.oauth_token_endpoint != mcp_server.oauth_token_endpoint
+            or request.oauth_scopes_override != mcp_server.oauth_scopes_override
+            or request.oauth_additional_auth_params
+            != mcp_server.oauth_additional_auth_params
+        )
+    )
+
+    changing_connection_config = (
+        not mcp_server.admin_connection_config
+        or (
             request.auth_type == MCPAuthenticationType.OAUTH
             and (
-                request.oauth_provider_mode != mcp_server.oauth_provider_mode
-                or request.oauth_authorization_endpoint
-                != mcp_server.oauth_authorization_endpoint
-                or request.oauth_token_endpoint != mcp_server.oauth_token_endpoint
-                or request.oauth_scopes_override != mcp_server.oauth_scopes_override
-                or request.oauth_additional_auth_params
-                != mcp_server.oauth_additional_auth_params
+                client_info is None
+                or oauth_client_id != client_info.client_id
+                or oauth_client_secret != (client_info.client_secret or "")
+                or oauth_provider_config_changed
             )
         )
-
-        changing_connection_config = (
-            not mcp_server.admin_connection_config
-            or (
-                request.auth_type == MCPAuthenticationType.OAUTH
-                and (
-                    client_info is None
-                    or oauth_client_id != client_info.client_id
-                    or oauth_client_secret != (client_info.client_secret or "")
-                    or oauth_provider_config_changed
-                )
-            )
-            or (
-                request.auth_type == MCPAuthenticationType.API_TOKEN
-                and (
-                    api_token_creds_changed
-                    or header_template_changed
-                    or shared_api_token_template_changed
-                    or shared_api_token_credentials_changed
-                    or (
-                        request.auth_performer == MCPAuthenticationPerformer.ADMIN
-                        and request.api_token_changed
-                    )
-                    or api_token_scheme_changed
-                )
-            )
-            or header_template_changed
-            or auth_scheme_changed
-            or server_url_changed
-            or (request.transport != mcp_server.transport)
-        )
-
-        if header_template_changed or auth_scheme_changed or server_url_changed:
-            users_to_reload.update(
-                _invalidate_mcp_user_credentials(mcp_server, db_session)
-            )
-
-        if server_url_changed and mcp_server.admin_connection_config_id:
-            previous_admin_config_id = mcp_server.admin_connection_config_id
-            mcp_server.admin_connection_config_id = None
-            delete_connection_config(previous_admin_config_id, db_session)
-            if (
-                request.auth_type == MCPAuthenticationType.OAUTH
-                and request.oauth_provider_mode is MCPOAuthProviderMode.AUTO_DISCOVERY
-            ):
-                client_info = None
-                if not request.oauth_client_id_changed:
-                    oauth_client_id = None
-                if not request.oauth_client_secret_changed:
-                    oauth_client_secret = None
-        elif (
-            changing_connection_config
-            and mcp_server.admin_connection_config_id
-            and request.auth_type == MCPAuthenticationType.OAUTH
-            and not header_template_changed
-            and not auth_scheme_changed
-        ):
-            users_to_reload.update(
-                _invalidate_mcp_user_credentials(mcp_server, db_session)
-            )
-        elif (
-            changing_connection_config
-            and mcp_server.admin_connection_config_id
-            and request.auth_type == MCPAuthenticationType.API_TOKEN
-        ):
-            delete_connection_config(mcp_server.admin_connection_config_id, db_session)
-
-        # Update the server with new values
-        mcp_server = update_mcp_server__no_commit(
-            server_id=request.existing_server_id,
-            db_session=db_session,
-            name=request.name,
-            description=request.description,
-            server_url=request.server_url,
-            auth_type=request.auth_type,
-            auth_performer=request.auth_performer,
-            oauth_provider_mode=request.oauth_provider_mode,
-            oauth_authorization_endpoint=request.oauth_authorization_endpoint,
-            oauth_token_endpoint=request.oauth_token_endpoint,
-            oauth_scopes_override=request.oauth_scopes_override,
-            oauth_additional_auth_params=request.oauth_additional_auth_params,
-            transport=request.transport,
-        )
-
-        logger.info(
-            "Updated existing MCP server '%s' with ID %s", request.name, mcp_server.id
-        )
-
-    else:
-        # Handle new server creation
-        if auth_template is not None:
-            auth_template = _resolve_auth_template(
-                auth_template,
-                request.auth_template_headers_changed,
-                None,
-            )
-        # Prevent duplicate server creation with same URL
-        normalized_url = (request.server_url or "").strip()
-        if not normalized_url:
-            raise HTTPException(status_code=400, detail="server_url is required")
-
-        if not user.email:
-            raise HTTPException(
-                status_code=400,
-                detail="Authenticated user email required to create MCP servers",
-            )
-
-        mcp_server = create_mcp_server__no_commit(
-            owner_email=user.email,
-            name=request.name,
-            description=request.description,
-            server_url=request.server_url,
-            auth_type=request.auth_type,
-            auth_performer=request.auth_performer,
-            oauth_provider_mode=request.oauth_provider_mode,
-            oauth_authorization_endpoint=request.oauth_authorization_endpoint,
-            oauth_token_endpoint=request.oauth_token_endpoint,
-            oauth_scopes_override=request.oauth_scopes_override,
-            oauth_additional_auth_params=request.oauth_additional_auth_params,
-            transport=request.transport or MCPTransport.STREAMABLE_HTTP,
-            db_session=db_session,
-        )
-
-        logger.info(
-            "Created new MCP server '%s' with ID %s", request.name, mcp_server.id
-        )
-
-    # A new server defaults to public (create_mcp_server__no_commit), so always run the
-    # access gate on create — otherwise a scoped manager could publish one org-wide by
-    # omitting is_public/users/groups. On update, only touch access when the caller sent it.
-    is_new_server = request.existing_server_id is None
-    if is_new_server or any(
-        value is not None
-        for value in (request.is_public, request.users, request.groups)
-    ):
-        _apply_mcp_server_access(
-            mcp_server=mcp_server,
-            acting_user=user,
-            is_public=request.is_public,
-            user_ids=request.users,
-            group_ids=request.groups,
-            is_new=is_new_server,
-            db_session=db_session,
-        )
-
-    if (
-        auth_template is not None
-        and admin_credentials is not None
-        and not (
+        or (
             request.auth_type == MCPAuthenticationType.API_TOKEN
-            and request.auth_performer == MCPAuthenticationPerformer.ADMIN
+            and (
+                api_token_creds_changed
+                or header_template_changed
+                or shared_api_token_template_changed
+                or shared_api_token_credentials_changed
+                or (
+                    request.auth_performer == MCPAuthenticationPerformer.ADMIN
+                    and request.api_token_changed
+                )
+                or api_token_scheme_changed
+            )
         )
+        or header_template_changed
+        or auth_scheme_changed
+        or server_url_changed
+        or (request.transport != mcp_server.transport)
+    )
+    return _UpdateChangeFlags(
+        changing_connection_config=changing_connection_config,
+        header_template_changed=header_template_changed,
+        auth_scheme_changed=auth_scheme_changed,
+        server_url_changed=server_url_changed,
+    )
+
+
+def _reconcile_existing_connection_config(
+    *,
+    request: MCPToolCreateRequest,
+    mcp_server: DbMCPServer,
+    flags: _UpdateChangeFlags,
+    client_info: OAuthClientInformationFull | None,
+    oauth_client_id: str | None,
+    oauth_client_secret: str | None,
+    users_to_reload: set[UUID],
+    db_session: Session,
+) -> tuple[OAuthClientInformationFull | None, str | None, str | None]:
+    """Drop the stored credentials the edit invalidates and add the affected users
+    to ``users_to_reload``. Returns the OAuth client state that survives the edit."""
+    if (
+        flags.header_template_changed
+        or flags.auth_scheme_changed
+        or flags.server_url_changed
     ):
-        _upsert_user_template_config(
+        users_to_reload.update(_invalidate_mcp_user_credentials(mcp_server, db_session))
+
+    if flags.server_url_changed and mcp_server.admin_connection_config_id:
+        previous_admin_config_id = mcp_server.admin_connection_config_id
+        mcp_server.admin_connection_config_id = None
+        delete_connection_config(previous_admin_config_id, db_session)
+        if (
+            request.auth_type == MCPAuthenticationType.OAUTH
+            and request.oauth_provider_mode is MCPOAuthProviderMode.AUTO_DISCOVERY
+        ):
+            client_info = None
+            if not request.oauth_client_id_changed:
+                oauth_client_id = None
+            if not request.oauth_client_secret_changed:
+                oauth_client_secret = None
+    elif (
+        flags.changing_connection_config
+        and mcp_server.admin_connection_config_id
+        and request.auth_type == MCPAuthenticationType.OAUTH
+        and not flags.header_template_changed
+        and not flags.auth_scheme_changed
+    ):
+        users_to_reload.update(_invalidate_mcp_user_credentials(mcp_server, db_session))
+    elif (
+        flags.changing_connection_config
+        and mcp_server.admin_connection_config_id
+        and request.auth_type == MCPAuthenticationType.API_TOKEN
+    ):
+        delete_connection_config(mcp_server.admin_connection_config_id, db_session)
+
+    return client_info, oauth_client_id, oauth_client_secret
+
+
+def _update_existing_mcp_server(
+    request: MCPToolCreateRequest,
+    existing_server_id: int,
+    db_session: Session,
+    user: User,
+) -> tuple[DbMCPServer, _ResolvedUpsertInputs]:
+    """Apply an edit to a stored MCP server and report the auth inputs it resolved."""
+    mcp_server, existing_admin_config, client_info = _load_mcp_server_for_update(
+        existing_server_id, user, db_session
+    )
+
+    # Resolve the effective OAuth credentials, falling back to the stored
+    # values for any field the frontend marked as unchanged. This protects
+    # the change-detection comparison below from spurious diffs caused by
+    # masked placeholders being replayed.
+    oauth_client_id = request.oauth_client_id
+    oauth_client_secret = request.oauth_client_secret
+    if client_info and request.auth_type == MCPAuthenticationType.OAUTH:
+        oauth_client_id, oauth_client_secret = _resolve_oauth_credentials(
+            request_client_id=request.oauth_client_id,
+            request_client_id_changed=request.oauth_client_id_changed,
+            request_client_secret=request.oauth_client_secret,
+            request_client_secret_changed=request.oauth_client_secret_changed,
+            existing_client=client_info,
+        )
+
+    (
+        auth_template,
+        existing_template_headers,
+        existing_shared_template_headers,
+    ) = _resolve_update_auth_template(request, mcp_server, existing_admin_config)
+
+    admin_credentials = request.admin_credentials
+    api_token = request.api_token
+    existing_admin_per_user_creds: dict[str, str] = {}
+    if _is_admin_api_token(request):
+        auth_template, admin_credentials, api_token = _resolve_shared_api_token_inputs(
+            request=request,
             mcp_server=mcp_server,
-            template=auth_template,
-            substitutions=admin_credentials,
+            existing_admin_config=existing_admin_config,
+            auth_template=auth_template,
+            admin_credentials=admin_credentials,
+        )
+    elif user.email:
+        (
+            existing_admin_per_user_creds,
+            admin_credentials,
+        ) = _resolve_per_user_admin_credentials(
+            request=request,
+            mcp_server=mcp_server,
             user_email=user.email,
+            admin_credentials=admin_credentials,
             db_session=db_session,
         )
-        users_to_reload.add(user.id)
 
-    if not changing_connection_config:
-        db_session.commit()
-        _hot_reload_craft_sessions(users_to_reload, db_session)
-        return mcp_server
+    flags = _compute_update_change_flags(
+        request=request,
+        mcp_server=mcp_server,
+        client_info=client_info,
+        oauth_client_id=oauth_client_id,
+        oauth_client_secret=oauth_client_secret,
+        auth_template=auth_template,
+        admin_credentials=admin_credentials,
+        existing_admin_config=existing_admin_config,
+        existing_admin_per_user_creds=existing_admin_per_user_creds,
+        existing_template_headers=existing_template_headers,
+        existing_shared_template_headers=existing_shared_template_headers,
+    )
 
+    users_to_reload: set[UUID] = set()
+    (
+        client_info,
+        oauth_client_id,
+        oauth_client_secret,
+    ) = _reconcile_existing_connection_config(
+        request=request,
+        mcp_server=mcp_server,
+        flags=flags,
+        client_info=client_info,
+        oauth_client_id=oauth_client_id,
+        oauth_client_secret=oauth_client_secret,
+        users_to_reload=users_to_reload,
+        db_session=db_session,
+    )
+
+    # Update the server with new values
+    mcp_server = update_mcp_server__no_commit(
+        server_id=existing_server_id,
+        db_session=db_session,
+        name=request.name,
+        description=request.description,
+        server_url=request.server_url,
+        auth_type=request.auth_type,
+        auth_performer=request.auth_performer,
+        oauth_provider_mode=request.oauth_provider_mode,
+        oauth_authorization_endpoint=request.oauth_authorization_endpoint,
+        oauth_token_endpoint=request.oauth_token_endpoint,
+        oauth_scopes_override=request.oauth_scopes_override,
+        oauth_additional_auth_params=request.oauth_additional_auth_params,
+        transport=request.transport,
+    )
+
+    logger.info(
+        "Updated existing MCP server '%s' with ID %s", request.name, mcp_server.id
+    )
+
+    return mcp_server, _ResolvedUpsertInputs(
+        oauth_client_id=oauth_client_id,
+        oauth_client_secret=oauth_client_secret,
+        auth_template=auth_template,
+        admin_credentials=admin_credentials,
+        api_token=api_token,
+        client_info=client_info,
+        changing_connection_config=flags.changing_connection_config,
+        users_to_reload=users_to_reload,
+    )
+
+
+def _create_new_mcp_server(
+    request: MCPToolCreateRequest,
+    db_session: Session,
+    user: User,
+) -> tuple[DbMCPServer, _ResolvedUpsertInputs]:
+    """Create a new MCP server row. Nothing is stored yet, so the request's auth
+    inputs need no fallback to stored values."""
+    auth_template = request.auth_template
+    if auth_template is not None:
+        auth_template = _resolve_auth_template(
+            auth_template,
+            request.auth_template_headers_changed,
+            None,
+        )
+    # Prevent duplicate server creation with same URL
+    normalized_url = (request.server_url or "").strip()
+    if not normalized_url:
+        raise HTTPException(status_code=400, detail="server_url is required")
+
+    if not user.email:
+        raise HTTPException(
+            status_code=400,
+            detail="Authenticated user email required to create MCP servers",
+        )
+
+    mcp_server = create_mcp_server__no_commit(
+        owner_email=user.email,
+        name=request.name,
+        description=request.description,
+        server_url=request.server_url,
+        auth_type=request.auth_type,
+        auth_performer=request.auth_performer,
+        oauth_provider_mode=request.oauth_provider_mode,
+        oauth_authorization_endpoint=request.oauth_authorization_endpoint,
+        oauth_token_endpoint=request.oauth_token_endpoint,
+        oauth_scopes_override=request.oauth_scopes_override,
+        oauth_additional_auth_params=request.oauth_additional_auth_params,
+        transport=request.transport or MCPTransport.STREAMABLE_HTTP,
+        db_session=db_session,
+    )
+
+    logger.info("Created new MCP server '%s' with ID %s", request.name, mcp_server.id)
+
+    return mcp_server, _ResolvedUpsertInputs(
+        oauth_client_id=request.oauth_client_id,
+        oauth_client_secret=request.oauth_client_secret,
+        auth_template=auth_template,
+        admin_credentials=request.admin_credentials,
+        api_token=request.api_token,
+        client_info=None,
+        changing_connection_config=True,
+        users_to_reload=set(),
+    )
+
+
+def _create_admin_connection_config(
+    *,
+    request: MCPToolCreateRequest,
+    mcp_server: DbMCPServer,
+    resolved: _ResolvedUpsertInputs,
+    user: User,
+    db_session: Session,
+) -> int | None:
+    """Write the admin connection config for the server's auth type."""
+    api_token = resolved.api_token
+    auth_template = resolved.auth_template
     admin_connection_config_id: int | None = None
-    if (
-        request.auth_type == MCPAuthenticationType.API_TOKEN
-        and request.auth_performer == MCPAuthenticationPerformer.ADMIN
-        and api_token
-    ):
+    if _is_admin_api_token(request) and api_token:
         admin_config = create_connection_config(
             config_data=_build_shared_api_token_config_data(
                 api_token=api_token,
                 auth_template=auth_template,
-                header_substitutions=admin_credentials,
+                header_substitutions=resolved.admin_credentials,
                 user_email=user.email,
             ),
             mcp_server_id=mcp_server.id,
@@ -2092,17 +2209,18 @@ def _upsert_mcp_server(
         ).id
 
     elif request.auth_type == MCPAuthenticationType.OAUTH:
+        client_info = resolved.client_info
         config_data = (
             _build_oauth_admin_config_data_for_update(
-                client_id=oauth_client_id,
-                client_secret=oauth_client_secret,
+                client_id=resolved.oauth_client_id,
+                client_secret=resolved.oauth_client_secret,
                 existing_client=client_info,
                 auth_template=auth_template,
             )
             if client_info is not None
             else _build_oauth_admin_config_data(
-                client_id=oauth_client_id,
-                client_secret=oauth_client_secret,
+                client_id=resolved.oauth_client_id,
+                client_secret=resolved.oauth_client_secret,
                 auth_template=auth_template,
             )
         )
@@ -2115,6 +2233,81 @@ def _upsert_mcp_server(
         admin_connection_config_id = _persist_admin_connection_config(
             mcp_server, config_data, db_session
         )
+    return admin_connection_config_id
+
+
+def _upsert_mcp_server(
+    request: MCPToolCreateRequest,
+    db_session: Session,
+    user: User,
+) -> DbMCPServer:
+    """
+    Creates a new or edits an existing MCP server. Returns the DB model
+    """
+    _validate_mcp_server_url(request.server_url, "server_url", require_https=False)
+    _validate_mcp_server_url(
+        request.oauth_authorization_endpoint,
+        "oauth_authorization_endpoint",
+        require_https=True,
+    )
+    _validate_mcp_server_url(
+        request.oauth_token_endpoint, "oauth_token_endpoint", require_https=True
+    )
+
+    existing_server_id = request.existing_server_id
+    if existing_server_id:
+        mcp_server, resolved = _update_existing_mcp_server(
+            request, existing_server_id, db_session, user
+        )
+    else:
+        mcp_server, resolved = _create_new_mcp_server(request, db_session, user)
+
+    # A new server defaults to public (create_mcp_server__no_commit), so always run the
+    # access gate on create — otherwise a scoped manager could publish one org-wide by
+    # omitting is_public/users/groups. On update, only touch access when the caller sent it.
+    is_new_server = request.existing_server_id is None
+    if is_new_server or any(
+        value is not None
+        for value in (request.is_public, request.users, request.groups)
+    ):
+        _apply_mcp_server_access(
+            mcp_server=mcp_server,
+            acting_user=user,
+            is_public=request.is_public,
+            user_ids=request.users,
+            group_ids=request.groups,
+            is_new=is_new_server,
+            db_session=db_session,
+        )
+
+    auth_template = resolved.auth_template
+    admin_credentials = resolved.admin_credentials
+    if (
+        auth_template is not None
+        and admin_credentials is not None
+        and not _is_admin_api_token(request)
+    ):
+        _upsert_user_template_config(
+            mcp_server=mcp_server,
+            template=auth_template,
+            substitutions=admin_credentials,
+            user_email=user.email,
+            db_session=db_session,
+        )
+        resolved.users_to_reload.add(user.id)
+
+    if not resolved.changing_connection_config:
+        db_session.commit()
+        _hot_reload_craft_sessions(resolved.users_to_reload, db_session)
+        return mcp_server
+
+    admin_connection_config_id = _create_admin_connection_config(
+        request=request,
+        mcp_server=mcp_server,
+        resolved=resolved,
+        user=user,
+        db_session=db_session,
+    )
     if admin_connection_config_id is not None:
         mcp_server = update_mcp_server__no_commit(
             server_id=mcp_server.id,
@@ -2123,7 +2316,7 @@ def _upsert_mcp_server(
         )
 
     db_session.commit()
-    _hot_reload_craft_sessions(users_to_reload, db_session)
+    _hot_reload_craft_sessions(resolved.users_to_reload, db_session)
     return mcp_server
 
 

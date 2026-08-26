@@ -993,6 +993,134 @@ def convert_slack_score(slack_score: float) -> float:
     return max(0.0, min(1.0, slack_score / 90_000))
 
 
+def _resolve_query_limit(entities: dict[str, Any], limit: int | None) -> int | None:
+    """Resolve the per-query message limit from the explicit limit or entity config."""
+    query_limit = limit
+    if entities:
+        try:
+            parsed_entities = SlackEntities(**entities)
+            if limit is None:
+                query_limit = parsed_entities.max_messages_per_query
+                logger.debug(
+                    "Using max_messages_per_query from config: %s", query_limit
+                )
+        except Exception as e:
+            logger.warning("Error parsing entities for limit: %s", e)
+            if limit is None:
+                query_limit = 100  # Fallback default
+    elif limit is None:
+        query_limit = 100  # Default when no entities and no limit provided
+
+    return query_limit
+
+
+def _partition_query_items(
+    query_items: list[str | DirectThreadFetch],
+) -> tuple[list[DirectThreadFetch], list[str]]:
+    """Partition into direct thread fetches and search query strings."""
+    direct_fetches: list[DirectThreadFetch] = []
+    query_strings: list[str] = []
+    for item in query_items:
+        if isinstance(item, DirectThreadFetch):
+            direct_fetches.append(item)
+        else:
+            query_strings.append(item)
+
+    return direct_fetches, query_strings
+
+
+def _resolve_bot_context_filters(
+    slack_event_context: SlackContext | None, entities: dict[str, Any]
+) -> tuple[bool, str | None]:
+    """Determine DM / private channel filtering from the bot context.
+
+    Returns (include_dm, allowed_private_channel).
+    """
+    include_dm = False
+    allowed_private_channel: str | None = None
+
+    # Bot context overrides (if entities not specified)
+    if slack_event_context and not entities:
+        channel_type = slack_event_context.channel_type
+        if channel_type == ChannelType.IM:  # DM with user
+            include_dm = True
+        if channel_type == ChannelType.PRIVATE_CHANNEL:
+            allowed_private_channel = slack_event_context.channel_id
+            logger.debug(
+                "Private channel context: will only allow messages from %s + public channels",
+                allowed_private_channel,
+            )
+
+    return include_dm, allowed_private_channel
+
+
+def _filter_messages_by_channel_type(
+    slack_messages: list[SlackMessage],
+    entities: dict[str, Any],
+    channel_metadata_dict: dict[str, ChannelMetadata] | None,
+    filtered_out_channels: set[str],
+) -> list[SlackMessage]:
+    """Drop messages whose channel type is excluded. Updates filtered_out_channels."""
+    filtered_messages = []
+    for msg in slack_messages:
+        # Pass pre-fetched metadata to avoid cache lookups
+        channel_type = get_channel_type(
+            channel_id=msg.channel_id,
+            channel_metadata=channel_metadata_dict,
+        )
+        if should_include_message(channel_type, entities):
+            filtered_messages.append(msg)
+        else:
+            # Track unique channel name for summary
+            channel_name = msg.metadata.get("channel", msg.channel_id)
+            filtered_out_channels.add(f"{channel_name}({msg.channel_id})")
+
+    return filtered_messages
+
+
+def _select_relevant_chunks(
+    chunks: list[DocAwareChunk],
+    sorted_highlighted_texts: list[str],
+    has_highlights: bool,
+    limit: int | None,
+) -> tuple[list[DocAwareChunk], dict[str, str]]:
+    """Prune chunks without highlighted texts and build their match highlights.
+
+    For recency queries without keywords, all chunks are kept.
+    """
+    relevant_chunks: list[DocAwareChunk] = []
+    chunkid_to_match_highlight: dict[str, str] = {}
+
+    if not has_highlights:
+        # No highlighted terms - keep all chunks (recency query)
+        for chunk in chunks:
+            chunk_id = f"{chunk.source_document.id}__{chunk.chunk_id}"
+            relevant_chunks.append(chunk)
+            chunkid_to_match_highlight[chunk_id] = chunk.content  # No highlighting
+            if limit and len(relevant_chunks) >= limit:
+                break
+    else:
+        # Prune chunks that don't contain highlighted terms
+        for chunk in chunks:
+            match_highlight = chunk.content
+            for highlight in sorted_highlighted_texts:  # faster than re sub
+                match_highlight = match_highlight.replace(
+                    highlight, f"<hi>{highlight}</hi>"
+                )
+
+            # if nothing got replaced, the chunk is irrelevant
+            if len(match_highlight) == len(chunk.content):
+                continue
+
+            chunk_id = f"{chunk.source_document.id}__{chunk.chunk_id}"
+            relevant_chunks.append(chunk)
+            chunkid_to_match_highlight[chunk_id] = match_highlight
+            if limit and len(relevant_chunks) >= limit:
+                break
+
+    return relevant_chunks, chunkid_to_match_highlight
+
+
 @log_function_time(print_only=True)
 def slack_retrieval(
     query: ChunkIndexRequest,
@@ -1040,21 +1168,7 @@ def slack_retrieval(
         logger.debug("Using entity configuration: %s", entities)
 
     # Extract limit from entity config if not explicitly provided
-    query_limit = limit
-    if entities:
-        try:
-            parsed_entities = SlackEntities(**entities)
-            if limit is None:
-                query_limit = parsed_entities.max_messages_per_query
-                logger.debug(
-                    "Using max_messages_per_query from config: %s", query_limit
-                )
-        except Exception as e:
-            logger.warning("Error parsing entities for limit: %s", e)
-            if limit is None:
-                query_limit = 100  # Fallback default
-    elif limit is None:
-        query_limit = 100  # Default when no entities and no limit provided
+    query_limit = _resolve_query_limit(entities, limit)
 
     # Pre-fetch channel metadata from Redis cache and extract available channels
     # This avoids repeated Redis lookups during parallel search execution
@@ -1078,29 +1192,12 @@ def slack_retrieval(
     query_items = build_slack_queries(query, llm, entities, available_channels)
 
     # Partition into direct thread fetches and search query strings
-    direct_fetches: list[DirectThreadFetch] = []
-    query_strings: list[str] = []
-    for item in query_items:
-        if isinstance(item, DirectThreadFetch):
-            direct_fetches.append(item)
-        else:
-            query_strings.append(item)
+    direct_fetches, query_strings = _partition_query_items(query_items)
 
     # Determine filtering based on entities OR context (bot)
-    include_dm = False
-    allowed_private_channel = None
-
-    # Bot context overrides (if entities not specified)
-    if slack_event_context and not entities:
-        channel_type = slack_event_context.channel_type
-        if channel_type == ChannelType.IM:  # DM with user
-            include_dm = True
-        if channel_type == ChannelType.PRIVATE_CHANNEL:
-            allowed_private_channel = slack_event_context.channel_id
-            logger.debug(
-                "Private channel context: will only allow messages from %s + public channels",
-                allowed_private_channel,
-            )
+    include_dm, allowed_private_channel = _resolve_bot_context_filters(
+        slack_event_context, entities
+    )
 
     # Build search tasks — direct thread fetches + keyword searches
     search_tasks: list[tuple] = [
@@ -1191,22 +1288,9 @@ def slack_retrieval(
     if entities and team_id:
         # Use pre-fetched channel metadata to avoid cache misses
         # Pass it directly instead of relying on Redis cache
-
-        filtered_messages = []
-        for msg in slack_messages:
-            # Pass pre-fetched metadata to avoid cache lookups
-            channel_type = get_channel_type(
-                channel_id=msg.channel_id,
-                channel_metadata=channel_metadata_dict,
-            )
-            if should_include_message(channel_type, entities):
-                filtered_messages.append(msg)
-            else:
-                # Track unique channel name for summary
-                channel_name = msg.metadata.get("channel", msg.channel_id)
-                filtered_out_channels.add(f"{channel_name}({msg.channel_id})")
-
-        slack_messages = filtered_messages
+        slack_messages = _filter_messages_by_channel_type(
+            slack_messages, entities, channel_metadata_dict, filtered_out_channels
+        )
 
     slack_messages = slack_messages[: limit or len(slack_messages)]
 
@@ -1291,35 +1375,9 @@ def slack_retrieval(
 
     # prune chunks without any highlighted texts
     # BUT: for recency queries without keywords, keep all chunks
-    relevant_chunks: list[DocAwareChunk] = []
-    chunkid_to_match_highlight: dict[str, str] = {}
-
-    if not has_highlights:
-        # No highlighted terms - keep all chunks (recency query)
-        for chunk in chunks:
-            chunk_id = f"{chunk.source_document.id}__{chunk.chunk_id}"
-            relevant_chunks.append(chunk)
-            chunkid_to_match_highlight[chunk_id] = chunk.content  # No highlighting
-            if limit and len(relevant_chunks) >= limit:
-                break
-    else:
-        # Prune chunks that don't contain highlighted terms
-        for chunk in chunks:
-            match_highlight = chunk.content
-            for highlight in sorted_highlighted_texts:  # faster than re sub
-                match_highlight = match_highlight.replace(
-                    highlight, f"<hi>{highlight}</hi>"
-                )
-
-            # if nothing got replaced, the chunk is irrelevant
-            if len(match_highlight) == len(chunk.content):
-                continue
-
-            chunk_id = f"{chunk.source_document.id}__{chunk.chunk_id}"
-            relevant_chunks.append(chunk)
-            chunkid_to_match_highlight[chunk_id] = match_highlight
-            if limit and len(relevant_chunks) >= limit:
-                break
+    relevant_chunks, chunkid_to_match_highlight = _select_relevant_chunks(
+        chunks, sorted_highlighted_texts, has_highlights, limit
+    )
 
     # convert to inference chunks
     top_chunks: list[InferenceChunk] = []

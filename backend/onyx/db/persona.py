@@ -1,6 +1,7 @@
 from collections.abc import Sequence
 from datetime import datetime
 from enum import Enum
+from typing import NamedTuple
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -1551,6 +1552,472 @@ def _mark_files_need_persona_sync(
     )
 
 
+class _PersonaRelations(NamedTuple):
+    """Rows resolved from the ID lists passed to ``upsert_persona``. ``None`` means the
+    caller did not pass that list, so the existing associations stay untouched."""
+
+    tools: list[Tool] | None
+    document_sets: list[DocumentSet] | None
+    user_files: list[UserFile] | None
+    labels: list[PersonaLabel] | None
+    hierarchy_nodes: list[HierarchyNode] | None
+    attached_documents: list[Document] | None
+
+
+def _resolve_existing_persona_for_upsert(
+    db_session: Session,
+    user: User | None,
+    name: str,
+    persona_id: int | None,
+) -> Persona | None:
+    """Return the row ``upsert_persona`` updates, or ``None`` when it must insert."""
+    # Only a create that lands on a deleted same-name row recycles it; editing by id must
+    # not reach a deleted agent.
+    recycling_deleted = False
+
+    if persona_id is not None:
+        existing_persona = db_session.query(Persona).filter_by(id=persona_id).first()
+    else:
+        existing_persona = _get_persona_by_name(
+            persona_name=name, user=user, db_session=db_session
+        )
+
+        # Check for duplicate names when creating new personas
+        # Deleted personas are allowed to be overwritten
+        if existing_persona and not existing_persona.deleted:
+            raise ValueError(
+                f"Assistant with name '{name}' already exists. Please rename your assistant."
+            )
+        recycling_deleted = existing_persona is not None
+
+    if existing_persona and user:
+        # this checks if the user has permission to edit the persona
+        # will raise an Exception if the user does not have permission
+        # Skip check if user is None (system/admin operation)
+        existing_persona = fetch_persona_by_id_for_user(
+            db_session=db_session,
+            persona_id=existing_persona.id,
+            user=user,
+            get_editable=True,
+            include_deleted=recycling_deleted,
+        )
+
+    return existing_persona
+
+
+def _assert_mcp_tools_accessible(
+    db_session: Session,
+    user: User,
+    tools: list[Tool],
+    existing_persona: Persona | None,
+) -> None:
+    """Existing tools survive access revocation; newly attached tools require access."""
+    # local import to avoid circular import (mirrors built_in_tools below)
+    from onyx.db.mcp import user_can_access_mcp_server
+
+    existing_tool_ids: set[int] = (
+        {tool.id for tool in existing_persona.tools} if existing_persona else set()
+    )
+    checked_servers: set[int] = set()
+    for tool in tools:
+        server_id = tool.mcp_server_id
+        if (
+            tool.id in existing_tool_ids
+            or server_id is None
+            or server_id in checked_servers
+        ):
+            continue
+        checked_servers.add(server_id)
+        if not user_can_access_mcp_server(user, server_id, db_session):
+            raise ValueError(
+                "You do not have access to one or more of the selected MCP servers."
+            )
+
+
+def _fetch_tools_for_upsert(
+    db_session: Session,
+    user: User | None,
+    tool_ids: list[int] | None,
+    existing_persona: Persona | None,
+) -> list[Tool] | None:
+    """Fetch and attach tools by IDs."""
+    if tool_ids is None:
+        return None
+
+    tools = db_session.query(Tool).filter(Tool.id.in_(tool_ids)).all()
+    if not tools and tool_ids:
+        raise ValueError("Tools not found")
+
+    if user is not None:
+        _assert_mcp_tools_accessible(db_session, user, tools, existing_persona)
+
+    return tools
+
+
+def _fetch_document_sets_for_upsert(
+    db_session: Session,
+    document_set_ids: list[int] | None,
+) -> list[DocumentSet] | None:
+    """Fetch and attach document_sets by IDs."""
+    if document_set_ids is None:
+        return None
+
+    document_sets = (
+        db_session.query(DocumentSet).filter(DocumentSet.id.in_(document_set_ids)).all()
+    )
+    if len(document_sets) != len(set(document_set_ids)):
+        raise ValueError("document_sets not found")
+    return document_sets
+
+
+def _assert_document_sets_attachable(
+    db_session: Session,
+    user: User | None,
+    document_set_ids: list[int] | None,
+    existing_persona: Persona | None,
+    knowledge_guard_applies: bool,
+) -> None:
+    """Editors may only ATTACH knowledge they can access themselves; anything
+    already attached survives an update, but once removed it can't be
+    re-added by someone without access (ENG-4180)."""
+    if document_set_ids is None or not knowledge_guard_applies or user is None:
+        return
+
+    existing_set_ids: set[int] = (
+        {ds.id for ds in existing_persona.document_sets} if existing_persona else set()
+    )
+    added_set_ids = set(document_set_ids) - existing_set_ids
+    if added_set_ids:
+        accessible_set_ids = filter_document_set_ids_by_user_access(
+            db_session, list(added_set_ids), user
+        )
+        if added_set_ids - accessible_set_ids:
+            raise ValueError("Cannot attach document sets you don't have access to")
+
+
+def _fetch_user_files_for_upsert(
+    db_session: Session,
+    user: User | None,
+    user_file_ids: list[UUID] | None,
+    existing_persona: Persona | None,
+    knowledge_guard_applies: bool,
+) -> list[UserFile] | None:
+    """Fetch and attach user_files by IDs."""
+    if user_file_ids is None:
+        return None
+
+    user_files = db_session.query(UserFile).filter(UserFile.id.in_(user_file_ids)).all()
+    if len(user_files) != len(set(user_file_ids)):
+        raise ValueError("user_files not found")
+
+    # Editors may only attach files they own (admins bypass)
+    if knowledge_guard_applies and user is not None:
+        existing_file_ids: set[UUID] = (
+            {uf.id for uf in existing_persona.user_files} if existing_persona else set()
+        )
+        for user_file in user_files:
+            if user_file.id not in existing_file_ids and user_file.user_id != user.id:
+                raise ValueError("Cannot attach files you don't own")
+
+    return user_files
+
+
+def _fetch_labels_for_upsert(
+    db_session: Session,
+    label_ids: list[int] | None,
+) -> list[PersonaLabel] | None:
+    if label_ids is None:
+        return None
+
+    labels = db_session.query(PersonaLabel).filter(PersonaLabel.id.in_(label_ids)).all()
+    if len(labels) != len(label_ids):
+        raise ValueError("Some label IDs were not found in the database")
+    return labels
+
+
+def _fetch_hierarchy_nodes_for_upsert(
+    db_session: Session,
+    hierarchy_node_ids: list[int] | None,
+) -> list[HierarchyNode] | None:
+    """Fetch and attach hierarchy_nodes by IDs."""
+    if hierarchy_node_ids is None:
+        return None
+
+    hierarchy_nodes = (
+        db_session.query(HierarchyNode)
+        .filter(HierarchyNode.id.in_(hierarchy_node_ids))
+        .all()
+    )
+    if len(hierarchy_nodes) != len(set(hierarchy_node_ids)):
+        raise ValueError("hierarchy_nodes not found")
+    return hierarchy_nodes
+
+
+def _assert_hierarchy_nodes_attachable(
+    db_session: Session,
+    user: User | None,
+    hierarchy_node_ids: list[int] | None,
+    existing_persona: Persona | None,
+    knowledge_guard_applies: bool,
+) -> None:
+    """Same attach-only guard as document sets, for hierarchy nodes."""
+    if hierarchy_node_ids is None or not knowledge_guard_applies or user is None:
+        return
+
+    existing_node_ids: set[int] = (
+        {node.id for node in existing_persona.hierarchy_nodes}
+        if existing_persona
+        else set()
+    )
+    added_node_ids = set(hierarchy_node_ids) - existing_node_ids
+    if added_node_ids:
+        accessible_node_ids = filter_accessible_hierarchy_node_ids(
+            db_session,
+            list(added_node_ids),
+            user.email,
+            get_user_external_group_ids(db_session, user),
+            user_id=user.id,
+        )
+        if added_node_ids - accessible_node_ids:
+            raise ValueError("Cannot attach hierarchy nodes you don't have access to")
+
+
+def _fetch_attached_documents_for_upsert(
+    db_session: Session,
+    user: User | None,
+    document_ids: list[str] | None,
+) -> list[Document] | None:
+    """Fetch and attach documents by IDs, filtering for access permissions."""
+    if document_ids is None:
+        return None
+
+    user_email = user.email if user else None
+    external_group_ids = get_user_external_group_ids(db_session, user) if user else []
+    attached_documents = get_accessible_documents_by_ids(
+        db_session=db_session,
+        document_ids=document_ids,
+        user_email=user_email,
+        external_group_ids=external_group_ids,
+        user_id=user.id if user else None,
+    )
+    if not attached_documents and document_ids:
+        raise ValueError("documents not found or not accessible")
+    return attached_documents
+
+
+def _resolve_persona_relations(
+    db_session: Session,
+    user: User | None,
+    existing_persona: Persona | None,
+    tool_ids: list[int] | None,
+    document_set_ids: list[int] | None,
+    user_file_ids: list[UUID] | None,
+    label_ids: list[int] | None,
+    hierarchy_node_ids: list[int] | None,
+    document_ids: list[str] | None,
+) -> _PersonaRelations:
+    """Load the rows named by the ID lists and enforce the attach-time guards. The call
+    order fixes which error a bad request reports first."""
+    tools = _fetch_tools_for_upsert(db_session, user, tool_ids, existing_persona)
+    document_sets = _fetch_document_sets_for_upsert(db_session, document_set_ids)
+
+    # Admins bypass the attach-time knowledge guards below.
+    knowledge_guard_applies: bool = user is not None and not has_global_permission(
+        user, Permission.MANAGE_AGENTS
+    )
+    _assert_document_sets_attachable(
+        db_session, user, document_set_ids, existing_persona, knowledge_guard_applies
+    )
+
+    user_files = _fetch_user_files_for_upsert(
+        db_session, user, user_file_ids, existing_persona, knowledge_guard_applies
+    )
+    labels = _fetch_labels_for_upsert(db_session, label_ids)
+    hierarchy_nodes = _fetch_hierarchy_nodes_for_upsert(db_session, hierarchy_node_ids)
+    _assert_hierarchy_nodes_attachable(
+        db_session, user, hierarchy_node_ids, existing_persona, knowledge_guard_applies
+    )
+    attached_documents = _fetch_attached_documents_for_upsert(
+        db_session, user, document_ids
+    )
+
+    return _PersonaRelations(
+        tools=tools,
+        document_sets=document_sets,
+        user_files=user_files,
+        labels=labels,
+        hierarchy_nodes=hierarchy_nodes,
+        attached_documents=attached_documents,
+    )
+
+
+def _update_persona_fields(
+    existing_persona: Persona,
+    db_session: Session,
+    user: User | None,
+    *,
+    name: str,
+    description: str,
+    default_model_configuration_id: int | None,
+    starter_messages: list[StarterMessage] | None,
+    is_public: bool | None,
+    uploaded_image_id: str | None,
+    remove_image: bool | None,
+    icon_name: str | None,
+    search_start_date: datetime | None,
+    labels: list[PersonaLabel] | None,
+    is_listed: bool | None,
+    is_featured: bool | None,
+    system_prompt: str | None,
+    task_prompt: str | None,
+    datetime_aware: bool | None,
+    replace_base_system_prompt: bool,
+    builtin_persona: bool,
+) -> None:
+    # Built-in personas can only be updated through YAML configuration.
+    # This ensures that core system personas are not modified unintentionally.
+    if existing_persona.builtin_persona and not builtin_persona:
+        raise ValueError("Cannot update builtin persona with non-builtin.")
+
+    # The following update excludes `default`, `built-in`, and display priority.
+    # Display priority is handled separately in the `display-priority` endpoint.
+    # `default` and `built-in` properties can only be set when creating a persona.
+    existing_persona.name = name
+    existing_persona.description = description
+    existing_persona.default_model_configuration_id = default_model_configuration_id
+    existing_persona.starter_messages = starter_messages
+    existing_persona.deleted = False  # Un-delete if previously deleted
+    # Publishing (org-wide public) is owner-or-admin — matches the share route and the
+    # publish projection. An editor-shared user may edit content but not flip an agent
+    # they don't own to public; the change is silently dropped, like is_listed/is_featured.
+    if is_public is not None and (
+        user is None or can_delete_persona(user, existing_persona, db_session)
+    ):
+        existing_persona.is_public = is_public
+    if remove_image or uploaded_image_id:
+        existing_persona.uploaded_image_id = uploaded_image_id
+    existing_persona.icon_name = icon_name
+    existing_persona.search_start_date = search_start_date
+    if labels is not None:
+        existing_persona.labels.clear()
+        existing_persona.labels = labels or []
+    # Featured/listed changes are curator/admin-only (ENG-4179): shared
+    # editors saving the form must never flip them, so non-privileged
+    # updates silently preserve the stored values.
+    user_can_set_admin_flags = user is None or has_global_permission(
+        user, Permission.MANAGE_AGENTS
+    )
+    if is_listed is not None and user_can_set_admin_flags:
+        existing_persona.is_listed = is_listed
+    if is_featured is not None and user_can_set_admin_flags:
+        existing_persona.is_featured = is_featured
+    # Update embedded prompt fields if provided
+    if system_prompt is not None:
+        existing_persona.system_prompt = system_prompt
+    if task_prompt is not None:
+        existing_persona.task_prompt = task_prompt
+    if datetime_aware is not None:
+        existing_persona.datetime_aware = datetime_aware
+    existing_persona.replace_base_system_prompt = replace_base_system_prompt
+
+
+def _replace_persona_associations(
+    existing_persona: Persona,
+    db_session: Session,
+    relations: _PersonaRelations,
+    display_priority: int | None,
+) -> None:
+    # Do not delete any associations manually added unless
+    # a new updated list is provided
+    if relations.document_sets is not None:
+        existing_persona.document_sets.clear()
+        existing_persona.document_sets = relations.document_sets or []
+
+    # Note: prompts are now embedded in personas - no separate prompts relationship
+
+    if relations.tools is not None:
+        existing_persona.tools = relations.tools or []
+
+    if relations.user_files is not None:
+        old_file_ids = {uf.id for uf in existing_persona.user_files}
+        new_file_ids = {uf.id for uf in (relations.user_files or [])}
+        affected_file_ids = old_file_ids | new_file_ids
+        existing_persona.user_files.clear()
+        existing_persona.user_files = relations.user_files or []
+        if affected_file_ids:
+            _mark_files_need_persona_sync(db_session, list(affected_file_ids))
+
+    if relations.hierarchy_nodes is not None:
+        existing_persona.hierarchy_nodes.clear()
+        existing_persona.hierarchy_nodes = relations.hierarchy_nodes or []
+
+    if relations.attached_documents is not None:
+        existing_persona.attached_documents.clear()
+        existing_persona.attached_documents = relations.attached_documents or []
+
+    # We should only update display priority if it is not already set
+    if existing_persona.display_priority is None:
+        existing_persona.display_priority = display_priority
+
+
+def _insert_new_persona(
+    db_session: Session,
+    user: User | None,
+    relations: _PersonaRelations,
+    *,
+    persona_id: int | None,
+    name: str,
+    description: str,
+    default_model_configuration_id: int | None,
+    starter_messages: list[StarterMessage] | None,
+    is_public: bool | None,
+    uploaded_image_id: str | None,
+    icon_name: str | None,
+    display_priority: int | None,
+    search_start_date: datetime | None,
+    is_listed: bool | None,
+    is_featured: bool | None,
+    system_prompt: str | None,
+    task_prompt: str | None,
+    datetime_aware: bool | None,
+    replace_base_system_prompt: bool,
+    builtin_persona: bool,
+) -> Persona:
+    # Create new persona - prompt configuration will be set separately if needed
+    new_persona = Persona(
+        id=persona_id,
+        user_id=user.id if user else None,
+        is_public=(is_public if is_public is not None else True),
+        name=name,
+        description=description,
+        builtin_persona=builtin_persona,
+        system_prompt=system_prompt or "",
+        task_prompt=task_prompt or "",
+        datetime_aware=(datetime_aware if datetime_aware is not None else True),
+        replace_base_system_prompt=replace_base_system_prompt,
+        document_sets=relations.document_sets or [],
+        default_model_configuration_id=default_model_configuration_id,
+        starter_messages=starter_messages,
+        tools=relations.tools or [],
+        uploaded_image_id=uploaded_image_id,
+        icon_name=icon_name,
+        display_priority=display_priority,
+        is_listed=(is_listed if is_listed is not None else True),
+        search_start_date=search_start_date,
+        is_featured=(is_featured if is_featured is not None else False),
+        user_files=relations.user_files or [],
+        labels=relations.labels or [],
+        hierarchy_nodes=relations.hierarchy_nodes or [],
+        attached_documents=relations.attached_documents or [],
+    )
+    db_session.add(new_persona)
+    if relations.user_files:
+        _mark_files_need_persona_sync(
+            db_session, [uf.id for uf in relations.user_files]
+        )
+    return new_persona
+
+
 def upsert_persona(
     user: User | None,
     name: str,
@@ -1587,297 +2054,79 @@ def upsert_persona(
     whether or not the assistant is a built-in / default assistant
     """
 
-    # Only a create that lands on a deleted same-name row recycles it; editing by id must
-    # not reach a deleted agent.
-    recycling_deleted = False
-
-    if persona_id is not None:
-        existing_persona = db_session.query(Persona).filter_by(id=persona_id).first()
-    else:
-        existing_persona = _get_persona_by_name(
-            persona_name=name, user=user, db_session=db_session
-        )
-
-        # Check for duplicate names when creating new personas
-        # Deleted personas are allowed to be overwritten
-        if existing_persona and not existing_persona.deleted:
-            raise ValueError(
-                f"Assistant with name '{name}' already exists. Please rename your assistant."
-            )
-        recycling_deleted = existing_persona is not None
-
-    if existing_persona and user:
-        # this checks if the user has permission to edit the persona
-        # will raise an Exception if the user does not have permission
-        # Skip check if user is None (system/admin operation)
-        existing_persona = fetch_persona_by_id_for_user(
-            db_session=db_session,
-            persona_id=existing_persona.id,
-            user=user,
-            get_editable=True,
-            include_deleted=recycling_deleted,
-        )
-
-    # Fetch and attach tools by IDs
-    tools = None
-    if tool_ids is not None:
-        tools = db_session.query(Tool).filter(Tool.id.in_(tool_ids)).all()
-        if not tools and tool_ids:
-            raise ValueError("Tools not found")
-
-        # Existing tools survive access revocation; newly attached tools require access.
-        if user is not None:
-            # local import to avoid circular import (mirrors built_in_tools below)
-            from onyx.db.mcp import user_can_access_mcp_server
-
-            existing_tool_ids = (
-                {tool.id for tool in existing_persona.tools}
-                if existing_persona
-                else set()
-            )
-            checked_servers: set[int] = set()
-            for tool in tools:
-                server_id = tool.mcp_server_id
-                if (
-                    tool.id in existing_tool_ids
-                    or server_id is None
-                    or server_id in checked_servers
-                ):
-                    continue
-                checked_servers.add(server_id)
-                if not user_can_access_mcp_server(user, server_id, db_session):
-                    raise ValueError(
-                        "You do not have access to one or more of the "
-                        "selected MCP servers."
-                    )
-
-    # Fetch and attach document_sets by IDs
-    document_sets = None
-    if document_set_ids is not None:
-        document_sets = (
-            db_session.query(DocumentSet)
-            .filter(DocumentSet.id.in_(document_set_ids))
-            .all()
-        )
-        if len(document_sets) != len(set(document_set_ids)):
-            raise ValueError("document_sets not found")
-
-    # Editors may only ATTACH knowledge they can access themselves; anything
-    # already attached survives an update, but once removed it can't be
-    # re-added by someone without access (ENG-4180).
-    knowledge_guard_applies: bool = user is not None and not has_global_permission(
-        user, Permission.MANAGE_AGENTS
+    existing_persona = _resolve_existing_persona_for_upsert(
+        db_session=db_session,
+        user=user,
+        name=name,
+        persona_id=persona_id,
     )
-    if document_set_ids is not None and knowledge_guard_applies and user is not None:
-        existing_set_ids = (
-            {ds.id for ds in existing_persona.document_sets}
-            if existing_persona
-            else set()
-        )
-        added_set_ids = set(document_set_ids) - existing_set_ids
-        if added_set_ids:
-            accessible_set_ids = filter_document_set_ids_by_user_access(
-                db_session, list(added_set_ids), user
-            )
-            if added_set_ids - accessible_set_ids:
-                raise ValueError("Cannot attach document sets you don't have access to")
 
-    # Fetch and attach user_files by IDs
-    user_files = None
-    if user_file_ids is not None:
-        user_files = (
-            db_session.query(UserFile).filter(UserFile.id.in_(user_file_ids)).all()
-        )
-        if len(user_files) != len(set(user_file_ids)):
-            raise ValueError("user_files not found")
-
-        # Editors may only attach files they own (admins bypass)
-        if knowledge_guard_applies and user is not None:
-            existing_file_ids = (
-                {uf.id for uf in existing_persona.user_files}
-                if existing_persona
-                else set()
-            )
-            for user_file in user_files:
-                if (
-                    user_file.id not in existing_file_ids
-                    and user_file.user_id != user.id
-                ):
-                    raise ValueError("Cannot attach files you don't own")
-
-    labels = None
-    if label_ids is not None:
-        labels = (
-            db_session.query(PersonaLabel).filter(PersonaLabel.id.in_(label_ids)).all()
-        )
-        if len(labels) != len(label_ids):
-            raise ValueError("Some label IDs were not found in the database")
-
-    # Fetch and attach hierarchy_nodes by IDs
-    hierarchy_nodes = None
-    if hierarchy_node_ids is not None:
-        hierarchy_nodes = (
-            db_session.query(HierarchyNode)
-            .filter(HierarchyNode.id.in_(hierarchy_node_ids))
-            .all()
-        )
-        if len(hierarchy_nodes) != len(set(hierarchy_node_ids)):
-            raise ValueError("hierarchy_nodes not found")
-
-    if hierarchy_node_ids is not None and knowledge_guard_applies and user is not None:
-        existing_node_ids = (
-            {node.id for node in existing_persona.hierarchy_nodes}
-            if existing_persona
-            else set()
-        )
-        added_node_ids = set(hierarchy_node_ids) - existing_node_ids
-        if added_node_ids:
-            accessible_node_ids = filter_accessible_hierarchy_node_ids(
-                db_session,
-                list(added_node_ids),
-                user.email,
-                get_user_external_group_ids(db_session, user),
-                user_id=user.id,
-            )
-            if added_node_ids - accessible_node_ids:
-                raise ValueError(
-                    "Cannot attach hierarchy nodes you don't have access to"
-                )
-
-    # Fetch and attach documents by IDs, filtering for access permissions
-    attached_documents = None
-    if document_ids is not None:
-        user_email = user.email if user else None
-        external_group_ids = (
-            get_user_external_group_ids(db_session, user) if user else []
-        )
-        attached_documents = get_accessible_documents_by_ids(
-            db_session=db_session,
-            document_ids=document_ids,
-            user_email=user_email,
-            external_group_ids=external_group_ids,
-            user_id=user.id if user else None,
-        )
-        if not attached_documents and document_ids:
-            raise ValueError("documents not found or not accessible")
+    relations = _resolve_persona_relations(
+        db_session=db_session,
+        user=user,
+        existing_persona=existing_persona,
+        tool_ids=tool_ids,
+        document_set_ids=document_set_ids,
+        user_file_ids=user_file_ids,
+        label_ids=label_ids,
+        hierarchy_node_ids=hierarchy_node_ids,
+        document_ids=document_ids,
+    )
 
     # ensure all specified tools are valid
-    if tools:
-        validate_persona_tools(tools, db_session)
+    if relations.tools:
+        validate_persona_tools(relations.tools, db_session)
 
     if existing_persona:
-        # Built-in personas can only be updated through YAML configuration.
-        # This ensures that core system personas are not modified unintentionally.
-        if existing_persona.builtin_persona and not builtin_persona:
-            raise ValueError("Cannot update builtin persona with non-builtin.")
-
-        # The following update excludes `default`, `built-in`, and display priority.
-        # Display priority is handled separately in the `display-priority` endpoint.
-        # `default` and `built-in` properties can only be set when creating a persona.
-        existing_persona.name = name
-        existing_persona.description = description
-        existing_persona.default_model_configuration_id = default_model_configuration_id
-        existing_persona.starter_messages = starter_messages
-        existing_persona.deleted = False  # Un-delete if previously deleted
-        # Publishing (org-wide public) is owner-or-admin — matches the share route and the
-        # publish projection. An editor-shared user may edit content but not flip an agent
-        # they don't own to public; the change is silently dropped, like is_listed/is_featured.
-        if is_public is not None and (
-            user is None or can_delete_persona(user, existing_persona, db_session)
-        ):
-            existing_persona.is_public = is_public
-        if remove_image or uploaded_image_id:
-            existing_persona.uploaded_image_id = uploaded_image_id
-        existing_persona.icon_name = icon_name
-        existing_persona.search_start_date = search_start_date
-        if label_ids is not None:
-            existing_persona.labels.clear()
-            existing_persona.labels = labels or []
-        # Featured/listed changes are curator/admin-only (ENG-4179): shared
-        # editors saving the form must never flip them, so non-privileged
-        # updates silently preserve the stored values.
-        user_can_set_admin_flags = user is None or has_global_permission(
-            user, Permission.MANAGE_AGENTS
-        )
-        if is_listed is not None and user_can_set_admin_flags:
-            existing_persona.is_listed = is_listed
-        if is_featured is not None and user_can_set_admin_flags:
-            existing_persona.is_featured = is_featured
-        # Update embedded prompt fields if provided
-        if system_prompt is not None:
-            existing_persona.system_prompt = system_prompt
-        if task_prompt is not None:
-            existing_persona.task_prompt = task_prompt
-        if datetime_aware is not None:
-            existing_persona.datetime_aware = datetime_aware
-        existing_persona.replace_base_system_prompt = replace_base_system_prompt
-
-        # Do not delete any associations manually added unless
-        # a new updated list is provided
-        if document_sets is not None:
-            existing_persona.document_sets.clear()
-            existing_persona.document_sets = document_sets or []
-
-        # Note: prompts are now embedded in personas - no separate prompts relationship
-
-        if tools is not None:
-            existing_persona.tools = tools or []
-
-        if user_file_ids is not None:
-            old_file_ids = {uf.id for uf in existing_persona.user_files}
-            new_file_ids = {uf.id for uf in (user_files or [])}
-            affected_file_ids = old_file_ids | new_file_ids
-            existing_persona.user_files.clear()
-            existing_persona.user_files = user_files or []
-            if affected_file_ids:
-                _mark_files_need_persona_sync(db_session, list(affected_file_ids))
-
-        if hierarchy_node_ids is not None:
-            existing_persona.hierarchy_nodes.clear()
-            existing_persona.hierarchy_nodes = hierarchy_nodes or []
-
-        if document_ids is not None:
-            existing_persona.attached_documents.clear()
-            existing_persona.attached_documents = attached_documents or []
-
-        # We should only update display priority if it is not already set
-        if existing_persona.display_priority is None:
-            existing_persona.display_priority = display_priority
-
-        persona = existing_persona
-
-    else:
-        # Create new persona - prompt configuration will be set separately if needed
-        new_persona = Persona(
-            id=persona_id,
-            user_id=user.id if user else None,
-            is_public=(is_public if is_public is not None else True),
+        _update_persona_fields(
+            existing_persona,
+            db_session,
+            user,
             name=name,
             description=description,
-            builtin_persona=builtin_persona,
-            system_prompt=system_prompt or "",
-            task_prompt=task_prompt or "",
-            datetime_aware=(datetime_aware if datetime_aware is not None else True),
-            replace_base_system_prompt=replace_base_system_prompt,
-            document_sets=document_sets or [],
             default_model_configuration_id=default_model_configuration_id,
             starter_messages=starter_messages,
-            tools=tools or [],
+            is_public=is_public,
+            uploaded_image_id=uploaded_image_id,
+            remove_image=remove_image,
+            icon_name=icon_name,
+            search_start_date=search_start_date,
+            labels=relations.labels,
+            is_listed=is_listed,
+            is_featured=is_featured,
+            system_prompt=system_prompt,
+            task_prompt=task_prompt,
+            datetime_aware=datetime_aware,
+            replace_base_system_prompt=replace_base_system_prompt,
+            builtin_persona=builtin_persona,
+        )
+        _replace_persona_associations(
+            existing_persona, db_session, relations, display_priority
+        )
+        persona = existing_persona
+    else:
+        persona = _insert_new_persona(
+            db_session,
+            user,
+            relations,
+            persona_id=persona_id,
+            name=name,
+            description=description,
+            default_model_configuration_id=default_model_configuration_id,
+            starter_messages=starter_messages,
+            is_public=is_public,
             uploaded_image_id=uploaded_image_id,
             icon_name=icon_name,
             display_priority=display_priority,
-            is_listed=(is_listed if is_listed is not None else True),
             search_start_date=search_start_date,
-            is_featured=(is_featured if is_featured is not None else False),
-            user_files=user_files or [],
-            labels=labels or [],
-            hierarchy_nodes=hierarchy_nodes or [],
-            attached_documents=attached_documents or [],
+            is_listed=is_listed,
+            is_featured=is_featured,
+            system_prompt=system_prompt,
+            task_prompt=task_prompt,
+            datetime_aware=datetime_aware,
+            replace_base_system_prompt=replace_base_system_prompt,
+            builtin_persona=builtin_persona,
         )
-        db_session.add(new_persona)
-        if user_files:
-            _mark_files_need_persona_sync(db_session, [uf.id for uf in user_files])
-        persona = new_persona
     if commit:
         db_session.commit()
     else:

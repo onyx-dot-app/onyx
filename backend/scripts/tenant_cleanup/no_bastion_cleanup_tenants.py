@@ -12,6 +12,7 @@ Usage:
         --data-plane-context <context> --control-plane-context <context> [--force]
 """
 
+import _csv
 import csv
 import fcntl
 import json
@@ -20,9 +21,11 @@ import signal
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from threading import Lock
+from typing import IO, NamedTuple
 
 from scripts.tenant_cleanup.no_bastion_cleanup_utils import (
     TenantNotFoundInControlPlaneError,
@@ -404,6 +407,99 @@ def cleanup_control_plane(
         raise
 
 
+def check_tenant_status_before_cleanup(
+    tenant_id: str,
+    control_plane_pod: str,
+    control_plane_context: str,
+    force: bool,
+) -> tuple[bool, bool]:
+    """Check the control plane tenant status before any destructive step.
+
+    Args:
+        tenant_id: Tenant ID to process
+        control_plane_pod: Control plane pod for tenant record operations
+        control_plane_context: kubectl context for control plane cluster
+        force: Skip confirmations if True
+
+    Returns:
+        (proceed, tenant_not_found_in_control_plane)
+    """
+    # Track if tenant was not found in control plane (for force mode)
+    tenant_not_found_in_control_plane = False
+
+    print(f"\n{'=' * 80}")
+    try:
+        tenant_status = get_tenant_status(
+            control_plane_pod, tenant_id, control_plane_context
+        )
+
+        # If tenant is not GATED_ACCESS, require explicit confirmation even in force mode
+        if tenant_status and tenant_status != "GATED_ACCESS":
+            print(
+                f"\n⚠️  WARNING: Tenant status is '{tenant_status}', not 'GATED_ACCESS'!"
+            )
+            print(
+                "This tenant may be active and should not be deleted without careful review."
+            )
+            print(f"{'=' * 80}\n")
+
+            if force:
+                print(f"Skipping cleanup for tenant {tenant_id} in force mode")
+                return False, tenant_not_found_in_control_plane
+
+            # Always ask for confirmation if not gated
+            response = input(
+                "Are you ABSOLUTELY SURE you want to proceed? Type 'yes' to confirm: "
+            )
+            if response.lower() != "yes":
+                print("Cleanup aborted - tenant is not GATED_ACCESS")
+                return False, tenant_not_found_in_control_plane
+        elif tenant_status == "GATED_ACCESS":
+            print("✓ Tenant status is GATED_ACCESS - safe to proceed with cleanup")
+        elif tenant_status is None:
+            print("⚠️  WARNING: Could not determine tenant status!")
+
+            if force:
+                print(f"Skipping cleanup for tenant {tenant_id} in force mode")
+                return False, tenant_not_found_in_control_plane
+
+            response = input("Continue anyway? Type 'yes' to confirm: ")
+            if response.lower() != "yes":
+                print("Cleanup aborted - could not verify tenant status")
+                return False, tenant_not_found_in_control_plane
+    except TenantNotFoundInControlPlaneError as e:
+        # Tenant/table not found in control plane
+        error_str = str(e)
+        print(f"⚠️  WARNING: Tenant not found in control plane: {error_str}")
+        tenant_not_found_in_control_plane = True
+
+        if force:
+            print(
+                "[FORCE MODE] Tenant not found in control plane - continuing with dataplane cleanup only"
+            )
+        else:
+            response = input("Continue anyway? Type 'yes' to confirm: ")
+            if response.lower() != "yes":
+                print("Cleanup aborted - tenant not found in control plane")
+                return False, tenant_not_found_in_control_plane
+    except Exception as e:
+        # Other errors (not "not found")
+        error_str = str(e)
+        print(f"⚠️  WARNING: Failed to check tenant status: {error_str}")
+
+        if force:
+            print(f"Skipping cleanup for tenant {tenant_id} in force mode")
+            return False, tenant_not_found_in_control_plane
+
+        response = input("Continue anyway? Type 'yes' to confirm: ")
+        if response.lower() != "yes":
+            print("Cleanup aborted - could not verify tenant status")
+            return False, tenant_not_found_in_control_plane
+    print(f"{'=' * 80}\n")
+
+    return True, tenant_not_found_in_control_plane
+
+
 def cleanup_tenant(
     tenant_id: str,
     data_plane_pod: str,
@@ -424,79 +520,12 @@ def cleanup_tenant(
     """
     print(f"Starting cleanup for tenant: {tenant_id}")
 
-    # Track if tenant was not found in control plane (for force mode)
-    tenant_not_found_in_control_plane = False
-
     # Check tenant status first (from control plane)
-    print(f"\n{'=' * 80}")
-    try:
-        tenant_status = get_tenant_status(
-            control_plane_pod, tenant_id, control_plane_context
-        )
-
-        # If tenant is not GATED_ACCESS, require explicit confirmation even in force mode
-        if tenant_status and tenant_status != "GATED_ACCESS":
-            print(
-                f"\n⚠️  WARNING: Tenant status is '{tenant_status}', not 'GATED_ACCESS'!"
-            )
-            print(
-                "This tenant may be active and should not be deleted without careful review."
-            )
-            print(f"{'=' * 80}\n")
-
-            if force:
-                print(f"Skipping cleanup for tenant {tenant_id} in force mode")
-                return False
-
-            # Always ask for confirmation if not gated
-            response = input(
-                "Are you ABSOLUTELY SURE you want to proceed? Type 'yes' to confirm: "
-            )
-            if response.lower() != "yes":
-                print("Cleanup aborted - tenant is not GATED_ACCESS")
-                return False
-        elif tenant_status == "GATED_ACCESS":
-            print("✓ Tenant status is GATED_ACCESS - safe to proceed with cleanup")
-        elif tenant_status is None:
-            print("⚠️  WARNING: Could not determine tenant status!")
-
-            if force:
-                print(f"Skipping cleanup for tenant {tenant_id} in force mode")
-                return False
-
-            response = input("Continue anyway? Type 'yes' to confirm: ")
-            if response.lower() != "yes":
-                print("Cleanup aborted - could not verify tenant status")
-                return False
-    except TenantNotFoundInControlPlaneError as e:
-        # Tenant/table not found in control plane
-        error_str = str(e)
-        print(f"⚠️  WARNING: Tenant not found in control plane: {error_str}")
-        tenant_not_found_in_control_plane = True
-
-        if force:
-            print(
-                "[FORCE MODE] Tenant not found in control plane - continuing with dataplane cleanup only"
-            )
-        else:
-            response = input("Continue anyway? Type 'yes' to confirm: ")
-            if response.lower() != "yes":
-                print("Cleanup aborted - tenant not found in control plane")
-                return False
-    except Exception as e:
-        # Other errors (not "not found")
-        error_str = str(e)
-        print(f"⚠️  WARNING: Failed to check tenant status: {error_str}")
-
-        if force:
-            print(f"Skipping cleanup for tenant {tenant_id} in force mode")
-            return False
-
-        response = input("Continue anyway? Type 'yes' to confirm: ")
-        if response.lower() != "yes":
-            print("Cleanup aborted - could not verify tenant status")
-            return False
-    print(f"{'=' * 80}\n")
+    proceed, tenant_not_found_in_control_plane = check_tenant_status_before_cleanup(
+        tenant_id, control_plane_pod, control_plane_context, force
+    )
+    if not proceed:
+        return False
 
     # Fetch tenant users for informational purposes (non-blocking) from data plane
     if not force:
@@ -579,112 +608,116 @@ def cleanup_tenant(
     return True
 
 
-def main() -> None:
-    # Register signal handlers for graceful shutdown
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
+class _RunConfig(NamedTuple):
+    """Pods, contexts, and mode shared by every tenant in a run."""
 
-    if len(sys.argv) < 2:
-        print(
-            "Usage: PYTHONPATH=. python scripts/tenant_cleanup/no_bastion_cleanup_tenants.py <tenant_id> \\"
-        )
-        print(
-            "           --data-plane-context <context> --control-plane-context <context> [--force]"
-        )
-        print(
-            "       PYTHONPATH=. python scripts/tenant_cleanup/no_bastion_cleanup_tenants.py --csv <csv_file_path> \\"
-        )
-        print(
-            "           --data-plane-context <context> --control-plane-context <context> [--force]"
-        )
-        print("\nThis version runs ALL operations from pods (no bastion required)")
-        print("\nArguments:")
-        print(
-            "  tenant_id                   The tenant ID to clean up (required if not using --csv)"
-        )
-        print(
-            "  --csv PATH                  Path to CSV file containing tenant IDs to clean up"
-        )
-        print("  --force                     Skip all confirmation prompts (optional)")
-        print(
-            "  --concurrency N             Process N tenants concurrently (default: 1)"
-        )
-        print(
-            "  --data-plane-context CTX    Kubectl context for data plane cluster (required)"
-        )
-        print(
-            "  --control-plane-context CTX Kubectl context for control plane cluster (required)"
-        )
-        print(
-            "  --data-plane-pod POD        Pin the data plane pod instead of picking one"
-        )
-        print(
-            "  --control-plane-pod POD     Pin the control plane pod instead of picking one"
-        )
-        sys.exit(1)
+    data_plane_pod: str
+    control_plane_pod: str
+    data_plane_context: str
+    control_plane_context: str
+    force: bool
 
-    # Parse arguments
-    force = "--force" in sys.argv
-    tenant_ids = []
 
-    # Parse concurrency
-    concurrency: int = 1
-    if "--concurrency" in sys.argv:
-        try:
-            concurrency_index = sys.argv.index("--concurrency")
-            if concurrency_index + 1 >= len(sys.argv):
-                print("Error: --concurrency flag requires a number", file=sys.stderr)
-                sys.exit(1)
-            concurrency = int(sys.argv[concurrency_index + 1])
-            if concurrency < 1:
-                print("Error: concurrency must be at least 1", file=sys.stderr)
-                sys.exit(1)
-        except ValueError:
-            print("Error: --concurrency value must be an integer", file=sys.stderr)
+class _CleanupLog(NamedTuple):
+    """Open handles for the CSV record of cleaned tenants."""
+
+    path: str
+    file: IO[str]
+    writer: _csv.Writer
+
+
+@dataclass
+class _CleanupResults:
+    """Outcome of every tenant processed in a run."""
+
+    successful: list[str] = field(default_factory=list)
+    skipped: list[str] = field(default_factory=list)
+    failed: list[tuple[str, str]] = field(default_factory=list)
+
+
+def _print_usage() -> None:
+    """Print usage information for the script."""
+    print(
+        "Usage: PYTHONPATH=. python scripts/tenant_cleanup/no_bastion_cleanup_tenants.py <tenant_id> \\"
+    )
+    print(
+        "           --data-plane-context <context> --control-plane-context <context> [--force]"
+    )
+    print(
+        "       PYTHONPATH=. python scripts/tenant_cleanup/no_bastion_cleanup_tenants.py --csv <csv_file_path> \\"
+    )
+    print(
+        "           --data-plane-context <context> --control-plane-context <context> [--force]"
+    )
+    print("\nThis version runs ALL operations from pods (no bastion required)")
+    print("\nArguments:")
+    print(
+        "  tenant_id                   The tenant ID to clean up (required if not using --csv)"
+    )
+    print(
+        "  --csv PATH                  Path to CSV file containing tenant IDs to clean up"
+    )
+    print("  --force                     Skip all confirmation prompts (optional)")
+    print("  --concurrency N             Process N tenants concurrently (default: 1)")
+    print(
+        "  --data-plane-context CTX    Kubectl context for data plane cluster (required)"
+    )
+    print(
+        "  --control-plane-context CTX Kubectl context for control plane cluster (required)"
+    )
+    print("  --data-plane-pod POD        Pin the data plane pod instead of picking one")
+    print(
+        "  --control-plane-pod POD     Pin the control plane pod instead of picking one"
+    )
+
+
+def _parse_concurrency() -> int:
+    """Return the --concurrency value, exiting on an invalid one."""
+    if "--concurrency" not in sys.argv:
+        return 1
+
+    try:
+        concurrency_index = sys.argv.index("--concurrency")
+        if concurrency_index + 1 >= len(sys.argv):
+            print("Error: --concurrency flag requires a number", file=sys.stderr)
             sys.exit(1)
-
-    # Validate: concurrency > 1 requires --force
-    if concurrency > 1 and not force:
-        print(
-            "Error: --concurrency > 1 requires --force flag (interactive mode not supported with parallel processing)",
-            file=sys.stderr,
-        )
+        concurrency = int(sys.argv[concurrency_index + 1])
+        if concurrency < 1:
+            print("Error: concurrency must be at least 1", file=sys.stderr)
+            sys.exit(1)
+    except ValueError:
+        print("Error: --concurrency value must be an integer", file=sys.stderr)
         sys.exit(1)
 
-    # Parse contexts (required)
-    data_plane_context: str | None = None
-    control_plane_context: str | None = None
+    return concurrency
 
-    if "--data-plane-context" in sys.argv:
-        try:
-            idx = sys.argv.index("--data-plane-context")
-            if idx + 1 >= len(sys.argv):
-                print(
-                    "Error: --data-plane-context requires a context name",
-                    file=sys.stderr,
-                )
-                sys.exit(1)
-            data_plane_context = sys.argv[idx + 1]
-        except ValueError:
-            pass
 
-    if "--control-plane-context" in sys.argv:
-        try:
-            idx = sys.argv.index("--control-plane-context")
-            if idx + 1 >= len(sys.argv):
-                print(
-                    "Error: --control-plane-context requires a context name",
-                    file=sys.stderr,
-                )
-                sys.exit(1)
-            control_plane_context = sys.argv[idx + 1]
-        except ValueError:
-            pass
+def _parse_context(flag: str) -> str | None:
+    """Return the context name given for a flag, or None if the flag is absent."""
+    if flag not in sys.argv:
+        return None
 
-    # Pinning pods lets several batches run against different pods instead of all
-    # piling onto whichever one the random pick returns.
-    data_plane_pod_override = None
-    control_plane_pod_override = None
+    try:
+        idx = sys.argv.index(flag)
+        if idx + 1 >= len(sys.argv):
+            print(
+                f"Error: {flag} requires a context name",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        return sys.argv[idx + 1]
+    except ValueError:
+        return None
+
+
+def _parse_pod_overrides() -> tuple[str | None, str | None]:
+    """Return the pinned data plane and control plane pods, if given.
+
+    Pinning pods lets several batches run against different pods instead of all
+    piling onto whichever one the random pick returns.
+    """
+    data_plane_pod_override: str | None = None
+    control_plane_pod_override: str | None = None
     for flag, target in (
         ("--data-plane-pod", "data"),
         ("--control-plane-pod", "control"),
@@ -699,7 +732,13 @@ def main() -> None:
             else:
                 control_plane_pod_override = sys.argv[idx + 1]
 
-    # Validate required contexts
+    return data_plane_pod_override, control_plane_pod_override
+
+
+def _require_contexts(
+    data_plane_context: str | None, control_plane_context: str | None
+) -> tuple[str, str]:
+    """Return both contexts, exiting if either one is missing."""
     if not data_plane_context:
         print(
             "Error: --data-plane-context is required",
@@ -714,31 +753,39 @@ def main() -> None:
         )
         sys.exit(1)
 
-    # Check for CSV mode
-    if "--csv" in sys.argv:
-        try:
-            csv_index = sys.argv.index("--csv")
-            if csv_index + 1 >= len(sys.argv):
-                print("Error: --csv flag requires a file path", file=sys.stderr)
-                sys.exit(1)
+    return data_plane_context, control_plane_context
 
-            csv_path = sys.argv[csv_index + 1]
-            tenant_ids = read_tenant_ids_from_csv(csv_path)
 
-            if not tenant_ids:
-                print("Error: No tenant IDs found in CSV file", file=sys.stderr)
-                sys.exit(1)
-
-            print(f"Found {len(tenant_ids)} tenant(s) in CSV file: {csv_path}")
-
-        except Exception as e:
-            print(f"Error reading CSV file: {e}", file=sys.stderr)
-            sys.exit(1)
-    else:
+def _parse_tenant_ids() -> list[str]:
+    """Return the tenant IDs from --csv, or the single positional tenant ID."""
+    if "--csv" not in sys.argv:
         # Single tenant mode
-        tenant_ids = [sys.argv[1]]
+        return [sys.argv[1]]
 
-    # Initial confirmation (unless --force is used)
+    try:
+        csv_index = sys.argv.index("--csv")
+        if csv_index + 1 >= len(sys.argv):
+            print("Error: --csv flag requires a file path", file=sys.stderr)
+            sys.exit(1)
+
+        csv_path = sys.argv[csv_index + 1]
+        tenant_ids = read_tenant_ids_from_csv(csv_path)
+
+        if not tenant_ids:
+            print("Error: No tenant IDs found in CSV file", file=sys.stderr)
+            sys.exit(1)
+
+        print(f"Found {len(tenant_ids)} tenant(s) in CSV file: {csv_path}")
+
+    except Exception as e:
+        print(f"Error reading CSV file: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    return tenant_ids
+
+
+def _confirm_start(tenant_ids: list[str], force: bool) -> None:
+    """Describe the run and require confirmation unless --force is used."""
     if not force:
         print(f"\n{'=' * 80}")
         print("TENANT CLEANUP - NO BASTION VERSION")
@@ -769,7 +816,14 @@ def main() -> None:
             f"⚠ FORCE MODE: Running cleanup for {len(tenant_ids)} tenant(s) without confirmations"
         )
 
-    # Find pods in both clusters before processing
+
+def _prepare_pods(
+    data_plane_context: str,
+    control_plane_context: str,
+    data_plane_pod_override: str | None,
+    control_plane_pod_override: str | None,
+) -> tuple[str, str]:
+    """Return both pods to run against, after copying the scripts to the data plane pod."""
     try:
         if data_plane_pod_override:
             data_plane_pod = data_plane_pod_override
@@ -795,157 +849,235 @@ def main() -> None:
         print("Cannot proceed with cleanup")
         sys.exit(1)
 
+    return data_plane_pod, control_plane_pod
+
+
+def _write_csv_header_if_empty(csv_file: IO[str], csv_writer: _csv.Writer) -> None:
+    """Write the CSV header when the output file is still empty.
+
+    Emit the header under an exclusive lock, and decide whether one is needed
+    while holding it. Two runs starting together would otherwise both see an
+    absent file and each write a header.
+    """
+    fcntl.flock(csv_file.fileno(), fcntl.LOCK_EX)
+    try:
+        if os.fstat(csv_file.fileno()).st_size == 0:
+            csv_writer.writerow(["tenant_id", "cleaned_at"])
+            csv_file.flush()
+    finally:
+        fcntl.flock(csv_file.fileno(), fcntl.LOCK_UN)
+
+
+def _cleanup_sequentially(
+    tenant_ids: list[str],
+    config: _RunConfig,
+    log: _CleanupLog,
+    results: _CleanupResults,
+) -> None:
+    """Clean up tenants one at a time, recording the outcome of each."""
+    for idx, tenant_id in enumerate(tenant_ids, 1):
+        if len(tenant_ids) > 1:
+            print(f"\n{'=' * 80}")
+            print(f"Processing tenant {idx}/{len(tenant_ids)}: {tenant_id}")
+            print(f"{'=' * 80}")
+
+        try:
+            was_cleaned = cleanup_tenant(
+                tenant_id,
+                config.data_plane_pod,
+                config.control_plane_pod,
+                config.data_plane_context,
+                config.control_plane_context,
+                config.force,
+            )
+
+            if was_cleaned:
+                results.successful.append(tenant_id)
+
+                # Write to CSV immediately after successful cleanup
+                timestamp = datetime.now(timezone.utc).isoformat()
+                log.writer.writerow([tenant_id, timestamp])
+                log.file.flush()
+                print(f"✓ Recorded cleanup in {log.path}")
+            else:
+                results.skipped.append(tenant_id)
+                print(f"⚠ Tenant {tenant_id} was skipped (not recorded in CSV)")
+
+        except Exception as e:
+            print(f"✗ Cleanup failed for tenant {tenant_id}: {e}", file=sys.stderr)
+            results.failed.append((tenant_id, str(e)))
+
+            # If not in force mode and there are more tenants, ask if we should continue
+            if not config.force and idx < len(tenant_ids):
+                response = input(
+                    f"\nContinue with remaining {len(tenant_ids) - idx} tenant(s)? (y/n): "
+                )
+                if response.lower() != "y":
+                    print("Cleanup aborted by user")
+                    break
+
+
+def _cleanup_in_parallel(
+    tenant_ids: list[str],
+    config: _RunConfig,
+    concurrency: int,
+    log: _CleanupLog,
+    results: _CleanupResults,
+) -> None:
+    """Clean up tenants concurrently, recording the outcome of each."""
+    print(f"Processing {len(tenant_ids)} tenant(s) with concurrency={concurrency}\n")
+
+    def process_tenant(tenant_id: str) -> tuple[str, bool, str | None]:
+        """Process a single tenant. Returns (tenant_id, was_cleaned, error_message)."""
+        try:
+            was_cleaned = cleanup_tenant(
+                tenant_id,
+                config.data_plane_pod,
+                config.control_plane_pod,
+                config.data_plane_context,
+                config.control_plane_context,
+                config.force,
+            )
+            return (tenant_id, was_cleaned, None)
+        except Exception as e:
+            return (tenant_id, False, str(e))
+
+    with ThreadPoolExecutor(max_workers=concurrency) as executor:
+        # Submit all tasks
+        future_to_tenant = {
+            executor.submit(process_tenant, tenant_id): tenant_id
+            for tenant_id in tenant_ids
+        }
+
+        # Process results as they complete
+        completed = 0
+        for future in as_completed(future_to_tenant):
+            completed += 1
+            tenant_id, was_cleaned, error = future.result()
+
+            if error:
+                with _print_lock:
+                    print(
+                        f"[{completed}/{len(tenant_ids)}] ✗ Failed: {tenant_id}: {error}",
+                        file=sys.stderr,
+                    )
+                results.failed.append((tenant_id, error))
+            elif was_cleaned:
+                with _csv_lock:
+                    timestamp = datetime.now(timezone.utc).isoformat()
+                    log.writer.writerow([tenant_id, timestamp])
+                    log.file.flush()
+                results.successful.append(tenant_id)
+                with _print_lock:
+                    print(f"[{completed}/{len(tenant_ids)}] ✓ Cleaned: {tenant_id}")
+            else:
+                results.skipped.append(tenant_id)
+                with _print_lock:
+                    print(f"[{completed}/{len(tenant_ids)}] ⊘ Skipped: {tenant_id}")
+
+
+def _print_summary(
+    tenant_ids: list[str], results: _CleanupResults, csv_output_path: str
+) -> None:
+    """Print the run summary and exit non-zero if any tenant failed."""
+    if len(tenant_ids) > 1:
+        print(f"\n{'=' * 80}")
+        print("CLEANUP SUMMARY")
+        print(f"{'=' * 80}")
+        print(f"Total tenants: {len(tenant_ids)}")
+        print(f"Successful: {len(results.successful)}")
+        print(f"Skipped: {len(results.skipped)}")
+        print(f"Failed: {len(results.failed)}")
+        print(f"\nSuccessfully cleaned tenants written to: {csv_output_path}")
+
+        if results.skipped:
+            print(f"\nSkipped tenants ({len(results.skipped)}):")
+            for tenant_id in results.skipped:
+                print(f"  - {tenant_id}")
+
+        if results.failed:
+            print(f"\nFailed tenants ({len(results.failed)}):")
+            for tenant_id, error in results.failed:
+                print(f"  - {tenant_id}: {error}")
+
+        print(f"{'=' * 80}")
+
+        if results.failed:
+            sys.exit(1)
+
+
+def main() -> None:
+    # Register signal handlers for graceful shutdown
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+
+    if len(sys.argv) < 2:
+        _print_usage()
+        sys.exit(1)
+
+    # Parse arguments
+    force = "--force" in sys.argv
+    concurrency: int = _parse_concurrency()
+
+    # Validate: concurrency > 1 requires --force
+    if concurrency > 1 and not force:
+        print(
+            "Error: --concurrency > 1 requires --force flag (interactive mode not supported with parallel processing)",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    # Parse contexts (required)
+    data_plane_context = _parse_context("--data-plane-context")
+    control_plane_context = _parse_context("--control-plane-context")
+
+    data_plane_pod_override, control_plane_pod_override = _parse_pod_overrides()
+
+    data_plane_context, control_plane_context = _require_contexts(
+        data_plane_context, control_plane_context
+    )
+
+    tenant_ids = _parse_tenant_ids()
+
+    # Initial confirmation (unless --force is used)
+    _confirm_start(tenant_ids, force)
+
+    # Find pods in both clusters before processing
+    data_plane_pod, control_plane_pod = _prepare_pods(
+        data_plane_context,
+        control_plane_context,
+        data_plane_pod_override,
+        control_plane_pod_override,
+    )
+
+    config = _RunConfig(
+        data_plane_pod=data_plane_pod,
+        control_plane_pod=control_plane_pod,
+        data_plane_context=data_plane_context,
+        control_plane_context=control_plane_context,
+        force=force,
+    )
+
     # Run cleanup for each tenant
-    failed_tenants = []
-    successful_tenants = []
-    skipped_tenants = []
+    results = _CleanupResults()
 
     # Append rather than truncate: cleanup runs in batches, and this file is the only
     # record of what was deleted. Opening it "w" silently erased prior batches.
     csv_output_path = "cleaned_tenants.csv"
     with open(csv_output_path, "a", newline="") as csv_file:
         csv_writer = csv.writer(csv_file)
-
-        # Emit the header under an exclusive lock, and decide whether one is needed
-        # while holding it. Two runs starting together would otherwise both see an
-        # absent file and each write a header.
-        fcntl.flock(csv_file.fileno(), fcntl.LOCK_EX)
-        try:
-            if os.fstat(csv_file.fileno()).st_size == 0:
-                csv_writer.writerow(["tenant_id", "cleaned_at"])
-                csv_file.flush()
-        finally:
-            fcntl.flock(csv_file.fileno(), fcntl.LOCK_UN)
+        _write_csv_header_if_empty(csv_file, csv_writer)
 
         print(f"Writing successful cleanups to: {csv_output_path}\n")
 
+        log = _CleanupLog(path=csv_output_path, file=csv_file, writer=csv_writer)
         if concurrency == 1:
-            # Sequential processing
-            for idx, tenant_id in enumerate(tenant_ids, 1):
-                if len(tenant_ids) > 1:
-                    print(f"\n{'=' * 80}")
-                    print(f"Processing tenant {idx}/{len(tenant_ids)}: {tenant_id}")
-                    print(f"{'=' * 80}")
-
-                try:
-                    was_cleaned = cleanup_tenant(
-                        tenant_id,
-                        data_plane_pod,
-                        control_plane_pod,
-                        data_plane_context,
-                        control_plane_context,
-                        force,
-                    )
-
-                    if was_cleaned:
-                        successful_tenants.append(tenant_id)
-
-                        # Write to CSV immediately after successful cleanup
-                        timestamp = datetime.now(timezone.utc).isoformat()
-                        csv_writer.writerow([tenant_id, timestamp])
-                        csv_file.flush()
-                        print(f"✓ Recorded cleanup in {csv_output_path}")
-                    else:
-                        skipped_tenants.append(tenant_id)
-                        print(f"⚠ Tenant {tenant_id} was skipped (not recorded in CSV)")
-
-                except Exception as e:
-                    print(
-                        f"✗ Cleanup failed for tenant {tenant_id}: {e}", file=sys.stderr
-                    )
-                    failed_tenants.append((tenant_id, str(e)))
-
-                    # If not in force mode and there are more tenants, ask if we should continue
-                    if not force and idx < len(tenant_ids):
-                        response = input(
-                            f"\nContinue with remaining {len(tenant_ids) - idx} tenant(s)? (y/n): "
-                        )
-                        if response.lower() != "y":
-                            print("Cleanup aborted by user")
-                            break
+            _cleanup_sequentially(tenant_ids, config, log, results)
         else:
-            # Parallel processing
-            print(
-                f"Processing {len(tenant_ids)} tenant(s) with concurrency={concurrency}\n"
-            )
-
-            def process_tenant(tenant_id: str) -> tuple[str, bool, str | None]:
-                """Process a single tenant. Returns (tenant_id, was_cleaned, error_message)."""
-                try:
-                    was_cleaned = cleanup_tenant(
-                        tenant_id,
-                        data_plane_pod,
-                        control_plane_pod,
-                        data_plane_context,
-                        control_plane_context,
-                        force,
-                    )
-                    return (tenant_id, was_cleaned, None)
-                except Exception as e:
-                    return (tenant_id, False, str(e))
-
-            with ThreadPoolExecutor(max_workers=concurrency) as executor:
-                # Submit all tasks
-                future_to_tenant = {
-                    executor.submit(process_tenant, tenant_id): tenant_id
-                    for tenant_id in tenant_ids
-                }
-
-                # Process results as they complete
-                completed = 0
-                for future in as_completed(future_to_tenant):
-                    completed += 1
-                    tenant_id, was_cleaned, error = future.result()
-
-                    if error:
-                        with _print_lock:
-                            print(
-                                f"[{completed}/{len(tenant_ids)}] ✗ Failed: {tenant_id}: {error}",
-                                file=sys.stderr,
-                            )
-                        failed_tenants.append((tenant_id, error))
-                    elif was_cleaned:
-                        with _csv_lock:
-                            timestamp = datetime.now(timezone.utc).isoformat()
-                            csv_writer.writerow([tenant_id, timestamp])
-                            csv_file.flush()
-                        successful_tenants.append(tenant_id)
-                        with _print_lock:
-                            print(
-                                f"[{completed}/{len(tenant_ids)}] ✓ Cleaned: {tenant_id}"
-                            )
-                    else:
-                        skipped_tenants.append(tenant_id)
-                        with _print_lock:
-                            print(
-                                f"[{completed}/{len(tenant_ids)}] ⊘ Skipped: {tenant_id}"
-                            )
+            _cleanup_in_parallel(tenant_ids, config, concurrency, log, results)
 
     # Print summary
-    if len(tenant_ids) > 1:
-        print(f"\n{'=' * 80}")
-        print("CLEANUP SUMMARY")
-        print(f"{'=' * 80}")
-        print(f"Total tenants: {len(tenant_ids)}")
-        print(f"Successful: {len(successful_tenants)}")
-        print(f"Skipped: {len(skipped_tenants)}")
-        print(f"Failed: {len(failed_tenants)}")
-        print(f"\nSuccessfully cleaned tenants written to: {csv_output_path}")
-
-        if skipped_tenants:
-            print(f"\nSkipped tenants ({len(skipped_tenants)}):")
-            for tenant_id in skipped_tenants:
-                print(f"  - {tenant_id}")
-
-        if failed_tenants:
-            print(f"\nFailed tenants ({len(failed_tenants)}):")
-            for tenant_id, error in failed_tenants:
-                print(f"  - {tenant_id}: {error}")
-
-        print(f"{'=' * 80}")
-
-        if failed_tenants:
-            sys.exit(1)
+    _print_summary(tenant_ids, results, csv_output_path)
 
 
 if __name__ == "__main__":

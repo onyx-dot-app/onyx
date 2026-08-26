@@ -1,7 +1,8 @@
 import json
 import time
 from collections.abc import Callable
-from typing import Any, Literal
+from functools import partial
+from typing import Any, Literal, NamedTuple
 
 from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.chat_utils import (
@@ -377,6 +378,197 @@ def _build_project_message(
     return messages
 
 
+def _marker_replay_tokens(token_counter: Callable[[str], int] | None) -> int:
+    """Token cost of the text marker that replaces a single replayed image."""
+    sample_marker = NON_VISION_IMAGE_MARKER.format(file_id="0" * 36)
+    return (
+        token_counter(sample_marker)
+        if token_counter
+        else _NON_VISION_MARKER_TOKEN_FALLBACK
+    )
+
+
+def _replay_token_count(
+    msg: ChatMessageSimple,
+    *,
+    image_files_replayed_as_markers: bool,
+    marker_tokens: int,
+) -> int:
+    """Token cost of a message as it is actually replayed to the model."""
+    if not image_files_replayed_as_markers:
+        return msg.token_count
+    # Charge markers for every IMAGE entry, including ones whose stored
+    # token contribution is zero (project/context images are never
+    # counted) — the marker text is still sent for them.
+    num_images = sum(
+        1 for f in msg.image_files or [] if f.file_type == ChatFileType.IMAGE
+    )
+    if not num_images:
+        return msg.token_count
+    return max(0, msg.token_count - msg.image_token_count) + num_images * marker_tokens
+
+
+def _filter_to_last_n_user_messages(
+    simple_chat_history: list[ChatMessageSimple],
+    last_n_user_messages: int | None,
+) -> list[ChatMessageSimple]:
+    """Keep only the messages from the last N user messages onwards."""
+    if last_n_user_messages is None:
+        return simple_chat_history
+
+    user_msg_indices = [
+        i
+        for i, msg in enumerate(simple_chat_history)
+        if msg.message_type == MessageType.USER
+    ]
+    if not user_msg_indices:
+        raise ValueError("No user message found in simple_chat_history")
+
+    # If we have more than n user messages, keep only the last n. For example,
+    # if last_n_user_messages=2, we start at the 2nd-to-last user message.
+    if len(user_msg_indices) <= last_n_user_messages:
+        return simple_chat_history
+    return simple_chat_history[user_msg_indices[-last_n_user_messages] :]
+
+
+def _split_at_last_user_message(
+    simple_chat_history: list[ChatMessageSimple],
+) -> tuple[list[ChatMessageSimple], ChatMessageSimple, list[ChatMessageSimple]]:
+    """Split the history around the last USER message.
+
+    The history may contain tool calls and responses after the last user
+    message. Returns the messages before it, the message itself, and the
+    messages after it.
+    """
+    last_user_msg_index = None
+    for i in range(len(simple_chat_history) - 1, -1, -1):
+        if simple_chat_history[i].message_type == MessageType.USER:
+            last_user_msg_index = i
+            break
+
+    if last_user_msg_index is None:
+        raise ValueError("No user message found in simple_chat_history")
+
+    return (
+        simple_chat_history[:last_user_msg_index],
+        simple_chat_history[last_user_msg_index],
+        simple_chat_history[last_user_msg_index + 1 :],
+    )
+
+
+def _truncate_history_to_budget(
+    history_before_last_user: list[ChatMessageSimple],
+    remaining_budget: int,
+    replay_token_count: Callable[[ChatMessageSimple], int],
+) -> tuple[list[ChatMessageSimple], int]:
+    """Keep the newest messages that fit the budget and drop the older ones.
+
+    Returns the kept messages and their total replay token count.
+    """
+    kept: list[ChatMessageSimple] = []
+    current_token_count = 0
+
+    for msg in reversed(history_before_last_user):
+        msg_tokens = replay_token_count(msg)
+        if current_token_count + msg_tokens <= remaining_budget:
+            msg.should_cache = True
+            kept.insert(0, msg)
+            current_token_count += msg_tokens
+        else:
+            # Can't fit this message, stop truncating.
+            # This message and everything older is dropped.
+            break
+
+    return kept, current_token_count
+
+
+def _collect_dropped_file_ids(
+    history_before_last_user: list[ChatMessageSimple],
+    kept_history: list[ChatMessageSimple],
+    simple_chat_history: list[ChatMessageSimple],
+    all_injected_file_metadata: dict[str, FileToolMetadata] | None,
+) -> list[str]:
+    """Collect file_ids of files the truncated history no longer contains.
+
+    The truncation keeps the most recent messages, so the dropped ones are at
+    the start of the original list up to (len(history) - len(kept)).
+    """
+    num_dropped = len(history_before_last_user) - len(kept_history)
+    dropped_file_ids: list[str] = [
+        msg.file_id
+        for msg in history_before_last_user[:num_dropped]
+        if msg.file_id is not None
+    ]
+
+    # Also treat "orphaned" metadata entries as dropped -- these are files
+    # from messages removed by summary truncation (before convert_chat_history
+    # ran), so no ChatMessageSimple was ever tagged with their file_id.
+    if all_injected_file_metadata:
+        surviving_file_ids = {
+            msg.file_id for msg in simple_chat_history if msg.file_id is not None
+        }
+        for fid in all_injected_file_metadata:
+            if fid not in surviving_file_ids and fid not in dropped_file_ids:
+                dropped_file_ids.append(fid)
+
+    return dropped_file_ids
+
+
+def _build_forgotten_files_message(
+    dropped_file_ids: list[str],
+    all_injected_file_metadata: dict[str, FileToolMetadata] | None,
+    token_counter: Callable[[str], int] | None,
+    kept_history: list[ChatMessageSimple],
+    kept_token_count: int,
+    remaining_budget: int,
+    replay_token_count: Callable[[ChatMessageSimple], int],
+) -> ChatMessageSimple | None:
+    """Build the metadata message for file messages dropped from the history.
+
+    Only built when we have metadata for the dropped files, which means the
+    FileReaderTool is available. Evicts further messages from ``kept_history``
+    in place when the metadata message does not fit the budget.
+    """
+    if not (dropped_file_ids and all_injected_file_metadata and token_counter):
+        return None
+
+    forgotten_meta = [
+        all_injected_file_metadata[fid]
+        for fid in dropped_file_ids
+        if fid in all_injected_file_metadata
+    ]
+    if not forgotten_meta:
+        return None
+
+    logger.debug(
+        "FileReader: building forgotten-files message for %s",
+        [(m.file_id, m.filename) for m in forgotten_meta],
+    )
+    forgotten_files_message = _create_file_tool_metadata_message(
+        forgotten_meta, token_counter
+    )
+    # Shrink the remaining budget. If the metadata message doesn't
+    # fit we may need to drop more history messages.
+    remaining_budget -= forgotten_files_message.token_count
+    while kept_history and kept_token_count > remaining_budget:
+        evicted = kept_history.pop(0)
+        kept_token_count -= replay_token_count(evicted)
+        # If the evicted message is itself a file, add it to the
+        # forgotten metadata (it's now dropped too).
+        if (
+            evicted.file_id is not None
+            and evicted.file_id in all_injected_file_metadata
+            and evicted.file_id not in {m.file_id for m in forgotten_meta}
+        ):
+            forgotten_meta.append(all_injected_file_metadata[evicted.file_id])
+            # Rebuild the message with the new entry
+            forgotten_files_message = _create_file_tool_metadata_message(
+                forgotten_meta, token_counter
+            )
+
+    return forgotten_files_message
+
+
 def construct_message_history(
     system_prompt: ChatMessageSimple | None,
     custom_agent_prompt: ChatMessageSimple | None,
@@ -399,29 +591,14 @@ def construct_message_history(
     # input, translate_history_to_llm_format sends short text markers instead
     # of the images, so charging the stored image token cost would evict
     # history that actually fits.
-    marker_tokens = 0
-    if image_files_replayed_as_markers:
-        sample_marker = NON_VISION_IMAGE_MARKER.format(file_id="0" * 36)
-        marker_tokens = (
-            token_counter(sample_marker)
-            if token_counter
-            else _NON_VISION_MARKER_TOKEN_FALLBACK
-        )
-
-    def _replay_token_count(msg: ChatMessageSimple) -> int:
-        if not image_files_replayed_as_markers:
-            return msg.token_count
-        # Charge markers for every IMAGE entry, including ones whose stored
-        # token contribution is zero (project/context images are never
-        # counted) — the marker text is still sent for them.
-        num_images = sum(
-            1 for f in msg.image_files or [] if f.file_type == ChatFileType.IMAGE
-        )
-        if not num_images:
-            return msg.token_count
-        return (
-            max(0, msg.token_count - msg.image_token_count) + num_images * marker_tokens
-        )
+    marker_tokens = (
+        _marker_replay_tokens(token_counter) if image_files_replayed_as_markers else 0
+    )
+    replay_token_count = partial(
+        _replay_token_count,
+        image_files_replayed_as_markers=image_files_replayed_as_markers,
+        marker_tokens=marker_tokens,
+    )
 
     # Build the project / file-metadata messages up front so we can use their
     # actual token counts for the budget.
@@ -453,49 +630,23 @@ def construct_message_history(
         return result
 
     # If last_n_user_messages is set, filter history to only include the last n user messages
-    if last_n_user_messages is not None:
-        # Find all user message indices
-        user_msg_indices = [
-            i
-            for i, msg in enumerate(simple_chat_history)
-            if msg.message_type == MessageType.USER
-        ]
-
-        if not user_msg_indices:
-            raise ValueError("No user message found in simple_chat_history")
-
-        # If we have more than n user messages, keep only the last n
-        if len(user_msg_indices) > last_n_user_messages:
-            # Find the index of the n-th user message from the end
-            # For example, if last_n_user_messages=2, we want the 2nd-to-last user message
-            nth_user_msg_index = user_msg_indices[-(last_n_user_messages)]
-            # Keep everything from that user message onwards
-            simple_chat_history = simple_chat_history[nth_user_msg_index:]
-
-    # Find the last USER message in the history
-    # The history may contain tool calls and responses after the last user message
-    last_user_msg_index = None
-    for i in range(len(simple_chat_history) - 1, -1, -1):
-        if simple_chat_history[i].message_type == MessageType.USER:
-            last_user_msg_index = i
-            break
-
-    if last_user_msg_index is None:
-        raise ValueError("No user message found in simple_chat_history")
+    simple_chat_history = _filter_to_last_n_user_messages(
+        simple_chat_history, last_n_user_messages
+    )
 
     # Split history into three parts:
     # 1. History before the last user message
     # 2. The last user message
     # 3. Messages after the last user message (tool calls, responses, etc.)
-    history_before_last_user = simple_chat_history[:last_user_msg_index]
-    last_user_message = simple_chat_history[last_user_msg_index]
-    messages_after_last_user = simple_chat_history[last_user_msg_index + 1 :]
+    (
+        history_before_last_user,
+        last_user_message,
+        messages_after_last_user,
+    ) = _split_at_last_user_message(simple_chat_history)
 
     # Calculate tokens needed for the last user message and everything after it
-    last_user_tokens = _replay_token_count(last_user_message)
-    after_user_tokens = sum(
-        _replay_token_count(msg) for msg in messages_after_last_user
-    )
+    last_user_tokens = replay_token_count(last_user_message)
+    after_user_tokens = sum(replay_token_count(msg) for msg in messages_after_last_user)
 
     # Check if we can fit at least the last user message and messages after it
     required_tokens = last_user_tokens + after_user_tokens
@@ -511,78 +662,29 @@ def construct_message_history(
     # Truncate history_before_last_user from the top to fit in remaining budget.
     # Track dropped file messages so we can provide their metadata to the
     # FileReaderTool instead.
-    truncated_history_before: list[ChatMessageSimple] = []
-    current_token_count = 0
+    truncated_history_before, current_token_count = _truncate_history_to_budget(
+        history_before_last_user, remaining_budget, replay_token_count
+    )
 
-    for msg in reversed(history_before_last_user):
-        msg_tokens = _replay_token_count(msg)
-        if current_token_count + msg_tokens <= remaining_budget:
-            msg.should_cache = True
-            truncated_history_before.insert(0, msg)
-            current_token_count += msg_tokens
-        else:
-            # Can't fit this message, stop truncating.
-            # This message and everything older is dropped.
-            break
-
-    # Collect file_ids from ALL dropped messages (those not in
-    # truncated_history_before). The truncation loop above keeps the most
-    # recent messages, so the dropped ones are at the start of the original
-    # list up to (len(history) - len(kept)).
-    num_kept = len(truncated_history_before)
-    dropped_file_ids: list[str] = [
-        msg.file_id
-        for msg in history_before_last_user[: len(history_before_last_user) - num_kept]
-        if msg.file_id is not None
-    ]
-
-    # Also treat "orphaned" metadata entries as dropped -- these are files
-    # from messages removed by summary truncation (before convert_chat_history
-    # ran), so no ChatMessageSimple was ever tagged with their file_id.
-    if all_injected_file_metadata:
-        surviving_file_ids = {
-            msg.file_id for msg in simple_chat_history if msg.file_id is not None
-        }
-        for fid in all_injected_file_metadata:
-            if fid not in surviving_file_ids and fid not in dropped_file_ids:
-                dropped_file_ids.append(fid)
+    dropped_file_ids = _collect_dropped_file_ids(
+        history_before_last_user=history_before_last_user,
+        kept_history=truncated_history_before,
+        simple_chat_history=simple_chat_history,
+        all_injected_file_metadata=all_injected_file_metadata,
+    )
 
     # Build a forgotten-files metadata message if any file messages were
     # dropped AND we have metadata for them (meaning the FileReaderTool is
     # available). Reserve tokens for this message in the budget.
-    forgotten_files_message: ChatMessageSimple | None = None
-    if dropped_file_ids and all_injected_file_metadata and token_counter:
-        forgotten_meta = [
-            all_injected_file_metadata[fid]
-            for fid in dropped_file_ids
-            if fid in all_injected_file_metadata
-        ]
-        if forgotten_meta:
-            logger.debug(
-                "FileReader: building forgotten-files message for %s",
-                [(m.file_id, m.filename) for m in forgotten_meta],
-            )
-            forgotten_files_message = _create_file_tool_metadata_message(
-                forgotten_meta, token_counter
-            )
-            # Shrink the remaining budget. If the metadata message doesn't
-            # fit we may need to drop more history messages.
-            remaining_budget -= forgotten_files_message.token_count
-            while truncated_history_before and current_token_count > remaining_budget:
-                evicted = truncated_history_before.pop(0)
-                current_token_count -= _replay_token_count(evicted)
-                # If the evicted message is itself a file, add it to the
-                # forgotten metadata (it's now dropped too).
-                if (
-                    evicted.file_id is not None
-                    and evicted.file_id in all_injected_file_metadata
-                    and evicted.file_id not in {m.file_id for m in forgotten_meta}
-                ):
-                    forgotten_meta.append(all_injected_file_metadata[evicted.file_id])
-                    # Rebuild the message with the new entry
-                    forgotten_files_message = _create_file_tool_metadata_message(
-                        forgotten_meta, token_counter
-                    )
+    forgotten_files_message = _build_forgotten_files_message(
+        dropped_file_ids=dropped_file_ids,
+        all_injected_file_metadata=all_injected_file_metadata,
+        token_counter=token_counter,
+        kept_history=truncated_history_before,
+        kept_token_count=current_token_count,
+        remaining_budget=remaining_budget,
+        replay_token_count=replay_token_count,
+    )
 
     # Build the final message list according to README ordering:
     # [system], [history_before_last_user], [custom_agent], [context_files],
@@ -740,6 +842,464 @@ def select_reminder_text(
     )
 
 
+def _select_tools_for_cycle(
+    tools: list[Tool],
+    forced_tool_id: int | None,
+    out_of_cycles: bool,
+    ran_image_gen: bool,
+) -> tuple[list[Tool], ToolChoiceOptions, int | None]:
+    """Pick the tools and tool choice for one cycle.
+
+    Returns the tools, the tool choice, and the forced tool id to carry into
+    the next cycle (cleared once the forced tool has been requested).
+    """
+    if forced_tool_id:
+        # Needs to be just the single one because the "required" currently doesn't have a specified tool, just a binary
+        final_tools = [tool for tool in tools if tool.id == forced_tool_id]
+        if not final_tools:
+            raise ValueError(f"Tool {forced_tool_id} not found in tools")
+        return final_tools, ToolChoiceOptions.REQUIRED, None
+
+    if out_of_cycles or ran_image_gen:
+        # Last cycle, no tools allowed, just answer!
+        return [], ToolChoiceOptions.NONE, forced_tool_id
+
+    return tools, ToolChoiceOptions.AUTO, forced_tool_id
+
+
+def _build_cycle_prompts(
+    persona: Persona | None,
+    persona_system_prompt: str | None,
+    custom_agent_prompt: str | None,
+    default_base_system_prompt: str,
+    user_memory_context: UserMemoryContext | None,
+    inject_memories_in_prompt: bool,
+    tools: list[Tool],
+    datetime_aware: bool,
+    cite_documents: bool,
+    token_counter: Callable[[str], int],
+) -> tuple[ChatMessageSimple | None, ChatMessageSimple | None]:
+    """Build the system prompt and custom agent prompt messages for one cycle."""
+    if persona and persona.replace_base_system_prompt:
+        # Handles the case where user has checked off the "Replace base system prompt" checkbox
+        processed_system_prompt = (
+            process_prompt_template(
+                persona_system_prompt,
+                datetime_aware=datetime_aware,
+                append_datetime_if_aware=True,
+                should_cite_documents=cite_documents,
+            )
+            if persona_system_prompt
+            else None
+        )
+        system_prompt = (
+            ChatMessageSimple(
+                message=processed_system_prompt,
+                token_count=token_counter(processed_system_prompt),
+                message_type=MessageType.SYSTEM,
+            )
+            if processed_system_prompt
+            else None
+        )
+        return system_prompt, None
+
+    # If it's an empty string, we assume the user does not want to include it as an empty System message
+    if default_base_system_prompt:
+        prompt_memory_context = (
+            user_memory_context
+            if inject_memories_in_prompt
+            else (
+                user_memory_context.without_memories() if user_memory_context else None
+            )
+        )
+        system_prompt_str = build_system_prompt(
+            base_system_prompt=default_base_system_prompt,
+            datetime_aware=datetime_aware,
+            user_memory_context=prompt_memory_context,
+            tools=tools,
+            should_cite_documents=cite_documents,
+        )
+        system_prompt = ChatMessageSimple(
+            message=system_prompt_str,
+            token_count=token_counter(system_prompt_str),
+            message_type=MessageType.SYSTEM,
+        )
+        processed_custom_agent_prompt = (
+            process_prompt_template(
+                custom_agent_prompt,
+                datetime_aware=datetime_aware,
+                append_datetime_if_aware=False,
+                should_cite_documents=cite_documents,
+            )
+            if custom_agent_prompt
+            else None
+        )
+        custom_agent_prompt_msg = (
+            ChatMessageSimple(
+                message=processed_custom_agent_prompt,
+                token_count=token_counter(processed_custom_agent_prompt),
+                message_type=MessageType.USER,
+            )
+            if processed_custom_agent_prompt
+            else None
+        )
+        return system_prompt, custom_agent_prompt_msg
+
+    # If there is a custom agent prompt, it replaces the system prompt when the default system prompt is empty
+    processed_custom_agent_prompt = (
+        process_prompt_template(
+            custom_agent_prompt,
+            datetime_aware=datetime_aware,
+            append_datetime_if_aware=True,
+            should_cite_documents=cite_documents,
+        )
+        if custom_agent_prompt
+        else None
+    )
+    system_prompt = (
+        ChatMessageSimple(
+            message=processed_custom_agent_prompt,
+            token_count=token_counter(processed_custom_agent_prompt),
+            message_type=MessageType.SYSTEM,
+        )
+        if processed_custom_agent_prompt
+        else None
+    )
+    return system_prompt, None
+
+
+def _emit_tool_call_packets(
+    emitter: Emitter,
+    tool_calls: list[ToolCallKickoff],
+) -> None:
+    """Emit the per-tool-call debug packets and the parallel branching marker."""
+    if INTEGRATION_TESTS_MODE and tool_calls:
+        for tool_call in tool_calls:
+            emitter.emit(
+                Packet(
+                    placement=tool_call.placement,
+                    obj=ToolCallDebug(
+                        tool_call_id=tool_call.tool_call_id,
+                        tool_name=tool_call.tool_name,
+                        tool_args=tool_call.tool_args,
+                    ),
+                )
+            )
+
+    if len(tool_calls) > 1:
+        emitter.emit(
+            Packet(
+                placement=Placement(turn_index=tool_calls[0].placement.turn_index),
+                obj=TopLevelBranching(num_parallel_branches=len(tool_calls)),
+            )
+        )
+
+
+def _python_tool_generated_files(tool_response: ToolResponse) -> bool:
+    """Whether a Python tool response reports generated files with download links."""
+    try:
+        parsed = json.loads(tool_response.llm_facing_response)
+        return bool(parsed.get("generated_files"))
+    except (json.JSONDecodeError, AttributeError):
+        return False
+
+
+def _record_search_docs(
+    search_docs: list[SearchDoc],
+    tool_name: str,
+    state_container: ChatStateContainer,
+    gathered_documents: list[SearchDoc] | None,
+    chat_files: list[ChatFile],
+) -> tuple[list[SearchDoc] | None, bool]:
+    """Persist and accumulate search hits, staging any files attached to them.
+
+    Extends ``chat_files`` in place. Returns the updated gathered documents and
+    whether a web search returned results (drives the open_url reminder).
+    """
+    # Add ALL search docs to state container for DB persistence
+    if search_docs:
+        state_container.add_search_docs(search_docs)
+
+    if gathered_documents:
+        gathered_documents.extend(search_docs)
+    else:
+        gathered_documents = search_docs
+
+    # This is used for the Open URL reminder in the next cycle
+    # only do this if the web search tool yielded results
+    ran_web_search = bool(search_docs) and tool_name == WebSearchTool.NAME
+
+    # Stage any raw source files attached to these hits into
+    # the session's chat_files so the next Python tool call
+    # sees them already uploaded under their display names.
+    if search_docs:
+        staged = build_python_chat_files_from_search_docs(
+            search_docs=search_docs,
+        )
+        if staged:
+            existing_filenames = {cf.filename for cf in chat_files}
+            chat_files.extend(
+                cf for cf in staged if cf.filename not in existing_filenames
+            )
+
+    return gathered_documents, ran_web_search
+
+
+def _persist_memory_tool_response(
+    tool_response: ToolResponse,
+    user_memory_context: UserMemoryContext | None,
+) -> tuple[MemoryToolResponseSnapshot | None, str | None]:
+    """Persist a memory tool write.
+
+    Returns the saved snapshot, or a refusal message when the chat is incognito.
+    """
+    memory_response = tool_response.rich_response
+    if not isinstance(memory_response, MemoryToolResponse):
+        return None, None
+
+    # Any incognito mode refuses memory writes with an explicit
+    # error, so neither the model nor the user sees a saved
+    # memory that does not exist.
+    if get_current_incognito_record_mode() is not None:
+        return None, (
+            "Error: memories cannot be saved from an incognito "
+            "chat. Tell the user their request was not saved."
+        )
+
+    persisted_memory_id: int | None = None
+    if user_memory_context and user_memory_context.user_id:
+        if memory_response.index_to_replace is not None:
+            persisted_memory_id = update_memory_at_index(
+                user_id=user_memory_context.user_id,
+                index=memory_response.index_to_replace,
+                new_text=memory_response.memory_text,
+            )
+        else:
+            persisted_memory_id = add_memory(
+                user_id=user_memory_context.user_id,
+                memory_text=memory_response.memory_text,
+            )
+
+    operation: Literal["add", "update"] = (
+        "update" if memory_response.index_to_replace is not None else "add"
+    )
+    return (
+        MemoryToolResponseSnapshot(
+            memory_text=memory_response.memory_text,
+            operation=operation,
+            memory_id=persisted_memory_id,
+            index=memory_response.index_to_replace,
+        ),
+        None,
+    )
+
+
+def _resolve_saved_tool_response(
+    tool_response: ToolResponse,
+    memory_snapshot: MemoryToolResponseSnapshot | None,
+    incognito_memory_refusal: str | None,
+) -> str:
+    """Pick the tool response text to persist on the tool call.
+
+    Overwrites ``llm_facing_response`` on an incognito memory refusal so the
+    next LLM cycle sees the refusal too.
+    """
+    if incognito_memory_refusal:
+        # The next LLM cycle must see the refusal too.
+        tool_response.llm_facing_response = incognito_memory_refusal
+        return incognito_memory_refusal
+    if memory_snapshot:
+        return json.dumps(memory_snapshot.model_dump())
+    if isinstance(tool_response.rich_response, CustomToolCallSummary):
+        return json.dumps(tool_response.rich_response.model_dump())
+    if isinstance(tool_response.rich_response, str):
+        return tool_response.rich_response
+    return tool_response.llm_facing_response
+
+
+class _ToolResponseOutcome(NamedTuple):
+    """Loop-carried state produced by processing a single tool response."""
+
+    gathered_documents: list[SearchDoc] | None
+    ran_search_tool: bool
+    generated_python_files: bool
+    ran_web_search: bool
+
+
+def _process_tool_response(
+    tool_response: ToolResponse,
+    final_tools: list[Tool],
+    state_container: ChatStateContainer,
+    citation_processor: DynamicCitationProcessor,
+    user_memory_context: UserMemoryContext | None,
+    reasoning: str | None,
+    turn_index: int,
+    chat_files: list[ChatFile],
+    gathered_documents: list[SearchDoc] | None,
+    code_interpreter_file_generated: bool,
+) -> _ToolResponseOutcome:
+    """Persist one tool response and fold its results into the loop state."""
+    # Extract tool_call from the response (set by run_tool_calls)
+    if tool_response.tool_call is None:
+        raise ValueError("Tool response missing tool_call reference")
+
+    tool_call = tool_response.tool_call
+    tab_index = tool_call.placement.tab_index
+
+    # Track if search tool was called (for skipping query expansion on subsequent calls)
+    ran_search_tool = tool_call.tool_name == SearchTool.NAME
+
+    # Track if code interpreter generated files with download links
+    generated_python_files = (
+        tool_call.tool_name == PythonTool.NAME
+        and not code_interpreter_file_generated
+        and _python_tool_generated_files(tool_response)
+    )
+
+    tools_by_name = {tool.name: tool for tool in final_tools}
+
+    # Add the results to the chat history. Even though tools may run in parallel,
+    # LLM APIs require linear history, so results are added sequentially.
+    # Get the tool object to retrieve tool_id
+    tool = tools_by_name.get(tool_call.tool_name)
+    if not tool:
+        raise ValueError(f"Tool '{tool_call.tool_name}' not found in tools list")
+
+    # Extract search_docs if this is a search tool response
+    search_docs = None
+    displayed_docs = None
+    ran_web_search = False
+    if isinstance(tool_response.rich_response, SearchDocsResponse):
+        search_docs = tool_response.rich_response.search_docs
+        displayed_docs = tool_response.rich_response.displayed_docs
+        gathered_documents, ran_web_search = _record_search_docs(
+            search_docs=search_docs,
+            tool_name=tool_call.tool_name,
+            state_container=state_container,
+            gathered_documents=gathered_documents,
+            chat_files=chat_files,
+        )
+
+    # Extract generated_images if this is an image generation tool response
+    generated_images = None
+    if isinstance(tool_response.rich_response, FinalImageGenerationResponse):
+        generated_images = tool_response.rich_response.generated_images
+
+    # Extract generated_files if this is a code interpreter response
+    generated_files = None
+    if isinstance(tool_response.rich_response, PythonToolRichResponse):
+        generated_files = tool_response.rich_response.generated_files or None
+
+    # Custom tools save image/CSV blobs and return their ids.
+    generated_file_ids = None
+    if isinstance(tool_response.rich_response, CustomToolCallSummary) and isinstance(
+        tool_response.rich_response.tool_result, CustomToolUserFileSnapshot
+    ):
+        generated_file_ids = tool_response.rich_response.tool_result.file_ids or None
+
+    # Persist memory if this is a memory tool response
+    memory_snapshot, incognito_memory_refusal = _persist_memory_tool_response(
+        tool_response, user_memory_context
+    )
+    saved_response = _resolve_saved_tool_response(
+        tool_response, memory_snapshot, incognito_memory_refusal
+    )
+
+    tool_call_info = ToolCallInfo(
+        parent_tool_call_id=None,  # Top-level tool calls are attached to the chat message
+        turn_index=turn_index,
+        tab_index=tab_index,
+        tool_name=tool_call.tool_name,
+        tool_call_id=tool_call.tool_call_id,
+        tool_id=tool.id,
+        reasoning_tokens=reasoning,  # All tool calls from this loop share the same reasoning
+        tool_call_arguments=tool_call.tool_args,
+        tool_call_response=saved_response,
+        search_docs=displayed_docs or search_docs,
+        generated_images=generated_images,
+        generated_files=generated_files,
+        generated_file_ids=generated_file_ids,
+    )
+    # Add to state container for partial save support
+    state_container.add_tool_call(tool_call_info)
+
+    # Update citation processor if this was a search tool
+    update_citation_processor_from_tool_response(tool_response, citation_processor)
+
+    return _ToolResponseOutcome(
+        gathered_documents=gathered_documents,
+        ran_search_tool=ran_search_tool,
+        generated_python_files=generated_python_files,
+        ran_web_search=ran_web_search,
+    )
+
+
+def _append_tool_call_history(
+    simple_chat_history: list[ChatMessageSimple],
+    tool_responses: list[ToolResponse],
+    token_counter: Callable[[str], int],
+) -> None:
+    """Append this turn's tool calls and responses to the history.
+
+    Uses the OpenAI parallel tool calling format:
+    1. ONE ASSISTANT message with tool_calls array
+    2. N TOOL_CALL_RESPONSE messages (one per tool call)
+    """
+    if not tool_responses:
+        return
+
+    # Filter to only responses with valid tool_call references
+    valid_tool_responses = [tr for tr in tool_responses if tr.tool_call is not None]
+
+    # Build ToolCallSimple list for all tool calls in this turn
+    tool_calls_simple: list[ToolCallSimple] = []
+    for tool_response in valid_tool_responses:
+        tc = tool_response.tool_call
+        assert (
+            tc is not None
+        )  # Already filtered above, this is just for typing purposes
+
+        tool_call_message = tc.to_msg_str()
+        tool_call_token_count = token_counter(tool_call_message)
+
+        tool_calls_simple.append(
+            ToolCallSimple(
+                tool_call_id=tc.tool_call_id,
+                tool_name=tc.tool_name,
+                tool_arguments=tc.tool_args,
+                token_count=tool_call_token_count,
+            )
+        )
+
+    # Create ONE ASSISTANT message with all tool calls for this turn
+    total_tool_call_tokens = sum(tc.token_count for tc in tool_calls_simple)
+    assistant_with_tools = ChatMessageSimple(
+        message="",  # No text content when making tool calls
+        token_count=total_tool_call_tokens,
+        message_type=MessageType.ASSISTANT,
+        tool_calls=tool_calls_simple,
+        image_files=None,
+    )
+    simple_chat_history.append(assistant_with_tools)
+
+    # Add TOOL_CALL_RESPONSE messages for each tool call
+    for tool_response in valid_tool_responses:
+        tc = tool_response.tool_call
+        assert tc is not None  # Already filtered above
+
+        tool_response_message = tool_response.llm_facing_response
+        tool_response_token_count = token_counter(tool_response_message)
+
+        tool_response_msg = ChatMessageSimple(
+            message=tool_response_message,
+            token_count=tool_response_token_count,
+            message_type=MessageType.TOOL_CALL_RESPONSE,
+            tool_call_id=tc.tool_call_id,
+            image_files=None,
+        )
+        simple_chat_history.append(tool_response_msg)
+
+
 def run_llm_loop(
     emitter: Emitter,
     state_container: ChatStateContainer,
@@ -882,113 +1442,30 @@ def run_llm_loop(
         for llm_cycle_count in range(MAX_LLM_CYCLES):
             # Handling tool calls based on cycle count and past cycle conditions
             out_of_cycles = llm_cycle_count == MAX_LLM_CYCLES - 1
-            if forced_tool_id:
-                # Needs to be just the single one because the "required" currently doesn't have a specified tool, just a binary
-                final_tools = [tool for tool in tools if tool.id == forced_tool_id]
-                if not final_tools:
-                    raise ValueError(f"Tool {forced_tool_id} not found in tools")
-                tool_choice = ToolChoiceOptions.REQUIRED
-                forced_tool_id = None
-            elif out_of_cycles or ran_image_gen:
-                # Last cycle, no tools allowed, just answer!
-                tool_choice = ToolChoiceOptions.NONE
-                final_tools = []
-            else:
-                tool_choice = ToolChoiceOptions.AUTO
-                final_tools = tools
+            final_tools, tool_choice, forced_tool_id = _select_tools_for_cycle(
+                tools=tools,
+                forced_tool_id=forced_tool_id,
+                out_of_cycles=out_of_cycles,
+                ran_image_gen=ran_image_gen,
+            )
 
             # Handling the system prompt and custom agent prompt
             # The section below calculates the available tokens for history a bit more accurately
             # now that project files are loaded in.
             persona_datetime_aware = persona.datetime_aware if persona else True
             cite_documents = should_cite_documents or always_cite_documents
-            if persona and persona.replace_base_system_prompt:
-                # Handles the case where user has checked off the "Replace base system prompt" checkbox
-                processed_system_prompt = (
-                    process_prompt_template(
-                        persona_system_prompt,
-                        datetime_aware=persona_datetime_aware,
-                        append_datetime_if_aware=True,
-                        should_cite_documents=cite_documents,
-                    )
-                    if persona_system_prompt
-                    else None
-                )
-                system_prompt = (
-                    ChatMessageSimple(
-                        message=processed_system_prompt,
-                        token_count=token_counter(processed_system_prompt),
-                        message_type=MessageType.SYSTEM,
-                    )
-                    if processed_system_prompt
-                    else None
-                )
-                custom_agent_prompt_msg = None
-            else:
-                # If it's an empty string, we assume the user does not want to include it as an empty System message
-                if default_base_system_prompt:
-                    prompt_memory_context = (
-                        user_memory_context
-                        if inject_memories_in_prompt
-                        else (
-                            user_memory_context.without_memories()
-                            if user_memory_context
-                            else None
-                        )
-                    )
-                    system_prompt_str = build_system_prompt(
-                        base_system_prompt=default_base_system_prompt,
-                        datetime_aware=persona_datetime_aware,
-                        user_memory_context=prompt_memory_context,
-                        tools=tools,
-                        should_cite_documents=cite_documents,
-                    )
-                    system_prompt = ChatMessageSimple(
-                        message=system_prompt_str,
-                        token_count=token_counter(system_prompt_str),
-                        message_type=MessageType.SYSTEM,
-                    )
-                    processed_custom_agent_prompt = (
-                        process_prompt_template(
-                            custom_agent_prompt,
-                            datetime_aware=persona_datetime_aware,
-                            append_datetime_if_aware=False,
-                            should_cite_documents=cite_documents,
-                        )
-                        if custom_agent_prompt
-                        else None
-                    )
-                    custom_agent_prompt_msg = (
-                        ChatMessageSimple(
-                            message=processed_custom_agent_prompt,
-                            token_count=token_counter(processed_custom_agent_prompt),
-                            message_type=MessageType.USER,
-                        )
-                        if processed_custom_agent_prompt
-                        else None
-                    )
-                else:
-                    # If there is a custom agent prompt, it replaces the system prompt when the default system prompt is empty
-                    processed_custom_agent_prompt = (
-                        process_prompt_template(
-                            custom_agent_prompt,
-                            datetime_aware=persona_datetime_aware,
-                            append_datetime_if_aware=True,
-                            should_cite_documents=cite_documents,
-                        )
-                        if custom_agent_prompt
-                        else None
-                    )
-                    system_prompt = (
-                        ChatMessageSimple(
-                            message=processed_custom_agent_prompt,
-                            token_count=token_counter(processed_custom_agent_prompt),
-                            message_type=MessageType.SYSTEM,
-                        )
-                        if processed_custom_agent_prompt
-                        else None
-                    )
-                    custom_agent_prompt_msg = None
+            system_prompt, custom_agent_prompt_msg = _build_cycle_prompts(
+                persona=persona,
+                persona_system_prompt=persona_system_prompt,
+                custom_agent_prompt=custom_agent_prompt,
+                default_base_system_prompt=default_base_system_prompt,
+                user_memory_context=user_memory_context,
+                inject_memories_in_prompt=inject_memories_in_prompt,
+                tools=tools,
+                datetime_aware=persona_datetime_aware,
+                cite_documents=cite_documents,
+                token_counter=token_counter,
+            )
 
             processed_task_prompt = (
                 process_prompt_template(
@@ -1083,28 +1560,7 @@ def run_llm_loop(
             tool_responses: list[ToolResponse] = []
             tool_calls = llm_step_result.tool_calls or []
 
-            if INTEGRATION_TESTS_MODE and tool_calls:
-                for tool_call in tool_calls:
-                    emitter.emit(
-                        Packet(
-                            placement=tool_call.placement,
-                            obj=ToolCallDebug(
-                                tool_call_id=tool_call.tool_call_id,
-                                tool_name=tool_call.tool_name,
-                                tool_args=tool_call.tool_args,
-                            ),
-                        )
-                    )
-
-            if len(tool_calls) > 1:
-                emitter.emit(
-                    Packet(
-                        placement=Placement(
-                            turn_index=tool_calls[0].placement.turn_index
-                        ),
-                        obj=TopLevelBranching(num_parallel_branches=len(tool_calls)),
-                    )
-                )
+            _emit_tool_call_packets(emitter, tool_calls)
 
             # Quick note for why citation_mapping and citation_processors are both needed:
             # 1. Tools return lightweight string mappings, not SearchDoc objects
@@ -1139,234 +1595,32 @@ def run_llm_loop(
                 continue
 
             for tool_response in tool_responses:
-                # Extract tool_call from the response (set by run_tool_calls)
-                if tool_response.tool_call is None:
-                    raise ValueError("Tool response missing tool_call reference")
-
-                tool_call = tool_response.tool_call
-                tab_index = tool_call.placement.tab_index
-
-                # Track if search tool was called (for skipping query expansion on subsequent calls)
-                if tool_call.tool_name == SearchTool.NAME:
-                    has_called_search_tool = True
-
-                # Track if code interpreter generated files with download links
-                if (
-                    tool_call.tool_name == PythonTool.NAME
-                    and not code_interpreter_file_generated
-                ):
-                    try:
-                        parsed = json.loads(tool_response.llm_facing_response)
-                        if parsed.get("generated_files"):
-                            code_interpreter_file_generated = True
-                    except (json.JSONDecodeError, AttributeError):
-                        pass
-
-                tools_by_name = {tool.name: tool for tool in final_tools}
-
-                # Add the results to the chat history. Even though tools may run in parallel,
-                # LLM APIs require linear history, so results are added sequentially.
-                # Get the tool object to retrieve tool_id
-                tool = tools_by_name.get(tool_call.tool_name)
-                if not tool:
-                    raise ValueError(
-                        f"Tool '{tool_call.tool_name}' not found in tools list"
-                    )
-
-                # Extract search_docs if this is a search tool response
-                search_docs = None
-                displayed_docs = None
-                if isinstance(tool_response.rich_response, SearchDocsResponse):
-                    search_docs = tool_response.rich_response.search_docs
-                    displayed_docs = tool_response.rich_response.displayed_docs
-
-                    # Add ALL search docs to state container for DB persistence
-                    if search_docs:
-                        state_container.add_search_docs(search_docs)
-
-                    if gathered_documents:
-                        gathered_documents.extend(search_docs)
-                    else:
-                        gathered_documents = search_docs
-
-                    # This is used for the Open URL reminder in the next cycle
-                    # only do this if the web search tool yielded results
-                    if search_docs and tool_call.tool_name == WebSearchTool.NAME:
-                        just_ran_web_search = True
-
-                    # Stage any raw source files attached to these hits into
-                    # the session's chat_files so the next Python tool call
-                    # sees them already uploaded under their display names.
-                    if search_docs:
-                        staged = build_python_chat_files_from_search_docs(
-                            search_docs=search_docs,
-                        )
-                        if staged:
-                            existing_filenames = {cf.filename for cf in chat_files}
-                            chat_files.extend(
-                                cf
-                                for cf in staged
-                                if cf.filename not in existing_filenames
-                            )
-
-                # Extract generated_images if this is an image generation tool response
-                generated_images = None
-                if isinstance(
-                    tool_response.rich_response, FinalImageGenerationResponse
-                ):
-                    generated_images = tool_response.rich_response.generated_images
-
-                # Extract generated_files if this is a code interpreter response
-                generated_files = None
-                if isinstance(tool_response.rich_response, PythonToolRichResponse):
-                    generated_files = (
-                        tool_response.rich_response.generated_files or None
-                    )
-
-                # Custom tools save image/CSV blobs and return their ids.
-                generated_file_ids = None
-                if isinstance(
-                    tool_response.rich_response, CustomToolCallSummary
-                ) and isinstance(
-                    tool_response.rich_response.tool_result, CustomToolUserFileSnapshot
-                ):
-                    generated_file_ids = (
-                        tool_response.rich_response.tool_result.file_ids or None
-                    )
-
-                # Persist memory if this is a memory tool response
-                memory_snapshot: MemoryToolResponseSnapshot | None = None
-                incognito_memory_refusal: str | None = None
-                if isinstance(tool_response.rich_response, MemoryToolResponse):
-                    # Any incognito mode refuses memory writes with an explicit
-                    # error, so neither the model nor the user sees a saved
-                    # memory that does not exist.
-                    if get_current_incognito_record_mode() is not None:
-                        incognito_memory_refusal = (
-                            "Error: memories cannot be saved from an incognito "
-                            "chat. Tell the user their request was not saved."
-                        )
-                    else:
-                        persisted_memory_id: int | None = None
-                        if user_memory_context and user_memory_context.user_id:
-                            if tool_response.rich_response.index_to_replace is not None:
-                                persisted_memory_id = update_memory_at_index(
-                                    user_id=user_memory_context.user_id,
-                                    index=tool_response.rich_response.index_to_replace,
-                                    new_text=tool_response.rich_response.memory_text,
-                                )
-                            else:
-                                persisted_memory_id = add_memory(
-                                    user_id=user_memory_context.user_id,
-                                    memory_text=tool_response.rich_response.memory_text,
-                                )
-                        operation: Literal["add", "update"] = (
-                            "update"
-                            if tool_response.rich_response.index_to_replace is not None
-                            else "add"
-                        )
-                        memory_snapshot = MemoryToolResponseSnapshot(
-                            memory_text=tool_response.rich_response.memory_text,
-                            operation=operation,
-                            memory_id=persisted_memory_id,
-                            index=tool_response.rich_response.index_to_replace,
-                        )
-
-                if incognito_memory_refusal:
-                    saved_response = incognito_memory_refusal
-                    # The next LLM cycle must see the refusal too.
-                    tool_response.llm_facing_response = incognito_memory_refusal
-                elif memory_snapshot:
-                    saved_response = json.dumps(memory_snapshot.model_dump())
-                elif isinstance(tool_response.rich_response, CustomToolCallSummary):
-                    saved_response = json.dumps(
-                        tool_response.rich_response.model_dump()
-                    )
-                elif isinstance(tool_response.rich_response, str):
-                    saved_response = tool_response.rich_response
-                else:
-                    saved_response = tool_response.llm_facing_response
-
-                tool_call_info = ToolCallInfo(
-                    parent_tool_call_id=None,  # Top-level tool calls are attached to the chat message
+                outcome = _process_tool_response(
+                    tool_response=tool_response,
+                    final_tools=final_tools,
+                    state_container=state_container,
+                    citation_processor=citation_processor,
+                    user_memory_context=user_memory_context,
+                    # All tool calls from this loop share the same reasoning
+                    reasoning=llm_step_result.reasoning,
                     turn_index=llm_cycle_count + reasoning_cycles,
-                    tab_index=tab_index,
-                    tool_name=tool_call.tool_name,
-                    tool_call_id=tool_call.tool_call_id,
-                    tool_id=tool.id,
-                    reasoning_tokens=llm_step_result.reasoning,  # All tool calls from this loop share the same reasoning
-                    tool_call_arguments=tool_call.tool_args,
-                    tool_call_response=saved_response,
-                    search_docs=displayed_docs or search_docs,
-                    generated_images=generated_images,
-                    generated_files=generated_files,
-                    generated_file_ids=generated_file_ids,
+                    chat_files=chat_files,
+                    gathered_documents=gathered_documents,
+                    code_interpreter_file_generated=code_interpreter_file_generated,
                 )
-                # Add to state container for partial save support
-                state_container.add_tool_call(tool_call_info)
-
-                # Update citation processor if this was a search tool
-                update_citation_processor_from_tool_response(
-                    tool_response, citation_processor
+                gathered_documents = outcome.gathered_documents
+                has_called_search_tool = (
+                    has_called_search_tool or outcome.ran_search_tool
                 )
+                code_interpreter_file_generated = (
+                    code_interpreter_file_generated or outcome.generated_python_files
+                )
+                just_ran_web_search = just_ran_web_search or outcome.ran_web_search
 
             # After processing all tool responses for this turn, add messages to history
-            # using OpenAI parallel tool calling format:
-            # 1. ONE ASSISTANT message with tool_calls array
-            # 2. N TOOL_CALL_RESPONSE messages (one per tool call)
-            if tool_responses:
-                # Filter to only responses with valid tool_call references
-                valid_tool_responses = [
-                    tr for tr in tool_responses if tr.tool_call is not None
-                ]
-
-                # Build ToolCallSimple list for all tool calls in this turn
-                tool_calls_simple: list[ToolCallSimple] = []
-                for tool_response in valid_tool_responses:
-                    tc = tool_response.tool_call
-                    assert (
-                        tc is not None
-                    )  # Already filtered above, this is just for typing purposes
-
-                    tool_call_message = tc.to_msg_str()
-                    tool_call_token_count = token_counter(tool_call_message)
-
-                    tool_calls_simple.append(
-                        ToolCallSimple(
-                            tool_call_id=tc.tool_call_id,
-                            tool_name=tc.tool_name,
-                            tool_arguments=tc.tool_args,
-                            token_count=tool_call_token_count,
-                        )
-                    )
-
-                # Create ONE ASSISTANT message with all tool calls for this turn
-                total_tool_call_tokens = sum(tc.token_count for tc in tool_calls_simple)
-                assistant_with_tools = ChatMessageSimple(
-                    message="",  # No text content when making tool calls
-                    token_count=total_tool_call_tokens,
-                    message_type=MessageType.ASSISTANT,
-                    tool_calls=tool_calls_simple,
-                    image_files=None,
-                )
-                simple_chat_history.append(assistant_with_tools)
-
-                # Add TOOL_CALL_RESPONSE messages for each tool call
-                for tool_response in valid_tool_responses:
-                    tc = tool_response.tool_call
-                    assert tc is not None  # Already filtered above
-
-                    tool_response_message = tool_response.llm_facing_response
-                    tool_response_token_count = token_counter(tool_response_message)
-
-                    tool_response_msg = ChatMessageSimple(
-                        message=tool_response_message,
-                        token_count=tool_response_token_count,
-                        message_type=MessageType.TOOL_CALL_RESPONSE,
-                        tool_call_id=tc.tool_call_id,
-                        image_files=None,
-                    )
-                    simple_chat_history.append(tool_response_msg)
+            _append_tool_call_history(
+                simple_chat_history, tool_responses, token_counter
+            )
 
             # If no tool calls, then it must have answered, wrap up
             if not llm_step_result.tool_calls or len(llm_step_result.tool_calls) == 0:

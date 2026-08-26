@@ -142,6 +142,7 @@ from onyx.server.settings.store import load_settings
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.server.utils import get_json_line
 from onyx.tools.constants import FILE_READER_TOOL_ID, SEARCH_TOOL_ID
+from onyx.tools.interface import Tool
 from onyx.tools.models import ChatFile, SearchToolUsage
 from onyx.tools.tool_constructor import (
     CustomToolConfig,
@@ -1140,6 +1141,520 @@ def _model_error_details(
     return details
 
 
+class _MultiModelRun:
+    """Shared state for a single ``_run_models`` invocation.
+
+    One instance owns the worker threads, the writer thread, and the queues that
+    connect them. Methods run on different threads: ``_run_model`` on the pool
+    workers, ``_drain_to_completion`` on the writer, ``read_stream`` on the
+    caller's thread.
+    """
+
+    def __init__(
+        self,
+        setup: ChatTurnSetup,
+        user: User,
+        external_state_container: ChatStateContainer | None,
+        stream_buffer: StreamBufferWriter | None,
+    ) -> None:
+        self.setup = setup
+        self.user = user
+        self.stream_buffer = stream_buffer
+        self.n_models = len(setup.llms)
+
+        # Workspace toggle: infer source/time filters from the query (default on).
+        self.auto_detect_search_filters = (
+            load_settings().auto_detect_search_filters is not False
+        )
+
+        self.merged_queue: queue.Queue[tuple[int, Packet | Exception | object]] = (
+            queue.Queue()
+        )
+
+        self.state_containers: list[ChatStateContainer] = [
+            (
+                external_state_container
+                if (external_state_container is not None and i == 0)
+                else ChatStateContainer()
+            )
+            for i in range(self.n_models)
+        ]
+        self.model_succeeded: list[bool] = [False] * self.n_models
+        # Set to True when a model raises an exception (distinct from "still running").
+        # Used in the stop-button path to avoid calling completion for errored models.
+        self.model_errored: list[bool] = [False] * self.n_models
+        # Per-model classification set in _run_model and reused by the streamed
+        # packet and the persisted message.
+        self.model_error_info: list[LLMErrorInfo | None] = [None] * self.n_models
+        self.persist_lock = threading.Lock()
+        self.persisted: list[bool] = [False] * self.n_models
+        # All models share one mainline chain, so exactly one completion should
+        # run history compression — the first non-errored one to persist, not a
+        # fixed index (model 0 may have errored). Guarded by persist_lock.
+        self.compression_claimed = False
+        self.post_steps_done = threading.Event()
+
+        # Set only on stop-button: workers can't be interrupted, so their remaining
+        # emits are discarded. Client disconnects do NOT set this — the writer keeps
+        # consuming and buffering to the very end.
+        self.drain_done = threading.Event()
+
+        # Writer-thread → reader-generator hand-off. The writer is the run's
+        # lifeline and always runs to completion; the reader can die freely.
+        self.tee: queue.Queue[Packet | StreamingError | object] = queue.Queue()
+        # Set when the reader detaches; stops the tee from accumulating items
+        # nobody will consume.
+        self.reader_gone = threading.Event()
+
+        # Each worker thread needs its own Context copy — a single Context object
+        # cannot be entered concurrently by multiple threads (RuntimeError).
+        self.executor = ThreadPoolExecutor(
+            max_workers=self.n_models, thread_name_prefix="multi-model"
+        )
+
+    def start(self) -> None:
+        """Start one worker thread per model plus the writer thread."""
+        for i in range(self.n_models):
+            ctx = contextvars.copy_context()
+            self.executor.submit(ctx.run, self._run_model, i)
+
+        writer_thread = threading.Thread(
+            target=contextvars.copy_context().run,
+            args=(self._drain_to_completion,),
+            name="chat-stream-writer",
+        )
+        writer_thread.start()
+
+    def _persist_model_outcome(
+        self,
+        model_idx: int,
+        context: _PersistContext,
+        *,
+        stop_button: bool = False,
+    ) -> None:
+        """Persist one model's outcome exactly once, from any thread.
+
+        The LLM loops never observe the stop signal, so a worker that returns
+        non-errored always holds a complete answer. Partial content exists only
+        when the stop-button path snapshots a still-running model mid-loop —
+        that call forces a claim (``stop_button=True``) so the in-flight state
+        is saved with the stopped-by-user annotation and the worker's later
+        call becomes a no-op."""
+        setup = self.setup
+        with self.persist_lock:
+            if self.persisted[model_idx]:
+                return
+            succeeded = self.model_succeeded[model_idx]
+            errored = self.model_errored[model_idx]
+            if not succeeded and not errored and not stop_button:
+                return
+            self.persisted[model_idx] = True
+
+        if errored:
+            self._save_errored_message(model_idx, context)
+            return
+
+        completed_normally = succeeded if stop_button else True
+
+        def _is_connected(value: bool = completed_normally) -> bool:
+            return value
+
+        with self.persist_lock:
+            run_compression = not self.compression_claimed
+            self.compression_claimed = True
+
+        try:
+            llm_loop_completion_handle(
+                state_container=self.state_containers[model_idx],
+                is_connected=_is_connected,
+                assistant_message=setup.reserved_messages[model_idx],
+                llm=setup.llms[model_idx],
+                reserved_tokens=setup.reserved_token_count,
+                run_compression=run_compression,
+                # The single compression check must still protect the
+                # smallest-window model, so it measures against the min
+                # window across the turn's models.
+                compression_max_input_tokens=min(
+                    model_llm.config.max_input_tokens for model_llm in setup.llms
+                ),
+            )
+        except Exception:
+            logger.exception(
+                "%s completion failed for model %d (%s)",
+                context.value,
+                model_idx,
+                setup.model_display_names[model_idx],
+            )
+            if run_compression:
+                # The handle failed before compression could have run
+                # (compress_chat_history swallows its own errors), so let a
+                # later model's completion pick it up. If every other model
+                # already persisted while the claim was held, this turn ends
+                # uncompressed — acceptable, since the next turn's completion
+                # re-evaluates the trigger and compresses then.
+                with self.persist_lock:
+                    self.compression_claimed = False
+
+    def _run_post_steps(self) -> None:
+        with self.persist_lock:
+            if self.post_steps_done.is_set():
+                return
+            self.post_steps_done.set()
+
+        for i in range(self.n_models):
+            self._persist_model_outcome(i, _PersistContext.POST_STEPS)
+
+        # The writer thread is the run's authoritative end — it owns the fence
+        # reset so the session never sticks at (or prematurely leaves)
+        # "processing", whatever happened to the request generator.
+        try:
+            set_processing_status(
+                chat_session_id=self.setup.chat_session_id,
+                cache=self.setup.cache,
+                value=False,
+            )
+        except Exception:
+            logger.exception("post-steps processing status reset failed")
+
+    def _build_model_tools(self, model_idx: int, emitter: Emitter) -> list[Tool]:
+        """Build one model's tool list and reject a missing forced tool."""
+        setup = self.setup
+        # Each function opens short-lived DB sessions on demand.
+        # Do NOT pass a long-lived session here — it would hold a
+        # connection for the entire LLM loop (minutes), and cloud
+        # infrastructure may drop idle connections.
+        thread_tool_dict = construct_tools(
+            persona=setup.persona,
+            emitter=emitter,
+            user=self.user,
+            llm=setup.llms[model_idx],
+            search_tool_config=SearchToolConfig(
+                user_selected_filters=setup.new_msg_req.internal_search_filters,
+                project_id_filter=setup.search_params.project_id_filter,
+                persona_id_filter=setup.search_params.persona_id_filter,
+                bypass_acl=setup.bypass_acl,
+                slack_context=setup.slack_context,
+                enable_slack_search=_should_enable_slack_search(
+                    setup.persona, setup.new_msg_req.internal_search_filters
+                ),
+                auto_detect_filters=self.auto_detect_search_filters,
+            ),
+            custom_tool_config=CustomToolConfig(
+                chat_session_id=setup.chat_session_id,
+                message_id=setup.user_message_id,
+                additional_headers=setup.custom_tool_additional_headers,
+                mcp_headers=setup.mcp_headers,
+            ),
+            file_reader_tool_config=FileReaderToolConfig(
+                user_file_ids=setup.available_files.user_file_ids,
+                chat_file_ids=setup.available_files.chat_file_ids,
+            ),
+            allowed_tool_ids=setup.new_msg_req.allowed_tool_ids,
+            search_usage_forcing_setting=setup.search_params.search_usage,
+        )
+        model_tools = [
+            tool for tool_list in thread_tool_dict.values() for tool in tool_list
+        ]
+
+        if setup.forced_tool_id and setup.forced_tool_id not in {
+            tool.id for tool in model_tools
+        }:
+            raise ValueError(f"Forced tool {setup.forced_tool_id} not found in tools")
+
+        return model_tools
+
+    def _run_llm_loop(
+        self,
+        model_idx: int,
+        emitter: Emitter,
+        model_tools: list[Tool],
+    ) -> None:
+        """Dispatch one model to the deep-research or the standard LLM loop."""
+        setup = self.setup
+        sc = self.state_containers[model_idx]
+        model_llm = setup.llms[model_idx]
+
+        # Per-thread copy: run_llm_loop mutates simple_chat_history in-place.
+        if self.n_models == 1 and setup.new_msg_req.deep_research:
+            if setup.chat_session_project_id:
+                raise RuntimeError("Deep research is not supported for projects")
+            run_deep_research_llm_loop(
+                emitter=emitter,
+                state_container=sc,
+                simple_chat_history=list(setup.simple_chat_history),
+                tools=model_tools,
+                custom_agent_prompt=setup.custom_agent_prompt,
+                llm=model_llm,
+                token_counter=get_llm_token_counter(model_llm),
+                reasoning_effort=setup.reasoning_effort,
+                skip_clarification=setup.skip_clarification,
+                user_identity=setup.user_identity,
+                chat_session_id=str(setup.chat_session_id),
+                all_injected_file_metadata=setup.all_injected_file_metadata,
+            )
+        else:
+            run_llm_loop(
+                emitter=emitter,
+                state_container=sc,
+                simple_chat_history=list(setup.simple_chat_history),
+                tools=model_tools,
+                custom_agent_prompt=setup.custom_agent_prompt,
+                context_files=setup.extracted_context_files,
+                persona=setup.persona,
+                user_memory_context=setup.user_memory_context,
+                llm=model_llm,
+                token_counter=get_llm_token_counter(model_llm),
+                forced_tool_id=setup.forced_tool_id,
+                user_identity=setup.user_identity,
+                chat_session_id=str(setup.chat_session_id),
+                chat_files=setup.chat_files_for_tools,
+                reasoning_effort=setup.reasoning_effort,
+                include_citations=setup.new_msg_req.include_citations,
+                all_injected_file_metadata=setup.all_injected_file_metadata,
+                inject_memories_in_prompt=self.user.use_memories,
+            )
+
+    def _run_model(self, model_idx: int) -> None:
+        """Run one LLM loop inside a worker thread, writing packets to ``merged_queue``."""
+
+        model_emitter = Emitter(
+            model_idx=model_idx,
+            merged_queue=self.merged_queue,
+            drain_done=self.drain_done,
+        )
+        model_llm = self.setup.llms[model_idx]
+
+        try:
+            model_tools = self._build_model_tools(model_idx, model_emitter)
+            self._run_llm_loop(model_idx, model_emitter, model_tools)
+
+            self.model_succeeded[model_idx] = True
+
+        except Exception as e:
+            self.model_errored[model_idx] = True
+            self.model_error_info[model_idx] = litellm_exception_to_safe_error(
+                e, model_llm, fallback_to_error_msg=True
+            )
+            self.merged_queue.put((model_idx, e))
+
+        finally:
+            self._persist_model_outcome(model_idx, _PersistContext.WORKER)
+            self.merged_queue.put((model_idx, _MODEL_DONE))
+
+    def _errored_message_text(self, model_idx: int) -> str:
+        """Build the durable error text for a model that failed mid-run."""
+        if not record_mode_persists_content(self.setup.incognito_record_mode):
+            # Provider errors can echo prompt fragments, so the
+            # durable row gets a generic marker. The live stream
+            # still carries the real error to the user.
+            return "The model encountered an error."
+
+        info = self.model_error_info[model_idx]
+        detail = (
+            info.message
+            if info is not None
+            else "model encountered an error during generation."
+        )
+        return "Error from %s: %s" % (
+            self.setup.model_display_names[model_idx],
+            detail,
+        )
+
+    def _save_errored_message(self, model_idx: int, context: _PersistContext) -> None:
+        """Save an error message to a reserved ChatMessage that failed during execution."""
+        try:
+            with get_session_with_current_tenant() as save_db_session:
+                msg = save_db_session.get(
+                    ChatMessage, self.setup.reserved_messages[model_idx].id
+                )
+                if msg is not None:
+                    error_text = self._errored_message_text(model_idx)
+                    msg.message = error_text
+                    msg.error = error_text
+                    # The reservation's placeholder count must not survive:
+                    # rows carry the real output count, zero when none emitted.
+                    sc = self.state_containers[model_idx]
+                    partial_answer = sc.get_answer_tokens()
+                    msg.token_count = (
+                        len(get_tokenizer(None, None).encode(partial_answer))
+                        if partial_answer
+                        else 0
+                    )
+                    save_db_session.commit()
+        except Exception:
+            logger.exception(
+                "%s error save failed for model %d (%s)",
+                context.value,
+                model_idx,
+                self.setup.model_display_names[model_idx],
+            )
+
+    def _publish(self, item: Packet | StreamingError) -> None:
+        """Fan one outbound item to the stream buffer and, while attached, the reader."""
+        if self.stream_buffer is not None:
+            try:
+                self.stream_buffer.append_line(get_json_line(item.model_dump()))
+            except Exception:
+                logger.exception("stream buffer append failed")
+        # Non-blocking put: a slow reader can't stall the writer.
+        if not self.reader_gone.is_set():
+            self.tee.put(item)
+
+    def _refresh_fence(self, last_fence_refresh: float) -> float:
+        """Re-arm the processing fence on schedule; returns the last refresh time."""
+        # Runs can outlive FENCE_TTL; a lapsed fence reads as a dead
+        # writer to resume readers and unblocks concurrent sends.
+        now = time.monotonic()
+        if now - last_fence_refresh < _FENCE_REFRESH_INTERVAL_S:
+            return last_fence_refresh
+        try:
+            set_processing_status(
+                chat_session_id=self.setup.chat_session_id,
+                cache=self.setup.cache,
+                value=True,
+                run_id=self.setup.processing_run_id,
+            )
+        except Exception:
+            # Worst case the fence lapses early; never kill the
+            # run over a refresh.
+            logger.exception("processing fence refresh failed")
+        return now
+
+    def _handle_idle_poll(self) -> bool:
+        """Handle an empty-queue tick; returns True when the user cancelled."""
+        if self.stream_buffer is not None:
+            self.stream_buffer.flush()
+        # Check for user-initiated cancellation every 50 ms.
+        if self.setup.check_is_connected():
+            return False
+
+        for i in range(self.n_models):
+            # Snapshot every model now: finished loops save
+            # complete, in-flight ones save partial + stopped.
+            self._persist_model_outcome(
+                i, _PersistContext.STOP_BUTTON, stop_button=True
+            )
+        self._publish(
+            Packet(
+                placement=Placement(turn_index=0),
+                obj=OverallStop(type="stop", stop_reason="user_cancelled"),
+            )
+        )
+        # Workers can't be interrupted; discard their remaining
+        # output via the Emitter no-op.
+        self.drain_done.set()
+        return True
+
+    def _publish_model_error(self, model_idx: int, error: Exception) -> None:
+        """Publish one model's failure as a secret-scrubbed ``StreamingError``."""
+        model_llm = self.setup.llms[model_idx]
+        # Classified in _run_model; fall back to a generic error.
+        info = self.model_error_info[model_idx]
+        if info is None:
+            info = LLMErrorInfo(
+                message=str(error),
+                error_code="MODEL_ERROR",
+                is_retryable=True,
+            )
+        stack_trace = "".join(
+            traceback.format_exception(type(error), error, error.__traceback__)
+        )
+        secrets = collect_credential_values(
+            model_llm.config.api_key, model_llm.config.custom_config
+        )
+        error_msg = scrub_sensitive_values(info.message, secrets)
+        stack_trace = scrub_sensitive_values(stack_trace, secrets)
+        self._publish(
+            StreamingError(
+                error=error_msg,
+                stack_trace=stack_trace,
+                error_code=info.error_code,
+                is_retryable=info.is_retryable,
+                details=_model_error_details(error, model_llm, model_idx),
+            )
+        )
+
+    def _drain_to_completion(self) -> None:
+        """Writer: consume worker output to the very end regardless of client state."""
+        models_remaining = self.n_models
+        last_fence_refresh = time.monotonic()
+        try:
+            while models_remaining > 0:
+                last_fence_refresh = self._refresh_fence(last_fence_refresh)
+                try:
+                    model_idx, item = self.merged_queue.get(
+                        timeout=_CANCEL_POLL_INTERVAL_S
+                    )
+                except queue.Empty:
+                    if self._handle_idle_poll():
+                        return
+                    continue
+                if item is _MODEL_DONE:
+                    models_remaining -= 1
+                elif isinstance(item, Exception):
+                    # Publish a tagged error for this model but keep the other
+                    # models running. Do NOT decrement models_remaining —
+                    # _run_model's finally always posts _MODEL_DONE, which is
+                    # the sole completion signal.
+                    self._publish_model_error(model_idx, item)
+                elif isinstance(item, Packet):
+                    # model_index already embedded by the model's Emitter
+                    self._publish(item)
+
+            for i in range(self.n_models):
+                self._persist_model_outcome(i, _PersistContext.NORMAL)
+        except Exception:
+            logger.exception("chat stream writer crashed")
+            # With the writer dead, merged_queue has no consumer — flip the
+            # emitters to discard so workers can't grow it unbounded.
+            self.drain_done.set()
+            # Generic message: the raw exception may embed provider API keys.
+            self._publish(
+                StreamingError(
+                    error="The response stream ended unexpectedly. Please try again.",
+                    error_code="STREAM_WRITER_ERROR",
+                    is_retryable=True,
+                )
+            )
+        finally:
+            # Mark done before _run_post_steps clears the fence so resume
+            # readers never see a fence-less, not-done buffer and drop the tail.
+            if self.stream_buffer is not None:
+                self.stream_buffer.mark_done()
+            self._run_post_steps()
+            self.tee.put(_STREAM_DONE)
+            self.executor.shutdown(wait=False)
+
+    def read_stream(self) -> AnswerStream:
+        # ── Reader: tail the tee while the client is attached ────────────────
+        stream_done = False
+        try:
+            last_packet_yield: float = time.monotonic()
+            while True:
+                try:
+                    item = self.tee.get(timeout=_CANCEL_POLL_INTERVAL_S)
+                except queue.Empty:
+                    now = time.monotonic()
+                    if now - last_packet_yield >= CHAT_HEARTBEAT_INTERVAL_S:
+                        yield heartbeat_packet()
+                        last_packet_yield = now
+                    continue
+                if item is _STREAM_DONE:
+                    stream_done = True
+                    return
+                yield cast(Packet | StreamingError, item)
+                last_packet_yield = time.monotonic()
+        finally:
+            self.reader_gone.set()
+            if not stream_done:
+                # GeneratorExit (client disconnect): the reader stops here while
+                # the writer thread keeps draining to completion in the background.
+                logger.info(
+                    "chat stream reader detached; writer continues for session %s",
+                    self.setup.chat_session_id,
+                )
+
+
 def _run_models(
     setup: ChatTurnSetup,
     user: User,
@@ -1180,457 +1695,9 @@ def _run_models(
         containing ``OverallStop`` once all models complete (or one containing
         ``OverallStop(stop_reason="user_cancelled")`` if the connection drops).
     """
-    n_models = len(setup.llms)
-
-    # Workspace toggle: infer source/time filters from the query (default on).
-    auto_detect_search_filters = load_settings().auto_detect_search_filters is not False
-
-    merged_queue: queue.Queue[tuple[int, Packet | Exception | object]] = queue.Queue()
-
-    state_containers: list[ChatStateContainer] = [
-        (
-            external_state_container
-            if (external_state_container is not None and i == 0)
-            else ChatStateContainer()
-        )
-        for i in range(n_models)
-    ]
-    model_succeeded: list[bool] = [False] * n_models
-    # Set to True when a model raises an exception (distinct from "still running").
-    # Used in the stop-button path to avoid calling completion for errored models.
-    model_errored: list[bool] = [False] * n_models
-    # Per-model classification set in _run_model and reused by the streamed
-    # packet and the persisted message.
-    model_error_info: list[LLMErrorInfo | None] = [None] * n_models
-    persist_lock = threading.Lock()
-    persisted: list[bool] = [False] * n_models
-    # All models share one mainline chain, so exactly one completion should
-    # run history compression — the first non-errored one to persist, not a
-    # fixed index (model 0 may have errored). Guarded by persist_lock.
-    compression_claimed = False
-    post_steps_done = threading.Event()
-
-    # Set only on stop-button: workers can't be interrupted, so their remaining
-    # emits are discarded. Client disconnects do NOT set this — the writer keeps
-    # consuming and buffering to the very end.
-    drain_done = threading.Event()
-
-    # Writer-thread → reader-generator hand-off. The writer is the run's
-    # lifeline and always runs to completion; the reader can die freely.
-    tee: queue.Queue[Packet | StreamingError | object] = queue.Queue()
-    # Set when the reader detaches; stops the tee from accumulating items
-    # nobody will consume.
-    reader_gone = threading.Event()
-
-    def _persist_model_outcome(
-        model_idx: int,
-        context: _PersistContext,
-        *,
-        stop_button: bool = False,
-    ) -> None:
-        """Persist one model's outcome exactly once, from any thread.
-
-        The LLM loops never observe the stop signal, so a worker that returns
-        non-errored always holds a complete answer. Partial content exists only
-        when the stop-button path snapshots a still-running model mid-loop —
-        that call forces a claim (``stop_button=True``) so the in-flight state
-        is saved with the stopped-by-user annotation and the worker's later
-        call becomes a no-op."""
-        with persist_lock:
-            if persisted[model_idx]:
-                return
-            succeeded = model_succeeded[model_idx]
-            errored = model_errored[model_idx]
-            if not succeeded and not errored and not stop_button:
-                return
-            persisted[model_idx] = True
-
-        if errored:
-            _save_errored_message(model_idx, context)
-            return
-
-        completed_normally = succeeded if stop_button else True
-
-        def _is_connected(value: bool = completed_normally) -> bool:
-            return value
-
-        nonlocal compression_claimed
-        with persist_lock:
-            run_compression = not compression_claimed
-            compression_claimed = True
-
-        try:
-            llm_loop_completion_handle(
-                state_container=state_containers[model_idx],
-                is_connected=_is_connected,
-                assistant_message=setup.reserved_messages[model_idx],
-                llm=setup.llms[model_idx],
-                reserved_tokens=setup.reserved_token_count,
-                run_compression=run_compression,
-                # The single compression check must still protect the
-                # smallest-window model, so it measures against the min
-                # window across the turn's models.
-                compression_max_input_tokens=min(
-                    model_llm.config.max_input_tokens for model_llm in setup.llms
-                ),
-            )
-        except Exception:
-            logger.exception(
-                "%s completion failed for model %d (%s)",
-                context.value,
-                model_idx,
-                setup.model_display_names[model_idx],
-            )
-            if run_compression:
-                # The handle failed before compression could have run
-                # (compress_chat_history swallows its own errors), so let a
-                # later model's completion pick it up. If every other model
-                # already persisted while the claim was held, this turn ends
-                # uncompressed — acceptable, since the next turn's completion
-                # re-evaluates the trigger and compresses then.
-                with persist_lock:
-                    compression_claimed = False
-
-    def _run_post_steps() -> None:
-        with persist_lock:
-            if post_steps_done.is_set():
-                return
-            post_steps_done.set()
-
-        for i in range(n_models):
-            _persist_model_outcome(i, _PersistContext.POST_STEPS)
-
-        # The writer thread is the run's authoritative end — it owns the fence
-        # reset so the session never sticks at (or prematurely leaves)
-        # "processing", whatever happened to the request generator.
-        try:
-            set_processing_status(
-                chat_session_id=setup.chat_session_id,
-                cache=setup.cache,
-                value=False,
-            )
-        except Exception:
-            logger.exception("post-steps processing status reset failed")
-
-    def _run_model(model_idx: int) -> None:
-        """Run one LLM loop inside a worker thread, writing packets to ``merged_queue``."""
-
-        model_emitter = Emitter(
-            model_idx=model_idx,
-            merged_queue=merged_queue,
-            drain_done=drain_done,
-        )
-        sc = state_containers[model_idx]
-        model_llm = setup.llms[model_idx]
-
-        try:
-            # Each function opens short-lived DB sessions on demand.
-            # Do NOT pass a long-lived session here — it would hold a
-            # connection for the entire LLM loop (minutes), and cloud
-            # infrastructure may drop idle connections.
-            thread_tool_dict = construct_tools(
-                persona=setup.persona,
-                emitter=model_emitter,
-                user=user,
-                llm=model_llm,
-                search_tool_config=SearchToolConfig(
-                    user_selected_filters=setup.new_msg_req.internal_search_filters,
-                    project_id_filter=setup.search_params.project_id_filter,
-                    persona_id_filter=setup.search_params.persona_id_filter,
-                    bypass_acl=setup.bypass_acl,
-                    slack_context=setup.slack_context,
-                    enable_slack_search=_should_enable_slack_search(
-                        setup.persona, setup.new_msg_req.internal_search_filters
-                    ),
-                    auto_detect_filters=auto_detect_search_filters,
-                ),
-                custom_tool_config=CustomToolConfig(
-                    chat_session_id=setup.chat_session_id,
-                    message_id=setup.user_message_id,
-                    additional_headers=setup.custom_tool_additional_headers,
-                    mcp_headers=setup.mcp_headers,
-                ),
-                file_reader_tool_config=FileReaderToolConfig(
-                    user_file_ids=setup.available_files.user_file_ids,
-                    chat_file_ids=setup.available_files.chat_file_ids,
-                ),
-                allowed_tool_ids=setup.new_msg_req.allowed_tool_ids,
-                search_usage_forcing_setting=setup.search_params.search_usage,
-            )
-            model_tools = [
-                tool for tool_list in thread_tool_dict.values() for tool in tool_list
-            ]
-
-            if setup.forced_tool_id and setup.forced_tool_id not in {
-                tool.id for tool in model_tools
-            }:
-                raise ValueError(
-                    f"Forced tool {setup.forced_tool_id} not found in tools"
-                )
-
-            # Per-thread copy: run_llm_loop mutates simple_chat_history in-place.
-            if n_models == 1 and setup.new_msg_req.deep_research:
-                if setup.chat_session_project_id:
-                    raise RuntimeError("Deep research is not supported for projects")
-                run_deep_research_llm_loop(
-                    emitter=model_emitter,
-                    state_container=sc,
-                    simple_chat_history=list(setup.simple_chat_history),
-                    tools=model_tools,
-                    custom_agent_prompt=setup.custom_agent_prompt,
-                    llm=model_llm,
-                    token_counter=get_llm_token_counter(model_llm),
-                    reasoning_effort=setup.reasoning_effort,
-                    skip_clarification=setup.skip_clarification,
-                    user_identity=setup.user_identity,
-                    chat_session_id=str(setup.chat_session_id),
-                    all_injected_file_metadata=setup.all_injected_file_metadata,
-                )
-            else:
-                run_llm_loop(
-                    emitter=model_emitter,
-                    state_container=sc,
-                    simple_chat_history=list(setup.simple_chat_history),
-                    tools=model_tools,
-                    custom_agent_prompt=setup.custom_agent_prompt,
-                    context_files=setup.extracted_context_files,
-                    persona=setup.persona,
-                    user_memory_context=setup.user_memory_context,
-                    llm=model_llm,
-                    token_counter=get_llm_token_counter(model_llm),
-                    forced_tool_id=setup.forced_tool_id,
-                    user_identity=setup.user_identity,
-                    chat_session_id=str(setup.chat_session_id),
-                    chat_files=setup.chat_files_for_tools,
-                    reasoning_effort=setup.reasoning_effort,
-                    include_citations=setup.new_msg_req.include_citations,
-                    all_injected_file_metadata=setup.all_injected_file_metadata,
-                    inject_memories_in_prompt=user.use_memories,
-                )
-
-            model_succeeded[model_idx] = True
-
-        except Exception as e:
-            model_errored[model_idx] = True
-            model_error_info[model_idx] = litellm_exception_to_safe_error(
-                e, model_llm, fallback_to_error_msg=True
-            )
-            merged_queue.put((model_idx, e))
-
-        finally:
-            _persist_model_outcome(model_idx, _PersistContext.WORKER)
-            merged_queue.put((model_idx, _MODEL_DONE))
-
-    def _save_errored_message(model_idx: int, context: _PersistContext) -> None:
-        """Save an error message to a reserved ChatMessage that failed during execution."""
-        try:
-            with get_session_with_current_tenant() as save_db_session:
-                msg = save_db_session.get(
-                    ChatMessage, setup.reserved_messages[model_idx].id
-                )
-                if msg is not None:
-                    mode = setup.incognito_record_mode
-                    if not record_mode_persists_content(mode):
-                        # Provider errors can echo prompt fragments, so the
-                        # durable row gets a generic marker. The live stream
-                        # still carries the real error to the user.
-                        error_text = "The model encountered an error."
-                    else:
-                        info = model_error_info[model_idx]
-                        detail = (
-                            info.message
-                            if info is not None
-                            else "model encountered an error during generation."
-                        )
-                        error_text = "Error from %s: %s" % (
-                            setup.model_display_names[model_idx],
-                            detail,
-                        )
-                    msg.message = error_text
-                    msg.error = error_text
-                    # The reservation's placeholder count must not survive:
-                    # rows carry the real output count, zero when none emitted.
-                    partial_answer = state_containers[model_idx].get_answer_tokens()
-                    msg.token_count = (
-                        len(get_tokenizer(None, None).encode(partial_answer))
-                        if partial_answer
-                        else 0
-                    )
-                    save_db_session.commit()
-        except Exception:
-            logger.exception(
-                "%s error save failed for model %d (%s)",
-                context.value,
-                model_idx,
-                setup.model_display_names[model_idx],
-            )
-
-    def _publish(item: Packet | StreamingError) -> None:
-        """Fan one outbound item to the stream buffer and, while attached, the reader."""
-        if stream_buffer is not None:
-            try:
-                stream_buffer.append_line(get_json_line(item.model_dump()))
-            except Exception:
-                logger.exception("stream buffer append failed")
-        # Non-blocking put: a slow reader can't stall the writer.
-        if not reader_gone.is_set():
-            tee.put(item)
-
-    def _drain_to_completion() -> None:
-        """Writer: consume worker output to the very end regardless of client state."""
-        models_remaining = n_models
-        last_fence_refresh = time.monotonic()
-        try:
-            while models_remaining > 0:
-                # Runs can outlive FENCE_TTL; a lapsed fence reads as a dead
-                # writer to resume readers and unblocks concurrent sends.
-                now = time.monotonic()
-                if now - last_fence_refresh >= _FENCE_REFRESH_INTERVAL_S:
-                    last_fence_refresh = now
-                    try:
-                        set_processing_status(
-                            chat_session_id=setup.chat_session_id,
-                            cache=setup.cache,
-                            value=True,
-                            run_id=setup.processing_run_id,
-                        )
-                    except Exception:
-                        # Worst case the fence lapses early; never kill the
-                        # run over a refresh.
-                        logger.exception("processing fence refresh failed")
-                try:
-                    model_idx, item = merged_queue.get(timeout=_CANCEL_POLL_INTERVAL_S)
-                except queue.Empty:
-                    if stream_buffer is not None:
-                        stream_buffer.flush()
-                    # Check for user-initiated cancellation every 50 ms.
-                    if not setup.check_is_connected():
-                        for i in range(n_models):
-                            # Snapshot every model now: finished loops save
-                            # complete, in-flight ones save partial + stopped.
-                            _persist_model_outcome(
-                                i, _PersistContext.STOP_BUTTON, stop_button=True
-                            )
-                        _publish(
-                            Packet(
-                                placement=Placement(turn_index=0),
-                                obj=OverallStop(
-                                    type="stop", stop_reason="user_cancelled"
-                                ),
-                            )
-                        )
-                        # Workers can't be interrupted; discard their remaining
-                        # output via the Emitter no-op.
-                        drain_done.set()
-                        return
-                    continue
-                if item is _MODEL_DONE:
-                    models_remaining -= 1
-                elif isinstance(item, Exception):
-                    # Publish a tagged error for this model but keep the other
-                    # models running. Do NOT decrement models_remaining —
-                    # _run_model's finally always posts _MODEL_DONE, which is
-                    # the sole completion signal.
-                    model_llm = setup.llms[model_idx]
-                    # Classified in _run_model; fall back to a generic error.
-                    info = model_error_info[model_idx]
-                    if info is None:
-                        info = LLMErrorInfo(
-                            message=str(item),
-                            error_code="MODEL_ERROR",
-                            is_retryable=True,
-                        )
-                    stack_trace = "".join(
-                        traceback.format_exception(type(item), item, item.__traceback__)
-                    )
-                    secrets = collect_credential_values(
-                        model_llm.config.api_key, model_llm.config.custom_config
-                    )
-                    error_msg = scrub_sensitive_values(info.message, secrets)
-                    stack_trace = scrub_sensitive_values(stack_trace, secrets)
-                    _publish(
-                        StreamingError(
-                            error=error_msg,
-                            stack_trace=stack_trace,
-                            error_code=info.error_code,
-                            is_retryable=info.is_retryable,
-                            details=_model_error_details(item, model_llm, model_idx),
-                        )
-                    )
-                elif isinstance(item, Packet):
-                    # model_index already embedded by the model's Emitter
-                    _publish(item)
-
-            for i in range(n_models):
-                _persist_model_outcome(i, _PersistContext.NORMAL)
-        except Exception:
-            logger.exception("chat stream writer crashed")
-            # With the writer dead, merged_queue has no consumer — flip the
-            # emitters to discard so workers can't grow it unbounded.
-            drain_done.set()
-            # Generic message: the raw exception may embed provider API keys.
-            _publish(
-                StreamingError(
-                    error="The response stream ended unexpectedly. Please try again.",
-                    error_code="STREAM_WRITER_ERROR",
-                    is_retryable=True,
-                )
-            )
-        finally:
-            # Mark done before _run_post_steps clears the fence so resume
-            # readers never see a fence-less, not-done buffer and drop the tail.
-            if stream_buffer is not None:
-                stream_buffer.mark_done()
-            _run_post_steps()
-            tee.put(_STREAM_DONE)
-            executor.shutdown(wait=False)
-
-    # Each worker thread needs its own Context copy — a single Context object
-    # cannot be entered concurrently by multiple threads (RuntimeError).
-    executor = ThreadPoolExecutor(
-        max_workers=n_models, thread_name_prefix="multi-model"
-    )
-    for i in range(n_models):
-        ctx = contextvars.copy_context()
-        executor.submit(ctx.run, _run_model, i)
-
-    writer_thread = threading.Thread(
-        target=contextvars.copy_context().run,
-        args=(_drain_to_completion,),
-        name="chat-stream-writer",
-    )
-    writer_thread.start()
-
-    def _read_stream() -> AnswerStream:
-        # ── Reader: tail the tee while the client is attached ────────────────
-        stream_done = False
-        try:
-            last_packet_yield: float = time.monotonic()
-            while True:
-                try:
-                    item = tee.get(timeout=_CANCEL_POLL_INTERVAL_S)
-                except queue.Empty:
-                    now = time.monotonic()
-                    if now - last_packet_yield >= CHAT_HEARTBEAT_INTERVAL_S:
-                        yield heartbeat_packet()
-                        last_packet_yield = now
-                    continue
-                if item is _STREAM_DONE:
-                    stream_done = True
-                    return
-                yield cast(Packet | StreamingError, item)
-                last_packet_yield = time.monotonic()
-        finally:
-            reader_gone.set()
-            if not stream_done:
-                # GeneratorExit (client disconnect): the reader stops here while
-                # the writer thread keeps draining to completion in the background.
-                logger.info(
-                    "chat stream reader detached; writer continues for session %s",
-                    setup.chat_session_id,
-                )
-
-    return _read_stream()
+    run = _MultiModelRun(setup, user, external_state_container, stream_buffer)
+    run.start()
+    return run.read_stream()
 
 
 def _stream_chat_turn(
