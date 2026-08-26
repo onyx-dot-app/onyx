@@ -3,7 +3,11 @@
 import hashlib
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, ValidationInfo, field_validator
+
+# Segments that would let one repo alias another once `key_prefix` is used as
+# a file-store id prefix, or that escape the key space entirely.
+_REJECTED_SEGMENTS = frozenset({"", ".", ".."})
 
 
 class RepoRef(BaseModel):
@@ -15,6 +19,15 @@ class RepoRef(BaseModel):
     host: str  # e.g. "github.com"; separates self-hosted instances
     owner: str  # namespace path: "org" or "group/subgroup"
     name: str
+
+    @field_validator("owner", "name")
+    @classmethod
+    def _validate_path_part(cls, value: str, info: ValidationInfo) -> str:
+        """`owner` and `name` become path segments of a cache key, so reject
+        empty values, leading/trailing "/", and "." / ".." segments."""
+        if any(segment in _REJECTED_SEGMENTS for segment in value.split("/")):
+            raise ValueError(f"Invalid repo {info.field_name}: {value!r}")
+        return value
 
     @property
     def key_prefix(self) -> str:
