@@ -401,6 +401,23 @@
         }
       }
     },
+    "documentSidebar": {
+      "citedSources": {
+        "title": "Cited Sources"
+      },
+      "closeButton": {
+        "tooltip": "Close Sidebar"
+      },
+      "foundSources": {
+        "title": "Found Sources"
+      },
+      "moreSources": {
+        "title": "More"
+      },
+      "userFiles": {
+        "title": "User Files"
+      }
+    },
     "federatedOAuth": {
       "connectButton": {
         "label": "Connect"
@@ -1170,6 +1187,192 @@
         }
       }
     },
+    "modals": {
+      "confirmEntity": {
+        "confirmButton": {
+          "label": "Confirm"
+        },
+        "confirmation": {
+          "description": "Are you sure you want to {action} <b>{entityName}</b>?"
+        },
+        "deleteAction": {
+          "label": "delete"
+        },
+        "deleteButton": {
+          "label": "Delete"
+        },
+        "header": {
+          "title": "{action} {entityType}"
+        },
+        "modifyAction": {
+          "label": "modify"
+        }
+      },
+      "editProperty": {
+        "header": {
+          "title": "Edit {property}"
+        },
+        "submitButton": {
+          "label": "Update property",
+          "loadingLabel": "Updating..."
+        },
+        "valueInput": {
+          "placeholder": "Property value"
+        }
+      },
+      "feedback": {
+        "additionalDetails": {
+          "dislikePlaceholder": "What did you dislike about this response?",
+          "label": "Provide Additional Details",
+          "likePlaceholder": "What did you like about this response?"
+        },
+        "cancelButton": {
+          "label": "Cancel"
+        },
+        "header": {
+          "title": "Feedback"
+        },
+        "submitButton": {
+          "label": "Submit",
+          "loadingLabel": "Submitting..."
+        }
+      },
+      "genericConfirm": {
+        "confirmButton": {
+          "label": "Confirm"
+        }
+      },
+      "share": {
+        "addPeople": {
+          "groupSuggestion": {
+            "description": "Group"
+          },
+          "permissionMenu": {
+            "ariaLabel": "Select staged permission"
+          },
+          "searchInput": {
+            "placeholder": "Add users, groups, and accounts"
+          },
+          "sharedTag": {
+            "label": "Shared"
+          }
+        },
+        "cancelButton": {
+          "label": "Cancel"
+        },
+        "copyLinkButton": {
+          "label": "Copy Link"
+        },
+        "createLinkButton": {
+          "label": "Create Share Link"
+        },
+        "generateLinkErrorToast": {
+          "message": "Failed to generate share link"
+        },
+        "genericErrorToast": {
+          "message": "An error occurred"
+        },
+        "header": {
+          "description": "All existing and future messages in this chat will be shared.",
+          "sharedTitle": "Chat shared",
+          "title": "Share this chat"
+        },
+        "linkCopiedToast": {
+          "message": "Share link copied to clipboard!"
+        },
+        "linkInput": {
+          "copyTooltip": "Copy link"
+        },
+        "makePrivateButton": {
+          "label": "Make Private"
+        },
+        "makePrivateErrorToast": {
+          "message": "Failed to make chat private"
+        },
+        "nowPrivateToast": {
+          "message": "Chat is now private"
+        },
+        "organizationOption": {
+          "description": "Anyone in your organization can view this chat.",
+          "title": "Your Organization"
+        },
+        "permissionMenu": {
+          "edit": {
+            "label": "Edit"
+          },
+          "removeAccess": {
+            "label": "Remove Access"
+          },
+          "viewAndChat": {
+            "label": "View & Chat"
+          }
+        },
+        "privateOption": {
+          "description": "Only you have access to this chat.",
+          "title": "Private"
+        },
+        "transferOwnership": {
+          "currentOwner": {
+            "label": "Current Owner"
+          },
+          "groupTag": {
+            "label": "Group"
+          },
+          "targetInput": {
+            "label": "Transfer Ownership To",
+            "placeholder": "Add a user or group"
+          },
+          "trailingButton": {
+            "tooltip": "Transfer Ownership"
+          }
+        }
+      },
+      "unsavedChanges": {
+        "body": {
+          "description": "Your changes have not been saved. If you leave now, they will be lost."
+        },
+        "cancelButton": {
+          "label": "Cancel"
+        },
+        "discardButton": {
+          "label": "Discard changes"
+        },
+        "header": {
+          "title": "Discard unsaved changes?"
+        }
+      },
+      "userFiles": {
+        "addFilesButton": {
+          "label": "Add Files"
+        },
+        "doneButton": {
+          "label": "Done"
+        },
+        "emptyState": {
+          "description": "No files found"
+        },
+        "fileCount": {
+          "label": "{count, plural, one {# File} other {# Files}}"
+        },
+        "fileStatus": {
+          "deleting": {
+            "label": "Deleting..."
+          },
+          "processing": {
+            "label": "Processing..."
+          },
+          "uploading": {
+            "label": "Uploading..."
+          }
+        },
+        "searchInput": {
+          "placeholder": "Search files..."
+        },
+        "selectedCount": {
+          "label": "{count, plural, one {# file selected} other {# files selected}}"
+        }
+      }
+    },
     "modelSelector": {
       "adminLimitedSetting": {
         "tooltip": "Your admin limits this model to a lower reasoning level."
@@ -1606,6 +1809,185 @@
         "title": "Playback Speed"
       },
       "title": "Voice"
+    }
+  },
+  "sidebar": {
+    "adminSidebar": {
+      "businessOrEnterpriseOnly": {
+        "tooltip": "This feature is available on the [Business or Enterprise version of Onyx](/admin/billing) only."
+      },
+      "enterpriseOnly": {
+        "tooltip": "This feature is available on the [Enterprise version of Onyx](/admin/billing) only."
+      },
+      "exitAdminPanel": {
+        "label": "Exit Admin Panel"
+      },
+      "search": {
+        "label": "Search"
+      },
+      "searchInput": {
+        "placeholder": "Search..."
+      }
+    },
+    "appSidebar": {
+      "adminPanel": {
+        "label": "Admin Panel"
+      },
+      "agents": {
+        "title": "Agents"
+      },
+      "craft": {
+        "label": "Craft"
+      },
+      "exploreAgents": {
+        "label": "Explore Agents"
+      },
+      "moreAgents": {
+        "label": "More Agents"
+      },
+      "moveChatError": {
+        "message": "Failed to move chat. Please try again."
+      },
+      "newProject": {
+        "label": "New Project",
+        "tooltip": "New Project"
+      },
+      "newSession": {
+        "label": "New Session"
+      },
+      "projects": {
+        "title": "Projects"
+      },
+      "recents": {
+        "empty": {
+          "text": "Try sending a message! Your chat history will appear here."
+        },
+        "title": "Recents"
+      },
+      "searchChats": {
+        "label": "Search Chats"
+      }
+    },
+    "chatButton": {
+      "createProject": {
+        "label": "Create {projectName}"
+      },
+      "createProjectError": {
+        "message": "Failed to create project. Please try again."
+      },
+      "delete": {
+        "label": "Delete"
+      },
+      "deleteConfirmation": {
+        "confirmButton": {
+          "label": "Delete"
+        },
+        "description": "Are you sure you want to delete this chat? This action cannot be undone.",
+        "title": "Delete Chat"
+      },
+      "deleteError": {
+        "message": "Failed to delete chat. Please try again."
+      },
+      "moveToProject": {
+        "label": "Move to Project"
+      },
+      "projectSearchInput": {
+        "placeholder": "Search Projects"
+      },
+      "removeFromProject": {
+        "label": "Remove from {projectName}"
+      },
+      "rename": {
+        "label": "Rename"
+      },
+      "share": {
+        "label": "Share"
+      }
+    },
+    "chatSearch": {
+      "createNamedProject": {
+        "label": "Create New Project \"<name>{projectName}</name>\""
+      },
+      "footer": {
+        "openAction": {
+          "label": "Open"
+        },
+        "selectAction": {
+          "label": "Select"
+        },
+        "showAllAction": {
+          "label": "Show all"
+        }
+      },
+      "list": {
+        "empty": {
+          "text": "No chats or projects yet"
+        },
+        "noResults": {
+          "text": "No results found"
+        }
+      },
+      "newProject": {
+        "label": "New Project"
+      },
+      "newSession": {
+        "label": "New Session"
+      },
+      "noMoreResults": {
+        "text": "No more results"
+      },
+      "projectsFilter": {
+        "label": "Projects"
+      },
+      "recentFilter": {
+        "label": "Recent"
+      },
+      "recentSessionsFilter": {
+        "label": "Recent Sessions"
+      },
+      "searchInput": {
+        "placeholder": "Search chat sessions, projects..."
+      },
+      "sessionsFilter": {
+        "label": "Sessions"
+      }
+    },
+    "createConnector": {
+      "advancedStep": {
+        "label": "Advanced (optional)"
+      },
+      "connectorStep": {
+        "label": "Connector"
+      },
+      "credentialStep": {
+        "label": "Credential"
+      },
+      "exitSetup": {
+        "label": "Exit Connector Setup"
+      }
+    },
+    "notifications": {
+      "empty": {
+        "title": "No notifications"
+      },
+      "header": {
+        "title": "Notifications"
+      },
+      "markAllAsReadButton": {
+        "tooltip": "Mark All as Read"
+      },
+      "markAsReadButton": {
+        "tooltip": "Mark as Read"
+      },
+      "newSection": {
+        "title": "New"
+      },
+      "olderSection": {
+        "title": "Older"
+      },
+      "unreadCount": {
+        "label": "{count, plural, one {# unread} other {# unread}}"
+      }
     }
   }
 }

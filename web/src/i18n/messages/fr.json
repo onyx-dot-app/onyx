@@ -401,6 +401,23 @@
         }
       }
     },
+    "documentSidebar": {
+      "citedSources": {
+        "title": "Sources citées"
+      },
+      "closeButton": {
+        "tooltip": "Fermer la barre latérale"
+      },
+      "foundSources": {
+        "title": "Sources trouvées"
+      },
+      "moreSources": {
+        "title": "Plus"
+      },
+      "userFiles": {
+        "title": "Fichiers de l'utilisateur"
+      }
+    },
     "federatedOAuth": {
       "connectButton": {
         "label": "Connecter"
@@ -1170,6 +1187,192 @@
         }
       }
     },
+    "modals": {
+      "confirmEntity": {
+        "confirmButton": {
+          "label": "Confirmer"
+        },
+        "confirmation": {
+          "description": "Voulez-vous vraiment {action} <b>{entityName}</b> ?"
+        },
+        "deleteAction": {
+          "label": "supprimer"
+        },
+        "deleteButton": {
+          "label": "Supprimer"
+        },
+        "header": {
+          "title": "{action} {entityType}"
+        },
+        "modifyAction": {
+          "label": "modifier"
+        }
+      },
+      "editProperty": {
+        "header": {
+          "title": "Modifier {property}"
+        },
+        "submitButton": {
+          "label": "Mettre à jour la propriété",
+          "loadingLabel": "Mise à jour..."
+        },
+        "valueInput": {
+          "placeholder": "Valeur de la propriété"
+        }
+      },
+      "feedback": {
+        "additionalDetails": {
+          "dislikePlaceholder": "Qu'est-ce qui vous a déplu dans cette réponse ?",
+          "label": "Donnez plus de détails",
+          "likePlaceholder": "Qu'avez-vous aimé dans cette réponse ?"
+        },
+        "cancelButton": {
+          "label": "Annuler"
+        },
+        "header": {
+          "title": "Commentaires"
+        },
+        "submitButton": {
+          "label": "Envoyer",
+          "loadingLabel": "Envoi en cours..."
+        }
+      },
+      "genericConfirm": {
+        "confirmButton": {
+          "label": "Confirmer"
+        }
+      },
+      "share": {
+        "addPeople": {
+          "groupSuggestion": {
+            "description": "Groupe"
+          },
+          "permissionMenu": {
+            "ariaLabel": "Sélectionner la permission proposée"
+          },
+          "searchInput": {
+            "placeholder": "Ajoutez des utilisateurs, des groupes et des comptes"
+          },
+          "sharedTag": {
+            "label": "Partagé"
+          }
+        },
+        "cancelButton": {
+          "label": "Annuler"
+        },
+        "copyLinkButton": {
+          "label": "Copier le lien"
+        },
+        "createLinkButton": {
+          "label": "Créer un lien de partage"
+        },
+        "generateLinkErrorToast": {
+          "message": "Impossible de générer le lien de partage"
+        },
+        "genericErrorToast": {
+          "message": "Une erreur s'est produite"
+        },
+        "header": {
+          "description": "Tous les messages existants et futurs de cette discussion seront partagés.",
+          "sharedTitle": "Discussion partagée",
+          "title": "Partager cette discussion"
+        },
+        "linkCopiedToast": {
+          "message": "Lien de partage copié dans le presse-papiers !"
+        },
+        "linkInput": {
+          "copyTooltip": "Copier le lien"
+        },
+        "makePrivateButton": {
+          "label": "Rendre privée"
+        },
+        "makePrivateErrorToast": {
+          "message": "Impossible de rendre la discussion privée"
+        },
+        "nowPrivateToast": {
+          "message": "La discussion est maintenant privée"
+        },
+        "organizationOption": {
+          "description": "Toute personne de votre organisation peut voir cette discussion.",
+          "title": "Votre organisation"
+        },
+        "permissionMenu": {
+          "edit": {
+            "label": "Modifier"
+          },
+          "removeAccess": {
+            "label": "Retirer l'accès"
+          },
+          "viewAndChat": {
+            "label": "Voir et discuter"
+          }
+        },
+        "privateOption": {
+          "description": "Vous seul avez accès à cette discussion.",
+          "title": "Privée"
+        },
+        "transferOwnership": {
+          "currentOwner": {
+            "label": "Propriétaire actuel"
+          },
+          "groupTag": {
+            "label": "Groupe"
+          },
+          "targetInput": {
+            "label": "Transférer la propriété à",
+            "placeholder": "Ajoutez un utilisateur ou un groupe"
+          },
+          "trailingButton": {
+            "tooltip": "Transférer la propriété"
+          }
+        }
+      },
+      "unsavedChanges": {
+        "body": {
+          "description": "Vos modifications n'ont pas été enregistrées. Si vous partez maintenant, elles seront perdues."
+        },
+        "cancelButton": {
+          "label": "Annuler"
+        },
+        "discardButton": {
+          "label": "Abandonner les modifications"
+        },
+        "header": {
+          "title": "Abandonner les modifications non enregistrées ?"
+        }
+      },
+      "userFiles": {
+        "addFilesButton": {
+          "label": "Ajouter des fichiers"
+        },
+        "doneButton": {
+          "label": "Terminé"
+        },
+        "emptyState": {
+          "description": "Aucun fichier trouvé"
+        },
+        "fileCount": {
+          "label": "{count, plural, one {# fichier} other {# fichiers}}"
+        },
+        "fileStatus": {
+          "deleting": {
+            "label": "Suppression en cours..."
+          },
+          "processing": {
+            "label": "Traitement en cours..."
+          },
+          "uploading": {
+            "label": "Téléversement en cours..."
+          }
+        },
+        "searchInput": {
+          "placeholder": "Rechercher des fichiers..."
+        },
+        "selectedCount": {
+          "label": "{count, plural, one {# fichier sélectionné} other {# fichiers sélectionnés}}"
+        }
+      }
+    },
     "modelSelector": {
       "adminLimitedSetting": {
         "tooltip": "Votre administrateur limite ce modèle à un niveau de raisonnement plus bas."
@@ -1606,6 +1809,185 @@
         "title": "Vitesse de lecture"
       },
       "title": "Voix"
+    }
+  },
+  "sidebar": {
+    "adminSidebar": {
+      "businessOrEnterpriseOnly": {
+        "tooltip": "Cette fonctionnalité est disponible uniquement dans la [version Business ou Enterprise d'Onyx](/admin/billing)."
+      },
+      "enterpriseOnly": {
+        "tooltip": "Cette fonctionnalité est disponible uniquement dans la [version Enterprise d'Onyx](/admin/billing)."
+      },
+      "exitAdminPanel": {
+        "label": "Quitter le panneau d'administration"
+      },
+      "search": {
+        "label": "Rechercher"
+      },
+      "searchInput": {
+        "placeholder": "Rechercher..."
+      }
+    },
+    "appSidebar": {
+      "adminPanel": {
+        "label": "Panneau d'administration"
+      },
+      "agents": {
+        "title": "Agents"
+      },
+      "craft": {
+        "label": "Craft"
+      },
+      "exploreAgents": {
+        "label": "Explorer les agents"
+      },
+      "moreAgents": {
+        "label": "Plus d'agents"
+      },
+      "moveChatError": {
+        "message": "Impossible de déplacer la discussion. Veuillez réessayer."
+      },
+      "newProject": {
+        "label": "Nouveau projet",
+        "tooltip": "Nouveau projet"
+      },
+      "newSession": {
+        "label": "Nouvelle session"
+      },
+      "projects": {
+        "title": "Projets"
+      },
+      "recents": {
+        "empty": {
+          "text": "Essayez d'envoyer un message ! Votre historique de discussions apparaîtra ici."
+        },
+        "title": "Récents"
+      },
+      "searchChats": {
+        "label": "Rechercher des discussions"
+      }
+    },
+    "chatButton": {
+      "createProject": {
+        "label": "Créer {projectName}"
+      },
+      "createProjectError": {
+        "message": "Impossible de créer le projet. Veuillez réessayer."
+      },
+      "delete": {
+        "label": "Supprimer"
+      },
+      "deleteConfirmation": {
+        "confirmButton": {
+          "label": "Supprimer"
+        },
+        "description": "Voulez-vous vraiment supprimer cette discussion ? Cette action est irréversible.",
+        "title": "Supprimer la discussion"
+      },
+      "deleteError": {
+        "message": "Impossible de supprimer la discussion. Veuillez réessayer."
+      },
+      "moveToProject": {
+        "label": "Déplacer vers un projet"
+      },
+      "projectSearchInput": {
+        "placeholder": "Rechercher des projets"
+      },
+      "removeFromProject": {
+        "label": "Retirer de {projectName}"
+      },
+      "rename": {
+        "label": "Renommer"
+      },
+      "share": {
+        "label": "Partager"
+      }
+    },
+    "chatSearch": {
+      "createNamedProject": {
+        "label": "Créer le nouveau projet \"<name>{projectName}</name>\""
+      },
+      "footer": {
+        "openAction": {
+          "label": "Ouvrir"
+        },
+        "selectAction": {
+          "label": "Sélectionner"
+        },
+        "showAllAction": {
+          "label": "Tout afficher"
+        }
+      },
+      "list": {
+        "empty": {
+          "text": "Aucune discussion ni aucun projet pour l'instant"
+        },
+        "noResults": {
+          "text": "Aucun résultat trouvé"
+        }
+      },
+      "newProject": {
+        "label": "Nouveau projet"
+      },
+      "newSession": {
+        "label": "Nouvelle session"
+      },
+      "noMoreResults": {
+        "text": "Aucun autre résultat"
+      },
+      "projectsFilter": {
+        "label": "Projets"
+      },
+      "recentFilter": {
+        "label": "Récent"
+      },
+      "recentSessionsFilter": {
+        "label": "Sessions récentes"
+      },
+      "searchInput": {
+        "placeholder": "Rechercher des sessions de discussion, des projets..."
+      },
+      "sessionsFilter": {
+        "label": "Sessions"
+      }
+    },
+    "createConnector": {
+      "advancedStep": {
+        "label": "Avancé (facultatif)"
+      },
+      "connectorStep": {
+        "label": "Connecteur"
+      },
+      "credentialStep": {
+        "label": "Identifiants"
+      },
+      "exitSetup": {
+        "label": "Quitter la configuration du connecteur"
+      }
+    },
+    "notifications": {
+      "empty": {
+        "title": "Aucune notification"
+      },
+      "header": {
+        "title": "Notifications"
+      },
+      "markAllAsReadButton": {
+        "tooltip": "Tout marquer comme lu"
+      },
+      "markAsReadButton": {
+        "tooltip": "Marquer comme lue"
+      },
+      "newSection": {
+        "title": "Nouvelles"
+      },
+      "olderSection": {
+        "title": "Plus anciennes"
+      },
+      "unreadCount": {
+        "label": "{count, plural, one {# non lue} other {# non lues}}"
+      }
     }
   }
 }
