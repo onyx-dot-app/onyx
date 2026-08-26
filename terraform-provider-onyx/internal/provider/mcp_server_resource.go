@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/mapvalidator"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -13,6 +15,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
+	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/onyx-dot-app/onyx/terraform-provider-onyx/internal/client"
 )
@@ -33,24 +37,28 @@ type mcpServerResource struct {
 }
 
 type mcpServerResourceModel struct {
-	ID                  types.String `tfsdk:"id"`
-	Name                types.String `tfsdk:"name"`
-	Description         types.String `tfsdk:"description"`
-	ServerURL           types.String `tfsdk:"server_url"`
-	Transport           types.String `tfsdk:"transport"`
-	AuthType            types.String `tfsdk:"auth_type"`
-	AuthPerformer       types.String `tfsdk:"auth_performer"`
-	APIToken            types.String `tfsdk:"api_token"`
-	AuthTemplateHeaders types.Map    `tfsdk:"auth_template_headers"`
-	AdminCredentials    types.Map    `tfsdk:"admin_credentials"`
-	IsPublic            types.Bool   `tfsdk:"is_public"`
-	Groups              types.Set    `tfsdk:"groups"`
-	Users               types.Set    `tfsdk:"users"`
-	AvailableInCraft    types.Bool   `tfsdk:"available_in_craft"`
-	Owner               types.String `tfsdk:"owner"`
-	Status              types.String `tfsdk:"status"`
-	ToolCount           types.Int64  `tfsdk:"tool_count"`
-	LastRefreshedAt     types.String `tfsdk:"last_refreshed_at"`
+	ID                        types.String `tfsdk:"id"`
+	Name                      types.String `tfsdk:"name"`
+	Description               types.String `tfsdk:"description"`
+	ServerURL                 types.String `tfsdk:"server_url"`
+	Transport                 types.String `tfsdk:"transport"`
+	AuthType                  types.String `tfsdk:"auth_type"`
+	AuthPerformer             types.String `tfsdk:"auth_performer"`
+	APIToken                  types.String `tfsdk:"api_token"`
+	APITokenWO                types.String `tfsdk:"api_token_wo"`
+	APITokenWOVersion         types.Int64  `tfsdk:"api_token_wo_version"`
+	AuthTemplateHeaders       types.Map    `tfsdk:"auth_template_headers"`
+	AdminCredentials          types.Map    `tfsdk:"admin_credentials"`
+	AdminCredentialsWO        types.Map    `tfsdk:"admin_credentials_wo"`
+	AdminCredentialsWOVersion types.Int64  `tfsdk:"admin_credentials_wo_version"`
+	IsPublic                  types.Bool   `tfsdk:"is_public"`
+	Groups                    types.Set    `tfsdk:"groups"`
+	Users                     types.Set    `tfsdk:"users"`
+	AvailableInCraft          types.Bool   `tfsdk:"available_in_craft"`
+	Owner                     types.String `tfsdk:"owner"`
+	Status                    types.String `tfsdk:"status"`
+	ToolCount                 types.Int64  `tfsdk:"tool_count"`
+	LastRefreshedAt           types.String `tfsdk:"last_refreshed_at"`
 }
 
 func (r *mcpServerResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -114,8 +122,20 @@ func (r *mcpServerResource) Schema(_ context.Context, _ resource.SchemaRequest, 
 				MarkdownDescription: "Shared API token, for `auth_type = \"API_TOKEN\"` with " +
 					"`auth_performer = \"ADMIN\"`. Onyx returns it masked, so Terraform never reads " +
 					"it back: the configured value is the only record, and an imported server has " +
-					"none.",
+					"none." + writeOnlyDescription("api_token"),
 			},
+			"api_token_wo": schema.StringAttribute{
+				Optional:  true,
+				Sensitive: true,
+				WriteOnly: true,
+				MarkdownDescription: "Shared API token, held only in configuration. Terraform sends it " +
+					"on every apply and stores nothing, so the token never reaches state. Pair it with " +
+					"`api_token_wo_version` to rotate it. Needs Terraform 1.11 or later.",
+				Validators: []validator.String{
+					stringvalidator.ConflictsWith(path.MatchRoot("api_token")),
+				},
+			},
+			"api_token_wo_version": writeOnlyVersionAttribute("api_token_wo"),
 			"auth_template_headers": schema.MapAttribute{
 				Optional:    true,
 				Computed:    true,
@@ -135,8 +155,23 @@ func (r *mcpServerResource) Schema(_ context.Context, _ resource.SchemaRequest, 
 				MarkdownDescription: "Values for the `auth_template_headers` placeholders, required " +
 					"with `auth_performer = \"PER_USER\"` and rejected otherwise — a shared token " +
 					"is set through `api_token`. Onyx stores them against the identity that " +
-					"applied, not the server, and returns them masked.",
+					"applied, not the server, and returns them masked." +
+					writeOnlyDescription("admin_credentials"),
 			},
+			"admin_credentials_wo": schema.MapAttribute{
+				Optional:    true,
+				Sensitive:   true,
+				WriteOnly:   true,
+				ElementType: types.StringType,
+				MarkdownDescription: "Values for the `auth_template_headers` placeholders, held only in " +
+					"configuration. Terraform sends them on every apply and stores nothing, so they " +
+					"never reach state. Pair with `admin_credentials_wo_version` to rotate them. " +
+					"Needs Terraform 1.11 or later.",
+				Validators: []validator.Map{
+					mapvalidator.ConflictsWith(path.MatchRoot("admin_credentials")),
+				},
+			},
+			"admin_credentials_wo_version": writeOnlyVersionAttribute("admin_credentials_wo"),
 			"is_public": schema.BoolAttribute{
 				Optional:            true,
 				Computed:            true,
@@ -257,25 +292,27 @@ func (r *mcpServerResource) ValidateConfig(ctx context.Context, req resource.Val
 
 	// A value that is still unknown cannot be checked for presence, and the
 	// apply would report anything the server rejects anyway.
-	tokenSet, tokenKnown := attributeIsSet(config.APIToken)
-	credentialsSet, credentialsKnown := attributeIsSet(config.AdminCredentials)
+	// A secret counts as set whichever half of its write-only pair carries it.
+	tokenSet, tokenKnown := eitherAttributeIsSet(config.APIToken, config.APITokenWO)
+	credentialsSet, credentialsKnown := eitherAttributeIsSet(config.AdminCredentials, config.AdminCredentialsWO)
 	headersSet, headersKnown := attributeIsSet(config.AuthTemplateHeaders)
 
 	if authType == client.MCPAuthNone {
 		for _, unwanted := range []struct {
 			name  string
+			label string
 			set   bool
 			known bool
 		}{
-			{"api_token", tokenSet, tokenKnown},
-			{"admin_credentials", credentialsSet, credentialsKnown},
-			{"auth_template_headers", headersSet, headersKnown},
+			{"api_token", "`api_token`/`api_token_wo`", tokenSet, tokenKnown},
+			{"admin_credentials", "`admin_credentials`/`admin_credentials_wo`", credentialsSet, credentialsKnown},
+			{"auth_template_headers", "`auth_template_headers`", headersSet, headersKnown},
 		} {
 			if unwanted.known && unwanted.set {
 				resp.Diagnostics.AddAttributeError(
 					path.Root(unwanted.name),
 					"Credentials set on a server that takes none",
-					fmt.Sprintf("`%s` only applies when `auth_type` is %q.", unwanted.name, client.MCPAuthAPIToken),
+					fmt.Sprintf("%s only applies when `auth_type` is %q.", unwanted.label, client.MCPAuthAPIToken),
 				)
 			}
 		}
@@ -287,7 +324,7 @@ func (r *mcpServerResource) ValidateConfig(ctx context.Context, req resource.Val
 			resp.Diagnostics.AddAttributeError(
 				path.Root("api_token"),
 				"Missing api_token",
-				"A server authenticated with a shared API token needs `api_token`.",
+				"A server authenticated with a shared API token needs `api_token` or `api_token_wo`.",
 			)
 		}
 		if headersKnown && headersSet {
@@ -302,8 +339,8 @@ func (r *mcpServerResource) ValidateConfig(ctx context.Context, req resource.Val
 			resp.Diagnostics.AddAttributeError(
 				path.Root("admin_credentials"),
 				"admin_credentials set on a shared-token server",
-				"A shared token is set through `api_token`, which Onyx stores as the "+
-					"credentials itself. Use `admin_credentials` only with "+
+				"A shared token is set through `api_token`/`api_token_wo`, which Onyx stores as the "+
+					"credentials itself. Use `admin_credentials`/`admin_credentials_wo` only with "+
 					"`auth_performer = \"PER_USER\"`.",
 			)
 		}
@@ -323,15 +360,16 @@ func (r *mcpServerResource) ValidateConfig(ctx context.Context, req resource.Val
 		resp.Diagnostics.AddAttributeError(
 			path.Root("admin_credentials"),
 			"Missing admin_credentials",
-			"Onyx requires the applying admin's own values for the template fields.",
+			"Onyx requires the applying admin's own values for the template fields, in "+
+				"`admin_credentials` or `admin_credentials_wo`.",
 		)
 	}
 	if tokenKnown && tokenSet {
 		resp.Diagnostics.AddAttributeError(
 			path.Root("api_token"),
 			"api_token set on a per-user server",
-			"`api_token` is the shared token for `auth_performer = \"ADMIN\"`. Use "+
-				"`admin_credentials` for a per-user server.",
+			"`api_token`/`api_token_wo` is the shared token for `auth_performer = \"ADMIN\"`. Use "+
+				"`admin_credentials` or `admin_credentials_wo` for a per-user server.",
 		)
 	}
 }
@@ -348,6 +386,22 @@ func attributeIsSet(value interface {
 	return !value.IsNull(), true
 }
 
+// mcpServerSecrets carries the secret values in force for one apply, each
+// resolved from either the stored attribute or its write-only twin.
+type mcpServerSecrets struct {
+	apiToken         types.String
+	adminCredentials types.Map
+}
+
+// resolveMCPServerSecrets reads the write-only twins, which live in
+// configuration only.
+func resolveMCPServerSecrets(ctx context.Context, config tfsdk.Config, plan mcpServerResourceModel, diags *diag.Diagnostics) mcpServerSecrets {
+	return mcpServerSecrets{
+		apiToken:         resolveWriteOnly(ctx, config, path.Root("api_token_wo"), plan.APIToken, diags),
+		adminCredentials: resolveWriteOnly(ctx, config, path.Root("admin_credentials_wo"), plan.AdminCredentials, diags),
+	}
+}
+
 // writeFromModel converts a plan into the upsert body.
 //
 // The changed flags follow the LLM provider: Terraform state holds the real
@@ -358,6 +412,7 @@ func (r *mcpServerResource) writeFromModel(
 	ctx context.Context,
 	plan mcpServerResourceModel,
 	id *int64,
+	secrets mcpServerSecrets,
 	diags *diag.Diagnostics,
 ) (client.MCPServerWrite, bool) {
 	write := client.MCPServerWrite{
@@ -368,8 +423,8 @@ func (r *mcpServerResource) writeFromModel(
 		AuthType:         plan.AuthType.ValueString(),
 		AuthPerformer:    plan.AuthPerformer.ValueString(),
 		Transport:        plan.Transport.ValueString(),
-		APIToken:         plan.APIToken.ValueStringPointer(),
-		APITokenChanged:  !plan.APIToken.IsNull(),
+		APIToken:         secrets.apiToken.ValueStringPointer(),
+		APITokenChanged:  !secrets.apiToken.IsNull(),
 		IsPublic:         plan.IsPublic.ValueBoolPointer(),
 	}
 
@@ -387,9 +442,9 @@ func (r *mcpServerResource) writeFromModel(
 		diags.Append(plan.AuthTemplateHeaders.ElementsAs(ctx, &headers, false)...)
 		write.AuthTemplate = &client.MCPAuthTemplate{Headers: headers}
 	}
-	if !plan.AdminCredentials.IsNull() && !plan.AdminCredentials.IsUnknown() {
+	if !secrets.adminCredentials.IsNull() && !secrets.adminCredentials.IsUnknown() {
 		credentials := map[string]string{}
-		diags.Append(plan.AdminCredentials.ElementsAs(ctx, &credentials, false)...)
+		diags.Append(secrets.adminCredentials.ElementsAs(ctx, &credentials, false)...)
 		write.AdminCredentials = credentials
 		changed := make(map[string]bool, len(credentials))
 		for key := range credentials {
@@ -519,7 +574,12 @@ func (r *mcpServerResource) Create(ctx context.Context, req resource.CreateReque
 		return
 	}
 
-	write, ok := r.writeFromModel(ctx, plan, nil, &resp.Diagnostics)
+	secrets := resolveMCPServerSecrets(ctx, req.Config, plan, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	write, ok := r.writeFromModel(ctx, plan, nil, secrets, &resp.Diagnostics)
 	if !ok {
 		return
 	}
@@ -592,7 +652,12 @@ func (r *mcpServerResource) Update(ctx context.Context, req resource.UpdateReque
 		return
 	}
 
-	write, ok := r.writeFromModel(ctx, plan, &id, &resp.Diagnostics)
+	secrets := resolveMCPServerSecrets(ctx, req.Config, plan, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	write, ok := r.writeFromModel(ctx, plan, &id, secrets, &resp.Diagnostics)
 	if !ok {
 		return
 	}
