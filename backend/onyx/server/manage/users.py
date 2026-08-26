@@ -6,7 +6,7 @@ from uuid import UUID
 
 import jwt
 from email_validator import EmailNotValidError, EmailUndeliverableError, validate_email
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, field_validator
 from sqlalchemy import select
@@ -41,9 +41,14 @@ from onyx.configs.app_configs import (
     REDIS_AUTH_KEY_PREFIX,
     SESSION_EXPIRE_TIME_SECONDS,
     USER_AUTH_SECRET,
+    WEB_DOMAIN,
     AuthBackend,
 )
-from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME, PUBLIC_API_TAGS
+from onyx.configs.constants import (
+    FASTAPI_USERS_AUTH_COOKIE_NAME,
+    NEXT_LOCALE_COOKIE_NAME,
+    PUBLIC_API_TAGS,
+)
 from onyx.db.api_key import is_api_key_email_address
 from onyx.db.auth import get_live_users_count
 from onyx.db.engine.sql_engine import get_session, get_session_with_shared_schema
@@ -1044,6 +1049,7 @@ def get_current_user_permissions(
 @router.get("/me", tags=PUBLIC_API_TAGS, dependencies=[Depends(scope_exempt)])
 def verify_user_logged_in(
     request: Request,
+    response: Response,
     user: User | None = Depends(optional_user),
     db_session: Session = Depends(get_session),
 ) -> UserInfo:
@@ -1130,6 +1136,11 @@ def verify_user_logged_in(
         memories=memories,
         effective_permissions=sorted(p.value for p in get_effective_permissions(user)),
     )
+
+    # Reconcile the locale cookie with the stored preference so a login on a
+    # fresh browser (or after an identity switch) renders the user's language.
+    if request.cookies.get(NEXT_LOCALE_COOKIE_NAME) != user.language:
+        set_locale_cookie(response, user.language)
 
     return user_info
 
@@ -1243,13 +1254,33 @@ def update_user_theme_preference_api(
     update_user_theme_preference(user.id, request.theme_preference, db_session)
 
 
+LOCALE_COOKIE_MAX_AGE_SECONDS = 365 * 24 * 60 * 60
+
+
+def set_locale_cookie(response: Response, language: str) -> None:
+    """The backend owns the locale cookie: it is set from the stored
+    preference on PATCH /user/language and reconciled on GET /me, so the
+    client never writes it. The Next.js server layout is the only reader."""
+    response.set_cookie(
+        key=NEXT_LOCALE_COOKIE_NAME,
+        value=language,
+        max_age=LOCALE_COOKIE_MAX_AGE_SECONDS,
+        path="/",
+        secure=WEB_DOMAIN.startswith("https"),
+        httponly=True,
+        samesite="lax",
+    )
+
+
 @router.patch("/user/language")
 def update_user_language_api(
     request: LanguageRequest,
+    response: Response,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     update_user_language(user.id, request.language.value, db_session)
+    set_locale_cookie(response, request.language.value)
 
 
 @router.patch("/user/chat-background")
