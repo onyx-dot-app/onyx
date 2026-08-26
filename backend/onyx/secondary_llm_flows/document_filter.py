@@ -30,13 +30,16 @@ class _ContextClassificationSpec(BaseModel):
     """Prompt + parsing rules for one section-relevance classification mode."""
 
     prompt_template: str
-    situation_pattern: str
     situation_to_type: dict[int, ContextExpansionType]
+
+    @property
+    def situation_pattern(self) -> str:
+        """Match one situation digit, derived from the situation keys."""
+        return rf"\b[{min(self.situation_to_type)}-{max(self.situation_to_type)}]\b"
 
 
 _TEXT_CONTEXT_SPEC = _ContextClassificationSpec(
     prompt_template=DOCUMENT_CONTEXT_SELECTION_PROMPT,
-    situation_pattern=r"\b[0-3]\b",
     situation_to_type={
         0: ContextExpansionType.NOT_RELEVANT,
         1: ContextExpansionType.MAIN_SECTION_ONLY,
@@ -47,7 +50,6 @@ _TEXT_CONTEXT_SPEC = _ContextClassificationSpec(
 
 _CODE_CONTEXT_SPEC = _ContextClassificationSpec(
     prompt_template=CODE_CONTEXT_SELECTION_PROMPT,
-    situation_pattern=r"\b[0-4]\b",
     situation_to_type={
         0: ContextExpansionType.NOT_RELEVANT,
         1: ContextExpansionType.MAIN_SECTION_ONLY,

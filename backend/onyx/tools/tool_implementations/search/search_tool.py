@@ -42,8 +42,15 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.chat.emitter import Emitter
+from onyx.coding_agent.mock_tools import CODING_AGENT_TOOL_NAME
 from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
-from onyx.configs.constants import DocumentSource, FederatedConnectorSource
+from onyx.configs.constants import (
+    CODE_FILE_BRANCH_KEY,
+    CODE_FILE_COMMIT_SHA_KEY,
+    CODE_FILE_REPO_KEY,
+    DocumentSource,
+    FederatedConnectorSource,
+)
 from onyx.context.search.federated.slack_search import slack_retrieval
 from onyx.context.search.models import (
     BaseFilters,
@@ -127,6 +134,7 @@ from onyx.tools.tool_implementations.search.search_utils import (
     SectionExpansionResult,
     expand_section_with_context,
     merge_overlapping_sections,
+    metadata_values,
     weighted_reciprocal_rank_fusion,
 )
 from onyx.tools.tool_implementations.utils import (
@@ -174,30 +182,30 @@ def _build_repo_analysis_note(escalation_chunks: list[InferenceChunk]) -> str:
     """LLM-facing hint listing code files whose question likely needs
     repository-wide analysis, with the repo pointer needed to escalate."""
 
-    def _meta_str(chunk: InferenceChunk, key: str) -> str | None:
-        value = chunk.metadata.get(key)
-        if isinstance(value, list):
-            return value[0] if value else None
-        return value
+    any_github = any(
+        chunk.source_type == DocumentSource.GITHUB for chunk in escalation_chunks
+    )
 
     lines: list[str] = []
-    any_github: bool = False
     for chunk in escalation_chunks:
         pointer = f"- file: {chunk.semantic_identifier}"
         pointer += f", platform: {chunk.source_type.value}"
-        any_github = any_github or chunk.source_type == DocumentSource.GITHUB
-        for key in ("repo", "branch", "commit_sha"):
-            value = _meta_str(chunk, key)
-            if value:
-                pointer += f", {key}: {value}"
+        for key in (
+            CODE_FILE_REPO_KEY,
+            CODE_FILE_BRANCH_KEY,
+            CODE_FILE_COMMIT_SHA_KEY,
+        ):
+            values = metadata_values(chunk.metadata, key)
+            if values:
+                pointer += f", {key}: {values[0]}"
         lines.append(pointer)
 
     # The coding agent currently supports GitHub repos only; suggest it only
     # when it can actually act on one of the listed files.
     escalation_advice = (
-        "If a coding agent tool (e.g. `coding_agent`) is available, consider "
-        "calling it with the GitHub repository listed above and the user's "
-        "question. Otherwise answer from the retrieved code and say what "
+        f"If a coding agent tool (e.g. `{CODING_AGENT_TOOL_NAME}`) is available, "
+        "consider calling it with the GitHub repository listed above and the "
+        "user's question. Otherwise answer from the retrieved code and say what "
         "could not be verified."
         if any_github
         else "Answer from the retrieved code and say what could not be verified."
@@ -1196,12 +1204,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                     document_index=document_index,
                     expand_override=expand_override,
                 )
-                if result.section is None:
-                    # NOT_RELEVANT — the selection step already vetted this
-                    # section, so keep the original rather than dropping it.
-                    return SectionExpansionResult(
-                        section=section, classification=result.classification
-                    )
+                # A None section means NOT_RELEVANT; the caller drops it.
                 return result
             except Exception as e:
                 logger.warning(
@@ -1270,8 +1273,8 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         escalation_chunks: list[InferenceChunk] = [
             result.section.center_chunk
             for result in expansion_results
-            if result.classification == ContextExpansionType.REPO_ANALYSIS
-            and result.section
+            if result.section
+            and result.classification == ContextExpansionType.REPO_ANALYSIS
         ]
         combined_note = (scope_note or "") + (
             _build_repo_analysis_note(escalation_chunks) if escalation_chunks else ""

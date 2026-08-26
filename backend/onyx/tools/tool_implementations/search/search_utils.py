@@ -4,9 +4,7 @@ from typing import TypeVar
 
 from pydantic import BaseModel
 
-from onyx.connectors.cross_connector_utils.code_file_utils import (
-    CODE_FILE_METADATA_TYPE,
-)
+from onyx.configs.constants import CODE_FILE_METADATA_TYPE, CODE_FILE_TYPE_KEY
 from onyx.context.search.models import (
     ContextExpansionType,
     IndexFilters,
@@ -137,6 +135,36 @@ def section_to_dict(section: InferenceSection, section_num: int) -> dict:
     return doc_dict
 
 
+def _fetch_chunk_range(
+    document_id: str,
+    document_index: DocumentIndex,
+    min_chunk_ind: int | None = None,
+    max_chunk_ind: int | None = None,
+) -> list[InferenceChunk]:
+    """Fetch one inclusive chunk-index range of a document, sorted by chunk_id.
+
+    Bounds default to the start / end of the document. Permissions were enforced
+    at retrieval time, so the fetch runs without ACL filters. Returns [] if the
+    index call fails.
+    """
+    request = DocumentSectionRequest(
+        document_id=replace_invalid_doc_id_characters(document_id),
+        min_chunk_ind=min_chunk_ind,
+        max_chunk_ind=max_chunk_ind,
+    )
+    try:
+        chunks = document_index.id_based_retrieval(
+            chunk_requests=[request],
+            filters=IndexFilters(access_control_list=None),
+            batch_retrieval=True,
+        )
+    except Exception as e:
+        logger.warning("Failed to retrieve chunks for document %s: %s", document_id, e)
+        return []
+    chunks.sort(key=lambda c: c.chunk_id)
+    return chunks
+
+
 def _retrieve_adjacent_chunks(
     section: InferenceSection,
     document_index: DocumentIndex,
@@ -154,12 +182,7 @@ def _retrieve_adjacent_chunks(
     Returns:
         Tuple of (chunks_above, chunks_below)
     """
-    # Get the document_id and chunk range from the section
     document_id = section.center_chunk.document_id
-
-    # The document fetching already enforced permissions
-    # the expansion does not need to do this unless it's for performance reasons
-    filters = IndexFilters(access_control_list=None)
 
     # Find the min and max chunk_id in the section
     chunk_ids = [chunk.chunk_id for chunk in section.chunks]
@@ -169,49 +192,21 @@ def _retrieve_adjacent_chunks(
     chunks_above: list[InferenceChunk] = []
     chunks_below: list[InferenceChunk] = []
 
-    # Retrieve chunks above (if any)
     if num_chunks_above > 0 and min_chunk_id > 0:
-        above_min = max(0, min_chunk_id - num_chunks_above)
-        above_max = min_chunk_id - 1
-
-        above_request = DocumentSectionRequest(
-            document_id=replace_invalid_doc_id_characters(document_id),
-            min_chunk_ind=above_min,
-            max_chunk_ind=above_max,
+        chunks_above = _fetch_chunk_range(
+            document_id=document_id,
+            document_index=document_index,
+            min_chunk_ind=max(0, min_chunk_id - num_chunks_above),
+            max_chunk_ind=min_chunk_id - 1,
         )
 
-        try:
-            chunks_above = document_index.id_based_retrieval(
-                chunk_requests=[above_request],
-                filters=filters,
-                batch_retrieval=True,
-            )
-            # Sort by chunk_id to ensure correct order
-            chunks_above.sort(key=lambda c: c.chunk_id)
-        except Exception as e:
-            logger.warning("Failed to retrieve chunks above section: %s", e)
-
-    # Retrieve chunks below (if any)
     if num_chunks_below > 0:
-        below_min = max_chunk_id + 1
-        below_max = max_chunk_id + num_chunks_below
-
-        below_request = DocumentSectionRequest(
-            document_id=replace_invalid_doc_id_characters(document_id),
-            min_chunk_ind=below_min,
-            max_chunk_ind=below_max,
+        chunks_below = _fetch_chunk_range(
+            document_id=document_id,
+            document_index=document_index,
+            min_chunk_ind=max_chunk_id + 1,
+            max_chunk_ind=max_chunk_id + num_chunks_below,
         )
-
-        try:
-            chunks_below = document_index.id_based_retrieval(
-                chunk_requests=[below_request],
-                filters=filters,
-                batch_retrieval=True,
-            )
-            # Sort by chunk_id to ensure correct order
-            chunks_below.sort(key=lambda c: c.chunk_id)
-        except Exception as e:
-            logger.warning("Failed to retrieve chunks below section: %s", e)
 
     return chunks_above, chunks_below
 
@@ -220,28 +215,18 @@ def _retrieve_full_document_chunks(
     document_id: str,
     document_index: DocumentIndex,
 ) -> list[InferenceChunk]:
-    """Fetch every chunk of a document (no chunk bounds), sorted by chunk_id.
+    """Fetch a document's chunks from the start up to MAX_FULL_FILE_CHUNKS.
 
-    Permissions were enforced at retrieval time, so the fetch runs without ACL
-    filters like the adjacent-chunk expansion above.
+    The cap is one chunk more than the usable budget: callers detect files
+    exceeding MAX_FULL_FILE_CHUNKS via len() without pulling every chunk of an
+    arbitrarily large file. Both index backends treat max_chunk_ind as
+    inclusive.
     """
-    request = DocumentSectionRequest(
-        document_id=replace_invalid_doc_id_characters(document_id),
-        # Cap + 1 chunk: callers detect files exceeding MAX_FULL_FILE_CHUNKS
-        # via len() without pulling every chunk of an arbitrarily large file.
+    return _fetch_chunk_range(
+        document_id=document_id,
+        document_index=document_index,
         max_chunk_ind=MAX_FULL_FILE_CHUNKS,
     )
-    try:
-        chunks = document_index.id_based_retrieval(
-            chunk_requests=[request],
-            filters=IndexFilters(access_control_list=None),
-            batch_retrieval=True,
-        )
-    except Exception as e:
-        logger.warning("Failed to retrieve full document %s: %s", document_id, e)
-        return []
-    chunks.sort(key=lambda c: c.chunk_id)
-    return chunks
 
 
 def merge_overlapping_sections(
@@ -387,15 +372,22 @@ def merge_overlapping_sections(
     return result
 
 
+def metadata_values(metadata: dict[str, str | list[str]], key: str) -> list[str]:
+    """Read a document-metadata key, which may hold a str or a list[str]."""
+    value = metadata.get(key)
+    if value is None:
+        return []
+    return value if isinstance(value, list) else [value]
+
+
 def _is_code_section(section: InferenceSection) -> bool:
     """Code detection rests on the document-metadata contract alone:
     connectors that index source files set `type: CodeFile`. Extensions and
     semantic_identifier are deliberately not consulted — a doc file's path
     (README.md) or an issue titled "fix foo.py" must not classify as code."""
-    value = section.center_chunk.metadata.get("type")
-    if isinstance(value, list):
-        return CODE_FILE_METADATA_TYPE in value
-    return value == CODE_FILE_METADATA_TYPE
+    return CODE_FILE_METADATA_TYPE in metadata_values(
+        section.center_chunk.metadata, CODE_FILE_TYPE_KEY
+    )
 
 
 class SectionExpansionResult(BaseModel):
@@ -430,11 +422,7 @@ def _expand_with_window(
         )
         return section
 
-    expanded_section = inference_section_from_chunks(
-        center_chunk=section.center_chunk,
-        chunks=all_chunks,
-    )
-    return expanded_section if expanded_section else section
+    return inference_section_from_chunks(section.center_chunk, all_chunks) or section
 
 
 def expand_section_with_context(
@@ -467,7 +455,6 @@ def expand_section_with_context(
     # If expand_override is True, skip LLM classification and use FULL_DOCUMENT
     if expand_override:
         classification = ContextExpansionType.FULL_DOCUMENT
-        # These are not used, but need to be defined to avoid type errors
     else:
         # Retrieve 2 chunks above and below for the LLM classification prompt
         chunks_above_for_prompt, chunks_below_for_prompt = _retrieve_adjacent_chunks(
@@ -501,17 +488,12 @@ def expand_section_with_context(
             is_code=_is_code_section(section),
         )
 
-    if expand_override:
-        logger.debug(
-            "Section marked for FULL_DOCUMENT expansion (override): %s",
-            section.center_chunk.semantic_identifier,
-        )
-    else:
-        logger.debug(
-            "LLM classified section as %s: %s",
-            classification.value,
-            section.center_chunk.semantic_identifier,
-        )
+    logger.debug(
+        "Section classified as %s%s: %s",
+        classification.value,
+        " (override)" if expand_override else "",
+        section.center_chunk.semantic_identifier,
+    )
 
     # Now build the expanded section based on classification
     if classification == ContextExpansionType.NOT_RELEVANT:
@@ -525,17 +507,9 @@ def expand_section_with_context(
     elif classification == ContextExpansionType.INCLUDE_ADJACENT_SECTIONS:
         # Use the 2 chunks we already retrieved for the prompt
         all_chunks = chunks_above_for_prompt + section.chunks + chunks_below_for_prompt
-        if not all_chunks:
-            return SectionExpansionResult(
-                section=section, classification=classification
-            )
-
-        expanded_section = inference_section_from_chunks(
-            center_chunk=section.center_chunk,
-            chunks=all_chunks,
-        )
         return SectionExpansionResult(
-            section=expanded_section if expanded_section else section,
+            section=inference_section_from_chunks(section.center_chunk, all_chunks)
+            or section,
             classification=classification,
         )
 
@@ -545,7 +519,7 @@ def expand_section_with_context(
     ):
         # Both outcomes give the fullest inline context; the caller reacts to
         # REPO_ANALYSIS via the returned classification.
-        all_chunks: list[InferenceChunk] = _retrieve_full_document_chunks(
+        all_chunks = _retrieve_full_document_chunks(
             document_id=section.center_chunk.document_id,
             document_index=document_index,
         )
@@ -556,12 +530,9 @@ def expand_section_with_context(
                 classification=classification,
             )
 
-        expanded_section = inference_section_from_chunks(
-            center_chunk=section.center_chunk,
-            chunks=all_chunks,
-        )
         return SectionExpansionResult(
-            section=expanded_section if expanded_section else section,
+            section=inference_section_from_chunks(section.center_chunk, all_chunks)
+            or section,
             classification=classification,
         )
 
