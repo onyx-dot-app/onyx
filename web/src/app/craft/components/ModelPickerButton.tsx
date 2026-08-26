@@ -10,10 +10,17 @@ import { getPreferredLlmSelection } from "@/app/craft/utils/llmPreferences";
 import { useUser } from "@/providers/UserProvider";
 
 interface ModelPickerButtonProps {
-  // null → show the recommended default.
+  // null → show the recommended default (or `placeholder`, if `fallbackToDefault` is false).
   selection: BuildLlmSelection | null;
   onChange: (selection: BuildLlmSelection) => void;
   disabled?: boolean;
+  // Whether a null `selection` should fall back to the user's remembered
+  // pick / workspace default. Admin contexts that display a workspace-wide
+  // setting should pass `false` so the admin's own personal pick can't leak
+  // in as if it were the setting's value.
+  fallbackToDefault?: boolean;
+  // Label shown when there is no selection and `fallbackToDefault` is false.
+  placeholder?: string;
 }
 
 // Controlled model picker pill matching the main app's ModelSelector.
@@ -21,19 +28,33 @@ export default function ModelPickerButton({
   selection,
   onChange,
   disabled = false,
+  fallbackToDefault = true,
+  placeholder = "Select model",
 }: ModelPickerButtonProps) {
-  const { llmProviders, defaultText } = useLLMProviders();
+  const { llmProviders, defaultText, defaultCraft } = useLLMProviders();
   const { user } = useUser();
 
   const effective = useMemo(
     () =>
       selection ??
-      getPreferredLlmSelection(user?.id, llmProviders, defaultText),
-    [selection, user?.id, llmProviders, defaultText]
+      (fallbackToDefault
+        ? getPreferredLlmSelection(user?.id, llmProviders, [
+            defaultCraft,
+            defaultText,
+          ])
+        : null),
+    [
+      selection,
+      fallbackToDefault,
+      user?.id,
+      llmProviders,
+      defaultCraft,
+      defaultText,
+    ]
   );
 
   const displayName = useMemo(() => {
-    if (!effective) return "Select model";
+    if (!effective) return placeholder;
     const provider = llmProviders?.find(
       (candidate) => candidate.id === effective.providerId
     );
@@ -42,7 +63,7 @@ export default function ModelPickerButton({
     );
     if (config) return config.effectiveDisplayName;
     return effective.modelName;
-  }, [effective, llmProviders]);
+  }, [effective, llmProviders, placeholder]);
 
   const ModelIcon = effective
     ? getModelIcon(effective.provider, effective.modelName)

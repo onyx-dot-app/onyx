@@ -853,6 +853,10 @@ def fetch_default_chat_naming_model(
     return fetch_default_model(db_session, LLMModelFlowType.CHAT_NAMING)
 
 
+def fetch_default_craft_model(db_session: Session) -> ModelConfiguration | None:
+    return fetch_default_model(db_session, LLMModelFlowType.CRAFT)
+
+
 def fetch_default_model(
     db_session: Session,
     flow_type: LLMModelFlowType,
@@ -1015,6 +1019,17 @@ def update_default_chat_naming_provider(
     )
 
 
+def update_default_craft_provider(
+    provider_id: int, model_name: str, db_session: Session
+) -> None:
+    _update_default_model(
+        db_session,
+        provider_id,
+        model_name,
+        LLMModelFlowType.CRAFT,
+    )
+
+
 def update_no_default_chat_naming_provider(
     db_session: Session,
 ) -> None:
@@ -1022,6 +1037,18 @@ def update_no_default_chat_naming_provider(
         update(LLMModelFlow)
         .where(
             LLMModelFlow.llm_model_flow_type == LLMModelFlowType.CHAT_NAMING,
+            LLMModelFlow.is_default == True,  # noqa: E712
+        )
+        .values(is_default=False)
+    )
+    db_session.commit()
+
+
+def update_no_default_craft_provider(db_session: Session) -> None:
+    db_session.execute(
+        update(LLMModelFlow)
+        .where(
+            LLMModelFlow.llm_model_flow_type == LLMModelFlowType.CRAFT,
             LLMModelFlow.is_default == True,  # noqa: E712
         )
         .values(is_default=False)
