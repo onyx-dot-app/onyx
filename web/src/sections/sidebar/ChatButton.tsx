@@ -22,7 +22,7 @@ import ShareChatSessionModal from "@/sections/modals/ShareChatSessionModal";
 import { Button, LineItemButton, SidebarTab } from "@opal/components";
 import { InputTypeIn } from "@opal/components";
 import { Hoverable } from "@opal/core";
-import useFocusOnMount from "@opal/hooks/useFocusOnMount";
+import { useFocusOnMount } from "@opal/hooks";
 import { DRAG_TYPES, LOCAL_STORAGE_KEYS } from "@/lib/sidebar/constants";
 import {
   shouldShowMoveModal,

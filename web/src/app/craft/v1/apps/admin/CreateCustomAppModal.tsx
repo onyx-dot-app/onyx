@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import useFocusOnMount from "@opal/hooks/useFocusOnMount";
+import { useFocusOnMount } from "@opal/hooks";
 import { useRouter } from "next/navigation";
 import isEqual from "lodash/isEqual";
 import {

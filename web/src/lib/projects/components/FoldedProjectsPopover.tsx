@@ -15,7 +15,7 @@ import {
   SidebarTab,
   useCreateModal,
 } from "@opal/components";
-import useFocusOnMount from "@opal/hooks/useFocusOnMount";
+import { useFocusOnMount } from "@opal/hooks";
 import { Section } from "@opal/layouts";
 import { SvgFolder, SvgFolderPlus } from "@opal/icons";
 import { useAppRouter } from "@/hooks/appNavigation";

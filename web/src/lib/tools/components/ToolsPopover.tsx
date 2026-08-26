@@ -2,7 +2,7 @@
 
 import { FILE_READER_TOOL_ID, SEARCH_TOOL_ID } from "@/lib/tools/constants";
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import useFocusOnMount from "@opal/hooks/useFocusOnMount";
+import { useFocusOnMount } from "@opal/hooks";
 import { InputTypeIn, Button, Popover, PopoverMenu } from "@opal/components";
 import { SvgActions, SvgKey, SvgSliders, SvgSimpleLoader } from "@opal/icons";
 import SwitchList, { SwitchListItem } from "@/lib/tools/components/SwitchList";

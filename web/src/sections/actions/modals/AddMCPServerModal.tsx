@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import useFocusOnMount from "@opal/hooks/useFocusOnMount";
+import { useFocusOnMount } from "@opal/hooks";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import { Modal } from "@opal/components";
