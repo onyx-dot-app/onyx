@@ -9,6 +9,11 @@
 # every admin route. Listing groups needs the same Enterprise Edition route
 # the admin panel uses.
 #
+# The account credentials are required, deliberately. On a deployment with no
+# users the register call below succeeds and the first user becomes an admin,
+# so a default password here would quietly create a known-password
+# administrator on any reachable deployment.
+#
 # Usage:
 #   ONYX_SERVER_URL=http://localhost:8080 \
 #   ONYX_ADMIN_EMAIL=admin@example.com \
@@ -17,9 +22,15 @@
 set -euo pipefail
 
 server_url="${ONYX_SERVER_URL:-http://localhost:8080}"
-email="${ONYX_ADMIN_EMAIL:-admin_user@example.com}"
-password="${ONYX_ADMIN_PASSWORD:-TestPassword123!}"
+email="${ONYX_ADMIN_EMAIL:-}"
+password="${ONYX_ADMIN_PASSWORD:-}"
 key_name="${ONYX_API_KEY_NAME:-terraform}"
+
+if [ -z "$email" ] || [ -z "$password" ]; then
+  echo "set ONYX_ADMIN_EMAIL and ONYX_ADMIN_PASSWORD" >&2
+  echo "they are required rather than defaulted: on a deployment with no users this script registers the account, and the first user becomes an admin" >&2
+  exit 1
+fi
 
 base="${server_url%/}"
 if [ -n "${ONYX_API_PREFIX:-}" ]; then
@@ -34,15 +45,27 @@ for tool in curl jq; do
 done
 
 cookie_jar="$(mktemp)"
-trap 'rm -f "$cookie_jar"' EXIT
+register_body="$(mktemp)"
+trap 'rm -f "$cookie_jar" "$register_body"' EXIT
 
-# Register. The first user on an empty deployment becomes admin. An existing
-# account fails here, which is fine: the login below is the real gate.
-curl -fsS -X POST "${base}/auth/register" \
+# Register. The first user on an empty deployment becomes admin. An account that
+# already exists answers 400 and is fine -- the login below is the real gate.
+# Any other status is reported rather than swallowed, so a deployment problem
+# does not resurface later as a confusing login failure.
+register_code="$(curl -sS -o "$register_body" -w '%{http_code}' \
+  -X POST "${base}/auth/register" \
   -H 'Content-Type: application/json' \
   -d "$(jq -cn --arg e "$email" --arg p "$password" \
-    '{email: $e, username: $e, password: $p}')" \
-  > /dev/null 2>&1 || true
+    '{email: $e, username: $e, password: $p}')" 2> /dev/null || echo 000)"
+
+case "$register_code" in
+  2*| 400) ;;
+  *)
+    echo "warning: registering ${email} answered HTTP ${register_code}" >&2
+    head -c 500 "$register_body" >&2
+    echo >&2
+    ;;
+esac
 
 if ! curl -fsS -X POST "${base}/auth/login" \
   -c "$cookie_jar" \

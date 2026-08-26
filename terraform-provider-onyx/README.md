@@ -49,7 +49,10 @@ curl -X POST https://your-onyx/api/admin/api-key \
 ```
 
 [`examples/bootstrap/mint_api_key.sh`](./examples/bootstrap/mint_api_key.sh) does the whole
-sequence — register, log in, resolve the Admin group, mint the key — for a scripted setup.
+sequence — register, log in, resolve the Admin group, mint the key — for a scripted setup. It
+requires `ONYX_ADMIN_EMAIL` and `ONYX_ADMIN_PASSWORD` rather than defaulting them: on a
+deployment with no users it registers that account, and the first user to register becomes an
+admin.
 
 This first key is inherently chicken-and-egg: it must exist before Terraform can run, so
 either leave it unmanaged, or `terraform import` it afterwards (its `api_key` attribute

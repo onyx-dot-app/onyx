@@ -16,13 +16,20 @@ groups it belongs to, so the key must be in the `Admin` group.
 Create one in the admin panel under **Settings -> Service Accounts**, or run:
 
 ```bash
-ONYX_SERVER_URL=http://localhost:8080 ./mint_api_key.sh
+ONYX_SERVER_URL=http://localhost:8080 \
+ONYX_ADMIN_EMAIL=admin@example.com \
+ONYX_ADMIN_PASSWORD='...' \
+./mint_api_key.sh
 ```
 
-The script registers an admin, logs in, and mints a key in the `Admin` group.
-It reads `ONYX_ADMIN_EMAIL` and `ONYX_ADMIN_PASSWORD`, and needs `curl` and
-`jq`. Listing groups needs the same Enterprise Edition route the admin panel
-uses.
+The script logs in as that account and mints a key in the `Admin` group. It
+needs `curl` and `jq`, and listing groups needs the same Enterprise Edition
+route the admin panel uses.
+
+The credentials are required rather than defaulted, deliberately. On a
+deployment with no users the script registers the account, and the first user
+to register becomes an admin — so a default password here would quietly create
+a known-password administrator on any reachable deployment.
 
 ## Apply
 
@@ -40,7 +47,9 @@ Credentials can also come from the environment, which keeps them out of
 
 ```bash
 export ONYX_SERVER_URL=http://localhost:8080
-export ONYX_API_KEY="$(./mint_api_key.sh)"
+export ONYX_API_KEY="$(ONYX_ADMIN_EMAIL=admin@example.com \
+  ONYX_ADMIN_PASSWORD='...' ./mint_api_key.sh)"
+export TF_VAR_openai_api_key="sk-..."
 ```
 
 ## What it creates

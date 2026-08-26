@@ -24,7 +24,7 @@
 name: Terraform Provider Tests
 
 concurrency:
-  group: Terraform-Provider-Tests-${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  group: Terraform-Provider-Tests-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 on:
@@ -306,12 +306,20 @@ jobs:
           AUTH_MODE: ${{ matrix.auth }}
           TF_ACC: "1"
           ONYX_TF_ACC_SERVER_URL: http://localhost:8080
+          # mint_api_key.sh requires these rather than defaulting them, so that
+          # it cannot quietly create a known-password admin on a real
+          # deployment. Here they match the harness's own defaults, against a
+          # throwaway stack this job tears down with `down -v`.
+          ACC_ADMIN_EMAIL: admin_user@example.com
+          ACC_ADMIN_PASSWORD: TestPassword123!
         run: |
           set -uo pipefail
           # Mint the key in this step so the material never lands in the job
           # environment or a step output.
           if [ "${AUTH_MODE}" = "api-key" ]; then
             key=$(ONYX_SERVER_URL="${ONYX_TF_ACC_SERVER_URL}" \
+              ONYX_ADMIN_EMAIL="${ACC_ADMIN_EMAIL}" \
+              ONYX_ADMIN_PASSWORD="${ACC_ADMIN_PASSWORD}" \
               ONYX_API_KEY_NAME=terraform-provider-ci \
               ./examples/bootstrap/mint_api_key.sh)
             # An empty key would send the harness down its own bootstrap path,
