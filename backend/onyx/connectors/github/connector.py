@@ -80,6 +80,7 @@ from onyx.file_processing.extract_file_text import (
     is_text_file,
 )
 from onyx.repo_archives.github import GitHubArchiveProvider
+from onyx.repo_archives.models import RepoRef
 from onyx.repo_archives.snapshot import RepoSnapshot, snapshot_or_none
 from onyx.utils.logger import setup_logger
 
@@ -782,11 +783,11 @@ class GithubConnector(
         if cache_key in self._snapshot_cache:
             return self._snapshot_cache[cache_key]
 
-        provider = GitHubArchiveProvider.from_token(self._github_token)
         owner, _, name = repo.full_name.partition("/")
+        repo_ref = RepoRef(provider="github", host="github.com", owner=owner, name=name)
         snapshot = snapshot_or_none(
-            provider,
-            provider.repo_ref(owner, name),
+            GitHubArchiveProvider.from_token(self._github_token),
+            repo_ref,
             branch,
             max_size_bytes=REPO_ARCHIVE_MAX_BYTES,
             timeout=REPO_ARCHIVE_FETCH_TIMEOUT,
@@ -913,17 +914,27 @@ class GithubConnector(
         # the file stage. Also immune to GitHub's tree truncation.
         snapshot = self._ensure_snapshot(repo)
         if snapshot is not None:
-            paths = sorted(
-                path
-                for path, size in snapshot.walk_files()
-                if _is_indexable_path(
-                    path,
-                    size,
-                    include_docs=self.include_files,
-                    include_code_files=self.include_code_files,
+            try:
+                paths = sorted(
+                    path
+                    for path, size in snapshot.walk_files()
+                    if _is_indexable_path(
+                        path,
+                        size,
+                        include_docs=self.include_files,
+                        include_code_files=self.include_code_files,
+                    )
                 )
-            )
-            return paths, False
+                return paths, False
+            except Exception:
+                # A concurrent prune can remove the snapshot mid-walk. The
+                # tree API listing below substitutes, so fall through.
+                logger.warning(
+                    "Listing files from the snapshot of %s failed; "
+                    "falling back to the git tree API",
+                    repo.full_name,
+                    exc_info=True,
+                )
 
         assert self.github_client is not None  # for type-checking
         try:
@@ -1075,7 +1086,9 @@ class GithubConnector(
         # A resumed checkpoint on a different worker re-downloads the tarball
         # once; if that fails, each file falls back to the content API.
         snapshot = self._ensure_snapshot(repo) if batch and not is_slim else None
-        commit_sha = snapshot.revision.commit_sha if snapshot is not None else None
+        snapshot_commit_sha = (
+            snapshot.revision.commit_sha if snapshot is not None else None
+        )
 
         for path in batch:
             html_url = f"{repo.html_url}/blob/{branch}/{path}"
@@ -1091,9 +1104,13 @@ class GithubConnector(
                 continue
             try:
                 raw: bytes | None = None
+                # Only snapshot-sourced content may claim the snapshot's
+                # revision; the content API serves the branch head.
+                commit_sha: str | None = None
                 if snapshot is not None:
                     try:
                         raw = snapshot.read_file(path, GITHUB_MAX_FILE_SIZE_BYTES)
+                        commit_sha = snapshot_commit_sha
                     except Exception as e:
                         logger.warning(
                             "Reading %s from snapshot failed (%s); "
@@ -1103,6 +1120,7 @@ class GithubConnector(
                         )
                 if raw is None:
                     raw = self._fetch_file_content(repo, path)
+                    commit_sha = None
                 content_text = _decode_file_content(raw)
                 if content_text is None:
                     yield ConnectorFailure(
