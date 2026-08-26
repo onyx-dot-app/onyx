@@ -2642,6 +2642,9 @@
         "elevenlabsTts": {
           "subtitle": "API de synthèse vocale ElevenLabs."
         },
+        "openaiCompatibleStt": {
+          "subtitle": "Transcription via une API compatible avec OpenAI."
+        },
         "tts1": {
           "subtitle": "Modèle de synthèse vocale d'OpenAI optimisé pour la rapidité."
         },
@@ -2653,9 +2656,17 @@
         }
       },
       "setupModal": {
+        "apiBase": {
+          "description": "Saisissez la racine du serveur ou une base d’API se terminant par /v1.",
+          "invalid": "Saisissez une URL de base d’API valide",
+          "label": "URL de base de l’API",
+          "placeholder": "http://host.docker.internal:8000/v1",
+          "required": "L’URL de base de l’API est requise"
+        },
         "apiKey": {
           "description": "Collez votre [clé d'API]({url}) de {provider} pour accéder à vos modèles.",
           "label": "Clé d'API",
+          "optionalDescription": "Facultatif. Saisissez une clé API Bearer uniquement si votre serveur l’exige.",
           "placeholder": "Clé d'API",
           "required": "La clé d'API est obligatoire"
         },
@@ -2664,6 +2675,10 @@
         },
         "connectButton": {
           "label": "Connecter"
+        },
+        "compatibleInfo": {
+          "description": "Onyx envoie l’audio par segments à `/v1/audio/transcriptions`. Il n’utilise pas OpenAI Realtime. Si Onyx s’exécute dans Docker et le serveur sur votre hôte, utilisez `host.docker.internal` au lieu de `127.0.0.1`.",
+          "title": "Transcription compatible avec OpenAI"
         },
         "connectionTestFailed": {
           "message": "Le test de connexion a échoué"
@@ -2688,7 +2703,10 @@
           "selfHostedCapExceeded": "Les points de terminaison auto-hébergés prennent en charge au maximum {cap} langues parlées (détection au démarrage)"
         },
         "sttModel": {
-          "label": "Modèle de reconnaissance vocale"
+          "description": "Saisissez le nom du modèle exposé par le serveur de transcription.",
+          "label": "Modèle de reconnaissance vocale",
+          "placeholder": "whisper-1",
+          "required": "Le modèle de reconnaissance vocale est requis"
         },
         "targetUri": {
           "description": "Collez le point de terminaison affiché dans le [portail Azure (Keys and Endpoint)]({portalUrl}). Onyx en extrait la région de service vocal. Exemples : `https://westus.api.cognitive.microsoft.com/` ou `https://westus.tts.speech.microsoft.com/`.",
