@@ -324,6 +324,11 @@ func testAccCurrentUserID(t *testing.T) string {
 		t.Fatalf("reading the current user failed: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode >= 300 {
+		// Reported plainly: an expired or group-less key answers here, and
+		// "the current user has no id" would send the reader the wrong way.
+		t.Fatalf("reading the current user failed with HTTP %d", resp.StatusCode)
+	}
 	var body struct {
 		ID string `json:"id"`
 	}
@@ -389,6 +394,38 @@ resource "onyx_mcp_server" "bad_performer" {
   auth_performer = "EVERYONE"
 }
 `, mcpServerURL),
+				ExpectError: regexp.MustCompile(`(?s)Unknown authentication performer`),
+			},
+		},
+	})
+}
+
+// The performer is checked even when auth_type is still unknown. Reading the
+// status of a server that does not exist yet leaves auth_type unresolved at
+// plan time, which used to return before the performer was looked at and let a
+// bad value through to the apply.
+func TestAccMCPServerResourceRejectsAnUnknownPerformerWhileAuthTypeIsUnknown(t *testing.T) {
+	name := acctest.RandomWithPrefix("tf-acc-mcp-unknown")
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		CheckDestroy:             testAccCheckMCPServerDestroyed(t),
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+resource "onyx_mcp_server" "source" {
+  name       = "%s-source"
+  server_url = %q
+}
+
+resource "onyx_mcp_server" "unknown_type" {
+  name           = "%s-target"
+  server_url     = %q
+  auth_type      = onyx_mcp_server.source.status
+  auth_performer = "EVERYONE"
+}
+`, name, mcpServerURL, name, mcpServerURL),
 				ExpectError: regexp.MustCompile(`(?s)Unknown authentication performer`),
 			},
 		},

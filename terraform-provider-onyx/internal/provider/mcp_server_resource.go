@@ -200,6 +200,27 @@ func (r *mcpServerResource) ValidateConfig(ctx context.Context, req resource.Val
 		return
 	}
 
+	// auth_performer is checked before auth_type, because the checks below
+	// return while the type is still unknown. A performer Onyx does not
+	// recognise is wrong whatever the type resolves to, and leaving it until
+	// after those returns let it reach the API and fail the apply instead.
+	performerKnown := !config.AuthPerformer.IsUnknown()
+	performer := client.MCPPerformerAdmin
+	if performerKnown && config.AuthPerformer.ValueString() != "" {
+		performer = config.AuthPerformer.ValueString()
+	}
+	if performerKnown &&
+		performer != client.MCPPerformerAdmin &&
+		performer != client.MCPPerformerPerUser {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("auth_performer"),
+			"Unknown authentication performer",
+			fmt.Sprintf("Expected %q or %q, got %q.",
+				client.MCPPerformerAdmin, client.MCPPerformerPerUser, performer),
+		)
+		return
+	}
+
 	if config.AuthType.IsUnknown() {
 		return
 	}
@@ -228,23 +249,9 @@ func (r *mcpServerResource) ValidateConfig(ctx context.Context, req resource.Val
 		return
 	}
 
-	if config.AuthPerformer.IsUnknown() {
-		return
-	}
-	performer := config.AuthPerformer.ValueString()
-	if performer == "" {
-		performer = client.MCPPerformerAdmin
-	}
-	// Without this an unrecognised performer falls through to the per-user
-	// branch below and is reported as missing per-user credentials, which sends
-	// the reader after the wrong attribute.
-	if performer != client.MCPPerformerAdmin && performer != client.MCPPerformerPerUser {
-		resp.Diagnostics.AddAttributeError(
-			path.Root("auth_performer"),
-			"Unknown authentication performer",
-			fmt.Sprintf("Expected %q or %q, got %q.",
-				client.MCPPerformerAdmin, client.MCPPerformerPerUser, performer),
-		)
+	// The credential matrix below is decided by the performer, so it can only be
+	// checked once that is known.
+	if !performerKnown {
 		return
 	}
 
