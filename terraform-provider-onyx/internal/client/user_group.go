@@ -91,6 +91,12 @@ type setGroupManagerRequest struct {
 	IsManager bool   `json:"is_manager"`
 }
 
+// addUsersToUserGroupRequest mirrors AddUsersToUserGroupRequest. It carries no
+// connector ids: Onyx keeps the stored ones itself.
+type addUsersToUserGroupRequest struct {
+	UserIDs []string `json:"user_ids"`
+}
+
 type bulkSetPermissionsRequest struct {
 	Permissions []string `json:"permissions"`
 }
@@ -142,11 +148,26 @@ func (c *Client) LookupUserGroup(ctx context.Context, id int64) (*UserGroup, boo
 	return nil, false, nil
 }
 
-// SetUserGroupMembers replaces the group roster.
+// SetUserGroupMembers makes the group roster match userIDs.
 //
-// The endpoint replaces connector links as well as members, and those links
-// belong to onyx_cc_pair, so the current set is read and sent back unchanged.
-// Sending an empty list would silently unshare every connector from the group.
+// Onyx's update endpoint replaces connector links along with members, and
+// those links belong to onyx_cc_pair, so they have to survive a roster change.
+// Which call does that best depends on the change:
+//
+// A roster that only gains members goes through the add-users endpoint. That
+// one takes members alone, and Onyx preserves the connector links itself,
+// reading and rewriting them inside the transaction that holds the membership
+// lock. The read and the write are one step there, so a connector share made
+// at the same moment cannot be overwritten by a list this client read a
+// round-trip earlier.
+//
+// A roster that loses a member has no such endpoint and has to use the full
+// replace, which means reading the connector ids here and sending them back.
+// That read-modify-write spans two calls, so a connector share that lands in
+// between is overwritten by the older list. Onyx offers nothing narrower —
+// omitting the field is not "leave them alone", it is a validation error, and
+// sending an empty list unshares every connector outright. The window is one
+// round-trip and only opens for a removal.
 func (c *Client) SetUserGroupMembers(ctx context.Context, id int64, userIDs []string) (*UserGroup, error) {
 	current, found, err := c.LookupUserGroup(ctx, id)
 	if err != nil {
@@ -162,6 +183,31 @@ func (c *Client) SetUserGroupMembers(ctx context.Context, id int64, userIDs []st
 	if userIDs == nil {
 		userIDs = []string{}
 	}
+
+	desired := make(map[string]bool, len(userIDs))
+	for _, userID := range userIDs {
+		desired[userID] = true
+	}
+	removes := false
+	for _, memberID := range current.MemberIDs() {
+		if !desired[memberID] {
+			removes = true
+			break
+		}
+	}
+
+	// The whole roster goes out, not just the new names: Onyx works out which
+	// of them are new and skips the rest.
+	if !removes && len(userIDs) > 0 {
+		var group UserGroup
+		req := addUsersToUserGroupRequest{UserIDs: userIDs}
+		path := fmt.Sprintf("%s/%d/add-users", userGroupBasePath, id)
+		if err := c.doJSON(ctx, http.MethodPost, path, req, &group); err != nil {
+			return nil, err
+		}
+		return &group, nil
+	}
+
 	req := userGroupUpdate{UserIDs: userIDs, CCPairIDs: current.CCPairIDs()}
 	var group UserGroup
 	path := fmt.Sprintf("%s/%d", userGroupBasePath, id)

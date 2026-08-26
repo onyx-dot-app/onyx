@@ -315,11 +315,12 @@ func TestAccUserGroupRefusesToRenameADefaultGroup(t *testing.T) {
 	testAccRequireEE(t)
 
 	c := testAccClient(t)
-	if bootstrapAdminGroupID == 0 {
-		t.Fatal("the bootstrap did not record the Admin group id")
-	}
+	// Resolved through the helper rather than read off the bootstrap: setting
+	// ONYX_TF_ACC_API_KEY short-circuits the bootstrap, which then never
+	// records the id.
+	adminGroupID := testAccAdminGroupID(t)
 
-	_, err := c.RenameUserGroup(context.Background(), bootstrapAdminGroupID, "tf-acc-should-not-apply")
+	_, err := c.RenameUserGroup(context.Background(), adminGroupID, "tf-acc-should-not-apply")
 	if err == nil {
 		t.Fatal("renaming a default system group must be refused")
 	}

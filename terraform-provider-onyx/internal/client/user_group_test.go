@@ -75,33 +75,59 @@ func groupListing(t *testing.T, ccPairIDs []int64, upToDate bool) string {
 	return "[" + groupObject(t, ccPairIDs, upToDate) + "]"
 }
 
-// The membership endpoint replaces connector links along with members, and
-// onyx_cc_pair owns those links. Sending an empty list would unshare every
-// connector from the group without anything in the plan saying so.
-func TestSetUserGroupMembersPreservesConnectorLinks(t *testing.T) {
+// A roster that only gains members goes through add-users, where Onyx keeps
+// the connector links itself inside the transaction that holds the membership
+// lock. That removes this client's read-modify-write, and with it the window
+// where a connector share made at the same moment would be overwritten.
+func TestSetUserGroupMembersAddsThroughTheAddUsersRoute(t *testing.T) {
 	c, seen := newRoutingTestServer(t, map[string]string{
-		listPath:                           groupListing(t, []int64{7, 9}, true),
-		"PATCH /manage/admin/user-group/4": groupObject(t, []int64{7, 9}, false),
+		listPath: groupListing(t, []int64{7}, true),
+		"POST /manage/admin/user-group/4/add-users": groupObject(t, []int64{7}, false),
 	})
 
+	// u-1 is already a member; u-2 is new. Nobody leaves.
 	if _, err := c.SetUserGroupMembers(context.Background(), 4, []string{"u-1", "u-2"}); err != nil {
 		t.Fatal(err)
 	}
 	if len(*seen) != 2 {
 		t.Fatalf("want a read then a write, got %d requests", len(*seen))
 	}
+	if (*seen)[1].Path != "/manage/admin/user-group/4/add-users" {
+		t.Errorf("an additive change must use add-users, got %s", (*seen)[1].Path)
+	}
 
 	body := bodyAsMap(t, (*seen)[1].Body)
-	pairs, ok := body["cc_pair_ids"].([]any)
-	if !ok {
-		t.Fatalf("cc_pair_ids missing from the update body: %s", (*seen)[1].Body)
-	}
-	if len(pairs) != 2 || pairs[0].(float64) != 7 || pairs[1].(float64) != 9 {
-		t.Errorf("the update must echo the stored connector ids back, got %v", pairs)
+	if _, present := body["cc_pair_ids"]; present {
+		t.Error("add-users must not carry connector ids; Onyx preserves them itself")
 	}
 	users, ok := body["user_ids"].([]any)
 	if !ok || len(users) != 2 {
-		t.Errorf("want the new roster, got %v", body["user_ids"])
+		t.Errorf("want the whole roster, got %v", body["user_ids"])
+	}
+}
+
+// A roster that loses a member has no additive route, so it falls back to the
+// full replace — which replaces connector links along with members. Those links
+// belong to onyx_cc_pair, so they have to be read and sent back. This is the
+// regression guard for that: without the echo-back the pair is silently
+// unshared from the group by a change that only mentioned people.
+func TestSetUserGroupMembersRemovesThroughTheFullReplace(t *testing.T) {
+	c, seen := newRoutingTestServer(t, map[string]string{
+		listPath:                           groupListing(t, []int64{7, 9}, true),
+		"PATCH /manage/admin/user-group/4": groupObject(t, []int64{7, 9}, false),
+	})
+
+	// The listing holds u-1, and the new roster does not.
+	if _, err := c.SetUserGroupMembers(context.Background(), 4, []string{"u-2"}); err != nil {
+		t.Fatal(err)
+	}
+	if (*seen)[1].Method != http.MethodPatch {
+		t.Fatalf("a removal must use the full replace, got %s %s", (*seen)[1].Method, (*seen)[1].Path)
+	}
+	body := bodyAsMap(t, (*seen)[1].Body)
+	pairs, ok := body["cc_pair_ids"].([]any)
+	if !ok || len(pairs) != 2 {
+		t.Errorf("the full replace must still echo the connector ids, got %v", body["cc_pair_ids"])
 	}
 }
 

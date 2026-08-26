@@ -123,10 +123,16 @@ and on Onyx Cloud the tenant is embedded in the key itself.
 - **`onyx_user_group` does not manage what a group can see.** Connectors, document sets,
   agents, LLM providers, MCP servers and credentials each carry their own `groups`
   attribute and own that link. The group exposes `cc_pair_ids`, `document_set_ids` and
-  `persona_ids` read-only, so the two sides never fight over the same edge. Note the
-  membership endpoint replaces connector links along with members, so the provider reads
-  the current set and sends it back unchanged; writing an empty list there would unshare
-  every connector from the group with nothing in the plan saying so.
+  `persona_ids` read-only, so the two sides never fight over the same edge.
+- **A roster change must not disturb those links, and how it avoids that depends on the
+  change.** Onyx's update endpoint replaces connector links along with members. A roster
+  that only gains members therefore goes through the add-users endpoint instead, which
+  takes members alone and lets Onyx preserve the links itself, inside the transaction that
+  holds the membership lock. A roster that loses one has no such endpoint: the provider
+  reads the connector ids and sends them back, so a connector share made between that read
+  and the write is overwritten by the older list. The window is one round-trip and only
+  opens for a removal. Sending an empty list instead — the obvious-looking alternative —
+  would unshare every connector from the group with nothing in the plan saying so.
 - **A group's computed links lag by one apply.** Terraform creates a group before the
   `onyx_cc_pair` that references it, so `cc_pair_ids` is still empty in the state written
   by that first apply and fills in on the next refresh.
