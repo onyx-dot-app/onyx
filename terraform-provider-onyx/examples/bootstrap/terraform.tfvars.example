@@ -1,0 +1,13 @@
+# Copy to terraform.tfvars and fill in. Keep terraform.tfvars out of version
+# control: it holds secrets.
+
+onyx_server_url = "http://localhost:8080"
+onyx_api_key    = "on_..."
+
+openai_api_key = "sk-..."
+
+company_name  = "ACME Corp"
+docs_base_url = "https://docs.onyx.app"
+
+# Enterprise Edition only.
+enable_enterprise_features = false
