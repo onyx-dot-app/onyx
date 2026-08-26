@@ -7,6 +7,7 @@
  * reaching back through the barrel is a cycle.
  */
 
+export { default as createSharedHook } from "@opal/hooks/createSharedHook";
 export { default as useContainerCenter } from "@opal/hooks/useContainerCenter";
 export { default as useFocusOnMount } from "@opal/hooks/useFocusOnMount";
 export { default as useOnMount } from "@opal/hooks/useOnMount";
