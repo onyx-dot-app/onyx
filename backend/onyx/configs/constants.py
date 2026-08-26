@@ -420,7 +420,6 @@ class FileStoreType(str, Enum):
 class FileOrigin(str, Enum):
     CHAT_UPLOAD = "chat_upload"
     CHAT_IMAGE_GEN = "chat_image_gen"
-    CODING_AGENT_REPO_CACHE = "coding_agent_repo_cache"
     CONNECTOR = "connector"
     CONNECTOR_FILE_UPLOAD = "connector_file_upload"
     CONNECTOR_METADATA = "connector_metadata"

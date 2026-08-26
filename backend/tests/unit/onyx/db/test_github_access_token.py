@@ -19,11 +19,14 @@ def _db_session_returning(rows: list[tuple[Any, Any]]) -> MagicMock:
     return db_session
 
 
-def _connector(repo_owner: str, repositories: str) -> MagicMock:
+def _connector(
+    repo_owner: str, repositories: str, include_code_files: bool = True
+) -> MagicMock:
     connector = MagicMock()
     connector.connector_specific_config = {
         "repo_owner": repo_owner,
         "repositories": repositories,
+        "include_code_files": include_code_files,
     }
     return connector
 
@@ -83,3 +86,18 @@ def test_no_repo_name_short_circuits() -> None:
     )
     assert token is None
     db_session.execute.assert_not_called()
+
+
+def test_skips_connector_that_does_not_index_code() -> None:
+    """A PR/issue-only connector never exposed the source tree; its token
+    must not hand the full repo to the coding agent."""
+    credential = MagicMock()
+    credential.credential_json = _sensitive_json('{"github_access_token": "tok"}')
+    db_session = _db_session_returning(
+        [(credential, _connector("owner", "repo", include_code_files=False))]
+    )
+
+    token = fetch_github_access_token_for_repo(
+        db_session=db_session, repo_owner="owner", repo_name="repo"
+    )
+    assert token is None

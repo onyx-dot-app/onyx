@@ -150,7 +150,10 @@ def fetch_github_access_token_for_repo(
       pairs are skipped since the coding agent has no per-user access check;
     - named the repo explicitly in the connector's `repositories` config.
       Owner-wide connectors do NOT qualify: they would extend one PAT to
-      every repo of the owner.
+      every repo of the owner;
+    - enabled source-code indexing (`include_code_files`). A connector that
+      indexes only PRs, issues, or docs never exposed the source tree, so
+      its token must not either.
 
     Returns None when no eligible pair matches (public-repo access only).
     """
@@ -180,6 +183,8 @@ def fetch_github_access_token_for_repo(
 
     for credential, connector in db_session.execute(stmt).all():
         config = connector.connector_specific_config or {}
+        if not config.get("include_code_files"):
+            continue
         if str(config.get("repo_owner", "")).lower() != owner_lower:
             continue
 
