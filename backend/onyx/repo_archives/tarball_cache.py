@@ -13,8 +13,9 @@ Storage and memory:
   store's save_file makes on a cache write, bounded by
   REPO_ARCHIVE_CACHE_MAX_BYTES.
 - One archive per repository: writing a new SHA deletes the repo's older
-  entries. Entries older than REPO_ARCHIVE_CACHE_TTL_SECONDS are pruned on
-  the next write, so repos nobody asks about again do not accumulate.
+  entries, scoped to that repo's own key prefix. The cache therefore never
+  holds more than one archive per repository ever fetched, so it needs no
+  separate expiry sweep.
 
 Cache failures are never fatal: any file-store or resolution error falls back
 to a direct fresh download. Concurrent runs need no locking: save_file is an
@@ -28,13 +29,11 @@ import shutil
 import tempfile
 from collections.abc import Iterator
 from contextlib import AbstractContextManager, contextmanager
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import BinaryIO
 
 from onyx.configs.app_configs import (
     REPO_ARCHIVE_CACHE_MAX_BYTES,
-    REPO_ARCHIVE_CACHE_TTL_SECONDS,
 )
 from onyx.configs.constants import FileOrigin
 from onyx.db.file_record import FileRecordNotFoundError
@@ -108,17 +107,19 @@ def _read_cached_archive(
     return size
 
 
-def _evict_stale_entries(repo: RepoRef) -> None:
-    """One archive per repo: drop the repo's older SHAs. Also prune every
-    repo's entries older than the TTL so abandoned repos do not accumulate."""
-    repo_prefix = f"{_FILE_ID_PREFIX}{repo.key_prefix}"
-    cutoff = datetime.now(timezone.utc) - timedelta(
-        seconds=REPO_ARCHIVE_CACHE_TTL_SECONDS
-    )
+def _evict_other_revisions(revision: RepoRevision) -> None:
+    """One archive per repo: drop the repo's other SHAs before a new one is
+    written. Scoped to the repo's own key prefix, so the listing stays small
+    on this hot path."""
+    repo_prefix = f"{_FILE_ID_PREFIX}{revision.repo.key_prefix}"
+    incoming = _file_id(revision)
     stale_ids = [
         record.file_id
-        for record in get_default_file_store().list_files_by_prefix(_FILE_ID_PREFIX)
-        if record.file_id.startswith(repo_prefix) or record.updated_at < cutoff
+        for record in get_default_file_store().list_files_by_prefix(repo_prefix)
+        # A revision id is the prefix plus one segment; requiring no "/" in
+        # the remainder stops owner="group"/name="sub" evicting the nested
+        # repo owner="group/sub"/name="x", whose ids share the prefix.
+        if record.file_id != incoming and "/" not in record.file_id[len(repo_prefix) :]
     ]
     delete_files_best_effort(stale_ids, context="repo archive cache")
 
@@ -126,7 +127,7 @@ def _evict_stale_entries(repo: RepoRef) -> None:
 def _cache_archive(revision: RepoRevision, archive_file: BinaryIO) -> None:
     file_id = _file_id(revision)
     try:
-        _evict_stale_entries(revision.repo)
+        _evict_other_revisions(revision)
         archive_file.seek(0)
         get_default_file_store().save_file(
             content=archive_file,

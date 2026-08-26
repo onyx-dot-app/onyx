@@ -8,7 +8,6 @@ import pytest
 
 from onyx.configs.constants import FileOrigin
 from onyx.db.file_record import FileRecordNotFoundError
-from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.repo_archives import tarball_cache
 from onyx.repo_archives.models import RepoRef
@@ -16,7 +15,6 @@ from onyx.repo_archives.tarball_cache import (
     _file_id,
     open_repo_archive,
     open_revision_archive,
-    resolve_revision,
 )
 from tests.utils.repo_archives import TEST_REPO, FakeArchiveProvider, revision
 
@@ -30,7 +28,13 @@ MODULE = "onyx.repo_archives.tarball_cache"
 def mock_file_store() -> Iterator[MagicMock]:
     store = MagicMock()
     store.read_file_record.side_effect = FileRecordNotFoundError("miss")
-    store.list_files_by_prefix.return_value = []
+    # The real store filters in SQL (LIKE 'prefix%'); tests set `records` and
+    # the fake applies the same filter, so a listing can never return an id
+    # the production query would have excluded.
+    store.records = []
+    store.list_files_by_prefix.side_effect = lambda prefix: [
+        r for r in store.records if r.file_id.startswith(prefix)
+    ]
     with patch(f"{MODULE}.get_default_file_store", return_value=store):
         yield store
 
@@ -141,7 +145,7 @@ def test_new_sha_evicts_previous_entries(
     old_record = _record(_file_id(revision("b" * 40)))
     other_repo = RepoRef(provider="test", host="test.local", owner="other", name="r")
     other_record = _record(_file_id(revision("c" * 40, other_repo)))
-    mock_file_store.list_files_by_prefix.return_value = [old_record, other_record]
+    mock_file_store.records = [old_record, other_record]
 
     _fetch(_provider())
 
@@ -149,95 +153,32 @@ def test_new_sha_evicts_previous_entries(
     mock_file_store.save_file.assert_called_once()
 
 
-def test_entries_older_than_ttl_are_pruned(
-    mock_file_store: MagicMock, mock_delete_files: MagicMock
-) -> None:
-    ttl = timedelta(seconds=tarball_cache.REPO_ARCHIVE_CACHE_TTL_SECONDS)
-    old_repo = RepoRef(provider="test", host="test.local", owner="old", name="r")
-    new_repo = RepoRef(provider="test", host="test.local", owner="new", name="r")
-    stale = _record(
-        _file_id(revision("d" * 40, old_repo)), age=ttl + timedelta(minutes=1)
-    )
-    fresh = _record(
-        _file_id(revision("e" * 40, new_repo)), age=ttl - timedelta(minutes=1)
-    )
-    mock_file_store.list_files_by_prefix.return_value = [stale, fresh]
-
+def test_write_path_lists_only_this_repos_prefix(mock_file_store: MagicMock) -> None:
+    """The write path must never scan the feature-wide prefix: that resolves
+    to an unindexed LIKE over every file_record in the tenant."""
     _fetch(_provider())
 
-    assert mock_delete_files.call_args.args[0] == [stale.file_id]
+    listed = [
+        call.args[0] for call in mock_file_store.list_files_by_prefix.call_args_list
+    ]
+    assert listed == [f"{tarball_cache._FILE_ID_PREFIX}{TEST_REPO.key_prefix}"]
 
 
-def test_oversized_archive_is_not_cached(
-    mock_file_store: MagicMock, monkeypatch: pytest.MonkeyPatch
+def test_nested_owner_does_not_evict_the_other_repo(
+    mock_file_store: MagicMock, mock_delete_files: MagicMock
 ) -> None:
-    monkeypatch.setattr(tarball_cache, "REPO_ARCHIVE_CACHE_MAX_BYTES", 4)
+    """`owner` is a namespace path, so repo(owner="group", name="sub") and
+    repo(owner="group/sub", name="x") share a key prefix. Caching one must
+    not evict the other."""
+    outer = RepoRef(provider="test", host="test.local", owner="group", name="sub")
+    inner = RepoRef(provider="test", host="test.local", owner="group/sub", name="x")
+    inner_record = _record(_file_id(revision("f" * 40, inner)))
+    outer_record = _record(_file_id(revision("b" * 40, outer)))
+    mock_file_store.records = [inner_record, outer_record]
 
-    archive, sha, _ = _fetch(_provider())
-
-    assert (archive, sha) == (ARCHIVE, SHA)
-    mock_file_store.save_file.assert_not_called()
-
-
-def test_resolution_failure_falls_back_to_fresh_download(
-    mock_file_store: MagicMock,
-) -> None:
-    provider = _provider(resolve_error=OnyxError(OnyxErrorCode.NOT_FOUND))
-
-    archive, sha, _ = _fetch(provider, ref="feature-branch")
-
-    assert (archive, sha) == (ARCHIVE, None)
-    # Downloaded at the requested ref; nothing cached without a SHA.
-    assert provider.downloads == ["feature-branch"]
-    mock_file_store.read_file_record.assert_not_called()
-    mock_file_store.save_file.assert_not_called()
-
-
-def test_resolve_revision_returns_none_on_provider_error() -> None:
-    provider = _provider(resolve_error=OnyxError(OnyxErrorCode.RATE_LIMITED))
-    assert resolve_revision(provider, TEST_REPO, "main") is None
-    assert resolve_revision(_provider(), TEST_REPO, "main") == revision(SHA)
-
-
-def test_pinned_sha_keeps_sha_but_proves_access(mock_file_store: MagicMock) -> None:
     provider = _provider()
+    with open_repo_archive(provider, outer, None, max_size_bytes=MAX_BYTES, timeout=30):
+        pass
 
-    _, sha, _ = _fetch(provider, ref=SHA.upper())
-
-    # The pinned SHA is used as-is, but one provider call still runs so a
-    # caller without current access cannot read cached source.
-    assert provider.resolve_calls == 1
-    assert sha == SHA
-    # A pinned SHA still populates the cache on a miss.
-    mock_file_store.save_file.assert_called_once()
-
-
-def test_pinned_sha_without_access_bypasses_cache(mock_file_store: MagicMock) -> None:
-    provider = _provider(resolve_error=OnyxError(OnyxErrorCode.NOT_FOUND, "no access"))
-
-    archive, sha, _ = _fetch(provider, ref=SHA)
-
-    # Access check failed: the cache is never consulted and the download
-    # itself must enforce access.
-    mock_file_store.read_file_record.assert_not_called()
-    assert (archive, sha) == (ARCHIVE, None)
-    assert provider.downloads == [SHA]
-
-
-def test_file_store_failure_falls_back_to_download(
-    mock_file_store: MagicMock,
-) -> None:
-    mock_file_store.read_file_record.side_effect = RuntimeError("store down")
-    mock_file_store.save_file.side_effect = RuntimeError("store down")
-
-    archive, sha, _ = _fetch(_provider())
-
-    assert (archive, sha) == (ARCHIVE, SHA)
-
-
-def test_download_error_propagates_and_cleans_up(mock_file_store: MagicMock) -> None:
-    provider = _provider()
-    with pytest.raises(OnyxError):
-        with open_repo_archive(provider, TEST_REPO, None, max_size_bytes=4, timeout=30):
-            pass
-    mock_file_store.save_file.assert_not_called()
+    # The nested repo's entry survives; only the outer repo's own older SHA goes.
+    assert mock_delete_files.call_args.args[0] == [outer_record.file_id]

@@ -10,7 +10,10 @@ import pytest
 from onyx.file_store.file_store import get_default_file_store
 from onyx.repo_archives import tarball_cache
 from onyx.repo_archives.models import RepoRef
-from onyx.repo_archives.tarball_cache import _file_id, open_repo_archive
+from onyx.repo_archives.tarball_cache import (
+    _file_id,
+    open_repo_archive,
+)
 from tests.utils.repo_archives import FakeArchiveProvider, revision
 
 ARCHIVE = b"tarball-bytes"
@@ -82,17 +85,3 @@ def test_same_sha_double_write_is_an_upsert(repo: RepoRef) -> None:
     assert _cached_ids(repo) == {file_id}
     with store.read_file(file_id, mode="b") as f:
         assert f.read() == b"second"
-
-
-def test_entries_older_than_ttl_are_pruned_on_write(
-    repo: RepoRef, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    abandoned = _repo("abandoned")
-    _fetch(abandoned, "4" * 40)
-    try:
-        # A cutoff in the future makes every existing entry count as stale.
-        monkeypatch.setattr(tarball_cache, "REPO_ARCHIVE_CACHE_TTL_SECONDS", -3600)
-        _fetch(repo, "5" * 40)
-        assert _cached_ids(abandoned) == set()
-    finally:
-        _cleanup(abandoned)
