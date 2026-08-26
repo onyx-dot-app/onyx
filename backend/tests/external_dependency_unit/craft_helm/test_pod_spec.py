@@ -662,8 +662,6 @@ def test_redis_tls_mounts_ca_in_all_enabled_redis_workloads() -> None:
         "redisTls.caConfigMapName=redis-ca-config",
         "--set",
         "redisTls.caKey=redis-root.pem",
-        "--set",
-        "redisTls.caMountPath=/etc/redis-tls/root.pem",
     ]
     rendered = _render_chart(redis_tls_args)
     assert rendered.returncode == 0, rendered.stderr
@@ -692,20 +690,22 @@ def test_redis_tls_mounts_ca_in_all_enabled_redis_workloads() -> None:
             "name": "redis-ca",
             "configMap": {
                 "name": "redis-ca-config",
-                "items": [{"key": "redis-root.pem", "path": "root.pem"}],
+                "items": [{"key": "redis-root.pem", "path": "redis-ca.crt"}],
             },
         }
         for container in pod_spec["containers"]:
             assert {
                 "name": "redis-ca",
-                "mountPath": "/etc/redis-tls",
+                "mountPath": "/etc/ssl/certs/redis-ca.crt",
+                "subPath": "redis-ca.crt",
                 "readOnly": True,
             } in container["volumeMounts"]
 
     config_map = yaml.safe_load(_render_config_map_yaml(redis_tls_args))
     assert config_map["data"]["REDIS_SSL"] == "true"
     assert config_map["data"]["REDIS_SSL_CERT_REQS"] == "required"
-    assert config_map["data"]["REDIS_SSL_CA_CERTS"] == "/etc/redis-tls/root.pem"
+    assert config_map["data"]["REDIS_SSL_CA_CERTS"] == "/etc/ssl/certs/redis-ca.crt"
+    assert config_map["data"]["REDIS_SSL_CHECK_HOSTNAME"] == "true"
 
 
 def test_redis_tls_rejects_bundled_redis() -> None:
@@ -723,6 +723,26 @@ def test_redis_tls_rejects_bundled_redis() -> None:
     assert "redisTls.enabled requires redis.enabled=false" in result.stderr
 
 
+def test_redis_tls_can_disable_hostname_verification() -> None:
+    """Operators can opt out when an endpoint certificate cannot match its host."""
+    config_map = yaml.safe_load(
+        _render_config_map_yaml(
+            [
+                "--set",
+                "redis.enabled=false",
+                "--set",
+                "redisTls.enabled=true",
+                "--set",
+                "redisTls.caConfigMapName=redis-ca-config",
+                "--set",
+                "redisTls.checkHostname=false",
+            ]
+        )
+    )
+
+    assert config_map["data"]["REDIS_SSL_CHECK_HOSTNAME"] == "false"
+
+
 def test_redis_tls_disabled_does_not_override_redis_configuration() -> None:
     """The optional feature must not change the default Redis configuration."""
     config_map = yaml.safe_load(_render_config_map_yaml())
@@ -730,6 +750,7 @@ def test_redis_tls_disabled_does_not_override_redis_configuration() -> None:
     assert "REDIS_SSL" not in config_map["data"]
     assert "REDIS_SSL_CERT_REQS" not in config_map["data"]
     assert "REDIS_SSL_CA_CERTS" not in config_map["data"]
+    assert "REDIS_SSL_CHECK_HOSTNAME" not in config_map["data"]
 
 
 def test_missing_container_raises_clear_error_on_version_skew() -> None:

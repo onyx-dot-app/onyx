@@ -416,7 +416,7 @@ REDIS_SSL_CA_CERTS, so mount exactly the configured key at its expected name.
 {{- if and $tls.caSecretName $tls.caConfigMapName -}}
 {{- fail "redisTls.caSecretName and redisTls.caConfigMapName are mutually exclusive; set exactly one" -}}
 {{- end -}}
-{{- $caPath := $tls.caMountPath | default "/etc/redis-ca/ca.crt" -}}
+{{- $caPath := $tls.caMountPath | default "/etc/ssl/certs/redis-ca.crt" -}}
 {{- $caKey := $tls.caKey | default "ca.crt" -}}
 - name: redis-ca
   {{- if $tls.caSecretName }}
@@ -440,9 +440,10 @@ REDIS_SSL_CA_CERTS, so mount exactly the configured key at its expected name.
 {{/* Mount for the Redis server CA. */}}
 {{- define "onyx.redisTls.volumeMount" -}}
 {{- if include "onyx.redisTls.enabled" . -}}
-{{- $caPath := .Values.redisTls.caMountPath | default "/etc/redis-ca/ca.crt" -}}
+{{- $caPath := .Values.redisTls.caMountPath | default "/etc/ssl/certs/redis-ca.crt" -}}
 - name: redis-ca
-  mountPath: {{ dir $caPath }}
+  mountPath: {{ $caPath }}
+  subPath: {{ base $caPath }}
   readOnly: true
 {{- end -}}
 {{- end }}

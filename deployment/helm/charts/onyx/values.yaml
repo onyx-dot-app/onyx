@@ -72,12 +72,16 @@ postgresTls:
 # exist in the release namespace.
 redisTls:
   enabled: false
+  # Verify that the Redis certificate matches REDIS_HOST. Disable only when
+  # the endpoint cannot present a certificate for its configured host or IP.
+  checkHostname: true
   # Exactly one of caSecretName / caConfigMapName must be set when enabled.
   caSecretName: ""
   caConfigMapName: ""
   caKey: ca.crt
-  # Full path exposed to REDIS_SSL_CA_CERTS.
-  caMountPath: /etc/redis-ca/ca.crt
+  # Full path exposed to REDIS_SSL_CA_CERTS. The parent directory must exist
+  # in every Redis client image because Kubernetes mounts this as one file.
+  caMountPath: /etc/ssl/certs/redis-ca.crt
 
 # Uncomment to skip the bundled CNPG operator and its CRDs, and let an existing
 # cluster-managed CloudNativePG operator reconcile the Cluster CR below (keep

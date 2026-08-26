@@ -14,6 +14,7 @@ _REDIS_TLS_ENV = (
     "REDIS_SSL_CERTFILE",
     "REDIS_SSL_KEYFILE",
     "REDIS_SSL_CA_CERTS",
+    "REDIS_SSL_CHECK_HOSTNAME",
     "USE_REDIS_IAM_AUTH",
 )
 
@@ -47,12 +48,14 @@ def test_sync_pool_forwards_client_cert() -> None:
     with patch("redis.BlockingConnectionPool") as mock_pool:
         redis_pool.RedisPool.create_pool(
             ssl=True,
+            ssl_check_hostname=True,
             ssl_certfile="/etc/redis/tls/client.crt",
             ssl_keyfile="/etc/redis/tls/client.key",
         )
         kwargs = mock_pool.call_args.kwargs
         assert kwargs["ssl_certfile"] == "/etc/redis/tls/client.crt"
         assert kwargs["ssl_keyfile"] == "/etc/redis/tls/client.key"
+        assert kwargs["ssl_check_hostname"] is True
 
 
 def test_async_connection_passes_native_ssl_kwargs() -> None:
@@ -63,6 +66,7 @@ def test_async_connection_passes_native_ssl_kwargs() -> None:
         patch.object(redis_pool, "REDIS_SSL", True),
         patch.object(redis_pool, "REDIS_SSL_CA_CERTS", "/ca.crt"),
         patch.object(redis_pool, "REDIS_SSL_CERT_REQS", "required"),
+        patch.object(redis_pool, "REDIS_SSL_CHECK_HOSTNAME", True),
         patch.object(redis_pool, "REDIS_SSL_CERTFILE", "/c.crt"),
         patch.object(redis_pool, "REDIS_SSL_KEYFILE", "/c.key"),
         patch.object(redis_pool, "aioredis") as mock_aioredis,
@@ -71,7 +75,7 @@ def test_async_connection_passes_native_ssl_kwargs() -> None:
         kwargs = mock_aioredis.Redis.call_args.kwargs
         assert kwargs["ssl"] is True
         assert kwargs["ssl_cert_reqs"] == "required"
-        assert kwargs["ssl_check_hostname"] is False
+        assert kwargs["ssl_check_hostname"] is True
         assert kwargs["ssl_ca_certs"] == "/ca.crt"
         assert kwargs["ssl_certfile"] == "/c.crt"
         assert kwargs["ssl_keyfile"] == "/c.key"
@@ -106,6 +110,7 @@ def test_celery_broker_and_result_urls_include_client_cert(tmp_path: Path) -> No
     with patch.dict(os.environ, {}, clear=False):
         _clear_redis_tls_env()
         os.environ["REDIS_SSL"] = "true"
+        os.environ["REDIS_SSL_CHECK_HOSTNAME"] = "true"
         os.environ["REDIS_SSL_CERTFILE"] = str(cert)
         os.environ["REDIS_SSL_KEYFILE"] = str(key)
         import onyx.background.celery.configs.base as celery_base
@@ -119,6 +124,7 @@ def test_celery_broker_and_result_urls_include_client_cert(tmp_path: Path) -> No
         enc_key = quote(str(key), safe="")
         for url in (celery_base.broker_url, celery_base.result_backend):
             assert url.startswith("rediss://")
+            assert "ssl_check_hostname=true" in url
             assert f"ssl_certfile={enc_cert}" in url
             assert f"ssl_keyfile={enc_key}" in url
 
