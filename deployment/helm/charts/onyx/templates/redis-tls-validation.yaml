@@ -1,3 +1,3 @@
-{{- if and .Values.redisTls .Values.redisTls.enabled .Values.redis.enabled }}
+{{- if and (eq (include "onyx.redisTls.enabled" .) "true") .Values.redis.enabled }}
 {{- fail "redisTls.enabled requires redis.enabled=false because the bundled Redis does not support TLS" }}
 {{- end }}

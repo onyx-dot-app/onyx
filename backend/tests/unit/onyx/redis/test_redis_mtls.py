@@ -2,6 +2,7 @@ import importlib
 import os
 from collections.abc import Generator
 from pathlib import Path
+from typing import cast
 from unittest.mock import patch
 from urllib.parse import quote
 
@@ -127,6 +128,34 @@ def test_celery_broker_and_result_urls_include_client_cert(tmp_path: Path) -> No
             assert "ssl_check_hostname=true" in url
             assert f"ssl_certfile={enc_cert}" in url
             assert f"ssl_keyfile={enc_key}" in url
+
+
+def test_celery_urls_parse_disabled_hostname_check_as_bool() -> None:
+    """Kombu and Celery must pass false to redis-py as a Boolean value."""
+    from celery import Celery
+    from celery.backends.redis import RedisBackend
+    from kombu import Connection
+
+    with patch.dict(os.environ, {}, clear=False):
+        _clear_redis_tls_env()
+        os.environ["REDIS_SSL"] = "true"
+        os.environ["REDIS_SSL_CHECK_HOSTNAME"] = "false"
+        import onyx.background.celery.configs.base as celery_base
+        import onyx.configs.app_configs as app_configs
+
+        importlib.reload(app_configs)
+        importlib.reload(celery_base)
+
+        broker = Connection(celery_base.broker_url)
+        broker_ssl = cast(dict, broker.ssl)
+        assert broker_ssl["ssl_check_hostname"] is False
+
+        backend = RedisBackend(
+            app=Celery("test-redis-hostname-verification"),
+            url=celery_base.result_backend,
+        )
+        connparams = cast(dict, backend.connparams)  # ty: ignore[unresolved-attribute]
+        assert connparams["ssl_check_hostname"] is False
 
 
 # --- config validation ----------------------------------------------------

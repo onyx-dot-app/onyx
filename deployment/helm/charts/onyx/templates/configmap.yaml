@@ -47,10 +47,11 @@ data:
   POSTGRES_SSLROOTCERT: {{ .Values.postgresTls.caMountPath | default "/etc/postgres-ca/ca.crt" | quote }}
   {{- end }}
   {{- if eq (include "onyx.redisTls.enabled" .) "true" }}
+  {{- $redisTls := .Values.redisTls | default dict }}
   REDIS_SSL: "true"
   REDIS_SSL_CERT_REQS: "required"
-  REDIS_SSL_CA_CERTS: {{ .Values.redisTls.caMountPath | default "/etc/ssl/certs/redis-ca.crt" | quote }}
-  REDIS_SSL_CHECK_HOSTNAME: {{ .Values.redisTls.checkHostname | quote }}
+  REDIS_SSL_CA_CERTS: {{ $redisTls.caMountPath | default "/etc/ssl/certs/redis-ca.crt" | quote }}
+  REDIS_SSL_CHECK_HOSTNAME: {{ include "onyx.redisTls.checkHostname" . | quote }}
   {{- end }}
   {{- if .Values.minio.enabled }}
   S3_ENDPOINT_URL: "http://{{ .Release.Name }}-minio:{{ default 9000 .Values.minio.service.port }}"

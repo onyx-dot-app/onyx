@@ -403,7 +403,24 @@ path at startup, so mount exactly the configured key at its expected filename.
 "true" when Redis TLS settings and a CA certificate source are configured.
 */}}
 {{- define "onyx.redisTls.enabled" -}}
-{{- if and .Values.redisTls .Values.redisTls.enabled }}true{{- end -}}
+{{- $tls := .Values.redisTls | default dict -}}
+{{- if hasKey $tls "enabled" -}}
+{{- if eq (toString (index $tls "enabled")) "true" }}true{{- end -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+Redis hostname verification defaults to enabled. Only an explicit Boolean false
+disables it; missing, null, and invalid values keep the secure default.
+*/}}
+{{- define "onyx.redisTls.checkHostname" -}}
+{{- $tls := .Values.redisTls | default dict -}}
+{{- $checkHostname := index $tls "checkHostname" -}}
+{{- if kindIs "bool" $checkHostname -}}
+{{- $checkHostname -}}
+{{- else -}}
+true
+{{- end -}}
 {{- end }}
 
 {{/*
@@ -412,7 +429,7 @@ REDIS_SSL_CA_CERTS, so mount exactly the configured key at its expected name.
 */}}
 {{- define "onyx.redisTls.volume" -}}
 {{- if include "onyx.redisTls.enabled" . -}}
-{{- $tls := .Values.redisTls -}}
+{{- $tls := .Values.redisTls | default dict -}}
 {{- if and $tls.caSecretName $tls.caConfigMapName -}}
 {{- fail "redisTls.caSecretName and redisTls.caConfigMapName are mutually exclusive; set exactly one" -}}
 {{- end -}}
@@ -440,7 +457,8 @@ REDIS_SSL_CA_CERTS, so mount exactly the configured key at its expected name.
 {{/* Mount for the Redis server CA. */}}
 {{- define "onyx.redisTls.volumeMount" -}}
 {{- if include "onyx.redisTls.enabled" . -}}
-{{- $caPath := .Values.redisTls.caMountPath | default "/etc/ssl/certs/redis-ca.crt" -}}
+{{- $tls := .Values.redisTls | default dict -}}
+{{- $caPath := $tls.caMountPath | default "/etc/ssl/certs/redis-ca.crt" -}}
 - name: redis-ca
   mountPath: {{ $caPath }}
   subPath: {{ base $caPath }}

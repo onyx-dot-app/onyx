@@ -713,6 +713,8 @@ def test_redis_tls_rejects_bundled_redis() -> None:
     result = _render_chart(
         [
             "--set",
+            "redis.enabled=true",
+            "--set",
             "redisTls.enabled=true",
             "--set",
             "redisTls.caConfigMapName=redis-ca-config",
@@ -741,6 +743,33 @@ def test_redis_tls_can_disable_hostname_verification() -> None:
     )
 
     assert config_map["data"]["REDIS_SSL_CHECK_HOSTNAME"] == "false"
+
+
+def test_redis_tls_null_hostname_verification_uses_secure_default() -> None:
+    """A null hostname option must not silently disable identity verification."""
+    config_map = yaml.safe_load(
+        _render_config_map_yaml(
+            [
+                "--set",
+                "redis.enabled=false",
+                "--set",
+                "redisTls.enabled=true",
+                "--set",
+                "redisTls.caConfigMapName=redis-ca-config",
+                "--set",
+                "redisTls.checkHostname=null",
+            ]
+        )
+    )
+
+    assert config_map["data"]["REDIS_SSL_CHECK_HOSTNAME"] == "true"
+
+
+def test_null_redis_tls_map_renders_without_tls_configuration() -> None:
+    """A reused null Redis TLS map must not cause a Helm template error."""
+    rendered = _render_chart(["--set", "redisTls=null"])
+
+    assert rendered.returncode == 0, rendered.stderr
 
 
 def test_redis_tls_disabled_does_not_override_redis_configuration() -> None:
