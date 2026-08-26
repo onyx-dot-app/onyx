@@ -140,20 +140,35 @@ def fetch_github_access_token_for_repo(
     db_session: Session,
     repo_owner: str,
     repo_name: str,
+    user: User,
 ) -> str | None:
     """Access token of the GitHub connector credential that indexes the repo.
 
-    The token unlocks the repo's FULL source for the caller, which is more
-    than indexing exposes, so eligibility is deliberately narrow. A pair
-    qualifies only when the admin both:
-    - made it org-public (AccessType.PUBLIC) — permission-synced or private
-      pairs are skipped since the coding agent has no per-user access check;
-    - named the repo explicitly in the connector's `repositories` config.
-      Owner-wide connectors do NOT qualify: they would extend one PAT to
-      every repo of the owner;
-    - enabled source-code indexing (`include_code_files`). A connector that
-      indexes only PRs, issues, or docs never exposed the source tree, so
-      its token must not either.
+    A connector that indexes a repo's source code is treated as making that
+    code available to whoever may read the connector, and the coding agent
+    works on the same repo on that user's behalf. So the grant follows the
+    user's own access rather than a separate admin toggle.
+
+    A pair qualifies only when:
+    - `user` may read the pair (public, or a user group they belong to), which
+      is what `get_connector_credential_pairs_for_user` answers;
+    - the pair is NOT permission-synced. SYNC pairs carry per-document ACLs, so
+      a user entitled to some of a repo's files can be entitled to few of them
+      — and a repo archive is all-or-nothing, so cc-pair access cannot stand in
+      for it;
+    - the connector indexes source code (`include_code_files`). One that
+      indexes only PRs, issues, or docs never exposed the tree;
+    - the repo is named explicitly in `repositories`. Owner-wide connectors do
+      NOT qualify: they would extend one PAT to every repo of the owner;
+    - the pair is active. A paused or invalid pair stops granting its
+      credential.
+
+    Known asymmetry: indexing exposes a filtered subset (sensitive files
+    skipped, document extensions subtracted, size caps), while the token reads
+    the whole tree. Filtering what the agent receives to the indexed set would
+    close it; until then the checks above bound who can ask.
+
+    `user` is the actor recorded in the credential-access audit line.
 
     Returns None when no eligible pair matches (public-repo access only).
     """
@@ -161,18 +176,24 @@ def fetch_github_access_token_for_repo(
     # GitHub connector utils pull in PyGithub.
     from onyx.connectors.github.utils import parse_repositories_config
     from onyx.db.connector_credential_pair import (
-        get_connector_credential_pairs_for_source,
+        get_connector_credential_pairs_for_user,
     )
 
     owner_lower = repo_owner.lower()
     repo_lower = repo_name.lower()
 
-    cc_pairs = get_connector_credential_pairs_for_source(
-        db_session, DocumentSource.GITHUB
+    # get_editable=False is read access, not manage access: a pair the user may
+    # see because it is public or attached to one of their groups.
+    cc_pairs = get_connector_credential_pairs_for_user(
+        db_session=db_session,
+        user=user,
+        get_editable=False,
+        source=DocumentSource.GITHUB,
     )
 
     for cc_pair in cc_pairs:
-        if cc_pair.access_type != AccessType.PUBLIC:
+        # Per-document ACLs cannot gate an all-or-nothing repo archive.
+        if cc_pair.access_type == AccessType.SYNC:
             continue
         # Active pairs only: a paused or invalid pair must not keep granting
         # its PAT (and its index is going stale anyway).
@@ -202,6 +223,7 @@ def fetch_github_access_token_for_repo(
                 credential_type="connector",
                 provider=DocumentSource.GITHUB.value,
                 row_id=credential.id,
+                user_id=str(user.id),
             )
             return token
 

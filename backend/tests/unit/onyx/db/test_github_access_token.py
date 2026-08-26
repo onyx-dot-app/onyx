@@ -1,13 +1,22 @@
 from typing import Any
 from unittest.mock import MagicMock, patch
+from uuid import UUID
 
 from onyx.db.credentials import fetch_github_access_token_for_repo
 from onyx.db.enums import AccessType, ConnectorCredentialPairStatus
 from onyx.utils.sensitive import SensitiveValue
 
 _CC_PAIRS_FN = (
-    "onyx.db.connector_credential_pair.get_connector_credential_pairs_for_source"
+    "onyx.db.connector_credential_pair.get_connector_credential_pairs_for_user"
 )
+
+_USER_ID = UUID("11111111-2222-3333-4444-555555555555")
+
+
+def _user() -> MagicMock:
+    user = MagicMock()
+    user.id = _USER_ID
+    return user
 
 
 def _sensitive_json(payload: str) -> SensitiveValue[dict[str, Any]]:
@@ -39,10 +48,18 @@ def _cc_pair(
 
 
 def _fetch(cc_pairs: list[Any], repo_owner: str, repo_name: str) -> str | None:
-    with patch(_CC_PAIRS_FN, return_value=cc_pairs):
-        return fetch_github_access_token_for_repo(
-            db_session=MagicMock(), repo_owner=repo_owner, repo_name=repo_name
+    user = _user()
+    with patch(_CC_PAIRS_FN, return_value=cc_pairs) as lookup:
+        token = fetch_github_access_token_for_repo(
+            db_session=MagicMock(),
+            repo_owner=repo_owner,
+            repo_name=repo_name,
+            user=user,
         )
+    # The gate is the acting user's own read access, not a global listing.
+    assert lookup.call_args.kwargs["user"] is user
+    assert lookup.call_args.kwargs["get_editable"] is False
+    return token
 
 
 def _credential_with_token() -> MagicMock:
@@ -60,16 +77,19 @@ def test_returns_token_for_named_repo() -> None:
     assert _fetch([cc_pair], "onyx-dot-app", "Onyx") == "tok"
 
 
-def test_emits_audit_event_on_decrypt() -> None:
+def test_emits_audit_event_with_actor_on_decrypt() -> None:
     """The token reaches an LLM-driven agent, so the decrypt must be audited
-    like every other connector-credential read."""
+    like every other connector-credential read — and name who triggered it."""
     cc_pair = _cc_pair(_credential_with_token(), "owner", "repo")
 
     with patch("onyx.db.credentials.emit_credential_access") as emit:
         assert _fetch([cc_pair], "owner", "repo") == "tok"
 
     emit.assert_called_once_with(
-        credential_type="connector", provider="github", row_id=7
+        credential_type="connector",
+        provider="github",
+        row_id=7,
+        user_id=str(_USER_ID),
     )
 
 
@@ -98,6 +118,27 @@ def test_skips_connector_that_does_not_index_code() -> None:
     )
 
     assert _fetch([cc_pair], "owner", "repo") is None
+
+
+def test_skips_permission_synced_pairs() -> None:
+    """SYNC pairs carry per-document ACLs: a user entitled to some of a repo's
+    files can be entitled to few of them, and a repo archive is all-or-nothing.
+    cc-pair access cannot stand in for it, so these never qualify."""
+    synced = _cc_pair(
+        _credential_with_token(), "owner", "repo", access_type=AccessType.SYNC
+    )
+
+    assert _fetch([synced], "owner", "repo") is None
+
+
+def test_private_pair_qualifies_when_the_user_may_read_it() -> None:
+    """The lookup only returns pairs this user may read, so a private pair
+    reaching the loop means the user is in one of its groups."""
+    private = _cc_pair(
+        _credential_with_token(), "owner", "repo", access_type=AccessType.PRIVATE
+    )
+
+    assert _fetch([private], "owner", "repo") == "tok"
 
 
 def test_skips_non_public_and_inactive_pairs() -> None:
