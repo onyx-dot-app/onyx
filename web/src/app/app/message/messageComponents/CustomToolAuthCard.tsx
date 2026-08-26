@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { useTranslations } from "next-intl";
 import { ToolSnapshot } from "@/lib/tools/types";
 import { initiateOAuthFlow } from "@/lib/oauth/api";
 import { useToolOAuthStatus } from "@/lib/hooks/useToolOAuthStatus";
@@ -20,6 +21,7 @@ function CustomToolAuthCard({
   tools,
   agentId,
 }: CustomToolAuthCardProps) {
+  const t = useTranslations("chat.messages");
   const { getToolAuthStatus } = useToolOAuthStatus(agentId);
   const matchedTool = useMemo(() => {
     if (toolId == null) return null;
@@ -48,15 +50,15 @@ function CustomToolAuthCard({
 
   return (
     <MessageCard
-      title={`${toolName} not connected`}
-      description={`Connect to ${toolName} to enable this tool`}
+      title={t("customToolAuth.card.title", { toolName })}
+      description={t("customToolAuth.card.description", { toolName })}
       rightChildren={
         <Button
           prominence="primary"
           icon={SvgArrowExchange}
           onClick={handleAuthenticate}
         >
-          Connect
+          {t("customToolAuth.connectButton.label")}
         </Button>
       }
     />

@@ -401,6 +401,23 @@
         }
       }
     },
+    "documentSidebar": {
+      "citedSources": {
+        "title": "Zitierte Quellen"
+      },
+      "closeButton": {
+        "tooltip": "Seitenleiste schließen"
+      },
+      "foundSources": {
+        "title": "Gefundene Quellen"
+      },
+      "moreSources": {
+        "title": "Weitere"
+      },
+      "userFiles": {
+        "title": "Benutzerdateien"
+      }
+    },
     "federatedOAuth": {
       "connectButton": {
         "label": "Verbinden"
@@ -670,6 +687,689 @@
         },
         "credentials": {
           "text": "Ihre Anmeldedaten werden beim Server validiert und sicher gespeichert."
+        }
+      }
+    },
+    "messages": {
+      "agentMessage": {
+        "stoppedGeneration": {
+          "text": "Der Benutzer hat die Generierung gestoppt"
+        }
+      },
+      "codeBlock": {
+        "copyButton": {
+          "copiedLabel": "Kopiert!",
+          "label": "Kopieren"
+        }
+      },
+      "customTool": {
+        "authFailedStatus": {
+          "text": "Authentifizierung von {toolName} fehlgeschlagen (HTTP {statusCode})"
+        },
+        "completedStatus": {
+          "text": "{toolName} abgeschlossen"
+        },
+        "downloadFileLink": {
+          "label": "Herunterladen"
+        },
+        "failedStatus": {
+          "text": "{toolName} fehlgeschlagen (HTTP {statusCode})"
+        },
+        "fallbackName": {
+          "label": "Werkzeug"
+        },
+        "fileItem": {
+          "label": "Datei {index}"
+        },
+        "fileStatus": {
+          "text": "{toolName} hat eine Datei zurückgegeben"
+        },
+        "imagesStatus": {
+          "text": "{toolName} hat Bilder zurückgegeben"
+        },
+        "openFileLink": {
+          "label": "Öffnen"
+        },
+        "requestBlock": {
+          "label": "Anfrage"
+        },
+        "responseBlock": {
+          "label": "Antwort"
+        },
+        "runningStatus": {
+          "text": "{toolName} wird ausgeführt..."
+        },
+        "waitingIndicator": {
+          "text": "Warten auf Antwort..."
+        }
+      },
+      "customToolAuth": {
+        "card": {
+          "description": "Verbinden Sie {toolName}, um dieses Werkzeug zu aktivieren",
+          "title": "{toolName} ist nicht verbunden"
+        },
+        "connectButton": {
+          "label": "Verbinden"
+        }
+      },
+      "errorBanner": {
+        "apiError": {
+          "title": "API-Fehler"
+        },
+        "authError": {
+          "title": "Authentifizierungsfehler"
+        },
+        "badRequest": {
+          "title": "Ungültige Anfrage"
+        },
+        "budgetExceeded": {
+          "title": "Budget überschritten"
+        },
+        "connectionError": {
+          "title": "Verbindungsfehler"
+        },
+        "contentPolicy": {
+          "title": "Verstoß gegen die Inhaltsrichtlinie"
+        },
+        "genericError": {
+          "title": "Fehler"
+        },
+        "initializationError": {
+          "title": "Initialisierungsfehler"
+        },
+        "messageTooLong": {
+          "title": "Nachricht zu lang"
+        },
+        "model": {
+          "label": "Modell: {model}"
+        },
+        "modelRefusal": {
+          "title": "Das Modell hat die Antwort abgelehnt"
+        },
+        "modelWithProvider": {
+          "label": "Modell: {model} ({provider})"
+        },
+        "permissionDenied": {
+          "title": "Berechtigung verweigert"
+        },
+        "rateLimitExceeded": {
+          "title": "Ratenlimit überschritten"
+        },
+        "resourceNotFound": {
+          "title": "Ressource nicht gefunden"
+        },
+        "serviceUnavailable": {
+          "title": "Dienst nicht verfügbar"
+        },
+        "stackTraceButton": {
+          "label": "Stacktrace"
+        },
+        "tool": {
+          "label": "Werkzeug: {tool}"
+        },
+        "toolError": {
+          "title": "Werkzeugfehler"
+        },
+        "usageLimitReached": {
+          "title": "Nutzungslimit erreicht"
+        },
+        "validationError": {
+          "title": "Validierungsfehler"
+        }
+      },
+      "humanMessage": {
+        "editButton": {
+          "tooltip": "Bearbeiten"
+        }
+      },
+      "imageTool": {
+        "defaultStatus": {
+          "text": "Bildgenerierung"
+        },
+        "emptyState": {
+          "text": "Keine Bilder generiert"
+        },
+        "failedStatus": {
+          "text": "Bildgenerierung fehlgeschlagen"
+        },
+        "generatedStatus": {
+          "text": "{count, plural, one {# Bild generiert} other {# Bilder generiert}}"
+        },
+        "generatingImagesStatus": {
+          "text": "Bilder werden generiert..."
+        },
+        "generatingStatus": {
+          "text": "Bild wird generiert..."
+        }
+      },
+      "memoizedLink": {
+        "questionFallback": {
+          "label": "Frage"
+        }
+      },
+      "messageEditing": {
+        "cancelButton": {
+          "label": "Abbrechen"
+        },
+        "submitButton": {
+          "label": "Absenden"
+        }
+      },
+      "messageSwitcher": {
+        "disabledWhileStreaming": {
+          "tooltip": "Warten Sie, bis die Agentennachricht abgeschlossen ist"
+        },
+        "nextButton": {
+          "tooltip": "Weiter"
+        },
+        "previousButton": {
+          "tooltip": "Zurück"
+        }
+      },
+      "multiModelPanel": {
+        "deselectButton": {
+          "tooltip": "Bevorzugte Antwort entfernen"
+        },
+        "hideButton": {
+          "tooltip": "Antwort ausblenden"
+        },
+        "preferredResponse": {
+          "label": "Bevorzugte Antwort"
+        },
+        "selectButton": {
+          "label": "Diese Antwort auswählen"
+        },
+        "selectPanel": {
+          "ariaLabel": "Die Antwort von {model} auswählen"
+        },
+        "showButton": {
+          "tooltip": "Antwort anzeigen"
+        },
+        "showPanel": {
+          "ariaLabel": "Die Antwort von {model} anzeigen"
+        }
+      },
+      "rateLimitBanner": {
+        "defaultError": {
+          "text": "Sie haben Ihr Nutzungslimit erreicht."
+        },
+        "resetsInDays": {
+          "text": "Wird in {count, plural, one {# Tag} other {# Tagen}} zurückgesetzt ({at})."
+        },
+        "resetsInHours": {
+          "text": "Wird in {count, plural, one {# Stunde} other {# Stunden}} zurückgesetzt ({at})."
+        },
+        "resetsInMinutes": {
+          "text": "Wird in {count, plural, one {# Minute} other {# Minuten}} zurückgesetzt ({at})."
+        },
+        "tryAgainNow": {
+          "text": "Sie können es jetzt erneut versuchen."
+        }
+      },
+      "resubmit": {
+        "regenerateButton": {
+          "label": "Neu generieren"
+        },
+        "responseError": {
+          "text": "Bei der Antwort ist ein Fehler aufgetreten."
+        }
+      },
+      "text": {
+        "thinkingPlaceholder": {
+          "text": "Denkt nach"
+        }
+      },
+      "timeline": {
+        "codingAgent": {
+          "bashExit": {
+            "header": "Bash · Exit {exitCode}"
+          },
+          "bashRequest": {
+            "label": "Anfrage"
+          },
+          "bashResponse": {
+            "label": "Antwort"
+          },
+          "bashRunning": {
+            "header": "Bash · läuft…"
+          },
+          "bashTimedOut": {
+            "header": "Bash · Zeitüberschreitung"
+          },
+          "noOutput": {
+            "text": "Keine Ausgabe"
+          },
+          "response": {
+            "header": "Antwort"
+          },
+          "task": {
+            "header": "Programmieraufgabe"
+          },
+          "taskWithRepo": {
+            "text": "{query}\n\nRepository: {repo}"
+          },
+          "thinking": {
+            "header": "Denkt nach"
+          }
+        },
+        "collapseButton": {
+          "ariaLabel": "Zeitleiste einklappen"
+        },
+        "deepResearchPlan": {
+          "expandable": {
+            "title": "Rechercheplan"
+          },
+          "generated": {
+            "status": "Plan erstellt"
+          },
+          "generating": {
+            "status": "Erstellt Plan"
+          }
+        },
+        "doneStep": {
+          "header": "Fertig"
+        },
+        "expandButton": {
+          "ariaLabel": "Zeitleiste ausklappen"
+        },
+        "fetch": {
+          "reading": {
+            "status": "Liest"
+          }
+        },
+        "fileReader": {
+          "charRange": {
+            "label": "Zeichen {start, number}–{end, number} von {total, number}"
+          },
+          "read": {
+            "status": "{fileName} gelesen (Zeichen {start, number}–{end, number} von {total, number})"
+          },
+          "reading": {
+            "status": "Liest Datei"
+          }
+        },
+        "generatedImages": {
+          "label": "{count, plural, one {# Bild generiert} other {# Bilder generiert}}"
+        },
+        "header": {
+          "executingCode": {
+            "label": "Führt Code aus"
+          },
+          "executingNamedTool": {
+            "label": "Führt {toolName} aus"
+          },
+          "executingTool": {
+            "label": "Führt Werkzeug aus"
+          },
+          "generatingImage": {
+            "label": "Bild wird generiert..."
+          },
+          "generatingImages": {
+            "label": "Bilder werden generiert"
+          },
+          "generatingPlan": {
+            "label": "Erstellt Plan"
+          },
+          "reading": {
+            "label": "Liest"
+          },
+          "readingFile": {
+            "label": "Liest Datei"
+          },
+          "researching": {
+            "label": "Recherchiert"
+          },
+          "searchingWeb": {
+            "label": "Durchsucht das Web"
+          },
+          "thinking": {
+            "label": "Denkt nach"
+          },
+          "thinkingEllipsis": {
+            "label": "Denkt nach..."
+          },
+          "updatingMemory": {
+            "label": "Aktualisiert Erinnerung..."
+          }
+        },
+        "internalSearch": {
+          "noResults": {
+            "text": "Keine Ergebnisse gefunden"
+          },
+          "reading": {
+            "status": "Liest"
+          }
+        },
+        "interruptedThinking": {
+          "label": "Unterbrochenes Nachdenken"
+        },
+        "memory": {
+          "default": {
+            "status": "Erinnerung"
+          },
+          "disabled": {
+            "text": "Erinnerungswerkzeug deaktiviert"
+          },
+          "updating": {
+            "status": "Aktualisiert Erinnerung"
+          },
+          "viewMemoriesButton": {
+            "tooltip": "Erinnerungen ansehen"
+          }
+        },
+        "memoryTag": {
+          "added": {
+            "label": "Zu den Erinnerungen hinzugefügt"
+          },
+          "updated": {
+            "label": "Erinnerung aktualisiert"
+          }
+        },
+        "python": {
+          "completed": {
+            "status": "Python-Ausführung abgeschlossen"
+          },
+          "default": {
+            "status": "Python-Ausführung"
+          },
+          "error": {
+            "label": "Fehler:"
+          },
+          "executing": {
+            "status": "Führt Python-Code aus..."
+          },
+          "failed": {
+            "status": "Python-Ausführung fehlgeschlagen"
+          },
+          "generatedFiles": {
+            "label": "{count, plural, one {# Datei generiert} other {# Dateien generiert}}"
+          },
+          "noOutput": {
+            "text": "Keine Ausgabe"
+          },
+          "output": {
+            "label": "Ausgabe:"
+          },
+          "runningCode": {
+            "label": "Führt Code aus..."
+          },
+          "writingCode": {
+            "status": "Schreibt Code..."
+          }
+        },
+        "reasoning": {
+          "fullText": {
+            "title": "Vollständiger Text"
+          },
+          "thinking": {
+            "status": "Denkt nach"
+          }
+        },
+        "researchAgent": {
+          "report": {
+            "title": "Recherchebericht"
+          },
+          "task": {
+            "title": "Rechercheaufgabe"
+          }
+        },
+        "searchChips": {
+          "showMore": {
+            "label": "+{count} weitere"
+          },
+          "viewFullQuery": {
+            "tooltip": "Vollständigen Suchbegriff ansehen"
+          }
+        },
+        "stepsButton": {
+          "label": "{count, plural, one {# Schritt} other {# Schritte}}"
+        },
+        "stoppedStep": {
+          "header": "Gestoppt"
+        },
+        "thoughtDuration": {
+          "label": "Hat {duration} nachgedacht"
+        },
+        "thoughtUnknownDuration": {
+          "label": "Hat einige Zeit nachgedacht"
+        },
+        "toggleRow": {
+          "ariaLabel": "Zeitleiste umschalten"
+        },
+        "toolNames": {
+          "codeInterpreter": "Code-Interpreter",
+          "codingAgent": "Coding-Agent",
+          "customTool": "Benutzerdefiniertes Werkzeug",
+          "generateImage": "Bild generieren",
+          "generatePlan": "Plan erstellen",
+          "internalSearch": "Interne Suche",
+          "memory": "Erinnerung",
+          "openUrls": "URLs öffnen",
+          "researchAgent": "Recherche-Agent",
+          "thinking": "Nachdenken",
+          "tool": "Werkzeug",
+          "webSearch": "Websuche"
+        },
+        "webSearch": {
+          "searching": {
+            "status": "Durchsucht das Web"
+          }
+        }
+      },
+      "toolbar": {
+        "dislikeButton": {
+          "removeTooltip": "Gefällt mir nicht entfernen",
+          "tooltip": "Schlechte Antwort"
+        },
+        "likeButton": {
+          "removeTooltip": "Gefällt mir entfernen",
+          "tooltip": "Gute Antwort"
+        },
+        "regenerateButton": {
+          "tooltip": "Erneut versuchen mit"
+        },
+        "sourcesTag": {
+          "label": "Quellen"
+        }
+      },
+      "tts": {
+        "loadingButton": {
+          "tooltip": "Wird geladen..."
+        },
+        "playButton": {
+          "tooltip": "Vorlesen"
+        },
+        "playbackError": {
+          "toast": "Audio konnte nicht abgespielt werden"
+        },
+        "stopButton": {
+          "tooltip": "Wiedergabe stoppen"
+        }
+      }
+    },
+    "modals": {
+      "confirmEntity": {
+        "confirmButton": {
+          "label": "Bestätigen"
+        },
+        "confirmation": {
+          "description": "Möchten Sie <b>{entityName}</b> wirklich {action}?"
+        },
+        "deleteAction": {
+          "label": "löschen"
+        },
+        "deleteButton": {
+          "label": "Löschen"
+        },
+        "header": {
+          "title": "{action} {entityType}"
+        },
+        "modifyAction": {
+          "label": "ändern"
+        }
+      },
+      "editProperty": {
+        "header": {
+          "title": "{property} bearbeiten"
+        },
+        "submitButton": {
+          "label": "Eigenschaft aktualisieren",
+          "loadingLabel": "Wird aktualisiert..."
+        },
+        "valueInput": {
+          "placeholder": "Eigenschaftswert"
+        }
+      },
+      "feedback": {
+        "additionalDetails": {
+          "dislikePlaceholder": "Was hat Ihnen an dieser Antwort nicht gefallen?",
+          "label": "Geben Sie weitere Details an",
+          "likePlaceholder": "Was hat Ihnen an dieser Antwort gefallen?"
+        },
+        "cancelButton": {
+          "label": "Abbrechen"
+        },
+        "header": {
+          "title": "Feedback"
+        },
+        "submitButton": {
+          "label": "Absenden",
+          "loadingLabel": "Wird gesendet..."
+        }
+      },
+      "genericConfirm": {
+        "confirmButton": {
+          "label": "Bestätigen"
+        }
+      },
+      "share": {
+        "addPeople": {
+          "groupSuggestion": {
+            "description": "Gruppe"
+          },
+          "permissionMenu": {
+            "ariaLabel": "Vorgemerkte Berechtigung auswählen"
+          },
+          "searchInput": {
+            "placeholder": "Benutzer, Gruppen und Konten hinzufügen"
+          },
+          "sharedTag": {
+            "label": "Geteilt"
+          }
+        },
+        "cancelButton": {
+          "label": "Abbrechen"
+        },
+        "copyLinkButton": {
+          "label": "Link kopieren"
+        },
+        "createLinkButton": {
+          "label": "Freigabelink erstellen"
+        },
+        "generateLinkErrorToast": {
+          "message": "Freigabelink konnte nicht erstellt werden"
+        },
+        "genericErrorToast": {
+          "message": "Ein Fehler ist aufgetreten"
+        },
+        "header": {
+          "description": "Alle bestehenden und zukünftigen Nachrichten in diesem Chat werden geteilt.",
+          "sharedTitle": "Chat geteilt",
+          "title": "Diesen Chat teilen"
+        },
+        "linkCopiedToast": {
+          "message": "Freigabelink in die Zwischenablage kopiert!"
+        },
+        "linkInput": {
+          "copyTooltip": "Link kopieren"
+        },
+        "makePrivateButton": {
+          "label": "Privat machen"
+        },
+        "makePrivateErrorToast": {
+          "message": "Chat konnte nicht privat gemacht werden"
+        },
+        "nowPrivateToast": {
+          "message": "Der Chat ist jetzt privat"
+        },
+        "organizationOption": {
+          "description": "Jeder in Ihrer Organisation kann diesen Chat sehen.",
+          "title": "Ihre Organisation"
+        },
+        "permissionMenu": {
+          "edit": {
+            "label": "Bearbeiten"
+          },
+          "removeAccess": {
+            "label": "Zugriff entfernen"
+          },
+          "viewAndChat": {
+            "label": "Ansehen & Chatten"
+          }
+        },
+        "privateOption": {
+          "description": "Nur Sie haben Zugriff auf diesen Chat.",
+          "title": "Privat"
+        },
+        "transferOwnership": {
+          "currentOwner": {
+            "label": "Aktueller Eigentümer"
+          },
+          "groupTag": {
+            "label": "Gruppe"
+          },
+          "targetInput": {
+            "label": "Eigentum übertragen an",
+            "placeholder": "Benutzer oder Gruppe hinzufügen"
+          },
+          "trailingButton": {
+            "tooltip": "Eigentum übertragen"
+          }
+        }
+      },
+      "unsavedChanges": {
+        "body": {
+          "description": "Ihre Änderungen wurden nicht gespeichert. Wenn Sie jetzt gehen, gehen sie verloren."
+        },
+        "cancelButton": {
+          "label": "Abbrechen"
+        },
+        "discardButton": {
+          "label": "Änderungen verwerfen"
+        },
+        "header": {
+          "title": "Ungespeicherte Änderungen verwerfen?"
+        }
+      },
+      "userFiles": {
+        "addFilesButton": {
+          "label": "Dateien hinzufügen"
+        },
+        "doneButton": {
+          "label": "Fertig"
+        },
+        "emptyState": {
+          "description": "Keine Dateien gefunden"
+        },
+        "fileCount": {
+          "label": "{count, plural, one {# Datei} other {# Dateien}}"
+        },
+        "fileStatus": {
+          "deleting": {
+            "label": "Wird gelöscht..."
+          },
+          "processing": {
+            "label": "Wird verarbeitet..."
+          },
+          "uploading": {
+            "label": "Wird hochgeladen..."
+          }
+        },
+        "searchInput": {
+          "placeholder": "Dateien durchsuchen..."
+        },
+        "selectedCount": {
+          "label": "{count, plural, one {# Datei ausgewählt} other {# Dateien ausgewählt}}"
         }
       }
     },
@@ -1109,6 +1809,185 @@
         "title": "Wiedergabegeschwindigkeit"
       },
       "title": "Sprachfunktionen"
+    }
+  },
+  "sidebar": {
+    "adminSidebar": {
+      "businessOrEnterpriseOnly": {
+        "tooltip": "Diese Funktion ist nur in der [Business- oder Enterprise-Version von Onyx](/admin/billing) verfügbar."
+      },
+      "enterpriseOnly": {
+        "tooltip": "Diese Funktion ist nur in der [Enterprise-Version von Onyx](/admin/billing) verfügbar."
+      },
+      "exitAdminPanel": {
+        "label": "Admin-Bereich verlassen"
+      },
+      "search": {
+        "label": "Suche"
+      },
+      "searchInput": {
+        "placeholder": "Suchen..."
+      }
+    },
+    "appSidebar": {
+      "adminPanel": {
+        "label": "Admin-Bereich"
+      },
+      "agents": {
+        "title": "Agenten"
+      },
+      "craft": {
+        "label": "Craft"
+      },
+      "exploreAgents": {
+        "label": "Agenten erkunden"
+      },
+      "moreAgents": {
+        "label": "Weitere Agenten"
+      },
+      "moveChatError": {
+        "message": "Chat konnte nicht verschoben werden. Bitte versuchen Sie es erneut."
+      },
+      "newProject": {
+        "label": "Neues Projekt",
+        "tooltip": "Neues Projekt"
+      },
+      "newSession": {
+        "label": "Neue Sitzung"
+      },
+      "projects": {
+        "title": "Projekte"
+      },
+      "recents": {
+        "empty": {
+          "text": "Senden Sie eine Nachricht! Ihr Chat-Verlauf erscheint hier."
+        },
+        "title": "Zuletzt verwendet"
+      },
+      "searchChats": {
+        "label": "Chats durchsuchen"
+      }
+    },
+    "chatButton": {
+      "createProject": {
+        "label": "{projectName} erstellen"
+      },
+      "createProjectError": {
+        "message": "Projekt konnte nicht erstellt werden. Bitte versuchen Sie es erneut."
+      },
+      "delete": {
+        "label": "Löschen"
+      },
+      "deleteConfirmation": {
+        "confirmButton": {
+          "label": "Löschen"
+        },
+        "description": "Möchten Sie diesen Chat wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.",
+        "title": "Chat löschen"
+      },
+      "deleteError": {
+        "message": "Chat konnte nicht gelöscht werden. Bitte versuchen Sie es erneut."
+      },
+      "moveToProject": {
+        "label": "In ein Projekt verschieben"
+      },
+      "projectSearchInput": {
+        "placeholder": "Projekte durchsuchen"
+      },
+      "removeFromProject": {
+        "label": "Aus {projectName} entfernen"
+      },
+      "rename": {
+        "label": "Umbenennen"
+      },
+      "share": {
+        "label": "Teilen"
+      }
+    },
+    "chatSearch": {
+      "createNamedProject": {
+        "label": "Neues Projekt \"<name>{projectName}</name>\" erstellen"
+      },
+      "footer": {
+        "openAction": {
+          "label": "Öffnen"
+        },
+        "selectAction": {
+          "label": "Auswählen"
+        },
+        "showAllAction": {
+          "label": "Alle anzeigen"
+        }
+      },
+      "list": {
+        "empty": {
+          "text": "Noch keine Chats oder Projekte"
+        },
+        "noResults": {
+          "text": "Keine Ergebnisse gefunden"
+        }
+      },
+      "newProject": {
+        "label": "Neues Projekt"
+      },
+      "newSession": {
+        "label": "Neue Sitzung"
+      },
+      "noMoreResults": {
+        "text": "Keine weiteren Ergebnisse"
+      },
+      "projectsFilter": {
+        "label": "Projekte"
+      },
+      "recentFilter": {
+        "label": "Zuletzt verwendet"
+      },
+      "recentSessionsFilter": {
+        "label": "Letzte Sitzungen"
+      },
+      "searchInput": {
+        "placeholder": "Chat-Sitzungen, Projekte durchsuchen..."
+      },
+      "sessionsFilter": {
+        "label": "Sitzungen"
+      }
+    },
+    "createConnector": {
+      "advancedStep": {
+        "label": "Erweitert (optional)"
+      },
+      "connectorStep": {
+        "label": "Konnektor"
+      },
+      "credentialStep": {
+        "label": "Anmeldedaten"
+      },
+      "exitSetup": {
+        "label": "Konnektor-Einrichtung verlassen"
+      }
+    },
+    "notifications": {
+      "empty": {
+        "title": "Keine Benachrichtigungen"
+      },
+      "header": {
+        "title": "Benachrichtigungen"
+      },
+      "markAllAsReadButton": {
+        "tooltip": "Alle als gelesen markieren"
+      },
+      "markAsReadButton": {
+        "tooltip": "Als gelesen markieren"
+      },
+      "newSection": {
+        "title": "Neu"
+      },
+      "olderSection": {
+        "title": "Älter"
+      },
+      "unreadCount": {
+        "label": "{count, plural, one {# ungelesen} other {# ungelesen}}"
+      }
     }
   }
 }

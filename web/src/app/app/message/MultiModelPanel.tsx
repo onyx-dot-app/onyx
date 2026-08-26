@@ -12,6 +12,7 @@ import AgentMessage, {
 import { ErrorBanner } from "@/app/app/message/Resubmit";
 import { cn, clickOnKeyDown } from "@opal/utils";
 import { markdown } from "@opal/utils";
+import { useTranslations } from "next-intl";
 
 export interface MultiModelPanelProps {
   /** Provider name for icon lookup */
@@ -96,6 +97,7 @@ export default function MultiModelPanel({
   carouselPrev,
   carouselNext,
 }: MultiModelPanelProps) {
+  const t = useTranslations("chat.messages");
   const ModelIcon = getModelIcon(provider, modelName);
 
   const canSelect =
@@ -138,7 +140,7 @@ export default function MultiModelPanel({
               <div className="flex items-center px-2">
                 <span className="text-action-selection-05 shrink-0">
                   <Text font="secondary-body" color="inherit" nowrap>
-                    Preferred Response
+                    {t("multiModelPanel.preferredResponse.label")}
                   </Text>
                 </span>
               </div>
@@ -150,7 +152,7 @@ export default function MultiModelPanel({
                 <>
                   <span className="text-action-selection-05 shrink-0">
                     <Text font="secondary-body" color="inherit" nowrap>
-                      Preferred Response
+                      {t("multiModelPanel.preferredResponse.label")}
                     </Text>
                   </span>
                   {onDeselect && (
@@ -162,7 +164,7 @@ export default function MultiModelPanel({
                         e.stopPropagation();
                         onDeselect();
                       }}
-                      tooltip="Deselect preferred response"
+                      tooltip={t("multiModelPanel.deselectButton.tooltip")}
                     />
                   )}
                 </>
@@ -177,7 +179,7 @@ export default function MultiModelPanel({
                       onSelect();
                     }}
                   >
-                    Select This Response
+                    {t("multiModelPanel.selectButton.label")}
                   </Button>
                 </span>
               )}
@@ -190,7 +192,11 @@ export default function MultiModelPanel({
                     e.stopPropagation();
                     onToggleVisibility();
                   }}
-                  tooltip={isHidden ? "Show response" : "Hide response"}
+                  tooltip={
+                    isHidden
+                      ? t("multiModelPanel.showButton.tooltip")
+                      : t("multiModelPanel.hideButton.tooltip")
+                  }
                 />
               )}
             </div>
@@ -207,7 +213,9 @@ export default function MultiModelPanel({
       className={headerClassName}
       role="button"
       tabIndex={0}
-      aria-label={`Select the ${displayName} response`}
+      aria-label={t("multiModelPanel.selectPanel.ariaLabel", {
+        model: displayName,
+      })}
       onKeyDown={clickOnKeyDown(onSelect)}
       onClick={onSelect}
     >
@@ -229,7 +237,9 @@ export default function MultiModelPanel({
             rightIcon={SvgChevronLeft}
             onClick={carouselPrev.onClick}
             tooltip={carouselPrev.displayName}
-            aria-label={`Show the ${carouselPrev.displayName} response`}
+            aria-label={t("multiModelPanel.showPanel.ariaLabel", {
+              model: carouselPrev.displayName,
+            })}
           />
         ) : null}
         {/* raw-ok: flex-1 slot for the pill inside the nav row, no layout primitive exposes a bare grow wrapper */}
@@ -244,7 +254,9 @@ export default function MultiModelPanel({
             )}
             onClick={carouselNext.onClick}
             tooltip={carouselNext.displayName}
-            aria-label={`Show the ${carouselNext.displayName} response`}
+            aria-label={t("multiModelPanel.showPanel.ariaLabel", {
+              model: carouselNext.displayName,
+            })}
           />
         ) : null}
       </div>

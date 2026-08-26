@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { useTranslations } from "next-intl";
 import { SvgFold, SvgExpand } from "@opal/icons";
 import { Button } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
@@ -28,6 +29,7 @@ export const StreamingHeader = React.memo(function StreamingHeader({
   streamingStartTime,
   toolProcessingDuration,
 }: StreamingHeaderProps) {
+  const t = useTranslations("chat.messages.timeline");
   // Use backend duration when available, otherwise continue live timer
   const elapsedSeconds = useStreamingDuration(
     toolProcessingDuration === undefined, // Stop updating when we have backend duration
@@ -62,7 +64,7 @@ export const StreamingHeader = React.memo(function StreamingHeader({
             size="md"
             onClick={onToggle}
             rightIcon={SvgFold}
-            aria-label="Collapse timeline"
+            aria-label={t("collapseButton.ariaLabel")}
             aria-expanded={true}
           >
             {formatDurationSeconds(elapsedSeconds)}
@@ -73,7 +75,11 @@ export const StreamingHeader = React.memo(function StreamingHeader({
             size="md"
             onClick={onToggle}
             icon={isExpanded ? SvgFold : SvgExpand}
-            aria-label={isExpanded ? "Collapse timeline" : "Expand timeline"}
+            aria-label={
+              isExpanded
+                ? t("collapseButton.ariaLabel")
+                : t("expandButton.ariaLabel")
+            }
             aria-expanded={isExpanded}
           />
         ))}

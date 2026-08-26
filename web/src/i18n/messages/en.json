@@ -401,6 +401,23 @@
         }
       }
     },
+    "documentSidebar": {
+      "citedSources": {
+        "title": "Cited Sources"
+      },
+      "closeButton": {
+        "tooltip": "Close Sidebar"
+      },
+      "foundSources": {
+        "title": "Found Sources"
+      },
+      "moreSources": {
+        "title": "More"
+      },
+      "userFiles": {
+        "title": "User Files"
+      }
+    },
     "federatedOAuth": {
       "connectButton": {
         "label": "Connect"
@@ -670,6 +687,689 @@
         },
         "credentials": {
           "text": "Your Credentials will be validated against the server and stored securely."
+        }
+      }
+    },
+    "messages": {
+      "agentMessage": {
+        "stoppedGeneration": {
+          "text": "User has stopped generation"
+        }
+      },
+      "codeBlock": {
+        "copyButton": {
+          "copiedLabel": "Copied!",
+          "label": "Copy"
+        }
+      },
+      "customTool": {
+        "authFailedStatus": {
+          "text": "{toolName} authentication failed (HTTP {statusCode})"
+        },
+        "completedStatus": {
+          "text": "{toolName} completed"
+        },
+        "downloadFileLink": {
+          "label": "Download"
+        },
+        "failedStatus": {
+          "text": "{toolName} failed (HTTP {statusCode})"
+        },
+        "fallbackName": {
+          "label": "Tool"
+        },
+        "fileItem": {
+          "label": "File {index}"
+        },
+        "fileStatus": {
+          "text": "{toolName} returned a file"
+        },
+        "imagesStatus": {
+          "text": "{toolName} returned images"
+        },
+        "openFileLink": {
+          "label": "Open"
+        },
+        "requestBlock": {
+          "label": "Request"
+        },
+        "responseBlock": {
+          "label": "Response"
+        },
+        "runningStatus": {
+          "text": "{toolName} running..."
+        },
+        "waitingIndicator": {
+          "text": "Waiting for response..."
+        }
+      },
+      "customToolAuth": {
+        "card": {
+          "description": "Connect to {toolName} to enable this tool",
+          "title": "{toolName} not connected"
+        },
+        "connectButton": {
+          "label": "Connect"
+        }
+      },
+      "errorBanner": {
+        "apiError": {
+          "title": "API Error"
+        },
+        "authError": {
+          "title": "Authentication Error"
+        },
+        "badRequest": {
+          "title": "Invalid Request"
+        },
+        "budgetExceeded": {
+          "title": "Budget Exceeded"
+        },
+        "connectionError": {
+          "title": "Connection Error"
+        },
+        "contentPolicy": {
+          "title": "Content Policy Violation"
+        },
+        "genericError": {
+          "title": "Error"
+        },
+        "initializationError": {
+          "title": "Initialization Error"
+        },
+        "messageTooLong": {
+          "title": "Message Too Long"
+        },
+        "model": {
+          "label": "Model: {model}"
+        },
+        "modelRefusal": {
+          "title": "Model Declined to Respond"
+        },
+        "modelWithProvider": {
+          "label": "Model: {model} ({provider})"
+        },
+        "permissionDenied": {
+          "title": "Permission Denied"
+        },
+        "rateLimitExceeded": {
+          "title": "Rate Limit Exceeded"
+        },
+        "resourceNotFound": {
+          "title": "Resource Not Found"
+        },
+        "serviceUnavailable": {
+          "title": "Service Unavailable"
+        },
+        "stackTraceButton": {
+          "label": "Stack trace"
+        },
+        "tool": {
+          "label": "Tool: {tool}"
+        },
+        "toolError": {
+          "title": "Tool Error"
+        },
+        "usageLimitReached": {
+          "title": "Usage limit reached"
+        },
+        "validationError": {
+          "title": "Validation Error"
+        }
+      },
+      "humanMessage": {
+        "editButton": {
+          "tooltip": "Edit"
+        }
+      },
+      "imageTool": {
+        "defaultStatus": {
+          "text": "Image generation"
+        },
+        "emptyState": {
+          "text": "No images generated"
+        },
+        "failedStatus": {
+          "text": "Image generation failed"
+        },
+        "generatedStatus": {
+          "text": "{count, plural, one {Generated # image} other {Generated # images}}"
+        },
+        "generatingImagesStatus": {
+          "text": "Generating images..."
+        },
+        "generatingStatus": {
+          "text": "Generating image..."
+        }
+      },
+      "memoizedLink": {
+        "questionFallback": {
+          "label": "Question"
+        }
+      },
+      "messageEditing": {
+        "cancelButton": {
+          "label": "Cancel"
+        },
+        "submitButton": {
+          "label": "Submit"
+        }
+      },
+      "messageSwitcher": {
+        "disabledWhileStreaming": {
+          "tooltip": "Wait for agent message to complete"
+        },
+        "nextButton": {
+          "tooltip": "Next"
+        },
+        "previousButton": {
+          "tooltip": "Previous"
+        }
+      },
+      "multiModelPanel": {
+        "deselectButton": {
+          "tooltip": "Deselect preferred response"
+        },
+        "hideButton": {
+          "tooltip": "Hide response"
+        },
+        "preferredResponse": {
+          "label": "Preferred Response"
+        },
+        "selectButton": {
+          "label": "Select This Response"
+        },
+        "selectPanel": {
+          "ariaLabel": "Select the {model} response"
+        },
+        "showButton": {
+          "tooltip": "Show response"
+        },
+        "showPanel": {
+          "ariaLabel": "Show the {model} response"
+        }
+      },
+      "rateLimitBanner": {
+        "defaultError": {
+          "text": "You've reached your usage limit."
+        },
+        "resetsInDays": {
+          "text": "Resets in {count, plural, one {# day} other {# days}} ({at})."
+        },
+        "resetsInHours": {
+          "text": "Resets in {count, plural, one {# hour} other {# hours}} ({at})."
+        },
+        "resetsInMinutes": {
+          "text": "Resets in {count, plural, one {# minute} other {# minutes}} ({at})."
+        },
+        "tryAgainNow": {
+          "text": "You can try again now."
+        }
+      },
+      "resubmit": {
+        "regenerateButton": {
+          "label": "Regenerate"
+        },
+        "responseError": {
+          "text": "There was an error with the response."
+        }
+      },
+      "text": {
+        "thinkingPlaceholder": {
+          "text": "Thinking"
+        }
+      },
+      "timeline": {
+        "codingAgent": {
+          "bashExit": {
+            "header": "Bash · exit {exitCode}"
+          },
+          "bashRequest": {
+            "label": "Request"
+          },
+          "bashResponse": {
+            "label": "Response"
+          },
+          "bashRunning": {
+            "header": "Bash · running…"
+          },
+          "bashTimedOut": {
+            "header": "Bash · timed out"
+          },
+          "noOutput": {
+            "text": "No output"
+          },
+          "response": {
+            "header": "Response"
+          },
+          "task": {
+            "header": "Coding Task"
+          },
+          "taskWithRepo": {
+            "text": "{query}\n\nRepository: {repo}"
+          },
+          "thinking": {
+            "header": "Thinking"
+          }
+        },
+        "collapseButton": {
+          "ariaLabel": "Collapse timeline"
+        },
+        "deepResearchPlan": {
+          "expandable": {
+            "title": "Research Plan"
+          },
+          "generated": {
+            "status": "Generated plan"
+          },
+          "generating": {
+            "status": "Generating plan"
+          }
+        },
+        "doneStep": {
+          "header": "Done"
+        },
+        "expandButton": {
+          "ariaLabel": "Expand timeline"
+        },
+        "fetch": {
+          "reading": {
+            "status": "Reading"
+          }
+        },
+        "fileReader": {
+          "charRange": {
+            "label": "chars {start, number}–{end, number} of {total, number}"
+          },
+          "read": {
+            "status": "Read {fileName} (chars {start, number}–{end, number} of {total, number})"
+          },
+          "reading": {
+            "status": "Reading file"
+          }
+        },
+        "generatedImages": {
+          "label": "{count, plural, one {Generated # image} other {Generated # images}}"
+        },
+        "header": {
+          "executingCode": {
+            "label": "Executing code"
+          },
+          "executingNamedTool": {
+            "label": "Executing {toolName}"
+          },
+          "executingTool": {
+            "label": "Executing tool"
+          },
+          "generatingImage": {
+            "label": "Generating image..."
+          },
+          "generatingImages": {
+            "label": "Generating images"
+          },
+          "generatingPlan": {
+            "label": "Generating plan"
+          },
+          "reading": {
+            "label": "Reading"
+          },
+          "readingFile": {
+            "label": "Reading file"
+          },
+          "researching": {
+            "label": "Researching"
+          },
+          "searchingWeb": {
+            "label": "Searching the web"
+          },
+          "thinking": {
+            "label": "Thinking"
+          },
+          "thinkingEllipsis": {
+            "label": "Thinking..."
+          },
+          "updatingMemory": {
+            "label": "Updating memory..."
+          }
+        },
+        "internalSearch": {
+          "noResults": {
+            "text": "No results found"
+          },
+          "reading": {
+            "status": "Reading"
+          }
+        },
+        "interruptedThinking": {
+          "label": "Interrupted Thinking"
+        },
+        "memory": {
+          "default": {
+            "status": "Memory"
+          },
+          "disabled": {
+            "text": "Memory tool disabled"
+          },
+          "updating": {
+            "status": "Updating memory"
+          },
+          "viewMemoriesButton": {
+            "tooltip": "View Memories"
+          }
+        },
+        "memoryTag": {
+          "added": {
+            "label": "Added to memories"
+          },
+          "updated": {
+            "label": "Updated memory"
+          }
+        },
+        "python": {
+          "completed": {
+            "status": "Python execution completed"
+          },
+          "default": {
+            "status": "Python execution"
+          },
+          "error": {
+            "label": "Error:"
+          },
+          "executing": {
+            "status": "Executing Python code..."
+          },
+          "failed": {
+            "status": "Python execution failed"
+          },
+          "generatedFiles": {
+            "label": "{count, plural, one {Generated # file} other {Generated # files}}"
+          },
+          "noOutput": {
+            "text": "No output"
+          },
+          "output": {
+            "label": "Output:"
+          },
+          "runningCode": {
+            "label": "Running code..."
+          },
+          "writingCode": {
+            "status": "Writing code..."
+          }
+        },
+        "reasoning": {
+          "fullText": {
+            "title": "Full text"
+          },
+          "thinking": {
+            "status": "Thinking"
+          }
+        },
+        "researchAgent": {
+          "report": {
+            "title": "Research Report"
+          },
+          "task": {
+            "title": "Research Task"
+          }
+        },
+        "searchChips": {
+          "showMore": {
+            "label": "+{count} more"
+          },
+          "viewFullQuery": {
+            "tooltip": "View Full Search Term"
+          }
+        },
+        "stepsButton": {
+          "label": "{count, plural, one {# step} other {# steps}}"
+        },
+        "stoppedStep": {
+          "header": "Stopped"
+        },
+        "thoughtDuration": {
+          "label": "Thought for {duration}"
+        },
+        "thoughtUnknownDuration": {
+          "label": "Thought for some time"
+        },
+        "toggleRow": {
+          "ariaLabel": "Toggle timeline"
+        },
+        "toolNames": {
+          "codeInterpreter": "Code Interpreter",
+          "codingAgent": "Coding agent",
+          "customTool": "Custom Tool",
+          "generateImage": "Generate Image",
+          "generatePlan": "Generate plan",
+          "internalSearch": "Internal Search",
+          "memory": "Memory",
+          "openUrls": "Open URLs",
+          "researchAgent": "Research agent",
+          "thinking": "Thinking",
+          "tool": "Tool",
+          "webSearch": "Web Search"
+        },
+        "webSearch": {
+          "searching": {
+            "status": "Searching the web"
+          }
+        }
+      },
+      "toolbar": {
+        "dislikeButton": {
+          "removeTooltip": "Remove Dislike",
+          "tooltip": "Bad Response"
+        },
+        "likeButton": {
+          "removeTooltip": "Remove Like",
+          "tooltip": "Good Response"
+        },
+        "regenerateButton": {
+          "tooltip": "Retry with"
+        },
+        "sourcesTag": {
+          "label": "Sources"
+        }
+      },
+      "tts": {
+        "loadingButton": {
+          "tooltip": "Loading..."
+        },
+        "playButton": {
+          "tooltip": "Read aloud"
+        },
+        "playbackError": {
+          "toast": "Could not play audio"
+        },
+        "stopButton": {
+          "tooltip": "Stop playback"
+        }
+      }
+    },
+    "modals": {
+      "confirmEntity": {
+        "confirmButton": {
+          "label": "Confirm"
+        },
+        "confirmation": {
+          "description": "Are you sure you want to {action} <b>{entityName}</b>?"
+        },
+        "deleteAction": {
+          "label": "delete"
+        },
+        "deleteButton": {
+          "label": "Delete"
+        },
+        "header": {
+          "title": "{action} {entityType}"
+        },
+        "modifyAction": {
+          "label": "modify"
+        }
+      },
+      "editProperty": {
+        "header": {
+          "title": "Edit {property}"
+        },
+        "submitButton": {
+          "label": "Update property",
+          "loadingLabel": "Updating..."
+        },
+        "valueInput": {
+          "placeholder": "Property value"
+        }
+      },
+      "feedback": {
+        "additionalDetails": {
+          "dislikePlaceholder": "What did you dislike about this response?",
+          "label": "Provide Additional Details",
+          "likePlaceholder": "What did you like about this response?"
+        },
+        "cancelButton": {
+          "label": "Cancel"
+        },
+        "header": {
+          "title": "Feedback"
+        },
+        "submitButton": {
+          "label": "Submit",
+          "loadingLabel": "Submitting..."
+        }
+      },
+      "genericConfirm": {
+        "confirmButton": {
+          "label": "Confirm"
+        }
+      },
+      "share": {
+        "addPeople": {
+          "groupSuggestion": {
+            "description": "Group"
+          },
+          "permissionMenu": {
+            "ariaLabel": "Select staged permission"
+          },
+          "searchInput": {
+            "placeholder": "Add users, groups, and accounts"
+          },
+          "sharedTag": {
+            "label": "Shared"
+          }
+        },
+        "cancelButton": {
+          "label": "Cancel"
+        },
+        "copyLinkButton": {
+          "label": "Copy Link"
+        },
+        "createLinkButton": {
+          "label": "Create Share Link"
+        },
+        "generateLinkErrorToast": {
+          "message": "Failed to generate share link"
+        },
+        "genericErrorToast": {
+          "message": "An error occurred"
+        },
+        "header": {
+          "description": "All existing and future messages in this chat will be shared.",
+          "sharedTitle": "Chat shared",
+          "title": "Share this chat"
+        },
+        "linkCopiedToast": {
+          "message": "Share link copied to clipboard!"
+        },
+        "linkInput": {
+          "copyTooltip": "Copy link"
+        },
+        "makePrivateButton": {
+          "label": "Make Private"
+        },
+        "makePrivateErrorToast": {
+          "message": "Failed to make chat private"
+        },
+        "nowPrivateToast": {
+          "message": "Chat is now private"
+        },
+        "organizationOption": {
+          "description": "Anyone in your organization can view this chat.",
+          "title": "Your Organization"
+        },
+        "permissionMenu": {
+          "edit": {
+            "label": "Edit"
+          },
+          "removeAccess": {
+            "label": "Remove Access"
+          },
+          "viewAndChat": {
+            "label": "View & Chat"
+          }
+        },
+        "privateOption": {
+          "description": "Only you have access to this chat.",
+          "title": "Private"
+        },
+        "transferOwnership": {
+          "currentOwner": {
+            "label": "Current Owner"
+          },
+          "groupTag": {
+            "label": "Group"
+          },
+          "targetInput": {
+            "label": "Transfer Ownership To",
+            "placeholder": "Add a user or group"
+          },
+          "trailingButton": {
+            "tooltip": "Transfer Ownership"
+          }
+        }
+      },
+      "unsavedChanges": {
+        "body": {
+          "description": "Your changes have not been saved. If you leave now, they will be lost."
+        },
+        "cancelButton": {
+          "label": "Cancel"
+        },
+        "discardButton": {
+          "label": "Discard changes"
+        },
+        "header": {
+          "title": "Discard unsaved changes?"
+        }
+      },
+      "userFiles": {
+        "addFilesButton": {
+          "label": "Add Files"
+        },
+        "doneButton": {
+          "label": "Done"
+        },
+        "emptyState": {
+          "description": "No files found"
+        },
+        "fileCount": {
+          "label": "{count, plural, one {# File} other {# Files}}"
+        },
+        "fileStatus": {
+          "deleting": {
+            "label": "Deleting..."
+          },
+          "processing": {
+            "label": "Processing..."
+          },
+          "uploading": {
+            "label": "Uploading..."
+          }
+        },
+        "searchInput": {
+          "placeholder": "Search files..."
+        },
+        "selectedCount": {
+          "label": "{count, plural, one {# file selected} other {# files selected}}"
         }
       }
     },
@@ -1109,6 +1809,185 @@
         "title": "Playback Speed"
       },
       "title": "Voice"
+    }
+  },
+  "sidebar": {
+    "adminSidebar": {
+      "businessOrEnterpriseOnly": {
+        "tooltip": "This feature is available on the [Business or Enterprise version of Onyx](/admin/billing) only."
+      },
+      "enterpriseOnly": {
+        "tooltip": "This feature is available on the [Enterprise version of Onyx](/admin/billing) only."
+      },
+      "exitAdminPanel": {
+        "label": "Exit Admin Panel"
+      },
+      "search": {
+        "label": "Search"
+      },
+      "searchInput": {
+        "placeholder": "Search..."
+      }
+    },
+    "appSidebar": {
+      "adminPanel": {
+        "label": "Admin Panel"
+      },
+      "agents": {
+        "title": "Agents"
+      },
+      "craft": {
+        "label": "Craft"
+      },
+      "exploreAgents": {
+        "label": "Explore Agents"
+      },
+      "moreAgents": {
+        "label": "More Agents"
+      },
+      "moveChatError": {
+        "message": "Failed to move chat. Please try again."
+      },
+      "newProject": {
+        "label": "New Project",
+        "tooltip": "New Project"
+      },
+      "newSession": {
+        "label": "New Session"
+      },
+      "projects": {
+        "title": "Projects"
+      },
+      "recents": {
+        "empty": {
+          "text": "Try sending a message! Your chat history will appear here."
+        },
+        "title": "Recents"
+      },
+      "searchChats": {
+        "label": "Search Chats"
+      }
+    },
+    "chatButton": {
+      "createProject": {
+        "label": "Create {projectName}"
+      },
+      "createProjectError": {
+        "message": "Failed to create project. Please try again."
+      },
+      "delete": {
+        "label": "Delete"
+      },
+      "deleteConfirmation": {
+        "confirmButton": {
+          "label": "Delete"
+        },
+        "description": "Are you sure you want to delete this chat? This action cannot be undone.",
+        "title": "Delete Chat"
+      },
+      "deleteError": {
+        "message": "Failed to delete chat. Please try again."
+      },
+      "moveToProject": {
+        "label": "Move to Project"
+      },
+      "projectSearchInput": {
+        "placeholder": "Search Projects"
+      },
+      "removeFromProject": {
+        "label": "Remove from {projectName}"
+      },
+      "rename": {
+        "label": "Rename"
+      },
+      "share": {
+        "label": "Share"
+      }
+    },
+    "chatSearch": {
+      "createNamedProject": {
+        "label": "Create New Project \"<name>{projectName}</name>\""
+      },
+      "footer": {
+        "openAction": {
+          "label": "Open"
+        },
+        "selectAction": {
+          "label": "Select"
+        },
+        "showAllAction": {
+          "label": "Show all"
+        }
+      },
+      "list": {
+        "empty": {
+          "text": "No chats or projects yet"
+        },
+        "noResults": {
+          "text": "No results found"
+        }
+      },
+      "newProject": {
+        "label": "New Project"
+      },
+      "newSession": {
+        "label": "New Session"
+      },
+      "noMoreResults": {
+        "text": "No more results"
+      },
+      "projectsFilter": {
+        "label": "Projects"
+      },
+      "recentFilter": {
+        "label": "Recent"
+      },
+      "recentSessionsFilter": {
+        "label": "Recent Sessions"
+      },
+      "searchInput": {
+        "placeholder": "Search chat sessions, projects..."
+      },
+      "sessionsFilter": {
+        "label": "Sessions"
+      }
+    },
+    "createConnector": {
+      "advancedStep": {
+        "label": "Advanced (optional)"
+      },
+      "connectorStep": {
+        "label": "Connector"
+      },
+      "credentialStep": {
+        "label": "Credential"
+      },
+      "exitSetup": {
+        "label": "Exit Connector Setup"
+      }
+    },
+    "notifications": {
+      "empty": {
+        "title": "No notifications"
+      },
+      "header": {
+        "title": "Notifications"
+      },
+      "markAllAsReadButton": {
+        "tooltip": "Mark All as Read"
+      },
+      "markAsReadButton": {
+        "tooltip": "Mark as Read"
+      },
+      "newSection": {
+        "title": "New"
+      },
+      "olderSection": {
+        "title": "Older"
+      },
+      "unreadCount": {
+        "label": "{count, plural, one {# unread} other {# unread}}"
+      }
     }
   }
 }

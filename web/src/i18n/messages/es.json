@@ -401,6 +401,23 @@
         }
       }
     },
+    "documentSidebar": {
+      "citedSources": {
+        "title": "Fuentes citadas"
+      },
+      "closeButton": {
+        "tooltip": "Cerrar la barra lateral"
+      },
+      "foundSources": {
+        "title": "Fuentes encontradas"
+      },
+      "moreSources": {
+        "title": "Más"
+      },
+      "userFiles": {
+        "title": "Archivos del usuario"
+      }
+    },
     "federatedOAuth": {
       "connectButton": {
         "label": "Conectar"
@@ -670,6 +687,689 @@
         },
         "credentials": {
           "text": "Tus credenciales se validarán con el servidor y se almacenarán de forma segura."
+        }
+      }
+    },
+    "messages": {
+      "agentMessage": {
+        "stoppedGeneration": {
+          "text": "El usuario detuvo la generación"
+        }
+      },
+      "codeBlock": {
+        "copyButton": {
+          "copiedLabel": "¡Copiado!",
+          "label": "Copiar"
+        }
+      },
+      "customTool": {
+        "authFailedStatus": {
+          "text": "Falló la autenticación de {toolName} (HTTP {statusCode})"
+        },
+        "completedStatus": {
+          "text": "{toolName} completado"
+        },
+        "downloadFileLink": {
+          "label": "Descargar"
+        },
+        "failedStatus": {
+          "text": "{toolName} falló (HTTP {statusCode})"
+        },
+        "fallbackName": {
+          "label": "Herramienta"
+        },
+        "fileItem": {
+          "label": "Archivo {index}"
+        },
+        "fileStatus": {
+          "text": "{toolName} devolvió un archivo"
+        },
+        "imagesStatus": {
+          "text": "{toolName} devolvió imágenes"
+        },
+        "openFileLink": {
+          "label": "Abrir"
+        },
+        "requestBlock": {
+          "label": "Solicitud"
+        },
+        "responseBlock": {
+          "label": "Respuesta"
+        },
+        "runningStatus": {
+          "text": "{toolName} en ejecución..."
+        },
+        "waitingIndicator": {
+          "text": "Esperando respuesta..."
+        }
+      },
+      "customToolAuth": {
+        "card": {
+          "description": "Conecta {toolName} para habilitar esta herramienta",
+          "title": "{toolName} no está conectado"
+        },
+        "connectButton": {
+          "label": "Conectar"
+        }
+      },
+      "errorBanner": {
+        "apiError": {
+          "title": "Error de API"
+        },
+        "authError": {
+          "title": "Error de autenticación"
+        },
+        "badRequest": {
+          "title": "Solicitud no válida"
+        },
+        "budgetExceeded": {
+          "title": "Presupuesto superado"
+        },
+        "connectionError": {
+          "title": "Error de conexión"
+        },
+        "contentPolicy": {
+          "title": "Infracción de la política de contenido"
+        },
+        "genericError": {
+          "title": "Error"
+        },
+        "initializationError": {
+          "title": "Error de inicialización"
+        },
+        "messageTooLong": {
+          "title": "Mensaje demasiado largo"
+        },
+        "model": {
+          "label": "Modelo: {model}"
+        },
+        "modelRefusal": {
+          "title": "El modelo se negó a responder"
+        },
+        "modelWithProvider": {
+          "label": "Modelo: {model} ({provider})"
+        },
+        "permissionDenied": {
+          "title": "Permiso denegado"
+        },
+        "rateLimitExceeded": {
+          "title": "Límite de frecuencia superado"
+        },
+        "resourceNotFound": {
+          "title": "Recurso no encontrado"
+        },
+        "serviceUnavailable": {
+          "title": "Servicio no disponible"
+        },
+        "stackTraceButton": {
+          "label": "Seguimiento de pila"
+        },
+        "tool": {
+          "label": "Herramienta: {tool}"
+        },
+        "toolError": {
+          "title": "Error de herramienta"
+        },
+        "usageLimitReached": {
+          "title": "Límite de uso alcanzado"
+        },
+        "validationError": {
+          "title": "Error de validación"
+        }
+      },
+      "humanMessage": {
+        "editButton": {
+          "tooltip": "Editar"
+        }
+      },
+      "imageTool": {
+        "defaultStatus": {
+          "text": "Generación de imágenes"
+        },
+        "emptyState": {
+          "text": "No se generaron imágenes"
+        },
+        "failedStatus": {
+          "text": "Falló la generación de imágenes"
+        },
+        "generatedStatus": {
+          "text": "{count, plural, one {Se generó # imagen} other {Se generaron # imágenes}}"
+        },
+        "generatingImagesStatus": {
+          "text": "Generando imágenes..."
+        },
+        "generatingStatus": {
+          "text": "Generando imagen..."
+        }
+      },
+      "memoizedLink": {
+        "questionFallback": {
+          "label": "Pregunta"
+        }
+      },
+      "messageEditing": {
+        "cancelButton": {
+          "label": "Cancelar"
+        },
+        "submitButton": {
+          "label": "Enviar"
+        }
+      },
+      "messageSwitcher": {
+        "disabledWhileStreaming": {
+          "tooltip": "Espera a que el mensaje del agente termine"
+        },
+        "nextButton": {
+          "tooltip": "Siguiente"
+        },
+        "previousButton": {
+          "tooltip": "Anterior"
+        }
+      },
+      "multiModelPanel": {
+        "deselectButton": {
+          "tooltip": "Quitar la respuesta preferida"
+        },
+        "hideButton": {
+          "tooltip": "Ocultar respuesta"
+        },
+        "preferredResponse": {
+          "label": "Respuesta preferida"
+        },
+        "selectButton": {
+          "label": "Seleccionar esta respuesta"
+        },
+        "selectPanel": {
+          "ariaLabel": "Seleccionar la respuesta de {model}"
+        },
+        "showButton": {
+          "tooltip": "Mostrar respuesta"
+        },
+        "showPanel": {
+          "ariaLabel": "Mostrar la respuesta de {model}"
+        }
+      },
+      "rateLimitBanner": {
+        "defaultError": {
+          "text": "Alcanzaste tu límite de uso."
+        },
+        "resetsInDays": {
+          "text": "Se restablece en {count, plural, one {# día} other {# días}} ({at})."
+        },
+        "resetsInHours": {
+          "text": "Se restablece en {count, plural, one {# hora} other {# horas}} ({at})."
+        },
+        "resetsInMinutes": {
+          "text": "Se restablece en {count, plural, one {# minuto} other {# minutos}} ({at})."
+        },
+        "tryAgainNow": {
+          "text": "Ya puedes intentarlo de nuevo."
+        }
+      },
+      "resubmit": {
+        "regenerateButton": {
+          "label": "Regenerar"
+        },
+        "responseError": {
+          "text": "Hubo un error con la respuesta."
+        }
+      },
+      "text": {
+        "thinkingPlaceholder": {
+          "text": "Pensando"
+        }
+      },
+      "timeline": {
+        "codingAgent": {
+          "bashExit": {
+            "header": "Bash · salida {exitCode}"
+          },
+          "bashRequest": {
+            "label": "Solicitud"
+          },
+          "bashResponse": {
+            "label": "Respuesta"
+          },
+          "bashRunning": {
+            "header": "Bash · en ejecución…"
+          },
+          "bashTimedOut": {
+            "header": "Bash · tiempo agotado"
+          },
+          "noOutput": {
+            "text": "Sin salida"
+          },
+          "response": {
+            "header": "Respuesta"
+          },
+          "task": {
+            "header": "Tarea de código"
+          },
+          "taskWithRepo": {
+            "text": "{query}\n\nRepositorio: {repo}"
+          },
+          "thinking": {
+            "header": "Pensando"
+          }
+        },
+        "collapseButton": {
+          "ariaLabel": "Contraer la línea de tiempo"
+        },
+        "deepResearchPlan": {
+          "expandable": {
+            "title": "Plan de investigación"
+          },
+          "generated": {
+            "status": "Plan generado"
+          },
+          "generating": {
+            "status": "Generando plan"
+          }
+        },
+        "doneStep": {
+          "header": "Listo"
+        },
+        "expandButton": {
+          "ariaLabel": "Expandir la línea de tiempo"
+        },
+        "fetch": {
+          "reading": {
+            "status": "Leyendo"
+          }
+        },
+        "fileReader": {
+          "charRange": {
+            "label": "caracteres {start, number}–{end, number} de {total, number}"
+          },
+          "read": {
+            "status": "Leyó {fileName} (caracteres {start, number}–{end, number} de {total, number})"
+          },
+          "reading": {
+            "status": "Leyendo archivo"
+          }
+        },
+        "generatedImages": {
+          "label": "{count, plural, one {Se generó # imagen} other {Se generaron # imágenes}}"
+        },
+        "header": {
+          "executingCode": {
+            "label": "Ejecutando código"
+          },
+          "executingNamedTool": {
+            "label": "Ejecutando {toolName}"
+          },
+          "executingTool": {
+            "label": "Ejecutando herramienta"
+          },
+          "generatingImage": {
+            "label": "Generando imagen..."
+          },
+          "generatingImages": {
+            "label": "Generando imágenes"
+          },
+          "generatingPlan": {
+            "label": "Generando plan"
+          },
+          "reading": {
+            "label": "Leyendo"
+          },
+          "readingFile": {
+            "label": "Leyendo archivo"
+          },
+          "researching": {
+            "label": "Investigando"
+          },
+          "searchingWeb": {
+            "label": "Buscando en la web"
+          },
+          "thinking": {
+            "label": "Pensando"
+          },
+          "thinkingEllipsis": {
+            "label": "Pensando..."
+          },
+          "updatingMemory": {
+            "label": "Actualizando memoria..."
+          }
+        },
+        "internalSearch": {
+          "noResults": {
+            "text": "No se encontraron resultados"
+          },
+          "reading": {
+            "status": "Leyendo"
+          }
+        },
+        "interruptedThinking": {
+          "label": "Pensamiento interrumpido"
+        },
+        "memory": {
+          "default": {
+            "status": "Memoria"
+          },
+          "disabled": {
+            "text": "Herramienta de memoria deshabilitada"
+          },
+          "updating": {
+            "status": "Actualizando memoria"
+          },
+          "viewMemoriesButton": {
+            "tooltip": "Ver memorias"
+          }
+        },
+        "memoryTag": {
+          "added": {
+            "label": "Añadido a las memorias"
+          },
+          "updated": {
+            "label": "Memoria actualizada"
+          }
+        },
+        "python": {
+          "completed": {
+            "status": "Ejecución de Python completada"
+          },
+          "default": {
+            "status": "Ejecución de Python"
+          },
+          "error": {
+            "label": "Error:"
+          },
+          "executing": {
+            "status": "Ejecutando código Python..."
+          },
+          "failed": {
+            "status": "Falló la ejecución de Python"
+          },
+          "generatedFiles": {
+            "label": "{count, plural, one {Se generó # archivo} other {Se generaron # archivos}}"
+          },
+          "noOutput": {
+            "text": "Sin salida"
+          },
+          "output": {
+            "label": "Salida:"
+          },
+          "runningCode": {
+            "label": "Ejecutando código..."
+          },
+          "writingCode": {
+            "status": "Escribiendo código..."
+          }
+        },
+        "reasoning": {
+          "fullText": {
+            "title": "Texto completo"
+          },
+          "thinking": {
+            "status": "Pensando"
+          }
+        },
+        "researchAgent": {
+          "report": {
+            "title": "Informe de investigación"
+          },
+          "task": {
+            "title": "Tarea de investigación"
+          }
+        },
+        "searchChips": {
+          "showMore": {
+            "label": "+{count} más"
+          },
+          "viewFullQuery": {
+            "tooltip": "Ver el término de búsqueda completo"
+          }
+        },
+        "stepsButton": {
+          "label": "{count, plural, one {# paso} other {# pasos}}"
+        },
+        "stoppedStep": {
+          "header": "Detenido"
+        },
+        "thoughtDuration": {
+          "label": "Pensó durante {duration}"
+        },
+        "thoughtUnknownDuration": {
+          "label": "Pensó durante un tiempo"
+        },
+        "toggleRow": {
+          "ariaLabel": "Alternar la línea de tiempo"
+        },
+        "toolNames": {
+          "codeInterpreter": "Intérprete de código",
+          "codingAgent": "Agente de código",
+          "customTool": "Herramienta personalizada",
+          "generateImage": "Generar imagen",
+          "generatePlan": "Generar plan",
+          "internalSearch": "Búsqueda interna",
+          "memory": "Memoria",
+          "openUrls": "Abrir URL",
+          "researchAgent": "Agente de investigación",
+          "thinking": "Pensando",
+          "tool": "Herramienta",
+          "webSearch": "Búsqueda web"
+        },
+        "webSearch": {
+          "searching": {
+            "status": "Buscando en la web"
+          }
+        }
+      },
+      "toolbar": {
+        "dislikeButton": {
+          "removeTooltip": "Quitar no me gusta",
+          "tooltip": "Mala respuesta"
+        },
+        "likeButton": {
+          "removeTooltip": "Quitar me gusta",
+          "tooltip": "Buena respuesta"
+        },
+        "regenerateButton": {
+          "tooltip": "Reintentar con"
+        },
+        "sourcesTag": {
+          "label": "Fuentes"
+        }
+      },
+      "tts": {
+        "loadingButton": {
+          "tooltip": "Cargando..."
+        },
+        "playButton": {
+          "tooltip": "Leer en voz alta"
+        },
+        "playbackError": {
+          "toast": "No se pudo reproducir el audio"
+        },
+        "stopButton": {
+          "tooltip": "Detener reproducción"
+        }
+      }
+    },
+    "modals": {
+      "confirmEntity": {
+        "confirmButton": {
+          "label": "Confirmar"
+        },
+        "confirmation": {
+          "description": "¿Seguro que quieres {action} <b>{entityName}</b>?"
+        },
+        "deleteAction": {
+          "label": "eliminar"
+        },
+        "deleteButton": {
+          "label": "Eliminar"
+        },
+        "header": {
+          "title": "{action} {entityType}"
+        },
+        "modifyAction": {
+          "label": "modificar"
+        }
+      },
+      "editProperty": {
+        "header": {
+          "title": "Editar {property}"
+        },
+        "submitButton": {
+          "label": "Actualizar propiedad",
+          "loadingLabel": "Actualizando..."
+        },
+        "valueInput": {
+          "placeholder": "Valor de la propiedad"
+        }
+      },
+      "feedback": {
+        "additionalDetails": {
+          "dislikePlaceholder": "¿Qué no te gustó de esta respuesta?",
+          "label": "Proporciona más detalles",
+          "likePlaceholder": "¿Qué te gustó de esta respuesta?"
+        },
+        "cancelButton": {
+          "label": "Cancelar"
+        },
+        "header": {
+          "title": "Comentarios"
+        },
+        "submitButton": {
+          "label": "Enviar",
+          "loadingLabel": "Enviando..."
+        }
+      },
+      "genericConfirm": {
+        "confirmButton": {
+          "label": "Confirmar"
+        }
+      },
+      "share": {
+        "addPeople": {
+          "groupSuggestion": {
+            "description": "Grupo"
+          },
+          "permissionMenu": {
+            "ariaLabel": "Seleccionar el permiso propuesto"
+          },
+          "searchInput": {
+            "placeholder": "Añade usuarios, grupos y cuentas"
+          },
+          "sharedTag": {
+            "label": "Compartido"
+          }
+        },
+        "cancelButton": {
+          "label": "Cancelar"
+        },
+        "copyLinkButton": {
+          "label": "Copiar enlace"
+        },
+        "createLinkButton": {
+          "label": "Crear enlace para compartir"
+        },
+        "generateLinkErrorToast": {
+          "message": "No se pudo generar el enlace para compartir"
+        },
+        "genericErrorToast": {
+          "message": "Ocurrió un error"
+        },
+        "header": {
+          "description": "Se compartirán todos los mensajes existentes y futuros de este chat.",
+          "sharedTitle": "Chat compartido",
+          "title": "Compartir este chat"
+        },
+        "linkCopiedToast": {
+          "message": "¡Enlace copiado al portapapeles!"
+        },
+        "linkInput": {
+          "copyTooltip": "Copiar enlace"
+        },
+        "makePrivateButton": {
+          "label": "Hacer privado"
+        },
+        "makePrivateErrorToast": {
+          "message": "No se pudo hacer privado el chat"
+        },
+        "nowPrivateToast": {
+          "message": "El chat ahora es privado"
+        },
+        "organizationOption": {
+          "description": "Cualquier persona de tu organización puede ver este chat.",
+          "title": "Tu organización"
+        },
+        "permissionMenu": {
+          "edit": {
+            "label": "Editar"
+          },
+          "removeAccess": {
+            "label": "Quitar acceso"
+          },
+          "viewAndChat": {
+            "label": "Ver y chatear"
+          }
+        },
+        "privateOption": {
+          "description": "Solo tú tienes acceso a este chat.",
+          "title": "Privado"
+        },
+        "transferOwnership": {
+          "currentOwner": {
+            "label": "Propietario actual"
+          },
+          "groupTag": {
+            "label": "Grupo"
+          },
+          "targetInput": {
+            "label": "Transferir la propiedad a",
+            "placeholder": "Añade un usuario o grupo"
+          },
+          "trailingButton": {
+            "tooltip": "Transferir propiedad"
+          }
+        }
+      },
+      "unsavedChanges": {
+        "body": {
+          "description": "Tus cambios no se han guardado. Si sales ahora, se perderán."
+        },
+        "cancelButton": {
+          "label": "Cancelar"
+        },
+        "discardButton": {
+          "label": "Descartar cambios"
+        },
+        "header": {
+          "title": "¿Descartar los cambios sin guardar?"
+        }
+      },
+      "userFiles": {
+        "addFilesButton": {
+          "label": "Añadir archivos"
+        },
+        "doneButton": {
+          "label": "Listo"
+        },
+        "emptyState": {
+          "description": "No se encontraron archivos"
+        },
+        "fileCount": {
+          "label": "{count, plural, one {# archivo} other {# archivos}}"
+        },
+        "fileStatus": {
+          "deleting": {
+            "label": "Eliminando..."
+          },
+          "processing": {
+            "label": "Procesando..."
+          },
+          "uploading": {
+            "label": "Subiendo..."
+          }
+        },
+        "searchInput": {
+          "placeholder": "Buscar archivos..."
+        },
+        "selectedCount": {
+          "label": "{count, plural, one {# archivo seleccionado} other {# archivos seleccionados}}"
         }
       }
     },
@@ -1109,6 +1809,185 @@
         "title": "Velocidad de reproducción"
       },
       "title": "Voz"
+    }
+  },
+  "sidebar": {
+    "adminSidebar": {
+      "businessOrEnterpriseOnly": {
+        "tooltip": "Esta función solo está disponible en la [versión Business o Enterprise de Onyx](/admin/billing)."
+      },
+      "enterpriseOnly": {
+        "tooltip": "Esta función solo está disponible en la [versión Enterprise de Onyx](/admin/billing)."
+      },
+      "exitAdminPanel": {
+        "label": "Salir del panel de administración"
+      },
+      "search": {
+        "label": "Buscar"
+      },
+      "searchInput": {
+        "placeholder": "Buscar..."
+      }
+    },
+    "appSidebar": {
+      "adminPanel": {
+        "label": "Panel de administración"
+      },
+      "agents": {
+        "title": "Agentes"
+      },
+      "craft": {
+        "label": "Craft"
+      },
+      "exploreAgents": {
+        "label": "Explorar agentes"
+      },
+      "moreAgents": {
+        "label": "Más agentes"
+      },
+      "moveChatError": {
+        "message": "No se pudo mover el chat. Inténtalo de nuevo."
+      },
+      "newProject": {
+        "label": "Nuevo proyecto",
+        "tooltip": "Nuevo proyecto"
+      },
+      "newSession": {
+        "label": "Nueva sesión"
+      },
+      "projects": {
+        "title": "Proyectos"
+      },
+      "recents": {
+        "empty": {
+          "text": "¡Prueba a enviar un mensaje! Tu historial de chats aparecerá aquí."
+        },
+        "title": "Recientes"
+      },
+      "searchChats": {
+        "label": "Buscar chats"
+      }
+    },
+    "chatButton": {
+      "createProject": {
+        "label": "Crear {projectName}"
+      },
+      "createProjectError": {
+        "message": "No se pudo crear el proyecto. Inténtalo de nuevo."
+      },
+      "delete": {
+        "label": "Eliminar"
+      },
+      "deleteConfirmation": {
+        "confirmButton": {
+          "label": "Eliminar"
+        },
+        "description": "¿Seguro que quieres eliminar este chat? Esta acción no se puede deshacer.",
+        "title": "Eliminar chat"
+      },
+      "deleteError": {
+        "message": "No se pudo eliminar el chat. Inténtalo de nuevo."
+      },
+      "moveToProject": {
+        "label": "Mover a un proyecto"
+      },
+      "projectSearchInput": {
+        "placeholder": "Buscar proyectos"
+      },
+      "removeFromProject": {
+        "label": "Quitar de {projectName}"
+      },
+      "rename": {
+        "label": "Renombrar"
+      },
+      "share": {
+        "label": "Compartir"
+      }
+    },
+    "chatSearch": {
+      "createNamedProject": {
+        "label": "Crear nuevo proyecto \"<name>{projectName}</name>\""
+      },
+      "footer": {
+        "openAction": {
+          "label": "Abrir"
+        },
+        "selectAction": {
+          "label": "Seleccionar"
+        },
+        "showAllAction": {
+          "label": "Mostrar todo"
+        }
+      },
+      "list": {
+        "empty": {
+          "text": "Todavía no hay chats ni proyectos"
+        },
+        "noResults": {
+          "text": "No se encontraron resultados"
+        }
+      },
+      "newProject": {
+        "label": "Nuevo proyecto"
+      },
+      "newSession": {
+        "label": "Nueva sesión"
+      },
+      "noMoreResults": {
+        "text": "No hay más resultados"
+      },
+      "projectsFilter": {
+        "label": "Proyectos"
+      },
+      "recentFilter": {
+        "label": "Reciente"
+      },
+      "recentSessionsFilter": {
+        "label": "Sesiones recientes"
+      },
+      "searchInput": {
+        "placeholder": "Buscar sesiones de chat, proyectos..."
+      },
+      "sessionsFilter": {
+        "label": "Sesiones"
+      }
+    },
+    "createConnector": {
+      "advancedStep": {
+        "label": "Avanzado (opcional)"
+      },
+      "connectorStep": {
+        "label": "Conector"
+      },
+      "credentialStep": {
+        "label": "Credencial"
+      },
+      "exitSetup": {
+        "label": "Salir de la configuración del conector"
+      }
+    },
+    "notifications": {
+      "empty": {
+        "title": "No hay notificaciones"
+      },
+      "header": {
+        "title": "Notificaciones"
+      },
+      "markAllAsReadButton": {
+        "tooltip": "Marcar todas como leídas"
+      },
+      "markAsReadButton": {
+        "tooltip": "Marcar como leída"
+      },
+      "newSection": {
+        "title": "Nuevas"
+      },
+      "olderSection": {
+        "title": "Anteriores"
+      },
+      "unreadCount": {
+        "label": "{count, plural, one {# sin leer} other {# sin leer}}"
+      }
     }
   }
 }

@@ -1,5 +1,6 @@
 import { Button, Modal, Text } from "@opal/components";
 import { SvgAlertTriangle } from "@opal/icons";
+import { useTranslations } from "next-intl";
 
 interface UnsavedChangesModalProps {
   open: boolean;
@@ -32,24 +33,26 @@ export function UnsavedChangesModalContent({
   onCancel,
   onDiscard,
 }: Omit<UnsavedChangesModalProps, "open">) {
+  const t = useTranslations("chat.modals.unsavedChanges");
+
   return (
     <>
       <Modal.Header
         icon={SvgAlertTriangle}
-        title="Discard unsaved changes?"
+        title={t("header.title")}
         onClose={onCancel}
       />
       <Modal.Body twoTone>
         <Text as="p" color="text-03">
-          Your changes have not been saved. If you leave now, they will be lost.
+          {t("body.description")}
         </Text>
       </Modal.Body>
       <Modal.Footer>
         <Button type="button" prominence="secondary" onClick={onCancel}>
-          Cancel
+          {t("cancelButton.label")}
         </Button>
         <Button type="button" variant="danger" onClick={onDiscard}>
-          Discard changes
+          {t("discardButton.label")}
         </Button>
       </Modal.Footer>
     </>

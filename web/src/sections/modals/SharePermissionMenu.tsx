@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { LineItemButton, OpenButton, Popover } from "@opal/components";
 import { SvgMinusCircle } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
@@ -32,13 +33,14 @@ export function SharePermissionMenu<T extends string>({
   options,
   onChange,
   onRemove,
-  removeLabel = "Remove Access",
+  removeLabel,
   disabled = false,
   width = "fit",
   showTriggerIcon = true,
   menuWidth = "md",
   ariaLabel,
 }: SharePermissionMenuProps<T>) {
+  const t = useTranslations("chat.modals.share");
   const selectedOption =
     options.find((option) => option.value === value) ?? options[0];
 
@@ -108,7 +110,7 @@ export function SharePermissionMenu<T extends string>({
                 rounding={3}
                 selectVariant="select-heavy"
                 sizePreset="main-ui"
-                title={removeLabel}
+                title={removeLabel ?? t("permissionMenu.removeAccess.label")}
                 variant="section"
                 width="full"
               />

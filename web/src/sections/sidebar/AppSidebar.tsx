@@ -10,6 +10,7 @@ import {
 } from "react";
 import useNotifications from "@/hooks/useNotifications";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { useSettings } from "@/lib/settings/hooks";
 import { MinimalAgent } from "@/lib/agents/types";
 import Text from "@/refresh-components/texts/Text";
@@ -128,6 +129,7 @@ function RecentsSection({
   isLoadingMore,
   onLoadMore,
 }: RecentsSectionProps) {
+  const t = useTranslations("sidebar");
   const { setNodeRef, isOver } = useDroppable({
     id: DRAG_TYPES.RECENTS,
     data: {
@@ -175,10 +177,10 @@ function RecentsSection({
         isOver && "bg-background-tint-03"
       )}
     >
-      <SidebarLayouts.Section title="Recents">
+      <SidebarLayouts.Section title={t("appSidebar.recents.title")}>
         {chatSessions.length === 0 ? (
           <Text as="p" text01 className="px-3">
-            Try sending a message! Your chat history will appear here.
+            {t("appSidebar.recents.empty.text")}
           </Text>
         ) : (
           <>
@@ -210,6 +212,8 @@ function RecentsSection({
 }
 
 export default function AppSidebar() {
+  const t = useTranslations("sidebar");
+  const moveChatErrorMessage = t("appSidebar.moveChatError.message");
   const { folded } = useSidebarState();
   const router = useRouter();
   const combinedSettingsData = useSettings();
@@ -454,7 +458,7 @@ export default function AppSidebar() {
         try {
           await performChatMove(targetProject.id, chatSession);
         } catch (error) {
-          showErrorNotification("Failed to move chat. Please try again.");
+          showErrorNotification(moveChatErrorMessage);
         }
       }
 
@@ -485,6 +489,7 @@ export default function AppSidebar() {
       refreshChatSessions,
       refreshCurrentProjectDetails,
       refreshProjects,
+      moveChatErrorMessage,
     ]
   );
 
@@ -508,7 +513,9 @@ export default function AppSidebar() {
         selected={activeSidebarTab.isMoreAgents()}
         variant={folded ? "sidebar-heavy" : "sidebar-light"}
       >
-        {visibleAgents.length === 0 ? "Explore Agents" : "More Agents"}
+        {visibleAgents.length === 0
+          ? t("appSidebar.exploreAgents.label")
+          : t("appSidebar.moreAgents.label")}
       </SidebarTab>
     </div>
   );
@@ -522,7 +529,7 @@ export default function AppSidebar() {
       selected={createProjectModal.isOpen}
       variant="sidebar-light"
     >
-      New Project
+      {t("appSidebar.newProject.label")}
     </SidebarTab>
   );
 
@@ -559,7 +566,7 @@ export default function AppSidebar() {
               try {
                 await performChatMove(target, chat);
               } catch (error) {
-                showErrorNotification("Failed to move chat. Please try again.");
+                showErrorNotification(moveChatErrorMessage);
               }
             }
           }}
@@ -608,13 +615,13 @@ export default function AppSidebar() {
                 reset();
               }}
             >
-              New Session
+              {t("appSidebar.newSession.label")}
             </SidebarTab>
           </div>
           <ChatSearchCommandMenu
             trigger={(open) => (
               <SidebarTab icon={SvgSearchMenu} onClick={open}>
-                Search Chats
+                {t("appSidebar.searchChats.label")}
               </SidebarTab>
             )}
           />
@@ -625,7 +632,7 @@ export default function AppSidebar() {
                 href={CRAFT_PATH}
                 onClick={() => track(AnalyticsEvent.CLICKED_CRAFT_IN_SIDEBAR)}
               >
-                Craft
+                {t("appSidebar.craft.label")}
               </SidebarTab>
             </div>
           )}
@@ -642,7 +649,7 @@ export default function AppSidebar() {
                 collisionDetection={closestCenter}
                 onDragEnd={handleAgentDragEnd}
               >
-                <SidebarLayouts.Section title="Agents">
+                <SidebarLayouts.Section title={t("appSidebar.agents.title")}>
                   <SortableContext
                     items={visibleAgentIds}
                     strategy={verticalListSortingStrategy}
@@ -667,13 +674,13 @@ export default function AppSidebar() {
               >
                 {/* Projects */}
                 <SidebarLayouts.Section
-                  title="Projects"
+                  title={t("appSidebar.projects.title")}
                   action={
                     <OpalButton
                       icon={SvgFolderPlus}
                       prominence="tertiary"
                       size="md"
-                      tooltip="New Project"
+                      tooltip={t("appSidebar.newProject.tooltip")}
                       onClick={() => createProjectModal.toggle(true)}
                     />
                   }
@@ -703,7 +710,7 @@ export default function AppSidebar() {
                 href={getFirstPermittedAdminRoute(adminCapabilities)}
                 icon={SvgSettings}
               >
-                Admin Panel
+                {t("appSidebar.adminPanel.label")}
               </SidebarTab>
             )}
             <AccountPopover
