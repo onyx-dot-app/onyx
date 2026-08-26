@@ -7,6 +7,7 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { useTranslations } from "next-intl";
 import { MinimalAgent } from "@/lib/agents/types";
 import { InputPrompt } from "@/app/app/interfaces";
 import { FilterManager, LlmManager, useFederatedConnectors } from "@/lib/hooks";
@@ -125,6 +126,7 @@ const AppInputBar = React.memo(
     currentTabUrl,
     onToggleTabReading,
   }: AppInputBarProps) => {
+    const t = useTranslations("chat.input");
     const { incognitoEnabled } = useIncognito();
     const [isRecording, setIsRecording] = useState(false);
     const [recordingCycleCount, setRecordingCycleCount] = useState(0);
@@ -644,7 +646,7 @@ const AppInputBar = React.memo(
               <Button
                 disabled={disabled}
                 icon={SvgPaperclip}
-                tooltip="Attach Files"
+                tooltip={t("appInputBar.attachFilesButton.tooltip")}
                 interaction={open ? "hover" : "rest"}
                 prominence="tertiary"
               />
@@ -684,8 +686,8 @@ const AppInputBar = React.memo(
                           return currentTabUrl;
                         }
                       })()
-                    : "Reading tab..."
-                  : "Read this tab"}
+                    : t("appInputBar.tabReadingButton.readingLabel")
+                  : t("appInputBar.tabReadingButton.readLabel")}
               </SelectButton>
             ) : (
               showDeepResearch && (
@@ -698,11 +700,11 @@ const AppInputBar = React.memo(
                   foldable={!deepResearchEnabled}
                   tooltip={
                     isMultiModelActive
-                      ? "Deep Research is disabled in multi-model mode"
+                      ? t("appInputBar.deepResearchButton.disabledTooltip")
                       : undefined
                   }
                 >
-                  Deep Research
+                  {t("appInputBar.deepResearchButton.label")}
                 </SelectButton>
               )
             )}
@@ -762,9 +764,9 @@ const AppInputBar = React.memo(
               <Button
                 disabled
                 icon={SvgMicrophone}
-                aria-label="Set up voice"
+                aria-label={t("appInputBar.voiceSetupButton.ariaLabel")}
                 prominence="tertiary"
-                tooltip="Voice not configured. Set up in admin settings."
+                tooltip={t("appInputBar.voiceSetupButton.tooltip")}
               />
             ))}
 
@@ -779,7 +781,7 @@ const AppInputBar = React.memo(
             }
             tooltip={
               hasUploadingFiles || hasIndexingFiles
-                ? "Waiting for attached file(s) to finish processing"
+                ? t("appInputBar.sendButton.processingFilesTooltip")
                 : undefined
             }
             id="onyx-chat-input-send-button"
@@ -907,7 +909,7 @@ const AppInputBar = React.memo(
                       ref={inputRef}
                       id="onyx-chat-input-textbox"
                       role="textbox"
-                      aria-label="Message input"
+                      aria-label={t("appInputBar.input.ariaLabel")}
                       contentEditable={!disabled}
                       suppressContentEditableWarning
                       onPaste={handlePaste}
@@ -928,17 +930,17 @@ const AppInputBar = React.memo(
                       }}
                       aria-multiline={true}
                       aria-disabled={disabled}
-                      aria-placeholder="How can I help you today?"
+                      aria-placeholder={t("appInputBar.input.placeholder")}
                       data-placeholder={
                         queuedMessages.length > 0 && !message
-                          ? "Press up to edit queued messages"
+                          ? t("appInputBar.input.queuedPlaceholder")
                           : isRecording
-                            ? "Listening..."
+                            ? t("appInputBar.input.listeningPlaceholder")
                             : isVoicePlaybackActive
-                              ? "Onyx is speaking..."
+                              ? t("appInputBar.input.speakingPlaceholder")
                               : isSearchMode
-                                ? "Search connected sources"
-                                : "How can I help you today?"
+                                ? t("appInputBar.input.searchPlaceholder")
+                                : t("appInputBar.input.placeholder")
                       }
                       data-empty={!message ? "" : undefined}
                       onKeyDown={(event) => {
@@ -1028,7 +1030,7 @@ const AppInputBar = React.memo(
                             ? "select-heavy"
                             : "select-light"
                         }
-                        title="Create New Prompt"
+                        title={t("appInputBar.createPromptItem.title")}
                       />,
                     ]}
                   </Popover.Menu>
@@ -1099,12 +1101,10 @@ const AppInputBar = React.memo(
             className="mt-3 text-center"
           >
             <Text font="secondary-body" color="text-02">
-              This chat won&apos;t appear in your history or be used for memory.
+              {t("appInputBar.incognitoNotice.text")}
             </Text>
             <Text font="secondary-body" color="text-02">
-              Your admin may still see this chat based on your
-              organization&apos;s policy. Third party tools can still record
-              your activity.
+              {t("appInputBar.incognitoPolicyNotice.text")}
             </Text>
           </Section>
         )}

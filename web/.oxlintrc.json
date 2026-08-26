@@ -90,11 +90,39 @@
     {
       "files": [
         "src/views/SettingsPage.tsx",
+        "src/views/AppPage.tsx",
         "src/sections/sidebar/AccountPopover.tsx",
-        "src/app/auth/**"
+        "src/sections/Suggestions.tsx",
+        "src/sections/banners/**",
+        "src/sections/chat/**",
+        "src/sections/input/**",
+        "src/sections/model-selector/**",
+        "src/components/chat/**",
+        "src/app/auth/**",
+        "src/app/app/page.tsx",
+        "src/app/app/layout.tsx",
+        "src/app/app/components/**",
+        "src/app/app/shared/**"
       ],
       "rules": {
         "i18n/no-raw-jsx-text": "error"
+      }
+    },
+    {
+      // Last override wins: keep dev-only files exempt from the i18n ratchet
+      // even when a migrated glob above matches them.
+      "files": [
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/*.spec.ts",
+        "**/*.spec.tsx",
+        "**/__tests__/**",
+        "**/__mocks__/**",
+        "tests/**",
+        "**/*.stories.tsx"
+      ],
+      "rules": {
+        "i18n/no-raw-jsx-text": "off"
       }
     }
   ],

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useRef } from "react";
+import { useTranslations } from "next-intl";
 import { getModelIcon } from "@/lib/languageModels";
 import {
   Button,
@@ -53,6 +54,7 @@ export default function MultiModelSelector({
   temperatureManager,
   reasoningManager,
 }: MultiModelSelectorProps) {
+  const t = useTranslations("chat.modelSelector");
   const [open, setOpen] = useState(false);
   const [replacingIndex, setReplacingIndex] = useState<number | null>(null);
   const anchorRef = useRef<HTMLElement | null>(null);
@@ -79,7 +81,7 @@ export default function MultiModelSelector({
   // Container-level tooltip carries only the disabled reason. The add button
   // labels itself, so an enabled row shows no tooltip outside the button.
   const selectorTooltip = noModelsToSelect
-    ? "No models currently configured"
+    ? t("multiModel.noModels.tooltip")
     : undefined;
 
   const selectedKeys = useMemo(
@@ -193,8 +195,8 @@ export default function MultiModelSelector({
               prominence="tertiary"
               icon={SvgPlusCircle}
               size="sm"
-              tooltip="Add Model"
-              aria-label="Add Model"
+              tooltip={t("multiModel.addModelButton.label")}
+              aria-label={t("multiModel.addModelButton.label")}
               onClick={(e: React.MouseEvent) => {
                 if (noModelsToSelect) return;
                 anchorRef.current = e.currentTarget as HTMLElement;

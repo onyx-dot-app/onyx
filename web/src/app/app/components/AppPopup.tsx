@@ -13,20 +13,26 @@ import { transformLinkUri } from "@/lib/utils";
 import { SvgAlertCircle } from "@opal/icons";
 import { SvgOnyxLogo } from "@opal/logos";
 import type { IconProps } from "@opal/types";
+import { useTranslations } from "next-intl";
 
 const ALL_USERS_INITIAL_POPUP_FLOW_COMPLETED =
   "allUsersInitialPopupFlowCompleted";
 
-const CustomLogoHeaderIcon = ({ className, size = 24 }: IconProps) => (
-  <img
-    src="/api/enterprise-settings/logo"
-    alt="Logo"
-    style={{ width: size, height: size, objectFit: "contain" }}
-    className={className}
-  />
-);
+const CustomLogoHeaderIcon = ({ className, size = 24 }: IconProps) => {
+  const t = useTranslations("chat.popup");
+
+  return (
+    <img
+      src="/api/enterprise-settings/logo"
+      alt={t("logoIcon.alt")}
+      style={{ width: size, height: size, objectFit: "contain" }}
+      className={className}
+    />
+  );
+};
 
 export function AppPopup() {
+  const t = useTranslations("chat.popup");
   const [completedFlow, setCompletedFlow] = useState(true);
   const [showConsentError, setShowConsentError] = useState(false);
   const [consentChecked, setConsentChecked] = useState(false);
@@ -76,7 +82,7 @@ export function AppPopup() {
       <Modal.Content width="sm" height="lg">
         <Modal.Header
           icon={headerIcon}
-          title={popupTitle || "Welcome to Onyx!"}
+          title={popupTitle || t("header.title")}
         />
         <Modal.Body>
           <div className="overflow-y-auto text-left">
@@ -125,7 +131,7 @@ export function AppPopup() {
                 <div className="flex items-center gap-1">
                   <FormField.Control>
                     <Checkbox
-                      aria-label="Consent checkbox"
+                      aria-label={t("consentCheckbox.label")}
                       checked={consentChecked}
                       onCheckedChange={(checked) => {
                         setConsentChecked(checked);
@@ -173,10 +179,7 @@ export function AppPopup() {
                   </FormField.Label>
                 </div>
                 <FormField.Message
-                  messages={{
-                    error:
-                      "You need to agree to the terms to access the application.",
-                  }}
+                  messages={{ error: t("consentRequired.error") }}
                 />
               </FormField>
             )}
@@ -196,7 +199,7 @@ export function AppPopup() {
               setCompletedFlow(true);
             }}
           >
-            Start
+            {t("startButton.label")}
           </Button>
         </Modal.Footer>
       </Modal.Content>

@@ -308,6 +308,502 @@
       }
     }
   },
+  "chat": {
+    "app": {
+      "failedFiles": {
+        "toast": "{count, plural, one {Eine Datei ist fehlgeschlagen und wurde entfernt: {names}} other {Dateien sind fehlgeschlagen und wurden entfernt: {names}}}"
+      },
+      "newChatButton": {
+        "label": "Neuen Chat starten"
+      },
+      "noPreviousMessage": {
+        "toast": "Keine zuvor gesendete Nachricht gefunden."
+      },
+      "oauthConnected": {
+        "toast": "Authentifizierung erfolgreich"
+      },
+      "scrollToBottomButton": {
+        "label": "Nach unten scrollen"
+      },
+      "sessionAccessDenied": {
+        "description": "Sie haben keine Berechtigung, diese Chat-Sitzung zu sehen.",
+        "title": "Zugriff verweigert"
+      },
+      "sessionGenericError": {
+        "title": "Etwas ist schiefgelaufen"
+      },
+      "sessionNotFound": {
+        "description": "Diese Chat-Sitzung existiert nicht oder wurde gelöscht.",
+        "title": "Chat nicht gefunden"
+      },
+      "sourcesModal": {
+        "title": "Quellen"
+      }
+    },
+    "banners": {
+      "collapsedSiblings": {
+        "label": "+{count} weitere"
+      },
+      "connectorInvalid": {
+        "aggregate": {
+          "description": "Mehrere Konnektoren haben ungültige Anmeldedaten. Öffnen Sie die Konnektoren-Seite, um sie zu überprüfen.",
+          "title": "{count, plural, one {# Konnektor ist ungültig} other {# Konnektoren sind ungültig}}"
+        }
+      },
+      "connectorRepeatedErrors": {
+        "aggregate": {
+          "description": "Mehrere Konnektoren haben wiederholte Indexierungsfehler. Öffnen Sie die Konnektoren-Seite, um sie zu überprüfen.",
+          "title": "{count, plural, one {# Konnektor schlägt fehl} other {# Konnektoren schlagen fehl}}"
+        }
+      },
+      "connectors": {
+        "cta": {
+          "label": "Konnektor ansehen"
+        },
+        "source": {
+          "label": "Konnektoren"
+        }
+      },
+      "defaultCta": {
+        "label": "Ansehen"
+      },
+      "defaultSource": {
+        "label": "Benachrichtigung"
+      },
+      "dismissButton": {
+        "ariaLabel": "Schließen"
+      },
+      "healthBanner": {
+        "backendUnavailable": {
+          "description": "Wenn dies Ihre Ersteinrichtung ist oder Sie Ihre Onyx-Bereitstellung gerade aktualisiert haben, startet das Backend wahrscheinlich noch. Warten Sie ein bis zwei Minuten und laden Sie die Seite neu. Wenn das nicht hilft, stellen Sie sicher, dass das Backend eingerichtet ist, oder wenden Sie sich an einen Administrator.",
+          "title": "Das Backend ist derzeit nicht erreichbar"
+        }
+      },
+      "licenseExpiry": {
+        "source": {
+          "label": "Lizenz"
+        }
+      },
+      "nextButton": {
+        "ariaLabel": "Nächster Banner"
+      },
+      "previousButton": {
+        "ariaLabel": "Vorheriger Banner"
+      },
+      "systemAnnouncement": {
+        "source": {
+          "label": "Administrator-Ankündigung"
+        }
+      },
+      "trialEnds": {
+        "source": {
+          "label": "Testphase"
+        }
+      }
+    },
+    "federatedOAuth": {
+      "connectButton": {
+        "label": "Verbinden"
+      },
+      "header": {
+        "description": "Verbessern Sie die Antwortqualität, indem Sie {appName} alle Ihre verbundenen Daten durchsuchen lassen.",
+        "title": "Verbinden Sie Ihre Apps"
+      },
+      "skipButton": {
+        "label": "Vorerst überspringen"
+      }
+    },
+    "files": {
+      "fullImageModal": {
+        "image": {
+          "alt": "Hochgeladener Anhang"
+        }
+      },
+      "inMessageImage": {
+        "downloadButton": {
+          "tooltip": "Herunterladen"
+        },
+        "image": {
+          "alt": "Chat-Anhang"
+        },
+        "viewFullImage": {
+          "label": "Bild in voller Größe ansehen"
+        }
+      },
+      "inputBarPreviewImage": {
+        "image": {
+          "alt": "Vorschau"
+        },
+        "viewFullImage": {
+          "label": "Bild in voller Größe ansehen"
+        }
+      }
+    },
+    "input": {
+      "appInputBar": {
+        "attachFilesButton": {
+          "tooltip": "Dateien anhängen"
+        },
+        "createPromptItem": {
+          "title": "Neuen Prompt erstellen"
+        },
+        "deepResearchButton": {
+          "disabledTooltip": "Deep Research ist im Multi-Modell-Modus deaktiviert",
+          "label": "Deep Research"
+        },
+        "incognitoNotice": {
+          "text": "Dieser Chat erscheint nicht in Ihrem Verlauf und wird nicht für die Memory-Funktion verwendet."
+        },
+        "incognitoPolicyNotice": {
+          "text": "Ihr Administrator kann diesen Chat gemäß den Richtlinien Ihrer Organisation weiterhin sehen. Drittanbieter-Tools können Ihre Aktivität weiterhin aufzeichnen."
+        },
+        "input": {
+          "ariaLabel": "Nachrichteneingabe",
+          "listeningPlaceholder": "Höre zu...",
+          "placeholder": "Wie kann ich Ihnen heute helfen?",
+          "queuedPlaceholder": "Pfeil nach oben drücken, um Nachrichten in der Warteschlange zu bearbeiten",
+          "searchPlaceholder": "Verbundene Quellen durchsuchen",
+          "speakingPlaceholder": "Onyx spricht..."
+        },
+        "sendButton": {
+          "processingFilesTooltip": "Warten, bis die angehängten Dateien verarbeitet sind"
+        },
+        "tabReadingButton": {
+          "readLabel": "Diesen Tab lesen",
+          "readingLabel": "Tab wird gelesen..."
+        },
+        "voiceSetupButton": {
+          "ariaLabel": "Sprachfunktion einrichten",
+          "tooltip": "Sprachfunktion nicht konfiguriert. Richten Sie sie in den Administrator-Einstellungen ein."
+        }
+      },
+      "baseInputBar": {
+        "input": {
+          "ariaLabel": "Nachrichteneingabe",
+          "placeholder": "Beschreiben Sie Ihre Aufgabe..."
+        },
+        "pasteExpandHint": {
+          "text": "Erneut einfügen zum Erweitern"
+        },
+        "queuedMessagesHint": {
+          "text": "zum Bearbeiten der Nachrichten in der Warteschlange"
+        },
+        "sendButton": {
+          "initializingTooltip": "Sandbox wird initialisiert...",
+          "queueLabel": "Nachricht in die Warteschlange stellen",
+          "sendLabel": "Senden"
+        },
+        "stopButton": {
+          "ariaLabel": "Generierung stoppen",
+          "tooltip": "Stopp · Esc"
+        }
+      },
+      "buildFileCard": {
+        "pending": {
+          "tooltip": "Warten, bis die Sitzung bereit ist..."
+        }
+      },
+      "entryInfoPopover": {
+        "dialog": {
+          "ariaLabel": "Skill: {name}"
+        }
+      },
+      "entryPickerPopover": {
+        "appsGroup": {
+          "label": "Apps"
+        },
+        "connectAction": {
+          "label": "Verbinden"
+        },
+        "connectedRow": {
+          "description": "Verbunden"
+        },
+        "connectionRequiredRow": {
+          "description": "Verbindung erforderlich"
+        },
+        "content": {
+          "ariaLabel": "Skill-Auswahl"
+        },
+        "empty": {
+          "text": "Keine passenden Skills"
+        },
+        "mcpServersGroup": {
+          "label": "MCP-Server"
+        },
+        "skillsGroup": {
+          "label": "Skills"
+        }
+      },
+      "inputChip": {
+        "removeButton": {
+          "ariaLabel": "{label} entfernen"
+        }
+      },
+      "microphoneButton": {
+        "accessError": {
+          "toast": "Zugriff auf das Mikrofon nicht möglich"
+        },
+        "autoStartError": {
+          "toast": "Mikrofon konnte nicht automatisch gestartet werden"
+        },
+        "startRecording": {
+          "ariaLabel": "Aufnahme starten"
+        },
+        "stopRecording": {
+          "ariaLabel": "Aufnahme stoppen"
+        }
+      },
+      "pasteTilePopover": {
+        "dialog": {
+          "ariaLabel": "Eingefügten Text bearbeiten"
+        },
+        "expandButton": {
+          "label": "In die Eingabeleiste erweitern",
+          "tooltip": "Diese Kachel durch ihren vollständigen Text ersetzen"
+        }
+      },
+      "plusMenuButton": {
+        "trigger": {
+          "ariaLabel": "Hinzufügen-Menü öffnen",
+          "tooltip": "Hinzufügen"
+        }
+      },
+      "queuedMessageBar": {
+        "discardButton": {
+          "tooltip": "Nachricht aus der Warteschlange entfernen"
+        },
+        "editHint": {
+          "label": "bearbeiten ·"
+        },
+        "item": {
+          "ariaLabel": "Nachricht in der Warteschlange umschalten"
+        },
+        "removeHint": {
+          "label": "entfernen"
+        }
+      },
+      "sharedAppInputBar": {
+        "input": {
+          "placeholder": "Wie kann Onyx Ihnen heute helfen?"
+        },
+        "startSessionButton": {
+          "label": "Neue Sitzung starten"
+        }
+      }
+    },
+    "mcpApiKey": {
+      "apiKeyField": {
+        "label": "API-Schlüssel",
+        "placeholder": "Geben Sie Ihren API-Schlüssel ein"
+      },
+      "apiKeyVisibilityButton": {
+        "hideAriaLabel": "API-Schlüssel verbergen",
+        "showAriaLabel": "API-Schlüssel anzeigen"
+      },
+      "cancelButton": {
+        "label": "Abbrechen"
+      },
+      "credentialField": {
+        "placeholder": "Geben Sie {field} ein"
+      },
+      "credentialVisibilityButton": {
+        "hideAriaLabel": "Anmeldedaten verbergen",
+        "showAriaLabel": "Anmeldedaten anzeigen"
+      },
+      "header": {
+        "enterApiKey": {
+          "title": "API-Schlüssel eingeben"
+        },
+        "enterCredentials": {
+          "title": "Anmeldedaten eingeben"
+        },
+        "manageApiKey": {
+          "title": "API-Schlüssel verwalten"
+        },
+        "manageCredentials": {
+          "title": "Anmeldedaten verwalten"
+        }
+      },
+      "intro": {
+        "enterApiKey": {
+          "text": "Geben Sie Ihren API-Schlüssel für {server} ein, um die Authentifizierung zu aktivieren."
+        },
+        "enterCredentials": {
+          "text": "Geben Sie Ihre Anmeldedaten für {server} ein, um die Authentifizierung zu aktivieren."
+        },
+        "updateApiKey": {
+          "text": "Aktualisieren Sie Ihren API-Schlüssel für {server}."
+        },
+        "updateCredentials": {
+          "text": "Aktualisieren Sie Ihre Anmeldedaten für {server}."
+        }
+      },
+      "saveApiKeyError": {
+        "message": "API-Schlüssel konnte nicht gespeichert werden"
+      },
+      "saveCredentialsError": {
+        "message": "Anmeldedaten konnten nicht gespeichert werden"
+      },
+      "submitButton": {
+        "saveApiKey": {
+          "label": "API-Schlüssel speichern"
+        },
+        "saveCredentials": {
+          "label": "Anmeldedaten speichern"
+        },
+        "saving": {
+          "label": "Wird gespeichert..."
+        },
+        "updateApiKey": {
+          "label": "API-Schlüssel aktualisieren"
+        },
+        "updateCredentials": {
+          "label": "Anmeldedaten aktualisieren"
+        }
+      },
+      "validationNote": {
+        "apiKey": {
+          "text": "Ihr API-Schlüssel wird beim Server validiert und sicher gespeichert."
+        },
+        "authenticated": {
+          "text": "Änderungen werden vor dem Speichern beim Server validiert."
+        },
+        "credentials": {
+          "text": "Ihre Anmeldedaten werden beim Server validiert und sicher gespeichert."
+        }
+      }
+    },
+    "modelSelector": {
+      "adminLimitedSetting": {
+        "tooltip": "Ihr Administrator beschränkt dieses Modell auf eine niedrigere Reasoning-Stufe."
+      },
+      "contextWindow": {
+        "row": {
+          "caption": "Token-Limit für jede Sitzung",
+          "title": "Kontextfenster"
+        },
+        "unknown": {
+          "tooltip": "Die Kontextgröße ist für dieses Modell nicht verfügbar. Chats wenden trotzdem automatisch ein Token-Limit an."
+        }
+      },
+      "list": {
+        "empty": {
+          "text": "Keine Modelle gefunden"
+        },
+        "loading": {
+          "text": "Modelle werden geladen..."
+        }
+      },
+      "modelSettingsButton": {
+        "ariaLabel": "Einstellungen für {model}",
+        "tooltip": "Modell-Einstellungen"
+      },
+      "multiModel": {
+        "addModelButton": {
+          "label": "Modell hinzufügen"
+        },
+        "noModels": {
+          "tooltip": "Derzeit sind keine Modelle konfiguriert"
+        }
+      },
+      "reasoningLevel": {
+        "high": {
+          "label": "Hoch"
+        },
+        "low": {
+          "label": "Niedrig"
+        },
+        "medium": {
+          "label": "Mittel"
+        },
+        "off": {
+          "label": "Aus"
+        },
+        "row": {
+          "caption": "Wie viel das Modell nachdenken soll, bevor es antwortet",
+          "title": "Reasoning-Stufe"
+        },
+        "xhigh": {
+          "label": "Sehr hoch"
+        }
+      },
+      "searchInput": {
+        "placeholder": "Modelle suchen..."
+      },
+      "temperature": {
+        "balanced": {
+          "label": "Ausgewogen"
+        },
+        "creative": {
+          "label": "Kreativ"
+        },
+        "deterministic": {
+          "label": "Deterministisch"
+        },
+        "row": {
+          "caption": "Wie vorhersehbar oder kreativ das Modell antworten soll",
+          "title": "Temperatur"
+        }
+      },
+      "trigger": {
+        "noSelection": {
+          "label": "Modell auswählen"
+        }
+      },
+      "unsupportedSetting": {
+        "tooltip": "Das Ändern dieser Einstellung wird für dieses Modell nicht unterstützt."
+      }
+    },
+    "popup": {
+      "consentCheckbox": {
+        "label": "Einwilligungs-Kontrollkästchen"
+      },
+      "consentRequired": {
+        "error": "Sie müssen den Bedingungen zustimmen, um auf die Anwendung zuzugreifen."
+      },
+      "header": {
+        "title": "Willkommen bei Onyx!"
+      },
+      "logoIcon": {
+        "alt": "Logo"
+      },
+      "startButton": {
+        "label": "Starten"
+      }
+    },
+    "sharedChat": {
+      "emptyChat": {
+        "description": "Keine Nachrichten im geteilten Chat gefunden."
+      },
+      "header": {
+        "owner": {
+          "text": "von {name}"
+        },
+        "sharedOn": {
+          "text": "Geteilt am {date}"
+        },
+        "untitledChat": {
+          "title": "Neuer Chat"
+        }
+      },
+      "newChatButton": {
+        "label": "Neuen Chat starten"
+      },
+      "notFound": {
+        "description": "Kein geteilter Chat mit der angegebenen ID gefunden.",
+        "title": "Geteilter Chat nicht gefunden"
+      }
+    },
+    "welcome": {
+      "greeting": {
+        "helpText": "Wie kann ich helfen?",
+        "startText": "Legen wir los."
+      },
+      "incognito": {
+        "title": "Sie sind inkognito"
+      }
+    }
+  },
   "settings": {
     "accounts": {
       "email": {

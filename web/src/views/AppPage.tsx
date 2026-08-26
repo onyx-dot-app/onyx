@@ -86,6 +86,7 @@ import EESearchUI from "@/ee/sections/SearchUI";
 const SearchUI = paidTierGated(EESearchUI);
 import { motion, AnimatePresence } from "motion/react";
 import { useChatSessionSupportsRetrieval } from "@/lib/app/hooks";
+import { useTranslations } from "next-intl";
 
 interface FadeProps {
   show: boolean;
@@ -133,13 +134,14 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   //   }
   // });
 
+  const t = useTranslations("chat.app");
   const router = useRouter();
   const appFocus = useAppFocus();
   const { isMobile } = useScreenSize();
 
   useToastFromQuery({
     oauth_connected: {
-      message: "Authentication successful",
+      message: t("oauthConnected.toast"),
       type: "success",
     },
   });
@@ -310,13 +312,11 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     if (lastFailedFiles && lastFailedFiles.length > 0) {
       const names = lastFailedFiles.map((f) => f.name).join(", ");
       toast.error(
-        lastFailedFiles.length === 1
-          ? `File failed and was removed: ${names}`
-          : `Files failed and were removed: ${names}`
+        t("failedFiles.toast", { count: lastFailedFiles.length, names })
       );
       clearLastFailedFiles();
     }
-  }, [lastFailedFiles, clearLastFailedFiles]);
+  }, [lastFailedFiles, clearLastFailedFiles, t]);
 
   const chatInputBarRef = useRef<AppInputBarHandle>(null);
 
@@ -583,7 +583,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       .reverse()
       .find((m) => m.type === "user");
     if (!lastUserMsg) {
-      toast.error("No previously-submitted user message found.");
+      toast.error(t("noPreviousMessage.toast"));
       return;
     }
 
@@ -601,6 +601,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     currentMessageFiles,
     deepResearchEnabledForCurrentWorkflow,
     multiModel.isMultiModelActive,
+    t,
   ]);
 
   if (resolvedUser === null) {
@@ -821,7 +822,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
               <Modal.Content>
                 <Modal.Header
                   icon={SvgFileText}
-                  title="Sources"
+                  title={t("sourcesModal.title")}
                   onClose={() => updateCurrentDocumentSidebarVisible(false)}
                 />
                 <Modal.Body>
@@ -934,21 +935,21 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                           }
                           title={
                             sessionFetchError.type === "not_found"
-                              ? "Chat not found"
+                              ? t("sessionNotFound.title")
                               : sessionFetchError.type === "access_denied"
-                                ? "Access denied"
-                                : "Something went wrong"
+                                ? t("sessionAccessDenied.title")
+                                : t("sessionGenericError.title")
                           }
                           description={
                             sessionFetchError.type === "not_found"
-                              ? "This chat session doesn't exist or has been deleted."
+                              ? t("sessionNotFound.description")
                               : sessionFetchError.type === "access_denied"
-                                ? "You don't have permission to view this chat session."
+                                ? t("sessionAccessDenied.description")
                                 : sessionFetchError.detail
                           }
                         />
                         <Button href="/app" prominence="secondary">
-                          Start a new chat
+                          {t("newChatButton.label")}
                         </Button>
                       </Section>
                     )}
@@ -1025,7 +1026,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         <Button
                           icon={SvgChevronDown}
                           onClick={handleScrollToBottom}
-                          aria-label="Scroll to bottom"
+                          aria-label={t("scrollToBottomButton.label")}
                           prominence="secondary"
                         />
                       </div>

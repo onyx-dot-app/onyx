@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useCallback, useMemo, useRef } from "react";
+import { useTranslations } from "next-intl";
 import { Popover, OpenButton } from "@opal/components";
 import { getModelIcon } from "@/lib/languageModels";
 import {
@@ -65,6 +66,7 @@ export default function ModelSelector({
   includeGlobalDefault = false,
   side = "top",
 }: ModelSelectorProps) {
+  const t = useTranslations("chat.modelSelector");
   // Unscoped by default. An agent narrows the model list, but only a chat has
   // an agent. The admin and settings pages that embed this picker have none,
   // and must not be filtered by whichever agent happens to be active. A chat
@@ -113,7 +115,8 @@ export default function ModelSelector({
   }, [defaultText, llmProviders]);
 
   const effectiveOption = currentOption ?? defaultModelOption;
-  const currentDisplayName = effectiveOption?.displayName ?? "Select Model";
+  const currentDisplayName =
+    effectiveOption?.displayName ?? t("trigger.noSelection.label");
 
   const isSelected = useCallback(
     (option: LLMOption) => {
