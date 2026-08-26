@@ -1409,6 +1409,22 @@ REPO_ARCHIVE_CACHE_TTL_SECONDS = int(
     os.environ.get("REPO_ARCHIVE_CACHE_TTL_SECONDS") or 7 * 24 * 60 * 60
 )
 
+# Bounds on a single repo archive fetch, shared by every caller of
+# onyx.repo_archives (connector snapshots, coding agent).
+REPO_ARCHIVE_MAX_BYTES = int(
+    os.environ.get("REPO_ARCHIVE_MAX_BYTES") or 500 * 1024 * 1024
+)
+REPO_ARCHIVE_CONNECT_TIMEOUT_SECONDS = float(
+    os.environ.get("REPO_ARCHIVE_CONNECT_TIMEOUT_SECONDS") or 30
+)
+REPO_ARCHIVE_READ_TIMEOUT_SECONDS = float(
+    os.environ.get("REPO_ARCHIVE_READ_TIMEOUT_SECONDS") or 300
+)
+REPO_ARCHIVE_FETCH_TIMEOUT = (
+    REPO_ARCHIVE_CONNECT_TIMEOUT_SECONDS,
+    REPO_ARCHIVE_READ_TIMEOUT_SECONDS,
+)
+
 GITLAB_CONNECTOR_INCLUDE_CODE_FILES = (
     os.environ.get("GITLAB_CONNECTOR_INCLUDE_CODE_FILES", "").lower() == "true"
 )

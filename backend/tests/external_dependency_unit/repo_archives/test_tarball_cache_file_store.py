@@ -15,6 +15,10 @@ from tests.utils.repo_archives import FakeArchiveProvider, revision
 
 ARCHIVE = b"tarball-bytes"
 
+pytestmark = pytest.mark.usefixtures(
+    "db_session", "tenant_context", "initialize_file_store"
+)
+
 
 def _fetch(repo: RepoRef, sha: str, archive: bytes = ARCHIVE) -> tuple[bytes, int]:
     """(archive bytes served, number of downloads performed)."""
@@ -47,9 +51,7 @@ def _repo(name: str) -> RepoRef:
 
 
 @pytest.fixture
-def repo(request: pytest.FixtureRequest) -> Iterator[RepoRef]:
-    for fixture in ("db_session", "tenant_context", "initialize_file_store"):
-        request.getfixturevalue(fixture)
+def repo() -> Iterator[RepoRef]:
     ref = _repo("repo")
     yield ref
     _cleanup(ref)
@@ -74,7 +76,7 @@ def test_same_sha_double_write_is_an_upsert(repo: RepoRef) -> None:
 
     _fetch(repo, sha)
     # A second writer for the same SHA (the cache read is forced to miss).
-    with patch.object(store.__class__, "has_file", return_value=False):
+    with patch.object(tarball_cache, "_read_cached_archive", return_value=None):
         _fetch(repo, sha, archive=b"second")
 
     assert _cached_ids(repo) == {file_id}

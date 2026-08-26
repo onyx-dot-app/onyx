@@ -6,6 +6,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from onyx.configs.constants import FileOrigin
+from onyx.db.file_record import FileRecordNotFoundError
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.repo_archives import tarball_cache
@@ -27,10 +29,16 @@ MODULE = "onyx.repo_archives.tarball_cache"
 @pytest.fixture
 def mock_file_store() -> Iterator[MagicMock]:
     store = MagicMock()
-    store.has_file.return_value = False
+    store.read_file_record.side_effect = FileRecordNotFoundError("miss")
     store.list_files_by_prefix.return_value = []
     with patch(f"{MODULE}.get_default_file_store", return_value=store):
         yield store
+
+
+@pytest.fixture
+def mock_delete_files() -> Iterator[MagicMock]:
+    with patch(f"{MODULE}.delete_files_best_effort") as delete_files:
+        yield delete_files
 
 
 def _provider(resolve_error: OnyxError | None = None) -> FakeArchiveProvider:
@@ -42,8 +50,12 @@ def _provider(resolve_error: OnyxError | None = None) -> FakeArchiveProvider:
 
 
 def _cached(store: MagicMock, archive: bytes = ARCHIVE) -> None:
-    store.has_file.return_value = True
-    store.read_file_record.return_value.file_size = len(archive)
+    store.read_file_record.side_effect = None
+    store.read_file_record.return_value = MagicMock(
+        file_origin=FileOrigin.REPO_ARCHIVE_CACHE,
+        file_type=tarball_cache._TARBALL_MIME_TYPE,
+        file_size=len(archive),
+    )
     store.read_file.return_value = BytesIO(archive)
 
 
@@ -123,7 +135,9 @@ def test_cached_entry_above_caller_cap_is_skipped_without_transfer(
     assert provider.downloads == [SHA]
 
 
-def test_new_sha_evicts_previous_entries(mock_file_store: MagicMock) -> None:
+def test_new_sha_evicts_previous_entries(
+    mock_file_store: MagicMock, mock_delete_files: MagicMock
+) -> None:
     old_record = _record(_file_id(revision("b" * 40)))
     other_repo = RepoRef(provider="test", host="test.local", owner="other", name="r")
     other_record = _record(_file_id(revision("c" * 40, other_repo)))
@@ -131,13 +145,13 @@ def test_new_sha_evicts_previous_entries(mock_file_store: MagicMock) -> None:
 
     _fetch(_provider())
 
-    mock_file_store.delete_file.assert_called_once_with(
-        old_record.file_id, error_on_missing=False
-    )
+    assert mock_delete_files.call_args.args[0] == [old_record.file_id]
     mock_file_store.save_file.assert_called_once()
 
 
-def test_entries_older_than_ttl_are_pruned(mock_file_store: MagicMock) -> None:
+def test_entries_older_than_ttl_are_pruned(
+    mock_file_store: MagicMock, mock_delete_files: MagicMock
+) -> None:
     ttl = timedelta(seconds=tarball_cache.REPO_ARCHIVE_CACHE_TTL_SECONDS)
     old_repo = RepoRef(provider="test", host="test.local", owner="old", name="r")
     new_repo = RepoRef(provider="test", host="test.local", owner="new", name="r")
@@ -151,9 +165,7 @@ def test_entries_older_than_ttl_are_pruned(mock_file_store: MagicMock) -> None:
 
     _fetch(_provider())
 
-    mock_file_store.delete_file.assert_called_once_with(
-        stale.file_id, error_on_missing=False
-    )
+    assert mock_delete_files.call_args.args[0] == [stale.file_id]
 
 
 def test_oversized_archive_is_not_cached(
@@ -177,7 +189,7 @@ def test_resolution_failure_falls_back_to_fresh_download(
     assert (archive, sha) == (ARCHIVE, None)
     # Downloaded at the requested ref; nothing cached without a SHA.
     assert provider.downloads == ["feature-branch"]
-    mock_file_store.has_file.assert_not_called()
+    mock_file_store.read_file_record.assert_not_called()
     mock_file_store.save_file.assert_not_called()
 
 
@@ -207,7 +219,7 @@ def test_pinned_sha_without_access_bypasses_cache(mock_file_store: MagicMock) ->
 
     # Access check failed: the cache is never consulted and the download
     # itself must enforce access.
-    mock_file_store.has_file.assert_not_called()
+    mock_file_store.read_file_record.assert_not_called()
     assert (archive, sha) == (ARCHIVE, None)
     assert provider.downloads == [SHA]
 
@@ -215,7 +227,7 @@ def test_pinned_sha_without_access_bypasses_cache(mock_file_store: MagicMock) ->
 def test_file_store_failure_falls_back_to_download(
     mock_file_store: MagicMock,
 ) -> None:
-    mock_file_store.has_file.side_effect = RuntimeError("store down")
+    mock_file_store.read_file_record.side_effect = RuntimeError("store down")
     mock_file_store.save_file.side_effect = RuntimeError("store down")
 
     archive, sha, _ = _fetch(_provider())

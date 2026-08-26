@@ -27,7 +27,7 @@ to a download, and re-caches.
 import shutil
 import tempfile
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import BinaryIO
@@ -37,8 +37,10 @@ from onyx.configs.app_configs import (
     REPO_ARCHIVE_CACHE_TTL_SECONDS,
 )
 from onyx.configs.constants import FileOrigin
+from onyx.db.file_record import FileRecordNotFoundError
 from onyx.error_handling.exceptions import OnyxError
-from onyx.file_store.file_store import FileStore, get_default_file_store
+from onyx.file_store.file_store import get_default_file_store
+from onyx.file_store.staging import delete_files_best_effort
 from onyx.repo_archives.models import RepoArchive, RepoRef, RepoRevision
 from onyx.repo_archives.provider import RepoArchiveProvider
 from onyx.utils.logger import setup_logger
@@ -76,57 +78,57 @@ def resolve_revision(
         return None
 
 
-def _file_size(archive_file: BinaryIO) -> int:
-    archive_file.seek(0, 2)
-    size = archive_file.tell()
-    archive_file.seek(0)
-    return size
-
-
-def _read_cached_archive(file_id: str, max_size_bytes: int, sink: BinaryIO) -> bool:
-    """Stream a cached archive into `sink`. False on a miss, on an entry the
-    caller's cap excludes, or on any file-store error."""
+def _read_cached_archive(
+    file_id: str, max_size_bytes: int, sink: BinaryIO
+) -> int | None:
+    """Stream a cached archive into `sink` and return its size. None on a
+    miss, on an entry the caller's cap excludes, or on any file-store error."""
     try:
         file_store = get_default_file_store()
-        if not file_store.has_file(
-            file_id=file_id,
-            file_origin=FileOrigin.REPO_ARCHIVE_CACHE,
-            file_type=_TARBALL_MIME_TYPE,
+        try:
+            record = file_store.read_file_record(file_id)
+        except FileRecordNotFoundError:
+            return None
+        # Reject an entry another feature wrote under the same id, and check
+        # the recorded size before transferring anything: an entry above the
+        # caller's cap is a miss (the download path enforces the cap itself).
+        size = record.file_size
+        if (
+            record.file_origin != FileOrigin.REPO_ARCHIVE_CACHE
+            or record.file_type != _TARBALL_MIME_TYPE
+            or size is None
+            or not 0 < size <= max_size_bytes
         ):
-            return False
-        # Check the recorded size before transferring anything: an entry
-        # above the caller's cap is a miss (the download path enforces the
-        # cap itself). A null size is a legacy row; measure after the copy.
-        recorded_size = file_store.read_file_record(file_id).file_size
-        if recorded_size is not None and not 0 < recorded_size <= max_size_bytes:
-            return False
+            return None
         with file_store.read_file(file_id, mode="b", use_tempfile=True) as cached:
             shutil.copyfileobj(cached, sink)
     except Exception:
         logger.warning("Failed to read cached repo archive %s", file_id, exc_info=True)
-        return False
-    return 0 < _file_size(sink) <= max_size_bytes
+        return None
+    return size
 
 
-def _evict_stale_entries(file_store: FileStore, repo: RepoRef) -> None:
+def _evict_stale_entries(repo: RepoRef) -> None:
     """One archive per repo: drop the repo's older SHAs. Also prune every
     repo's entries older than the TTL so abandoned repos do not accumulate."""
     repo_prefix = f"{_FILE_ID_PREFIX}{repo.key_prefix}"
     cutoff = datetime.now(timezone.utc) - timedelta(
         seconds=REPO_ARCHIVE_CACHE_TTL_SECONDS
     )
-    for record in file_store.list_files_by_prefix(_FILE_ID_PREFIX):
-        if record.file_id.startswith(repo_prefix) or record.updated_at < cutoff:
-            file_store.delete_file(record.file_id, error_on_missing=False)
+    stale_ids = [
+        record.file_id
+        for record in get_default_file_store().list_files_by_prefix(_FILE_ID_PREFIX)
+        if record.file_id.startswith(repo_prefix) or record.updated_at < cutoff
+    ]
+    delete_files_best_effort(stale_ids, context="repo archive cache")
 
 
 def _cache_archive(revision: RepoRevision, archive_file: BinaryIO) -> None:
     file_id = _file_id(revision)
     try:
-        file_store = get_default_file_store()
-        _evict_stale_entries(file_store, revision.repo)
+        _evict_stale_entries(revision.repo)
         archive_file.seek(0)
-        file_store.save_file(
+        get_default_file_store().save_file(
             content=archive_file,
             display_name=f"{revision.repo.display} archive",
             file_origin=FileOrigin.REPO_ARCHIVE_CACHE,
@@ -149,11 +151,13 @@ def _open_archive(
     with tempfile.TemporaryDirectory(prefix="onyx_repo_archive_") as tmp_dir:
         path = Path(tmp_dir) / "repo.tar.gz"
         with open(path, "w+b") as archive_file:
-            cached = revision is not None and _read_cached_archive(
-                _file_id(revision), max_size_bytes, archive_file
+            cached_size = (
+                _read_cached_archive(_file_id(revision), max_size_bytes, archive_file)
+                if revision is not None
+                else None
             )
-            if cached:
-                size = _file_size(archive_file)
+            if cached_size is not None:
+                size = cached_size
                 logger.info("Repo archive cache hit: %s@%s", repo.display, ref)
             else:
                 archive_file.seek(0)
@@ -180,7 +184,6 @@ def _open_archive(
         yield RepoArchive(path=path, size=size, revision=revision)
 
 
-@contextmanager
 def open_repo_archive(
     provider: RepoArchiveProvider,
     repo: RepoRef,
@@ -188,7 +191,7 @@ def open_repo_archive(
     *,
     max_size_bytes: int,
     timeout: float | tuple[float, float],
-) -> Iterator[RepoArchive]:
+) -> AbstractContextManager[RepoArchive]:
     """Tarball of `repo` at `ref` (default branch when None) as a local temp
     file, from the cache when it holds the ref's current commit. Fetched at
     the resolved SHA so what is cached is what was resolved; when resolution
@@ -196,27 +199,22 @@ def open_repo_archive(
     removed when the block exits."""
     revision = resolve_revision(provider, repo, ref)
     fetch_ref = revision.commit_sha if revision is not None else (ref or "HEAD")
-    with _open_archive(
-        provider, repo, fetch_ref, revision, max_size_bytes, timeout
-    ) as archive:
-        yield archive
+    return _open_archive(provider, repo, fetch_ref, revision, max_size_bytes, timeout)
 
 
-@contextmanager
 def open_revision_archive(
     provider: RepoArchiveProvider,
     revision: RepoRevision,
     *,
     max_size_bytes: int,
     timeout: float | tuple[float, float],
-) -> Iterator[RepoArchive]:
+) -> AbstractContextManager[RepoArchive]:
     """`open_repo_archive` for a revision already pinned by `resolve_revision`."""
-    with _open_archive(
+    return _open_archive(
         provider,
         revision.repo,
         revision.commit_sha,
         revision,
         max_size_bytes,
         timeout,
-    ) as archive:
-        yield archive
+    )

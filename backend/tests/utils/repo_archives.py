@@ -4,10 +4,16 @@ provider, so tests need no network and no patching of provider internals."""
 import io
 import tarfile
 from collections.abc import Sequence
+from pathlib import Path
 from typing import BinaryIO
+from unittest.mock import MagicMock
 
+import pytest
+
+from onyx.db.file_record import FileRecordNotFoundError
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.repo_archives import snapshot, tarball_cache
 from onyx.repo_archives.models import RepoRef, RepoRevision
 from onyx.utils.github import GITHUB_COMMIT_SHA_PATTERN
 
@@ -34,6 +40,20 @@ def make_repo_tarball(
             info.size = len(content)
             tar.addfile(info, io.BytesIO(content))
     return buf.getvalue()
+
+
+def isolate_repo_archive_caches(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> MagicMock:
+    """Keep both repo-archive caches inside `tmp_path` and out of the file
+    store. Returns the stub store, which reports every entry as a miss."""
+    store = MagicMock()
+    store.has_file.return_value = False
+    store.read_file_record.side_effect = FileRecordNotFoundError("no cached archive")
+    store.list_files_by_prefix.return_value = []
+    monkeypatch.setattr(snapshot, "_CACHE_ROOT", tmp_path / "snapshot_cache")
+    monkeypatch.setattr(tarball_cache, "get_default_file_store", lambda: store)
+    return store
 
 
 def revision(commit_sha: str, repo: RepoRef = TEST_REPO) -> RepoRevision:
