@@ -22,6 +22,7 @@ from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_experts_stores_representations,
 )
 from onyx.connectors.models import (
+    CodeSection,
     ConnectorFailure,
     ConnectorStopSignal,
     Document,
@@ -1131,14 +1132,34 @@ def _apply_document_ingestion_hook(
                 "Document ingestion hook dropped document doc_id=%r: %s", doc.id, reason
             )
             return None
-        new_sections: list[TextSection | ImageSection] = []
+        # Hook sections carry no type, so a returned code section would come
+        # back as prose and lose syntax chunking; match on link to restore it.
+        # TabularSection cannot be recovered this way — its content lives in
+        # csv_file_id, which the hook never sees.
+        code_by_link = {
+            section.link: section
+            for section in doc.sections
+            if isinstance(section, CodeSection) and section.link
+        }
+        new_sections: list[TextSection | ImageSection | CodeSection] = []
         for s in hook_result.sections:
             if s.image_file_id is not None:
                 new_sections.append(
                     ImageSection(image_file_id=s.image_file_id, link=s.link)
                 )
             elif s.text is not None:
-                new_sections.append(TextSection(text=s.text, link=s.link))
+                original_code = code_by_link.get(s.link) if s.link else None
+                if original_code is not None:
+                    new_sections.append(
+                        CodeSection(
+                            text=s.text,
+                            link=s.link,
+                            language=original_code.language,
+                            file_path=original_code.file_path,
+                        )
+                    )
+                else:
+                    new_sections.append(TextSection(text=s.text, link=s.link))
             else:
                 logger.warning(
                     "Document ingestion hook returned a section with neither text nor image_file_id for doc_id=%r — skipping section.",

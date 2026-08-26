@@ -2,12 +2,13 @@ import random
 import threading
 import time
 from datetime import datetime, timezone
-from typing import Any, List, cast
+from typing import Any, List
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
 from onyx.connectors.models import (
+    CodeSection,
     Document,
     DocumentSource,
     ImageSection,
@@ -45,7 +46,7 @@ def create_test_document(
         id=doc_id,
         title=title,
         semantic_identifier=semantic_id,
-        sections=cast(list[TextSection | ImageSection], sections),
+        sections=sections,
         source=DocumentSource.FILE,
         metadata={},
     )
@@ -263,7 +264,7 @@ _PATCH_GET_SESSION = "onyx.indexing.indexing_pipeline.get_session_with_current_t
 
 def _make_doc(
     doc_id: str = "doc1",
-    sections: list[TextSection | ImageSection] | None = None,
+    sections: list[TextSection | ImageSection | CodeSection] | None = None,
 ) -> Document:
     if sections is None:
         sections = [TextSection(text="Hello", link="http://example.com")]
@@ -588,6 +589,60 @@ def test_document_ingestion_hook_rewrites_text_sections() -> None:
     assert isinstance(section, TextSection)
     assert section.text == "rewritten"
     assert section.link == "http://b.com"
+
+
+def test_document_ingestion_hook_keeps_code_sections_as_code() -> None:
+    """A hook section carries no type, so a rewritten code section would come
+    back as prose and lose syntax chunking. The link identifies it."""
+    doc = _make_doc(
+        sections=[
+            CodeSection(
+                text="def f():\n    pass\n",
+                link="http://a.com/mod.py",
+                language="python",
+                file_path="pkg/mod.py",
+            )
+        ]
+    )
+    with (
+        patch(
+            _PATCH_EXECUTE_HOOK,
+            return_value=DocumentIngestionResponse(
+                sections=[
+                    DocumentIngestionSection(
+                        text="def f():\n    return 1\n", link="http://a.com/mod.py"
+                    )
+                ]
+            ),
+        ),
+        patch(_PATCH_GET_SESSION),
+    ):
+        result = _apply_document_ingestion_hook([doc])
+    section = result[0].sections[0]
+    assert isinstance(section, CodeSection)
+    assert section.text == "def f():\n    return 1\n"
+    assert section.language == "python"
+    assert section.file_path == "pkg/mod.py"
+
+
+def test_document_ingestion_hook_new_section_stays_text() -> None:
+    """A section the hook invents (no matching original link) is prose."""
+    doc = _make_doc(
+        sections=[
+            CodeSection(text="x = 1\n", link="http://a.com/mod.py", language="python")
+        ]
+    )
+    with (
+        patch(
+            _PATCH_EXECUTE_HOOK,
+            return_value=DocumentIngestionResponse(
+                sections=[DocumentIngestionSection(text="a note", link="http://z.com")]
+            ),
+        ),
+        patch(_PATCH_GET_SESSION),
+    ):
+        result = _apply_document_ingestion_hook([doc])
+    assert isinstance(result[0].sections[0], TextSection)
 
 
 def test_document_ingestion_hook_preserves_image_section_order() -> None:
