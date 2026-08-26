@@ -133,6 +133,16 @@ RUN ln -s /usr/local/bin/supervisord /usr/bin/supervisord && \
     rm -rf /var/lib/apt/lists/* && \
     apt-get clean
 
+# Deployments run this image as uid 1001, and the default caches land under
+# /root (mode 700). Pin them to /app so one chown at the end covers them.
+# XDG_CACHE_HOME also drives huggingface_hub and tree-sitter-language-pack.
+ENV XDG_CACHE_HOME=/app/.cache \
+    NLTK_DATA=/app/nltk_data
+
+# nltk.download() only writes to a search path that already exists, and
+# silently falls back to /root/nltk_data otherwise.
+RUN mkdir -p /app/.cache /app/nltk_data
+
 # Pre-downloading models for setups with limited egress
 RUN python -c "from tokenizers import Tokenizer; \
 Tokenizer.from_pretrained('nomic-ai/nomic-embed-text-v1')"
@@ -177,6 +187,20 @@ RUN chmod +x /app/scripts/supervisord_entrypoint.sh
 COPY --chown=onyx:onyx ./assets /app/assets
 
 ENV PYTHONPATH=/app
+
+# Pre-downloading tree-sitter grammars for setups with limited egress.
+# tree-sitter-language-pack ships none: the first call fetches one bundle for
+# every language, then extracts from it offline. The cache path embeds the
+# pack version, so the assertion fails the build when a bump leaves it stale.
+RUN python -c "import sys; \
+from onyx.connectors.cross_connector_utils.code_file_utils import DEFAULT_CODE_GRAMMARS; \
+from tree_sitter_language_pack import prefetch, downloaded_languages, cache_dir; \
+wanted = set(DEFAULT_CODE_GRAMMARS); \
+prefetch(sorted(wanted)); \
+missing = sorted(wanted - set(downloaded_languages())); \
+sys.exit(f'grammars missing from {cache_dir()}: {missing}') if missing else \
+print(f'cached {len(wanted)} grammars in {cache_dir()}')" && \
+    chown -R onyx:onyx /app/.cache /app/nltk_data
 
 # Default ONYX_VERSION, typically overriden during builds by GitHub Actions.
 ARG ONYX_VERSION=0.0.0-dev

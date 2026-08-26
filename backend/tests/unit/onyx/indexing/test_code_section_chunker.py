@@ -6,7 +6,7 @@ from onyx.connectors.models import (
     Section,
     TextSection,
 )
-from onyx.indexing.chunking import DocumentChunker
+from onyx.indexing.chunking import DocumentChunker, code_section_chunker
 from onyx.indexing.chunking.code_section_chunker import _line_anchored_link
 from tests.unit.onyx.indexing.conftest import CHUNK_LIMIT, make_doc
 from tests.unit.onyx.indexing.conftest import (
@@ -141,6 +141,35 @@ def test_code_text_keeps_punctuation_and_emoji() -> None:
 
     assert "—" in chunks[0].content
     assert "✅" in chunks[0].content
+
+
+def test_unreachable_grammar_is_attempted_once_per_process(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A firewalled network blocks each bundle fetch until timeout, so the
+    failure must be remembered rather than repaid for every file."""
+    monkeypatch.setattr(code_section_chunker, "_UNAVAILABLE_GRAMMARS", set())
+    attempts = 0
+
+    def _blocked(**_kwargs: object) -> None:
+        nonlocal attempts
+        attempts += 1
+        raise RuntimeError("bundle unreachable")
+
+    monkeypatch.setattr(code_section_chunker, "ChonkieCodeChunker", _blocked)
+
+    section = CodeSection(
+        text="x " * 300,
+        language="python",
+        file_path="a.py",
+        link="https://git.example.com/blob/main/a.py",
+    )
+    for _ in range(3):
+        chunks = _chunk(_make_document_chunker(), [section])
+        assert len(chunks) > 1  # still indexed, via token splitting
+
+    assert attempts == 1
+    assert "python" in code_section_chunker._UNAVAILABLE_GRAMMARS
 
 
 # --- Interaction with other sections ----------------------------------------------

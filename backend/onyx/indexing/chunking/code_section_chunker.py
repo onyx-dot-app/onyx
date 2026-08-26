@@ -21,6 +21,14 @@ from onyx.utils.text_processing import clean_code_text
 
 logger = setup_logger()
 
+# Grammars whose load already failed in this process. The pack fetches its
+# bundle on the first miss, and a firewalled network drops those packets
+# rather than refusing them, so each attempt blocks until timeout (60s in
+# testing). Without this an unreachable bundle costs one timeout per file.
+# Process-wide because a Chunker is built per document batch. Holds only
+# language names, so unlike the splitter cache it is safe to share.
+_UNAVAILABLE_GRAMMARS: set[str] = set()
+
 
 class _CodeSpan(NamedTuple):
     """One syntax-bounded slice of a code section, and the 1-based line range
@@ -203,6 +211,9 @@ class CodeChunker(SectionChunker):
             )
             return None
 
+        if language in _UNAVAILABLE_GRAMMARS:
+            return None
+
         try:
             splitter = ChonkieCodeChunker(
                 tokenizer_or_token_counter=(
@@ -213,9 +224,12 @@ class CodeChunker(SectionChunker):
                 return_type="texts",
             )
         except Exception:
+            _UNAVAILABLE_GRAMMARS.add(language)
             logger.warning(
-                "Could not load the tree-sitter grammar for language=%s; "
-                "falling back to token splitting.",
+                "Could not load the tree-sitter grammar for language=%s; falling "
+                "back to token splitting for the rest of this process. Grammars "
+                "are extracted from a bundle the image build caches, so this "
+                "means that cache is missing or not writable.",
                 language,
                 exc_info=True,
             )

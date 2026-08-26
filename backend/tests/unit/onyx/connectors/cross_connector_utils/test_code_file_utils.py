@@ -2,6 +2,7 @@ import pytest
 from tree_sitter_language_pack import manifest_languages
 
 from onyx.connectors.cross_connector_utils.code_file_utils import (
+    DEFAULT_CODE_GRAMMARS,
     SENSITIVE_FILE_LANGUAGES,
     infer_code_language,
     is_sensitive_code_file,
@@ -14,6 +15,19 @@ def test_sensitive_languages_are_real_grammars() -> None:
     manifest = set(manifest_languages())
     unknown = SENSITIVE_FILE_LANGUAGES - manifest
     assert not unknown, f"Not grammars in tree-sitter-language-pack: {unknown}"
+
+
+def test_default_grammars_are_real_grammars() -> None:
+    """A name that is not a grammar is prefetched as a no-op, so the worker
+    would still download that language at index time. Fail here instead."""
+    manifest = set(manifest_languages())
+    unknown = set(DEFAULT_CODE_GRAMMARS) - manifest
+    assert not unknown, f"Not grammars in tree-sitter-language-pack: {unknown}"
+
+
+def test_default_grammars_exclude_credential_formats() -> None:
+    """Prefetching a guarded grammar would suggest those files are indexable."""
+    assert not set(DEFAULT_CODE_GRAMMARS) & SENSITIVE_FILE_LANGUAGES
 
 
 @pytest.mark.parametrize(

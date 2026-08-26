@@ -39,6 +39,47 @@ SENSITIVE_FILE_PATTERNS = (
     "*.kdbx",
 )
 
+# Grammars the image build extracts ahead of time. Anything outside this set
+# still extracts on demand from the same bundle. Names are checked against the
+# pack's manifest by a unit test.
+DEFAULT_CODE_GRAMMARS = (
+    "bash",
+    "c",
+    "cpp",
+    "csharp",
+    "css",
+    "dockerfile",
+    "go",
+    "gomod",
+    "graphql",
+    "hcl",
+    "html",
+    "ini",
+    "java",
+    "javascript",
+    "json",
+    "kotlin",
+    "lua",
+    "make",
+    "markdown",
+    "php",
+    "powershell",
+    "proto",
+    "python",
+    "ruby",
+    "rust",
+    "scala",
+    "scss",
+    "sql",
+    "swift",
+    "terraform",
+    "toml",
+    "tsx",
+    "typescript",
+    "xml",
+    "yaml",
+)
+
 
 def infer_code_language(file_path: str | None) -> str | None:
     """Grammar name for a path, from tree-sitter-language-pack's extension
