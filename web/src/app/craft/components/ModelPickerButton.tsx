@@ -26,7 +26,9 @@ export default function ModelPickerButton({
   const { user } = useUser();
 
   const effective = useMemo(
-    () => selection ?? getPreferredLlmSelection(user?.id, llmProviders, defaultText),
+    () =>
+      selection ??
+      getPreferredLlmSelection(user?.id, llmProviders, defaultText),
     [selection, user?.id, llmProviders, defaultText]
   );
 

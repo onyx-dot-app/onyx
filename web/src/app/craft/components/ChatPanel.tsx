@@ -144,7 +144,14 @@ export default function BuildChatPanel({
       (sessionId ? modelBySession[sessionId] : undefined) ??
       sessionModel ??
       getPreferredLlmSelection(user?.id, llmProviders, defaultText),
-    [sessionId, modelBySession, sessionModel, user?.id, llmProviders, defaultText]
+    [
+      sessionId,
+      modelBySession,
+      sessionModel,
+      user?.id,
+      llmProviders,
+      defaultText,
+    ]
   );
 
   const contextUsage = useMemo(() => {
