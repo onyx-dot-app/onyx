@@ -115,7 +115,7 @@ class _ExtractionLimits:
         # nodes, and links escaping the destination.
         filtered = tarfile.data_filter(member, path)
         self.members += 1
-        self.total_bytes += max(filtered.size, 0)
+        self.total_bytes += filtered.size
         if self.members > REPO_SNAPSHOT_MAX_ARCHIVE_MEMBERS:
             raise RepoSnapshotError(
                 f"Archive exceeds {REPO_SNAPSHOT_MAX_ARCHIVE_MEMBERS} members"
@@ -210,9 +210,9 @@ def get_or_create_snapshot(
     dest = _snapshot_dir(revision)
     if dest.is_dir():
         try:
-            os.utime(dest)
+            _touch(dest)
             return RepoSnapshot(dest, revision)
-        except FileNotFoundError:
+        except RepoSnapshotError:
             pass  # Pruned by another worker between the check and the touch.
 
     _CACHE_ROOT.mkdir(parents=True, exist_ok=True)

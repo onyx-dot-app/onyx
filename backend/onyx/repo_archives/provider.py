@@ -14,10 +14,6 @@ class RepoArchiveProvider(Protocol):
     @property
     def authenticated(self) -> bool: ...
 
-    def repo_ref(self, owner: str, name: str) -> RepoRef:
-        """Identity of a repository on this provider (and host)."""
-        ...
-
     def resolve_commit(self, repo: RepoRef, ref: str | None) -> str:
         """Full commit SHA that `ref` (branch, tag, or SHA; None for the
         default branch) points at now.

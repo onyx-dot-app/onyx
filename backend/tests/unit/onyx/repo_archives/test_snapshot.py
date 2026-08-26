@@ -1,5 +1,4 @@
 import hashlib
-import io
 import os
 import shutil
 import tarfile
@@ -12,8 +11,14 @@ import pytest
 
 from onyx.repo_archives import snapshot
 from onyx.repo_archives.models import RepoArchive, RepoRevision
-from onyx.repo_archives.snapshot import RepoSnapshotError, get_or_create_snapshot
-from tests.utils.repo_archives import make_repo_tarball, revision
+from onyx.repo_archives.snapshot import (
+    RepoSnapshotError,
+    get_or_create_snapshot,
+)
+from tests.utils.repo_archives import (
+    make_repo_tarball,
+    revision,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -67,15 +72,10 @@ def test_second_call_uses_cache_without_fetching(tmp_path: Path) -> None:
 
 
 def test_archive_without_wrapper_dir_is_served_from_tree_root(tmp_path: Path) -> None:
-    buf = io.BytesIO()
-    with tarfile.open(fileobj=buf, mode="w:gz") as tar:
-        for name in ("a.txt", "b.txt"):
-            info = tarfile.TarInfo(name=name)
-            info.size = 1
-            tar.addfile(info, io.BytesIO(b"x"))
+    flat = make_repo_tarball({"a.txt": b"x", "b.txt": b"x"}, top_dir=None)
 
     rev = _rev("flat")
-    snap = get_or_create_snapshot(rev, _opener(tmp_path, buf.getvalue(), rev))
+    snap = get_or_create_snapshot(rev, _opener(tmp_path, flat, rev))
     assert set(dict(snap.walk_files())) == {"a.txt", "b.txt"}
 
 
@@ -89,28 +89,21 @@ def test_fetch_errors_propagate_and_leave_no_snapshot() -> None:
 
 
 def test_malicious_archive_members_are_rejected(tmp_path: Path) -> None:
-    buf = io.BytesIO()
-    with tarfile.open(fileobj=buf, mode="w:gz") as tar:
-        info = tarfile.TarInfo(name="top/../../escape.txt")
-        payload = b"boom"
-        info.size = len(payload)
-        tar.addfile(info, io.BytesIO(payload))
+    traversal = make_repo_tarball({"escape.txt": b"boom"}, top_dir="top/../..")
 
     rev = _rev("evil")
     with pytest.raises(RepoSnapshotError):
-        get_or_create_snapshot(rev, _opener(tmp_path, buf.getvalue(), rev))
+        get_or_create_snapshot(rev, _opener(tmp_path, traversal, rev))
 
 
 def test_empty_archive_is_rejected_and_not_cached(tmp_path: Path) -> None:
-    buf = io.BytesIO()
-    with tarfile.open(fileobj=buf, mode="w:gz") as tar:
-        info = tarfile.TarInfo(name="org-repo-abc1234")
-        info.type = tarfile.DIRTYPE
-        tar.addfile(info)
+    wrapper = tarfile.TarInfo(name="org-repo-abc1234")
+    wrapper.type = tarfile.DIRTYPE
+    dir_only = make_repo_tarball({}, extra_members=[wrapper])
 
     rev = _rev("empty")
     with pytest.raises(RepoSnapshotError, match="no files"):
-        get_or_create_snapshot(rev, _opener(tmp_path, buf.getvalue(), rev))
+        get_or_create_snapshot(rev, _opener(tmp_path, dir_only, rev))
     assert list(snapshot._CACHE_ROOT.iterdir()) == []
 
 
@@ -228,17 +221,14 @@ def test_total_size_cap_rejects_archive(
 
 
 def _symlink_tarball(with_file: bool) -> bytes:
-    buf = io.BytesIO()
-    with tarfile.open(fileobj=buf, mode="w:gz") as tar:
-        link = tarfile.TarInfo(name="link")
-        link.type = tarfile.SYMTYPE
-        link.linkname = "."
-        tar.addfile(link)
-        if with_file:
-            info = tarfile.TarInfo(name="README.md")
-            info.size = 1
-            tar.addfile(info, io.BytesIO(b"x"))
-    return buf.getvalue()
+    link = tarfile.TarInfo(name="link")
+    link.type = tarfile.SYMTYPE
+    link.linkname = "."
+    return make_repo_tarball(
+        {"README.md": b"x"} if with_file else {},
+        top_dir=None,
+        extra_members=[link],
+    )
 
 
 def test_symlink_top_level_entry_is_not_promoted_to_root(tmp_path: Path) -> None:

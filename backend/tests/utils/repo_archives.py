@@ -2,27 +2,35 @@
 provider, so tests need no network and no patching of provider internals."""
 
 import io
-import re
 import tarfile
+from collections.abc import Sequence
 from typing import BinaryIO
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.repo_archives.models import RepoRef, RepoRevision
+from onyx.utils.github import GITHUB_COMMIT_SHA_PATTERN
 
 TEST_REPO = RepoRef(provider="test", host="test.local", owner="test-org", name="repo")
 
-_SHA_PATTERN = re.compile(r"^[0-9a-fA-F]{40}$")
-
 
 def make_repo_tarball(
-    files: dict[str, bytes], top_dir: str = "org-repo-abc1234"
+    files: dict[str, bytes],
+    top_dir: str | None = "org-repo-abc1234",
+    *,
+    extra_members: Sequence[tarfile.TarInfo] = (),
 ) -> bytes:
-    """A repo-archive-shaped tar.gz: contents wrapped in one top-level dir."""
+    """A repo-archive-shaped tar.gz: contents wrapped in one top-level dir.
+
+    `top_dir=None` builds a flat archive. `extra_members` are added verbatim
+    and carry no data, for directories, symlinks, and other non-file entries.
+    """
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+        for member in extra_members:
+            tar.addfile(member)
         for path, content in files.items():
-            info = tarfile.TarInfo(name=f"{top_dir}/{path}")
+            info = tarfile.TarInfo(name=f"{top_dir}/{path}" if top_dir else path)
             info.size = len(content)
             tar.addfile(info, io.BytesIO(content))
     return buf.getvalue()
@@ -68,7 +76,7 @@ class FakeArchiveProvider:
         self.resolve_calls += 1
         if self.resolve_error is not None:
             raise self.resolve_error
-        if ref and _SHA_PATTERN.fullmatch(ref):
+        if ref and GITHUB_COMMIT_SHA_PATTERN.fullmatch(ref):
             return ref.lower()
         if ref not in self.refs:
             raise OnyxError(OnyxErrorCode.NOT_FOUND, f"unknown ref {ref}")
