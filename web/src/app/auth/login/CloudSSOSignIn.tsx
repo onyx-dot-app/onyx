@@ -18,17 +18,7 @@ import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import ProviderSignInButton from "@/app/auth/login/ProviderSignInButton";
 import type { SSOProviderOption } from "@/lib/auth/types";
 import { discoverSSOProviders } from "@/lib/sso/svc";
-
-// Deliberately the same copy for "no such workspace", "several workspaces" and
-// "workspace without SSO". The endpoint does not distinguish them either.
-const NO_PROVIDERS_MESSAGE =
-  "No SSO sign-in is set up for that address. Try Google or your password below.";
-
-const LOOKUP_SCHEMA = Yup.object({
-  email: Yup.string()
-    .email("Enter a valid email address")
-    .required("Email is required"),
-});
+import { useTranslations } from "next-intl";
 
 interface LookupValues {
   email: string;
@@ -39,16 +29,28 @@ interface CloudSSOSignInProps {
 }
 
 export default function CloudSSOSignIn({ nextUrl }: CloudSSOSignInProps) {
+  const t = useTranslations("auth");
   const [expanded, setExpanded] = useState(false);
   const [providers, setProviders] = useState<SSOProviderOption[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Deliberately the same copy for "no such workspace", "several
+  // workspaces" and "workspace without SSO". The endpoint does not
+  // distinguish them either.
+  const noProvidersMessage = t("login.noSsoProviders.error");
+
+  const lookupSchema = Yup.object({
+    email: Yup.string()
+      .email(t("login.ssoEmailInvalid.error"))
+      .required(t("login.ssoEmailRequired.error")),
+  });
 
   async function handleLookup(values: LookupValues) {
     setError(null);
     try {
       const found = await discoverSSOProviders(values.email.toLowerCase());
       if (found.length === 0) {
-        setError(NO_PROVIDERS_MESSAGE);
+        setError(noProvidersMessage);
         return;
       }
       setProviders(found);
@@ -65,7 +67,7 @@ export default function CloudSSOSignIn({ nextUrl }: CloudSSOSignInProps) {
         icon={SvgUserKey}
         onClick={() => setExpanded(true)}
       >
-        Sign in with SSO
+        {t("login.ssoSignInButton.label")}
       </Button>
     );
   }
@@ -75,13 +77,16 @@ export default function CloudSSOSignIn({ nextUrl }: CloudSSOSignInProps) {
       {providers === null ? (
         <Formik
           initialValues={{ email: "" }}
-          validationSchema={LOOKUP_SCHEMA}
+          validationSchema={lookupSchema}
           onSubmit={handleLookup}
         >
           {({ isSubmitting, isValid, dirty }) => (
             <AuthLayouts.FormBody>
               <AuthLayouts.Fields>
-                <InputVertical title="Work Email" withLabel="email">
+                <InputVertical
+                  title={t("login.workEmailField.label")}
+                  withLabel="email"
+                >
                   <InputTypeInField
                     name="email"
                     placeholder="email@yourcompany.com"

@@ -150,6 +150,8 @@ func (p *onyxProvider) Resources(_ context.Context) []func() resource.Resource {
 		NewConnectorResource,
 		NewCCPairResource,
 		NewDocumentSetResource,
+		NewCustomToolResource,
+		NewPersonaResource,
 	}
 }
 

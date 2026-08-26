@@ -1,4 +1,7 @@
-export const forgotPassword = async (email: string): Promise<void> => {
+export const forgotPassword = async (
+  email: string,
+  fallbackErrorMessage: string
+): Promise<void> => {
   const response = await fetch(`/api/auth/forgot-password`, {
     method: "POST",
     headers: {
@@ -9,15 +12,20 @@ export const forgotPassword = async (email: string): Promise<void> => {
 
   if (!response.ok) {
     const error = await response.json();
-    const errorMessage =
-      error?.detail || "An error occurred during password reset.";
+    const errorMessage = error?.detail || fallbackErrorMessage;
     throw new Error(errorMessage);
   }
 };
 
+interface ResetPasswordMessages {
+  invalidPassword: string;
+  genericError: string;
+}
+
 export const resetPassword = async (
   token: string,
-  password: string
+  password: string,
+  messages: ResetPasswordMessages
 ): Promise<void> => {
   const response = await fetch(`/api/auth/reset-password`, {
     method: "POST",
@@ -30,10 +38,9 @@ export const resetPassword = async (
   if (!response.ok) {
     const error = await response.json();
     if (error?.detail?.code === "RESET_PASSWORD_INVALID_PASSWORD") {
-      throw new Error(error.detail.reason || "Invalid password");
+      throw new Error(error.detail.reason || messages.invalidPassword);
     }
-    const errorMessage =
-      error?.detail || "An error occurred during password reset.";
+    const errorMessage = error?.detail || messages.genericError;
     throw new Error(errorMessage);
   }
 };

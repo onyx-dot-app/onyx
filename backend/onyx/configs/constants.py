@@ -37,6 +37,10 @@ FASTAPI_USERS_AUTH_COOKIE_NAME = (
     os.environ.get("AUTH_COOKIE_NAME") or "fastapiusersauth"
 )
 ANONYMOUS_USER_COOKIE_NAME = "onyx_anonymous_user"
+# Locale cookie the Next.js server layout reads to render the UI language.
+# The backend owns this cookie: PATCH /user/language and GET /me set it from
+# the user's stored preference. Name must match web/src/i18n/config.ts.
+NEXT_LOCALE_COOKIE_NAME = "NEXT_LOCALE"
 
 # ID used in UserInfo API responses for anonymous users (not a UUID, just a string identifier)
 ANONYMOUS_USER_INFO_ID = "__anonymous_user__"

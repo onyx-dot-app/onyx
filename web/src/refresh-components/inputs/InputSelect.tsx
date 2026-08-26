@@ -364,7 +364,7 @@ function InputSelectItem({
     <SelectPrimitive.Item
       ref={ref}
       value={value}
-      className="outline-hidden focus:outline-hidden rounded-08 data-highlighted:bg-background-tint-02"
+      className="cursor-pointer select-none outline-hidden focus:outline-hidden rounded-08 data-highlighted:bg-background-tint-02"
       onSelect={onClick}
     >
       {/* Hidden ItemText for Radix to track selection */}
