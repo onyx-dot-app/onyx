@@ -1,5 +1,6 @@
 import { toast } from "@opal/layouts";
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import {
   Table,
   TableHead,
@@ -27,6 +28,8 @@ const IsVisibleSection = ({
   document: DocumentBoostStatus;
   onUpdate: (response: Response) => void;
 }) => {
+  const t = useTranslations("admin.documents");
+
   async function setHidden(hidden: boolean) {
     onUpdate(await updateHiddenStatus(document.document_id, hidden));
   }
@@ -38,12 +41,12 @@ const IsVisibleSection = ({
           <div
             role="button"
             tabIndex={0}
-            aria-label="Unhide document"
+            aria-label={t("visibility.unhide.ariaLabel")}
             onKeyDown={clickOnKeyDown(() => void setHidden(false))}
             onClick={() => void setHidden(false)}
             className="flex text-error cursor-pointer hover:bg-accent-background-hovered py-1 px-2 w-fit rounded-full"
           >
-            <div className="select-none">Hidden</div>
+            <div className="select-none">{t("visibility.hidden.label")}</div>
             <div className="ml-1 my-auto">
               <Checkbox checked={false} />
             </div>
@@ -52,12 +55,14 @@ const IsVisibleSection = ({
           <div
             role="button"
             tabIndex={0}
-            aria-label="Hide document"
+            aria-label={t("visibility.hide.ariaLabel")}
             onKeyDown={clickOnKeyDown(() => void setHidden(true))}
             onClick={() => void setHidden(true)}
             className="flex cursor-pointer hover:bg-accent-background-hovered py-1 px-2 w-fit rounded-full"
           >
-            <div className="my-auto select-none">Visible</div>
+            <div className="my-auto select-none">
+              {t("visibility.visible.label")}
+            </div>
             <div className="ml-1 my-auto">
               <Checkbox checked={true} />
             </div>
@@ -68,12 +73,12 @@ const IsVisibleSection = ({
         <div className="text-xs">
           {document.hidden ? (
             <div className="flex">
-              <FiEye className="my-auto mr-1" /> Unhide
+              <FiEye className="my-auto mr-1" /> {t("visibility.unhide.label")}
             </div>
           ) : (
             <div className="flex">
               <FiEyeOff className="my-auto mr-1" />
-              Hide
+              {t("visibility.hide.label")}
             </div>
           )}
         </div>
@@ -90,6 +95,7 @@ export const DocumentFeedbackTable = ({
   documents: DocumentBoostStatus[];
   refresh: () => void;
 }) => {
+  const t = useTranslations("admin.documents");
   const [page, setPage] = useState(1);
 
   return (
@@ -97,9 +103,9 @@ export const DocumentFeedbackTable = ({
       <Table className="overflow-visible">
         <TableHeader>
           <TableRow>
-            <TableHead>Document Name</TableHead>
-            <TableHead>Is Searchable?</TableHead>
-            <TableHead>Score</TableHead>
+            <TableHead>{t("feedback.table.name.header")}</TableHead>
+            <TableHead>{t("feedback.table.searchable.header")}</TableHead>
+            <TableHead>{t("feedback.table.score.header")}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -126,9 +132,9 @@ export const DocumentFeedbackTable = ({
                           refresh();
                         } else {
                           toast.error(
-                            `Error updating hidden status - ${getErrorMsg(
-                              response
-                            )}`
+                            t("feedback.updateHiddenFailed.toast", {
+                              detail: await getErrorMsg(response),
+                            })
                           );
                         }
                       }}

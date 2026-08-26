@@ -1,5 +1,6 @@
 "use client";
 import { use } from "react";
+import { useTranslations } from "next-intl";
 
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { refreshDocumentSets, useDocumentSets } from "../hooks";
@@ -15,6 +16,7 @@ import { useSettings } from "@/lib/settings/hooks";
 const route = ADMIN_ROUTES.DOCUMENT_SETS;
 
 function Main({ documentSetId }: { documentSetId: number }) {
+  const t = useTranslations("admin.documents");
   const router = useRouter();
   const { vectorDbEnabled } = useSettings();
 
@@ -41,7 +43,7 @@ function Main({ documentSetId }: { documentSetId: number }) {
   if (documentSetsError || !documentSets) {
     return (
       <ErrorCallout
-        errorTitle="Failed to fetch document sets"
+        errorTitle={t("sets.fetchSetsFailed.title")}
         errorMsg={documentSetsError}
       />
     );
@@ -50,7 +52,7 @@ function Main({ documentSetId }: { documentSetId: number }) {
   if (vectorDbEnabled && (ccPairsError || !ccPairs)) {
     return (
       <ErrorCallout
-        errorTitle="Failed to fetch Connectors"
+        errorTitle={t("sets.fetchConnectorsFailed.title")}
         errorMsg={ccPairsError}
       />
     );
@@ -62,8 +64,8 @@ function Main({ documentSetId }: { documentSetId: number }) {
   if (!documentSet) {
     return (
       <ErrorCallout
-        errorTitle="Document set not found"
-        errorMsg={`Document set with id ${documentSetId} not found`}
+        errorTitle={t("sets.notFound.title")}
+        errorMsg={t("sets.notFound.message", { id: String(documentSetId) })}
       />
     );
   }
@@ -85,6 +87,7 @@ function Main({ documentSetId }: { documentSetId: number }) {
 export default function Page(props: {
   params: Promise<{ documentSetId: string }>;
 }) {
+  const t = useTranslations("admin.documents");
   const params = use(props.params);
   const documentSetId = parseInt(params.documentSetId);
 
@@ -92,7 +95,7 @@ export default function Page(props: {
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={route.icon}
-        title="Edit Document Set"
+        title={t("sets.edit.header.title")}
         divider
         backButton
       />

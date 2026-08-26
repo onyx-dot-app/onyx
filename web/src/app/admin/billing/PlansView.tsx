@@ -18,6 +18,7 @@ import {
   SvgUserManage,
   SvgUsers,
 } from "@opal/icons";
+import { useTranslations } from "next-intl";
 import "@/app/admin/billing/billing.css";
 import type { IconProps } from "@opal/types";
 import Card from "@/refresh-components/cards/Card";
@@ -52,31 +53,6 @@ interface PlanConfig {
 }
 
 // ----------------------------------------------------------------------------
-// Plan Features
-// ----------------------------------------------------------------------------
-
-const BUSINESS_FEATURES: PlanFeature[] = [
-  { icon: SvgFiles, text: "Inherit Document Permissions" },
-  { icon: SvgHistory, text: "Query History and Usage Dashboard" },
-  { icon: SvgShield, text: "Role Based Access Control (RBAC)" },
-  { icon: SvgLock, text: "Encryption of Secrets" },
-  { icon: SvgKey, text: "Service Account API Keys" },
-  { icon: SvgHardDrive, text: "Self-hosting (Optional)" },
-  { icon: SvgPaintBrush, text: "Custom Theming" },
-];
-
-const ENTERPRISE_FEATURES: PlanFeature[] = [
-  { icon: SvgUsers, text: "SCIM / Group Sync" },
-  { icon: SvgDashboard, text: "Full White-labeling" },
-  { icon: SvgUserManage, text: "Custom Roles and Permissions" },
-  { icon: SvgSliders, text: "Configurable Usage Limits" },
-  { icon: SvgShareWebhook, text: "Hook Extensions" },
-  { icon: SvgServer, text: "Custom Deployments" },
-  { icon: SvgGlobe, text: "Region-Specific Data Processing" },
-  { icon: SvgHeadsetMic, text: "Enterprise SLAs and Priority Support" },
-];
-
-// ----------------------------------------------------------------------------
 // PlanCard (inlined)
 // ----------------------------------------------------------------------------
 
@@ -94,12 +70,14 @@ function PlanCard({
   isCurrentPlan,
   hideFeatures,
 }: PlanConfig & { hideFeatures?: boolean }) {
+  const t = useTranslations("admin.billing");
+
   return (
     <Card
       padding={0}
       gap={0}
       alignItems="stretch"
-      aria-label={title + " plan card"}
+      aria-label={t("plans.card.ariaLabel", { plan: title })}
       className="plan-card"
     >
       <Section
@@ -148,7 +126,7 @@ function PlanCard({
             // the shared 2.25rem box now do directly.
             <div className="w-full flex items-center justify-center rounded-12 p-2 bg-background-tint-00">
               <Text mainUiAction text03>
-                Your Current Plan
+                {t("plans.currentPlan.label")}
               </Text>
             </div>
           ) : href ? (
@@ -170,7 +148,7 @@ function PlanCard({
             // the shared 2.25rem box now do directly.
             <div className="w-full flex items-center justify-center rounded-12 p-2 bg-background-tint-00">
               <Text mainUiAction text03>
-                Included in your plan
+                {t("plans.includedInPlan.label")}
               </Text>
             </div>
           )}
@@ -240,30 +218,60 @@ export default function PlansView({
   onCheckout,
   hideFeatures,
 }: PlansViewProps) {
+  const t = useTranslations("admin.billing");
+
+  const businessFeatures: PlanFeature[] = [
+    { icon: SvgFiles, text: t("plans.business.features.documentPermissions") },
+    { icon: SvgHistory, text: t("plans.business.features.queryHistory") },
+    { icon: SvgShield, text: t("plans.business.features.rbac") },
+    { icon: SvgLock, text: t("plans.business.features.encryption") },
+    { icon: SvgKey, text: t("plans.business.features.apiKeys") },
+    { icon: SvgHardDrive, text: t("plans.business.features.selfHosting") },
+    { icon: SvgPaintBrush, text: t("plans.business.features.theming") },
+  ];
+
+  const enterpriseFeatures: PlanFeature[] = [
+    { icon: SvgUsers, text: t("plans.enterprise.features.scim") },
+    { icon: SvgDashboard, text: t("plans.enterprise.features.whiteLabeling") },
+    { icon: SvgUserManage, text: t("plans.enterprise.features.customRoles") },
+    { icon: SvgSliders, text: t("plans.enterprise.features.usageLimits") },
+    {
+      icon: SvgShareWebhook,
+      text: t("plans.enterprise.features.hookExtensions"),
+    },
+    {
+      icon: SvgServer,
+      text: t("plans.enterprise.features.customDeployments"),
+    },
+    {
+      icon: SvgGlobe,
+      text: t("plans.enterprise.features.regionalProcessing"),
+    },
+    { icon: SvgHeadsetMic, text: t("plans.enterprise.features.support") },
+  ];
+
   const plans: PlanConfig[] = [
     {
       icon: SvgUsers,
-      title: "Business",
-      pricing: "$20",
-      description:
-        "per seat/month billed annually\nor $25 per seat if billed monthly",
-      buttonLabel: "Get Business Plan",
+      title: t("plans.business.title"),
+      pricing: t("plans.business.pricing"),
+      description: t("plans.business.description"),
+      buttonLabel: t("plans.business.button.label"),
       buttonVariant: "primary",
       onClick: hasLicense ? undefined : onCheckout,
-      features: BUSINESS_FEATURES,
-      featuresPrefix: "Get more work done with AI for your team.",
+      features: businessFeatures,
+      featuresPrefix: t("plans.business.featuresPrefix"),
       isCurrentPlan: !!hasSubscription,
     },
     {
       icon: SvgOrganization,
-      title: "Enterprise",
-      description:
-        "Flexible pricing & deployment options\nfor large organizations",
-      buttonLabel: "Contact Sales",
+      title: t("plans.enterprise.title"),
+      description: t("plans.enterprise.description"),
+      buttonLabel: t("plans.enterprise.button.label"),
       buttonVariant: "secondary",
       href: SALES_URL,
-      features: ENTERPRISE_FEATURES,
-      featuresPrefix: "Everything in Business Plan, plus:",
+      features: enterpriseFeatures,
+      featuresPrefix: t("plans.enterprise.featuresPrefix"),
       isCurrentPlan: !!hasLicense && !hasSubscription,
     },
   ];

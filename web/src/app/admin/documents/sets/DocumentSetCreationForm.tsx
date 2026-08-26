@@ -1,6 +1,7 @@
 "use client";
 
 import { Form, Formik } from "formik";
+import { useTranslations } from "next-intl";
 import { mutate } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import * as Yup from "yup";
@@ -40,6 +41,7 @@ export const DocumentSetCreationForm = ({
   onClose,
   existingDocumentSet,
 }: SetCreationPopupProps) => {
+  const t = useTranslations("admin.documents");
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const isUpdate = existingDocumentSet !== undefined;
   const [localCcPairs, setLocalCcPairs] = useState(ccPairs);
@@ -76,7 +78,7 @@ export const DocumentSetCreationForm = ({
         }}
         validationSchema={Yup.object()
           .shape({
-            name: Yup.string().required("Please enter a name for the set"),
+            name: Yup.string().required(t("sets.form.name.required")),
             description: Yup.string().optional(),
             cc_pair_ids: Yup.array().of(Yup.number().required()),
             federated_connectors: Yup.array().of(
@@ -88,7 +90,7 @@ export const DocumentSetCreationForm = ({
           })
           .test(
             "at-least-one-connector",
-            "Please select at least one connector (regular or federated)",
+            t("sets.form.connectors.required"),
             function (values) {
               const hasRegularConnectors =
                 values.cc_pair_ids && values.cc_pair_ids.length > 0;
@@ -120,8 +122,8 @@ export const DocumentSetCreationForm = ({
           if (response.ok) {
             toast.success(
               isUpdate
-                ? "Successfully updated document set!"
-                : "Successfully created document set!"
+                ? t("sets.form.updated.toast")
+                : t("sets.form.created.toast")
             );
             await Promise.all([
               mutate(SWR_KEYS.documentSets),
@@ -132,8 +134,8 @@ export const DocumentSetCreationForm = ({
             const errorMsg = await response.text();
             toast.error(
               isUpdate
-                ? `Error updating document set - ${errorMsg}`
-                : `Error creating document set - ${errorMsg}`
+                ? t("sets.form.updateFailed.toast", { detail: errorMsg })
+                : t("sets.form.createFailed.toast", { detail: errorMsg })
             );
           }
         }}
@@ -178,13 +180,13 @@ export const DocumentSetCreationForm = ({
               <div className="space-y-4 w-full">
                 <TextFormField
                   name="name"
-                  label="Name:"
-                  placeholder="A name for the document set"
+                  label={t("sets.form.name.label")}
+                  placeholder={t("sets.form.name.placeholder")}
                 />
                 <TextFormField
                   name="description"
-                  label="Description:"
-                  placeholder="Describe what the document set represents"
+                  label={t("sets.form.description.label")}
+                  placeholder={t("sets.form.description.placeholder")}
                   optional={true}
                 />
 
@@ -204,39 +206,37 @@ export const DocumentSetCreationForm = ({
                   <>
                     <ConnectorMultiSelect
                       name="cc_pair_ids"
-                      label={`Connectors available to ${
-                        props.values.groups.length > 1
-                          ? "the selected groups"
-                          : "the selected group"
-                      }`}
+                      label={t("sets.form.scopedConnectors.label", {
+                        count: props.values.groups.length,
+                      })}
                       connectors={visibleCcPairs}
                       selectedIds={props.values.cc_pair_ids}
                       onChange={(selectedIds) => {
                         props.setFieldValue("cc_pair_ids", selectedIds);
                       }}
-                      placeholder="Search for connectors..."
+                      placeholder={t("sets.form.connectors.placeholder")}
                     />
 
                     <NonSelectableConnectors
                       connectors={nonVisibleCcPairs}
-                      title={`Connectors not available to the ${
-                        props.values.groups.length > 1
-                          ? "groups you have selected"
-                          : "group you have selected"
-                      }`}
-                      description="Only connectors that are directly assigned to the group you are trying to add the document set to will be available."
+                      title={t("sets.form.unavailableConnectors.title", {
+                        count: props.values.groups.length,
+                      })}
+                      description={t(
+                        "sets.form.unavailableConnectors.description"
+                      )}
                     />
                   </>
                 ) : (
                   <ConnectorMultiSelect
                     name="cc_pair_ids"
-                    label="Pick your connectors"
+                    label={t("sets.form.connectors.label")}
                     connectors={visibleCcPairs}
                     selectedIds={props.values.cc_pair_ids}
                     onChange={(selectedIds) => {
                       props.setFieldValue("cc_pair_ids", selectedIds);
                     }}
-                    placeholder="Search for connectors..."
+                    placeholder={t("sets.form.connectors.placeholder")}
                   />
                 )}
 
@@ -246,7 +246,7 @@ export const DocumentSetCreationForm = ({
                     <div className="my-4 border-t border-border-02" />
                     <FederatedConnectorSelector
                       name="federated_connectors"
-                      label="Federated Connectors"
+                      label={t("sets.form.federatedConnectors.label")}
                       federatedConnectors={federatedConnectors}
                       selectedConfigs={props.values.federated_connectors}
                       onChange={(selectedConfigs) => {
@@ -255,7 +255,9 @@ export const DocumentSetCreationForm = ({
                           selectedConfigs
                         );
                       }}
-                      placeholder="Search for federated connectors..."
+                      placeholder={t(
+                        "sets.form.federatedConnectors.placeholder"
+                      )}
                     />
                   </>
                 )}
@@ -268,7 +270,9 @@ export const DocumentSetCreationForm = ({
                     disabled={props.isSubmitting}
                     width="full"
                   >
-                    {isUpdate ? "Update Document Set" : "Create Document Set"}
+                    {isUpdate
+                      ? t("sets.form.submitButton.updateLabel")
+                      : t("sets.form.submitButton.createLabel")}
                   </Button>
                 </div>
               </div>

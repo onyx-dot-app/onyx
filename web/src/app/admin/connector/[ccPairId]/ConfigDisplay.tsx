@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useLocale, useTranslations } from "next-intl";
 
 import { ValidSources } from "@/lib/types";
 import { Section } from "@/layouts/general-layouts";
@@ -47,6 +48,7 @@ interface ConfigItemProps {
 }
 
 function ConfigItem({ label, value, onEdit }: ConfigItemProps) {
+  const t = useTranslations("admin.connector");
   const [isExpanded, setIsExpanded] = useState(false);
   const isExpandable = Array.isArray(value) && value.length > 5;
 
@@ -84,7 +86,7 @@ function ConfigItem({ label, value, onEdit }: ConfigItemProps) {
     } else if (typeof value === "boolean") {
       return (
         <Text secondaryBody text03 className="text-right">
-          {value ? "True" : "False"}
+          {value ? t("configItem.booleanTrue") : t("configItem.booleanFalse")}
         </Text>
       );
     }
@@ -122,7 +124,9 @@ function ConfigItem({ label, value, onEdit }: ConfigItemProps) {
             icon={isExpanded ? SvgChevronUp : SvgChevronDown}
             onClick={() => setIsExpanded(!isExpanded)}
           >
-            {isExpanded ? "Show less" : `Show all (${value.length} items)`}
+            {isExpanded
+              ? t("configItem.showLess.label")
+              : t("configItem.showAll.label", { count: value.length })}
           </Button>
         )}
         {onEdit && (
@@ -130,7 +134,7 @@ function ConfigItem({ label, value, onEdit }: ConfigItemProps) {
             prominence="tertiary"
             icon={SvgEdit}
             onClick={onEdit}
-            tooltip="Edit"
+            tooltip={t("configItem.edit.tooltip")}
           />
         )}
       </Section>
@@ -152,19 +156,24 @@ export function AdvancedConfigDisplay({
   onRefreshEdit?: () => void;
   onPruningEdit?: () => void;
 }) {
+  const t = useTranslations("admin.connector");
+  const locale = useLocale();
+
   const formatRefreshFrequency = (seconds: number | null): string => {
     if (seconds === null) return "-";
     const totalMinutes = seconds / 60;
 
     // If it's 60 minutes or more and evenly divisible by 60, show in hours
     if (totalMinutes >= 60 && totalMinutes % 60 === 0) {
-      const hours = totalMinutes / 60;
-      return `${hours} hour${hours !== 1 ? "s" : ""}`;
+      return t("advancedConfig.duration.hours", {
+        count: totalMinutes / 60,
+      });
     }
 
     // Otherwise show in minutes
-    const minutes = Math.round(totalMinutes);
-    return `${minutes} minute${minutes !== 1 ? "s" : ""}`;
+    return t("advancedConfig.duration.minutes", {
+      count: Math.round(totalMinutes),
+    });
   };
   const formatPruneFrequency = (seconds: number | null): string => {
     if (seconds === null) return "-";
@@ -172,25 +181,25 @@ export function AdvancedConfigDisplay({
 
     // If less than 1 hour, show in minutes
     if (totalHours < 1) {
-      const minutes = Math.round(seconds / 60);
-      return `${minutes} minute${minutes !== 1 ? "s" : ""}`;
+      return t("advancedConfig.duration.minutes", {
+        count: Math.round(seconds / 60),
+      });
     }
 
     const hours = Math.round(totalHours);
 
     // If it's 24 hours or more and evenly divisible by 24, show in days
     if (hours >= 24 && hours % 24 === 0) {
-      const days = hours / 24;
-      return `${days} day${days !== 1 ? "s" : ""}`;
+      return t("advancedConfig.duration.days", { count: hours / 24 });
     }
 
     // Otherwise show in hours
-    return `${hours} hour${hours !== 1 ? "s" : ""}`;
+    return t("advancedConfig.duration.hours", { count: hours });
   };
 
   const formatDate = (date: Date | null): string => {
     if (date === null) return "-";
-    return date.toLocaleString("en-US", {
+    return date.toLocaleString(locale, {
       year: "numeric",
       month: "long",
       day: "numeric",
@@ -202,17 +211,17 @@ export function AdvancedConfigDisplay({
 
   const items = [
     pruneFreq !== null && {
-      label: "Pruning Frequency",
+      label: t("advancedConfig.pruningFrequency.label"),
       value: formatPruneFrequency(pruneFreq),
       onEdit: onPruningEdit,
     },
     refreshFreq && {
-      label: "Refresh Frequency",
+      label: t("advancedConfig.refreshFrequency.label"),
       value: formatRefreshFrequency(refreshFreq),
       onEdit: onRefreshEdit,
     },
     indexingStart && {
-      label: "Indexing Start",
+      label: t("advancedConfig.indexingStart.label"),
       value: formatDate(indexingStart),
     },
   ].filter(Boolean) as ConfigItemProps[];
