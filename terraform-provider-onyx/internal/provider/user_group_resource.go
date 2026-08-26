@@ -111,11 +111,17 @@ func (r *userGroupResource) Schema(ctx context.Context, _ resource.SchemaRequest
 				Optional:    true,
 				Computed:    true,
 				Default:     setdefault.StaticValue(emptyStringSet()),
-				MarkdownDescription: "Permission grants, for example `MANAGE_CONNECTORS`. The " +
-					"configuration owns the list, so leaving it out revokes every grant the group has.\n\n" +
+				MarkdownDescription: "Permission grants, written as Onyx's own tokens: " +
+					"`manage:connectors`, `manage:document_sets`, `manage:llms`, `manage:actions`, " +
+					"`manage:agents`, `add:agents`, `manage:user_groups`, `manage:bots`, " +
+					"`manage:service_account_api_keys`, `create:user_api_keys`, " +
+					"`read:agent_analytics`, `read:query_history`. Note these are the wire values, " +
+					"not the enum names.\n\n" +
+					"The configuration owns the list, so leaving it out revokes every grant the " +
+					"group has.\n\n" +
 					"Only toggleable permissions may be set. Onyx manages the rest itself " +
-					"(`BASIC_ACCESS`, `FULL_ADMIN_PANEL_ACCESS`, `CRAFT_SANDBOX`, `MANAGE_SKILLS` and " +
-					"the implied set); they are neither readable here nor writable, and naming one is " +
+					"(`basic`, `admin`, `craft_sandbox`, `manage:skills` and the implied read " +
+					"tokens); they are neither read back here nor writable, and naming one is " +
 					"refused. Writing this attribute needs full admin access, so the provider only " +
 					"calls the endpoint when the set actually changes.",
 			},
