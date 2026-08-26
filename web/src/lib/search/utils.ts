@@ -1,30 +1,5 @@
-import { Tag, ValidSources } from "../types";
-import {
-  Filters,
-  MinimalOnyxDocument,
-  OnyxDocument,
-  SourceMetadata,
-} from "./interfaces";
-import { DateRangePickerValue } from "@/refresh-components/DateRangePicker";
-
-export const buildFilters = (
-  sources: SourceMetadata[],
-  documentSets: string[],
-  timeRange: DateRangePickerValue | null,
-  tags: Tag[]
-): Filters => {
-  const filters = {
-    source_type:
-      sources.length > 0 ? sources.map((source) => source.internalName) : null,
-    document_set: documentSets.length > 0 ? documentSets : null,
-    updated_at_range: timeRange?.from
-      ? { start: timeRange.from, end: null }
-      : null,
-    tags: tags,
-  };
-
-  return filters;
-};
+import { ValidSources } from "@/lib/types";
+import { MinimalOnyxDocument, OnyxDocument } from "@/lib/search/interfaces";
 
 // If we have a link, open it in a new tab (including if it's a file)
 // If above fails and we have a file, update the presenting document

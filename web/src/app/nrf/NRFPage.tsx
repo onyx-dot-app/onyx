@@ -8,7 +8,8 @@ import { toast } from "@opal/layouts";
 import AppInputBar, { AppInputBarHandle } from "@/sections/input/AppInputBar";
 import { Button } from "@opal/components";
 import { Modal } from "@opal/components";
-import { useFilters, useLlmManager } from "@/lib/hooks";
+import { useLlmManager } from "@/lib/hooks";
+import { useSearchFilters } from "@/lib/searchFilters/hooks";
 import Dropzone from "react-dropzone";
 import { getPanelOrigin } from "@/lib/extension/utils";
 import { sendSetDefaultNewTabMessage } from "@/lib/extension/svc";
@@ -62,7 +63,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   const { setUseOnyxAsNewTab } = useNRFPreferences();
 
   const searchParams = useSearchParams();
-  const filterManager = useFilters();
+  const filterManager = useSearchFilters();
   const { user, authTypeMetadata } = useUser();
 
   // Chat sessions

@@ -1,8 +1,5 @@
-import {
-  Filters,
-  DocumentInfoPacket,
-  StreamStopInfo,
-} from "@/lib/search/interfaces";
+import { DocumentInfoPacket, StreamStopInfo } from "@/lib/search/interfaces";
+import type { Filters } from "@/lib/searchFilters/types";
 import { handleSSEStream } from "@/lib/search/streamingUtils";
 import { ReasoningEffortOverride } from "@/lib/languageModels/types";
 import { FeedbackType } from "@/app/app/interfaces";

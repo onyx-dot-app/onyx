@@ -30,7 +30,8 @@ import { Switch } from "@opal/components";
 import { Button } from "@opal/components";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import AppInputBar from "@/sections/input/AppInputBar";
-import { useFilters, useLlmManager } from "@/lib/hooks";
+import { useLlmManager } from "@/lib/hooks";
+import { useSearchFilters } from "@/lib/searchFilters/hooks";
 import { formatMmDdYyyy } from "@/lib/dateUtils";
 import { useProjectsContext } from "@/lib/projects/providers";
 import { FileCard } from "@/sections/cards/FileCard";
@@ -128,7 +129,7 @@ interface AgentChatInputProps {
 }
 function AgentChatInput({ agent, onSubmit }: AgentChatInputProps) {
   const llmManager = useLlmManager(undefined, agent);
-  const filterManager = useFilters();
+  const filterManager = useSearchFilters();
 
   return (
     <AppInputBar

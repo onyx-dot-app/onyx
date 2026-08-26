@@ -1,9 +1,9 @@
 import {
   OnyxDocument,
-  Filters,
   SearchOnyxDocument,
   StreamStopReason,
 } from "@/lib/search/interfaces";
+import type { Filters } from "@/lib/searchFilters/types";
 import { Packet } from "./services/streamingModels";
 import { ReasoningEffortOverride } from "@/lib/languageModels/types";
 

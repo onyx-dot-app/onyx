@@ -16,7 +16,7 @@ import { useAgentPreferences } from "@/lib/agents/hooks";
 import { MinimalAgent } from "@/lib/agents/types";
 import { useUser } from "@/providers/UserProvider";
 import { hasPermission } from "@/lib/permissions";
-import { FilterManager, useSourcePreferences } from "@/lib/hooks";
+import { useSourcePreferences } from "@/lib/searchFilters/hooks";
 import MCPApiKeyModal from "@/components/chat/MCPApiKeyModal";
 import { Permission, ValidSources } from "@/lib/types";
 import { NO_DISABLED_TOOLS } from "@/lib/tools/constants";
@@ -41,6 +41,7 @@ import {
   saveMCPUserCredentials,
   startMCPUserOAuth,
 } from "@/lib/tools/svc";
+import type { SearchFilters } from "@/lib/searchFilters/types";
 
 /**
  * The actions popover.
@@ -55,7 +56,7 @@ import {
  */
 export interface ToolsPopoverProps {
   agent: MinimalAgent;
-  filterManager: FilterManager;
+  filterManager: SearchFilters;
   disabled?: boolean;
 }
 

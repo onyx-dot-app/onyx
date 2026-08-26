@@ -22,7 +22,7 @@ import {
   SEARCH_PARAM_NAMES,
   shouldSubmitOnLoad,
 } from "@/app/app/services/searchParams";
-import { FilterManager } from "@/lib/hooks";
+
 import { OnyxDocument } from "@/lib/search/interfaces";
 import {
   useChatSessionStore,
@@ -36,6 +36,7 @@ import {
   getProjectFilesForSession,
 } from "@/lib/projects/svc";
 import { AppInputBarHandle } from "@/sections/input/AppInputBar";
+import type { SearchFilters } from "@/lib/searchFilters/types";
 
 // Runs currently being re-attached; module-level so effect re-runs (incl.
 // strict mode) can't start a second tail for the same run.
@@ -44,7 +45,7 @@ const resumingRuns = new Set<number>();
 interface UseChatSessionControllerProps {
   existingChatSessionId: string | null;
   searchParams: ReadonlyURLSearchParams;
-  filterManager: FilterManager;
+  filterManager: SearchFilters;
   firstMessage?: string;
 
   // UI state setters
