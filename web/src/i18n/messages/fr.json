@@ -4425,11 +4425,6 @@
         "light": "Clair",
         "title": "Mode de couleur"
       },
-      "language": {
-        "description": "Sélectionnez la langue de l'interface.",
-        "title": "Langue",
-        "updateFailed": "Impossible de mettre à jour la préférence de langue"
-      },
       "title": "Apparence"
     },
     "chats": {
@@ -4534,6 +4529,16 @@
       "url": {
         "description": "Utilisez cette URL de base avec les clients OpenAI et Anthropic compatibles.",
         "title": "URL du Gateway"
+      }
+    },
+    "language": {
+      "displayLanguage": {
+        "description": "Sélectionnez la langue de l'interface.",
+        "title": "Langue d'affichage"
+      },
+      "title": "Langue",
+      "toasts": {
+        "updateFailed": "Impossible de mettre à jour la préférence de langue"
       }
     },
     "memory": {

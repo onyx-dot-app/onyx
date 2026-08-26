@@ -4425,11 +4425,6 @@
         "light": "Hell",
         "title": "Farbmodus"
       },
-      "language": {
-        "description": "Wählen Sie die Sprache für die Benutzeroberfläche.",
-        "title": "Sprache",
-        "updateFailed": "Die Spracheinstellung konnte nicht aktualisiert werden"
-      },
       "title": "Erscheinungsbild"
     },
     "chats": {
@@ -4534,6 +4529,16 @@
       "url": {
         "description": "Verwenden Sie diese Basis-URL mit kompatiblen OpenAI- und Anthropic-Clients.",
         "title": "Gateway-URL"
+      }
+    },
+    "language": {
+      "displayLanguage": {
+        "description": "Wählen Sie die Sprache für die Benutzeroberfläche.",
+        "title": "Anzeigesprache"
+      },
+      "title": "Sprache",
+      "toasts": {
+        "updateFailed": "Die Spracheinstellung konnte nicht aktualisiert werden"
       }
     },
     "memory": {

@@ -4425,11 +4425,6 @@
         "light": "Light",
         "title": "Color Mode"
       },
-      "language": {
-        "description": "Select the language for the UI.",
-        "title": "Language",
-        "updateFailed": "Failed to update language preference"
-      },
       "title": "Appearance"
     },
     "chats": {
@@ -4534,6 +4529,16 @@
       "url": {
         "description": "Use this base URL with compatible OpenAI and Anthropic clients.",
         "title": "Gateway URL"
+      }
+    },
+    "language": {
+      "displayLanguage": {
+        "description": "Select the language for the UI.",
+        "title": "Display Language"
+      },
+      "title": "Language",
+      "toasts": {
+        "updateFailed": "Failed to update language preference"
       }
     },
     "memory": {
