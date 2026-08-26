@@ -8099,6 +8099,9 @@
         "elevenlabsTts": {
           "subtitle": "ElevenLabs のテキスト読み上げ API。"
         },
+        "openaiCompatibleStt": {
+          "subtitle": "OpenAI 互換 API を使用した文字起こし。"
+        },
         "tts1": {
           "subtitle": "速度に最適化された OpenAI のテキスト読み上げモデル。"
         },
@@ -8110,9 +8113,17 @@
         }
       },
       "setupModal": {
+        "apiBase": {
+          "description": "サーバーのルート URL、または /v1 で終わる API ベース URL を入力してください。",
+          "invalid": "有効な API ベース URL を入力してください",
+          "label": "API ベース URL",
+          "placeholder": "http://host.docker.internal:8000/v1",
+          "required": "API ベース URL は必須です"
+        },
         "apiKey": {
           "description": "モデルにアクセスするには、{provider} の [API キー]({url}) を貼り付けてください。",
           "label": "API キー",
+          "optionalDescription": "任意。サーバーで必要な場合のみ Bearer API キーを入力してください。",
           "placeholder": "API キー",
           "required": "API キーは必須です"
         },
@@ -8121,6 +8132,10 @@
         },
         "connectButton": {
           "label": "接続"
+        },
+        "compatibleInfo": {
+          "description": "Onyx は分割した音声を `/v1/audio/transcriptions` に送信します。OpenAI Realtime は使用しません。Onyx が Docker で動作し、サーバーがホスト上で動作する場合は、`127.0.0.1` ではなく `host.docker.internal` を使用してください。",
+          "title": "OpenAI 互換文字起こし"
         },
         "connectionTestFailed": {
           "message": "接続テストに失敗しました"
@@ -8145,7 +8160,10 @@
           "selfHostedCapExceeded": "セルフホストのエンドポイントは音声言語を最大 {cap} 個までサポートします（開始時に検出）"
         },
         "sttModel": {
-          "label": "STT モデル"
+          "description": "文字起こしサーバーが公開するモデル名を入力してください。",
+          "label": "STT モデル",
+          "placeholder": "whisper-1",
+          "required": "STT モデルは必須です"
         },
         "targetUri": {
           "description": "[Azure Portal（キーとエンドポイント）]({portalUrl}) に表示されるエンドポイントを貼り付けてください。Onyx はこの URL から音声リージョンを抽出します。例：`https://westus.api.cognitive.microsoft.com/` または `https://westus.tts.speech.microsoft.com/`。",

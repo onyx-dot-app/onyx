@@ -8099,6 +8099,9 @@
         "elevenlabsTts": {
           "subtitle": "ElevenLabs 文字转语音 API。"
         },
+        "openaiCompatibleStt": {
+          "subtitle": "通过 OpenAI 兼容 API 进行转录。"
+        },
         "tts1": {
           "subtitle": "OpenAI 针对速度优化的文字转语音模型。"
         },
@@ -8110,9 +8113,17 @@
         }
       },
       "setupModal": {
+        "apiBase": {
+          "description": "输入服务器根 URL，或以 /v1 结尾的 API 基础 URL。",
+          "invalid": "请输入有效的 API 基础 URL",
+          "label": "API 基础 URL",
+          "placeholder": "http://host.docker.internal:8000/v1",
+          "required": "API 基础 URL 为必填项"
+        },
         "apiKey": {
           "description": "粘贴来自 {provider} 的 [API 密钥]({url})，以访问您的模型。",
           "label": "API 密钥",
+          "optionalDescription": "可选。仅当服务器需要时，输入 Bearer API 密钥。",
           "placeholder": "API 密钥",
           "required": "API 密钥为必填项"
         },
@@ -8121,6 +8132,10 @@
         },
         "connectButton": {
           "label": "连接"
+        },
+        "compatibleInfo": {
+          "description": "Onyx 将分块音频发送到 `/v1/audio/transcriptions`。它不使用 OpenAI Realtime。如果 Onyx 在 Docker 中运行，而服务器在主机上运行，请使用 `host.docker.internal`，而不是 `127.0.0.1`。",
+          "title": "OpenAI 兼容转录"
         },
         "connectionTestFailed": {
           "message": "连接测试失败"
@@ -8145,7 +8160,10 @@
           "selfHostedCapExceeded": "自托管端点最多支持 {cap} 种语音语言（在开始时检测）"
         },
         "sttModel": {
-          "label": "STT 模型"
+          "description": "输入转录服务器公开的模型名称。",
+          "label": "STT 模型",
+          "placeholder": "whisper-1",
+          "required": "STT 模型为必填项"
         },
         "targetUri": {
           "description": "粘贴 [Azure Portal（密钥和终结点）]({portalUrl}) 中显示的终结点。Onyx 会从该 URL 中提取语音区域。示例：`https://westus.api.cognitive.microsoft.com/` 或 `https://westus.tts.speech.microsoft.com/`。",

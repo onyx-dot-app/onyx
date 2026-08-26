@@ -8099,6 +8099,9 @@
         "elevenlabsTts": {
           "subtitle": "واجهة ElevenLabs لتحويل النص إلى كلام."
         },
+        "openaiCompatibleStt": {
+          "subtitle": "نسخ صوتي عبر واجهة API متوافقة مع OpenAI."
+        },
         "tts1": {
           "subtitle": "نموذج OpenAI لتحويل النص إلى كلام محسّن للسرعة."
         },
@@ -8110,9 +8113,17 @@
         }
       },
       "setupModal": {
+        "apiBase": {
+          "description": "أدخل عنوان جذر الخادم أو عنوان API أساسيًا ينتهي بـ /v1.",
+          "invalid": "أدخل عنوان API أساسيًا صالحًا",
+          "label": "عنوان API الأساسي",
+          "placeholder": "http://host.docker.internal:8000/v1",
+          "required": "عنوان API الأساسي مطلوب"
+        },
         "apiKey": {
           "description": "الصق [مفتاح API]({url}) من {provider} للوصول إلى نماذجك.",
           "label": "مفتاح API",
+          "optionalDescription": "اختياري. أدخل مفتاح Bearer API فقط إذا كان الخادم يتطلبه.",
           "placeholder": "مفتاح API",
           "required": "مفتاح API مطلوب"
         },
@@ -8121,6 +8132,10 @@
         },
         "connectButton": {
           "label": "ربط"
+        },
+        "compatibleInfo": {
+          "description": "يرسل Onyx الصوت المجزأ إلى `/v1/audio/transcriptions`. ولا يستخدم OpenAI Realtime. إذا كان Onyx يعمل في Docker والخادم يعمل على المضيف، فاستخدم `host.docker.internal` بدلًا من `127.0.0.1`.",
+          "title": "نسخ متوافق مع OpenAI"
         },
         "connectionTestFailed": {
           "message": "فشل اختبار الاتصال"
@@ -8145,7 +8160,10 @@
           "selfHostedCapExceeded": "تدعم نقاط النهاية المستضافة ذاتيًا ما لا يزيد على {cap} لغات منطوقة (اكتشاف عند البدء)"
         },
         "sttModel": {
-          "label": "نموذج تحويل الكلام إلى نص"
+          "description": "أدخل اسم النموذج الذي يعرضه خادم النسخ.",
+          "label": "نموذج تحويل الكلام إلى نص",
+          "placeholder": "whisper-1",
+          "required": "نموذج تحويل الكلام إلى نص مطلوب"
         },
         "targetUri": {
           "description": "الصق نقطة النهاية الظاهرة في [بوابة Azure (المفاتيح ونقطة النهاية)]({portalUrl}). يستخرج Onyx منطقة الكلام من هذا العنوان. أمثلة: `https://westus.api.cognitive.microsoft.com/` أو `https://westus.tts.speech.microsoft.com/`.",
