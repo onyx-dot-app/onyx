@@ -55,7 +55,9 @@ type MCPServerWrite struct {
 	AdminCredentials        map[string]string `json:"admin_credentials,omitempty"`
 	AdminCredentialsChanged map[string]bool   `json:"admin_credentials_changed,omitempty"`
 
-	// Null leaves the stored access unchanged, so these stay pointers.
+	// Null leaves the stored access unchanged. They stay pointers so a caller
+	// can tell "no access list" (an empty list, which clears) apart from
+	// "do not touch it" (null).
 	IsPublic *bool     `json:"is_public,omitempty"`
 	Groups   *[]int64  `json:"groups,omitempty"`
 	Users    *[]string `json:"users,omitempty"`

@@ -67,17 +67,17 @@ resource "onyx_mcp_server" "tickets" {
 
 ### Optional
 
-- `admin_credentials` (Map of String, Sensitive) Values for the `auth_template_headers` placeholders, required with `auth_performer = "PER_USER"`. Onyx stores them against the identity that applied, not the server, and returns them masked.
+- `admin_credentials` (Map of String, Sensitive) Values for the `auth_template_headers` placeholders, required with `auth_performer = "PER_USER"` and rejected otherwise — a shared token is set through `api_token`. Onyx stores them against the identity that applied, not the server, and returns them masked.
 - `api_token` (String, Sensitive) Shared API token, for `auth_type = "API_TOKEN"` with `auth_performer = "ADMIN"`. Onyx returns it masked, so Terraform never reads it back: the configured value is the only record, and an imported server has none.
 - `auth_performer` (String) Who supplies the credentials: `ADMIN` for one shared token, `PER_USER` for a token each user provides.
-- `auth_template_headers` (Map of String, Sensitive) Headers Onyx sends to the server, for `auth_performer = "PER_USER"`. A `{placeholder}` in a value names a field each user fills in. Onyx writes this itself for a shared token.
+- `auth_template_headers` (Map of String, Sensitive) Headers Onyx sends to the server, for `auth_performer = "PER_USER"`. A `{placeholder}` in a value names a field each user fills in. Onyx writes this itself for a shared token, and keeps whatever it holds when a request states none, so switching a server from per-user to a shared token leaves the per-user headers in place. Recreate the server to start over.
 - `auth_type` (String) `NONE` or `API_TOKEN`.
 - `available_in_craft` (Boolean) Whether the Craft agent may use this server. Onyx keeps this on a different endpoint from the rest, so setting it costs a second call.
 - `description` (String) Free-text description.
-- `groups` (Set of Number) User group ids that may use the server when it is not public. Onyx refuses the built-in `Admin` group here and asks for a public server instead.
+- `groups` (Set of Number) User group ids that may use the server when it is not public. Onyx refuses the built-in `Admin` group here and asks for a public server instead. The configuration owns this list: removing it clears the groups on the server, including any added from the admin panel.
 - `is_public` (Boolean) Whether every user may use the server. When `false`, only `users` and `groups` may.
 - `transport` (String) `STREAMABLE_HTTP` or the deprecated `SSE`.
-- `users` (Set of String) User ids (UUIDs) that may use the server when it is not public.
+- `users` (Set of String) User ids (UUIDs) that may use the server when it is not public. The configuration owns this list: removing it clears the users on the server, including any added from the admin panel.
 
 ### Read-Only
 

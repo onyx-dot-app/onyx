@@ -2,9 +2,13 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"regexp"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/acctest"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
@@ -230,15 +234,106 @@ resource "onyx_mcp_server" "per_user" {
 				),
 			},
 			{
+				// Onyx keeps a stored header template whenever a request omits
+				// one, so switching to a shared token does not restore the
+				// default Authorization header. Pinned here because it is
+				// surprising, not because it is wanted.
+				Config: fmt.Sprintf(`
+resource "onyx_mcp_server" "per_user" {
+  name           = %q
+  server_url     = %q
+  auth_type      = "API_TOKEN"
+  auth_performer = "ADMIN"
+  api_token      = "a-shared-token"
+}
+`, name, mcpServerURL),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("onyx_mcp_server.per_user", "auth_performer", "ADMIN"),
+					resource.TestCheckResourceAttr("onyx_mcp_server.per_user", "auth_template_headers.X-Api-Key", "{api_key}"),
+					resource.TestCheckNoResourceAttr("onyx_mcp_server.per_user", "auth_template_headers.Authorization"),
+				),
+			},
+			{
 				ResourceName:      "onyx_mcp_server.per_user",
 				ImportState:       true,
 				ImportStateVerify: true,
-				// Onyx returns these masked, and partially rather than fully,
-				// so an imported server carries neither.
-				ImportStateVerifyIgnore: []string{"admin_credentials"},
+				// Onyx returns these masked, so an imported server carries none.
+				ImportStateVerifyIgnore: []string{"admin_credentials", "api_token"},
 			},
 		},
 	})
+}
+
+// Removing an optional access list from the configuration must clear it on the
+// server. Onyx reads a missing list as "leave it alone", so an omitted one
+// would come back on the next read and disagree with the plan.
+func TestAccMCPServerResourceClearsAnEmptiedUserList(t *testing.T) {
+	name := acctest.RandomWithPrefix("tf-acc-mcp-acl")
+	// The step configurations are built before resource.Test runs PreCheck, so
+	// the credentials have to be resolved here or the lookup below has none.
+	testAccPreCheck(t)
+	userID := testAccCurrentUserID(t)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		CheckDestroy:             testAccCheckMCPServerDestroyed(t),
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+resource "onyx_mcp_server" "acl" {
+  name       = %q
+  server_url = %q
+  is_public  = false
+  users      = [%q]
+}
+`, name, mcpServerURL, userID),
+				Check: resource.TestCheckResourceAttr("onyx_mcp_server.acl", "users.#", "1"),
+			},
+			{
+				// users is gone from the configuration, so it must be gone from
+				// the server too.
+				Config: fmt.Sprintf(`
+resource "onyx_mcp_server" "acl" {
+  name       = %q
+  server_url = %q
+  is_public  = false
+}
+`, name, mcpServerURL),
+				Check: resource.TestCheckNoResourceAttr("onyx_mcp_server.acl", "users.#"),
+			},
+		},
+	})
+}
+
+// testAccCurrentUserID returns the id of the user the acceptance suite
+// authenticates as, which is a real user row usable in an access list.
+func testAccCurrentUserID(t *testing.T) string {
+	t.Helper()
+	base := strings.TrimRight(testAccServerURL(), "/")
+	if p := strings.Trim(testAccAPIPrefix(), "/"); p != "" {
+		base += "/" + p
+	}
+	req, err := http.NewRequest(http.MethodGet, base+"/me", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer "+bootstrapKey)
+	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
+	if err != nil {
+		t.Fatalf("reading the current user failed: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	var body struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decoding the current user failed: %v", err)
+	}
+	if body.ID == "" {
+		t.Fatal("the current user has no id")
+	}
+	return body.ID
 }
 
 // A per-user server needs the header template naming the fields users fill in.

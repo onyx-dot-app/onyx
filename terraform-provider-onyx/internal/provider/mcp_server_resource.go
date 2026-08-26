@@ -123,15 +123,19 @@ func (r *mcpServerResource) Schema(_ context.Context, _ resource.SchemaRequest, 
 				ElementType: types.StringType,
 				MarkdownDescription: "Headers Onyx sends to the server, for " +
 					"`auth_performer = \"PER_USER\"`. A `{placeholder}` in a value names a field " +
-					"each user fills in. Onyx writes this itself for a shared token.",
+					"each user fills in. Onyx writes this itself for a shared token, and keeps " +
+					"whatever it holds when a request states none, so switching a server from " +
+					"per-user to a shared token leaves the per-user headers in place. Recreate " +
+					"the server to start over.",
 			},
 			"admin_credentials": schema.MapAttribute{
 				Optional:    true,
 				Sensitive:   true,
 				ElementType: types.StringType,
 				MarkdownDescription: "Values for the `auth_template_headers` placeholders, required " +
-					"with `auth_performer = \"PER_USER\"`. Onyx stores them against the identity " +
-					"that applied, not the server, and returns them masked.",
+					"with `auth_performer = \"PER_USER\"` and rejected otherwise — a shared token " +
+					"is set through `api_token`. Onyx stores them against the identity that " +
+					"applied, not the server, and returns them masked.",
 			},
 			"is_public": schema.BoolAttribute{
 				Optional:            true,
@@ -143,12 +147,16 @@ func (r *mcpServerResource) Schema(_ context.Context, _ resource.SchemaRequest, 
 				Optional:    true,
 				ElementType: types.Int64Type,
 				MarkdownDescription: "User group ids that may use the server when it is not public. " +
-					"Onyx refuses the built-in `Admin` group here and asks for a public server instead.",
+					"Onyx refuses the built-in `Admin` group here and asks for a public server " +
+					"instead. The configuration owns this list: removing it clears the groups on " +
+					"the server, including any added from the admin panel.",
 			},
 			"users": schema.SetAttribute{
-				Optional:            true,
-				ElementType:         types.StringType,
-				MarkdownDescription: "User ids (UUIDs) that may use the server when it is not public.",
+				Optional:    true,
+				ElementType: types.StringType,
+				MarkdownDescription: "User ids (UUIDs) that may use the server when it is not " +
+					"public. The configuration owns this list: removing it clears the users on " +
+					"the server, including any added from the admin panel.",
 			},
 			"available_in_craft": schema.BoolAttribute{
 				Optional: true,
@@ -192,10 +200,12 @@ func (r *mcpServerResource) ValidateConfig(ctx context.Context, req resource.Val
 		return
 	}
 
-	authType := config.AuthType.ValueString()
 	if config.AuthType.IsUnknown() {
 		return
 	}
+	// Null when the configuration leaves it out: the schema default applies to
+	// the plan, not to the configuration this reads.
+	authType := config.AuthType.ValueString()
 	if authType == "" {
 		authType = client.MCPAuthNone
 	}
@@ -218,10 +228,10 @@ func (r *mcpServerResource) ValidateConfig(ctx context.Context, req resource.Val
 		return
 	}
 
-	performer := config.AuthPerformer.ValueString()
 	if config.AuthPerformer.IsUnknown() {
 		return
 	}
+	performer := config.AuthPerformer.ValueString()
 	if performer == "" {
 		performer = client.MCPPerformerAdmin
 	}
@@ -267,6 +277,15 @@ func (r *mcpServerResource) ValidateConfig(ctx context.Context, req resource.Val
 				"Headers set on a shared-token server",
 				"Onyx writes the header template itself for a shared token. Drop "+
 					"`auth_template_headers`, or set `auth_performer` to \"PER_USER\" to write your own.",
+			)
+		}
+		if credentialsKnown && credentialsSet {
+			resp.Diagnostics.AddAttributeError(
+				path.Root("admin_credentials"),
+				"admin_credentials set on a shared-token server",
+				"A shared token is set through `api_token`, which Onyx stores as the "+
+					"credentials itself. Use `admin_credentials` only with "+
+					"`auth_performer = \"PER_USER\"`.",
 			)
 		}
 		return
@@ -335,7 +354,16 @@ func (r *mcpServerResource) writeFromModel(
 		IsPublic:         plan.IsPublic.ValueBoolPointer(),
 	}
 
-	if !plan.AuthTemplateHeaders.IsNull() && !plan.AuthTemplateHeaders.IsUnknown() {
+	// Only a per-user server states its own template; Onyx writes the shared one
+	// itself. The attribute is computed, so on a shared-token server the plan
+	// holds whatever Onyx last stored, and echoing that back would put a value
+	// Terraform never had in its configuration into the write body.
+	//
+	// This does not decide what the server ends up with. Onyx preserves the
+	// stored template whenever the request omits one, so a server switched from
+	// per-user to a shared token keeps the headers it already had either way.
+	perUser := plan.AuthPerformer.ValueString() == client.MCPPerformerPerUser
+	if perUser && !plan.AuthTemplateHeaders.IsNull() && !plan.AuthTemplateHeaders.IsUnknown() {
 		headers := map[string]string{}
 		diags.Append(plan.AuthTemplateHeaders.ElementsAs(ctx, &headers, false)...)
 		write.AuthTemplate = &client.MCPAuthTemplate{Headers: headers}
@@ -351,18 +379,26 @@ func (r *mcpServerResource) writeFromModel(
 		write.AdminCredentialsChanged = changed
 	}
 
-	// Null leaves the stored access alone, so only send a list the
-	// configuration actually states.
+	// Onyx reads a missing access list as "leave the stored one alone", but in a
+	// configuration a missing list means there is no access list. Send an empty
+	// one so the configuration stays authoritative: without this a list removed
+	// from the configuration survives on the server and comes back on the next
+	// read, disagreeing with the plan that had already dropped it.
+	groups := []int64{}
 	if !plan.Groups.IsNull() && !plan.Groups.IsUnknown() {
-		groups, groupDiags := int64SetValues(ctx, plan.Groups)
+		configured, groupDiags := int64SetValues(ctx, plan.Groups)
 		diags.Append(groupDiags...)
-		write.Groups = &groups
+		groups = configured
 	}
+	write.Groups = &groups
+
+	users := []string{}
 	if !plan.Users.IsNull() && !plan.Users.IsUnknown() {
-		users, userDiags := stringSetValues(ctx, plan.Users)
+		configured, userDiags := stringSetValues(ctx, plan.Users)
 		diags.Append(userDiags...)
-		write.Users = &users
+		users = configured
 	}
+	write.Users = &users
 
 	if diags.HasError() {
 		return client.MCPServerWrite{}, false

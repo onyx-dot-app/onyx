@@ -131,6 +131,14 @@ and on Onyx Cloud the tenant is embedded in the key itself.
   Onyx stores `admin_credentials` against the applying user rather than the server, so a
   Terraform-managed per-user server holds the API key's own credentials, not an
   administrator's. It also masks them partially rather than fully, unlike a shared token.
+- **An MCP server's header template is never reset.** Onyx keeps the stored template
+  whenever a write omits one, so switching a server from `PER_USER` to a shared token
+  leaves the per-user headers in place rather than restoring the default `Authorization`
+  header. Recreate the server to start over.
+- **`groups` and `users` on an MCP server are owned by the configuration.** Onyx reads a
+  missing list as "leave it alone", so the provider sends an empty one instead. Removing
+  either from the configuration clears it on the server, including entries added from the
+  admin panel.
 - **An MCP server URL cannot point at the Onyx host.** The SSRF guard refuses `localhost`
   and link-local addresses by name at every protection level, not only the strictest.
 - **The model list read is the API's display view.** It hides obsolete models and dated
