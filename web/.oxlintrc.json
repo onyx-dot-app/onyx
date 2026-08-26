@@ -102,6 +102,7 @@
         "src/app/app/page.tsx",
         "src/app/app/layout.tsx",
         "src/app/app/components/**",
+        "src/app/app/message/**",
         "src/app/app/shared/**"
       ],
       "rules": {

@@ -673,6 +673,503 @@
         }
       }
     },
+    "messages": {
+      "agentMessage": {
+        "stoppedGeneration": {
+          "text": "L'utilisateur a arrêté la génération"
+        }
+      },
+      "codeBlock": {
+        "copyButton": {
+          "copiedLabel": "Copié !",
+          "label": "Copier"
+        }
+      },
+      "customTool": {
+        "authFailedStatus": {
+          "text": "Échec de l'authentification de {toolName} (HTTP {statusCode})"
+        },
+        "completedStatus": {
+          "text": "{toolName} terminé"
+        },
+        "downloadFileLink": {
+          "label": "Télécharger"
+        },
+        "failedStatus": {
+          "text": "{toolName} a échoué (HTTP {statusCode})"
+        },
+        "fallbackName": {
+          "label": "Outil"
+        },
+        "fileItem": {
+          "label": "Fichier {index}"
+        },
+        "fileStatus": {
+          "text": "{toolName} a renvoyé un fichier"
+        },
+        "imagesStatus": {
+          "text": "{toolName} a renvoyé des images"
+        },
+        "openFileLink": {
+          "label": "Ouvrir"
+        },
+        "requestBlock": {
+          "label": "Requête"
+        },
+        "responseBlock": {
+          "label": "Réponse"
+        },
+        "runningStatus": {
+          "text": "{toolName} en cours d'exécution..."
+        },
+        "waitingIndicator": {
+          "text": "En attente de réponse..."
+        }
+      },
+      "customToolAuth": {
+        "card": {
+          "description": "Connectez {toolName} pour activer cet outil",
+          "title": "{toolName} n'est pas connecté"
+        },
+        "connectButton": {
+          "label": "Connecter"
+        }
+      },
+      "errorBanner": {
+        "apiError": {
+          "title": "Erreur d'API"
+        },
+        "authError": {
+          "title": "Erreur d'authentification"
+        },
+        "badRequest": {
+          "title": "Requête non valide"
+        },
+        "budgetExceeded": {
+          "title": "Budget dépassé"
+        },
+        "connectionError": {
+          "title": "Erreur de connexion"
+        },
+        "contentPolicy": {
+          "title": "Violation de la politique de contenu"
+        },
+        "genericError": {
+          "title": "Erreur"
+        },
+        "initializationError": {
+          "title": "Erreur d'initialisation"
+        },
+        "messageTooLong": {
+          "title": "Message trop long"
+        },
+        "model": {
+          "label": "Modèle : {model}"
+        },
+        "modelRefusal": {
+          "title": "Le modèle a refusé de répondre"
+        },
+        "modelWithProvider": {
+          "label": "Modèle : {model} ({provider})"
+        },
+        "permissionDenied": {
+          "title": "Permission refusée"
+        },
+        "rateLimitExceeded": {
+          "title": "Limite de fréquence dépassée"
+        },
+        "resourceNotFound": {
+          "title": "Ressource introuvable"
+        },
+        "serviceUnavailable": {
+          "title": "Service indisponible"
+        },
+        "stackTraceButton": {
+          "label": "Trace d'appels"
+        },
+        "tool": {
+          "label": "Outil : {tool}"
+        },
+        "toolError": {
+          "title": "Erreur d'outil"
+        },
+        "usageLimitReached": {
+          "title": "Limite d'utilisation atteinte"
+        },
+        "validationError": {
+          "title": "Erreur de validation"
+        }
+      },
+      "humanMessage": {
+        "editButton": {
+          "tooltip": "Modifier"
+        }
+      },
+      "imageTool": {
+        "defaultStatus": {
+          "text": "Génération d'images"
+        },
+        "emptyState": {
+          "text": "Aucune image générée"
+        },
+        "failedStatus": {
+          "text": "Échec de la génération d'images"
+        },
+        "generatedStatus": {
+          "text": "{count, plural, one {# image générée} other {# images générées}}"
+        },
+        "generatingImagesStatus": {
+          "text": "Génération des images..."
+        },
+        "generatingStatus": {
+          "text": "Génération de l'image..."
+        }
+      },
+      "memoizedLink": {
+        "questionFallback": {
+          "label": "Question"
+        }
+      },
+      "messageEditing": {
+        "cancelButton": {
+          "label": "Annuler"
+        },
+        "submitButton": {
+          "label": "Envoyer"
+        }
+      },
+      "messageSwitcher": {
+        "disabledWhileStreaming": {
+          "tooltip": "Attendez la fin du message de l'agent"
+        },
+        "nextButton": {
+          "tooltip": "Suivant"
+        },
+        "previousButton": {
+          "tooltip": "Précédent"
+        }
+      },
+      "multiModelPanel": {
+        "deselectButton": {
+          "tooltip": "Retirer la réponse préférée"
+        },
+        "hideButton": {
+          "tooltip": "Masquer la réponse"
+        },
+        "preferredResponse": {
+          "label": "Réponse préférée"
+        },
+        "selectButton": {
+          "label": "Sélectionner cette réponse"
+        },
+        "selectPanel": {
+          "ariaLabel": "Sélectionner la réponse de {model}"
+        },
+        "showButton": {
+          "tooltip": "Afficher la réponse"
+        },
+        "showPanel": {
+          "ariaLabel": "Afficher la réponse de {model}"
+        }
+      },
+      "rateLimitBanner": {
+        "defaultError": {
+          "text": "Vous avez atteint votre limite d'utilisation."
+        },
+        "resetsInDays": {
+          "text": "Réinitialisation dans {count, plural, one {# jour} other {# jours}} ({at})."
+        },
+        "resetsInHours": {
+          "text": "Réinitialisation dans {count, plural, one {# heure} other {# heures}} ({at})."
+        },
+        "resetsInMinutes": {
+          "text": "Réinitialisation dans {count, plural, one {# minute} other {# minutes}} ({at})."
+        },
+        "tryAgainNow": {
+          "text": "Vous pouvez réessayer maintenant."
+        }
+      },
+      "resubmit": {
+        "regenerateButton": {
+          "label": "Régénérer"
+        },
+        "responseError": {
+          "text": "Une erreur s'est produite avec la réponse."
+        }
+      },
+      "text": {
+        "thinkingPlaceholder": {
+          "text": "Réflexion"
+        }
+      },
+      "timeline": {
+        "codingAgent": {
+          "bashExit": {
+            "header": "Bash · sortie {exitCode}"
+          },
+          "bashRequest": {
+            "label": "Requête"
+          },
+          "bashResponse": {
+            "label": "Réponse"
+          },
+          "bashRunning": {
+            "header": "Bash · en cours…"
+          },
+          "bashTimedOut": {
+            "header": "Bash · délai dépassé"
+          },
+          "noOutput": {
+            "text": "Aucune sortie"
+          },
+          "response": {
+            "header": "Réponse"
+          },
+          "task": {
+            "header": "Tâche de code"
+          },
+          "taskWithRepo": {
+            "text": "{query}\n\nDépôt : {repo}"
+          },
+          "thinking": {
+            "header": "Réflexion"
+          }
+        },
+        "collapseButton": {
+          "ariaLabel": "Réduire la chronologie"
+        },
+        "deepResearchPlan": {
+          "expandable": {
+            "title": "Plan de recherche"
+          },
+          "generated": {
+            "status": "Plan généré"
+          },
+          "generating": {
+            "status": "Génération du plan"
+          }
+        },
+        "doneStep": {
+          "header": "Terminé"
+        },
+        "expandButton": {
+          "ariaLabel": "Développer la chronologie"
+        },
+        "fetch": {
+          "reading": {
+            "status": "Lecture"
+          }
+        },
+        "fileReader": {
+          "charRange": {
+            "label": "caractères {start, number}–{end, number} sur {total, number}"
+          },
+          "read": {
+            "status": "A lu {fileName} (caractères {start, number}–{end, number} sur {total, number})"
+          },
+          "reading": {
+            "status": "Lecture du fichier"
+          }
+        },
+        "generatedImages": {
+          "label": "{count, plural, one {# image générée} other {# images générées}}"
+        },
+        "header": {
+          "executingCode": {
+            "label": "Exécution du code"
+          },
+          "executingNamedTool": {
+            "label": "Exécution de {toolName}"
+          },
+          "executingTool": {
+            "label": "Exécution de l'outil"
+          },
+          "generatingImage": {
+            "label": "Génération de l'image..."
+          },
+          "generatingImages": {
+            "label": "Génération des images"
+          },
+          "generatingPlan": {
+            "label": "Génération du plan"
+          },
+          "reading": {
+            "label": "Lecture"
+          },
+          "readingFile": {
+            "label": "Lecture du fichier"
+          },
+          "researching": {
+            "label": "Recherche en cours"
+          },
+          "searchingWeb": {
+            "label": "Recherche sur le web"
+          },
+          "thinking": {
+            "label": "Réflexion"
+          },
+          "thinkingEllipsis": {
+            "label": "Réflexion..."
+          },
+          "updatingMemory": {
+            "label": "Mise à jour de la mémoire..."
+          }
+        },
+        "internalSearch": {
+          "noResults": {
+            "text": "Aucun résultat trouvé"
+          },
+          "reading": {
+            "status": "Lecture"
+          }
+        },
+        "interruptedThinking": {
+          "label": "Réflexion interrompue"
+        },
+        "memory": {
+          "default": {
+            "status": "Mémoire"
+          },
+          "disabled": {
+            "text": "Outil de mémoire désactivé"
+          },
+          "updating": {
+            "status": "Mise à jour de la mémoire"
+          },
+          "viewMemoriesButton": {
+            "tooltip": "Voir les mémoires"
+          }
+        },
+        "memoryTag": {
+          "added": {
+            "label": "Ajouté aux mémoires"
+          },
+          "updated": {
+            "label": "Mémoire mise à jour"
+          }
+        },
+        "python": {
+          "completed": {
+            "status": "Exécution Python terminée"
+          },
+          "default": {
+            "status": "Exécution Python"
+          },
+          "error": {
+            "label": "Erreur :"
+          },
+          "executing": {
+            "status": "Exécution du code Python..."
+          },
+          "failed": {
+            "status": "Échec de l'exécution Python"
+          },
+          "generatedFiles": {
+            "label": "{count, plural, one {# fichier généré} other {# fichiers générés}}"
+          },
+          "noOutput": {
+            "text": "Aucune sortie"
+          },
+          "output": {
+            "label": "Sortie :"
+          },
+          "runningCode": {
+            "label": "Exécution du code..."
+          },
+          "writingCode": {
+            "status": "Écriture du code..."
+          }
+        },
+        "reasoning": {
+          "fullText": {
+            "title": "Texte intégral"
+          },
+          "thinking": {
+            "status": "Réflexion"
+          }
+        },
+        "researchAgent": {
+          "report": {
+            "title": "Rapport de recherche"
+          },
+          "task": {
+            "title": "Tâche de recherche"
+          }
+        },
+        "searchChips": {
+          "showMore": {
+            "label": "+{count} de plus"
+          },
+          "viewFullQuery": {
+            "tooltip": "Voir le terme de recherche complet"
+          }
+        },
+        "stepsButton": {
+          "label": "{count, plural, one {# étape} other {# étapes}}"
+        },
+        "stoppedStep": {
+          "header": "Arrêté"
+        },
+        "thoughtDuration": {
+          "label": "A réfléchi pendant {duration}"
+        },
+        "thoughtUnknownDuration": {
+          "label": "A réfléchi pendant un certain temps"
+        },
+        "toggleRow": {
+          "ariaLabel": "Basculer la chronologie"
+        },
+        "toolNames": {
+          "codeInterpreter": "Interpréteur de code",
+          "codingAgent": "Agent de code",
+          "customTool": "Outil personnalisé",
+          "generateImage": "Générer une image",
+          "generatePlan": "Générer un plan",
+          "internalSearch": "Recherche interne",
+          "memory": "Mémoire",
+          "openUrls": "Ouvrir des URL",
+          "researchAgent": "Agent de recherche",
+          "thinking": "Réflexion",
+          "tool": "Outil",
+          "webSearch": "Recherche web"
+        },
+        "webSearch": {
+          "searching": {
+            "status": "Recherche sur le web"
+          }
+        }
+      },
+      "toolbar": {
+        "dislikeButton": {
+          "removeTooltip": "Retirer le je n'aime pas",
+          "tooltip": "Mauvaise réponse"
+        },
+        "likeButton": {
+          "removeTooltip": "Retirer le j'aime",
+          "tooltip": "Bonne réponse"
+        },
+        "regenerateButton": {
+          "tooltip": "Réessayer avec"
+        },
+        "sourcesTag": {
+          "label": "Sources"
+        }
+      },
+      "tts": {
+        "loadingButton": {
+          "tooltip": "Chargement..."
+        },
+        "playButton": {
+          "tooltip": "Lire à voix haute"
+        },
+        "playbackError": {
+          "toast": "Impossible de lire l'audio"
+        },
+        "stopButton": {
+          "tooltip": "Arrêter la lecture"
+        }
+      }
+    },
     "modelSelector": {
       "adminLimitedSetting": {
         "tooltip": "Votre administrateur limite ce modèle à un niveau de raisonnement plus bas."
