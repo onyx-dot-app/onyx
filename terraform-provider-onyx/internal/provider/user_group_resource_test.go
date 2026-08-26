@@ -294,6 +294,36 @@ func TestAccUserGroupRefusesToRenameADefaultGroup(t *testing.T) {
 	}
 }
 
+// A follow-up call failing during create must report why.
+//
+// Managers, incognito and permissions are separate calls made after the group
+// exists. Returning at the first failure left cc_pair_ids, document_set_ids,
+// persona_ids and is_default unknown, and Terraform reported four provider bugs
+// in place of the real reason. The group must also survive into state, or the
+// one that now exists is leaked — the destroy check at the end proves it did.
+func TestAccUserGroupReportsAFailedFollowUpCall(t *testing.T) {
+	testAccPreCheck(t)
+	testAccRequireEE(t)
+	name := acctest.RandomWithPrefix("tf-acc-group-followup")
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		CheckDestroy:             testAccCheckUserGroupDestroyed(t),
+		Steps: []resource.TestStep{
+			{
+				Config: `
+resource "onyx_user_group" "followup" {
+  name        = "` + name + `"
+  permissions = ["not:a:real:permission"]
+}
+`,
+				ExpectError: regexp.MustCompile(`(?s)Unable to set the user group permissions`),
+			},
+		},
+	})
+}
+
 func testAccCheckUserGroupDestroyed(t *testing.T) resource.TestCheckFunc {
 	return func(state *terraform.State) error {
 		c := testAccClient(t)

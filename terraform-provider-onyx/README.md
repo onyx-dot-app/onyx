@@ -146,8 +146,10 @@ and on Onyx Cloud the tenant is embedded in the key itself.
   one and managing its roster works, but a rename, a delete, or a permission or incognito
   change is refused with a conflict.
 - **Onyx refuses a membership removal that would strand someone**, leaving them in no group
-  at all — a person with no group has no permissions. It also guards self-removal by a
-  manager, privilege amplification, and the survival of admin access.
+  at all — a person with no group has no permissions. Destroying a group is checked the same
+  way, because it drops the whole roster, so a `terraform destroy` can fail on a member whose
+  only group this is. It also guards self-removal by a manager, privilege amplification, and
+  the survival of admin access.
 - **`onyx_mcp_server` manages only servers that need no interactive sign-in.** `NONE` and
   `API_TOKEN` are supported; `OAUTH` and `PT_OAUTH` need a browser round-trip and are
   refused while the plan is built, with a diagnostic naming the admin panel.

@@ -236,35 +236,32 @@ func (r *userGroupResource) Create(ctx context.Context, req resource.CreateReque
 		return
 	}
 
-	// The id must reach state before any follow-up call, or a failure below
-	// would leak the group: Terraform drops a resource whose create returned
-	// an error without an id.
 	plan.ID = types.StringValue(strconv.FormatInt(group.ID, 10))
-	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
 
 	// None of these three writes pass through the sync gate, so a group left
 	// syncing by its own create still accepts them.
-	if !r.applyManagers(ctx, group.ID, plan.ManagerIDs, &resp.Diagnostics) {
-		return
-	}
-	if plan.IncognitoEnabled.ValueBool() {
-		if _, err := r.client.SetUserGroupIncognito(ctx, group.ID, true); err != nil {
-			resp.Diagnostics.AddError("Unable to set incognito access on the user group", err.Error())
-			return
+	//
+	// A failure is collected rather than returned. The group exists now, so it
+	// has to reach state or it is leaked, and returning here would leave the
+	// computed attributes below unknown — which Terraform reports as four
+	// provider bugs that bury the real reason the apply failed.
+	followUps := diag.Diagnostics{}
+	if r.applyManagers(ctx, group.ID, plan.ManagerIDs, &followUps) {
+		if plan.IncognitoEnabled.ValueBool() {
+			if _, err := r.client.SetUserGroupIncognito(ctx, group.ID, true); err != nil {
+				followUps.AddError("Unable to set incognito access on the user group", err.Error())
+			}
+		}
+		if !followUps.HasError() {
+			r.applyPermissions(ctx, group.ID, plan.Permissions, &followUps)
 		}
 	}
-	if !r.applyPermissions(ctx, group.ID, plan.Permissions, &resp.Diagnostics) {
-		return
-	}
 
-	r.readInto(ctx, group.ID, &plan, &resp.Diagnostics, resp.State.RemoveResource)
-	if resp.Diagnostics.HasError() {
-		return
+	if r.readInto(ctx, group.ID, &plan, &resp.Diagnostics, resp.State.RemoveResource) {
+		plan.ensureComputedKnown()
+		resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 	}
-	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
+	resp.Diagnostics.Append(followUps...)
 }
 
 func (r *userGroupResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
@@ -279,7 +276,9 @@ func (r *userGroupResource) Read(ctx context.Context, req resource.ReadRequest, 
 		return
 	}
 
-	r.readInto(ctx, id, &state, &resp.Diagnostics, resp.State.RemoveResource)
+	if !r.readInto(ctx, id, &state, &resp.Diagnostics, resp.State.RemoveResource) {
+		return
+	}
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -310,62 +309,62 @@ func (r *userGroupResource) Update(ctx context.Context, req resource.UpdateReque
 	ctx, cancel := context.WithTimeout(ctx, updateTimeout)
 	defer cancel()
 
+	// Read the roster up front. Converting it mid-way would need an early
+	// return on failure, and every return before the refresh below leaves the
+	// computed attributes unknown.
+	userIDs, diags := stringSetValues(ctx, plan.UserIDs)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	// Renaming and changing membership both pass through the sync gate, and
 	// each one leaves the group syncing again, so each waits for itself.
+	//
+	// As in Create, a write failure is collected rather than returned: the
+	// refresh at the end has to run either way, or the computed attributes stay
+	// unknown and Terraform reports provider bugs instead of the real cause.
+	writes := diag.Diagnostics{}
 	if !plan.Name.Equal(state.Name) {
 		if err := r.client.WaitForUserGroupSettled(ctx, id, updateTimeout); err != nil {
-			resp.Diagnostics.AddError("Unable to rename the user group", err.Error())
-			return
-		}
-		if _, err := r.client.RenameUserGroup(ctx, id, plan.Name.ValueString()); err != nil {
-			resp.Diagnostics.AddError("Unable to rename the user group", err.Error())
-			return
+			writes.AddError("Unable to rename the user group", err.Error())
+		} else if _, err := r.client.RenameUserGroup(ctx, id, plan.Name.ValueString()); err != nil {
+			writes.AddError("Unable to rename the user group", err.Error())
 		}
 	}
 
-	if !plan.UserIDs.Equal(state.UserIDs) {
-		userIDs, diags := stringSetValues(ctx, plan.UserIDs)
-		resp.Diagnostics.Append(diags...)
-		if resp.Diagnostics.HasError() {
-			return
-		}
+	if !writes.HasError() && !plan.UserIDs.Equal(state.UserIDs) {
 		if err := r.client.WaitForUserGroupSettled(ctx, id, updateTimeout); err != nil {
-			resp.Diagnostics.AddError("Unable to update the user group roster", err.Error())
-			return
-		}
-		if _, err := r.client.SetUserGroupMembers(ctx, id, userIDs); err != nil {
-			resp.Diagnostics.AddError("Unable to update the user group roster", err.Error())
-			return
+			writes.AddError("Unable to update the user group roster", err.Error())
+		} else if _, err := r.client.SetUserGroupMembers(ctx, id, userIDs); err != nil {
+			writes.AddError("Unable to update the user group roster", err.Error())
 		}
 	}
 
 	// Managers are reconciled after the roster, against what the group now
 	// holds: a member dropped above takes their manager flag with them, so
 	// demoting them here would fail on a membership row that no longer exists.
-	if !r.applyManagers(ctx, id, plan.ManagerIDs, &resp.Diagnostics) {
-		return
+	if !writes.HasError() {
+		r.applyManagers(ctx, id, plan.ManagerIDs, &writes)
 	}
 
 	// Incognito and permissions both need full admin access, which someone who
 	// manages a group need not hold. Calling them unconditionally would fail an
 	// update that never touched either.
-	if !plan.IncognitoEnabled.Equal(state.IncognitoEnabled) {
+	if !writes.HasError() && !plan.IncognitoEnabled.Equal(state.IncognitoEnabled) {
 		if _, err := r.client.SetUserGroupIncognito(ctx, id, plan.IncognitoEnabled.ValueBool()); err != nil {
-			resp.Diagnostics.AddError("Unable to set incognito access on the user group", err.Error())
-			return
+			writes.AddError("Unable to set incognito access on the user group", err.Error())
 		}
 	}
-	if !plan.Permissions.Equal(state.Permissions) {
-		if !r.applyPermissions(ctx, id, plan.Permissions, &resp.Diagnostics) {
-			return
-		}
+	if !writes.HasError() && !plan.Permissions.Equal(state.Permissions) {
+		r.applyPermissions(ctx, id, plan.Permissions, &writes)
 	}
 
-	r.readInto(ctx, id, &plan, &resp.Diagnostics, resp.State.RemoveResource)
-	if resp.Diagnostics.HasError() {
-		return
+	if r.readInto(ctx, id, &plan, &resp.Diagnostics, resp.State.RemoveResource) {
+		plan.ensureComputedKnown()
+		resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 	}
-	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
+	resp.Diagnostics.Append(writes...)
 }
 
 func (r *userGroupResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
@@ -498,29 +497,30 @@ func (r *userGroupResource) applyPermissions(ctx context.Context, id int64, plan
 	return true
 }
 
-// readInto refreshes model from the API. A group that has gone is removed from
-// state through remove.
+// readInto refreshes model from the API. A group that has gone is dropped from
+// state through remove, and the false return says so: writing the model back
+// afterwards would put the resource straight back into state.
 func (r *userGroupResource) readInto(
 	ctx context.Context,
 	id int64,
 	model *userGroupResourceModel,
 	diags *diag.Diagnostics,
 	remove func(context.Context),
-) {
+) bool {
 	group, found, err := r.client.LookupUserGroup(ctx, id)
 	if err != nil {
 		diags.AddError("Unable to read the user group", err.Error())
-		return
+		return true
 	}
 	if !found {
 		remove(ctx)
-		return
+		return false
 	}
 
 	permissions, err := r.client.GetUserGroupPermissions(ctx, id)
 	if err != nil {
 		diags.AddError("Unable to read the user group permissions", err.Error())
-		return
+		return true
 	}
 
 	model.ID = types.StringValue(strconv.FormatInt(group.ID, 10))
@@ -534,6 +534,7 @@ func (r *userGroupResource) readInto(
 	model.CCPairIDs = stringSetFrom(ctx, int64sAsStrings(group.CCPairIDs()), diags)
 	model.DocumentSetIDs = stringSetFrom(ctx, namedRefIDs(group.DocumentSets), diags)
 	model.PersonaIDs = stringSetFrom(ctx, namedRefIDs(group.Personas), diags)
+	return true
 }
 
 // stringSetFrom builds a set from values the API returned. A nil slice becomes
@@ -545,6 +546,28 @@ func stringSetFrom(ctx context.Context, values []string, diags *diag.Diagnostics
 	value, setDiags := types.SetValueFrom(ctx, types.StringType, values)
 	diags.Append(setDiags...)
 	return value
+}
+
+// ensureComputedKnown replaces a still-unknown computed value with null.
+//
+// Terraform rejects an unknown value in the state an apply returns and reports
+// it as a bug in the provider — four at once for this resource, which buries
+// whatever actually went wrong. The refresh normally resolves them, so this
+// only matters when that refresh is the thing that failed. Null is a legal
+// value the next refresh fills in, and it is honest: nothing is known here.
+func (m *userGroupResourceModel) ensureComputedKnown() {
+	if m.CCPairIDs.IsUnknown() {
+		m.CCPairIDs = types.SetNull(types.StringType)
+	}
+	if m.DocumentSetIDs.IsUnknown() {
+		m.DocumentSetIDs = types.SetNull(types.StringType)
+	}
+	if m.PersonaIDs.IsUnknown() {
+		m.PersonaIDs = types.SetNull(types.StringType)
+	}
+	if m.IsDefault.IsUnknown() {
+		m.IsDefault = types.BoolNull()
+	}
 }
 
 func namedRefIDs(refs []client.UserGroupNamedRef) []string {
