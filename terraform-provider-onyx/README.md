@@ -19,6 +19,10 @@ providers.
 | `onyx_embedding_provider` | Cloud embedding provider credentials | provider type (e.g. `openai`) |
 | `onyx_credential` | Connector credentials (`/manage/credential`) | numeric id |
 | `onyx_connector` | Connector definitions (`/manage/admin/connector`) | numeric id |
+| `onyx_cc_pair` | Connector-credential pairs (`/manage/connector/.../credential/...`) | numeric id |
+| `onyx_document_set` | Document sets (`/manage/admin/document-set`) | numeric id |
+| `onyx_custom_tool` | Custom actions (`/admin/tool/custom`) | numeric id |
+| `onyx_persona` | Agents / assistants (`/persona`) | numeric id |
 | `data.onyx_llm_providers` | Read-only list of providers + defaults | — |
 | `data.onyx_embedding_providers` | Read-only list of embedding providers | — |
 | `data.onyx_settings` | Read-only current settings (incl. license `tier`) | — |
@@ -86,6 +90,31 @@ and on Onyx Cloud the tenant is embedded in the key itself.
   from a deleted one, so Terraform would drop it from state and recreate it. Keep
   `admin_public = true` (the default) for credentials Terraform manages, or run Terraform
   with the key that created them.
+- **Deleting an agent leaves a tombstone.** Onyx marks the row deleted instead of removing
+  it, so the name stays taken. A later create under that name revives the tombstone, which
+  is why destroy-then-apply returns the same agent id rather than a new one.
+- **A deleted agent answers 400, not 404.** The lookup raises a plain `ValueError`, which
+  Onyx renders as a bad request, so "gone" cannot be read off the status. The provider
+  confirms against the agent listing instead of matching on the message text. Making that
+  endpoint return 404 is a worthwhile backend fix.
+- **`onyx_persona` does not own every field on an agent.** Attached folders and documents
+  are cleared by an omitted list, and sending null is rejected (422), so the provider reads
+  them and sends them back unchanged. That leaves a narrow window in which an attachment
+  added between the read and the write is reverted; making the two fields nullable
+  server-side would close it. Also,
+  `search_start_date` is sent but never read back, because Onyx returns it as a parsed
+  timestamp that would not match a plain date. Avatar images are not managed at all.
+- **`display_priority` is create-only on the upsert.** Onyx reads it when an agent is
+  created and ignores it on every later write, so the provider applies a change through
+  the display-priority endpoint as a second call. That endpoint only sets a number, so the
+  attribute is computed: removing it from the configuration leaves the last value rather
+  than reporting a difference that never settles.
+- **Two built-in actions are hidden from the API.** `OktaProfileTool` and `MemoryTool` are
+  left out of the agent snapshot, so an agent holding one reports fewer `tool_ids` than
+  were written and the difference never settles. Attach custom actions and the ordinary
+  built-ins instead.
+- **Deleting a custom action detaches it from every agent that uses it**, including agents
+  Terraform does not manage, without an error or a warning.
 - **The model list read is the API's display view.** It hides obsolete models and dated
   duplicates, so writes (including the auto-mode pass-through, which is also not atomic
   with its read) cannot preserve rows the API hides. The admin UI round-trips the same
