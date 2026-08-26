@@ -22,6 +22,7 @@ from onyx.connectors.exceptions import (
 from onyx.connectors.github.connector import GithubConnector, GithubConnectorStage
 from onyx.connectors.github.models import SerializedRepository
 from onyx.connectors.models import Document
+from tests.unit.onyx.connectors.github.conftest import make_mock_repo
 from tests.unit.onyx.connectors.utils import (
     load_everything_from_checkpoint_connector,
     load_everything_from_checkpoint_connector_from_checkpoint,
@@ -36,18 +37,6 @@ def repo_owner() -> str:
 @pytest.fixture
 def repositories() -> str:
     return "test-repo"
-
-
-@pytest.fixture
-def mock_github_client() -> MagicMock:
-    """Create a mock GitHub client with proper typing"""
-    mock = MagicMock(spec=Github)
-    mock.get_repo = MagicMock()
-    mock.get_organization = MagicMock()
-    mock.get_user = MagicMock()
-    mock.get_rate_limit = MagicMock(return_value=MagicMock(spec=RateLimit))
-    mock._requester = MagicMock(spec=Requester)
-    return mock
 
 
 @pytest.fixture
@@ -138,26 +127,7 @@ def create_mock_repo() -> Callable[..., MagicMock]:
         name: str = "test-repo",
         id: int = 1,
     ) -> MagicMock:
-        mock_repo = MagicMock()
-        mock_repo.name = name
-        mock_repo.id = id
-
-        headers_dict = {"status": "200 OK", "content-type": "application/json"}
-        data_dict = {
-            "id": id,
-            "name": name,
-            "full_name": f"test-org/{name}",
-            "private": False,
-            "description": "Test repository",
-        }
-
-        mock_repo.configure_mock(raw_headers=headers_dict, raw_data=data_dict)
-
-        mock_repo.get_pulls = MagicMock()
-        mock_repo.get_issues = MagicMock()
-        mock_repo.get_contents = MagicMock()
-
-        return mock_repo
+        return make_mock_repo(name=name, id=id)
 
     return _create_mock_repo
 

@@ -17,12 +17,17 @@ from typing_extensions import override
 
 from onyx.access.models import ExternalAccess
 from onyx.configs.app_configs import GITHUB_CONNECTOR_BASE_URL
-from onyx.configs.constants import DocumentSource
-from onyx.connectors.connector_runner import CheckpointOutputWrapper, ConnectorRunner
-from onyx.connectors.cross_connector_utils.code_file_utils import (
+from onyx.configs.constants import (
+    CODE_FILE_BRANCH_KEY,
+    CODE_FILE_LANGUAGE_KEY,
     CODE_FILE_METADATA_TYPE,
-    infer_code_language,
+    CODE_FILE_PATH_KEY,
+    CODE_FILE_REPO_KEY,
+    CODE_FILE_TYPE_KEY,
+    DocumentSource,
 )
+from onyx.connectors.connector_runner import CheckpointOutputWrapper, ConnectorRunner
+from onyx.connectors.cross_connector_utils.code_file_utils import infer_code_language
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
     CredentialExpiredError,
@@ -36,6 +41,7 @@ from onyx.connectors.github.utils import (
     deserialize_repository,
     get_external_access_permission,
     normalize_github_base_url,
+    parse_repositories_config,
     validate_credential_base_url,
 )
 from onyx.connectors.interfaces import (
@@ -59,7 +65,11 @@ from onyx.connectors.models import (
     SlimDocument,
     TextSection,
 )
-from onyx.file_processing.extract_file_text import file_io_to_text, is_text_file
+from onyx.file_processing.extract_file_text import (
+    file_io_to_text,
+    get_file_ext,
+    is_text_file,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -119,6 +129,17 @@ _GITHUB_EMPTY_REPOSITORY_TREE_STATUS = 409
 _GITHUB_EMPTY_REPOSITORY_TREE_MESSAGE = "Git Repository is empty."
 
 
+def _code_language(path: str) -> str | None:
+    """The source-code language of `path`, or None when it is not code.
+
+    Document extensions are never code — grammars exist for prose formats
+    like markdown, so the docs set must be subtracted, not just preferred.
+    """
+    if get_file_ext(path) in GITHUB_INDEXABLE_FILE_EXTENSIONS:
+        return None
+    return infer_code_language(path)
+
+
 def _is_indexable_path(
     path: str,
     size: int | None,
@@ -140,8 +161,8 @@ def _is_indexable_path(
         return False
 
     basename = path.rsplit("/", 1)[-1]
-    _, extension = os.path.splitext(basename)
-    if include_docs and extension.lower() in GITHUB_INDEXABLE_FILE_EXTENSIONS:
+    extension = get_file_ext(basename)
+    if include_docs and extension in GITHUB_INDEXABLE_FILE_EXTENSIONS:
         return True
 
     # Extensionless docs like README / LICENSE (basename has no extension).
@@ -152,13 +173,7 @@ def _is_indexable_path(
     ):
         return True
 
-    # Document extensions are never code — grammars exist for prose formats
-    # like markdown, so the docs set must be subtracted, not just preferred.
-    if (
-        include_code_files
-        and extension.lower() not in GITHUB_INDEXABLE_FILE_EXTENSIONS
-        and infer_code_language(path) is not None
-    ):
+    if include_code_files and _code_language(path) is not None:
         return True
 
     return False
@@ -544,7 +559,6 @@ def _convert_file_to_document(
     repo_name = parts[1] if len(parts) > 1 else repo_full_name
 
     html_url = f"{repo.html_url}/blob/{branch}/{path}"
-    _, extension = os.path.splitext(path)
 
     # NOTE: GitHub's tree API does not expose per-file modification times without
     # additional per-file commit-history calls. repo.pushed_at is the closest
@@ -564,19 +578,14 @@ def _convert_file_to_document(
 
     metadata: dict[str, str | list[str]] = {
         "object_type": "File",
-        "repo": repo_full_name,
-        "path": path,
-        "file_extension": extension.lower(),
-        "branch": branch,
+        CODE_FILE_REPO_KEY: repo_full_name,
+        CODE_FILE_PATH_KEY: path,
+        "file_extension": get_file_ext(path),
+        CODE_FILE_BRANCH_KEY: branch,
     }
-    # Source-code files (recognized by extension, excluding the docs set —
-    # prose formats like markdown also have grammars) become CodeSections so
-    # they chunk at syntactic boundaries; everything else stays prose.
-    language = (
-        infer_code_language(path)
-        if extension.lower() not in GITHUB_INDEXABLE_FILE_EXTENSIONS
-        else None
-    )
+    # Source-code files become CodeSections so they chunk at syntactic
+    # boundaries; everything else stays prose.
+    language = _code_language(path)
     section: TextSection | CodeSection
     if language is not None:
         section = CodeSection(
@@ -585,8 +594,8 @@ def _convert_file_to_document(
             language=language,
             file_path=path,
         )
-        metadata["type"] = CODE_FILE_METADATA_TYPE
-        metadata["language"] = language
+        metadata[CODE_FILE_TYPE_KEY] = CODE_FILE_METADATA_TYPE
+        metadata[CODE_FILE_LANGUAGE_KEY] = language
     else:
         section = TextSection(link=html_url, text=content_text)
 
@@ -731,23 +740,19 @@ class GithubConnector(
 
         try:
             repos = []
-            # Split repo_name by comma and strip whitespace
-            repo_names = [
-                name.strip() for name in (cast(str, self.repositories)).split(",")
-            ]
+            repo_names = parse_repositories_config(self.repositories)
 
             for repo_name in repo_names:
-                if repo_name:  # Skip empty strings
-                    try:
-                        repo = github_client.get_repo(f"{self.repo_owner}/{repo_name}")
-                        repos.append(repo)
-                    except GithubException as e:
-                        logger.warning(
-                            "Could not fetch repo %s/%s: %s",
-                            self.repo_owner,
-                            repo_name,
-                            e,
-                        )
+                try:
+                    repo = github_client.get_repo(f"{self.repo_owner}/{repo_name}")
+                    repos.append(repo)
+                except GithubException as e:
+                    logger.warning(
+                        "Could not fetch repo %s/%s: %s",
+                        self.repo_owner,
+                        repo_name,
+                        e,
+                    )
 
             return repos
         except RateLimitExceededException:
@@ -1395,7 +1400,7 @@ class GithubConnector(
             if self.repositories:
                 if "," in self.repositories:
                     # Multiple repositories specified
-                    repo_names = [name.strip() for name in self.repositories.split(",")]
+                    repo_names = parse_repositories_config(self.repositories)
                     if not repo_names:
                         raise ConnectorValidationError(
                             "Invalid connector settings: No valid repository names provided."

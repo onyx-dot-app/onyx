@@ -4,10 +4,7 @@ from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
-from github import Github
 from github.GithubException import GithubException, UnknownObjectException
-from github.RateLimit import RateLimit
-from github.Requester import Requester
 
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.github.connector import (
@@ -22,6 +19,7 @@ from onyx.connectors.models import (
     Document,
     TextSection,
 )
+from tests.unit.onyx.connectors.github.conftest import make_mock_repo
 from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_connector
 
 
@@ -108,54 +106,13 @@ def test_is_indexable_path_code_only_excludes_docs() -> None:
 
 
 @pytest.fixture
-def mock_github_client() -> MagicMock:
-    mock = MagicMock(spec=Github)
-    mock.get_repo = MagicMock()
-    mock.get_rate_limit = MagicMock(return_value=MagicMock(spec=RateLimit))
-    mock._requester = MagicMock(spec=Requester)
-    return mock
-
-
-def _tree_element(path: str, size: int, type_: str = "blob") -> MagicMock:
-    el = MagicMock()
-    el.path = path
-    el.size = size
-    el.type = type_
-    return el
-
-
-@pytest.fixture
 def create_mock_repo() -> Callable[..., MagicMock]:
     def _create(
         files: dict[str, bytes],
         pushed_at: datetime | None = None,
         truncated: bool = False,
     ) -> MagicMock:
-        mock_repo = MagicMock()
-        mock_repo.name = "test-repo"
-        mock_repo.id = 1
-        mock_repo.full_name = "test-org/test-repo"
-        mock_repo.html_url = "https://github.com/test-org/test-repo"
-        mock_repo.default_branch = "main"
-        mock_repo.pushed_at = pushed_at or datetime(2023, 1, 1)
-        mock_repo.configure_mock(
-            raw_headers={"status": "200 OK"},
-            raw_data={"id": 1, "full_name": "test-org/test-repo"},
-        )
-
-        tree = MagicMock()
-        tree.tree = [_tree_element(p, len(c)) for p, c in files.items()]
-        tree.raw_data = {"truncated": truncated}
-        mock_repo.get_git_tree = MagicMock(return_value=tree)
-
-        def _get_contents(path: str, ref: str | None = None) -> MagicMock:
-            del ref  # accepted as a kwarg by the connector, unused in the mock
-            cf = MagicMock()
-            cf.decoded_content = files[path]
-            return cf
-
-        mock_repo.get_contents = MagicMock(side_effect=_get_contents)
-        return mock_repo
+        return make_mock_repo(files=files, pushed_at=pushed_at, truncated=truncated)
 
     return _create
 
