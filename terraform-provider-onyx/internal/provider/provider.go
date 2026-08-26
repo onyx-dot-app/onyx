@@ -153,6 +153,7 @@ func (p *onyxProvider) Resources(_ context.Context) []func() resource.Resource {
 		NewCustomToolResource,
 		NewPersonaResource,
 		NewMCPServerResource,
+		NewUserGroupResource,
 	}
 }
 

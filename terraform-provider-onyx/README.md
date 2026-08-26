@@ -24,6 +24,7 @@ providers.
 | `onyx_custom_tool` | Custom actions (`/admin/tool/custom`) | numeric id |
 | `onyx_persona` | Agents / assistants (`/persona`) | numeric id |
 | `onyx_mcp_server` | MCP servers Onyx connects to (`/admin/mcp`) | numeric id |
+| `onyx_user_group` | User groups: roster, managers, permission grants (**EE only**) | numeric id |
 | `data.onyx_llm_providers` | Read-only list of providers + defaults | — |
 | `data.onyx_embedding_providers` | Read-only list of embedding providers | — |
 | `data.onyx_settings` | Read-only current settings (incl. license `tier`) | — |
@@ -116,6 +117,47 @@ and on Onyx Cloud the tenant is embedded in the key itself.
   built-ins instead.
 - **Deleting a custom action detaches it from every agent that uses it**, including agents
   Terraform does not manage, without an error or a warning.
+- **`onyx_user_group` is Enterprise Edition only.** The routes live in the EE application
+  and do not exist on Community Edition, where every call answers 404. Its acceptance tests
+  skip when `ee_features_enabled` is false.
+- **`onyx_user_group` does not manage what a group can see.** Connectors, document sets,
+  agents, LLM providers, MCP servers and credentials each carry their own `groups`
+  attribute and own that link. The group exposes `cc_pair_ids`, `document_set_ids` and
+  `persona_ids` read-only, so the two sides never fight over the same edge.
+- **A roster change must not disturb those links, and how it avoids that depends on the
+  change.** Onyx's update endpoint replaces connector links along with members. A roster
+  that only gains members therefore goes through the add-users endpoint instead, which
+  takes members alone and lets Onyx preserve the links itself, inside the transaction that
+  holds the membership lock. A roster that loses one has no such endpoint: the provider
+  reads the connector ids and sends them back, so a connector share made between that read
+  and the write is overwritten by the older list. The window is one round-trip and only
+  opens for a removal. Sending an empty list instead — the obvious-looking alternative —
+  would unshare every connector from the group with nothing in the plan saying so.
+- **A group's computed links lag by one apply.** Terraform creates a group before the
+  `onyx_cc_pair` that references it, so `cc_pair_ids` is still empty in the state written
+  by that first apply and fills in on the next refresh.
+- **Onyx refuses membership, rename and delete while a group is syncing**, and a newly
+  created group starts out syncing, so the provider waits before each of those. Managers,
+  incognito and permissions are not gated. **The user group tests therefore need Celery
+  beat as well as the workers** — the sync that clears the gate is beat-scheduled every 20
+  seconds, so without beat every one of those writes waits until it times out.
+- **A syncing group answers HTTP 404**, not a conflict, on the membership routes *and on
+  delete*, because those handlers map every `ValueError` to not-found. The rename route gets
+  this right. So a 404 from any of them does not mean the group is gone — the destroy
+  confirms each one against the listing before reporting success, since trusting it would
+  drop a live group out of state and leave the next apply failing on the name it still holds.
+- **`onyx_user_group` permissions use Onyx's wire tokens**, for example `manage:connectors`,
+  not the enum names. Only toggleable permissions can be set; `basic`, `admin`,
+  `craft_sandbox`, `manage:skills` and the implied read tokens are managed by Onyx and are
+  neither read back nor writable.
+- **A seeded default group (`Admin`, `Basic`) holds members and nothing else.** Importing
+  one and managing its roster works, but a rename, a delete, or a permission or incognito
+  change is refused with a conflict.
+- **Onyx refuses a membership removal that would strand someone**, leaving them in no group
+  at all — a person with no group has no permissions. Destroying a group is checked the same
+  way, because it drops the whole roster, so a `terraform destroy` can fail on a member whose
+  only group this is. It also guards self-removal by a manager, privilege amplification, and
+  the survival of admin access.
 - **`onyx_mcp_server` manages only servers that need no interactive sign-in.** `NONE` and
   `API_TOKEN` are supported; `OAUTH` and `PT_OAUTH` need a browser round-trip and are
   refused while the plan is built, with a diagnostic naming the admin panel.
@@ -219,13 +261,16 @@ its key with. License enforcement must be off or API key creation answers 402. T
 enterprise features flag registers the user-group routes, which the harness reads to find
 the Admin group its key needs.
 
-The `onyx_cc_pair` and `onyx_document_set` tests also need Celery, because both objects
-are deleted in the background. Without a worker the rows never go away and the destroy
-step waits until it times out. Two workers are enough, and they need the same environment
-as the API server:
+The `onyx_cc_pair`, `onyx_document_set` and `onyx_user_group` tests also need Celery,
+because those objects are synced and deleted in the background. Without a worker the rows
+never go away and the destroy step waits until it times out. They need the same
+environment as the API server, plus `PYTHONPATH` pointing at `backend/` so beat can load
+the Enterprise schedule:
 
 ```bash
 source /path/to/the/same/env   # the variables above
+export PYTHONPATH=/path/to/onyx/backend
+celery -A onyx.background.celery.versioned_apps.beat beat --loglevel=INFO &
 celery -A onyx.background.celery.versioned_apps.primary worker \
   --pool=threads --concurrency=4 --loglevel=INFO --hostname=tfacc-primary@%n -Q celery &
 celery -A onyx.background.celery.versioned_apps.light worker \
@@ -235,6 +280,12 @@ celery -A onyx.background.celery.versioned_apps.light worker \
 
 The primary worker picks up the deletion checks the API server dispatches; the light
 worker runs the deletions and the document set sync themselves.
+
+**Beat is required for the user group tests specifically.** Onyx refuses to change or
+delete a group while it is syncing, a new group starts out syncing, and only the
+beat-scheduled `check-for-vespa-sync` (every 20 seconds) clears that state. The workers
+alone never run it, so without beat every group rename, membership change and destroy
+waits until it times out.
 
 The pair tests use the `mock_connector` source on purpose. Creating a pair runs the
 connector's real `validate_connector_settings`, which reaches the source system; Onyx
