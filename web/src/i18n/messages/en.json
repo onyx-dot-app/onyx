@@ -308,6 +308,502 @@
       }
     }
   },
+  "chat": {
+    "app": {
+      "failedFiles": {
+        "toast": "{count, plural, one {File failed and was removed: {names}} other {Files failed and were removed: {names}}}"
+      },
+      "newChatButton": {
+        "label": "Start a new chat"
+      },
+      "noPreviousMessage": {
+        "toast": "No previously-submitted user message found."
+      },
+      "oauthConnected": {
+        "toast": "Authentication successful"
+      },
+      "scrollToBottomButton": {
+        "label": "Scroll to bottom"
+      },
+      "sessionAccessDenied": {
+        "description": "You don't have permission to view this chat session.",
+        "title": "Access denied"
+      },
+      "sessionGenericError": {
+        "title": "Something went wrong"
+      },
+      "sessionNotFound": {
+        "description": "This chat session doesn't exist or has been deleted.",
+        "title": "Chat not found"
+      },
+      "sourcesModal": {
+        "title": "Sources"
+      }
+    },
+    "banners": {
+      "collapsedSiblings": {
+        "label": "+{count} more"
+      },
+      "connectorInvalid": {
+        "aggregate": {
+          "description": "Multiple connectors have invalid credentials. Open the connectors page to review them.",
+          "title": "{count, plural, one {# connector is invalid} other {# connectors are invalid}}"
+        }
+      },
+      "connectorRepeatedErrors": {
+        "aggregate": {
+          "description": "Multiple connectors have repeated indexing failures. Open the connectors page to review them.",
+          "title": "{count, plural, one {# connector is failing} other {# connectors are failing}}"
+        }
+      },
+      "connectors": {
+        "cta": {
+          "label": "View connector"
+        },
+        "source": {
+          "label": "Connectors"
+        }
+      },
+      "defaultCta": {
+        "label": "View"
+      },
+      "defaultSource": {
+        "label": "Notification"
+      },
+      "dismissButton": {
+        "ariaLabel": "Dismiss"
+      },
+      "healthBanner": {
+        "backendUnavailable": {
+          "description": "If this is your initial setup or you just updated your Onyx deployment, this is likely because the backend is still starting up. Give it a minute or two, and then refresh the page. If that does not work, make sure the backend is setup and/or contact an administrator.",
+          "title": "The backend is currently unavailable"
+        }
+      },
+      "licenseExpiry": {
+        "source": {
+          "label": "License"
+        }
+      },
+      "nextButton": {
+        "ariaLabel": "Next banner"
+      },
+      "previousButton": {
+        "ariaLabel": "Previous banner"
+      },
+      "systemAnnouncement": {
+        "source": {
+          "label": "Admin announcement"
+        }
+      },
+      "trialEnds": {
+        "source": {
+          "label": "Trial"
+        }
+      }
+    },
+    "federatedOAuth": {
+      "connectButton": {
+        "label": "Connect"
+      },
+      "header": {
+        "description": "Improve answer quality by letting {appName} search all your connected data.",
+        "title": "Connect Your Apps"
+      },
+      "skipButton": {
+        "label": "Skip for now"
+      }
+    },
+    "files": {
+      "fullImageModal": {
+        "image": {
+          "alt": "Uploaded attachment"
+        }
+      },
+      "inMessageImage": {
+        "downloadButton": {
+          "tooltip": "Download"
+        },
+        "image": {
+          "alt": "Chat attachment"
+        },
+        "viewFullImage": {
+          "label": "View the full image"
+        }
+      },
+      "inputBarPreviewImage": {
+        "image": {
+          "alt": "preview"
+        },
+        "viewFullImage": {
+          "label": "View the full image"
+        }
+      }
+    },
+    "input": {
+      "appInputBar": {
+        "attachFilesButton": {
+          "tooltip": "Attach Files"
+        },
+        "createPromptItem": {
+          "title": "Create New Prompt"
+        },
+        "deepResearchButton": {
+          "disabledTooltip": "Deep Research is disabled in multi-model mode",
+          "label": "Deep Research"
+        },
+        "incognitoNotice": {
+          "text": "This chat won't appear in your history or be used for memory."
+        },
+        "incognitoPolicyNotice": {
+          "text": "Your admin may still see this chat based on your organization's policy. Third party tools can still record your activity."
+        },
+        "input": {
+          "ariaLabel": "Message input",
+          "listeningPlaceholder": "Listening...",
+          "placeholder": "How can I help you today?",
+          "queuedPlaceholder": "Press up to edit queued messages",
+          "searchPlaceholder": "Search connected sources",
+          "speakingPlaceholder": "Onyx is speaking..."
+        },
+        "sendButton": {
+          "processingFilesTooltip": "Waiting for attached file(s) to finish processing"
+        },
+        "tabReadingButton": {
+          "readLabel": "Read this tab",
+          "readingLabel": "Reading tab..."
+        },
+        "voiceSetupButton": {
+          "ariaLabel": "Set up voice",
+          "tooltip": "Voice not configured. Set up in admin settings."
+        }
+      },
+      "baseInputBar": {
+        "input": {
+          "ariaLabel": "Message input",
+          "placeholder": "Describe your task..."
+        },
+        "pasteExpandHint": {
+          "text": "Paste again to expand"
+        },
+        "queuedMessagesHint": {
+          "text": "to edit queued messages"
+        },
+        "sendButton": {
+          "initializingTooltip": "Initializing sandbox...",
+          "queueLabel": "Queue message",
+          "sendLabel": "Send"
+        },
+        "stopButton": {
+          "ariaLabel": "Stop generating",
+          "tooltip": "Stop · esc"
+        }
+      },
+      "buildFileCard": {
+        "pending": {
+          "tooltip": "Waiting for session to be ready..."
+        }
+      },
+      "entryInfoPopover": {
+        "dialog": {
+          "ariaLabel": "Skill: {name}"
+        }
+      },
+      "entryPickerPopover": {
+        "appsGroup": {
+          "label": "Apps"
+        },
+        "connectAction": {
+          "label": "Connect"
+        },
+        "connectedRow": {
+          "description": "Connected"
+        },
+        "connectionRequiredRow": {
+          "description": "Connection required"
+        },
+        "content": {
+          "ariaLabel": "Skill picker"
+        },
+        "empty": {
+          "text": "No matching skills"
+        },
+        "mcpServersGroup": {
+          "label": "MCP servers"
+        },
+        "skillsGroup": {
+          "label": "Skills"
+        }
+      },
+      "inputChip": {
+        "removeButton": {
+          "ariaLabel": "Remove {label}"
+        }
+      },
+      "microphoneButton": {
+        "accessError": {
+          "toast": "Could not access microphone"
+        },
+        "autoStartError": {
+          "toast": "Could not auto-start microphone"
+        },
+        "startRecording": {
+          "ariaLabel": "Start recording"
+        },
+        "stopRecording": {
+          "ariaLabel": "Stop recording"
+        }
+      },
+      "pasteTilePopover": {
+        "dialog": {
+          "ariaLabel": "Edit pasted text"
+        },
+        "expandButton": {
+          "label": "Expand into input bar",
+          "tooltip": "Replace this tile with its full text inline"
+        }
+      },
+      "plusMenuButton": {
+        "trigger": {
+          "ariaLabel": "Open add menu",
+          "tooltip": "Add"
+        }
+      },
+      "queuedMessageBar": {
+        "discardButton": {
+          "tooltip": "Remove queued message"
+        },
+        "editHint": {
+          "label": "edit ·"
+        },
+        "item": {
+          "ariaLabel": "Toggle queued message"
+        },
+        "removeHint": {
+          "label": "remove"
+        }
+      },
+      "sharedAppInputBar": {
+        "input": {
+          "placeholder": "How can Onyx help you today"
+        },
+        "startSessionButton": {
+          "label": "Start New Session"
+        }
+      }
+    },
+    "mcpApiKey": {
+      "apiKeyField": {
+        "label": "API Key",
+        "placeholder": "Enter your API Key"
+      },
+      "apiKeyVisibilityButton": {
+        "hideAriaLabel": "Hide API key",
+        "showAriaLabel": "Show API key"
+      },
+      "cancelButton": {
+        "label": "Cancel"
+      },
+      "credentialField": {
+        "placeholder": "Enter your {field}"
+      },
+      "credentialVisibilityButton": {
+        "hideAriaLabel": "Hide credential",
+        "showAriaLabel": "Show credential"
+      },
+      "header": {
+        "enterApiKey": {
+          "title": "Enter API Key"
+        },
+        "enterCredentials": {
+          "title": "Enter Credentials"
+        },
+        "manageApiKey": {
+          "title": "Manage API Key"
+        },
+        "manageCredentials": {
+          "title": "Manage Credentials"
+        }
+      },
+      "intro": {
+        "enterApiKey": {
+          "text": "Enter your API Key for {server} to enable authentication."
+        },
+        "enterCredentials": {
+          "text": "Enter your Credentials for {server} to enable authentication."
+        },
+        "updateApiKey": {
+          "text": "Update your API Key for {server}."
+        },
+        "updateCredentials": {
+          "text": "Update your Credentials for {server}."
+        }
+      },
+      "saveApiKeyError": {
+        "message": "Failed to save API key"
+      },
+      "saveCredentialsError": {
+        "message": "Failed to save credentials"
+      },
+      "submitButton": {
+        "saveApiKey": {
+          "label": "Save API Key"
+        },
+        "saveCredentials": {
+          "label": "Save Credentials"
+        },
+        "saving": {
+          "label": "Saving..."
+        },
+        "updateApiKey": {
+          "label": "Update API Key"
+        },
+        "updateCredentials": {
+          "label": "Update Credentials"
+        }
+      },
+      "validationNote": {
+        "apiKey": {
+          "text": "Your API Key will be validated against the server and stored securely."
+        },
+        "authenticated": {
+          "text": "Changes will be validated against the server before being saved."
+        },
+        "credentials": {
+          "text": "Your Credentials will be validated against the server and stored securely."
+        }
+      }
+    },
+    "modelSelector": {
+      "adminLimitedSetting": {
+        "tooltip": "Your admin limits this model to a lower reasoning level."
+      },
+      "contextWindow": {
+        "row": {
+          "caption": "Tokens limit for each session",
+          "title": "Context Window"
+        },
+        "unknown": {
+          "tooltip": "Context size is not available for this model. Chats still apply a token limit automatically."
+        }
+      },
+      "list": {
+        "empty": {
+          "text": "No models found"
+        },
+        "loading": {
+          "text": "Loading models..."
+        }
+      },
+      "modelSettingsButton": {
+        "ariaLabel": "{model} settings",
+        "tooltip": "Model settings"
+      },
+      "multiModel": {
+        "addModelButton": {
+          "label": "Add Model"
+        },
+        "noModels": {
+          "tooltip": "No models currently configured"
+        }
+      },
+      "reasoningLevel": {
+        "high": {
+          "label": "High"
+        },
+        "low": {
+          "label": "Low"
+        },
+        "medium": {
+          "label": "Medium"
+        },
+        "off": {
+          "label": "Off"
+        },
+        "row": {
+          "caption": "How much thinking the model should perform before answering",
+          "title": "Reasoning Level"
+        },
+        "xhigh": {
+          "label": "XHigh"
+        }
+      },
+      "searchInput": {
+        "placeholder": "Search models..."
+      },
+      "temperature": {
+        "balanced": {
+          "label": "Balanced"
+        },
+        "creative": {
+          "label": "Creative"
+        },
+        "deterministic": {
+          "label": "Deterministic"
+        },
+        "row": {
+          "caption": "How predictable or creative the model should respond",
+          "title": "Temperature"
+        }
+      },
+      "trigger": {
+        "noSelection": {
+          "label": "Select Model"
+        }
+      },
+      "unsupportedSetting": {
+        "tooltip": "Modifying this setting is not supported for this model."
+      }
+    },
+    "popup": {
+      "consentCheckbox": {
+        "label": "Consent checkbox"
+      },
+      "consentRequired": {
+        "error": "You need to agree to the terms to access the application."
+      },
+      "header": {
+        "title": "Welcome to Onyx!"
+      },
+      "logoIcon": {
+        "alt": "Logo"
+      },
+      "startButton": {
+        "label": "Start"
+      }
+    },
+    "sharedChat": {
+      "emptyChat": {
+        "description": "No messages found in shared chat."
+      },
+      "header": {
+        "owner": {
+          "text": "by {name}"
+        },
+        "sharedOn": {
+          "text": "Shared on {date}"
+        },
+        "untitledChat": {
+          "title": "New Chat"
+        }
+      },
+      "newChatButton": {
+        "label": "Start a new chat"
+      },
+      "notFound": {
+        "description": "Did not find a shared chat with the specified ID.",
+        "title": "Shared chat not found"
+      }
+    },
+    "welcome": {
+      "greeting": {
+        "helpText": "How can I help?",
+        "startText": "Let's get started."
+      },
+      "incognito": {
+        "title": "You're incognito"
+      }
+    }
+  },
   "settings": {
     "accounts": {
       "email": {

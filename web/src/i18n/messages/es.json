@@ -308,6 +308,502 @@
       }
     }
   },
+  "chat": {
+    "app": {
+      "failedFiles": {
+        "toast": "{count, plural, one {Un archivo falló y fue eliminado: {names}} other {Algunos archivos fallaron y fueron eliminados: {names}}}"
+      },
+      "newChatButton": {
+        "label": "Iniciar un chat nuevo"
+      },
+      "noPreviousMessage": {
+        "toast": "No se encontró ningún mensaje enviado previamente."
+      },
+      "oauthConnected": {
+        "toast": "Autenticación correcta"
+      },
+      "scrollToBottomButton": {
+        "label": "Ir al final"
+      },
+      "sessionAccessDenied": {
+        "description": "No tienes permiso para ver esta sesión de chat.",
+        "title": "Acceso denegado"
+      },
+      "sessionGenericError": {
+        "title": "Algo salió mal"
+      },
+      "sessionNotFound": {
+        "description": "Esta sesión de chat no existe o fue eliminada.",
+        "title": "Chat no encontrado"
+      },
+      "sourcesModal": {
+        "title": "Fuentes"
+      }
+    },
+    "banners": {
+      "collapsedSiblings": {
+        "label": "+{count} más"
+      },
+      "connectorInvalid": {
+        "aggregate": {
+          "description": "Varios conectores tienen credenciales no válidas. Abre la página de conectores para revisarlos.",
+          "title": "{count, plural, one {# conector no es válido} other {# conectores no son válidos}}"
+        }
+      },
+      "connectorRepeatedErrors": {
+        "aggregate": {
+          "description": "Varios conectores tienen fallos de indexación repetidos. Abre la página de conectores para revisarlos.",
+          "title": "{count, plural, one {# conector está fallando} other {# conectores están fallando}}"
+        }
+      },
+      "connectors": {
+        "cta": {
+          "label": "Ver conector"
+        },
+        "source": {
+          "label": "Conectores"
+        }
+      },
+      "defaultCta": {
+        "label": "Ver"
+      },
+      "defaultSource": {
+        "label": "Notificación"
+      },
+      "dismissButton": {
+        "ariaLabel": "Descartar"
+      },
+      "healthBanner": {
+        "backendUnavailable": {
+          "description": "Si esta es tu configuración inicial o acabas de actualizar tu despliegue de Onyx, probablemente el backend todavía se está iniciando. Espera uno o dos minutos y recarga la página. Si eso no funciona, asegúrate de que el backend esté configurado o contacta a un administrador.",
+          "title": "El backend no está disponible en este momento"
+        }
+      },
+      "licenseExpiry": {
+        "source": {
+          "label": "Licencia"
+        }
+      },
+      "nextButton": {
+        "ariaLabel": "Siguiente aviso"
+      },
+      "previousButton": {
+        "ariaLabel": "Aviso anterior"
+      },
+      "systemAnnouncement": {
+        "source": {
+          "label": "Anuncio del administrador"
+        }
+      },
+      "trialEnds": {
+        "source": {
+          "label": "Prueba"
+        }
+      }
+    },
+    "federatedOAuth": {
+      "connectButton": {
+        "label": "Conectar"
+      },
+      "header": {
+        "description": "Mejora la calidad de las respuestas permitiendo que {appName} busque en todos tus datos conectados.",
+        "title": "Conecta tus aplicaciones"
+      },
+      "skipButton": {
+        "label": "Omitir por ahora"
+      }
+    },
+    "files": {
+      "fullImageModal": {
+        "image": {
+          "alt": "Archivo adjunto subido"
+        }
+      },
+      "inMessageImage": {
+        "downloadButton": {
+          "tooltip": "Descargar"
+        },
+        "image": {
+          "alt": "Adjunto del chat"
+        },
+        "viewFullImage": {
+          "label": "Ver la imagen completa"
+        }
+      },
+      "inputBarPreviewImage": {
+        "image": {
+          "alt": "vista previa"
+        },
+        "viewFullImage": {
+          "label": "Ver la imagen completa"
+        }
+      }
+    },
+    "input": {
+      "appInputBar": {
+        "attachFilesButton": {
+          "tooltip": "Adjuntar archivos"
+        },
+        "createPromptItem": {
+          "title": "Crear nuevo prompt"
+        },
+        "deepResearchButton": {
+          "disabledTooltip": "La investigación profunda está deshabilitada en el modo multimodelo",
+          "label": "Investigación profunda"
+        },
+        "incognitoNotice": {
+          "text": "Este chat no aparecerá en tu historial ni se usará para la memoria."
+        },
+        "incognitoPolicyNotice": {
+          "text": "Tu administrador aún puede ver este chat según la política de tu organización. Las herramientas de terceros todavía pueden registrar tu actividad."
+        },
+        "input": {
+          "ariaLabel": "Entrada de mensaje",
+          "listeningPlaceholder": "Escuchando...",
+          "placeholder": "¿En qué puedo ayudarte hoy?",
+          "queuedPlaceholder": "Pulsa la flecha arriba para editar los mensajes en cola",
+          "searchPlaceholder": "Buscar en las fuentes conectadas",
+          "speakingPlaceholder": "Onyx está hablando..."
+        },
+        "sendButton": {
+          "processingFilesTooltip": "Esperando a que terminen de procesarse los archivos adjuntos"
+        },
+        "tabReadingButton": {
+          "readLabel": "Leer esta pestaña",
+          "readingLabel": "Leyendo la pestaña..."
+        },
+        "voiceSetupButton": {
+          "ariaLabel": "Configurar voz",
+          "tooltip": "La voz no está configurada. Actívala en la configuración de administración."
+        }
+      },
+      "baseInputBar": {
+        "input": {
+          "ariaLabel": "Entrada de mensaje",
+          "placeholder": "Describe tu tarea..."
+        },
+        "pasteExpandHint": {
+          "text": "Pega de nuevo para expandir"
+        },
+        "queuedMessagesHint": {
+          "text": "para editar los mensajes en cola"
+        },
+        "sendButton": {
+          "initializingTooltip": "Inicializando el sandbox...",
+          "queueLabel": "Poner mensaje en cola",
+          "sendLabel": "Enviar"
+        },
+        "stopButton": {
+          "ariaLabel": "Detener la generación",
+          "tooltip": "Detener · esc"
+        }
+      },
+      "buildFileCard": {
+        "pending": {
+          "tooltip": "Esperando a que la sesión esté lista..."
+        }
+      },
+      "entryInfoPopover": {
+        "dialog": {
+          "ariaLabel": "Habilidad: {name}"
+        }
+      },
+      "entryPickerPopover": {
+        "appsGroup": {
+          "label": "Aplicaciones"
+        },
+        "connectAction": {
+          "label": "Conectar"
+        },
+        "connectedRow": {
+          "description": "Conectado"
+        },
+        "connectionRequiredRow": {
+          "description": "Requiere conexión"
+        },
+        "content": {
+          "ariaLabel": "Selector de habilidades"
+        },
+        "empty": {
+          "text": "No hay habilidades que coincidan"
+        },
+        "mcpServersGroup": {
+          "label": "Servidores MCP"
+        },
+        "skillsGroup": {
+          "label": "Habilidades"
+        }
+      },
+      "inputChip": {
+        "removeButton": {
+          "ariaLabel": "Quitar {label}"
+        }
+      },
+      "microphoneButton": {
+        "accessError": {
+          "toast": "No se pudo acceder al micrófono"
+        },
+        "autoStartError": {
+          "toast": "No se pudo iniciar automáticamente el micrófono"
+        },
+        "startRecording": {
+          "ariaLabel": "Iniciar grabación"
+        },
+        "stopRecording": {
+          "ariaLabel": "Detener grabación"
+        }
+      },
+      "pasteTilePopover": {
+        "dialog": {
+          "ariaLabel": "Editar texto pegado"
+        },
+        "expandButton": {
+          "label": "Expandir en la barra de entrada",
+          "tooltip": "Reemplazar esta tarjeta por su texto completo en línea"
+        }
+      },
+      "plusMenuButton": {
+        "trigger": {
+          "ariaLabel": "Abrir el menú de añadir",
+          "tooltip": "Añadir"
+        }
+      },
+      "queuedMessageBar": {
+        "discardButton": {
+          "tooltip": "Quitar mensaje en cola"
+        },
+        "editHint": {
+          "label": "editar ·"
+        },
+        "item": {
+          "ariaLabel": "Alternar mensaje en cola"
+        },
+        "removeHint": {
+          "label": "quitar"
+        }
+      },
+      "sharedAppInputBar": {
+        "input": {
+          "placeholder": "¿En qué puede ayudarte Onyx hoy?"
+        },
+        "startSessionButton": {
+          "label": "Iniciar nueva sesión"
+        }
+      }
+    },
+    "mcpApiKey": {
+      "apiKeyField": {
+        "label": "Clave de API",
+        "placeholder": "Introduce tu clave de API"
+      },
+      "apiKeyVisibilityButton": {
+        "hideAriaLabel": "Ocultar clave de API",
+        "showAriaLabel": "Mostrar clave de API"
+      },
+      "cancelButton": {
+        "label": "Cancelar"
+      },
+      "credentialField": {
+        "placeholder": "Introduce tu {field}"
+      },
+      "credentialVisibilityButton": {
+        "hideAriaLabel": "Ocultar credencial",
+        "showAriaLabel": "Mostrar credencial"
+      },
+      "header": {
+        "enterApiKey": {
+          "title": "Introducir clave de API"
+        },
+        "enterCredentials": {
+          "title": "Introducir credenciales"
+        },
+        "manageApiKey": {
+          "title": "Gestionar clave de API"
+        },
+        "manageCredentials": {
+          "title": "Gestionar credenciales"
+        }
+      },
+      "intro": {
+        "enterApiKey": {
+          "text": "Introduce tu clave de API para {server} para habilitar la autenticación."
+        },
+        "enterCredentials": {
+          "text": "Introduce tus credenciales para {server} para habilitar la autenticación."
+        },
+        "updateApiKey": {
+          "text": "Actualiza tu clave de API para {server}."
+        },
+        "updateCredentials": {
+          "text": "Actualiza tus credenciales para {server}."
+        }
+      },
+      "saveApiKeyError": {
+        "message": "No se pudo guardar la clave de API"
+      },
+      "saveCredentialsError": {
+        "message": "No se pudieron guardar las credenciales"
+      },
+      "submitButton": {
+        "saveApiKey": {
+          "label": "Guardar clave de API"
+        },
+        "saveCredentials": {
+          "label": "Guardar credenciales"
+        },
+        "saving": {
+          "label": "Guardando..."
+        },
+        "updateApiKey": {
+          "label": "Actualizar clave de API"
+        },
+        "updateCredentials": {
+          "label": "Actualizar credenciales"
+        }
+      },
+      "validationNote": {
+        "apiKey": {
+          "text": "Tu clave de API se validará con el servidor y se almacenará de forma segura."
+        },
+        "authenticated": {
+          "text": "Los cambios se validarán con el servidor antes de guardarse."
+        },
+        "credentials": {
+          "text": "Tus credenciales se validarán con el servidor y se almacenarán de forma segura."
+        }
+      }
+    },
+    "modelSelector": {
+      "adminLimitedSetting": {
+        "tooltip": "Tu administrador limita este modelo a un nivel de razonamiento más bajo."
+      },
+      "contextWindow": {
+        "row": {
+          "caption": "Límite de tokens para cada sesión",
+          "title": "Ventana de contexto"
+        },
+        "unknown": {
+          "tooltip": "El tamaño de contexto no está disponible para este modelo. Los chats aplican un límite de tokens automáticamente."
+        }
+      },
+      "list": {
+        "empty": {
+          "text": "No se encontraron modelos"
+        },
+        "loading": {
+          "text": "Cargando modelos..."
+        }
+      },
+      "modelSettingsButton": {
+        "ariaLabel": "Configuración de {model}",
+        "tooltip": "Configuración del modelo"
+      },
+      "multiModel": {
+        "addModelButton": {
+          "label": "Añadir modelo"
+        },
+        "noModels": {
+          "tooltip": "No hay modelos configurados actualmente"
+        }
+      },
+      "reasoningLevel": {
+        "high": {
+          "label": "Alto"
+        },
+        "low": {
+          "label": "Bajo"
+        },
+        "medium": {
+          "label": "Medio"
+        },
+        "off": {
+          "label": "Desactivado"
+        },
+        "row": {
+          "caption": "Cuánto razonamiento debe realizar el modelo antes de responder",
+          "title": "Nivel de razonamiento"
+        },
+        "xhigh": {
+          "label": "Muy alto"
+        }
+      },
+      "searchInput": {
+        "placeholder": "Buscar modelos..."
+      },
+      "temperature": {
+        "balanced": {
+          "label": "Equilibrado"
+        },
+        "creative": {
+          "label": "Creativo"
+        },
+        "deterministic": {
+          "label": "Determinista"
+        },
+        "row": {
+          "caption": "Qué tan predecible o creativo debe responder el modelo",
+          "title": "Temperatura"
+        }
+      },
+      "trigger": {
+        "noSelection": {
+          "label": "Seleccionar modelo"
+        }
+      },
+      "unsupportedSetting": {
+        "tooltip": "Modificar esta configuración no es compatible con este modelo."
+      }
+    },
+    "popup": {
+      "consentCheckbox": {
+        "label": "Casilla de consentimiento"
+      },
+      "consentRequired": {
+        "error": "Debes aceptar los términos para acceder a la aplicación."
+      },
+      "header": {
+        "title": "¡Te damos la bienvenida a Onyx!"
+      },
+      "logoIcon": {
+        "alt": "Logotipo"
+      },
+      "startButton": {
+        "label": "Comenzar"
+      }
+    },
+    "sharedChat": {
+      "emptyChat": {
+        "description": "No se encontraron mensajes en el chat compartido."
+      },
+      "header": {
+        "owner": {
+          "text": "por {name}"
+        },
+        "sharedOn": {
+          "text": "Compartido el {date}"
+        },
+        "untitledChat": {
+          "title": "Chat nuevo"
+        }
+      },
+      "newChatButton": {
+        "label": "Iniciar un chat nuevo"
+      },
+      "notFound": {
+        "description": "No se encontró un chat compartido con el ID especificado.",
+        "title": "Chat compartido no encontrado"
+      }
+    },
+    "welcome": {
+      "greeting": {
+        "helpText": "¿En qué puedo ayudarte?",
+        "startText": "Comencemos."
+      },
+      "incognito": {
+        "title": "Estás en modo incógnito"
+      }
+    }
+  },
   "settings": {
     "accounts": {
       "email": {

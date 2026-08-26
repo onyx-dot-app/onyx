@@ -11,6 +11,7 @@ import {
   type ReactNode,
   type SyntheticEvent,
 } from "react";
+import { useTranslations } from "next-intl";
 import { getPastedFilesIfNoText } from "@/lib/clipboard";
 import { deleteTokenBeforeCursor, getTextContent } from "@/lib/contentEditable";
 import PasteTilePopover from "@/sections/input/PasteTilePopover";
@@ -78,7 +79,7 @@ const BaseInputBar = memo(
         onSubmit,
         isRunning,
         disabled = false,
-        placeholder = "Describe your task...",
+        placeholder,
         noBottomRounding = false,
         pasteTilesEnabled = false,
         sandboxInitializing = false,
@@ -98,8 +99,11 @@ const BaseInputBar = memo(
       },
       ref
     ) => {
+      const t = useTranslations("chat.input");
       const queueEnabled = !!onQueueMessage;
       const queue = queuedMessages ?? EMPTY_QUEUED_MESSAGES;
+      const resolvedPlaceholder =
+        placeholder ?? t("baseInputBar.input.placeholder");
 
       const inputWrapperRef = useRef<HTMLDivElement>(null);
       const {
@@ -311,11 +315,11 @@ const BaseInputBar = memo(
                   scrollbarColor: "var(--border-02) transparent",
                 }}
                 role="textbox"
-                aria-label="Message input"
+                aria-label={t("baseInputBar.input.ariaLabel")}
                 aria-multiline={true}
                 aria-disabled={disabled}
-                aria-placeholder={placeholder}
-                data-placeholder={placeholder}
+                aria-placeholder={resolvedPlaceholder}
+                data-placeholder={resolvedPlaceholder}
                 data-empty={!message ? "" : undefined}
                 onCopy={handleCopy}
                 onCut={handleCut}
@@ -330,7 +334,7 @@ const BaseInputBar = memo(
                 {pasteExpandHintVisible ? (
                   <div className="flex items-center gap-1 select-none">
                     <Text font="secondary-body" color="text-02">
-                      Paste again to expand
+                      {t("baseInputBar.pasteExpandHint.text")}
                     </Text>
                   </div>
                 ) : (
@@ -340,7 +344,7 @@ const BaseInputBar = memo(
                     <div className="flex items-center gap-1 select-none">
                       <Keycap>↑</Keycap>
                       <Text font="secondary-body" color="text-02">
-                        to edit queued messages
+                        {t("baseInputBar.queuedMessagesHint.text")}
                       </Text>
                     </div>
                   )
@@ -364,8 +368,8 @@ const BaseInputBar = memo(
                     className="border-[1.5px] border-border-02"
                     disabled={!interruptible || isInterrupting}
                     onClick={handleInterrupt}
-                    tooltip="Stop · esc"
-                    aria-label="Stop generating"
+                    tooltip={t("baseInputBar.stopButton.tooltip")}
+                    aria-label={t("baseInputBar.stopButton.ariaLabel")}
                   />
                 </div>
                 <Button
@@ -383,12 +387,16 @@ const BaseInputBar = memo(
                   disabled={!canSubmit}
                   tooltip={
                     sandboxInitializing
-                      ? "Initializing sandbox..."
+                      ? t("baseInputBar.sendButton.initializingTooltip")
                       : isRunning
-                        ? "Queue message"
-                        : "Send"
+                        ? t("baseInputBar.sendButton.queueLabel")
+                        : t("baseInputBar.sendButton.sendLabel")
                   }
-                  aria-label={isRunning ? "Queue message" : "Send"}
+                  aria-label={
+                    isRunning
+                      ? t("baseInputBar.sendButton.queueLabel")
+                      : t("baseInputBar.sendButton.sendLabel")
+                  }
                 />
               </div>
             </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, type ReactNode } from "react";
+import { useTranslations } from "next-intl";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { cn, clickOnKeyDown } from "@opal/utils";
 import { Button, Text, Tooltip } from "@opal/components";
@@ -36,6 +37,7 @@ function InputChip({
   onRemove,
   onClick,
 }: InputChipProps) {
+  const t = useTranslations("chat.input");
   const chipRef = useRef<HTMLDivElement>(null);
 
   const chipClassName = cn(
@@ -61,7 +63,7 @@ function InputChip({
           e.stopPropagation();
           onRemove();
         }}
-        aria-label={`Remove ${label}`}
+        aria-label={t("inputChip.removeButton.ariaLabel", { label })}
       />
     </>
   );
@@ -102,6 +104,7 @@ function BuildFileCard({
   file: BuildFile;
   onRemove: (id: string) => void;
 }) {
+  const t = useTranslations("chat.input");
   const isImage = isImageFile(file.name);
   const isUploading = file.status === UploadFileStatus.UPLOADING;
   const isPending = file.status === UploadFileStatus.PENDING;
@@ -140,7 +143,7 @@ function BuildFileCard({
   }
   if (isPending) {
     return (
-      <Tooltip tooltip="Waiting for session to be ready..." side="top">
+      <Tooltip tooltip={t("buildFileCard.pending.tooltip")} side="top">
         {chip}
       </Tooltip>
     );

@@ -8,6 +8,7 @@
 // there is no content area.
 
 import { usePathname, useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { Button, Text } from "@opal/components";
 import { cn, markdown } from "@opal/utils";
 import { timeAgo } from "@opal/time";
@@ -20,7 +21,7 @@ import {
   NotificationSeverity,
   NotificationType,
 } from "@/lib/notifications/interfaces";
-import { useBannerQueue, type BannerQueueItem } from "@/lib/banner/hooks";
+import { useBannerQueue } from "@/lib/banner/hooks";
 
 // Inset from the content area's left edge, matching the card's bottom inset.
 const CONTENT_INSET_PX = 8;
@@ -61,55 +62,12 @@ interface BannerContent {
   ctaLabel: string;
 }
 
-const DEFAULT_SOURCE_LABEL = "Notification";
-const DEFAULT_CTA_LABEL = "View";
+type BannerTypeConfigMap = Partial<Record<NotificationType, BannerTypeConfig>>;
 
-function connectorAggregate(noun: string, cause: string) {
-  return (count: number): BannerContent => ({
-    title: `${count} connectors are ${noun}`,
-    description: `Multiple connectors have ${cause}. Open the connectors page to review them.`,
-    link: "/admin/indexing/status",
-    ctaLabel: DEFAULT_CTA_LABEL,
-  });
-}
-
-const BANNER_TYPE_CONFIG: Partial<Record<NotificationType, BannerTypeConfig>> =
-  {
-    [NotificationType.SYSTEM_ANNOUNCEMENT]: {
-      sourceLabel: "Admin announcement",
-      variantOverride: NotificationSeverity.INFO,
-    },
-    [NotificationType.LICENSE_EXPIRY_WARNING]: { sourceLabel: "License" },
-    [NotificationType.TRIAL_ENDS_TWO_DAYS]: { sourceLabel: "Trial" },
-    [NotificationType.CONNECTOR_REPEATED_ERRORS]: {
-      sourceLabel: "Connectors",
-      ctaLabel: "View connector",
-      aggregate: connectorAggregate("failing", "repeated indexing failures"),
-    },
-    [NotificationType.CONNECTOR_INVALID]: {
-      sourceLabel: "Connectors",
-      ctaLabel: "View connector",
-      aggregate: connectorAggregate("invalid", "invalid credentials"),
-    },
-  };
-
-// The notification's own copy when it stands alone, the type's aggregate
-// copy when it represents several.
-function bannerContent(item: BannerQueueItem): BannerContent {
-  const { notification, count } = item;
-  const config = BANNER_TYPE_CONFIG[notification.notif_type];
-  if (count > 1 && config?.aggregate) {
-    return config.aggregate(count);
-  }
-  return {
-    title: notification.title,
-    description: notification.description,
-    link: notification.additional_data?.link ?? null,
-    ctaLabel: config?.ctaLabel ?? DEFAULT_CTA_LABEL,
-  };
-}
+const CONNECTORS_LINK = "/admin/indexing/status";
 
 export default function BannerQueue() {
+  const t = useTranslations("chat.banners");
   const pathname = usePathname();
   const router = useRouter();
   const { left: contentLeft } = useContainerCenter();
@@ -118,24 +76,70 @@ export default function BannerQueue() {
 
   if (isAuthPath(pathname) || !current) return null;
 
+  const defaultCtaLabel = t("defaultCta.label");
+  const bannerTypeConfig: BannerTypeConfigMap = {
+    [NotificationType.SYSTEM_ANNOUNCEMENT]: {
+      sourceLabel: t("systemAnnouncement.source.label"),
+      variantOverride: NotificationSeverity.INFO,
+    },
+    [NotificationType.LICENSE_EXPIRY_WARNING]: {
+      sourceLabel: t("licenseExpiry.source.label"),
+    },
+    [NotificationType.TRIAL_ENDS_TWO_DAYS]: {
+      sourceLabel: t("trialEnds.source.label"),
+    },
+    [NotificationType.CONNECTOR_REPEATED_ERRORS]: {
+      sourceLabel: t("connectors.source.label"),
+      ctaLabel: t("connectors.cta.label"),
+      aggregate: (count) => ({
+        title: t("connectorRepeatedErrors.aggregate.title", { count }),
+        description: t("connectorRepeatedErrors.aggregate.description"),
+        link: CONNECTORS_LINK,
+        ctaLabel: defaultCtaLabel,
+      }),
+    },
+    [NotificationType.CONNECTOR_INVALID]: {
+      sourceLabel: t("connectors.source.label"),
+      ctaLabel: t("connectors.cta.label"),
+      aggregate: (count) => ({
+        title: t("connectorInvalid.aggregate.title", { count }),
+        description: t("connectorInvalid.aggregate.description"),
+        link: CONNECTORS_LINK,
+        ctaLabel: defaultCtaLabel,
+      }),
+    },
+  };
+
   const notification = current.notification;
-  const config = BANNER_TYPE_CONFIG[notification.notif_type];
+  const config = bannerTypeConfig[notification.notif_type];
+  // The notification's own copy when it stands alone, the type's aggregate
+  // copy when it represents several.
+  const aggregateContent =
+    current.count > 1 ? config?.aggregate?.(current.count) : undefined;
   // An aggregate card represents every collapsed notification, so dismissing
   // it must dismiss them all — not surface them one at a time.
-  const showsAggregate = current.count > 1 && Boolean(config?.aggregate);
+  const showsAggregate = aggregateContent !== undefined;
   const styles =
     VARIANT_STYLES[config?.variantOverride ?? notification.severity];
   const Icon = getNotificationIcon(notification.notif_type);
-  const { title, description, link, ctaLabel } = bannerContent(current);
+  const { title, description, link, ctaLabel }: BannerContent =
+    aggregateContent ?? {
+      title: notification.title,
+      description: notification.description,
+      link: notification.additional_data?.link ?? null,
+      ctaLabel: config?.ctaLabel ?? defaultCtaLabel,
+    };
   const relativeTime = timeAgo(notification.last_shown);
-  const sourceLabel = config?.sourceLabel ?? DEFAULT_SOURCE_LABEL;
+  const sourceLabel = config?.sourceLabel ?? t("defaultSource.label");
   // Disclose collapsed same-type siblings so dismissing the visible one
   // never surfaces the rest as a surprise.
   const footer = [
     sourceLabel,
     relativeTime,
     // Aggregate copy already states the count in the title.
-    current.count > 1 && !showsAggregate ? `+${current.count - 1} more` : null,
+    current.count > 1 && !showsAggregate
+      ? t("collapsedSiblings.label", { count: current.count - 1 })
+      : null,
   ]
     .filter(Boolean)
     .join(" • ");
@@ -182,14 +186,14 @@ export default function BannerQueue() {
                 prominence="internal"
                 size="sm"
                 onClick={goToPrevious}
-                aria-label="Previous banner"
+                aria-label={t("previousButton.ariaLabel")}
               />
               <Button
                 icon={SvgChevronRight}
                 prominence="internal"
                 size="sm"
                 onClick={goToNext}
-                aria-label="Next banner"
+                aria-label={t("nextButton.ariaLabel")}
               />
             </>
           )}
@@ -200,7 +204,7 @@ export default function BannerQueue() {
             onClick={() =>
               void dismissCurrent(showsAggregate ? current.ids : undefined)
             }
-            aria-label="Dismiss"
+            aria-label={t("dismissButton.ariaLabel")}
           />
         </Section>
 
