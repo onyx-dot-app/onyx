@@ -1399,6 +1399,16 @@ REPO_SNAPSHOT_MAX_TOTAL_BYTES = int(
     os.environ.get("REPO_SNAPSHOT_MAX_TOTAL_BYTES") or 10 * 1024**3
 )
 
+# Repo archive (tarball) cache in the file store, shared by the connectors'
+# snapshots and the coding agent. Archives above the cap are served but not
+# cached; entries older than the TTL are pruned on the next cache write.
+REPO_ARCHIVE_CACHE_MAX_BYTES = int(
+    os.environ.get("REPO_ARCHIVE_CACHE_MAX_BYTES") or 100 * 1024 * 1024
+)
+REPO_ARCHIVE_CACHE_TTL_SECONDS = int(
+    os.environ.get("REPO_ARCHIVE_CACHE_TTL_SECONDS") or 7 * 24 * 60 * 60
+)
+
 GITLAB_CONNECTOR_INCLUDE_CODE_FILES = (
     os.environ.get("GITLAB_CONNECTOR_INCLUDE_CODE_FILES", "").lower() == "true"
 )
