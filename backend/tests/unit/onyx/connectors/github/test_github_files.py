@@ -16,7 +16,12 @@ from onyx.connectors.github.connector import (
     _is_indexable_path,
 )
 from onyx.connectors.github.models import SerializedRepository
-from onyx.connectors.models import ConnectorFailure, Document
+from onyx.connectors.models import (
+    CodeSection,
+    ConnectorFailure,
+    Document,
+    TextSection,
+)
 from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_connector
 
 
@@ -59,6 +64,47 @@ from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_con
 )
 def test_is_indexable_path(path: str, size: int | None, expected: bool) -> None:
     assert _is_indexable_path(path, size) is expected
+
+
+@pytest.mark.parametrize(
+    "path,size,expected",
+    [
+        # source code is included when the flag is on
+        ("main.py", 100, True),
+        ("src/app.tsx", 100, True),
+        ("native/lib.cpp", 100, True),
+        ("schema.sql", 100, True),
+        # config formats magika classifies as code are included too
+        ("data.json", 100, True),
+        ("config.yaml", 100, True),
+        # non-code stays excluded
+        ("logo.png", 100, False),
+        ("secrets.env", 100, False),
+        ("key.pem", 100, False),
+        # size cap and denylist still apply to code
+        ("huge.py", 5_000_000, False),
+        ("node_modules/pkg/index.js", 100, False),
+        # docs still included alongside code
+        ("README.md", 100, True),
+    ],
+)
+def test_is_indexable_path_with_code_files(
+    path: str, size: int | None, expected: bool
+) -> None:
+    assert _is_indexable_path(path, size, include_code_files=True) is expected
+
+
+def test_is_indexable_path_code_only_excludes_docs() -> None:
+    assert (
+        _is_indexable_path(
+            "README.md", 100, include_docs=False, include_code_files=True
+        )
+        is False
+    )
+    assert (
+        _is_indexable_path("main.py", 100, include_docs=False, include_code_files=True)
+        is True
+    )
 
 
 @pytest.fixture
@@ -117,6 +163,7 @@ def create_mock_repo() -> Callable[..., MagicMock]:
 def _build_connector(
     mock_github_client: MagicMock,
     include_files: bool = True,
+    include_code_files: bool = False,
     branch: str | None = None,
 ) -> GithubConnector:
     connector = GithubConnector(
@@ -125,6 +172,7 @@ def _build_connector(
         include_prs=False,
         include_issues=False,
         include_files=include_files,
+        include_code_files=include_code_files,
         branch=branch,
     )
     connector.github_client = mock_github_client
@@ -189,6 +237,65 @@ def test_files_indexed_when_enabled(
         "README.md",
     ]
     assert outputs[-1].next_checkpoint.has_more is False
+
+
+def test_code_files_indexed_as_code_sections(
+    mock_github_client: MagicMock,
+    create_mock_repo: Callable[..., MagicMock],
+) -> None:
+    connector = _build_connector(mock_github_client, include_code_files=True)
+    mock_repo = create_mock_repo(
+        {
+            "README.md": b"# Hello world",
+            "src/main.py": b"print('hi')",
+        }
+    )
+    mock_github_client.get_repo.return_value = mock_repo
+
+    with patch.object(SerializedRepository, "to_Repository", return_value=mock_repo):
+        outputs = load_everything_from_checkpoint_connector(connector, 0, time.time())
+
+    docs = [i for i in _all_items(outputs) if isinstance(i, Document)]
+    assert sorted(d.semantic_identifier for d in docs) == [
+        "README.md",
+        "src/main.py",
+    ]
+
+    code_doc = next(d for d in docs if d.semantic_identifier == "src/main.py")
+    code_section = code_doc.sections[0]
+    assert isinstance(code_section, CodeSection)
+    assert code_section.language == "python"
+    assert code_section.file_path == "src/main.py"
+    assert code_section.text == "print('hi')"
+    assert code_doc.metadata["type"] == "CodeFile"
+    assert code_doc.metadata["language"] == "python"
+
+    readme_doc = next(d for d in docs if d.semantic_identifier == "README.md")
+    assert isinstance(readme_doc.sections[0], TextSection)
+    assert "type" not in readme_doc.metadata
+
+
+def test_code_files_excluded_when_flag_off(
+    mock_github_client: MagicMock,
+    create_mock_repo: Callable[..., MagicMock],
+) -> None:
+    connector = _build_connector(
+        mock_github_client, include_files=False, include_code_files=True
+    )
+    mock_repo = create_mock_repo(
+        {
+            "README.md": b"# Hello world",
+            "src/main.py": b"print('hi')",
+        }
+    )
+    mock_github_client.get_repo.return_value = mock_repo
+
+    with patch.object(SerializedRepository, "to_Repository", return_value=mock_repo):
+        outputs = load_everything_from_checkpoint_connector(connector, 0, time.time())
+
+    docs = [i for i in _all_items(outputs) if isinstance(i, Document)]
+    # Docs off + code on: only the code file is indexed.
+    assert [d.semantic_identifier for d in docs] == ["src/main.py"]
 
 
 def test_binary_file_yields_failure(

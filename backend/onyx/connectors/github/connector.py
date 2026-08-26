@@ -19,6 +19,10 @@ from onyx.access.models import ExternalAccess
 from onyx.configs.app_configs import GITHUB_CONNECTOR_BASE_URL
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.connector_runner import CheckpointOutputWrapper, ConnectorRunner
+from onyx.connectors.cross_connector_utils.code_file_utils import (
+    CODE_FILE_METADATA_TYPE,
+    infer_code_language,
+)
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
     CredentialExpiredError,
@@ -46,6 +50,7 @@ from onyx.connectors.interfaces import (
     SlimConnectorWithPermSync,
 )
 from onyx.connectors.models import (
+    CodeSection,
     ConnectorMissingCredentialError,
     Document,
     DocumentFailure,
@@ -114,12 +119,18 @@ _GITHUB_EMPTY_REPOSITORY_TREE_STATUS = 409
 _GITHUB_EMPTY_REPOSITORY_TREE_MESSAGE = "Git Repository is empty."
 
 
-def _is_indexable_path(path: str, size: int | None) -> bool:
+def _is_indexable_path(
+    path: str,
+    size: int | None,
+    include_docs: bool = True,
+    include_code_files: bool = False,
+) -> bool:
     """Pure predicate: should this repo file be indexed?
 
-    Filters on a max size and path-segment denylist, then matches either a
-    document extension (.md, .txt, ...) or a conventional extensionless
-    document basename (README, LICENSE, ...).
+    Filters on a max size and path-segment denylist, then matches a document
+    extension (.md, .txt, ...), a conventional extensionless document basename
+    (README, LICENSE, ...), or — when code indexing is enabled — a known
+    source-code extension.
     """
     if size is not None and size > GITHUB_MAX_FILE_SIZE_BYTES:
         return False
@@ -130,11 +141,24 @@ def _is_indexable_path(path: str, size: int | None) -> bool:
 
     basename = path.rsplit("/", 1)[-1]
     _, extension = os.path.splitext(basename)
-    if extension.lower() in GITHUB_INDEXABLE_FILE_EXTENSIONS:
+    if include_docs and extension.lower() in GITHUB_INDEXABLE_FILE_EXTENSIONS:
         return True
 
     # Extensionless docs like README / LICENSE (basename has no extension).
-    if not extension and basename.lower() in GITHUB_INDEXABLE_FILENAMES:
+    if (
+        include_docs
+        and not extension
+        and basename.lower() in GITHUB_INDEXABLE_FILENAMES
+    ):
+        return True
+
+    # Document extensions are never code — grammars exist for prose formats
+    # like markdown, so the docs set must be subtracted, not just preferred.
+    if (
+        include_code_files
+        and extension.lower() not in GITHUB_INDEXABLE_FILE_EXTENSIONS
+        and infer_code_language(path) is not None
+    ):
         return True
 
     return False
@@ -537,21 +561,44 @@ def _convert_file_to_document(
             "object_type": "file",
         },
     }
+
+    metadata: dict[str, str | list[str]] = {
+        "object_type": "File",
+        "repo": repo_full_name,
+        "path": path,
+        "file_extension": extension.lower(),
+        "branch": branch,
+    }
+    # Source-code files (recognized by extension, excluding the docs set —
+    # prose formats like markdown also have grammars) become CodeSections so
+    # they chunk at syntactic boundaries; everything else stays prose.
+    language = (
+        infer_code_language(path)
+        if extension.lower() not in GITHUB_INDEXABLE_FILE_EXTENSIONS
+        else None
+    )
+    section: TextSection | CodeSection
+    if language is not None:
+        section = CodeSection(
+            link=html_url,
+            text=content_text,
+            language=language,
+            file_path=path,
+        )
+        metadata["type"] = CODE_FILE_METADATA_TYPE
+        metadata["language"] = language
+    else:
+        section = TextSection(link=html_url, text=content_text)
+
     return Document(
         id=html_url,
-        sections=[TextSection(link=html_url, text=content_text)],
+        sections=[section],
         source=DocumentSource.GITHUB,
         external_access=repo_external_access,
         semantic_identifier=path,
         doc_updated_at=updated_at,
         doc_metadata=doc_metadata,
-        metadata={
-            "object_type": "File",
-            "repo": repo_full_name,
-            "path": path,
-            "file_extension": extension.lower(),
-            "branch": branch,
-        },
+        metadata=metadata,
     )
 
 
@@ -618,6 +665,7 @@ class GithubConnector(
         include_prs: bool = True,
         include_issues: bool = False,
         include_files: bool = False,
+        include_code_files: bool = False,
         branch: str | None = None,
     ) -> None:
         self.repo_owner = repo_owner
@@ -626,6 +674,7 @@ class GithubConnector(
         self.include_prs = include_prs
         self.include_issues = include_issues
         self.include_files = include_files
+        self.include_code_files = include_code_files
         # Branch to index files from; None means each repo's default branch.
         self.branch = (branch or "").strip() or None
         self.github_client: Github | None = None
@@ -774,6 +823,7 @@ class GithubConnector(
                 "Re-tried listing repo files too many times. "
                 "Something is going wrong with fetching objects from Github"
             )
+
         assert self.github_client is not None  # for type-checking
         try:
             git_tree = repo.get_git_tree(self._resolve_branch(repo), recursive=True)
@@ -788,7 +838,12 @@ class GithubConnector(
                 element.path
                 for element in git_tree.tree
                 if element.type == "blob"
-                and _is_indexable_path(element.path, element.size)
+                and _is_indexable_path(
+                    element.path,
+                    element.size,
+                    include_docs=self.include_files,
+                    include_code_files=self.include_code_files,
+                )
             ]
             paths.sort()
             return paths, truncated
@@ -1176,7 +1231,9 @@ class GithubConnector(
         ):
             checkpoint.stage = GithubConnectorStage.FILES
 
-        if self.include_files and checkpoint.stage == GithubConnectorStage.FILES:
+        if (
+            self.include_files or self.include_code_files
+        ) and checkpoint.stage == GithubConnectorStage.FILES:
             has_more_file_batches = yield from self._fetch_repo_files(
                 repo, checkpoint, start, is_slim, repo_external_access
             )
@@ -1323,10 +1380,15 @@ class GithubConnector(
                 "Invalid connector settings: 'repo_owner' must be provided."
             )
 
-        if not (self.include_prs or self.include_issues or self.include_files):
+        if not (
+            self.include_prs
+            or self.include_issues
+            or self.include_files
+            or self.include_code_files
+        ):
             raise ConnectorValidationError(
                 "Invalid connector settings: at least one of pull requests, "
-                "issues, or files must be selected for indexing."
+                "issues, documents, or code files must be selected for indexing."
             )
 
         try:

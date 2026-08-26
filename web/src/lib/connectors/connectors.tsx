@@ -349,6 +349,15 @@ export const connectorConfigs: Record<
           "Index text-based documents (markdown, text, etc.) from repositories",
         optional: true,
       },
+      {
+        type: "checkbox",
+        query: "Include code files?",
+        label: "Include Code Files?",
+        name: "include_code_files",
+        description:
+          "Index source code files from repositories so they can be searched",
+        optional: true,
+      },
     ],
     advanced_values: [
       {
@@ -358,7 +367,7 @@ export const connectorConfigs: Record<
         name: "branch",
         optional: true,
         description:
-          "Branch to index documents from (e.g. gh-pages). Leave blank to use each repository's default branch. Only applies when 'Include Documents?' is enabled. After changing this on an existing connector, trigger a re-index to pick up the new branch immediately.",
+          "Branch to index documents from (e.g. gh-pages). Leave blank to use each repository's default branch. Only applies when 'Include Documents?' or 'Include Code Files?' is enabled. After changing this on an existing connector, trigger a re-index to pick up the new branch immediately.",
       },
     ],
   },
@@ -2143,6 +2152,7 @@ export interface GithubConfig {
   include_prs: boolean;
   include_issues: boolean;
   include_files: boolean;
+  include_code_files: boolean;
   branch?: string;
 }
 
