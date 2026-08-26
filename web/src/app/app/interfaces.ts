@@ -3,7 +3,6 @@ import {
   SearchOnyxDocument,
   StreamStopReason,
 } from "@/lib/search/interfaces";
-import type { SearchFiltersRequest } from "@/lib/searchFilters/types";
 import { Packet } from "./services/streamingModels";
 import { ReasoningEffortOverride } from "@/lib/languageModels/types";
 
@@ -77,13 +76,6 @@ export interface ChatSearchResponse {
 
 // The number of messages to buffer on the client side.
 export const BUFFER_COUNT = 35;
-
-export interface RetrievalDetails {
-  run_search: "always" | "never" | "auto";
-  real_time: boolean;
-  filters?: SearchFiltersRequest;
-  enable_auto_detect_filters?: boolean | null;
-}
 
 // Citation number -> Document ID (allows O(1) lookup when rendering citations)
 export type CitationMap = { [citation_num: number]: string };
@@ -345,12 +337,6 @@ export interface AddPromptModalProps {
   onClose: () => void;
   onSubmit: (promptData: CreateInputPromptRequest) => void;
 }
-export interface PromptData {
-  id: number;
-  prompt: string;
-  content: string;
-}
-
 /**
  * // Start of Selection
  */
