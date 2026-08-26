@@ -14,7 +14,7 @@ inline markdown rendering via `RichStr` — pass `markdown("*bold* text")` as ch
 | `as`       | `"p" \| "span" \| "li" \| "h1" \| "h2" \| "h3"` | `"span"`         | HTML tag to render                                                                             |
 | `nowrap`   | `boolean`                                       | `false`          | Prevent text wrapping                                                                          |
 | `maxLines` | `number`                                        | —                | Truncate to N lines with an ellipsis (`1` = single-line truncate; `2+` = `-webkit-line-clamp`) |
-| `children` | `string \| RichStr`                             | —                | Plain string or `markdown()` for inline markdown                                               |
+| `children` | `string \| RichStr \| RichNodes`                | —                | Plain string, `markdown()` for inline markdown, or `richNodes()` for inline React nodes        |
 
 > **No `className` or `style`.** `Text` strips both (its props extend `WithoutStyles`); every
 > aspect of its appearance is driven by `font`, `color`, `nowrap`, and `maxLines`. For layout
@@ -90,7 +90,7 @@ import { Text } from "@opal/components";
 Inline markdown is opt-in via the `markdown()` function, which returns a `RichStr`. When `Text`
 receives a `RichStr` as children, it parses the inner string as inline markdown. Plain strings
 are rendered as-is — no parsing, no surprises. `Text` does not accept arbitrary JSX as children;
-use `string | RichStr` only.
+every non-string child must be branded via `markdown()` or `richNodes()`.
 
 ```tsx
 import { Text } from "@opal/components";
@@ -133,6 +133,41 @@ interface MyComponentProps {
 
 This avoids API coloring — no `markdown` boolean needs to be threaded through intermediate
 components. The decision to use markdown lives at the call site.
+
+## Inline React nodes via `RichNodes`
+
+Some sentences must embed an inline *component* — most often i18n rich text, where a translated
+sentence wraps part of itself in a link or button (next-intl `t.rich`). Markdown cannot express
+an element with an event handler, so for this case `richNodes()` brands a `ReactNode` as
+deliberate `Text` children:
+
+```tsx
+import { Text } from "@opal/components";
+import { richNodes } from "@opal/utils";
+
+<Text font="main-ui-body" color="text-04">
+  {richNodes(
+    t.rich("waitingOnVerification.helpPrompt.text", {
+      link: (chunks) => (
+        <RequestNewVerificationEmail email={email}>{chunks}</RequestNewVerificationEmail>
+      ),
+    })
+  )}
+</Text>
+```
+
+The nodes render verbatim and inherit the `font` and `color` presets. The brand keeps the same
+discipline as `RichStr`: naked JSX children stay a type error, and the opt-in is visible and
+greppable at the call site.
+
+Rules of thumb:
+
+- Prefer a plain string; use `markdown()` when the formatting is static (bold, code, plain
+  links); use `richNodes()` only when a real component must sit mid-sentence.
+- Keep the content inline (spans, links, buttons) — never layout JSX.
+- `RichNodes` is accepted **only** by `Text` children. Props typed `string | RichStr`
+  (`title`, `description`, `tooltip`, …) must stay plain-string-derivable for truncation and
+  aria labels, so do not widen them.
 
 ## Compatibility
 

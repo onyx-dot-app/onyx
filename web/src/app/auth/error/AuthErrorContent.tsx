@@ -1,8 +1,8 @@
 "use client";
 
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
-import Text from "@/refresh-components/texts/Text";
-import { Button } from "@opal/components";
+import { Button, Text } from "@opal/components";
+import { richNodes } from "@opal/utils";
 import { useTranslations } from "next-intl";
 
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
@@ -58,30 +58,30 @@ function AuthErrorContent({ message: rawMessage }: AuthErrorContentProps) {
   return (
     <AuthFlowContainer>
       <div className="flex flex-col items-center gap-4">
-        <Text headingH2 text05>
+        <Text font="heading-h2" color="text-05">
           {t("error.heading.title")}
         </Text>
-        <Text mainContentBody text03>
+        <Text font="main-content-body" color="text-03">
           {t("error.heading.description")}
         </Text>
         {/* TODO: Error card component */}
         <div className="w-full rounded-12 border border-status-error-05 bg-status-error-00 p-4">
           {message ? (
-            <Text mainContentBody className="text-status-error-05">
+            <Text font="main-content-body" color="status-error-05">
               {message}
             </Text>
           ) : (
             <div className="flex flex-col gap-2 px-4">
-              <Text mainContentEmphasis className="text-status-error-05">
+              <Text font="main-content-emphasis" color="status-error-05">
                 {t("error.possibleIssues.title")}
               </Text>
-              <Text as="li" mainContentBody className="text-status-error-05">
+              <Text as="li" font="main-content-body" color="status-error-05">
                 {t("error.credentialsIssue.description")}
               </Text>
-              <Text as="li" mainContentBody className="text-status-error-05">
+              <Text as="li" font="main-content-body" color="status-error-05">
                 {t("error.systemDisruptionIssue.description")}
               </Text>
-              <Text as="li" mainContentBody className="text-status-error-05">
+              <Text as="li" font="main-content-body" color="status-error-05">
                 {t("error.accessRestrictionIssue.description")}
               </Text>
             </div>
@@ -92,18 +92,20 @@ function AuthErrorContent({ message: rawMessage }: AuthErrorContentProps) {
           {t("error.returnToLoginButton.label")}
         </Button>
 
-        <Text mainContentBody text04>
+        <Text font="main-content-body" color="text-04">
           {NEXT_PUBLIC_CLOUD_ENABLED
-            ? t.rich("error.cloudSupportPrompt.text", {
-                link: (chunks) => (
-                  <a
-                    href="mailto:support@onyx.app"
-                    className="text-action-selection-05"
-                  >
-                    {chunks}
-                  </a>
-                ),
-              })
+            ? richNodes(
+                t.rich("error.cloudSupportPrompt.text", {
+                  link: (chunks) => (
+                    <a
+                      href="mailto:support@onyx.app"
+                      className="text-action-selection-05"
+                    >
+                      {chunks}
+                    </a>
+                  ),
+                })
+              )
             : t("error.selfHostedSupportPrompt.text")}
         </Text>
       </div>

@@ -6,8 +6,7 @@ import { User } from "@/lib/types";
 import { RequestNewVerificationEmail } from "./RequestNewVerificationEmail";
 import { Logo } from "@/lib/app/components";
 import { Text } from "@opal/components";
-import LegacyText from "@/refresh-components/texts/Text";
-import { markdown } from "@opal/utils";
+import { markdown, richNodes } from "@opal/utils";
 import { getTranslations } from "next-intl/server";
 
 export default async function Page() {
@@ -46,17 +45,17 @@ export default async function Page() {
               })
             )}
           </Text>
-          {/* Opal Text only accepts string children; t.rich output needs the
-              legacy Text, same as AuthErrorContent's support prompt. */}
-          <LegacyText mainUiBody text04 as="span">
-            {t.rich("waitingOnVerification.helpPrompt.text", {
-              link: (chunks) => (
-                <RequestNewVerificationEmail email={currentUser.email}>
-                  {chunks}
-                </RequestNewVerificationEmail>
-              ),
-            })}
-          </LegacyText>
+          <Text as="span">
+            {richNodes(
+              t.rich("waitingOnVerification.helpPrompt.text", {
+                link: (chunks) => (
+                  <RequestNewVerificationEmail email={currentUser.email}>
+                    {chunks}
+                  </RequestNewVerificationEmail>
+                ),
+              })
+            )}
+          </Text>
         </div>
       </div>
     </main>

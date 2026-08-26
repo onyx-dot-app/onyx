@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { Text } from "@opal/components";
 import type { TextFont, TextColor } from "@opal/components";
-import { markdown } from "@opal/utils";
+import { markdown, richNodes } from "@opal/utils";
 
 const meta: Meta<typeof Text> = {
   title: "opal/components/Text",
@@ -254,6 +254,29 @@ export const PlainStringNotParsed: Story = {
         }
       </Text>
     </div>
+  ),
+};
+
+// ---------------------------------------------------------------------------
+// Inline React nodes via RichNodes
+// ---------------------------------------------------------------------------
+
+export const RichNodesInlineComponent: Story = {
+  render: () => (
+    <Text font="main-ui-body" color="text-04">
+      {richNodes(
+        <>
+          Click{" "}
+          <button
+            className="underline underline-offset-2"
+            onClick={() => alert("clicked")}
+          >
+            here
+          </button>{" "}
+          to request a new email.
+        </>
+      )}
+    </Text>
   ),
 };
 
