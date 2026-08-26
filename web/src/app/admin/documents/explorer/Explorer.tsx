@@ -1,6 +1,6 @@
 "use client";
 
-import { adminSearch } from "./lib";
+import { adminSearch } from "@/lib/searchFilters/svc";
 import { useState, useEffect, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { OnyxDocument } from "@/lib/search/interfaces";
