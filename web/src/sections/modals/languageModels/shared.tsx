@@ -517,9 +517,37 @@ function buildModelDescription(model: ModelConfiguration): string | undefined {
   return parts.length > 0 ? parts.join("  ·  ") : undefined;
 }
 
-/** Eye marker for vision models, shown on the right of the picker row. */
-function modelRightChildren(model: ModelConfiguration): React.ReactNode {
-  if (!hasModelMetadata(model) || !model.supports_image_input) return undefined;
+/** Eye marker for vision models, shown on the right of the picker row.
+ *  When onToggleVision is provided, the eye is clickable to toggle
+ *  supports_image_input (admin override for models not recognized by
+ *  LiteLLM cost map). */
+function modelRightChildren(
+  model: ModelConfiguration,
+  onToggleVision?: () => void
+): React.ReactNode {
+  if (!onToggleVision && !model.supports_image_input) return undefined;
+  if (onToggleVision) {
+    return (
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggleVision();
+        }}
+        title={
+          model.supports_image_input
+            ? "Vision enabled — click to disable"
+            : "Click to enable vision (overrides LiteLLM auto-detection)"
+        }
+        className="cursor-pointer hover:opacity-80 transition-opacity"
+        style={{ opacity: model.supports_image_input ? 1 : 0.3 }}
+      >
+        <Text secondaryBody text03>
+          👁
+        </Text>
+      </button>
+    );
+  }
   return (
     <Text secondaryBody text03 title="Vision">
       👁
@@ -535,6 +563,7 @@ interface ModelRowProps {
   onRename: (value: string | undefined) => void;
   onSettingsChange: (patch: ModelSettingsPatch) => void;
   onSetDefaultModel?: () => void;
+  onToggleVision?: () => void;
 }
 
 /**
@@ -557,6 +586,7 @@ function ModelRow({
   onRename,
   onSettingsChange,
   onSetDefaultModel,
+  onToggleVision,
 }: ModelRowProps) {
   const editHandle = useRef<ContentMdEditHandle>(null);
   // Keeps the hover-revealed actions visible while the settings popover,
@@ -636,7 +666,7 @@ function ModelRow({
                   height="auto"
                   gap={1}
                 >
-                  {modelRightChildren(model)}
+                  {modelRightChildren(model, onToggleVision)}
                   <Hoverable.Item group="model-row" variant="appear-on-hover">
                     <OpalSection
                       flexDirection="row"
@@ -759,6 +789,13 @@ export function ModelSelectionField({
     await setDefaultLlmModelAndRefresh(providerId, modelName, mutate);
   }
 
+  function setVisionSupport(modelName: string, supports: boolean) {
+    const updated = models.map((m) =>
+      m.name === modelName ? { ...m, supports_image_input: supports } : m
+    );
+    formikProps.setFieldValue("model_configurations", updated);
+  }
+
   function setCustomDisplayName(modelName: string, value: string | undefined) {
     const updated = models.map((m) =>
       m.name === modelName
@@ -868,6 +905,12 @@ export function ModelSelectionField({
                         providerId != null && model.is_visible
                           ? () => void setDefaultModel(model.name)
                           : undefined
+                      }
+                      onToggleVision={() =>
+                        setVisionSupport(
+                          model.name,
+                          !model.supports_image_input
+                        )
                       }
                     />
                   ))}

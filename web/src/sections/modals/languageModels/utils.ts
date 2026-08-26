@@ -182,6 +182,7 @@ export function mergeFetchedModelConfigurations(
     return clampModelSettings({
       ...model,
       is_visible: prior.is_visible,
+      supports_image_input: prior.supports_image_input,
       custom_display_name: prior.custom_display_name,
       reasoning_effort_max: prior.reasoning_effort_max,
       reasoning_effort_default: prior.reasoning_effort_default,
