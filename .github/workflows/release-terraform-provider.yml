@@ -1,0 +1,200 @@
+name: Release Terraform Provider
+
+# The public Terraform Registry only serves a provider from a repository named
+# after it, so the provider is published from a mirror,
+# onyx-dot-app/terraform-provider-onyx, rather than from this monorepo.
+#
+# A `tf-provider/vX.Y.Z` tag here pushes terraform-provider-onyx/ to that mirror
+# as one commit tagged `vX.Y.Z`, then builds and signs the release there. The
+# mirror holds no source of its own: it is written from this directory, never
+# edited directly.
+#
+# Run this with workflow_dispatch first. The default is a dry run, which builds
+# every platform archive and touches neither the mirror nor the registry.
+
+on:
+  push:
+    tags:
+      - "tf-provider/v*.*.*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to build, without the leading v (e.g. 1.0.0)"
+        required: true
+        type: string
+      dry_run:
+        description: "Build only. Leaves the mirror and the registry alone."
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: Release-Terraform-Provider-${{ github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  MIRROR_REPO: onyx-dot-app/terraform-provider-onyx
+  PROVIDER_DIR: terraform-provider-onyx
+
+jobs:
+  release:
+    name: Publish to the Terraform Registry
+    runs-on: ubuntu-latest
+    # Holds the signing key and the mirror app credentials, and gates the job
+    # behind whatever reviewers the environment requires.
+    environment: release-terraform-provider
+    timeout-minutes: 30
+    steps:
+      - name: Resolve the release version
+        id: version
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [ -n "${INPUT_VERSION}" ]; then
+            version="${INPUT_VERSION#v}"
+          else
+            version="${REF_NAME#tf-provider/v}"
+          fi
+          if ! printf '%s' "${version}" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::'${version}' is not a semantic version; tag as tf-provider/vX.Y.Z"
+            exit 1
+          fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${version}" >> "$GITHUB_OUTPUT"
+          echo "Releasing ${version}"
+
+      - name: Mint a token for the release mirror
+        id: mirror-token
+        if: ${{ !inputs.dry_run }}
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # ratchet:actions/create-github-app-token@v2
+        with:
+          client-id: ${{ vars.TF_PROVIDER_RELEASE_APP_ID }}
+          private-key: ${{ secrets.TF_PROVIDER_RELEASE_APP_PRIVATE_KEY }}
+          owner: onyx-dot-app
+          repositories: terraform-provider-onyx
+          permission-contents: write
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      # Authenticate git the way actions/checkout does, with a header rather
+      # than a URL, so the token never becomes part of a remote or a ref.
+      - name: Authenticate git against the mirror
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ steps.mirror-token.outputs.token }}
+        run: |
+          set -euo pipefail
+          auth=$(printf 'x-access-token:%s' "${GH_TOKEN}" | base64 -w0)
+          git config --global "http.https://github.com/.extraheader" \
+            "Authorization: Basic ${auth}"
+
+      # `git subtree split` walks every commit in this repository to find the
+      # handful that touch the provider, which takes longer than the whole
+      # release. The provider directory is already a complete tree, so commit
+      # that tree straight onto the mirror's history instead.
+      - name: Push the provider to the release mirror
+        if: ${{ !inputs.dry_run }}
+        env:
+          MIRROR_TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          mirror="https://github.com/${MIRROR_REPO}.git"
+
+          tree=$(git rev-parse "HEAD:${PROVIDER_DIR}")
+          parents=()
+          if git fetch --quiet "${mirror}" main 2>/dev/null; then
+            parents=(-p "$(git rev-parse FETCH_HEAD)")
+            echo "Building on the mirror's current main."
+          else
+            echo "The mirror has no main yet; this is its first commit."
+          fi
+
+          message="${MIRROR_TAG}
+
+          Published from ${GITHUB_REPOSITORY}@$(git rev-parse HEAD).
+          Edit the provider there, never here."
+          commit=$(git commit-tree "${tree}" "${parents[@]}" -m "${message}")
+
+          git push "${mirror}" "${commit}:refs/heads/main"
+          git push "${mirror}" "${commit}:refs/tags/${MIRROR_TAG}"
+          echo "Pushed ${commit} to ${MIRROR_REPO} as ${MIRROR_TAG}."
+
+      # goreleaser reads the version from the tag it finds in the checkout it
+      # runs in. Running it here would pick up this repository's own tags, so
+      # the release is built from the mirror, where the only tags are the
+      # provider's.
+      - name: Check out the mirror at the new tag
+        if: ${{ !inputs.dry_run }}
+        env:
+          MIRROR_TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git clone --quiet --branch "${MIRROR_TAG}" \
+            "https://github.com/${MIRROR_REPO}.git" mirror
+          git -C mirror describe --tags
+
+      # A dry run has no mirror to build from, so it builds the directory as it
+      # stands. goreleaser stamps a snapshot version rather than the real one.
+      - name: Stage the provider for a dry run
+        if: ${{ inputs.dry_run }}
+        run: cp -R "${PROVIDER_DIR}" mirror
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # ratchet:actions/setup-go@v5 # zizmor: ignore[cache-poisoning]
+        with:
+          go-version-file: ${{ env.PROVIDER_DIR }}/go.mod
+          cache-dependency-path: ${{ env.PROVIDER_DIR }}/go.sum
+
+      - name: Import the signing key
+        id: gpg
+        if: ${{ !inputs.dry_run }}
+        uses: crazy-max/ghaction-import-gpg@2dc316deee8e90f13e1a351ab510b4d5bc0c82cd # ratchet:crazy-max/ghaction-import-gpg@v7.0.0
+        with:
+          gpg_private_key: ${{ secrets.TF_PROVIDER_GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.TF_PROVIDER_GPG_PASSPHRASE }}
+
+      - name: Build and publish the release
+        if: ${{ !inputs.dry_run }}
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # ratchet:goreleaser/goreleaser-action@v7.2.3
+        with:
+          version: "~> v2"
+          args: release --clean
+          workdir: mirror
+        env:
+          GITHUB_TOKEN: ${{ steps.mirror-token.outputs.token }}
+          GPG_FINGERPRINT: ${{ steps.gpg.outputs.fingerprint }}
+
+      - name: Build the release without publishing it
+        if: ${{ inputs.dry_run }}
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # ratchet:goreleaser/goreleaser-action@v7.2.3
+        with:
+          version: "~> v2"
+          args: release --snapshot --clean --skip=sign,publish
+          workdir: mirror
+
+      - name: Report what was built
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          MIRROR_TAG: ${{ steps.version.outputs.tag }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          {
+            echo "### Terraform provider ${VERSION}"
+            if [ "${DRY_RUN}" = "true" ]; then
+              echo "Dry run: nothing reached ${MIRROR_REPO} or the registry."
+            else
+              echo "Published to https://github.com/${MIRROR_REPO}/releases/tag/${MIRROR_TAG}"
+            fi
+            echo '```'
+            find mirror/dist -maxdepth 1 -name '*.zip' -exec basename {} \; | sort
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

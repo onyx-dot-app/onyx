@@ -1,0 +1,75 @@
+# Release build for the public Terraform Registry.
+#
+# This file runs in the release mirror (onyx-dot-app/terraform-provider-onyx),
+# not in the monorepo: the registry requires a repository named after the
+# provider, and .github/workflows/release-terraform-provider.yml pushes this
+# directory there before it runs. Everything the registry ingests is produced
+# here — the platform archives, the checksum file, and its GPG signature.
+version: 2
+
+project_name: terraform-provider-onyx
+
+before:
+  hooks:
+    # Not `go mod tidy`: a release must build what was reviewed, and tidy can
+    # rewrite go.mod mid-release.
+    - go mod download
+
+builds:
+  - env:
+      - CGO_ENABLED=0
+    # Reproducible builds: stamp the commit time rather than the build time.
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    flags:
+      - -trimpath
+    ldflags:
+      - "-s -w -X main.version={{.Version}}"
+    goos:
+      - darwin
+      - freebsd
+      - linux
+      - windows
+    goarch:
+      - "386"
+      - amd64
+      - arm
+      - arm64
+    ignore:
+      - goos: darwin
+        goarch: "386"
+      - goos: darwin
+        goarch: arm
+    # The registry expects this exact binary name inside each archive.
+    binary: "{{ .ProjectName }}_v{{ .Version }}"
+
+archives:
+  - formats: [zip]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: "{{ .ProjectName }}_{{ .Version }}_SHA256SUMS"
+  algorithm: sha256
+  extra_files:
+    - glob: terraform-registry-manifest.json
+      name_template: "{{ .ProjectName }}_{{ .Version }}_manifest.json"
+
+# The registry verifies this signature against the GPG public key registered
+# with the provider, and refuses a release without it.
+signs:
+  - artifacts: checksum
+    args:
+      - "--batch"
+      - "--local-user"
+      - "{{ .Env.GPG_FINGERPRINT }}"
+      - "--output"
+      - "${signature}"
+      - "--detach-sign"
+      - "${artifact}"
+
+release:
+  extra_files:
+    - glob: terraform-registry-manifest.json
+      name_template: "{{ .ProjectName }}_{{ .Version }}_manifest.json"
+
+changelog:
+  disable: true
