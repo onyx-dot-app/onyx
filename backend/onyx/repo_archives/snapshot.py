@@ -1,11 +1,11 @@
 """Local snapshots of repository archives for connectors that index files.
 
-One archive download (e.g. GitHub's tarball endpoint — a single API request)
-replaces the per-file content API calls that rate-limit large repositories.
-Snapshots are cached on local disk keyed by the caller's cache key, so a
-checkpointed connector can read file batches across task invocations without
-re-downloading; a cache miss (different worker, prune, restart) just fetches
-the archive again.
+One archive fetch per revision (served by the tarball cache or one provider
+request) replaces the per-file content API calls that rate-limit large
+repositories. The archive is extracted once onto local disk, so a
+checkpointed connector can read file batches across task invocations
+without fetching again; a cache miss (different worker, prune, restart)
+just fetches the archive again.
 
 Archive content is untrusted. Extraction uses tarfile's "data" filter (blocks
 absolute paths, traversal, devices, and escaping links) plus archive-wide
@@ -13,7 +13,6 @@ member and size caps, walks never follow symlinks, and reads verify that the
 resolved path stays inside the snapshot root.
 """
 
-import hashlib
 import os
 import shutil
 import stat
@@ -22,14 +21,15 @@ import tempfile
 import time
 import uuid
 from collections.abc import Callable, Iterator
+from contextlib import AbstractContextManager
 from pathlib import Path
-from typing import BinaryIO
 
 from onyx.configs.app_configs import (
     REPO_SNAPSHOT_MAX_ARCHIVE_MEMBERS,
     REPO_SNAPSHOT_MAX_EXTRACTED_BYTES,
     REPO_SNAPSHOT_TTL_SECONDS,
 )
+from onyx.repo_archives.models import RepoArchive, RepoRevision
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -44,8 +44,9 @@ class RepoSnapshotError(Exception):
 class RepoSnapshot:
     """Read access to one extracted repository revision."""
 
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, revision: RepoRevision) -> None:
         self.root = root
+        self.revision = revision
         self._resolved_root = root.resolve()
 
     def walk_files(self) -> Iterator[tuple[str, int]]:
@@ -128,9 +129,8 @@ class _ExtractionLimits:
         return filtered
 
 
-def _snapshot_dir(cache_key: str) -> Path:
-    digest = hashlib.sha256(cache_key.encode()).hexdigest()[:32]
-    return _CACHE_ROOT / digest
+def _snapshot_dir(revision: RepoRevision) -> Path:
+    return _CACHE_ROOT / revision.digest
 
 
 def _touch(snapshot_root: Path) -> None:
@@ -195,23 +195,23 @@ def _extract_and_publish(archive_path: Path, staging: Path, dest: Path) -> int:
 
 
 def get_or_create_snapshot(
-    cache_key: str,
-    fetch_archive: Callable[[BinaryIO], None],
+    revision: RepoRevision,
+    open_archive: Callable[[], AbstractContextManager[RepoArchive]],
 ) -> RepoSnapshot:
-    """Snapshot for `cache_key`, reusing a cached one when present.
+    """Snapshot of `revision`, reusing a cached one when present.
 
-    On a miss, `fetch_archive` streams the tar.gz bytes into the file object
-    it is given; the archive never has to fit in memory. Errors raised by
-    `fetch_archive` propagate unchanged; extraction problems raise
+    On a miss, `open_archive` (typically `tarball_cache.open_revision_archive`
+    bound to the revision) supplies the tar.gz; it is only called on a miss.
+    Errors it raises propagate unchanged; extraction problems raise
     RepoSnapshotError.
     """
     _prune_stale_snapshots()
 
-    dest = _snapshot_dir(cache_key)
+    dest = _snapshot_dir(revision)
     if dest.is_dir():
         try:
             os.utime(dest)
-            return RepoSnapshot(dest)
+            return RepoSnapshot(dest, revision)
         except FileNotFoundError:
             pass  # Pruned by another worker between the check and the touch.
 
@@ -221,11 +221,9 @@ def get_or_create_snapshot(
     staging = dest.with_name(f"{dest.name}.tmp{os.getpid()}_{uuid.uuid4().hex[:8]}")
     staging.mkdir()
     try:
-        archive_path = staging / "archive.tar.gz"
-        with open(archive_path, "wb") as archive_file:
-            fetch_archive(archive_file)
-        archive_size = archive_path.stat().st_size
-        file_count = _extract_and_publish(archive_path, staging, dest)
+        with open_archive() as archive:
+            file_count = _extract_and_publish(archive.path, staging, dest)
+            archive_size = archive.size
     finally:
         shutil.rmtree(staging, ignore_errors=True)
 
@@ -235,4 +233,4 @@ def get_or_create_snapshot(
         file_count,
         archive_size,
     )
-    return RepoSnapshot(dest)
+    return RepoSnapshot(dest, revision)
