@@ -1,11 +1,26 @@
+from contextlib import nullcontext
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-from onyx.coding_agent.repo_cache import RepoArchive
+from onyx.repo_archives.github import GitHubArchiveProvider
+from onyx.repo_archives.models import RepoArchive, RepoRevision
 from onyx.tools.fake_tools import coding_agent
 
 
-def test_coding_agent_fetches_and_extracts_repo_with_existing_policy() -> None:
+def test_coding_agent_fetches_and_extracts_repo_with_existing_policy(
+    tmp_path: Path,
+) -> None:
+    archive_path = tmp_path / "repo.tar.gz"
+    archive_path.write_bytes(b"repository archive")
+    archive = RepoArchive(
+        path=archive_path,
+        size=archive_path.stat().st_size,
+        revision=RepoRevision(
+            repo=GitHubArchiveProvider.repo_ref("onyx-dot-app", "onyx"),
+            commit_sha="a" * 40,
+        ),
+    )
     client = MagicMock()
     client.__enter__.return_value = client
     client.__exit__.return_value = False
@@ -18,13 +33,8 @@ def test_coding_agent_fetches_and_extracts_repo_with_existing_policy() -> None:
 
     with (
         patch.object(
-            coding_agent,
-            "fetch_repo_archive",
-            return_value=RepoArchive(
-                archive=b"repository archive",
-                commit_sha="a" * 40,
-            ),
-        ) as fetch_archive,
+            coding_agent, "open_repo_archive", return_value=nullcontext(archive)
+        ) as open_archive,
         patch.object(coding_agent, "CodeInterpreterClient", return_value=client),
         coding_agent._setup_session(
             repo="git@github.com:onyx-dot-app/onyx.git",
@@ -34,11 +44,12 @@ def test_coding_agent_fetches_and_extracts_repo_with_existing_policy() -> None:
         assert session_id == "session-id"
         assert commit_sha == "a" * 40
 
-    source, ref, authorization = fetch_archive.call_args.args
-    assert (source.owner, source.repo) == ("onyx-dot-app", "onyx")
+    provider, repo_ref, ref = open_archive.call_args.args
+    assert isinstance(provider, GitHubArchiveProvider)
+    assert provider._authorization_header == "Bearer secret"
+    assert (repo_ref.owner, repo_ref.name) == ("onyx-dot-app", "onyx")
     assert ref is None
-    assert authorization == "Bearer secret"
-    assert fetch_archive.call_args.kwargs == {
+    assert open_archive.call_args.kwargs == {
         "max_size_bytes": 500 * 1024 * 1024,
         "timeout": (30, 300),
     }

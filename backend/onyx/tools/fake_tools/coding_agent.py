@@ -17,7 +17,6 @@ from onyx.coding_agent.mock_tools import (
     get_coding_agent_tool_definitions,
 )
 from onyx.coding_agent.models import CodingAgentCallResult, CodingAgentSpecialToolCalls
-from onyx.coding_agent.repo_cache import fetch_repo_archive
 from onyx.configs.constants import MessageType
 from onyx.deep_research.dr_mock_tools import (
     THINK_TOOL_NAME,
@@ -36,6 +35,8 @@ from onyx.prompts.coding_agent.coding_agent import (
     USER_FINAL_ANSWER_QUERY,
 )
 from onyx.prompts.prompt_utils import get_current_llm_day_time
+from onyx.repo_archives.github import GitHubArchiveProvider
+from onyx.repo_archives.tarball_cache import open_repo_archive
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
     AgentResponseDelta,
@@ -94,7 +95,8 @@ def _setup_session(
 
     The requested ref is resolved to its current commit SHA before every run,
     so the agent always analyzes the up-to-date state; unchanged repos come
-    from the file-store cache instead of a fresh download (see repo_cache).
+    from the file-store cache instead of a fresh download (see
+    repo_archives.tarball_cache).
 
     Creates its own :class:`CodeInterpreterClient` internally and tears it
     down on exit, so callers only deal with the ``session_id``.
@@ -103,21 +105,25 @@ def _setup_session(
         repo,
         allow_ssh=True,
     )
-    repo_archive = fetch_repo_archive(
-        github_source,
-        ref,
-        f"Bearer {github_token}" if github_token else None,
-        max_size_bytes=CODING_AGENT_GITHUB_MAX_REPO_BYTES,
-        timeout=CODING_AGENT_GITHUB_DOWNLOAD_TIMEOUT,
-    )
-    repo_bytes = repo_archive.archive
-    commit_sha = repo_archive.commit_sha
+    provider = GitHubArchiveProvider(f"Bearer {github_token}" if github_token else None)
 
     with CodeInterpreterClient() as client:
-        ci_file_id = client.upload_file(repo_bytes, REPO_TARBALL_PATH)
-        # The archive can be hundreds of MB; drop it as soon as it's uploaded
-        # so it isn't held for the agent's whole (potentially 25-minute) run.
-        del repo_bytes, repo_archive
+        # The archive can be hundreds of MB: it lives in a temp file that is
+        # removed when this block exits, right after the upload, so it isn't
+        # held for the agent's whole (potentially 25-minute) run.
+        with open_repo_archive(
+            provider,
+            provider.repo_ref(github_source.owner, github_source.repo),
+            ref,
+            max_size_bytes=CODING_AGENT_GITHUB_MAX_REPO_BYTES,
+            timeout=CODING_AGENT_GITHUB_DOWNLOAD_TIMEOUT,
+        ) as repo_archive:
+            ci_file_id = client.upload_file(
+                repo_archive.path.read_bytes(), REPO_TARBALL_PATH
+            )
+            commit_sha = (
+                repo_archive.revision.commit_sha if repo_archive.revision else None
+            )
         session_info = client.create_session(
             ttl_seconds=CODING_AGENT_SESSION_TTL_SECONDS,
             files=[{"path": REPO_TARBALL_PATH, "file_id": ci_file_id}],
