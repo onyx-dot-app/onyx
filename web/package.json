@@ -86,7 +86,7 @@
     "react": "19.2.4",
     "react-day-picker": "^9.13.0",
     "react-dom": "19.2.4",
-    "react-dropzone": "^14.2.3",
+    "react-dropzone": "^20.1.0",
     "react-icons": "^4.8.0",
     "react-markdown": "^9.0.1",
     "recharts": "^3.9.2",
