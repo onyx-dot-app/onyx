@@ -1,6 +1,7 @@
 "use client";
 
 import { Formik, Form } from "formik";
+import { useTranslations } from "next-intl";
 import * as Yup from "yup";
 import { Button } from "@opal/components";
 import { useProjectsContext } from "@/lib/projects/providers";
@@ -14,6 +15,7 @@ const validationSchema = Yup.object({
 });
 
 export default function AddInstructionModal() {
+  const t = useTranslations("skills.modals");
   const modal = useModal();
   const { currentProjectDetails, upsertInstructions } = useProjectsContext();
 
@@ -22,8 +24,8 @@ export default function AddInstructionModal() {
       <Modal.Content width="sm">
         <Modal.Header
           icon={SvgAddLines}
-          title="Set Project Instructions"
-          description="Specify the behaviors or tone for the chat sessions in this project."
+          title={t("addInstruction.header.title")}
+          description={t("addInstruction.header.description")}
           onClose={() => modal.toggle(false)}
         />
         <Formik
@@ -47,7 +49,9 @@ export default function AddInstructionModal() {
               <Modal.Body>
                 <InputTextAreaField
                   name="instructions"
-                  placeholder="My goal with is to... be sure to... in your responses."
+                  placeholder={t(
+                    "addInstruction.instructionsField.placeholder"
+                  )}
                 />
               </Modal.Body>
               <Modal.Footer>
@@ -56,13 +60,13 @@ export default function AddInstructionModal() {
                   type="button"
                   onClick={() => modal.toggle(false)}
                 >
-                  Cancel
+                  {t("addInstruction.cancelButton.label")}
                 </Button>
                 <Button
                   type="submit"
                   disabled={isSubmitting || !dirty || !isValid}
                 >
-                  Save Instructions
+                  {t("addInstruction.saveButton.label")}
                 </Button>
               </Modal.Footer>
             </Form>

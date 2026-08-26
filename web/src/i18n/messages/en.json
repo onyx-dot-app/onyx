@@ -25,6 +25,571 @@
       "label": "Log Out"
     }
   },
+  "actions": {
+    "actionButtons": {
+      "authenticateButton": {
+        "ariaLabel": "Authenticate and connect to {serverName}",
+        "label": "Authenticate"
+      },
+      "deleteButton": {
+        "ariaLabel": "Delete {serverName} server",
+        "tooltip": "Delete Server"
+      },
+      "disconnectButton": {
+        "ariaLabel": "Disconnect {serverName} server",
+        "tooltip": "Disconnect Server"
+      },
+      "fetchingTools": {
+        "label": "Fetching tools..."
+      },
+      "manageButton": {
+        "ariaLabel": "Manage {serverName} server",
+        "tooltip": "Manage Server"
+      },
+      "reconnectButton": {
+        "ariaLabel": "Reconnect to {serverName}",
+        "label": "Reconnect"
+      },
+      "viewToolsButton": {
+        "ariaLabel": "View tools for {serverName}",
+        "label": "{count, plural, one {View # tool} other {View # tools}}"
+      }
+    },
+    "actionCard": {
+      "card": {
+        "ariaLabel": "{title} action card"
+      }
+    },
+    "addMcpModal": {
+      "addHeader": {
+        "description": "Connect MCP (Model Context Protocol) server to add custom actions.",
+        "title": "Add MCP Server"
+      },
+      "authStatus": {
+        "apiTokenDescription": "API token configured",
+        "connectedDescription": "Connected",
+        "oauthDescription": "OAuth connected to {owner}",
+        "title": "Authenticated & Connected"
+      },
+      "cancelButton": {
+        "label": "Cancel"
+      },
+      "description": {
+        "placeholder": "More details about the MCP server",
+        "suffix": "optional",
+        "title": "Description"
+      },
+      "disconnectButton": {
+        "tooltip": "Disconnect Server"
+      },
+      "editConfigsButton": {
+        "label": "Edit Configs"
+      },
+      "manageHeader": {
+        "description": "Update your MCP server configuration and manage authentication.",
+        "title": "Manage MCP Server"
+      },
+      "name": {
+        "placeholder": "Name your MCP server",
+        "required": "Server name is required",
+        "title": "Server Name"
+      },
+      "serverUrl": {
+        "invalid": "Must be a valid URL",
+        "required": "Server URL is required",
+        "subDescription": "Only connect to servers you trust. You are responsible for actions taken with this connection and keeping your tools updated.",
+        "title": "MCP Server URL"
+      },
+      "submitButton": {
+        "addLabel": "Add Server",
+        "addingLabel": "Adding...",
+        "saveLabel": "Save Changes",
+        "savingLabel": "Saving..."
+      },
+      "toasts": {
+        "createFailed": "Failed to create MCP server",
+        "serverCreated": "MCP Server created successfully",
+        "serverUpdated": "MCP Server updated successfully",
+        "updateFailed": "Failed to update MCP server"
+      }
+    },
+    "addOpenApiModal": {
+      "addHeader": {
+        "description": "Add OpenAPI schema to add custom actions.",
+        "title": "Add OpenAPI action"
+      },
+      "authStatus": {
+        "configuredTitle": "Authentication configured",
+        "enabledTitle": "Authenticated & Enabled",
+        "headersDescription": "Custom authentication headers configured",
+        "oauthDescription": "OAuth authentication configured",
+        "oauthNamedDescription": "OAuth connected via {name}",
+        "passthroughDescription": "Passthrough authentication enabled"
+      },
+      "cancelButton": {
+        "label": "Cancel"
+      },
+      "copyButton": {
+        "tooltip": "Copy definition"
+      },
+      "definition": {
+        "invalidJson": "Invalid JSON format",
+        "placeholder": "Enter your OpenAPI schema here",
+        "required": "OpenAPI schema definition is required",
+        "subDescription": "Specify an OpenAPI schema that defines the APIs you want to make available as part of this action. You can use the placeholders `CHAT_SESSION_ID`, `MESSAGE_ID`, `USER_ID`, and `USER_EMAIL` anywhere in the schema (e.g. server URL, paths, parameter defaults) and they will be replaced with the current request's values at call time. Learn more about [OpenAPI actions]({docsUrl}).",
+        "title": "OpenAPI Schema Definition"
+      },
+      "disableButton": {
+        "tooltip": "Disable action"
+      },
+      "editConfigsButton": {
+        "disabledTooltip": "Only the action's creator or an admin can manage authentication",
+        "label": "Edit Configs"
+      },
+      "editHeader": {
+        "description": "Update the OpenAPI schema for this action.",
+        "title": "Edit OpenAPI action"
+      },
+      "empty": {
+        "description": "Provide OpenAPI schema to preview actions here.",
+        "title": "No Actions Found"
+      },
+      "formatButton": {
+        "tooltip": "Format definition"
+      },
+      "method": {
+        "noSummary": "No summary provided"
+      },
+      "serverUrl": {
+        "description": "URL found in the schema. Only connect to servers you trust."
+      },
+      "submitButton": {
+        "addLabel": "Add Action",
+        "addingLabel": "Adding...",
+        "saveLabel": "Save Changes",
+        "savingLabel": "Saving..."
+      },
+      "toasts": {
+        "actionCreated": "OpenAPI action created successfully",
+        "actionUpdated": "OpenAPI action updated successfully",
+        "createFailed": "Failed to create OpenAPI action",
+        "invalidJson": "Invalid JSON format in OpenAPI schema definition",
+        "updateFailed": "Failed to update OpenAPI action"
+      }
+    },
+    "cardHeader": {
+      "disconnected": {
+        "label": "(Disconnected)"
+      },
+      "notAuthenticated": {
+        "label": "(Not Authenticated)"
+      },
+      "renameButton": {
+        "ariaLabel": "Rename {title}",
+        "tooltip": "Rename"
+      }
+    },
+    "cardSkeleton": {
+      "card": {
+        "ariaLabel": "Loading action card"
+      }
+    },
+    "disconnectModal": {
+      "body": {
+        "confirmation": "Are you sure you want to proceed?",
+        "description": "All tools connected to {name} will stop working. You can reconnect to this server later if needed."
+      },
+      "cancelButton": {
+        "label": "Cancel"
+      },
+      "confirmButton": {
+        "label": "Disconnect",
+        "pendingLabel": "Disconnecting..."
+      },
+      "deleteButton": {
+        "label": "Disconnect & Delete"
+      },
+      "header": {
+        "title": "Disconnect *{name}*"
+      }
+    },
+    "mcpAuthModal": {
+      "additionalAuthParams": {
+        "label": "Additional Auth Params (JSON)"
+      },
+      "advanced": {
+        "description": "Configure a known OAuth provider with explicit authorization and token endpoints instead of automatic discovery.",
+        "title": "Advanced"
+      },
+      "apiKey": {
+        "required": "API token is required"
+      },
+      "apiKeyTabs": {
+        "admin": {
+          "label": "Shared Key (Admin)"
+        },
+        "perUser": {
+          "label": "Individual Key (Per User)"
+        }
+      },
+      "authPerformer": {
+        "required": "Authentication performer is required"
+      },
+      "authType": {
+        "apiToken": {
+          "description": "Use per-user individual API key or organization-wide shared API key.",
+          "label": "API Key"
+        },
+        "label": "Authentication Method",
+        "none": {
+          "description": "Not Recommended",
+          "label": "None"
+        },
+        "oauth": {
+          "description": "Each user need to authenticate via OAuth with their own credentials.",
+          "label": "OAuth"
+        },
+        "placeholder": "Select method",
+        "ptOauth": {
+          "description": "Forward the user's OAuth access token used to authenticate Onyx.",
+          "label": "OAuth Pass-through"
+        },
+        "required": "Authentication type is required"
+      },
+      "authorizationEndpoint": {
+        "label": "Authorization Endpoint",
+        "required": "Authorization endpoint is required in known-provider mode"
+      },
+      "cancelButton": {
+        "label": "Cancel"
+      },
+      "clientId": {
+        "label": "Client ID"
+      },
+      "clientSecret": {
+        "label": "Client Secret"
+      },
+      "errors": {
+        "additionalParamsInvalid": "Invalid additional auth params JSON",
+        "additionalParamsInvalidWithReason": "Invalid additional auth params JSON: {reason}",
+        "additionalParamsNotObject": "Additional auth params must be a JSON object",
+        "oauthInitFailed": "Failed to initiate OAuth: {detail}",
+        "saveAuthFailed": "Failed to save authentication configuration",
+        "saveConfigFailed": "Failed to save server configuration"
+      },
+      "header": {
+        "defaultTitle": "Authenticate MCP Server",
+        "description": "Authenticate your connection to start using the MCP server.",
+        "title": "Authenticate *{name}*"
+      },
+      "knownProvider": {
+        "hint": "Known-provider mode requires endpoint configuration. Google reference endpoints: authorization {authorizationEndpoint} and token {tokenEndpoint}."
+      },
+      "noAuthNotice": {
+        "description": "No authentication will be used for this connection. Make sure you trust this server. You are responsible for actions taken with this connection.",
+        "title": "No authentication for this MCP server"
+      },
+      "oauthInfo": {
+        "discovery": "Client ID and secret are optional. During automatic discovery, Onyx uses a Client ID Metadata Document (CIMD) when supported and falls back to Dynamic Client Registration (DCR).",
+        "manualRegistration": "If your server supports neither method, register your Onyx instance with the server provider first. Grant Onyx the necessary scopes for your actions."
+      },
+      "passThroughNotice": {
+        "description": "Onyx will forward the user's OAuth access token directly to the server as an Authorization header. Make sure the server supports authentication with the same provider.",
+        "title": "Use pass-through for services with shared identity provider."
+      },
+      "providerMode": {
+        "autoDiscovery": {
+          "description": "Use MCP SDK challenge/discovery flow (default).",
+          "label": "Auto Discovery"
+        },
+        "knownProvider": {
+          "description": "Use configured authorization/token endpoints.",
+          "label": "Known Provider"
+        },
+        "label": "Provider Mode",
+        "placeholder": "Select mode"
+      },
+      "redirectUri": {
+        "copyTooltip": "Copy redirect URI",
+        "label": "Use **redirect URI**:"
+      },
+      "scopesOverride": {
+        "label": "Scopes Override (comma-separated)"
+      },
+      "sharedApiKey": {
+        "description": "Do not use your personal API key. Make sure this key is appropriate to share with everyone in your organization.",
+        "label": "API Key",
+        "placeholder": "Shared API key for your organization"
+      },
+      "submitButton": {
+        "label": "Connect",
+        "pendingLabel": "Connecting..."
+      },
+      "tokenEndpoint": {
+        "label": "Token Endpoint",
+        "required": "Token endpoint is required in known-provider mode"
+      },
+      "transport": {
+        "required": "Transport is required"
+      }
+    },
+    "mcpCard": {
+      "card": {
+        "ariaLabel": "{title} MCP server card"
+      },
+      "deleteModal": {
+        "body": {
+          "confirmation": "Are you sure you want to delete this MCP server?",
+          "description": "All tools connected to <emphasis>{title}</emphasis> will be removed. Deletion is irreversible."
+        },
+        "submitButton": {
+          "label": "Delete"
+        },
+        "title": "Delete MCP server"
+      },
+      "lastRefreshed": {
+        "label": "Tools last refreshed {time}"
+      },
+      "refreshToolsButton": {
+        "ariaLabel": "Refresh tools",
+        "tooltip": "Refresh tools"
+      }
+    },
+    "mcpPage": {
+      "addButton": {
+        "label": "Add MCP Server"
+      },
+      "empty": {
+        "description": "Connect MCP server to add custom actions."
+      },
+      "errors": {
+        "unknown": "Unknown error"
+      },
+      "toasts": {
+        "deleteFailed": "Failed to delete MCP Server",
+        "disableAllFailed": "Failed to disable all tools",
+        "disconnectFailed": "Failed to disconnect MCP Server",
+        "enableAllFailed": "Failed to enable all tools",
+        "fetchToolsFailed": "Failed to fetch tools: {error}",
+        "noToolsToDisable": "No tools to disable",
+        "reconnectFailed": "Failed to reconnect MCP Server",
+        "refreshToolsFailed": "Failed to refresh tools",
+        "renameFailed": "Failed to rename MCP Server",
+        "serverDeleted": "MCP Server deleted successfully",
+        "serverDisconnected": "MCP Server disconnected successfully",
+        "serverReconnected": "MCP Server reconnected successfully",
+        "serverRenamed": "MCP Server renamed successfully",
+        "toolDisabled": "Tool disabled successfully",
+        "toolEnabled": "Tool enabled successfully",
+        "toolUpdateFailed": "Failed to update tool",
+        "toolsDisabled": "{count, plural, one {# tool disabled successfully} other {# tools disabled successfully}}",
+        "toolsEnabled": "{count, plural, one {# tool enabled successfully} other {# tools enabled successfully}}",
+        "toolsFetched": "Successfully connected and fetched tools",
+        "toolsRefreshed": "Tools refreshed successfully"
+      }
+    },
+    "openApiAuthModal": {
+      "authMethod": {
+        "customHeader": {
+          "description": "Send custom headers with every request.",
+          "label": "Custom Authorization Header"
+        },
+        "label": "Authentication Method",
+        "oauth": {
+          "description": "Each user authenticates via OAuth with their own credentials.",
+          "label": "OAuth"
+        },
+        "placeholder": "Select method",
+        "ptOauth": {
+          "description": "Forward the user's OAuth access token used to authenticate Onyx.",
+          "label": "OAuth Pass-through"
+        },
+        "required": "Authentication method is required"
+      },
+      "authorizationUrl": {
+        "label": "Authorization URL",
+        "required": "Authorization URL is required"
+      },
+      "cancelButton": {
+        "label": "Cancel"
+      },
+      "clientId": {
+        "description": "Leave blank to keep the current client ID.",
+        "label": "OAuth Client ID",
+        "required": "Client ID is required"
+      },
+      "clientSecret": {
+        "description": "Leave blank to keep the current client secret.",
+        "label": "OAuth Client Secret",
+        "required": "Client secret is required"
+      },
+      "errors": {
+        "invalidUrl": "Enter a valid URL",
+        "loadConfigFailed": "Failed to load existing OAuth configuration. Re-enter the details to update it."
+      },
+      "header": {
+        "description": "Authenticate your connection to start using the OpenAPI actions."
+      },
+      "headers": {
+        "addButton": {
+          "label": "Add Header"
+        },
+        "description": "Specify custom headers for all requests sent to this action's API endpoint.",
+        "keyRequired": "Header key is required",
+        "keyTitle": "Header",
+        "minRequired": "Add at least one authentication header",
+        "title": "Authentication Headers",
+        "valueRequired": "Header value is required",
+        "valueTitle": "Value"
+      },
+      "loading": {
+        "label": "Loading existing configuration..."
+      },
+      "oauthLoginNotice": {
+        "description": "OAuth pass-through requires an OAuth-capable login method (Google or OIDC)."
+      },
+      "passThroughNotice": {
+        "description": "Onyx will forward the user's OAuth access token directly to the server as an Authorization header. Make sure the server supports authentication with the same provider.",
+        "title": "Use pass-through for services with shared identity provider."
+      },
+      "redirectUri": {
+        "copyTooltip": "Copy redirect URI",
+        "label": "Use <emphasis>redirect URI</emphasis>:"
+      },
+      "scopes": {
+        "description": "Comma-separated list of OAuth scopes to request.",
+        "label": "Scopes <optional>(Optional)</optional>",
+        "placeholder": "e.g. repo, user"
+      },
+      "submitButton": {
+        "label": "Connect",
+        "pendingLabel": "Connecting..."
+      },
+      "tokenUrl": {
+        "label": "Token URL",
+        "required": "Token URL is required"
+      }
+    },
+    "openApiCard": {
+      "card": {
+        "ariaLabel": "{name} OpenAPI action card"
+      },
+      "deleteModal": {
+        "body": {
+          "confirmation": "Are you sure you want to delete this OpenAPI action?",
+          "description": "This will permanently delete the OpenAPI action <emphasis>{name}</emphasis> and its configuration."
+        },
+        "submitButton": {
+          "label": "Delete"
+        },
+        "title": "Delete OpenAPI action"
+      },
+      "method": {
+        "noSummary": "No summary provided"
+      },
+      "toolsList": {
+        "emptyMessage": "No actions defined for this OpenAPI schema",
+        "emptySearchMessage": "No actions match your search"
+      }
+    },
+    "openApiPage": {
+      "addButton": {
+        "label": "Add OpenAPI Action"
+      },
+      "authModal": {
+        "authenticateTitle": "Authenticate {name}",
+        "defaultTitle": "Authenticate OpenAPI Action",
+        "updateTitle": "Update authentication for {name}"
+      },
+      "empty": {
+        "description": "Add custom actions from OpenAPI schemas."
+      },
+      "toasts": {
+        "actionRenamed": "OpenAPI action renamed successfully",
+        "authHeadersSaved": "{name} authentication headers saved successfully.",
+        "authPassthroughSaved": "{name} authentication passthrough saved successfully.",
+        "authSaveFailed": "Failed to save authentication settings.",
+        "authSaved": "{name} authentication saved successfully.",
+        "authUpdated": "{name} authentication updated successfully.",
+        "deleteFailed": "Failed to delete tool.",
+        "deleteUnexpectedError": "An unexpected error occurred while deleting the tool.",
+        "disconnectFailed": "Failed to disconnect OpenAPI action.",
+        "renameFailed": "Failed to rename OpenAPI action",
+        "toolDeleted": "{name} deleted successfully.",
+        "toolDisconnected": "{name} has been disconnected."
+      }
+    },
+    "perUserAuth": {
+      "credentialField": {
+        "placeholder": "Enter {field}"
+      },
+      "credentials": {
+        "perUserDescription": "The following credentials will not be shared with your organization.",
+        "perUserTitle": "Only for your own account",
+        "sharedDescription": "These values are used for every user in your organization.",
+        "sharedTitle": "Shared organization values"
+      },
+      "headers": {
+        "addButton": {
+          "label": "Add Header"
+        },
+        "error": {
+          "message": "At least one header value must include the {apiKey} placeholder."
+        },
+        "keyTitle": "Header Name",
+        "label": "Authentication Headers",
+        "perUserDescription": "Format headers for each user to fill in their individual credentials. Use placeholders like <mono>{apiKey}</mono> or <mono>{userEmail}</mono>. Users will be prompted to provide values for placeholders (except user_email).",
+        "sharedDescription": "Format the headers sent with your organization's shared credentials. Use placeholders like <mono>{apiKey}</mono> in at least one header value; it is replaced with your organization's shared key.",
+        "valueTitle": "Header Value"
+      }
+    },
+    "policyToggle": {
+      "always": {
+        "label": "Auto-approve"
+      },
+      "ask": {
+        "label": "Ask"
+      },
+      "deny": {
+        "label": "Deny"
+      }
+    },
+    "toolItem": {
+      "unavailable": {
+        "label": "Tool unavailable"
+      }
+    },
+    "toolsList": {
+      "disableAllButton": {
+        "ariaLabel": "Disable all tools",
+        "tooltip": "Disable all tools"
+      },
+      "empty": {
+        "message": "No tools available",
+        "searchMessage": "No tools found"
+      },
+      "enableAllButton": {
+        "label": "Enable all"
+      },
+      "showAllButton": {
+        "ariaLabel": "Show all tools",
+        "tooltip": "Show all tools"
+      },
+      "showEnabledButton": {
+        "ariaLabel": "Show only enabled tools",
+        "tooltip": "Show only enabled"
+      }
+    },
+    "toolsSection": {
+      "foldButton": {
+        "label": "Fold"
+      },
+      "search": {
+        "ariaLabel": "Search tools",
+        "placeholder": "Search tools…"
+      }
+    }
+  },
   "admin": {
     "addConnector": {
       "categories": {
@@ -3582,6 +4147,436 @@
           "title": "Self-hosted & Custom"
         }
       },
+      "modals": {
+        "access": {
+          "admin": {
+            "sharedNote": "Always shared",
+            "title": "Admin"
+          },
+          "agent": {
+            "name": "Agent {id}"
+          },
+          "agentOption": {
+            "description": "Agent"
+          },
+          "comboBox": {
+            "placeholder": "Add groups and agents"
+          },
+          "field": {
+            "description": "Who can access this provider.",
+            "title": "Models Access"
+          },
+          "group": {
+            "name": "Group {id}"
+          },
+          "groupOption": {
+            "description": "Group"
+          },
+          "memberCount": {
+            "label": "{count, plural, one {# member} other {# members}}"
+          },
+          "noAgents": {
+            "description": "This provider will not be used by any agents.",
+            "title": "No agents added"
+          },
+          "private": {
+            "label": "Named Groups & Agents"
+          },
+          "public": {
+            "label": "All Users & Agents"
+          },
+          "select": {
+            "placeholder": "Select access level"
+          }
+        },
+        "azure": {
+          "targetUriField": {
+            "description": "Paste your endpoint target URI from Azure OpenAI (including API endpoint base, deployment name, and API version).",
+            "title": "Target URI"
+          },
+          "toasts": {
+            "targetUriParseFailed": "Failed to parse target URI — using original values."
+          },
+          "validation": {
+            "targetUriInvalid": "Target URI must be a valid URL with api-version query parameter and either a deployment name in the path or /openai/responses",
+            "targetUriRequired": "Target URI is required"
+          }
+        },
+        "bedrock": {
+          "accessKeyIdField": {
+            "title": "AWS Access Key ID"
+          },
+          "authMethodField": {
+            "accessKey": {
+              "description": "For non-AWS environments",
+              "label": "Access Key"
+            },
+            "description": "Choose how Onyx should authenticate with Bedrock.",
+            "iam": {
+              "description": "Recommended for AWS environments",
+              "label": "Environment IAM Role"
+            },
+            "longTermApiKey": {
+              "description": "For non-AWS environments",
+              "label": "Long-term API Key"
+            },
+            "title": "Authentication Method"
+          },
+          "iamNotice": {
+            "title": "Onyx will use the IAM role attached to the environment it’s running in to authenticate."
+          },
+          "longTermApiKeyField": {
+            "placeholder": "Your long-term API key",
+            "title": "Long-term API Key"
+          },
+          "regionField": {
+            "description": "Region where your Amazon Bedrock models are hosted.",
+            "placeholder": "Select a region",
+            "title": "AWS Region"
+          },
+          "secretAccessKeyField": {
+            "title": "AWS Secret Access Key"
+          },
+          "validation": {
+            "regionRequired": "AWS Region is required"
+          }
+        },
+        "bifrost": {
+          "apiBaseField": {
+            "description": "Paste your Bifrost gateway endpoint URL (including API version)."
+          },
+          "apiKeyField": {
+            "description": "Paste your API key from [Bifrost](https://docs.getbifrost.ai/overview) to access your models."
+          },
+          "apiMode": {
+            "chatCompletions": {
+              "label": "Chat Completions API"
+            },
+            "responses": {
+              "label": "Responses API"
+            }
+          }
+        },
+        "custom": {
+          "addModelButton": {
+            "label": "Add Model"
+          },
+          "apiKeyField": {
+            "description": "Paste your API key if your model provider requires authentication."
+          },
+          "apiVersionField": {
+            "title": "API Version"
+          },
+          "description": "Connect models from other LiteLLM-compatible providers.",
+          "envVars": {
+            "addButton": {
+              "label": "Add Line"
+            },
+            "description": "Add extra properties as needed by the model provider. These are passed to LiteLLM's `completion()` call as [environment variables](https://docs.litellm.ai/docs/set_keys#environment-variables). See [documentation](https://docs.onyx.app/admins/ai_models/custom_inference_provider) for more instructions.",
+            "title": "Environment Variables"
+          },
+          "modelRow": {
+            "displayNamePlaceholder": "Display name",
+            "inputTypePlaceholder": "Input type",
+            "maxTokensPlaceholder": "Default",
+            "namePlaceholder": "Model name",
+            "textImage": {
+              "label": "Text & Image"
+            },
+            "textOnly": {
+              "label": "Text Only"
+            }
+          },
+          "modelTable": {
+            "displayName": {
+              "header": "Display Name"
+            },
+            "inputType": {
+              "header": "Input Type"
+            },
+            "maxTokens": {
+              "header": "Max Tokens"
+            },
+            "name": {
+              "header": "Model Name"
+            }
+          },
+          "models": {
+            "description": "List LLM models you wish to use and their configurations for this provider. See full list of models at LiteLLM.",
+            "empty": {
+              "title": "No models added yet."
+            },
+            "title": "Models"
+          },
+          "providerField": {
+            "createPrefix": "Use",
+            "description": "See full list of supported LLM providers at [LiteLLM](https://docs.litellm.ai/docs/providers).",
+            "placeholder": "Provider ID string as shown on LiteLLM",
+            "title": "Provider"
+          },
+          "toasts": {
+            "modelNameRequired": "At least one model name is required"
+          },
+          "validation": {
+            "displayNameRequired": "Display Name is required",
+            "providerNameRequired": "Provider Name is required"
+          }
+        },
+        "liteLlmProxy": {
+          "apiBaseField": {
+            "description": "The base URL for your LiteLLM Proxy server."
+          }
+        },
+        "lmStudio": {
+          "apiBaseField": {
+            "description": "The base URL for your LM Studio server.",
+            "placeholder": "Your LM Studio API base URL"
+          },
+          "apiKeyField": {
+            "description": "Optional API key if your LM Studio server requires authentication."
+          }
+        },
+        "modelSettings": {
+          "capabilities": {
+            "chat": {
+              "label": "chat"
+            },
+            "multiModal": {
+              "label": "multi-modal"
+            },
+            "reasoning": {
+              "label": "reasoning"
+            }
+          },
+          "reasoningLevel": {
+            "defaultSlider": {
+              "label": "Default"
+            },
+            "maxSlider": {
+              "label": "Max Level"
+            }
+          },
+          "temperature": {
+            "defaultSlider": {
+              "label": "Default"
+            },
+            "pinned": {
+              "tooltip": "Reasoning models always run at temperature 1."
+            }
+          },
+          "trigger": {
+            "tooltip": "Model Settings"
+          }
+        },
+        "models": {
+          "addModelButton": {
+            "label": "Add Model"
+          },
+          "addModelInput": {
+            "placeholder": "Enter model name"
+          },
+          "autoUpdate": {
+            "description": "Update the available models when new models are released.",
+            "title": "Auto Update"
+          },
+          "deselectAllButton": {
+            "label": "Deselect All"
+          },
+          "empty": {
+            "title": "No models available."
+          },
+          "field": {
+            "description": "Select models to make available for this provider.",
+            "title": "Models"
+          },
+          "foldButton": {
+            "label": "Fold Models"
+          },
+          "moreButton": {
+            "label": "More Models"
+          },
+          "refetch": {
+            "errorToast": "Failed to fetch models"
+          },
+          "row": {
+            "defaultLabel": "Default Model",
+            "renameButton": {
+              "tooltip": "Rename"
+            },
+            "setDefaultButton": {
+              "label": "Set as Default"
+            },
+            "visionMarker": {
+              "title": "Vision"
+            }
+          },
+          "selectAllButton": {
+            "label": "Select All"
+          }
+        },
+        "nebius": {
+          "apiBaseField": {
+            "description": "Nebius TokenFactory endpoint URL (including API version)."
+          },
+          "apiKeyField": {
+            "description": "Paste your API key from [Nebius TokenFactory](https://tokenfactory.nebius.com/) to load the available models."
+          }
+        },
+        "ollama": {
+          "apiBaseField": {
+            "description": "The base URL for your Ollama instance.",
+            "placeholder": "Your Ollama API base URL"
+          },
+          "apiKeyField": {
+            "description": "Your Ollama Cloud API key.",
+            "placeholder": "API Key"
+          },
+          "tabs": {
+            "cloud": {
+              "label": "Ollama Cloud"
+            },
+            "selfHosted": {
+              "label": "Self-hosted Ollama"
+            }
+          }
+        },
+        "openAiCompatible": {
+          "apiBaseField": {
+            "description": "Paste your OpenAI-compatible endpoint URL.",
+            "learnMore": "[Learn More](https://docs.litellm.ai/docs/providers/openai_compatible)"
+          },
+          "apiKeyField": {
+            "description": "Paste your API key if your model provider requires authentication."
+          },
+          "description": "Connect from other cloud or self-hosted models via OpenAI-compatible endpoints."
+        },
+        "openRouter": {
+          "apiBaseField": {
+            "description": "Paste your OpenRouter-compatible endpoint URL or use OpenRouter API directly.",
+            "placeholder": "Your OpenRouter base URL"
+          }
+        },
+        "portkey": {
+          "apiBaseField": {
+            "description": "Use Portkey's base URL or paste your self-hosted gateway base URL.",
+            "placeholder": "Your Portkey gateway base URL"
+          },
+          "apiKeyField": {
+            "description": "Paste your API key from [Portkey](https://portkey.ai/) to access your models."
+          },
+          "apiMode": {
+            "chatCompletions": {
+              "caption": "OpenAI-compatible",
+              "label": "Chat Completions API"
+            },
+            "messages": {
+              "caption": "Anthropic-compatible",
+              "label": "Messages API"
+            },
+            "responses": {
+              "caption": "OpenAI-compatible",
+              "label": "Responses API"
+            }
+          },
+          "description": "Connect to your Portkey gateway and set up compatible models.",
+          "models": {
+            "empty": {
+              "title": "No models available. Provide a valid base URL and key."
+            }
+          },
+          "restoreDefaultButton": {
+            "ariaLabel": "Restore default API base URL",
+            "tooltip": "Restore Default"
+          }
+        },
+        "setup": {
+          "apiBaseField": {
+            "containerizedNote": "With Onyx running in a container, use `host.docker.internal` in place of `localhost` to reach a service on your host.",
+            "title": "API Base URL"
+          },
+          "apiKeyField": {
+            "description": "Paste your API key to access your models.",
+            "providerDescription": "Paste your API key from {provider} to access your models.",
+            "title": "API Key"
+          },
+          "cancelButton": {
+            "label": "Cancel"
+          },
+          "connectButton": {
+            "label": "Connect"
+          },
+          "description": "Connect to {company} and set up your {product} models.",
+          "displayNameField": {
+            "description": "Used to identify this provider in the app.",
+            "placeholder": "Display Name",
+            "title": "Display Name"
+          },
+          "optionalSuffix": {
+            "label": "optional"
+          },
+          "submitButton": {
+            "invalidTooltip": "Please fill in all required fields.",
+            "pristineTooltip": "No changes to save."
+          },
+          "title": {
+            "configure": "Configure *{provider}*",
+            "create": "Set up {product}"
+          },
+          "updateButton": {
+            "label": "Update"
+          }
+        },
+        "toasts": {
+          "providerEnableFailed": "Failed to enable provider: {message}",
+          "providerEnabled": "Provider enabled successfully!",
+          "providerUpdateFailed": "Failed to update provider: {message}",
+          "providerUpdated": "Provider updated successfully!",
+          "setDefaultFailed": "Failed to set provider as default",
+          "setNewDefaultFailed": "Failed to set new provider as default",
+          "testApiKeyFailed": "An error occurred while testing the API key.",
+          "testCustomProviderFailed": "An error occurred while testing the custom provider.",
+          "testProviderFailed": "An error occurred while testing the provider."
+        },
+        "validation": {
+          "apiBaseRequired": "API Base URL is required",
+          "apiKeyRequired": "API Key is required",
+          "modelNameRequired": "Model name is required"
+        },
+        "vertexAi": {
+          "authMethodField": {
+            "description": "Choose how Onyx should authenticate with Google Vertex AI.",
+            "serviceAccount": {
+              "description": "Upload a GCP service account key JSON file",
+              "label": "Service Account JSON"
+            },
+            "title": "Authentication Method",
+            "workloadIdentity": {
+              "description": "Use the pod's ambient GCP credentials (GKE Workload Identity)",
+              "label": "Workload Identity (GKE)"
+            }
+          },
+          "credentialsField": {
+            "description": "Attach your API key JSON from Google Cloud to access your models.",
+            "title": "API Key"
+          },
+          "locationField": {
+            "description": "Region where your Google Vertex AI models are hosted. See full list of regions supported at Google Cloud.",
+            "title": "Google Cloud Region Name"
+          },
+          "projectField": {
+            "description": "The GCP project where Vertex AI is enabled. Required because ADC cannot reliably infer the target project under service-account impersonation.",
+            "title": "GCP Project ID"
+          },
+          "validation": {
+            "authMethodRequired": "Authentication method is required",
+            "credentialsRequired": "Credentials file is required",
+            "projectRequired": "GCP Project ID is required"
+          },
+          "workloadIdentityNotice": {
+            "title": "Onyx will use the pod's ambient Google Cloud credentials (via google.auth.default). Ensure the Kubernetes ServiceAccount is bound to a GCP Service Account with access to Vertex AI."
+          }
+        }
+      },
       "newCustomProviderCard": {
         "setUpButton": {
           "label": "Set Up"
@@ -3616,6 +4611,78 @@
     "mcpActions": {
       "header": {
         "description": "Connect MCP (Model Context Protocol) servers to add custom actions and tools for your agents."
+      }
+    },
+    "modals": {
+      "newTeam": {
+        "body": "Your join request can be approved by any admin of {domain}.",
+        "continueButton": {
+          "label": "Continue with new team"
+        },
+        "header": {
+          "requestSentTitle": "Join Request Sent",
+          "title": "We found an existing team for {domain}"
+        },
+        "inviteRequestedToast": {
+          "message": "Your invite request has been sent to the team admin."
+        },
+        "loadError": {
+          "message": "Could not retrieve team information. Please try again later."
+        },
+        "requestButton": {
+          "label": "Request to join your team",
+          "pendingLabel": "Sending request..."
+        },
+        "requestError": {
+          "message": "Failed to request an invite",
+          "responseFallback": "Failed to request invite"
+        },
+        "requestSentBody": "Your join request has been sent. You can explore as your own team while waiting for an admin of {domain} to approve your request.",
+        "tryOnyxButton": {
+          "label": "Try Onyx while waiting"
+        }
+      },
+      "newTenant": {
+        "acceptError": {
+          "responseFallback": "Failed to accept invitation"
+        },
+        "acceptedToast": {
+          "message": "You have accepted the invitation."
+        },
+        "approvedTitle": "Your request to join {count} other users of {domain} has been approved.",
+        "declineButton": {
+          "label": "Decline"
+        },
+        "declineError": {
+          "message": "Failed to decline the invitation. Please try again.",
+          "responseFallback": "Failed to decline invitation"
+        },
+        "declinedToast": {
+          "message": "You have declined the invitation."
+        },
+        "inviteDescription": "By accepting this invitation, you will join the existing {domain} team and lose access to your current team. Note: you will lose access to your current agents, prompts, chats, and connected sources.",
+        "inviteTitle": "You have been invited to join {count, plural, one {# other teammate} other {# other teammates}} of {domain}.",
+        "joinError": {
+          "message": "Failed to join the team. Please try again."
+        },
+        "joinRequestToast": {
+          "message": "Processing your team join request..."
+        },
+        "reauthenticateDescription": "To finish joining your team, please reauthenticate with {email}.",
+        "submitButton": {
+          "acceptLabel": "Accept Invitation",
+          "acceptingLabel": "Accepting...",
+          "joiningLabel": "Joining...",
+          "reauthenticateLabel": "Reauthenticate"
+        }
+      },
+      "provider": {
+        "cancelButton": {
+          "label": "Cancel"
+        },
+        "submitButton": {
+          "label": "Connect"
+        }
       }
     },
     "oauthTest": {
@@ -4561,6 +5628,100 @@
         "description": "Unable to load SSO providers.",
         "title": "Failed to load SSO providers"
       },
+      "modals": {
+        "domainVerification": {
+          "description": "A domain signs your workspace's users in automatically only after you verify you own it. Add the DNS record below, then verify.",
+          "loadError": {
+            "message": "We couldn't load the DNS records."
+          },
+          "loading": {
+            "message": "Loading…"
+          },
+          "pendingDescription": "Add this TXT record at your DNS provider, then verify.",
+          "record": {
+            "labelPrefix": "{label}: ",
+            "nameLabel": "Name",
+            "typeLabel": "Type",
+            "valueLabel": "Value"
+          },
+          "refreshError": {
+            "message": "We couldn't refresh these records, so they may be out of date."
+          },
+          "retryButton": {
+            "label": "Try again"
+          },
+          "status": {
+            "pending": "Pending",
+            "verified": "Verified"
+          },
+          "title": "Domain verification",
+          "verifiedDescription": "This domain signs its users in automatically.",
+          "verifiedToast": {
+            "message": "{domain} verified"
+          },
+          "verifyButton": {
+            "label": "Verify domain",
+            "unclaimedTooltip": "Save the provider with this domain first."
+          }
+        },
+        "provider": {
+          "cancelButton": {
+            "label": "Cancel"
+          },
+          "configField": {
+            "optionalTitle": "{label} (Optional)"
+          },
+          "displayNameField": {
+            "description": "Label shown on the sign-in button.",
+            "placeholder": "Company A",
+            "title": "Display Name"
+          },
+          "emailDomainsField": {
+            "description": "Only emails in these domains may sign in through this provider.",
+            "optionalDescription": "Only emails in these domains may sign in through this provider. Recommended, but you can leave it empty to allow any.",
+            "placeholder": "Add a domain (e.g. onyx.app)",
+            "recommendedTitle": "Allowed Email Domains (Recommended)",
+            "title": "Allowed Email Domains"
+          },
+          "header": {
+            "createDescription": "Add an SSO provider for sign-in.",
+            "createTitle": "Add SSO Provider",
+            "editDescription": "Update how this provider signs users in.",
+            "editTitle": "Edit {name}"
+          },
+          "nameField": {
+            "description": "Unique lowercase slug used in the login URL. Cannot be changed later.",
+            "title": "Name"
+          },
+          "providerTypeField": {
+            "description": "The protocol this provider authenticates with.",
+            "placeholder": "Select a provider type",
+            "title": "Provider Type"
+          },
+          "redirectField": {
+            "acsLabel": "ACS (Reply) URL",
+            "copyTooltip": "Copy {label}",
+            "description": "Register this URL in your IdP as the callback.",
+            "redirectUriLabel": "Redirect URI"
+          },
+          "submitButton": {
+            "createLabel": "Create",
+            "updateLabel": "Update"
+          },
+          "toasts": {
+            "created": "SSO provider created",
+            "updated": "SSO provider updated"
+          },
+          "validation": {
+            "displayNameRequired": "Display name is required",
+            "emailDomainsMin": "List at least one email domain that may sign in",
+            "fieldRequired": "{field} is required",
+            "namePattern": "Use lowercase letters, numbers, and hyphens only",
+            "nameRequired": "Name is required",
+            "providerTypeRequired": "Provider type is required"
+          }
+        }
+      },
       "page": {
         "description": "Let users sign in through your identity provider."
       },
@@ -4789,6 +5950,98 @@
         "connected": "{label} connected",
         "disconnected": "{label} disconnected",
         "unexpectedError": "Unexpected error occurred."
+      }
+    },
+    "usage": {
+      "detail": {
+        "breakdown": {
+          "byFlow": {
+            "title": "By flow"
+          },
+          "byModel": {
+            "title": "By model"
+          },
+          "byProvider": {
+            "title": "By provider"
+          },
+          "slice": {
+            "ariaLabel": "{label} share of spend",
+            "summary": " · {percent}% · {tokens} tokens"
+          }
+        },
+        "dailySpend": {
+          "chart": {
+            "ariaLabel": "Daily spend for the selected period: {days}"
+          },
+          "day": {
+            "ariaLabel": "{day}, {cost}",
+            "tooltip": "{day} · {cost}"
+          },
+          "title": "Daily spend"
+        },
+        "done": {
+          "label": "Done"
+        },
+        "empty": {
+          "description": "No per-model records for this period."
+        },
+        "stats": {
+          "cacheReads": {
+            "label": "Cache reads"
+          },
+          "cacheWrites": {
+            "label": "Cache writes"
+          },
+          "inputTokens": {
+            "label": "Input tokens"
+          },
+          "outputTokens": {
+            "label": "Output tokens"
+          },
+          "spend": {
+            "label": "Spend"
+          }
+        }
+      },
+      "spendByUser": {
+        "columns": {
+          "input": {
+            "header": "Input"
+          },
+          "output": {
+            "header": "Output"
+          },
+          "spend": {
+            "header": "Spend"
+          },
+          "tokens": {
+            "header": "Tokens"
+          },
+          "user": {
+            "header": "User"
+          }
+        },
+        "empty": {
+          "description": "No usage matches the current filters."
+        },
+        "filters": {
+          "allFlows": {
+            "label": "All flows"
+          },
+          "allModels": {
+            "label": "All models"
+          }
+        },
+        "row": {
+          "ariaLabel": "View usage details for {email}"
+        },
+        "rowCount": {
+          "label": "{count, plural, one {# user} other {# users}}"
+        },
+        "search": {
+          "ariaLabel": "Search users by email",
+          "placeholder": "Search users by email…"
+        }
       }
     },
     "users": {
@@ -5322,6 +6575,218 @@
       }
     }
   },
+  "agents": {
+    "card": {
+      "actionsCount": {
+        "label": "{count, plural, =0 {No Actions} one {# Action} other {# Actions}}"
+      },
+      "edit": {
+        "tooltip": "Edit Agent"
+      },
+      "pin": {
+        "tooltip": "Pin to Sidebar"
+      },
+      "share": {
+        "tooltip": "Share Agent"
+      },
+      "startChat": {
+        "label": "Start Chat"
+      },
+      "unpin": {
+        "tooltip": "Unpin from Sidebar"
+      },
+      "viewStats": {
+        "tooltip": "View Agent Stats"
+      }
+    },
+    "filters": {
+      "actions": {
+        "all": {
+          "label": "All Actions"
+        },
+        "multiple": {
+          "label": "{count} selected"
+        },
+        "search": {
+          "placeholder": "Filter actions..."
+        }
+      },
+      "creator": {
+        "all": {
+          "label": "Everyone"
+        },
+        "me": {
+          "description": "Me"
+        },
+        "multiple": {
+          "label": "{count} people"
+        },
+        "search": {
+          "placeholder": "Created by..."
+        },
+        "single": {
+          "label": "By {email}"
+        }
+      }
+    },
+    "modals": {
+      "agentButton": {
+        "unpin": {
+          "tooltip": "Unpin Agent"
+        }
+      },
+      "moveCustomAgentChat": {
+        "body": {
+          "description": "This chat uses a <b>custom agent</b> and moving it to a <b>project</b> will not override the agent's prompt or knowledge configurations. This should only be used for organization purposes."
+        },
+        "confirm": {
+          "label": "Confirm Move"
+        },
+        "doNotShowAgain": {
+          "label": "Do not show this again"
+        },
+        "title": "Move Custom Agent Chat"
+      },
+      "noAgent": {
+        "admin": {
+          "description": "As an administrator, you can either create a new agent by visiting the admin panel, or you can enable the default chat again."
+        },
+        "body": {
+          "description": "There are currently no configured agents available. The default chat has also been explicitly disabled."
+        },
+        "configureAgent": {
+          "label": "Configure a New Agent"
+        },
+        "nonAdmin": {
+          "description": "Please contact your administrator to configure an agent for you, or to re-enable the default chat."
+        },
+        "reenableDefaultChat": {
+          "label": "Re-enable Default Chat"
+        },
+        "title": "No Agent Available"
+      },
+      "shareAgent": {
+        "admins": {
+          "description": "{count, plural, one {# user} other {# users}}",
+          "title": "Admins"
+        },
+        "agentFallback": {
+          "name": "Agent"
+        },
+        "back": {
+          "label": "Back"
+        },
+        "cancel": {
+          "label": "Cancel"
+        },
+        "copyLink": {
+          "label": "Copy Link"
+        },
+        "done": {
+          "label": "Done"
+        },
+        "loading": {
+          "description": "Loading sharing details..."
+        },
+        "permission": {
+          "edit": {
+            "label": "Edit"
+          },
+          "owner": {
+            "label": "Owner"
+          }
+        },
+        "publicPermissionMenu": {
+          "ariaLabel": "Change public permission"
+        },
+        "row": {
+          "updateAccess": {
+            "ariaLabel": "Update access for {name}"
+          },
+          "you": {
+            "title": "{email} (you)"
+          }
+        },
+        "save": {
+          "label": "Save"
+        },
+        "scopeMenu": {
+          "ariaLabel": "Change sharing scope"
+        },
+        "share": {
+          "title": "Share *{name}*"
+        },
+        "toasts": {
+          "accessRemoved": "Access removed.",
+          "copyLinkFailed": "Failed to copy link.",
+          "linkCopied": "Copied link.",
+          "ownershipTransferred": "Ownership transferred.",
+          "sharingUpdated": "Sharing updated."
+        },
+        "transfer": {
+          "label": "Transfer",
+          "title": "Transfer *{name}*"
+        }
+      },
+      "viewer": {
+        "actions": {
+          "empty": {
+            "title": "No Actions"
+          },
+          "title": "Actions & Tools"
+        },
+        "conversationStarters": {
+          "title": "Conversation Starters"
+        },
+        "defaultModel": {
+          "description": "This model will be used by Onyx by default in your chats.",
+          "title": "Default Model"
+        },
+        "featured": {
+          "label": "Featured"
+        },
+        "instructions": {
+          "title": "Instructions"
+        },
+        "knowledge": {
+          "empty": {
+            "title": "No Knowledge"
+          },
+          "title": "Knowledge"
+        },
+        "knowledgeCutoff": {
+          "description": "Documents with a last-updated date prior to this will be ignored.",
+          "title": "Knowledge Cutoff Date"
+        },
+        "mcpCard": {
+          "expand": {
+            "label": "Expand"
+          },
+          "fold": {
+            "label": "Fold"
+          }
+        },
+        "moreInfo": {
+          "title": "More Info"
+        },
+        "overwritePrompts": {
+          "description": "Remove the base system prompt which includes useful instructions (e.g. \"You can use Markdown tables\"). This may affect response quality.",
+          "title": "Overwrite System Prompts"
+        },
+        "promptReminders": {
+          "title": "Prompt Reminders"
+        },
+        "public": {
+          "label": "Public to your organization"
+        }
+      }
+    },
+    "userVariables": {
+      "insert": {
+        "tooltip": "Insert user variable"
+      }
+    }
+  },
   "auth": {
     "createAccount": {
       "createOrgButton": {
@@ -5602,6 +7067,74 @@
       },
       "sendFailed": {
         "toast": "Failed to send a new verification email - {errorDetail}"
+      }
+    }
+  },
+  "cards": {
+    "file": {
+      "processing": {
+        "description": "Processing..."
+      },
+      "remove": {
+        "label": "Remove"
+      },
+      "uploading": {
+        "description": "Uploading..."
+      }
+    },
+    "skill": {
+      "dependency": {
+        "appDisabled": "App “{app}” is disabled",
+        "connectToEnable": "Connect app “{app}” to enable",
+        "connectToUse": "Connect app “{app}” to use",
+        "nameConflict": "Another skill with this name is enabled",
+        "usesApp": "Uses app “{app}”"
+      },
+      "edit": {
+        "tooltip": "Edit skill"
+      },
+      "invalid": {
+        "description": "Delete this invalid skill and create a new one."
+      },
+      "tags": {
+        "appSkill": {
+          "label": "App skill"
+        },
+        "builtin": {
+          "label": "Built-in"
+        },
+        "custom": {
+          "label": "Custom"
+        },
+        "invalid": {
+          "label": "Invalid"
+        },
+        "personal": {
+          "label": "Personal"
+        },
+        "unavailable": {
+          "label": "Unavailable - click to learn more"
+        }
+      },
+      "toggle": {
+        "disable": {
+          "ariaLabel": "Disable {name}"
+        },
+        "disableForApp": {
+          "ariaLabel": "Disable {name} for {app}"
+        },
+        "enable": {
+          "ariaLabel": "Enable {name}"
+        },
+        "enableForApp": {
+          "ariaLabel": "Enable {name} for {app}"
+        }
+      },
+      "tooltips": {
+        "appDisabled": "App “{app}” is disabled by an administrator.",
+        "connectApp": "Connect app “{app}” from the Apps page to use this skill.",
+        "invalid": "This skill is invalid. Delete it and create a new skill.",
+        "unavailable": "Skill is currently unavailable. Click to view details."
       }
     }
   },
@@ -6539,6 +8072,64 @@
           "label": "Confirm"
         }
       },
+      "preview": {
+        "code": {
+          "headerDescription": "{language} - {lineCount, plural, one {# line} other {# lines}} · {fileSize}"
+        },
+        "copyButton": {
+          "tooltip": "Copy content"
+        },
+        "csv": {
+          "footer": "{columnCount, plural, one {# column} other {# columns}} • {rowCount, plural, one {# row} other {# rows}}",
+          "headerDescription": "CSV - {rowCount, plural, one {# row} other {# rows}} • {fileSize}",
+          "rowSeparator": "{count, plural, one {# row} other {# rows}}"
+        },
+        "docx": {
+          "headerDescription": "{count, plural, one {Word Document • # word} other {Word Document • # words}}",
+          "headerDescriptionFallback": "Word Document",
+          "legacyDocMessage": "Legacy .doc format cannot be previewed. Download the file to view it.",
+          "loadError": {
+            "message": "Could not preview this document. Download the file to view it."
+          }
+        },
+        "downloadButton": {
+          "label": "Download File",
+          "tooltip": "Download"
+        },
+        "exceptionTrace": {
+          "defaultTitle": "Full Exception Trace"
+        },
+        "header": {
+          "fallbackTitle": "Document"
+        },
+        "lineCount": {
+          "label": "{count, plural, one {# line} other {# lines}}"
+        },
+        "loadError": {
+          "message": "Failed to load document."
+        },
+        "pdf": {
+          "iframeTitle": "PDF Viewer"
+        },
+        "text": {
+          "headerDescription": "{lineCount, plural, one {# line} other {# lines}} · {fileSize}"
+        },
+        "unsupported": {
+          "message": "This file format is not supported for preview."
+        },
+        "xlsx": {
+          "headerDescription": "Spreadsheet - {count, plural, one {# sheet} other {# sheets}}",
+          "parseError": {
+            "message": "Unable to preview this spreadsheet."
+          },
+          "sheetCount": "{count, plural, one {# sheet} other {# sheets}}"
+        },
+        "zoomControls": {
+          "level": "{zoom}%",
+          "zoomInTooltip": "Zoom In",
+          "zoomOutTooltip": "Zoom Out"
+        }
+      },
       "share": {
         "addPeople": {
           "groupSuggestion": {
@@ -6607,6 +8198,14 @@
         "privateOption": {
           "description": "Only you have access to this chat.",
           "title": "Private"
+        },
+        "scope": {
+          "invitedOnly": {
+            "label": "Only those invited"
+          },
+          "organization": {
+            "label": "Anyone in your organization"
+          }
         },
         "transferOwnership": {
           "currentOwner": {
@@ -6798,6 +8397,279 @@
       },
       "incognito": {
         "title": "You're incognito"
+      }
+    }
+  },
+  "knowledge": {
+    "addView": {
+      "connectedSources": {
+        "label": "Connected Sources"
+      },
+      "documentSets": {
+        "label": "Document Sets"
+      },
+      "yourFiles": {
+        "description": "Recent or new uploads",
+        "label": "Your Files"
+      }
+    },
+    "browser": {
+      "copyLink": {
+        "tooltip": "Copy link"
+      },
+      "empty": {
+        "folder": {
+          "description": "No items in this folder."
+        },
+        "root": {
+          "description": "Select a folder to browse documents."
+        }
+      },
+      "loadFoldersError": {
+        "description": "Failed to load folders"
+      },
+      "loadingFolders": {
+        "description": "Loading folders..."
+      },
+      "loadingMore": {
+        "description": "Loading more..."
+      },
+      "selectedCount": {
+        "label": "{count, plural, one {# item selected} other {# items selected}}"
+      },
+      "selectedItems": {
+        "label": "Selected items"
+      },
+      "sort": {
+        "ascending": {
+          "lastUpdated": {
+            "label": "Old to Recent"
+          },
+          "name": {
+            "label": "A to Z"
+          }
+        },
+        "descending": {
+          "lastUpdated": {
+            "label": "Recent to Old"
+          },
+          "name": {
+            "label": "Z to A"
+          }
+        },
+        "folders": {
+          "title": "Folders"
+        },
+        "foldersMixed": {
+          "label": "Mixed with Files"
+        },
+        "foldersOnTop": {
+          "label": "On top"
+        },
+        "sortBy": {
+          "title": "Sort by"
+        },
+        "sortingOrder": {
+          "title": "Sorting Order"
+        }
+      }
+    },
+    "documentSets": {
+      "empty": {
+        "description": "No document sets available."
+      },
+      "filter": {
+        "placeholder": "Filter document sets..."
+      }
+    },
+    "mainContent": {
+      "empty": {
+        "description": "Add documents or connected sources to use for this agent."
+      },
+      "selectedCount": {
+        "label": "{count, plural, one {# knowledge source selected} other {# knowledge sources selected}}"
+      },
+      "viewEdit": {
+        "label": "View / Edit"
+      }
+    },
+    "pane": {
+      "header": {
+        "description": "Add specific connectors and documents for this agent to use to inform its responses.",
+        "title": "Knowledge"
+      },
+      "useKnowledge": {
+        "description": "Let this agent reference these documents to inform its responses.",
+        "title": "Use Knowledge"
+      }
+    },
+    "recentFiles": {
+      "addFile": {
+        "label": "Add File"
+      },
+      "empty": {
+        "description": "No files available. Upload files to get started."
+      },
+      "filter": {
+        "placeholder": "Filter files..."
+      },
+      "processing": {
+        "description": "Onyx is still processing your uploaded files. You can create the agent now, but it will not have access to all files until processing completes."
+      }
+    },
+    "search": {
+      "error": {
+        "description": "Search failed, please try again."
+      },
+      "input": {
+        "placeholder": "Search documents..."
+      },
+      "loading": {
+        "description": "Searching..."
+      },
+      "noResults": {
+        "description": "No results found."
+      },
+      "noResultsInSource": {
+        "description": "No results found in {source}."
+      },
+      "prompt": {
+        "description": "Input a search term and hit enter."
+      },
+      "sidebar": {
+        "all": {
+          "label": "All"
+        }
+      },
+      "stale": {
+        "description": "Press Enter for new results."
+      }
+    },
+    "sidebar": {
+      "documentSet": {
+        "label": "Document Set"
+      },
+      "yourFiles": {
+        "label": "Your Files"
+      }
+    },
+    "table": {
+      "columns": {
+        "lastUpdated": {
+          "header": "Last Updated"
+        },
+        "name": {
+          "header": "Name"
+        },
+        "sources": {
+          "header": "Sources"
+        }
+      },
+      "empty": {
+        "description": "No items available."
+      },
+      "filter": {
+        "placeholder": "Filter..."
+      }
+    }
+  },
+  "onboarding": {
+    "finalStep": {
+      "imageGeneration": {
+        "button": {
+          "label": "Image Generation"
+        },
+        "description": "Set up models to create images in your chats.",
+        "title": "Enable image generation"
+      },
+      "inviteTeam": {
+        "button": {
+          "label": "Manage Users"
+        },
+        "description": "Manage users and permissions for your team",
+        "title": "Invite your team"
+      },
+      "webSearch": {
+        "button": {
+          "label": "Web Search"
+        },
+        "description": "Enable Onyx to search the internet for information.",
+        "title": "Select web search provider"
+      }
+    },
+    "header": {
+      "progress": {
+        "label": "Step {current} of {total}"
+      }
+    },
+    "llmStep": {
+      "adminPanel": {
+        "label": "View in Admin Panel"
+      },
+      "connectedCount": {
+        "label": "{count, plural, one {# model connected} other {# models connected}}"
+      },
+      "customProvider": {
+        "subtitle": "LiteLLM Compatible APIs",
+        "title": "Custom LLM Provider"
+      },
+      "description": "Onyx supports both self-hosted models and popular providers.",
+      "edit": {
+        "ariaLabel": "Edit LLM providers"
+      },
+      "providerCard": {
+        "connect": {
+          "label": "Connect"
+        }
+      },
+      "title": "Connect your LLM models"
+    },
+    "nameStep": {
+      "description": "We will display this name in the app.",
+      "edit": {
+        "ariaLabel": "Edit display name",
+        "tooltip": "Edit"
+      },
+      "input": {
+        "placeholder": "Your name"
+      },
+      "title": "What should Onyx call you?"
+    },
+    "nonAdminStep": {
+      "confirmation": {
+        "title": "You're all set!"
+      },
+      "save": {
+        "label": "Save"
+      },
+      "toasts": {
+        "saveNameFailed": "Failed to save name. Please try again."
+      }
+    },
+    "steps": {
+      "complete": {
+        "button": {
+          "label": "Finish Setup"
+        },
+        "title": "You're all set, review the optional settings or click Finish Setup"
+      },
+      "llmSetup": {
+        "button": {
+          "label": "Next"
+        },
+        "title": "Almost there! Connect your models to start chatting."
+      },
+      "name": {
+        "button": {
+          "label": "Next"
+        },
+        "title": "Let's take a moment to get you set up."
+      },
+      "welcome": {
+        "button": {
+          "label": "Let's Go"
+        },
+        "title": "Let's take a moment to get you set up."
       }
     }
   },
@@ -7043,6 +8915,9 @@
       }
     },
     "memory": {
+      "empty": {
+        "description": "Add personal note or memory that Onyx should remember."
+      },
       "referenceStoredMemories": {
         "description": "Let Onyx reference stored memories in chats.",
         "title": "Reference Stored Memories"
@@ -7051,6 +8926,10 @@
       "updateMemories": {
         "description": "Let Onyx generate and update stored memories.",
         "title": "Update Memories"
+      },
+      "viewAll": {
+        "description": "All Memories",
+        "title": "View/Add"
       }
     },
     "personalPreferences": {
@@ -7418,6 +9297,264 @@
       },
       "unreadCount": {
         "label": "{count, plural, one {# unread} other {# unread}}"
+      }
+    }
+  },
+  "skills": {
+    "modals": {
+      "addInstruction": {
+        "cancelButton": {
+          "label": "Cancel"
+        },
+        "header": {
+          "description": "Specify the behaviors or tone for the chat sessions in this project.",
+          "title": "Set Project Instructions"
+        },
+        "instructionsField": {
+          "placeholder": "My goal with is to... be sure to... in your responses."
+        },
+        "saveButton": {
+          "label": "Save Instructions"
+        }
+      },
+      "create": {
+        "cancelButton": {
+          "label": "Cancel"
+        },
+        "continueButton": {
+          "label": "Review skill",
+          "loadingLabel": "Opening…"
+        },
+        "header": {
+          "description": "Upload a SKILL.md file, ZIP file, or skill folder. You can review and edit its details before saving.",
+          "title": "Upload skill"
+        },
+        "readError": {
+          "message": "Failed to read skill"
+        },
+        "requirements": {
+          "frontmatter": "SKILL.md must include valid frontmatter with a name and description.",
+          "singleSkill": "Upload one skill at a time.",
+          "title": "File requirements",
+          "zip": "ZIP files must contain a SKILL.md file."
+        }
+      },
+      "importGithub": {
+        "cancelButton": {
+          "label": "Cancel"
+        },
+        "doneButton": {
+          "label": "Done"
+        },
+        "header": {
+          "chooseDescription": "Choose skills from {repository}.",
+          "completeDescription": "Review what was added to your skills.",
+          "completeTitle": "GitHub import complete",
+          "description": "Import one or more skills from a GitHub repository.",
+          "title": "Import from GitHub"
+        },
+        "importError": {
+          "message": "Couldn't import skills.",
+          "title": "Couldn't import skills"
+        },
+        "loadError": {
+          "message": "Couldn't load repository.",
+          "title": "Couldn't load repository"
+        },
+        "privateRepos": {
+          "askAdmin": "Public repositories import directly. Ask an admin to set up GitHub before importing private repositories.",
+          "connect": "Public repositories import directly. Connect GitHub to import private repositories.",
+          "connectButton": {
+            "label": "Connect GitHub"
+          },
+          "connected": "Public repositories import directly. Private repositories use your GitHub connection.",
+          "needsConnection": "Public repositories import directly. Private repositories require a GitHub connection.",
+          "setUp": "Public repositories import directly. Set up GitHub before importing private repositories.",
+          "setUpButton": {
+            "label": "Set up GitHub"
+          }
+        },
+        "repositoryInput": {
+          "label": "Repository"
+        },
+        "result": {
+          "disabledCount": "{count} imported disabled because another skill with the same name is enabled.",
+          "enabledCount": "{count} enabled automatically.",
+          "failedCount": "{count} could not be imported.",
+          "importedSection": {
+            "title": "Imported"
+          },
+          "importedTitle": "{count, plural, one {# skill imported} other {# skills imported}}",
+          "noneTitle": "No skills were imported",
+          "notImportedSection": {
+            "title": "Not imported"
+          },
+          "notSelectedCount": "{count} not selected."
+        },
+        "selectAll": {
+          "ariaLabel": "Select all importable skills"
+        },
+        "selection": {
+          "label": "{selected} of {total, plural, one {# importable skill} other {# importable skills}} selected"
+        },
+        "skillCheckbox": {
+          "ariaLabel": "Select {name}"
+        },
+        "skillTag": {
+          "disabled": "Disabled",
+          "enabled": "Enabled"
+        },
+        "submitButton": {
+          "importLabel": "{count, plural, one {Import skill} other {Import # skills}}",
+          "importingLabel": "Importing…",
+          "searchLabel": "Search repository",
+          "searchingLabel": "Searching…"
+        },
+        "unavailableFallback": "This skill cannot be imported.",
+        "unavailableTag": {
+          "label": "Can't import"
+        }
+      },
+      "nameConflict": {
+        "body": "The new skill will start disabled. You can switch which one is active from the Skills page.",
+        "confirmButton": {
+          "label": "Create anyway",
+          "pendingLabel": "Creating..."
+        },
+        "description": "You already have an enabled skill with this name.",
+        "title": "Create another “{name}” skill?"
+      },
+      "preview": {
+        "closeButton": {
+          "label": "Close"
+        },
+        "fallbackTitle": "Skill preview",
+        "instructions": {
+          "title": "Instructions"
+        },
+        "loadError": {
+          "description": "Try closing and opening the preview again.",
+          "title": "Failed to load skill"
+        },
+        "metadata": {
+          "createdBy": {
+            "label": "Created by"
+          },
+          "externalApp": {
+            "label": "External app"
+          }
+        },
+        "noInstructions": {
+          "message": "No instructions found."
+        },
+        "unavailable": {
+          "appDisabled": "App “{appName}” is disabled by an administrator.",
+          "appNotConnected": "Connect app “{appName}” from the Apps page to use this skill.",
+          "title": "Skill unavailable"
+        }
+      },
+      "share": {
+        "backButton": {
+          "label": "Back"
+        },
+        "cancelButton": {
+          "label": "Cancel"
+        },
+        "currentUserLabel": "{email} (you)",
+        "doneButton": {
+          "label": "Done"
+        },
+        "externalAppNotice": "Organization-wide viewer access is required while this skill is associated with app “{appName}”.",
+        "header": {
+          "title": "Share *{name}*",
+          "transferTitle": "Transfer *{name}*"
+        },
+        "loading": {
+          "message": "Loading sharing details..."
+        },
+        "noOwnerTitle": "No active owner",
+        "organizationPermissionMenu": {
+          "ariaLabel": "Change organization permission"
+        },
+        "ownerLabel": "Owner",
+        "permissionMenu": {
+          "ariaLabel": "Update access for {name}"
+        },
+        "saveButton": {
+          "label": "Save"
+        },
+        "saveErrorToast": {
+          "message": "Failed to update sharing"
+        },
+        "savedToast": {
+          "message": "Sharing updated."
+        },
+        "scopeMenu": {
+          "ariaLabel": "Change sharing scope"
+        },
+        "transferButton": {
+          "label": "Transfer"
+        },
+        "transferErrorToast": {
+          "message": "Failed to transfer ownership"
+        },
+        "transferredToast": {
+          "message": "Ownership transferred."
+        }
+      }
+    },
+    "sections": {
+      "bundlePicker": {
+        "chooseDifferent": {
+          "label": "Choose a different file"
+        },
+        "noFile": {
+          "description": "No file selected"
+        },
+        "preparing": {
+          "label": "Preparing upload..."
+        },
+        "upload": {
+          "label": "Drag and drop or click to upload"
+        }
+      },
+      "fileTree": {
+        "empty": {
+          "description": "No supporting files yet."
+        },
+        "remove": {
+          "label": "Remove {name}"
+        }
+      },
+      "filesPicker": {
+        "addFiles": {
+          "label": "Add files"
+        },
+        "input": {
+          "ariaLabel": "Add skill files"
+        },
+        "preparing": {
+          "label": "Preparing..."
+        },
+        "prompt": {
+          "description": "Choose files or a ZIP, or drop a folder here."
+        }
+      },
+      "instructionsToggle": {
+        "group": {
+          "ariaLabel": "Instruction display mode"
+        },
+        "raw": {
+          "label": "Raw markdown"
+        },
+        "rendered": {
+          "label": "Rendered markdown"
+        }
+      },
+      "upload": {
+        "error": {
+          "readFailed": "Could not read the upload."
+        }
       }
     }
   }

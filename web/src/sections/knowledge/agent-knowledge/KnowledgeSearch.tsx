@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { useTranslations } from "next-intl";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
 import Text from "@/refresh-components/texts/Text";
@@ -50,6 +51,8 @@ export function KnowledgeSearchBar({
   onFocus,
   isSearchMode,
 }: KnowledgeSearchBarProps) {
+  const t = useTranslations("knowledge");
+
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Enter") onSubmit();
     if (e.key === "Escape" && isSearchMode) onBack();
@@ -77,7 +80,7 @@ export function KnowledgeSearchBar({
           onChange={(e) => onQueryChange(e.target.value)}
           onKeyDown={handleKeyDown}
           onFocus={onFocus}
-          placeholder="Search documents..."
+          placeholder={t("search.input.placeholder")}
           variant="internal"
         />
       </GeneralLayouts.Section>
@@ -118,6 +121,7 @@ export function KnowledgeSearchSidebar({
   resultCountBySource,
   vectorDbEnabled,
 }: KnowledgeSearchSidebarProps) {
+  const t = useTranslations("knowledge");
   const totalCount = Array.from(resultCountBySource.values()).reduce(
     (a, b) => a + b,
     0
@@ -138,7 +142,7 @@ export function KnowledgeSearchSidebar({
             </Text>
           ) : undefined
         }
-        title="All"
+        title={t("search.sidebar.all.label")}
       />
 
       {vectorDbEnabled &&
@@ -195,6 +199,8 @@ export function KnowledgeSearchResultsPanel({
   onToggleFolder,
   onNavigateToNode,
 }: KnowledgeSearchResultsPanelProps) {
+  const t = useTranslations("knowledge");
+
   if (!committedQuery) {
     return (
       <GeneralLayouts.Section
@@ -205,7 +211,7 @@ export function KnowledgeSearchResultsPanel({
       >
         <SvgSearch size={32} className="stroke-text-04" />
         <Text secondaryBody text03>
-          Input a search term and hit enter.
+          {t("search.prompt.description")}
         </Text>
       </GeneralLayouts.Section>
     );
@@ -219,7 +225,7 @@ export function KnowledgeSearchResultsPanel({
         aria-label="search-loading"
       >
         <Text secondaryBody text03>
-          Searching...
+          {t("search.loading.description")}
         </Text>
       </GeneralLayouts.Section>
     );
@@ -234,7 +240,7 @@ export function KnowledgeSearchResultsPanel({
         aria-label="search-error"
       >
         <Text secondaryBody text03>
-          Search failed, please try again.
+          {t("search.error.description")}
         </Text>
       </GeneralLayouts.Section>
     );
@@ -259,11 +265,11 @@ export function KnowledgeSearchResultsPanel({
         aria-label="search-no-results"
       >
         <Text secondaryBody text03>
-          No results found
           {activeSourceFilter
-            ? ` in ${getSourceMetadata(activeSourceFilter).displayName}`
-            : ""}
-          .
+            ? t("search.noResultsInSource.description", {
+                source: getSourceMetadata(activeSourceFilter).displayName,
+              })
+            : t("search.noResults.description")}
         </Text>
       </GeneralLayouts.Section>
     ) : (
@@ -272,12 +278,12 @@ export function KnowledgeSearchResultsPanel({
           <TableLayouts.CheckboxCell />
           <TableLayouts.TableCell flex>
             <Text secondaryBody text03>
-              Name
+              {t("table.columns.name.header")}
             </Text>
           </TableLayouts.TableCell>
           <TableLayouts.TableCell width={8}>
             <Text secondaryBody text03>
-              Sources
+              {t("table.columns.sources.header")}
             </Text>
           </TableLayouts.TableCell>
         </TableLayouts.TableRow>
@@ -427,7 +433,7 @@ export function KnowledgeSearchResultsPanel({
           className="absolute inset-0 z-10"
         >
           <Text secondaryBody text03>
-            Press Enter for new results.
+            {t("search.stale.description")}
           </Text>
         </GeneralLayouts.Section>
       </GeneralLayouts.Section>

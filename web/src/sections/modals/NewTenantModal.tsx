@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { BasicModalFooter, Modal } from "@opal/components";
 import { Button } from "@opal/components";
 import { SvgArrowRight, SvgUsers, SvgX } from "@opal/icons";
@@ -25,6 +26,7 @@ export default function NewTenantModal({
   isInvite = false,
   onClose,
 }: NewTenantModalProps) {
+  const t = useTranslations("admin.modals.newTenant");
   const router = useRouter();
   const { user } = useUser();
   const [isLoading, setIsLoading] = useState(false);
@@ -50,14 +52,14 @@ export default function NewTenantModal({
           throw new Error(
             errorData.detail ||
               errorData.message ||
-              "Failed to accept invitation"
+              t("acceptError.responseFallback")
           );
         }
 
-        toast.success("You have accepted the invitation.");
+        toast.success(t("acceptedToast.message"));
       } else {
         // For non-invite flow, just show success message
-        toast.success("Processing your team join request...");
+        toast.success(t("joinRequestToast.message"));
       }
 
       // Common logout and redirect for both flows
@@ -66,9 +68,7 @@ export default function NewTenantModal({
       onClose?.();
     } catch (error) {
       const message =
-        error instanceof Error
-          ? error.message
-          : "Failed to join the team. Please try again.";
+        error instanceof Error ? error.message : t("joinError.message");
 
       setError(message);
       toast.error(message);
@@ -98,17 +98,15 @@ export default function NewTenantModal({
         throw new Error(
           errorData.detail ||
             errorData.message ||
-            "Failed to decline invitation"
+            t("declineError.responseFallback")
         );
       }
 
-      toast.info("You have declined the invitation.");
+      toast.info(t("declinedToast.message"));
       onClose?.();
     } catch (error) {
       const message =
-        error instanceof Error
-          ? error.message
-          : "Failed to decline the invitation. Please try again.";
+        error instanceof Error ? error.message : t("declineError.message");
 
       setError(message);
       toast.error(message);
@@ -118,16 +116,18 @@ export default function NewTenantModal({
   }
 
   const title = isInvite
-    ? `You have been invited to join ${
-        tenantInfo.number_of_users
-      } other teammate${
-        tenantInfo.number_of_users === 1 ? "" : "s"
-      } of ${APP_DOMAIN}.`
-    : `Your request to join ${tenantInfo.number_of_users} other users of ${APP_DOMAIN} has been approved.`;
+    ? t("inviteTitle", {
+        count: tenantInfo.number_of_users,
+        domain: APP_DOMAIN,
+      })
+    : t("approvedTitle", {
+        count: tenantInfo.number_of_users,
+        domain: APP_DOMAIN,
+      });
 
   const description = isInvite
-    ? `By accepting this invitation, you will join the existing ${APP_DOMAIN} team and lose access to your current team. Note: you will lose access to your current agents, prompts, chats, and connected sources.`
-    : `To finish joining your team, please reauthenticate with ${user?.email}.`;
+    ? t("inviteDescription", { domain: APP_DOMAIN })
+    : t("reauthenticateDescription", { email: user?.email ?? "" });
 
   return (
     <Modal open>
@@ -149,7 +149,7 @@ export default function NewTenantModal({
                   onClick={handleRejectInvite}
                   icon={SvgX}
                 >
-                  Decline
+                  {t("declineButton.label")}
                 </Button>
               ) : undefined
             }
@@ -161,11 +161,11 @@ export default function NewTenantModal({
               >
                 {isLoading
                   ? isInvite
-                    ? "Accepting..."
-                    : "Joining..."
+                    ? t("submitButton.acceptingLabel")
+                    : t("submitButton.joiningLabel")
                   : isInvite
-                    ? "Accept Invitation"
-                    : "Reauthenticate"}
+                    ? t("submitButton.acceptLabel")
+                    : t("submitButton.reauthenticateLabel")}
               </Button>
             }
           />

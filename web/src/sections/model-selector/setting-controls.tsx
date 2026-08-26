@@ -22,22 +22,14 @@ export const ALL_REASONING_STOPS: ReasoningEffortOverride[] = [
   "xhigh",
 ];
 
-export const REASONING_STOP_LABELS: Record<ReasoningEffortOverride, string> = {
-  off: "Off",
-  low: "Low",
-  medium: "Medium",
-  high: "High",
-  xhigh: "XHigh",
-};
-
-export const UNSUPPORTED_SETTING_TOOLTIP =
-  "Modifying this setting is not supported for this model.";
-
-export const UNKNOWN_CONTEXT_TOOLTIP =
-  "Context size is not available for this model. Chats still apply a token limit automatically.";
-
-export const ADMIN_LIMITED_SETTING_TOOLTIP =
-  "Your admin limits this model to a lower reasoning level.";
+/** Message keys under the `chat.modelSelector` namespace, one per stop. */
+export const REASONING_STOP_LABEL_KEYS = {
+  off: "reasoningLevel.off.label",
+  low: "reasoningLevel.low.label",
+  medium: "reasoningLevel.medium.label",
+  high: "reasoningLevel.high.label",
+  xhigh: "reasoningLevel.xhigh.label",
+} as const satisfies Record<ReasoningEffortOverride, string>;
 
 /** Where an unset reasoning setting parks: the backend resolves AUTO to medium. */
 export const UNSET_REASONING_STOP = ALL_REASONING_STOPS.indexOf("medium");

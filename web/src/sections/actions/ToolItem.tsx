@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo } from "react";
+import { useTranslations } from "next-intl";
 import { cn } from "@opal/utils";
 import { Switch } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
@@ -91,6 +92,8 @@ const ToolItem: React.FC<ToolItemProps> = ({
   canToggle = true,
   className,
 }) => {
+  const t = useTranslations("actions");
+
   const isMcpVariant = variant === "mcp";
 
   const unavailableStyles =
@@ -213,7 +216,7 @@ const ToolItem: React.FC<ToolItemProps> = ({
               <div className="flex gap-0.5 items-center">
                 <div className="flex items-center px-0.5">
                   <Text as="p" text03 secondaryBody className="text-right">
-                    Tool unavailable
+                    {t("toolItem.unavailable.label")}
                   </Text>
                 </div>
                 <div className="flex items-center justify-center p-0.5 w-4 h-4">

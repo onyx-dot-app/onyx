@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import { Button, LineItemButton, Text } from "@opal/components";
 import type { RichStr } from "@opal/types";
 import {
@@ -41,6 +42,8 @@ function SkillFileTreeNodes({
   removingPath,
   removeDisabled,
 }: SkillFileTreeNodesProps) {
+  const t = useTranslations("skills.sections");
+
   return nodes.map((node) => {
     const isDirectory = node.size === null;
     const isExpanded = expandedPaths.has(node.path);
@@ -69,8 +72,8 @@ function SkillFileTreeNodes({
             icon={SvgTrash}
             size="sm"
             prominence="tertiary"
-            aria-label={`Remove ${node.name}`}
-            tooltip={`Remove ${node.name}`}
+            aria-label={t("fileTree.remove.label", { name: node.name })}
+            tooltip={t("fileTree.remove.label", { name: node.name })}
             disabled={removeDisabled || removingPath !== null}
             onClick={() => onRemove(node.path)}
           />
@@ -132,11 +135,12 @@ interface SkillFileTreeProps {
 
 export default function SkillFileTree({
   files,
-  emptyMessage = "No supporting files yet.",
+  emptyMessage,
   onRemove,
   removingPath = null,
   removeDisabled = false,
 }: SkillFileTreeProps) {
+  const t = useTranslations("skills.sections");
   const nodes = useMemo(() => {
     const root: SkillFileTreeNode = {
       name: "",
@@ -196,7 +200,7 @@ export default function SkillFileTree({
     return (
       <div className="flex min-h-24 items-center justify-center p-3">
         <Text font="secondary-body" color="text-03">
-          {emptyMessage}
+          {emptyMessage ?? t("fileTree.empty.description")}
         </Text>
       </div>
     );

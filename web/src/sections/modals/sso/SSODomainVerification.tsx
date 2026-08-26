@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useState } from "react";
+import { useTranslations } from "next-intl";
 import useSWR from "swr";
 import { Button, Card, CopyButton, Tag, Text } from "@opal/components";
 import { Hoverable } from "@opal/core";
@@ -27,6 +28,7 @@ interface RecordRowProps {
 }
 
 function RecordRow({ label, value, copyable }: RecordRowProps) {
+  const t = useTranslations("admin.ssoProviders.modals");
   const group = useId();
   const row = (
     <Section
@@ -42,7 +44,7 @@ function RecordRow({ label, value, copyable }: RecordRowProps) {
     >
       <div className="min-w-0 break-all">
         <Text font="main-ui-body" color="text-03" as="span">
-          {`${label}: `}
+          {t("domainVerification.record.labelPrefix", { label })}
         </Text>
         <Text font="main-ui-mono" color="text-04" as="span">
           {value}
@@ -66,6 +68,8 @@ interface DomainCardProps {
 }
 
 function DomainCard({ status, busy, onVerify }: DomainCardProps) {
+  const t = useTranslations("admin.ssoProviders.modals");
+
   return (
     <Card border="solid" rounding={4}>
       <Section flexDirection="column" alignItems="stretch" height="fit" gap={3}>
@@ -81,18 +85,22 @@ function DomainCard({ status, busy, onVerify }: DomainCardProps) {
           </Text>
           <Tag
             color={status.verified ? "green" : "amber"}
-            title={status.verified ? "Verified" : "Pending"}
+            title={
+              status.verified
+                ? t("domainVerification.status.verified")
+                : t("domainVerification.status.pending")
+            }
           />
         </Section>
 
         {status.verified ? (
           <Text font="secondary-body" color="text-03" as="span">
-            This domain signs its users in automatically.
+            {t("domainVerification.verifiedDescription")}
           </Text>
         ) : (
           <>
             <Text font="secondary-body" color="text-03" as="span">
-              Add this TXT record at your DNS provider, then verify.
+              {t("domainVerification.pendingDescription")}
             </Text>
             <Card border="solid" rounding={3} padding={0}>
               <Section
@@ -102,13 +110,20 @@ function DomainCard({ status, busy, onVerify }: DomainCardProps) {
                 gap={0}
                 className="[&>*+*]:border-t [&>*+*]:border-border-01"
               >
-                <RecordRow label="Type" value="TXT" />
+                <RecordRow
+                  label={t("domainVerification.record.typeLabel")}
+                  value="TXT"
+                />
                 {status.record_host && (
-                  <RecordRow label="Name" value={status.record_host} copyable />
+                  <RecordRow
+                    label={t("domainVerification.record.nameLabel")}
+                    value={status.record_host}
+                    copyable
+                  />
                 )}
                 {status.record_value && (
                   <RecordRow
-                    label="Value"
+                    label={t("domainVerification.record.valueLabel")}
                     value={status.record_value}
                     copyable
                   />
@@ -124,10 +139,10 @@ function DomainCard({ status, busy, onVerify }: DomainCardProps) {
                 tooltip={
                   status.claimed
                     ? undefined
-                    : "Save the provider with this domain first."
+                    : t("domainVerification.verifyButton.unclaimedTooltip")
                 }
               >
-                Verify domain
+                {t("domainVerification.verifyButton.label")}
               </Button>
             </Section>
           </>
@@ -143,6 +158,7 @@ function DomainCard({ status, busy, onVerify }: DomainCardProps) {
 export default function SSODomainVerification({
   domains,
 }: SSODomainVerificationProps) {
+  const t = useTranslations("admin.ssoProviders.modals");
   const { data, mutate, isLoading, error } = useSWR<SSOLoginDomains>(
     domains.length > 0 ? SWR_KEYS.adminSsoDomainRecords(domains) : null,
     () => fetchDomainRecords(domains)
@@ -155,7 +171,7 @@ export default function SSODomainVerification({
     setBusyDomain(domain);
     try {
       await verifyDomainViaDns(domain);
-      toast.success(`${domain} verified`);
+      toast.success(t("domainVerification.verifiedToast.message", { domain }));
       // The backend persisted it, so apply the result locally before asking for
       // a refresh. A failed refresh then cannot report success as a failure or
       // leave the row sitting on its old pending state.
@@ -187,8 +203,8 @@ export default function SSODomainVerification({
 
   return (
     <InputVertical
-      title="Domain verification"
-      description="A domain signs your workspace's users in automatically only after you verify you own it. Add the DNS record below, then verify."
+      title={t("domainVerification.title")}
+      description={t("domainVerification.description")}
       withLabel
     >
       <Section flexDirection="column" alignItems="stretch" height="fit" gap={3}>
@@ -206,11 +222,11 @@ export default function SSODomainVerification({
             >
               <Text font="main-ui-body" color="text-03" as="span">
                 {rows.length > 0
-                  ? "We couldn't refresh these records, so they may be out of date."
-                  : "We couldn't load the DNS records."}
+                  ? t("domainVerification.refreshError.message")
+                  : t("domainVerification.loadError.message")}
               </Text>
               <Button prominence="secondary" onClick={() => void mutate()}>
-                Try again
+                {t("domainVerification.retryButton.label")}
               </Button>
             </Section>
           </Card>
@@ -219,7 +235,7 @@ export default function SSODomainVerification({
           <Section flexDirection="row" alignItems="center" height="fit" gap={2}>
             <SvgSimpleLoader className="text-text-03" />
             <Text font="main-ui-body" color="text-03">
-              Loading…
+              {t("domainVerification.loading.message")}
             </Text>
           </Section>
         ) : (
