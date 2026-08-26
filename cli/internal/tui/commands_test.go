@@ -198,6 +198,34 @@ func TestFormatPickerLabelAlignsDetail(t *testing.T) {
 	}
 }
 
+func TestSelectAgentByName(t *testing.T) {
+	m := NewModel(config.DefaultConfig(), nil)
+	m.agents = []models.AgentSummary{
+		{ID: 1, Name: "Support Agent"},
+		{ID: 2, Name: "Engineering Bot"},
+	}
+
+	m, _ = cmdSelectAgent(m, "support")
+	if m.agentID != 1 {
+		t.Errorf("agentID = %d, want 1", m.agentID)
+	}
+	if m.agentName != "Support Agent" {
+		t.Errorf("agentName = %q, want Support Agent", m.agentName)
+	}
+}
+
+func TestSelectAgentByID(t *testing.T) {
+	m := NewModel(config.DefaultConfig(), nil)
+	m.agents = []models.AgentSummary{
+		{ID: 1, Name: "Support Agent"},
+	}
+
+	m, _ = cmdSelectAgent(m, "1")
+	if m.agentID != 1 {
+		t.Errorf("agentID = %d, want 1", m.agentID)
+	}
+}
+
 func TestSelectModelInvalidIndex(t *testing.T) {
 	m := NewModel(config.DefaultConfig(), nil)
 	m, _ = cmdSelectModel(m, "5")
