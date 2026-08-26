@@ -29,6 +29,7 @@ import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { SourceMetadata } from "@/lib/search/interfaces";
 import { SourceIcon } from "@/components/SourceIcon";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
+import { useAvailableSources } from "@/lib/connectors/hooks";
 import useCCPairs from "@/hooks/useCCPairs";
 import { useLLMProviders } from "@/lib/languageModels/hooks";
 import { useSettings } from "@/lib/settings/hooks";
@@ -46,7 +47,6 @@ import {
 
 export interface ToolsPopoverProps {
   filterManager: FilterManager;
-  availableSources?: ValidSources[];
   disabled?: boolean;
 }
 
@@ -82,9 +82,9 @@ interface AgentToolsProps extends ToolsPopoverProps {
 function AgentTools({
   activeAgent,
   filterManager,
-  availableSources = [],
   disabled = false,
 }: AgentToolsProps) {
+  const { availableSources } = useAvailableSources();
   const [open, setOpen] = useState(false);
   const [secondaryView, setSecondaryView] = useState<SecondaryViewState | null>(
     null

@@ -9,11 +9,11 @@ import React, {
 } from "react";
 import { MinimalAgent } from "@/lib/agents/types";
 import { InputPrompt } from "@/app/app/interfaces";
-import { FilterManager, LlmManager, useFederatedConnectors } from "@/lib/hooks";
+import { FilterManager, LlmManager } from "@/lib/hooks";
 import usePromptShortcuts from "@/hooks/usePromptShortcuts";
 import { useContentEditable } from "@/hooks/useContentEditable";
 import useFilter from "@/hooks/useFilter";
-import useCCPairs from "@/hooks/useCCPairs";
+import { useAvailableSources } from "@/lib/connectors/hooks";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { ChatState, MAX_QUEUED_MESSAGES } from "@/app/app/interfaces";
 import { useQueuedMessageNavigation } from "@/hooks/useQueuedMessageNavigation";
@@ -442,28 +442,14 @@ const AppInputBar = React.memo(
     );
 
     const { activePromptShortcuts } = usePromptShortcuts();
-    const { vectorDbEnabled } = combinedSettingsData;
-    const { ccPairs, isLoading: ccPairsLoading } = useCCPairs(vectorDbEnabled);
-    const { data: federatedConnectorsData, isLoading: federatedLoading } =
-      useFederatedConnectors();
+    // The list itself belongs to ToolsPopover, which reads it directly; only
+    // the loading flag is wanted here, to hold the controls back.
+    const { isLoading: sourcesLoading } = useAvailableSources();
 
     // Bottom controls are hidden until all data is loaded
     const controlsLoading =
-      ccPairsLoading ||
-      federatedLoading ||
-      !activeAgent ||
-      llmManager.isLoadingProviders;
+      sourcesLoading || !activeAgent || llmManager.isLoadingProviders;
     const [showPrompts, setShowPrompts] = useState(false);
-
-    // Memoize availableSources to prevent unnecessary re-renders
-    const memoizedAvailableSources = useMemo(
-      () => [
-        ...ccPairs.map((ccPair) => ccPair.source),
-        ...(federatedConnectorsData?.map((connector) => connector.source) ||
-          []),
-      ],
-      [ccPairs, federatedConnectorsData]
-    );
 
     const [tabbingIconIndex, setTabbingIconIndex] = useState(0);
 
@@ -659,11 +645,7 @@ const AppInputBar = React.memo(
               controlsLoading && "invisible"
             )}
           >
-            <ToolsPopover
-              filterManager={filterManager}
-              availableSources={memoizedAvailableSources}
-              disabled={disabled}
-            />
+            <ToolsPopover filterManager={filterManager} disabled={disabled} />
             {onToggleTabReading ? (
               <SelectButton
                 disabled={disabled}
