@@ -376,6 +376,9 @@ export interface ModelSelectorContentProps {
   includeGlobalDefault?: boolean;
   /** When provided, model rows gain a drill-in settings pane. */
   modelDetail?: ModelDetailManagers;
+  /** Opening a model's settings also selects it. Hosts pass their select
+   *  action WITHOUT closing the popover, so the pane stays visible. */
+  onDetailSelect?: (option: LLMOption) => void;
 }
 
 export default function ModelSelectorContent({
@@ -390,6 +393,7 @@ export default function ModelSelectorContent({
   scrollContainerRef: externalScrollRef,
   includeGlobalDefault = false,
   modelDetail,
+  onDetailSelect,
 }: ModelSelectorContentProps) {
   const [detailOption, setDetailOption] = useState<LLMOption | null>(null);
   const {
@@ -498,8 +502,10 @@ export default function ModelSelectorContent({
                     prominence="tertiary"
                     size="sm"
                     aria-label={`${option.displayName} settings`}
+                    tooltip="Model settings"
                     onClick={(e) => {
                       e.stopPropagation();
+                      onDetailSelect?.(option);
                       setDetailOption(option);
                     }}
                   />
