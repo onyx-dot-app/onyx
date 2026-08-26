@@ -39,7 +39,7 @@ import { isAnthropic } from "@/lib/languageModels/svc";
 import { getConfiguredSources } from "@/lib/sources";
 import { DEFAULT_AGENT_ID, NEXT_PUBLIC_CLOUD_ENABLED } from "./constants";
 import { useUser } from "@/providers/UserProvider";
-import { SEARCH_TOOL_ID } from "@/app/app/components/tools/constants";
+import { SEARCH_TOOL_ID } from "@/lib/tools/constants";
 import {
   updateReasoningEffortForChatSession,
   updateTemperatureOverrideForChatSession,

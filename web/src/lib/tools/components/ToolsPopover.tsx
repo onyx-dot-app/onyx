@@ -1,9 +1,6 @@
 "use client";
 
-import {
-  FILE_READER_TOOL_ID,
-  SEARCH_TOOL_ID,
-} from "@/app/app/components/tools/constants";
+import { FILE_READER_TOOL_ID, SEARCH_TOOL_ID } from "@/lib/tools/constants";
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import useFocusOnMount from "@opal/hooks/useFocusOnMount";
 import { InputTypeIn, Button, Popover, PopoverMenu } from "@opal/components";
@@ -15,7 +12,7 @@ import {
   SecondaryViewState,
 } from "@/lib/tools/types";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
-import { useActiveAgent, useAgentPreferences } from "@/lib/agents/hooks";
+import { useAgentPreferences } from "@/lib/agents/hooks";
 import { MinimalAgent } from "@/lib/agents/types";
 import { useUser } from "@/providers/UserProvider";
 import { hasPermission } from "@/lib/permissions";
@@ -45,14 +42,28 @@ import {
   startMCPUserOAuth,
 } from "@/lib/tools/svc";
 
-interface ToolsPopoverInnerProps extends ToolsPopoverProps {
-  activeAgent: MinimalAgent;
+/**
+ * The actions popover.
+ *
+ * Takes the agent rather than resolving one. Everything the panel shows is
+ * scoped to it — the rows are its tools, the toggles are its per-agent
+ * preferences, the sources are what it can reach — so the caller decides
+ * which agent this acts on, and the panel never has to ask whether it has one.
+ *
+ * Callers should key this on the agent, so switching starts clean rather than
+ * carrying the previous agent's open panel and search term across.
+ */
+export interface ToolsPopoverProps {
+  agent: MinimalAgent;
+  filterManager: FilterManager;
+  disabled?: boolean;
 }
-function ToolsPopoverInner({
-  activeAgent,
+
+export default function ToolsPopover({
+  agent,
   filterManager,
   disabled = false,
-}: ToolsPopoverInnerProps) {
+}: ToolsPopoverProps) {
   const { availableSources } = useAvailableSources();
   const [open, setOpen] = useState(false);
   const [secondaryView, setSecondaryView] = useState<SecondaryViewState | null>(
@@ -64,19 +75,15 @@ function ToolsPopoverInner({
   // const [showTopShadow, setShowTopShadow] = useState(false);
   const { selectedSources, setSelectedSources } = filterManager;
   const [mcpServers, setMcpServers] = useState<MCPServer[]>([]);
-  const { llmProviders, isLoading: isLLMLoading } = useLLMProviders(
-    activeAgent.id
-  );
+  const { llmProviders, isLoading: isLLMLoading } = useLLMProviders(agent.id);
   const hasAnyProvider = !isLLMLoading && (llmProviders?.length ?? 0) > 0;
 
   // Use the OAuth hook
-  const { getToolAuthStatus, authenticateTool } = useToolOAuthStatus(
-    activeAgent.id
-  );
+  const { getToolAuthStatus, authenticateTool } = useToolOAuthStatus(agent.id);
 
-  const agentIsAssistant = isAssistant(activeAgent);
+  const agentIsAssistant = isAssistant(agent);
 
-  const hasSearchTool = activeAgent.tools.some(
+  const hasSearchTool = agent.tools.some(
     (tool) => tool.in_code_tool_id === SEARCH_TOOL_ID
   );
 
@@ -88,13 +95,13 @@ function ToolsPopoverInner({
       return null; // null means "all accessible"
     }
 
-    const sources = activeAgent.knowledge_sources ?? [];
+    const sources = agent.knowledge_sources ?? [];
     if (sources.length === 0 && hasSearchTool) {
       return null;
     }
 
     return new Set<string>(sources);
-  }, [agentIsAssistant, activeAgent.knowledge_sources, hasSearchTool]);
+  }, [agentIsAssistant, agent.knowledge_sources, hasSearchTool]);
 
   // Scope availableSources to only what this agent can access. This ensures
   // that (a) agent-only sources like user_file appear in the toggle list and
@@ -121,7 +128,7 @@ function ToolsPopoverInner({
   // Store previously enabled sources when search tool is disabled
   const previouslyEnabledSourcesRef = useRef<SourceMetadata[]>([]);
 
-  // Store MCP server auth/loading state (tools are part of activeAgent.tools)
+  // Store MCP server auth/loading state (tools are part of agent.tools)
   const [mcpServerData, setMcpServerData] = useState<{
     [serverId: number]: {
       isAuthenticated: boolean;
@@ -154,7 +161,7 @@ function ToolsPopoverInner({
   // Reset state when assistant changes
   useEffect(() => {
     setForcedToolIds([]);
-  }, [activeAgent.id, setForcedToolIds]);
+  }, [agent.id, setForcedToolIds]);
 
   const { isAdmin, permissions } = useUser();
   const { vectorDbEnabled } = useSettings();
@@ -167,13 +174,13 @@ function ToolsPopoverInner({
   // Check if there are any connectors available
   const hasNoConnectors = ccPairs.length === 0;
 
-  const agentPreference = agentPreferences?.[activeAgent.id];
+  const agentPreference = agentPreferences?.[agent.id];
   const disabledToolIds =
     agentPreference?.disabled_tool_ids || NO_DISABLED_TOOLS;
   const toggleToolForCurrentAgent = useCallback(
     (toolId: number) => {
       const disabled = disabledToolIds.includes(toolId);
-      setSpecificAgentPreferences(activeAgent.id, {
+      setSpecificAgentPreferences(agent.id, {
         disabled_tool_ids: disabled
           ? disabledToolIds.filter((id) => id !== toolId)
           : [...disabledToolIds, toolId],
@@ -186,7 +193,7 @@ function ToolsPopoverInner({
     },
     [
       disabledToolIds,
-      activeAgent.id,
+      agent.id,
       setSpecificAgentPreferences,
       forcedToolIds,
       setForcedToolIds,
@@ -209,10 +216,10 @@ function ToolsPopoverInner({
   // Get internal search tool reference for auto-pin logic
   const internalSearchTool = useMemo(
     () =>
-      activeAgent.tools.find(
+      agent.tools.find(
         (tool) => tool.in_code_tool_id === SEARCH_TOOL_ID && !tool.mcp_server_id
       ),
-    [activeAgent.tools]
+    [agent.tools]
   );
 
   // Handle explicit force toggle from ActionLineItem
@@ -298,7 +305,7 @@ function ToolsPopoverInner({
   // Filter out MCP tools from the main list (they have mcp_server_id)
   // Also filter out internal search tool for basic users when there are no connectors
   // Also filter out tools that are not chat-selectable (e.g., OpenURL)
-  const displayTools = activeAgent.tools.filter((tool) => {
+  const displayTools = agent.tools.filter((tool) => {
     // Filter out MCP tools
     if (tool.mcp_server_id) return false;
 
@@ -345,19 +352,15 @@ function ToolsPopoverInner({
 
   // Fetch MCP servers for the agent on mount
   useEffect(() => {
-    if (activeAgent == null || activeAgent.id == null || !hasAnyProvider)
-      return;
+    if (agent == null || agent.id == null || !hasAnyProvider) return;
 
     const abortController = new AbortController();
 
     const fetchMCPServers = async () => {
       try {
-        const response = await fetch(
-          `/api/mcp/servers/persona/${activeAgent.id}`,
-          {
-            signal: abortController.signal,
-          }
-        );
+        const response = await fetch(`/api/mcp/servers/persona/${agent.id}`, {
+          signal: abortController.signal,
+        });
         if (response.ok) {
           const data = await response.json();
           const servers = data.mcp_servers || [];
@@ -387,9 +390,9 @@ function ToolsPopoverInner({
     return () => {
       abortController.abort();
     };
-  }, [activeAgent?.id, hasAnyProvider]);
+  }, [agent?.id, hasAnyProvider]);
 
-  // No separate MCP tool loading; tools already exist in activeAgent.tools
+  // No separate MCP tool loading; tools already exist in agent.tools
 
   // Handle MCP authentication
   const handleMCPAuthenticate = async (
@@ -520,7 +523,7 @@ function ToolsPopoverInner({
     : undefined;
   const selectedMcpTools =
     selectedMcpServerId !== null
-      ? activeAgent.tools.filter(
+      ? agent.tools.filter(
           (t) => t.mcp_server_id === Number(selectedMcpServerId)
         )
       : [];
@@ -553,7 +556,7 @@ function ToolsPopoverInner({
     if (!selectedMcpServer) return;
     const serverToolIds = selectedMcpTools.map((tool) => tool.id);
     const merged = Array.from(new Set([...disabledToolIds, ...serverToolIds]));
-    setSpecificAgentPreferences(activeAgent.id, {
+    setSpecificAgentPreferences(agent.id, {
       disabled_tool_ids: merged,
     });
     setForcedToolIds(forcedToolIds.filter((id) => !serverToolIds.includes(id)));
@@ -562,7 +565,7 @@ function ToolsPopoverInner({
   const enableAllToolsForSelectedServer = () => {
     if (!selectedMcpServer) return;
     const serverToolIdSet = new Set(selectedMcpTools.map((tool) => tool.id));
-    setSpecificAgentPreferences(activeAgent.id, {
+    setSpecificAgentPreferences(agent.id, {
       disabled_tool_ids: disabledToolIds.filter(
         (id) => !serverToolIdSet.has(id)
       ),
@@ -764,7 +767,7 @@ function ToolsPopoverInner({
           };
 
           // Tools for this server come from assistant.tools
-          const serverTools = activeAgent.tools.filter(
+          const serverTools = agent.tools.filter(
             (t) => t.mcp_server_id === Number(server.id)
           );
           const enabledTools = serverTools.filter(
@@ -887,38 +890,5 @@ function ToolsPopoverInner({
         />
       )}
     </>
-  );
-}
-
-/**
- * The actions popover.
- *
- * Only resolves the agent. Everything the panel shows is scoped to one — the
- * rows are its tools, the toggles are its per-agent preferences, the sources
- * are what it can reach — so there is nothing to render without it, and
- * {@link ToolsPopoverInner} is spared having to ask whether it has one.
- */
-export interface ToolsPopoverProps {
-  filterManager: FilterManager;
-  disabled?: boolean;
-}
-export default function ToolsPopover(props: ToolsPopoverProps) {
-  const activeAgent = useActiveAgent();
-
-  // No agent covers two situations. The agent list is still loading, which is
-  // every cold mount, and the parent keeps this row invisible meanwhile. Or
-  // there is genuinely no agent to act as — the default Assistant disabled
-  // with nothing to replace it — which AppPage answers with NoAgentModal.
-  // Neither wants a tool menu.
-  if (!activeAgent) return null;
-
-  // Keyed, so switching agents starts clean rather than carrying the previous
-  // agent's open panel, search term and half-opened MCP server across.
-  return (
-    <ToolsPopoverInner
-      key={activeAgent.id}
-      activeAgent={activeAgent}
-      {...props}
-    />
   );
 }

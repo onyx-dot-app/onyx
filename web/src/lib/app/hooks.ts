@@ -8,10 +8,7 @@ import useAppFocus from "@/hooks/useAppFocus";
 import useChatSessions from "@/hooks/useChatSessions";
 import { useCurrentSessionPersonaId } from "@/app/app/stores/useChatSessionStore";
 import { useActiveAgent, useAgents } from "@/lib/agents/hooks";
-import {
-  SEARCH_TOOL_ID,
-  WEB_SEARCH_TOOL_ID,
-} from "@/app/app/components/tools/constants";
+import { SEARCH_TOOL_ID, WEB_SEARCH_TOOL_ID } from "@/lib/tools/constants";
 
 export function useCustomFooterContent(): string {
   const settings = useSettings();

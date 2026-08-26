@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { SEARCH_TOOL_ID } from "@/app/app/components/tools/constants";
+import { SEARCH_TOOL_ID } from "@/lib/tools/constants";
 import { ToolSnapshot } from "@/lib/tools/types";
 import { getIconForAction } from "@/app/app/services/actionUtils";
 import { ToolAuthStatus } from "@/lib/hooks/useToolOAuthStatus";

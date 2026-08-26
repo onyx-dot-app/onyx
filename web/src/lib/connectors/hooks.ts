@@ -19,15 +19,31 @@ import { ValidSources } from "@/lib/types";
  * reset the user's saved source selections. Callers that want one entry per
  * source type run the result through `getConfiguredSources`, which dedups on
  * the cleaned name.
+ *
+ * `error` is set when either request failed, so the list is short rather than
+ * genuinely empty. A caller that hides controls on an empty list should check
+ * it, otherwise a failed fetch is indistinguishable from a workspace with
+ * nothing connected.
  */
 export function useAvailableSources(): {
   availableSources: ValidSources[];
   isLoading: boolean;
+  error: unknown;
 } {
-  const { vectorDbEnabled } = useSettings();
-  const { ccPairs, isLoading: ccPairsLoading } = useCCPairs(vectorDbEnabled);
-  const { data: federatedConnectors, isLoading: federatedLoading } =
-    useFederatedConnectors();
+  // `vectorDbEnabled` reads false while settings load, which would make
+  // `useCCPairs` skip its fetch and report ready. Wait for settings first, or
+  // a cached federated list alone would look like the complete set.
+  const { vectorDbEnabled, isLoading: settingsLoading } = useSettings();
+  const {
+    ccPairs,
+    isLoading: ccPairsLoading,
+    error: ccPairsError,
+  } = useCCPairs(vectorDbEnabled);
+  const {
+    data: federatedConnectors,
+    isLoading: federatedLoading,
+    error: federatedError,
+  } = useFederatedConnectors();
 
   const availableSources = useMemo(
     () => [
@@ -39,6 +55,7 @@ export function useAvailableSources(): {
 
   return {
     availableSources,
-    isLoading: ccPairsLoading || federatedLoading,
+    isLoading: settingsLoading || ccPairsLoading || federatedLoading,
+    error: ccPairsError ?? federatedError,
   };
 }

@@ -645,7 +645,16 @@ const AppInputBar = React.memo(
               controlsLoading && "invisible"
             )}
           >
-            <ToolsPopover filterManager={filterManager} disabled={disabled} />
+            {activeAgent && (
+              // Keyed, so switching agents starts clean rather than carrying
+              // the previous agent's open panel and search term across.
+              <ToolsPopover
+                key={activeAgent.id}
+                agent={activeAgent}
+                filterManager={filterManager}
+                disabled={disabled}
+              />
+            )}
             {onToggleTabReading ? (
               <SelectButton
                 disabled={disabled}
