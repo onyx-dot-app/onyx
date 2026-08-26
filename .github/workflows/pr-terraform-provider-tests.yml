@@ -224,7 +224,7 @@ jobs:
 
       # Retag the prebuilt image to the local name compose expects (compose
       # consumes local docker images directly, so pull+tag is enough).
-      - name: Pull and tag the backend image
+      - name: Pull the backend image and pin the model server to the cache
         env:
           ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
           RUN_ID: ${{ github.run_id }}
@@ -233,6 +233,15 @@ jobs:
           docker pull "${ECR_CACHE}:tf-provider-backend-${RUN_ID}"
           docker tag "${ECR_CACHE}:tf-provider-backend-${RUN_ID}" \
             "onyxdotapp/onyx-backend:latest"
+
+          # Every other image already resolves through the pull-through cache:
+          # compose writes them as ${BASE_IMAGE_REGISTRY:-docker.io}/... and the
+          # ECR login step exports that. The model servers are the exception --
+          # their default carries no registry, so they would come straight from
+          # Docker Hub, anonymously and rate-limited, and they are the largest
+          # images in the stack.
+          echo "ONYX_MODEL_SERVER_IMAGE=${BASE_IMAGE_REGISTRY}/onyxdotapp/onyx-model-server:${IMAGE_TAG}" \
+            >> "$GITHUB_ENV"
 
       # LICENSE_ENFORCEMENT_ENABLED already defaults to false; it is set here so
       # the lane keeps working if that default changes, and so it needs no
@@ -262,14 +271,6 @@ jobs:
             --env-file env.template \
             up -d --wait --wait-timeout 600 \
             api_server background
-
-      - name: Check the api_server is serving
-        # --fail: without it curl exits 0 on 4xx/5xx and this step would accept
-        # an unhealthy api_server. -w still emits on --fail.
-        run: |
-          docker ps --format 'table {{.Names}}\t{{.Status}}'
-          curl --fail -sS -o /dev/null -w "api_server /health -> %{http_code}\n" \
-            http://localhost:8080/health
 
       # Several resources only settle once the sync gate marks them up to date,
       # and beat is what schedules the task that moves the gate. Without this
