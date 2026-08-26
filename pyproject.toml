@@ -292,7 +292,13 @@ ignore = [
     "B904", # raise-without-from-inside-except (~465 existing violations).
 ]
 # G004: f-strings in logging break Sentry's message-pattern grouping.
-select = ["ARG", "B", "E", "F", "G004", "I", "PERF", "S", "W"]
+select = ["ARG", "B", "C901", "E", "F", "G004", "I", "PERF", "S", "W"]
+
+[tool.ruff.lint.mccabe]
+# Ruff's default is 10, which flags 429 functions. 30 is a ratchet: it stops new
+# highly-branched functions without a repo-wide refactor. The 23 functions above
+# it are listed in per-file-ignores below. Lower this as those get simplified.
+max-complexity = 30
 
 [tool.ruff.lint.flake8-bugbear]
 # FastAPI dependency-injection markers are the intended way to write these
@@ -322,3 +328,29 @@ known-first-party = ["onyx", "ee", "tests", "shared_configs", "model_server"]
 # pipe shell commands, and build ad-hoc SQL against trusted internal inputs
 # (tenant IDs, schema names). Other S rules still apply.
 "backend/scripts/**" = ["S108", "S602", "S608"]
+# Functions above the max-complexity of 30 when C901 was enabled. The trailing
+# number is the complexity at that time. Remove an entry once its function is
+# simplified. NOTE: the ignore is per file, so it also hides new complex
+# functions added to these files.
+"backend/ee/onyx/server/gateway/openai_passthrough.py" = ["C901"] # 32
+"backend/onyx/background/celery/tasks/docfetching/tasks.py" = ["C901"] # 43
+"backend/onyx/background/indexing/run_docfetching.py" = ["C901"] # 33
+"backend/onyx/chat/llm_loop.py" = ["C901"] # 46
+"backend/onyx/chat/llm_step.py" = ["C901"] # 51
+"backend/onyx/chat/process_message.py" = ["C901"] # 47
+"backend/onyx/connectors/sharepoint/connector.py" = ["C901"] # 34
+"backend/onyx/context/search/federated/slack_search.py" = ["C901"] # 31
+"backend/onyx/db/persona.py" = ["C901"] # 49
+"backend/onyx/document_index/opensearch/search.py" = ["C901"] # 48
+"backend/onyx/document_index/vespa/shared_utils/vespa_request_builders.py" = ["C901"] # 41
+"backend/onyx/llm/multi_llm.py" = ["C901"] # 45
+"backend/onyx/onyxbot/slack/handlers/handle_message.py" = ["C901"] # 34
+"backend/onyx/secondary_llm_flows/document_filter.py" = ["C901"] # 31
+"backend/onyx/server/features/build/interactive_turns/executor.py" = ["C901"] # 35
+"backend/onyx/server/features/build/sandbox/opencode/serve_client.py" = ["C901"] # 56
+"backend/onyx/server/features/mcp/api.py" = ["C901"] # 33
+"backend/onyx/server/query_and_chat/session_loading.py" = ["C901"] # 42
+"backend/onyx/tools/tool_constructor.py" = ["C901"] # 40
+"backend/scripts/tenant_cleanup/mark_connectors_for_deletion.py" = ["C901"] # 31
+"backend/scripts/tenant_cleanup/no_bastion_cleanup_tenants.py" = ["C901"] # 49
+"backend/scripts/tenant_cleanup/no_bastion_mark_connectors.py" = ["C901"] # 39
