@@ -167,6 +167,360 @@ def get_normalization_pipeline_name_and_config() -> tuple[str, dict[str, Any]]:
         )
 
 
+def _get_acl_visibility_filter(
+    access_control_list: list[str],
+) -> dict[str, dict[str, list[TermQuery[bool] | TermsQuery[str]] | int]]:
+    """Returns a filter for the access control list.
+
+    Since this returns an isolated bool should clause, it can be cached in
+    OpenSearch independently of other clauses in _get_search_filters.
+
+    Args:
+        access_control_list: The access control list to restrict documents to.
+
+    Raises:
+        ValueError: The number of access control list entries is greater than
+            MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY.
+
+    Returns:
+        A filter for the access control list.
+    """
+    # Logical OR operator on its elements.
+    acl_visibility_filter: dict[str, dict[str, Any]] = {
+        "bool": {
+            "should": [{"term": {PUBLIC_FIELD_NAME: {"value": True}}}],
+            "minimum_should_match": 1,
+        }
+    }
+    if access_control_list:
+        if len(access_control_list) > MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY:
+            raise ValueError(
+                f"Too many access control list entries: {len(access_control_list)}. Max allowed: {MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY}."
+            )
+        # Use terms instead of a list of term within a should clause because
+        # Lucene will optimize the filtering for large sets of terms. Small sets
+        # of terms are not expected to perform any differently than individual
+        # term clauses.
+        acl_subclause: TermsQuery[str] = {
+            "terms": {ACCESS_CONTROL_LIST_FIELD_NAME: list(access_control_list)}
+        }
+        acl_visibility_filter["bool"]["should"].append(
+            acl_subclause  # ty: ignore[invalid-argument-type]
+        )
+    return acl_visibility_filter
+
+
+def _get_source_type_filter(
+    source_types: list[DocumentSource],
+) -> TermsQuery[str]:
+    """Returns a filter for the source types.
+
+    Since this returns an isolated terms clause, it can be cached in OpenSearch
+    independently of other clauses in _get_search_filters.
+
+    Args:
+        source_types: The source types to restrict documents to.
+
+    Raises:
+        ValueError: The number of source types is greater than
+            MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY.
+        ValueError: An empty list was supplied.
+
+    Returns:
+        A filter for the source types.
+    """
+    if not source_types:
+        raise ValueError(
+            "source_types cannot be empty if trying to create a source type filter."
+        )
+    if len(source_types) > MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY:
+        raise ValueError(
+            f"Too many source types: {len(source_types)}. Max allowed: {MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY}."
+        )
+    # Use terms instead of a list of term within a should clause because Lucene
+    # will optimize the filtering for large sets of terms. Small sets of terms
+    # are not expected to perform any differently than individual term clauses.
+    return {
+        "terms": {
+            SOURCE_TYPE_FIELD_NAME: [source_type.value for source_type in source_types]
+        }
+    }
+
+
+def _get_tag_filter(tags: list[Tag]) -> TermsQuery[str]:
+    """Returns a filter for the tags.
+
+    Since this returns an isolated terms clause, it can be cached in OpenSearch
+    independently of other clauses in _get_search_filters.
+
+    Args:
+        tags: The tags to restrict documents to.
+
+    Raises:
+        ValueError: The number of tags is greater than
+            MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY.
+        ValueError: An empty list was supplied.
+
+    Returns:
+        A filter for the tags.
+    """
+    if not tags:
+        raise ValueError("tags cannot be empty if trying to create a tag filter.")
+    if len(tags) > MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY:
+        raise ValueError(
+            f"Too many tags: {len(tags)}. Max allowed: {MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY}."
+        )
+    # Kind of an abstraction leak, see convert_metadata_dict_to_list_of_strings
+    # for why metadata list entries are expected to look this way.
+    tag_str_list = [f"{tag.tag_key}{INDEX_SEPARATOR}{tag.tag_value}" for tag in tags]
+    # Use terms instead of a list of term within a should clause because Lucene
+    # will optimize the filtering for large sets of terms. Small sets of terms
+    # are not expected to perform any differently than individual term clauses.
+    return {"terms": {METADATA_LIST_FIELD_NAME: tag_str_list}}
+
+
+def _get_document_set_filter(document_sets: list[str]) -> TermsQuery[str]:
+    """Returns a filter for the document sets.
+
+    Since this returns an isolated terms clause, it can be cached in OpenSearch
+    independently of other clauses in _get_search_filters.
+
+    Args:
+        document_sets: The document sets to restrict documents to.
+
+    Raises:
+        ValueError: The number of document sets is greater than
+            MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY.
+        ValueError: An empty list was supplied.
+
+    Returns:
+        A filter for the document sets.
+    """
+    if not document_sets:
+        raise ValueError(
+            "document_sets cannot be empty if trying to create a document set filter."
+        )
+    if len(document_sets) > MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY:
+        raise ValueError(
+            f"Too many document sets: {len(document_sets)}. Max allowed: {MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY}."
+        )
+    # Use terms instead of a list of term within a should clause because Lucene
+    # will optimize the filtering for large sets of terms. Small sets of terms
+    # are not expected to perform any differently than individual term clauses.
+    return {"terms": {DOCUMENT_SETS_FIELD_NAME: list(document_sets)}}
+
+
+def _get_user_project_filter(project_id: int) -> TermQuery[int]:
+    return {"term": {USER_PROJECTS_FIELD_NAME: {"value": project_id}}}
+
+
+def _get_persona_filter(persona_id: int) -> TermQuery[int]:
+    return {"term": {PERSONAS_FIELD_NAME: {"value": persona_id}}}
+
+
+def _get_date_range_clause(
+    field_name: str,
+    gte: datetime | None,
+    lte: datetime | None,
+    include_undated: bool,
+) -> dict[str, Any]:
+    """Inclusive [gte, lte] range clause on a date field; when include_undated
+    is True, documents missing the field also match. Isolated bool clause, so
+    OpenSearch can cache it independently."""
+    # Convert to UTC if not already so the bounds are comparable to the document
+    # data.
+    range_bounds: dict[str, int] = {}
+    if gte is not None:
+        range_bounds["gte"] = int(datetime_to_utc(gte).timestamp())
+    if lte is not None:
+        range_bounds["lte"] = int(datetime_to_utc(lte).timestamp())
+
+    # Logical OR operator on its elements.
+    date_range_clause: dict[str, Any] = {
+        "bool": {"should": [], "minimum_should_match": 1}
+    }
+    date_range_clause["bool"]["should"].append({"range": {field_name: range_bounds}})
+    if include_undated:
+        date_range_clause["bool"]["should"].append(
+            {"bool": {"must_not": {"exists": {"field": field_name}}}}
+        )
+    return date_range_clause
+
+
+def _get_document_time_filter(
+    created_at_range: TimeRange | None,
+    updated_at_range: TimeRange | None,
+) -> list[dict[str, Any]]:
+    """One null-tolerant clause per set range, to be AND-ed into the filter.
+    created_at always keeps undated documents (over-extend); last_updated keeps
+    them only for an old, open-ended lower bound, so recent-window queries
+    aren't flooded by undated docs."""
+    clauses: list[dict[str, Any]] = []
+    if created_at_range is not None and created_at_range.has_bounds():
+        clauses.append(
+            _get_date_range_clause(
+                CREATED_AT_FIELD_NAME,
+                gte=created_at_range.start,
+                lte=created_at_range.end,
+                include_undated=True,
+            )
+        )
+    if updated_at_range is not None and updated_at_range.has_bounds():
+        include_undated = (
+            updated_at_range.start is not None
+            and updated_at_range.end is None
+            and updated_at_range.start
+            < datetime.now(timezone.utc) - timedelta(days=ASSUMED_DOCUMENT_AGE_DAYS)
+        )
+        clauses.append(
+            _get_date_range_clause(
+                LAST_UPDATED_FIELD_NAME,
+                gte=updated_at_range.start,
+                lte=updated_at_range.end,
+                include_undated=include_undated,
+            )
+        )
+    return clauses
+
+
+def _get_chunk_index_filter(
+    min_chunk_index: int | None, max_chunk_index: int | None
+) -> dict[str, Any]:
+    range_clause: dict[str, Any] = {"range": {CHUNK_INDEX_FIELD_NAME: {}}}
+    if min_chunk_index is not None:
+        range_clause["range"][CHUNK_INDEX_FIELD_NAME]["gte"] = min_chunk_index
+    if max_chunk_index is not None:
+        range_clause["range"][CHUNK_INDEX_FIELD_NAME]["lte"] = max_chunk_index
+    return range_clause
+
+
+def _get_attached_document_id_filter(
+    doc_ids: list[str],
+) -> TermsQuery[str]:
+    """
+    Returns a filter for documents explicitly attached to an assistant.
+
+    Since this returns an isolated terms clause, it can be cached in OpenSearch
+    independently of other clauses in _get_search_filters.
+
+    Args:
+        doc_ids: The document IDs to restrict documents to.
+
+    Raises:
+        ValueError: The number of document IDs is greater than
+            MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY.
+        ValueError: An empty list was supplied.
+
+    Returns:
+        A filter for the document IDs.
+    """
+    if not doc_ids:
+        raise ValueError(
+            "doc_ids cannot be empty if trying to create a document ID filter."
+        )
+    if len(doc_ids) > MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY:
+        raise ValueError(
+            f"Too many document IDs: {len(doc_ids)}. Max allowed: {MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY}."
+        )
+    # Use terms instead of a list of term within a should clause because Lucene
+    # will optimize the filtering for large sets of terms. Small sets of terms
+    # are not expected to perform any differently than individual term clauses.
+    return {"terms": {DOCUMENT_ID_FIELD_NAME: list(doc_ids)}}
+
+
+def _get_hierarchy_node_filter(
+    node_ids: list[int],
+) -> TermsQuery[int]:
+    """
+    Returns a filter for chunks whose ancestors include any of the given
+    hierarchy nodes.
+
+    Since this returns an isolated terms clause, it can be cached in OpenSearch
+    independently of other clauses in _get_search_filters.
+
+    Args:
+        node_ids: The hierarchy node IDs to restrict documents to.
+
+    Raises:
+        ValueError: The number of hierarchy node IDs is greater than
+            MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY.
+        ValueError: An empty list was supplied.
+
+    Returns:
+        A filter for the hierarchy node IDs.
+    """
+    if not node_ids:
+        raise ValueError(
+            "node_ids cannot be empty if trying to create a hierarchy node ID filter."
+        )
+    if len(node_ids) > MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY:
+        raise ValueError(
+            f"Too many hierarchy node IDs: {len(node_ids)}. Max allowed: {MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY}."
+        )
+    # Use terms instead of a list of term within a should clause because Lucene
+    # will optimize the filtering for large sets of terms. Small sets of terms
+    # are not expected to perform any differently than individual term clauses.
+    return {"terms": {ANCESTOR_HIERARCHY_NODE_IDS_FIELD_NAME: list(node_ids)}}
+
+
+def _get_knowledge_scope_filter(
+    document_sets: list[str],
+    project_id_filter: int | None,
+    persona_id_filter: int | None,
+    attached_document_ids: list[str] | None,
+    hierarchy_node_ids: list[int] | None,
+) -> dict[str, Any] | None:
+    """Returns the knowledge scope filter, or None when there is no scope.
+
+    Explicit knowledge attachments restrict what an assistant can see. When none
+    are set the assistant searches everything.
+
+    persona_id_filter is a primary trigger — a persona with user files IS
+    explicit knowledge, so it can start a knowledge scope on its own.
+
+    project_id_filter is a primary trigger — a chat inside a project is scoped
+    to that project, so project_id_filter restricts the search to the project's
+    files on its own (project chats do not search team knowledge).
+
+    Since this returns an isolated bool should clause, it can be cached in
+    OpenSearch independently of other clauses in _get_search_filters.
+    """
+    has_knowledge_scope = (
+        attached_document_ids
+        or hierarchy_node_ids
+        or document_sets
+        or persona_id_filter is not None
+        or project_id_filter is not None
+    )
+    if not has_knowledge_scope:
+        return None
+
+    knowledge_filter: dict[str, Any] = {
+        "bool": {"should": [], "minimum_should_match": 1}
+    }
+    if attached_document_ids:
+        knowledge_filter["bool"]["should"].append(
+            _get_attached_document_id_filter(attached_document_ids)
+        )
+    if hierarchy_node_ids:
+        knowledge_filter["bool"]["should"].append(
+            _get_hierarchy_node_filter(hierarchy_node_ids)
+        )
+    if document_sets:
+        knowledge_filter["bool"]["should"].append(
+            _get_document_set_filter(document_sets)
+        )
+    if persona_id_filter is not None:
+        knowledge_filter["bool"]["should"].append(
+            _get_persona_filter(persona_id_filter)
+        )
+    if project_id_filter is not None:
+        knowledge_filter["bool"]["should"].append(
+            _get_user_project_filter(project_id_filter)
+        )
+    return knowledge_filter
+
+
 class DocumentQuery:
     """
     TODO(andrei): Implement multi-phase search strategies.
@@ -956,307 +1310,6 @@ class DocumentQuery:
                 query.
         """
 
-        def _get_acl_visibility_filter(
-            access_control_list: list[str],
-        ) -> dict[str, dict[str, list[TermQuery[bool] | TermsQuery[str]] | int]]:
-            """Returns a filter for the access control list.
-
-            Since this returns an isolated bool should clause, it can be cached
-            in OpenSearch independently of other clauses in _get_search_filters.
-
-            Args:
-                access_control_list: The access control list to restrict
-                    documents to.
-
-            Raises:
-                ValueError: The number of access control list entries is greater
-                    than MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY.
-
-            Returns:
-                A filter for the access control list.
-            """
-            # Logical OR operator on its elements.
-            acl_visibility_filter: dict[str, dict[str, Any]] = {
-                "bool": {
-                    "should": [{"term": {PUBLIC_FIELD_NAME: {"value": True}}}],
-                    "minimum_should_match": 1,
-                }
-            }
-            if access_control_list:
-                if len(access_control_list) > MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY:
-                    raise ValueError(
-                        f"Too many access control list entries: {len(access_control_list)}. Max allowed: {MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY}."
-                    )
-                # Use terms instead of a list of term within a should clause
-                # because Lucene will optimize the filtering for large sets of
-                # terms. Small sets of terms are not expected to perform any
-                # differently than individual term clauses.
-                acl_subclause: TermsQuery[str] = {
-                    "terms": {ACCESS_CONTROL_LIST_FIELD_NAME: list(access_control_list)}
-                }
-                acl_visibility_filter["bool"]["should"].append(
-                    acl_subclause  # ty: ignore[invalid-argument-type]
-                )
-            return acl_visibility_filter
-
-        def _get_source_type_filter(
-            source_types: list[DocumentSource],
-        ) -> TermsQuery[str]:
-            """Returns a filter for the source types.
-
-            Since this returns an isolated terms clause, it can be cached in
-            OpenSearch independently of other clauses in _get_search_filters.
-
-            Args:
-                source_types: The source types to restrict documents to.
-
-            Raises:
-                ValueError: The number of source types is greater than
-                    MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY.
-                ValueError: An empty list was supplied.
-
-            Returns:
-                A filter for the source types.
-            """
-            if not source_types:
-                raise ValueError(
-                    "source_types cannot be empty if trying to create a source type filter."
-                )
-            if len(source_types) > MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY:
-                raise ValueError(
-                    f"Too many source types: {len(source_types)}. Max allowed: {MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY}."
-                )
-            # Use terms instead of a list of term within a should clause because
-            # Lucene will optimize the filtering for large sets of terms. Small
-            # sets of terms are not expected to perform any differently than
-            # individual term clauses.
-            return {
-                "terms": {
-                    SOURCE_TYPE_FIELD_NAME: [
-                        source_type.value for source_type in source_types
-                    ]
-                }
-            }
-
-        def _get_tag_filter(tags: list[Tag]) -> TermsQuery[str]:
-            """Returns a filter for the tags.
-
-            Since this returns an isolated terms clause, it can be cached in
-            OpenSearch independently of other clauses in _get_search_filters.
-
-            Args:
-                tags: The tags to restrict documents to.
-
-            Raises:
-                ValueError: The number of tags is greater than
-                    MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY.
-                ValueError: An empty list was supplied.
-
-            Returns:
-                A filter for the tags.
-            """
-            if not tags:
-                raise ValueError(
-                    "tags cannot be empty if trying to create a tag filter."
-                )
-            if len(tags) > MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY:
-                raise ValueError(
-                    f"Too many tags: {len(tags)}. Max allowed: {MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY}."
-                )
-            # Kind of an abstraction leak, see
-            # convert_metadata_dict_to_list_of_strings for why metadata list
-            # entries are expected to look this way.
-            tag_str_list = [
-                f"{tag.tag_key}{INDEX_SEPARATOR}{tag.tag_value}" for tag in tags
-            ]
-            # Use terms instead of a list of term within a should clause because
-            # Lucene will optimize the filtering for large sets of terms. Small
-            # sets of terms are not expected to perform any differently than
-            # individual term clauses.
-            return {"terms": {METADATA_LIST_FIELD_NAME: tag_str_list}}
-
-        def _get_document_set_filter(document_sets: list[str]) -> TermsQuery[str]:
-            """Returns a filter for the document sets.
-
-            Since this returns an isolated terms clause, it can be cached in
-            OpenSearch independently of other clauses in _get_search_filters.
-
-            Args:
-                document_sets: The document sets to restrict documents to.
-
-            Raises:
-                ValueError: The number of document sets is greater than
-                    MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY.
-                ValueError: An empty list was supplied.
-
-            Returns:
-                A filter for the document sets.
-            """
-            if not document_sets:
-                raise ValueError(
-                    "document_sets cannot be empty if trying to create a document set filter."
-                )
-            if len(document_sets) > MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY:
-                raise ValueError(
-                    f"Too many document sets: {len(document_sets)}. Max allowed: {MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY}."
-                )
-            # Use terms instead of a list of term within a should clause because
-            # Lucene will optimize the filtering for large sets of terms. Small
-            # sets of terms are not expected to perform any differently than
-            # individual term clauses.
-            return {"terms": {DOCUMENT_SETS_FIELD_NAME: list(document_sets)}}
-
-        def _get_user_project_filter(project_id: int) -> TermQuery[int]:
-            return {"term": {USER_PROJECTS_FIELD_NAME: {"value": project_id}}}
-
-        def _get_persona_filter(persona_id: int) -> TermQuery[int]:
-            return {"term": {PERSONAS_FIELD_NAME: {"value": persona_id}}}
-
-        def _get_date_range_clause(
-            field_name: str,
-            gte: datetime | None,
-            lte: datetime | None,
-            include_undated: bool,
-        ) -> dict[str, Any]:
-            """Inclusive [gte, lte] range clause on a date field; when
-            include_undated is True, documents missing the field also match.
-            Isolated bool clause, so OpenSearch can cache it independently."""
-            # Convert to UTC if not already so the bounds are comparable to the
-            # document data.
-            range_bounds: dict[str, int] = {}
-            if gte is not None:
-                range_bounds["gte"] = int(datetime_to_utc(gte).timestamp())
-            if lte is not None:
-                range_bounds["lte"] = int(datetime_to_utc(lte).timestamp())
-
-            # Logical OR operator on its elements.
-            date_range_clause: dict[str, Any] = {
-                "bool": {"should": [], "minimum_should_match": 1}
-            }
-            date_range_clause["bool"]["should"].append(
-                {"range": {field_name: range_bounds}}
-            )
-            if include_undated:
-                date_range_clause["bool"]["should"].append(
-                    {"bool": {"must_not": {"exists": {"field": field_name}}}}
-                )
-            return date_range_clause
-
-        def _get_document_time_filter(
-            created_at_range: TimeRange | None,
-            updated_at_range: TimeRange | None,
-        ) -> list[dict[str, Any]]:
-            """One null-tolerant clause per set range, to be AND-ed into the
-            filter. created_at always keeps undated documents (over-extend);
-            last_updated keeps them only for an old, open-ended lower bound, so
-            recent-window queries aren't flooded by undated docs."""
-            clauses: list[dict[str, Any]] = []
-            if created_at_range is not None and created_at_range.has_bounds():
-                clauses.append(
-                    _get_date_range_clause(
-                        CREATED_AT_FIELD_NAME,
-                        gte=created_at_range.start,
-                        lte=created_at_range.end,
-                        include_undated=True,
-                    )
-                )
-            if updated_at_range is not None and updated_at_range.has_bounds():
-                include_undated = (
-                    updated_at_range.start is not None
-                    and updated_at_range.end is None
-                    and updated_at_range.start
-                    < datetime.now(timezone.utc)
-                    - timedelta(days=ASSUMED_DOCUMENT_AGE_DAYS)
-                )
-                clauses.append(
-                    _get_date_range_clause(
-                        LAST_UPDATED_FIELD_NAME,
-                        gte=updated_at_range.start,
-                        lte=updated_at_range.end,
-                        include_undated=include_undated,
-                    )
-                )
-            return clauses
-
-        def _get_chunk_index_filter(
-            min_chunk_index: int | None, max_chunk_index: int | None
-        ) -> dict[str, Any]:
-            range_clause: dict[str, Any] = {"range": {CHUNK_INDEX_FIELD_NAME: {}}}
-            if min_chunk_index is not None:
-                range_clause["range"][CHUNK_INDEX_FIELD_NAME]["gte"] = min_chunk_index
-            if max_chunk_index is not None:
-                range_clause["range"][CHUNK_INDEX_FIELD_NAME]["lte"] = max_chunk_index
-            return range_clause
-
-        def _get_attached_document_id_filter(
-            doc_ids: list[str],
-        ) -> TermsQuery[str]:
-            """
-            Returns a filter for documents explicitly attached to an assistant.
-
-            Since this returns an isolated terms clause, it can be cached in
-            OpenSearch independently of other clauses in _get_search_filters.
-
-            Args:
-                doc_ids: The document IDs to restrict documents to.
-
-            Raises:
-                ValueError: The number of document IDs is greater than
-                    MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY.
-                ValueError: An empty list was supplied.
-
-            Returns:
-                A filter for the document IDs.
-            """
-            if not doc_ids:
-                raise ValueError(
-                    "doc_ids cannot be empty if trying to create a document ID filter."
-                )
-            if len(doc_ids) > MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY:
-                raise ValueError(
-                    f"Too many document IDs: {len(doc_ids)}. Max allowed: {MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY}."
-                )
-            # Use terms instead of a list of term within a should clause because
-            # Lucene will optimize the filtering for large sets of terms. Small
-            # sets of terms are not expected to perform any differently than
-            # individual term clauses.
-            return {"terms": {DOCUMENT_ID_FIELD_NAME: list(doc_ids)}}
-
-        def _get_hierarchy_node_filter(
-            node_ids: list[int],
-        ) -> TermsQuery[int]:
-            """
-            Returns a filter for chunks whose ancestors include any of the given
-            hierarchy nodes.
-
-            Since this returns an isolated terms clause, it can be cached in
-            OpenSearch independently of other clauses in _get_search_filters.
-
-            Args:
-                node_ids: The hierarchy node IDs to restrict documents to.
-
-            Raises:
-                ValueError: The number of hierarchy node IDs is greater than
-                    MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY.
-                ValueError: An empty list was supplied.
-
-            Returns:
-                A filter for the hierarchy node IDs.
-            """
-            if not node_ids:
-                raise ValueError(
-                    "node_ids cannot be empty if trying to create a hierarchy node ID filter."
-                )
-            if len(node_ids) > MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY:
-                raise ValueError(
-                    f"Too many hierarchy node IDs: {len(node_ids)}. Max allowed: {MAX_NUM_TERMS_ALLOWED_IN_TERMS_QUERY}."
-                )
-            # Use terms instead of a list of term within a should clause because
-            # Lucene will optimize the filtering for large sets of terms. Small
-            # sets of terms are not expected to perform any differently than
-            # individual term clauses.
-            return {"terms": {ANCESTOR_HIERARCHY_NODE_IDS_FIELD_NAME: list(node_ids)}}
-
         if document_id is not None and attached_document_ids is not None:
             raise ValueError(
                 "document_id and attached_document_ids cannot be used together."
@@ -1293,52 +1346,14 @@ class DocumentQuery:
             # document's metadata list.
             filter_clauses.append(_get_tag_filter(tags))
 
-        # Knowledge scope: explicit knowledge attachments restrict what an
-        # assistant can see. When none are set the assistant searches
-        # everything.
-        #
-        # persona_id_filter is a primary trigger — a persona with user files IS
-        # explicit knowledge, so it can start a knowledge scope on its own.
-        #
-        # project_id_filter is a primary trigger — a chat inside a project is
-        # scoped to that project, so project_id_filter restricts the search to
-        # the project's files on its own (project chats do not search team
-        # knowledge).
-        has_knowledge_scope = (
-            attached_document_ids
-            or hierarchy_node_ids
-            or document_sets
-            or persona_id_filter is not None
-            or project_id_filter is not None
+        knowledge_filter = _get_knowledge_scope_filter(
+            document_sets=document_sets,
+            project_id_filter=project_id_filter,
+            persona_id_filter=persona_id_filter,
+            attached_document_ids=attached_document_ids,
+            hierarchy_node_ids=hierarchy_node_ids,
         )
-
-        if has_knowledge_scope:
-            # Since this returns an isolated bool should clause, it can be
-            # cached in OpenSearch independently of other clauses in
-            # _get_search_filters.
-            knowledge_filter: dict[str, Any] = {
-                "bool": {"should": [], "minimum_should_match": 1}
-            }
-            if attached_document_ids:
-                knowledge_filter["bool"]["should"].append(
-                    _get_attached_document_id_filter(attached_document_ids)
-                )
-            if hierarchy_node_ids:
-                knowledge_filter["bool"]["should"].append(
-                    _get_hierarchy_node_filter(hierarchy_node_ids)
-                )
-            if document_sets:
-                knowledge_filter["bool"]["should"].append(
-                    _get_document_set_filter(document_sets)
-                )
-            if persona_id_filter is not None:
-                knowledge_filter["bool"]["should"].append(
-                    _get_persona_filter(persona_id_filter)
-                )
-            if project_id_filter is not None:
-                knowledge_filter["bool"]["should"].append(
-                    _get_user_project_filter(project_id_filter)
-                )
+        if knowledge_filter is not None:
             filter_clauses.append(knowledge_filter)
 
         if created_at_range is not None or updated_at_range is not None:

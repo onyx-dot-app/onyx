@@ -406,6 +406,337 @@ def _warn_dropped_env_only_keys(
     )
 
 
+def _resolve_tool_choice(
+    tool_choice: ToolChoice | None,
+    tools: list[dict] | None,
+    mishandles_required: bool,
+) -> ToolChoice | None:
+    """Downgrade tool_choice=required to AUTO for models that mishandle it:
+    Claude skips reasoning when it's set, Qwen thinking models reject it
+    with a 400, and Z.AI rejects any GLM tool_choice other than auto
+    ("Tool choice must be auto"). The chat loop's fallback tool-call
+    extraction still enforces the forced tool. Matched by model name
+    rather than `is_reasoning` because the litellm/local registry lags
+    behind new Qwen/GLM releases (e.g. qwen3.7-plus, glm-5.3).
+    A NamedToolChoice is deliberately NOT downgraded: legacy Claude
+    thinking is skipped separately instead, and the other models may still
+    reject the forced tool upstream (a loud 400 beats silently ignoring
+    the caller's forced tool)."""
+    if mishandles_required and tool_choice == ToolChoiceOptions.REQUIRED:
+        tool_choice = ToolChoiceOptions.AUTO
+
+    # If no tools are provided, tool_choice should be None
+    return tool_choice if tools else None
+
+
+def _sampling_kwargs(
+    model_identity_names: list[str],
+    is_reasoning: bool,
+    temperature: float,
+    stream: bool,
+    send_stream_options: bool,
+) -> dict[str, Any]:
+    """Temperature plus stream usage reporting."""
+    kwargs: dict[str, Any] = {}
+
+    # Some models (e.g. Claude Opus 4.7/4.8) reject a non-default
+    # temperature with a 400 invalid_request_error. For those models we
+    # must omit the param entirely.
+    # LiteLLM's drop_params is not reliable here because the upstream
+    # provider config can still claim the param is supported.
+    # https://github.com/BerriAI/litellm/issues/26444
+    # TODO(acaprau): Consider removing this once the above is resolved,
+    # although this assumes users have upgraded their litellm if relevant.
+    omits_sampling_params = any(
+        anthropic_omits_sampling_params(name) for name in model_identity_names
+    )
+    if not omits_sampling_params:
+        kwargs["temperature"] = 1 if is_reasoning else temperature
+
+    if stream and send_stream_options:
+        kwargs["stream_options"] = {"include_usage": True}
+    return kwargs
+
+
+def _openai_style_reasoning_kwargs(
+    prompt: LanguageModelInput,
+    model_identity_names: list[str],
+    is_claude_model: bool,
+    openai_style_reasoning: dict[str, Any],
+) -> dict[str, Any]:
+    if is_claude_model:
+        # Only a gateway routes Claude here, and it still translates
+        # to Anthropic, so the signed-thinking-block constraint
+        # described below applies to these requests too.
+        send_reasoning = not _prompt_contains_tool_call_history(prompt)
+    else:
+        # OpenAI API does not accept reasoning params for GPT 5 chat
+        # models (neither reasoning nor reasoning_effort are accepted)
+        # even though they are reasoning models (bug in OpenAI)
+        send_reasoning = not any(
+            openai_chat_variant_rejects_reasoning(name) for name in model_identity_names
+        )
+    return {"reasoning": openai_style_reasoning} if send_reasoning else {}
+
+
+def _anthropic_reasoning_kwargs(
+    prompt: LanguageModelInput,
+    reasoning_style: ReasoningParamStyle,
+    reasoning_effort: ReasoningEffort,
+    tool_choice: ToolChoice | None,
+    max_tokens: int | None,
+) -> tuple[dict[str, Any], int | None]:
+    """Returns the thinking kwargs plus the max_tokens to send, which an
+    Anthropic thinking budget can raise."""
+    # Anthropic requires every assistant message with tool_use
+    # blocks to start with a thinking block that carries a
+    # cryptographic signature.  We don't preserve those blocks
+    # across turns, so skip thinking when the history already
+    # contains tool-calling assistant messages.  LiteLLM's
+    # modify_params workaround doesn't cover all providers
+    # (notably Bedrock).
+    has_tool_call_history = _prompt_contains_tool_call_history(prompt)
+
+    if reasoning_style is ReasoningParamStyle.ANTHROPIC_ADAPTIVE:
+        # Newer Anthropic models (Claude Opus 4.7+) reject
+        # thinking.type.enabled — they require the adaptive
+        # thinking config with output_config.effort.
+        if has_tool_call_history:
+            return {}, max_tokens
+        return {
+            "thinking": {"type": "adaptive"},
+            "output_config": {
+                "effort": ANTHROPIC_ADAPTIVE_REASONING_EFFORT[reasoning_effort],
+            },
+        }, max_tokens
+
+    budget_tokens: int | None = ANTHROPIC_REASONING_EFFORT_BUDGET.get(reasoning_effort)
+    # thinking.type=enabled is rejected alongside a forced
+    # tool_choice (only adaptive thinking supports forced tool
+    # use), so skip thinking for a NamedToolChoice.
+    if (
+        budget_tokens is None
+        or has_tool_call_history
+        or isinstance(tool_choice, NamedToolChoice)
+    ):
+        return {}, max_tokens
+
+    if max_tokens is not None:
+        # Anthropic has a weird rule where max token has to be at least as much as budget tokens if set
+        # and the minimum budget tokens is 1024
+        # Will note that overwriting a developer set max tokens is not ideal but is the best we can do for now
+        # It is better to allow the LLM to output more reasoning tokens even if it results in a fairly small tool
+        # call as compared to reducing the budget for reasoning.
+        max_tokens = max(budget_tokens + 1, max_tokens)
+    return {"thinking": {"type": "enabled", "budget_tokens": budget_tokens}}, max_tokens
+
+
+def _litellm_reasoning_effort_kwargs(
+    reasoning_effort: ReasoningEffort,
+) -> dict[str, Any]:
+    """Hope for the best from LiteLLM."""
+    if reasoning_effort in [
+        ReasoningEffort.LOW,
+        ReasoningEffort.MEDIUM,
+        ReasoningEffort.HIGH,
+    ]:
+        return {"reasoning_effort": reasoning_effort.value}
+    if reasoning_effort is ReasoningEffort.XHIGH:
+        # Provider mappings behind litellm's reasoning_effort are
+        # uneven (Gemini raises on xhigh), clamp to high. The model
+        # picker greys the level out for these models, so reaching
+        # here means a stored override outliving a model switch.
+        return {"reasoning_effort": ReasoningEffort.HIGH.value}
+    return {"reasoning_effort": ReasoningEffort.MEDIUM.value}
+
+
+def _reasoning_kwargs(
+    prompt: LanguageModelInput,
+    model_provider: str,
+    model_identity_names: list[str],
+    api_surface: LlmApiSurface | None,
+    reasoning_effort: ReasoningEffort,
+    is_reasoning: bool,
+    is_claude_model: bool,
+    tool_choice: ToolChoice | None,
+    max_tokens: int | None,
+) -> tuple[dict[str, Any], int | None]:
+    """Returns the reasoning kwargs plus the max_tokens to send, which an
+    Anthropic thinking budget can raise."""
+    # Note, there is a reasoning_effort parameter in LiteLLM but it is completely jank and does not work for any
+    # of the major providers. Not setting it sets it to OFF.
+    if not (
+        is_reasoning
+        # The default of this parameter not set is surprisingly not the equivalent of an Auto but is actually Off
+        and reasoning_effort != ReasoningEffort.OFF
+        and not any(
+            openai_model_rejects_reasoning_effort(name) for name in model_identity_names
+        )
+    ):
+        return {}, max_tokens
+
+    openai_style_reasoning = {
+        "effort": OPENAI_REASONING_EFFORT[reasoning_effort],
+        "summary": "auto",
+    }
+    reasoning_style = resolve_reasoning_param_style(
+        model_provider,
+        model_identity_names,
+        api_surface,
+    )
+
+    if reasoning_style is ReasoningParamStyle.OPENAI:
+        kwargs = _openai_style_reasoning_kwargs(
+            prompt, model_identity_names, is_claude_model, openai_style_reasoning
+        )
+        return kwargs, max_tokens
+
+    if reasoning_style in (
+        ReasoningParamStyle.ANTHROPIC_ADAPTIVE,
+        ReasoningParamStyle.ANTHROPIC_BUDGET,
+    ):
+        return _anthropic_reasoning_kwargs(
+            prompt, reasoning_style, reasoning_effort, tool_choice, max_tokens
+        )
+
+    return _litellm_reasoning_effort_kwargs(reasoning_effort), max_tokens
+
+
+def _tool_and_format_kwargs(
+    tools: list[dict] | None,
+    parallel_tool_calls: bool,
+    structured_response_format: dict | None,
+    tool_choice_param_breaks_model: bool,
+    is_openai_compatible_proxy: bool,
+) -> dict[str, Any]:
+    kwargs: dict[str, Any] = {}
+    if tools:
+        # OpenAI will error if parallel_tool_calls is True and tools are not specified
+        kwargs["parallel_tool_calls"] = parallel_tool_calls
+
+    if structured_response_format:
+        kwargs["response_format"] = structured_response_format
+
+    if not tool_choice_param_breaks_model or is_openai_compatible_proxy:
+        # Litellm bug: tool_choice is dropped silently if not specified here for OpenAI
+        # However, this param breaks Anthropic and Mistral models,
+        # so it must be conditionally included unless the request is
+        # routed through Bifrost's OpenAI-compatible endpoint.
+        # Additionally, tool_choice is not supported by Ollama and causes warnings if included.
+        # See also, https://github.com/ollama/ollama/issues/11171
+        kwargs["allowed_openai_params"] = ["tool_choice"]
+    return kwargs
+
+
+def _tool_choice_kwargs(
+    tools: list[dict] | None, tool_choice: ToolChoice | None
+) -> dict[str, Any]:
+    """Only pass tool_choice when tools are present — some providers (e.g. Fireworks)
+    reject requests where tool_choice is explicitly null."""
+    if not tools or tool_choice is None:
+        return {}
+    if isinstance(tool_choice, NamedToolChoice):
+        return {
+            "tool_choice": {
+                "type": "function",
+                "function": {"name": tool_choice.name},
+            }
+        }
+    return {"tool_choice": tool_choice}
+
+
+def _with_openrouter_extra_body(
+    passthrough_kwargs: dict[str, Any],
+    model_kwargs: dict[str, Any],
+    model_provider: str,
+    user_identity: LLMUserIdentity | None,
+) -> dict[str, Any]:
+    """OpenRouter: inject session_id and user into extra_body.
+
+    session_id — sticky routing: pins all turns of a conversation to the
+    same upstream provider, enabling prompt cache hits across turns.
+    Without this, OpenRouter may alternate between e.g. Anthropic and Google
+    for the same model, causing cache misses on every other turn.
+    See: https://openrouter.ai/docs/features/provider-routing#session-id
+
+    user — activity tracking: OpenRouter reads the user identifier from
+    extra_body for its per-user activity logs; the top-level LiteLLM
+    `user` parameter is forwarded to the upstream model but is not picked
+    up by OpenRouter's own tracking dashboard.
+
+    Both are gated on SEND_USER_METADATA_TO_LLM_PROVIDER: an operator who
+    opted out of sending session/user identifiers to providers should not
+    have them forwarded to OpenRouter either."""
+    if not (
+        SEND_USER_METADATA_TO_LLM_PROVIDER
+        and model_provider == LlmProviderNames.OPENROUTER
+        and user_identity is not None
+    ):
+        return passthrough_kwargs
+
+    extra_body_updates: dict[str, str] = {}
+    if user_identity.session_id:
+        extra_body_updates["session_id"] = user_identity.session_id
+    if user_identity.user_id:
+        extra_body_updates["user"] = user_identity.user_id
+    if not extra_body_updates:
+        return passthrough_kwargs
+
+    if passthrough_kwargs is model_kwargs:
+        passthrough_kwargs = copy.deepcopy(model_kwargs)
+    existing_extra_body = passthrough_kwargs.get("extra_body") or {}
+    if not isinstance(existing_extra_body, dict):
+        logger.warning(
+            "OpenRouter extra_body injection: extra_body is not a dict (%s), "
+            "skipping session_id/user injection",
+            type(existing_extra_body).__name__,
+        )
+        return passthrough_kwargs
+
+    passthrough_kwargs["extra_body"] = {
+        **existing_extra_body,
+        **extra_body_updates,
+    }
+    return passthrough_kwargs
+
+
+def _completion_attempts(optional_kwargs: dict[str, Any]) -> list[dict[str, Any]]:
+    """Retry ladder for provider 400s: drop reasoning kwargs, then every
+    best-effort kwarg. Unknown models or capability drift degrade to
+    provider defaults with a warning instead of failing the message."""
+    attempts = [optional_kwargs]
+    for strip_keys in (_REASONING_KWARG_KEYS, _BEST_EFFORT_KWARG_KEYS):
+        stripped = {k: v for k, v in optional_kwargs.items() if k not in strip_keys}
+        if len(stripped) < len(attempts[-1]):
+            attempts.append(stripped)
+    return attempts
+
+
+def _should_retry_without_kwargs(
+    error: Exception,
+    model: str,
+    attempt_index: int,
+    attempts: list[dict[str, Any]],
+) -> bool:
+    """True when a later attempt strips a kwarg the provider's 400 named."""
+    if attempt_index == len(attempts) - 1:
+        return False
+
+    opts = attempts[attempt_index]
+    # Only retry rejections a later attempt can strip away.
+    remaining_strippable = set(opts) - set(attempts[-1])
+    if not _rejection_names_strippable_kwargs(error, remaining_strippable):
+        return False
+
+    logger.warning(
+        "Provider rejected request for model %s. Retrying without %s: %s",
+        model,
+        sorted(set(opts) - set(attempts[attempt_index + 1])),
+        error,
+    )
+    return True
+
+
 class LitellmLLM(LLM):
     """Uses Litellm library to allow easy configuration to use a multitude of LLMs
     See https://python.langchain.com/docs/integrations/chat/litellm"""
@@ -587,6 +918,90 @@ class LitellmLLM(LLM):
             # Log but don't fail the LLM call if tracking fails
             logger.warning("Failed to track LLM cost: %s", e)
 
+    def _resolve_model_target(self, is_openai_model: bool) -> tuple[str, str | None]:
+        """Resolve the LiteLLM `model` string and the api_version to send."""
+        model_provider = (
+            f"{self.config.model_provider}/responses"
+            if is_openai_model  # Uses litellm's completions -> responses bridge
+            else self.config.model_provider
+        )
+
+        # Azure responses-bridge calls must target the v1 responses surface:
+        # with a dated api-version, LiteLLM builds the legacy /openai/responses
+        # URL, which sovereign clouds (e.g. Azure Government) do not serve
+        # (#11420). Dropping the dated version lets LiteLLM apply its responses
+        # default (AZURE_DEFAULT_RESPONSES_API_VERSION env var, default
+        # "preview"), which routes to /openai/v1/responses — working on all
+        # clouds with reasoning summaries intact. Admin-configured v1 versions
+        # ("preview"/"latest"/"v1") pass through, and the dated version still
+        # applies to every non-bridge call (e.g. Azure chat completions).
+        api_version = self._api_version or None
+        if (
+            is_openai_model
+            and self._model_provider == LlmProviderNames.AZURE
+            and api_version is not None
+            and api_version not in _AZURE_V1_API_VERSIONS
+        ):
+            _log_azure_responses_api_version_override(self._api_base, api_version)
+            api_version = None
+
+        model_bare = self.config.deployment_name or self.config.model_name
+        if self._api_surface is LlmApiSurface.OPENAI_RESPONSES:
+            # Drives LiteLLM's completions -> responses bridge.
+            model = f"responses/{model_bare}"
+        elif self._api_surface is not None:
+            model = model_bare
+        else:
+            model = f"{model_provider}/{model_bare}"
+        return model, api_version
+
+    def _prepare_messages(
+        self,
+        prompt: LanguageModelInput,
+        tools: list[dict] | None,
+        is_claude_model: bool,
+        is_mistral: bool,
+        model_identity_names: list[str],
+    ) -> list[dict[str, Any]]:
+        """Convert the prompt to LiteLLM messages, then apply provider fixups."""
+        messages = _prompt_to_dicts(prompt)
+
+        if not (
+            is_claude_model
+            and (
+                self._model_provider in _THINKING_BLOCK_PROVIDERS
+                or self._api_surface is LlmApiSurface.ANTHROPIC_MESSAGES
+            )
+        ):
+            messages = _strip_thinking_blocks_from_messages(messages)
+
+        # Bedrock's Converse API requires toolConfig when messages
+        # contain toolUse/toolResult content blocks. When no tools are
+        # provided for this request but the history contains tool
+        # content from previous turns, strip it to plain text.
+        is_bedrock = self._model_provider in {
+            LlmProviderNames.BEDROCK,
+            LlmProviderNames.BEDROCK_CONVERSE,
+        }
+        if is_bedrock and not tools and _messages_contain_tool_content(messages):
+            messages = _strip_tool_content_from_messages(messages)
+
+        # Some models (e.g. Mistral) reject a user message
+        # immediately after a tool message. Insert a synthetic
+        # assistant bridge message to satisfy the ordering
+        # constraint. Check the provider, the LiteLLM routing
+        # override, and every identity name (deployment alias and
+        # model name) to catch Mistral served behind Azure or
+        # OpenAI-compatible endpoints (e.g. vLLM).
+        is_mistral_model = (
+            is_mistral
+            or self._custom_llm_provider == LlmProviderNames.MISTRAL
+            or _is_mistral_family_name(model_identity_names)
+        )
+        if is_mistral_model:
+            messages = _fix_tool_user_message_ordering(messages)
+        return messages
+
     def _completion(
         self,
         prompt: LanguageModelInput,
@@ -653,79 +1068,24 @@ class LitellmLLM(LLM):
         optional_kwargs: dict[str, Any] = {}
 
         # Model name
-        is_openai_compatible_proxy = self._api_surface in OPENAI_COMPATIBLE_SURFACES
-        model_provider = (
-            f"{self.config.model_provider}/responses"
-            if is_openai_model  # Uses litellm's completions -> responses bridge
-            else self.config.model_provider
-        )
-
-        # Azure responses-bridge calls must target the v1 responses surface:
-        # with a dated api-version, LiteLLM builds the legacy /openai/responses
-        # URL, which sovereign clouds (e.g. Azure Government) do not serve
-        # (#11420). Dropping the dated version lets LiteLLM apply its responses
-        # default (AZURE_DEFAULT_RESPONSES_API_VERSION env var, default
-        # "preview"), which routes to /openai/v1/responses — working on all
-        # clouds with reasoning summaries intact. Admin-configured v1 versions
-        # ("preview"/"latest"/"v1") pass through, and the dated version still
-        # applies to every non-bridge call (e.g. Azure chat completions).
-        api_version = self._api_version or None
-        if (
-            is_openai_model
-            and self._model_provider == LlmProviderNames.AZURE
-            and api_version is not None
-            and api_version not in _AZURE_V1_API_VERSIONS
-        ):
-            _log_azure_responses_api_version_override(self._api_base, api_version)
-            api_version = None
-
-        model_bare = self.config.deployment_name or self.config.model_name
-        if self._api_surface is LlmApiSurface.OPENAI_RESPONSES:
-            # Drives LiteLLM's completions -> responses bridge.
-            model = f"responses/{model_bare}"
-        elif self._api_surface is not None:
-            model = model_bare
-        else:
-            model = f"{model_provider}/{model_bare}"
+        model, api_version = self._resolve_model_target(is_openai_model)
 
         # Tool choice
-        # Downgrade tool_choice=required to AUTO for models that mishandle it:
-        # Claude skips reasoning when it's set, Qwen thinking models reject it
-        # with a 400, and Z.AI rejects any GLM tool_choice other than auto
-        # ("Tool choice must be auto"). The chat loop's fallback tool-call
-        # extraction still enforces the forced tool. Matched by model name
-        # rather than `is_reasoning` because the litellm/local registry lags
-        # behind new Qwen/GLM releases (e.g. qwen3.7-plus, glm-5.3).
-        # A NamedToolChoice is deliberately NOT downgraded: legacy Claude
-        # thinking is skipped below instead, and the other models may still
-        # reject the forced tool upstream (a loud 400 beats silently ignoring
-        # the caller's forced tool).
-        if (is_claude_model or is_qwen_model or is_glm_model) and (
-            tool_choice == ToolChoiceOptions.REQUIRED
-        ):
-            tool_choice = ToolChoiceOptions.AUTO
-
-        # If no tools are provided, tool_choice should be None
-        if not tools:
-            tool_choice = None
-
-        # Temperature
-        # Some models (e.g. Claude Opus 4.7/4.8) reject a non-default
-        # temperature with a 400 invalid_request_error. For those models we
-        # must omit the param entirely.
-        # LiteLLM's drop_params is not reliable here because the upstream
-        # provider config can still claim the param is supported.
-        # https://github.com/BerriAI/litellm/issues/26444
-        # TODO(acaprau): Consider removing this once the above is resolved,
-        # although this assumes users have upgraded their litellm if relevant.
-        omits_sampling_params = any(
-            anthropic_omits_sampling_params(name) for name in model_identity_names
+        tool_choice = _resolve_tool_choice(
+            tool_choice,
+            tools,
+            mishandles_required=is_claude_model or is_qwen_model or is_glm_model,
         )
-        if not omits_sampling_params:
-            optional_kwargs["temperature"] = 1 if is_reasoning else self._temperature
 
-        if stream and not is_vertex_model_rejecting_stream_options:
-            optional_kwargs["stream_options"] = {"include_usage": True}
+        optional_kwargs.update(
+            _sampling_kwargs(
+                model_identity_names,
+                is_reasoning,
+                self._temperature,
+                stream,
+                send_stream_options=not is_vertex_model_rejecting_stream_options,
+            )
+        )
 
         # Settle before anything reads it, so every branch below and tracing
         # see the same effort the provider will.
@@ -736,175 +1096,44 @@ class LitellmLLM(LLM):
             maximum=self.config.reasoning_effort_max,
         )
 
-        # Note, there is a reasoning_effort parameter in LiteLLM but it is completely jank and does not work for any
-        # of the major providers. Not setting it sets it to OFF.
-        if (
-            is_reasoning
-            # The default of this parameter not set is surprisingly not the equivalent of an Auto but is actually Off
-            and reasoning_effort != ReasoningEffort.OFF
-            and not any(
-                openai_model_rejects_reasoning_effort(name)
-                for name in model_identity_names
+        reasoning_kwargs, max_tokens = _reasoning_kwargs(
+            prompt,
+            self.config.model_provider,
+            model_identity_names,
+            self._api_surface,
+            reasoning_effort,
+            is_reasoning,
+            is_claude_model,
+            tool_choice,
+            max_tokens,
+        )
+        optional_kwargs.update(reasoning_kwargs)
+
+        optional_kwargs.update(
+            _tool_and_format_kwargs(
+                tools,
+                parallel_tool_calls,
+                structured_response_format,
+                tool_choice_param_breaks_model=(
+                    is_claude_model or is_ollama or is_mistral
+                ),
+                is_openai_compatible_proxy=(
+                    self._api_surface in OPENAI_COMPATIBLE_SURFACES
+                ),
             )
-        ):
-            openai_style_reasoning = {
-                "effort": OPENAI_REASONING_EFFORT[reasoning_effort],
-                "summary": "auto",
-            }
-            reasoning_style = resolve_reasoning_param_style(
-                self.config.model_provider,
-                model_identity_names,
-                self._api_surface,
-            )
-
-            if reasoning_style is ReasoningParamStyle.OPENAI:
-                if is_claude_model:
-                    # Only a gateway routes Claude here, and it still translates
-                    # to Anthropic, so the signed-thinking-block constraint
-                    # described below applies to these requests too.
-                    send_reasoning = not _prompt_contains_tool_call_history(prompt)
-                else:
-                    # OpenAI API does not accept reasoning params for GPT 5 chat
-                    # models (neither reasoning nor reasoning_effort are accepted)
-                    # even though they are reasoning models (bug in OpenAI)
-                    send_reasoning = not any(
-                        openai_chat_variant_rejects_reasoning(name)
-                        for name in model_identity_names
-                    )
-                if send_reasoning:
-                    optional_kwargs["reasoning"] = openai_style_reasoning
-
-            elif reasoning_style in (
-                ReasoningParamStyle.ANTHROPIC_ADAPTIVE,
-                ReasoningParamStyle.ANTHROPIC_BUDGET,
-            ):
-                # Anthropic requires every assistant message with tool_use
-                # blocks to start with a thinking block that carries a
-                # cryptographic signature.  We don't preserve those blocks
-                # across turns, so skip thinking when the history already
-                # contains tool-calling assistant messages.  LiteLLM's
-                # modify_params workaround doesn't cover all providers
-                # (notably Bedrock).
-                has_tool_call_history = _prompt_contains_tool_call_history(prompt)
-
-                if reasoning_style is ReasoningParamStyle.ANTHROPIC_ADAPTIVE:
-                    # Newer Anthropic models (Claude Opus 4.7+) reject
-                    # thinking.type.enabled — they require the adaptive
-                    # thinking config with output_config.effort.
-                    if not has_tool_call_history:
-                        optional_kwargs["thinking"] = {"type": "adaptive"}
-                        optional_kwargs["output_config"] = {
-                            "effort": ANTHROPIC_ADAPTIVE_REASONING_EFFORT[
-                                reasoning_effort
-                            ],
-                        }
-                else:
-                    budget_tokens: int | None = ANTHROPIC_REASONING_EFFORT_BUDGET.get(
-                        reasoning_effort
-                    )
-                    # thinking.type=enabled is rejected alongside a forced
-                    # tool_choice (only adaptive thinking supports forced tool
-                    # use), so skip thinking for a NamedToolChoice.
-                    if (
-                        budget_tokens is not None
-                        and not has_tool_call_history
-                        and not isinstance(tool_choice, NamedToolChoice)
-                    ):
-                        if max_tokens is not None:
-                            # Anthropic has a weird rule where max token has to be at least as much as budget tokens if set
-                            # and the minimum budget tokens is 1024
-                            # Will note that overwriting a developer set max tokens is not ideal but is the best we can do for now
-                            # It is better to allow the LLM to output more reasoning tokens even if it results in a fairly small tool
-                            # call as compared to reducing the budget for reasoning.
-                            max_tokens = max(budget_tokens + 1, max_tokens)
-                        optional_kwargs["thinking"] = {
-                            "type": "enabled",
-                            "budget_tokens": budget_tokens,
-                        }
-
-            else:
-                # Hope for the best from LiteLLM
-                if reasoning_effort in [
-                    ReasoningEffort.LOW,
-                    ReasoningEffort.MEDIUM,
-                    ReasoningEffort.HIGH,
-                ]:
-                    optional_kwargs["reasoning_effort"] = reasoning_effort.value
-                elif reasoning_effort is ReasoningEffort.XHIGH:
-                    # Provider mappings behind litellm's reasoning_effort are
-                    # uneven (Gemini raises on xhigh), clamp to high. The model
-                    # picker greys the level out for these models, so reaching
-                    # here means a stored override outliving a model switch.
-                    optional_kwargs["reasoning_effort"] = ReasoningEffort.HIGH.value
-                else:
-                    optional_kwargs["reasoning_effort"] = ReasoningEffort.MEDIUM.value
-
-        if tools:
-            # OpenAI will error if parallel_tool_calls is True and tools are not specified
-            optional_kwargs["parallel_tool_calls"] = parallel_tool_calls
-
-        if structured_response_format:
-            optional_kwargs["response_format"] = structured_response_format
-
-        if (
-            not (is_claude_model or is_ollama or is_mistral)
-            or is_openai_compatible_proxy
-        ):
-            # Litellm bug: tool_choice is dropped silently if not specified here for OpenAI
-            # However, this param breaks Anthropic and Mistral models,
-            # so it must be conditionally included unless the request is
-            # routed through Bifrost's OpenAI-compatible endpoint.
-            # Additionally, tool_choice is not supported by Ollama and causes warnings if included.
-            # See also, https://github.com/ollama/ollama/issues/11171
-            optional_kwargs["allowed_openai_params"] = ["tool_choice"]
+        )
 
         # Passthrough kwargs
         passthrough_kwargs = build_litellm_passthrough_kwargs(
             model_kwargs=self._model_kwargs,
             user_identity=user_identity,
         )
-
-        # OpenRouter: inject session_id and user into extra_body.
-        #
-        # session_id — sticky routing: pins all turns of a conversation to the
-        # same upstream provider, enabling prompt cache hits across turns.
-        # Without this, OpenRouter may alternate between e.g. Anthropic and Google
-        # for the same model, causing cache misses on every other turn.
-        # See: https://openrouter.ai/docs/features/provider-routing#session-id
-        #
-        # user — activity tracking: OpenRouter reads the user identifier from
-        # extra_body for its per-user activity logs; the top-level LiteLLM
-        # `user` parameter is forwarded to the upstream model but is not picked
-        # up by OpenRouter's own tracking dashboard.
-        #
-        # Both are gated on SEND_USER_METADATA_TO_LLM_PROVIDER: an operator who
-        # opted out of sending session/user identifiers to providers should not
-        # have them forwarded to OpenRouter either.
-        if (
-            SEND_USER_METADATA_TO_LLM_PROVIDER
-            and self._model_provider == LlmProviderNames.OPENROUTER
-            and user_identity is not None
-        ):
-            extra_body_updates: dict[str, str] = {}
-            if user_identity.session_id:
-                extra_body_updates["session_id"] = user_identity.session_id
-            if user_identity.user_id:
-                extra_body_updates["user"] = user_identity.user_id
-            if extra_body_updates:
-                if passthrough_kwargs is self._model_kwargs:
-                    passthrough_kwargs = copy.deepcopy(self._model_kwargs)
-                existing_extra_body = passthrough_kwargs.get("extra_body") or {}
-                if isinstance(existing_extra_body, dict):
-                    passthrough_kwargs["extra_body"] = {
-                        **existing_extra_body,
-                        **extra_body_updates,
-                    }
-                else:
-                    logger.warning(
-                        "OpenRouter extra_body injection: extra_body is not a dict (%s), "
-                        "skipping session_id/user injection",
-                        type(existing_extra_body).__name__,
-                    )
+        passthrough_kwargs = _with_openrouter_extra_body(
+            passthrough_kwargs,
+            self._model_kwargs,
+            self._model_provider,
+            user_identity,
+        )
 
         try:
             # NOTE: must pass in None instead of empty strings otherwise litellm
@@ -915,53 +1144,11 @@ class LitellmLLM(LLM):
             if "api_key" not in passthrough_kwargs:
                 passthrough_kwargs["api_key"] = self._api_key or None
 
-            messages = _prompt_to_dicts(prompt)
-
-            if not (
-                is_claude_model
-                and (
-                    self._model_provider in _THINKING_BLOCK_PROVIDERS
-                    or self._api_surface is LlmApiSurface.ANTHROPIC_MESSAGES
-                )
-            ):
-                messages = _strip_thinking_blocks_from_messages(messages)
-
-            # Bedrock's Converse API requires toolConfig when messages
-            # contain toolUse/toolResult content blocks. When no tools are
-            # provided for this request but the history contains tool
-            # content from previous turns, strip it to plain text.
-            is_bedrock = self._model_provider in {
-                LlmProviderNames.BEDROCK,
-                LlmProviderNames.BEDROCK_CONVERSE,
-            }
-            if is_bedrock and not tools and _messages_contain_tool_content(messages):
-                messages = _strip_tool_content_from_messages(messages)
-
-            # Some models (e.g. Mistral) reject a user message
-            # immediately after a tool message. Insert a synthetic
-            # assistant bridge message to satisfy the ordering
-            # constraint. Check the provider, the LiteLLM routing
-            # override, and every identity name (deployment alias and
-            # model name) to catch Mistral served behind Azure or
-            # OpenAI-compatible endpoints (e.g. vLLM).
-            is_mistral_model = (
-                is_mistral
-                or self._custom_llm_provider == LlmProviderNames.MISTRAL
-                or _is_mistral_family_name(model_identity_names)
+            messages = self._prepare_messages(
+                prompt, tools, is_claude_model, is_mistral, model_identity_names
             )
-            if is_mistral_model:
-                messages = _fix_tool_user_message_ordering(messages)
 
-            # Only pass tool_choice when tools are present — some providers (e.g. Fireworks)
-            # reject requests where tool_choice is explicitly null.
-            if tools and tool_choice is not None:
-                if isinstance(tool_choice, NamedToolChoice):
-                    optional_kwargs["tool_choice"] = {
-                        "type": "function",
-                        "function": {"name": tool_choice.name},
-                    }
-                else:
-                    optional_kwargs["tool_choice"] = tool_choice
+            optional_kwargs.update(_tool_choice_kwargs(tools, tool_choice))
 
             if not _env_injection_enabled() and self._env_only_custom_config:
                 _warn_dropped_env_only_keys(
@@ -997,16 +1184,7 @@ class LitellmLLM(LLM):
                         **passthrough_kwargs,
                     )
 
-            # Retry ladder for provider 400s: drop reasoning kwargs, then every
-            # best-effort kwarg. Unknown models or capability drift degrade to
-            # provider defaults with a warning instead of failing the message.
-            attempts = [optional_kwargs]
-            for strip_keys in (_REASONING_KWARG_KEYS, _BEST_EFFORT_KWARG_KEYS):
-                stripped = {
-                    k: v for k, v in optional_kwargs.items() if k not in strip_keys
-                }
-                if len(stripped) < len(attempts[-1]):
-                    attempts.append(stripped)
+            attempts = _completion_attempts(optional_kwargs)
 
             for i, opts in enumerate(attempts):
                 # Last write wins: sent_kwargs holds what the returning (or
@@ -1027,19 +1205,8 @@ class LitellmLLM(LLM):
                 try:
                     return _call_litellm(opts)
                 except BadRequestError as e:
-                    if i == len(attempts) - 1:
+                    if not _should_retry_without_kwargs(e, model, i, attempts):
                         raise
-                    # Only retry rejections a later attempt can strip away.
-                    remaining_strippable = set(opts) - set(attempts[-1])
-                    if not _rejection_names_strippable_kwargs(e, remaining_strippable):
-                        raise
-                    logger.warning(
-                        "Provider rejected request for model %s. Retrying "
-                        "without %s: %s",
-                        model,
-                        sorted(set(opts) - set(attempts[i + 1])),
-                        e,
-                    )
             raise RuntimeError("unreachable: retry ladder always returns or raises")
         except Exception as e:
             # for break pointing

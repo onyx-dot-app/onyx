@@ -548,96 +548,21 @@ def translate_opencode_event(
     if not isinstance(props, dict):
         return
 
-    # All events for our session must match by sessionID. Some events nest the
-    # session id under properties.info.sessionID, others under
-    # properties.sessionID; check both.
-    sess_id = props.get("sessionID")
-    if sess_id is None:
-        info = props.get("info") or {}
-        if isinstance(info, dict):
-            sess_id = info.get("sessionID")
+    sess_id = _resolve_session_id(props)
 
     if etype == "session.created":
-        info = props.get("info") or {}
-        if not isinstance(info, dict):
-            return
-        child_id = info.get("id")
-        parent_id = info.get("parentID")
-        if (
-            isinstance(child_id, str)
-            and isinstance(parent_id, str)
-            and parent_id == state.session_id
-        ):
-            yield SubagentStartedPacket(
-                subagent_session_id=child_id,
-                parent_session_id=parent_id,
-            )
+        yield from _translate_session_created(props, state)
         return
 
     if isinstance(sess_id, str) and sess_id != state.session_id:
-        # Event from another session. Forward descendant text/thought/tool
-        # events tagged so the frontend can route them to the live subagent.
-        if not _is_descendant_of(sess_id, state.session_id, parent_resolver):
-            return  # unrelated session — drop as before
-
-        child_meta = {"sessionId": sess_id, "parentSessionId": state.session_id}
-        child_state = _state_for_session(state, sess_id)
-
-        if etype == "message.updated":
-            info = props.get("info") or {}
-            if not isinstance(info, dict):
-                return
-            if info.get("role") != "assistant":
-                return
-            msg_id = info.get("id")
-            if isinstance(msg_id, str):
-                child_state.assistant_message_ids.add(msg_id)
-            return
-
-        child_fetch_message = (
-            (lambda mid: fetch_message_by_session(sess_id, mid))
-            if fetch_message_by_session is not None
-            else None
+        yield from _translate_descendant_event(
+            etype,
+            props,
+            state,
+            sess_id,
+            parent_resolver,
+            fetch_message_by_session,
         )
-
-        if etype == "message.part.delta":
-            for event in _emit_text_delta(props, child_state, child_fetch_message):
-                _merge_field_meta(event, child_meta)
-                yield event
-            return
-
-        if etype != "message.part.updated":
-            return
-
-        part = props.get("part") or {}
-        if not isinstance(part, dict):
-            return
-
-        part_type = part.get("type")
-        part_id_for_state = part.get("id")
-        if isinstance(part_id_for_state, str) and isinstance(part_type, str):
-            child_state.part_types[part_id_for_state] = part_type
-
-        if part_type == "reasoning":
-            if not _is_assistant_message(
-                child_state, part.get("messageID"), child_fetch_message
-            ):
-                return
-            events = _reconcile_reasoning_part(part, child_state)
-        elif part_type == "text":
-            if not _is_assistant_message(
-                child_state, part.get("messageID"), child_fetch_message
-            ):
-                return
-            events = _reconcile_text_part(part, child_state)
-        elif part_type == "tool":
-            events = _emit_tool_events(part, child_state)
-        else:
-            return
-
-        for event in events:
-            _merge_field_meta(event, child_meta)
-            yield event
         return
 
     # ── streaming text deltas ────────────────────────────────────────
@@ -647,90 +572,14 @@ def translate_opencode_event(
 
     # ── part lifecycle (tool calls + gap-fill anchors for text parts) ──
     if etype == "message.part.updated":
-        part = props.get("part") or {}
-        if not isinstance(part, dict):
-            return
-        part_type = part.get("type")
-
-        # Record the part's type so later ``message.part.delta`` events
-        # can route to the right sandbox event class (text → message chunk,
-        # reasoning → thought chunk). Deltas alone don't carry the part
-        # type, only the part id.
-        part_id_for_state = part.get("id")
-        if isinstance(part_id_for_state, str) and isinstance(part_type, str):
-            state.part_types[part_id_for_state] = part_type
-
-        if part_type == "reasoning":
-            if not _is_assistant_message(state, part.get("messageID"), fetch_message):
-                return
-            if _is_summary_message(state, part.get("messageID")):
-                return
-            yield from _reconcile_reasoning_part(part, state)
-            return
-
-        if part_type == "text":
-            if not _is_assistant_message(state, part.get("messageID"), fetch_message):
-                return
-            if _is_summary_message(state, part.get("messageID")):
-                return
-            yield from _reconcile_text_part(part, state)
-            return
-
-        if part_type == "tool":
-            # Tag the parent's ``task`` tool event with the subagent session it
-            # spawned so the frontend can link the call to its child stream.
-            subagent_sid: str | None = None
-            if part.get("tool") == "task" and children_resolver is not None:
-                # Each task callID claims the most-recent not-yet-claimed child.
-                call_id = part.get("callID")
-                if call_id is not None and call_id in state.task_child_by_call:
-                    subagent_sid = state.task_child_by_call[call_id]
-                else:
-                    claimed = set(state.task_child_by_call.values())
-                    unclaimed = [
-                        c
-                        for c in children_resolver(state.session_id)
-                        if c not in claimed
-                    ]
-                    if unclaimed:
-                        subagent_sid = unclaimed[-1]
-                        if call_id is not None:
-                            state.task_child_by_call[call_id] = subagent_sid
-            for event in _emit_tool_events(part, state):
-                if subagent_sid is not None:
-                    _merge_field_meta(event, {"subagentSessionId": subagent_sid})
-                yield event
-            return
-
-        # Reasoning parts: streams come via message.part.delta with
-        # field=reasoning; ignore the updated lifecycle for them.
+        yield from _translate_part_updated(
+            props, state, fetch_message, children_resolver
+        )
         return
 
     # ── role caching + error termination ─────────────────────────────
-    # NOT a turn terminator: opencode emits time.completed on EVERY step's
-    # assistant message (tool-call step, text step, etc.). The real
-    # end-of-turn signal is session.status:idle / session.idle below.
     if etype == "message.updated":
-        info = props.get("info") or {}
-        if not isinstance(info, dict):
-            return
-        if info.get("role") != "assistant":
-            return
-        msg_id = info.get("id")
-        if isinstance(msg_id, str):
-            state.assistant_message_ids.add(msg_id)
-            if info.get("summary") is True:
-                state.summary_message_ids.add(msg_id)
-        finish = info.get("finish")
-        if isinstance(finish, str):
-            state.last_finish = finish
-        usage = _context_usage_from_info(info)
-        if usage is not None:
-            yield usage
-        # A message error DOES kill the turn — surface it.
-        err = info.get("error")
-        if err and isinstance(err, dict):
-            yield from _emit_terminator(state, error=err, finish=finish)
+        yield from _translate_message_updated(props, state)
         return
 
     # ── turn terminators ─────────────────────────────────────────────
@@ -761,6 +610,230 @@ def translate_opencode_event(
     # session.next.{agent,model}.switched, session.updated, etc.) is
     # informational — ignored.
     return
+
+
+def _resolve_session_id(props: dict[str, Any]) -> Any:
+    """Session id of an event. Some events nest it under
+    ``properties.info.sessionID``, others under ``properties.sessionID``;
+    check both."""
+    sess_id = props.get("sessionID")
+    if sess_id is None:
+        info = props.get("info") or {}
+        if isinstance(info, dict):
+            sess_id = info.get("sessionID")
+    return sess_id
+
+
+def _record_part_type(part: dict[str, Any], state: _TurnState) -> Any:
+    """Record the part's type so later ``message.part.delta`` events can route
+    to the right sandbox event class (text → message chunk, reasoning →
+    thought chunk). Deltas alone don't carry the part type, only the part id.
+    Returns the part type."""
+    part_type = part.get("type")
+    part_id_for_state = part.get("id")
+    if isinstance(part_id_for_state, str) and isinstance(part_type, str):
+        state.part_types[part_id_for_state] = part_type
+    return part_type
+
+
+def _translate_session_created(
+    props: dict[str, Any], state: _TurnState
+) -> Iterable[SandboxEvent]:
+    info = props.get("info") or {}
+    if not isinstance(info, dict):
+        return
+    child_id = info.get("id")
+    parent_id = info.get("parentID")
+    if (
+        isinstance(child_id, str)
+        and isinstance(parent_id, str)
+        and parent_id == state.session_id
+    ):
+        yield SubagentStartedPacket(
+            subagent_session_id=child_id,
+            parent_session_id=parent_id,
+        )
+
+
+def _translate_descendant_event(
+    etype: str,
+    props: dict[str, Any],
+    state: _TurnState,
+    sess_id: str,
+    parent_resolver: Callable[[str], str | None] | None,
+    fetch_message_by_session: Callable[[str, str], dict[str, Any] | None] | None,
+) -> Iterable[SandboxEvent]:
+    """Event from another session. Forward descendant text/thought/tool
+    events tagged so the frontend can route them to the live subagent."""
+    if not _is_descendant_of(sess_id, state.session_id, parent_resolver):
+        return  # unrelated session — drop as before
+
+    child_meta = {"sessionId": sess_id, "parentSessionId": state.session_id}
+    child_state = _state_for_session(state, sess_id)
+
+    if etype == "message.updated":
+        _record_descendant_assistant_message(props, child_state)
+        return
+
+    child_fetch_message = (
+        (lambda mid: fetch_message_by_session(sess_id, mid))
+        if fetch_message_by_session is not None
+        else None
+    )
+
+    events: Iterable[SandboxEvent]
+    if etype == "message.part.delta":
+        events = _emit_text_delta(props, child_state, child_fetch_message)
+    elif etype == "message.part.updated":
+        events = _translate_descendant_part_updated(
+            props, child_state, child_fetch_message
+        )
+    else:
+        return
+
+    for event in events:
+        _merge_field_meta(event, child_meta)
+        yield event
+
+
+def _record_descendant_assistant_message(
+    props: dict[str, Any], child_state: _TurnState
+) -> None:
+    info = props.get("info") or {}
+    if not isinstance(info, dict):
+        return
+    if info.get("role") != "assistant":
+        return
+    msg_id = info.get("id")
+    if isinstance(msg_id, str):
+        child_state.assistant_message_ids.add(msg_id)
+
+
+def _translate_descendant_part_updated(
+    props: dict[str, Any],
+    child_state: _TurnState,
+    child_fetch_message: Callable[[str], dict[str, Any] | None] | None,
+) -> Iterable[SandboxEvent]:
+    part = props.get("part") or {}
+    if not isinstance(part, dict):
+        return
+
+    part_type = _record_part_type(part, child_state)
+
+    if part_type == "reasoning":
+        if not _is_assistant_message(
+            child_state, part.get("messageID"), child_fetch_message
+        ):
+            return
+        yield from _reconcile_reasoning_part(part, child_state)
+    elif part_type == "text":
+        if not _is_assistant_message(
+            child_state, part.get("messageID"), child_fetch_message
+        ):
+            return
+        yield from _reconcile_text_part(part, child_state)
+    elif part_type == "tool":
+        yield from _emit_tool_events(part, child_state)
+
+
+def _translate_part_updated(
+    props: dict[str, Any],
+    state: _TurnState,
+    fetch_message: Callable[[str], dict[str, Any] | None] | None,
+    children_resolver: Callable[[str], list[str]] | None,
+) -> Iterable[SandboxEvent]:
+    part = props.get("part") or {}
+    if not isinstance(part, dict):
+        return
+
+    part_type = _record_part_type(part, state)
+
+    if part_type == "reasoning":
+        if not _is_assistant_message(state, part.get("messageID"), fetch_message):
+            return
+        if _is_summary_message(state, part.get("messageID")):
+            return
+        yield from _reconcile_reasoning_part(part, state)
+        return
+
+    if part_type == "text":
+        if not _is_assistant_message(state, part.get("messageID"), fetch_message):
+            return
+        if _is_summary_message(state, part.get("messageID")):
+            return
+        yield from _reconcile_text_part(part, state)
+        return
+
+    if part_type == "tool":
+        yield from _translate_tool_part(part, state, children_resolver)
+        return
+
+    # Reasoning parts: streams come via message.part.delta with
+    # field=reasoning; ignore the updated lifecycle for them.
+    return
+
+
+def _translate_tool_part(
+    part: dict[str, Any],
+    state: _TurnState,
+    children_resolver: Callable[[str], list[str]] | None,
+) -> Iterable[SandboxEvent]:
+    subagent_sid = _claim_subagent_session(part, state, children_resolver)
+    for event in _emit_tool_events(part, state):
+        if subagent_sid is not None:
+            _merge_field_meta(event, {"subagentSessionId": subagent_sid})
+        yield event
+
+
+def _claim_subagent_session(
+    part: dict[str, Any],
+    state: _TurnState,
+    children_resolver: Callable[[str], list[str]] | None,
+) -> str | None:
+    """Subagent session spawned by a parent ``task`` tool part, so the frontend
+    can link the call to its child stream. Each task callID claims the
+    most-recent not-yet-claimed child."""
+    if part.get("tool") != "task" or children_resolver is None:
+        return None
+    call_id = part.get("callID")
+    if call_id is not None and call_id in state.task_child_by_call:
+        return state.task_child_by_call[call_id]
+    claimed = set(state.task_child_by_call.values())
+    unclaimed = [c for c in children_resolver(state.session_id) if c not in claimed]
+    if not unclaimed:
+        return None
+    subagent_sid = unclaimed[-1]
+    if call_id is not None:
+        state.task_child_by_call[call_id] = subagent_sid
+    return subagent_sid
+
+
+def _translate_message_updated(
+    props: dict[str, Any], state: _TurnState
+) -> Iterable[SandboxEvent]:
+    """NOT a turn terminator: opencode emits time.completed on EVERY step's
+    assistant message (tool-call step, text step, etc.). The real end-of-turn
+    signal is session.status:idle / session.idle."""
+    info = props.get("info") or {}
+    if not isinstance(info, dict):
+        return
+    if info.get("role") != "assistant":
+        return
+    msg_id = info.get("id")
+    if isinstance(msg_id, str):
+        state.assistant_message_ids.add(msg_id)
+        if info.get("summary") is True:
+            state.summary_message_ids.add(msg_id)
+    finish = info.get("finish")
+    if isinstance(finish, str):
+        state.last_finish = finish
+    usage = _context_usage_from_info(info)
+    if usage is not None:
+        yield usage
+    # A message error DOES kill the turn — surface it.
+    err = info.get("error")
+    if err and isinstance(err, dict):
+        yield from _emit_terminator(state, error=err, finish=finish)
 
 
 def _reconcile_text_part(

@@ -3,6 +3,7 @@ import re
 import time
 import uuid
 from collections.abc import Callable, Generator, Mapping, Sequence
+from dataclasses import dataclass, field
 from html import unescape
 from typing import Any, cast
 
@@ -28,7 +29,7 @@ from onyx.llm.interfaces import (
     LLMUserIdentity,
     ToolChoiceOptions,
 )
-from onyx.llm.model_response import Delta
+from onyx.llm.model_response import Delta, ModelResponseStream
 from onyx.llm.models import (
     AssistantMessage,
     ChatCompletionMessage,
@@ -65,6 +66,8 @@ from onyx.tools.models import ToolCallKickoff
 from onyx.tools.tool_name import sanitize_tool_name
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.create import generation_span
+from onyx.tracing.framework.span_data import GenerationSpanData
+from onyx.tracing.framework.spans import Span
 from onyx.tracing.llm_utils import build_llm_model_config
 from onyx.utils.b64 import get_image_type_from_bytes
 from onyx.utils.jsonriver import Parser
@@ -1071,6 +1074,371 @@ def _delta_has_action(delta: Delta) -> bool:
     return bool(delta.content or delta.reasoning_content or delta.tool_calls)
 
 
+@dataclass
+class _StepEmitState:
+    """Mutable emit state shared by the packet-emitting helpers of an LLM step."""
+
+    tool_choice: ToolChoiceOptions
+    state_container: ChatStateContainer | None
+    citation_processor: DynamicCitationProcessor | None
+    final_documents: list[SearchDoc] | None
+    pre_answer_processing_time: float | None
+    is_deep_research: bool
+    turn_index: int
+    tab_index: int
+    sub_turn_index: int | None
+    has_reasoned: bool = False
+    reasoning_start: bool = False
+    answer_start: bool = False
+    accumulated_reasoning: str = ""
+    accumulated_answer: str = ""
+    accumulated_raw_answer: str = ""
+
+    def current_placement(self) -> Placement:
+        return Placement(
+            turn_index=self.turn_index,
+            tab_index=self.tab_index,
+            sub_turn_index=self.sub_turn_index,
+        )
+
+
+@dataclass
+class _StreamStats:
+    """Counters and tracing bookkeeping accumulated over one LLM stream."""
+
+    stream_start_time: float
+    stream_chunk_count: int = 0
+    actionable_chunk_count: int = 0
+    empty_chunk_count: int = 0
+    finish_reasons: set[str] = field(default_factory=set)
+    terminal_finish_reason: str | None = None
+    first_action_recorded: bool = False
+    processor_state: Any = None
+
+
+def _emit_citation_results(
+    state: _StepEmitState,
+    results: Generator[str | CitationInfo, None, None],
+) -> Generator[Packet, None, None]:
+    """Yield packets for citation processor results (str or CitationInfo)."""
+    for result in results:
+        if isinstance(result, str):
+            state.accumulated_answer += result
+            if state.state_container:
+                state.state_container.set_answer_tokens(state.accumulated_answer)
+            yield Packet(
+                placement=state.current_placement(),
+                obj=AgentResponseDelta(content=result),
+            )
+        elif isinstance(result, CitationInfo):
+            yield Packet(
+                placement=state.current_placement(),
+                obj=result,
+            )
+            if state.state_container:
+                state.state_container.add_emitted_citation(result.citation_number)
+
+
+def _close_reasoning_if_active(state: _StepEmitState) -> Generator[Packet, None, None]:
+    """Emit ReasoningDone and increment turns if reasoning is in progress."""
+    if state.reasoning_start:
+        yield Packet(
+            placement=state.current_placement(),
+            obj=ReasoningDone(),
+        )
+        state.has_reasoned = True
+        state.turn_index, state.sub_turn_index = _increment_turns(
+            state.turn_index, state.sub_turn_index
+        )
+        state.reasoning_start = False
+
+
+def _emit_reasoning_chunk(
+    state: _StepEmitState, reasoning_chunk: str
+) -> Generator[Packet, None, None]:
+    """Accumulate a reasoning chunk and emit its start/delta packets.
+
+    Should only start once, the frontend does not expect multiple
+    ReasoningStart or ReasoningDone packets.
+    """
+    state.accumulated_reasoning += reasoning_chunk
+    # Save reasoning incrementally to state container
+    if state.state_container:
+        state.state_container.set_reasoning_tokens(state.accumulated_reasoning)
+    if not state.reasoning_start:
+        yield Packet(
+            placement=state.current_placement(),
+            obj=ReasoningStart(),
+        )
+    yield Packet(
+        placement=state.current_placement(),
+        obj=ReasoningDelta(reasoning=reasoning_chunk),
+    )
+    state.reasoning_start = True
+
+
+def _emit_answer_start_if_needed(
+    state: _StepEmitState,
+) -> Generator[Packet, None, None]:
+    """Emit AgentResponseStart once, persisting pre-answer timing first."""
+    if state.answer_start:
+        return
+
+    # Store pre-answer processing time in state container for save_chat
+    if state.state_container and state.pre_answer_processing_time is not None:
+        state.state_container.set_pre_answer_processing_time(
+            state.pre_answer_processing_time
+        )
+
+    yield Packet(
+        placement=state.current_placement(),
+        obj=AgentResponseStart(
+            final_documents=state.final_documents,
+            pre_answer_processing_seconds=state.pre_answer_processing_time,
+        ),
+    )
+    state.answer_start = True
+
+
+def _emit_content_chunk(
+    state: _StepEmitState, content_chunk: str
+) -> Generator[Packet, None, None]:
+    # When tool_choice is REQUIRED, content before tool calls is reasoning/thinking
+    # about which tool to call, not an actual answer to the user.
+    # Treat this content as reasoning instead of answer.
+    if state.is_deep_research and state.tool_choice == ToolChoiceOptions.REQUIRED:
+        yield from _emit_reasoning_chunk(state, content_chunk)
+        return
+
+    # Normal flow for AUTO or NONE tool choice
+    yield from _close_reasoning_if_active(state)
+    yield from _emit_answer_start_if_needed(state)
+
+    if state.citation_processor:
+        yield from _emit_citation_results(
+            state, state.citation_processor.process_token(content_chunk)
+        )
+    else:
+        state.accumulated_answer += content_chunk
+        # Save answer incrementally to state container
+        if state.state_container:
+            state.state_container.set_answer_tokens(state.accumulated_answer)
+        yield Packet(
+            placement=state.current_placement(),
+            obj=AgentResponseDelta(content=content_chunk),
+        )
+
+
+def _record_first_action(
+    stats: _StreamStats,
+    delta: Delta,
+    span_generation: Span[GenerationSpanData],
+) -> None:
+    """Record time-to-first-action the first time a delta carries real output."""
+    if not stats.first_action_recorded and _delta_has_action(delta):
+        span_generation.span_data.time_to_first_action_seconds = (
+            time.monotonic() - stats.stream_start_time
+        )
+        stats.first_action_recorded = True
+
+
+def _record_chunk_stats(
+    packet: ModelResponseStream,
+    stats: _StreamStats,
+    state_container: ChatStateContainer | None,
+    span_generation: Span[GenerationSpanData],
+) -> Delta | None:
+    """Update per-chunk counters and span data.
+
+    Returns the delta to emit, or None when the chunk carries nothing usable.
+    """
+    # On the first chunk, not at stream end: a mid-step stop persists
+    # from another thread and needs this step's params already there.
+    if stats.stream_chunk_count == 0 and state_container:
+        state_container.set_request_params(get_llm_request_params())
+    stats.stream_chunk_count += 1
+    if packet.usage:
+        usage = packet.usage
+        span_generation.span_data.usage = {
+            "input_tokens": usage.prompt_tokens,
+            "output_tokens": usage.completion_tokens,
+            "cache_read_input_tokens": usage.cache_read_input_tokens,
+            "cache_creation_input_tokens": usage.cache_creation_input_tokens,
+        }
+        # Note: LLM cost tracking is now handled in multi_llm.py
+    finish_reason = packet.choice.finish_reason
+    if finish_reason:
+        stats.finish_reasons.add(str(finish_reason))
+        stats.terminal_finish_reason = str(finish_reason)
+    delta = packet.choice.delta
+
+    # Weird behavior from some model providers, just log and ignore for now
+    if not delta.content and delta.reasoning_content is None and not delta.tool_calls:
+        stats.empty_chunk_count += 1
+        logger.warning(
+            "LLM packet is empty (no content, reasoning, or tool calls). "
+            "finish_reason=%s. Skipping: %s",
+            finish_reason,
+            packet,
+        )
+        return None
+
+    _record_first_action(stats, delta, span_generation)
+    if _delta_has_action(delta):
+        stats.actionable_chunk_count += 1
+    return delta
+
+
+def _emit_delta_packets(
+    state: _StepEmitState,
+    delta: Delta,
+    id_to_tool_call_map: dict[int, dict[str, Any]],
+    arg_parsers: dict[int, Parser],
+    xml_tool_call_content_filter: _XmlToolCallContentFilter,
+) -> Generator[Packet, None, None]:
+    """Emit the reasoning, answer, and tool-call packets for one delta."""
+    if delta.reasoning_content:
+        yield from _emit_reasoning_chunk(state, delta.reasoning_content)
+
+    if delta.content:
+        # Keep raw content for fallback extraction. Display content can be
+        # filtered and, in deep-research REQUIRED mode, routed as reasoning.
+        state.accumulated_raw_answer += delta.content
+        filtered_content = xml_tool_call_content_filter.process(delta.content)
+        if filtered_content:
+            yield from _emit_content_chunk(state, filtered_content)
+
+    if delta.tool_calls:
+        yield from _close_reasoning_if_active(state)
+
+        for tool_call_delta in delta.tool_calls:
+            # maybe_emit depends and update being called first and attaching the delta
+            _update_tool_call_with_delta(id_to_tool_call_map, tool_call_delta)
+            yield from maybe_emit_argument_delta(
+                tool_calls_in_progress=id_to_tool_call_map,
+                tool_call_delta=tool_call_delta,
+                placement=state.current_placement(),
+                parsers=arg_parsers,
+            )
+
+
+def _flush_custom_token_processor(
+    custom_token_processor: Callable[[Delta | None, Any], tuple[Delta | None, Any]],
+    stats: _StreamStats,
+    span_generation: Span[GenerationSpanData],
+    id_to_tool_call_map: dict[int, dict[str, Any]],
+) -> None:
+    """Flush custom token processor to get any final tool calls."""
+    flush_delta, stats.processor_state = custom_token_processor(
+        None, stats.processor_state
+    )
+    if flush_delta is not None:
+        _record_first_action(stats, flush_delta, span_generation)
+    if flush_delta and flush_delta.tool_calls:
+        for tool_call_delta in flush_delta.tool_calls:
+            _update_tool_call_with_delta(id_to_tool_call_map, tool_call_delta)
+
+
+def _emit_empty_answer_recovery(
+    state: _StepEmitState,
+    llm_config: LLMConfig,
+    stats: _StreamStats,
+    tool_calls: list[ToolCallKickoff],
+) -> Generator[Packet, None, None]:
+    """Empty-answer recovery.
+
+    The model emitted text but content/citation processing consumed all of it
+    (e.g. an unmapped bracketed-numeric answer like "[123456789012345]" that the
+    citation processor strips). Surface the raw output instead of returning an
+    empty answer, which would raise a misleading EmptyLLMResponseError
+    downstream. Skipped for REQUIRED tool choice, where empty pre-tool content is
+    expected (fallback extraction). Also skipped when the raw output is XML
+    tool-call markup: run_llm_loop's fallback extraction will parse it into a
+    real tool call, so surfacing it as an answer would leak raw markup to the
+    client and pollute context.
+    """
+    if not (
+        state.tool_choice != ToolChoiceOptions.REQUIRED
+        and not tool_calls
+        and not state.accumulated_answer.strip()
+        and state.accumulated_raw_answer.strip()
+        and not _looks_like_xml_tool_call_payload(state.accumulated_raw_answer)
+    ):
+        return
+
+    logger.warning(
+        "Answer empty after content/citation processing; recovering raw "
+        "model output (%d chars). provider=%s, model=%s, finish_reasons=%s",
+        len(state.accumulated_raw_answer),
+        llm_config.model_provider,
+        llm_config.model_name,
+        sorted(stats.finish_reasons),
+    )
+    yield from _emit_answer_start_if_needed(state)
+    yield Packet(
+        placement=state.current_placement(),
+        obj=AgentResponseDelta(content=state.accumulated_raw_answer),
+    )
+    state.accumulated_answer = state.accumulated_raw_answer
+    if state.state_container:
+        state.state_container.set_answer_tokens(state.accumulated_answer)
+
+
+def _record_span_output(
+    span_generation: Span[GenerationSpanData],
+    state: _StepEmitState,
+    tool_calls: list[ToolCallKickoff],
+) -> None:
+    """Record assistant output and reasoning for tracing (after flush + recovery)."""
+    if tool_calls:
+        tool_calls_list: list[ToolCall] = [
+            ToolCall(
+                id=kickoff.tool_call_id,
+                type="function",
+                function=FunctionCall(
+                    name=kickoff.tool_name,
+                    arguments=json.dumps(kickoff.tool_args),
+                ),
+            )
+            for kickoff in tool_calls
+        ]
+
+        assistant_msg: AssistantMessage = AssistantMessage(
+            role="assistant",
+            content=state.accumulated_answer if state.accumulated_answer else None,
+            tool_calls=tool_calls_list,
+        )
+        span_generation.span_data.output = [assistant_msg.model_dump()]
+    elif state.accumulated_answer:
+        assistant_msg_no_tools = AssistantMessage(
+            role="assistant",
+            content=state.accumulated_answer,
+            tool_calls=None,
+        )
+        span_generation.span_data.output = [assistant_msg_no_tools.model_dump()]
+
+    # Record reasoning content for tracing (extended thinking from reasoning models)
+    if state.accumulated_reasoning:
+        span_generation.span_data.reasoning = state.accumulated_reasoning
+
+
+def _log_step_output(state: _StepEmitState, tool_calls: list[ToolCallKickoff]) -> None:
+    if not (LOG_ONYX_MODEL_INTERACTIONS and current_turn_persists_content()):
+        return
+
+    logger.debug("Accumulated reasoning: %s", state.accumulated_reasoning)
+    logger.debug("Accumulated answer: %s", state.accumulated_answer)
+
+    if tool_calls:
+        tool_calls_str = "\n".join(
+            f"  - {tc.tool_name}: {json.dumps(tc.tool_args, indent=4)}"
+            for tc in tool_calls
+        )
+        logger.debug("Tool calls:\n%s", tool_calls_str)
+    else:
+        logger.debug("Tool calls: []")
+
+
 def run_llm_step_pkt_generator(
     history: list[ChatMessageSimple],
     tool_definitions: list[dict],
@@ -1147,19 +1515,19 @@ def run_llm_step_pkt_generator(
         and yielded only after the stream completes.
     """
 
-    turn_index = placement.turn_index
-    tab_index = placement.tab_index
-    sub_turn_index = placement.sub_turn_index
-
-    def _current_placement() -> Placement:
-        return Placement(
-            turn_index=turn_index,
-            tab_index=tab_index,
-            sub_turn_index=sub_turn_index,
-        )
+    state = _StepEmitState(
+        tool_choice=tool_choice,
+        state_container=state_container,
+        citation_processor=citation_processor,
+        final_documents=final_documents,
+        pre_answer_processing_time=pre_answer_processing_time,
+        is_deep_research=is_deep_research,
+        turn_index=placement.turn_index,
+        tab_index=placement.tab_index,
+        sub_turn_index=placement.sub_turn_index,
+    )
 
     llm_msg_history = translate_history_to_llm_format(history, llm.config)
-    has_reasoned = False
 
     if LOG_ONYX_MODEL_INTERACTIONS and current_turn_persists_content():
         logger.debug(
@@ -1169,19 +1537,7 @@ def run_llm_step_pkt_generator(
 
     id_to_tool_call_map: dict[int, dict[str, Any]] = {}
     arg_parsers: dict[int, Parser] = {}
-    reasoning_start = False
-    answer_start = False
-    accumulated_reasoning = ""
-    accumulated_answer = ""
-    accumulated_raw_answer = ""
-    stream_chunk_count = 0
-    actionable_chunk_count = 0
-    empty_chunk_count = 0
-    finish_reasons: set[str] = set()
-    terminal_finish_reason: str | None = None
     xml_tool_call_content_filter = _XmlToolCallContentFilter()
-
-    processor_state: Any = None
 
     with generation_span(
         model=llm.config.model_name,
@@ -1196,113 +1552,7 @@ def run_llm_step_pkt_generator(
         span_generation.span_data.tools = cast(
             Sequence[Mapping[str, Any]], tool_definitions
         )
-        stream_start_time = time.monotonic()
-        first_action_recorded = False
-
-        def _emit_citation_results(
-            results: Generator[str | CitationInfo, None, None],
-        ) -> Generator[Packet, None, None]:
-            """Yield packets for citation processor results (str or CitationInfo)."""
-            nonlocal accumulated_answer
-
-            for result in results:
-                if isinstance(result, str):
-                    accumulated_answer += result
-                    if state_container:
-                        state_container.set_answer_tokens(accumulated_answer)
-                    yield Packet(
-                        placement=_current_placement(),
-                        obj=AgentResponseDelta(content=result),
-                    )
-                elif isinstance(result, CitationInfo):
-                    yield Packet(
-                        placement=_current_placement(),
-                        obj=result,
-                    )
-                    if state_container:
-                        state_container.add_emitted_citation(result.citation_number)
-
-        def _close_reasoning_if_active() -> Generator[Packet, None, None]:
-            """Emit ReasoningDone and increment turns if reasoning is in progress."""
-            nonlocal reasoning_start
-            nonlocal has_reasoned
-            nonlocal turn_index
-            nonlocal sub_turn_index
-
-            if reasoning_start:
-                yield Packet(
-                    placement=Placement(
-                        turn_index=turn_index,
-                        tab_index=tab_index,
-                        sub_turn_index=sub_turn_index,
-                    ),
-                    obj=ReasoningDone(),
-                )
-                has_reasoned = True
-                turn_index, sub_turn_index = _increment_turns(
-                    turn_index, sub_turn_index
-                )
-                reasoning_start = False
-
-        def _emit_content_chunk(content_chunk: str) -> Generator[Packet, None, None]:
-            nonlocal accumulated_answer
-            nonlocal accumulated_reasoning
-            nonlocal answer_start
-            nonlocal reasoning_start
-            nonlocal turn_index
-            nonlocal sub_turn_index
-
-            # When tool_choice is REQUIRED, content before tool calls is reasoning/thinking
-            # about which tool to call, not an actual answer to the user.
-            # Treat this content as reasoning instead of answer.
-            if is_deep_research and tool_choice == ToolChoiceOptions.REQUIRED:
-                accumulated_reasoning += content_chunk
-                if state_container:
-                    state_container.set_reasoning_tokens(accumulated_reasoning)
-                if not reasoning_start:
-                    yield Packet(
-                        placement=_current_placement(),
-                        obj=ReasoningStart(),
-                    )
-                yield Packet(
-                    placement=_current_placement(),
-                    obj=ReasoningDelta(reasoning=content_chunk),
-                )
-                reasoning_start = True
-                return
-
-            # Normal flow for AUTO or NONE tool choice
-            yield from _close_reasoning_if_active()
-
-            if not answer_start:
-                # Store pre-answer processing time in state container for save_chat
-                if state_container and pre_answer_processing_time is not None:
-                    state_container.set_pre_answer_processing_time(
-                        pre_answer_processing_time
-                    )
-
-                yield Packet(
-                    placement=_current_placement(),
-                    obj=AgentResponseStart(
-                        final_documents=final_documents,
-                        pre_answer_processing_seconds=pre_answer_processing_time,
-                    ),
-                )
-                answer_start = True
-
-            if citation_processor:
-                yield from _emit_citation_results(
-                    citation_processor.process_token(content_chunk)
-                )
-            else:
-                accumulated_answer += content_chunk
-                # Save answer incrementally to state container
-                if state_container:
-                    state_container.set_answer_tokens(accumulated_answer)
-                yield Packet(
-                    placement=_current_placement(),
-                    obj=AgentResponseDelta(content=content_chunk),
-                )
+        stats = _StreamStats(stream_start_time=time.monotonic())
 
         for packet in llm.stream(
             prompt=llm_msg_history,
@@ -1314,246 +1564,83 @@ def run_llm_step_pkt_generator(
             user_identity=user_identity,
             timeout_override=timeout_override,
         ):
-            # On the first chunk, not at stream end: a mid-step stop persists
-            # from another thread and needs this step's params already there.
-            if stream_chunk_count == 0 and state_container:
-                state_container.set_request_params(get_llm_request_params())
-            stream_chunk_count += 1
-            if packet.usage:
-                usage = packet.usage
-                span_generation.span_data.usage = {
-                    "input_tokens": usage.prompt_tokens,
-                    "output_tokens": usage.completion_tokens,
-                    "cache_read_input_tokens": usage.cache_read_input_tokens,
-                    "cache_creation_input_tokens": usage.cache_creation_input_tokens,
-                }
-                # Note: LLM cost tracking is now handled in multi_llm.py
-            finish_reason = packet.choice.finish_reason
-            if finish_reason:
-                finish_reasons.add(str(finish_reason))
-                terminal_finish_reason = str(finish_reason)
-            delta = packet.choice.delta
-
-            # Weird behavior from some model providers, just log and ignore for now
-            if (
-                not delta.content
-                and delta.reasoning_content is None
-                and not delta.tool_calls
-            ):
-                empty_chunk_count += 1
-                logger.warning(
-                    "LLM packet is empty (no content, reasoning, or tool calls). "
-                    "finish_reason=%s. Skipping: %s",
-                    finish_reason,
-                    packet,
-                )
+            delta = _record_chunk_stats(packet, stats, state_container, span_generation)
+            if delta is None:
                 continue
-
-            if not first_action_recorded and _delta_has_action(delta):
-                span_generation.span_data.time_to_first_action_seconds = (
-                    time.monotonic() - stream_start_time
-                )
-                first_action_recorded = True
-            if _delta_has_action(delta):
-                actionable_chunk_count += 1
 
             if custom_token_processor:
                 # The custom token processor can modify the deltas for specific custom logic
                 # It can also return a state so that it can handle aggregated delta logic etc.
                 # Loosely typed so the function can be flexible
-                modified_delta, processor_state = custom_token_processor(
-                    delta, processor_state
+                modified_delta, stats.processor_state = custom_token_processor(
+                    delta, stats.processor_state
                 )
                 if modified_delta is None:
                     continue
                 delta = modified_delta
 
-            # Should only happen once, frontend does not expect multiple
-            # ReasoningStart or ReasoningDone packets.
-            if delta.reasoning_content:
-                accumulated_reasoning += delta.reasoning_content
-                # Save reasoning incrementally to state container
-                if state_container:
-                    state_container.set_reasoning_tokens(accumulated_reasoning)
-                if not reasoning_start:
-                    yield Packet(
-                        placement=_current_placement(),
-                        obj=ReasoningStart(),
-                    )
-                yield Packet(
-                    placement=_current_placement(),
-                    obj=ReasoningDelta(reasoning=delta.reasoning_content),
-                )
-                reasoning_start = True
-
-            if delta.content:
-                # Keep raw content for fallback extraction. Display content can be
-                # filtered and, in deep-research REQUIRED mode, routed as reasoning.
-                accumulated_raw_answer += delta.content
-                filtered_content = xml_tool_call_content_filter.process(delta.content)
-                if filtered_content:
-                    yield from _emit_content_chunk(filtered_content)
-
-            if delta.tool_calls:
-                yield from _close_reasoning_if_active()
-
-                for tool_call_delta in delta.tool_calls:
-                    # maybe_emit depends and update being called first and attaching the delta
-                    _update_tool_call_with_delta(id_to_tool_call_map, tool_call_delta)
-                    yield from maybe_emit_argument_delta(
-                        tool_calls_in_progress=id_to_tool_call_map,
-                        tool_call_delta=tool_call_delta,
-                        placement=_current_placement(),
-                        parsers=arg_parsers,
-                    )
+            yield from _emit_delta_packets(
+                state,
+                delta,
+                id_to_tool_call_map,
+                arg_parsers,
+                xml_tool_call_content_filter,
+            )
 
         # Flush any tail text buffered while checking for split "<function_calls" markers.
         filtered_content_tail = xml_tool_call_content_filter.flush()
         if filtered_content_tail:
-            yield from _emit_content_chunk(filtered_content_tail)
+            yield from _emit_content_chunk(state, filtered_content_tail)
 
-        # Flush custom token processor to get any final tool calls
         if custom_token_processor:
-            flush_delta, processor_state = custom_token_processor(None, processor_state)
-            if (
-                not first_action_recorded
-                and flush_delta is not None
-                and _delta_has_action(flush_delta)
-            ):
-                span_generation.span_data.time_to_first_action_seconds = (
-                    time.monotonic() - stream_start_time
-                )
-                first_action_recorded = True
-            if flush_delta and flush_delta.tool_calls:
-                for tool_call_delta in flush_delta.tool_calls:
-                    _update_tool_call_with_delta(id_to_tool_call_map, tool_call_delta)
+            _flush_custom_token_processor(
+                custom_token_processor, stats, span_generation, id_to_tool_call_map
+            )
 
         # Narration emitted before these tool calls occupies the base tab; start
         # tool calls at the next tab so they render as their own group instead of
         # merging with the narration (which would hide them in the chat area).
-        tab_index_start = 1 if (answer_start and not use_existing_tab_index) else 0
+        tab_index_start = (
+            1 if (state.answer_start and not use_existing_tab_index) else 0
+        )
         tool_calls = _extract_tool_call_kickoffs(
             id_to_tool_call_map=id_to_tool_call_map,
-            turn_index=turn_index,
-            tab_index=tab_index if use_existing_tab_index else None,
-            sub_turn_index=sub_turn_index,
+            turn_index=state.turn_index,
+            tab_index=state.tab_index if use_existing_tab_index else None,
+            sub_turn_index=state.sub_turn_index,
             tab_index_start=tab_index_start,
         )
         # Run the flush + recovery below while the span is still open, so the
         # span output recorded afterward reflects the answer the user received.
-        yield from _close_reasoning_if_active()
+        yield from _close_reasoning_if_active(state)
 
         # Flush any remaining content from citation processor
         # Reasoning is always first so this should use the post-incremented value of turn_index
         # Note that this doesn't need to handle any sub-turns as those docs will not have citations
         # as clickable items and will be stripped out instead.
         if citation_processor:
-            yield from _emit_citation_results(citation_processor.process_token(None))
-
-        # Empty-answer recovery: the model emitted text but content/citation
-        # processing consumed all of it (e.g. an unmapped bracketed-numeric answer
-        # like "[123456789012345]" that the citation processor strips). Surface the
-        # raw output instead of returning an empty answer, which would raise a
-        # misleading EmptyLLMResponseError downstream. Skipped for REQUIRED tool
-        # choice, where empty pre-tool content is expected (fallback extraction).
-        # Also skipped when the raw output is XML tool-call markup: run_llm_loop's
-        # fallback extraction will parse it into a real tool call, so surfacing it
-        # as an answer would leak raw markup to the client and pollute context.
-        if (
-            tool_choice != ToolChoiceOptions.REQUIRED
-            and not tool_calls
-            and not accumulated_answer.strip()
-            and accumulated_raw_answer.strip()
-            and not _looks_like_xml_tool_call_payload(accumulated_raw_answer)
-        ):
-            logger.warning(
-                "Answer empty after content/citation processing; recovering raw "
-                "model output (%d chars). provider=%s, model=%s, finish_reasons=%s",
-                len(accumulated_raw_answer),
-                llm.config.model_provider,
-                llm.config.model_name,
-                sorted(finish_reasons),
+            yield from _emit_citation_results(
+                state, citation_processor.process_token(None)
             )
-            if not answer_start:
-                # Mirror _emit_content_chunk: persist pre-answer timing before the
-                # first AgentResponseStart.
-                if state_container and pre_answer_processing_time is not None:
-                    state_container.set_pre_answer_processing_time(
-                        pre_answer_processing_time
-                    )
-                yield Packet(
-                    placement=_current_placement(),
-                    obj=AgentResponseStart(
-                        final_documents=final_documents,
-                        pre_answer_processing_seconds=pre_answer_processing_time,
-                    ),
-                )
-                answer_start = True
-            yield Packet(
-                placement=_current_placement(),
-                obj=AgentResponseDelta(content=accumulated_raw_answer),
-            )
-            accumulated_answer = accumulated_raw_answer
-            if state_container:
-                state_container.set_answer_tokens(accumulated_answer)
 
-        # Record assistant output for tracing (after flush + recovery).
-        if tool_calls:
-            tool_calls_list: list[ToolCall] = [
-                ToolCall(
-                    id=kickoff.tool_call_id,
-                    type="function",
-                    function=FunctionCall(
-                        name=kickoff.tool_name,
-                        arguments=json.dumps(kickoff.tool_args),
-                    ),
-                )
-                for kickoff in tool_calls
-            ]
+        yield from _emit_empty_answer_recovery(state, llm.config, stats, tool_calls)
 
-            assistant_msg: AssistantMessage = AssistantMessage(
-                role="assistant",
-                content=accumulated_answer if accumulated_answer else None,
-                tool_calls=tool_calls_list,
-            )
-            span_generation.span_data.output = [assistant_msg.model_dump()]
-        elif accumulated_answer:
-            assistant_msg_no_tools = AssistantMessage(
-                role="assistant",
-                content=accumulated_answer,
-                tool_calls=None,
-            )
-            span_generation.span_data.output = [assistant_msg_no_tools.model_dump()]
-
-        # Record reasoning content for tracing (extended thinking from reasoning models)
-        if accumulated_reasoning:
-            span_generation.span_data.reasoning = accumulated_reasoning
+        _record_span_output(span_generation, state, tool_calls)
 
     # Note: Content (AgentResponseDelta) doesn't need an explicit end packet - OverallStop handles it
     # Tool calls are handled by tool execution code and emit their own packets (e.g., SectionEnd)
-    if LOG_ONYX_MODEL_INTERACTIONS and current_turn_persists_content():
-        logger.debug("Accumulated reasoning: %s", accumulated_reasoning)
-        logger.debug("Accumulated answer: %s", accumulated_answer)
+    _log_step_output(state, tool_calls)
 
-        if tool_calls:
-            tool_calls_str = "\n".join(
-                f"  - {tc.tool_name}: {json.dumps(tc.tool_args, indent=4)}"
-                for tc in tool_calls
-            )
-            logger.debug("Tool calls:\n%s", tool_calls_str)
-        else:
-            logger.debug("Tool calls: []")
-
-    if actionable_chunk_count == 0:
+    if stats.actionable_chunk_count == 0:
         logger.warning(
             "LLM stream completed with no actionable deltas. "
             "chunks=%s, empty_chunks=%s, "
             "finish_reasons=%s, "
             "provider=%s, model=%s, "
             "tool_choice=%s, tools_sent=%s",
-            stream_chunk_count,
-            empty_chunk_count,
-            sorted(finish_reasons),
+            stats.stream_chunk_count,
+            stats.empty_chunk_count,
+            sorted(stats.finish_reasons),
             llm.config.model_provider,
             llm.config.model_name,
             tool_choice,
@@ -1562,13 +1649,17 @@ def run_llm_step_pkt_generator(
 
     return (
         LlmStepResult(
-            reasoning=accumulated_reasoning if accumulated_reasoning else None,
-            answer=accumulated_answer if accumulated_answer else None,
+            reasoning=(
+                state.accumulated_reasoning if state.accumulated_reasoning else None
+            ),
+            answer=state.accumulated_answer if state.accumulated_answer else None,
             tool_calls=tool_calls if tool_calls else None,
-            raw_answer=accumulated_raw_answer if accumulated_raw_answer else None,
-            finish_reason=terminal_finish_reason,
+            raw_answer=(
+                state.accumulated_raw_answer if state.accumulated_raw_answer else None
+            ),
+            finish_reason=stats.terminal_finish_reason,
         ),
-        has_reasoned,
+        state.has_reasoned,
     )
 
 

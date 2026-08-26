@@ -14,7 +14,7 @@ from onyx.db.chat import (
     get_db_search_doc_by_id,
     translate_db_search_doc_to_saved_search_doc,
 )
-from onyx.db.models import ChatMessage
+from onyx.db.models import ChatMessage, Tool, ToolCall
 from onyx.db.tools import get_tool_by_id
 from onyx.deep_research.dr_mock_tools import (
     RESEARCH_AGENT_IN_CODE_ID,
@@ -526,6 +526,306 @@ def create_search_packets(
     return packets
 
 
+def _group_tool_calls_by_turn(tool_calls: list[ToolCall]) -> dict[int, list[ToolCall]]:
+    """Group tool calls by turn number, keeping their order within each turn."""
+    tool_calls_by_turn: dict[int, list[ToolCall]] = {}
+    for tool_call in tool_calls:
+        tool_calls_by_turn.setdefault(tool_call.turn_number, []).append(tool_call)
+    return tool_calls_by_turn
+
+
+def _create_python_tool_call_packets(
+    tool_call: ToolCall, turn_index: int
+) -> list[Packet]:
+    """Rebuild python tool packets from the saved code and JSON response."""
+    code = cast(str, tool_call.tool_call_arguments.get("code", ""))
+    stdout = ""
+    stderr = ""
+    file_ids: list[str] = []
+    if tool_call.tool_call_response:
+        try:
+            response_data = json.loads(tool_call.tool_call_response)
+            stdout = response_data.get("stdout", "")
+            stderr = response_data.get("stderr", "")
+            generated_files = response_data.get("generated_files", [])
+            file_ids = [
+                f.get("file_link", "").split("/")[-1]
+                for f in generated_files
+                if f.get("file_link")
+            ]
+        except (json.JSONDecodeError, KeyError):
+            # Fall back to raw response as stdout
+            stdout = tool_call.tool_call_response
+
+    return create_python_tool_packets(
+        code=code,
+        stdout=stdout,
+        stderr=stderr,
+        file_ids=file_ids,
+        turn_index=turn_index,
+        tab_index=tool_call.tab_index,
+    )
+
+
+def _create_custom_tool_call_packets(
+    tool: Tool, tool_call: ToolCall, turn_index: int
+) -> list[Packet]:
+    """Rebuild packets for a custom or unrecognized tool call."""
+    # Try to parse as structured CustomToolCallSummary JSON
+    custom_data: dict | list | str | int | float | bool | None = (
+        tool_call.tool_call_response
+    )
+    custom_error: CustomToolErrorInfo | None = None
+    custom_response_type = "text"
+
+    try:
+        parsed = json.loads(tool_call.tool_call_response)
+        if isinstance(parsed, dict) and "tool_name" in parsed:
+            custom_data = parsed.get("tool_result")
+            custom_response_type = parsed.get("response_type", "text")
+            if parsed.get("error"):
+                custom_error = CustomToolErrorInfo(**parsed["error"])
+    except (json.JSONDecodeError, KeyError, TypeError, ValidationError):
+        pass
+
+    custom_file_ids: list[str] | None = None
+    if custom_response_type in ("image", "csv") and isinstance(custom_data, dict):
+        custom_file_ids = custom_data.get("file_ids")
+        custom_data = None
+
+    custom_args = {
+        k: v
+        for k, v in (tool_call.tool_call_arguments or {}).items()
+        if k != "requestBody"
+    }
+    return create_custom_tool_packets(
+        tool_name=tool.display_name or tool.name,
+        response_type=custom_response_type,
+        turn_index=turn_index,
+        tab_index=tool_call.tab_index,
+        data=custom_data,
+        file_ids=custom_file_ids,
+        error=custom_error,
+        tool_args=custom_args if custom_args else None,
+        tool_id=tool_call.tool_id,
+    )
+
+
+def _create_tool_call_packets(
+    tool: Tool, tool_call: ToolCall, turn_index: int
+) -> list[Packet]:
+    """Rebuild the replay packets for a single saved tool call."""
+    tab_index = tool_call.tab_index
+
+    if tool.in_code_tool_id in [SearchTool.__name__, WebSearchTool.__name__]:
+        queries = cast(list[str], tool_call.tool_call_arguments.get("queries", []))
+        search_docs: list[SavedSearchDoc] = [
+            translate_db_search_doc_to_saved_search_doc(doc)
+            for doc in tool_call.search_docs
+        ]
+        return create_search_packets(
+            search_queries=queries,
+            search_docs=search_docs,
+            is_internet_search=tool.in_code_tool_id == WebSearchTool.__name__,
+            turn_index=turn_index,
+            tab_index=tab_index,
+        )
+
+    if tool.in_code_tool_id == OpenURLTool.__name__:
+        fetch_docs: list[SavedSearchDoc] = [
+            translate_db_search_doc_to_saved_search_doc(doc)
+            for doc in tool_call.search_docs
+        ]
+        # Get URLs from tool_call_arguments
+        urls = cast(list[str], tool_call.tool_call_arguments.get("urls", []))
+        return create_fetch_packets(fetch_docs, urls, turn_index, tab_index=tab_index)
+
+    if tool.in_code_tool_id == ImageGenerationTool.__name__:
+        if not tool_call.generated_images:
+            return []
+        images = [GeneratedImage(**img) for img in tool_call.generated_images]
+        return create_image_generation_packets(images, turn_index, tab_index=tab_index)
+
+    if tool.in_code_tool_id == FileReaderTool.__name__:
+        return create_file_reader_packets(
+            summary_json=tool_call.tool_call_response or "",
+            turn_index=turn_index,
+            tab_index=tab_index,
+        )
+
+    if tool.in_code_tool_id == RESEARCH_AGENT_IN_CODE_ID:
+        # Not ideal but not a huge issue if the research task is lost.
+        research_task = cast(
+            str,
+            tool_call.tool_call_arguments.get(RESEARCH_AGENT_TASK_KEY)
+            or "Could not fetch saved research task.",
+        )
+        return create_research_agent_packets(
+            research_task=research_task,
+            report_content=tool_call.tool_call_response,
+            turn_index=turn_index,
+            tab_index=tab_index,
+        )
+
+    if tool.in_code_tool_id == CodingAgentTool.__name__:
+        coding_query = cast(
+            str, tool_call.tool_call_arguments.get(CODING_AGENT_QUERY_KEY) or ""
+        )
+        coding_repo = cast(
+            str, tool_call.tool_call_arguments.get(CODING_AGENT_REPO_KEY) or ""
+        )
+        return create_coding_agent_packets(
+            query=coding_query,
+            repo=coding_repo,
+            answer=tool_call.tool_call_response,
+            turn_index=turn_index,
+            tab_index=tab_index,
+        )
+
+    if tool.in_code_tool_id == MemoryTool.__name__:
+        if not tool_call.tool_call_response:
+            return []
+        memory_data = json.loads(tool_call.tool_call_response)
+        return create_memory_packets(
+            memory_text=memory_data["memory_text"],
+            operation=cast(Literal["add", "update"], memory_data["operation"]),
+            memory_id=memory_data.get("memory_id"),
+            turn_index=turn_index,
+            tab_index=tab_index,
+            index=memory_data.get("index"),
+        )
+
+    if tool.in_code_tool_id == PythonTool.__name__:
+        return _create_python_tool_call_packets(tool_call, turn_index)
+
+    return _create_custom_tool_call_packets(tool, tool_call, turn_index)
+
+
+def _create_all_tool_call_packets(
+    tool_calls: list[ToolCall],
+    db_session: Session,
+) -> list[Packet]:
+    """Replay every tool call turn in order, with the pre-tool reasoning."""
+    packet_list: list[Packet] = []
+    tool_calls_by_turn = _group_tool_calls_by_turn(tool_calls)
+    tool_call_turns = set(tool_calls_by_turn.keys())
+
+    # Process each turn in order
+    for turn_num in sorted(tool_calls_by_turn.keys()):
+        tool_calls_in_turn = tool_calls_by_turn[turn_num]
+
+        # Insert pre-tool reasoning once per turn (if available)
+        turn_reasoning = next(
+            (
+                tool_call.reasoning_tokens
+                for tool_call in tool_calls_in_turn
+                if tool_call.reasoning_tokens
+            ),
+            None,
+        )
+        if turn_reasoning:
+            # Use the previous turn slot when free to preserve reasoning-before-tool ordering.
+            reasoning_turn_index = turn_num
+            if turn_num > 0 and (turn_num - 1) not in tool_call_turns:
+                reasoning_turn_index = turn_num - 1
+            packet_list.extend(
+                create_reasoning_packets(
+                    reasoning_text=turn_reasoning,
+                    turn_index=reasoning_turn_index,
+                )
+            )
+
+        # Process each tool call in this turn (single pass).
+        # We buffer packets for the turn so we can conditionally prepend a TopLevelBranching
+        # packet (which must appear before any tool output in the turn).
+        research_agent_count = 0
+        turn_tool_packets: list[Packet] = []
+        for tool_call in tool_calls_in_turn:
+            # Here we do a try because some tools may get deleted before the session is reloaded.
+            try:
+                tool = get_tool_by_id(tool_call.tool_id, db_session)
+                if tool.in_code_tool_id == RESEARCH_AGENT_IN_CODE_ID:
+                    research_agent_count += 1
+
+                turn_tool_packets.extend(
+                    _create_tool_call_packets(tool, tool_call, turn_num)
+                )
+            except Exception as e:
+                logger.warning("Error processing tool call %s: %s", tool_call.id, e)
+                continue
+
+        if research_agent_count > 1:
+            # Emit TopLevelBranching before processing any tool output in the turn.
+            packet_list.append(
+                Packet(
+                    placement=Placement(turn_index=turn_num),
+                    obj=TopLevelBranching(num_parallel_branches=research_agent_count),
+                )
+            )
+        packet_list.extend(turn_tool_packets)
+
+    return packet_list
+
+
+def _create_citation_info_list(
+    chat_message: ChatMessage,
+    db_session: Session,
+) -> list[CitationInfo]:
+    """Build the message citations, ordered by first appearance in the text."""
+    citations = chat_message.citations
+    if not citations:
+        return []
+
+    citation_info_list: list[CitationInfo] = []
+    for citation_num, search_doc_id in citations.items():
+        search_doc = get_db_search_doc_by_id(search_doc_id, db_session)
+        if search_doc:
+            citation_info_list.append(
+                CitationInfo(
+                    citation_number=citation_num,
+                    document_id=search_doc.document_id,
+                )
+            )
+
+    # Sort citations by order of appearance in message text
+    citation_order = extract_citation_order_from_text(chat_message.message or "")
+    order_map = {num: idx for idx, num in enumerate(citation_order)}
+    citation_info_list.sort(
+        key=lambda c: order_map.get(c.citation_number, float("inf"))
+    )
+
+    return citation_info_list
+
+
+def _compute_final_turn_index(
+    chat_message: ChatMessage,
+    message_turn_index: int,
+    citation_turn_index: int,
+    has_citations: bool,
+) -> int:
+    """Return the highest turn_index used by the message's packets."""
+    max_tool_turn = 0
+    if chat_message.tool_calls:
+        max_tool_turn = max(tc.turn_number for tc in chat_message.tool_calls)
+
+    final_turn_index = max_tool_turn
+    if chat_message.reasoning_tokens:
+        final_turn_index = max(final_turn_index, max_tool_turn + 1)
+    if chat_message.message:
+        final_turn_index = max(final_turn_index, message_turn_index)
+    if has_citations:
+        final_turn_index = max(final_turn_index, citation_turn_index)
+
+    return final_turn_index
+
+
+def _determine_stop_reason(message: str | None) -> str | None:
+    """Report a user cancellation when the saved message says so."""
+    if message and "generation was stopped" in message.lower():
+        return "user_cancelled"
+    return None
+
+
 def translate_assistant_message_to_packets(
     chat_message: ChatMessage,
     db_session: Session,
@@ -535,305 +835,20 @@ def translate_assistant_message_to_packets(
     It needs to be a list of list of packets combined into indices for "steps".
     The final answer and citations are also a "step".
     """
-    packet_list: list[Packet] = []
-
     if chat_message.message_type != MessageType.ASSISTANT:
         raise ValueError(f"Chat message {chat_message.id} is not an assistant message")
 
-    if chat_message.tool_calls:
-        # Group tool calls by turn_number
-        tool_calls_by_turn: dict[int, list] = {}
-        for tool_call in chat_message.tool_calls:
-            turn_num = tool_call.turn_number
-            if turn_num not in tool_calls_by_turn:
-                tool_calls_by_turn[turn_num] = []
-            tool_calls_by_turn[turn_num].append(tool_call)
+    packet_list: list[Packet] = []
 
-        tool_call_turns = set(tool_calls_by_turn.keys())
-        # Process each turn in order
-        for turn_num in sorted(tool_calls_by_turn.keys()):
-            tool_calls_in_turn = tool_calls_by_turn[turn_num]
-
-            # Insert pre-tool reasoning once per turn (if available)
-            turn_reasoning = next(
-                (
-                    tool_call.reasoning_tokens
-                    for tool_call in tool_calls_in_turn
-                    if tool_call.reasoning_tokens
-                ),
-                None,
-            )
-            if turn_reasoning:
-                # Use the previous turn slot when free to preserve reasoning-before-tool ordering.
-                reasoning_turn_index = turn_num
-                if turn_num > 0 and (turn_num - 1) not in tool_call_turns:
-                    reasoning_turn_index = turn_num - 1
-                packet_list.extend(
-                    create_reasoning_packets(
-                        reasoning_text=turn_reasoning,
-                        turn_index=reasoning_turn_index,
-                    )
-                )
-
-            # Process each tool call in this turn (single pass).
-            # We buffer packets for the turn so we can conditionally prepend a TopLevelBranching
-            # packet (which must appear before any tool output in the turn).
-            research_agent_count = 0
-            turn_tool_packets: list[Packet] = []
-            for tool_call in tool_calls_in_turn:
-                # Here we do a try because some tools may get deleted before the session is reloaded.
-                try:
-                    tool = get_tool_by_id(tool_call.tool_id, db_session)
-                    if tool.in_code_tool_id == RESEARCH_AGENT_IN_CODE_ID:
-                        research_agent_count += 1
-
-                    # Handle different tool types
-                    if tool.in_code_tool_id in [
-                        SearchTool.__name__,
-                        WebSearchTool.__name__,
-                    ]:
-                        queries = cast(
-                            list[str], tool_call.tool_call_arguments.get("queries", [])
-                        )
-                        search_docs: list[SavedSearchDoc] = [
-                            translate_db_search_doc_to_saved_search_doc(doc)
-                            for doc in tool_call.search_docs
-                        ]
-                        turn_tool_packets.extend(
-                            create_search_packets(
-                                search_queries=queries,
-                                search_docs=search_docs,
-                                is_internet_search=tool.in_code_tool_id
-                                == WebSearchTool.__name__,
-                                turn_index=turn_num,
-                                tab_index=tool_call.tab_index,
-                            )
-                        )
-
-                    elif tool.in_code_tool_id == OpenURLTool.__name__:
-                        fetch_docs: list[SavedSearchDoc] = [
-                            translate_db_search_doc_to_saved_search_doc(doc)
-                            for doc in tool_call.search_docs
-                        ]
-                        # Get URLs from tool_call_arguments
-                        urls = cast(
-                            list[str], tool_call.tool_call_arguments.get("urls", [])
-                        )
-                        turn_tool_packets.extend(
-                            create_fetch_packets(
-                                fetch_docs,
-                                urls,
-                                turn_num,
-                                tab_index=tool_call.tab_index,
-                            )
-                        )
-
-                    elif tool.in_code_tool_id == ImageGenerationTool.__name__:
-                        if tool_call.generated_images:
-                            images = [
-                                GeneratedImage(**img)
-                                for img in tool_call.generated_images
-                            ]
-                            turn_tool_packets.extend(
-                                create_image_generation_packets(
-                                    images, turn_num, tab_index=tool_call.tab_index
-                                )
-                            )
-
-                    elif tool.in_code_tool_id == FileReaderTool.__name__:
-                        turn_tool_packets.extend(
-                            create_file_reader_packets(
-                                summary_json=tool_call.tool_call_response or "",
-                                turn_index=turn_num,
-                                tab_index=tool_call.tab_index,
-                            )
-                        )
-
-                    elif tool.in_code_tool_id == RESEARCH_AGENT_IN_CODE_ID:
-                        # Not ideal but not a huge issue if the research task is lost.
-                        research_task = cast(
-                            str,
-                            tool_call.tool_call_arguments.get(RESEARCH_AGENT_TASK_KEY)
-                            or "Could not fetch saved research task.",
-                        )
-                        turn_tool_packets.extend(
-                            create_research_agent_packets(
-                                research_task=research_task,
-                                report_content=tool_call.tool_call_response,
-                                turn_index=turn_num,
-                                tab_index=tool_call.tab_index,
-                            )
-                        )
-
-                    elif tool.in_code_tool_id == CodingAgentTool.__name__:
-                        coding_query = cast(
-                            str,
-                            tool_call.tool_call_arguments.get(CODING_AGENT_QUERY_KEY)
-                            or "",
-                        )
-                        coding_repo = cast(
-                            str,
-                            tool_call.tool_call_arguments.get(CODING_AGENT_REPO_KEY)
-                            or "",
-                        )
-                        turn_tool_packets.extend(
-                            create_coding_agent_packets(
-                                query=coding_query,
-                                repo=coding_repo,
-                                answer=tool_call.tool_call_response,
-                                turn_index=turn_num,
-                                tab_index=tool_call.tab_index,
-                            )
-                        )
-
-                    elif tool.in_code_tool_id == MemoryTool.__name__:
-                        if tool_call.tool_call_response:
-                            memory_data = json.loads(tool_call.tool_call_response)
-                            turn_tool_packets.extend(
-                                create_memory_packets(
-                                    memory_text=memory_data["memory_text"],
-                                    operation=cast(
-                                        Literal["add", "update"],
-                                        memory_data["operation"],
-                                    ),
-                                    memory_id=memory_data.get("memory_id"),
-                                    turn_index=turn_num,
-                                    tab_index=tool_call.tab_index,
-                                    index=memory_data.get("index"),
-                                )
-                            )
-
-                    elif tool.in_code_tool_id == PythonTool.__name__:
-                        code = cast(
-                            str,
-                            tool_call.tool_call_arguments.get("code", ""),
-                        )
-                        stdout = ""
-                        stderr = ""
-                        file_ids: list[str] = []
-                        if tool_call.tool_call_response:
-                            try:
-                                response_data = json.loads(tool_call.tool_call_response)
-                                stdout = response_data.get("stdout", "")
-                                stderr = response_data.get("stderr", "")
-                                generated_files = response_data.get(
-                                    "generated_files", []
-                                )
-                                file_ids = [
-                                    f.get("file_link", "").split("/")[-1]
-                                    for f in generated_files
-                                    if f.get("file_link")
-                                ]
-                            except (json.JSONDecodeError, KeyError):
-                                # Fall back to raw response as stdout
-                                stdout = tool_call.tool_call_response
-                        turn_tool_packets.extend(
-                            create_python_tool_packets(
-                                code=code,
-                                stdout=stdout,
-                                stderr=stderr,
-                                file_ids=file_ids,
-                                turn_index=turn_num,
-                                tab_index=tool_call.tab_index,
-                            )
-                        )
-
-                    else:
-                        # Custom tool or unknown tool
-                        # Try to parse as structured CustomToolCallSummary JSON
-                        custom_data: dict | list | str | int | float | bool | None = (
-                            tool_call.tool_call_response
-                        )
-                        custom_error: CustomToolErrorInfo | None = None
-                        custom_response_type = "text"
-
-                        try:
-                            parsed = json.loads(tool_call.tool_call_response)
-                            if isinstance(parsed, dict) and "tool_name" in parsed:
-                                custom_data = parsed.get("tool_result")
-                                custom_response_type = parsed.get(
-                                    "response_type", "text"
-                                )
-                                if parsed.get("error"):
-                                    custom_error = CustomToolErrorInfo(
-                                        **parsed["error"]
-                                    )
-                        except (
-                            json.JSONDecodeError,
-                            KeyError,
-                            TypeError,
-                            ValidationError,
-                        ):
-                            pass
-
-                        custom_file_ids: list[str] | None = None
-                        if custom_response_type in ("image", "csv") and isinstance(
-                            custom_data, dict
-                        ):
-                            custom_file_ids = custom_data.get("file_ids")
-                            custom_data = None
-
-                        custom_args = {
-                            k: v
-                            for k, v in (tool_call.tool_call_arguments or {}).items()
-                            if k != "requestBody"
-                        }
-                        turn_tool_packets.extend(
-                            create_custom_tool_packets(
-                                tool_name=tool.display_name or tool.name,
-                                response_type=custom_response_type,
-                                turn_index=turn_num,
-                                tab_index=tool_call.tab_index,
-                                data=custom_data,
-                                file_ids=custom_file_ids,
-                                error=custom_error,
-                                tool_args=custom_args if custom_args else None,
-                                tool_id=tool_call.tool_id,
-                            )
-                        )
-
-                except Exception as e:
-                    logger.warning("Error processing tool call %s: %s", tool_call.id, e)
-                    continue
-
-            if research_agent_count > 1:
-                # Emit TopLevelBranching before processing any tool output in the turn.
-                packet_list.append(
-                    Packet(
-                        placement=Placement(turn_index=turn_num),
-                        obj=TopLevelBranching(
-                            num_parallel_branches=research_agent_count
-                        ),
-                    )
-                )
-            packet_list.extend(turn_tool_packets)
-
-    # Determine the next turn_index for the final message
-    # It should come after all tool calls
+    # The final message comes after all tool calls, so track the last tool turn.
     max_tool_turn = 0
     if chat_message.tool_calls:
+        packet_list.extend(
+            _create_all_tool_call_packets(chat_message.tool_calls, db_session)
+        )
         max_tool_turn = max(tc.turn_number for tc in chat_message.tool_calls)
 
-    citations = chat_message.citations
-    citation_info_list: list[CitationInfo] = []
-
-    if citations:
-        for citation_num, search_doc_id in citations.items():
-            search_doc = get_db_search_doc_by_id(search_doc_id, db_session)
-            if search_doc:
-                citation_info_list.append(
-                    CitationInfo(
-                        citation_number=citation_num,
-                        document_id=search_doc.document_id,
-                    )
-                )
-
-        # Sort citations by order of appearance in message text
-        citation_order = extract_citation_order_from_text(chat_message.message or "")
-        order_map = {num: idx for idx, num in enumerate(citation_order)}
-        citation_info_list.sort(
-            key=lambda c: order_map.get(c.citation_number, float("inf"))
-        )
+    citation_info_list = _create_citation_info_list(chat_message, db_session)
 
     # Message comes after tool calls, with optional reasoning step beforehand
     message_turn_index = max_tool_turn + 1
@@ -863,37 +878,23 @@ def translate_assistant_message_to_packets(
         message_turn_index + 1 if citation_info_list else message_turn_index
     )
 
-    if len(citation_info_list) > 0:
+    if citation_info_list:
         packet_list.extend(
             create_citation_packets(citation_info_list, citation_turn_index)
         )
 
-    # Return the highest turn_index used
-    final_turn_index = 0
-    if chat_message.message_type == MessageType.ASSISTANT:
-        max_tool_turn = 0
-        if chat_message.tool_calls:
-            max_tool_turn = max(tc.turn_number for tc in chat_message.tool_calls)
-
-        final_turn_index = max_tool_turn
-        if chat_message.reasoning_tokens:
-            final_turn_index = max(final_turn_index, max_tool_turn + 1)
-        if chat_message.message:
-            final_turn_index = max(final_turn_index, message_turn_index)
-        if citation_info_list:
-            final_turn_index = max(final_turn_index, citation_turn_index)
-
-    # Determine stop reason - check if message indicates user cancelled
-    stop_reason: str | None = None
-    if chat_message.message:
-        if "generation was stopped" in chat_message.message.lower():
-            stop_reason = "user_cancelled"
-
     # Add overall stop packet at the end
     packet_list.append(
         Packet(
-            placement=Placement(turn_index=final_turn_index),
-            obj=OverallStop(stop_reason=stop_reason),
+            placement=Placement(
+                turn_index=_compute_final_turn_index(
+                    chat_message=chat_message,
+                    message_turn_index=message_turn_index,
+                    citation_turn_index=citation_turn_index,
+                    has_citations=bool(citation_info_list),
+                )
+            ),
+            obj=OverallStop(stop_reason=_determine_stop_reason(chat_message.message)),
         )
     )
 
