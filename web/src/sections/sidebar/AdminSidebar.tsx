@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { useSettings } from "@/lib/settings/hooks";
 import { SidebarLayouts, useSidebarState } from "@opal/layouts";
 import { useCustomAnalyticsEnabled } from "@/lib/hooks/useCustomAnalyticsEnabled";
@@ -28,6 +29,7 @@ import { renderSidebarLogo } from "@/lib/sidebar/utils";
 import { useShowLogoWhenFolded } from "@/lib/sidebar/hooks";
 
 export default function AdminSidebar() {
+  const t = useTranslations("sidebar");
   const { folded, setFolded } = useSidebarState();
   const showLogoWhenFolded = useShowLogoWhenFolded();
   const searchRef = useRef<HTMLInputElement>(null);
@@ -97,14 +99,14 @@ export default function AdminSidebar() {
               setFocusSearch(true);
             }}
           >
-            Search
+            {t("adminSidebar.search.label")}
           </SidebarTab>
         ) : (
           <InputTypeIn
             ref={searchRef}
             variant="internal"
             searchIcon
-            placeholder="Search..."
+            placeholder={t("adminSidebar.searchInput.placeholder")}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             clearButton
@@ -147,8 +149,8 @@ export default function AdminSidebar() {
                   icon={icon}
                   tooltip={markdown(
                     requiredTier === Tier.ENTERPRISE
-                      ? "This feature is available on the [Enterprise version of Onyx](/admin/billing) only."
-                      : "This feature is available on the [Business or Enterprise version of Onyx](/admin/billing) only."
+                      ? t("adminSidebar.enterpriseOnly.tooltip")
+                      : t("adminSidebar.businessOrEnterpriseOnly.tooltip")
                   )}
                 >
                   {name}
@@ -166,7 +168,7 @@ export default function AdminSidebar() {
           href={pathname?.startsWith("/admin/craft") ? "/craft/v1" : "/app"}
           variant="sidebar-light"
         >
-          Exit Admin Panel
+          {t("adminSidebar.exitAdminPanel.label")}
         </SidebarTab>
         <AccountPopover />
       </SidebarLayouts.Footer>

@@ -401,6 +401,23 @@
         }
       }
     },
+    "documentSidebar": {
+      "citedSources": {
+        "title": "Fontes citadas"
+      },
+      "closeButton": {
+        "tooltip": "Fechar a barra lateral"
+      },
+      "foundSources": {
+        "title": "Fontes encontradas"
+      },
+      "moreSources": {
+        "title": "Mais"
+      },
+      "userFiles": {
+        "title": "Arquivos do usuário"
+      }
+    },
     "federatedOAuth": {
       "connectButton": {
         "label": "Conectar"
@@ -1170,6 +1187,192 @@
         }
       }
     },
+    "modals": {
+      "confirmEntity": {
+        "confirmButton": {
+          "label": "Confirmar"
+        },
+        "confirmation": {
+          "description": "Tem certeza de que deseja {action} <b>{entityName}</b>?"
+        },
+        "deleteAction": {
+          "label": "excluir"
+        },
+        "deleteButton": {
+          "label": "Excluir"
+        },
+        "header": {
+          "title": "{action} {entityType}"
+        },
+        "modifyAction": {
+          "label": "modificar"
+        }
+      },
+      "editProperty": {
+        "header": {
+          "title": "Editar {property}"
+        },
+        "submitButton": {
+          "label": "Atualizar propriedade",
+          "loadingLabel": "Atualizando..."
+        },
+        "valueInput": {
+          "placeholder": "Valor da propriedade"
+        }
+      },
+      "feedback": {
+        "additionalDetails": {
+          "dislikePlaceholder": "O que você não gostou nesta resposta?",
+          "label": "Forneça mais detalhes",
+          "likePlaceholder": "O que você gostou nesta resposta?"
+        },
+        "cancelButton": {
+          "label": "Cancelar"
+        },
+        "header": {
+          "title": "Feedback"
+        },
+        "submitButton": {
+          "label": "Enviar",
+          "loadingLabel": "Enviando..."
+        }
+      },
+      "genericConfirm": {
+        "confirmButton": {
+          "label": "Confirmar"
+        }
+      },
+      "share": {
+        "addPeople": {
+          "groupSuggestion": {
+            "description": "Grupo"
+          },
+          "permissionMenu": {
+            "ariaLabel": "Selecionar a permissão proposta"
+          },
+          "searchInput": {
+            "placeholder": "Adicione usuários, grupos e contas"
+          },
+          "sharedTag": {
+            "label": "Compartilhado"
+          }
+        },
+        "cancelButton": {
+          "label": "Cancelar"
+        },
+        "copyLinkButton": {
+          "label": "Copiar link"
+        },
+        "createLinkButton": {
+          "label": "Criar link de compartilhamento"
+        },
+        "generateLinkErrorToast": {
+          "message": "Falha ao gerar o link de compartilhamento"
+        },
+        "genericErrorToast": {
+          "message": "Ocorreu um erro"
+        },
+        "header": {
+          "description": "Todas as mensagens existentes e futuras deste chat serão compartilhadas.",
+          "sharedTitle": "Chat compartilhado",
+          "title": "Compartilhar este chat"
+        },
+        "linkCopiedToast": {
+          "message": "Link de compartilhamento copiado para a área de transferência!"
+        },
+        "linkInput": {
+          "copyTooltip": "Copiar link"
+        },
+        "makePrivateButton": {
+          "label": "Tornar privado"
+        },
+        "makePrivateErrorToast": {
+          "message": "Falha ao tornar o chat privado"
+        },
+        "nowPrivateToast": {
+          "message": "O chat agora é privado"
+        },
+        "organizationOption": {
+          "description": "Qualquer pessoa da sua organização pode ver este chat.",
+          "title": "Sua organização"
+        },
+        "permissionMenu": {
+          "edit": {
+            "label": "Editar"
+          },
+          "removeAccess": {
+            "label": "Remover acesso"
+          },
+          "viewAndChat": {
+            "label": "Ver e conversar"
+          }
+        },
+        "privateOption": {
+          "description": "Somente você tem acesso a este chat.",
+          "title": "Privado"
+        },
+        "transferOwnership": {
+          "currentOwner": {
+            "label": "Proprietário atual"
+          },
+          "groupTag": {
+            "label": "Grupo"
+          },
+          "targetInput": {
+            "label": "Transferir a propriedade para",
+            "placeholder": "Adicione um usuário ou grupo"
+          },
+          "trailingButton": {
+            "tooltip": "Transferir propriedade"
+          }
+        }
+      },
+      "unsavedChanges": {
+        "body": {
+          "description": "Suas alterações não foram salvas. Se você sair agora, elas serão perdidas."
+        },
+        "cancelButton": {
+          "label": "Cancelar"
+        },
+        "discardButton": {
+          "label": "Descartar alterações"
+        },
+        "header": {
+          "title": "Descartar alterações não salvas?"
+        }
+      },
+      "userFiles": {
+        "addFilesButton": {
+          "label": "Adicionar arquivos"
+        },
+        "doneButton": {
+          "label": "Concluído"
+        },
+        "emptyState": {
+          "description": "Nenhum arquivo encontrado"
+        },
+        "fileCount": {
+          "label": "{count, plural, one {# arquivo} other {# arquivos}}"
+        },
+        "fileStatus": {
+          "deleting": {
+            "label": "Excluindo..."
+          },
+          "processing": {
+            "label": "Processando..."
+          },
+          "uploading": {
+            "label": "Enviando..."
+          }
+        },
+        "searchInput": {
+          "placeholder": "Pesquisar arquivos..."
+        },
+        "selectedCount": {
+          "label": "{count, plural, one {# arquivo selecionado} other {# arquivos selecionados}}"
+        }
+      }
+    },
     "modelSelector": {
       "adminLimitedSetting": {
         "tooltip": "Seu administrador limita este modelo a um nível de raciocínio mais baixo."
@@ -1606,6 +1809,185 @@
         "title": "Velocidade de reprodução"
       },
       "title": "Voz"
+    }
+  },
+  "sidebar": {
+    "adminSidebar": {
+      "businessOrEnterpriseOnly": {
+        "tooltip": "Este recurso está disponível apenas na [versão Business ou Enterprise do Onyx](/admin/billing)."
+      },
+      "enterpriseOnly": {
+        "tooltip": "Este recurso está disponível apenas na [versão Enterprise do Onyx](/admin/billing)."
+      },
+      "exitAdminPanel": {
+        "label": "Sair do painel de administração"
+      },
+      "search": {
+        "label": "Pesquisar"
+      },
+      "searchInput": {
+        "placeholder": "Pesquisar..."
+      }
+    },
+    "appSidebar": {
+      "adminPanel": {
+        "label": "Painel de administração"
+      },
+      "agents": {
+        "title": "Agentes"
+      },
+      "craft": {
+        "label": "Craft"
+      },
+      "exploreAgents": {
+        "label": "Explorar agentes"
+      },
+      "moreAgents": {
+        "label": "Mais agentes"
+      },
+      "moveChatError": {
+        "message": "Falha ao mover o chat. Tente novamente."
+      },
+      "newProject": {
+        "label": "Novo projeto",
+        "tooltip": "Novo projeto"
+      },
+      "newSession": {
+        "label": "Nova sessão"
+      },
+      "projects": {
+        "title": "Projetos"
+      },
+      "recents": {
+        "empty": {
+          "text": "Experimente enviar uma mensagem! Seu histórico de chats aparecerá aqui."
+        },
+        "title": "Recentes"
+      },
+      "searchChats": {
+        "label": "Pesquisar chats"
+      }
+    },
+    "chatButton": {
+      "createProject": {
+        "label": "Criar {projectName}"
+      },
+      "createProjectError": {
+        "message": "Falha ao criar o projeto. Tente novamente."
+      },
+      "delete": {
+        "label": "Excluir"
+      },
+      "deleteConfirmation": {
+        "confirmButton": {
+          "label": "Excluir"
+        },
+        "description": "Tem certeza de que deseja excluir este chat? Esta ação não pode ser desfeita.",
+        "title": "Excluir chat"
+      },
+      "deleteError": {
+        "message": "Falha ao excluir o chat. Tente novamente."
+      },
+      "moveToProject": {
+        "label": "Mover para um projeto"
+      },
+      "projectSearchInput": {
+        "placeholder": "Pesquisar projetos"
+      },
+      "removeFromProject": {
+        "label": "Remover de {projectName}"
+      },
+      "rename": {
+        "label": "Renomear"
+      },
+      "share": {
+        "label": "Compartilhar"
+      }
+    },
+    "chatSearch": {
+      "createNamedProject": {
+        "label": "Criar novo projeto \"<name>{projectName}</name>\""
+      },
+      "footer": {
+        "openAction": {
+          "label": "Abrir"
+        },
+        "selectAction": {
+          "label": "Selecionar"
+        },
+        "showAllAction": {
+          "label": "Mostrar tudo"
+        }
+      },
+      "list": {
+        "empty": {
+          "text": "Ainda não há chats nem projetos"
+        },
+        "noResults": {
+          "text": "Nenhum resultado encontrado"
+        }
+      },
+      "newProject": {
+        "label": "Novo projeto"
+      },
+      "newSession": {
+        "label": "Nova sessão"
+      },
+      "noMoreResults": {
+        "text": "Não há mais resultados"
+      },
+      "projectsFilter": {
+        "label": "Projetos"
+      },
+      "recentFilter": {
+        "label": "Recente"
+      },
+      "recentSessionsFilter": {
+        "label": "Sessões recentes"
+      },
+      "searchInput": {
+        "placeholder": "Pesquisar sessões de chat, projetos..."
+      },
+      "sessionsFilter": {
+        "label": "Sessões"
+      }
+    },
+    "createConnector": {
+      "advancedStep": {
+        "label": "Avançado (opcional)"
+      },
+      "connectorStep": {
+        "label": "Conector"
+      },
+      "credentialStep": {
+        "label": "Credencial"
+      },
+      "exitSetup": {
+        "label": "Sair da configuração do conector"
+      }
+    },
+    "notifications": {
+      "empty": {
+        "title": "Nenhuma notificação"
+      },
+      "header": {
+        "title": "Notificações"
+      },
+      "markAllAsReadButton": {
+        "tooltip": "Marcar todas como lidas"
+      },
+      "markAsReadButton": {
+        "tooltip": "Marcar como lida"
+      },
+      "newSection": {
+        "title": "Novas"
+      },
+      "olderSection": {
+        "title": "Anteriores"
+      },
+      "unreadCount": {
+        "label": "{count, plural, one {# não lida} other {# não lidas}}"
+      }
     }
   }
 }

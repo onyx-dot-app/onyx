@@ -26,6 +26,7 @@ import useFilter from "@/hooks/useFilter";
 import { Button } from "@opal/components";
 import ScrollIndicatorDiv from "@/refresh-components/ScrollIndicatorDiv";
 import { timeAgo } from "@opal/time";
+import { useTranslations } from "next-intl";
 
 function getIcon(
   file: ProjectFile,
@@ -37,12 +38,20 @@ function getIcon(
   return SvgFileText;
 }
 
-function getDescription(file: ProjectFile): string {
+// Translated labels for the in-progress statuses; the rest fall back to the
+// file's own extension or raw status, which are data rather than copy.
+interface FileStatusLabels {
+  processing: string;
+  uploading: string;
+  deleting: string;
+}
+
+function getDescription(file: ProjectFile, labels: FileStatusLabels): string {
   const s = String(file.status || "");
   const typeLabel = getFileExtension(file.name);
-  if (s === UserFileStatus.PROCESSING) return "Processing...";
-  if (s === UserFileStatus.UPLOADING) return "Uploading...";
-  if (s === UserFileStatus.DELETING) return "Deleting...";
+  if (s === UserFileStatus.PROCESSING) return labels.processing;
+  if (s === UserFileStatus.UPLOADING) return labels.uploading;
+  if (s === UserFileStatus.DELETING) return labels.deleting;
   if (s === UserFileStatus.COMPLETED) return typeLabel;
   return file.status ?? typeLabel;
 }
@@ -62,13 +71,18 @@ function FileAttachment({
   onView,
   onDelete,
 }: FileAttachmentProps) {
+  const t = useTranslations("chat.modals.userFiles");
   const isProcessing =
     String(file.status) === UserFileStatus.PROCESSING ||
     String(file.status) === UserFileStatus.UPLOADING ||
     String(file.status) === UserFileStatus.DELETING;
 
   const Icon = getIcon(file, isProcessing);
-  const description = getDescription(file);
+  const description = getDescription(file, {
+    processing: t("fileStatus.processing.label"),
+    uploading: t("fileStatus.uploading.label"),
+    deleting: t("fileStatus.deleting.label"),
+  });
   const rightText = file.last_accessed_at
     ? (timeAgo(file.last_accessed_at) ?? "")
     : "";
@@ -117,6 +131,7 @@ export default function UserFilesModal({
   onPickRecent,
   onUnpickRecent,
 }: UserFilesModalProps) {
+  const t = useTranslations("chat.modals.userFiles");
   const { isOpen, toggle } = useModal();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(
     () => new Set(selectedFileIds || [])
@@ -181,7 +196,7 @@ export default function UserFilesModal({
             <Section flexDirection="row" gap={2}>
               <InputTypeIn
                 ref={searchInputRef}
-                placeholder="Search files..."
+                placeholder={t("searchInput.placeholder")}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 searchIcon
@@ -197,7 +212,7 @@ export default function UserFilesModal({
                   prominence="internal"
                   onClick={triggerUploadPicker}
                 >
-                  Add Files
+                  {t("addFilesButton.label")}
                 </Button>
               )}
             </Section>
@@ -210,7 +225,7 @@ export default function UserFilesModal({
           >
             {/* File display section */}
             {filtered.length === 0 ? (
-              <Text text03>No files found</Text>
+              <Text text03>{t("emptyState.description")}</Text>
             ) : (
               <ScrollIndicatorDiv className="p-2 gap-2 max-h-[70vh]">
                 {filtered.map((projectFle) => {
@@ -252,8 +267,7 @@ export default function UserFilesModal({
                 {/* File count divider - only show when not searching or filtering */}
                 {!query.trim() && !showOnlySelected && (
                   <TextSeparator
-                    count={recentFiles.length}
-                    text={recentFiles.length === 1 ? "File" : "Files"}
+                    text={t("fileCount.label", { count: recentFiles.length })}
                   />
                 )}
               </ScrollIndicatorDiv>
@@ -265,8 +279,7 @@ export default function UserFilesModal({
             {onPickRecent && (
               <Section flexDirection="row" justifyContent="start" gap={2}>
                 <Text as="p" text03>
-                  {selectedCount} {selectedCount === 1 ? "file" : "files"}{" "}
-                  selected
+                  {t("selectedCount.label", { count: selectedCount })}
                 </Text>
                 <Button
                   icon={SvgEye}
@@ -287,7 +300,7 @@ export default function UserFilesModal({
 
             {/* Right side: Done button */}
             <Button prominence="secondary" onClick={() => toggle(false)}>
-              Done
+              {t("doneButton.label")}
             </Button>
           </Modal.Footer>
         </Modal.Content>
