@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import {
   createTableColumns,
   EmptyMessageCard,
@@ -13,8 +14,6 @@ import { localizeAndPrettify } from "@opal/time";
 import ExceptionTraceModal from "@/sections/modals/PreviewModal/ExceptionTraceModal";
 import { PermissionSyncStatusBadge } from "./PermissionSyncStatusBadge";
 import type { DocPermissionSyncAttemptSnapshot } from "./types";
-
-const ERROR_MODAL_TITLE = "Document Permission Sync Error";
 
 /**
  * Renders one page of `DocPermissionSyncAttempt` rows for the
@@ -39,10 +38,22 @@ const tc = createTableColumns<DocPermissionSyncAttemptSnapshot>();
 // (e.g. "5/3/2026, 12:00:00 PM") stays on a single line at standard
 // 800px-wide admin layouts; the difference is taken from `Status` and
 // `Docs Synced`, which both render short content.
-function buildColumns(onErrorClick: (errorMessage: string) => void) {
+/** Translated column headers threaded in from the calling component. */
+interface ColumnHeaders {
+  timeStarted: string;
+  status: string;
+  docsSynced: string;
+  permissionErrors: string;
+  errorMessage: string;
+}
+
+function buildColumns(
+  onErrorClick: (errorMessage: string) => void,
+  headers: ColumnHeaders
+) {
   return [
     tc.column("time_started", {
-      header: "Time Started",
+      header: headers.timeStarted,
       weight: 28,
       enableSorting: false,
       cell: (value) => (
@@ -52,7 +63,7 @@ function buildColumns(onErrorClick: (errorMessage: string) => void) {
       ),
     }),
     tc.column("status", {
-      header: "Status",
+      header: headers.status,
       weight: 14,
       enableSorting: false,
       cell: (value, row) => (
@@ -63,7 +74,7 @@ function buildColumns(onErrorClick: (errorMessage: string) => void) {
       ),
     }),
     tc.column("total_docs_synced", {
-      header: "Docs Synced",
+      header: headers.docsSynced,
       weight: 12,
       enableSorting: false,
       cell: (value) => (
@@ -73,7 +84,7 @@ function buildColumns(onErrorClick: (errorMessage: string) => void) {
       ),
     }),
     tc.column("docs_with_permission_errors", {
-      header: "Permission Errors",
+      header: headers.permissionErrors,
       weight: 18,
       enableSorting: false,
       cell: (value) => (
@@ -83,7 +94,7 @@ function buildColumns(onErrorClick: (errorMessage: string) => void) {
       ),
     }),
     tc.column("error_message", {
-      header: "Error Message",
+      header: headers.errorMessage,
       weight: 28,
       enableSorting: false,
       cell: (value, row) => (
@@ -122,6 +133,8 @@ function ErrorMessageCell({
   modalContent,
   onErrorClick,
 }: ErrorMessageCellProps) {
+  const t = useTranslations("admin.connector");
+
   if (!errorMessage) {
     return (
       <Text as="span" font="secondary-body" color="text-03">
@@ -133,7 +146,7 @@ function ErrorMessageCell({
     <button
       type="button"
       onClick={() => onErrorClick(modalContent ?? errorMessage)}
-      aria-label="View full error message"
+      aria-label={t("syncTables.errorCell.ariaLabel")}
       className="text-left w-full cursor-pointer hover:underline"
     >
       <Text as="span" font="secondary-body" color="text-03" maxLines={2}>
@@ -157,22 +170,30 @@ export function DocPermissionSyncAttemptsTable({
   totalPages,
   onPageChange,
 }: DocPermissionSyncAttemptsTableProps) {
+  const t = useTranslations("admin.connector");
   const [openErrorMessage, setOpenErrorMessage] = useState<string | null>(null);
   const handleErrorClick = useCallback(
     (errorMessage: string) => setOpenErrorMessage(errorMessage),
     []
   );
   const columns = useMemo(
-    () => buildColumns(handleErrorClick),
-    [handleErrorClick]
+    () =>
+      buildColumns(handleErrorClick, {
+        timeStarted: t("docPermissionsTable.columns.timeStarted"),
+        status: t("docPermissionsTable.columns.status"),
+        docsSynced: t("docPermissionsTable.columns.docsSynced"),
+        permissionErrors: t("docPermissionsTable.columns.permissionErrors"),
+        errorMessage: t("docPermissionsTable.columns.errorMessage"),
+      }),
+    [handleErrorClick, t]
   );
 
   if (!attempts.length) {
     return (
       <EmptyMessageCard
         sizePreset="main-ui"
-        title="No document permission sync attempts yet"
-        description="Document-permission sync runs are scheduled in the background. They may take some time to appear — try refreshing in ~30 seconds."
+        title={t("docPermissionsTable.empty.title")}
+        description={t("docPermissionsTable.empty.description")}
       />
     );
   }
@@ -183,7 +204,7 @@ export function DocPermissionSyncAttemptsTable({
         <ExceptionTraceModal
           onOutsideClick={() => setOpenErrorMessage(null)}
           exceptionTrace={openErrorMessage}
-          title={ERROR_MODAL_TITLE}
+          title={t("docPermissionsTable.errorModal.title")}
         />
       )}
 

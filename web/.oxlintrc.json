@@ -113,6 +113,7 @@
         "src/sections/model-selector/**",
         "src/components/chat/**",
         "src/app/auth/**",
+        "src/app/admin/**",
         "src/app/app/page.tsx",
         "src/app/app/layout.tsx",
         "src/app/app/components/**",

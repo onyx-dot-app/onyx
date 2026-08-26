@@ -1,11 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import { Button, Text } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { IndexAttemptStageMetric } from "@/lib/types";
 import { formatDurationMs } from "@opal/time";
-import { PIPELINE_ORDER, STAGE_LABELS } from "./constants";
+import { PIPELINE_ORDER, STAGE_LABEL_KEYS } from "./constants";
 
 interface AttemptOverheadProps {
   attemptStages: IndexAttemptStageMetric[];
@@ -17,6 +18,7 @@ interface AttemptOverheadProps {
 export default function AttemptOverhead({
   attemptStages,
 }: AttemptOverheadProps) {
+  const t = useTranslations("admin.connector");
   const [open, setOpen] = useState(false);
   const sorted = useMemo(() => {
     const copy = [...attemptStages];
@@ -33,7 +35,9 @@ export default function AttemptOverhead({
         size="sm"
         onClick={() => setOpen((o) => !o)}
       >
-        {open ? "Hide attempt overhead" : "Show attempt overhead"}
+        {open
+          ? t("stageMetrics.attemptOverhead.hideButton.label")
+          : t("stageMetrics.attemptOverhead.showButton.label")}
       </Button>
       {open && <AttemptOverheadList stages={sorted} />}
     </Section>
@@ -59,6 +63,8 @@ interface AttemptOverheadRowProps {
 }
 
 function AttemptOverheadRow({ stage }: AttemptOverheadRowProps) {
+  const t = useTranslations("admin.connector");
+
   return (
     <Section
       flexDirection="row"
@@ -69,7 +75,7 @@ function AttemptOverheadRow({ stage }: AttemptOverheadRowProps) {
       gap={4}
     >
       <Text font="secondary-body" color="text-04">
-        {STAGE_LABELS[stage.stage]}
+        {t(STAGE_LABEL_KEYS[stage.stage])}
       </Text>
       <Text font="secondary-body" color="text-03">
         {formatDurationMs(stage.total_duration_ms)}

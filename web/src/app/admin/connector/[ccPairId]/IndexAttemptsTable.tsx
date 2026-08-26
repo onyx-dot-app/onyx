@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import {
   Table,
   TableHead,
@@ -36,6 +37,7 @@ export function IndexAttemptsTable({
   totalPages,
   onPageChange,
 }: IndexingAttemptsTableProps) {
+  const t = useTranslations("admin.connector");
   const [indexAttemptTracePopupId, setIndexAttemptTracePopupId] = useState<
     number | null
   >(null);
@@ -45,11 +47,10 @@ export function IndexAttemptsTable({
     return (
       <Callout
         className="mt-4"
-        title="No indexing attempts scheduled yet"
+        title={t("indexAttemptsTable.empty.title")}
         type="notice"
       >
-        Index attempts are scheduled in the background, and may take some time
-        to appear. Try refreshing the page in ~30 seconds!
+        {t("indexAttemptsTable.empty.description")}
       </Callout>
     );
   }
@@ -77,21 +78,25 @@ export function IndexAttemptsTable({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Time Started</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead className="whitespace-nowrap">New Docs</TableHead>
+            <TableHead>{t("indexAttemptsTable.columns.timeStarted")}</TableHead>
+            <TableHead>{t("indexAttemptsTable.columns.status")}</TableHead>
+            <TableHead className="whitespace-nowrap">
+              {t("indexAttemptsTable.columns.newDocs")}
+            </TableHead>
             <TableHead>
               <Tooltip
-                tooltip="Total number of documents replaced in the index during this indexing attempt"
+                tooltip={t("indexAttemptsTable.columns.totalDocsTooltip")}
                 side="top"
               >
                 <span className="flex items-center">
-                  Total Docs
+                  {t("indexAttemptsTable.columns.totalDocs")}
                   <SvgInfo className="ml-1 w-4 h-4" />
                 </span>
               </Tooltip>
             </TableHead>
-            <TableHead>Error Message</TableHead>
+            <TableHead>
+              {t("indexAttemptsTable.columns.errorMessage")}
+            </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -101,11 +106,9 @@ export function IndexAttemptsTable({
             const isReindexInProgress =
               indexAttempt.status === "in_progress" ||
               indexAttempt.status === "not_started";
-            const reindexTooltip = `This index attempt ${
-              isReindexInProgress ? "is" : "was"
-            } a full re-index. All documents from the source ${
-              isReindexInProgress ? "are being" : "were"
-            } synced into the system.`;
+            const reindexTooltip = isReindexInProgress
+              ? t("indexAttemptsTable.reindexTooltip.inProgress")
+              : t("indexAttemptsTable.reindexTooltip.completed");
             return (
               <TableRow
                 key={indexAttempt.id}
@@ -139,20 +142,24 @@ export function IndexAttemptsTable({
                         className="relative z-content"
                       >
                         <Text font="secondary-body" color="text-03">
-                          {`${docsPerMinute} docs / min`}
+                          {t("indexAttemptsTable.docsPerMinute", {
+                            rate: docsPerMinute,
+                          })}
                         </Text>
                         <Button
                           icon={SvgBarChartSmall}
                           prominence="tertiary"
                           size="sm"
-                          tooltip="View stage metrics"
+                          tooltip={t(
+                            "indexAttemptsTable.stageMetricsButton.tooltip"
+                          )}
                           onClick={() => setMetricsAttemptId(indexAttempt.id)}
                         />
                       </Section>
                     ) : (
                       indexAttempt.status === "success" && (
                         <Text font="secondary-body" color="text-03">
-                          No additional docs processed
+                          {t("indexAttemptsTable.noAdditionalDocs")}
                         </Text>
                       )
                     )}
@@ -164,8 +171,9 @@ export function IndexAttemptsTable({
                       <div>{indexAttempt.new_docs_indexed}</div>
                       {indexAttempt.docs_removed_from_index > 0 && (
                         <div className="text-xs w-52 text-wrap flex italic overflow-hidden whitespace-normal px-1">
-                          (also removed {indexAttempt.docs_removed_from_index}{" "}
-                          docs that were detected as deleted in the source)
+                          {t("indexAttemptsTable.docsRemoved", {
+                            count: indexAttempt.docs_removed_from_index,
+                          })}
                         </div>
                       )}
                     </div>
@@ -195,7 +203,7 @@ export function IndexAttemptsTable({
                   {indexAttempt.full_exception_trace && (
                     <button
                       type="button"
-                      aria-label="View full trace"
+                      aria-label={t("indexAttemptsTable.viewTrace.ariaLabel")}
                       onClick={() =>
                         setIndexAttemptTracePopupId(indexAttempt.id)
                       }

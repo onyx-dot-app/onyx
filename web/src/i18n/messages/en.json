@@ -26,6 +26,46 @@
     }
   },
   "admin": {
+    "addConnector": {
+      "categories": {
+        "codeRepository": {
+          "label": "Code Repository"
+        },
+        "messaging": {
+          "label": "Messaging"
+        },
+        "other": {
+          "label": "Others"
+        },
+        "sales": {
+          "label": "Sales"
+        },
+        "storage": {
+          "label": "Cloud Storage"
+        },
+        "ticketingAndTaskManagement": {
+          "label": "Ticketing & Task Management"
+        },
+        "wiki": {
+          "label": "Knowledge Base & Wikis"
+        }
+      },
+      "popular": {
+        "title": "Popular"
+      },
+      "search": {
+        "placeholder": "Search Connectors"
+      },
+      "seeConnectorsButton": {
+        "label": "See Connectors"
+      },
+      "sourceTile": {
+        "tooltip": {
+          "federatedConfigured": "<strong>Federated connector already configured.</strong> Click to edit the existing connector.",
+          "slackCredentialsFound": "<strong>Existing Slack credentials found.</strong> Click to manage your Slack connector."
+        }
+      }
+    },
     "agents": {
       "deleteModal": {
         "confirmation": {
@@ -298,6 +338,326 @@
           }
         },
         "title": "Usage"
+      }
+    },
+    "billing": {
+      "activatingBanner": {
+        "description": "Your license is being processed. You'll be taken to billing details automatically once confirmed.",
+        "title": "Your license is still activating"
+      },
+      "banners": {
+        "airGapped": {
+          "description": "Online billing management is disabled. Contact support to update your subscription.",
+          "title": "Air-gapped deployment"
+        },
+        "expired": {
+          "description": "Renew your subscription to restore access to paid features.",
+          "title": "Your subscription has expired.",
+          "withDate": {
+            "description": "Renew your subscription by {date} to restore access."
+          },
+          "withDeletion": {
+            "title": "Your subscription has expired. Data will be deleted in {days} days."
+          }
+        },
+        "expiring": {
+          "description": "Renew your subscription by {date} to avoid disruption.",
+          "title": "Your subscription is expiring in {days} days."
+        },
+        "graceSync": {
+          "title": "Checking for a renewed license…"
+        },
+        "stripeError": {
+          "description": "Check your internet connection or manually provide a license.",
+          "title": "Unable to connect to Stripe payment portal."
+        }
+      },
+      "checkout": {
+        "adjustPlan": {
+          "label": "Adjust Plan"
+        },
+        "annual": {
+          "label": "Annual"
+        },
+        "annualBadge": {
+          "label": "Save 20%"
+        },
+        "billingCycle": {
+          "description": "after your 1-month free trial",
+          "title": "Billing Cycle"
+        },
+        "continueToPayment": {
+          "label": "Continue to Payment"
+        },
+        "createSessionFailed": {
+          "error": "Failed to create checkout session"
+        },
+        "loading": {
+          "label": "Loading..."
+        },
+        "monthly": {
+          "label": "Monthly"
+        },
+        "perSeatMonth": {
+          "label": "per seat/month"
+        },
+        "plan": {
+          "title": "Business"
+        },
+        "price": {
+          "label": "${price}"
+        },
+        "seats": {
+          "description": "{count, plural, one {Minimum # seat required for your current users and Slack accounts.} other {Minimum # seats required for your current users and Slack accounts.}}",
+          "title": "Seats"
+        },
+        "trialBilling": {
+          "text": "You will be billed on <value>{date}</value> After your 1-month free trial ends."
+        }
+      },
+      "footer": {
+        "activateLicenseKey": {
+          "label": "Activate License Key"
+        },
+        "billingHelp": {
+          "label": "Billing Help"
+        },
+        "licenseKeyPrompt": {
+          "label": "Have a license key?"
+        },
+        "updateLicenseKey": {
+          "label": "Update License Key"
+        }
+      },
+      "header": {
+        "plansBilling": {
+          "title": "Plans & Billing"
+        },
+        "upgradePlan": {
+          "title": "Upgrade Plan"
+        },
+        "viewPlans": {
+          "title": "View Plans"
+        }
+      },
+      "license": {
+        "activateFailed": {
+          "error": "Failed to activate license"
+        },
+        "activateLicense": {
+          "label": "Activate License"
+        },
+        "activateSuccess": {
+          "message": "License activated successfully!"
+        },
+        "activateTitle": {
+          "title": "Activate License Key"
+        },
+        "activating": {
+          "label": "Activating..."
+        },
+        "activeUntil": {
+          "label": "License key active until <value>{date}</value>"
+        },
+        "cancel": {
+          "label": "Cancel"
+        },
+        "close": {
+          "label": "Close"
+        },
+        "description": "Manually add and activate a license for this Onyx instance.",
+        "emptyKey": {
+          "error": "Please enter a license key"
+        },
+        "error": {
+          "text": "{error}. <link>Billing Help</link>"
+        },
+        "expired": {
+          "label": "License key expired"
+        },
+        "keyField": {
+          "description": "Paste or attach your license key file you received from Onyx.",
+          "title": "License Key"
+        },
+        "updateKey": {
+          "label": "Update Key"
+        },
+        "updateLicense": {
+          "label": "Update License"
+        },
+        "updateSuccess": {
+          "message": "License updated successfully!"
+        },
+        "updateTitle": {
+          "title": "Update License Key"
+        }
+      },
+      "payment": {
+        "card": {
+          "description": "Payment method",
+          "title": "Visa ending in 1234"
+        },
+        "lastPayment": {
+          "description": "Last payment"
+        },
+        "section": {
+          "title": "Payment"
+        },
+        "update": {
+          "label": "Update"
+        },
+        "viewInvoice": {
+          "label": "View Invoice"
+        }
+      },
+      "plans": {
+        "business": {
+          "button": {
+            "label": "Get Business Plan"
+          },
+          "description": "per seat/month billed annually\nor $25 per seat if billed monthly",
+          "features": {
+            "apiKeys": "Service Account API Keys",
+            "documentPermissions": "Inherit Document Permissions",
+            "encryption": "Encryption of Secrets",
+            "queryHistory": "Query History and Usage Dashboard",
+            "rbac": "Role Based Access Control (RBAC)",
+            "selfHosting": "Self-hosting (Optional)",
+            "theming": "Custom Theming"
+          },
+          "featuresPrefix": "Get more work done with AI for your team.",
+          "pricing": "$20",
+          "title": "Business"
+        },
+        "card": {
+          "ariaLabel": "{plan} plan card"
+        },
+        "currentPlan": {
+          "label": "Your Current Plan"
+        },
+        "enterprise": {
+          "button": {
+            "label": "Contact Sales"
+          },
+          "description": "Flexible pricing & deployment options\nfor large organizations",
+          "features": {
+            "customDeployments": "Custom Deployments",
+            "customRoles": "Custom Roles and Permissions",
+            "hookExtensions": "Hook Extensions",
+            "regionalProcessing": "Region-Specific Data Processing",
+            "scim": "SCIM / Group Sync",
+            "support": "Enterprise SLAs and Priority Support",
+            "usageLimits": "Configurable Usage Limits",
+            "whiteLabeling": "Full White-labeling"
+          },
+          "featuresPrefix": "Everything in Business Plan, plus:",
+          "title": "Enterprise"
+        },
+        "includedInPlan": {
+          "label": "Included in your plan"
+        }
+      },
+      "seats": {
+        "belowMinimum": {
+          "error": "You cannot set seats below current **{minimum}** seats in use/pending. [Remove users](/admin/users) first before adjusting seats."
+        },
+        "billing": {
+          "added": "{count, plural, one {You will be billed for the <value>{count}</value> additional seat at a pro-rated amount.} other {You will be billed for the <value>{count}</value> additional seats at a pro-rated amount.}}",
+          "removed": "{count, plural, one {<value>{count}</value> seat will be removed on <value>{date}</value> (after current billing cycle).} other {<value>{count}</value> seats will be removed on <value>{date}</value> (after current billing cycle).}}",
+          "unchanged": "No changes to your billing."
+        },
+        "breakdown": {
+          "label": "{used} in use • {pending} pending • {remaining} remaining"
+        },
+        "cancel": {
+          "label": "Cancel"
+        },
+        "confirmChange": {
+          "label": "Confirm Change"
+        },
+        "delta": {
+          "added": "{count, plural, one {# seat to be added} other {# seats to be added}}",
+          "removed": "{count, plural, one {# seat to be removed} other {# seats to be removed}}"
+        },
+        "saving": {
+          "label": "Saving..."
+        },
+        "seatsField": {
+          "title": "Seats"
+        },
+        "total": {
+          "label": "{count} Seats"
+        },
+        "updateFailed": {
+          "error": "Failed to update seats"
+        },
+        "updateSeats": {
+          "description": "Add or remove seats to reflect your team size.",
+          "label": "Update Seats",
+          "title": "Update Seats"
+        },
+        "viewUsers": {
+          "label": "View Users"
+        }
+      },
+      "subscription": {
+        "businessPlan": {
+          "name": "Business Plan"
+        },
+        "connectToStripe": {
+          "label": "Connect to Stripe"
+        },
+        "connecting": {
+          "label": "Connecting..."
+        },
+        "enterprisePlan": {
+          "name": "Enterprise Plan"
+        },
+        "expired": {
+          "subtitle": "Expired on {date}"
+        },
+        "managePlan": {
+          "label": "Manage Plan"
+        },
+        "managedBySales": {
+          "text": "Your plan is managed through sales.<br></br><link>Contact billing</link> to make changes."
+        },
+        "nextPayment": {
+          "subtitle": "Next payment on {date}"
+        },
+        "syncLicense": {
+          "label": "Sync License"
+        },
+        "syncing": {
+          "label": "Syncing..."
+        },
+        "trialDays": {
+          "subtitle": "Trial ends in {days} days. Payment required on {date}"
+        },
+        "trialToday": {
+          "subtitle": "Trial ends today. Payment required on {date}"
+        },
+        "trialTomorrow": {
+          "subtitle": "Trial ends tomorrow. Payment required on {date}"
+        },
+        "upgradeNow": {
+          "label": "Upgrade now"
+        },
+        "upgrading": {
+          "label": "Upgrading..."
+        },
+        "validUntil": {
+          "subtitle": "Valid until {date}"
+        },
+        "viewPlanDetails": {
+          "label": "View Plan Details"
+        }
+      },
+      "toasts": {
+        "endTrialFailed": "Failed to end trial",
+        "licenseSyncFailed": "License sync failed",
+        "paymentMethodRequired": "Add a payment method first, then try upgrading again.",
+        "syncLicenseFailed": "Failed to sync license"
       }
     },
     "chatPreferences": {
@@ -591,6 +951,847 @@
         }
       }
     },
+    "connector": {
+      "advancedConfig": {
+        "duration": {
+          "days": "{count, plural, one {# day} other {# days}}",
+          "hours": "{count, plural, one {# hour} other {# hours}}",
+          "minutes": "{count, plural, one {# minute} other {# minutes}}"
+        },
+        "indexingStart": {
+          "label": "Indexing Start"
+        },
+        "pruningFrequency": {
+          "label": "Pruning Frequency"
+        },
+        "refreshFrequency": {
+          "label": "Refresh Frequency"
+        }
+      },
+      "configItem": {
+        "booleanFalse": "False",
+        "booleanTrue": "True",
+        "edit": {
+          "tooltip": "Edit"
+        },
+        "showAll": {
+          "label": "Show all ({count} items)"
+        },
+        "showLess": {
+          "label": "Show less"
+        }
+      },
+      "deleteModal": {
+        "additionalDetails": "Deleting this connector schedules a deletion job that removes its indexed documents and deletes it for every user.",
+        "entityType": "connector"
+      },
+      "deletionError": {
+        "description": "This error occurred while attempting to delete the connector. You may re-attempt a deletion by clicking the \"Delete\" button.",
+        "title": "Deletion Error"
+      },
+      "docPermissionsTable": {
+        "columns": {
+          "docsSynced": "Docs Synced",
+          "errorMessage": "Error Message",
+          "permissionErrors": "Permission Errors",
+          "status": "Status",
+          "timeStarted": "Time Started"
+        },
+        "empty": {
+          "description": "Document-permission sync runs are scheduled in the background. They may take some time to appear — try refreshing in ~30 seconds.",
+          "title": "No document permission sync attempts yet"
+        },
+        "errorModal": {
+          "title": "Document Permission Sync Error"
+        }
+      },
+      "errorsModal": {
+        "columns": {
+          "documentId": "Document ID",
+          "errorMessage": "Error Message",
+          "status": "Status",
+          "time": "Time"
+        },
+        "description": "Below are the errors encountered during indexing. Each row represents a failed document or entity.",
+        "empty": {
+          "description": "No errors found on this page"
+        },
+        "fullReindex": {
+          "description": "Click the button below to kick off a full re-index to try and resolve these errors. This full re-index may take much longer than a normal update."
+        },
+        "resolveAllButton": {
+          "label": "Resolve All"
+        },
+        "status": {
+          "resolved": "Resolved",
+          "unresolved": "Unresolved"
+        },
+        "targetedReindex": {
+          "description": "Click the button below to re-fetch only the failing documents. Much faster than a full re-index."
+        },
+        "title": "Indexing Errors",
+        "unknownDocument": "Unknown"
+      },
+      "fileManagement": {
+        "addFilesButton": {
+          "label": "Add Files"
+        },
+        "cancelButton": {
+          "label": "Cancel"
+        },
+        "columns": {
+          "fileName": "File Name",
+          "size": "Size",
+          "uploadDate": "Upload Date"
+        },
+        "confirmModal": {
+          "addDetails": "New files will be uploaded, chunked, embedded, and indexed in the Document Index",
+          "addSummary": "{count} file(s) will be added",
+          "confirmButton": {
+            "label": "Confirm & Save"
+          },
+          "description": "When you save these changes, the following will happen:",
+          "removeDetails": "Documents from these files will be pruned from the Document Index",
+          "removeSummary": "🗑️ {count} file(s) will be removed",
+          "title": "Confirm File Changes"
+        },
+        "editButton": {
+          "label": "Edit"
+        },
+        "empty": {
+          "description": "No files in this connector"
+        },
+        "header": {
+          "title": "Files ({count, plural, one {# file} other {# files}})"
+        },
+        "loadError": "Error loading files: {message}",
+        "newBadge": {
+          "label": "New"
+        },
+        "removeFileButton": {
+          "tooltip": "Remove file"
+        },
+        "removingBadge": {
+          "label": "Removing"
+        },
+        "saveButton": {
+          "label": "Save Changes",
+          "saving": "Saving..."
+        },
+        "toasts": {
+          "cannotRemoveAllFiles": "Cannot remove all files from a connector. Delete the connector if this is desired.",
+          "filesUpdated": "Files updated successfully! Document index is being updated in the background. New files are being indexed and removed files will be pruned from the search results.",
+          "updateFailed": "Failed to update files"
+        }
+      },
+      "groupMembershipTable": {
+        "columns": {
+          "errorMessage": "Error Message",
+          "groups": "Groups",
+          "memberships": "Memberships",
+          "status": "Status",
+          "timeStarted": "Time Started",
+          "users": "Users"
+        },
+        "empty": {
+          "description": "Group-membership sync runs are scheduled in the background. They may take some time to appear — try refreshing in ~30 seconds.",
+          "title": "No group membership sync attempts yet"
+        },
+        "errorModal": {
+          "title": "Group Membership Sync Error"
+        }
+      },
+      "indexAttemptsTable": {
+        "columns": {
+          "errorMessage": "Error Message",
+          "newDocs": "New Docs",
+          "status": "Status",
+          "timeStarted": "Time Started",
+          "totalDocs": "Total Docs",
+          "totalDocsTooltip": "Total number of documents replaced in the index during this indexing attempt"
+        },
+        "docsPerMinute": "{rate} docs / min",
+        "docsRemoved": "(also removed {count} docs that were detected as deleted in the source)",
+        "empty": {
+          "description": "Index attempts are scheduled in the background, and may take some time to appear. Try refreshing the page in ~30 seconds!",
+          "title": "No indexing attempts scheduled yet"
+        },
+        "noAdditionalDocs": "No additional docs processed",
+        "reindexTooltip": {
+          "completed": "This index attempt was a full re-index. All documents from the source were synced into the system.",
+          "inProgress": "This index attempt is a full re-index. All documents from the source are being synced into the system."
+        },
+        "stageMetricsButton": {
+          "tooltip": "View stage metrics"
+        },
+        "viewTrace": {
+          "ariaLabel": "View full trace"
+        }
+      },
+      "indexErrorsAlert": {
+        "description": "We ran into some issues while processing some documents. <details>View details.</details>",
+        "resolvingStatus": "Resolving failures",
+        "title": "Some documents failed to index"
+      },
+      "invalidState": {
+        "description": "This connector is in an invalid state. Please update your credentials or create a new connector before re-indexing.",
+        "title": "Invalid Connector State"
+      },
+      "loadError": {
+        "title": "Failed to fetch info on Connector with ID {ccPairId}",
+        "unknownMessage": "Unknown error"
+      },
+      "manageMenu": {
+        "delete": {
+          "label": "Delete",
+          "tooltip": {
+            "active": "Pause the connector before deleting"
+          }
+        },
+        "reIndex": {
+          "label": "Re-Index",
+          "tooltip": {
+            "indexing": "Cannot re-index while indexing is already in progress",
+            "invalid": "Fix the connector configuration before re-indexing",
+            "paused": "Resume the connector before re-indexing"
+          }
+        },
+        "toggleStatus": {
+          "pause": {
+            "label": "Pause"
+          },
+          "resume": {
+            "label": "Resume"
+          },
+          "tooltip": {
+            "updating": "Status update in progress"
+          }
+        },
+        "trigger": {
+          "label": "Manage"
+        }
+      },
+      "permissionSyncStatus": {
+        "canceled": {
+          "label": "Canceled"
+        },
+        "completedWithErrors": {
+          "label": "Completed with errors"
+        },
+        "failed": {
+          "label": "Failed"
+        },
+        "fallback": {
+          "label": "Not Started"
+        },
+        "inProgress": {
+          "label": "In Progress"
+        },
+        "notStarted": {
+          "label": "Scheduled"
+        },
+        "success": {
+          "label": "Succeeded"
+        }
+      },
+      "pruningFrequencyModal": {
+        "description": "How often the connector should be pruned (in hours)",
+        "title": "Pruning Frequency"
+      },
+      "reEnableModal": {
+        "actionButton": {
+          "label": "Re-Enable"
+        },
+        "additionalDetails": "This connector was previously marked as invalid. Please verify that your configuration is correct before re-enabling. Are you sure you want to proceed?",
+        "entityType": "Invalid Connector"
+      },
+      "reIndexModal": {
+        "fullReindex": {
+          "description": "This will cause a complete re-indexing of all documents from the source.",
+          "note": "<strong>NOTE:</strong> depending on the number of documents stored in the source, this may take a long time."
+        },
+        "fullReindexButton": {
+          "label": "Run Complete Re-Indexing"
+        },
+        "title": "Run Indexing",
+        "update": {
+          "description": "This will pull in and index all documents that have changed and/or have been added since the last successful indexing run."
+        },
+        "updateButton": {
+          "label": "Run Update"
+        }
+      },
+      "refreshFrequencyModal": {
+        "description": "How often the connector should refresh (in minutes)",
+        "title": "Refresh Frequency"
+      },
+      "sections": {
+        "advanced": {
+          "title": "Advanced"
+        },
+        "advancedConfiguration": {
+          "title": "Advanced Configuration"
+        },
+        "connectorConfiguration": {
+          "title": "Connector Configuration"
+        },
+        "credential": {
+          "title": "Credential"
+        },
+        "indexing": {
+          "title": "Indexing"
+        },
+        "indexingAttempts": {
+          "title": "Indexing Attempts"
+        }
+      },
+      "stageMetrics": {
+        "attemptOverhead": {
+          "hideButton": {
+            "label": "Hide attempt overhead"
+          },
+          "showButton": {
+            "label": "Show attempt overhead"
+          }
+        },
+        "batchTotal": {
+          "empty": "No completed batches yet",
+          "summary": "Average batch: {avgLabel}, {count, plural, one {# batch} other {# batches}} — distribution shown below."
+        },
+        "empty": {
+          "description": "No stage timing data has been recorded for this attempt yet. Older attempts that ran before stage instrumentation was deployed will not have metrics."
+        },
+        "loadError": {
+          "description": "Stage timing data could not be loaded for this attempt. The pipeline runs even when metric recording is unavailable, so this does not indicate a problem with the indexing run itself.",
+          "title": "Failed to load stage metrics"
+        },
+        "loading": "Loading stage metrics…",
+        "perBatch": {
+          "columns": {
+            "avgTime": "Avg time",
+            "calls": "Calls",
+            "max": "Max",
+            "min": "Min",
+            "stage": "Stage",
+            "totalTime": "Total time"
+          },
+          "empty": "No per-batch stage data recorded."
+        },
+        "sort": {
+          "label": "Sort:",
+          "pipelineOrder": {
+            "label": "Pipeline order"
+          },
+          "timeTaken": {
+            "label": "Time taken"
+          }
+        },
+        "stages": {
+          "batchLoad": {
+            "description": "Reads the batch back from object storage into worker memory.",
+            "label": "Batch load"
+          },
+          "batchTotal": {
+            "description": "Total wall-clock time elapsed processing a single batch end-to-end.",
+            "label": "Batch total"
+          },
+          "batchUnaccounted": {
+            "description": "Batch time not attributed to any named stage. A large value suggests missing instrumentation.",
+            "label": "Unaccounted"
+          },
+          "checkpointLoad": {
+            "description": "Loads the saved checkpoint so the attempt resumes where the previous run stopped.",
+            "label": "Checkpoint load"
+          },
+          "chunking": {
+            "description": "Splits each document into the chunks that get embedded and indexed.",
+            "label": "Chunking"
+          },
+          "connectorFetch": {
+            "description": "Time the connector spends calling the source API and yielding raw documents.",
+            "label": "Connector fetch"
+          },
+          "connectorValidation": {
+            "description": "Validates that the connector is configured correctly and reachable before fetching begins.",
+            "label": "Connector validation"
+          },
+          "contextualRag": {
+            "description": "Generates per-chunk context summaries with an LLM to improve retrieval quality.",
+            "label": "Contextual RAG"
+          },
+          "coordLockAcquireWait": {
+            "description": "Waits for the coordination lock that guards the attempt's shared progress counters.",
+            "label": "Coord lock acquire wait"
+          },
+          "coordinationUpdate": {
+            "description": "Updates the attempt's progress counters so the UI reflects the completed batch.",
+            "label": "Coordination update"
+          },
+          "docBatchEnqueue": {
+            "description": "Publishes the stored batch onto the Celery queue for a docprocessing worker to pick up.",
+            "label": "Doc batch enqueue"
+          },
+          "docBatchStore": {
+            "description": "Persists a fetched batch of documents to object storage for the docprocessing workers.",
+            "label": "Doc batch store"
+          },
+          "docDbPrepare": {
+            "description": "Resolves which documents are new or updated and prepares the database rows.",
+            "label": "Doc DB prepare"
+          },
+          "docLockAcquireWait": {
+            "description": "Waits for per-document locks so concurrent attempts do not write the same document.",
+            "label": "Doc lock acquire wait"
+          },
+          "docprocessingSetup": {
+            "description": "Prepares the worker: loads search settings, embedding model, and index clients.",
+            "label": "Docprocessing setup"
+          },
+          "embedding": {
+            "description": "Calls the embedding model to turn chunks into vectors. Usually the slowest stage.",
+            "label": "Embedding"
+          },
+          "enrichmentPrep": {
+            "description": "Attaches access control, boosts, and other metadata to each chunk before writing.",
+            "label": "Enrichment prep"
+          },
+          "finalization": {
+            "description": "Cleans up worker resources and releases the batch once processing completes.",
+            "label": "Finalization"
+          },
+          "gcCollect": {
+            "description": "Time spent in explicit garbage collection between batches.",
+            "label": "Garbage collection"
+          },
+          "hierarchyUpsert": {
+            "description": "Writes the source's folder or space hierarchy so documents can be filtered by location.",
+            "label": "Hierarchy upsert"
+          },
+          "imageProcessing": {
+            "description": "Extracts and summarizes images so their content becomes searchable text.",
+            "label": "Image processing"
+          },
+          "permissionValidation": {
+            "description": "Confirms the credential has the permissions required to read the source's documents.",
+            "label": "Permission validation"
+          },
+          "postIndexDbUpdate": {
+            "description": "Updates document rows in Postgres after the index write succeeds.",
+            "label": "Post-index DB update"
+          },
+          "queueWait": {
+            "description": "Time a batch waits in the queue before a docprocessing worker starts it.",
+            "label": "Queue wait"
+          },
+          "vectorDbWrite": {
+            "description": "Writes the embedded chunks into the document index.",
+            "label": "Vector DB write"
+          }
+        }
+      },
+      "stageMetricsModal": {
+        "description": "Per-batch and per-attempt timing for this index attempt.",
+        "title": "Indexing stage metrics"
+      },
+      "statusCard": {
+        "documentsIndexed": {
+          "label": "Documents Indexed"
+        },
+        "indexingSpeed": "({speed} docs / min)",
+        "lastIndexed": {
+          "label": "Last Indexed"
+        },
+        "lastSynced": {
+          "label": "Last Synced"
+        },
+        "permissionSyncing": {
+          "label": "Permission Syncing"
+        },
+        "status": {
+          "label": "Status"
+        }
+      },
+      "syncTables": {
+        "errorCell": {
+          "ariaLabel": "View full error message"
+        }
+      },
+      "syncTabs": {
+        "docPermissions": {
+          "label": "Document Permission Sync",
+          "notApplicableDescription": "This connector does not use a separate document-permission syncing job."
+        },
+        "groupMembership": {
+          "label": "Group Membership Sync",
+          "notApplicableDescription": "This connector does not use a separate group-membership syncing job."
+        },
+        "indexing": {
+          "label": "Indexing"
+        },
+        "loadError": {
+          "title": "Failed to load sync attempts"
+        },
+        "notApplicable": {
+          "title": "Not applicable"
+        }
+      },
+      "toasts": {
+        "completeReindexStarted": "Complete re-indexing started successfully",
+        "completeReindexStarting": "Starting complete re-indexing...",
+        "deletionScheduleFailed": "Failed to schedule deletion of connector - {message}",
+        "indexingProcessStartFailed": "Failed to start indexing process",
+        "indexingStartFailed": "Failed to start indexing",
+        "indexingStartUnexpectedError": "An unexpected error occurred while trying to start indexing",
+        "indexingUpdateStarted": "Indexing update started successfully",
+        "indexingUpdateStarting": "Starting indexing update...",
+        "invalidPruningFrequency": "Invalid pruning frequency: must be a valid number",
+        "invalidRefreshFrequency": "Invalid refresh frequency: must be an integer",
+        "nameUpdateFailed": "Failed to update connector name",
+        "nameUpdated": "Connector name updated successfully",
+        "noUnresolvedErrors": "No unresolved errors to retry.",
+        "pruningFrequencyUpdateFailed": "Failed to update connector pruning frequency",
+        "pruningFrequencyUpdated": "Connector pruning frequency updated successfully",
+        "refreshFrequencyUpdateFailed": "Failed to update connector refresh frequency",
+        "refreshFrequencyUpdated": "Connector refresh frequency updated successfully",
+        "targetedReindexFailed": "Targeted reindex failed: {message}",
+        "targetedReindexSubmitted": "Targeted reindex submitted for {count, plural, one {# document} other {# documents}}. Errors will clear from the list as documents finish reindexing."
+      }
+    },
+    "connectorsList": {
+      "add": {
+        "authorizeButton": {
+          "label": "Authorize with {source}",
+          "pendingLabel": "Authorizing..."
+        },
+        "createCredentialButton": {
+          "label": "Create New"
+        },
+        "credentialDeleted": {
+          "toast": "Credential deleted successfully!"
+        },
+        "credentialModal": {
+          "title": "Create a {source} credential"
+        },
+        "credentialStep": {
+          "title": "Select a credential"
+        },
+        "credentialSwapped": {
+          "toast": "Swapped credential successfully!"
+        },
+        "error": {
+          "toast": "Error: {detail}"
+        },
+        "federated": {
+          "tooltip": {
+            "description": "A federated search option is available for this connector. It will result in greater latency and reduced search quality.",
+            "link": {
+              "label": "Use federated version instead →"
+            }
+          }
+        },
+        "fileUploadFailed": {
+          "toast": "Error uploading files"
+        },
+        "oauthRedirectFailed": {
+          "message": "We couldn't redirect you to sign in with {source}. Please try again."
+        },
+        "oauthStartFailed": {
+          "toast": "Unable to start OAuth"
+        },
+        "oauthUrlFailed": {
+          "toast": "Failed to fetch OAuth URL"
+        },
+        "retryButton": {
+          "label": "Retry"
+        },
+        "timeout": {
+          "toast": "Operation timed out after {seconds} seconds. Check your configuration for errors?"
+        },
+        "unknownError": {
+          "toast": "An unknown error occurred"
+        }
+      },
+      "advanced": {
+        "indexingStart": {
+          "label": "Indexing Start Date",
+          "subtext": "Documents prior to this date will not be pulled in"
+        },
+        "pruneFrequency": {
+          "description": "Checks all documents against the source to delete those that no longer exist. Note: This process checks every document, so be cautious when increasing frequency. Default is {hours} hours ({days} days). Decimal hours are supported (e.g., 0.1 hours = 6 minutes). Enter 0 to disable pruning for this connector.",
+          "label": "Prune Frequency (hours)"
+        },
+        "refreshFrequency": {
+          "description": "This is how frequently we pull new documents from the source (in minutes). If you input 0, we will never pull new documents for this connector.",
+          "label": "Refresh Frequency (minutes)"
+        },
+        "resetButton": {
+          "label": "Reset"
+        },
+        "title": "Advanced Configuration"
+      },
+      "connectorName": {
+        "label": "Connector Name",
+        "subtext": "A descriptive name for the connector."
+      },
+      "credentialsLoadError": {
+        "title": "Failed to load credentials."
+      },
+      "field": {
+        "optional": {
+          "label": "(optional)"
+        },
+        "optionalSuffix": {
+          "label": "optional"
+        }
+      },
+      "gdrive": {
+        "authComplete": {
+          "description": "Your Google Drive credential was created. Manage or revoke it from the credential list.",
+          "title": "Authentication Complete"
+        },
+        "authFailed": {
+          "toast": "Failed to authenticate with Google Drive - {error}"
+        },
+        "authenticateButton": {
+          "label": "Authenticate with Google Drive",
+          "pendingLabel": "Authenticating..."
+        },
+        "createButton": {
+          "label": "Create Credential",
+          "pendingLabel": "Creating..."
+        },
+        "credentialsLoadError": {
+          "title": "Failed to load Google Drive credentials."
+        },
+        "invalidFile": {
+          "toast": "Invalid file provided - {error}"
+        },
+        "invalidServiceAccountFile": {
+          "toast": "Invalid file provided - expected a Service Account JSON key"
+        },
+        "missingServiceAccountKey": {
+          "toast": "Please upload a service account key before creating a credential"
+        },
+        "oauthOption": {
+          "description": "Upload the OAuth app JSON from Google Cloud Console ([setup instructions]({docsUrl})), then authenticate with the Google account whose Drive you want to index.",
+          "title": "Option 1: OAuth app"
+        },
+        "oauthUpload": {
+          "placeholder": "Upload or paste your OAuth app JSON"
+        },
+        "primaryAdmin": {
+          "description": "Enter the email of an admin or owner of the Google Organization that owns the Google Drive(s) you want to index.",
+          "invalidEmail": "Must be a valid email",
+          "label": "Primary Admin Email",
+          "required": "Required"
+        },
+        "section": {
+          "title": "Google Drive Authentication"
+        },
+        "serviceAccountCreateFailed": {
+          "toast": "Failed to create service account credential - {error}"
+        },
+        "serviceAccountCreated": {
+          "toast": "Successfully created service account credential"
+        },
+        "serviceAccountOption": {
+          "title": "Option 2: Service account"
+        },
+        "serviceAccountUpload": {
+          "placeholder": "Upload or paste your service account JSON key"
+        }
+      },
+      "gmail": {
+        "authComplete": {
+          "description": "Your Gmail credential was created. Manage or revoke it from the credential list.",
+          "title": "Authentication Complete"
+        },
+        "authFailed": {
+          "toast": "Failed to authenticate with Gmail - {error}"
+        },
+        "authenticateButton": {
+          "label": "Authenticate with Gmail",
+          "pendingLabel": "Authenticating..."
+        },
+        "createButton": {
+          "label": "Create Credential",
+          "pendingLabel": "Creating..."
+        },
+        "credentialsLoadError": {
+          "title": "Failed to load Gmail credentials."
+        },
+        "invalidFile": {
+          "toast": "Invalid file provided - {error}"
+        },
+        "invalidServiceAccountFile": {
+          "toast": "Invalid file provided - expected a Service Account JSON key"
+        },
+        "missingServiceAccountKey": {
+          "toast": "Please upload a service account key before creating a credential"
+        },
+        "oauthOption": {
+          "description": "Upload the OAuth app JSON from Google Cloud Console ([setup instructions]({docsUrl})), then authenticate with the Google account whose Gmail you want to index.",
+          "title": "Option 1: OAuth app"
+        },
+        "oauthUpload": {
+          "placeholder": "Upload or paste your OAuth app JSON"
+        },
+        "primaryAdmin": {
+          "description": "Enter the email of an admin or owner of the Google Organization that owns the Gmail account(s) you want to index.",
+          "invalidEmail": "Must be a valid email",
+          "label": "Primary Admin Email",
+          "required": "Required"
+        },
+        "section": {
+          "title": "Gmail Authentication"
+        },
+        "serviceAccountCreateFailed": {
+          "toast": "Failed to create service account credential - {error}"
+        },
+        "serviceAccountCreated": {
+          "toast": "Successfully created service account credential"
+        },
+        "serviceAccountOption": {
+          "title": "Option 2: Service account"
+        },
+        "serviceAccountUpload": {
+          "placeholder": "Upload or paste your service account JSON key"
+        }
+      },
+      "invalidConnector": {
+        "homeButton": {
+          "label": "Go home"
+        },
+        "title": "‘{connector}’ is not a valid Connector Type!"
+      },
+      "listInput": {
+        "placeholder": "Enter {label}"
+      },
+      "navigation": {
+        "advancedButton": {
+          "label": "Advanced"
+        },
+        "continueButton": {
+          "label": "Continue"
+        },
+        "createButton": {
+          "label": "Create Connector"
+        },
+        "previousButton": {
+          "label": "Previous"
+        }
+      },
+      "oauth": {
+        "error": {
+          "title": "Oops, something went wrong!"
+        },
+        "invalidSource": {
+          "description": "{source} is not a valid source type.",
+          "title": "The specified connector source type {source} does not exist."
+        },
+        "processing": {
+          "description": "Please wait while we complete the setup.",
+          "title": "Processing..."
+        }
+      },
+      "oauthCallback": {
+        "authorize": {
+          "title": "Authorize with {source}"
+        },
+        "authorizing": {
+          "description": "Please wait while we complete authorization."
+        },
+        "continue": {
+          "message": "Click <link>here</link> to continue."
+        },
+        "error": {
+          "description": "An error occurred during the OAuth process. Please try again."
+        },
+        "malformed": {
+          "missingCode": "Missing authorization code.",
+          "missingState": "Missing state parameter.",
+          "title": "Improperly formed OAuth authorization request."
+        },
+        "page": {
+          "title": "Authorize with Third-Party service"
+        },
+        "success": {
+          "additionalSteps": {
+            "description": "Your authorization with {source} completed successfully. Additional steps are required to complete credential setup."
+          },
+          "description": "Your authorization with {source} completed successfully.",
+          "title": "Success!"
+        }
+      },
+      "oauthFailed": {
+        "toast": "OAuth authentication failed. Please try again."
+      },
+      "oauthFinalize": {
+        "authorize": {
+          "title": "Finalize Authorization with {source}"
+        },
+        "cloudId": {
+          "required": "You must select a Confluence site (id not found)."
+        },
+        "cloudName": {
+          "required": "You must select a Confluence site (name not found)."
+        },
+        "cloudUrl": {
+          "required": "You must select a Confluence site (url not found)."
+        },
+        "continue": {
+          "message": "Authorization finalized. Click <link>here</link> to continue."
+        },
+        "credentialId": {
+          "required": "Credential ID is required."
+        },
+        "error": {
+          "description": "An error occurred during the OAuth finalization process. Please try again."
+        },
+        "finalized": {
+          "title": "Confluence authorization finalized."
+        },
+        "loadingSites": {
+          "description": "Please wait while we retrieve a list of your accessible sites."
+        },
+        "malformed": {
+          "description": "Invalid or missing credential id.",
+          "title": "Improperly formed OAuth finalization request."
+        },
+        "page": {
+          "title": "Finalize Authorization with Third-Party service"
+        },
+        "selectSite": {
+          "title": "Select a Confluence site"
+        },
+        "submitButton": {
+          "label": "Submit",
+          "pendingLabel": "Submitting..."
+        },
+        "submitError": {
+          "description": "An error occurred during the submission process. Please try again.",
+          "title": "Error during submission."
+        }
+      },
+      "selectInput": {
+        "emptyOption": {
+          "label": "Select an option"
+        }
+      },
+      "stringPairList": {
+        "addButton": {
+          "label": "Add New"
+        },
+        "removeButton": {
+          "tooltip": "Remove"
+        }
+      },
+      "tabs": {
+        "empty": {
+          "label": "No tabs to display."
+        }
+      }
+    },
     "costOverrides": {
       "allProviders": {
         "label": "All providers"
@@ -813,6 +2014,461 @@
         "title": "Craft isn't available on this deployment"
       }
     },
+    "discordBot": {
+      "botToken": {
+        "changeInstructions": {
+          "text": "To change the token, delete the current one and add a new one."
+        },
+        "configured": {
+          "badge": "Configured",
+          "text": "Your Discord bot token is configured."
+        },
+        "configuredWithDate": {
+          "text": "Your Discord bot token is configured. Added {date}."
+        },
+        "deleteButton": {
+          "blocked": {
+            "tooltip": "Delete server configs first"
+          },
+          "label": "Delete Discord Token"
+        },
+        "deleteError": {
+          "toast": "Failed to delete bot token"
+        },
+        "deleteModal": {
+          "additionalDetails": "This will disconnect your Discord bot. You will need to re-enter the token to use the bot again.",
+          "entityName": "Discord Bot Token",
+          "entityType": "Discord bot token"
+        },
+        "deleted": {
+          "toast": "Bot token deleted"
+        },
+        "enterInstructions": {
+          "text": "Enter your Discord bot token to enable the bot. You can get this from the Discord Developer Portal."
+        },
+        "input": {
+          "placeholder": "Enter bot token..."
+        },
+        "missing": {
+          "toast": "Please enter a bot token"
+        },
+        "notConfigured": {
+          "badge": "Not Configured"
+        },
+        "saveButton": {
+          "label": "Save Token",
+          "saving": {
+            "label": "Saving..."
+          }
+        },
+        "saveError": {
+          "toast": "Failed to save bot token"
+        },
+        "saved": {
+          "toast": "Bot token saved successfully"
+        },
+        "section": {
+          "title": "Bot Token"
+        }
+      },
+      "channels": {
+        "awaitingRegistration": {
+          "text": "Channel configuration will be available after the server is registered."
+        },
+        "disableAllButton": {
+          "label": "Disable All"
+        },
+        "empty": {
+          "description": "Run !sync-channels in Discord to add channels.",
+          "title": "No channels configured"
+        },
+        "enableAllButton": {
+          "label": "Enable All"
+        },
+        "partialUpdate": {
+          "toast": "Updated {succeeded} channels, but {failed} failed"
+        },
+        "section": {
+          "description": "Run !sync-channels in Discord to update the channel list.",
+          "title": "Channel Configuration"
+        },
+        "table": {
+          "agentOverride": {
+            "header": "Agent Override"
+          },
+          "channel": {
+            "header": "Channel"
+          },
+          "enabled": {
+            "header": "Enabled"
+          },
+          "requireMention": {
+            "header": "Require @mention"
+          },
+          "threadOnly": {
+            "header": "Thread Only Mode"
+          }
+        },
+        "updateError": {
+          "toast": "Failed to update channels"
+        },
+        "updated": {
+          "toast": "Updated {count, plural, one {# channel} other {# channels}}"
+        }
+      },
+      "defaultAgent": {
+        "cleared": {
+          "toast": "Default agent cleared"
+        },
+        "section": {
+          "description": "The agent used by the bot in all channels unless overridden.",
+          "title": "Default Agent"
+        },
+        "select": {
+          "default": {
+            "label": "Default Agent"
+          },
+          "placeholder": "Select agent"
+        },
+        "updateError": {
+          "toast": "Failed to update agent"
+        },
+        "updated": {
+          "toast": "Default agent updated"
+        }
+      },
+      "error": {
+        "loadChannels": {
+          "message": "Could not load channels",
+          "title": "Failed to load channels"
+        },
+        "loadServer": {
+          "title": "Failed to load server"
+        },
+        "loadServers": {
+          "title": "Failed to load Discord servers"
+        },
+        "serverNotFound": {
+          "message": "Server not found"
+        },
+        "unknown": {
+          "message": "An unknown error occurred"
+        }
+      },
+      "guildDetail": {
+        "awaiting": {
+          "text": "Use the !register command in your Discord server with the registration key to complete setup.",
+          "title": "Waiting for Registration"
+        },
+        "pending": {
+          "text": "Pending registration"
+        },
+        "registered": {
+          "text": "Registered: {date}"
+        },
+        "updateButton": {
+          "label": "Update Configuration"
+        }
+      },
+      "guilds": {
+        "createError": {
+          "toast": "Failed to create server"
+        },
+        "created": {
+          "toast": "Server configuration created!"
+        },
+        "deleteError": {
+          "toast": "Failed to delete server config"
+        },
+        "deleteModal": {
+          "additionalDetails": "This will remove all settings for this Discord server.",
+          "entityType": "Discord server configuration"
+        },
+        "deleted": {
+          "toast": "Server configuration deleted"
+        },
+        "disabled": {
+          "toast": "Server disabled"
+        },
+        "empty": {
+          "description": "Create a server configuration to get started.",
+          "title": "No Discord servers configured yet"
+        },
+        "enabled": {
+          "toast": "Server enabled"
+        },
+        "fallbackName": "Server #{id}",
+        "notRegistered": {
+          "toast": "Server must be registered before it can be enabled"
+        },
+        "pending": {
+          "badge": "Pending"
+        },
+        "registered": {
+          "badge": "Registered"
+        },
+        "table": {
+          "actions": {
+            "header": "Actions"
+          },
+          "enabled": {
+            "header": "Enabled"
+          },
+          "registered": {
+            "header": "Registered"
+          },
+          "server": {
+            "header": "Server"
+          },
+          "status": {
+            "header": "Status"
+          }
+        },
+        "updateError": {
+          "toast": "Failed to update server"
+        }
+      },
+      "page": {
+        "header": {
+          "description": "Connect Onyx to your Discord servers. Users can ask questions directly in Discord channels."
+        }
+      },
+      "registrationKey": {
+        "header": {
+          "description": "This key will only be shown once!",
+          "title": "Registration Key"
+        },
+        "instructions": {
+          "text": "Copy the command and send it from any text channel in your server!"
+        }
+      },
+      "serverConfigs": {
+        "addButton": {
+          "creating": {
+            "label": "Creating..."
+          },
+          "label": "Add Server"
+        },
+        "section": {
+          "title": "Server Configurations"
+        }
+      },
+      "unsavedChanges": {
+        "description": "Click Update to save them.",
+        "title": "You have unsaved changes"
+      }
+    },
+    "documentProcessing": {
+      "unstructured": {
+        "apiKey": {
+          "placeholder": "Enter API Key"
+        },
+        "deleteButton": {
+          "label": "Delete API Key"
+        },
+        "deleteHint": "Delete the current API key before updating.",
+        "description": "Unstructured extracts and transforms complex data from formats like .pdf, .docx, .png, .pptx, etc. into clean text for Onyx to ingest. Provide an API key to enable Unstructured document processing.",
+        "learnMore": "Learn more about Unstructured <link>here</link>.",
+        "note": "<label>Note:</label> this will send documents to Unstructured servers for processing.",
+        "saveButton": {
+          "label": "Save API Key"
+        },
+        "title": "Process with Unstructured API"
+      }
+    },
+    "documents": {
+      "explorer": {
+        "boost": {
+          "label": "Boost:"
+        },
+        "search": {
+          "placeholder": "Find documents based on title / content..."
+        },
+        "updateFailed": {
+          "toast": "Failed to update document - {detail}"
+        }
+      },
+      "feedback": {
+        "loadError": {
+          "message": "Error loading documents - {detail}"
+        },
+        "loading": {
+          "label": "Loading"
+        },
+        "mostDisliked": {
+          "title": "Most Disliked Documents"
+        },
+        "mostLiked": {
+          "title": "Most Liked Documents"
+        },
+        "table": {
+          "name": {
+            "header": "Document Name"
+          },
+          "score": {
+            "header": "Score"
+          },
+          "searchable": {
+            "header": "Is Searchable?"
+          }
+        },
+        "updateHiddenFailed": {
+          "toast": "Error updating hidden status - {detail}"
+        }
+      },
+      "score": {
+        "notANumber": {
+          "toast": "Score must be a number"
+        },
+        "updated": {
+          "toast": "Updated score!"
+        }
+      },
+      "sets": {
+        "access": {
+          "private": {
+            "label": "Private"
+          },
+          "public": {
+            "label": "Public"
+          }
+        },
+        "connector": {
+          "unnamed": {
+            "label": "Unnamed"
+          }
+        },
+        "deleteFailed": {
+          "toast": "Failed to schedule document set for deletion - {detail}"
+        },
+        "deleteScheduled": {
+          "toast": "Document set \"{name}\" scheduled for deletion"
+        },
+        "description": "**Document Sets** allow you to group logically connected documents into a single bundle. These can then be used as a filter when performing searches to control the scope of information Onyx searches over.",
+        "edit": {
+          "header": {
+            "title": "Edit Document Set"
+          }
+        },
+        "editRow": {
+          "syncing": {
+            "tooltip": "Cannot update while syncing! Wait for the sync to finish, then try again."
+          }
+        },
+        "federatedBadge": {
+          "label": "Federated"
+        },
+        "fetchConnectorsFailed": {
+          "title": "Failed to fetch Connectors"
+        },
+        "fetchSetsFailed": {
+          "title": "Failed to fetch document sets"
+        },
+        "form": {
+          "connectors": {
+            "label": "Pick your connectors",
+            "placeholder": "Search for connectors...",
+            "required": "Please select at least one connector (regular or federated)"
+          },
+          "createFailed": {
+            "toast": "Error creating document set - {detail}"
+          },
+          "created": {
+            "toast": "Successfully created document set!"
+          },
+          "description": {
+            "label": "Description:",
+            "placeholder": "Describe what the document set represents"
+          },
+          "federatedConnectors": {
+            "label": "Federated Connectors",
+            "placeholder": "Search for federated connectors..."
+          },
+          "name": {
+            "label": "Name:",
+            "placeholder": "A name for the document set",
+            "required": "Please enter a name for the set"
+          },
+          "scopedConnectors": {
+            "label": "{count, plural, =0 {Connectors available to the selected group} one {Connectors available to the selected group} other {Connectors available to the selected groups}}"
+          },
+          "submitButton": {
+            "createLabel": "Create Document Set",
+            "updateLabel": "Update Document Set"
+          },
+          "unavailableConnectors": {
+            "description": "Only connectors that are directly assigned to the group you are trying to add the document set to will be available.",
+            "title": "{count, plural, =0 {Connectors not available to the group you have selected} one {Connectors not available to the group you have selected} other {Connectors not available to the groups you have selected}}"
+          },
+          "updateFailed": {
+            "toast": "Error updating document set - {detail}"
+          },
+          "updated": {
+            "toast": "Successfully updated document set!"
+          }
+        },
+        "loadError": {
+          "message": "Error: {detail}"
+        },
+        "new": {
+          "header": {
+            "title": "New Document Set"
+          }
+        },
+        "newButton": {
+          "label": "New Document Set"
+        },
+        "notFound": {
+          "message": "Document set with id {id} not found",
+          "title": "Document set not found"
+        },
+        "status": {
+          "deleting": {
+            "label": "Deleting"
+          },
+          "syncing": {
+            "label": "Syncing"
+          },
+          "upToDate": {
+            "label": "Up to Date"
+          }
+        },
+        "table": {
+          "connectors": {
+            "header": "Connectors"
+          },
+          "delete": {
+            "header": "Delete"
+          },
+          "name": {
+            "header": "Name"
+          },
+          "public": {
+            "header": "Public"
+          },
+          "status": {
+            "header": "Status"
+          },
+          "title": "Existing Document Sets"
+        }
+      },
+      "visibility": {
+        "hidden": {
+          "label": "Hidden"
+        },
+        "hide": {
+          "ariaLabel": "Hide document",
+          "label": "Hide"
+        },
+        "unhide": {
+          "ariaLabel": "Unhide document",
+          "label": "Unhide"
+        },
+        "visible": {
+          "label": "Visible"
+        }
+      }
+    },
     "externalApps": {
       "apps": {
         "empty": {
@@ -912,6 +2568,16 @@
       "warnings": {
         "invalidSkill": "invalid skill",
         "providerUnavailable": "provider unavailable"
+      }
+    },
+    "federated": {
+      "error": {
+        "loadFailed": "Failed to load connector: {details}",
+        "title": "Error"
+      },
+      "loading": {
+        "description": "Retrieving connector details and credential schema",
+        "title": "Loading connector configuration..."
       }
     },
     "groups": {
@@ -1734,6 +3400,155 @@
         "urlInvalid": "Must be a valid URL"
       }
     },
+    "indexing": {
+      "status": {
+        "access": {
+          "inherited": {
+            "label": "Inherited from {source}"
+          },
+          "organizationPublic": {
+            "label": "Organization Public"
+          },
+          "private": {
+            "label": "Private"
+          }
+        },
+        "addConnectorButton": {
+          "label": "Add Connector"
+        },
+        "connectorCreated": {
+          "toast": "Connector created successfully"
+        },
+        "empty": {
+          "message": "It looks like you don't have any connectors setup yet. Visit the [Add Connector](/admin/add-connector) page to get started!"
+        },
+        "federated": {
+          "access": {
+            "label": "Federated Access"
+          },
+          "indexed": {
+            "label": "Indexed"
+          },
+          "notApplicable": {
+            "label": "N/A"
+          }
+        },
+        "filterMenu": {
+          "accessType": {
+            "autoSync": {
+              "label": "Auto-Sync"
+            },
+            "private": {
+              "label": "Private"
+            },
+            "public": {
+              "label": "Public"
+            },
+            "title": "Access Type"
+          },
+          "applyButton": {
+            "label": "Apply"
+          },
+          "docCount": {
+            "placeholder": "Count",
+            "title": "Document Count"
+          },
+          "lastStatus": {
+            "completedWithErrors": {
+              "label": "Completed with Errors"
+            },
+            "failed": {
+              "label": "Failed"
+            },
+            "inProgress": {
+              "label": "In Progress"
+            },
+            "interrupted": {
+              "label": "Interrupted"
+            },
+            "notStarted": {
+              "label": "Not Started"
+            },
+            "success": {
+              "label": "Success"
+            },
+            "title": "Last Status"
+          },
+          "title": "Filter Connectors"
+        },
+        "filters": {
+          "accessBadge": {
+            "label": "Access: {values}"
+          },
+          "clearBadge": {
+            "label": "Clear"
+          },
+          "docsAnyBadge": {
+            "label": "Docs {operator} any"
+          },
+          "docsBadge": {
+            "label": "Docs {operator} {value}"
+          },
+          "statusBadge": {
+            "label": "Status: {values}"
+          }
+        },
+        "loadError": {
+          "message": "Error loading indexing status."
+        },
+        "manageConnector": {
+          "tooltip": "Manage Connector"
+        },
+        "manageFederatedConnector": {
+          "tooltip": "Manage Federated Connector"
+        },
+        "search": {
+          "placeholder": "Search Connectors"
+        },
+        "summary": {
+          "activeConnectors": {
+            "label": "Active Connectors"
+          },
+          "publicConnectors": {
+            "label": "Public Connectors"
+          },
+          "totalConnectors": {
+            "label": "Total Connectors"
+          },
+          "totalDocsIndexed": {
+            "label": "Total Docs Indexed"
+          }
+        },
+        "table": {
+          "allCaughtUp": {
+            "label": "All caught up! No more connectors to show"
+          },
+          "lastIndexed": {
+            "header": "Last Indexed"
+          },
+          "name": {
+            "header": "Name"
+          },
+          "permissions": {
+            "header": "Permissions / Access"
+          },
+          "status": {
+            "header": "Status"
+          },
+          "totalDocs": {
+            "header": "Total Docs"
+          }
+        },
+        "toggleAll": {
+          "collapse": {
+            "label": "Collapse All"
+          },
+          "expand": {
+            "label": "Expand All"
+          }
+        }
+      }
+    },
     "languageModels": {
       "availableProviders": {
         "title": "Available Providers"
@@ -1798,6 +3613,75 @@
         "unknownError": "Unknown error"
       }
     },
+    "mcpActions": {
+      "header": {
+        "description": "Connect MCP (Model Context Protocol) servers to add custom actions and tools for your agents."
+      }
+    },
+    "oauthTest": {
+      "claims": {
+        "empty": {
+          "message": "No claims received."
+        },
+        "table": {
+          "claim": {
+            "header": "Claim"
+          },
+          "value": {
+            "header": "Value"
+          }
+        }
+      },
+      "directory": {
+        "fallbackSource": "provider API",
+        "subtitle": "Directory fields fetched from the provider API — e.g. Microsoft Graph /me for Entra ID, which carries country/usageLocation that the id_token omits unless the ctry optional claim is configured.",
+        "title": "Directory profile ({source})"
+      },
+      "idToken": {
+        "subtitle": "Decoded from the id_token JWT returned by the token endpoint.",
+        "title": "id_token claims"
+      },
+      "intro": {
+        "description": "Shows the raw fields your identity provider sent about you during your last OAuth/OIDC login: the id_token claims and the userinfo endpoint response. Use it to verify which attributes the IdP is configured to release. Claims are captured at every login."
+      },
+      "loadFailed": {
+        "title": "Failed to load OAuth claims"
+      },
+      "noSnapshot": {
+        "description": "No OAuth login snapshot found for {email}. Log in through the identity provider (button above) and reload this page.",
+        "title": "No captured claims yet"
+      },
+      "rerun": {
+        "label": "Re-run OAuth login"
+      },
+      "resolved": {
+        "subtitle": "The claim-mapped directory profile that actually feeds the Organization Profile prompt block and {placeholder} placeholders.",
+        "title": "Resolved profile (used for prompts)"
+      },
+      "snapshot": {
+        "capturedAt": {
+          "label": "Captured at: {timestamp}"
+        },
+        "provider": {
+          "label": "Provider: {provider}"
+        },
+        "tokenFields": {
+          "label": "Token response fields: {fields}"
+        },
+        "user": {
+          "label": "User: {email}"
+        }
+      },
+      "userinfo": {
+        "subtitle": "Response of the OIDC userinfo endpoint for your access token.",
+        "title": "userinfo claims"
+      }
+    },
+    "openapiActions": {
+      "header": {
+        "description": "Connect OpenAPI servers to add custom actions and tools for your agents."
+      }
+    },
     "perUserUsage": {
       "panel": {
         "description": "{start} – {end} · Costs are calculated from recorded model usage.",
@@ -1831,6 +3715,62 @@
           "description": "No usage recorded for this period."
         },
         "title": "Users"
+      }
+    },
+    "scim": {
+      "card": {
+        "connected": {
+          "label": "Connected"
+        },
+        "description": "Connect your identity provider to import and sync users and groups.",
+        "generate": {
+          "label": "Generate SCIM Token"
+        },
+        "regenerate": {
+          "label": "Regenerate Token"
+        },
+        "title": "SCIM Sync",
+        "waiting": {
+          "description": "Provide the SCIM key to your identity provider to begin syncing users and groups.",
+          "label": "Waiting for Connection"
+        }
+      },
+      "header": {
+        "description": "Sync users and groups via System for Cross-domain Identity Management (SCIM) protocol.",
+        "title": "SCIM"
+      },
+      "loadFailed": {
+        "error": "Failed to load SCIM token status."
+      },
+      "modal": {
+        "copied": {
+          "message": "Token copied to clipboard"
+        },
+        "copyFailed": {
+          "error": "Failed to copy token"
+        },
+        "regenerate": {
+          "description": "Your current SCIM token will be revoked and a new token will be generated. You will need to update the token on your identity provider before SCIM provisioning will resume.",
+          "submit": {
+            "label": "Regenerate Token"
+          },
+          "title": "Regenerate SCIM Token"
+        },
+        "token": {
+          "copy": {
+            "label": "Copy Token"
+          },
+          "description": "Save this key before continuing. It won't be shown again.",
+          "download": {
+            "label": "Download"
+          },
+          "title": "SCIM Token"
+        }
+      },
+      "toasts": {
+        "generateFailed": "Failed to generate token: {detail}",
+        "genericError": "Something went wrong. Please try again.",
+        "regenerated": "Token regenerated"
       }
     },
     "security": {
@@ -2213,6 +4153,393 @@
         }
       }
     },
+    "slackBots": {
+      "channelConfig": {
+        "createError": {
+          "toast": "Error creating OnyxBot config - {error}"
+        },
+        "updateError": {
+          "toast": "Error updating OnyxBot config - {error}"
+        }
+      },
+      "channels": {
+        "deleteError": {
+          "toast": "Failed to delete Slack bot config - {error}"
+        },
+        "deleted": {
+          "toast": "Slack bot config \"{configId}\" deleted"
+        },
+        "editDefaultButton": {
+          "label": "Edit Default Configuration"
+        },
+        "newConfigButton": {
+          "label": "New Channel Configuration"
+        },
+        "section": {
+          "title": "Channel-Specific Configurations"
+        },
+        "table": {
+          "actions": {
+            "header": "Actions"
+          },
+          "assistant": {
+            "header": "Assistant"
+          },
+          "channel": {
+            "header": "Channel"
+          },
+          "documentSets": {
+            "header": "Document Sets"
+          },
+          "empty": {
+            "message": "No channel-specific configurations. Add a new configuration to customize behavior for specific channels."
+          }
+        }
+      },
+      "deleteModal": {
+        "confirmButton": {
+          "label": "Delete"
+        },
+        "error": {
+          "toast": "Failed to delete Slack bot"
+        },
+        "message": "Are you sure you want to delete this Slack bot? This action cannot be undone.",
+        "success": {
+          "toast": "Slack bot deleted successfully"
+        },
+        "title": "Delete Slack Bot"
+      },
+      "edit": {
+        "header": {
+          "title": "Edit Slack Bot"
+        }
+      },
+      "editChannel": {
+        "channel": {
+          "header": {
+            "title": "Edit Slack Channel Config"
+          }
+        },
+        "default": {
+          "header": {
+            "title": "Edit Default Slack Config"
+          }
+        }
+      },
+      "error": {
+        "channelConfigNotFound": {
+          "message": "Did not find Slack Channel config with ID: {id}"
+        },
+        "fetchAgents": {
+          "message": "Failed to fetch agents - {error}"
+        },
+        "fetchBot": {
+          "message": "Failed to fetch Slack Bot {botId}: {error}"
+        },
+        "fetchChannels": {
+          "message": "Failed to fetch Slack Channels - {error}"
+        },
+        "fetchDocumentSets": {
+          "message": "Failed to fetch document sets - {error}"
+        },
+        "generic": {
+          "title": "Something went wrong :("
+        },
+        "unknown": {
+          "message": "unknown error"
+        },
+        "unknownOccurred": {
+          "message": "An unknown error occurred"
+        }
+      },
+      "form": {
+        "agent": {
+          "placeholder": "Search for an agent..."
+        },
+        "answerValidity": {
+          "label": "Only respond if citations found",
+          "tooltip": "If set, will only answer questions where the model successfully produces citations"
+        },
+        "cancelButton": {
+          "label": "Cancel"
+        },
+        "channelName": {
+          "label": "Slack Channel Name",
+          "placeholder": "Enter channel name (e.g., general, support)",
+          "subtext": "Enter the name of the Slack channel (without the # symbol)"
+        },
+        "createButton": {
+          "label": "Create"
+        },
+        "defaultConfig": {
+          "badge": "Default Configuration",
+          "description": "This default configuration will apply to all channels and direct messages (DMs) in your Slack workspace."
+        },
+        "disableDefault": {
+          "label": "Disable Default Configuration",
+          "warning": "Warning: Disabling the default configuration means OnyxBot won't respond in Slack channels unless they are explicitly configured. Additionally, OnyxBot will not respond to DMs."
+        },
+        "documentSets": {
+          "autoSyncedDisabled": {
+            "tooltip": "Unable to use this document set because it contains a connector with auto-sync permissions. OnyxBot's responses in this channel are visible to all Slack users, so mirroring the asker's permissions could inadvertently expose private information."
+          },
+          "autoSyncedNote": {
+            "text": "These document sets cannot be attached as they have auto-synced docs:"
+          },
+          "description": "Select the document sets OnyxBot will use while answering questions in Slack.",
+          "hideUnselectableButton": {
+            "label": "Hide un-selectable document sets"
+          },
+          "incompatibleHidden": {
+            "text": "Some incompatible document sets are hidden."
+          },
+          "incompatibleVisible": {
+            "text": "Some incompatible document sets are visible."
+          },
+          "viewAllButton": {
+            "label": "View all document sets"
+          }
+        },
+        "followUpTags": {
+          "label": "(Optional) Users / Groups to Tag",
+          "subtext": "The Slack users / groups we should tag if the user clicks the \"Still need help?\" button. If no emails are provided, we will not tag anyone and will just react with a 🆘 emoji to the original message."
+        },
+        "generalConfig": {
+          "section": {
+            "title": "General Configuration"
+          }
+        },
+        "isEphemeral": {
+          "label": "Respond to user in a private (ephemeral) message",
+          "tooltip": "If set, OnyxBot will respond only to the user in a private (ephemeral) message. If you also chose 'Search' Agent above, selecting this option will make documents that are private to the user available for their queries."
+        },
+        "knowledgeSource": {
+          "allPublic": {
+            "label": "All Public Knowledge",
+            "sublabel": "Let OnyxBot respond based on information from all public connectors"
+          },
+          "documentSets": {
+            "label": "Specific Document Sets",
+            "sublabel": "Control which documents to use for answering questions"
+          },
+          "label": "Knowledge Source",
+          "nonSearchAgent": {
+            "label": "Non-Search Agent",
+            "sublabel": "Chat with an agent that does not use documents"
+          },
+          "searchAgent": {
+            "label": "Search Agent",
+            "sublabel": "Control both the documents and the prompt to use for answering questions"
+          }
+        },
+        "nonSearchAgent": {
+          "description": "Select the non-search agent OnyxBot will use while answering questions in Slack."
+        },
+        "privacyAlert": {
+          "connectors": {
+            "title": "Relevant Connectors:"
+          },
+          "description": "Please note that if the private (ephemeral) response is *not selected*, only public documents within the selected document sets will be accessible for user queries. If the private (ephemeral) response *is selected*, user quries can also leverage documents that the user has already been granted access to. Note that users will be able to share the response with others in the channel, so please ensure that this is aligned with your company sharing policies.",
+          "title": "Privacy Alert"
+        },
+        "questionmarkPrefilter": {
+          "label": "Only respond to questions",
+          "tooltip": "If set, OnyxBot will only respond to messages that contain a question mark"
+        },
+        "removedDocumentSets": {
+          "toast": "We removed one or more document sets from your selection because they are no longer valid. Please review and update your configuration."
+        },
+        "respondMemberGroupList": {
+          "disabled": {
+            "tooltip": "Disabled while 'Respond to user in a private (ephemeral) message' is on — ephemeral responses target a single user only."
+          },
+          "label": "(Optional) Respond to Certain Users / Groups",
+          "subtext": "If specified, only these users / groups can invoke OnyxBot in this channel, and responses are visible only to them."
+        },
+        "respondTagOnly": {
+          "label": "Respond to @OnyxBot Only",
+          "tooltip": "If set, OnyxBot will only respond when directly tagged"
+        },
+        "respondToBots": {
+          "label": "Respond to Bot messages",
+          "tooltip": "If not set, OnyxBot will always ignore messages from Bots"
+        },
+        "responseType": {
+          "detailed": {
+            "label": "Detailed"
+          },
+          "label": "Answer Type",
+          "standard": {
+            "label": "Standard"
+          },
+          "tooltip": "Controls the format of OnyxBot's responses."
+        },
+        "searchAgent": {
+          "description": "Select the search-enabled agent OnyxBot will use while answering questions in Slack."
+        },
+        "searchConfig": {
+          "section": {
+            "title": "Search Configuration"
+          }
+        },
+        "showContinueInWebUi": {
+          "label": "Show Continue in Web UI button",
+          "tooltip": "If set, will show a button at the bottom of the response that allows the user to continue the conversation in the Onyx Web UI"
+        },
+        "stillNeedHelp": {
+          "label": "Give a \"Still need help?\" button",
+          "section": {
+            "prompt": "Configure Still Need Help Button"
+          },
+          "tooltip": "OnyxBot's response will include a button at the bottom of the response that asks the user if they still need help."
+        },
+        "syncEnabledAgents": {
+          "hideButton": {
+            "label": "Hide un-selectable agents"
+          },
+          "listLabel": "Un-selectable agents:",
+          "note": "Note: Some of your agents have auto-synced connectors in their document sets. You cannot select these agents as they will not be able to answer questions in Slack.",
+          "viewAllButton": {
+            "label": "View all agents"
+          }
+        },
+        "updateButton": {
+          "label": "Update"
+        },
+        "userOrGroup": {
+          "placeholder": "User email or user group name..."
+        }
+      },
+      "intro": {
+        "autoAnswer": {
+          "item": "Setup OnyxBot to automatically answer questions in certain channels."
+        },
+        "description": "Setup Slack bots that connect to Onyx. Once setup, you will be able to ask questions to Onyx directly from Slack. Additionally, you can:",
+        "directMessage": {
+          "item": "Directly message OnyxBot to search just as you would in the web UI."
+        },
+        "docsPrompt": {
+          "text": "Follow the <link>guide</link> found in the Onyx documentation to get started!"
+        },
+        "documentSets": {
+          "item": "Choose which document sets OnyxBot should answer from, depending on the channel the question is being asked."
+        }
+      },
+      "list": {
+        "error": {
+          "title": "Error loading apps"
+        }
+      },
+      "newBot": {
+        "header": {
+          "title": "New Slack Bot"
+        }
+      },
+      "newBotButton": {
+        "label": "New Slack Bot"
+      },
+      "newChannel": {
+        "header": {
+          "title": "Configure OnyxBot for Slack Channel"
+        }
+      },
+      "table": {
+        "channelCount": {
+          "header": "Channel Count"
+        },
+        "defaultConfig": {
+          "header": "Default Config"
+        },
+        "defaultSet": {
+          "badge": "Default Set"
+        },
+        "disabled": {
+          "badge": "Disabled"
+        },
+        "empty": {
+          "message": "Please add a New Slack Bot to begin chatting with Onyx!"
+        },
+        "enabled": {
+          "badge": "Enabled"
+        },
+        "name": {
+          "header": "Name"
+        },
+        "status": {
+          "header": "Status"
+        }
+      },
+      "tokensForm": {
+        "appToken": {
+          "label": "Slack App Token"
+        },
+        "botToken": {
+          "label": "Slack Bot Token"
+        },
+        "createButton": {
+          "label": "Create"
+        },
+        "createError": {
+          "toast": "Error creating Slack Bot - {error}"
+        },
+        "created": {
+          "toast": "Successfully created Slack Bot!"
+        },
+        "docsPrompt": {
+          "text": "Please refer to our <link>guide</link> if you are not sure how to get these tokens!"
+        },
+        "invalidAppToken": {
+          "message": "Slack App Token is invalid"
+        },
+        "invalidBotToken": {
+          "message": "Slack Bot Token is invalid"
+        },
+        "name": {
+          "label": "Name This Slack Bot:"
+        },
+        "updateButton": {
+          "label": "Update"
+        },
+        "updateError": {
+          "toast": "Error updating Slack Bot - {error}"
+        },
+        "updated": {
+          "toast": "Successfully updated Slack Bot!"
+        },
+        "userToken": {
+          "label": "Slack User Token (Optional)",
+          "subtext": "Optional: User OAuth token for enhanced private channel access"
+        }
+      },
+      "updateForm": {
+        "deleteButton": {
+          "label": "Delete"
+        },
+        "enabledCheckbox": {
+          "label": "Enabled"
+        },
+        "fieldUpdateFailed": {
+          "toast": "Failed to update connector {field}"
+        },
+        "fieldUpdated": {
+          "toast": "Connector {field} updated successfully"
+        },
+        "updateTokensButton": {
+          "label": "Update Tokens"
+        }
+      },
+      "validation": {
+        "agentRequired": {
+          "message": "An agent is required when using the 'Agent' knowledge source"
+        },
+        "channelNameRequired": {
+          "message": "Channel Name is required"
+        },
+        "documentSetRequired": {
+          "message": "At least one Document Set is required when using the 'Document Sets' knowledge source"
+        }
+      }
+    },
     "ssoProviders": {
       "addProvider": {
         "button": {
@@ -2239,6 +4566,180 @@
       },
       "toasts": {
         "unexpectedError": "Unexpected error occurred."
+      }
+    },
+    "systemInfo": {
+      "backendVersion": {
+        "label": "Backend Version: "
+      },
+      "version": {
+        "title": "Version"
+      },
+      "webVersion": {
+        "label": "Web Version: "
+      }
+    },
+    "tokenRateLimits": {
+      "limits": {
+        "budget": {
+          "both": "Up to {cost} or {tokens} tokens",
+          "cost": "Up to {cost}",
+          "none": "No budget set",
+          "tokens": "Up to {tokens} tokens"
+        },
+        "cadence": {
+          "label": "{days, plural, one {Resets every day at midnight UTC} other {Resets every # days at midnight UTC}}"
+        },
+        "deleteFailed": {
+          "error": "Failed to delete token rate limit"
+        },
+        "empty": {
+          "message": "No limits yet. Create a spending limit to cap usage."
+        },
+        "loadFailed": {
+          "error": "Failed to load token rate limits"
+        },
+        "row": {
+          "delete": {
+            "ariaLabel": "Delete {label}",
+            "tooltip": "Delete limit"
+          },
+          "disable": {
+            "ariaLabel": "Disable {label}"
+          },
+          "enable": {
+            "ariaLabel": "Enable {label}"
+          },
+          "label": "{budget}, {cadence}"
+        },
+        "updateFailed": {
+          "error": "Failed to update token rate limit"
+        }
+      },
+      "modal": {
+        "cancel": {
+          "label": "Cancel"
+        },
+        "costBudget": {
+          "description": "Maximum spend per reset period. Set a cost budget, a token budget, or both.",
+          "placeholder": "No cost limit",
+          "title": "Cost budget",
+          "unit": "USD"
+        },
+        "errors": {
+          "budgetRequired": "Enter a cost budget, a token budget, or both",
+          "costMax": "The maximum cost budget is ${amount, number}",
+          "costMinCents": "Cost budget must be at least $0.01",
+          "costMoreThanZero": "Cost budget must be greater than 0",
+          "groupRequired": "Select a user group",
+          "periodInteger": "Enter a whole number of days",
+          "periodMin": "Use at least 1 day",
+          "periodRequired": "Enter a reset period",
+          "scopeRequired": "Target Scope is a required field",
+          "tokenIncrement": "Use increments of 1,000 tokens",
+          "tokenInteger": "Enter a whole number of tokens",
+          "tokenMax": "The maximum token budget is 1 trillion",
+          "tokenMin": "Use at least 1,000 tokens"
+        },
+        "groupMenu": {
+          "empty": "No user groups yet. Create one under Users & Groups."
+        },
+        "groupPicker": {
+          "placeholder": "Choose a group"
+        },
+        "header": {
+          "title": "Create spending limit"
+        },
+        "period": {
+          "description": "Budgets reset at midnight UTC",
+          "title": "Reset period",
+          "unit": "days"
+        },
+        "scope": {
+          "caption": {
+            "global": "Everyone in the workspace shares one budget.",
+            "group": "Members of {group} share one budget.",
+            "groupUnchosen": "Members of the chosen group share one budget.",
+            "user": "Each user gets their own budget."
+          },
+          "title": "Applies to"
+        },
+        "scopeOptions": {
+          "global": {
+            "title": "Workspace"
+          },
+          "user": {
+            "title": "Per user"
+          },
+          "userGroup": {
+            "title": "User group"
+          }
+        },
+        "submit": {
+          "label": "Create limit"
+        },
+        "summary": {
+          "budget": {
+            "both": "{cost} or {tokens} tokens",
+            "tokens": "{tokens} tokens"
+          },
+          "global": "{days, plural, one {Everyone in the workspace shares up to {budget} every day. Usage is blocked until the period resets.} other {Everyone in the workspace shares up to {budget} every # days. Usage is blocked until the period resets.}}",
+          "group": "{days, plural, one {Members of {group} share up to {budget} every day. Usage is blocked until the period resets.} other {Members of {group} share up to {budget} every # days. Usage is blocked until the period resets.}}",
+          "groupUnchosen": "{days, plural, one {Members of the chosen group share up to {budget} every day. Usage is blocked until the period resets.} other {Members of the chosen group share up to {budget} every # days. Usage is blocked until the period resets.}}",
+          "user": "{days, plural, one {Each user can spend up to {budget} every day. Usage is blocked until the period resets.} other {Each user can spend up to {budget} every # days. Usage is blocked until the period resets.}}"
+        },
+        "tokenBudget": {
+          "description": "Maximum tokens per reset period",
+          "placeholder": "No token limit",
+          "title": "Token budget",
+          "unit": "tokens"
+        },
+        "userGroup": {
+          "description": "Choose which group shares this budget",
+          "title": "User group"
+        }
+      },
+      "panel": {
+        "create": {
+          "label": "Create spending limit"
+        },
+        "createFailed": {
+          "error": "Failed to create spending limit"
+        },
+        "created": {
+          "message": "Spending limit created!"
+        },
+        "embedded": {
+          "description": "Set guardrails for workspace, user, and group usage. Limits can be enabled or disabled without deleting their configuration.",
+          "title": "Manage spending limits"
+        },
+        "global": {
+          "description": "Global limits apply to all users, user groups, and API keys. When the global limit is reached, no more tokens can be spent."
+        },
+        "intro": {
+          "description": "Spending limits help you control how many tokens can be spent in a given time period.",
+          "groupLimit": "Set limits for user groups to control spend for teams.",
+          "toggleLimit": "Enable and disable limits as needed.",
+          "userLimit": "Set limits for users so no single user can spend too much.",
+          "workspaceLimit": "Set a workspace-wide limit for your team's overall spend."
+        },
+        "tabs": {
+          "global": {
+            "name": "Global"
+          },
+          "groups": {
+            "name": "Groups"
+          },
+          "users": {
+            "name": "Users"
+          }
+        },
+        "user": {
+          "description": "User limits apply to each user individually. When a user reaches a limit, they are temporarily blocked from spending tokens."
+        },
+        "userGroup": {
+          "description": "Group limits apply to all users in a group. If a user belongs to multiple groups, the most permissive limit applies."
+        }
       }
     },
     "tracing": {

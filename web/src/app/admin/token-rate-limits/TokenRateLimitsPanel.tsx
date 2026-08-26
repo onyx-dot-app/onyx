@@ -1,6 +1,7 @@
 "use client";
 
 import SimpleTabs from "@/refresh-components/SimpleTabs";
+import { useTranslations } from "next-intl";
 import { Button, Text } from "@opal/components";
 import { toast } from "@opal/layouts";
 import { useState } from "react";
@@ -22,14 +23,6 @@ import CreateRateLimitModal from "./CreateRateLimitModal";
 const GLOBAL_TOKEN_FETCH_URL = SWR_KEYS.globalTokenRateLimits;
 const USER_TOKEN_FETCH_URL = SWR_KEYS.userTokenRateLimits;
 const USER_GROUP_FETCH_URL = SWR_KEYS.userGroupTokenRateLimits;
-
-const GLOBAL_DESCRIPTION =
-  "Global limits apply to all users, user groups, and API keys. When the global limit is reached, no more tokens can be spent.";
-const USER_DESCRIPTION =
-  "User limits apply to each user individually. When a user reaches a limit, they are temporarily blocked from spending tokens.";
-const USER_GROUP_DESCRIPTION =
-  "Group limits apply to all users in a group. If a user belongs to multiple groups, the most permissive limit applies.";
-const CREATE_ERROR_MESSAGE = "Failed to create spending limit";
 
 async function createTokenRateLimit(
   targetScope: Scope,
@@ -63,6 +56,7 @@ interface TokenRateLimitsPanelProps {
 export default function TokenRateLimitsPanel({
   embedded = false,
 }: TokenRateLimitsPanelProps) {
+  const t = useTranslations("admin.tokenRateLimits");
   const [tabIndex, setTabIndex] = useState(0);
   const [modalIsOpen, setModalIsOpen] = useState(false);
   const enterpriseTier = useTierAtLeast(Tier.ENTERPRISE);
@@ -96,12 +90,12 @@ export default function TokenRateLimitsPanel({
         groupId
       );
       setModalIsOpen(false);
-      toast.success("Spending limit created!");
+      toast.success(t("panel.created.message"));
       updateTable(targetScope);
     } catch (error) {
       console.error("Failed to create spending limit:", error);
       toast.error(
-        error instanceof Error ? error.message : CREATE_ERROR_MESSAGE
+        error instanceof Error ? error.message : t("panel.createFailed.error")
       );
     }
   }
@@ -110,40 +104,30 @@ export default function TokenRateLimitsPanel({
     <Section alignItems="stretch" justifyContent="start" height="auto">
       {embedded ? (
         <Section gap={1} alignItems="start" justifyContent="start">
-          <Text font="heading-h3">Manage spending limits</Text>
+          <Text font="heading-h3">{t("panel.embedded.title")}</Text>
           <Text font="secondary-body" color="text-03">
-            Set guardrails for workspace, user, and group usage. Limits can be
-            enabled or disabled without deleting their configuration.
+            {t("panel.embedded.description")}
           </Text>
         </Section>
       ) : (
         <>
-          <Text as="p">
-            Spending limits help you control how many tokens can be spent in a
-            given time period.
-          </Text>
+          <Text as="p">{t("panel.intro.description")}</Text>
           <ul className="list-disc ml-4">
             <li>
-              <Text as="p">
-                Set a workspace-wide limit for your team&apos;s overall spend.
-              </Text>
+              <Text as="p">{t("panel.intro.workspaceLimit")}</Text>
             </li>
             {enterpriseTier && (
               <>
                 <li>
-                  <Text as="p">
-                    Set limits for users so no single user can spend too much.
-                  </Text>
+                  <Text as="p">{t("panel.intro.userLimit")}</Text>
                 </li>
                 <li>
-                  <Text as="p">
-                    Set limits for user groups to control spend for teams.
-                  </Text>
+                  <Text as="p">{t("panel.intro.groupLimit")}</Text>
                 </li>
               </>
             )}
             <li>
-              <Text as="p">Enable and disable limits as needed.</Text>
+              <Text as="p">{t("panel.intro.toggleLimit")}</Text>
             </li>
           </ul>
         </>
@@ -154,39 +138,39 @@ export default function TokenRateLimitsPanel({
         prominence="secondary"
         onClick={() => setModalIsOpen(true)}
       >
-        Create spending limit
+        {t("panel.create.label")}
       </Button>
 
       {enterpriseTier ? (
         <SimpleTabs
           tabs={{
             "0": {
-              name: "Global",
+              name: t("panel.tabs.global.name"),
               icon: SvgGlobe,
               content: (
                 <GenericTokenRateLimitTable
                   fetchUrl={GLOBAL_TOKEN_FETCH_URL}
-                  description={GLOBAL_DESCRIPTION}
+                  description={t("panel.global.description")}
                 />
               ),
             },
             "1": {
-              name: "Users",
+              name: t("panel.tabs.users.name"),
               icon: SvgUser,
               content: (
                 <GenericTokenRateLimitTable
                   fetchUrl={USER_TOKEN_FETCH_URL}
-                  description={USER_DESCRIPTION}
+                  description={t("panel.user.description")}
                 />
               ),
             },
             "2": {
-              name: "Groups",
+              name: t("panel.tabs.groups.name"),
               icon: SvgUsers,
               content: (
                 <GenericTokenRateLimitTable
                   fetchUrl={USER_GROUP_FETCH_URL}
-                  description={USER_GROUP_DESCRIPTION}
+                  description={t("panel.userGroup.description")}
                   responseMapper={(data: Record<string, TokenRateLimit[]>) =>
                     Object.entries(data).flatMap(([groupName, elements]) =>
                       elements.map((element) => ({
@@ -205,7 +189,7 @@ export default function TokenRateLimitsPanel({
       ) : (
         <GenericTokenRateLimitTable
           fetchUrl={GLOBAL_TOKEN_FETCH_URL}
-          description={GLOBAL_DESCRIPTION}
+          description={t("panel.global.description")}
         />
       )}
 

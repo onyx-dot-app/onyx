@@ -11,6 +11,7 @@ import {
   Text,
 } from "@opal/components";
 import React, { useRef } from "react";
+import { useLocale, useTranslations } from "next-intl";
 import { Form, Formik, useField, useFormikContext } from "formik";
 import { Scope } from "./types";
 import {
@@ -44,18 +45,6 @@ interface ScopeOptionConfig {
   value: Scope;
   icon: IconFunctionComponent;
   title: string;
-}
-
-const SCOPE_OPTIONS: ScopeOptionConfig[] = [
-  { value: Scope.GLOBAL, icon: SvgGlobe, title: "Workspace" },
-  { value: Scope.USER, icon: SvgUser, title: "Per user" },
-  { value: Scope.USER_GROUP, icon: SvgUsers, title: "User group" },
-];
-
-function scopeSubject(scope: Scope, groupName?: string): string {
-  if (scope === Scope.GLOBAL) return "Everyone in the workspace";
-  if (scope === Scope.USER) return "Each user";
-  return groupName ? `Members of ${groupName}` : "Members of the chosen group";
 }
 
 function handleRadioOptionKeyDown(
@@ -170,6 +159,8 @@ function GroupMenuContent({
   selectedGroupId,
   onSelectGroup,
 }: GroupMenuContentProps) {
+  const t = useTranslations("admin.tokenRateLimits");
+
   return (
     <Popover.Content align="start" side="bottom" width="lg">
       <Popover.Menu>
@@ -177,7 +168,7 @@ function GroupMenuContent({
           ? [
               <div className="p-2" key="empty">
                 <Text font="secondary-body" color="text-03" as="p">
-                  No user groups yet. Create one under Users &amp; Groups.
+                  {t("modal.groupMenu.empty")}
                 </Text>
               </div>,
             ]
@@ -227,14 +218,14 @@ function GroupScopeOption({
 }
 
 function TokenBudgetField() {
+  const t = useTranslations("admin.tokenRateLimits");
+  const locale = useLocale();
   const [field, meta, helpers] = useField<string>("token_budget");
   const inputRef = useRef<HTMLInputElement>(null);
   const digits = String(field.value ?? "")
     .replace(/\D/g, "")
     .slice(0, 15);
-  const formattedValue = digits
-    ? new Intl.NumberFormat("en-US").format(Number(digits))
-    : "";
+  const formattedValue = digits ? formatTokenCount(Number(digits), locale) : "";
 
   return (
     <InputTypeIn
@@ -245,7 +236,7 @@ function TokenBudgetField() {
       inputMode="numeric"
       pattern="[0-9,]*"
       maxLength={19}
-      placeholder="No token limit"
+      placeholder={t("modal.tokenBudget.placeholder")}
       onChange={(event) => {
         const input = event.target;
         const cursorPosition = input.selectionStart ?? input.value.length;
@@ -257,7 +248,7 @@ function TokenBudgetField() {
         void helpers.setValue(nextDigits);
 
         const nextFormatted = nextDigits
-          ? new Intl.NumberFormat("en-US").format(Number(nextDigits))
+          ? formatTokenCount(Number(nextDigits), locale)
           : "";
         let seenDigits = 0;
         let nextCursorPosition = nextFormatted.length;
@@ -280,7 +271,7 @@ function TokenBudgetField() {
       rightChildren={
         <div className="pr-1">
           <Text font="secondary-action" color="text-03" nowrap>
-            tokens
+            {t("modal.tokenBudget.unit")}
           </Text>
         </div>
       }
@@ -288,16 +279,11 @@ function TokenBudgetField() {
   );
 }
 
-function formatDollarBudgetInput(raw: string): string | null {
+/** Reads a budget field, ignoring blank, malformed, and non-positive input. */
+function parseBudgetInput(raw: string): number | null {
   const amount = Number(raw);
   if (raw === "" || !Number.isFinite(amount) || amount <= 0) return null;
-  return formatCurrency(amount);
-}
-
-function formatTokenBudgetInput(raw: string): string | null {
-  const amount = Number(raw);
-  if (raw === "" || !Number.isFinite(amount) || amount <= 0) return null;
-  return `${formatTokenCount(amount)} tokens`;
+  return amount;
 }
 
 interface GroupPickerProps {
@@ -311,13 +297,14 @@ function GroupPicker({
   selectedGroupId,
   onSelectGroup,
 }: GroupPickerProps) {
+  const t = useTranslations("admin.tokenRateLimits");
   const selectedGroup = groups.find((group) => group.value === selectedGroupId);
 
   return (
     <Popover>
       <Popover.Trigger asChild>
         <Button prominence="secondary" width="full">
-          {selectedGroup?.name ?? "Choose a group"}
+          {selectedGroup?.name ?? t("modal.groupPicker.placeholder")}
         </Button>
       </Popover.Trigger>
       <GroupMenuContent
@@ -334,27 +321,38 @@ interface LimitSummaryProps {
 }
 
 function LimitSummary({ groupName }: LimitSummaryProps) {
+  const t = useTranslations("admin.tokenRateLimits");
+  const locale = useLocale();
   const { values } = useFormikContext<RateLimitFormValues>();
 
   const period = Number(values.period_days);
   if (!Number.isInteger(period) || period < 1) return null;
 
-  const budgets = [
-    formatDollarBudgetInput(values.cost_budget_dollars),
-    formatTokenBudgetInput(values.token_budget),
-  ].filter((budget): budget is string => budget !== null);
-  if (budgets.length === 0) return null;
+  const costAmount = parseBudgetInput(values.cost_budget_dollars);
+  const tokenAmount = parseBudgetInput(values.token_budget);
+  const cost = costAmount === null ? null : formatCurrency(costAmount, locale);
+  const tokens =
+    tokenAmount === null ? null : formatTokenCount(tokenAmount, locale);
 
-  const budgetText = budgets.join(" or ");
-  const periodText = period === 1 ? "every day" : `every ${period} days`;
+  let budget: string;
+  if (cost !== null && tokens !== null) {
+    budget = t("modal.summary.budget.both", { cost, tokens });
+  } else if (cost !== null) {
+    budget = cost;
+  } else if (tokens !== null) {
+    budget = t("modal.summary.budget.tokens", { tokens });
+  } else {
+    return null;
+  }
 
-  const subject = scopeSubject(values.target_scope, groupName);
-  const subjectText =
-    values.target_scope === Scope.USER
-      ? `${subject} can spend`
-      : `${subject} share${values.target_scope === Scope.GLOBAL ? "s" : ""}`;
-
-  const summary = `${subjectText} up to ${budgetText} ${periodText}. Usage is blocked until the period resets.`;
+  const summary =
+    values.target_scope === Scope.GLOBAL
+      ? t("modal.summary.global", { days: period, budget })
+      : values.target_scope === Scope.USER
+        ? t("modal.summary.user", { days: period, budget })
+        : groupName
+          ? t("modal.summary.group", { days: period, budget, group: groupName })
+          : t("modal.summary.groupUnchosen", { days: period, budget });
 
   return (
     <div className="rounded-08 bg-background-tint-01 p-2">
@@ -386,17 +384,36 @@ export default function CreateRateLimitModal({
   forSpecificScope,
   forSpecificUserGroup,
 }: CreateRateLimitModalProps) {
+  const t = useTranslations("admin.tokenRateLimits");
   const { data: shareableGroupsData } = useShareableGroups();
   const modalUserGroups = (shareableGroupsData ?? []).map((userGroup) => ({
     name: userGroup.name,
     value: userGroup.id,
   }));
 
+  const scopeOptions: ScopeOptionConfig[] = [
+    {
+      value: Scope.GLOBAL,
+      icon: SvgGlobe,
+      title: t("modal.scopeOptions.global.title"),
+    },
+    {
+      value: Scope.USER,
+      icon: SvgUser,
+      title: t("modal.scopeOptions.user.title"),
+    },
+    {
+      value: Scope.USER_GROUP,
+      icon: SvgUsers,
+      title: t("modal.scopeOptions.userGroup.title"),
+    },
+  ];
+
   return (
     <Modal open={isOpen} onOpenChange={setIsOpen}>
       <Modal.Content width="sm" height="fit">
         <Modal.Header
-          title="Create spending limit"
+          title={t("modal.header.title")}
           onClose={() => setIsOpen(false)}
         />
         <Formik<RateLimitFormValues>
@@ -410,30 +427,28 @@ export default function CreateRateLimitModal({
           }}
           validationSchema={Yup.object().shape({
             period_days: Yup.number()
-              .required("Enter a reset period")
-              .integer("Enter a whole number of days")
-              .min(1, "Use at least 1 day"),
+              .required(t("modal.errors.periodRequired"))
+              .integer(t("modal.errors.periodInteger"))
+              .min(1, t("modal.errors.periodMin")),
             cost_budget_dollars: Yup.number()
               .transform((value, original) =>
                 original === "" ? undefined : value
               )
-              .moreThan(0, "Cost budget must be greater than 0")
+              .moreThan(0, t("modal.errors.costMoreThanZero"))
               .max(
                 MAX_COST_BUDGET_DOLLARS,
-                `The maximum cost budget is $${new Intl.NumberFormat("en-US").format(MAX_COST_BUDGET_DOLLARS)}`
+                t("modal.errors.costMax", { amount: MAX_COST_BUDGET_DOLLARS })
               )
               .test(
                 "minimum-cents",
-                "Cost budget must be at least $0.01",
+                t("modal.errors.costMinCents"),
                 (value) => value == null || Math.round(value * 100) > 0
               )
               .when("token_budget", {
                 is: (value: string | undefined) =>
                   value === undefined || value === "",
                 then: (schema) =>
-                  schema.required(
-                    "Enter a cost budget, a token budget, or both"
-                  ),
+                  schema.required(t("modal.errors.budgetRequired")),
                 otherwise: (schema) => schema.notRequired(),
               }),
             token_budget: Yup.number()
@@ -441,20 +456,20 @@ export default function CreateRateLimitModal({
                 original === "" ? undefined : value
               )
               .notRequired()
-              .integer("Enter a whole number of tokens")
-              .min(1_000, "Use at least 1,000 tokens")
-              .max(MAX_TOKEN_BUDGET, "The maximum token budget is 1 trillion")
+              .integer(t("modal.errors.tokenInteger"))
+              .min(1_000, t("modal.errors.tokenMin"))
+              .max(MAX_TOKEN_BUDGET, t("modal.errors.tokenMax"))
               .test(
                 "whole-thousands",
-                "Use increments of 1,000 tokens",
+                t("modal.errors.tokenIncrement"),
                 (value) => value == null || value % 1_000 === 0
               ),
             target_scope: Yup.string().required(
-              "Target Scope is a required field"
+              t("modal.errors.scopeRequired")
             ),
             user_group_id: Yup.string().test(
               "user_group_id",
-              "Select a user group",
+              t("modal.errors.groupRequired"),
               (value, context) => {
                 return (
                   context.parent.target_scope !== "user_group" ||
@@ -488,16 +503,16 @@ export default function CreateRateLimitModal({
             const selectedGroupName = modalUserGroups.find(
               (group) => group.value === values.user_group_id
             )?.name;
-            const scopeSubjectLabel = scopeSubject(
-              values.target_scope,
-              selectedGroupName
-            );
             const scopeCaption =
-              values.target_scope === Scope.USER
-                ? `${scopeSubjectLabel} gets their own budget.`
-                : `${scopeSubjectLabel} share${
-                    values.target_scope === Scope.GLOBAL ? "s" : ""
-                  } one budget.`;
+              values.target_scope === Scope.GLOBAL
+                ? t("modal.scope.caption.global")
+                : values.target_scope === Scope.USER
+                  ? t("modal.scope.caption.user")
+                  : selectedGroupName
+                    ? t("modal.scope.caption.group", {
+                        group: selectedGroupName,
+                      })
+                    : t("modal.scope.caption.groupUnchosen");
 
             return (
               <Form className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -505,15 +520,15 @@ export default function CreateRateLimitModal({
                   <Section alignItems="stretch" height="auto" gap={4}>
                     {!forSpecificScope && (
                       <InputVertical
-                        title="Applies to"
+                        title={t("modal.scope.title")}
                         subDescription={scopeCaption}
                       >
                         <div
                           role="radiogroup"
-                          aria-label="Applies to"
+                          aria-label={t("modal.scope.title")}
                           className="grid w-full grid-cols-3 gap-1"
                         >
-                          {SCOPE_OPTIONS.map((option) =>
+                          {scopeOptions.map((option) =>
                             option.value === Scope.USER_GROUP &&
                             forSpecificUserGroup === undefined ? (
                               <GroupScopeOption
@@ -558,8 +573,8 @@ export default function CreateRateLimitModal({
                     {forSpecificScope === Scope.USER_GROUP &&
                       forSpecificUserGroup === undefined && (
                         <InputVertical
-                          title="User group"
-                          description="Choose which group shares this budget"
+                          title={t("modal.userGroup.title")}
+                          description={t("modal.userGroup.description")}
                         >
                           <GroupPicker
                             groups={modalUserGroups}
@@ -578,14 +593,14 @@ export default function CreateRateLimitModal({
 
                     <InputVertical
                       withLabel="cost_budget_dollars"
-                      title="Cost budget"
-                      description="Maximum spend per reset period. Set a cost budget, a token budget, or both."
+                      title={t("modal.costBudget.title")}
+                      description={t("modal.costBudget.description")}
                     >
                       <InputTypeInField
                         name="cost_budget_dollars"
                         inputMode="decimal"
                         prefixText="$"
-                        placeholder="No cost limit"
+                        placeholder={t("modal.costBudget.placeholder")}
                         rightChildren={
                           <div className="pr-1">
                             <Text
@@ -593,7 +608,7 @@ export default function CreateRateLimitModal({
                               color="text-03"
                               nowrap
                             >
-                              USD
+                              {t("modal.costBudget.unit")}
                             </Text>
                           </div>
                         }
@@ -602,16 +617,16 @@ export default function CreateRateLimitModal({
 
                     <InputVertical
                       withLabel="token_budget"
-                      title="Token budget"
-                      description="Maximum tokens per reset period"
+                      title={t("modal.tokenBudget.title")}
+                      description={t("modal.tokenBudget.description")}
                     >
                       <TokenBudgetField />
                     </InputVertical>
 
                     <InputVertical
                       withLabel="period_days"
-                      title="Reset period"
-                      description="Budgets reset at midnight UTC"
+                      title={t("modal.period.title")}
+                      description={t("modal.period.description")}
                     >
                       <InputTypeInField
                         name="period_days"
@@ -624,7 +639,7 @@ export default function CreateRateLimitModal({
                               color="text-03"
                               nowrap
                             >
-                              days
+                              {t("modal.period.unit")}
                             </Text>
                           </div>
                         }
@@ -641,10 +656,10 @@ export default function CreateRateLimitModal({
                     type="button"
                     onClick={() => setIsOpen(false)}
                   >
-                    Cancel
+                    {t("modal.cancel.label")}
                   </Button>
                   <Button disabled={isSubmitting} type="submit">
-                    Create limit
+                    {t("modal.submit.label")}
                   </Button>
                 </Modal.Footer>
               </Form>
