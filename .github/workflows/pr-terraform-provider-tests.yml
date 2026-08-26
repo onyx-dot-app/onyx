@@ -118,8 +118,14 @@ jobs:
 
       - name: Fail on uncommitted docs changes
         working-directory: terraform-provider-onyx
+        # `git status --porcelain`, not `git diff`: a new resource's page is
+        # generated untracked, and git diff does not see untracked files, so the
+        # likeliest drift of all would pass silently.
         run: |
-          if ! git diff --exit-code docs/; then
+          drift=$(git status --porcelain -- docs/)
+          if [ -n "${drift}" ]; then
+            echo "${drift}"
+            git diff -- docs/ || true
             echo "::error::docs/ is out of date -- run 'go generate .' in terraform-provider-onyx/ and commit the result"
             exit 1
           fi
@@ -188,7 +194,9 @@ jobs:
       - volume=100gb
       - ${{ format('run-id={0}-tf-provider-acceptance-{1}', github.run_id, matrix.auth) }}
       - extras=ecr-cache
-    timeout-minutes: 45
+    # Bounds the steps below rather than cutting across them: stack-up (10m) +
+    # celery readiness (5m) + the test step (35m) have to fit inside it.
+    timeout-minutes: 60
 
     strategy:
       # fail-fast off so one leg's failure does not cancel the other.
@@ -271,7 +279,11 @@ jobs:
         run: |
           set -uo pipefail
           programs="celery_beat celery_worker_primary celery_worker_light"
-          for _ in $(seq 60); do
+          # `background` declares no healthcheck, so `--wait` returns as soon as
+          # the container starts and every worker still has the whole app to
+          # import. 150 x 2s covers a cold runner; a healthy stack exits in
+          # seconds.
+          for _ in $(seq 150); do
             status=$(docker compose -f docker-compose.yml -f docker-compose.dev.yml \
               --env-file env.template \
               exec -T background supervisorctl status ${programs} 2>/dev/null || true)
@@ -287,7 +299,9 @@ jobs:
 
       - name: Run acceptance tests (${{ matrix.auth }})
         working-directory: terraform-provider-onyx
-        timeout-minutes: 30
+        # Deliberately above the -timeout below: go test's own timeout dumps
+        # every goroutine, while a step timeout kills the job with no diagnosis.
+        timeout-minutes: 35
         env:
           AUTH_MODE: ${{ matrix.auth }}
           TF_ACC: "1"
