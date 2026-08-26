@@ -5,7 +5,6 @@ import {
   Tag,
   UserGroup,
   ConnectorStatus,
-  CCPairBasicInfo,
   FederatedConnectorDetail,
   ValidSources,
   ConnectorIndexingStatusLiteResponse,
