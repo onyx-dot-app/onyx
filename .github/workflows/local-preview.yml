@@ -7,11 +7,8 @@ name: Local Preview Deployment
 # (internal-tools/terraform/github-org) — nothing here names a host, so
 # pointing this at a different deployment is a variable change, not a PR.
 #
-# Separate from preview.yml (Vercel) because the two want different triggers.
 # The server does not watch this repo: it deploys only what this workflow
-# hands it, so a commit that never runs this job never gets a preview. That is
-# why backend/** is here and is not in preview.yml — Vercel has no backend to
-# build and should not run for a backend-only change.
+# hands it, so a commit that never runs this job never gets a preview.
 on:
   push:
     branches-ignore:
@@ -101,8 +98,6 @@ jobs:
       # here is a preview that doesn't match what a rebuild would produce.
       #
       # @onyx-ai/opal depends on @onyx-ai/shared, so shared builds first.
-      # (The Vercel job below has the two in the other order; it survives
-      # because bun install's prepare scripts have already built both.)
       - name: Build the frontend
         working-directory: ./web
         run: |
