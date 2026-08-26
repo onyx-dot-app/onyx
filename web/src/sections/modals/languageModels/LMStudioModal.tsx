@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
 import { InputDivider, toast } from "@opal/layouts";
@@ -45,9 +46,10 @@ function LMStudioModalInternals({
   existingLlmProvider,
   isOnboarding,
 }: LMStudioModalInternalsProps) {
+  const t = useTranslations("admin.languageModels.modals");
   const formikProps = useFormikContext<LMStudioModalValues>();
   const apiBaseSubDescription = useApiBaseSubDescription(
-    "The base URL for your LM Studio server."
+    t("lmStudio.apiBaseField.description")
   );
 
   const isFetchDisabled = !formikProps.values.api_base;
@@ -71,13 +73,13 @@ function LMStudioModalInternals({
     <>
       <APIBaseField
         subDescription={apiBaseSubDescription}
-        placeholder="Your LM Studio API base URL"
+        placeholder={t("lmStudio.apiBaseField.placeholder")}
       />
 
       <APIKeyField
         name="custom_config.LM_STUDIO_API_KEY"
         optional
-        subDescription="Optional API key if your LM Studio server requires authentication."
+        subDescription={t("lmStudio.apiKeyField.description")}
       />
 
       {!isOnboarding && (
@@ -111,6 +113,7 @@ export default function LMStudioModal({
   onSuccess,
   analyticsSource,
 }: LLMProviderFormProps) {
+  const t = useTranslations("admin.languageModels.modals");
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
   const settings = useSettings();
@@ -132,7 +135,7 @@ export default function LMStudioModal({
     },
   } as LMStudioModalValues;
 
-  const validationSchema = buildValidationSchema(isOnboarding, {
+  const validationSchema = buildValidationSchema(t, isOnboarding, {
     apiBase: true,
   });
 
@@ -157,6 +160,7 @@ export default function LMStudioModal({
         };
 
         await submitProvider({
+          t,
           analyticsSource:
             analyticsSource ??
             (isOnboarding
@@ -177,8 +181,8 @@ export default function LMStudioModal({
               await refreshLlmProviderCaches(mutate);
               toast.success(
                 existingLlmProvider
-                  ? "Provider updated successfully!"
-                  : "Provider enabled successfully!"
+                  ? t("toasts.providerUpdated")
+                  : t("toasts.providerEnabled")
               );
             }
           },

@@ -1,6 +1,7 @@
 "use client";
 
 import { memo, useCallback } from "react";
+import { useTranslations } from "next-intl";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import Text from "@/refresh-components/texts/Text";
 import Truncated from "@/refresh-components/texts/Truncated";
@@ -33,6 +34,7 @@ function LLMProviderCardInner({
   isConnected,
   onClick,
 }: LLMProviderCardProps) {
+  const t = useTranslations("onboarding");
   const handleCardClick = useCallback(() => {
     if (disabled) {
       return;
@@ -111,7 +113,7 @@ function LLMProviderCardInner({
             <div className="flex items-start p-1">
               <div className="flex items-center gap-0.5">
                 <Text as="p" text03 secondaryAction>
-                  Connect
+                  {t("llmStep.providerCard.connect.label")}
                 </Text>
                 <div className="p-0.5">
                   <SvgArrowExchange className="w-4 h-4 stroke-text-03" />

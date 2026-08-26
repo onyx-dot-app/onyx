@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useTranslations } from "next-intl";
 import { renderAsync } from "docx-preview";
 import ScrollIndicatorDiv from "@/refresh-components/ScrollIndicatorDiv";
 import Text from "@/refresh-components/texts/Text";
@@ -33,6 +34,7 @@ interface DocxPreviewProps {
 }
 
 function DocxPreview({ fileUrl, onLoad }: DocxPreviewProps) {
+  const t = useTranslations("chat.modals.preview");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -95,15 +97,13 @@ function DocxPreview({ fileUrl, onLoad }: DocxPreviewProps) {
 
         onLoadRef.current({ plainText: text, wordCount: words });
       } catch {
-        setError(
-          "Could not preview this document. Download the file to view it."
-        );
+        setError(t("docx.loadError.message"));
       } finally {
         setIsLoading(false);
       }
     }
     loadDocument();
-  }, [fileUrl]);
+  }, [fileUrl, t]);
 
   if (error) {
     return (
@@ -146,14 +146,13 @@ export const docxVariant: PreviewVariant = {
   height: "full",
   needsTextContent: false,
   codeBackground: false,
-  headerDescription: () => {
+  headerDescription: (ctx: PreviewContext) => {
     if (lastDocxResult) {
-      const count = lastDocxResult.wordCount;
-      return `Word Document • ${count.toLocaleString()} ${
-        count === 1 ? "word" : "words"
-      }`;
+      return ctx.t("docx.headerDescription", {
+        count: lastDocxResult.wordCount,
+      });
     }
-    return "Word Document";
+    return ctx.t("docx.headerDescriptionFallback");
   },
 
   renderContent: (ctx: PreviewContext) => {
@@ -162,8 +161,7 @@ export const docxVariant: PreviewVariant = {
       return (
         <Section justifyContent="center" alignItems="center" padding={6}>
           <Text text03 mainUiBody>
-            Legacy .doc format cannot be previewed. Download the file to view
-            it.
+            {ctx.t("docx.legacyDocMessage")}
           </Text>
         </Section>
       );
@@ -184,7 +182,7 @@ export const docxVariant: PreviewVariant = {
       {lastDocxResult && (
         <CopyButton
           size="sm"
-          tooltip="Copy content"
+          tooltip={ctx.t("copyButton.tooltip")}
           getCopyText={() => lastDocxResult?.plainText ?? ""}
         />
       )}

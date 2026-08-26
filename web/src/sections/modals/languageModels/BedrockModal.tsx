@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useEffect } from "react";
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
@@ -76,6 +77,7 @@ function BedrockModalInternals({
   existingLlmProvider,
   isOnboarding,
 }: BedrockModalInternalsProps) {
+  const t = useTranslations("admin.languageModels.modals");
   const formikProps = useFormikContext<BedrockModalValues>();
   const authMethod = formikProps.values.custom_config?.BEDROCK_AUTH_METHOD;
 
@@ -126,11 +128,13 @@ function BedrockModalInternals({
         <Section gap={4}>
           <InputVertical
             withLabel={FIELD_AWS_REGION_NAME}
-            title="AWS Region"
-            subDescription="Region where your Amazon Bedrock models are hosted."
+            title={t("bedrock.regionField.title")}
+            subDescription={t("bedrock.regionField.description")}
           >
             <InputSelectField name={FIELD_AWS_REGION_NAME}>
-              <InputSelect.Trigger placeholder="Select a region" />
+              <InputSelect.Trigger
+                placeholder={t("bedrock.regionField.placeholder")}
+              />
               <InputSelect.Content>
                 {AWS_REGION_OPTIONS.map((option) => (
                   <InputSelect.Item key={option.value} value={option.value}>
@@ -143,29 +147,33 @@ function BedrockModalInternals({
 
           <InputVertical
             withLabel={FIELD_BEDROCK_AUTH_METHOD}
-            title="Authentication Method"
-            subDescription="Choose how Onyx should authenticate with Bedrock."
+            title={t("bedrock.authMethodField.title")}
+            subDescription={t("bedrock.authMethodField.description")}
           >
             <InputSelectField name={FIELD_BEDROCK_AUTH_METHOD}>
               <InputSelect.Trigger />
               <InputSelect.Content>
                 <InputSelect.Item
                   value={AUTH_METHOD_IAM}
-                  description="Recommended for AWS environments"
+                  description={t("bedrock.authMethodField.iam.description")}
                 >
-                  Environment IAM Role
+                  {t("bedrock.authMethodField.iam.label")}
                 </InputSelect.Item>
                 <InputSelect.Item
                   value={AUTH_METHOD_ACCESS_KEY}
-                  description="For non-AWS environments"
+                  description={t(
+                    "bedrock.authMethodField.accessKey.description"
+                  )}
                 >
-                  Access Key
+                  {t("bedrock.authMethodField.accessKey.label")}
                 </InputSelect.Item>
                 <InputSelect.Item
                   value={AUTH_METHOD_LONG_TERM_API_KEY}
-                  description="For non-AWS environments"
+                  description={t(
+                    "bedrock.authMethodField.longTermApiKey.description"
+                  )}
                 >
-                  Long-term API Key
+                  {t("bedrock.authMethodField.longTermApiKey.label")}
                 </InputSelect.Item>
               </InputSelect.Content>
             </InputSelectField>
@@ -178,16 +186,17 @@ function BedrockModalInternals({
           <Section gap={4}>
             <InputVertical
               withLabel={FIELD_AWS_ACCESS_KEY_ID}
-              title="AWS Access Key ID"
+              title={t("bedrock.accessKeyIdField.title")}
             >
               <InputTypeInField
                 name={FIELD_AWS_ACCESS_KEY_ID}
+                // oxlint-disable-next-line i18n/no-raw-jsx-text -- AWS example key, not copy
                 placeholder="AKIAIOSFODNN7EXAMPLE"
               />
             </InputVertical>
             <InputVertical
               withLabel={FIELD_AWS_SECRET_ACCESS_KEY}
-              title="AWS Secret Access Key"
+              title={t("bedrock.secretAccessKeyField.title")}
             >
               <PasswordInputTypeInField
                 name={FIELD_AWS_SECRET_ACCESS_KEY}
@@ -200,10 +209,7 @@ function BedrockModalInternals({
 
       {authMethod === AUTH_METHOD_IAM && (
         <InputPadder>
-          <MessageCard
-            variant="info"
-            title="Onyx will use the IAM role attached to the environment it’s running in to authenticate."
-          />
+          <MessageCard variant="info" title={t("bedrock.iamNotice.title")} />
         </InputPadder>
       )}
 
@@ -212,11 +218,11 @@ function BedrockModalInternals({
           <Section gap={2}>
             <InputVertical
               withLabel={FIELD_AWS_BEARER_TOKEN_BEDROCK}
-              title="Long-term API Key"
+              title={t("bedrock.longTermApiKeyField.title")}
             >
               <PasswordInputTypeInField
                 name={FIELD_AWS_BEARER_TOKEN_BEDROCK}
-                placeholder="Your long-term API key"
+                placeholder={t("bedrock.longTermApiKeyField.placeholder")}
               />
             </InputVertical>
           </Section>
@@ -254,6 +260,7 @@ export default function BedrockModal({
   onSuccess,
   analyticsSource,
 }: LLMProviderFormProps) {
+  const t = useTranslations("admin.languageModels.modals");
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
 
@@ -282,10 +289,12 @@ export default function BedrockModal({
     },
   } as BedrockModalValues;
 
-  const validationSchema = buildValidationSchema(isOnboarding, {
+  const validationSchema = buildValidationSchema(t, isOnboarding, {
     extra: {
       custom_config: Yup.object({
-        AWS_REGION_NAME: Yup.string().required("AWS Region is required"),
+        AWS_REGION_NAME: Yup.string().required(
+          t("bedrock.validation.regionRequired")
+        ),
       }),
     },
   });
@@ -311,6 +320,7 @@ export default function BedrockModal({
         };
 
         await submitProvider({
+          t,
           analyticsSource:
             analyticsSource ??
             (isOnboarding
@@ -331,8 +341,8 @@ export default function BedrockModal({
               await refreshLlmProviderCaches(mutate);
               toast.success(
                 existingLlmProvider
-                  ? "Provider updated successfully!"
-                  : "Provider enabled successfully!"
+                  ? t("toasts.providerUpdated")
+                  : t("toasts.providerEnabled")
               );
             }
           },

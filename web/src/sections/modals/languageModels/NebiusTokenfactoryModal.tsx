@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useEffect, useRef } from "react";
 import { markdown } from "@opal/utils";
 import { useSWRConfig } from "swr";
@@ -45,6 +46,7 @@ function NebiusTokenfactoryModalInternals({
   existingLlmProvider,
   isOnboarding,
 }: NebiusTokenfactoryModalInternalsProps) {
+  const t = useTranslations("admin.languageModels.modals");
   const formikProps = useFormikContext<NebiusTokenfactoryModalValues>();
   const { setFieldValue } = formikProps;
 
@@ -88,14 +90,12 @@ function NebiusTokenfactoryModalInternals({
   return (
     <>
       <APIBaseField
-        subDescription="Nebius TokenFactory endpoint URL (including API version)."
+        subDescription={t("nebius.apiBaseField.description")}
         placeholder={DEFAULT_API_BASE}
       />
 
       <APIKeyField
-        subDescription={markdown(
-          "Paste your API key from [Nebius TokenFactory](https://tokenfactory.nebius.com/) to load the available models."
-        )}
+        subDescription={markdown(t("nebius.apiKeyField.description"))}
       />
 
       {!isOnboarding && (
@@ -129,6 +129,7 @@ export default function NebiusTokenfactoryModal({
   onSuccess,
   analyticsSource,
 }: LLMProviderFormProps) {
+  const t = useTranslations("admin.languageModels.modals");
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
 
@@ -147,7 +148,7 @@ export default function NebiusTokenfactoryModal({
     initialValues.api_base = DEFAULT_API_BASE;
   }
 
-  const validationSchema = buildValidationSchema(isOnboarding, {
+  const validationSchema = buildValidationSchema(t, isOnboarding, {
     apiBase: true,
     apiKey: true,
   });
@@ -161,6 +162,7 @@ export default function NebiusTokenfactoryModal({
       validationSchema={validationSchema}
       onSubmit={async (values, { setSubmitting, setStatus }) => {
         await submitProvider({
+          t,
           analyticsSource:
             analyticsSource ??
             (isOnboarding
@@ -181,8 +183,8 @@ export default function NebiusTokenfactoryModal({
               await refreshLlmProviderCaches(mutate);
               toast.success(
                 existingLlmProvider
-                  ? "Provider updated successfully!"
-                  : "Provider enabled successfully!"
+                  ? t("toasts.providerUpdated")
+                  : t("toasts.providerEnabled")
               );
             }
           },

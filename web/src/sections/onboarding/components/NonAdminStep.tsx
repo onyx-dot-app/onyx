@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useRef, useState, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import Text from "@/refresh-components/texts/Text";
 import { InputTypeIn } from "@opal/components";
 import { updateUserPersonalization } from "@/lib/users/svc";
@@ -13,6 +14,7 @@ import { ContentAction, InputHorizontal, toast } from "@opal/layouts";
 import { Hoverable } from "@opal/core";
 
 export default function NonAdminStep() {
+  const t = useTranslations("onboarding");
   const inputRef = useRef<HTMLInputElement>(null);
   const { user, refreshUser } = useUser();
   const [name, setName] = useState("");
@@ -49,7 +51,7 @@ export default function NonAdminStep() {
         // refreshUser() is called in handleDismissConfirmation instead.
       })
       .catch((error) => {
-        toast.error("Failed to save name. Please try again.");
+        toast.error(t("nonAdminStep.toasts.saveNameFailed"));
         console.error(error);
       });
   };
@@ -73,7 +75,7 @@ export default function NonAdminStep() {
                 {...props}
               />
             )}
-            title="You're all set!"
+            title={t("nonAdminStep.confirmation.title")}
             sizePreset="main-ui"
             variant="body"
             color="muted"
@@ -104,13 +106,13 @@ export default function NonAdminStep() {
             <InputHorizontal
               responsive
               icon={SvgUser}
-              title="What should Onyx call you?"
-              description="We will display this name in the app."
+              title={t("nameStep.title")}
+              description={t("nameStep.description")}
             >
               <div className="flex w-full items-center gap-2">
                 <InputTypeIn
                   ref={inputRef}
-                  placeholder="Your name"
+                  placeholder={t("nameStep.input.placeholder")}
                   value={name || ""}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                     setName(e.target.value)
@@ -123,7 +125,7 @@ export default function NonAdminStep() {
                   }}
                 />
                 <Button disabled={name === ""} onClick={handleSave}>
-                  Save
+                  {t("nonAdminStep.save.label")}
                 </Button>
               </div>
             </InputHorizontal>
@@ -133,7 +135,7 @@ export default function NonAdminStep() {
         <Hoverable.Root group="nonAdminName" width="full">
           <div
             className={containerClasses}
-            aria-label="Edit display name"
+            aria-label={t("nameStep.edit.ariaLabel")}
             role="button"
             tabIndex={0}
             onClick={handleEdit}
@@ -161,7 +163,7 @@ export default function NonAdminStep() {
                   prominence="internal"
                   size="sm"
                   icon={SvgEdit}
-                  tooltip="Edit"
+                  tooltip={t("nameStep.edit.tooltip")}
                 />
               </Hoverable.Item>
               <SvgCheckCircle className="w-4 h-4 stroke-status-success-05" />

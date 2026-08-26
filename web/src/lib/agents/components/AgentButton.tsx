@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef } from "react";
+import { useTranslations } from "next-intl";
 import { MinimalAgent } from "@/lib/agents/types";
 import { usePinnedAgents, useActiveAgent } from "@/lib/agents/hooks";
 import { noProp } from "@/lib/utils";
@@ -65,6 +66,7 @@ export interface AgentButtonProps {
 }
 
 export function AgentButton({ agent }: AgentButtonProps) {
+  const t = useTranslations("agents.modals");
   const activeAgent = useActiveAgent();
   const { pinnedAgents, togglePinnedAgent } = usePinnedAgents();
   const isActuallyPinned = pinnedAgents.some((a) => a.id === agent.id);
@@ -94,7 +96,7 @@ export function AgentButton({ agent }: AgentButtonProps) {
                   prominence="internal"
                   size="sm"
                   onClick={noProp(() => togglePinnedAgent(agent, false))}
-                  tooltip="Unpin Agent"
+                  tooltip={t("agentButton.unpin.tooltip")}
                 />
               </Hoverable.Item>
             )

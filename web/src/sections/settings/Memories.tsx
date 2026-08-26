@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import FileTile from "@/refresh-components/tiles/FileTile";
 import ButtonTile from "@/refresh-components/tiles/ButtonTile";
 import { SvgAddLines, SvgFilter, SvgMenu, SvgPlusCircle } from "@opal/icons";
@@ -16,6 +17,7 @@ interface MemoriesProps {
 }
 
 export default function Memories({ memories, onSaveMemories }: MemoriesProps) {
+  const t = useTranslations("settings.memory");
   const memoriesModal = useCreateModal();
   const [targetMemoryId, setTargetMemoryId] = useState<number | null>(null);
 
@@ -24,7 +26,7 @@ export default function Memories({ memories, onSaveMemories }: MemoriesProps) {
       {memories.length === 0 ? (
         <LineItem
           skeleton
-          description="Add personal note or memory that Onyx should remember."
+          description={t("empty.description")}
           onClick={() => {
             setTargetMemoryId(null);
             memoriesModal.toggle(true);
@@ -55,8 +57,8 @@ export default function Memories({ memories, onSaveMemories }: MemoriesProps) {
             ))}
           </div>
           <ButtonTile
-            title="View/Add"
-            description="All Memories"
+            title={t("viewAll.title")}
+            description={t("viewAll.description")}
             icon={SvgAddLines}
             onClick={() => {
               setTargetMemoryId(null);

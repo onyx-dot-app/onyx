@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import { FormField } from "@/refresh-components/form/FormField";
 import InputKeyValue, {
   KeyValue,
@@ -11,6 +12,11 @@ import { Divider } from "@opal/components";
 import type { MCPAuthFormValues } from "@/sections/actions/modals/MCPAuthenticationModal";
 import { MCPAuthenticationType } from "@/lib/tools/types";
 import { SvgUser } from "@opal/icons";
+
+// Rendered verbatim inside the help copy. Kept as ICU arguments so the braces
+// are not parsed as message placeholders.
+const API_KEY_PLACEHOLDER = "{api_key}";
+const USER_EMAIL_PLACEHOLDER = "{user_email}";
 
 interface PerUserAuthConfigProps {
   values: MCPAuthFormValues;
@@ -26,6 +32,8 @@ export function PerUserAuthConfig({
   setFieldValue,
   mode = "per-user",
 }: PerUserAuthConfigProps) {
+  const t = useTranslations("actions");
+
   // Use draft state for KeyValue array (like in LLMConnectionFieldsCustom)
   const [headersDraft, setHeadersDraft] = useState<KeyValue[]>(
     Object.entries(values.auth_template?.headers || {}).map(([key, value]) => ({
@@ -125,46 +133,43 @@ export function PerUserAuthConfig({
         name="auth_template.headers"
         state={missingSharedApiKey ? "error" : "idle"}
       >
-        <FormField.Label>Authentication Headers</FormField.Label>
+        <FormField.Label>{t("perUserAuth.headers.label")}</FormField.Label>
         <FormField.Control asChild>
           <InputKeyValue
-            keyTitle="Header Name"
-            valueTitle="Header Value"
+            keyTitle={t("perUserAuth.headers.keyTitle")}
+            valueTitle={t("perUserAuth.headers.valueTitle")}
             items={headersDraft}
             onChange={handleHeadersChange}
             mode="fixed-line"
             layout="equal"
-            addButtonLabel="Add Header"
+            addButtonLabel={t("perUserAuth.headers.addButton.label")}
           />
         </FormField.Control>
         <FormField.Description>
           {mode === "per-user"
-            ? "Format headers for each user to fill in their individual credentials."
-            : "Format the headers sent with your organization's shared credentials."}{" "}
-          Use placeholders like{" "}
-          <Text text03 secondaryMono className="inline">
-            {"{api_key}"}
-          </Text>{" "}
-          {mode === "per-user" ? (
-            <>
-              or{" "}
-              <Text text03 secondaryMono className="inline">
-                {"{user_email}"}
-              </Text>
-              . Users will be prompted to provide values for placeholders
-              (except user_email).
-            </>
-          ) : (
-            <>
-              in at least one header value; it is replaced with your
-              organization&apos;s shared key.
-            </>
-          )}
+            ? t.rich("perUserAuth.headers.perUserDescription", {
+                apiKey: API_KEY_PLACEHOLDER,
+                userEmail: USER_EMAIL_PLACEHOLDER,
+                mono: (chunks) => (
+                  <Text text03 secondaryMono className="inline">
+                    {chunks}
+                  </Text>
+                ),
+              })
+            : t.rich("perUserAuth.headers.sharedDescription", {
+                apiKey: API_KEY_PLACEHOLDER,
+                mono: (chunks) => (
+                  <Text text03 secondaryMono className="inline">
+                    {chunks}
+                  </Text>
+                ),
+              })}
         </FormField.Description>
         <FormField.Message
           messages={{
-            error:
-              "At least one header value must include the {api_key} placeholder.",
+            error: t("perUserAuth.headers.error.message", {
+              apiKey: API_KEY_PLACEHOLDER,
+            }),
           }}
         />
       </FormField>
@@ -179,13 +184,13 @@ export function PerUserAuthConfig({
               <div className="flex flex-col gap-1">
                 <Text text04 secondaryAction as="p">
                   {mode === "per-user"
-                    ? "Only for your own account"
-                    : "Shared organization values"}
+                    ? t("perUserAuth.credentials.perUserTitle")
+                    : t("perUserAuth.credentials.sharedTitle")}
                 </Text>
                 <Text text03 secondaryBody as="p">
                   {mode === "per-user"
-                    ? "The following credentials will not be shared with your organization."
-                    : "These values are used for every user in your organization."}
+                    ? t("perUserAuth.credentials.perUserDescription")
+                    : t("perUserAuth.credentials.sharedDescription")}
                 </Text>
               </div>
             </div>
@@ -218,7 +223,12 @@ export function PerUserAuthConfig({
                         onChange={(e) =>
                           updateUserCredential(field, e.target.value)
                         }
-                        placeholder={`Enter ${field.replace(/_/g, " ")}`}
+                        placeholder={t(
+                          "perUserAuth.credentialField.placeholder",
+                          {
+                            field: field.replace(/_/g, " "),
+                          }
+                        )}
                       />
                     </FormField.Control>
                   </FormField>

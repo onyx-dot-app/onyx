@@ -80,7 +80,7 @@ import { useIsSearchModeAvailable, useSettings } from "@/lib/settings/hooks";
 import {
   ALL_REASONING_STOPS,
   PaneSlider,
-  REASONING_STOP_LABELS,
+  REASONING_STOP_LABEL_KEYS,
   UNSET_REASONING_STOP,
   reasoningStopIndex,
 } from "@/sections/model-selector/setting-controls";
@@ -1164,6 +1164,7 @@ function PromptShortcuts() {
 
 function ChatPreferencesSettings() {
   const t = useTranslations("settings");
+  const tModelSelector = useTranslations("chat.modelSelector");
   const {
     user,
     updateUserPersonalization,
@@ -1402,11 +1403,11 @@ function ChatPreferencesSettings() {
                     </Section>
                     <Section width={4} height="auto" alignItems="end">
                       <Text font="secondary-mono" color="text-04" nowrap>
-                        {
-                          REASONING_STOP_LABELS[
+                        {tModelSelector(
+                          REASONING_STOP_LABEL_KEYS[
                             ALL_REASONING_STOPS[draftEffortStop] ?? "medium"
                           ]
-                        }
+                        )}
                       </Text>
                     </Section>
                   </Section>
