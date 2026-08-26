@@ -1,1 +1,618 @@
-{}
+{
+  "accountPopover": {
+    "accountFallback": {
+      "label": "Compte"
+    },
+    "helpFaq": {
+      "label": "Aide et FAQ"
+    },
+    "logIn": {
+      "label": "Se connecter"
+    },
+    "logoutFailed": {
+      "message": "Échec de la déconnexion"
+    },
+    "notifications": {
+      "label": "Notifications"
+    },
+    "profileUnavailable": {
+      "title": "Profil indisponible"
+    },
+    "settings": {
+      "label": "Paramètres"
+    },
+    "signOut": {
+      "label": "Se déconnecter"
+    }
+  },
+  "auth": {
+    "createAccount": {
+      "createOrgButton": {
+        "label": "Créer une nouvelle organisation"
+      },
+      "createTeamOption": {
+        "text": "Créer une nouvelle équipe Onyx"
+      },
+      "differentEmailPrompt": {
+        "text": "Vous avez un compte avec une autre adresse e-mail ?"
+      },
+      "heading": {
+        "title": "Compte introuvable"
+      },
+      "inviteOption": {
+        "text": "Être invité dans une équipe Onyx existante"
+      },
+      "notFound": {
+        "description": "Nous n'avons pas trouvé votre compte dans nos registres. Pour accéder à Onyx, vous devez :"
+      },
+      "signInLink": {
+        "label": "Se connecter"
+      }
+    },
+    "error": {
+      "accessRestrictionIssue": {
+        "description": "Restrictions d'accès ou autorisations du compte"
+      },
+      "cloudSupportPrompt": {
+        "text": "Si le problème persiste, contactez l'équipe Onyx à <link>support@onyx.app</link>"
+      },
+      "code": {
+        "accessDenied": "Votre fournisseur d'identité a refusé l'accès.",
+        "consentRequired": "Votre fournisseur d'identité exige un consentement avant de continuer.",
+        "interactionRequired": "Une interaction supplémentaire avec votre fournisseur d'identité est requise.",
+        "invalidScope": "Les autorisations demandées ne sont pas disponibles.",
+        "loginBadCredentials": "Ce compte ne peut pas se connecter. Il est peut-être désactivé. Contactez l'administrateur de votre espace de travail.",
+        "loginRequired": "Vous devez d'abord vous connecter avec votre fournisseur d'identité.",
+        "oauthUserAlreadyExists": "Un compte avec cette adresse e-mail existe déjà avec une autre méthode de connexion. Connectez-vous comme la première fois, ou demandez à votre administrateur d'associer ce fournisseur.",
+        "serverError": "Votre fournisseur d'identité a rencontré une erreur. Veuillez réessayer.",
+        "temporarilyUnavailable": "Votre fournisseur d'identité est temporairement indisponible. Veuillez réessayer plus tard."
+      },
+      "credentialsIssue": {
+        "description": "Identifiants de connexion incorrects ou expirés"
+      },
+      "heading": {
+        "description": "Un problème est survenu lors de votre tentative de connexion.",
+        "title": "Erreur d'authentification"
+      },
+      "possibleIssues": {
+        "title": "Causes possibles :"
+      },
+      "returnToLoginButton": {
+        "label": "Retour à la page de connexion"
+      },
+      "selfHostedSupportPrompt": {
+        "text": "Si le problème persiste, contactez votre administrateur système pour obtenir de l'aide."
+      },
+      "systemDisruptionIssue": {
+        "description": "Perturbation temporaire du système d'authentification"
+      }
+    },
+    "forgotPassword": {
+      "backToLoginLink": {
+        "label": "[Retour à la connexion](/auth/login)"
+      },
+      "emailField": {
+        "label": "E-mail"
+      },
+      "emailSent": {
+        "toast": "E-mail de réinitialisation du mot de passe envoyé. Vérifiez votre boîte de réception."
+      },
+      "genericError": {
+        "toast": "Une erreur est survenue lors de la réinitialisation du mot de passe."
+      },
+      "heading": {
+        "title": "Mot de passe oublié"
+      },
+      "submitButton": {
+        "label": "Réinitialiser le mot de passe"
+      },
+      "unexpectedError": {
+        "toast": "Une erreur est survenue. Veuillez réessayer."
+      }
+    },
+    "impersonate": {
+      "adminNote": {
+        "text": "Remarque : cette fonctionnalité est réservée aux administrateurs @onyx.app"
+      },
+      "apiKeyField": {
+        "label": "Clé d'API",
+        "placeholder": "Saisissez la clé d'API"
+      },
+      "emailField": {
+        "label": "E-mail"
+      },
+      "genericError": {
+        "toast": "Impossible d'emprunter l'identité de l'utilisateur"
+      },
+      "heading": {
+        "title": "Emprunter l'identité d'un utilisateur"
+      },
+      "invalidEmail": {
+        "error": "E-mail non valide"
+      },
+      "requiredField": {
+        "error": "Obligatoire"
+      },
+      "submitButton": {
+        "label": "Emprunter l'identité"
+      }
+    },
+    "join": {
+      "heading": {
+        "title": "Reconnectez-vous pour rejoindre l'équipe"
+      },
+      "orDivider": {
+        "text": "ou"
+      }
+    },
+    "login": {
+      "createAccountButton": {
+        "label": "Créer un compte"
+      },
+      "noSsoProviders": {
+        "error": "Aucune connexion SSO n'est configurée pour cette adresse. Essayez Google ou votre mot de passe ci-dessous."
+      },
+      "resetPasswordButton": {
+        "label": "Réinitialiser le mot de passe"
+      },
+      "signupPrompt": {
+        "text": "Vous n'avez pas de compte ?"
+      },
+      "ssoEmailInvalid": {
+        "error": "Saisissez une adresse e-mail valide"
+      },
+      "ssoEmailRequired": {
+        "error": "L'e-mail est obligatoire"
+      },
+      "ssoMissingAuthUrl": {
+        "error": "La réponse de connexion ne contenait pas l'URL d'autorisation"
+      },
+      "ssoSignInButton": {
+        "label": "Se connecter avec SSO"
+      },
+      "ssoStartFailed": {
+        "error": "Impossible de démarrer la connexion (statut {status})"
+      },
+      "verifiedMessage": {
+        "title": "Votre e-mail a été vérifié ! Connectez-vous pour continuer."
+      },
+      "workEmailField": {
+        "label": "E-mail professionnel"
+      }
+    },
+    "resetPassword": {
+      "backToLoginLink": {
+        "label": "[Retour à la connexion](/auth/login)"
+      },
+      "confirmPasswordField": {
+        "label": "Confirmer le nouveau mot de passe",
+        "placeholder": "Confirmez votre nouveau mot de passe"
+      },
+      "confirmPasswordRequired": {
+        "error": "La confirmation du mot de passe est obligatoire"
+      },
+      "genericError": {
+        "toast": "Une erreur est survenue lors de la réinitialisation du mot de passe."
+      },
+      "heading": {
+        "title": "Réinitialiser le mot de passe"
+      },
+      "invalidPassword": {
+        "error": "Mot de passe non valide"
+      },
+      "missingToken": {
+        "toast": "Jeton de réinitialisation non valide ou manquant."
+      },
+      "newPasswordField": {
+        "label": "Nouveau mot de passe",
+        "placeholder": "Saisissez votre nouveau mot de passe"
+      },
+      "passwordRequired": {
+        "error": "Le mot de passe est obligatoire"
+      },
+      "passwordsMatch": {
+        "error": "Les mots de passe doivent correspondre"
+      },
+      "submitButton": {
+        "label": "Réinitialiser le mot de passe"
+      },
+      "successRedirect": {
+        "toast": "Mot de passe réinitialisé. Redirection vers la connexion..."
+      },
+      "unexpectedError": {
+        "toast": "Une erreur inattendue est survenue. Veuillez réessayer."
+      }
+    },
+    "signup": {
+      "cloudSignupHeading": {
+        "title": "Terminez votre inscription"
+      },
+      "createAccountHeading": {
+        "title": "Créer un compte"
+      },
+      "orDivider": {
+        "text": "ou"
+      },
+      "referralOptionAds": {
+        "label": "Publicités"
+      },
+      "referralOptionBlog": {
+        "label": "Article/Blog"
+      },
+      "referralOptionFriend": {
+        "label": "Ami/Collègue"
+      },
+      "referralOptionHackernews": {
+        "label": "HackerNews"
+      },
+      "referralOptionLinkedin": {
+        "label": "LinkedIn"
+      },
+      "referralOptionOther": {
+        "label": "Autre"
+      },
+      "referralOptionPodcast": {
+        "label": "Podcast"
+      },
+      "referralOptionReddit": {
+        "label": "Reddit"
+      },
+      "referralOptionSearch": {
+        "label": "Moteur de recherche (Google/Bing)"
+      },
+      "referralOptionTwitter": {
+        "label": "Twitter"
+      },
+      "referralOptionYoutube": {
+        "label": "YouTube"
+      },
+      "referralPlaceholder": {
+        "placeholder": "Sélectionnez une option"
+      },
+      "referralQuestion": {
+        "label": "Comment avez-vous entendu parler de nous ?"
+      },
+      "subtitle": {
+        "text": "Commencez avec Onyx"
+      }
+    },
+    "verifyEmail": {
+      "getNewEmailLink": {
+        "label": "Recevoir un nouvel e-mail de vérification"
+      },
+      "missingToken": {
+        "error": "Jeton de vérification manquant. Demandez un nouvel e-mail de vérification."
+      },
+      "unknownError": {
+        "text": "erreur inconnue"
+      },
+      "verificationFailed": {
+        "error": "Impossible de vérifier votre e-mail : {errorDetail}. Demandez un nouvel e-mail de vérification."
+      },
+      "verifying": {
+        "text": "Vérification de votre e-mail..."
+      }
+    },
+    "waitingOnVerification": {
+      "emailSent": {
+        "toast": "Un nouvel e-mail de vérification a été envoyé !"
+      },
+      "greeting": {
+        "text": "Bonjour, *{email}*, il semble que vous n'ayez pas encore vérifié votre e-mail.\nConsultez votre boîte de réception pour commencer !"
+      },
+      "helpPrompt": {
+        "text": "Si vous ne voyez rien, cliquez <link>ici</link> pour demander un nouvel e-mail."
+      },
+      "sendFailed": {
+        "toast": "Impossible d'envoyer un nouvel e-mail de vérification : {errorDetail}"
+      }
+    }
+  },
+  "settings": {
+    "accounts": {
+      "email": {
+        "anonymousFallback": "anonyme",
+        "description": "Adresse e-mail de votre compte.",
+        "title": "E-mail"
+      },
+      "password": {
+        "changeButton": "Modifier le mot de passe",
+        "description": "Mettez à jour le mot de passe de votre compte.",
+        "title": "Mot de passe"
+      },
+      "passwordModal": {
+        "confirmPassword": {
+          "title": "Confirmer le nouveau mot de passe"
+        },
+        "currentPassword": {
+          "title": "Mot de passe actuel"
+        },
+        "newPassword": {
+          "title": "Nouveau mot de passe"
+        },
+        "submit": {
+          "update": "Mettre à jour",
+          "updating": "Mise à jour..."
+        },
+        "title": "Modifier le mot de passe",
+        "toasts": {
+          "networkError": "Une erreur s'est produite lors de la modification du mot de passe",
+          "updateFailed": "Échec de la modification du mot de passe",
+          "updated": "Mot de passe mis à jour avec succès"
+        }
+      },
+      "title": "Comptes"
+    },
+    "apiKeys": {
+      "createModal": {
+        "description": "Toutes les requêtes API utilisant ce jeton hériteront de vos autorisations d'accès et vous seront attribuées à titre individuel.",
+        "expiration": {
+          "days30": "30 jours",
+          "days365": "365 jours",
+          "days7": "7 jours",
+          "expiresAtNote": "Ce jeton expirera le : {date}",
+          "noExpiration": "Aucune expiration",
+          "placeholder": "Sélectionner l'expiration",
+          "title": "Expire dans"
+        },
+        "name": {
+          "placeholder": "Nommez votre jeton",
+          "title": "Nom du jeton"
+        },
+        "permissions": {
+          "fullAccessNote": "Hérite de toutes vos autorisations.",
+          "fullAccessOption": "Accès complet",
+          "limitedAccessNote": "Limitez ce jeton à des fonctionnalités spécifiques.",
+          "limitedAccessOption": "Accès limité",
+          "placeholder": "Sélectionner les autorisations",
+          "title": "Autorisations"
+        },
+        "submit": {
+          "create": "Créer le jeton",
+          "creating": "Création du jeton..."
+        },
+        "title": "Créer un jeton d'accès"
+      },
+      "list": {
+        "createdDaysAgo": "{count, plural, one {Créé il y a # jour} other {Créé il y a # jours}}",
+        "createdToday": "Créé aujourd'hui",
+        "deleteTokenAriaLabel": "Supprimer le jeton {name}",
+        "empty": "Aucun jeton d'accès créé.",
+        "expiresIn": "{count, plural, one {Expire dans # jour} other {Expire dans # jours}}",
+        "loading": "Chargement des jetons...",
+        "neverExpires": "N'expire jamais",
+        "newTokenButton": "Nouveau jeton d'accès",
+        "noPermissionTooltip": "Vous n'avez pas l'autorisation de créer des jetons d'accès",
+        "searchPlaceholder": "Rechercher..."
+      },
+      "revokeModal": {
+        "description": "Toute application utilisant le jeton {name} ({tokenDisplay}) perdra l'accès à Onyx. Cette action est irréversible.",
+        "question": "Voulez-vous vraiment révoquer ce jeton ?",
+        "submit": "Révoquer",
+        "title": "Révoquer le jeton d'accès"
+      },
+      "scopeSelector": {
+        "includedWith": "{label} (inclus avec {lockReason})",
+        "loadError": "Impossible de charger les autorisations.",
+        "loading": "Chargement des autorisations..."
+      },
+      "section": {
+        "title": "Jetons d'accès"
+      },
+      "toasts": {
+        "createFailed": "Échec de la création du jeton",
+        "createNetworkError": "Erreur réseau lors de la création du jeton",
+        "created": "Jeton créé avec succès",
+        "deleteFailed": "Échec de la suppression du jeton",
+        "deleteNetworkError": "Erreur réseau lors de la suppression du jeton",
+        "deleted": "Jeton supprimé avec succès",
+        "loadFailed": "Échec du chargement des jetons",
+        "loadPermissionsFailed": "Échec du chargement des options d'autorisation",
+        "nameRequired": "Le nom du jeton est requis"
+      },
+      "tokenCreatedModal": {
+        "copyButton": "Copier le jeton",
+        "description": "Enregistrez ce jeton avant de continuer. Il ne sera plus affiché.",
+        "title": "Jeton d'accès"
+      },
+      "upsell": {
+        "description": "Les jetons d'accès nécessitent un abonnement payant actif.",
+        "upgradeButton": "Mettre à niveau le forfait"
+      }
+    },
+    "appearance": {
+      "chatBackground": {
+        "none": "Aucun",
+        "optionAriaLabel": "Arrière-plan {label}{selected, select, true { (sélectionné)} other {}}",
+        "title": "Arrière-plan du chat"
+      },
+      "colorMode": {
+        "auto": "Auto",
+        "dark": "Sombre",
+        "description": "Sélectionnez le mode de couleur préféré pour l'interface.",
+        "light": "Clair",
+        "title": "Mode de couleur"
+      },
+      "language": {
+        "description": "Sélectionnez la langue de l'interface.",
+        "title": "Langue",
+        "updateFailed": "Impossible de mettre à jour la préférence de langue"
+      },
+      "title": "Apparence"
+    },
+    "chats": {
+      "autoScroll": {
+        "description": "Faites défiler automatiquement vers le nouveau contenu pendant que le chat génère une réponse.",
+        "title": "Défilement automatique du chat"
+      },
+      "collapseLargePastes": {
+        "description": "Lorsque vous collez un texte de plus de 3 lignes ou 200 caractères, il est réduit en une vignette compacte au lieu d'être inséré en ligne. Cliquez sur la vignette pour afficher ou modifier le texte complet.",
+        "title": "Réduire les collages volumineux"
+      },
+      "defaultAppMode": {
+        "chatOption": "Chat",
+        "description": "Choisissez si les nouvelles sessions démarrent en mode Recherche ou Chat.",
+        "disabledTooltip": "L'interface de recherche est désactivée et ne peut être activée que par un administrateur.",
+        "searchOption": "Recherche",
+        "title": "Mode d'application par défaut"
+      },
+      "defaultModel": {
+        "description": "Ce modèle sera utilisé par défaut par Onyx dans vos chats.",
+        "title": "Modèle par défaut"
+      },
+      "defaultReasoningLevel": {
+        "description": "Niveau de raisonnement initial de vos nouveaux chats. Les réglages administrateur d'un modèle s'appliquent toujours, et chaque chat peut le modifier dans ses réglages de modèle.",
+        "title": "Niveau de raisonnement par défaut"
+      },
+      "defaultTemperature": {
+        "description": "Température initiale de vos nouveaux chats. Les réglages administrateur d'un modèle s'appliquent toujours, et chaque chat peut la modifier dans ses réglages de modèle.",
+        "title": "Température par défaut"
+      },
+      "smoothStreaming": {
+        "description": "Animez les réponses diffusées caractère par caractère. Désactivez pour afficher les segments au fur et à mesure de leur arrivée.",
+        "title": "Diffusion fluide"
+      },
+      "title": "Chats",
+      "toasts": {
+        "saveFailed": "Échec de l'enregistrement des préférences",
+        "saved": "Préférences enregistrées"
+      }
+    },
+    "connectors": {
+      "connectButton": "Connecter",
+      "disconnectModal": {
+        "continueNote": "Vous pouvez toujours poursuivre les sessions existantes faisant référence au contenu {name}.",
+        "description": "Onyx ne pourra plus accéder au contenu de votre compte {name} ni le rechercher.",
+        "disconnecting": "Déconnexion...",
+        "submit": "Déconnecter",
+        "title": "Déconnecter *{name}*"
+      },
+      "emptyMessage": "Aucun connecteur configuré pour votre organisation.",
+      "status": {
+        "connected": "Connecté",
+        "notConnected": "Non connecté",
+        "paused": "En pause"
+      },
+      "title": "Connecteurs",
+      "toasts": {
+        "disconnectFailed": "Échec de la déconnexion",
+        "disconnected": "Déconnecté avec succès"
+      }
+    },
+    "dangerZone": {
+      "deleteAllChats": {
+        "button": "Supprimer tous les chats",
+        "confirm": {
+          "deleting": "Suppression...",
+          "description": "Toutes vos sessions de chat et leur historique seront définitivement supprimés. Cette suppression est irréversible.",
+          "question": "Voulez-vous vraiment supprimer tous les chats ?",
+          "submit": "Supprimer",
+          "title": "Supprimer tous les chats"
+        },
+        "description": "Supprimez définitivement toutes vos sessions de chat.",
+        "title": "Supprimer tous les chats",
+        "toasts": {
+          "deleteFailed": "Échec de la suppression de toutes les sessions de chat",
+          "deleted": "Toutes vos sessions de chat ont été supprimées."
+        }
+      },
+      "title": "Zone de danger"
+    },
+    "gateway": {
+      "accessToken": {
+        "button": "Nouveau jeton",
+        "description": "Créez un jeton à portée limitée avant de connecter une application.",
+        "title": "Jeton d'accès"
+      },
+      "copyButton": {
+        "copied": "Copié",
+        "copy": "Copier",
+        "copyError": "Impossible de copier la valeur."
+      },
+      "description": "Connectez des outils externes aux modèles disponibles pour vous dans Onyx.",
+      "guideButton": "Guide",
+      "models": {
+        "description": "{count, plural, one {# modèle est disponible pour votre compte. Ouvrez un fournisseur pour copier un ID.} other {# modèles sont disponibles pour votre compte. Ouvrez un fournisseur pour copier un ID.}}",
+        "title": "Modèles"
+      },
+      "provider": {
+        "modelsAvailable": "{count, plural, one {# modèle disponible} other {# modèles disponibles}}"
+      },
+      "title": "LLM Gateway",
+      "url": {
+        "description": "Utilisez cette URL de base avec les clients OpenAI et Anthropic compatibles.",
+        "title": "URL du Gateway"
+      }
+    },
+    "memory": {
+      "referenceStoredMemories": {
+        "description": "Autorisez Onyx à faire référence aux souvenirs enregistrés dans les chats.",
+        "title": "Référencer les souvenirs enregistrés"
+      },
+      "title": "Mémoire",
+      "updateMemories": {
+        "description": "Autorisez Onyx à générer et mettre à jour les souvenirs enregistrés.",
+        "title": "Mettre à jour les souvenirs"
+      }
+    },
+    "personalPreferences": {
+      "description": "Indiquez vos préférences personnalisées en langage naturel.",
+      "placeholder": "Décrivez comment vous souhaitez que le système se comporte et le ton qu'il doit utiliser.",
+      "title": "Préférences personnelles"
+    },
+    "profile": {
+      "fullName": {
+        "description": "Ce nom sera affiché dans l'application.",
+        "placeholder": "Votre nom",
+        "title": "Nom complet"
+      },
+      "title": "Profil",
+      "toasts": {
+        "updateFailed": "Échec de la mise à jour de la personnalisation",
+        "updated": "Personnalisation mise à jour avec succès"
+      },
+      "workRole": {
+        "description": "Indiquez votre rôle pour mieux adapter les réponses.",
+        "placeholder": "Votre rôle",
+        "title": "Rôle professionnel"
+      }
+    },
+    "promptShortcuts": {
+      "row": {
+        "contentPlaceholder": "Fournissez un résumé concis en 1 à 2 phrases de ce qui suit :",
+        "promptPlaceholder": "Résumer",
+        "publicTooltip": "Impossible de supprimer les raccourcis d'invite publics.",
+        "removeAriaLabel": "Supprimer le raccourci"
+      },
+      "title": "Raccourcis d'invite",
+      "toasts": {
+        "bothRequired": "Le raccourci et l'expansion sont tous deux requis",
+        "created": "Raccourci créé",
+        "deleteFailed": "Échec de la suppression du raccourci",
+        "deleted": "Raccourci supprimé",
+        "loadFailed": "Échec du chargement des raccourcis",
+        "saveFailed": "Échec de l'enregistrement du raccourci",
+        "updated": "Raccourci mis à jour"
+      },
+      "toggle": {
+        "description": "Activez les raccourcis pour insérer rapidement des invites courantes.",
+        "title": "Utiliser les raccourcis d'invite"
+      }
+    },
+    "voice": {
+      "autoPlayback": {
+        "description": "Lisez automatiquement les réponses vocales.",
+        "title": "Lecture automatique"
+      },
+      "autoSend": {
+        "description": "Envoyez automatiquement la saisie vocale lorsque vous arrêtez de parler.",
+        "title": "Envoi automatique à la pause"
+      },
+      "playbackSpeed": {
+        "description": "Ajustez la vitesse de lecture vocale.",
+        "title": "Vitesse de lecture"
+      },
+      "title": "Voix"
+    }
+  }
+}

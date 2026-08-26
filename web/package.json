@@ -107,6 +107,8 @@
     "zustand": "^5.0.8"
   },
   "devDependencies": {
+    "@formatjs/icu-messageformat-parser": "^3.5.17",
+    "@oxlint/plugins": "^1.71.0",
     "@playwright/test": "^1.39.0",
     "@storybook/addon-docs": "10.5.0",
     "@storybook/addon-mcp": "^0.7.0",
@@ -128,7 +130,6 @@
     "@types/node": "24.12.2",
     "@types/react": "19.2.10",
     "@types/react-dom": "19.2.3",
-    "@oxlint/plugins": "^1.71.0",
     "@types/stats.js": "^0.17.4",
     "babel-plugin-react-compiler": "^1.0.0",
     "baseline-browser-mapping": "^2.9.19",

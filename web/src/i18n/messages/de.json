@@ -1,1 +1,618 @@
-{}
+{
+  "accountPopover": {
+    "accountFallback": {
+      "label": "Konto"
+    },
+    "helpFaq": {
+      "label": "Hilfe & FAQ"
+    },
+    "logIn": {
+      "label": "Anmelden"
+    },
+    "logoutFailed": {
+      "message": "Abmeldung fehlgeschlagen"
+    },
+    "notifications": {
+      "label": "Benachrichtigungen"
+    },
+    "profileUnavailable": {
+      "title": "Profil nicht verfügbar"
+    },
+    "settings": {
+      "label": "Einstellungen"
+    },
+    "signOut": {
+      "label": "Abmelden"
+    }
+  },
+  "auth": {
+    "createAccount": {
+      "createOrgButton": {
+        "label": "Neue Organisation erstellen"
+      },
+      "createTeamOption": {
+        "text": "Ein neues Onyx-Team erstellen"
+      },
+      "differentEmailPrompt": {
+        "text": "Haben Sie ein Konto mit einer anderen E-Mail-Adresse?"
+      },
+      "heading": {
+        "title": "Konto nicht gefunden"
+      },
+      "inviteOption": {
+        "text": "In ein bestehendes Onyx-Team eingeladen werden"
+      },
+      "notFound": {
+        "description": "Wir konnten Ihr Konto nicht finden. Um auf Onyx zuzugreifen, haben Sie folgende Möglichkeiten:"
+      },
+      "signInLink": {
+        "label": "Anmelden"
+      }
+    },
+    "error": {
+      "accessRestrictionIssue": {
+        "description": "Zugriffsbeschränkungen oder Berechtigungen des Kontos"
+      },
+      "cloudSupportPrompt": {
+        "text": "Wenn das Problem weiterhin besteht, wenden Sie sich an das Onyx-Team unter <link>support@onyx.app</link>"
+      },
+      "code": {
+        "accessDenied": "Ihr Identitätsanbieter hat den Zugriff verweigert.",
+        "consentRequired": "Ihr Identitätsanbieter erfordert eine Zustimmung, bevor Sie fortfahren können.",
+        "interactionRequired": "Eine zusätzliche Interaktion mit Ihrem Identitätsanbieter ist erforderlich.",
+        "invalidScope": "Die angeforderten Berechtigungen sind nicht verfügbar.",
+        "loginBadCredentials": "Dieses Konto kann sich nicht anmelden. Es ist möglicherweise deaktiviert. Wenden Sie sich an den Administrator Ihres Arbeitsbereichs.",
+        "loginRequired": "Sie müssen sich zuerst bei Ihrem Identitätsanbieter anmelden.",
+        "oauthUserAlreadyExists": "Ein Konto mit dieser E-Mail-Adresse existiert bereits mit einer anderen Anmeldemethode. Melden Sie sich wie beim ersten Mal an, oder bitten Sie Ihren Administrator, diesen Anbieter zu verknüpfen.",
+        "serverError": "Bei Ihrem Identitätsanbieter ist ein Fehler aufgetreten. Bitte versuchen Sie es erneut.",
+        "temporarilyUnavailable": "Ihr Identitätsanbieter ist vorübergehend nicht verfügbar. Bitte versuchen Sie es später erneut."
+      },
+      "credentialsIssue": {
+        "description": "Falsche oder abgelaufene Anmeldedaten"
+      },
+      "heading": {
+        "description": "Bei Ihrem Anmeldeversuch ist ein Problem aufgetreten.",
+        "title": "Authentifizierungsfehler"
+      },
+      "possibleIssues": {
+        "title": "Mögliche Ursachen:"
+      },
+      "returnToLoginButton": {
+        "label": "Zurück zur Anmeldeseite"
+      },
+      "selfHostedSupportPrompt": {
+        "text": "Wenn das Problem weiterhin besteht, wenden Sie sich an Ihren Systemadministrator."
+      },
+      "systemDisruptionIssue": {
+        "description": "Vorübergehende Störung des Authentifizierungssystems"
+      }
+    },
+    "forgotPassword": {
+      "backToLoginLink": {
+        "label": "[Zurück zur Anmeldung](/auth/login)"
+      },
+      "emailField": {
+        "label": "E-Mail"
+      },
+      "emailSent": {
+        "toast": "E-Mail zum Zurücksetzen des Passworts gesendet. Bitte prüfen Sie Ihren Posteingang."
+      },
+      "genericError": {
+        "toast": "Beim Zurücksetzen des Passworts ist ein Fehler aufgetreten."
+      },
+      "heading": {
+        "title": "Passwort vergessen"
+      },
+      "submitButton": {
+        "label": "Passwort zurücksetzen"
+      },
+      "unexpectedError": {
+        "toast": "Ein Fehler ist aufgetreten. Bitte versuchen Sie es erneut."
+      }
+    },
+    "impersonate": {
+      "adminNote": {
+        "text": "Hinweis: Diese Funktion ist nur für @onyx.app-Administratoren verfügbar"
+      },
+      "apiKeyField": {
+        "label": "API-Schlüssel",
+        "placeholder": "API-Schlüssel eingeben"
+      },
+      "emailField": {
+        "label": "E-Mail"
+      },
+      "genericError": {
+        "toast": "Benutzer konnte nicht übernommen werden"
+      },
+      "heading": {
+        "title": "Benutzeridentität übernehmen"
+      },
+      "invalidEmail": {
+        "error": "Ungültige E-Mail-Adresse"
+      },
+      "requiredField": {
+        "error": "Erforderlich"
+      },
+      "submitButton": {
+        "label": "Benutzeridentität übernehmen"
+      }
+    },
+    "join": {
+      "heading": {
+        "title": "Erneut anmelden, um dem Team beizutreten"
+      },
+      "orDivider": {
+        "text": "oder"
+      }
+    },
+    "login": {
+      "createAccountButton": {
+        "label": "Konto erstellen"
+      },
+      "noSsoProviders": {
+        "error": "Für diese Adresse ist keine SSO-Anmeldung eingerichtet. Versuchen Sie Google oder Ihr Passwort unten."
+      },
+      "resetPasswordButton": {
+        "label": "Passwort zurücksetzen"
+      },
+      "signupPrompt": {
+        "text": "Sie haben noch kein Konto?"
+      },
+      "ssoEmailInvalid": {
+        "error": "Geben Sie eine gültige E-Mail-Adresse ein"
+      },
+      "ssoEmailRequired": {
+        "error": "E-Mail ist erforderlich"
+      },
+      "ssoMissingAuthUrl": {
+        "error": "In der Anmeldeantwort fehlte die Autorisierungs-URL"
+      },
+      "ssoSignInButton": {
+        "label": "Mit SSO anmelden"
+      },
+      "ssoStartFailed": {
+        "error": "Anmeldung konnte nicht gestartet werden (Status {status})"
+      },
+      "verifiedMessage": {
+        "title": "Ihre E-Mail-Adresse wurde bestätigt! Bitte melden Sie sich an, um fortzufahren."
+      },
+      "workEmailField": {
+        "label": "Geschäftliche E-Mail"
+      }
+    },
+    "resetPassword": {
+      "backToLoginLink": {
+        "label": "[Zurück zur Anmeldung](/auth/login)"
+      },
+      "confirmPasswordField": {
+        "label": "Neues Passwort bestätigen",
+        "placeholder": "Bestätigen Sie Ihr neues Passwort"
+      },
+      "confirmPasswordRequired": {
+        "error": "Passwortbestätigung ist erforderlich"
+      },
+      "genericError": {
+        "toast": "Beim Zurücksetzen des Passworts ist ein Fehler aufgetreten."
+      },
+      "heading": {
+        "title": "Passwort zurücksetzen"
+      },
+      "invalidPassword": {
+        "error": "Ungültiges Passwort"
+      },
+      "missingToken": {
+        "toast": "Ungültiges oder fehlendes Zurücksetzungs-Token."
+      },
+      "newPasswordField": {
+        "label": "Neues Passwort",
+        "placeholder": "Geben Sie Ihr neues Passwort ein"
+      },
+      "passwordRequired": {
+        "error": "Passwort ist erforderlich"
+      },
+      "passwordsMatch": {
+        "error": "Die Passwörter müssen übereinstimmen"
+      },
+      "submitButton": {
+        "label": "Passwort zurücksetzen"
+      },
+      "successRedirect": {
+        "toast": "Passwort erfolgreich zurückgesetzt. Weiterleitung zur Anmeldung..."
+      },
+      "unexpectedError": {
+        "toast": "Ein unerwarteter Fehler ist aufgetreten. Bitte versuchen Sie es erneut."
+      }
+    },
+    "signup": {
+      "cloudSignupHeading": {
+        "title": "Registrierung abschließen"
+      },
+      "createAccountHeading": {
+        "title": "Konto erstellen"
+      },
+      "orDivider": {
+        "text": "oder"
+      },
+      "referralOptionAds": {
+        "label": "Werbung"
+      },
+      "referralOptionBlog": {
+        "label": "Artikel/Blog"
+      },
+      "referralOptionFriend": {
+        "label": "Freund/Kollege"
+      },
+      "referralOptionHackernews": {
+        "label": "HackerNews"
+      },
+      "referralOptionLinkedin": {
+        "label": "LinkedIn"
+      },
+      "referralOptionOther": {
+        "label": "Sonstiges"
+      },
+      "referralOptionPodcast": {
+        "label": "Podcast"
+      },
+      "referralOptionReddit": {
+        "label": "Reddit"
+      },
+      "referralOptionSearch": {
+        "label": "Suchmaschine (Google/Bing)"
+      },
+      "referralOptionTwitter": {
+        "label": "Twitter"
+      },
+      "referralOptionYoutube": {
+        "label": "YouTube"
+      },
+      "referralPlaceholder": {
+        "placeholder": "Option auswählen"
+      },
+      "referralQuestion": {
+        "label": "Wie haben Sie von uns erfahren?"
+      },
+      "subtitle": {
+        "text": "Starten Sie mit Onyx"
+      }
+    },
+    "verifyEmail": {
+      "getNewEmailLink": {
+        "label": "Neue Bestätigungs-E-Mail anfordern"
+      },
+      "missingToken": {
+        "error": "Bestätigungs-Token fehlt. Fordern Sie eine neue Bestätigungs-E-Mail an."
+      },
+      "unknownError": {
+        "text": "unbekannter Fehler"
+      },
+      "verificationFailed": {
+        "error": "Ihre E-Mail-Adresse konnte nicht bestätigt werden: {errorDetail}. Fordern Sie eine neue Bestätigungs-E-Mail an."
+      },
+      "verifying": {
+        "text": "Ihre E-Mail-Adresse wird bestätigt..."
+      }
+    },
+    "waitingOnVerification": {
+      "emailSent": {
+        "toast": "Eine neue Bestätigungs-E-Mail wurde gesendet!"
+      },
+      "greeting": {
+        "text": "Hallo, *{email}*, Sie haben Ihre E-Mail-Adresse anscheinend noch nicht bestätigt.\nPrüfen Sie Ihren Posteingang auf eine E-Mail von uns, um loszulegen!"
+      },
+      "helpPrompt": {
+        "text": "Wenn Sie nichts finden, klicken Sie <link>hier</link>, um eine neue E-Mail anzufordern."
+      },
+      "sendFailed": {
+        "toast": "Es konnte keine neue Bestätigungs-E-Mail gesendet werden: {errorDetail}"
+      }
+    }
+  },
+  "settings": {
+    "accounts": {
+      "email": {
+        "anonymousFallback": "anonym",
+        "description": "Ihre Konto-E-Mail-Adresse.",
+        "title": "E-Mail"
+      },
+      "password": {
+        "changeButton": "Passwort ändern",
+        "description": "Aktualisieren Sie das Passwort Ihres Kontos.",
+        "title": "Passwort"
+      },
+      "passwordModal": {
+        "confirmPassword": {
+          "title": "Neues Passwort bestätigen"
+        },
+        "currentPassword": {
+          "title": "Aktuelles Passwort"
+        },
+        "newPassword": {
+          "title": "Neues Passwort"
+        },
+        "submit": {
+          "update": "Aktualisieren",
+          "updating": "Wird aktualisiert..."
+        },
+        "title": "Passwort ändern",
+        "toasts": {
+          "networkError": "Beim Ändern des Passworts ist ein Fehler aufgetreten",
+          "updateFailed": "Passwort konnte nicht geändert werden",
+          "updated": "Passwort erfolgreich aktualisiert"
+        }
+      },
+      "title": "Konten"
+    },
+    "apiKeys": {
+      "createModal": {
+        "description": "Alle API-Anfragen, die dieses Token verwenden, übernehmen Ihre Zugriffsberechtigungen und werden Ihnen persönlich zugeordnet.",
+        "expiration": {
+          "days30": "30 Tage",
+          "days365": "365 Tage",
+          "days7": "7 Tage",
+          "expiresAtNote": "Dieses Token läuft ab am: {date}",
+          "noExpiration": "Kein Ablaufdatum",
+          "placeholder": "Ablauf auswählen",
+          "title": "Läuft ab in"
+        },
+        "name": {
+          "placeholder": "Benennen Sie Ihr Token",
+          "title": "Token-Name"
+        },
+        "permissions": {
+          "fullAccessNote": "Übernimmt alle Ihre Berechtigungen.",
+          "fullAccessOption": "Vollzugriff",
+          "limitedAccessNote": "Beschränken Sie dieses Token auf bestimmte Funktionen.",
+          "limitedAccessOption": "Eingeschränkter Zugriff",
+          "placeholder": "Berechtigungen auswählen",
+          "title": "Berechtigungen"
+        },
+        "submit": {
+          "create": "Token erstellen",
+          "creating": "Token wird erstellt..."
+        },
+        "title": "Zugriffstoken erstellen"
+      },
+      "list": {
+        "createdDaysAgo": "{count, plural, one {Vor # Tag erstellt} other {Vor # Tagen erstellt}}",
+        "createdToday": "Heute erstellt",
+        "deleteTokenAriaLabel": "Token {name} löschen",
+        "empty": "Keine Zugriffstoken erstellt.",
+        "expiresIn": "{count, plural, one {Läuft in # Tag ab} other {Läuft in # Tagen ab}}",
+        "loading": "Token werden geladen...",
+        "neverExpires": "Läuft nie ab",
+        "newTokenButton": "Neues Zugriffstoken",
+        "noPermissionTooltip": "Sie haben keine Berechtigung, Zugriffstoken zu erstellen",
+        "searchPlaceholder": "Suchen..."
+      },
+      "revokeModal": {
+        "description": "Jede Anwendung, die das Token {name} ({tokenDisplay}) verwendet, verliert den Zugriff auf Onyx. Diese Aktion kann nicht rückgängig gemacht werden.",
+        "question": "Möchten Sie dieses Token wirklich widerrufen?",
+        "submit": "Widerrufen",
+        "title": "Zugriffstoken widerrufen"
+      },
+      "scopeSelector": {
+        "includedWith": "{label} (enthalten in {lockReason})",
+        "loadError": "Berechtigungen konnten nicht geladen werden.",
+        "loading": "Berechtigungen werden geladen..."
+      },
+      "section": {
+        "title": "Zugriffstoken"
+      },
+      "toasts": {
+        "createFailed": "Token konnte nicht erstellt werden",
+        "createNetworkError": "Netzwerkfehler beim Erstellen des Tokens",
+        "created": "Token erfolgreich erstellt",
+        "deleteFailed": "Token konnte nicht gelöscht werden",
+        "deleteNetworkError": "Netzwerkfehler beim Löschen des Tokens",
+        "deleted": "Token erfolgreich gelöscht",
+        "loadFailed": "Token konnten nicht geladen werden",
+        "loadPermissionsFailed": "Berechtigungsoptionen konnten nicht geladen werden",
+        "nameRequired": "Token-Name ist erforderlich"
+      },
+      "tokenCreatedModal": {
+        "copyButton": "Token kopieren",
+        "description": "Speichern Sie dieses Token, bevor Sie fortfahren. Es wird nicht erneut angezeigt.",
+        "title": "Zugriffstoken"
+      },
+      "upsell": {
+        "description": "Zugriffstoken erfordern ein aktives kostenpflichtiges Abonnement.",
+        "upgradeButton": "Tarif upgraden"
+      }
+    },
+    "appearance": {
+      "chatBackground": {
+        "none": "Keiner",
+        "optionAriaLabel": "{label}-Hintergrund{selected, select, true { (ausgewählt)} other {}}",
+        "title": "Chat-Hintergrund"
+      },
+      "colorMode": {
+        "auto": "Automatisch",
+        "dark": "Dunkel",
+        "description": "Wählen Sie Ihren bevorzugten Farbmodus für die Benutzeroberfläche.",
+        "light": "Hell",
+        "title": "Farbmodus"
+      },
+      "language": {
+        "description": "Wählen Sie die Sprache für die Benutzeroberfläche.",
+        "title": "Sprache",
+        "updateFailed": "Die Spracheinstellung konnte nicht aktualisiert werden"
+      },
+      "title": "Erscheinungsbild"
+    },
+    "chats": {
+      "autoScroll": {
+        "description": "Scrollt automatisch zu neuen Inhalten, während der Chat die Antwort generiert.",
+        "title": "Automatisches Scrollen im Chat"
+      },
+      "collapseLargePastes": {
+        "description": "Wenn Sie Text einfügen, der länger als 3 Zeilen oder 200 Zeichen ist, wird er in einer kompakten Kachel zusammengefasst, anstatt ihn direkt einzufügen. Klicken Sie auf die Kachel, um den vollständigen Text anzuzeigen oder zu bearbeiten.",
+        "title": "Große eingefügte Texte einklappen"
+      },
+      "defaultAppMode": {
+        "chatOption": "Chat",
+        "description": "Wählen Sie, ob neue Sitzungen im Such- oder im Chat-Modus starten.",
+        "disabledTooltip": "Die Suchoberfläche ist deaktiviert und kann nur von einem Administrator aktiviert werden.",
+        "searchOption": "Suche",
+        "title": "Standard-App-Modus"
+      },
+      "defaultModel": {
+        "description": "Dieses Modell wird von Onyx standardmäßig in Ihren Chats verwendet.",
+        "title": "Standardmodell"
+      },
+      "defaultReasoningLevel": {
+        "description": "Anfängliche Reasoning-Stufe für Ihre neuen Chats. Admin-Einstellungen eines Modells gelten immer, und jeder Chat kann sie in seinen Modelleinstellungen überschreiben.",
+        "title": "Standard-Reasoning-Stufe"
+      },
+      "defaultTemperature": {
+        "description": "Anfangstemperatur für Ihre neuen Chats. Admin-Einstellungen eines Modells gelten immer, und jeder Chat kann sie in seinen Modelleinstellungen überschreiben.",
+        "title": "Standard-Temperatur"
+      },
+      "smoothStreaming": {
+        "description": "Animiert gestreamte Antworten Zeichen für Zeichen. Deaktivieren Sie diese Option, um Textblöcke sofort bei Eintreffen anzuzeigen.",
+        "title": "Sanftes Streaming"
+      },
+      "title": "Chats",
+      "toasts": {
+        "saveFailed": "Einstellungen konnten nicht gespeichert werden",
+        "saved": "Einstellungen gespeichert"
+      }
+    },
+    "connectors": {
+      "connectButton": "Verbinden",
+      "disconnectModal": {
+        "continueNote": "Sie können bestehende Sitzungen, die auf Inhalte von {name} verweisen, weiterhin fortsetzen.",
+        "description": "Onyx kann nicht mehr auf Inhalte aus Ihrem {name}-Konto zugreifen oder diese durchsuchen.",
+        "disconnecting": "Wird getrennt...",
+        "submit": "Trennen",
+        "title": "*{name}* trennen"
+      },
+      "emptyMessage": "Für Ihre Organisation sind keine Konnektoren eingerichtet.",
+      "status": {
+        "connected": "Verbunden",
+        "notConnected": "Nicht verbunden",
+        "paused": "Pausiert"
+      },
+      "title": "Konnektoren",
+      "toasts": {
+        "disconnectFailed": "Trennung fehlgeschlagen",
+        "disconnected": "Erfolgreich getrennt"
+      }
+    },
+    "dangerZone": {
+      "deleteAllChats": {
+        "button": "Alle Chats löschen",
+        "confirm": {
+          "deleting": "Wird gelöscht...",
+          "description": "Alle Ihre Chat-Sitzungen und Ihr Verlauf werden dauerhaft gelöscht. Das Löschen kann nicht rückgängig gemacht werden.",
+          "question": "Möchten Sie wirklich alle Chats löschen?",
+          "submit": "Löschen",
+          "title": "Alle Chats löschen"
+        },
+        "description": "Löschen Sie alle Ihre Chat-Sitzungen dauerhaft.",
+        "title": "Alle Chats löschen",
+        "toasts": {
+          "deleteFailed": "Alle Chat-Sitzungen konnten nicht gelöscht werden",
+          "deleted": "Alle Ihre Chat-Sitzungen wurden gelöscht."
+        }
+      },
+      "title": "Gefahrenzone"
+    },
+    "gateway": {
+      "accessToken": {
+        "button": "Neues Token",
+        "description": "Erstellen Sie ein eingeschränktes Token, bevor Sie eine Anwendung verbinden.",
+        "title": "Zugriffstoken"
+      },
+      "copyButton": {
+        "copied": "Kopiert",
+        "copy": "Kopieren",
+        "copyError": "Wert konnte nicht kopiert werden."
+      },
+      "description": "Verbinden Sie externe Tools mit den Modellen, die Ihnen in Onyx zur Verfügung stehen.",
+      "guideButton": "Anleitung",
+      "models": {
+        "description": "{count, plural, one {# Modell ist für Ihr Konto verfügbar. Öffnen Sie einen Anbieter, um eine ID zu kopieren.} other {# Modelle sind für Ihr Konto verfügbar. Öffnen Sie einen Anbieter, um eine ID zu kopieren.}}",
+        "title": "Modelle"
+      },
+      "provider": {
+        "modelsAvailable": "{count, plural, one {# Modell verfügbar} other {# Modelle verfügbar}}"
+      },
+      "title": "LLM Gateway",
+      "url": {
+        "description": "Verwenden Sie diese Basis-URL mit kompatiblen OpenAI- und Anthropic-Clients.",
+        "title": "Gateway-URL"
+      }
+    },
+    "memory": {
+      "referenceStoredMemories": {
+        "description": "Lassen Sie Onyx gespeicherte Erinnerungen in Chats verwenden.",
+        "title": "Gespeicherte Erinnerungen verwenden"
+      },
+      "title": "Erinnerungen",
+      "updateMemories": {
+        "description": "Lassen Sie Onyx gespeicherte Erinnerungen erstellen und aktualisieren.",
+        "title": "Erinnerungen aktualisieren"
+      }
+    },
+    "personalPreferences": {
+      "description": "Geben Sie Ihre individuellen Präferenzen in natürlicher Sprache an.",
+      "placeholder": "Beschreiben Sie, wie sich das System verhalten soll und welchen Ton es verwenden soll.",
+      "title": "Persönliche Präferenzen"
+    },
+    "profile": {
+      "fullName": {
+        "description": "Wir zeigen diesen Namen in der App an.",
+        "placeholder": "Ihr Name",
+        "title": "Vollständiger Name"
+      },
+      "title": "Profil",
+      "toasts": {
+        "updateFailed": "Personalisierung konnte nicht aktualisiert werden",
+        "updated": "Personalisierung erfolgreich aktualisiert"
+      },
+      "workRole": {
+        "description": "Teilen Sie Ihre Rolle mit, um Antworten besser anzupassen.",
+        "placeholder": "Ihre Rolle",
+        "title": "Berufliche Rolle"
+      }
+    },
+    "promptShortcuts": {
+      "row": {
+        "contentPlaceholder": "Geben Sie eine kurze Zusammenfassung des Folgenden in 1–2 Sätzen an:",
+        "promptPlaceholder": "Zusammenfassen",
+        "publicTooltip": "Öffentliche Prompt-Shortcuts können nicht gelöscht werden.",
+        "removeAriaLabel": "Shortcut entfernen"
+      },
+      "title": "Prompt-Shortcuts",
+      "toasts": {
+        "bothRequired": "Shortcut und Erweiterung sind beide erforderlich",
+        "created": "Shortcut erstellt",
+        "deleteFailed": "Shortcut konnte nicht gelöscht werden",
+        "deleted": "Shortcut gelöscht",
+        "loadFailed": "Shortcuts konnten nicht geladen werden",
+        "saveFailed": "Shortcut konnte nicht gespeichert werden",
+        "updated": "Shortcut aktualisiert"
+      },
+      "toggle": {
+        "description": "Aktivieren Sie Shortcuts, um häufig verwendete Prompts schnell einzufügen.",
+        "title": "Prompt-Shortcuts verwenden"
+      }
+    },
+    "voice": {
+      "autoPlayback": {
+        "description": "Sprachantworten automatisch abspielen.",
+        "title": "Automatische Wiedergabe"
+      },
+      "autoSend": {
+        "description": "Spracheingabe automatisch senden, wenn Sie zu sprechen aufhören.",
+        "title": "Automatisches Senden bei Pause"
+      },
+      "playbackSpeed": {
+        "description": "Passen Sie die Geschwindigkeit der Sprachwiedergabe an.",
+        "title": "Wiedergabegeschwindigkeit"
+      },
+      "title": "Sprachfunktionen"
+    }
+  }
+}

@@ -1,1 +1,618 @@
-{}
+{
+  "accountPopover": {
+    "accountFallback": {
+      "label": "Conta"
+    },
+    "helpFaq": {
+      "label": "Ajuda e perguntas frequentes"
+    },
+    "logIn": {
+      "label": "Entrar"
+    },
+    "logoutFailed": {
+      "message": "Não foi possível sair"
+    },
+    "notifications": {
+      "label": "Notificações"
+    },
+    "profileUnavailable": {
+      "title": "Perfil indisponível"
+    },
+    "settings": {
+      "label": "Configurações"
+    },
+    "signOut": {
+      "label": "Sair"
+    }
+  },
+  "auth": {
+    "createAccount": {
+      "createOrgButton": {
+        "label": "Criar nova organização"
+      },
+      "createTeamOption": {
+        "text": "Criar uma nova equipe do Onyx"
+      },
+      "differentEmailPrompt": {
+        "text": "Tem uma conta com outro e-mail?"
+      },
+      "heading": {
+        "title": "Conta não encontrada"
+      },
+      "inviteOption": {
+        "text": "Ser convidado para uma equipe do Onyx existente"
+      },
+      "notFound": {
+        "description": "Não encontramos sua conta em nossos registros. Para acessar o Onyx, você precisa de uma destas opções:"
+      },
+      "signInLink": {
+        "label": "Entrar"
+      }
+    },
+    "error": {
+      "accessRestrictionIssue": {
+        "description": "Restrições de acesso ou permissões da conta"
+      },
+      "cloudSupportPrompt": {
+        "text": "Se o problema continuar, entre em contato com a equipe do Onyx em <link>support@onyx.app</link>"
+      },
+      "code": {
+        "accessDenied": "Seu provedor de identidade negou o acesso.",
+        "consentRequired": "Seu provedor de identidade exige consentimento antes de continuar.",
+        "interactionRequired": "É necessária uma interação adicional com seu provedor de identidade.",
+        "invalidScope": "As permissões solicitadas não estão disponíveis.",
+        "loginBadCredentials": "Esta conta não pode entrar. Ela pode estar desativada. Contate o administrador do seu espaço de trabalho.",
+        "loginRequired": "Você precisa primeiro entrar com seu provedor de identidade.",
+        "oauthUserAlreadyExists": "Já existe uma conta com este e-mail usando outro método de login. Entre da forma que usou pela primeira vez, ou peça ao seu administrador para vincular este provedor.",
+        "serverError": "Seu provedor de identidade encontrou um erro. Tente novamente.",
+        "temporarilyUnavailable": "Seu provedor de identidade está temporariamente indisponível. Tente novamente mais tarde."
+      },
+      "credentialsIssue": {
+        "description": "Credenciais de login incorretas ou expiradas"
+      },
+      "heading": {
+        "description": "Houve um problema com sua tentativa de login.",
+        "title": "Erro de autenticação"
+      },
+      "possibleIssues": {
+        "title": "Possíveis causas:"
+      },
+      "returnToLoginButton": {
+        "label": "Voltar à página de login"
+      },
+      "selfHostedSupportPrompt": {
+        "text": "Se o problema continuar, entre em contato com o administrador do sistema para obter ajuda."
+      },
+      "systemDisruptionIssue": {
+        "description": "Interrupção temporária do sistema de autenticação"
+      }
+    },
+    "forgotPassword": {
+      "backToLoginLink": {
+        "label": "[Voltar ao login](/auth/login)"
+      },
+      "emailField": {
+        "label": "E-mail"
+      },
+      "emailSent": {
+        "toast": "E-mail de redefinição de senha enviado. Verifique sua caixa de entrada."
+      },
+      "genericError": {
+        "toast": "Ocorreu um erro ao redefinir a senha."
+      },
+      "heading": {
+        "title": "Esqueci a senha"
+      },
+      "submitButton": {
+        "label": "Redefinir senha"
+      },
+      "unexpectedError": {
+        "toast": "Ocorreu um erro. Tente novamente."
+      }
+    },
+    "impersonate": {
+      "adminNote": {
+        "text": "Observação: este recurso está disponível apenas para administradores @onyx.app"
+      },
+      "apiKeyField": {
+        "label": "Chave de API",
+        "placeholder": "Insira a chave de API"
+      },
+      "emailField": {
+        "label": "E-mail"
+      },
+      "genericError": {
+        "toast": "Não foi possível personificar o usuário"
+      },
+      "heading": {
+        "title": "Personificar usuário"
+      },
+      "invalidEmail": {
+        "error": "E-mail inválido"
+      },
+      "requiredField": {
+        "error": "Obrigatório"
+      },
+      "submitButton": {
+        "label": "Personificar usuário"
+      }
+    },
+    "join": {
+      "heading": {
+        "title": "Autentique-se novamente para entrar na equipe"
+      },
+      "orDivider": {
+        "text": "ou"
+      }
+    },
+    "login": {
+      "createAccountButton": {
+        "label": "Criar uma conta"
+      },
+      "noSsoProviders": {
+        "error": "Não há login SSO configurado para esse endereço. Tente o Google ou sua senha abaixo."
+      },
+      "resetPasswordButton": {
+        "label": "Redefinir senha"
+      },
+      "signupPrompt": {
+        "text": "Não tem uma conta?"
+      },
+      "ssoEmailInvalid": {
+        "error": "Insira um endereço de e-mail válido"
+      },
+      "ssoEmailRequired": {
+        "error": "O e-mail é obrigatório"
+      },
+      "ssoMissingAuthUrl": {
+        "error": "A resposta de login não incluía a URL de autorização"
+      },
+      "ssoSignInButton": {
+        "label": "Entrar com SSO"
+      },
+      "ssoStartFailed": {
+        "error": "Não foi possível iniciar o login (status {status})"
+      },
+      "verifiedMessage": {
+        "title": "Seu e-mail foi verificado! Entre para continuar."
+      },
+      "workEmailField": {
+        "label": "E-mail de trabalho"
+      }
+    },
+    "resetPassword": {
+      "backToLoginLink": {
+        "label": "[Voltar ao login](/auth/login)"
+      },
+      "confirmPasswordField": {
+        "label": "Confirmar nova senha",
+        "placeholder": "Confirme sua nova senha"
+      },
+      "confirmPasswordRequired": {
+        "error": "A confirmação da senha é obrigatória"
+      },
+      "genericError": {
+        "toast": "Ocorreu um erro ao redefinir a senha."
+      },
+      "heading": {
+        "title": "Redefinir senha"
+      },
+      "invalidPassword": {
+        "error": "Senha inválida"
+      },
+      "missingToken": {
+        "toast": "Token de redefinição inválido ou ausente."
+      },
+      "newPasswordField": {
+        "label": "Nova senha",
+        "placeholder": "Insira sua nova senha"
+      },
+      "passwordRequired": {
+        "error": "A senha é obrigatória"
+      },
+      "passwordsMatch": {
+        "error": "As senhas devem coincidir"
+      },
+      "submitButton": {
+        "label": "Redefinir senha"
+      },
+      "successRedirect": {
+        "toast": "Senha redefinida com sucesso. Redirecionando para o login..."
+      },
+      "unexpectedError": {
+        "toast": "Ocorreu um erro inesperado. Tente novamente."
+      }
+    },
+    "signup": {
+      "cloudSignupHeading": {
+        "title": "Conclua seu cadastro"
+      },
+      "createAccountHeading": {
+        "title": "Criar conta"
+      },
+      "orDivider": {
+        "text": "ou"
+      },
+      "referralOptionAds": {
+        "label": "Anúncios"
+      },
+      "referralOptionBlog": {
+        "label": "Artigo/Blog"
+      },
+      "referralOptionFriend": {
+        "label": "Amigo/Colega"
+      },
+      "referralOptionHackernews": {
+        "label": "HackerNews"
+      },
+      "referralOptionLinkedin": {
+        "label": "LinkedIn"
+      },
+      "referralOptionOther": {
+        "label": "Outro"
+      },
+      "referralOptionPodcast": {
+        "label": "Podcast"
+      },
+      "referralOptionReddit": {
+        "label": "Reddit"
+      },
+      "referralOptionSearch": {
+        "label": "Mecanismo de busca (Google/Bing)"
+      },
+      "referralOptionTwitter": {
+        "label": "Twitter"
+      },
+      "referralOptionYoutube": {
+        "label": "YouTube"
+      },
+      "referralPlaceholder": {
+        "placeholder": "Selecione uma opção"
+      },
+      "referralQuestion": {
+        "label": "Como você ficou sabendo de nós?"
+      },
+      "subtitle": {
+        "text": "Comece a usar o Onyx"
+      }
+    },
+    "verifyEmail": {
+      "getNewEmailLink": {
+        "label": "Receber um novo e-mail de verificação"
+      },
+      "missingToken": {
+        "error": "Token de verificação ausente. Solicite um novo e-mail de verificação."
+      },
+      "unknownError": {
+        "text": "erro desconhecido"
+      },
+      "verificationFailed": {
+        "error": "Não foi possível verificar seu e-mail: {errorDetail}. Solicite um novo e-mail de verificação."
+      },
+      "verifying": {
+        "text": "Verificando seu e-mail..."
+      }
+    },
+    "waitingOnVerification": {
+      "emailSent": {
+        "toast": "Um novo e-mail de verificação foi enviado!"
+      },
+      "greeting": {
+        "text": "Olá, *{email}*, parece que você ainda não verificou seu e-mail.\nConfira um e-mail nosso na sua caixa de entrada para começar!"
+      },
+      "helpPrompt": {
+        "text": "Se não encontrar nada, clique <link>aqui</link> para solicitar um novo e-mail."
+      },
+      "sendFailed": {
+        "toast": "Não foi possível enviar um novo e-mail de verificação: {errorDetail}"
+      }
+    }
+  },
+  "settings": {
+    "accounts": {
+      "email": {
+        "anonymousFallback": "anônimo",
+        "description": "O endereço de e-mail da sua conta.",
+        "title": "E-mail"
+      },
+      "password": {
+        "changeButton": "Alterar senha",
+        "description": "Atualize a senha da sua conta.",
+        "title": "Senha"
+      },
+      "passwordModal": {
+        "confirmPassword": {
+          "title": "Confirmar nova senha"
+        },
+        "currentPassword": {
+          "title": "Senha atual"
+        },
+        "newPassword": {
+          "title": "Nova senha"
+        },
+        "submit": {
+          "update": "Atualizar",
+          "updating": "Atualizando..."
+        },
+        "title": "Alterar senha",
+        "toasts": {
+          "networkError": "Ocorreu um erro ao alterar a senha",
+          "updateFailed": "Falha ao alterar a senha",
+          "updated": "Senha atualizada com sucesso"
+        }
+      },
+      "title": "Contas"
+    },
+    "apiKeys": {
+      "createModal": {
+        "description": "Todas as solicitações de API que usarem este token herdarão suas permissões de acesso e serão atribuídas a você individualmente.",
+        "expiration": {
+          "days30": "30 dias",
+          "days365": "365 dias",
+          "days7": "7 dias",
+          "expiresAtNote": "Este token expirará em: {date}",
+          "noExpiration": "Sem expiração",
+          "placeholder": "Selecione a expiração",
+          "title": "Expira em"
+        },
+        "name": {
+          "placeholder": "Nomeie seu token",
+          "title": "Nome do token"
+        },
+        "permissions": {
+          "fullAccessNote": "Herda todas as suas permissões.",
+          "fullAccessOption": "Acesso completo",
+          "limitedAccessNote": "Limite este token a recursos específicos.",
+          "limitedAccessOption": "Acesso limitado",
+          "placeholder": "Selecione as permissões",
+          "title": "Permissões"
+        },
+        "submit": {
+          "create": "Criar token",
+          "creating": "Criando token..."
+        },
+        "title": "Criar token de acesso"
+      },
+      "list": {
+        "createdDaysAgo": "{count, plural, one {Criado há # dia} other {Criado há # dias}}",
+        "createdToday": "Criado hoje",
+        "deleteTokenAriaLabel": "Excluir token {name}",
+        "empty": "Nenhum token de acesso criado.",
+        "expiresIn": "{count, plural, one {Expira em # dia} other {Expira em # dias}}",
+        "loading": "Carregando tokens...",
+        "neverExpires": "Nunca expira",
+        "newTokenButton": "Novo token de acesso",
+        "noPermissionTooltip": "Você não tem permissão para criar tokens de acesso",
+        "searchPlaceholder": "Pesquisar..."
+      },
+      "revokeModal": {
+        "description": "Qualquer aplicativo que usar o token {name} ({tokenDisplay}) perderá o acesso ao Onyx. Esta ação não pode ser desfeita.",
+        "question": "Tem certeza de que deseja revogar este token?",
+        "submit": "Revogar",
+        "title": "Revogar token de acesso"
+      },
+      "scopeSelector": {
+        "includedWith": "{label} (incluído com {lockReason})",
+        "loadError": "Não foi possível carregar as permissões.",
+        "loading": "Carregando permissões..."
+      },
+      "section": {
+        "title": "Tokens de acesso"
+      },
+      "toasts": {
+        "createFailed": "Falha ao criar token",
+        "createNetworkError": "Erro de rede ao criar token",
+        "created": "Token criado com sucesso",
+        "deleteFailed": "Falha ao excluir token",
+        "deleteNetworkError": "Erro de rede ao excluir token",
+        "deleted": "Token excluído com sucesso",
+        "loadFailed": "Falha ao carregar tokens",
+        "loadPermissionsFailed": "Falha ao carregar opções de permissão",
+        "nameRequired": "O nome do token é obrigatório"
+      },
+      "tokenCreatedModal": {
+        "copyButton": "Copiar token",
+        "description": "Salve este token antes de continuar. Ele não será exibido novamente.",
+        "title": "Token de acesso"
+      },
+      "upsell": {
+        "description": "Tokens de acesso exigem uma assinatura paga ativa.",
+        "upgradeButton": "Fazer upgrade do plano"
+      }
+    },
+    "appearance": {
+      "chatBackground": {
+        "none": "Nenhum",
+        "optionAriaLabel": "Fundo {label}{selected, select, true { (selecionado)} other {}}",
+        "title": "Fundo do chat"
+      },
+      "colorMode": {
+        "auto": "Automático",
+        "dark": "Escuro",
+        "description": "Selecione o modo de cor preferido para a interface.",
+        "light": "Claro",
+        "title": "Modo de cor"
+      },
+      "language": {
+        "description": "Selecione o idioma da interface.",
+        "title": "Idioma",
+        "updateFailed": "Não foi possível atualizar a preferência de idioma"
+      },
+      "title": "Aparência"
+    },
+    "chats": {
+      "autoScroll": {
+        "description": "Rola automaticamente para o novo conteúdo enquanto o chat gera a resposta.",
+        "title": "Rolagem automática do chat"
+      },
+      "collapseLargePastes": {
+        "description": "Ao colar um texto com mais de 3 linhas ou 200 caracteres, ele é recolhido em um bloco compacto em vez de ser inserido embutido. Clique no bloco para ver ou editar o texto completo.",
+        "title": "Recolher textos colados grandes"
+      },
+      "defaultAppMode": {
+        "chatOption": "Chat",
+        "description": "Escolha se as novas sessões começam no modo Pesquisa ou Chat.",
+        "disabledTooltip": "A interface de pesquisa está desativada e só pode ser ativada por um administrador.",
+        "searchOption": "Pesquisa",
+        "title": "Modo padrão do aplicativo"
+      },
+      "defaultModel": {
+        "description": "Este modelo será usado pelo Onyx por padrão nos seus chats.",
+        "title": "Modelo padrão"
+      },
+      "defaultReasoningLevel": {
+        "description": "Nível de raciocínio inicial para seus novos chats. As configurações do administrador em um modelo sempre se aplicam, e qualquer chat pode substituí-lo nas configurações de modelo.",
+        "title": "Nível de raciocínio padrão"
+      },
+      "defaultTemperature": {
+        "description": "Temperatura inicial para seus novos chats. As configurações do administrador em um modelo sempre se aplicam, e qualquer chat pode substituí-la nas configurações de modelo.",
+        "title": "Temperatura padrão"
+      },
+      "smoothStreaming": {
+        "description": "Anime as respostas transmitidas caractere por caractere. Desative para renderizar os blocos conforme chegam.",
+        "title": "Transmissão suave"
+      },
+      "title": "Chats",
+      "toasts": {
+        "saveFailed": "Falha ao salvar preferências",
+        "saved": "Preferências salvas"
+      }
+    },
+    "connectors": {
+      "connectButton": "Conectar",
+      "disconnectModal": {
+        "continueNote": "Você ainda pode continuar sessões existentes que referenciam conteúdo do {name}.",
+        "description": "O Onyx não poderá mais acessar ou pesquisar conteúdo da sua conta do {name}.",
+        "disconnecting": "Desconectando...",
+        "submit": "Desconectar",
+        "title": "Desconectar *{name}*"
+      },
+      "emptyMessage": "Nenhum conector configurado para sua organização.",
+      "status": {
+        "connected": "Conectado",
+        "notConnected": "Não conectado",
+        "paused": "Pausado"
+      },
+      "title": "Conectores",
+      "toasts": {
+        "disconnectFailed": "Falha ao desconectar",
+        "disconnected": "Desconectado com sucesso"
+      }
+    },
+    "dangerZone": {
+      "deleteAllChats": {
+        "button": "Excluir todos os chats",
+        "confirm": {
+          "deleting": "Excluindo...",
+          "description": "Todas as suas sessões de chat e o histórico serão excluídos permanentemente. A exclusão não pode ser desfeita.",
+          "question": "Tem certeza de que deseja excluir todos os chats?",
+          "submit": "Excluir",
+          "title": "Excluir todos os chats"
+        },
+        "description": "Exclua permanentemente todas as suas sessões de chat.",
+        "title": "Excluir todos os chats",
+        "toasts": {
+          "deleteFailed": "Falha ao excluir todas as sessões de chat",
+          "deleted": "Todas as suas sessões de chat foram excluídas."
+        }
+      },
+      "title": "Zona de perigo"
+    },
+    "gateway": {
+      "accessToken": {
+        "button": "Novo token",
+        "description": "Crie um token com escopo definido antes de conectar um aplicativo.",
+        "title": "Token de acesso"
+      },
+      "copyButton": {
+        "copied": "Copiado",
+        "copy": "Copiar",
+        "copyError": "Não foi possível copiar o valor."
+      },
+      "description": "Conecte ferramentas externas aos modelos disponíveis para você no Onyx.",
+      "guideButton": "Guia",
+      "models": {
+        "description": "{count, plural, one {# modelo está disponível para sua conta. Abra um provedor para copiar um ID.} other {# modelos estão disponíveis para sua conta. Abra um provedor para copiar um ID.}}",
+        "title": "Modelos"
+      },
+      "provider": {
+        "modelsAvailable": "{count, plural, one {# modelo disponível} other {# modelos disponíveis}}"
+      },
+      "title": "LLM Gateway",
+      "url": {
+        "description": "Use esta URL base com clientes compatíveis com OpenAI e Anthropic.",
+        "title": "URL do gateway"
+      }
+    },
+    "memory": {
+      "referenceStoredMemories": {
+        "description": "Permita que o Onyx faça referência a memórias armazenadas nos chats.",
+        "title": "Referenciar memórias armazenadas"
+      },
+      "title": "Memória",
+      "updateMemories": {
+        "description": "Permita que o Onyx gere e atualize memórias armazenadas.",
+        "title": "Atualizar memórias"
+      }
+    },
+    "personalPreferences": {
+      "description": "Forneça suas preferências personalizadas em linguagem natural.",
+      "placeholder": "Descreva como você quer que o sistema se comporte e o tom que ele deve usar.",
+      "title": "Preferências pessoais"
+    },
+    "profile": {
+      "fullName": {
+        "description": "Vamos exibir este nome no aplicativo.",
+        "placeholder": "Seu nome",
+        "title": "Nome completo"
+      },
+      "title": "Perfil",
+      "toasts": {
+        "updateFailed": "Falha ao atualizar a personalização",
+        "updated": "Personalização atualizada com sucesso"
+      },
+      "workRole": {
+        "description": "Compartilhe seu cargo para personalizar melhor as respostas.",
+        "placeholder": "Seu cargo",
+        "title": "Cargo"
+      }
+    },
+    "promptShortcuts": {
+      "row": {
+        "contentPlaceholder": "Forneça um resumo conciso de 1 a 2 frases do seguinte:",
+        "promptPlaceholder": "Resumir",
+        "publicTooltip": "Não é possível excluir atalhos de prompt públicos.",
+        "removeAriaLabel": "Remover atalho"
+      },
+      "title": "Atalhos de prompt",
+      "toasts": {
+        "bothRequired": "O atalho e a expansão são obrigatórios",
+        "created": "Atalho criado",
+        "deleteFailed": "Falha ao excluir atalho",
+        "deleted": "Atalho excluído",
+        "loadFailed": "Falha ao carregar atalhos",
+        "saveFailed": "Falha ao salvar atalho",
+        "updated": "Atalho atualizado"
+      },
+      "toggle": {
+        "description": "Ative os atalhos para inserir rapidamente prompts comuns.",
+        "title": "Usar atalhos de prompt"
+      }
+    },
+    "voice": {
+      "autoPlayback": {
+        "description": "Reproduz automaticamente as respostas de voz.",
+        "title": "Reprodução automática"
+      },
+      "autoSend": {
+        "description": "Envia automaticamente a entrada de voz quando você para de falar.",
+        "title": "Envio automático ao pausar"
+      },
+      "playbackSpeed": {
+        "description": "Ajuste a velocidade da reprodução de voz.",
+        "title": "Velocidade de reprodução"
+      },
+      "title": "Voz"
+    }
+  }
+}

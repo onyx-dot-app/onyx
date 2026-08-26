@@ -15,6 +15,12 @@
 const esmPackages = [
   // Auth & Security
   "jose",
+  // i18n
+  "next-intl",
+  "use-intl",
+  "intl-messageformat",
+  "@formatjs",
+  "tslib",
   // UI Libraries
   "@radix-ui",
   "@floating-ui",

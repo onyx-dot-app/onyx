@@ -2,8 +2,8 @@ import type { HTMLAttributes } from "react";
 // Canonical TextFont/TextColor unions, shared with mobile via the neutral
 // @onyx-ai/shared/contracts (not the RN-only /native).
 import type { TextColor, TextFont } from "@onyx-ai/shared/contracts";
-import type { RichStr, WithoutStyles } from "@opal/types";
-import { cn } from "@opal/utils";
+import type { RichNodes, RichStr, WithoutStyles } from "@opal/types";
+import { cn, isRichNodes } from "@opal/utils";
 import { resolveStr } from "@opal/components/text/InlineMarkdown";
 
 // ---------------------------------------------------------------------------
@@ -28,8 +28,11 @@ interface TextProps extends WithoutStyles<
   /** Truncate text to N lines with ellipsis. `1` uses simple truncation; `2+` uses `-webkit-line-clamp`. */
   maxLines?: number;
 
-  /** Plain string or `markdown()` for inline markdown. */
-  children?: string | RichStr;
+  /**
+   * Plain string, `markdown()` for inline markdown, or `richNodes()` for
+   * sentences that embed inline components (e.g. next-intl `t.rich` output).
+   */
+  children?: string | RichStr | RichNodes;
 }
 
 // ---------------------------------------------------------------------------
@@ -115,7 +118,8 @@ function Text({
 
   return (
     <Tag {...rest} className={resolvedClassName} style={style}>
-      {children && resolveStr(children)}
+      {children &&
+        (isRichNodes(children) ? children.nodes : resolveStr(children))}
     </Tag>
   );
 }

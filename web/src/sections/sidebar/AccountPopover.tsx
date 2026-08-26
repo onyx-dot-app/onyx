@@ -34,6 +34,7 @@ import SidebarTabSkeleton from "@/refresh-components/skeletons/SidebarTabSkeleto
 import { useNotificationSummary } from "@/hooks/useNotifications";
 import { SvgOnyxLogo } from "@opal/logos";
 import { markdown } from "@opal/utils";
+import { useTranslations } from "next-intl";
 
 interface SettingsPopoverProps {
   onUserSettingsClick: () => void;
@@ -46,6 +47,7 @@ function SettingsPopover({
   onOpenNotifications,
   undismissedCount,
 }: SettingsPopoverProps) {
+  const t = useTranslations("accountPopover");
   const { user, userResolution } = useUser();
   const settings = useSettings();
   const enterpriseSettings = settings.enterprise;
@@ -65,11 +67,13 @@ function SettingsPopover({
     router.push(`/auth/login?next=${encodedRedirect}`);
   };
 
+  const logoutFailedMessage = t("logoutFailed.message");
+
   const handleLogout = () => {
     logout()
       .then((response) => {
         if (!response?.ok) {
-          alert("Failed to logout");
+          alert(logoutFailedMessage);
           return;
         }
 
@@ -83,7 +87,7 @@ function SettingsPopover({
       })
 
       .catch(() => {
-        toast.error("Failed to logout");
+        toast.error(logoutFailedMessage);
       });
   };
 
@@ -95,7 +99,7 @@ function SettingsPopover({
             sizePreset="main-ui"
             title={
               userResolution === "unavailable"
-                ? "Profile unavailable"
+                ? t("profileUnavailable.title")
                 : getUserEmail(user)
             }
           />
@@ -107,7 +111,7 @@ function SettingsPopover({
             variant="section"
             rounding={2}
             icon={SvgSliders}
-            title="Settings"
+            title={t("settings.label")}
             href="/app/settings"
             onClick={onUserSettingsClick}
           />
@@ -118,7 +122,7 @@ function SettingsPopover({
           variant="section"
           rounding={2}
           icon={SvgBell}
-          title="Notifications"
+          title={t("notifications.label")}
           onClick={onOpenNotifications}
           rightChildren={
             undismissedCount ? (
@@ -132,7 +136,7 @@ function SettingsPopover({
           variant="section"
           rounding={2}
           icon={SvgHelpCircle}
-          title="Help & FAQ"
+          title={t("helpFaq.label")}
           href="https://docs.onyx.app"
           target="_blank"
         />,
@@ -158,7 +162,7 @@ function SettingsPopover({
             variant="section"
             rounding={2}
             icon={SvgUser}
-            title="Log in"
+            title={t("logIn.label")}
             onClick={handleLogin}
           />
         ),
@@ -170,7 +174,7 @@ function SettingsPopover({
             color="danger"
             rounding={2}
             icon={SvgLogOut}
-            title="Log Out"
+            title={t("signOut.label")}
             onClick={handleLogout}
           />
         ),
@@ -199,6 +203,7 @@ export interface SettingsProps {
 }
 
 export default function AccountPopover({ onShowBuildIntro }: SettingsProps) {
+  const t = useTranslations("accountPopover");
   const folded = useSidebarFolded();
   const [popupState, setPopupState] = useState<
     "Settings" | "Notifications" | undefined
@@ -210,7 +215,9 @@ export default function AccountPopover({ onShowBuildIntro }: SettingsProps) {
   const { undismissedCount, refresh: refreshNotificationSummary } =
     useNotificationSummary();
   const userDisplayName =
-    userResolution === "unavailable" ? "Account" : getUserDisplayName(user);
+    userResolution === "unavailable"
+      ? t("accountFallback.label")
+      : getUserDisplayName(user);
 
   const handlePopoverOpen = (state: boolean) => {
     if (state) {

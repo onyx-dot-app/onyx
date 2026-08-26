@@ -1,9 +1,26 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["typescript", "unicorn", "oxc", "react", "nextjs", "jsx-a11y"],
+  "plugins": [
+    "typescript",
+    "unicorn",
+    "oxc",
+    "react",
+    "nextjs",
+    "jsx-a11y"
+  ],
   "jsPlugins": [
-    { "name": "react-doctor", "specifier": "oxlint-plugin-react-doctor" },
-    { "name": "anti-slop", "specifier": "./tools/oxlint/anti-slop/index.ts" }
+    {
+      "name": "react-doctor",
+      "specifier": "oxlint-plugin-react-doctor"
+    },
+    {
+      "name": "anti-slop",
+      "specifier": "./tools/oxlint/anti-slop/index.ts"
+    },
+    {
+      "name": "i18n",
+      "specifier": "./tools/oxlint/i18n/index.ts"
+    }
   ],
   "categories": {
     "correctness": "error"
@@ -37,7 +54,8 @@
     "anti-slop/no-unsafe-dictionary-type": "warn",
     "anti-slop/require-safety-comment-for-type-assertion": "warn",
     "anti-slop/no-runtime-typeof": "off",
-    "anti-slop/no-shape-in-symbol-names": "off"
+    "anti-slop/no-shape-in-symbol-names": "off",
+    "i18n/no-raw-jsx-text": "off"
   },
   "overrides": [
     {
@@ -68,6 +86,16 @@
         "anti-slop/no-widen-then-assert": "off",
         "anti-slop/require-safety-comment-for-type-assertion": "off"
       }
+    },
+    {
+      "files": [
+        "src/views/SettingsPage.tsx",
+        "src/sections/sidebar/AccountPopover.tsx",
+        "src/app/auth/**"
+      ],
+      "rules": {
+        "i18n/no-raw-jsx-text": "error"
+      }
     }
   ],
   "ignorePatterns": [
@@ -78,7 +106,8 @@
     "public",
     "storybook-static",
     "lib/opal/dist",
-    "tools/oxlint/anti-slop"
+    "tools/oxlint/anti-slop",
+    "tools/oxlint/i18n"
   ],
   "env": {
     "builtin": true

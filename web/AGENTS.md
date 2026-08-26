@@ -470,6 +470,39 @@ function ContactForm() {
 
 **Reason:** Client side fetching allows us to load the skeleton of the page without waiting for data to load, leading to a snappier UX. Loading data where needed reduces dependencies between a component and its parent component(s).
 
+## 7. Internationalization (i18n)
+
+The UI is being migrated to next-intl. English message catalogs live in
+`web/src/i18n/messages/en.json`; the locale registry is `web/src/i18n/config.ts`.
+
+- **In migrated directories** (listed in the `i18n/no-raw-jsx-text` override in
+  `web/.oxlintrc.json`), never hardcode user-facing strings. Use
+  `const t = useTranslations("<namespace>")` (client) or
+  `await getTranslations("<namespace>")` (server) and add the English value to
+  `en.json`. The oxlint rule and the `types:check` key augmentation both fail on
+  violations.
+- **Update every locale when you touch a key.** `en.json` is the source of
+  truth. When you add or change a key, also give `es/pt/fr/de.json` your best
+  translation of the English value. Key parity is a compile-time check:
+  `src/i18n/messages/keyParity.ts` makes a missing or extra locale key fail
+  `types:check` (pre-commit, CI, IDE). Keep the ICU shape (arguments, tags,
+  plurals) identical across locales — `web/src/i18n/__tests__/catalog.test.ts`
+  enforces this.
+- Keys are stable identifiers, not English sentences:
+  `<namespace>.<section>.<element>.<role>` in camelCase
+  (e.g. `settings.appearance.colorMode.title`). Rewording English copy must not
+  change the key.
+- Use ICU for interpolation and plurals: `"Hello {name}"`,
+  `"{count, plural, one {# item} other {# items}}"`. Never concatenate
+  translated fragments.
+- When you finish migrating a directory, add its glob to the
+  `i18n/no-raw-jsx-text` override in `.oxlintrc.json` so it cannot regress.
+- Locale-aware date/number formatting: prefer `useFormatter`/`useLocale` from
+  next-intl over hardcoded `"en-US"` `Intl` calls.
+- Prefer CSS logical properties (`ms-`/`me-`/`ps-`/`pe-`/`start-`/`end-`) over
+  physical ones (`ml-`/`mr-`/`pl-`/`pr-`/`left-`/`right-`) in new styles so a
+  future RTL locale does not require re-touching them.
+
 # Stylistic Preferences
 
 ## 1. Import Standards
