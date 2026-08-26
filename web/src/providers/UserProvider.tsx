@@ -590,8 +590,12 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       // error); the stored preference is unchanged server-side.
       try {
         await refreshUser();
-      } catch {
+      } catch (refreshError) {
         // Best effort: the next successful /me resolves any drift.
+        console.error(
+          "Error restoring user state after failed language update:",
+          refreshError
+        );
       }
       console.error("Error updating language preference:", error);
       throw error;
