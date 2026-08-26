@@ -28,6 +28,21 @@ import {
   setUserDefaultModel,
 } from "@/lib/users/svc";
 import { useTheme } from "next-themes";
+import { useRouter } from "next/navigation";
+import Cookies from "js-cookie";
+import {
+  LOCALE_COOKIE_NAME,
+  isSupportedLocale,
+  type Locale,
+} from "@/i18n/config";
+
+// path "/" (js-cookie's default, made explicit) so every route sees the
+// locale, not just the tree the settings page lives under.
+const LOCALE_COOKIE_OPTIONS = {
+  expires: 365,
+  sameSite: "lax" as const,
+  path: "/",
+};
 
 const EMPTY_PERMISSIONS: string[] = [];
 
@@ -73,6 +88,7 @@ export interface UserContextType {
   updateUserThemePreference: (
     themePreference: ThemePreference
   ) => Promise<void>;
+  updateUserLanguage: (language: Locale) => Promise<void>;
   updateUserChatBackground: (chatBackground: string | null) => Promise<void>;
   updateUserDefaultModel: (defaultModel: string | null) => Promise<void>;
   updateUserDefaultAppMode: (mode: "CHAT" | "SEARCH") => Promise<void>;
@@ -228,6 +244,49 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     theme,
     setTheme,
   ]);
+
+  // Sync the user's language preference from DB to the NEXT_LOCALE cookie the
+  // server layout reads (src/i18n/request.ts). The DB is canonical; one
+  // refresh re-renders the tree in the right locale after login. Keyed by user
+  // id so switching identities without a remount (e.g. impersonation) re-syncs
+  // the new user's preference.
+  //
+  // TODO: move the NEXT_LOCALE write to the backend — PATCH /user/language and
+  // session establishment should Set-Cookie so the server owns reconciliation.
+  // That deletes the sequencing/identity guards below (client becomes "PATCH,
+  // then router.refresh()") and removes the first-paint language flash on new
+  // sessions. Do this before another preference copies this pattern.
+  const router = useRouter();
+  const lastLanguageSyncUserIdRef = useRef<string | null>(null);
+  const languageRequestSeqRef = useRef(0);
+  const languagePatchChainRef = useRef<Promise<void>>(Promise.resolve());
+
+  useEffect(() => {
+    // Wait for user data to load; sync once per user identity
+    if (!upToDateUser?.id) {
+      // Signed out: drop the served identity and advance the sequence so
+      // pending language requests neither commit nor roll back — not now,
+      // and not after the same user signs back in.
+      lastLanguageSyncUserIdRef.current = null;
+      languageRequestSeqRef.current++;
+      return;
+    }
+    if (lastLanguageSyncUserIdRef.current === upToDateUser.id) return;
+    lastLanguageSyncUserIdRef.current = upToDateUser.id;
+
+    const savedLanguage = upToDateUser.preferences?.language;
+    if (isSupportedLocale(savedLanguage)) {
+      if (Cookies.get(LOCALE_COOKIE_NAME) !== savedLanguage) {
+        Cookies.set(LOCALE_COOKIE_NAME, savedLanguage, LOCALE_COOKIE_OPTIONS);
+        router.refresh();
+      }
+    } else if (Cookies.get(LOCALE_COOKIE_NAME) !== undefined) {
+      // This user has no stored preference: drop a cookie left behind by a
+      // previous identity in this tab so the default locale renders.
+      Cookies.remove(LOCALE_COOKIE_NAME, { path: "/" });
+      router.refresh();
+    }
+  }, [upToDateUser?.id, upToDateUser?.preferences?.language, router]);
 
   const updateUserTemperatureOverrideEnabled = async (enabled: boolean) => {
     try {
@@ -537,6 +596,117 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const updateUserLanguage = async (language: Locale) => {
+    const previousLanguage = upToDateUser?.preferences?.language;
+    // No signed-in identity to persist for — the picker is only rendered for
+    // signed-in users, so there is nothing to do.
+    const requestUserId = upToDateUser?.id ?? null;
+    if (requestUserId === null) {
+      return;
+    }
+    // Guards overlapping updates: only the newest request may commit, roll
+    // back, or refresh, so a slow older request can't clobber a newer choice.
+    // Also bound to the identity that issued it: after an in-place identity
+    // switch (impersonation), a queued request must neither PATCH the new
+    // identity's preference row nor roll back the new identity's cookie.
+    // lastLanguageSyncUserIdRef tracks the identity this provider currently
+    // serves (updated by the sync effect above on every id change).
+    const requestId = ++languageRequestSeqRef.current;
+    const isLatestRequest = () =>
+      requestId === languageRequestSeqRef.current &&
+      requestUserId === lastLanguageSyncUserIdRef.current;
+    try {
+      setUpToDateUser((prevUser) => {
+        if (prevUser) {
+          return {
+            ...prevUser,
+            preferences: {
+              ...prevUser.preferences,
+              language,
+            },
+          };
+        }
+        return prevUser;
+      });
+
+      // Optimistically switch the locale the server layout renders with.
+      Cookies.set(LOCALE_COOKIE_NAME, language, LOCALE_COOKIE_OPTIONS);
+
+      // Strictly serialize PATCHes: wait until the in-flight request has a
+      // response (not just a client-side rejection) before sending the next
+      // one, so the backend commits updates in selection order. A selection
+      // superseded while it waits skips its send — the newest one covers it.
+      const previousSend = languagePatchChainRef.current;
+      const send = (async (): Promise<Response | null> => {
+        await previousSend;
+        if (!isLatestRequest()) {
+          return null;
+        }
+        return fetch(`/api/user/language`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ language }),
+        });
+      })();
+      languagePatchChainRef.current = send.then(
+        () => undefined,
+        () => undefined
+      );
+
+      const response = await send;
+
+      // Superseded while queued: the newer request owns all state from here.
+      if (response === null) {
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error("Failed to update language preference");
+      }
+
+      if (isLatestRequest()) {
+        // Re-run the server layout so getLocale()/getMessages() re-resolve.
+        router.refresh();
+      }
+    } catch (error) {
+      // Roll back the optimistic cookie and in-memory preference on every
+      // failure path, including network errors where fetch itself rejects.
+      if (isLatestRequest()) {
+        setUpToDateUser((prevUser) => {
+          if (prevUser) {
+            return {
+              ...prevUser,
+              preferences: {
+                ...prevUser.preferences,
+                language: previousLanguage ?? null,
+              },
+            };
+          }
+          return prevUser;
+        });
+        if (isSupportedLocale(previousLanguage)) {
+          Cookies.set(
+            LOCALE_COOKIE_NAME,
+            previousLanguage,
+            LOCALE_COOKIE_OPTIONS
+          );
+        } else {
+          Cookies.remove(LOCALE_COOKIE_NAME, { path: "/" });
+        }
+        try {
+          await refreshUser();
+        } catch {
+          // Best effort: the direct rollback above already restored local
+          // state, so a failed refetch changes nothing user-visible.
+        }
+      }
+      console.error("Error updating language preference:", error);
+      throw error;
+    }
+  };
+
   const updateUserChatBackground = async (chatBackground: string | null) => {
     try {
       setUpToDateUser((prevUser) => {
@@ -693,6 +863,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         updateUserReasoningEffortDefault,
         updateUserPersonalization,
         updateUserThemePreference,
+        updateUserLanguage,
         updateUserChatBackground,
         updateUserDefaultModel,
         updateUserDefaultAppMode,

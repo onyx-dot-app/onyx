@@ -34,6 +34,12 @@ import { Switch } from "@opal/components";
 import { useUser } from "@/providers/UserProvider";
 import { useTheme } from "next-themes";
 import { MemoryItem, Permission, ThemePreference } from "@/lib/types";
+import {
+  DEFAULT_LOCALE,
+  LOCALE_ENDONYMS,
+  SUPPORTED_LOCALES,
+  type Locale,
+} from "@/i18n/config";
 import useUserPersonalization from "@/hooks/useUserPersonalization";
 import ModelSelector from "@/sections/model-selector/ModelSelector";
 import { structureValue } from "@/lib/languageModels/utils";
@@ -493,8 +499,10 @@ function GeneralSettings() {
     updateUserPersonalization,
     updateUserThemePreference,
     updateUserChatBackground,
+    updateUserLanguage,
   } = useUser();
   const { theme, setTheme, systemTheme } = useTheme();
+  const currentLanguage = user?.preferences?.language ?? DEFAULT_LOCALE;
 
   const applyBackground = useCallback(
     async (bg: (typeof CHAT_BACKGROUND_OPTIONS)[number]) => {
@@ -709,6 +717,32 @@ function GeneralSettings() {
                     >
                       Dark
                     </InputSelect.Item>
+                  </InputSelect.Content>
+                </InputSelect>
+              </InputHorizontal>
+              <InputHorizontal
+                title="Language"
+                description="Select the language for the UI."
+                center
+                withLabel
+              >
+                <InputSelect
+                  value={currentLanguage}
+                  onValueChange={(value) => {
+                    // SAFETY: the items below only carry SUPPORTED_LOCALES
+                    // values, so the select can't emit anything else.
+                    updateUserLanguage(value as Locale).catch(() => {
+                      toast.error("Failed to update language preference");
+                    });
+                  }}
+                >
+                  <InputSelect.Trigger />
+                  <InputSelect.Content>
+                    {SUPPORTED_LOCALES.map((locale) => (
+                      <InputSelect.Item key={locale} value={locale}>
+                        {LOCALE_ENDONYMS[locale]}
+                      </InputSelect.Item>
+                    ))}
                   </InputSelect.Content>
                 </InputSelect>
               </InputHorizontal>
