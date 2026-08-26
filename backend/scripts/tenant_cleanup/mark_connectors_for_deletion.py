@@ -194,101 +194,87 @@ def mark_tenant_connectors_for_deletion(
     )
 
 
-def main() -> None:
-    if len(sys.argv) < 2:
-        print(
-            "Usage: python backend/scripts/tenant_cleanup/mark_connectors_for_deletion.py <tenant_id> [--force] [--concurrency N]"
-        )
-        print(
-            "       python backend/scripts/tenant_cleanup/mark_connectors_for_deletion.py --csv <csv_file_path> [--force]"
-            " [--concurrency N]"
-        )
-        print("\nArguments:")
-        print(
-            "  tenant_id        The tenant ID to process (required if not using --csv)"
-        )
-        print("  --csv PATH       Path to CSV file containing tenant IDs to process")
-        print("  --force          Skip all confirmation prompts (optional)")
-        print("  --concurrency N  Process N tenants concurrently (default: 1)")
-        print("\nExamples:")
-        print(
-            "  python backend/scripts/tenant_cleanup/mark_connectors_for_deletion.py tenant_abc123-def456-789"
-        )
-        print(
-            "  python backend/scripts/tenant_cleanup/mark_connectors_for_deletion.py tenant_abc123-def456-789 --force"
-        )
-        print(
-            "  python backend/scripts/tenant_cleanup/mark_connectors_for_deletion.py --csv gated_tenants_no_query_3mo.csv"
-        )
-        print(
-            "  python backend/scripts/tenant_cleanup/mark_connectors_for_deletion.py --csv gated_tenants_no_query_3mo.csv "
-            "--force --concurrency 16"
-        )
-        sys.exit(1)
+def _print_usage() -> None:
+    """Print usage information for the script."""
+    print(
+        "Usage: python backend/scripts/tenant_cleanup/mark_connectors_for_deletion.py <tenant_id> [--force] [--concurrency N]"
+    )
+    print(
+        "       python backend/scripts/tenant_cleanup/mark_connectors_for_deletion.py --csv <csv_file_path> [--force]"
+        " [--concurrency N]"
+    )
+    print("\nArguments:")
+    print("  tenant_id        The tenant ID to process (required if not using --csv)")
+    print("  --csv PATH       Path to CSV file containing tenant IDs to process")
+    print("  --force          Skip all confirmation prompts (optional)")
+    print("  --concurrency N  Process N tenants concurrently (default: 1)")
+    print("\nExamples:")
+    print(
+        "  python backend/scripts/tenant_cleanup/mark_connectors_for_deletion.py tenant_abc123-def456-789"
+    )
+    print(
+        "  python backend/scripts/tenant_cleanup/mark_connectors_for_deletion.py tenant_abc123-def456-789 --force"
+    )
+    print(
+        "  python backend/scripts/tenant_cleanup/mark_connectors_for_deletion.py --csv gated_tenants_no_query_3mo.csv"
+    )
+    print(
+        "  python backend/scripts/tenant_cleanup/mark_connectors_for_deletion.py --csv gated_tenants_no_query_3mo.csv "
+        "--force --concurrency 16"
+    )
 
-    # Parse arguments
-    force = "--force" in sys.argv
-    tenant_ids: list[str] = []
 
-    # Parse concurrency
-    concurrency: int = 1
-    if "--concurrency" in sys.argv:
-        try:
-            concurrency_index = sys.argv.index("--concurrency")
-            if concurrency_index + 1 >= len(sys.argv):
-                print("Error: --concurrency flag requires a number", file=sys.stderr)
-                sys.exit(1)
-            concurrency = int(sys.argv[concurrency_index + 1])
-            if concurrency < 1:
-                print("Error: concurrency must be at least 1", file=sys.stderr)
-                sys.exit(1)
-        except ValueError:
-            print("Error: --concurrency value must be an integer", file=sys.stderr)
-            sys.exit(1)
+def _parse_concurrency() -> int:
+    """Return the --concurrency value, exiting on an invalid one."""
+    if "--concurrency" not in sys.argv:
+        return 1
 
-    # Validate: concurrency > 1 requires --force
-    if concurrency > 1 and not force:
-        print(
-            "Error: --concurrency > 1 requires --force flag (interactive mode not supported with parallel processing)",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    # Check for CSV mode
-    if "--csv" in sys.argv:
-        try:
-            csv_index: int = sys.argv.index("--csv")
-            if csv_index + 1 >= len(sys.argv):
-                print("Error: --csv flag requires a file path", file=sys.stderr)
-                sys.exit(1)
-
-            csv_path: str = sys.argv[csv_index + 1]
-            tenant_ids = read_tenant_ids_from_csv(csv_path)
-
-            if not tenant_ids:
-                print("Error: No tenant IDs found in CSV file", file=sys.stderr)
-                sys.exit(1)
-
-            print(f"Found {len(tenant_ids)} tenant(s) in CSV file: {csv_path}")
-
-        except Exception as e:
-            print(f"Error reading CSV file: {e}", file=sys.stderr)
-            sys.exit(1)
-    else:
-        # Single tenant mode
-        tenant_ids = [sys.argv[1]]
-
-    # Find heavy worker pod once before processing
     try:
-        print("Finding worker pod...")
-        pod_name: str = find_worker_pod()
-        print(f"✓ Using worker pod: {pod_name}")
-    except Exception as e:
-        print(f"✗ Failed to find heavy worker pod: {e}", file=sys.stderr)
-        print("Cannot proceed with marking connectors for deletion")
+        concurrency_index = sys.argv.index("--concurrency")
+        if concurrency_index + 1 >= len(sys.argv):
+            print("Error: --concurrency flag requires a number", file=sys.stderr)
+            sys.exit(1)
+        concurrency = int(sys.argv[concurrency_index + 1])
+        if concurrency < 1:
+            print("Error: concurrency must be at least 1", file=sys.stderr)
+            sys.exit(1)
+    except ValueError:
+        print("Error: --concurrency value must be an integer", file=sys.stderr)
         sys.exit(1)
 
-    # Initial confirmation (unless --force is used)
+    return concurrency
+
+
+def _parse_tenant_ids() -> list[str]:
+    """Return the tenant IDs from --csv, or the single positional tenant ID."""
+    if "--csv" not in sys.argv:
+        # Single tenant mode
+        return [sys.argv[1]]
+
+    try:
+        csv_index: int = sys.argv.index("--csv")
+        if csv_index + 1 >= len(sys.argv):
+            print("Error: --csv flag requires a file path", file=sys.stderr)
+            sys.exit(1)
+
+        csv_path: str = sys.argv[csv_index + 1]
+        tenant_ids = read_tenant_ids_from_csv(csv_path)
+
+        if not tenant_ids:
+            print("Error: No tenant IDs found in CSV file", file=sys.stderr)
+            sys.exit(1)
+
+        print(f"Found {len(tenant_ids)} tenant(s) in CSV file: {csv_path}")
+
+    except Exception as e:
+        print(f"Error reading CSV file: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    return tenant_ids
+
+
+def _confirm_start(tenant_ids: list[str], force: bool, concurrency: int) -> None:
+    """Describe the run and require confirmation unless --force is used."""
     if not force:
         print(f"\n{'=' * 80}")
         print("MARK CONNECTORS FOR DELETION - CONFIRMATION REQUIRED")
@@ -331,76 +317,92 @@ def main() -> None:
                 f"(concurrency: {concurrency}) without confirmations"
             )
 
-    # Process tenants (in parallel if concurrency > 1)
-    failed_tenants: list[tuple[str, str]] = []
-    successful_tenants: list[str] = []
 
-    if concurrency == 1:
-        # Sequential processing
-        for idx, tenant_id in enumerate(tenant_ids, 1):
-            if len(tenant_ids) > 1:
-                print(f"\n{'=' * 80}")
-                print(f"Processing tenant {idx}/{len(tenant_ids)}: {tenant_id}")
-                print(f"{'=' * 80}")
+def _process_sequentially(
+    tenant_ids: list[str],
+    pod_name: str,
+    force: bool,
+    successful_tenants: list[str],
+    failed_tenants: list[tuple[str, str]],
+) -> None:
+    """Process tenants one at a time, recording the outcome of each."""
+    for idx, tenant_id in enumerate(tenant_ids, 1):
+        if len(tenant_ids) > 1:
+            print(f"\n{'=' * 80}")
+            print(f"Processing tenant {idx}/{len(tenant_ids)}: {tenant_id}")
+            print(f"{'=' * 80}")
 
-            try:
-                mark_tenant_connectors_for_deletion(tenant_id, pod_name, force)
+        try:
+            mark_tenant_connectors_for_deletion(tenant_id, pod_name, force)
+            successful_tenants.append(tenant_id)
+        except Exception as e:
+            print(
+                f"✗ Failed to process tenant {tenant_id}: {e}",
+                file=sys.stderr,
+            )
+            failed_tenants.append((tenant_id, str(e)))
+
+            # If not in force mode and there are more tenants, ask if we should continue
+            if not force and idx < len(tenant_ids):
+                response = input(
+                    f"\nContinue with remaining {len(tenant_ids) - idx} tenant(s)? (y/n): "
+                )
+                if response.lower() != "y":
+                    print("Operation aborted by user")
+                    break
+
+
+def _process_in_parallel(
+    tenant_ids: list[str],
+    pod_name: str,
+    force: bool,
+    concurrency: int,
+    successful_tenants: list[str],
+    failed_tenants: list[tuple[str, str]],
+) -> None:
+    """Process tenants concurrently, recording the outcome of each."""
+    print(f"\nProcessing {len(tenant_ids)} tenant(s) with concurrency={concurrency}")
+
+    def process_tenant(tenant_id: str) -> tuple[str, bool, str | None]:
+        """Process a single tenant. Returns (tenant_id, success, error_message)."""
+        try:
+            mark_tenant_connectors_for_deletion(tenant_id, pod_name, force)
+            return (tenant_id, True, None)
+        except Exception as e:
+            return (tenant_id, False, str(e))
+
+    with ThreadPoolExecutor(max_workers=concurrency) as executor:
+        # Submit all tasks
+        future_to_tenant = {
+            executor.submit(process_tenant, tenant_id): tenant_id
+            for tenant_id in tenant_ids
+        }
+
+        # Process results as they complete
+        completed: int = 0
+        for future in as_completed(future_to_tenant):
+            completed += 1
+            tenant_id, success, error = future.result()
+
+            if success:
                 successful_tenants.append(tenant_id)
-            except Exception as e:
-                print(
-                    f"✗ Failed to process tenant {tenant_id}: {e}",
+                safe_print(
+                    f"[{completed}/{len(tenant_ids)}] ✓ Successfully processed {tenant_id}"
+                )
+            else:
+                failed_tenants.append((tenant_id, error or "Unknown error"))
+                safe_print(
+                    f"[{completed}/{len(tenant_ids)}] ✗ Failed to process {tenant_id}: {error}",
                     file=sys.stderr,
                 )
-                failed_tenants.append((tenant_id, str(e)))
 
-                # If not in force mode and there are more tenants, ask if we should continue
-                if not force and idx < len(tenant_ids):
-                    response = input(
-                        f"\nContinue with remaining {len(tenant_ids) - idx} tenant(s)? (y/n): "
-                    )
-                    if response.lower() != "y":
-                        print("Operation aborted by user")
-                        break
-    else:
-        # Parallel processing
-        print(
-            f"\nProcessing {len(tenant_ids)} tenant(s) with concurrency={concurrency}"
-        )
 
-        def process_tenant(tenant_id: str) -> tuple[str, bool, str | None]:
-            """Process a single tenant. Returns (tenant_id, success, error_message)."""
-            try:
-                mark_tenant_connectors_for_deletion(tenant_id, pod_name, force)
-                return (tenant_id, True, None)
-            except Exception as e:
-                return (tenant_id, False, str(e))
-
-        with ThreadPoolExecutor(max_workers=concurrency) as executor:
-            # Submit all tasks
-            future_to_tenant = {
-                executor.submit(process_tenant, tenant_id): tenant_id
-                for tenant_id in tenant_ids
-            }
-
-            # Process results as they complete
-            completed: int = 0
-            for future in as_completed(future_to_tenant):
-                completed += 1
-                tenant_id, success, error = future.result()
-
-                if success:
-                    successful_tenants.append(tenant_id)
-                    safe_print(
-                        f"[{completed}/{len(tenant_ids)}] ✓ Successfully processed {tenant_id}"
-                    )
-                else:
-                    failed_tenants.append((tenant_id, error or "Unknown error"))
-                    safe_print(
-                        f"[{completed}/{len(tenant_ids)}] ✗ Failed to process {tenant_id}: {error}",
-                        file=sys.stderr,
-                    )
-
-    # Print summary if multiple tenants
+def _print_summary(
+    tenant_ids: list[str],
+    successful_tenants: list[str],
+    failed_tenants: list[tuple[str, str]],
+) -> None:
+    """Print the run summary and exit non-zero if any tenant failed."""
     if len(tenant_ids) > 1:
         print(f"\n{'=' * 80}")
         print("OPERATION SUMMARY")
@@ -418,6 +420,60 @@ def main() -> None:
 
         if failed_tenants:
             sys.exit(1)
+
+
+def main() -> None:
+    if len(sys.argv) < 2:
+        _print_usage()
+        sys.exit(1)
+
+    # Parse arguments
+    force = "--force" in sys.argv
+    concurrency: int = _parse_concurrency()
+
+    # Validate: concurrency > 1 requires --force
+    if concurrency > 1 and not force:
+        print(
+            "Error: --concurrency > 1 requires --force flag (interactive mode not supported with parallel processing)",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    tenant_ids: list[str] = _parse_tenant_ids()
+
+    # Find heavy worker pod once before processing
+    try:
+        print("Finding worker pod...")
+        pod_name: str = find_worker_pod()
+        print(f"✓ Using worker pod: {pod_name}")
+    except Exception as e:
+        print(f"✗ Failed to find heavy worker pod: {e}", file=sys.stderr)
+        print("Cannot proceed with marking connectors for deletion")
+        sys.exit(1)
+
+    # Initial confirmation (unless --force is used)
+    _confirm_start(tenant_ids, force, concurrency)
+
+    # Process tenants (in parallel if concurrency > 1)
+    failed_tenants: list[tuple[str, str]] = []
+    successful_tenants: list[str] = []
+
+    if concurrency == 1:
+        _process_sequentially(
+            tenant_ids, pod_name, force, successful_tenants, failed_tenants
+        )
+    else:
+        _process_in_parallel(
+            tenant_ids,
+            pod_name,
+            force,
+            concurrency,
+            successful_tenants,
+            failed_tenants,
+        )
+
+    # Print summary if multiple tenants
+    _print_summary(tenant_ids, successful_tenants, failed_tenants)
 
 
 if __name__ == "__main__":

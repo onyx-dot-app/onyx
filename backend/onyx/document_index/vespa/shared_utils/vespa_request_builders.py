@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
-from onyx.configs.constants import INDEX_SEPARATOR
-from onyx.context.search.models import IndexFilters
+from onyx.configs.constants import INDEX_SEPARATOR, DocumentSource
+from onyx.context.search.models import IndexFilters, Tag, TimeRange
 from onyx.document_index.vespa.internal_types import VespaChunkRequest
 from onyx.document_index.vespa_constants import (
     ACCESS_CONTROL_LIST,
@@ -27,157 +27,222 @@ def build_tenant_id_filter(tenant_id: str) -> str:
     return f'({TENANT_ID} contains "{tenant_id}")'
 
 
+def _append(parts: list[str], clause: str) -> None:
+    if clause:
+        parts.append(clause)
+
+
+def _build_or_filters(key: str, vals: list[str] | None) -> str:
+    """For string-based 'contains' filters, e.g. WSET fields or array<string> fields.
+    Returns a bare clause like '(key contains "v1" or key contains "v2")' or ""."""
+    if not key or not vals:
+        return ""
+    eq_elems = [f'{key} contains "{val}"' for val in vals if val]
+    if not eq_elems:
+        return ""
+    return f"({' or '.join(eq_elems)})"
+
+
+def _build_weighted_set_filter(key: str, vals: list[str] | None) -> str:
+    """Build a Vespa weightedSet filter for large value lists.
+
+    Uses Vespa's native weightedSet() operator instead of OR-chained
+    'contains' clauses.  This is critical for fields like
+    access_control_list where a single user may have tens of thousands
+    of ACL entries — OR clauses at that scale cause Vespa to reject
+    the query with HTTP 400."""
+    if not key or not vals:
+        return ""
+    filtered = [val for val in vals if val]
+    if not filtered:
+        return ""
+    items = ", ".join(f'"{val}":1' for val in filtered)
+    return f"weightedSet({key}, {{{items}}})"
+
+
+def _build_int_or_filters(key: str, vals: list[int] | None) -> str:
+    """For an integer field filter.
+    Returns a bare clause or ""."""
+    if vals is None or not vals:
+        return ""
+    eq_elems = [f"{key} = {val}" for val in vals]
+    return f"({' or '.join(eq_elems)})"
+
+
+def _build_kge(entity: str) -> str:
+    GENERAL = "::*"
+    if entity.endswith(GENERAL):
+        return f'({{prefix: true}}"{entity.split(GENERAL, 1)[0]}")'
+    else:
+        return f'"{entity}"'
+
+
+def _build_kg_filter(
+    kg_entities: list[str] | None,
+    kg_relationships: list[str] | None,
+    kg_terms: list[str] | None,
+) -> str:
+    if not kg_entities and not kg_relationships and not kg_terms:
+        return ""
+
+    combined_filter_parts: list[str] = []
+
+    if kg_entities:
+        filter_parts = [
+            f"(kg_entities contains {_build_kge(kg_entity)})"
+            for kg_entity in kg_entities
+        ]
+        combined_filter_parts.append(f"({' or '.join(filter_parts)})")
+
+    # TODO: handle complex nested relationship logic (e.g., A participated, and B or C participated)
+    if kg_relationships:
+        filter_parts = []
+        for kg_relationship in kg_relationships:
+            source, rel_type, target = split_relationship_id(kg_relationship)
+            filter_parts.append(
+                "(kg_relationships contains sameElement("
+                f"source contains {_build_kge(source)},"
+                f'rel_type contains "{rel_type}",'
+                f"target contains {_build_kge(target)}))"
+            )
+        combined_filter_parts.append(f"{' and '.join(filter_parts)}")
+
+    # TODO: remove kg terms entirely from prompts and codebase
+
+    return f"({' and '.join(combined_filter_parts)})"
+
+
+def _build_kg_source_filters(
+    kg_sources: list[str] | None,
+) -> str:
+    if not kg_sources:
+        return ""
+
+    source_phrases = [f'{DOCUMENT_ID} contains "{source}"' for source in kg_sources]
+    return f"({' or '.join(source_phrases)})"
+
+
+def _build_kg_chunk_id_zero_only_filter(
+    kg_chunk_id_zero_only: bool,
+) -> str:
+    if not kg_chunk_id_zero_only:
+        return ""
+    return "(chunk_id = 0)"
+
+
+def _build_time_filter(
+    cutoff: datetime | None,
+    cutoff_upper: datetime | None = None,
+    untimed_doc_cutoff: timedelta = timedelta(days=92),
+) -> str:
+    if not cutoff and not cutoff_upper:
+        return ""
+
+    clauses: list[str] = []
+    if cutoff:
+        # Untimed docs (no doc_updated_at) are only included for an old, open-
+        # ended lower bound. A bounded range excludes them — an undated doc
+        # cannot be shown to fall within [cutoff, cutoff_upper].
+        include_untimed = (
+            cutoff_upper is None
+            and datetime.now(timezone.utc) - untimed_doc_cutoff > cutoff
+        )
+        cutoff_secs = int(cutoff.timestamp())
+        if include_untimed:
+            clauses.append(f"!({DOC_UPDATED_AT} < {cutoff_secs})")
+        else:
+            clauses.append(f"({DOC_UPDATED_AT} >= {cutoff_secs})")
+    if cutoff_upper:
+        clauses.append(f"({DOC_UPDATED_AT} <= {int(cutoff_upper.timestamp())})")
+
+    return " and ".join(clauses)
+
+
+def _build_updated_at_filter(updated_at_range: TimeRange | None) -> str:
+    """Vespa only indexes doc_updated_at: created_at_range is dropped (widens
+    rather than narrows)."""
+    return _build_time_filter(
+        updated_at_range.start if updated_at_range else None,
+        updated_at_range.end if updated_at_range else None,
+    )
+
+
+def _build_user_project_filter(
+    project_id: int | None,
+) -> str:
+    if project_id is None:
+        return ""
+    try:
+        pid = int(project_id)
+    except Exception:
+        return ""
+    return f'({USER_PROJECT} contains "{pid}")'
+
+
+def _build_persona_filter(
+    persona_id: int | None,
+) -> str:
+    if persona_id is None:
+        return ""
+    try:
+        pid = int(persona_id)
+    except Exception:
+        logger.warning("Invalid persona ID: %s", persona_id)
+        return ""
+    return f'({PERSONAS} contains "{pid}")'
+
+
+def _build_source_type_filter(source_type: list[DocumentSource] | None) -> str:
+    source_strs = [s.value for s in source_type] if source_type else None
+    return _build_or_filters(SOURCE_TYPE, source_strs)
+
+
+def _build_tag_filter(tags: list[Tag] | None) -> str:
+    tag_attributes = None
+    if tags:
+        tag_attributes = [
+            f"{tag.tag_key}{INDEX_SEPARATOR}{tag.tag_value}" for tag in tags
+        ]
+    return _build_or_filters(METADATA_LIST, tag_attributes)
+
+
+def _build_knowledge_scope_filter(filters: IndexFilters) -> str:
+    """Explicit knowledge attachments restrict what an assistant can see.
+    When none are set, the assistant can see everything.
+
+    persona_id_filter is a primary trigger — a persona with user files IS
+    explicit knowledge, so it can start a knowledge scope on its own.
+
+    project_id_filter is additive — it widens the scope to also cover
+    overflowing project files but never restricts on its own (a chat
+    inside a project should still search team knowledge)."""
+    knowledge_scope_parts: list[str] = []
+
+    _append(
+        knowledge_scope_parts, _build_or_filters(DOCUMENT_SETS, filters.document_set)
+    )
+    _append(knowledge_scope_parts, _build_persona_filter(filters.persona_id_filter))
+
+    # project_id_filter only widens an existing scope.
+    if knowledge_scope_parts:
+        _append(
+            knowledge_scope_parts,
+            _build_user_project_filter(filters.project_id_filter),
+        )
+
+    if len(knowledge_scope_parts) > 1:
+        return "(" + " or ".join(knowledge_scope_parts) + ")"
+    if len(knowledge_scope_parts) == 1:
+        return knowledge_scope_parts[0]
+    return ""
+
+
 def build_vespa_filters(
     filters: IndexFilters,
     *,
     include_hidden: bool = False,
     remove_trailing_and: bool = False,  # Set to True when using as a complete Vespa query
 ) -> str:
-    def _build_or_filters(key: str, vals: list[str] | None) -> str:
-        """For string-based 'contains' filters, e.g. WSET fields or array<string> fields.
-        Returns a bare clause like '(key contains "v1" or key contains "v2")' or ""."""
-        if not key or not vals:
-            return ""
-        eq_elems = [f'{key} contains "{val}"' for val in vals if val]
-        if not eq_elems:
-            return ""
-        return f"({' or '.join(eq_elems)})"
-
-    def _build_weighted_set_filter(key: str, vals: list[str] | None) -> str:
-        """Build a Vespa weightedSet filter for large value lists.
-
-        Uses Vespa's native weightedSet() operator instead of OR-chained
-        'contains' clauses.  This is critical for fields like
-        access_control_list where a single user may have tens of thousands
-        of ACL entries — OR clauses at that scale cause Vespa to reject
-        the query with HTTP 400."""
-        if not key or not vals:
-            return ""
-        filtered = [val for val in vals if val]
-        if not filtered:
-            return ""
-        items = ", ".join(f'"{val}":1' for val in filtered)
-        return f"weightedSet({key}, {{{items}}})"
-
-    def _build_int_or_filters(key: str, vals: list[int] | None) -> str:
-        """For an integer field filter.
-        Returns a bare clause or ""."""
-        if vals is None or not vals:
-            return ""
-        eq_elems = [f"{key} = {val}" for val in vals]
-        return f"({' or '.join(eq_elems)})"
-
-    def _build_kg_filter(
-        kg_entities: list[str] | None,
-        kg_relationships: list[str] | None,
-        kg_terms: list[str] | None,
-    ) -> str:
-        if not kg_entities and not kg_relationships and not kg_terms:
-            return ""
-
-        combined_filter_parts = []
-
-        def _build_kge(entity: str) -> str:
-            GENERAL = "::*"
-            if entity.endswith(GENERAL):
-                return f'({{prefix: true}}"{entity.split(GENERAL, 1)[0]}")'
-            else:
-                return f'"{entity}"'
-
-        if kg_entities:
-            filter_parts = [
-                f"(kg_entities contains {_build_kge(kg_entity)})"
-                for kg_entity in kg_entities
-            ]
-            combined_filter_parts.append(f"({' or '.join(filter_parts)})")
-
-        # TODO: handle complex nested relationship logic (e.g., A participated, and B or C participated)
-        if kg_relationships:
-            filter_parts = []
-            for kg_relationship in kg_relationships:
-                source, rel_type, target = split_relationship_id(kg_relationship)
-                filter_parts.append(
-                    "(kg_relationships contains sameElement("
-                    f"source contains {_build_kge(source)},"
-                    f'rel_type contains "{rel_type}",'
-                    f"target contains {_build_kge(target)}))"
-                )
-            combined_filter_parts.append(f"{' and '.join(filter_parts)}")
-
-        # TODO: remove kg terms entirely from prompts and codebase
-
-        return f"({' and '.join(combined_filter_parts)})"
-
-    def _build_kg_source_filters(
-        kg_sources: list[str] | None,
-    ) -> str:
-        if not kg_sources:
-            return ""
-
-        source_phrases = [f'{DOCUMENT_ID} contains "{source}"' for source in kg_sources]
-        return f"({' or '.join(source_phrases)})"
-
-    def _build_kg_chunk_id_zero_only_filter(
-        kg_chunk_id_zero_only: bool,
-    ) -> str:
-        if not kg_chunk_id_zero_only:
-            return ""
-        return "(chunk_id = 0)"
-
-    def _build_time_filter(
-        cutoff: datetime | None,
-        cutoff_upper: datetime | None = None,
-        untimed_doc_cutoff: timedelta = timedelta(days=92),
-    ) -> str:
-        if not cutoff and not cutoff_upper:
-            return ""
-
-        clauses: list[str] = []
-        if cutoff:
-            # Untimed docs (no doc_updated_at) are only included for an old, open-
-            # ended lower bound. A bounded range excludes them — an undated doc
-            # cannot be shown to fall within [cutoff, cutoff_upper].
-            include_untimed = (
-                cutoff_upper is None
-                and datetime.now(timezone.utc) - untimed_doc_cutoff > cutoff
-            )
-            cutoff_secs = int(cutoff.timestamp())
-            if include_untimed:
-                clauses.append(f"!({DOC_UPDATED_AT} < {cutoff_secs})")
-            else:
-                clauses.append(f"({DOC_UPDATED_AT} >= {cutoff_secs})")
-        if cutoff_upper:
-            clauses.append(f"({DOC_UPDATED_AT} <= {int(cutoff_upper.timestamp())})")
-
-        return " and ".join(clauses)
-
-    def _build_user_project_filter(
-        project_id: int | None,
-    ) -> str:
-        if project_id is None:
-            return ""
-        try:
-            pid = int(project_id)
-        except Exception:
-            return ""
-        return f'({USER_PROJECT} contains "{pid}")'
-
-    def _build_persona_filter(
-        persona_id: int | None,
-    ) -> str:
-        if persona_id is None:
-            return ""
-        try:
-            pid = int(persona_id)
-        except Exception:
-            logger.warning("Invalid persona ID: %s", persona_id)
-            return ""
-        return f'({PERSONAS} contains "{pid}")'
-
-    def _append(parts: list[str], clause: str) -> None:
-        if clause:
-            parts.append(clause)
-
     # Collect all top-level filter clauses, then join with " and " at the end.
     filter_parts: list[str] = []
 
@@ -200,59 +265,10 @@ def build_vespa_filters(
             ),
         )
 
-    # Source type filters
-    source_strs = (
-        [s.value for s in filters.source_type] if filters.source_type else None
-    )
-    _append(filter_parts, _build_or_filters(SOURCE_TYPE, source_strs))
-
-    # Tag filters
-    tag_attributes = None
-    if filters.tags:
-        tag_attributes = [
-            f"{tag.tag_key}{INDEX_SEPARATOR}{tag.tag_value}" for tag in filters.tags
-        ]
-    _append(filter_parts, _build_or_filters(METADATA_LIST, tag_attributes))
-
-    # Knowledge scope: explicit knowledge attachments restrict what an
-    # assistant can see.  When none are set, the assistant can see
-    # everything.
-    #
-    # persona_id_filter is a primary trigger — a persona with user files IS
-    # explicit knowledge, so it can start a knowledge scope on its own.
-    #
-    # project_id_filter is additive — it widens the scope to also cover
-    # overflowing project files but never restricts on its own (a chat
-    # inside a project should still search team knowledge).
-    knowledge_scope_parts: list[str] = []
-
-    _append(
-        knowledge_scope_parts, _build_or_filters(DOCUMENT_SETS, filters.document_set)
-    )
-    _append(knowledge_scope_parts, _build_persona_filter(filters.persona_id_filter))
-
-    # project_id_filter only widens an existing scope.
-    if knowledge_scope_parts:
-        _append(
-            knowledge_scope_parts,
-            _build_user_project_filter(filters.project_id_filter),
-        )
-
-    if len(knowledge_scope_parts) > 1:
-        filter_parts.append("(" + " or ".join(knowledge_scope_parts) + ")")
-    elif len(knowledge_scope_parts) == 1:
-        filter_parts.append(knowledge_scope_parts[0])
-
-    # Vespa only indexes doc_updated_at: created_at_range is dropped (widens
-    # rather than narrows).
-    updated_at_range = filters.updated_at_range
-    _append(
-        filter_parts,
-        _build_time_filter(
-            updated_at_range.start if updated_at_range else None,
-            updated_at_range.end if updated_at_range else None,
-        ),
-    )
+    _append(filter_parts, _build_source_type_filter(filters.source_type))
+    _append(filter_parts, _build_tag_filter(filters.tags))
+    _append(filter_parts, _build_knowledge_scope_filter(filters))
+    _append(filter_parts, _build_updated_at_filter(filters.updated_at_range))
 
     # # Knowledge Graph Filters
     # _append(filter_parts, _build_kg_filter(

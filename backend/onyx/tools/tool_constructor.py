@@ -1,6 +1,7 @@
 from collections import Counter
 from collections.abc import Sequence
-from typing import cast
+from dataclasses import dataclass
+from typing import Any, cast
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -22,6 +23,7 @@ from onyx.db.oauth_config import get_oauth_config
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.tools import get_builtin_tool
 from onyx.document_index.factory import get_default_document_index
+from onyx.document_index.interfaces_new import DocumentIndex
 from onyx.image_gen.interfaces import ImageGenerationProviderCredentials
 from onyx.llm.interfaces import LLM, LLMConfig
 from onyx.onyxbot.slack.models import SlackContext
@@ -29,7 +31,7 @@ from onyx.server.features.mcp.credentials import (
     MCPCredentialsError,
     resolve_mcp_credentials,
 )
-from onyx.tools.built_in_tools import get_built_in_tool_by_id
+from onyx.tools.built_in_tools import BUILT_IN_TOOL_TYPES, get_built_in_tool_by_id
 from onyx.tools.interface import Tool
 from onyx.tools.models import DynamicSchemaInfo, SearchToolUsage
 from onyx.tools.tool_implementations.coding_agent.coding_agent_tool import (
@@ -140,6 +142,295 @@ def should_disable_open_url_web_fetch(
     )
 
 
+@dataclass(frozen=True)
+class _ToolBuildContext:
+    """Inputs shared by every per-tool builder below."""
+
+    persona: Persona
+    db_session: Session
+    emitter: Emitter
+    user: User
+    llm: LLM
+    document_index: DocumentIndex
+    search_tool_config: SearchToolConfig
+    custom_tool_config: CustomToolConfig
+    file_reader_tool_config: FileReaderToolConfig
+    open_url_web_fetch_disabled: bool
+    search_usage_forcing_setting: SearchToolUsage
+    user_oauth_token: str | None
+
+
+def _is_tool_available(
+    tool_cls: type[BUILT_IN_TOOL_TYPES], db_session: Session
+) -> bool:
+    try:
+        return tool_cls.is_available(db_session)
+    except Exception:
+        logger.exception("Failed checking availability for tool %s", tool_cls.__name__)
+        return False
+
+
+def _build_search_tool(tool_id: int, ctx: _ToolBuildContext) -> SearchTool:
+    persona = ctx.persona
+    persona_search_info = PersonaSearchInfo(
+        document_set_names=[ds.name for ds in persona.document_sets],
+        search_start_date=persona.search_start_date,
+        attached_document_ids=[doc.id for doc in persona.attached_documents],
+        hierarchy_node_ids=[node.id for node in persona.hierarchy_nodes],
+    )
+    config = ctx.search_tool_config
+    return SearchTool(
+        tool_id=tool_id,
+        emitter=ctx.emitter,
+        user=ctx.user,
+        persona_search_info=persona_search_info,
+        llm=ctx.llm,
+        document_index=ctx.document_index,
+        user_selected_filters=config.user_selected_filters,
+        project_id_filter=config.project_id_filter,
+        persona_id_filter=config.persona_id_filter,
+        bypass_acl=config.bypass_acl,
+        slack_context=config.slack_context,
+        enable_slack_search=config.enable_slack_search,
+        auto_detect_filters=config.auto_detect_filters,
+    )
+
+
+def _build_image_generation_tool(
+    tool_id: int, ctx: _ToolBuildContext
+) -> ImageGenerationTool:
+    img_generation_llm_config = _get_image_generation_config(ctx.llm, ctx.db_session)
+    return ImageGenerationTool(
+        image_generation_credentials=ImageGenerationProviderCredentials(
+            api_key=cast(str, img_generation_llm_config.api_key),
+            api_base=img_generation_llm_config.api_base,
+            api_version=img_generation_llm_config.api_version,
+            deployment_name=(
+                img_generation_llm_config.deployment_name
+                or img_generation_llm_config.model_name
+            ),
+            custom_config=img_generation_llm_config.custom_config,
+        ),
+        provider=img_generation_llm_config.model_provider,
+        model=img_generation_llm_config.model_name,
+        tool_id=tool_id,
+        emitter=ctx.emitter,
+    )
+
+
+def _build_web_search_tool(tool_id: int, ctx: _ToolBuildContext) -> WebSearchTool:
+    try:
+        return WebSearchTool(tool_id=tool_id, emitter=ctx.emitter)
+    except ValueError as e:
+        logger.error("Failed to initialize Internet Search Tool: %s", e)
+        raise ValueError(
+            "Internet search tool requires a search provider API key, please contact your Onyx admin to get it added!"
+        )
+
+
+def _build_open_url_tool(tool_id: int, ctx: _ToolBuildContext) -> OpenURLTool | None:
+    if ctx.open_url_web_fetch_disabled and DISABLE_VECTOR_DB:
+        # Without an index, open_url can serve nothing once web
+        # fetching is off (crawl-only deployments).
+        logger.debug(
+            "Skipping OpenURLTool: WebSearchTool is excluded for "
+            "this message and no document index is available"
+        )
+        return None
+    try:
+        return OpenURLTool(
+            tool_id=tool_id,
+            emitter=ctx.emitter,
+            document_index=ctx.document_index,
+            user=ctx.user,
+            web_fetch_disabled=ctx.open_url_web_fetch_disabled,
+        )
+    except RuntimeError as e:
+        logger.error("Failed to initialize Open URL Tool: %s", e)
+        raise ValueError(
+            "Open URL tool requires a web content provider, please contact your Onyx admin to get it configured!"
+        )
+
+
+def _build_in_code_tools(
+    tool_cls: type[BUILT_IN_TOOL_TYPES], tool_id: int, ctx: _ToolBuildContext
+) -> list[Tool] | None:
+    """Build the instances for one built-in tool. None means skip the tool."""
+    tool_name = tool_cls.__name__
+
+    if tool_name == SearchTool.__name__:
+        if ctx.search_usage_forcing_setting == SearchToolUsage.DISABLED:
+            return None
+        return [_build_search_tool(tool_id, ctx)]
+
+    if tool_name == ImageGenerationTool.__name__:
+        return [_build_image_generation_tool(tool_id, ctx)]
+
+    if tool_name == WebSearchTool.__name__:
+        return [_build_web_search_tool(tool_id, ctx)]
+
+    if tool_name == OpenURLTool.__name__:
+        open_url_tool = _build_open_url_tool(tool_id, ctx)
+        return None if open_url_tool is None else [open_url_tool]
+
+    if tool_name == PythonTool.__name__:
+        return [PythonTool(tool_id=tool_id, emitter=ctx.emitter)]
+
+    if tool_name == CodingAgentTool.__name__:
+        return [CodingAgentTool(tool_id=tool_id, emitter=ctx.emitter, llm=ctx.llm)]
+
+    if tool_name == FileReaderTool.__name__:
+        cfg = ctx.file_reader_tool_config
+        return [
+            FileReaderTool(
+                tool_id=tool_id,
+                emitter=ctx.emitter,
+                user_file_ids=cfg.user_file_ids,
+                chat_file_ids=cfg.chat_file_ids,
+            )
+        ]
+
+    # Handle KG Tool
+    # TODO: disabling for now because it's broken in the refactor
+    # if tool_name == KnowledgeGraphTool.__name__:
+
+    #     # skip the knowledge graph tool if KG is not enabled/exposed
+    #     kg_config = get_kg_config_settings()
+    #     if not kg_config.KG_ENABLED or not kg_config.KG_EXPOSED:
+    #         logger.debug("Knowledge Graph Tool is not enabled/exposed")
+    #         return None
+
+    #     if ctx.persona.name != TMP_DRALPHA_PERSONA_NAME:
+    #         # TODO: remove this after the beta period
+    #         raise ValueError(
+    #             f"The Knowledge Graph Tool should only be used by the '{TMP_DRALPHA_PERSONA_NAME}' Agent."
+    #         )
+    #     return [KnowledgeGraphTool(tool_id=tool_id)]
+
+    return None
+
+
+def _build_custom_tools(
+    db_tool_model: ToolDBModel,
+    openapi_schema: dict[str, Any],
+    ctx: _ToolBuildContext,
+) -> list[Tool] | None:
+    """Build the tools of one OpenAPI-schema tool. None means skip the tool."""
+    user = ctx.user
+    custom_tool_config = ctx.custom_tool_config
+
+    # Determine which OAuth token to use
+    oauth_token_for_tool = None
+
+    # Priority 1: OAuth config (per-tool OAuth)
+    if db_tool_model.oauth_config_id:
+        if user.is_anonymous:
+            logger.warning("Anonymous user cannot use OAuth tool %s", db_tool_model.id)
+            return None
+        oauth_config = get_oauth_config(db_tool_model.oauth_config_id, ctx.db_session)
+        if oauth_config:
+            token_manager = OAuthTokenManager(oauth_config, user.id, ctx.db_session)
+            oauth_token_for_tool = token_manager.get_valid_access_token()
+            if not oauth_token_for_tool:
+                logger.warning(
+                    "No valid OAuth token found for tool %s with OAuth config %s",
+                    db_tool_model.id,
+                    db_tool_model.oauth_config_id,
+                )
+
+    # Priority 2: Passthrough auth (user's login OAuth token)
+    elif db_tool_model.passthrough_auth:
+        if user.is_anonymous:
+            logger.warning(
+                "Anonymous user cannot use passthrough auth tool %s",
+                db_tool_model.id,
+            )
+            return None
+        oauth_token_for_tool = ctx.user_oauth_token
+
+    return cast(
+        list[Tool],
+        build_custom_tools_from_openapi_schema_and_headers(
+            tool_id=db_tool_model.id,
+            openapi_schema=openapi_schema,
+            emitter=ctx.emitter,
+            dynamic_schema_info=DynamicSchemaInfo(
+                chat_session_id=custom_tool_config.chat_session_id,
+                message_id=custom_tool_config.message_id,
+                user_id=user.id,
+                user_email="anonymous" if user.is_anonymous else user.email,
+            ),
+            custom_headers=(db_tool_model.custom_headers or [])
+            + (header_dict_to_header_list(custom_tool_config.additional_headers or {})),
+            user_oauth_token=oauth_token_for_tool,
+        ),
+    )
+
+
+def _add_mcp_tools(
+    db_tool_model: ToolDBModel,
+    mcp_server_id: int,
+    tool_dict: dict[int, list[Tool]],
+    mcp_tool_cache: dict[int, dict[int, MCPTool]],
+    ctx: _ToolBuildContext,
+) -> None:
+    """Add the MCP tool for ``db_tool_model`` to ``tool_dict``.
+
+    Every tool of the same MCP server is built once and kept in
+    ``mcp_tool_cache`` for the later tools of that server.
+    """
+    if mcp_server_id in mcp_tool_cache:
+        tool_dict[db_tool_model.id] = [mcp_tool_cache[mcp_server_id][db_tool_model.id]]
+        return
+
+    mcp_server = get_mcp_server_by_id(mcp_server_id, ctx.db_session)
+
+    try:
+        mcp_credentials = resolve_mcp_credentials(mcp_server, ctx.user, ctx.db_session)
+    except MCPCredentialsError as e:
+        logger.warning(str(e))
+        return
+
+    # Get all saved tools for this MCP server
+    saved_tools = get_all_mcp_tools_for_server(mcp_server.id, ctx.db_session)
+
+    # Find the specific tool that this database entry represents
+    expected_tool_name = db_tool_model.display_name
+
+    # Extract additional MCP headers from config
+    additional_mcp_headers = ctx.custom_tool_config.mcp_headers or None
+
+    mcp_tool_cache[mcp_server_id] = {}
+    # Find the matching tool definition
+    for saved_tool in saved_tools:
+        # Create MCPTool instance for this specific tool
+        mcp_tool = MCPTool(
+            tool_id=saved_tool.id,
+            emitter=ctx.emitter,
+            mcp_server=mcp_server,
+            tool_name=saved_tool.name,
+            tool_description=saved_tool.description,
+            tool_definition=saved_tool.mcp_input_schema or {},
+            connection_config=mcp_credentials.connection_config,
+            user_email=ctx.user.email,
+            user_id=str(ctx.user.id),
+            user_oauth_token=mcp_credentials.user_oauth_token,
+            additional_headers=additional_mcp_headers,
+            resolved_credentials=mcp_credentials,
+        )
+        mcp_tool_cache[mcp_server_id][saved_tool.id] = mcp_tool
+
+        if saved_tool.id == db_tool_model.id:
+            tool_dict[saved_tool.id] = [cast(Tool, mcp_tool)]
+
+    if db_tool_model.id not in tool_dict:
+        logger.warning(
+            "Tool '%s' not found in MCP server '%s'",
+            expected_tool_name,
+            mcp_server.name,
+        )
+
+
 def construct_tools(
     persona: Persona,
     emitter: Emitter,
@@ -200,39 +491,29 @@ def _construct_tools_impl(
 
     mcp_tool_cache: dict[int, dict[int, MCPTool]] = {}
     # Get user's OAuth token if available
-    user_oauth_token = None
-    if user.oauth_accounts:
-        user_oauth_token = user.oauth_accounts[0].access_token
+    user_oauth_token = (
+        user.oauth_accounts[0].access_token if user.oauth_accounts else None
+    )
 
     search_settings = get_current_search_settings(db_session)
     # This flow is for search so we do not get all indices.
     document_index = get_default_document_index(search_settings, None, db_session)
 
-    def _build_search_tool(tool_id: int, config: SearchToolConfig) -> SearchTool:
-        persona_search_info = PersonaSearchInfo(
-            document_set_names=[ds.name for ds in persona.document_sets],
-            search_start_date=persona.search_start_date,
-            attached_document_ids=[doc.id for doc in persona.attached_documents],
-            hierarchy_node_ids=[node.id for node in persona.hierarchy_nodes],
-        )
-        return SearchTool(
-            tool_id=tool_id,
-            emitter=emitter,
-            user=user,
-            persona_search_info=persona_search_info,
-            llm=llm,
-            document_index=document_index,
-            user_selected_filters=config.user_selected_filters,
-            project_id_filter=config.project_id_filter,
-            persona_id_filter=config.persona_id_filter,
-            bypass_acl=config.bypass_acl,
-            slack_context=config.slack_context,
-            enable_slack_search=config.enable_slack_search,
-            auto_detect_filters=config.auto_detect_filters,
-        )
-
-    open_url_web_fetch_disabled = should_disable_open_url_web_fetch(
-        persona.tools, allowed_tool_ids
+    ctx = _ToolBuildContext(
+        persona=persona,
+        db_session=db_session,
+        emitter=emitter,
+        user=user,
+        llm=llm,
+        document_index=document_index,
+        search_tool_config=search_tool_config or SearchToolConfig(),
+        custom_tool_config=custom_tool_config or CustomToolConfig(),
+        file_reader_tool_config=file_reader_tool_config or FileReaderToolConfig(),
+        open_url_web_fetch_disabled=should_disable_open_url_web_fetch(
+            persona.tools, allowed_tool_ids
+        ),
+        search_usage_forcing_setting=search_usage_forcing_setting,
+        user_oauth_token=user_oauth_token,
     )
 
     added_search_tool = False
@@ -241,262 +522,41 @@ def _construct_tools_impl(
         if allowed_tool_ids is not None and db_tool_model.id not in allowed_tool_ids:
             continue
 
+        built_tools: list[Tool] | None = None
+
+        # Handle built-in tools
         if db_tool_model.in_code_tool_id:
             tool_cls = get_built_in_tool_by_id(db_tool_model.in_code_tool_id)
-
-            try:
-                tool_is_available = tool_cls.is_available(db_session)
-            except Exception:
-                logger.exception(
-                    "Failed checking availability for tool %s", tool_cls.__name__
-                )
-                tool_is_available = False
-
-            if not tool_is_available:
+            if not _is_tool_available(tool_cls, db_session):
                 logger.debug(
                     "Skipping tool %s because it is not available",
                     tool_cls.__name__,
                 )
                 continue
 
-            # Handle Internal Search Tool
-            if tool_cls.__name__ == SearchTool.__name__:
-                added_search_tool = True
-                if search_usage_forcing_setting == SearchToolUsage.DISABLED:
-                    continue
-
-                if not search_tool_config:
-                    search_tool_config = SearchToolConfig()
-
-                tool_dict[db_tool_model.id] = [
-                    _build_search_tool(db_tool_model.id, search_tool_config)
-                ]
-
-            # Handle Image Generation Tool
-            elif tool_cls.__name__ == ImageGenerationTool.__name__:
-                img_generation_llm_config = _get_image_generation_config(
-                    llm, db_session
-                )
-
-                tool_dict[db_tool_model.id] = [
-                    ImageGenerationTool(
-                        image_generation_credentials=ImageGenerationProviderCredentials(
-                            api_key=cast(str, img_generation_llm_config.api_key),
-                            api_base=img_generation_llm_config.api_base,
-                            api_version=img_generation_llm_config.api_version,
-                            deployment_name=(
-                                img_generation_llm_config.deployment_name
-                                or img_generation_llm_config.model_name
-                            ),
-                            custom_config=img_generation_llm_config.custom_config,
-                        ),
-                        provider=img_generation_llm_config.model_provider,
-                        model=img_generation_llm_config.model_name,
-                        tool_id=db_tool_model.id,
-                        emitter=emitter,
-                    )
-                ]
-
-            # Handle Web Search Tool
-            elif tool_cls.__name__ == WebSearchTool.__name__:
-                try:
-                    tool_dict[db_tool_model.id] = [
-                        WebSearchTool(tool_id=db_tool_model.id, emitter=emitter)
-                    ]
-                except ValueError as e:
-                    logger.error("Failed to initialize Internet Search Tool: %s", e)
-                    raise ValueError(
-                        "Internet search tool requires a search provider API key, please contact your Onyx admin to get it added!"
-                    )
-
-            # Handle Open URL Tool
-            elif tool_cls.__name__ == OpenURLTool.__name__:
-                if open_url_web_fetch_disabled and DISABLE_VECTOR_DB:
-                    # Without an index, open_url can serve nothing once web
-                    # fetching is off (crawl-only deployments).
-                    logger.debug(
-                        "Skipping OpenURLTool: WebSearchTool is excluded for "
-                        "this message and no document index is available"
-                    )
-                    continue
-                try:
-                    tool_dict[db_tool_model.id] = [
-                        OpenURLTool(
-                            tool_id=db_tool_model.id,
-                            emitter=emitter,
-                            document_index=document_index,
-                            user=user,
-                            web_fetch_disabled=open_url_web_fetch_disabled,
-                        )
-                    ]
-                except RuntimeError as e:
-                    logger.error("Failed to initialize Open URL Tool: %s", e)
-                    raise ValueError(
-                        "Open URL tool requires a web content provider, please contact your Onyx admin to get it configured!"
-                    )
-
-            # Handle Python/Code Interpreter Tool
-            elif tool_cls.__name__ == PythonTool.__name__:
-                tool_dict[db_tool_model.id] = [
-                    PythonTool(tool_id=db_tool_model.id, emitter=emitter)
-                ]
-
-            # Handle Coding Agent Tool
-            elif tool_cls.__name__ == CodingAgentTool.__name__:
-                tool_dict[db_tool_model.id] = [
-                    CodingAgentTool(
-                        tool_id=db_tool_model.id,
-                        emitter=emitter,
-                        llm=llm,
-                    )
-                ]
-
-            # Handle File Reader Tool
-            elif tool_cls.__name__ == FileReaderTool.__name__:
-                cfg = file_reader_tool_config or FileReaderToolConfig()
-                tool_dict[db_tool_model.id] = [
-                    FileReaderTool(
-                        tool_id=db_tool_model.id,
-                        emitter=emitter,
-                        user_file_ids=cfg.user_file_ids,
-                        chat_file_ids=cfg.chat_file_ids,
-                    )
-                ]
-
-            # Handle KG Tool
-            # TODO: disabling for now because it's broken in the refactor
-            # elif tool_cls.__name__ == KnowledgeGraphTool.__name__:
-
-            #     # skip the knowledge graph tool if KG is not enabled/exposed
-            #     kg_config = get_kg_config_settings()
-            #     if not kg_config.KG_ENABLED or not kg_config.KG_EXPOSED:
-            #         logger.debug("Knowledge Graph Tool is not enabled/exposed")
-            #         continue
-
-            #     if persona.name != TMP_DRALPHA_PERSONA_NAME:
-            #         # TODO: remove this after the beta period
-            #         raise ValueError(
-            #             f"The Knowledge Graph Tool should only be used by the '{TMP_DRALPHA_PERSONA_NAME}' Agent."
-            #         )
-            #     tool_dict[db_tool_model.id] = [
-            #         KnowledgeGraphTool(tool_id=db_tool_model.id)
-            #     ]
+            added_search_tool = (
+                added_search_tool or tool_cls.__name__ == SearchTool.__name__
+            )
+            built_tools = _build_in_code_tools(tool_cls, db_tool_model.id, ctx)
 
         # Handle custom tools
         elif db_tool_model.openapi_schema:
-            if not custom_tool_config:
-                custom_tool_config = CustomToolConfig()
-
-            # Determine which OAuth token to use
-            oauth_token_for_tool = None
-
-            # Priority 1: OAuth config (per-tool OAuth)
-            if db_tool_model.oauth_config_id:
-                if user.is_anonymous:
-                    logger.warning(
-                        "Anonymous user cannot use OAuth tool %s", db_tool_model.id
-                    )
-                    continue
-                oauth_config = get_oauth_config(
-                    db_tool_model.oauth_config_id, db_session
-                )
-                if oauth_config:
-                    token_manager = OAuthTokenManager(oauth_config, user.id, db_session)
-                    oauth_token_for_tool = token_manager.get_valid_access_token()
-                    if not oauth_token_for_tool:
-                        logger.warning(
-                            "No valid OAuth token found for tool %s with OAuth config %s",
-                            db_tool_model.id,
-                            db_tool_model.oauth_config_id,
-                        )
-
-            # Priority 2: Passthrough auth (user's login OAuth token)
-            elif db_tool_model.passthrough_auth:
-                if user.is_anonymous:
-                    logger.warning(
-                        "Anonymous user cannot use passthrough auth tool %s",
-                        db_tool_model.id,
-                    )
-                    continue
-                oauth_token_for_tool = user_oauth_token
-
-            tool_dict[db_tool_model.id] = cast(
-                list[Tool],
-                build_custom_tools_from_openapi_schema_and_headers(
-                    tool_id=db_tool_model.id,
-                    openapi_schema=db_tool_model.openapi_schema,
-                    emitter=emitter,
-                    dynamic_schema_info=DynamicSchemaInfo(
-                        chat_session_id=custom_tool_config.chat_session_id,
-                        message_id=custom_tool_config.message_id,
-                        user_id=user.id,
-                        user_email="anonymous" if user.is_anonymous else user.email,
-                    ),
-                    custom_headers=(db_tool_model.custom_headers or [])
-                    + (
-                        header_dict_to_header_list(
-                            custom_tool_config.additional_headers or {}
-                        )
-                    ),
-                    user_oauth_token=oauth_token_for_tool,
-                ),
+            built_tools = _build_custom_tools(
+                db_tool_model, db_tool_model.openapi_schema, ctx
             )
 
         # Handle MCP tools
         elif db_tool_model.mcp_server_id:
-            if db_tool_model.mcp_server_id in mcp_tool_cache:
-                tool_dict[db_tool_model.id] = [
-                    mcp_tool_cache[db_tool_model.mcp_server_id][db_tool_model.id]
-                ]
-                continue
+            _add_mcp_tools(
+                db_tool_model,
+                db_tool_model.mcp_server_id,
+                tool_dict,
+                mcp_tool_cache,
+                ctx,
+            )
 
-            mcp_server = get_mcp_server_by_id(db_tool_model.mcp_server_id, db_session)
-
-            try:
-                mcp_credentials = resolve_mcp_credentials(mcp_server, user, db_session)
-            except MCPCredentialsError as e:
-                logger.warning(str(e))
-                continue
-
-            # Get all saved tools for this MCP server
-            saved_tools = get_all_mcp_tools_for_server(mcp_server.id, db_session)
-
-            # Find the specific tool that this database entry represents
-            expected_tool_name = db_tool_model.display_name
-
-            # Extract additional MCP headers from config
-            additional_mcp_headers = None
-            if custom_tool_config and custom_tool_config.mcp_headers:
-                additional_mcp_headers = custom_tool_config.mcp_headers
-
-            mcp_tool_cache[db_tool_model.mcp_server_id] = {}
-            # Find the matching tool definition
-            for saved_tool in saved_tools:
-                # Create MCPTool instance for this specific tool
-                mcp_tool = MCPTool(
-                    tool_id=saved_tool.id,
-                    emitter=emitter,
-                    mcp_server=mcp_server,
-                    tool_name=saved_tool.name,
-                    tool_description=saved_tool.description,
-                    tool_definition=saved_tool.mcp_input_schema or {},
-                    connection_config=mcp_credentials.connection_config,
-                    user_email=user.email,
-                    user_id=str(user.id),
-                    user_oauth_token=mcp_credentials.user_oauth_token,
-                    additional_headers=additional_mcp_headers,
-                    resolved_credentials=mcp_credentials,
-                )
-                mcp_tool_cache[db_tool_model.mcp_server_id][saved_tool.id] = mcp_tool
-
-                if saved_tool.id == db_tool_model.id:
-                    tool_dict[saved_tool.id] = [cast(Tool, mcp_tool)]
-            if db_tool_model.id not in tool_dict:
-                logger.warning(
-                    "Tool '%s' not found in MCP server '%s'",
-                    expected_tool_name,
-                    mcp_server.name,
-                )
+        if built_tools is not None:
+            tool_dict[db_tool_model.id] = built_tools
 
     if (
         not added_search_tool
@@ -506,11 +566,8 @@ def _construct_tools_impl(
         # Get the database tool model for SearchTool
         search_tool_db_model = get_builtin_tool(db_session, SearchTool)
 
-        if not search_tool_config:
-            search_tool_config = SearchToolConfig()
-
         tool_dict[search_tool_db_model.id] = [
-            _build_search_tool(search_tool_db_model.id, search_tool_config)
+            _build_search_tool(search_tool_db_model.id, ctx)
         ]
 
     # Always inject MemoryTool when the user has the memory tool enabled,

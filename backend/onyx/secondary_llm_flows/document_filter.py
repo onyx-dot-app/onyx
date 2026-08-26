@@ -185,6 +185,156 @@ def classify_section_relevance(
     return classification
 
 
+def _format_section_for_llm(
+    idx: int,
+    section: InferenceSection,
+    max_chunks_per_section: int | None,
+) -> dict[str, str | int | list[str]]:
+    """Build the JSON-serializable description of one section for the LLM prompt.
+
+    Key insertion order defines the order of the keys in the prompt.
+    """
+    chunk = section.center_chunk
+
+    # Combine primary and secondary owners for authors
+    authors: list[str] | None = None
+    if chunk.primary_owners or chunk.secondary_owners:
+        authors = []
+        if chunk.primary_owners:
+            authors.extend(chunk.primary_owners)
+        if chunk.secondary_owners:
+            authors.extend(chunk.secondary_owners)
+
+    # Select only the most relevant chunks from the section to avoid flooding
+    # the LLM with too much content from documents with many matching sections
+    if max_chunks_per_section is not None:
+        selected_chunks = select_chunks_for_relevance(section, max_chunks_per_section)
+        selected_content = " ".join(
+            selected_chunk.content for selected_chunk in selected_chunks
+        )
+    else:
+        selected_content = section.combined_content
+
+    section_dict: dict[str, str | int | list[str]] = {
+        "section_id": idx,
+        "title": chunk.semantic_identifier,
+    }
+
+    # Only include updated_at if available
+    if chunk.updated_at:
+        section_dict["updated_at"] = chunk.updated_at.isoformat()
+
+    # Only include authors if not None
+    if authors is not None:
+        section_dict["authors"] = authors
+
+    section_dict["source_type"] = str(chunk.source_type)
+    section_dict["metadata"] = json.dumps(chunk.metadata)
+    section_dict["content"] = selected_content
+
+    return section_dict
+
+
+def _parse_id_list(list_content: str) -> tuple[list[str], set[str]]:
+    """Parse a comma-separated list of section IDs, each optionally marked by "!"."""
+    section_ids: list[str] = []
+    sections_with_exclamation: set[str] = set()
+
+    for part in [part.strip() for part in list_content.split(",")]:
+        # Check if this part has an exclamation mark
+        has_exclamation = "!" in part
+        # Extract the number (digits only)
+        numbers = re.findall(r"\d+", part)
+        if numbers:
+            section_id = numbers[0]
+            section_ids.append(section_id)
+            if has_exclamation:
+                sections_with_exclamation.add(section_id)
+
+    return section_ids, sections_with_exclamation
+
+
+def _parse_section_ids(llm_response: str) -> tuple[list[str], set[str]]:
+    """Extract the selected section IDs and the ones marked with "!" from a response.
+
+    Handles bracketed lists like "[1, 2, 3]", unbracketed lists like "1, 2, 3" and,
+    as a last resort, every number in the response.
+    """
+    # First try to find a bracketed list
+    bracket_match = re.search(r"\[([^\]]+)\]", llm_response)
+    if bracket_match:
+        return _parse_id_list(bracket_match.group(1))
+
+    # Try to find an unbracketed comma-separated list
+    # Look for patterns like "1, 2, 3" or "1, 2!, 3"
+    comma_match = re.search(r"\b\d+!?\b(?:\s*,\s*\b\d+!?\b)*", llm_response)
+    if comma_match:
+        return _parse_id_list(comma_match.group(0))
+
+    # Fallback: try to extract all numbers from the response
+    # Also check for "!" after numbers
+    section_ids: list[str] = []
+    sections_with_exclamation: set[str] = set()
+    for match in re.finditer(r"\b(\d+)(!)?\b", llm_response):
+        section_id = match.group(1)
+        section_ids.append(section_id)
+        if match.group(2) == "!":
+            sections_with_exclamation.add(section_id)
+
+    return section_ids, sections_with_exclamation
+
+
+def _collect_selected_sections(
+    section_ids: list[str],
+    sections_with_exclamation: set[str],
+    section_map: dict[str, InferenceSection],
+    num_sections: int,
+    max_sections: int,
+) -> tuple[list[InferenceSection], list[str]]:
+    """Resolve parsed section IDs to sections, up to max_sections.
+
+    Out-of-range and unparsable IDs are skipped and don't count toward max_sections.
+    Also returns the document IDs of the sections marked with "!".
+    """
+    selected_sections: list[InferenceSection] = []
+    document_ids_with_exclamation: list[str] = []
+
+    for section_id_str in section_ids:
+        # Convert to int
+        try:
+            section_id_int = int(section_id_str)
+        except ValueError:
+            logger.warning("Could not convert section ID to int: %s", section_id_str)
+            continue
+
+        # Check if in valid range
+        if section_id_int < 0 or section_id_int >= num_sections:
+            logger.warning(
+                "Section ID %s is out of range [0, %s], skipping",
+                section_id_int,
+                num_sections - 1,
+            )
+            continue
+
+        # Convert back to string for section_map lookup
+        section_id = str(section_id_int)
+        if section_id in section_map:
+            section = section_map[section_id]
+            selected_sections.append(section)
+
+            # If this section has an exclamation mark, collect its document_id
+            if section_id_str in sections_with_exclamation:
+                document_id = section.center_chunk.document_id
+                if document_id not in document_ids_with_exclamation:
+                    document_ids_with_exclamation.append(document_id)
+
+        # Stop if we've reached max_sections valid selections
+        if len(selected_sections) >= max_sections:
+            break
+
+    return selected_sections, document_ids_with_exclamation
+
+
 @log_function_time(print_only=True)
 def select_sections_for_expansion(
     sections: list[InferenceSection],
@@ -219,57 +369,10 @@ def select_sections_for_expansion(
 
     for idx, section in enumerate(sections):
         # Create a unique ID for each section
-        section_id = f"{idx}"
-        section_map[section_id] = section
-
-        # Format the section for the LLM
-        chunk = section.center_chunk
-
-        # Combine primary and secondary owners for authors
-        authors = None
-        if chunk.primary_owners or chunk.secondary_owners:
-            authors = []
-            if chunk.primary_owners:
-                authors.extend(chunk.primary_owners)
-            if chunk.secondary_owners:
-                authors.extend(chunk.secondary_owners)
-
-        # Format updated_at as ISO string if available
-        updated_at_str = None
-        if chunk.updated_at:
-            updated_at_str = chunk.updated_at.isoformat()
-
-        # Convert metadata to JSON string
-        metadata_str = json.dumps(chunk.metadata)
-
-        # Select only the most relevant chunks from the section to avoid flooding
-        # the LLM with too much content from documents with many matching sections
-        if max_chunks_per_section is not None:
-            selected_chunks = select_chunks_for_relevance(
-                section, max_chunks_per_section
-            )
-            selected_content = " ".join(chunk.content for chunk in selected_chunks)
-        else:
-            selected_content = section.combined_content
-
-        section_dict: dict[str, str | int | list[str]] = {
-            "section_id": idx,
-            "title": chunk.semantic_identifier,
-        }
-
-        # Only include updated_at if not None
-        if updated_at_str is not None:
-            section_dict["updated_at"] = updated_at_str
-
-        # Only include authors if not None
-        if authors is not None:
-            section_dict["authors"] = authors
-
-        section_dict["source_type"] = str(chunk.source_type)
-        section_dict["metadata"] = metadata_str
-        section_dict["content"] = selected_content
-
-        sections_dict.append(section_dict)
+        section_map[f"{idx}"] = section
+        sections_dict.append(
+            _format_section_for_llm(idx, section, max_chunks_per_section)
+        )
 
     # Build the prompt
     extra_instructions = TRY_TO_FILL_TO_MAX_INSTRUCTIONS if try_to_fill_to_max else ""
@@ -303,64 +406,8 @@ def select_sections_for_expansion(
             )
             return sections[:max_sections], None
 
-        # Parse the response to extract section IDs
-        # Look for patterns like [1, 2, 3] or [1,2,3] with flexible whitespace/newlines
-        # Also handle unbracketed comma-separated lists like "1, 2, 3"
-        # Track which sections have "!" marker (e.g., "1, 2!, 3" or "[1, 2!, 3]")
-        section_ids = []
-        sections_with_exclamation = set()  # Track section IDs that have "!" marker
-
-        # First try to find a bracketed list
-        bracket_pattern = r"\[([^\]]+)\]"
-        bracket_match = re.search(bracket_pattern, llm_response)
-
-        if bracket_match:
-            # Extract the content between brackets
-            list_content = bracket_match.group(1)
-            # Split by comma, preserving the parts
-            parts = [part.strip() for part in list_content.split(",")]
-            for part in parts:
-                # Check if this part has an exclamation mark
-                has_exclamation = "!" in part
-                # Extract the number (digits only)
-                numbers = re.findall(r"\d+", part)
-                if numbers:
-                    section_id = numbers[0]
-                    section_ids.append(section_id)
-                    if has_exclamation:
-                        sections_with_exclamation.add(section_id)
-        else:
-            # Try to find an unbracketed comma-separated list
-            # Look for patterns like "1, 2, 3" or "1, 2!, 3"
-            # This regex finds sequences of digits optionally followed by "!" and separated by commas
-            comma_list_pattern = r"\b\d+!?\b(?:\s*,\s*\b\d+!?\b)*"
-            comma_match = re.search(comma_list_pattern, llm_response)
-
-            if comma_match:
-                # Extract the matched comma-separated list
-                list_content = comma_match.group(0)
-                parts = [part.strip() for part in list_content.split(",")]
-                for part in parts:
-                    # Check if this part has an exclamation mark
-                    has_exclamation = "!" in part
-                    # Extract the number (digits only)
-                    numbers = re.findall(r"\d+", part)
-                    if numbers:
-                        section_id = numbers[0]
-                        section_ids.append(section_id)
-                        if has_exclamation:
-                            sections_with_exclamation.add(section_id)
-            else:
-                # Fallback: try to extract all numbers from the response
-                # Also check for "!" after numbers
-                number_pattern = r"\b(\d+)(!)?\b"
-                matches = re.finditer(number_pattern, llm_response)
-                for match in matches:
-                    section_id = match.group(1)
-                    has_exclamation = match.group(2) == "!"
-                    section_ids.append(section_id)
-                    if has_exclamation:
-                        sections_with_exclamation.add(section_id)
+        # Parse the response to extract section IDs and the "!" markers
+        section_ids, sections_with_exclamation = _parse_section_ids(llm_response)
 
         if not section_ids:
             logger.warning(
@@ -369,45 +416,13 @@ def select_sections_for_expansion(
             return sections[:max_sections], None
 
         # Filter sections based on LLM selection
-        # Skip out-of-range IDs and don't count them toward max_sections
-        selected_sections = []
-        document_ids_with_exclamation = []  # Collect document_ids for sections with "!"
-        num_sections = len(sections)
-
-        for section_id_str in section_ids:
-            # Convert to int
-            try:
-                section_id_int = int(section_id_str)
-            except ValueError:
-                logger.warning(
-                    "Could not convert section ID to int: %s", section_id_str
-                )
-                continue
-
-            # Check if in valid range
-            if section_id_int < 0 or section_id_int >= num_sections:
-                logger.warning(
-                    "Section ID %s is out of range [0, %s], skipping",
-                    section_id_int,
-                    num_sections - 1,
-                )
-                continue
-
-            # Convert back to string for section_map lookup
-            section_id = str(section_id_int)
-            if section_id in section_map:
-                section = section_map[section_id]
-                selected_sections.append(section)
-
-                # If this section has an exclamation mark, collect its document_id
-                if section_id_str in sections_with_exclamation:
-                    document_id = section.center_chunk.document_id
-                    if document_id not in document_ids_with_exclamation:
-                        document_ids_with_exclamation.append(document_id)
-
-            # Stop if we've reached max_sections valid selections
-            if len(selected_sections) >= max_sections:
-                break
+        selected_sections, document_ids_with_exclamation = _collect_selected_sections(
+            section_ids=section_ids,
+            sections_with_exclamation=sections_with_exclamation,
+            section_map=section_map,
+            num_sections=len(sections),
+            max_sections=max_sections,
+        )
 
         if not selected_sections:
             logger.warning(

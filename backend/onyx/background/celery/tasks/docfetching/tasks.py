@@ -2,6 +2,7 @@ import multiprocessing
 import os
 import time
 import traceback
+from multiprocessing.context import SpawnProcess
 from time import sleep
 
 import psutil
@@ -323,6 +324,367 @@ def process_job_result(
     return result
 
 
+def _wait_for_spawn(
+    job: SimpleJob,
+    process: SpawnProcess,
+    result: SimpleJobResult,
+    log_builder: ConnectorIndexingLogBuilder,
+) -> bool:
+    """Wait for the spawned process to move out of the starting state.
+
+    Returns False if the process never came alive; the caller must then stop.
+    """
+    num_waits = 0
+    while True:
+        if num_waits > 15:
+            result.status = IndexingWatchdogTerminalStatus.SPAWN_NOT_ALIVE
+            task_logger.info(
+                log_builder.build(
+                    "Indexing watchdog - finished",
+                    status=str(result.status.value),
+                    exit_code=str(result.exit_code),
+                )
+            )
+            job.release()
+            return False
+
+        if process.is_alive() or process.exitcode is not None:
+            break
+
+        sleep(1)
+        num_waits += 1
+
+    return True
+
+
+def _handle_worker_shutdown(
+    job: SimpleJob,
+    result: SimpleJobResult,
+    index_attempt_id: int,
+    log_builder: ConnectorIndexingLogBuilder,
+) -> None:
+    """Mark the attempt INTERRUPTED, then stop the subprocess."""
+    result.status = IndexingWatchdogTerminalStatus.TERMINATED_BY_WORKER_SHUTDOWN
+    try:
+        with get_session_with_current_tenant() as db_session:
+            attempt = get_index_attempt(db_session, index_attempt_id)
+            if attempt and not attempt.status.is_terminal():
+                mark_attempt_interrupted(
+                    index_attempt_id,
+                    db_session,
+                    "Indexing worker shutting down (deploy or "
+                    "autoscaling). The attempt resumes automatically "
+                    "from the last checkpoint.",
+                )
+    except Exception:
+        task_logger.exception(
+            log_builder.build(
+                "Indexing watchdog - transient exception marking index "
+                "attempt as interrupted on worker shutdown"
+            )
+        )
+    try:
+        job.terminate_and_wait(CELERY_INDEXING_WATCHDOG_SIGTERM_GRACE_SECONDS)
+    except Exception:
+        task_logger.exception(
+            log_builder.build(
+                "Indexing watchdog - exception while terminating "
+                "subprocess on worker shutdown"
+            )
+        )
+    if job.process is not None:
+        result.exit_code = job.process.exitcode
+
+
+def _maybe_emit_process_memory(
+    pid: int,
+    last_memory_emit_time: float,
+    cc_pair_id: int,
+    search_settings_id: int,
+    index_attempt_id: int,
+) -> float:
+    """Emit memory info at most once per minute. Returns the last emit time."""
+    current_time = time.monotonic()
+    if current_time - last_memory_emit_time >= 60.0:
+        emit_process_memory(
+            pid,
+            "indexing_worker",
+            {
+                "cc_pair_id": cc_pair_id,
+                "search_settings_id": search_settings_id,
+                "index_attempt_id": index_attempt_id,
+            },
+        )
+        return current_time
+
+    return last_memory_emit_time
+
+
+def _enforce_memory_limit(
+    job: SimpleJob,
+    result: SimpleJobResult,
+    pid: int,
+    index_attempt_id: int,
+    log_builder: ConnectorIndexingLogBuilder,
+) -> str | None:
+    """Terminate the subprocess if its RSS exceeds the configured limit.
+
+    Returns the failure reason when the limit tripped, otherwise None.
+    """
+    if INDEXING_WORKER_MEMORY_LIMIT_MB > 0:
+        rss_mb: int | None = None
+        try:
+            rss_mb = psutil.Process(pid).memory_info().rss // (1024 * 1024)
+        except psutil.Error:
+            # process likely exited; job.done() handles it next loop
+            pass
+
+        if rss_mb is not None and rss_mb > INDEXING_WORKER_MEMORY_LIMIT_MB:
+            task_logger.warning(
+                log_builder.build(
+                    "Indexing watchdog - memory limit exceeded; terminating subprocess",
+                    rss_mb=str(rss_mb),
+                    limit_mb=str(INDEXING_WORKER_MEMORY_LIMIT_MB),
+                    pid=str(pid),
+                )
+            )
+            result.status = IndexingWatchdogTerminalStatus.TERMINATED_BY_MEMORY_LIMIT
+            memory_limit_failure_reason = (
+                "Indexing worker exceeded the memory limit while "
+                f"fetching documents: rss_mb={rss_mb} "
+                f"limit_mb={INDEXING_WORKER_MEMORY_LIMIT_MB}. "
+                "This usually means the connector encountered "
+                "very large documents."
+            )
+
+            # mark failed before terminating so the subprocess's own
+            # termination handling can't write a competing status
+            try:
+                with get_session_with_current_tenant() as db_session:
+                    mark_attempt_failed(
+                        index_attempt_id,
+                        db_session,
+                        memory_limit_failure_reason,
+                    )
+            except Exception:
+                task_logger.exception(
+                    log_builder.build(
+                        "Indexing watchdog - transient exception marking "
+                        "index attempt as failed after memory limit"
+                    )
+                )
+
+            try:
+                job.terminate_and_wait(CELERY_INDEXING_WATCHDOG_SIGTERM_GRACE_SECONDS)
+            except Exception:
+                task_logger.exception(
+                    log_builder.build(
+                        "Indexing watchdog - exception while terminating "
+                        "subprocess after memory limit exceeded"
+                    )
+                )
+            if job.process is not None:
+                result.exit_code = job.process.exitcode
+            return memory_limit_failure_reason
+
+    return None
+
+
+def _terminate_after_attempt_finalized(
+    job: SimpleJob,
+    result: SimpleJobResult,
+    log_builder: ConnectorIndexingLogBuilder,
+) -> None:
+    """Stop the subprocess after the IndexAttempt row reached a terminal status."""
+    result.status = IndexingWatchdogTerminalStatus.TERMINATED_BY_ATTEMPT_FINALIZED
+    try:
+        job.terminate_and_wait(CELERY_INDEXING_WATCHDOG_SIGTERM_GRACE_SECONDS)
+    except Exception:
+        task_logger.exception(
+            log_builder.build(
+                "Indexing watchdog - exception while terminating subprocess "
+                "after attempt finalization"
+            )
+        )
+    if job.process is not None:
+        result.exit_code = job.process.exitcode
+
+
+def _mark_attempt_in_progress(
+    index_attempt_id: int,
+    cc_pair_id: int,
+    tenant_id: str,
+    result: SimpleJobResult,
+) -> None:
+    """Record the connector source on the result and report the in-progress status."""
+    with get_session_with_current_tenant() as db_session:
+        index_attempt = get_index_attempt(
+            db_session=db_session,
+            index_attempt_id=index_attempt_id,
+            eager_load_cc_pair=True,
+        )
+        if not index_attempt:
+            raise RuntimeError("Index attempt not found")
+
+        result.connector_source = (
+            index_attempt.connector_credential_pair.connector.source.value
+        )
+
+        cc_pair = index_attempt.connector_credential_pair
+        on_index_attempt_status_change(
+            tenant_id=tenant_id,
+            source=result.connector_source,
+            cc_pair_id=cc_pair_id,
+            connector_name=cc_pair.connector.name or f"cc_pair_{cc_pair_id}",
+            status="in_progress",
+        )
+
+
+def _get_finalized_attempt_status(
+    index_attempt_id: int,
+    log_builder: ConnectorIndexingLogBuilder,
+) -> IndexingStatus | None:
+    """Return the attempt status if the row is already terminal, else None.
+
+    None also covers a missing row and a transient db error; the watchdog keeps
+    waiting in both cases.
+    """
+    try:
+        with get_session_with_current_tenant() as db_session:
+            index_attempt = get_index_attempt(
+                db_session=db_session, index_attempt_id=index_attempt_id
+            )
+
+            if not index_attempt:
+                return None
+
+            if not index_attempt.is_finished():
+                return None
+
+            return index_attempt.status
+    except Exception:
+        task_logger.exception(
+            log_builder.build(
+                "Indexing watchdog - transient exception looking up index attempt"
+            )
+        )
+        return None
+
+
+def _mark_attempt_failed_after_exception(
+    ctx: DocProcessingContext,
+    result: SimpleJobResult,
+    log_builder: ConnectorIndexingLogBuilder,
+) -> None:
+    """Record the watchdog exception on the attempt row, best effort."""
+    try:
+        with get_session_with_current_tenant() as db_session:
+            attempt = get_index_attempt(db_session, ctx.index_attempt_id)
+
+            # only mark failures if not already terminal,
+            # otherwise we're overwriting potential real stack traces
+            if attempt and not attempt.status.is_terminal():
+                failure_reason = (
+                    f"Spawned task exceptioned: exit_code={result.exit_code}"
+                )
+                mark_attempt_failed(
+                    ctx.index_attempt_id,
+                    db_session,
+                    failure_reason=failure_reason,
+                    full_exception_trace=result.exception_str,
+                )
+    except Exception:
+        task_logger.exception(
+            log_builder.build(
+                "Indexing watchdog - transient exception marking index attempt as failed"
+            )
+        )
+
+
+def _finalize_terminal_status(
+    job: SimpleJob,
+    result: SimpleJobResult,
+    index_attempt_id: int,
+    log_builder: ConnectorIndexingLogBuilder,
+    memory_limit_failure_reason: str | None,
+) -> None:
+    """Apply the db writes and subprocess cleanup for the terminal status."""
+    if result.status == IndexingWatchdogTerminalStatus.TERMINATED_BY_SIGNAL:
+        try:
+            with get_session_with_current_tenant() as db_session:
+                logger.exception(
+                    "Marking attempt %s as canceled due to termination signal",
+                    index_attempt_id,
+                )
+                mark_attempt_canceled(
+                    index_attempt_id,
+                    db_session,
+                    "Connector termination signal detected",
+                )
+        except Exception:
+            task_logger.exception(
+                log_builder.build(
+                    "Indexing watchdog - transient exception marking index attempt as canceled"
+                )
+            )
+
+        job.terminate_and_wait(CELERY_INDEXING_WATCHDOG_SIGTERM_GRACE_SECONDS)
+    elif result.status == IndexingWatchdogTerminalStatus.TERMINATED_BY_ACTIVITY_TIMEOUT:
+        try:
+            with get_session_with_current_tenant() as db_session:
+                mark_attempt_failed(
+                    index_attempt_id,
+                    db_session,
+                    "Indexing watchdog - activity timeout exceeded: "
+                    f"attempt={index_attempt_id} "
+                    f"timeout={CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT}s",
+                )
+        except Exception:
+            logger.exception(
+                log_builder.build(
+                    "Indexing watchdog - transient exception marking index attempt as failed"
+                )
+            )
+        job.terminate_and_wait(CELERY_INDEXING_WATCHDOG_SIGTERM_GRACE_SECONDS)
+    elif (
+        result.status == IndexingWatchdogTerminalStatus.TERMINATED_BY_ATTEMPT_FINALIZED
+    ):
+        # the IndexAttempt row was already marked terminal by whoever finalized it
+        # (e.g. heartbeat watchdog marking it FAILED, user requesting cancellation,
+        # successful completion in the spawned process before we noticed). The
+        # subprocess has been killed in the watchdog loop above; no further DB
+        # writes are needed here.
+        pass
+    elif result.status == IndexingWatchdogTerminalStatus.TERMINATED_BY_WORKER_SHUTDOWN:
+        # already marked INTERRUPTED in the loop (best-effort). The heartbeat
+        # watchdog is the fallback if that write failed, so nothing to do here.
+        pass
+    elif result.status == IndexingWatchdogTerminalStatus.TERMINATED_BY_MEMORY_LIMIT:
+        # subprocess already terminated in the watchdog loop. Re-mark in case the
+        # in-loop mark_attempt_failed hit a transient DB error — otherwise the
+        # attempt lingers in_progress until the heartbeat watchdog fails it with
+        # the opaque "No heartbeat received" message this status exists to replace.
+        try:
+            with get_session_with_current_tenant() as db_session:
+                attempt = get_index_attempt(db_session, index_attempt_id)
+                if attempt and not attempt.status.is_terminal():
+                    mark_attempt_failed(
+                        index_attempt_id,
+                        db_session,
+                        memory_limit_failure_reason
+                        or "Indexing worker exceeded the memory limit",
+                    )
+        except Exception:
+            task_logger.exception(
+                log_builder.build(
+                    "Indexing watchdog - transient exception marking index attempt "
+                    "as failed after memory limit"
+                )
+            )
+    else:
+        pass
+
+
 @shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.CONNECTOR_DOC_FETCHING_TASK,
     bind=True,
@@ -449,25 +811,8 @@ def docfetching_proxy_task(
         return
 
     # Ensure the process has moved out of the starting state
-    num_waits = 0
-    while True:
-        if num_waits > 15:
-            result.status = IndexingWatchdogTerminalStatus.SPAWN_NOT_ALIVE
-            task_logger.info(
-                log_builder.build(
-                    "Indexing watchdog - finished",
-                    status=str(result.status.value),
-                    exit_code=str(result.exit_code),
-                )
-            )
-            job.release()
-            return
-
-        if job.process.is_alive() or job.process.exitcode is not None:
-            break
-
-        sleep(1)
-        num_waits += 1
+    if not _wait_for_spawn(job, job.process, result, log_builder):
+        return
 
     task_logger.info(
         log_builder.build(
@@ -483,27 +828,7 @@ def docfetching_proxy_task(
     memory_limit_failure_reason: str | None = None
 
     try:
-        with get_session_with_current_tenant() as db_session:
-            index_attempt = get_index_attempt(
-                db_session=db_session,
-                index_attempt_id=index_attempt_id,
-                eager_load_cc_pair=True,
-            )
-            if not index_attempt:
-                raise RuntimeError("Index attempt not found")
-
-            result.connector_source = (
-                index_attempt.connector_credential_pair.connector.source.value
-            )
-
-            cc_pair = index_attempt.connector_credential_pair
-            on_index_attempt_status_change(
-                tenant_id=tenant_id,
-                source=result.connector_source,
-                cc_pair_id=cc_pair_id,
-                connector_name=cc_pair.connector.name or f"cc_pair_{cc_pair_id}",
-                status="in_progress",
-            )
+        _mark_attempt_in_progress(index_attempt_id, cc_pair_id, tenant_id, result)
 
         while True:
             sleep(5)
@@ -514,40 +839,7 @@ def docfetching_proxy_task(
             # terminating so the subprocess can't write a competing status, then
             # stop it. A fresh attempt resumes from checkpoint on the next beat.
             if is_worker_shutting_down():
-                result.status = (
-                    IndexingWatchdogTerminalStatus.TERMINATED_BY_WORKER_SHUTDOWN
-                )
-                try:
-                    with get_session_with_current_tenant() as db_session:
-                        attempt = get_index_attempt(db_session, index_attempt_id)
-                        if attempt and not attempt.status.is_terminal():
-                            mark_attempt_interrupted(
-                                index_attempt_id,
-                                db_session,
-                                "Indexing worker shutting down (deploy or "
-                                "autoscaling). The attempt resumes automatically "
-                                "from the last checkpoint.",
-                            )
-                except Exception:
-                    task_logger.exception(
-                        log_builder.build(
-                            "Indexing watchdog - transient exception marking index "
-                            "attempt as interrupted on worker shutdown"
-                        )
-                    )
-                try:
-                    job.terminate_and_wait(
-                        CELERY_INDEXING_WATCHDOG_SIGTERM_GRACE_SECONDS
-                    )
-                except Exception:
-                    task_logger.exception(
-                        log_builder.build(
-                            "Indexing watchdog - exception while terminating "
-                            "subprocess on worker shutdown"
-                        )
-                    )
-                if job.process is not None:
-                    result.exit_code = job.process.exitcode
+                _handle_worker_shutdown(job, result, index_attempt_id, log_builder)
                 break
 
             # if the job is done, clean up and break
@@ -570,108 +862,33 @@ def docfetching_proxy_task(
             pid = job.process.pid
             if pid is not None:
                 # Only emit memory info once per minute (60 seconds)
-                current_time = time.monotonic()
-                if current_time - last_memory_emit_time >= 60.0:
-                    emit_process_memory(
-                        pid,
-                        "indexing_worker",
-                        {
-                            "cc_pair_id": cc_pair_id,
-                            "search_settings_id": search_settings_id,
-                            "index_attempt_id": index_attempt_id,
-                        },
-                    )
-                    last_memory_emit_time = current_time
+                last_memory_emit_time = _maybe_emit_process_memory(
+                    pid,
+                    last_memory_emit_time,
+                    cc_pair_id,
+                    search_settings_id,
+                    index_attempt_id,
+                )
 
                 # Terminate the worker before it can trip the kernel OOM killer —
                 # a kernel kill takes down the whole pod (the attempt heartbeat and
                 # other tenants' tasks included) and surfaces as an opaque
                 # "No heartbeat received" failure. Checked every loop iteration
                 # since RSS can grow by GBs within the 60s emit cadence.
-                if INDEXING_WORKER_MEMORY_LIMIT_MB > 0:
-                    rss_mb: int | None = None
-                    try:
-                        rss_mb = psutil.Process(pid).memory_info().rss // (1024 * 1024)
-                    except psutil.Error:
-                        # process likely exited; job.done() handles it next loop
-                        pass
-
-                    if rss_mb is not None and rss_mb > INDEXING_WORKER_MEMORY_LIMIT_MB:
-                        task_logger.warning(
-                            log_builder.build(
-                                "Indexing watchdog - memory limit exceeded; "
-                                "terminating subprocess",
-                                rss_mb=str(rss_mb),
-                                limit_mb=str(INDEXING_WORKER_MEMORY_LIMIT_MB),
-                                pid=str(pid),
-                            )
-                        )
-                        result.status = (
-                            IndexingWatchdogTerminalStatus.TERMINATED_BY_MEMORY_LIMIT
-                        )
-                        memory_limit_failure_reason = (
-                            "Indexing worker exceeded the memory limit while "
-                            f"fetching documents: rss_mb={rss_mb} "
-                            f"limit_mb={INDEXING_WORKER_MEMORY_LIMIT_MB}. "
-                            "This usually means the connector encountered "
-                            "very large documents."
-                        )
-
-                        # mark failed before terminating so the subprocess's own
-                        # termination handling can't write a competing status
-                        try:
-                            with get_session_with_current_tenant() as db_session:
-                                mark_attempt_failed(
-                                    index_attempt_id,
-                                    db_session,
-                                    memory_limit_failure_reason,
-                                )
-                        except Exception:
-                            task_logger.exception(
-                                log_builder.build(
-                                    "Indexing watchdog - transient exception marking "
-                                    "index attempt as failed after memory limit"
-                                )
-                            )
-
-                        try:
-                            job.terminate_and_wait(
-                                CELERY_INDEXING_WATCHDOG_SIGTERM_GRACE_SECONDS
-                            )
-                        except Exception:
-                            task_logger.exception(
-                                log_builder.build(
-                                    "Indexing watchdog - exception while terminating "
-                                    "subprocess after memory limit exceeded"
-                                )
-                            )
-                        if job.process is not None:
-                            result.exit_code = job.process.exitcode
-                        break
+                memory_limit_failure_reason = _enforce_memory_limit(
+                    job, result, pid, index_attempt_id, log_builder
+                )
+                if memory_limit_failure_reason is not None:
+                    break
 
             # if the IndexAttempt row has been marked terminal (failed/canceled/
             # succeeded) by anyone else, the spawned subprocess is no longer doing
             # work that anyone cares about. Kill it so the worker thread is freed
             # up and a fresh attempt can be scheduled with a clean slate.
-            try:
-                with get_session_with_current_tenant() as db_session:
-                    index_attempt = get_index_attempt(
-                        db_session=db_session, index_attempt_id=index_attempt_id
-                    )
-
-                    if not index_attempt:
-                        continue
-
-                    if not index_attempt.is_finished():
-                        continue
-
-                    attempt_status = index_attempt.status
-            except Exception:
-                task_logger.exception(
-                    log_builder.build(
-                        "Indexing watchdog - transient exception looking up index attempt"
-                    )
-                )
+            attempt_status = _get_finalized_attempt_status(
+                index_attempt_id, log_builder
+            )
+            if attempt_status is None:
                 continue
 
             task_logger.warning(
@@ -682,20 +899,7 @@ def docfetching_proxy_task(
                     pid=str(job.process.pid),
                 )
             )
-            result.status = (
-                IndexingWatchdogTerminalStatus.TERMINATED_BY_ATTEMPT_FINALIZED
-            )
-            try:
-                job.terminate_and_wait(CELERY_INDEXING_WATCHDOG_SIGTERM_GRACE_SECONDS)
-            except Exception:
-                task_logger.exception(
-                    log_builder.build(
-                        "Indexing watchdog - exception while terminating subprocess "
-                        "after attempt finalization"
-                    )
-                )
-            if job.process is not None:
-                result.exit_code = job.process.exitcode
+            _terminate_after_attempt_finalized(job, result, log_builder)
             break
 
     except Exception as e:
@@ -710,28 +914,7 @@ def docfetching_proxy_task(
     elapsed = time.monotonic() - start
     if result.exception_str is not None:
         # print with exception
-        try:
-            with get_session_with_current_tenant() as db_session:
-                attempt = get_index_attempt(db_session, ctx.index_attempt_id)
-
-                # only mark failures if not already terminal,
-                # otherwise we're overwriting potential real stack traces
-                if attempt and not attempt.status.is_terminal():
-                    failure_reason = (
-                        f"Spawned task exceptioned: exit_code={result.exit_code}"
-                    )
-                    mark_attempt_failed(
-                        ctx.index_attempt_id,
-                        db_session,
-                        failure_reason=failure_reason,
-                        full_exception_trace=result.exception_str,
-                    )
-        except Exception:
-            task_logger.exception(
-                log_builder.build(
-                    "Indexing watchdog - transient exception marking index attempt as failed"
-                )
-            )
+        _mark_attempt_failed_after_exception(ctx, result, log_builder)
 
         normalized_exception_str = "None"
         if result.exception_str:
@@ -752,80 +935,9 @@ def docfetching_proxy_task(
         raise RuntimeError(f"Exception encountered: traceback={result.exception_str}")
 
     # print without exception
-    if result.status == IndexingWatchdogTerminalStatus.TERMINATED_BY_SIGNAL:
-        try:
-            with get_session_with_current_tenant() as db_session:
-                logger.exception(
-                    "Marking attempt %s as canceled due to termination signal",
-                    index_attempt_id,
-                )
-                mark_attempt_canceled(
-                    index_attempt_id,
-                    db_session,
-                    "Connector termination signal detected",
-                )
-        except Exception:
-            task_logger.exception(
-                log_builder.build(
-                    "Indexing watchdog - transient exception marking index attempt as canceled"
-                )
-            )
-
-        job.terminate_and_wait(CELERY_INDEXING_WATCHDOG_SIGTERM_GRACE_SECONDS)
-    elif result.status == IndexingWatchdogTerminalStatus.TERMINATED_BY_ACTIVITY_TIMEOUT:
-        try:
-            with get_session_with_current_tenant() as db_session:
-                mark_attempt_failed(
-                    index_attempt_id,
-                    db_session,
-                    "Indexing watchdog - activity timeout exceeded: "
-                    f"attempt={index_attempt_id} "
-                    f"timeout={CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT}s",
-                )
-        except Exception:
-            logger.exception(
-                log_builder.build(
-                    "Indexing watchdog - transient exception marking index attempt as failed"
-                )
-            )
-        job.terminate_and_wait(CELERY_INDEXING_WATCHDOG_SIGTERM_GRACE_SECONDS)
-    elif (
-        result.status == IndexingWatchdogTerminalStatus.TERMINATED_BY_ATTEMPT_FINALIZED
-    ):
-        # the IndexAttempt row was already marked terminal by whoever finalized it
-        # (e.g. heartbeat watchdog marking it FAILED, user requesting cancellation,
-        # successful completion in the spawned process before we noticed). The
-        # subprocess has been killed in the watchdog loop above; no further DB
-        # writes are needed here.
-        pass
-    elif result.status == IndexingWatchdogTerminalStatus.TERMINATED_BY_WORKER_SHUTDOWN:
-        # already marked INTERRUPTED in the loop (best-effort). The heartbeat
-        # watchdog is the fallback if that write failed, so nothing to do here.
-        pass
-    elif result.status == IndexingWatchdogTerminalStatus.TERMINATED_BY_MEMORY_LIMIT:
-        # subprocess already terminated in the watchdog loop. Re-mark in case the
-        # in-loop mark_attempt_failed hit a transient DB error — otherwise the
-        # attempt lingers in_progress until the heartbeat watchdog fails it with
-        # the opaque "No heartbeat received" message this status exists to replace.
-        try:
-            with get_session_with_current_tenant() as db_session:
-                attempt = get_index_attempt(db_session, index_attempt_id)
-                if attempt and not attempt.status.is_terminal():
-                    mark_attempt_failed(
-                        index_attempt_id,
-                        db_session,
-                        memory_limit_failure_reason
-                        or "Indexing worker exceeded the memory limit",
-                    )
-        except Exception:
-            task_logger.exception(
-                log_builder.build(
-                    "Indexing watchdog - transient exception marking index attempt "
-                    "as failed after memory limit"
-                )
-            )
-    else:
-        pass
+    _finalize_terminal_status(
+        job, result, index_attempt_id, log_builder, memory_limit_failure_reason
+    )
 
     task_logger.info(
         log_builder.build(

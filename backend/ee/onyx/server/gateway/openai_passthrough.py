@@ -9,6 +9,7 @@ import queue
 import threading
 import time
 import uuid
+from collections.abc import Callable
 from contextlib import ExitStack
 from typing import Any
 
@@ -44,6 +45,8 @@ from onyx.server.gateway.models import (
 from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationView
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.create import trace
+from onyx.tracing.framework.span_data import GenerationSpanData
+from onyx.tracing.framework.spans import Span
 from onyx.tracing.framework.traces import Trace
 from onyx.tracing.llm_utils import llm_generation_span, record_llm_span_output
 from onyx.utils.headers import build_llm_extra_headers
@@ -386,6 +389,198 @@ def handle_openai_responses_passthrough(
     return JSONResponse(content=response_body)
 
 
+_TEXT_DELTA_EVENT = "response.output_text.delta"
+_TERMINAL_EVENTS = ("response.completed", "response.failed", "response.incomplete")
+_ERRORED_EVENTS = ("response.failed", "response.incomplete")
+_RATE_LIMIT_ERROR_TYPES = ("rate_limit_error", "rate_limit_exceeded")
+
+
+class _ResponseFrameState:
+    """Response identity an out-of-band error frame must mirror.
+
+    The upstream values are read per SSE frame into the ``pending_*`` slots and
+    adopted only once that frame has been forwarded, so an error frame never
+    claims an identity the client has not seen.
+    """
+
+    def __init__(self, response_id: str, created_at: int) -> None:
+        self.response_id = response_id
+        self.created_at = created_at
+        self.next_sequence_number = 0
+        self.pending_response_id: str | None = None
+        self.pending_created_at: int | None = None
+        self.pending_next_sequence: int | None = None
+
+    def observe(self, event: Any) -> None:
+        event_response = event.get("response")
+        if isinstance(event_response, dict):
+            upstream_response_id = event_response.get("id")
+            if isinstance(upstream_response_id, str):
+                self.pending_response_id = upstream_response_id
+            upstream_created_at = event_response.get("created_at")
+            if isinstance(upstream_created_at, int):
+                self.pending_created_at = upstream_created_at
+        upstream_sequence = event.get("sequence_number")
+        if isinstance(upstream_sequence, int):
+            self.pending_next_sequence = upstream_sequence + 1
+
+    def adopt_pending(self) -> None:
+        if self.pending_response_id is not None:
+            self.response_id = self.pending_response_id
+        if self.pending_created_at is not None:
+            self.created_at = self.pending_created_at
+        if self.pending_next_sequence is not None:
+            self.next_sequence_number = self.pending_next_sequence
+
+    def clear_pending(self) -> None:
+        self.pending_response_id = None
+        self.pending_created_at = None
+        self.pending_next_sequence = None
+
+
+def _emit_failed_frame(
+    *,
+    out: "queue.Queue[Any]",
+    cancelled: threading.Event,
+    frame: _ResponseFrameState,
+    model: str,
+    message: str,
+    error_type: str,
+) -> None:
+    code: ResponsesErrorCode = (
+        "rate_limit_exceeded"
+        if error_type in _RATE_LIMIT_ERROR_TYPES
+        else "server_error"
+    )
+    payload = {
+        **ResponsesFailedEvent.create(
+            ResponsesObjectPayload.failed(
+                response_id=frame.response_id,
+                created_at=frame.created_at,
+                model=model,
+                message=message,
+                code=code,
+            )
+        ).to_wire(),
+        "sequence_number": frame.next_sequence_number,
+    }
+    _put_stream_item(out, f"data: {json.dumps(payload)}\n\n", cancelled)
+
+
+def _emit_upstream_status_error(
+    response: httpx.Response,
+    span: Span[GenerationSpanData] | None,
+    emit_error: Callable[..., None],
+) -> None:
+    response.read()
+    if response.status_code in _FORWARDABLE_STATUSES:
+        error_type, message = _error_type_and_message(response.content)
+    else:
+        logger.warning(
+            "OpenAI passthrough upstream stream error (sanitized): status=%s",
+            response.status_code,
+        )
+        error_type, message = "api_error", _SANITIZED_ERROR
+    if span is not None:
+        span.set_error(
+            {"message": f"upstream status {response.status_code}", "data": None}
+        )
+    emit_error(message=message, error_type=error_type)
+
+
+def _record_stream_usage(
+    response_obj: Any,
+    state: _StreamAccumulator,
+    span: Span[GenerationSpanData] | None,
+) -> None:
+    usage = response_obj.get("usage")
+    if not isinstance(usage, dict):
+        return
+    state.usage = _usage_from_openai_wire(usage)
+    reasoning_tokens = _reasoning_tokens(usage)
+    if reasoning_tokens and span is not None:
+        # No Usage slot for reasoning-token pricing yet; surface it in traces.
+        span.span_data.model_config = {
+            **(span.span_data.model_config or {}),
+            "reasoning_tokens": reasoning_tokens,
+        }
+
+
+def _observe_stream_event(
+    event: Any,
+    state: _StreamAccumulator,
+    span: Span[GenerationSpanData] | None,
+) -> None:
+    """Accumulate text, usage and errors for the trace span."""
+    event_type = event.get("type")
+    if event_type == _TEXT_DELTA_EVENT:
+        delta_text = event.get("delta")
+        if isinstance(delta_text, str):
+            state.content.append(delta_text)
+        return
+    if event_type not in _TERMINAL_EVENTS:
+        return
+    # incomplete/failed also bill real tokens, so usage cannot be read from
+    # completed alone.
+    response_obj = event.get("response") or {}
+    _record_stream_usage(response_obj, state, span)
+    if event_type in _ERRORED_EVENTS:
+        error = response_obj.get("error")
+        if error and span is not None:
+            span.set_error({"message": str(error), "data": None})
+
+
+def _flush_frame(
+    frame_lines: list[str],
+    frame: _ResponseFrameState,
+    out: "queue.Queue[Any]",
+    cancelled: threading.Event,
+) -> bool:
+    """Forward one buffered SSE frame verbatim, then adopt its identity."""
+    if not _put_stream_item(out, "\n".join(frame_lines) + "\n\n", cancelled):
+        return False
+    frame.adopt_pending()
+    return True
+
+
+def _forward_stream_frames(
+    response: httpx.Response,
+    frame: _ResponseFrameState,
+    state: _StreamAccumulator,
+    span: Span[GenerationSpanData] | None,
+    out: "queue.Queue[Any]",
+    cancelled: threading.Event,
+) -> None:
+    """Relay upstream SSE frames unchanged while accumulating trace state."""
+    frame_lines: list[str] = []
+    for line in response.iter_lines():
+        if cancelled.is_set():
+            break
+        if line == "":
+            if not frame_lines:
+                continue
+            buffered, frame_lines = frame_lines, []
+            if not _flush_frame(buffered, frame, out, cancelled):
+                break
+            frame.clear_pending()
+            continue
+        frame_lines.append(line)
+        if not line.startswith("data: "):
+            continue
+        raw_data = line[len("data: ") :]
+        try:
+            event = json.loads(raw_data)
+        except json.JSONDecodeError:
+            logger.warning(
+                "OpenAI passthrough: unparsable SSE data line, forwarding verbatim"
+            )
+            continue
+        frame.observe(event)
+        _observe_stream_event(event, state, span)
+    if frame_lines and not cancelled.is_set():
+        _flush_frame(frame_lines, frame, out, cancelled)
+
+
 def _openai_passthrough_stream_worker(
     url: str,
     headers: dict[str, str],
@@ -398,29 +593,19 @@ def _openai_passthrough_stream_worker(
     out: "queue.Queue[Any]",
     cancelled: threading.Event,
 ) -> None:
-    response_id = f"resp_{uuid.uuid4().hex}"
-    response_created_at = int(time.time())
-    next_sequence_number = 0
+    frame = _ResponseFrameState(
+        response_id=f"resp_{uuid.uuid4().hex}", created_at=int(time.time())
+    )
 
     def emit_error(*, message: str, error_type: str) -> None:
-        code: ResponsesErrorCode = (
-            "rate_limit_exceeded"
-            if error_type in ("rate_limit_error", "rate_limit_exceeded")
-            else "server_error"
+        _emit_failed_frame(
+            out=out,
+            cancelled=cancelled,
+            frame=frame,
+            model=model,
+            message=message,
+            error_type=error_type,
         )
-        payload = {
-            **ResponsesFailedEvent.create(
-                ResponsesObjectPayload.failed(
-                    response_id=response_id,
-                    created_at=response_created_at,
-                    model=model,
-                    message=message,
-                    code=code,
-                )
-            ).to_wire(),
-            "sequence_number": next_sequence_number,
-        }
-        _put_stream_item(out, f"data: {json.dumps(payload)}\n\n", cancelled)
 
     # Runs on its own thread after the endpoint returned, so the trace must be
     # opened here or the generation span sees no active trace.
@@ -458,106 +643,10 @@ def _openai_passthrough_stream_worker(
             ).start()
 
             if response.status_code != 200:
-                response.read()
-                if response.status_code in _FORWARDABLE_STATUSES:
-                    error_type, message = _error_type_and_message(response.content)
-                else:
-                    logger.warning(
-                        "OpenAI passthrough upstream stream error (sanitized): "
-                        "status=%s",
-                        response.status_code,
-                    )
-                    error_type, message = "api_error", _SANITIZED_ERROR
-                if span is not None:
-                    span.set_error(
-                        {
-                            "message": f"upstream status {response.status_code}",
-                            "data": None,
-                        }
-                    )
-                emit_error(message=message, error_type=error_type)
+                _emit_upstream_status_error(response, span, emit_error)
                 return
 
-            frame_lines: list[str] = []
-            frame_response_id: str | None = None
-            frame_created_at: int | None = None
-            frame_next_sequence: int | None = None
-            for line in response.iter_lines():
-                if cancelled.is_set():
-                    break
-                if line == "":
-                    if frame_lines:
-                        frame_text = "\n".join(frame_lines)
-                        frame_lines = []
-                        if not _put_stream_item(out, frame_text + "\n\n", cancelled):
-                            break
-                        if frame_response_id is not None:
-                            response_id = frame_response_id
-                        if frame_created_at is not None:
-                            response_created_at = frame_created_at
-                        if frame_next_sequence is not None:
-                            next_sequence_number = frame_next_sequence
-                        frame_response_id = None
-                        frame_created_at = None
-                        frame_next_sequence = None
-                    continue
-                frame_lines.append(line)
-                if not line.startswith("data: "):
-                    continue
-                raw_data = line[len("data: ") :]
-                try:
-                    event = json.loads(raw_data)
-                except json.JSONDecodeError:
-                    logger.warning(
-                        "OpenAI passthrough: unparsable SSE data line, "
-                        "forwarding verbatim"
-                    )
-                    continue
-                event_type = event.get("type")
-                event_response = event.get("response")
-                if isinstance(event_response, dict):
-                    upstream_response_id = event_response.get("id")
-                    if isinstance(upstream_response_id, str):
-                        frame_response_id = upstream_response_id
-                    upstream_created_at = event_response.get("created_at")
-                    if isinstance(upstream_created_at, int):
-                        frame_created_at = upstream_created_at
-                upstream_sequence = event.get("sequence_number")
-                if isinstance(upstream_sequence, int):
-                    frame_next_sequence = upstream_sequence + 1
-                if event_type == "response.output_text.delta":
-                    delta_text = event.get("delta")
-                    if isinstance(delta_text, str):
-                        state.content.append(delta_text)
-                elif event_type in (
-                    "response.completed",
-                    "response.failed",
-                    "response.incomplete",
-                ):
-                    # incomplete/failed also bill real tokens, so usage
-                    # cannot be read from completed alone.
-                    response_obj = event.get("response") or {}
-                    usage = response_obj.get("usage")
-                    if isinstance(usage, dict):
-                        state.usage = _usage_from_openai_wire(usage)
-                        reasoning_tokens = _reasoning_tokens(usage)
-                        if reasoning_tokens and span is not None:
-                            span.span_data.model_config = {
-                                **(span.span_data.model_config or {}),
-                                "reasoning_tokens": reasoning_tokens,
-                            }
-                    if event_type in ("response.failed", "response.incomplete"):
-                        error = response_obj.get("error")
-                        if error and span is not None:
-                            span.set_error({"message": str(error), "data": None})
-            if frame_lines and not cancelled.is_set():
-                if _put_stream_item(out, "\n".join(frame_lines) + "\n\n", cancelled):
-                    if frame_response_id is not None:
-                        response_id = frame_response_id
-                    if frame_created_at is not None:
-                        response_created_at = frame_created_at
-                    if frame_next_sequence is not None:
-                        next_sequence_number = frame_next_sequence
+            _forward_stream_frames(response, frame, state, span, out, cancelled)
             # Managed-key cost accounting normally happens inside
             # LLM.invoke/stream, which this path bypasses.
             if state.usage is not None and isinstance(llm, LitellmLLM):
