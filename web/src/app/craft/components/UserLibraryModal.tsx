@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef, useMemo, useEffect } from "react";
-import useFocusOnMount from "@opal/hooks/useFocusOnMount";
+import { useFocusOnMount } from "@opal/hooks";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
