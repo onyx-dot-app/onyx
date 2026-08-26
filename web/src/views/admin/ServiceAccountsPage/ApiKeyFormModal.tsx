@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useCallback } from "react";
+import { useTranslations } from "next-intl";
 import { Form, Formik } from "formik";
 import {
   createApiKey,
@@ -31,6 +32,7 @@ export default function ApiKeyFormModal({
   onCreateApiKey,
   apiKey,
 }: ApiKeyFormModalProps) {
+  const t = useTranslations("admin.serviceAccounts");
   const isUpdate = apiKey !== undefined;
   // A key's access is whatever groups it lands in, so Admin/Basic must be offered too.
   const { data: allGroups, isLoading: groupsLoading } = useGroups(true);
@@ -54,12 +56,10 @@ export default function ApiKeyFormModal({
       <Modal.Content width="sm" height="lg" ref={contentRef}>
         <Modal.Header
           icon={SvgKey}
-          title={isUpdate ? "Update Service Account" : "Create Service Account"}
-          description={
-            isUpdate
-              ? undefined
-              : "Use service account API key to programmatically access Onyx API with user-level permissions. You can modify the account details later."
+          title={
+            isUpdate ? t("formModal.title.update") : t("formModal.title.create")
           }
+          description={isUpdate ? undefined : t("formModal.description")}
           onClose={onClose}
         />
         <Formik
@@ -85,8 +85,8 @@ export default function ApiKeyFormModal({
               if (response.ok) {
                 toast.success(
                   isUpdate
-                    ? "Successfully updated service account!"
-                    : "Successfully created service account!"
+                    ? t("formModal.toasts.updated")
+                    : t("formModal.toasts.created")
                 );
                 if (!isUpdate) {
                   onCreateApiKey(await response.json());
@@ -97,13 +97,15 @@ export default function ApiKeyFormModal({
                 const errorMsg = responseJson.detail || responseJson.message;
                 toast.error(
                   isUpdate
-                    ? `Error updating service account - ${errorMsg}`
-                    : `Error creating service account - ${errorMsg}`
+                    ? t("formModal.toasts.updateFailed", { detail: errorMsg })
+                    : t("formModal.toasts.createFailed", { detail: errorMsg })
                 );
               }
             } catch (e) {
               toast.error(
-                e instanceof Error ? e.message : "An unexpected error occurred."
+                e instanceof Error
+                  ? e.message
+                  : t("formModal.toasts.unexpectedError")
               );
             } finally {
               formikHelpers.setSubmitting(false);
@@ -129,20 +131,26 @@ export default function ApiKeyFormModal({
             return (
               <Form className="w-full overflow-visible">
                 <Modal.Body>
-                  <InputVertical withLabel="name" title="Name">
+                  <InputVertical
+                    withLabel="name"
+                    title={t("formModal.name.title")}
+                  >
                     <FormikField<string>
                       name="name"
                       render={(field) => (
                         <InputTypeIn
                           {...field}
-                          placeholder="Enter a name"
+                          placeholder={t("formModal.name.placeholder")}
                           clearButton
                         />
                       )}
                     />
                   </InputVertical>
 
-                  <InputVertical withLabel="group_ids" title="Groups">
+                  <InputVertical
+                    withLabel="group_ids"
+                    title={t("formModal.groups.title")}
+                  >
                     <Section
                       gap={2}
                       padding={1}
@@ -162,7 +170,9 @@ export default function ApiKeyFormModal({
                               data-testid="groups-search-input"
                               value={searchTerm}
                               onChange={(e) => setSearchTerm(e.target.value)}
-                              placeholder="Search groups..."
+                              placeholder={t(
+                                "formModal.groups.search.placeholder"
+                              )}
                               searchIcon
                             />
                           </div>
@@ -173,15 +183,22 @@ export default function ApiKeyFormModal({
                           container={contentEl}
                         >
                           {groupsLoading ? (
-                            <LineItem skeleton description="Loading groups...">
-                              Loading...
+                            <LineItem
+                              skeleton
+                              description={t(
+                                "formModal.groups.loading.description"
+                              )}
+                            >
+                              {t("formModal.groups.loading.title")}
                             </LineItem>
                           ) : dropdownGroups.length === 0 ? (
                             <LineItem
                               skeleton
-                              description="Try a different search term."
+                              description={t(
+                                "formModal.groups.noResults.description"
+                              )}
                             >
-                              No groups found
+                              {t("formModal.groups.noResults.title")}
                             </LineItem>
                           ) : (
                             <ShadowDiv
@@ -196,11 +213,10 @@ export default function ApiKeyFormModal({
                                   <LineItem
                                     key={group.id}
                                     icon={isMember ? SvgCheck : SvgUsers}
-                                    description={`${group.users.length} ${
-                                      group.users.length === 1
-                                        ? "user"
-                                        : "users"
-                                    }`}
+                                    description={t(
+                                      "formModal.groups.memberCount",
+                                      { count: group.users.length }
+                                    )}
                                     selected={isMember}
                                     emphasized={isMember}
                                     onClick={() => toggleGroup(group.id)}
@@ -225,9 +241,11 @@ export default function ApiKeyFormModal({
                             icon={SvgUsers}
                             skeleton
                             interactive={false}
-                            description="No groups assigned to this service account."
+                            description={t(
+                              "formModal.groups.empty.description"
+                            )}
                           >
-                            No groups
+                            {t("formModal.groups.empty.title")}
                           </LineItem>
                         ) : (
                           joinedGroups.map((group) => (
@@ -237,9 +255,9 @@ export default function ApiKeyFormModal({
                             >
                               <LineItem
                                 icon={SvgUsers}
-                                description={`${group.users.length} ${
-                                  group.users.length === 1 ? "user" : "users"
-                                }`}
+                                description={t("formModal.groups.memberCount", {
+                                  count: group.users.length,
+                                })}
                                 rightChildren={
                                   <SvgLogOut height={16} width={16} />
                                 }
@@ -261,13 +279,15 @@ export default function ApiKeyFormModal({
                     type="button"
                     onClick={onClose}
                   >
-                    Cancel
+                    {t("formModal.cancelButton.label")}
                   </Button>
                   <Button
                     disabled={isSubmitting || !values.name.trim()}
                     type="submit"
                   >
-                    {isUpdate ? "Update" : "Create Account"}
+                    {isUpdate
+                      ? t("formModal.submitButton.update")
+                      : t("formModal.submitButton.create")}
                   </Button>
                 </Modal.Footer>
               </Form>

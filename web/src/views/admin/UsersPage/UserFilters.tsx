@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import {
   SvgCheck,
   SvgSlack,
@@ -18,12 +19,7 @@ import {
   ShadowDiv,
 } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
-import {
-  AccountType,
-  ACCOUNT_TYPE_LABELS,
-  UserStatus,
-  USER_STATUS_LABELS,
-} from "@/lib/types";
+import { AccountType, UserStatus } from "@/lib/types";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import type { GroupOption, StatusFilter, StatusCountMap } from "./interfaces";
 
@@ -31,20 +27,20 @@ import type { GroupOption, StatusFilter, StatusCountMap } from "./interfaces";
 // Constants
 // ---------------------------------------------------------------------------
 
-const FILTERABLE_ACCOUNT_TYPES: [AccountType, string][] = [
-  [AccountType.STANDARD, ACCOUNT_TYPE_LABELS[AccountType.STANDARD]],
-  [AccountType.BOT, ACCOUNT_TYPE_LABELS[AccountType.BOT]],
-  [AccountType.EXT_PERM_USER, ACCOUNT_TYPE_LABELS[AccountType.EXT_PERM_USER]],
-  [
-    AccountType.SERVICE_ACCOUNT,
-    ACCOUNT_TYPE_LABELS[AccountType.SERVICE_ACCOUNT],
-  ],
+const FILTERABLE_ACCOUNT_TYPES: AccountType[] = [
+  AccountType.STANDARD,
+  AccountType.BOT,
+  AccountType.EXT_PERM_USER,
+  AccountType.SERVICE_ACCOUNT,
 ];
 
-const FILTERABLE_STATUSES = (
-  Object.entries(USER_STATUS_LABELS) as [UserStatus, string][]
-).filter(
-  ([value]) => value !== UserStatus.REQUESTED || NEXT_PUBLIC_CLOUD_ENABLED
+const FILTERABLE_STATUSES: UserStatus[] = [
+  UserStatus.ACTIVE,
+  UserStatus.INACTIVE,
+  UserStatus.INVITED,
+  UserStatus.REQUESTED,
+].filter(
+  (value) => value !== UserStatus.REQUESTED || NEXT_PUBLIC_CLOUD_ENABLED
 );
 
 const ACCOUNT_TYPE_ICONS: Partial<Record<AccountType, IconFunctionComponent>> =
@@ -101,6 +97,32 @@ export default function UserFilters({
   accountTypeCounts,
   statusCounts,
 }: UserFiltersProps) {
+  const t = useTranslations("admin.users");
+  const accountTypeLabels: Record<AccountType, string> = {
+    [AccountType.STANDARD]: t("accountType.standard.label"),
+    [AccountType.BOT]: t("accountType.bot.label"),
+    [AccountType.EXT_PERM_USER]: t("accountType.extPermUser.label"),
+    [AccountType.SERVICE_ACCOUNT]: t("accountType.serviceAccount.label"),
+    [AccountType.ANONYMOUS]: t("accountType.anonymous.label"),
+  };
+  const statusLabels: Record<UserStatus, string> = {
+    [UserStatus.ACTIVE]: t("status.active.label"),
+    [UserStatus.INACTIVE]: t("status.inactive.label"),
+    [UserStatus.INVITED]: t("status.invited.label"),
+    [UserStatus.REQUESTED]: t("status.requested.label"),
+  };
+
+  // Names of the first two selections, plus a count of the rest.
+  const summarize = (names: string[], selectedCount: number) => {
+    const shown = names.slice(0, 2).join(", ");
+    return selectedCount > 2
+      ? t("filters.button.moreLabel", {
+          names: shown,
+          count: selectedCount - 2,
+        })
+      : shown;
+  };
+
   const hasTypeFilter = selectedAccountTypes.length > 0;
   const hasGroupFilter = selectedGroups.length > 0;
   const hasStatusFilter = selectedStatuses.length > 0;
@@ -132,35 +154,29 @@ export default function UserFilters({
   };
 
   const typeLabel = hasTypeFilter
-    ? FILTERABLE_ACCOUNT_TYPES.filter(([type]) =>
-        selectedAccountTypes.includes(type)
+    ? summarize(
+        FILTERABLE_ACCOUNT_TYPES.filter((type) =>
+          selectedAccountTypes.includes(type)
+        ).map((type) => accountTypeLabels[type]),
+        selectedAccountTypes.length
       )
-        .map(([, label]) => label)
-        .slice(0, 2)
-        .join(", ") +
-      (selectedAccountTypes.length > 2
-        ? `, +${selectedAccountTypes.length - 2}`
-        : "")
-    : "All Account Types";
+    : t("filters.accountType.allOption.label");
 
   const groupLabel = hasGroupFilter
-    ? groups
-        .filter((g) => selectedGroups.includes(g.id))
-        .map((g) => g.name)
-        .slice(0, 2)
-        .join(", ") +
-      (selectedGroups.length > 2 ? `, +${selectedGroups.length - 2}` : "")
-    : "All Groups";
+    ? summarize(
+        groups.filter((g) => selectedGroups.includes(g.id)).map((g) => g.name),
+        selectedGroups.length
+      )
+    : t("filters.group.allOption.label");
 
   const statusLabel = hasStatusFilter
-    ? FILTERABLE_STATUSES.filter(([status]) =>
-        selectedStatuses.includes(status)
+    ? summarize(
+        FILTERABLE_STATUSES.filter((status) =>
+          selectedStatuses.includes(status)
+        ).map((status) => statusLabels[status]),
+        selectedStatuses.length
       )
-        .map(([, label]) => label)
-        .slice(0, 2)
-        .join(", ") +
-      (selectedStatuses.length > 2 ? `, +${selectedStatuses.length - 2}` : "")
-    : "All Status";
+    : t("filters.status.allOption.label");
 
   const filteredGroups = groupSearch
     ? groups.filter((g) =>
@@ -174,7 +190,7 @@ export default function UserFilters({
       <Popover>
         <Popover.Trigger asChild>
           <FilterButton
-            aria-label="Filter by account type"
+            aria-label={t("filters.accountType.button.ariaLabel")}
             icon={SvgUsers}
             active={hasTypeFilter}
             onClear={() => onAccountTypesChange([])}
@@ -191,9 +207,9 @@ export default function UserFilters({
               state={!hasTypeFilter ? "selected" : "empty"}
               selectVariant={!hasTypeFilter ? "select-heavy" : "select-light"}
               onClick={() => onAccountTypesChange([])}
-              title="All Account Types"
+              title={t("filters.accountType.allOption.label")}
             />
-            {FILTERABLE_ACCOUNT_TYPES.map(([type, label]) => {
+            {FILTERABLE_ACCOUNT_TYPES.map((type) => {
               const isSelected = selectedAccountTypes.includes(type);
               const typeIcon = ACCOUNT_TYPE_ICONS[type] ?? SvgUser;
               return (
@@ -206,7 +222,7 @@ export default function UserFilters({
                   selectVariant={isSelected ? "select-heavy" : "select-light"}
                   onClick={() => toggleAccountType(type)}
                   rightChildren={<CountBadge count={accountTypeCounts[type]} />}
-                  title={label}
+                  title={accountTypeLabels[type]}
                 />
               );
             })}
@@ -224,7 +240,7 @@ export default function UserFilters({
       >
         <Popover.Trigger asChild>
           <FilterButton
-            aria-label="Filter by group"
+            aria-label={t("filters.group.button.ariaLabel")}
             icon={SvgUsers}
             active={hasGroupFilter}
             onClear={() => onGroupsChange([])}
@@ -237,7 +253,7 @@ export default function UserFilters({
             <InputTypeIn
               value={groupSearch}
               onChange={(e) => setGroupSearch(e.target.value)}
-              placeholder="Search groups..."
+              placeholder={t("filters.group.search.placeholder")}
               searchIcon
               variant="internal"
             />
@@ -248,7 +264,7 @@ export default function UserFilters({
               state={!hasGroupFilter ? "selected" : "empty"}
               selectVariant={!hasGroupFilter ? "select-heavy" : "select-light"}
               onClick={() => onGroupsChange([])}
-              title="All Groups"
+              title={t("filters.group.allOption.label")}
             />
             <ShadowDiv className="flex flex-col gap-1 max-h-[240px]">
               {filteredGroups.map((group) => {
@@ -269,7 +285,7 @@ export default function UserFilters({
               })}
               {filteredGroups.length === 0 && (
                 <Text as="span" secondaryBody text03 className="px-2 py-1.5">
-                  No groups found
+                  {t("filters.group.empty.label")}
                 </Text>
               )}
             </ShadowDiv>
@@ -281,7 +297,7 @@ export default function UserFilters({
       <Popover>
         <Popover.Trigger asChild>
           <FilterButton
-            aria-label="Filter by status"
+            aria-label={t("filters.status.button.ariaLabel")}
             icon={SvgUsers}
             active={hasStatusFilter}
             onClear={() => onStatusesChange([])}
@@ -298,9 +314,9 @@ export default function UserFilters({
               state={!hasStatusFilter ? "selected" : "empty"}
               selectVariant={!hasStatusFilter ? "select-heavy" : "select-light"}
               onClick={() => onStatusesChange([])}
-              title="All Status"
+              title={t("filters.status.allOption.label")}
             />
-            {FILTERABLE_STATUSES.map(([status, label]) => {
+            {FILTERABLE_STATUSES.map((status) => {
               const isSelected = selectedStatuses.includes(status);
               const countKey = STATUS_COUNT_KEY[status];
               return (
@@ -313,7 +329,7 @@ export default function UserFilters({
                   selectVariant={isSelected ? "select-heavy" : "select-light"}
                   onClick={() => toggleStatus(status)}
                   rightChildren={<CountBadge count={statusCounts[countKey]} />}
-                  title={label}
+                  title={statusLabels[status]}
                 />
               );
             })}

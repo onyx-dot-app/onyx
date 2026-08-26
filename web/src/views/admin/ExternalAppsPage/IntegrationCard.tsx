@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import {
   Button,
   Card,
@@ -34,6 +35,7 @@ export default function IntegrationCard({ integration }: IntegrationCardProps) {
     edit,
     remove,
   } = integration;
+  const t = useTranslations("admin.externalApps");
   const [isMutating, setIsMutating] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmingRemoval, setConfirmingRemoval] = useState(false);
@@ -69,7 +71,9 @@ export default function IntegrationCard({ integration }: IntegrationCardProps) {
             <div className="flex-1 min-w-0 flex flex-col gap-0.5">
               <div className="flex items-center gap-2">
                 <Text font="main-ui-action">{name}</Text>
-                {isCustom && <Tag title="Custom" color="purple" />}
+                {isCustom && (
+                  <Tag title={t("card.customTag.label")} color="purple" />
+                )}
                 {warnings.map((warning) => (
                   <Tag key={warning} title={warning} color="amber" error />
                 ))}
@@ -84,7 +88,7 @@ export default function IntegrationCard({ integration }: IntegrationCardProps) {
                 connection; the label fades in on hover or focus. */}
             <Hoverable.Item group="integration-row" variant="appear-on-hover">
               <Text font="secondary-body" color="text-03" nowrap>
-                Available in Craft
+                {t("card.availableInCraft.label")}
               </Text>
             </Hoverable.Item>
             <Switch
@@ -92,11 +96,17 @@ export default function IntegrationCard({ integration }: IntegrationCardProps) {
               onCheckedChange={() =>
                 run(
                   toggleEnabled,
-                  `Failed to ${enabled ? "disable" : "enable"} "${name}"`
+                  enabled
+                    ? t("card.toasts.disableFailed", { name })
+                    : t("card.toasts.enableFailed", { name })
                 )
               }
               disabled={isMutating}
-              aria-label={`${enabled ? "Disable" : "Enable"} ${name}`}
+              aria-label={
+                enabled
+                  ? t("card.toggle.disableAriaLabel", { name })
+                  : t("card.toggle.enableAriaLabel", { name })
+              }
             />
             {/* Secondary actions live in an overflow menu at the card's edge.
                 Every row renders the trigger, so the switch position is
@@ -107,7 +117,7 @@ export default function IntegrationCard({ integration }: IntegrationCardProps) {
                   prominence="tertiary"
                   icon={SvgMoreHorizontal}
                   disabled={isMutating || (!edit && !remove)}
-                  aria-label={`${name} actions`}
+                  aria-label={t("card.actionsButton.ariaLabel", { name })}
                 />
               </Popover.Trigger>
               <Popover.Content align="end" width="sm">
@@ -123,7 +133,7 @@ export default function IntegrationCard({ integration }: IntegrationCardProps) {
                           setMenuOpen(false);
                           edit();
                         }}
-                        title="Edit"
+                        title={t("card.editAction.label")}
                       />
                     ) : undefined,
                     remove ? (
@@ -137,7 +147,7 @@ export default function IntegrationCard({ integration }: IntegrationCardProps) {
                           setMenuOpen(false);
                           setConfirmingRemoval(true);
                         }}
-                        title="Delete"
+                        title={t("card.deleteAction.label")}
                       />
                     ) : undefined,
                   ]}
@@ -149,28 +159,29 @@ export default function IntegrationCard({ integration }: IntegrationCardProps) {
         {confirmingRemoval && remove && (
           <ConfirmationModalLayout
             icon={SvgTrash}
-            title={`Delete “${name}”?`}
-            description="This deletes the app for your whole organization: its configuration, every member's connection, and any provider-managed skills."
+            title={t("card.deleteModal.title", { name })}
+            description={t("card.deleteModal.description")}
             onClose={isMutating ? undefined : () => setConfirmingRemoval(false)}
             submit={
               <Button
                 variant="danger"
                 disabled={isMutating}
                 onClick={async () => {
-                  if (await run(remove.run, `Failed to delete "${name}"`)) {
+                  const failure = t("card.toasts.deleteFailed", { name });
+                  if (await run(remove.run, failure)) {
                     setConfirmingRemoval(false);
                   }
                 }}
               >
-                {isMutating ? "Deleting…" : "Delete app"}
+                {isMutating
+                  ? t("card.deleteModal.submitting.label")
+                  : t("card.deleteModal.submit.label")}
               </Button>
             }
           >
-            {remove.retainedCustomSkillCount === 0
-              ? "No associated custom skills will be deleted."
-              : `${remove.retainedCustomSkillCount} associated custom ${
-                  remove.retainedCustomSkillCount === 1 ? "skill" : "skills"
-                } will be kept, unlinked from this app, and disabled for everyone.`}
+            {t("card.deleteModal.retainedSkills", {
+              count: remove.retainedCustomSkillCount,
+            })}
           </ConfirmationModalLayout>
         )}
       </Card>
