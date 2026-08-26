@@ -265,10 +265,18 @@ func (c *Client) WaitForUserGroupSettled(ctx context.Context, id int64, timeout 
 func (c *Client) WaitForUserGroupDeleted(ctx context.Context, id int64, timeout time.Duration) error {
 	return Poll(ctx, timeout, "the user group to be deleted",
 		func(ctx context.Context) (bool, string, error) {
-			_, found, err := c.LookupUserGroup(ctx, id)
+			group, found, err := c.LookupUserGroup(ctx, id)
 			if err != nil {
 				return false, "", err
 			}
-			return !found, "the group is still marked for deletion", nil
+			if !found {
+				return true, "", nil
+			}
+			// The two cases need different answers from whoever reads the
+			// timeout, so say which one it is rather than assuming the usual.
+			if group.IsUpForDeletion {
+				return false, "the group is marked for deletion and waiting on the background sync", nil
+			}
+			return false, "the group is still present and was never marked for deletion", nil
 		})
 }
