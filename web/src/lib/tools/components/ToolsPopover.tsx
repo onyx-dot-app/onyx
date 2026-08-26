@@ -1,184 +1,70 @@
 "use client";
 
-import {
-  CODING_AGENT_TOOL_ID,
-  FILE_READER_TOOL_ID,
-  IMAGE_GENERATION_TOOL_ID,
-  PYTHON_TOOL_ID,
-  SEARCH_TOOL_ID,
-  WEB_SEARCH_TOOL_ID,
-} from "@/app/app/components/tools/constants";
+import { FILE_READER_TOOL_ID, SEARCH_TOOL_ID } from "@/lib/tools/constants";
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import useFocusOnMount from "@opal/hooks/useFocusOnMount";
-import { Popover, PopoverMenu } from "@opal/components";
-import SwitchList, {
-  SwitchListItem,
-} from "@/refresh-components/popovers/ActionsPopover/SwitchList";
-import { MinimalAgent } from "@/lib/agents/types";
+import { InputTypeIn, Button, Popover, PopoverMenu } from "@opal/components";
+import { SvgActions, SvgKey, SvgSliders, SvgSimpleLoader } from "@opal/icons";
+import SwitchList, { SwitchListItem } from "@/lib/tools/components/SwitchList";
 import {
   MCPAuthenticationType,
   MCPAuthenticationPerformer,
-  ToolSnapshot,
+  SecondaryViewState,
 } from "@/lib/tools/types";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import { useAgentPreferences } from "@/lib/agents/hooks";
+import { MinimalAgent } from "@/lib/agents/types";
 import { useUser } from "@/providers/UserProvider";
 import { hasPermission } from "@/lib/permissions";
 import { FilterManager, useSourcePreferences } from "@/lib/hooks";
-import { getSourceMetadata } from "@/lib/sources";
 import MCPApiKeyModal from "@/components/chat/MCPApiKeyModal";
-import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { Permission, ValidSources } from "@/lib/types";
+import { NO_DISABLED_TOOLS } from "@/lib/tools/constants";
+import { getAdminConfigureInfo, getToolTooltip } from "@/lib/tools/utils";
+import { getConfiguredSources } from "@/lib/sources";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { SourceMetadata } from "@/lib/search/interfaces";
 import { SourceIcon } from "@/components/SourceIcon";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
+import { useAvailableSources } from "@/lib/connectors/hooks";
 import useCCPairs from "@/hooks/useCCPairs";
 import { useLLMProviders } from "@/lib/languageModels/hooks";
 import { useSettings } from "@/lib/settings/hooks";
-import { InputTypeIn } from "@opal/components";
 import { useToolOAuthStatus } from "@/lib/hooks/useToolOAuthStatus";
 import LineItem from "@/refresh-components/buttons/LineItem";
-import ActionLineItem from "@/refresh-components/popovers/ActionsPopover/ActionLineItem";
-import MCPLineItem, {
-  MCPServer,
-} from "@/refresh-components/popovers/ActionsPopover/MCPLineItem";
+import ActionLineItem from "@/lib/tools/components/ActionLineItem";
+import MCPLineItem, { MCPServer } from "@/lib/tools/components/MCPLineItem";
 import { useProjectsContext } from "@/lib/projects/providers";
-import {
-  SvgActions,
-  SvgChevronRight,
-  SvgKey,
-  SvgSliders,
-  SvgSimpleLoader,
-} from "@opal/icons";
-import { Button } from "@opal/components";
 import { isAssistant } from "@/lib/agents/utils";
 import {
   getMCPUserOAuthNavigationUrl,
+  saveMCPUserCredentials,
   startMCPUserOAuth,
 } from "@/lib/tools/svc";
 
-function buildTooltipMessage(
-  actionDescription: string,
-  isConfigured: boolean,
-  canManageAction: boolean
-) {
-  const _CONFIGURE_MESSAGE = "Press the settings cog to enable.";
-  const _USER_NOT_ADMIN_MESSAGE = "Ask an admin to configure.";
-
-  if (isConfigured) {
-    return actionDescription;
-  }
-
-  if (canManageAction) {
-    return actionDescription + " " + _CONFIGURE_MESSAGE;
-  }
-
-  return actionDescription + " " + _USER_NOT_ADMIN_MESSAGE;
-}
-
-const TOOL_DESCRIPTIONS: Record<string, string> = {
-  [SEARCH_TOOL_ID]: "Search through connected knowledge to inform the answer.",
-  [IMAGE_GENERATION_TOOL_ID]: "Generate images based on a prompt.",
-  [WEB_SEARCH_TOOL_ID]: "Search the web for up-to-date information.",
-  [PYTHON_TOOL_ID]: "Execute code for complex analysis.",
-  [CODING_AGENT_TOOL_ID]:
-    "Investigate a GitHub repository and answer questions about its code.",
-};
-
-const DEFAULT_TOOL_DESCRIPTION = "This action is not configured yet.";
-
-// Stable fallback so absent preferences never churn dependent callbacks.
-const NO_DISABLED_TOOLS: number[] = [];
-
-function getToolTooltip(
-  tool: ToolSnapshot,
-  isConfigured: boolean,
-  canManageAction: boolean
-): string {
-  const description =
-    (tool.in_code_tool_id && TOOL_DESCRIPTIONS[tool.in_code_tool_id]) ||
-    tool.description ||
-    DEFAULT_TOOL_DESCRIPTION;
-  return buildTooltipMessage(description, isConfigured, canManageAction);
-}
-
-const ADMIN_CONFIG_LINKS: Record<string, { href: string; tooltip: string }> = {
-  [IMAGE_GENERATION_TOOL_ID]: {
-    href: ADMIN_ROUTES.IMAGE_GENERATION.path,
-    tooltip: "Configure Image Generation",
-  },
-  [WEB_SEARCH_TOOL_ID]: {
-    href: ADMIN_ROUTES.WEB_SEARCH.path,
-    tooltip: "Configure Web Search",
-  },
-  [PYTHON_TOOL_ID]: {
-    href: ADMIN_ROUTES.CODE_INTERPRETER.path,
-    tooltip: "Configure Code Interpreter",
-  },
-};
-
-const OPENAPI_ADMIN_CONFIG = {
-  href: ADMIN_ROUTES.OPENAPI_ACTIONS.path,
-  tooltip: "Manage OpenAPI Actions",
-};
-
-const getAdminConfigureInfo = (
-  tool: ToolSnapshot
-): { href: string; tooltip: string } | null => {
-  if (tool.in_code_tool_id && ADMIN_CONFIG_LINKS[tool.in_code_tool_id]) {
-    return ADMIN_CONFIG_LINKS[tool.in_code_tool_id] ?? null;
-  }
-
-  if (!tool.in_code_tool_id && !tool.mcp_server_id) {
-    return OPENAPI_ADMIN_CONFIG;
-  }
-
-  return null;
-};
-
-// Get source metadata for configured sources - deduplicated by source type
-function getConfiguredSources(
-  availableSources: ValidSources[]
-): Array<SourceMetadata & { originalName: string; uniqueKey: string }> {
-  const seen = new Set<string>();
-  const result: Array<
-    SourceMetadata & { originalName: string; uniqueKey: string }
-  > = [];
-
-  for (const sourceName of availableSources) {
-    const cleanName = sourceName.replace("federated_", "") as ValidSources;
-    if (seen.has(cleanName)) continue;
-    seen.add(cleanName);
-
-    const metadata = getSourceMetadata(cleanName);
-    if (metadata.internalName === ValidSources.NotApplicable) continue;
-
-    result.push({
-      ...metadata,
-      originalName: sourceName,
-      uniqueKey: cleanName,
-    });
-  }
-  return result;
-}
-
-type SecondaryViewState =
-  | { type: "sources" }
-  | { type: "mcp"; serverId: number };
-
-export interface ActionsPopoverProps {
-  activeAgent: MinimalAgent;
+/**
+ * The actions popover.
+ *
+ * Takes the agent rather than resolving one. Everything the panel shows is
+ * scoped to it — the rows are its tools, the toggles are its per-agent
+ * preferences, the sources are what it can reach — so the caller decides
+ * which agent this acts on, and the panel never has to ask whether it has one.
+ *
+ * Callers should key this on the agent, so switching starts clean rather than
+ * carrying the previous agent's open panel and search term across.
+ */
+export interface ToolsPopoverProps {
+  agent: MinimalAgent;
   filterManager: FilterManager;
-  availableSources?: ValidSources[];
   disabled?: boolean;
 }
 
-export default function ActionsPopover({
-  activeAgent,
+export default function ToolsPopover({
+  agent,
   filterManager,
-  availableSources = [],
   disabled = false,
-}: ActionsPopoverProps) {
+}: ToolsPopoverProps) {
+  const { availableSources } = useAvailableSources();
   const [open, setOpen] = useState(false);
   const [secondaryView, setSecondaryView] = useState<SecondaryViewState | null>(
     null
@@ -189,19 +75,15 @@ export default function ActionsPopover({
   // const [showTopShadow, setShowTopShadow] = useState(false);
   const { selectedSources, setSelectedSources } = filterManager;
   const [mcpServers, setMcpServers] = useState<MCPServer[]>([]);
-  const { llmProviders, isLoading: isLLMLoading } = useLLMProviders(
-    activeAgent.id
-  );
+  const { llmProviders, isLoading: isLLMLoading } = useLLMProviders(agent.id);
   const hasAnyProvider = !isLLMLoading && (llmProviders?.length ?? 0) > 0;
 
   // Use the OAuth hook
-  const { getToolAuthStatus, authenticateTool } = useToolOAuthStatus(
-    activeAgent.id
-  );
+  const { getToolAuthStatus, authenticateTool } = useToolOAuthStatus(agent.id);
 
-  const agentIsAssistant = isAssistant(activeAgent);
+  const agentIsAssistant = isAssistant(agent);
 
-  const hasSearchTool = activeAgent.tools.some(
+  const hasSearchTool = agent.tools.some(
     (tool) => tool.in_code_tool_id === SEARCH_TOOL_ID
   );
 
@@ -213,13 +95,13 @@ export default function ActionsPopover({
       return null; // null means "all accessible"
     }
 
-    const sources = activeAgent.knowledge_sources ?? [];
+    const sources = agent.knowledge_sources ?? [];
     if (sources.length === 0 && hasSearchTool) {
       return null;
     }
 
     return new Set<string>(sources);
-  }, [agentIsAssistant, activeAgent.knowledge_sources, hasSearchTool]);
+  }, [agentIsAssistant, agent.knowledge_sources, hasSearchTool]);
 
   // Scope availableSources to only what this agent can access. This ensures
   // that (a) agent-only sources like user_file appear in the toggle list and
@@ -246,7 +128,7 @@ export default function ActionsPopover({
   // Store previously enabled sources when search tool is disabled
   const previouslyEnabledSourcesRef = useRef<SourceMetadata[]>([]);
 
-  // Store MCP server auth/loading state (tools are part of activeAgent.tools)
+  // Store MCP server auth/loading state (tools are part of agent.tools)
   const [mcpServerData, setMcpServerData] = useState<{
     [serverId: number]: {
       isAuthenticated: boolean;
@@ -279,7 +161,7 @@ export default function ActionsPopover({
   // Reset state when assistant changes
   useEffect(() => {
     setForcedToolIds([]);
-  }, [activeAgent.id, setForcedToolIds]);
+  }, [agent.id, setForcedToolIds]);
 
   const { isAdmin, permissions } = useUser();
   const { vectorDbEnabled } = useSettings();
@@ -292,13 +174,13 @@ export default function ActionsPopover({
   // Check if there are any connectors available
   const hasNoConnectors = ccPairs.length === 0;
 
-  const agentPreference = agentPreferences?.[activeAgent.id];
+  const agentPreference = agentPreferences?.[agent.id];
   const disabledToolIds =
     agentPreference?.disabled_tool_ids || NO_DISABLED_TOOLS;
   const toggleToolForCurrentAgent = useCallback(
     (toolId: number) => {
       const disabled = disabledToolIds.includes(toolId);
-      setSpecificAgentPreferences(activeAgent.id, {
+      setSpecificAgentPreferences(agent.id, {
         disabled_tool_ids: disabled
           ? disabledToolIds.filter((id) => id !== toolId)
           : [...disabledToolIds, toolId],
@@ -311,7 +193,7 @@ export default function ActionsPopover({
     },
     [
       disabledToolIds,
-      activeAgent.id,
+      agent.id,
       setSpecificAgentPreferences,
       forcedToolIds,
       setForcedToolIds,
@@ -334,10 +216,10 @@ export default function ActionsPopover({
   // Get internal search tool reference for auto-pin logic
   const internalSearchTool = useMemo(
     () =>
-      activeAgent.tools.find(
+      agent.tools.find(
         (tool) => tool.in_code_tool_id === SEARCH_TOOL_ID && !tool.mcp_server_id
       ),
-    [activeAgent.tools]
+    [agent.tools]
   );
 
   // Handle explicit force toggle from ActionLineItem
@@ -423,7 +305,7 @@ export default function ActionsPopover({
   // Filter out MCP tools from the main list (they have mcp_server_id)
   // Also filter out internal search tool for basic users when there are no connectors
   // Also filter out tools that are not chat-selectable (e.g., OpenURL)
-  const displayTools = activeAgent.tools.filter((tool) => {
+  const displayTools = agent.tools.filter((tool) => {
     // Filter out MCP tools
     if (tool.mcp_server_id) return false;
 
@@ -470,19 +352,15 @@ export default function ActionsPopover({
 
   // Fetch MCP servers for the agent on mount
   useEffect(() => {
-    if (activeAgent == null || activeAgent.id == null || !hasAnyProvider)
-      return;
+    if (agent == null || agent.id == null || !hasAnyProvider) return;
 
     const abortController = new AbortController();
 
     const fetchMCPServers = async () => {
       try {
-        const response = await fetch(
-          `/api/mcp/servers/persona/${activeAgent.id}`,
-          {
-            signal: abortController.signal,
-          }
-        );
+        const response = await fetch(`/api/mcp/servers/persona/${agent.id}`, {
+          signal: abortController.signal,
+        });
         if (response.ok) {
           const data = await response.json();
           const servers = data.mcp_servers || [];
@@ -512,9 +390,9 @@ export default function ActionsPopover({
     return () => {
       abortController.abort();
     };
-  }, [activeAgent?.id, hasAnyProvider]);
+  }, [agent?.id, hasAnyProvider]);
 
-  // No separate MCP tool loading; tools already exist in activeAgent.tools
+  // No separate MCP tool loading; tools already exist in agent.tools
 
   // Handle MCP authentication
   const handleMCPAuthenticate = async (
@@ -555,58 +433,15 @@ export default function ActionsPopover({
     }
   };
 
-  const handleMCPApiKeySubmit = async (serverId: number, apiKey: string) => {
-    try {
-      const response = await fetch("/api/mcp/user-credentials", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          server_id: serverId,
-          credentials: { api_key: apiKey },
-          transport: "streamable-http",
-        }),
-      });
+  // Both submit paths are the same request; the API-key form just names its
+  // one field. `saveMCPUserCredentials` owns the endpoint and its errors.
+  const handleMCPApiKeySubmit = (serverId: number, apiKey: string) =>
+    saveMCPUserCredentials(serverId, { api_key: apiKey });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        const errorMessage = errorData.detail || "Failed to save API key";
-        throw new Error(errorMessage);
-      }
-    } catch (error) {
-      console.error("Error saving API key:", error);
-      throw error;
-    }
-  };
-
-  const handleMCPCredentialsSubmit = async (
+  const handleMCPCredentialsSubmit = (
     serverId: number,
     credentials: Record<string, string>
-  ) => {
-    try {
-      const response = await fetch("/api/mcp/user-credentials", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          server_id: serverId,
-          credentials: credentials,
-          transport: "streamable-http",
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        const errorMessage = errorData.detail || "Failed to save credentials";
-        throw new Error(errorMessage);
-      }
-    } catch (error) {
-      console.error("Error saving credentials:", error);
-      throw error;
-    }
-  };
+  ) => saveMCPUserCredentials(serverId, credentials);
 
   const handleServerAuthentication = (
     server: MCPServer,
@@ -688,7 +523,7 @@ export default function ActionsPopover({
     : undefined;
   const selectedMcpTools =
     selectedMcpServerId !== null
-      ? activeAgent.tools.filter(
+      ? agent.tools.filter(
           (t) => t.mcp_server_id === Number(selectedMcpServerId)
         )
       : [];
@@ -721,7 +556,7 @@ export default function ActionsPopover({
     if (!selectedMcpServer) return;
     const serverToolIds = selectedMcpTools.map((tool) => tool.id);
     const merged = Array.from(new Set([...disabledToolIds, ...serverToolIds]));
-    setSpecificAgentPreferences(activeAgent.id, {
+    setSpecificAgentPreferences(agent.id, {
       disabled_tool_ids: merged,
     });
     setForcedToolIds(forcedToolIds.filter((id) => !serverToolIds.includes(id)));
@@ -730,7 +565,7 @@ export default function ActionsPopover({
   const enableAllToolsForSelectedServer = () => {
     if (!selectedMcpServer) return;
     const serverToolIdSet = new Set(selectedMcpTools.map((tool) => tool.id));
-    setSpecificAgentPreferences(activeAgent.id, {
+    setSpecificAgentPreferences(agent.id, {
       disabled_tool_ids: disabledToolIds.filter(
         (id) => !serverToolIdSet.has(id)
       ),
@@ -932,7 +767,7 @@ export default function ActionsPopover({
           };
 
           // Tools for this server come from assistant.tools
-          const serverTools = activeAgent.tools.filter(
+          const serverTools = agent.tools.filter(
             (t) => t.mcp_server_id === Number(server.id)
           );
           const enabledTools = serverTools.filter(

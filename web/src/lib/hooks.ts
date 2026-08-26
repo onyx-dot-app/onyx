@@ -5,7 +5,6 @@ import {
   Tag,
   UserGroup,
   ConnectorStatus,
-  CCPairBasicInfo,
   FederatedConnectorDetail,
   ValidSources,
   ConnectorIndexingStatusLiteResponse,
@@ -37,10 +36,10 @@ import {
   ReasoningEffortOverride,
 } from "@/lib/languageModels/types";
 import { isAnthropic } from "@/lib/languageModels/svc";
-import { getSourceMetadataForSources } from "./sources";
+import { getConfiguredSources } from "@/lib/sources";
 import { DEFAULT_AGENT_ID, NEXT_PUBLIC_CLOUD_ENABLED } from "./constants";
 import { useUser } from "@/providers/UserProvider";
-import { SEARCH_TOOL_ID } from "@/app/app/components/tools/constants";
+import { SEARCH_TOOL_ID } from "@/lib/tools/constants";
 import {
   updateReasoningEffortForChatSession,
   updateTemperatureOverrideForChatSession,
@@ -76,21 +75,6 @@ export const useMostReactedToDocuments = (
     ...swrResponse,
     refreshDocs: () => mutate(url),
   };
-};
-
-export const useObjectState = <T>(
-  initialValue: T
-): [T, (update: Partial<T>) => void] => {
-  const [state, setState] = useState<T>(initialValue);
-  const set = (update: Partial<T>) => {
-    setState((prevState) => {
-      return {
-        ...prevState,
-        ...update,
-      };
-    });
-  };
-  return [state, set];
 };
 
 export const useConnectorIndexingStatusWithPagination = (
@@ -227,18 +211,6 @@ export const useConnectorStatus = (
     { refreshInterval: refreshInterval }
   );
 
-  return {
-    ...swrResponse,
-    refreshIndexingStatus: enabled ? () => mutate(url) : () => {},
-  };
-};
-
-export const useBasicConnectorStatus = (enabled: boolean = true) => {
-  const url = SWR_KEYS.connectorStatus;
-  const swrResponse = useSWR<CCPairBasicInfo[]>(
-    enabled ? url : null,
-    errorHandlingFetcher
-  );
   return {
     ...swrResponse,
     refreshIndexingStatus: enabled ? () => mutate(url) : () => {},
@@ -1097,37 +1069,6 @@ export const fetchConnectorIndexingStatus = async (
 
   return response.json();
 };
-
-// Get source metadata for configured sources - deduplicated by source type
-function getConfiguredSources(
-  availableSources: ValidSources[]
-): Array<SourceMetadata & { originalName: string; uniqueKey: string }> {
-  const allSources = getSourceMetadataForSources(availableSources);
-
-  const seenSources = new Set<string>();
-  const configuredSources: Array<
-    SourceMetadata & { originalName: string; uniqueKey: string }
-  > = [];
-
-  availableSources.forEach((sourceName) => {
-    // Handle federated connectors by removing the federated_ prefix
-    const cleanName = sourceName.replace("federated_", "");
-    // Skip if we've already seen this source type
-    if (seenSources.has(cleanName)) return;
-    seenSources.add(cleanName);
-    const source = allSources.find(
-      (source) => source.internalName === cleanName
-    );
-    if (source) {
-      configuredSources.push({
-        ...source,
-        originalName: sourceName,
-        uniqueKey: cleanName,
-      });
-    }
-  });
-  return configuredSources;
-}
 
 interface UseSourcePreferencesProps {
   availableSources: ValidSources[];

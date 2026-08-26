@@ -219,3 +219,8 @@ export interface OAuthTokenStatus {
   expires_at: number | null;
   is_expired: boolean;
 }
+
+/** Which drill-down the actions popover is showing, if any. */
+export type SecondaryViewState =
+  | { type: "sources" }
+  | { type: "mcp"; serverId: number };

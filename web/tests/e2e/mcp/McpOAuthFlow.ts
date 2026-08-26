@@ -11,7 +11,7 @@
 
 import { type Page, expect } from "@playwright/test";
 import { logPageState } from "@tests/e2e/utils/pageStateLogger";
-import { ActionsPopover } from "@tests/e2e/pages/ActionsPopover";
+import { ToolsPopover } from "@tests/e2e/pages/ToolsPopover";
 
 const REQUIRED_ENV_VARS = [
   "MCP_OAUTH_CLIENT_ID",
@@ -537,7 +537,7 @@ export class McpOAuthFlow {
    * "Re-Authenticate" footer row; both are handled.
    */
   async reauthenticateFromChat(
-    actions: ActionsPopover,
+    actions: ToolsPopover,
     serverName: string,
     returnSubstring: string
   ): Promise<void> {

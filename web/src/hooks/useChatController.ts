@@ -30,7 +30,7 @@ import {
 } from "@/app/app/services/messageTree";
 import { MinimalAgent } from "@/lib/agents/types";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
-import { SEARCH_TOOL_ID } from "@/app/app/components/tools/constants";
+import { SEARCH_TOOL_ID } from "@/lib/tools/constants";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import { FilterManager, LlmDescriptor, LlmManager } from "@/lib/hooks";
 import {

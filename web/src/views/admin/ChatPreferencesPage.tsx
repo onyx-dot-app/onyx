@@ -52,7 +52,7 @@ import {
   PYTHON_TOOL_ID,
   OPEN_URL_TOOL_ID,
   CODING_AGENT_TOOL_ID,
-} from "@/app/app/components/tools/constants";
+} from "@/lib/tools/constants";
 import {
   EmptyMessageCard,
   Button,

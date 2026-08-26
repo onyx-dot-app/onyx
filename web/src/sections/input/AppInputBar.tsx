@@ -10,11 +10,11 @@ import React, {
 import { useTranslations } from "next-intl";
 import { MinimalAgent } from "@/lib/agents/types";
 import { InputPrompt } from "@/app/app/interfaces";
-import { FilterManager, LlmManager, useFederatedConnectors } from "@/lib/hooks";
+import { FilterManager, LlmManager } from "@/lib/hooks";
 import usePromptShortcuts from "@/hooks/usePromptShortcuts";
 import { useContentEditable } from "@/hooks/useContentEditable";
 import useFilter from "@/hooks/useFilter";
-import useCCPairs from "@/hooks/useCCPairs";
+import { useAvailableSources } from "@/lib/connectors/hooks";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { ChatState, MAX_QUEUED_MESSAGES } from "@/app/app/interfaces";
 import { useQueuedMessageNavigation } from "@/hooks/useQueuedMessageNavigation";
@@ -32,7 +32,7 @@ import { useActiveProject, useProjects } from "@/lib/projects/hooks";
 import { FileCard } from "@/sections/cards/FileCard";
 import { ProjectFile, UserFileStatus } from "@/lib/projects/types";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
-import ActionsPopover from "@/refresh-components/popovers/ActionsPopover";
+import { ToolsPopover } from "@/lib/tools/components";
 import {
   getIconForAction,
   hasSearchToolsAvailable,
@@ -113,7 +113,6 @@ const AppInputBar = React.memo(
     currentSessionFileTokenCount,
     availableContextTokens,
     activeAgent,
-
     handleFileUpload,
     llmManager,
     deepResearchEnabled,
@@ -445,28 +444,14 @@ const AppInputBar = React.memo(
     );
 
     const { activePromptShortcuts } = usePromptShortcuts();
-    const { vectorDbEnabled } = combinedSettingsData;
-    const { ccPairs, isLoading: ccPairsLoading } = useCCPairs(vectorDbEnabled);
-    const { data: federatedConnectorsData, isLoading: federatedLoading } =
-      useFederatedConnectors();
+    // The list itself belongs to ToolsPopover, which reads it directly; only
+    // the loading flag is wanted here, to hold the controls back.
+    const { isLoading: sourcesLoading } = useAvailableSources();
 
     // Bottom controls are hidden until all data is loaded
     const controlsLoading =
-      ccPairsLoading ||
-      federatedLoading ||
-      !activeAgent ||
-      llmManager.isLoadingProviders;
+      sourcesLoading || !activeAgent || llmManager.isLoadingProviders;
     const [showPrompts, setShowPrompts] = useState(false);
-
-    // Memoize availableSources to prevent unnecessary re-renders
-    const memoizedAvailableSources = useMemo(
-      () => [
-        ...ccPairs.map((ccPair) => ccPair.source),
-        ...(federatedConnectorsData?.map((connector) => connector.source) ||
-          []),
-      ],
-      [ccPairs, federatedConnectorsData]
-    );
 
     const [tabbingIconIndex, setTabbingIconIndex] = useState(0);
 
@@ -662,11 +647,13 @@ const AppInputBar = React.memo(
               controlsLoading && "invisible"
             )}
           >
-            {activeAgent && activeAgent.tools.length > 0 && (
-              <ActionsPopover
-                activeAgent={activeAgent}
+            {activeAgent && (
+              // Keyed, so switching agents starts clean rather than carrying
+              // the previous agent's open panel and search term across.
+              <ToolsPopover
+                key={activeAgent.id}
+                agent={activeAgent}
                 filterManager={filterManager}
-                availableSources={memoizedAvailableSources}
                 disabled={disabled}
               />
             )}

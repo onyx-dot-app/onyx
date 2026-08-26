@@ -41,7 +41,7 @@ import {
   OPEN_URL_TOOL_ID,
   OPEN_URL_TOOL_NAME,
   SYSTEM_TOOL_ICONS,
-} from "@/app/app/components/tools/constants";
+} from "@/lib/tools/constants";
 
 // ---------------------------------------------------------------------------
 // Types

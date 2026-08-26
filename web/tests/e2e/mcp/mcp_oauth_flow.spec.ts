@@ -10,7 +10,7 @@ import {
 } from "@tests/e2e/utils/mcpServer";
 import { TEST_ADMIN_CREDENTIALS } from "@tests/e2e/constants";
 import { AdminMcpServersPage } from "@tests/e2e/pages/AdminMcpServersPage";
-import { ActionsPopover } from "@tests/e2e/pages/ActionsPopover";
+import { ToolsPopover } from "@tests/e2e/pages/ToolsPopover";
 import {
   McpOAuthFlow,
   getMcpOAuthConfig,
@@ -145,7 +145,7 @@ async function verifyToolUsableFromChat(
   artifacts: { serverName: string; toolName: string; toolId: number | null },
   agentId: number
 ): Promise<void> {
-  const actions = new ActionsPopover(page);
+  const actions = new ToolsPopover(page);
   // Confirm the (now-authenticated) server is listed in the chat actions popover.
   await actions.ensureServerVisible(artifacts.serverName, { agentId });
   // Prove the tool is usable by forcing an invocation from chat. This is the
@@ -343,7 +343,7 @@ test.describe("MCP OAuth flows", () => {
     // server's client config, not a per-user token for this user (backend
     // mcp/api.py resolves the server's `user_can_authenticate` from the user's
     // stored credentials). So authenticate from chat first, then verify the tool runs.
-    const actions = new ActionsPopover(page);
+    const actions = new ToolsPopover(page);
     await oauthFlow.reauthenticateFromChat(
       actions,
       serverName,
@@ -465,7 +465,7 @@ test.describe("MCP OAuth flows", () => {
       // We don't drill into the popover tool list — that view re-renders on
       // background auth-status revalidation and is flaky for OAuth servers
       // (covered by the API-key / per-user-key specs instead).
-      const actions = new ActionsPopover(page);
+      const actions = new ToolsPopover(page);
       await actions.ensureServerVisible(serverName, { agentId });
 
       await oauthFlow.reauthenticateFromChat(
@@ -529,7 +529,7 @@ test.describe("MCP OAuth flows", () => {
     await page.goto(`/app?agentId=${agentId}`, { waitUntil: "load" });
 
     const oauthFlow = new McpOAuthFlow(page, oauthConfig());
-    const actions = new ActionsPopover(page);
+    const actions = new ToolsPopover(page);
     await actions.ensureServerVisible(serverName, { agentId });
 
     // The end user has not authenticated yet, so re-authenticating from chat
