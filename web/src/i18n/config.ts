@@ -10,8 +10,9 @@ export type Locale = (typeof SUPPORTED_LOCALES)[number];
 export const DEFAULT_LOCALE: Locale = "en";
 
 // Cookie the server layout reads to resolve the locale without a DB round
-// trip. The DB preference (`user.language`) is canonical for logged-in users;
-// UserProvider keeps this cookie in sync with it.
+// trip. The backend owns it: PATCH /user/language and GET /me set it from the
+// stored preference (NEXT_LOCALE_COOKIE_NAME in backend/onyx/configs/
+// constants.py). The client never writes it.
 export const LOCALE_COOKIE_NAME = "NEXT_LOCALE";
 
 // Endonyms (each language named in itself) so users can always find their own
