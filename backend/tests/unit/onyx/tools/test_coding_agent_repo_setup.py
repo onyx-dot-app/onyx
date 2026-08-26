@@ -3,6 +3,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+from onyx.configs.app_configs import REPO_ARCHIVE_FETCH_TIMEOUT, REPO_ARCHIVE_MAX_BYTES
 from onyx.repo_archives.github import GitHubArchiveProvider
 from onyx.repo_archives.models import RepoArchive, RepoRevision
 from onyx.tools.fake_tools import coding_agent
@@ -37,7 +38,7 @@ def test_coding_agent_fetches_and_extracts_repo_with_existing_policy(
         ) as open_archive,
         patch.object(coding_agent, "CodeInterpreterClient", return_value=client),
         coding_agent._setup_session(
-            repo="git@github.com:onyx-dot-app/onyx.git",
+            repo_ref=GitHubArchiveProvider.repo_ref("onyx-dot-app", "onyx"),
             github_token="secret",
         ) as (session_id, commit_sha),
     ):
@@ -50,13 +51,15 @@ def test_coding_agent_fetches_and_extracts_repo_with_existing_policy(
     assert (repo_ref.owner, repo_ref.name) == ("onyx-dot-app", "onyx")
     assert ref is None
     assert open_archive.call_args.kwargs == {
-        "max_size_bytes": 500 * 1024 * 1024,
-        "timeout": (30, 300),
+        "max_size_bytes": REPO_ARCHIVE_MAX_BYTES,
+        "timeout": REPO_ARCHIVE_FETCH_TIMEOUT,
     }
-    client.upload_file.assert_called_once_with(
-        b"repository archive",
-        coding_agent.REPO_TARBALL_PATH,
-    )
+    # The archive streams straight off disk instead of being read into memory.
+    client.upload_file.assert_called_once()
+    uploaded_file, uploaded_name = client.upload_file.call_args.args
+    assert uploaded_name == coding_agent.REPO_TARBALL_PATH
+    assert Path(uploaded_file.name) == archive_path
+    assert uploaded_file.closed
     client.execute_bash_in_session.assert_called_once_with(
         session_id="session-id",
         cmd="tar -xzf repo.tar.gz --strip-components=1 && rm repo.tar.gz && ls",

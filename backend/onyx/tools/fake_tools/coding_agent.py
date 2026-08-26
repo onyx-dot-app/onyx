@@ -17,6 +17,7 @@ from onyx.coding_agent.mock_tools import (
     get_coding_agent_tool_definitions,
 )
 from onyx.coding_agent.models import CodingAgentCallResult, CodingAgentSpecialToolCalls
+from onyx.configs.app_configs import REPO_ARCHIVE_FETCH_TIMEOUT, REPO_ARCHIVE_MAX_BYTES
 from onyx.configs.constants import MessageType
 from onyx.deep_research.dr_mock_tools import (
     THINK_TOOL_NAME,
@@ -36,6 +37,7 @@ from onyx.prompts.coding_agent.coding_agent import (
 )
 from onyx.prompts.prompt_utils import get_current_llm_day_time
 from onyx.repo_archives.github import GitHubArchiveProvider
+from onyx.repo_archives.models import RepoRef
 from onyx.repo_archives.tarball_cache import open_repo_archive
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
@@ -56,7 +58,6 @@ from onyx.tools.tool_implementations.python.code_interpreter_client import (
     CodeInterpreterClient,
 )
 from onyx.tracing.framework.create import function_span
-from onyx.utils.github import parse_github_source
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -79,19 +80,17 @@ REPO_TARBALL_PATH = "repo.tar.gz"
 # calls are not persisted to the DB through this loop, so the id is unused.
 BASH_TOOL_SENTINEL_ID = 0
 MAX_FINAL_ANSWER_TOKENS = 4000
-CODING_AGENT_GITHUB_MAX_REPO_BYTES = 500 * 1024 * 1024
-CODING_AGENT_GITHUB_DOWNLOAD_TIMEOUT = (30, 300)
 
 
 @contextmanager
 def _setup_session(
-    repo: str,
+    repo_ref: RepoRef,
     github_token: str | None,
     ref: str | None = None,
 ) -> Iterator[tuple[str, str | None]]:
-    """Materialize ``repo`` at ``ref`` (default-branch HEAD when None), create
-    a code-interpreter session with the tarball staged + extracted, yield
-    (session id, resolved commit SHA), and delete the session on exit.
+    """Materialize ``repo_ref`` at ``ref`` (default-branch HEAD when None),
+    create a code-interpreter session with the tarball staged + extracted,
+    yield (session id, resolved commit SHA), and delete the session on exit.
 
     The requested ref is resolved to its current commit SHA before every run,
     so the agent always analyzes the up-to-date state; unchanged repos come
@@ -101,26 +100,22 @@ def _setup_session(
     Creates its own :class:`CodeInterpreterClient` internally and tears it
     down on exit, so callers only deal with the ``session_id``.
     """
-    github_source = parse_github_source(
-        repo,
-        allow_ssh=True,
-    )
-    provider = GitHubArchiveProvider(f"Bearer {github_token}" if github_token else None)
+    provider = GitHubArchiveProvider.from_token(github_token)
 
     with CodeInterpreterClient() as client:
-        # The archive can be hundreds of MB: it lives in a temp file that is
+        # The archive can be hundreds of MB: it stays in a temp file that is
         # removed when this block exits, right after the upload, so it isn't
-        # held for the agent's whole (potentially 25-minute) run.
+        # held for the agent's whole (potentially 25-minute) run. The upload
+        # streams from that file so the bytes never enter this process.
         with open_repo_archive(
             provider,
-            provider.repo_ref(github_source.owner, github_source.repo),
+            repo_ref,
             ref,
-            max_size_bytes=CODING_AGENT_GITHUB_MAX_REPO_BYTES,
-            timeout=CODING_AGENT_GITHUB_DOWNLOAD_TIMEOUT,
+            max_size_bytes=REPO_ARCHIVE_MAX_BYTES,
+            timeout=REPO_ARCHIVE_FETCH_TIMEOUT,
         ) as repo_archive:
-            ci_file_id = client.upload_file(
-                repo_archive.path.read_bytes(), REPO_TARBALL_PATH
-            )
+            with repo_archive.path.open("rb") as archive_file:
+                ci_file_id = client.upload_file(archive_file, REPO_TARBALL_PATH)
             commit_sha = (
                 repo_archive.revision.commit_sha if repo_archive.revision else None
             )
@@ -301,6 +296,7 @@ def run_coding_agent_call(
     user_identity: LLMUserIdentity | None,
     github_token: str | None = None,
     seed_paths: list[str] | None = None,
+    repo_ref: RepoRef | None = None,
 ) -> CodingAgentCallResult | None:
     turn_index = coding_agent_call.placement.turn_index
     tab_index = coding_agent_call.placement.tab_index
@@ -314,8 +310,15 @@ def run_coding_agent_call(
             query = coding_agent_call.tool_args[CODING_AGENT_QUERY_KEY]
             repo = coding_agent_call.tool_args[CODING_AGENT_REPO_KEY]
             ref = coding_agent_call.tool_args.get(CODING_AGENT_REF_KEY)
+            # Callers that already parsed the repo (CodingAgentTool) pass the
+            # RepoRef through so the string is parsed once per run.
+            resolved_repo_ref = repo_ref or GitHubArchiveProvider.repo_ref_from_url(
+                repo
+            )
 
-            with _setup_session(repo=repo, github_token=github_token, ref=ref) as (
+            with _setup_session(
+                repo_ref=resolved_repo_ref, github_token=github_token, ref=ref
+            ) as (
                 session_id,
                 commit_sha,
             ):
