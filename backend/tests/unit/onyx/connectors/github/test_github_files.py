@@ -1,6 +1,7 @@
 import time
 from collections.abc import Callable
 from datetime import datetime, timezone
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -610,3 +611,21 @@ def test_files_paginated_with_issues_enabled_no_stage_regression(
     assert len(ids) == 250
     assert len(set(ids)) == 250  # no duplicates from re-indexing page 0
     assert outputs[-1].next_checkpoint.has_more is False
+
+
+def test_connector_accepts_full_connector_specific_config() -> None:
+    """`instantiate_connector` splats connector_specific_config into __init__
+    unfiltered, so every key the admin form saves must be accepted."""
+    config: dict[str, Any] = {
+        "repo_owner": "test-org",
+        "repositories": "test-repo",
+        "include_prs": True,
+        "include_issues": False,
+        "include_files": True,
+        "include_code_files": True,
+        "branch": "main",
+    }
+
+    connector = GithubConnector(**config)
+
+    assert connector.include_code_files is True
