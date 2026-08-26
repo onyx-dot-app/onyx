@@ -211,7 +211,10 @@ func (c *Client) SetUserGroupMembers(ctx context.Context, id int64, userIDs []st
 	req := userGroupUpdate{UserIDs: userIDs, CCPairIDs: current.CCPairIDs()}
 	var group UserGroup
 	path := fmt.Sprintf("%s/%d", userGroupBasePath, id)
-	if err := c.doJSON(ctx, http.MethodPatch, path, req, &group); err != nil {
+	// Not replayed: a write that commits leaves the group syncing, so a replay
+	// trips the gate the first attempt set and reports a failure for a change
+	// that actually landed.
+	if err := c.doJSON(nonReplayable(ctx), http.MethodPatch, path, req, &group); err != nil {
 		return nil, err
 	}
 	return &group, nil
@@ -219,11 +222,14 @@ func (c *Client) SetUserGroupMembers(ctx context.Context, id int64, userIDs []st
 
 // RenameUserGroup renames a group. The route is a fixed path rather than one
 // under the group id, and it carries the id in the body.
+//
+// Not replayed, for the same reason as the membership write: a committed
+// rename leaves the group syncing, and the replay would be refused.
 func (c *Client) RenameUserGroup(ctx context.Context, id int64, name string) (*UserGroup, error) {
 	var group UserGroup
 	req := userGroupRename{ID: id, Name: name}
 	path := userGroupBasePath + "/rename"
-	if err := c.doJSON(ctx, http.MethodPatch, path, req, &group); err != nil {
+	if err := c.doJSON(nonReplayable(ctx), http.MethodPatch, path, req, &group); err != nil {
 		return nil, err
 	}
 	return &group, nil
@@ -279,9 +285,13 @@ func (c *Client) SetUserGroupPermissions(ctx context.Context, id int64, permissi
 
 // DeleteUserGroup asks Onyx to delete a group. The row usually survives the
 // call: the group is marked for deletion and a background sync removes it.
+//
+// Not replayed. A delete that commits but loses its response has already
+// marked the group, so the replay meets the sync gate and reports a failure
+// for a deletion that is under way.
 func (c *Client) DeleteUserGroup(ctx context.Context, id int64) error {
 	path := fmt.Sprintf("%s/%d", userGroupBasePath, id)
-	return c.doJSON(ctx, http.MethodDelete, path, nil, nil)
+	return c.doJSON(nonReplayable(ctx), http.MethodDelete, path, nil, nil)
 }
 
 // WaitForUserGroupSettled waits until the group accepts gated writes again.
