@@ -460,6 +460,14 @@
         "description": "This model will be used by Onyx by default in your chats.",
         "title": "Default Model"
       },
+      "defaultReasoningLevel": {
+        "description": "Starting reasoning level for your new chats. Admin settings on a model always apply, and any single chat can override this in its model settings.",
+        "title": "Default Reasoning Level"
+      },
+      "defaultTemperature": {
+        "description": "Starting temperature for your new chats. Admin settings on a model always apply, and any single chat can override this in its model settings.",
+        "title": "Default Temperature"
+      },
       "smoothStreaming": {
         "description": "Animate streamed responses character-by-character. Disable to render chunks as they arrive.",
         "title": "Smooth Streaming"

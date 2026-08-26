@@ -1334,8 +1334,8 @@ function ChatPreferencesSettings() {
 
             {(user?.preferences?.temperature_override_enabled ?? true) && (
               <InputHorizontal
-                title="Default Temperature"
-                description="Starting temperature for your new chats. Admin settings on a model always apply, and any single chat can override this in its model settings."
+                title={t("chats.defaultTemperature.title")}
+                description={t("chats.defaultTemperature.description")}
                 withLabel
               >
                 <Section flexDirection="row" width="fit" height="auto" gap={3}>
@@ -1364,8 +1364,8 @@ function ChatPreferencesSettings() {
             {!settings.isLoading &&
               (settings.reasoning_override_enabled ?? true) && (
                 <InputHorizontal
-                  title="Default Reasoning Level"
-                  description="Starting reasoning level for your new chats. Admin settings on a model always apply, and any single chat can override this in its model settings."
+                  title={t("chats.defaultReasoningLevel.title")}
+                  description={t("chats.defaultReasoningLevel.description")}
                   withLabel
                 >
                   <Section

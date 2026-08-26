@@ -460,6 +460,14 @@
         "description": "Ce modèle sera utilisé par défaut par Onyx dans vos chats.",
         "title": "Modèle par défaut"
       },
+      "defaultReasoningLevel": {
+        "description": "Niveau de raisonnement initial de vos nouveaux chats. Les réglages administrateur d'un modèle s'appliquent toujours, et chaque chat peut le modifier dans ses réglages de modèle.",
+        "title": "Niveau de raisonnement par défaut"
+      },
+      "defaultTemperature": {
+        "description": "Température initiale de vos nouveaux chats. Les réglages administrateur d'un modèle s'appliquent toujours, et chaque chat peut la modifier dans ses réglages de modèle.",
+        "title": "Température par défaut"
+      },
       "smoothStreaming": {
         "description": "Animez les réponses diffusées caractère par caractère. Désactivez pour afficher les segments au fur et à mesure de leur arrivée.",
         "title": "Diffusion fluide"

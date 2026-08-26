@@ -460,6 +460,14 @@
         "description": "Este modelo será usado pelo Onyx por padrão nos seus chats.",
         "title": "Modelo padrão"
       },
+      "defaultReasoningLevel": {
+        "description": "Nível de raciocínio inicial para seus novos chats. As configurações do administrador em um modelo sempre se aplicam, e qualquer chat pode substituí-lo nas configurações de modelo.",
+        "title": "Nível de raciocínio padrão"
+      },
+      "defaultTemperature": {
+        "description": "Temperatura inicial para seus novos chats. As configurações do administrador em um modelo sempre se aplicam, e qualquer chat pode substituí-la nas configurações de modelo.",
+        "title": "Temperatura padrão"
+      },
       "smoothStreaming": {
         "description": "Anime as respostas transmitidas caractere por caractere. Desative para renderizar os blocos conforme chegam.",
         "title": "Transmissão suave"

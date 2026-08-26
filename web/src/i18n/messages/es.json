@@ -460,6 +460,14 @@
         "description": "Onyx usará este modelo de forma predeterminada en tus chats.",
         "title": "Modelo predeterminado"
       },
+      "defaultReasoningLevel": {
+        "description": "Nivel de razonamiento inicial para tus nuevos chats. La configuración del administrador en un modelo siempre se aplica, y cualquier chat puede modificarla en su configuración de modelo.",
+        "title": "Nivel de razonamiento predeterminado"
+      },
+      "defaultTemperature": {
+        "description": "Temperatura inicial para tus nuevos chats. La configuración del administrador en un modelo siempre se aplica, y cualquier chat puede modificarla en su configuración de modelo.",
+        "title": "Temperatura predeterminada"
+      },
       "smoothStreaming": {
         "description": "Anima las respuestas en tiempo real carácter por carácter. Desactívalo para mostrar los fragmentos a medida que llegan.",
         "title": "Transmisión fluida"

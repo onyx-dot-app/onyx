@@ -460,6 +460,14 @@
         "description": "Dieses Modell wird von Onyx standardmäßig in Ihren Chats verwendet.",
         "title": "Standardmodell"
       },
+      "defaultReasoningLevel": {
+        "description": "Anfängliche Reasoning-Stufe für Ihre neuen Chats. Admin-Einstellungen eines Modells gelten immer, und jeder Chat kann sie in seinen Modelleinstellungen überschreiben.",
+        "title": "Standard-Reasoning-Stufe"
+      },
+      "defaultTemperature": {
+        "description": "Anfangstemperatur für Ihre neuen Chats. Admin-Einstellungen eines Modells gelten immer, und jeder Chat kann sie in seinen Modelleinstellungen überschreiben.",
+        "title": "Standard-Temperatur"
+      },
       "smoothStreaming": {
         "description": "Animiert gestreamte Antworten Zeichen für Zeichen. Deaktivieren Sie diese Option, um Textblöcke sofort bei Eintreffen anzuzeigen.",
         "title": "Sanftes Streaming"
