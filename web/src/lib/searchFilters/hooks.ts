@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import useSWR from "swr";
+import { errorHandlingFetcher } from "@/lib/fetcher";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import type { Tag, ValidSources } from "@/lib/types";
 import type { SourceMetadata } from "@/lib/search/interfaces";
 import type { DateRangePickerValue } from "@/refresh-components/DateRangePicker";
@@ -313,5 +316,38 @@ export function useSourcePreferences({
     disableAllSources,
     toggleSource,
     isSourceEnabled,
+  };
+}
+
+interface TagsResponse {
+  tags: Tag[];
+}
+
+/**
+ * Fetches the set of valid tags from the server.
+ *
+ * Tags are deduplicated for 60 s and not re-fetched on window focus.
+ *
+ * @returns tags - The array of available {@link Tag} objects (empty while loading).
+ * @returns isLoading - `true` until the first successful fetch or an error.
+ * @returns error - The error object if the request failed.
+ * @returns refresh - SWR mutate function to manually re-fetch.
+ */
+export function useTags() {
+  const { data, error, mutate } = useSWR<TagsResponse>(
+    SWR_KEYS.tags,
+    errorHandlingFetcher,
+    {
+      revalidateOnFocus: false,
+      revalidateIfStale: false,
+      dedupingInterval: 60000,
+    }
+  );
+
+  return {
+    tags: data?.tags ?? [],
+    isLoading: !error && !data,
+    error,
+    refresh: mutate,
   };
 }
