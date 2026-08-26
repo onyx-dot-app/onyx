@@ -17,8 +17,10 @@ if TYPE_CHECKING:
 
 
 def normalize_openai_compatible_api_base(api_base: str) -> str:
-    normalized = api_base.rstrip("/")
-    return normalized if normalized.endswith("/v1") else f"{normalized}/v1"
+    url = httpx.URL(api_base)
+    path = url.path.rstrip("/")
+    normalized_path = path if path.endswith("/v1") else f"{path}/v1"
+    return str(url.copy_with(path=normalized_path))
 
 
 def validate_openai_compatible_url(url: str) -> str:
