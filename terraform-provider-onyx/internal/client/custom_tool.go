@@ -135,3 +135,12 @@ func (c *Client) SetCustomToolEnabled(ctx context.Context, id int64, enabled boo
 	req := toolStatusUpdate{ToolIDs: []int64{id}, Enabled: enabled}
 	return c.doJSON(ctx, http.MethodPatch, "/admin/tool/status", req, nil)
 }
+
+// ListTools returns every action the caller can see, built-in ones included.
+func (c *Client) ListTools(ctx context.Context) ([]CustomTool, error) {
+	var tools []CustomTool
+	if err := c.doJSON(ctx, http.MethodGet, "/tool", nil, &tools); err != nil {
+		return nil, err
+	}
+	return tools, nil
+}

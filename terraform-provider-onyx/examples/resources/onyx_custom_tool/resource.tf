@@ -1,6 +1,6 @@
 # A custom action lets an assistant call an external HTTP API. Onyx derives one
-# callable method per operation, so every operation needs an operationId and a
-# summary.
+# callable method per operation, so every operation needs an operationId and
+# either a summary or a description.
 resource "onyx_custom_tool" "weather" {
   name        = "weather"
   description = "Looks up the current weather for a city"

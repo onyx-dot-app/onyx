@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"testing"
 
+	"github.com/hashicorp/terraform-plugin-testing/helper/acctest"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
@@ -36,6 +37,11 @@ resource "onyx_custom_tool" "persona" {
 `
 
 func TestAccPersonaResource(t *testing.T) {
+	// Agent names are unique across the deployment and a delete only leaves a
+	// tombstone, so a run that dies before its cleanup would block every later
+	// run on the name. A per-run name keeps the suite repeatable.
+	name := acctest.RandomWithPrefix("tf-acc-agent")
+
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -44,7 +50,7 @@ func TestAccPersonaResource(t *testing.T) {
 			{
 				Config: personaDependencies + `
 resource "onyx_persona" "test" {
-  name          = "tf-acc-agent"
+  name          = "` + name + `"
   description   = "Answers support questions"
   system_prompt = "You are a support agent. Be brief."
   task_prompt   = "Answer using the handbook."
@@ -68,7 +74,7 @@ resource "onyx_persona" "test" {
 }
 `,
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("onyx_persona.test", "name", "tf-acc-agent"),
+					resource.TestCheckResourceAttr("onyx_persona.test", "name", name),
 					resource.TestCheckResourceAttr("onyx_persona.test", "description", "Answers support questions"),
 					resource.TestCheckResourceAttr("onyx_persona.test", "system_prompt", "You are a support agent. Be brief."),
 					resource.TestCheckResourceAttr("onyx_persona.test", "task_prompt", "Answer using the handbook."),
@@ -97,7 +103,7 @@ resource "onyx_persona" "test" {
 				// and list it again.
 				Config: personaDependencies + `
 resource "onyx_persona" "test" {
-  name          = "tf-acc-agent-renamed"
+  name          = "` + name + `-renamed"
   system_prompt = "You are a support agent. Be thorough."
   tool_ids      = []
   is_listed     = true
@@ -108,7 +114,7 @@ resource "onyx_persona" "test" {
 }
 `,
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("onyx_persona.test", "name", "tf-acc-agent-renamed"),
+					resource.TestCheckResourceAttr("onyx_persona.test", "name", name+"-renamed"),
 					resource.TestCheckResourceAttr("onyx_persona.test", "description", ""),
 					resource.TestCheckResourceAttr("onyx_persona.test", "system_prompt", "You are a support agent. Be thorough."),
 					resource.TestCheckResourceAttr("onyx_persona.test", "task_prompt", ""),
@@ -136,6 +142,8 @@ resource "onyx_persona" "test" {
 // Agent names are unique, and a create that lands on a live name is refused
 // rather than quietly taking the agent over.
 func TestAccPersonaResourceRejectsADuplicateName(t *testing.T) {
+	name := acctest.RandomWithPrefix("tf-acc-duplicate")
+
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -144,18 +152,18 @@ func TestAccPersonaResourceRejectsADuplicateName(t *testing.T) {
 			{
 				Config: `
 resource "onyx_persona" "first" {
-  name = "tf-acc-duplicate-name"
+  name = "` + name + `"
 }
 `,
 			},
 			{
 				Config: `
 resource "onyx_persona" "first" {
-  name = "tf-acc-duplicate-name"
+  name = "` + name + `"
 }
 
 resource "onyx_persona" "second" {
-  name = "tf-acc-duplicate-name"
+  name = "` + name + `"
 }
 `,
 				ExpectError: regexp.MustCompile(`(?s)already exists`),

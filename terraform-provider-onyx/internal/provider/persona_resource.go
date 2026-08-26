@@ -526,6 +526,14 @@ func (r *personaResource) Update(ctx context.Context, req resource.UpdateRequest
 	// The update replaces the whole agent, and an omitted folder or document
 	// list clears it. Terraform does not manage those, so carry over whatever
 	// the agent holds rather than dropping it.
+	//
+	// Reading them back is the only option the API leaves: both fields are
+	// plain lists on the request model, so omitting one clears it and sending
+	// null is rejected outright (422, "Input should be a valid list"). That
+	// leaves a narrow window in which an attachment added between this read and
+	// the write below is reverted. Making the two fields nullable server-side,
+	// so null means "leave unchanged", would remove the read and the window
+	// with it.
 	current, err := r.client.GetPersona(ctx, id)
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to read the Onyx agent before updating it", err.Error())
@@ -569,13 +577,16 @@ func (r *personaResource) Delete(ctx context.Context, req resource.DeleteRequest
 	}
 
 	err := r.client.DeletePersona(ctx, id)
-	if client.IsNotFound(err) {
+	if err == nil || client.IsNotFound(err) {
 		return
 	}
-	if err != nil {
-		resp.Diagnostics.AddError("Failed to delete Onyx agent", err.Error())
+	// An agent that is already a tombstone fails this call, and not with a 404:
+	// the lookup behind it rejects a deleted agent, and the handler reports that
+	// as a permission error. Confirm it is really gone before failing a destroy.
+	if _, found, lookupErr := r.client.LookupPersona(ctx, id); lookupErr == nil && !found {
 		return
 	}
+	resp.Diagnostics.AddError("Failed to delete Onyx agent", err.Error())
 }
 
 func (r *personaResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {

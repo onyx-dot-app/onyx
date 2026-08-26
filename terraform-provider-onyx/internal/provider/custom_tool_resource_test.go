@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strconv"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
@@ -177,4 +178,45 @@ func testAccCheckCustomToolDestroyed(t *testing.T) resource.TestCheckFunc {
 		}
 		return nil
 	}
+}
+
+// Onyx answers the read endpoint for built-in actions but refuses every write
+// to them, so importing one would record state that can neither be updated nor
+// destroyed. The refresh rejects it instead.
+func TestAccCustomToolResourceRejectsImportingABuiltIn(t *testing.T) {
+	testAccPreCheck(t)
+
+	tools, err := testAccClient(t).ListTools(context.Background())
+	if err != nil {
+		t.Fatalf("failed to list actions: %v", err)
+	}
+	builtInID := ""
+	for _, tool := range tools {
+		if tool.InCodeToolID != nil {
+			builtInID = strconv.FormatInt(tool.ID, 10)
+			break
+		}
+	}
+	if builtInID == "" {
+		t.Skip("this deployment exposes no built-in actions")
+	}
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: `
+resource "onyx_custom_tool" "builtin" {
+  name       = "tf-acc-import-target"
+  definition = ` + customToolDefinition + `
+}
+`,
+				ResourceName:  "onyx_custom_tool.builtin",
+				ImportState:   true,
+				ImportStateId: builtInID,
+				ExpectError:   regexp.MustCompile(`(?s)Not a custom Onyx action`),
+			},
+		},
+	})
 }

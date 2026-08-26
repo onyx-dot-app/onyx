@@ -98,7 +98,10 @@ and on Onyx Cloud the tenant is embedded in the key itself.
   confirms against the agent listing instead of matching on the message text. Making that
   endpoint return 404 is a worthwhile backend fix.
 - **`onyx_persona` does not own every field on an agent.** Attached folders and documents
-  are cleared by an omitted list, so the provider reads them and sends them back unchanged;
+  are cleared by an omitted list, and sending null is rejected (422), so the provider reads
+  them and sends them back unchanged. That leaves a narrow window in which an attachment
+  added between the read and the write is reverted; making the two fields nullable
+  server-side would close it. Also,
   `search_start_date` is sent but never read back, because Onyx returns it as a parsed
   timestamp that would not match a plain date. Avatar images are not managed at all.
 - **`display_priority` is create-only on the upsert.** Onyx reads it when an agent is

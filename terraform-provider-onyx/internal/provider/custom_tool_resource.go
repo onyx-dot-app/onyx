@@ -362,6 +362,20 @@ func (r *customToolResource) Read(ctx context.Context, req resource.ReadRequest,
 		resp.Diagnostics.AddError("Failed to read Onyx action", err.Error())
 		return
 	}
+	// The read endpoint answers for built-in actions too, but every write
+	// endpoint refuses them. Catching it here fails an import that named one,
+	// rather than recording state that can be neither updated nor destroyed.
+	if remote.InCodeToolID != nil {
+		resp.Diagnostics.AddError(
+			"Not a custom Onyx action",
+			fmt.Sprintf(
+				"Action %s is the built-in %q, which Onyx does not allow an API client to change. "+
+					"Only custom actions can be managed here.",
+				state.ID.ValueString(), *remote.InCodeToolID,
+			),
+		)
+		return
+	}
 	if !applyRemoteCustomTool(ctx, &state, remote, &resp.Diagnostics) {
 		return
 	}
