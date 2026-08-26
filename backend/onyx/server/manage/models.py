@@ -20,6 +20,7 @@ from onyx.db.models import SlackBot as SlackAppModel
 from onyx.db.models import SlackChannelConfig as SlackChannelConfigModel
 from onyx.db.models import StandardAnswer as StandardAnswerModel
 from onyx.db.models import StandardAnswerCategory as StandardAnswerCategoryModel
+from onyx.llm.models import ReasoningEffort
 from onyx.onyxbot.slack.config import VALID_SLACK_FILTERS
 from onyx.server.features.persona.models import FullPersonaSnapshot, PersonaSnapshot
 from onyx.server.models import FullUserSnapshot, InvitedUserSnapshot
@@ -106,6 +107,8 @@ class UserPreferences(BaseModel):
     # These will default to workspace settings on the frontend if not set
     auto_scroll: bool | None = None
     temperature_override_enabled: bool | None = None
+    temperature_default: float | None = None
+    reasoning_effort_default: ReasoningEffort | None = None
     theme_preference: ThemePreference | None = None
     language: str | None = None
     chat_background: str | None = None
@@ -215,6 +218,8 @@ class UserInfo(BaseModel):
                     visible_assistants=user.visible_assistants,
                     auto_scroll=user.auto_scroll,
                     temperature_override_enabled=user.temperature_override_enabled,
+                    temperature_default=user.temperature_default,
+                    reasoning_effort_default=user.reasoning_effort_default,
                     theme_preference=user.theme_preference,
                     language=user.language,
                     chat_background=user.chat_background,

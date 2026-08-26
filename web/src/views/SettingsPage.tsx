@@ -70,6 +70,13 @@ import { Interactive } from "@opal/core";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
 import { useIsSearchModeAvailable, useSettings } from "@/lib/settings/hooks";
+import {
+  ALL_REASONING_STOPS,
+  PaneSlider,
+  REASONING_STOP_LABELS,
+  UNSET_REASONING_STOP,
+  reasoningStopIndex,
+} from "@/sections/model-selector/setting-controls";
 import { LLM_GATEWAY_MIN_TIER, tierAtLeast } from "@/lib/tiers";
 import { Tooltip } from "@opal/components";
 import { useCloudSubscription } from "@/hooks/useCloudSubscription";
@@ -1080,6 +1087,8 @@ function ChatPreferencesSettings() {
     updateUserDefaultModel,
     updateUserDefaultAppMode,
     updateUserVoiceSettings,
+    updateUserTemperatureDefault,
+    updateUserReasoningEffortDefault,
   } = useUser();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const searchUiEnabled = useIsSearchModeAvailable();
@@ -1121,6 +1130,55 @@ function ChatPreferencesSettings() {
       }
     },
     [updateUserVoiceSettings]
+  );
+
+  const settings = useSettings();
+  const userTemperatureDefault = user?.preferences.temperature_default ?? null;
+  const userEffortDefault = user?.preferences.reasoning_effort_default ?? null;
+  // 0 mirrors the backend GEN_AI_TEMPERATURE fallback an untouched chat
+  // actually runs with, so the parked slider never overstates the default.
+  const [draftTemperature, setDraftTemperature] = useState(
+    userTemperatureDefault ?? 0
+  );
+  const [draftEffortStop, setDraftEffortStop] = useState(() => {
+    const stop = reasoningStopIndex(userEffortDefault);
+    return stop >= 0 ? stop : UNSET_REASONING_STOP;
+  });
+
+  useEffect(() => {
+    if (userTemperatureDefault != null) {
+      setDraftTemperature(userTemperatureDefault);
+    }
+  }, [userTemperatureDefault]);
+  useEffect(() => {
+    const stop = reasoningStopIndex(userEffortDefault);
+    if (stop >= 0) setDraftEffortStop(stop);
+  }, [userEffortDefault]);
+
+  const saveTemperatureDefault = useCallback(
+    async (value: number): Promise<void> => {
+      try {
+        await updateUserTemperatureDefault(value);
+        toast.success("Preferences saved");
+      } catch {
+        toast.error("Failed to save preferences");
+      }
+    },
+    [updateUserTemperatureDefault]
+  );
+
+  const saveEffortDefault = useCallback(
+    async (effortStop: number): Promise<void> => {
+      try {
+        await updateUserReasoningEffortDefault(
+          ALL_REASONING_STOPS[effortStop] ?? null
+        );
+        toast.success("Preferences saved");
+      } catch {
+        toast.error("Failed to save preferences");
+      }
+    },
+    [updateUserReasoningEffortDefault]
   );
 
   const commitVoicePlaybackSpeed = useCallback(() => {
@@ -1200,6 +1258,74 @@ function ChatPreferencesSettings() {
                 side="bottom"
               />
             </InputHorizontal>
+
+            {(user?.preferences?.temperature_override_enabled ?? true) && (
+              <InputHorizontal
+                title="Default Temperature"
+                description="Starting temperature for your new chats. Admin settings on a model always apply, and any single chat can override this in its model settings."
+                withLabel
+              >
+                <Section flexDirection="row" width="fit" height="auto" gap={3}>
+                  <Section width={8} height="auto">
+                    <PaneSlider
+                      compact
+                      value={draftTemperature}
+                      min={0}
+                      max={2}
+                      step={0.1}
+                      onValueChange={setDraftTemperature}
+                      onValueCommit={(value) => {
+                        void saveTemperatureDefault(value);
+                      }}
+                    />
+                  </Section>
+                  <Section width={4} height="auto" alignItems="end">
+                    <Text font="secondary-mono" color="text-04" nowrap>
+                      {draftTemperature.toFixed(1)}
+                    </Text>
+                  </Section>
+                </Section>
+              </InputHorizontal>
+            )}
+
+            {!settings.isLoading &&
+              (settings.reasoning_override_enabled ?? true) && (
+                <InputHorizontal
+                  title="Default Reasoning Level"
+                  description="Starting reasoning level for your new chats. Admin settings on a model always apply, and any single chat can override this in its model settings."
+                  withLabel
+                >
+                  <Section
+                    flexDirection="row"
+                    width="fit"
+                    height="auto"
+                    gap={3}
+                  >
+                    <Section width={8} height="auto">
+                      <PaneSlider
+                        compact
+                        value={draftEffortStop}
+                        min={0}
+                        max={ALL_REASONING_STOPS.length - 1}
+                        step={1}
+                        onValueChange={setDraftEffortStop}
+                        onValueCommit={(value) => {
+                          void saveEffortDefault(value);
+                        }}
+                      />
+                    </Section>
+                    <Section width={4} height="auto" alignItems="end">
+                      <Text font="secondary-mono" color="text-04" nowrap>
+                        {
+                          REASONING_STOP_LABELS[
+                            ALL_REASONING_STOPS[draftEffortStop] ?? "medium"
+                          ]
+                        }
+                      </Text>
+                    </Section>
+                  </Section>
+                </InputHorizontal>
+              )}
 
             <InputHorizontal
               title="Chat Auto-scroll"

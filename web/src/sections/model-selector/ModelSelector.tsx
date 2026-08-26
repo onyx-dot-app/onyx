@@ -169,6 +169,7 @@ export default function ModelSelector({
           includeGlobalDefault={includeGlobalDefault}
           scrollContainerRef={scrollContainerRef}
           modelDetail={modelDetail}
+          onDetailSelect={onChange}
         />
       </Popover.Content>
     </Popover>
