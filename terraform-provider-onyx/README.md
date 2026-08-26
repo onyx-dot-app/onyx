@@ -89,6 +89,16 @@ configuration and never reaches a state file. Prefer the twin.
 Set one or the other, never both. `onyx_credential` needs exactly one of the two, because
 the payload is mandatory.
 
+Three secrets have no twin, and cannot get one:
+
+- **`onyx_api_key.api_key`** is the key Onyx mints, not one you supply. Terraform can only
+  hand back a generated value through state. Treat the state file as holding it.
+- **`onyx_mcp_server.auth_template_headers`** is computed — Onyx writes the template itself
+  for a shared token — and Terraform does not allow an argument to be both computed and
+  write-only. Its placeholder values are filled from `admin_credentials_wo`.
+- **The provider's own `api_key`** is provider configuration, which Terraform does not
+  write to state at all. Supply it from `ONYX_API_KEY` rather than in a `.tf` file.
+
 ```hcl
 resource "onyx_llm_provider" "openai" {
   name          = "openai"
