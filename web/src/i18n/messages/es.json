@@ -25,6 +25,2802 @@
       "label": "Cerrar sesión"
     }
   },
+  "admin": {
+    "agents": {
+      "deleteModal": {
+        "confirmation": {
+          "description": "¿Seguro que quieres eliminar <emphasis>{name}</emphasis>? Esta acción no se puede deshacer."
+        },
+        "header": {
+          "title": "Eliminar el agente"
+        },
+        "submitButton": {
+          "label": "Eliminar"
+        }
+      },
+      "emptyState": {
+        "description": "Ningún agente coincide con la búsqueda actual.",
+        "title": "No se encontraron agentes"
+      },
+      "featuredModal": {
+        "addBody": {
+          "description": "Los agentes destacados aparecen al principio de la lista de explorar agentes y se fijan automáticamente en la barra lateral de los usuarios nuevos con acceso. Usa esta opción para resaltar los agentes recomendados en toda tu organización."
+        },
+        "addHeader": {
+          "title": "Destacar {name}"
+        },
+        "featureButton": {
+          "label": "Destacar"
+        },
+        "removeBody": {
+          "description": "Esto quitará a {name} de la sección de destacados que aparece al principio de la lista de explorar agentes. Los usuarios nuevos ya no lo verán fijado en su barra lateral, pero los agentes ya fijados no cambian."
+        },
+        "removeHeader": {
+          "title": "Quitar {name} de los destacados"
+        },
+        "unfeatureButton": {
+          "label": "Dejar de destacar"
+        }
+      },
+      "header": {
+        "description": "Personaliza el comportamiento y el conocimiento de la IA con agentes. Gestiona los agentes de tu organización.",
+        "title": "Agentes"
+      },
+      "modals": {
+        "accessNote": {
+          "description": "Esto no cambia quién puede acceder a este agente."
+        }
+      },
+      "newAgentButton": {
+        "label": "Nuevo agente"
+      },
+      "reorderError": {
+        "message": "No se pudo actualizar el orden de los agentes"
+      },
+      "rowActions": {
+        "deleteItem": {
+          "title": "Eliminar"
+        },
+        "editAgentButton": {
+          "label": "Editar el agente"
+        },
+        "genericError": {
+          "message": "Ocurrió un error"
+        },
+        "listItem": {
+          "title": "Mostrar el agente en la lista"
+        },
+        "menuButton": {
+          "ariaLabel": "Acciones del agente"
+        },
+        "relistAgentButton": {
+          "label": "Volver a mostrar el agente en la lista"
+        },
+        "removeFeaturedButton": {
+          "label": "Quitar de los destacados"
+        },
+        "setFeaturedButton": {
+          "label": "Marcar como destacado"
+        },
+        "shareItem": {
+          "title": "Compartir"
+        },
+        "statsItem": {
+          "title": "Estadísticas"
+        },
+        "unlistItem": {
+          "title": "Quitar el agente de la lista"
+        },
+        "updateSuccess": {
+          "message": "{name} se actualizó correctamente."
+        }
+      },
+      "search": {
+        "placeholder": "Buscar agentes..."
+      },
+      "table": {
+        "access": {
+          "featured": {
+            "label": "Destacado"
+          },
+          "private": {
+            "label": "Privado"
+          },
+          "public": {
+            "label": "Público"
+          },
+          "shared": {
+            "label": "Compartido"
+          },
+          "unlisted": {
+            "label": "Fuera de la lista"
+          }
+        },
+        "accessColumn": {
+          "header": "Acceso"
+        },
+        "createdBy": {
+          "system": {
+            "label": "Sistema"
+          }
+        },
+        "createdByColumn": {
+          "header": "Creado por"
+        },
+        "descriptionColumn": {
+          "header": "Descripción"
+        },
+        "nameColumn": {
+          "header": "Nombre"
+        }
+      },
+      "unlistModal": {
+        "body": {
+          "description": "Los agentes fuera de la lista no aparecen en la lista de explorar agentes, pero siguen siendo accesibles por enlace directo y para los usuarios que ya los usaron o los fijaron."
+        },
+        "header": {
+          "title": "Quitar *{name}* de la lista"
+        },
+        "submitButton": {
+          "label": "Quitar de la lista"
+        }
+      }
+    },
+    "analytics": {
+      "agentChart": {
+        "description": "Mensajes y usuarios únicos por día para el agente seleccionado",
+        "empty": "No se encontraron datos del agente seleccionado en este intervalo de tiempo.",
+        "error": "No se pudieron obtener los datos del agente.",
+        "selectPrompt": "Selecciona un agente para ver sus analíticas.",
+        "series": {
+          "messages": {
+            "label": "Mensajes"
+          },
+          "uniqueUsers": {
+            "label": "Usuarios únicos"
+          }
+        },
+        "title": "Analíticas del agente"
+      },
+      "agentPicker": {
+        "empty": {
+          "label": "Ningún agente coincide con esa búsqueda"
+        },
+        "placeholder": "Selecciona un agente para mostrarlo",
+        "search": {
+          "placeholder": "Buscar agentes..."
+        }
+      },
+      "feedbackChart": {
+        "description": "Votos positivos y negativos a lo largo del tiempo",
+        "empty": "No hay valoraciones en el intervalo de tiempo seleccionado.",
+        "error": "No se pudieron obtener los datos de valoraciones.",
+        "series": {
+          "negative": {
+            "label": "Valoraciones negativas"
+          },
+          "positive": {
+            "label": "Valoraciones positivas"
+          }
+        },
+        "title": "Valoraciones"
+      },
+      "page": {
+        "description": "Descubre cómo usa Onyx tu espacio de trabajo en consultas, valoraciones y agentes."
+      },
+      "reports": {
+        "calendar": {
+          "pickEnd": {
+            "label": "Elige el final del periodo"
+          },
+          "pickStart": {
+            "label": "Elige el inicio del periodo"
+          }
+        },
+        "description": "Exporta el uso por usuario como un ZIP de archivos CSV. Los informes se generan en segundo plano y quedan disponibles aquí.",
+        "empty": {
+          "description": "Todavía no hay informes. Elige un periodo y genera el primero."
+        },
+        "generateButton": {
+          "label": "Generar informe",
+          "pendingLabel": "Generando…"
+        },
+        "listError": {
+          "title": "No se pudieron cargar los informes de uso."
+        },
+        "pendingRow": {
+          "description": "{range} · normalmente está listo en menos de un minuto",
+          "slowDescription": "Sigue en curso. Puedes salir de esta página; el informe aparecerá aquí.",
+          "title": "Preparando el informe…"
+        },
+        "period": {
+          "allTime": {
+            "label": "Todo el tiempo"
+          },
+          "custom": {
+            "label": "Periodo personalizado…"
+          },
+          "last30Days": {
+            "label": "Últimos 30 días"
+          },
+          "last3Months": {
+            "label": "Últimos 3 meses"
+          },
+          "last7Days": {
+            "label": "Últimos 7 días"
+          },
+          "today": {
+            "label": "Hoy"
+          }
+        },
+        "row": {
+          "description": "Generado por {requestor} · {time}",
+          "downloadButton": {
+            "ariaLabel": "Descargar el informe de {label}",
+            "tooltip": "Descargar el ZIP"
+          },
+          "systemRequestor": {
+            "label": "sistema"
+          }
+        },
+        "title": "Informes de uso",
+        "toasts": {
+          "ready": "Informe de uso listo.",
+          "startFailed": "No se pudo iniciar la generación del informe: {message}",
+          "timedOut": "La generación del informe está tardando demasiado. Inténtalo de nuevo o vuelve más tarde.",
+          "unknownError": "error desconocido"
+        }
+      },
+      "slackChannelChart": {
+        "description": "Consultas totales frente a resueltas automáticamente",
+        "empty": "No hay actividad de OnyxBot en este espacio de trabajo en el intervalo de tiempo seleccionado.",
+        "error": "No se pudieron obtener los datos de OnyxBot.",
+        "series": {
+          "autoResolved": {
+            "label": "Resueltas automáticamente"
+          },
+          "totalQueries": {
+            "label": "Consultas totales"
+          }
+        },
+        "title": "Canal de Slack"
+      },
+      "usageChart": {
+        "description": "Uso a lo largo del tiempo",
+        "empty": "No hay consultas en el intervalo de tiempo seleccionado.",
+        "error": "No se pudieron obtener los datos de uso.",
+        "series": {
+          "queries": {
+            "label": "Consultas"
+          },
+          "uniqueUsers": {
+            "label": "Usuarios únicos"
+          }
+        },
+        "title": "Uso"
+      }
+    },
+    "chatPreferences": {
+      "advanced": {
+        "title": "Opciones avanzadas"
+      },
+      "anonymousUsers": {
+        "description": "Permite que cualquier persona inicie chats sin iniciar sesión. No ven ningún otro chat y no pueden crear agentes ni cambiar la configuración.",
+        "title": "Permitir usuarios anónimos"
+      },
+      "autoDetectFilters": {
+        "description": "Aplica automáticamente los filtros de fuente y de fecha deducidos de la consulta de búsqueda.",
+        "title": "Detectar los filtros de búsqueda automáticamente"
+      },
+      "autoScroll": {
+        "description": "Desplaza la vista automáticamente hacia el contenido nuevo mientras el chat genera la respuesta. Los usuarios pueden cambiar esto en su configuración personal.",
+        "title": "Desplazamiento automático del chat"
+      },
+      "betaTag": {
+        "label": "beta"
+      },
+      "chatNaming": {
+        "description": "Modelo que se usa para nombrar automáticamente las sesiones de chat. De forma predeterminada usa el modelo de cada sesión: fija aquí un modelo pequeño y rápido si tu modelo principal no puede atender solicitudes simultáneas.",
+        "resetButton": {
+          "label": "Restablecer"
+        },
+        "title": "Modelo para nombrar chats"
+      },
+      "connectors": {
+        "empty": {
+          "title": "No hay conectores configurados"
+        },
+        "manageAllButton": {
+          "label": "Gestionar todos"
+        },
+        "title": "Conectores"
+      },
+      "deepResearch": {
+        "description": "Sistema de investigación agéntica que trabaja en la web y en las fuentes conectadas. Usa muchos más tokens por consulta.",
+        "title": "Investigación profunda"
+      },
+      "disableDefaultChat": {
+        "description": "Esto obliga a los usuarios a empezar siempre dentro de un agente. Los chats nuevos se crearán en su primer agente fijado. Destaca algunos agentes para ayudar a los usuarios nuevos a empezar.",
+        "title": "Desactivar el chat predeterminado"
+      },
+      "fileLimits": {
+        "default": {
+          "placeholder": "Predeterminado: {value}"
+        },
+        "description": "Los archivos adjuntos en chats y proyectos deben cumplir ambos límites para aceptarse. Los archivos más grandes aumentan la latencia, el uso de memoria y el coste en tokens.",
+        "noLimit": {
+          "placeholder": "Sin límite"
+        },
+        "restoreDefault": {
+          "tooltip": "Restaurar el valor predeterminado"
+        },
+        "size": {
+          "maxDescription": "Máx.: {max} MB",
+          "suffix": "(MB)",
+          "title": "Límite de tamaño de archivo"
+        },
+        "title": "Límite de tamaño de los archivos adjuntos",
+        "tokens": {
+          "suffix": "(miles de tokens)",
+          "title": "Límite de tokens por archivo"
+        }
+      },
+      "header": {
+        "description": "Configuración y valores predeterminados del chat para toda la organización. Los usuarios pueden cambiar algunos de estos valores en su configuración personal."
+      },
+      "mcpServer": {
+        "authTooltip": "Autentica este servidor MCP antes de activar sus herramientas.",
+        "expandButton": {
+          "label": "Desplegar"
+        },
+        "foldButton": {
+          "label": "Plegar"
+        },
+        "search": {
+          "placeholder": "Buscar herramientas..."
+        }
+      },
+      "multiModel": {
+        "description": "Permite que varios modelos generen respuestas en paralelo en el chat.",
+        "title": "Generación multimodelo"
+      },
+      "queryHistory": {
+        "anonymized": {
+          "description": "Los administradores ven las consultas sin la identidad del usuario",
+          "label": "Anonimizado"
+        },
+        "description": "Controla cómo aparece el historial completo de chats de tu organización en el panel de administración.",
+        "disabled": {
+          "description": "Los informes del historial de consultas están desactivados.",
+          "label": "Oculto"
+        },
+        "normal": {
+          "description": "Todas las consultas son visibles para los administradores y están vinculadas a cada usuario.",
+          "label": "Mostrar con la información del usuario"
+        },
+        "title": "Visibilidad del historial de consultas"
+      },
+      "reasoning": {
+        "description": "Permite que los usuarios ajusten cuánto razona el modelo antes de responder, desde el selector de modelos del chat.",
+        "title": "Control del razonamiento"
+      },
+      "retention": {
+        "custom": {
+          "invalidError": "Introduce un número entero de días entre 1 y {max}.",
+          "label": "Retención personalizada",
+          "moreTooltip": "Más",
+          "placeholder": "En días",
+          "restoreTooltip": "Restaurar el valor predeterminado"
+        },
+        "description": "Indica cuánto tiempo debe conservar Onyx los chats de tu organización.",
+        "enterprisePlanTag": {
+          "label": "Plan Enterprise"
+        },
+        "forever": {
+          "label": "Para siempre"
+        },
+        "presets": {
+          "days30": "30 días",
+          "days60": "60 días",
+          "days7": "7 días",
+          "days90": "90 días",
+          "year1": "1 año"
+        },
+        "reduceModal": {
+          "confirmLabel": "Reducir la retención",
+          "message": "Los chats sin actividad durante más de {days, plural, one {# día} other {# días}} se eliminarán de forma permanente. Esta acción no se puede deshacer.",
+          "title": "¿Reducir la retención de chats?"
+        },
+        "tierTooltip": "La retención del historial de chats es una función del plan Enterprise.",
+        "title": "Conservar el historial de chats"
+      },
+      "searchMode": {
+        "businessPlanTag": {
+          "label": "Plan Business"
+        },
+        "description": "Modo de interfaz para buscar documentos rápidamente en tu organización.",
+        "noConnectorsTooltip": "Configura conectores para usar el modo de búsqueda",
+        "tierTooltip": "El modo de búsqueda requiere el plan Business o Enterprise.",
+        "title": "Modo de búsqueda"
+      },
+      "systemPrompt": {
+        "description": "Prompt base para todos los chats, agentes y proyectos. Modifícalo con cuidado: los cambios importantes pueden empeorar la calidad de las respuestas.",
+        "modal": {
+          "cancelButton": {
+            "label": "Cancelar"
+          },
+          "caution": {
+            "description": "El prompt del sistema afecta a todos los chats, agentes y proyectos. Los cambios importantes pueden empeorar la calidad de las respuestas.",
+            "title": "Modifícalo con cuidado."
+          },
+          "description": "Este prompt base se antepone a todos los chats, agentes y proyectos.",
+          "placeholder": "Introduce tu prompt del sistema...",
+          "placeholders": {
+            "citationGuidance": "`{token}` - Instrucciones para incluir citas cuando se recuperan datos con las herramientas de búsqueda.",
+            "citationNote": "Solo se incluye cuando se usan herramientas de búsqueda.",
+            "currentDatetime": "`{token}` - Fecha actual y día de la semana en un formato legible.",
+            "intro": "Puedes usar los siguientes marcadores de posición en tu prompt:",
+            "reminderTag": "`{token}` - Instrucciones sobre cómo interpretar los recordatorios del sistema en los mensajes de los usuarios."
+          },
+          "restoreTooltip": "Restaurar el valor predeterminado",
+          "saveButton": {
+            "label": "Guardar"
+          }
+        },
+        "modifyButton": {
+          "label": "Modificar el prompt"
+        },
+        "title": "Prompt del sistema"
+      },
+      "teamContext": {
+        "description": "Los usuarios también pueden añadir contexto individual en su configuración personal.",
+        "placeholder": "Describe tu equipo y cómo debe comportarse Onyx.",
+        "title": "Contexto del equipo"
+      },
+      "teamName": {
+        "description": "Esto se añade a todas las sesiones de chat como contexto adicional para ofrecer una experiencia más rica y personalizada.",
+        "placeholder": "Introduce el nombre del equipo",
+        "title": "Nombre del equipo"
+      },
+      "temperature": {
+        "description": "Permite que los usuarios ajusten la temperatura (creatividad) de las respuestas del modelo desde el selector de modelos del chat.",
+        "title": "Control de la temperatura"
+      },
+      "toasts": {
+        "chatNamingReset": "Los chats se nombrarán de nuevo con el modelo de la sesión",
+        "chatNamingResetFailed": "No se pudo restablecer el modelo para nombrar chats",
+        "chatNamingUpdateFailed": "No se pudo actualizar el modelo para nombrar chats",
+        "chatNamingUpdated": "Modelo para nombrar chats actualizado",
+        "providerResolveFailed": "No se pudo resolver el proveedor",
+        "settingsUpdateFailed": "No se pudo actualizar la configuración",
+        "settingsUpdated": "Configuración actualizada",
+        "systemPromptUpdateFailed": "No se pudo actualizar el prompt del sistema",
+        "systemPromptUpdated": "Prompt del sistema actualizado",
+        "toolsUpdateFailed": "No se pudieron actualizar las herramientas",
+        "toolsUpdated": "Herramientas actualizadas",
+        "unknownError": "Ocurrió un error desconocido"
+      },
+      "tools": {
+        "codeInterpreter": {
+          "description": "Genera y ejecuta código.",
+          "title": "Intérprete de código"
+        },
+        "codingAgent": {
+          "description": "Investiga un repositorio de GitHub y responde preguntas sobre su código.",
+          "title": "Agente de código"
+        },
+        "description": "Herramientas y capacidades que el chat puede usar. Esto no se aplica a los agentes.",
+        "imageGeneration": {
+          "description": "Genera y edita imágenes con herramientas de IA.",
+          "disabledTooltip": "La generación de imágenes requiere un modelo configurado. Configura uno en Configuración > Generación de imágenes, o pídeselo a un administrador.",
+          "title": "Generación de imágenes"
+        },
+        "internalSearch": {
+          "description": "Busca en la base de conocimiento y los documentos conectados de tu organización.",
+          "title": "Búsqueda interna"
+        },
+        "openUrl": {
+          "description": "Obtiene y lee el contenido de las URL web.",
+          "title": "Abrir URL"
+        },
+        "title": "Acciones y herramientas",
+        "webSearch": {
+          "description": "Busca en la web información en tiempo real y resultados actualizados.",
+          "title": "Búsqueda web"
+        }
+      }
+    },
+    "codeInterpreter": {
+      "card": {
+        "description": "Entorno de ejecución de Python integrado",
+        "disconnectButton": {
+          "tooltip": "Desconectar"
+        },
+        "disconnectedTitle": "Intérprete de código (desconectado)",
+        "reconnectButton": {
+          "label": "Volver a conectar"
+        },
+        "refreshButton": {
+          "tooltip": "Actualizar"
+        },
+        "title": "Intérprete de código"
+      },
+      "disconnectModal": {
+        "body": {
+          "description": "Todas las sesiones activas conectadas al <emphasis>intérprete de código</emphasis> dejarán de funcionar. Ten en cuenta que esto no elimina ningún dato de tu entorno de ejecución. Puedes volver a conectarte a este entorno más tarde si lo necesitas."
+        },
+        "header": {
+          "title": "Desconectar el intérprete de código"
+        },
+        "submitButton": {
+          "label": "Desconectar"
+        }
+      },
+      "errorCard": {
+        "connectionLost": {
+          "title": "Error de conexión perdida"
+        },
+        "generic": {
+          "title": "Error del intérprete de código"
+        }
+      },
+      "header": {
+        "description": "Entorno de ejecución de Python seguro y aislado disponible para tu LLM. Consulta la documentación para ver más detalles.",
+        "title": "Intérprete de código"
+      },
+      "status": {
+        "checking": {
+          "label": "Comprobando..."
+        },
+        "connectionLost": {
+          "label": "Conexión perdida"
+        },
+        "healthy": {
+          "label": "Conectado"
+        },
+        "unhealthy": {
+          "label": "Con problemas"
+        }
+      },
+      "toggleError": {
+        "disconnect": {
+          "message": "No se pudo desconectar el intérprete de código"
+        },
+        "reconnect": {
+          "message": "No se pudo volver a conectar el intérprete de código"
+        }
+      }
+    },
+    "costOverrides": {
+      "allProviders": {
+        "label": "Todos los proveedores"
+      },
+      "empty": {
+        "description": "Añade uno para aplicar una tarifa negociada (USD por 1M de tokens) a un modelo.",
+        "title": "No hay tarifas personalizadas definidas."
+      },
+      "form": {
+        "addButton": {
+          "label": "Añadir tarifa personalizada"
+        },
+        "cacheRate": {
+          "label": "Tarifa de lectura de caché (USD por 1M de tokens, opcional)",
+          "placeholder": "usa la tarifa de entrada"
+        },
+        "cancelButton": {
+          "label": "Cancelar"
+        },
+        "inputRate": {
+          "label": "Tarifa de entrada (USD por 1M de tokens)"
+        },
+        "model": {
+          "label": "Modelo",
+          "placeholder": "Selecciona un modelo"
+        },
+        "outputRate": {
+          "label": "Tarifa de salida (USD por 1M de tokens)"
+        },
+        "saveButton": {
+          "label": "Guardar"
+        }
+      },
+      "panel": {
+        "addButton": {
+          "label": "Añadir tarifa personalizada"
+        },
+        "description": "Define tarifas negociadas por modelo en **USD por 1M de tokens**. Sustituyen a la tabla de precios integrada en el cálculo del coste de uso.",
+        "error": {
+          "title": "No se pudieron cargar las tarifas personalizadas."
+        },
+        "title": "Tarifas personalizadas"
+      },
+      "row": {
+        "deleteButton": {
+          "ariaLabel": "Eliminar la tarifa personalizada de {provider} para {model}"
+        },
+        "editButton": {
+          "ariaLabel": "Editar la tarifa personalizada de {provider} para {model}"
+        },
+        "rates": "{provider} · Entrada {input} · Salida {output} · USD por 1M de tokens",
+        "ratesWithCache": "{provider} · Entrada {input} · Salida {output} · Caché {cache} · USD por 1M de tokens",
+        "updated": "Actualizado {time}"
+      },
+      "toasts": {
+        "removeFailed": "No se pudo quitar la tarifa personalizada: {message}",
+        "removed": "Se quitó la tarifa personalizada de {model}.",
+        "saveFailed": "No se pudo guardar la tarifa personalizada: {message}",
+        "saved": "Tarifa guardada para {model}.",
+        "unknownError": "Error desconocido"
+      }
+    },
+    "craft": {
+      "accessCell": {
+        "disabledSuccess": {
+          "message": "Craft desactivado para el usuario"
+        },
+        "enabledSuccess": {
+          "message": "Craft activado para el usuario"
+        },
+        "error": {
+          "message": "No se pudo actualizar el acceso a Craft"
+        }
+      },
+      "accessSummary": {
+        "description": "Ahora mismo: {enabledCount} de {total} usuarios tienen acceso"
+      },
+      "confirmModal": {
+        "disableBody": {
+          "description": "Se retira el acceso a todos. Las sesiones en curso no cambian.",
+          "withExceptions": {
+            "description": "Se retira el acceso a todos, salvo a los {enabledCount} usuarios activados abajo. Las sesiones en curso no cambian."
+          }
+        },
+        "disableButton": {
+          "label": "Desactivar de forma predeterminada"
+        },
+        "disableHeader": {
+          "title": "¿Desactivar Craft de forma predeterminada?"
+        },
+        "enableBody": {
+          "description": "Los {total} usuarios obtienen acceso. Los agentes de Craft se ejecutan en entornos aislados y pueden actuar en tu nombre con tu autorización y tus aprobaciones.",
+          "withExclusions": {
+            "description": "Los {total} usuarios obtienen acceso, salvo los {excludedCount} desactivados abajo. Los agentes de Craft se ejecutan en entornos aislados y pueden actuar en tu nombre con tu autorización y tus aprobaciones."
+          }
+        },
+        "enableButton": {
+          "label": "Activar para todos"
+        },
+        "enableHeader": {
+          "title": "¿Activar Craft para todos los usuarios?"
+        }
+      },
+      "defaultToggle": {
+        "betaTag": {
+          "label": "beta"
+        },
+        "disabled": {
+          "description": "Craft está desactivado para todos. Actívalo o desactívalo por usuario abajo."
+        },
+        "disabledSuccess": {
+          "message": "Craft ahora está desactivado de forma predeterminada"
+        },
+        "enabled": {
+          "description": "Craft está activado para todos. Actívalo o desactívalo por usuario abajo."
+        },
+        "enabledSuccess": {
+          "message": "Craft ahora está activado de forma predeterminada"
+        },
+        "title": "Activar Craft de forma predeterminada"
+      },
+      "emptyState": {
+        "description": "Ningún usuario coincide con tu búsqueda.",
+        "title": "No se encontraron usuarios"
+      },
+      "header": {
+        "description": "Controla quién puede usar Craft, el creador de apps agéntico de Onyx.",
+        "title": "Acceso"
+      },
+      "perUserAccess": {
+        "description": "Los usuarios que cambies respecto al valor predeterminado del espacio de trabajo mantienen su ajuste aunque cambie el predeterminado.",
+        "title": "Acceso por usuario"
+      },
+      "saveError": {
+        "message": "No se pudo actualizar la configuración"
+      },
+      "search": {
+        "placeholder": "Buscar usuarios..."
+      },
+      "settingsLoadError": {
+        "description": "No se pudo cargar la configuración. Prueba a actualizar la página."
+      },
+      "table": {
+        "accessColumn": {
+          "header": "Acceso"
+        },
+        "footer": {
+          "units": "usuarios"
+        },
+        "groupsColumn": {
+          "header": "Grupos"
+        },
+        "userColumn": {
+          "header": "Usuario"
+        }
+      },
+      "unavailable": {
+        "description": "Onyx activa Craft en cada instalación. Contacta con tu representante de Onyx para obtener acceso.",
+        "title": "Craft no está disponible en esta instalación"
+      },
+      "usersLoadError": {
+        "description": "No se pudieron cargar los usuarios. Prueba a actualizar la página."
+      }
+    },
+    "craftInstructions": {
+      "baseInstructions": {
+        "description": "El prompt integrado al que se añaden tus instrucciones. Las secciones dinámicas se rellenan en cada sesión.",
+        "loadError": {
+          "description": "No se pudieron cargar las instrucciones base."
+        },
+        "title": "Ver las instrucciones base"
+      },
+      "header": {
+        "description": "Instrucciones para todo el espacio de trabajo que sigue cada agente de Craft, además del comportamiento integrado de Craft.",
+        "title": "Instrucciones"
+      },
+      "instructions": {
+        "charCount": {
+          "label": "{count} / {max}"
+        },
+        "help": {
+          "description": "Los cambios se aplican cuando una sesión empieza o se restaura: no afectan a las sesiones en curso."
+        },
+        "label": "Instrucciones del espacio de trabajo",
+        "placeholder": "p. ej., Sigue siempre nuestras pautas de marca y prefiere textos breves y formales."
+      },
+      "resetButton": {
+        "label": "Restablecer los valores predeterminados"
+      },
+      "resetModal": {
+        "body": {
+          "description": "Las sesiones nuevas de Craft se ejecutarán solo con las instrucciones integradas. Esto elimina tus instrucciones del espacio de trabajo para todos."
+        },
+        "header": {
+          "title": "¿Restablecer las instrucciones de Craft?"
+        },
+        "resettingLabel": "Restableciendo…",
+        "submitButton": {
+          "label": "Restablecer"
+        }
+      },
+      "saveButton": {
+        "label": "Guardar",
+        "savingLabel": "Guardando…"
+      },
+      "saveError": {
+        "message": "No se pudieron guardar las instrucciones"
+      },
+      "saveSuccess": {
+        "message": "Instrucciones de Craft guardadas"
+      },
+      "settingsLoadError": {
+        "description": "No se pudo cargar la configuración. Prueba a actualizar la página."
+      },
+      "tryInCraftButton": {
+        "label": "Probar en Craft"
+      },
+      "unavailable": {
+        "description": "Onyx activa Craft en cada instalación. Contacta con tu representante de Onyx para obtener acceso.",
+        "title": "Craft no está disponible en esta instalación"
+      }
+    },
+    "externalApps": {
+      "apps": {
+        "empty": {
+          "addButton": {
+            "label": "Añadir app"
+          },
+          "description": "Añade una app para ponerla a disposición de toda tu organización.",
+          "title": "Todavía no hay apps"
+        },
+        "panel": {
+          "blurb": "Se configura una vez para toda la organización. Edita una app para definir credenciales compartidas, políticas de acciones y habilidades asociadas."
+        },
+        "tab": {
+          "label": "Apps",
+          "labelWithCount": "Apps · {count, number}"
+        }
+      },
+      "card": {
+        "actionsButton": {
+          "ariaLabel": "Acciones de {name}"
+        },
+        "availableInCraft": {
+          "label": "Disponible en Craft"
+        },
+        "customTag": {
+          "label": "Personalizada"
+        },
+        "deleteAction": {
+          "label": "Eliminar"
+        },
+        "deleteModal": {
+          "description": "Esto elimina la app para toda tu organización: su configuración, la conexión de cada miembro y todas las habilidades gestionadas por el proveedor.",
+          "retainedSkills": "{count, plural, =0 {No se eliminará ninguna habilidad personalizada asociada.} one {# habilidad personalizada asociada se conservará, se desvinculará de esta app y se desactivará para todos.} other {# habilidades personalizadas asociadas se conservarán, se desvincularán de esta app y se desactivarán para todos.}}",
+          "submit": {
+            "label": "Eliminar la app"
+          },
+          "submitting": {
+            "label": "Eliminando…"
+          },
+          "title": "¿Eliminar “{name}”?"
+        },
+        "editAction": {
+          "label": "Editar"
+        },
+        "toasts": {
+          "deleteFailed": "No se pudo eliminar \"{name}\"",
+          "disableFailed": "No se pudo desactivar \"{name}\"",
+          "enableFailed": "No se pudo activar \"{name}\""
+        },
+        "toggle": {
+          "disableAriaLabel": "Desactivar {name}",
+          "enableAriaLabel": "Activar {name}"
+        }
+      },
+      "facts": {
+        "actions": "{count, plural, one {# acción} other {# acciones}}",
+        "customSkills": "{count, plural, one {# habilidad personalizada} other {# habilidades personalizadas}}",
+        "noCredentials": "sin credenciales",
+        "noCustomSkills": "sin habilidades personalizadas",
+        "orgCredentialsSet": "credenciales de la organización definidas",
+        "perUserCredentials": "credenciales por usuario",
+        "providedByOnyx": "proporcionada por Onyx",
+        "tools": "{count, plural, one {# herramienta} other {# herramientas}}",
+        "upstreamPatterns": "{count, plural, one {# patrón upstream} other {# patrones upstream}}"
+      },
+      "loading": {
+        "label": "Cargando…"
+      },
+      "mcpServers": {
+        "empty": {
+          "description": "Conecta un servidor en Acciones y actívalo aquí para tu organización.",
+          "openActionsButton": {
+            "label": "Abrir Acciones"
+          },
+          "title": "Todavía no hay servidores MCP"
+        },
+        "manageInActionsButton": {
+          "label": "Gestionar en Acciones"
+        },
+        "panel": {
+          "blurb": "Activa un servidor para que los miembros con acceso puedan usar sus herramientas en Craft. Edítalo para definir la política de aprobación de cada herramienta. Las conexiones y el acceso a los servidores se gestionan en Acciones."
+        },
+        "tab": {
+          "label": "Servidores MCP",
+          "labelWithCount": "Servidores MCP · {count, number}"
+        }
+      },
+      "page": {
+        "addAppButton": {
+          "label": "Añadir app"
+        },
+        "backToCraftButton": {
+          "label": "Volver a Craft"
+        },
+        "description": "Configura las apps que puede usar el agente de Craft de tu organización. Cada miembro conecta su propia cuenta en la página Apps de Craft."
+      },
+      "warnings": {
+        "invalidSkill": "habilidad no válida",
+        "providerUnavailable": "proveedor no disponible"
+      }
+    },
+    "groups": {
+      "card": {
+        "defaultTag": {
+          "label": "Predeterminado"
+        },
+        "toasts": {
+          "renameFailed": "No se pudo renombrar el grupo",
+          "renamed": "El grupo se renombró como \"{name}\""
+        },
+        "viewGroup": {
+          "label": "Ver el grupo"
+        }
+      },
+      "create": {
+        "header": {
+          "title": "Crear grupo"
+        },
+        "submit": {
+          "label": "Crear"
+        },
+        "toasts": {
+          "createFailed": "No se pudo crear el grupo",
+          "created": "Grupo \"{name}\" creado"
+        }
+      },
+      "edit": {
+        "delete": {
+          "button": {
+            "label": "Eliminar el grupo"
+          },
+          "description": "Los miembros perderán el acceso a los recursos compartidos con este grupo.",
+          "title": "Eliminar este grupo"
+        },
+        "deleteModal": {
+          "deleting": {
+            "label": "Eliminando..."
+          },
+          "description": "Los miembros del grupo <highlight>{name}</highlight> perderán el acceso a los recursos compartidos con este grupo, salvo que tengan acceso directo. La eliminación no se puede deshacer.",
+          "submit": {
+            "label": "Eliminar"
+          },
+          "title": "Eliminar el grupo"
+        },
+        "header": {
+          "title": "Editar el grupo"
+        },
+        "incognito": {
+          "description": "Los miembros de este grupo pueden iniciar chats de incógnito.",
+          "title": "Chats de incógnito"
+        },
+        "loadError": {
+          "text": "No se pudieron cargar los datos del grupo."
+        },
+        "notFound": {
+          "description": "Este grupo no existe o puede que se haya eliminado.",
+          "header": {
+            "title": "Grupo no encontrado"
+          },
+          "title": "Grupo no encontrado"
+        },
+        "saving": {
+          "label": "Guardando..."
+        },
+        "submit": {
+          "label": "Guardar cambios"
+        },
+        "syncing": {
+          "label": "Sincronizando...",
+          "tooltip": "Los embeddings de los documentos se están actualizando por los cambios recientes en este grupo."
+        },
+        "systemGroup": {
+          "description": "Onyx gestiona este grupo. Solo contiene miembros y es lo único que puedes cambiar.",
+          "title": "Grupo del sistema"
+        },
+        "toasts": {
+          "deleteFailed": "No se pudo eliminar el grupo",
+          "deleted": "Grupo \"{name}\" eliminado",
+          "managerAssigned": "Responsable asignado",
+          "managerRevoked": "Responsable revocado",
+          "managerUpdateFailed": "No se pudo actualizar el responsable",
+          "membersStranded": "Algunos de esos miembros se quedarían sin grupo. Añádelos primero a otro grupo.",
+          "syncing": "Este grupo se está sincronizando. Espera un momento e inténtalo de nuevo.",
+          "updateFailed": "No se pudo actualizar el grupo",
+          "updated": "Grupo \"{name}\" actualizado"
+        }
+      },
+      "form": {
+        "cancel": {
+          "label": "Cancelar"
+        },
+        "name": {
+          "label": "Nombre del grupo",
+          "placeholder": "Ponle un nombre a tu grupo"
+        },
+        "toasts": {
+          "nameRequired": "El nombre del grupo es obligatorio"
+        }
+      },
+      "list": {
+        "empty": {
+          "text": "Crea grupos para organizar a los usuarios y gestionar el acceso."
+        },
+        "loadError": {
+          "description": "Consulta la consola para ver más detalles.",
+          "title": "No se pudieron cargar los grupos."
+        },
+        "newGroup": {
+          "label": "Nuevo grupo"
+        },
+        "noResults": {
+          "description": "No hay grupos que coincidan con \"{query}\"",
+          "title": "No se encontraron grupos"
+        },
+        "search": {
+          "placeholder": "Buscar grupos..."
+        }
+      },
+      "members": {
+        "add": {
+          "label": "Añadir"
+        },
+        "done": {
+          "label": "Listo"
+        },
+        "lastGroup": {
+          "tooltip": "Este es su único grupo. Añádelo primero a otro grupo."
+        },
+        "loadError": {
+          "text": "No se pudieron cargar los usuarios."
+        },
+        "makeManager": {
+          "label": "Hacer responsable"
+        },
+        "managerTag": {
+          "label": "Responsable"
+        },
+        "noMembers": {
+          "description": "Añade miembros a este grupo.",
+          "title": "Sin miembros"
+        },
+        "noUsers": {
+          "description": "Ningún usuario coincide con tu búsqueda.",
+          "title": "No se encontraron usuarios"
+        },
+        "ownManager": {
+          "tooltip": "No puedes revocar tu propio acceso de responsable"
+        },
+        "removeMember": {
+          "label": "Quitar al miembro"
+        },
+        "removeSelf": {
+          "tooltip": "No puedes quitarte mientras gestionas este grupo"
+        },
+        "revokeManager": {
+          "label": "Revocar el rol de responsable"
+        },
+        "saveBeforeManager": {
+          "tooltip": "Guarda el grupo antes de asignar un responsable"
+        },
+        "searchMembers": {
+          "placeholder": "Buscar miembros..."
+        },
+        "searchUsers": {
+          "placeholder": "Buscar usuarios y cuentas..."
+        },
+        "table": {
+          "accountType": {
+            "header": "Tipo de cuenta"
+          },
+          "name": {
+            "header": "Nombre"
+          }
+        }
+      },
+      "page": {
+        "title": "Grupos"
+      },
+      "permissions": {
+        "section": {
+          "description": "Configura el acceso y los permisos de los miembros de este grupo.",
+          "title": "Permisos del grupo"
+        }
+      },
+      "permissionsChanged": {
+        "description": "Onyx ahora usa permisos por grupo. El acceso se configura en cada grupo, así que los permisos de un usuario son la combinación de todos los grupos a los que pertenece.",
+        "learnMore": {
+          "label": "Más información"
+        },
+        "title": "Los permisos han cambiado"
+      },
+      "sharedResources": {
+        "agent": {
+          "description": "agente"
+        },
+        "agents": {
+          "label": "Agentes",
+          "placeholder": "Añade agentes"
+        },
+        "connector": {
+          "description": "Conector"
+        },
+        "connectorFallback": {
+          "label": "Conector n.º {id}"
+        },
+        "connectors": {
+          "label": "Conectores y conjuntos de documentos",
+          "placeholder": "Añade conectores y conjuntos de documentos"
+        },
+        "documentSet": {
+          "description": "Conjunto de documentos"
+        },
+        "noAgents": {
+          "description": "Añade agentes para compartirlos con este grupo.",
+          "title": "No se han añadido agentes"
+        },
+        "noConnectors": {
+          "description": "Añade conectores o conjuntos de documentos para compartirlos con este grupo.",
+          "title": "No se han añadido conectores ni conjuntos de documentos"
+        },
+        "popover": {
+          "connectors": {
+            "label": "Conectores"
+          },
+          "documentSets": {
+            "label": "Conjuntos de documentos"
+          },
+          "noResults": {
+            "title": "No se encontraron resultados"
+          }
+        },
+        "section": {
+          "description": "Comparte conectores, conjuntos de documentos y agentes con los miembros de este grupo.",
+          "title": "Compartido con este grupo"
+        },
+        "sharedBadge": {
+          "label": "Compartido"
+        }
+      },
+      "tokenLimits": {
+        "addLimit": {
+          "label": "Añadir límite"
+        },
+        "costLimit": {
+          "header": "Límite de coste",
+          "placeholder": "Límite de coste",
+          "unit": "(USD)"
+        },
+        "disabledTooltip": "Los límites de frecuencia de tokens solo están disponibles en la [versión Enterprise de Onyx](/admin/billing).",
+        "section": {
+          "description": "Limita el número de tokens que este grupo puede usar en un periodo de tiempo determinado.",
+          "title": "Límite de frecuencia de tokens"
+        },
+        "timeWindow": {
+          "header": "Ventana de tiempo",
+          "unit": "(días UTC)"
+        },
+        "tokenLimit": {
+          "header": "Límite de tokens",
+          "placeholder": "Límite de tokens (en miles)",
+          "unit": "(en miles)"
+        }
+      }
+    },
+    "imageGeneration": {
+      "configureSuccess": {
+        "message": "Proveedor configurado correctamente"
+      },
+      "deselectError": {
+        "message": "No se pudo anular la selección"
+      },
+      "deselectSuccess": {
+        "message": "Selección de {title} anulada"
+      },
+      "disconnectError": {
+        "message": "No se pudo desconectar"
+      },
+      "disconnectModal": {
+        "connectAnother": {
+          "description": "Conecta otro proveedor para seguir usando la generación de imágenes."
+        },
+        "defaultNoReplacement": {
+          "description": "**{title}** es ahora mismo el modelo predeterminado de generación de imágenes."
+        },
+        "defaultWithReplacement": {
+          "description": "**{title}** es ahora mismo el modelo predeterminado de generación de imágenes. Se conservará el historial de sesiones."
+        },
+        "header": {
+          "description": "Esto eliminará las credenciales guardadas de este proveedor.",
+          "title": "Desconectar *{title}*"
+        },
+        "noDefaultOption": {
+          "description": "(Desactivar la generación de imágenes)",
+          "label": "Sin predeterminado"
+        },
+        "nonDefault": {
+          "description": "Los modelos de **{title}** ya no se usarán para generar imágenes."
+        },
+        "replacement": {
+          "label": "Definir el nuevo predeterminado",
+          "placeholder": "Selecciona un modelo de reemplazo"
+        },
+        "sessionHistory": {
+          "description": "Se conservará el historial de sesiones."
+        },
+        "submitButton": {
+          "label": "Desconectar"
+        }
+      },
+      "disconnectSuccess": {
+        "message": "{title} desconectado"
+      },
+      "emptyState": {
+        "title": "Conecta un modelo de generación de imágenes para usarlo en el chat."
+      },
+      "form": {
+        "apiKey": {
+          "comboPlaceholder": "Introduce una nueva clave de API o selecciona un proveedor existente",
+          "idle": "Introduce una nueva clave de API o selecciona un proveedor existente.",
+          "label": "Clave de API",
+          "placeholder": "Introduce tu clave de API",
+          "required": "La clave de API es obligatoria"
+        },
+        "apiKeyTest": {
+          "error": "Clave de API no válida",
+          "loading": "Probando la clave de API con {title}...",
+          "success": "La clave de API es válida. Configuración guardada."
+        },
+        "apiKeyValidationFailed": {
+          "message": "No se pudo validar la clave de API"
+        },
+        "authMethod": {
+          "idle": "Elige cómo debe autenticarse Onyx con Google Vertex AI.",
+          "label": "Método de autenticación",
+          "required": "El método de autenticación es obligatorio",
+          "serviceAccount": {
+            "description": "Sube un archivo JSON con la clave de una cuenta de servicio de GCP",
+            "label": "JSON de la cuenta de servicio"
+          },
+          "workloadIdentity": {
+            "description": "Usa las credenciales de GCP del entorno del pod (GKE Workload Identity)",
+            "label": "Workload Identity (GKE)"
+          }
+        },
+        "azureApiKey": {
+          "idle": "Pega tu <link>clave de API</link> de Azure OpenAI para acceder a tus modelos."
+        },
+        "connectHeader": {
+          "title": "Conectar {title}"
+        },
+        "credentials": {
+          "idle": "Sube o pega tus <link>credenciales de cuenta de servicio</link> de Google Cloud.",
+          "label": "Archivo de credenciales",
+          "placeholder": "Sube o pega tus credenciales",
+          "required": "El archivo de credenciales es obligatorio"
+        },
+        "credentialsTest": {
+          "error": "Credenciales no válidas",
+          "loading": "Probando las credenciales con {title}...",
+          "success": "Credenciales válidas. Configuración guardada."
+        },
+        "editHeader": {
+          "title": "Editar {title}"
+        },
+        "invalidProviderSelection": {
+          "message": "Selección de proveedor no válida"
+        },
+        "loading": {
+          "placeholder": "Cargando..."
+        },
+        "location": {
+          "idle": "La región de Google Cloud de tus modelos de Vertex AI. Consulta <link>la documentación de Google</link> para ver las regiones disponibles.",
+          "label": "Ubicación",
+          "required": "La ubicación es obligatoria"
+        },
+        "projectId": {
+          "idle": "El proyecto de GCP donde Vertex AI está activado. Onyx se autentica con la cuenta de servicio asociada al pod (GKE Workload Identity).",
+          "label": "ID del proyecto de GCP",
+          "required": "El ID del proyecto es obligatorio"
+        },
+        "targetUri": {
+          "idle": "Pega el URI de destino de tu endpoint de <link>Azure OpenAI</link> (incluidos la base del endpoint de la API, el nombre de la implementación y la versión de la API).",
+          "invalid": "El URI de destino debe ser una URL válida con api-version y nombre de implementación",
+          "label": "URI de destino",
+          "required": "El URI de destino es obligatorio"
+        },
+        "unknownError": {
+          "message": "Ocurrió un error desconocido"
+        }
+      },
+      "header": {
+        "description": "Configuración de la generación de imágenes en el chat.",
+        "title": "Generación de imágenes"
+      },
+      "loadError": {
+        "message": "No se pudo cargar la configuración. Actualiza la página."
+      },
+      "model": {
+        "description": "Selecciona un modelo para generar imágenes en el chat.",
+        "title": "Modelo de generación de imágenes"
+      },
+      "providers": {
+        "azureGptImage1": {
+          "description": "Modelo de generación de imágenes GPT Image 1 alojado en Microsoft Azure."
+        },
+        "azureGptImage15": {
+          "description": "Modelo de generación de imágenes GPT Image 1.5 alojado en Microsoft Azure."
+        },
+        "azureGptImage2": {
+          "description": "Modelo de generación de imágenes GPT Image 2 alojado en Microsoft Azure."
+        },
+        "gemini25FlashImage": {
+          "description": "El modelo Gemini 2.5 Flash Image (Nano Banana) está diseñado para la velocidad y la eficiencia."
+        },
+        "gemini3ProImage": {
+          "description": "Gemini 3 Pro Image (Nano Banana Pro) está diseñado para la producción de recursos profesionales."
+        },
+        "gemini3ProImagePreview": {
+          "description": "Google Cloud lo retiró el 17 de julio de 2026. Cambia a Gemini 3 Pro Image."
+        },
+        "openaiGptImage1": {
+          "description": "Un potente modelo de generación de imágenes de OpenAI que sigue muy bien el prompt."
+        },
+        "openaiGptImage15": {
+          "description": "El anterior modelo insignia de generación de imágenes de OpenAI."
+        },
+        "openaiGptImage2": {
+          "description": "El último modelo de generación de imágenes de OpenAI, con la mayor fidelidad al prompt."
+        }
+      },
+      "setDefaultError": {
+        "message": "No se pudo establecer como predeterminado"
+      },
+      "setDefaultSuccess": {
+        "message": "{title} establecido como predeterminado"
+      }
+    },
+    "indexSettings": {
+      "actions": {
+        "applyForward": {
+          "label": "Aplicar a los documentos nuevos y actualizados"
+        },
+        "applyReindex": {
+          "label": "Aplicar y reindexar"
+        },
+        "rebuildAll": {
+          "label": "Reconstruir todos los documentos existentes"
+        },
+        "revert": {
+          "label": "Revertir"
+        }
+      },
+      "azure": {
+        "apiVersion": {
+          "description": "La versión de la API de Azure OpenAI a la que apunta tu implementación.",
+          "placeholder": "p. ej., 2023-05-15",
+          "title": "Versión de la API"
+        },
+        "deploymentName": {
+          "description": "El nombre de la implementación que configuraste en Azure para este modelo de embeddings.",
+          "placeholder": "my-embedding-deployment",
+          "title": "Nombre de la implementación"
+        },
+        "modelName": {
+          "description": "Una etiqueta para este modelo en Onyx. Azure enruta las solicitudes por nombre de implementación, así que solo necesita ser un identificador único."
+        },
+        "targetUrl": {
+          "title": "URL de destino"
+        }
+      },
+      "cancelReindexModal": {
+        "description": "Si cancelas, se volverá al modelo de embeddings anterior y se perderá todo el progreso de la reindexación.",
+        "submit": {
+          "label": "Cancelar"
+        },
+        "title": "Cancelar la reindexación"
+      },
+      "captioningModel": {
+        "description": "Este modelo se usará para analizar las imágenes durante la indexación. Solo se pueden seleccionar modelos con capacidad de visión. Las actualizaciones se aplican a los documentos indexados a partir de ahora: las descripciones existentes ya están integradas en los embeddings anteriores.",
+        "title": "LLM de descripción de imágenes"
+      },
+      "changesBanner": {
+        "contextualModelMissing": {
+          "description": "La recuperación contextual está activada, pero no hay ningún modelo seleccionado. Elige abajo un LLM de recuperación contextual antes de reindexar: sin él, la reindexación no se puede ejecutar.",
+          "title": "Selecciona un LLM de recuperación contextual"
+        },
+        "contextualModelOnly": {
+          "description": "Aplica el modelo solo a los documentos nuevos y actualizados, o reconstruye todos los documentos para obtener un enriquecimiento contextual uniforme.",
+          "title": "Elige cómo aplicar este LLM de recuperación contextual"
+        },
+        "default": {
+          "description": "Modificar la configuración de embeddings o de recuperación requiere una reindexación completa de todos los documentos para que surta efecto, lo que puede tardar **horas o días** según el tamaño del corpus. [Más información](https://docs.onyx.app/security/architecture/data_flows)",
+          "title": "Los cambios requieren una reindexación completa."
+        },
+        "orSeparator": {
+          "label": "o"
+        }
+      },
+      "cloudDisabled": {
+        "tooltip": "Onyx Cloud gestiona esta configuración."
+      },
+      "contextualModel": {
+        "description": "Este modelo se usará para generar contexto para los fragmentos.",
+        "disabledTooltip": "No se puede modificar mientras la recuperación contextual esté desactivada.",
+        "title": "LLM de recuperación contextual"
+      },
+      "contextualRetrieval": {
+        "description": "Añade contexto a nivel de documento a cada fragmento indexado para mejorar la relevancia de la búsqueda híbrida. Esto puede aumentar mucho el coste de los embeddings.",
+        "noModelsTooltip": "La recuperación contextual está desactivada porque no tienes modelos configurados. Configura primero un [modelo de lenguaje]({link}).",
+        "title": "Recuperación contextual"
+      },
+      "embeddingModel": {
+        "cloudManaged": {
+          "title": "Onyx Cloud gestiona el modelo de embeddings y su configuración."
+        },
+        "description": "Onyx usa este modelo para codificar los documentos para la búsqueda y la recuperación.",
+        "title": "Modelo de embeddings"
+      },
+      "errorsModal": {
+        "columns": {
+          "error": "Error",
+          "id": "ID",
+          "name": "Nombre",
+          "status": "Estado",
+          "type": "Tipo"
+        },
+        "description": "Conectores y archivos de usuario cuyo último intento de reindexación falló (se reintenta automáticamente) o se pausó (usa Reanudar para reintentarlo).",
+        "empty": "No hay nada que requiera atención.",
+        "loadError": "No se pudo cargar el estado de la reindexación. Inténtalo de nuevo.",
+        "loading": "Cargando…",
+        "resumeButton": {
+          "label": "Reanudar"
+        },
+        "resumeFailed": "No se pudo reanudar.",
+        "resumingButton": {
+          "label": "Reanudando…"
+        },
+        "scope": {
+          "connector": "Conector",
+          "userFiles": "Archivos del usuario"
+        },
+        "status": {
+          "failed": "Fallido",
+          "paused": "En pausa"
+        },
+        "title": "Reindexación: requiere atención",
+        "unknownError": "Error desconocido"
+      },
+      "fields": {
+        "apiKey": {
+          "description": "Pega tu [clave de API]({link}) de {provider} para acceder a tus modelos.",
+          "title": "Clave de API"
+        },
+        "googleCredentials": {
+          "title": "Sube el archivo de credenciales JSON"
+        },
+        "modelDim": {
+          "description": "Número de dimensiones de los embeddings que genera este modelo.",
+          "placeholder": "p. ej., 768",
+          "title": "Dimensión del modelo"
+        },
+        "modelName": {
+          "placeholder": "model-name",
+          "selfHostedDescription": "Onyx se conectará a este modelo en tu endpoint autoalojado.",
+          "title": "Nombre del modelo"
+        },
+        "normalize": {
+          "description": "Normaliza los embeddings que genera el modelo. Se recomienda para la mayoría de los modelos, salvo que la documentación de tu modelo de embeddings indique lo contrario.",
+          "title": "Normalizar los embeddings"
+        },
+        "optional": {
+          "suffix": "opcional"
+        },
+        "passagePrefix": {
+          "description": "Esto se antepone a los fragmentos de documento indexados antes de pasarlos al modelo, si tu modelo de embeddings lo requiere. Los prefijos incorrectos o ausentes degradan la calidad de los embeddings.",
+          "placeholder": "p. ej., 'passage: '",
+          "title": "Prefijo de pasaje"
+        },
+        "queryPrefix": {
+          "description": "Esto se antepone a las consultas de búsqueda antes de pasarlas al modelo, si tu modelo de embeddings lo requiere. Los prefijos incorrectos o ausentes degradan la calidad de los embeddings.",
+          "placeholder": "p. ej., 'query: '",
+          "title": "Prefijo de consulta"
+        }
+      },
+      "forwardOnlyModal": {
+        "description": "Los documentos existentes conservarán el contexto generado por el modelo anterior. El nuevo modelo se aplicará solo cuando se añadan o se actualicen documentos. El enriquecimiento contextual puede variar entre documentos.",
+        "title": "Aplicar el LLM de recuperación contextual a partir de ahora"
+      },
+      "header": {
+        "description": "Configura cómo se indexan y se preparan los documentos, y cómo se generan sus embeddings para la búsqueda y la recuperación."
+      },
+      "imageExtraction": {
+        "description": "Extrae las imágenes incrustadas en los archivos subidos (PDF, DOCX, etc.) y resúmelas con un LLM con capacidad de visión para que los documentos que solo tienen imágenes se puedan buscar y responder. Requiere un LLM predeterminado con capacidad de visión.",
+        "title": "Extraer y describir imágenes"
+      },
+      "imageProcessing": {
+        "description": "Usa un modelo LLM para analizar las imágenes y añadirles descripciones durante la indexación.",
+        "enableFirstTooltip": "Activa Extraer y describir imágenes para configurar esto.",
+        "noVisionModelsTooltip": "El procesamiento de imágenes está desactivado porque no tienes modelos con capacidad de visión configurados. Configura primero un [modelo de lenguaje]({link}) con capacidad de visión.",
+        "title": "Procesamiento de imágenes"
+      },
+      "litellm": {
+        "apiUrl": {
+          "description": "Pega la URL del endpoint compatible con {provider}.",
+          "title": "URL base de la API"
+        },
+        "modelName": {
+          "description": "Onyx se conectará a este modelo en tu proxy de {provider}."
+        }
+      },
+      "maxImageSize": {
+        "description": "Las imágenes que superen este tamaño se omitirán para limitar el uso de recursos.",
+        "suffix": "(MB)",
+        "title": "Tamaño máximo de imagen para el análisis"
+      },
+      "modal": {
+        "cancelButton": {
+          "label": "Cancelar"
+        },
+        "connectButton": {
+          "label": "Conectar"
+        },
+        "manage": {
+          "description": "Gestiona los detalles del proveedor {provider} y de sus modelos.",
+          "title": "Gestionar {provider}"
+        },
+        "setUp": {
+          "description": "Conéctate a {provider} y configura tus modelos de embeddings de {provider}.",
+          "title": "Configurar {provider}"
+        },
+        "updateButton": {
+          "label": "Actualizar"
+        }
+      },
+      "modelCard": {
+        "connectButton": {
+          "label": "Conectar"
+        },
+        "currentButton": {
+          "label": "Modelo actual"
+        },
+        "deprecated": {
+          "connectTooltip": "Este modelo de embeddings está obsoleto y no se puede conectar.",
+          "selectTooltip": "Este modelo de embeddings está obsoleto y no se puede seleccionar."
+        },
+        "selectButton": {
+          "label": "Seleccionar modelo"
+        },
+        "selectedButton": {
+          "label": "Seleccionado"
+        }
+      },
+      "modelPicker": {
+        "addCustomModel": {
+          "label": "Añadir modelo personalizado"
+        },
+        "cloudTab": {
+          "label": "En la nube"
+        },
+        "customModel": {
+          "title": "Configura un modelo de embeddings personalizado."
+        },
+        "customModels": {
+          "title": "Modelos personalizados"
+        },
+        "foldModels": {
+          "label": "Plegar modelos"
+        },
+        "noCloudResults": {
+          "title": "No se encontraron modelos en la nube"
+        },
+        "noResults": {
+          "description": "Prueba con otro término de búsqueda."
+        },
+        "noSelfHostedResults": {
+          "title": "No se encontraron modelos autoalojados"
+        },
+        "revertSelection": {
+          "tooltip": "Revertir la selección del modelo de embeddings"
+        },
+        "search": {
+          "placeholder": "Buscar modelos..."
+        },
+        "selfHostedTab": {
+          "label": "Autoalojado"
+        },
+        "viewAllModels": {
+          "label": "Ver todos los modelos"
+        }
+      },
+      "multipass": {
+        "description": "Indexa los documentos como fragmentos de distintos tamaños para identificar mejor las fuentes relevantes.",
+        "disabledTooltip": "La indexación multipaso está desactivada temporalmente y estará disponible en el futuro.",
+        "tag": {
+          "label": "no disponible temporalmente"
+        },
+        "title": "Indexación multipaso"
+      },
+      "progressBanner": {
+        "attentionButton": {
+          "label": "Ver las unidades que requieren atención"
+        },
+        "cancelButton": {
+          "label": "Cancelar la reindexación y revertir"
+        },
+        "description": {
+          "withModel": "La nueva configuración de embeddings (**{model}**) se aplica a medida que avanza la reindexación. Esto puede tardar **horas o días** según el tamaño del corpus.",
+          "withoutModel": "La nueva configuración de embeddings se aplica a medida que avanza la reindexación. Esto puede tardar **horas o días** según el tamaño del corpus."
+        },
+        "progress": {
+          "ariaLabel": "Progreso de la reindexación"
+        },
+        "status": {
+          "label": "Estado de la reindexación:"
+        },
+        "title": "Reindexación en curso…"
+      },
+      "providerGroup": {
+        "addConfig": {
+          "button": {
+            "label": "Añadir configuración"
+          },
+          "title": "Añade configuraciones para tus proveedores de embeddings de {provider}."
+        },
+        "deprecated": {
+          "suffix": "(obsoleto)"
+        },
+        "disconnect": {
+          "errorToast": "No se pudo desconectar {provider}",
+          "successToast": "{provider} desconectado"
+        },
+        "disconnectButton": {
+          "disabledTooltip": "No se puede desconectar este modelo de embeddings porque es el predeterminado actual. Selecciona otro antes de continuar."
+        },
+        "disconnectModal": {
+          "description": "Esto desconectará todos los modelos de embeddings del proveedor **{provider}**.",
+          "submit": {
+            "label": "Desconectar"
+          },
+          "title": "Desconectar {provider}"
+        },
+        "editCredentialsButton": {
+          "label": "Editar credenciales"
+        }
+      },
+      "providerInfo": {
+        "cloudProvider": {
+          "title": "Proveedor en la nube"
+        },
+        "docsLink": {
+          "label": "Documentación"
+        },
+        "pricingLink": {
+          "label": "Precios"
+        },
+        "selfHosted": {
+          "title": "Autoalojado"
+        }
+      },
+      "reindexBanner": {
+        "cancelReindex": {
+          "label": "Cancelar la reindexación"
+        },
+        "description": "Cambiando a **{model}**. Se están regenerando los embeddings de los documentos existentes: esto puede tardar horas o días según el tamaño del corpus. El modelo anterior sigue atendiendo las consultas hasta que finalice el cambio.",
+        "seeConnectors": {
+          "label": "Ver conectores"
+        },
+        "title": "Reindexación en curso"
+      },
+      "reindexing": {
+        "disabledTooltip": "Hay una reindexación en curso. Cancélala para hacer cambios."
+      },
+      "retrieval": {
+        "description": "Funciones de indexación adicionales que mejoran la precisión de la búsqueda al configurar cómo se fragmentan y se contextualizan los documentos. Pueden aumentar el coste de los embeddings.",
+        "title": "Optimización de la recuperación"
+      },
+      "switchover": {
+        "activeOnly": {
+          "description": "Sigue usando el índice de documentos actual con la configuración existente hasta que todos los conectores activos (no pausados ni en eliminación) hayan completado un intento de indexación correcto.",
+          "label": "Reindexar los conectores activos y luego cambiar"
+        },
+        "instant": {
+          "description": "Vacía de inmediato el índice de documentos actual y cambia a la nueva configuración. Requiere reindexar todos los conectores antes de que el índice se vuelva a llenar para la búsqueda.",
+          "label": "Cambiar antes de reindexar"
+        },
+        "placeholder": "Selecciona una estrategia de cambio",
+        "reindexAll": {
+          "description": "La opción más segura. Sigue usando el índice de documentos actual con la configuración existente hasta que todos los conectores hayan completado un intento de indexación correcto.",
+          "label": "Reindexar todos los conectores y luego cambiar"
+        }
+      },
+      "toasts": {
+        "applyFailed": "No se pudo aplicar la configuración",
+        "cancelReindexFailed": "No se pudo cancelar la reindexación",
+        "captioningUpdateFailed": "No se pudo actualizar el LLM de descripción de imágenes",
+        "captioningUpdated": "LLM de descripción de imágenes actualizado",
+        "contextualModelRequired": "Selecciona un LLM de recuperación contextual antes de reindexar.",
+        "contextualModelUpdateFailed": "No se pudo actualizar el LLM de recuperación contextual",
+        "contextualModelUpdated": "LLM de recuperación contextual actualizado",
+        "modelNotFound": "No se encontró el modelo seleccionado",
+        "providerResolveFailed": "No se pudo resolver el proveedor",
+        "reindexCanceled": "Reindexación cancelada",
+        "reindexStarted": "Reindexación iniciada",
+        "settingsUpdateFailed": "No se pudo actualizar la configuración",
+        "settingsUpdated": "Configuración actualizada",
+        "unknownError": "Ocurrió un error desconocido"
+      },
+      "validation": {
+        "apiBaseUrlRequired": "La URL base de la API es obligatoria",
+        "apiKeyRequired": "La clave de API es obligatoria",
+        "apiVersionRequired": "La versión de la API es obligatoria",
+        "deploymentNameRequired": "El nombre de la implementación es obligatorio",
+        "modelDimPositive": "Debe ser un número entero positivo",
+        "modelDimRequired": "La dimensión del modelo es obligatoria",
+        "modelNameRequired": "El nombre del modelo es obligatorio",
+        "serviceAccountJsonInvalid": "Debe ser un archivo JSON válido de cuenta de servicio de Google",
+        "serviceAccountJsonRequired": "El JSON de la cuenta de servicio es obligatorio",
+        "targetUrlRequired": "La URL de destino es obligatoria",
+        "urlInvalid": "Debe ser una URL válida"
+      }
+    },
+    "languageModels": {
+      "availableProviders": {
+        "title": "Proveedores disponibles"
+      },
+      "configurationDisabled": {
+        "description": "Los proveedores de LLM existentes se pueden seguir usando y actualizando.",
+        "title": "La configuración de nuevos LLM no está disponible temporalmente."
+      },
+      "defaultModel": {
+        "description": "Onyx usará este modelo de forma predeterminada en tus chats.",
+        "title": "Modelo predeterminado"
+      },
+      "deleteModal": {
+        "defaultProviderWarning": "No se puede eliminar el proveedor predeterminado. Selecciona otro proveedor como predeterminado antes de eliminar este.",
+        "description": "Todos los modelos LLM del proveedor **{provider}** se eliminarán y dejarán de estar disponibles para los chats futuros. Se conservará el historial de chats.",
+        "lastProviderNote": "Conecta otro proveedor para seguir usando los chats.",
+        "submit": {
+          "label": "Eliminar"
+        },
+        "title": "Eliminar *{provider}*"
+      },
+      "groups": {
+        "addProvider": {
+          "description": "Onyx admite tanto los proveedores más populares como los modelos autoalojados.",
+          "title": "Añadir proveedor"
+        },
+        "gateways": {
+          "title": "Pasarelas y enrutadores"
+        },
+        "selfHosted": {
+          "title": "Autoalojados y personalizados"
+        }
+      },
+      "newCustomProviderCard": {
+        "setUpButton": {
+          "label": "Configurar"
+        }
+      },
+      "newProviderCard": {
+        "ariaLabel": "Añadir {company} {product}",
+        "connectButton": {
+          "label": "Conectar"
+        }
+      },
+      "noProviders": {
+        "title": "Configura un proveedor de LLM para empezar a chatear."
+      },
+      "providerCard": {
+        "defaultTag": {
+          "label": "Predeterminado"
+        },
+        "deleteButton": {
+          "ariaLabel": "Eliminar {provider}"
+        },
+        "editButton": {
+          "ariaLabel": "Editar {provider}"
+        }
+      },
+      "toasts": {
+        "providerDeleteFailed": "No se pudo eliminar el proveedor: {message}",
+        "providerDeleted": "¡Proveedor eliminado correctamente!",
+        "unknownError": "Error desconocido"
+      }
+    },
+    "perUserUsage": {
+      "panel": {
+        "description": "{start} – {end} · Los costes se calculan a partir del uso registrado de los modelos.",
+        "emptyDescription": "Gasto y uso de tokens por usuario en el periodo seleccionado.",
+        "error": {
+          "title": "No se pudo cargar el uso de este periodo."
+        },
+        "title": "Resumen de uso"
+      },
+      "summary": {
+        "activeUsers": {
+          "detail": "{count, number} usuarios con registros",
+          "label": "Usuarios activos"
+        },
+        "topSpender": {
+          "label": "Mayor gasto",
+          "noSpend": "No hay gasto registrado"
+        },
+        "totalTokens": {
+          "detail": "Entrada (incluidas las lecturas de caché) y salida",
+          "label": "Tokens totales"
+        },
+        "workspaceSpend": {
+          "detail": "De todos los usuarios de la lista",
+          "label": "Gasto del espacio de trabajo"
+        }
+      },
+      "users": {
+        "description": "El gasto se ordena de mayor a menor. Filtra la lista y luego selecciona un usuario para ver el desglose completo.",
+        "empty": {
+          "description": "No hay uso registrado en este periodo."
+        },
+        "title": "Usuarios"
+      }
+    },
+    "security": {
+      "adminControls": {
+        "incognito": {
+          "description": "Los chats de incógnito nunca aparecen en el historial de su propietario. El acceso se configura en cada grupo, dentro de Grupos.",
+          "everyone": {
+            "description": "Cualquier persona con la sesión iniciada puede empezar chats de incógnito.",
+            "label": "Todos"
+          },
+          "groups": {
+            "description": "Solo los miembros de los grupos con el acceso de incógnito activado.",
+            "label": "Grupos designados"
+          },
+          "off": {
+            "description": "Nadie puede empezar chats de incógnito.",
+            "label": "Desactivado"
+          },
+          "title": "Chats de incógnito"
+        },
+        "incognitoRecords": {
+          "description": "Lo que el espacio de trabajo conserva de los chats de incógnito. Las sesiones nuevas fijan el modo activo en el momento de empezar.",
+          "fullHistory": {
+            "description": "Se registran como cualquier otro chat: historial de consultas, uso y trazado. Solo se ocultan del historial de su propietario.",
+            "label": "Historial completo"
+          },
+          "title": "Registros de los chats de incógnito",
+          "usageOnly": {
+            "description": "No se guarda el contenido de los mensajes. El uso de tokens se sigue registrando y estos chats no aparecen en el historial de consultas.",
+            "label": "Solo el uso"
+          }
+        },
+        "maskCredentials": {
+          "description": "Formato con el que los administradores ven las claves de API y las credenciales guardadas.",
+          "masked": {
+            "description": "Muestra solo los primeros y los últimos caracteres (p. ej., abcd...wxyz).",
+            "label": "Parcialmente oculto"
+          },
+          "title": "Ocultar las credenciales guardadas",
+          "visible": {
+            "description": "Muestra el valor completo de la credencial a los administradores.",
+            "label": "Totalmente visible"
+          }
+        },
+        "section": {
+          "title": "Controles de administración"
+        },
+        "userDirectory": {
+          "adminsOnly": {
+            "description": "Solo los administradores pueden ver la lista completa de usuarios.",
+            "label": "Visible solo para los administradores"
+          },
+          "allUsers": {
+            "description": "Cualquier persona con la sesión iniciada puede ver la lista completa de usuarios al compartir recursos.",
+            "label": "Visible para todos los usuarios"
+          },
+          "description": "Las búsquedas exactas por nombre y por correo funcionan con independencia de esta opción.",
+          "title": "Visibilidad del directorio completo de usuarios"
+        }
+      },
+      "authentication": {
+        "allowedEmailDomains": {
+          "placeholder": "Añade un dominio (p. ej., onyx.app)",
+          "subDescription": "Los usuarios nuevos solo pueden registrar cuentas con correos de esta lista de dominios.",
+          "title": "Dominios de correo permitidos"
+        },
+        "emailDomains": {
+          "description": "Limita el registro de usuarios nuevos a dominios de correo concretos.",
+          "title": "Restringir los dominios de correo"
+        },
+        "idpExpiry": {
+          "description": "Cierra la sesión de los usuarios cuando caduca la sesión del proveedor OAuth/OIDC de origen.",
+          "title": "Sincronizar la caducidad de la sesión con el proveedor de identidad"
+        },
+        "openSignUp": {
+          "description": "Los usuarios nuevos deben recibir una invitación para unirse a este espacio de trabajo.",
+          "title": "Restringir el registro abierto"
+        },
+        "passwordLockdown": {
+          "description": "Todos inician sesión y se registran solo mediante SSO. Requiere al menos un proveedor de SSO activado.",
+          "title": "Desactivar el inicio de sesión y el registro con contraseña"
+        },
+        "section": {
+          "title": "Autenticación"
+        }
+      },
+      "jwt": {
+        "expectedAudience": {
+          "description": "Rechaza los tokens cuyo campo aud no coincida. Si se deja vacío, se desactiva la comprobación.",
+          "title": "Audiencia esperada"
+        },
+        "expectedIssuer": {
+          "description": "Rechaza los tokens cuyo campo iss no coincida. Si se deja vacío, se desactiva la comprobación.",
+          "title": "Emisor esperado"
+        },
+        "pinnedField": {
+          "description": "Fijado por una variable de entorno."
+        },
+        "publicKeyUrl": {
+          "description": "Endpoint JWKS o PEM que se usa para verificar las firmas de los tokens. Déjalo vacío para desactivar la autenticación JWT.",
+          "title": "URL de la clave pública"
+        },
+        "section": {
+          "description": "Acepta tokens bearer RS256 firmados por tu proveedor de identidad. Los valores definidos por variables de entorno quedan fijados y no se pueden editar aquí.",
+          "title": "Autenticación JWT externa"
+        }
+      },
+      "networkSafety": {
+        "envInjection": {
+          "description": "Permite que las configuraciones de proveedores de LLM personalizados definan temporalmente variables de entorno del proceso durante las llamadas. Desactívalo para exigir que todas las opciones del proveedor tengan un parámetro equivalente en LiteLLM.",
+          "multiTenantDescription": "Las configuraciones de proveedores de LLM personalizados nunca pueden definir variables de entorno del proceso en instalaciones multiinquilino.",
+          "title": "Inyección de variables de entorno para LLM"
+        },
+        "section": {
+          "title": "Seguridad de red"
+        },
+        "ssrf": {
+          "allowPrivateNetwork": {
+            "description": "Igual que Validar las solicitudes de LLM, pero los endpoints MCP/OAuth configurados por los administradores también pueden alcanzar hosts de la red local privada. El loopback (el propio host de la app) y los metadatos de la nube siguen bloqueados.",
+            "label": "Permitir la red privada"
+          },
+          "description": "Valida las solicitudes salientes frente a IP privadas o internas para protegerte contra la falsificación de solicitudes del lado del servidor (SSRF).",
+          "disabled": {
+            "description": "Úsalo solo en redes de confianza. Permite todas las solicitudes salientes: es necesario para conectarse a backends de LLM locales.",
+            "label": "Desactivado"
+          },
+          "title": "Protección contra SSRF",
+          "validateAll": {
+            "description": "La opción más restrictiva. Ninguna solicitud saliente puede alcanzar IP privadas o internas, ni siquiera las de los conectores web.",
+            "label": "Validar todas las solicitudes"
+          },
+          "validateLlm": {
+            "description": "Valida todas las descargas de URL iniciadas por el LLM. Los conectores configurados por los administradores sí pueden alcanzar IP privadas o internas.",
+            "label": "Validar las solicitudes de LLM"
+          }
+        }
+      },
+      "page": {
+        "description": "Opciones de seguridad configurables en tiempo de ejecución. Los valores sin definir usan la configuración de entorno de tu instalación."
+      },
+      "passwordPolicy": {
+        "charactersSuffix": {
+          "label": "(caracteres)"
+        },
+        "lengthInput": {
+          "placeholder": "Predeterminado"
+        },
+        "maxLength": {
+          "title": "Longitud máxima de la contraseña"
+        },
+        "minLength": {
+          "title": "Longitud mínima de la contraseña"
+        },
+        "requireLowercase": {
+          "title": "Exigir una letra minúscula"
+        },
+        "requireNumber": {
+          "title": "Exigir un número"
+        },
+        "requireSpecialChar": {
+          "description": "Caracteres aceptados: `{characters}`",
+          "title": "Exigir caracteres especiales"
+        },
+        "requireUppercase": {
+          "title": "Exigir una letra mayúscula"
+        },
+        "section": {
+          "description": "Requisitos para todas las contraseñas nuevas. Solo se aplica a la autenticación básica.",
+          "title": "Política de contraseñas"
+        }
+      },
+      "toasts": {
+        "securitySettingsUpdateFailed": "No se pudo actualizar la configuración de seguridad",
+        "securitySettingsUpdated": "Configuración de seguridad actualizada",
+        "settingsUpdateFailed": "No se pudo actualizar la configuración",
+        "settingsUpdated": "Configuración actualizada"
+      }
+    },
+    "serviceAccounts": {
+      "deleteModal": {
+        "description": "Cualquier aplicación que use la clave de API de la cuenta *{name}* (`{keyDisplay}`) perderá el acceso a Onyx.",
+        "submit": {
+          "label": "Eliminar"
+        },
+        "title": "Eliminar la cuenta",
+        "warning": "La eliminación no se puede deshacer."
+      },
+      "editModal": {
+        "cancelButton": {
+          "label": "Cancelar"
+        },
+        "groupList": {
+          "loading": {
+            "description": "Cargando grupos...",
+            "title": "Cargando..."
+          },
+          "memberCount": "{count, plural, one {# usuario} other {# usuarios}}",
+          "noResults": {
+            "description": "Prueba con otro término de búsqueda.",
+            "title": "No se encontraron grupos"
+          }
+        },
+        "joinedGroups": {
+          "empty": {
+            "description": "{name} no pertenece a ningún grupo.",
+            "title": "No se encontraron grupos"
+          }
+        },
+        "removeGroupButton": {
+          "tooltip": "Quitar del grupo"
+        },
+        "saveButton": {
+          "label": "Guardar cambios"
+        },
+        "search": {
+          "placeholder": "Busca grupos a los que unirse..."
+        },
+        "title": "Editar los grupos de {name}",
+        "toasts": {
+          "error": "Ocurrió un error",
+          "updated": "Cuenta de servicio actualizada"
+        }
+      },
+      "formModal": {
+        "cancelButton": {
+          "label": "Cancelar"
+        },
+        "description": "Usa la clave de API de una cuenta de servicio para acceder de forma programática a la API de Onyx con permisos de usuario. Puedes cambiar los detalles de la cuenta más tarde.",
+        "groups": {
+          "empty": {
+            "description": "No hay grupos asignados a esta cuenta de servicio.",
+            "title": "Sin grupos"
+          },
+          "loading": {
+            "description": "Cargando grupos...",
+            "title": "Cargando..."
+          },
+          "memberCount": "{count, plural, one {# usuario} other {# usuarios}}",
+          "noResults": {
+            "description": "Prueba con otro término de búsqueda.",
+            "title": "No se encontraron grupos"
+          },
+          "search": {
+            "placeholder": "Buscar grupos..."
+          },
+          "title": "Grupos"
+        },
+        "name": {
+          "placeholder": "Introduce un nombre",
+          "title": "Nombre"
+        },
+        "submitButton": {
+          "create": "Crear cuenta",
+          "update": "Actualizar"
+        },
+        "title": {
+          "create": "Crear cuenta de servicio",
+          "update": "Actualizar la cuenta de servicio"
+        },
+        "toasts": {
+          "createFailed": "Error al crear la cuenta de servicio: {detail}",
+          "created": "¡Cuenta de servicio creada correctamente!",
+          "unexpectedError": "Ocurrió un error inesperado.",
+          "updateFailed": "Error al actualizar la cuenta de servicio: {detail}",
+          "updated": "¡Cuenta de servicio actualizada correctamente!"
+        }
+      },
+      "keyModal": {
+        "copyButton": {
+          "label": "Copiar la clave de API"
+        },
+        "description": "Guarda esta clave antes de continuar. No se volverá a mostrar.",
+        "downloadButton": {
+          "label": "Descargar"
+        },
+        "title": "Clave de API de la cuenta de servicio"
+      },
+      "list": {
+        "createButton": {
+          "label": "Nueva cuenta de servicio"
+        },
+        "empty": {
+          "description": "Crea claves de API de cuentas de servicio con acceso de usuario."
+        },
+        "search": {
+          "placeholder": "Buscar cuentas de servicio..."
+        }
+      },
+      "page": {
+        "description": "Usa cuentas de servicio para acceder de forma programática a la API de Onyx.",
+        "error": {
+          "description": "Consulta la consola para ver más detalles.",
+          "title": "No se pudieron cargar las cuentas de servicio."
+        }
+      },
+      "regenerateModal": {
+        "description": "Tu clave de API actual *{name}* (`{keyDisplay}`) se revocará y se generará una clave nueva. Tendrás que actualizar con la nueva clave todas las aplicaciones que usen esta.",
+        "submit": {
+          "label": "Regenerar la clave"
+        },
+        "title": "Regenerar la clave de API"
+      },
+      "table": {
+        "actions": {
+          "delete": {
+            "label": "Eliminar la cuenta"
+          },
+          "edit": {
+            "label": "Editar la cuenta"
+          },
+          "groups": {
+            "label": "Grupos"
+          }
+        },
+        "columns": {
+          "apiKey": {
+            "header": "Clave de API"
+          },
+          "groups": {
+            "header": "Grupos"
+          },
+          "name": {
+            "header": "Nombre"
+          }
+        },
+        "groups": {
+          "overflow": {
+            "label": "+{count}"
+          }
+        },
+        "moreButton": {
+          "tooltip": "Más"
+        },
+        "name": {
+          "unnamed": "Sin nombre"
+        },
+        "regenerateButton": {
+          "tooltip": "Regenerar"
+        }
+      },
+      "toasts": {
+        "deleteFailed": "No se pudo eliminar la clave de API.",
+        "deleteFailedWithDetail": "No se pudo eliminar la clave de API: {detail}",
+        "keyCopied": "Clave de API copiada al portapapeles.",
+        "regenerateFailed": "No se pudo regenerar la clave de API.",
+        "regenerateFailedWithDetail": "No se pudo regenerar la clave de API: {detail}"
+      },
+      "trialNotice": {
+        "description": "Las cuentas de prueba no incluyen acceso mediante clave de API: compra una suscripción de pago para desbloquear esta función.",
+        "title": "Cambia a un plan de pago para crear claves de API."
+      }
+    },
+    "shared": {
+      "listHeader": {
+        "search": {
+          "placeholder": "Buscar..."
+        }
+      },
+      "liteModeNotice": {
+        "description": "Esta instalación ejecuta Onyx Lite, que no tiene base de datos vectorial: los conectores y la indexación de documentos están desactivados y no se indexa nada. Para conectar fuentes de datos e indexar documentos, instala Onyx en **modo Standard**. Consulta la [guía de instalación]({docsUrl}) para empezar.",
+        "title": "La indexación no está disponible en el modo Lite"
+      },
+      "providerCard": {
+        "connectButton": {
+          "label": "Conectar"
+        },
+        "currentDefault": {
+          "label": "Predeterminado actual"
+        },
+        "disconnectButton": {
+          "ariaLabel": "Desconectar {title}",
+          "tooltip": "Desconectar"
+        },
+        "editButton": {
+          "ariaLabel": "Editar {title}",
+          "tooltip": "Editar"
+        },
+        "setDefaultButton": {
+          "label": "Establecer como predeterminado"
+        }
+      }
+    },
+    "ssoProviders": {
+      "addProvider": {
+        "button": {
+          "label": "Añadir proveedor"
+        },
+        "gatedTooltip": "Tener varios proveedores de SSO activados está disponible en el plan Business o Enterprise."
+      },
+      "copyRedirectUri": {
+        "tooltip": "Copiar el URI de redirección"
+      },
+      "editProvider": {
+        "tooltip": "Editar"
+      },
+      "empty": {
+        "description": "Añade un proveedor para que los usuarios inicien sesión con Google, OIDC o SAML.",
+        "title": "Todavía no hay proveedores de SSO"
+      },
+      "loadError": {
+        "description": "No se pudieron cargar los proveedores de SSO.",
+        "title": "No se pudieron cargar los proveedores de SSO"
+      },
+      "page": {
+        "description": "Permite que los usuarios inicien sesión con tu proveedor de identidad."
+      },
+      "toasts": {
+        "unexpectedError": "Ocurrió un error inesperado."
+      }
+    },
+    "tracing": {
+      "disconnectModal": {
+        "body": "Las trazas de las llamadas al LLM ya no se enviarán a **{label}**. Las trazas ya enviadas no cambian.",
+        "description": "Deja de enviar las trazas de las llamadas al LLM a este proveedor.",
+        "submit": {
+          "label": "Desconectar"
+        },
+        "title": "Desconectar {label}"
+      },
+      "field": {
+        "optional": {
+          "title": "{label} (opcional)"
+        },
+        "required": {
+          "error": "{label} es obligatorio"
+        }
+      },
+      "loadError": {
+        "description": "No se pudo cargar la configuración del trazado.",
+        "title": "No se pudo cargar la configuración del trazado"
+      },
+      "page": {
+        "description": "Conecta plataformas de observabilidad para monitorizar y evaluar las llamadas al LLM."
+      },
+      "provider": {
+        "connected": {
+          "label": "Conectado"
+        }
+      },
+      "setupModal": {
+        "cancel": {
+          "label": "Cancelar"
+        },
+        "connect": {
+          "label": "Conectar"
+        },
+        "createTitle": "Configurar {label}",
+        "description": "Conéctate a {label} para enviar las trazas de las llamadas al LLM.",
+        "editTitle": "Editar la configuración de {label}",
+        "update": {
+          "label": "Actualizar"
+        }
+      },
+      "toasts": {
+        "connected": "{label} conectado",
+        "disconnected": "{label} desconectado",
+        "unexpectedError": "Ocurrió un error inesperado."
+      }
+    },
+    "users": {
+      "accountType": {
+        "anonymous": {
+          "label": "Anónimo"
+        },
+        "bot": {
+          "label": "Bot de Slack"
+        },
+        "extPermUser": {
+          "label": "Usuario externo"
+        },
+        "serviceAccount": {
+          "label": "Cuenta de servicio"
+        },
+        "standard": {
+          "label": "Estándar"
+        }
+      },
+      "activateModal": {
+        "description": "<strong>{email}</strong> recuperará el acceso a Onyx.",
+        "submit": {
+          "label": "Activar"
+        },
+        "title": "Activar al usuario",
+        "toasts": {
+          "success": "Usuario activado"
+        }
+      },
+      "cancelInviteModal": {
+        "description": "<strong>{email}</strong> ya no podrá unirse a Onyx con esta invitación.",
+        "submit": {
+          "label": "Cancelar la invitación"
+        },
+        "title": "Cancelar la invitación",
+        "toasts": {
+          "success": "Invitación cancelada"
+        }
+      },
+      "deactivateModal": {
+        "description": "<strong>{email}</strong> perderá el acceso a Onyx de inmediato. Se conservarán sus sesiones y sus agentes. Se liberará su puesto de licencia. Puedes reactivar esta cuenta más tarde.",
+        "submit": {
+          "label": "Desactivar"
+        },
+        "title": "Desactivar al usuario",
+        "toasts": {
+          "success": "Usuario desactivado"
+        }
+      },
+      "deleteModal": {
+        "description": "<strong>{email}</strong> se eliminará de Onyx de forma permanente. Se borrará todo su historial de sesiones. La eliminación no se puede deshacer.",
+        "submit": {
+          "label": "Eliminar"
+        },
+        "title": "Eliminar al usuario",
+        "toasts": {
+          "success": "Usuario eliminado"
+        }
+      },
+      "editModal": {
+        "cancelButton": {
+          "label": "Cancelar"
+        },
+        "groupList": {
+          "loading": {
+            "description": "Cargando grupos...",
+            "title": "Cargando..."
+          },
+          "memberCount": "{count, plural, one {# usuario} other {# usuarios}}",
+          "noResults": {
+            "description": "Prueba con otro término de búsqueda.",
+            "title": "No se encontraron grupos"
+          }
+        },
+        "joinedGroups": {
+          "empty": {
+            "description": "{name} no pertenece a ningún grupo.",
+            "title": "No se encontraron grupos"
+          }
+        },
+        "removeGroupButton": {
+          "tooltip": "Quitar del grupo"
+        },
+        "saveButton": {
+          "label": "Guardar cambios"
+        },
+        "search": {
+          "placeholder": "Busca grupos a los que unirse..."
+        },
+        "title": "Editar los grupos del usuario",
+        "toasts": {
+          "error": "Ocurrió un error",
+          "updated": "Usuario actualizado"
+        }
+      },
+      "filters": {
+        "accountType": {
+          "allOption": {
+            "label": "Todos los tipos de cuenta"
+          },
+          "button": {
+            "ariaLabel": "Filtrar por tipo de cuenta"
+          }
+        },
+        "button": {
+          "moreLabel": "{names}, +{count}"
+        },
+        "group": {
+          "allOption": {
+            "label": "Todos los grupos"
+          },
+          "button": {
+            "ariaLabel": "Filtrar por grupo"
+          },
+          "empty": {
+            "label": "No se encontraron grupos"
+          },
+          "search": {
+            "placeholder": "Buscar grupos..."
+          }
+        },
+        "status": {
+          "allOption": {
+            "label": "Todos los estados"
+          },
+          "button": {
+            "ariaLabel": "Filtrar por estado"
+          }
+        }
+      },
+      "groupsCell": {
+        "editButton": {
+          "tooltip": "Editar"
+        },
+        "editCell": {
+          "ariaLabel": "Editar los grupos"
+        },
+        "overflow": {
+          "label": "+{count}"
+        }
+      },
+      "inviteModal": {
+        "cancelButton": {
+          "label": "Cancelar"
+        },
+        "emails": {
+          "placeholder": "Añade los correos a invitar, separados por espacios o comas"
+        },
+        "message": {
+          "needsValidEmail": "Introduce una dirección de correo válida para invitar.",
+          "readyCount": "{count, plural, one {# correo por invitar} other {# correos por invitar}}",
+          "someInvalid": "Algunas direcciones de correo no son válidas y se omitirán."
+        },
+        "submitButton": {
+          "label": "Invitar"
+        },
+        "title": "Invitar usuarios",
+        "toasts": {
+          "inviteFailed": "No se pudo invitar a los usuarios",
+          "invited": "{count, plural, one {Se invitó a # usuario} other {Se invitó a # usuarios}}",
+          "noValidEmails": "Añade al menos una dirección de correo válida"
+        }
+      },
+      "modals": {
+        "toasts": {
+          "error": "Ocurrió un error"
+        }
+      },
+      "page": {
+        "inviteButton": {
+          "label": "Invitar usuarios"
+        },
+        "title": "Usuarios y solicitudes"
+      },
+      "permissionsNotice": {
+        "description": "Onyx ahora usa permisos por grupo. Los roles de Curador y Curador global se han sustituido por permisos de grupo configurables, con responsables por grupo para una administración acotada.",
+        "learnMoreButton": {
+          "label": "Más información"
+        },
+        "title": "Los permisos han cambiado"
+      },
+      "resetPasswordModal": {
+        "description": "Esto generará una nueva contraseña aleatoria para <strong>{email}</strong>. Su contraseña actual dejará de funcionar de inmediato.",
+        "doneButton": {
+          "label": "Listo"
+        },
+        "submit": {
+          "label": "Restablecer la contraseña"
+        },
+        "successDescription": "La contraseña de <strong>{email}</strong> se ha restablecido. Copia la nueva contraseña de abajo: no se volverá a mostrar.",
+        "successTitle": "Contraseña restablecida",
+        "title": "Restablecer la contraseña",
+        "toasts": {
+          "error": "No se pudo restablecer la contraseña"
+        }
+      },
+      "rowActions": {
+        "activate": {
+          "label": "Activar al usuario"
+        },
+        "approve": {
+          "label": "Aprobar"
+        },
+        "cancelInvite": {
+          "label": "Cancelar la invitación"
+        },
+        "deactivate": {
+          "label": "Desactivar al usuario"
+        },
+        "delete": {
+          "label": "Eliminar al usuario"
+        },
+        "editGroups": {
+          "label": "Grupos y roles"
+        },
+        "makeAdmin": {
+          "label": "Convertir en administrador"
+        },
+        "removeAdmin": {
+          "label": "Quitar el acceso de administrador"
+        },
+        "resetPassword": {
+          "label": "Restablecer la contraseña"
+        },
+        "scimNotice": {
+          "description": "Este es un usuario sincronizado por SCIM que gestiona tu proveedor de identidad."
+        },
+        "toasts": {
+          "adminAccessGranted": "El usuario ya es administrador",
+          "adminAccessRemoved": "Acceso de administrador retirado",
+          "error": "Ocurrió un error",
+          "requestApproved": "Solicitud aprobada"
+        }
+      },
+      "status": {
+        "active": {
+          "label": "Activo"
+        },
+        "inactive": {
+          "label": "Inactivo"
+        },
+        "invited": {
+          "label": "Invitación pendiente"
+        },
+        "requested": {
+          "label": "Solicitud de acceso"
+        }
+      },
+      "summary": {
+        "activeUsers": {
+          "label": "usuarios activos"
+        },
+        "filterButton": {
+          "tooltip": "Añadir filtro"
+        },
+        "pendingInvites": {
+          "label": "invitaciones pendientes"
+        },
+        "requests": {
+          "label": "solicitudes de acceso"
+        },
+        "scim": {
+          "description": "Los usuarios se sincronizan desde tu proveedor de identidad.",
+          "manageButton": {
+            "label": "Gestionar"
+          },
+          "title": "Sincronización SCIM"
+        },
+        "statCell": {
+          "ariaLabel": "Filtrar por {label}"
+        }
+      },
+      "table": {
+        "columns": {
+          "accountType": {
+            "header": "Tipo de cuenta"
+          },
+          "groups": {
+            "header": "Grupos"
+          },
+          "lastUpdated": {
+            "header": "Última actualización"
+          },
+          "name": {
+            "header": "Nombre"
+          },
+          "status": {
+            "header": "Estado"
+          }
+        },
+        "downloadCsvButton": {
+          "ariaLabel": "Descargar CSV",
+          "tooltip": "Descargar CSV"
+        },
+        "empty": {
+          "description": "Ningún usuario coincide con los filtros actuales.",
+          "title": "No se encontraron usuarios"
+        },
+        "error": {
+          "description": "No se pudieron cargar los usuarios. Prueba a actualizar la página."
+        },
+        "search": {
+          "placeholder": "Buscar usuarios..."
+        },
+        "status": {
+          "scimSynced": {
+            "label": "Sincronizado por SCIM"
+          }
+        },
+        "toasts": {
+          "downloadFailed": "No se pudo descargar el CSV"
+        }
+      }
+    },
+    "voice": {
+      "disconnectModal": {
+        "body": {
+          "description": "Los modelos de **{label}** ya no se usarán para voz a texto ni para texto a voz, y dejará de ser tu proveedor predeterminado. Se conservará el historial de sesiones."
+        },
+        "connectAnother": {
+          "description": "Conecta otro proveedor para seguir usando las funciones de voz."
+        },
+        "disconnectError": {
+          "message": "No se pudo desconectar el proveedor."
+        },
+        "disconnectSuccess": {
+          "message": "{label} desconectado"
+        },
+        "header": {
+          "description": "Esto eliminará las credenciales guardadas de este proveedor.",
+          "title": "Desconectar {label}"
+        },
+        "submitButton": {
+          "label": "Desconectar"
+        }
+      },
+      "header": {
+        "description": "Configura los proveedores de voz a texto y de texto a voz para la entrada por voz y las respuestas habladas.",
+        "title": "Voz"
+      },
+      "models": {
+        "azureSpeechStt": {
+          "subtitle": "Voz a texto en Microsoft Foundry Tools."
+        },
+        "azureSpeechTts": {
+          "subtitle": "Texto a voz en Microsoft Foundry Tools."
+        },
+        "elevenlabsStt": {
+          "subtitle": "API de voz a texto de ElevenLabs."
+        },
+        "elevenlabsTts": {
+          "subtitle": "API de texto a voz de ElevenLabs."
+        },
+        "tts1": {
+          "subtitle": "El modelo de texto a voz de OpenAI optimizado para la velocidad."
+        },
+        "tts1Hd": {
+          "subtitle": "El modelo de texto a voz de OpenAI optimizado para la calidad."
+        },
+        "whisper": {
+          "subtitle": "El modelo de reconocimiento de voz de uso general de OpenAI."
+        }
+      },
+      "setupModal": {
+        "apiKey": {
+          "description": "Pega tu [clave de API]({url}) de {provider} para acceder a tus modelos.",
+          "label": "Clave de API",
+          "placeholder": "Clave de API",
+          "required": "La clave de API es obligatoria"
+        },
+        "cancelButton": {
+          "label": "Cancelar"
+        },
+        "connectButton": {
+          "label": "Conectar"
+        },
+        "connectionTestFailed": {
+          "message": "La prueba de conexión falló"
+        },
+        "createHeader": {
+          "title": "Configurar {provider}"
+        },
+        "editHeader": {
+          "title": "Editar la configuración de {provider}"
+        },
+        "header": {
+          "description": "Conéctate a {provider} y configura tus modelos de voz."
+        },
+        "saveError": {
+          "message": "No se pudo guardar el proveedor"
+        },
+        "sttLanguages": {
+          "azureCapExceeded": "Azure admite como máximo {cap} idiomas hablados",
+          "description": "Configuraciones regionales que los usuarios pueden hablar, separadas por comas, p. ej., `en-US, fr-FR`. Con más de una, la transcripción en vivo detecta automáticamente el idioma hablado (el audio subido usa la primera). Consulta las [configuraciones regionales admitidas]({docsUrl}).",
+          "invalid": "Introduce configuraciones regionales separadas por comas, como en-US, fr-FR (una por idioma)",
+          "label": "Idiomas hablados",
+          "selfHostedCapExceeded": "Los endpoints autoalojados admiten como máximo {cap} idiomas hablados (detección al inicio)"
+        },
+        "sttModel": {
+          "label": "Modelo de STT"
+        },
+        "targetUri": {
+          "description": "Pega el endpoint que aparece en [Azure Portal (Claves y punto de conexión)]({portalUrl}). Onyx extrae la región de voz de esta URL. Ejemplos: `https://westus.api.cognitive.microsoft.com/` o `https://westus.tts.speech.microsoft.com/`.",
+          "label": "URI de destino",
+          "required": "El URI de destino es obligatorio"
+        },
+        "ttsModel": {
+          "description": "Onyx usará este modelo de forma predeterminada para la síntesis de voz.",
+          "label": "Modelo predeterminado"
+        },
+        "updateButton": {
+          "label": "Actualizar"
+        },
+        "voice": {
+          "description": "Esta voz se usará para las respuestas habladas. Consulta la lista completa de idiomas y voces admitidos en [{docsLabel}]({docsUrl}).",
+          "label": "Voz",
+          "loadingPlaceholder": "Cargando voces...",
+          "placeholder": "Selecciona una voz o introduce un ID de voz"
+        }
+      },
+      "speechToText": {
+        "description": "Selecciona un modelo para transcribir la voz a texto en los chats.",
+        "emptyState": {
+          "title": "Conecta un proveedor de voz a texto para usarlo en el chat."
+        },
+        "title": "Voz a texto"
+      },
+      "textToSpeech": {
+        "description": "Selecciona un modelo para leer en voz alta las respuestas del chat.",
+        "emptyState": {
+          "title": "Conecta un proveedor de texto a voz para usarlo en el chat."
+        },
+        "title": "Texto a voz"
+      },
+      "unexpectedError": {
+        "message": "Ocurrió un error inesperado."
+      }
+    },
+    "webSearch": {
+      "apiKeyField": {
+        "noLink": {
+          "description": "Pega tu clave de API de {provider} para conectarte."
+        },
+        "placeholder": "Clave de API",
+        "title": "Clave de API",
+        "withLink": {
+          "description": "Pega tu [clave de API]({url}) de {provider} para conectarte."
+        }
+      },
+      "crawler": {
+        "currentCrawler": {
+          "label": "Rastreador actual"
+        },
+        "description": "Se usa para leer el contenido completo de las páginas de resultados de búsqueda.",
+        "title": "Rastreador web"
+      },
+      "customIntegration": {
+        "subtitle": "Integración personalizada"
+      },
+      "disconnectModal": {
+        "connectAnother": {
+          "description": "Conecta otro motor de búsqueda para seguir usando la búsqueda web."
+        },
+        "content": {
+          "description": "**{label}** ya no se usará para leer las páginas web de los resultados de búsqueda."
+        },
+        "disconnectSuccess": {
+          "message": "{label} desconectado"
+        },
+        "fallback": {
+          "description": "Onyx usará el rastreador web integrado como alternativa."
+        },
+        "header": {
+          "description": "Esto eliminará las credenciales guardadas de este proveedor.",
+          "title": "Desconectar {label}"
+        },
+        "search": {
+          "description": "La búsqueda web ya no se hará a través de **{label}**. Se conservará el historial de búsquedas."
+        },
+        "submitButton": {
+          "label": "Desconectar"
+        }
+      },
+      "header": {
+        "description": "Configuración de la búsqueda externa en internet.",
+        "title": "Búsqueda web"
+      },
+      "loadError": {
+        "description": "No se pudo cargar la configuración de la búsqueda web.",
+        "title": "No se pudo cargar la configuración de la búsqueda web"
+      },
+      "searchEngine": {
+        "connectPrompt": {
+          "title": "Conecta un motor de búsqueda para configurar la búsqueda web."
+        },
+        "description": "API de motor de búsqueda externo que se usa para obtener las URL, los fragmentos y los metadatos de los resultados de la búsqueda web.",
+        "selectPrompt": {
+          "title": "Selecciona un motor de búsqueda para activar la búsqueda web."
+        },
+        "title": "Motor de búsqueda"
+      },
+      "setupModal": {
+        "apiKey": {
+          "required": "La clave de API es obligatoria"
+        },
+        "cancelButton": {
+          "label": "Cancelar"
+        },
+        "config": {
+          "required": "{title} es obligatorio"
+        },
+        "connectButton": {
+          "label": "Conectar"
+        },
+        "connectSuccess": {
+          "message": "Proveedor conectado"
+        },
+        "createHeader": {
+          "title": "Configurar {provider}"
+        },
+        "editHeader": {
+          "title": "Editar la configuración de {provider}"
+        },
+        "updateButton": {
+          "label": "Actualizar"
+        }
+      },
+      "unexpectedError": {
+        "message": "Ocurrió un error inesperado."
+      }
+    }
+  },
   "auth": {
     "createAccount": {
       "createOrgButton": {
@@ -1812,6 +4608,135 @@
     }
   },
   "sidebar": {
+    "adminNav": {
+      "items": {
+        "addConnector": {
+          "label": "Añadir conector"
+        },
+        "agents": {
+          "label": "Agentes"
+        },
+        "analytics": {
+          "label": "Analíticas"
+        },
+        "appearanceAndTheming": {
+          "label": "Apariencia y tema"
+        },
+        "chatPreferences": {
+          "label": "Preferencias del chat"
+        },
+        "codeInterpreter": {
+          "label": "Intérprete de código"
+        },
+        "craftAccess": {
+          "label": "Acceso"
+        },
+        "craftApps": {
+          "label": "Apps"
+        },
+        "craftInstructions": {
+          "label": "Instrucciones"
+        },
+        "customAnalytics": {
+          "label": "Analíticas personalizadas"
+        },
+        "discordIntegration": {
+          "label": "Integración con Discord"
+        },
+        "documentSets": {
+          "label": "Conjuntos de documentos"
+        },
+        "existingConnectors": {
+          "label": "Conectores existentes"
+        },
+        "exportLogs": {
+          "label": "Exportar registros"
+        },
+        "groups": {
+          "label": "Grupos"
+        },
+        "hookExtensions": {
+          "label": "Extensiones de hooks"
+        },
+        "imageGeneration": {
+          "label": "Generación de imágenes"
+        },
+        "indexSettings": {
+          "label": "Configuración del índice"
+        },
+        "languageModels": {
+          "label": "Modelos de lenguaje"
+        },
+        "mcpActions": {
+          "label": "Acciones MCP"
+        },
+        "openapiActions": {
+          "label": "Acciones OpenAPI"
+        },
+        "plansAndBilling": {
+          "label": "Planes y facturación"
+        },
+        "queryHistory": {
+          "label": "Historial de consultas"
+        },
+        "scim": {
+          "label": "SCIM"
+        },
+        "securityAndHardening": {
+          "label": "Seguridad y protección"
+        },
+        "serviceAccounts": {
+          "label": "Cuentas de servicio"
+        },
+        "slackIntegration": {
+          "label": "Integración con Slack"
+        },
+        "ssoProviders": {
+          "label": "Proveedores de SSO"
+        },
+        "tracing": {
+          "label": "Trazado"
+        },
+        "upgradePlan": {
+          "label": "Mejorar el plan"
+        },
+        "usage": {
+          "label": "Uso"
+        },
+        "users": {
+          "label": "Usuarios"
+        },
+        "voice": {
+          "label": "Voz"
+        },
+        "webSearch": {
+          "label": "Búsqueda web"
+        }
+      },
+      "sections": {
+        "agentsAndActions": {
+          "label": "Agentes y acciones"
+        },
+        "craft": {
+          "label": "Craft"
+        },
+        "documentsAndKnowledge": {
+          "label": "Documentos y conocimiento"
+        },
+        "integrations": {
+          "label": "Integraciones"
+        },
+        "organization": {
+          "label": "Organización"
+        },
+        "permissions": {
+          "label": "Permisos"
+        },
+        "usage": {
+          "label": "Uso"
+        }
+      }
+    },
     "adminSidebar": {
       "businessOrEnterpriseOnly": {
         "tooltip": "Esta función solo está disponible en la [versión Business o Enterprise de Onyx](/admin/billing)."

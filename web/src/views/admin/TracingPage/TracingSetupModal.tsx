@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import { SvgArrowExchange, SvgSimpleLoader } from "@opal/icons";
@@ -30,6 +31,7 @@ export interface TracingSetupModalProps {
 type FormValues = Record<string, string>;
 
 export function TracingSetupModal({ state, onSaved }: TracingSetupModalProps) {
+  const t = useTranslations("admin.tracing");
   const onClose = useModalClose();
   const { providerType, detail, provider } = state;
 
@@ -52,12 +54,16 @@ export function TracingSetupModal({ state, onSaved }: TracingSetupModalProps) {
   const shape: Record<string, Yup.StringSchema> = {
     [detail.secretField.name]: hasStoredKey
       ? Yup.string()
-      : Yup.string().required(`${detail.secretField.label} is required`),
+      : Yup.string().required(
+          t("field.required.error", { label: detail.secretField.label })
+        ),
   };
   for (const field of detail.configFields) {
     shape[field.name] = field.optional
       ? Yup.string()
-      : Yup.string().required(`${field.label} is required`);
+      : Yup.string().required(
+          t("field.required.error", { label: field.label })
+        );
   }
   const validationSchema = Yup.object().shape(shape);
 
@@ -82,12 +88,12 @@ export function TracingSetupModal({ state, onSaved }: TracingSetupModalProps) {
         hasStoredKey,
         config,
       });
-      toast.success(`${detail.label} connected`);
+      toast.success(t("toasts.connected", { label: detail.label }));
       await onSaved();
       onClose?.();
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Unexpected error occurred."
+        error instanceof Error ? error.message : t("toasts.unexpectedError")
       );
     } finally {
       setSubmitting(false);
@@ -110,10 +116,12 @@ export function TracingSetupModal({ state, onSaved }: TracingSetupModalProps) {
                 moreIcon2={SvgOnyxLogo}
                 title={
                   isEditing
-                    ? `Configure ${detail.label}`
-                    : `Set up ${detail.label}`
+                    ? t("setupModal.editTitle", { label: detail.label })
+                    : t("setupModal.createTitle", { label: detail.label })
                 }
-                description={`Connect to ${detail.label} to send LLM call traces.`}
+                description={t("setupModal.description", {
+                  label: detail.label,
+                })}
                 onClose={onClose}
               />
               <Modal.Body>
@@ -124,14 +132,16 @@ export function TracingSetupModal({ state, onSaved }: TracingSetupModalProps) {
               </Modal.Body>
               <Modal.Footer>
                 <Button prominence="secondary" type="button" onClick={onClose}>
-                  Cancel
+                  {t("setupModal.cancel.label")}
                 </Button>
                 <Button
                   type="submit"
                   disabled={!dirty || !isValid || isSubmitting}
                   icon={isSubmitting ? SvgSimpleLoader : undefined}
                 >
-                  {isEditing ? "Update" : "Connect"}
+                  {isEditing
+                    ? t("setupModal.update.label")
+                    : t("setupModal.connect.label")}
                 </Button>
               </Modal.Footer>
             </Form>

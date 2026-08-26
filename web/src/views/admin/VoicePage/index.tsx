@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { useTranslations } from "next-intl";
 import ProviderCard from "@/sections/admin/ProviderCard";
 import { SettingsLayouts } from "@opal/layouts";
 import { useVoiceProviders } from "@/lib/voice/hooks";
@@ -22,15 +23,27 @@ import {
 import { getVoiceProviderDetail } from "@/lib/voice/utils";
 import { VoiceProviderView } from "@/lib/voice/types";
 
+// Message keys, not copy — the literal union keeps `t()` statically checked.
+type ModelSubtitleKey =
+  | "models.whisper.subtitle"
+  | "models.azureSpeechStt.subtitle"
+  | "models.elevenlabsStt.subtitle"
+  | "models.tts1.subtitle"
+  | "models.tts1Hd.subtitle"
+  | "models.azureSpeechTts.subtitle"
+  | "models.elevenlabsTts.subtitle";
+
 interface ModelDetails {
   id: string;
+  // Model name — a proper noun, so it is not translated.
   label: string;
-  subtitle: string;
+  subtitleKey: ModelSubtitleKey;
   providerType: string;
 }
 
 interface ProviderGroup {
   providerType: string;
+  // Vendor name — a proper noun, so it is not translated.
   providerLabel: string;
   models: ModelDetails[];
 }
@@ -40,19 +53,19 @@ const STT_MODELS: ModelDetails[] = [
   {
     id: "whisper",
     label: "Whisper",
-    subtitle: "OpenAI's general purpose speech recognition model.",
+    subtitleKey: "models.whisper.subtitle",
     providerType: "openai",
   },
   {
     id: "azure-speech-stt",
     label: "Azure Speech",
-    subtitle: "Speech to text in Microsoft Foundry Tools.",
+    subtitleKey: "models.azureSpeechStt.subtitle",
     providerType: "azure",
   },
   {
     id: "elevenlabs-stt",
     label: "ElevenAPI",
-    subtitle: "ElevenLabs Speech to Text API.",
+    subtitleKey: "models.elevenlabsStt.subtitle",
     providerType: "elevenlabs",
   },
 ];
@@ -66,13 +79,13 @@ const TTS_PROVIDER_GROUPS: ProviderGroup[] = [
       {
         id: "tts-1",
         label: "TTS-1",
-        subtitle: "OpenAI's text-to-speech model optimized for speed.",
+        subtitleKey: "models.tts1.subtitle",
         providerType: "openai",
       },
       {
         id: "tts-1-hd",
         label: "TTS-1 HD",
-        subtitle: "OpenAI's text-to-speech model optimized for quality.",
+        subtitleKey: "models.tts1Hd.subtitle",
         providerType: "openai",
       },
     ],
@@ -84,7 +97,7 @@ const TTS_PROVIDER_GROUPS: ProviderGroup[] = [
       {
         id: "azure-speech-tts",
         label: "Azure Speech",
-        subtitle: "Text to speech in Microsoft Foundry Tools.",
+        subtitleKey: "models.azureSpeechTts.subtitle",
         providerType: "azure",
       },
     ],
@@ -96,7 +109,7 @@ const TTS_PROVIDER_GROUPS: ProviderGroup[] = [
       {
         id: "elevenlabs-tts",
         label: "ElevenAPI",
-        subtitle: "ElevenLabs Text to Speech API.",
+        subtitleKey: "models.elevenlabsTts.subtitle",
         providerType: "elevenlabs",
       },
     ],
@@ -104,8 +117,6 @@ const TTS_PROVIDER_GROUPS: ProviderGroup[] = [
 ];
 
 const route = ADMIN_ROUTES.VOICE;
-const pageDescription =
-  "Configure speech-to-text and text-to-speech providers for voice input and spoken responses.";
 
 interface ModelCardProps {
   model: ModelDetails;
@@ -128,6 +139,7 @@ function ModelCard({
   onDeselect,
   onMutate,
 }: ModelCardProps) {
+  const t = useTranslations("admin.voice");
   const setupModal = useCreateModal();
   const disconnectModal = useCreateModal();
 
@@ -164,7 +176,7 @@ function ModelCard({
         aria-label={`voice-${mode}-${model.id}`}
         icon={getVoiceProviderDetail(model.providerType).icon}
         title={model.label}
-        description={model.subtitle}
+        description={t(model.subtitleKey)}
         status={status}
         onConnect={() => setupModal.toggle(true)}
         onSelect={onSelect}
@@ -182,6 +194,7 @@ function ModelCard({
 }
 
 export default function VoicePage() {
+  const t = useTranslations("admin.voice");
   const { providers, isLoading, refresh: mutate } = useVoiceProviders();
 
   const providersByType = useMemo(() => {
@@ -198,8 +211,8 @@ export default function VoicePage() {
       <SettingsLayouts.Root>
         <SettingsLayouts.Header
           icon={route.icon}
-          title={route.title}
-          description={pageDescription}
+          title={t("header.title")}
+          description={t("header.description")}
           divider
         />
         <SettingsLayouts.Body>
@@ -229,16 +242,16 @@ export default function VoicePage() {
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={route.icon}
-        title={route.title}
-        description={pageDescription}
+        title={t("header.title")}
+        description={t("header.description")}
         divider
       />
       <SettingsLayouts.Body>
         <Section gap={8}>
           <Section gap={3}>
             <Content
-              title="Speech to Text"
-              description="Select a model to transcribe speech to text in chats."
+              title={t("speechToText.title")}
+              description={t("speechToText.description")}
               sizePreset="main-content"
               variant="section"
             />
@@ -246,7 +259,7 @@ export default function VoicePage() {
             {!hasActiveSTTProvider && (
               <MessageCard
                 variant="info"
-                title="Connect a speech to text provider to use in chat."
+                title={t("speechToText.emptyState.title")}
               />
             )}
 
@@ -284,8 +297,8 @@ export default function VoicePage() {
 
           <Section gap={3}>
             <Content
-              title="Text to Speech"
-              description="Select a model to speak out chat responses."
+              title={t("textToSpeech.title")}
+              description={t("textToSpeech.description")}
               sizePreset="main-content"
               variant="section"
             />
@@ -293,7 +306,7 @@ export default function VoicePage() {
             {!hasActiveTTSProvider && (
               <MessageCard
                 variant="info"
-                title="Connect a text to speech provider to use in chat."
+                title={t("textToSpeech.emptyState.title")}
               />
             )}
 

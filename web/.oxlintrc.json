@@ -91,6 +91,7 @@
       "files": [
         "src/views/SettingsPage.tsx",
         "src/views/AppPage.tsx",
+        "src/views/admin/**",
         "src/sections/sidebar/**",
         "src/sections/document-sidebar/**",
         "src/sections/Suggestions.tsx",

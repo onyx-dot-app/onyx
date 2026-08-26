@@ -2,6 +2,7 @@
 
 import type { Route } from "next";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import type { UserGroup } from "@/lib/types";
 import { SvgChevronRight, SvgUserManage, SvgUsers } from "@opal/icons";
 import { ContentAction, toast } from "@opal/layouts";
@@ -23,6 +24,7 @@ interface GroupCardProps {
 }
 
 function GroupCard({ group }: GroupCardProps) {
+  const t = useTranslations("admin.groups");
   const router = useRouter();
   const { mutate } = useSWRConfig();
   const builtIn = isBuiltInGroup(group);
@@ -36,10 +38,12 @@ function GroupCard({ group }: GroupCardProps) {
     try {
       await renameGroup(group.id, newName);
       await refreshGroupLists(mutate);
-      toast.success(`Group renamed to "${newName}"`);
+      toast.success(t("card.toasts.renamed", { name: newName }));
     } catch (e) {
       console.error("Failed to rename group:", e);
-      toast.error(e instanceof Error ? e.message : "Failed to rename group");
+      toast.error(
+        e instanceof Error ? e.message : t("card.toasts.renameFailed")
+      );
     }
   }
 
@@ -52,7 +56,7 @@ function GroupCard({ group }: GroupCardProps) {
           description={buildGroupDescription(group)}
           sizePreset="main-content"
           variant="section"
-          tag={builtIn ? { title: "Default" } : undefined}
+          tag={builtIn ? { title: t("card.defaultTag.label") } : undefined}
           editable={!isSyncing && canManage}
           onTitleChange={!isSyncing && canManage ? handleRename : undefined}
           rightChildren={
@@ -68,8 +72,8 @@ function GroupCard({ group }: GroupCardProps) {
                 <Button
                   icon={SvgChevronRight}
                   prominence="tertiary"
-                  tooltip="View group"
-                  aria-label="View group"
+                  tooltip={t("card.viewGroup.label")}
+                  aria-label={t("card.viewGroup.label")}
                   onClick={() =>
                     router.push(`/admin/groups/${group.id}` as Route)
                   }

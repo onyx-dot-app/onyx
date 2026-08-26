@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import { mutate } from "swr";
 import {
   Button,
@@ -42,61 +43,12 @@ const PAGE_SIZE = 10;
 
 const tc = createTableColumns<UserRow>();
 
-function buildColumns(defaultEnabled: boolean, onMutate: () => void) {
-  return [
-    tc.qualifier({
-      content: "icon",
-      iconSize: "lg",
-      getContent: (row) => {
-        const user = {
-          email: row.email,
-          personalization: row.personal_name
-            ? { name: row.personal_name }
-            : undefined,
-        } as User;
-        return (props) => <UserAvatar user={user} size={props.size} />;
-      },
-    }),
-    tc.column("email", {
-      header: "User",
-      weight: 44,
-      cell: (email, row) => (
-        <Content
-          sizePreset="main-ui"
-          variant="section"
-          title={row.personal_name ?? email}
-          description={row.personal_name ? email : undefined}
-        />
-      ),
-    }),
-    tc.column("groups", {
-      header: "Groups",
-      weight: 24,
-      enableSorting: false,
-      cell: (value, row) => (
-        <GroupsCell groups={value} user={row} onMutate={onMutate} />
-      ),
-    }),
-    tc.column("craft_enabled", {
-      header: "Access",
-      weight: 16,
-      enableSorting: false,
-      cell: (_value, row) => (
-        <AccessCell
-          user={row}
-          defaultEnabled={defaultEnabled}
-          onMutate={onMutate}
-        />
-      ),
-    }),
-  ];
-}
-
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 
 export default function CraftPage() {
+  const t = useTranslations("admin.craft");
   const settings = useSettings();
   const craftAvailable = settings?.onyx_craft_available === true;
   const defaultEnabled = settings?.craft_default_enabled !== false;
@@ -120,8 +72,54 @@ export default function CraftPage() {
     : explicitlyEnabled;
 
   const columns = useMemo(
-    () => buildColumns(defaultEnabled, refresh),
-    [defaultEnabled, refresh]
+    () => [
+      tc.qualifier({
+        content: "icon",
+        iconSize: "lg",
+        getContent: (row) => {
+          const user = {
+            email: row.email,
+            personalization: row.personal_name
+              ? { name: row.personal_name }
+              : undefined,
+          } as User;
+          return (props) => <UserAvatar user={user} size={props.size} />;
+        },
+      }),
+      tc.column("email", {
+        header: t("table.userColumn.header"),
+        weight: 44,
+        cell: (email, row) => (
+          <Content
+            sizePreset="main-ui"
+            variant="section"
+            title={row.personal_name ?? email}
+            description={row.personal_name ? email : undefined}
+          />
+        ),
+      }),
+      tc.column("groups", {
+        header: t("table.groupsColumn.header"),
+        weight: 24,
+        enableSorting: false,
+        cell: (value, row) => (
+          <GroupsCell groups={value} user={row} onMutate={refresh} />
+        ),
+      }),
+      tc.column("craft_enabled", {
+        header: t("table.accessColumn.header"),
+        weight: 16,
+        enableSorting: false,
+        cell: (_value, row) => (
+          <AccessCell
+            user={row}
+            defaultEnabled={defaultEnabled}
+            onMutate={refresh}
+          />
+        ),
+      }),
+    ],
+    [defaultEnabled, refresh, t]
   );
 
   async function saveDefault(checked: boolean) {
@@ -135,13 +133,11 @@ export default function CraftPage() {
       await mutate(SWR_KEYS.settings);
       toast.success(
         checked
-          ? "Craft is now enabled by default"
-          : "Craft is now disabled by default"
+          ? t("defaultToggle.enabledSuccess.message")
+          : t("defaultToggle.disabledSuccess.message")
       );
     } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Failed to update settings"
-      );
+      toast.error(err instanceof Error ? err.message : t("saveError.message"));
     } finally {
       setIsSavingDefault(false);
       setPendingDefault(null);
@@ -151,8 +147,8 @@ export default function CraftPage() {
   const header = (
     <SettingsLayouts.Header
       icon={ADMIN_ROUTES.CRAFT_ACCESS.icon}
-      title={ADMIN_ROUTES.CRAFT_ACCESS.title}
-      description="Control who can use Craft, Onyx's agentic app builder."
+      title={t("header.title")}
+      description={t("header.description")}
       divider
     />
   );
@@ -166,7 +162,7 @@ export default function CraftPage() {
         <SettingsLayouts.Body>
           {settings.error ? (
             <Text as="p" secondaryBody text03>
-              Failed to load settings. Please try refreshing the page.
+              {t("settingsLoadError.description")}
             </Text>
           ) : (
             <div className="flex justify-center py-12">
@@ -185,8 +181,8 @@ export default function CraftPage() {
         <SettingsLayouts.Body>
           <IllustrationContent
             illustration={SvgNoResult}
-            title="Craft isn't available on this deployment"
-            description="Craft is enabled per deployment by Onyx. Contact your Onyx representative to get access."
+            title={t("unavailable.title")}
+            description={t("unavailable.description")}
           />
         </SettingsLayouts.Body>
       </SettingsLayouts.Root>
@@ -200,9 +196,13 @@ export default function CraftPage() {
         <Card border="solid" rounding={4}>
           <Section alignItems="stretch" gap={2}>
             <InputHorizontal
-              title="Enable Craft by default"
-              tag={{ title: "beta", color: "blue" }}
-              description={`Craft is ${defaultEnabled ? "on" : "off"} for everyone. Toggle individual users below.`}
+              title={t("defaultToggle.title")}
+              tag={{ title: t("defaultToggle.betaTag.label"), color: "blue" }}
+              description={
+                defaultEnabled
+                  ? t("defaultToggle.enabled.description")
+                  : t("defaultToggle.disabled.description")
+              }
               withLabel
             >
               <Switch
@@ -214,7 +214,10 @@ export default function CraftPage() {
             <Text as="p" secondaryBody text03>
               {isLoading
                 ? " "
-                : `Currently: ${enabledCount} of ${realUsers.length} users have access`}
+                : t("accessSummary.description", {
+                    enabledCount,
+                    total: realUsers.length,
+                  })}
             </Text>
           </Section>
         </Card>
@@ -223,8 +226,8 @@ export default function CraftPage() {
           <Content
             sizePreset="main-content"
             variant="section"
-            title="Per-user access"
-            description="Users you toggle away from the workspace default keep their setting if the default changes."
+            title={t("perUserAccess.title")}
+            description={t("perUserAccess.description")}
           />
 
           {isLoading && (
@@ -234,7 +237,7 @@ export default function CraftPage() {
           )}
           {error ? (
             <Text as="p" secondaryBody text03>
-              Failed to load users. Please try refreshing the page.
+              {t("usersLoadError.description")}
             </Text>
           ) : null}
 
@@ -243,7 +246,7 @@ export default function CraftPage() {
               <InputTypeIn
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Search users..."
+                placeholder={t("search.placeholder")}
                 searchIcon
               />
               <Table
@@ -252,12 +255,12 @@ export default function CraftPage() {
                 getRowId={(row) => row.id ?? row.email}
                 pageSize={PAGE_SIZE}
                 searchTerm={searchTerm}
-                footer={{ units: "users" }}
+                footer={{ units: t("table.footer.units") }}
                 emptyState={
                   <IllustrationContent
                     illustration={SvgNoResult}
-                    title="No users found"
-                    description="No users match your search."
+                    title={t("emptyState.title")}
+                    description={t("emptyState.description")}
                   />
                 }
               />
@@ -271,8 +274,8 @@ export default function CraftPage() {
           icon={ADMIN_ROUTES.CRAFT_ACCESS.icon}
           title={
             pendingDefault
-              ? "Enable Craft for all users?"
-              : "Disable Craft by default?"
+              ? t("confirmModal.enableHeader.title")
+              : t("confirmModal.disableHeader.title")
           }
           onClose={isSavingDefault ? undefined : () => setPendingDefault(null)}
           submit={
@@ -282,22 +285,27 @@ export default function CraftPage() {
                 void saveDefault(pendingDefault);
               }}
             >
-              {pendingDefault ? "Enable for Everyone" : "Disable by Default"}
+              {pendingDefault
+                ? t("confirmModal.enableButton.label")
+                : t("confirmModal.disableButton.label")}
             </Button>
           }
         >
           <Text as="p" text03>
             {pendingDefault
-              ? `All ${realUsers.length} users get access${
-                  explicitlyDisabled > 0
-                    ? `, except the ${explicitlyDisabled} toggled off below`
-                    : ""
-                }. Craft agents run in sandboxes and can act on your behalf with your authorization and approvals.`
-              : `Access is removed for everyone${
-                  explicitlyEnabled > 0
-                    ? ` except the ${explicitlyEnabled} users toggled on below`
-                    : ""
-                }. In-progress sessions are unaffected.`}
+              ? explicitlyDisabled > 0
+                ? t("confirmModal.enableBody.withExclusions.description", {
+                    total: realUsers.length,
+                    excludedCount: explicitlyDisabled,
+                  })
+                : t("confirmModal.enableBody.description", {
+                    total: realUsers.length,
+                  })
+              : explicitlyEnabled > 0
+                ? t("confirmModal.disableBody.withExceptions.description", {
+                    enabledCount: explicitlyEnabled,
+                  })
+                : t("confirmModal.disableBody.description")}
           </Text>
         </ConfirmationModalLayout>
       )}

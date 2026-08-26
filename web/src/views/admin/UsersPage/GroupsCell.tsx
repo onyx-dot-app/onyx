@@ -7,6 +7,7 @@ import {
   useCallback,
   useEffect,
 } from "react";
+import { useTranslations } from "next-intl";
 import { Hoverable } from "@opal/core";
 import { clickOnKeyDown } from "@opal/utils";
 import { SvgEdit } from "@opal/icons";
@@ -37,6 +38,7 @@ export default function GroupsCell({
   user,
   onMutate,
 }: GroupsCellProps) {
+  const t = useTranslations("admin.users");
   const [showModal, setShowModal] = useState(false);
   const [visibleCount, setVisibleCount] = useState<number | null>(null);
   // below Business the editor is empty, so show pills but don't open it
@@ -133,7 +135,10 @@ export default function GroupsCell({
       ))}
       {hasOverflow && (
         <div className="shrink-0">
-          <Tag title={`+${overflowCount}`} size="md" />
+          <Tag
+            title={t("groupsCell.overflow.label", { count: overflowCount })}
+            size="md"
+          />
         </div>
       )}
     </>
@@ -152,7 +157,7 @@ export default function GroupsCell({
             ? {
                 role: "button" as const,
                 tabIndex: 0,
-                "aria-label": "Edit groups",
+                "aria-label": t("groupsCell.editCell.ariaLabel"),
                 onClick: () => setShowModal(true),
                 onKeyDown: clickOnKeyDown(() => setShowModal(true)),
               }
@@ -190,7 +195,7 @@ export default function GroupsCell({
               <Button
                 icon={SvgEdit}
                 prominence="tertiary"
-                tooltip="Edit"
+                tooltip={t("groupsCell.editButton.tooltip")}
                 tooltipSide="left"
                 onClick={(e) => {
                   e.stopPropagation();

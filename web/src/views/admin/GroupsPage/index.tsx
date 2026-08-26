@@ -3,6 +3,7 @@
 import type { Route } from "next";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import useSWR from "swr";
 import { SvgExternalLink, SvgUsers, SvgSimpleLoader } from "@opal/icons";
 import { Button, MessageCard } from "@opal/components";
@@ -20,6 +21,7 @@ import { IllustrationContent } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 
 function GroupsPage() {
+  const t = useTranslations("admin.groups");
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
   const { user } = useUser();
@@ -52,11 +54,11 @@ function GroupsPage() {
   return (
     <SettingsLayouts.Root>
       <div data-testid="groups-page-heading">
-        <SettingsLayouts.Header icon={SvgUsers} title="Groups" divider>
+        <SettingsLayouts.Header icon={SvgUsers} title={t("page.title")} divider>
           <MessageCard
             variant="info"
-            title="Permissions have changed"
-            description="Onyx now uses group-based permissions. Access is configured per group, so a user's permissions are the combination of every group they belong to."
+            title={t("permissionsChanged.title")}
+            description={t("permissionsChanged.description")}
             rightChildren={
               <Button
                 icon={SvgExternalLink}
@@ -68,7 +70,7 @@ function GroupsPage() {
                   )
                 }
               >
-                Learn more
+                {t("permissionsChanged.learnMore.label")}
               </Button>
             }
           />
@@ -80,14 +82,14 @@ function GroupsPage() {
           hasItems={!isLoading && !error && manageableGroups.length > 0}
           searchQuery={searchQuery}
           onSearchQueryChange={setSearchQuery}
-          placeholder="Search groups..."
-          emptyStateText="Create groups to organize users and manage access."
+          placeholder={t("list.search.placeholder")}
+          emptyStateText={t("list.empty.text")}
           onAction={
             canCreateGroup
               ? () => router.push("/admin/groups/create" as Route)
               : undefined
           }
-          actionLabel={canCreateGroup ? "New Group" : undefined}
+          actionLabel={canCreateGroup ? t("list.newGroup.label") : undefined}
         />
 
         {isLoading && <SvgSimpleLoader />}
@@ -95,8 +97,8 @@ function GroupsPage() {
         {error && (
           <IllustrationContent
             illustration={SvgNoResult}
-            title="Failed to load groups."
-            description="Please check the console for more details."
+            title={t("list.loadError.title")}
+            description={t("list.loadError.description")}
           />
         )}
 
