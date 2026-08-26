@@ -46,11 +46,17 @@ const NO_PROVIDER = Symbol("createSharedHook.noProvider");
  * there is nothing correct to key a `useMemo` on.
  *
  * @param useValue the hook to share. Runs once per provider, on every render of
- *   that provider. Anything it needs at runtime arrives through provider props.
+ *   that provider. Anything it needs at runtime arrives through provider props,
+ *   which is why its own props cannot declare `children` — the provider owns
+ *   that one. A hook that declares it is rejected here, at the call, rather
+ *   than at every `<Provider>` that then could not accept a subtree.
  * @param name names the provider in React DevTools and in the error thrown when
  *   a consumer has no provider above it
  */
-export default function createSharedHook<T, P extends object = object>(
+export default function createSharedHook<
+  T,
+  P extends object & { children?: never } = object,
+>(
   useValue: (props: P) => T,
   name: string
 ): readonly [FunctionComponent<P & { children: ReactNode }>, () => T] {
