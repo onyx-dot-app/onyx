@@ -1,6 +1,6 @@
-name: Local Preview Deployment
+name: Preview Deployment
 
-# Per-commit full-stack previews on the self-hosted local-preview server: the
+# Per-commit full-stack previews on the self-hosted preview server: the
 # Next.js frontend and the FastAPI backend running together at
 # <sha>-onyx.<the server's preview domain>. Which server that is lives
 # entirely in vars.PREVIEW_URL, managed in onyx-infra
@@ -40,7 +40,7 @@ permissions:
   contents: read
 
 jobs:
-  Deploy-Local-Preview:
+  Deploy-Preview:
     if: ${{ vars.PREVIEW_URL != '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -134,9 +134,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PREVIEW_DEPLOYMENT_URL: ${{ steps.deploy.outputs.url }}
-          # Which GitHub org the server admits, only so the comment can say
-          # so. Optional — the sign-in line drops the clause when it is unset.
-          PREVIEW_SSO_ORG: ${{ vars.PREVIEW_SSO_ORG }}
         run: |
           PR_NUMBER=$(gh pr list --head "$GITHUB_REF_NAME" --json number --jq '.[0].number')
           if [ -z "$PR_NUMBER" ]; then
@@ -144,15 +141,13 @@ jobs:
             exit 0
           fi
 
-          COMMENT_MARKER="<!-- local-preview-deployment -->"
+          COMMENT_MARKER="<!-- preview-deployment -->"
           COMMENT_BODY="$COMMENT_MARKER
           **Full-stack Preview** (frontend + backend)
 
           | Status | Preview | Commit | Updated |
           | --- | --- | --- | --- |
-          | ✅ | $PREVIEW_DEPLOYMENT_URL | \`${GITHUB_SHA::7}\` | $(date -u '+%Y-%m-%d %H:%M:%S UTC') |
-
-          Sign in with GitHub${PREVIEW_SSO_ORG:+ as an \`$PREVIEW_SSO_ORG\` member} to view it."
+          | ✅ | $PREVIEW_DEPLOYMENT_URL | \`${GITHUB_SHA::7}\` | $(date -u '+%Y-%m-%d %H:%M:%S UTC') |"
 
           # --paginate: on a long PR the marker can sit past the first page.
           EXISTING_COMMENT_ID=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
