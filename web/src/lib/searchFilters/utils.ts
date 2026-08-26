@@ -4,13 +4,13 @@ import type { DateRangePickerValue } from "@/refresh-components/DateRangePicker"
 import type { Filters } from "@/lib/searchFilters/types";
 
 /** Freezes a live selection into the shape the backend receives. */
-export const buildFilters = (
+export function buildFilters(
   sources: SourceMetadata[],
   documentSets: string[],
   timeRange: DateRangePickerValue | null,
   tags: Tag[]
-): Filters => {
-  const filters = {
+): Filters {
+  return {
     source_type:
       sources.length > 0 ? sources.map((source) => source.internalName) : null,
     document_set: documentSets.length > 0 ? documentSets : null,
@@ -19,6 +19,4 @@ export const buildFilters = (
       : null,
     tags: tags,
   };
-
-  return filters;
-};
+}
