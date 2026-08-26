@@ -63,8 +63,10 @@ type MCPServerWrite struct {
 	Users    *[]string `json:"users,omitempty"`
 }
 
-// MCPServerPatch mirrors MCPServerSimpleUpdateRequest. Every field is
-// "null leaves it unchanged", and it is the only path to available_in_craft.
+// MCPServerPatch carries the one field of MCPServerSimpleUpdateRequest the
+// upsert cannot reach. The request model holds more, and the endpoint also
+// covers per-tool Craft policies, but Onyx rejects a policy for a tool it has
+// never discovered, so nothing here would be able to set one.
 type MCPServerPatch struct {
 	AvailableInCraft *bool `json:"available_in_craft,omitempty"`
 }

@@ -235,6 +235,18 @@ func (r *mcpServerResource) ValidateConfig(ctx context.Context, req resource.Val
 	if performer == "" {
 		performer = client.MCPPerformerAdmin
 	}
+	// Without this an unrecognised performer falls through to the per-user
+	// branch below and is reported as missing per-user credentials, which sends
+	// the reader after the wrong attribute.
+	if performer != client.MCPPerformerAdmin && performer != client.MCPPerformerPerUser {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("auth_performer"),
+			"Unknown authentication performer",
+			fmt.Sprintf("Expected %q or %q, got %q.",
+				client.MCPPerformerAdmin, client.MCPPerformerPerUser, performer),
+		)
+		return
+	}
 
 	// A value that is still unknown cannot be checked for presence, and the
 	// apply would report anything the server rejects anyway.
@@ -431,12 +443,19 @@ func applyRemoteMCPServer(ctx context.Context, model *mcpServerResourceModel, re
 		model.LastRefreshedAt = types.StringValue(*remote.LastRefreshedAt)
 	}
 
-	if remote.AuthTemplate == nil || len(remote.AuthTemplate.Headers) == 0 {
-		model.AuthTemplateHeaders = types.MapNull(types.StringType)
-	} else {
-		headers, headerDiags := types.MapValueFrom(ctx, types.StringType, remote.AuthTemplate.Headers)
-		diags.Append(headerDiags...)
-		model.AuthTemplateHeaders = headers
+	// Only fill the template in when the model holds none, which is the shared
+	// one Onyx writes for itself. A header value may be a literal rather than a
+	// placeholder, and Onyx masks those on the way out (`lite...-123`), so
+	// refreshing over a configured template would store the mask and leave a
+	// difference that never settles.
+	if model.AuthTemplateHeaders.IsNull() || model.AuthTemplateHeaders.IsUnknown() {
+		if remote.AuthTemplate == nil || len(remote.AuthTemplate.Headers) == 0 {
+			model.AuthTemplateHeaders = types.MapNull(types.StringType)
+		} else {
+			headers, headerDiags := types.MapValueFrom(ctx, types.StringType, remote.AuthTemplate.Headers)
+			diags.Append(headerDiags...)
+			model.AuthTemplateHeaders = headers
+		}
 	}
 
 	model.Groups = mcpInt64Set(ctx, model.Groups, remote.Groups, diags)

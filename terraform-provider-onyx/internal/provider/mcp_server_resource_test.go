@@ -336,6 +336,65 @@ func testAccCurrentUserID(t *testing.T) string {
 	return body.ID
 }
 
+// A header template value may be a literal rather than a placeholder, and Onyx
+// masks those on the way out. Refreshing over the configured value would store
+// the mask, so the plan that follows this apply would not be empty.
+func TestAccMCPServerResourceKeepsALiteralHeaderValue(t *testing.T) {
+	name := acctest.RandomWithPrefix("tf-acc-mcp-literal")
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		CheckDestroy:             testAccCheckMCPServerDestroyed(t),
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+resource "onyx_mcp_server" "literal" {
+  name           = %q
+  server_url     = %q
+  auth_type      = "API_TOKEN"
+  auth_performer = "PER_USER"
+
+  auth_template_headers = {
+    "X-Api-Key" = "{api_key}"
+    "X-Tenant"  = "a-literal-value"
+  }
+  admin_credentials = {
+    api_key = "the-admins-own-key"
+  }
+}
+`, name, mcpServerURL),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("onyx_mcp_server.literal", "auth_template_headers.X-Tenant", "a-literal-value"),
+					resource.TestCheckResourceAttr("onyx_mcp_server.literal", "auth_template_headers.X-Api-Key", "{api_key}"),
+				),
+			},
+		},
+	})
+}
+
+// An unrecognised performer is named for what it is, rather than falling
+// through to the per-user branch and being reported as missing credentials.
+func TestAccMCPServerResourceRejectsAnUnknownPerformer(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+resource "onyx_mcp_server" "bad_performer" {
+  name           = "tf-acc-mcp-bad-performer"
+  server_url     = %q
+  auth_type      = "API_TOKEN"
+  auth_performer = "EVERYONE"
+}
+`, mcpServerURL),
+				ExpectError: regexp.MustCompile(`(?s)Unknown authentication performer`),
+			},
+		},
+	})
+}
+
 // A per-user server needs the header template naming the fields users fill in.
 // auth_template_headers is optional-and-computed, so this also proves the check
 // reads the configuration rather than the plan: a computed attribute is unknown

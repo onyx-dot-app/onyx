@@ -123,10 +123,20 @@ and on Onyx Cloud the tenant is embedded in the key itself.
   the server, and it rejects both a tool selection and a Craft approval policy naming a
   tool it has never seen. Neither attribute is exposed rather than exposing one that
   silently does nothing on a server Terraform just created.
-- **An MCP server's description is preserved unless it is cleared explicitly.** The upsert
-  treats a missing description as "leave it alone", so the provider always sends the field.
-  The same body cannot carry `available_in_craft`, which lives on a different endpoint, so
-  setting it costs a second call.
+- **An MCP server's `description` left out of the configuration is cleared, not kept.** Onyx
+  reads a missing description as "leave it alone", so the provider always sends the field and
+  an unstated one goes out empty — the same rule as `groups` and `users` below. The upsert
+  cannot carry `available_in_craft`, which lives on a different endpoint, so setting it costs
+  a second call.
+- **An MCP server added from the admin panel but never configured imports with empty strings.**
+  That flow leaves `auth_type` and `transport` unset, and Terraform has no value to show for
+  them, so the first plan after such an import moves them to the schema defaults. It settles
+  in one apply.
+- **A configured `auth_template_headers` is never refreshed from Onyx.** A header value may be
+  a literal rather than a `{placeholder}`, and Onyx masks those on the way out, so refreshing
+  would store the mask and leave a difference that never settles. Onyx's own template is read
+  back only when the configuration states none. Editing the headers in the admin panel is
+  therefore invisible to `terraform plan`, like any other secret.
 - **`auth_performer = "PER_USER"` credentials belong to the identity that applied them.**
   Onyx stores `admin_credentials` against the applying user rather than the server, so a
   Terraform-managed per-user server holds the API key's own credentials, not an
