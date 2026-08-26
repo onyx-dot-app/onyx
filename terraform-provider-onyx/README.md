@@ -32,6 +32,9 @@ providers.
 
 Generated per-resource docs live in [`docs/`](./docs/).
 
+[`examples/bootstrap/`](./examples/bootstrap/) is a runnable day-one configuration: a chat
+model, one indexed site, a document set built from it, and an agent that answers from it.
+
 ## Authentication
 
 The provider needs an API key in the seeded **Admin** group (or an unrestricted PAT created
@@ -44,6 +47,12 @@ curl -X POST https://your-onyx/api/admin/api-key \
   -H "Content-Type: application/json" \
   -d '{"name": "terraform", "group_ids": [<admin group id>]}'
 ```
+
+[`examples/bootstrap/mint_api_key.sh`](./examples/bootstrap/mint_api_key.sh) does the whole
+sequence — register, log in, resolve the Admin group, mint the key — for a scripted setup. It
+requires `ONYX_ADMIN_EMAIL` and `ONYX_ADMIN_PASSWORD` rather than defaulting them: on a
+deployment with no users it registers that account, and the first user to register becomes an
+admin.
 
 This first key is inherently chicken-and-egg: it must exist before Terraform can run, so
 either leave it unmanaged, or `terraform import` it afterwards (its `api_key` attribute
@@ -240,8 +249,16 @@ TF_ACC=1 ONYX_TF_ACC_SERVER_URL=http://localhost:8080 go test ./internal/provide
   `admin_user@example.com` / `TestPassword123!`; on a fresh deployment the first
   registered user becomes admin automatically).
 
-Without `TF_ACC` these tests skip, so plain `go test ./...` (and the repo's Go CI) stays
-green with no Onyx running.
+Without `TF_ACC` these tests skip, so plain `go test ./...` stays green with no Onyx
+running. That is also what `pr-golang-tests.yml` runs, so the acceptance suite does not
+run there.
+
+`pr-terraform-provider-tests.yml` is the lane that does run it. It stands up api_server
+and background from docker compose, so the workers and beat below come with it, and runs
+the suite twice: once letting the harness bootstrap its own key, and once against a key
+minted first by `examples/bootstrap/mint_api_key.sh`. On pull requests it only triggers
+for provider and compose changes; the nightly run is what catches a backend change that
+breaks the provider.
 
 To test against an API server that does not touch your dev database, give it a database of
 its own. This reuses the running Postgres, Redis, OpenSearch and MinIO containers (the
