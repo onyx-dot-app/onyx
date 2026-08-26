@@ -476,7 +476,7 @@ class IndexingDocument(Document):
             section_len = sum(
                 len(section.text) if section.text is not None else 0
                 for section in self.sections
-                if isinstance(section, (TextSection, TabularSection, CodeSection))
+                if is_text_bearing(section)
             )
 
         return title_len + section_len

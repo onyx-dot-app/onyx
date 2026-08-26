@@ -1,78 +1,17 @@
 import pytest
-from chonkie import SentenceChunker
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import (
     CodeSection,
-    IndexingDocument,
     Section,
     TextSection,
 )
 from onyx.indexing.chunking import DocumentChunker
 from onyx.indexing.chunking.code_section_chunker import _line_anchored_link
-from onyx.natural_language_processing.utils import BaseTokenizer
-
-
-class CharTokenizer(BaseTokenizer):
-    """1 character == 1 token. Deterministic & trivial to reason about."""
-
-    def encode(self, string: str) -> list[int]:
-        return [ord(c) for c in string]
-
-    def tokenize(self, string: str) -> list[str]:
-        return list(string)
-
-    def decode(self, tokens: list[int]) -> str:
-        return "".join(chr(t) for t in tokens)
-
-
-CHUNK_LIMIT = 200
-
-
-def _make_document_chunker(
-    chunk_token_limit: int = CHUNK_LIMIT,
-    with_mini_chunks: bool = False,
-) -> DocumentChunker:
-    def token_counter(text: str) -> int:
-        return len(text)
-
-    return DocumentChunker(
-        tokenizer=CharTokenizer(),
-        blurb_splitter=SentenceChunker(
-            tokenizer_or_token_counter=token_counter,
-            chunk_size=128,
-            chunk_overlap=0,
-            return_type="texts",
-        ),
-        chunk_splitter=SentenceChunker(
-            tokenizer_or_token_counter=token_counter,
-            chunk_size=chunk_token_limit,
-            chunk_overlap=0,
-            return_type="texts",
-        ),
-        mini_chunk_splitter=(
-            SentenceChunker(
-                tokenizer_or_token_counter=token_counter,
-                chunk_size=150,
-                chunk_overlap=0,
-                return_type="texts",
-            )
-            if with_mini_chunks
-            else None
-        ),
-    )
-
-
-def _make_doc(sections: list[Section], doc_id: str = "doc1") -> IndexingDocument:
-    return IndexingDocument(
-        id=doc_id,
-        source=DocumentSource.GITLAB,
-        semantic_identifier=doc_id,
-        title="pkg/mod.py",
-        metadata={},
-        sections=[],  # real sections unused — method reads processed_sections
-        processed_sections=sections,
-    )
+from tests.unit.onyx.indexing.conftest import CHUNK_LIMIT, make_doc
+from tests.unit.onyx.indexing.conftest import (
+    make_document_chunker as _make_document_chunker,
+)
 
 
 def _make_python_code(num_functions: int, body_width: int = 30) -> str:
@@ -86,7 +25,7 @@ def _make_python_code(num_functions: int, body_width: int = 30) -> str:
 
 
 def _chunk(dc: DocumentChunker, sections: list[Section]) -> list:
-    doc = _make_doc(sections)
+    doc = make_doc(sections, title="pkg/mod.py", source=DocumentSource.GITLAB)
     return dc.chunk(
         document=doc,
         sections=sections,

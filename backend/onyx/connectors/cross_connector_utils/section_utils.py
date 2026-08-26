@@ -1,14 +1,19 @@
 from onyx.configs.app_configs import CONNECTOR_MAX_EXTRACTED_TEXT_CHARS
-from onyx.connectors.models import ImageSection, TabularSection, TextSection
+from onyx.connectors.models import (
+    CodeSection,
+    ImageSection,
+    TabularSection,
+    TextSection,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 
 def cap_sections_text(
-    sections: list[TextSection | ImageSection | TabularSection],
+    sections: list[TextSection | ImageSection | TabularSection | CodeSection],
     file_name: str | None,
-) -> list[TextSection | ImageSection | TabularSection]:
+) -> list[TextSection | ImageSection | TabularSection | CodeSection]:
     """Bound the total text retained per file to bound connector worker memory.
     Needed when a source can't be size-checked before fetch (e.g. Google-native
     files report no `size` metadata). A non-positive cap disables."""

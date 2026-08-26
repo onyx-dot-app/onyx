@@ -1,4 +1,7 @@
-from typing import Any, cast
+from typing import cast
+
+from chonkie import CodeChunker as ChonkieCodeChunker
+from tree_sitter_language_pack import has_language
 
 from onyx.connectors.cross_connector_utils.code_file_utils import (
     infer_code_language,
@@ -10,20 +13,13 @@ from onyx.indexing.chunking.section_chunker import (
     ChunkPayload,
     SectionChunker,
     SectionChunkerOutput,
+    build_payloads,
 )
-from onyx.natural_language_processing.utils import (
-    BaseTokenizer,
-    count_tokens,
-    split_text_by_tokens,
-)
+from onyx.natural_language_processing.utils import BaseTokenizer, count_tokens
 from onyx.utils.logger import setup_logger
 from onyx.utils.text_processing import clean_text
 
 logger = setup_logger()
-
-# Language passed to chonkie's CodeChunker when we cannot name one; magika
-# then detects the language from the content itself.
-_AUTO_LANGUAGE = "auto"
 
 
 def _line_anchored_link(link: str, start_line: int, end_line: int) -> str:
@@ -46,7 +42,7 @@ class CodeChunker(SectionChunker):
         # was built for. The budget varies per document (title/metadata
         # deductions), so a mismatched entry is rebuilt; keying by language
         # alone keeps the cache bounded.
-        self._splitters: dict[str, tuple[int, Any]] = {}
+        self._splitters: dict[str, tuple[int, ChonkieCodeChunker]] = {}
 
     def chunk_section(
         self,
@@ -54,7 +50,10 @@ class CodeChunker(SectionChunker):
         accumulator: AccumulatorState,
         content_token_limit: int,
     ) -> SectionChunkerOutput:
-        assert isinstance(section, CodeSection)
+        if not isinstance(section, CodeSection):
+            raise ValueError(
+                f"CodeChunker received a non-code section: {type(section).__name__}"
+            )
 
         # Enforced here, not only in connectors: sections can arrive from the
         # ingestion API with any path/language, and a supplied language must
@@ -96,17 +95,21 @@ class CodeChunker(SectionChunker):
         language: str | None,
         content_token_limit: int,
     ) -> list[ChunkPayload]:
-        def make_payload(text: str, link: str, is_continuation: bool) -> ChunkPayload:
-            return ChunkPayload(
+        def code_payloads(
+            text: str, link: str, is_continuation: bool
+        ) -> list[ChunkPayload]:
+            return build_payloads(
                 text=text,
-                links={0: link},
+                link=link,
+                tokenizer=self.tokenizer,
+                content_token_limit=content_token_limit,
                 is_continuation=is_continuation,
                 # Sentence-based mini-chunks cut code mid-statement.
                 skip_mini_chunks=True,
             )
 
         if count_tokens(section_text, self.tokenizer) <= content_token_limit:
-            return [make_payload(section_text, section_link, is_continuation=False)]
+            return code_payloads(section_text, section_link, is_continuation=False)
 
         try:
             spans = self._split_at_syntax_boundaries(
@@ -122,28 +125,19 @@ class CodeChunker(SectionChunker):
             spans = None
 
         if spans is None:
-            texts = split_text_by_tokens(
-                section_text, self.tokenizer, content_token_limit
-            )
-            return [
-                make_payload(text, section_link, is_continuation=(i != 0))
-                for i, text in enumerate(texts)
-            ]
+            return code_payloads(section_text, section_link, is_continuation=False)
 
         payloads: list[ChunkPayload] = []
         for i, (text, start_line, end_line) in enumerate(spans):
-            link = _line_anchored_link(section_link, start_line, end_line)
             # A single syntax node can exceed the budget (e.g. a giant
-            # literal); hard-split it so the embedder never truncates.
-            if count_tokens(text, self.tokenizer) > content_token_limit:
-                payloads.extend(
-                    make_payload(small_text, link, is_continuation=(i != 0 or j != 0))
-                    for j, small_text in enumerate(
-                        split_text_by_tokens(text, self.tokenizer, content_token_limit)
-                    )
+            # literal); build_payloads hard-splits it.
+            payloads.extend(
+                code_payloads(
+                    text,
+                    _line_anchored_link(section_link, start_line, end_line),
+                    is_continuation=(i != 0),
                 )
-            else:
-                payloads.append(make_payload(text, link, is_continuation=(i != 0)))
+            )
         return payloads
 
     def _split_at_syntax_boundaries(
@@ -153,44 +147,63 @@ class CodeChunker(SectionChunker):
         content_token_limit: int,
     ) -> list[tuple[str, int, int]] | None:
         """Split at tree-sitter node boundaries. Returns (text, start_line,
-        end_line) per chunk, or None if the language is unsupported."""
-        # Local import: pulls in tree-sitter language packs.
-        from chonkie import CodeChunker as ChonkieCodeChunker
+        end_line) per chunk, or None when no grammar is available."""
+        if language is None:
+            return None
 
-        language_key = language or _AUTO_LANGUAGE
-        cached = self._splitters.get(language_key)
-        splitter = (
-            cached[1]
-            if cached is not None and cached[0] == content_token_limit
-            else None
-        )
+        splitter = self._get_splitter(language, content_token_limit)
         if splitter is None:
-            try:
-                splitter = ChonkieCodeChunker(
-                    tokenizer_or_token_counter=(
-                        lambda text: len(self.tokenizer.encode(text))
-                    ),
-                    chunk_size=content_token_limit,
-                    language=language_key,
-                    return_type="chunks",
-                )
-            except Exception:
-                logger.warning(
-                    "No tree-sitter grammar for language=%s; "
-                    "falling back to token splitting",
-                    language,
-                )
-                return None
-            self._splitters[language_key] = (content_token_limit, splitter)
+            return None
 
-        chunks = cast(list[Any], splitter.chunk(section_text))
+        # chonkie's chunk texts are contiguous and reconstruct the input
+        # exactly, so one running line counter covers the whole file.
+        # (CodeChunk carries start_line/end_line fields, but chonkie never
+        # populates them.)
+        texts = cast(list[str], splitter.chunk(section_text))
         spans: list[tuple[str, int, int]] = []
-        for chunk in chunks:
-            if not chunk.text.strip():
-                continue
-            # Anchor to the first real code line, past any leading newlines.
-            leading = len(chunk.text) - len(chunk.text.lstrip("\n"))
-            start_line = section_text.count("\n", 0, chunk.start_index + leading) + 1
-            end_line = start_line + chunk.text.strip("\n").count("\n")
-            spans.append((chunk.text, start_line, end_line))
+        line = 1
+        for text in texts:
+            if text.strip():
+                # Anchor to the first real code line, past any leading newlines.
+                start_line = line + len(text) - len(text.lstrip("\n"))
+                end_line = start_line + text.strip("\n").count("\n")
+                spans.append((text, start_line, end_line))
+            line += text.count("\n")
         return spans
+
+    def _get_splitter(
+        self, language: str, content_token_limit: int
+    ) -> ChonkieCodeChunker | None:
+        """Cached chonkie splitter for a language, or None when its grammar is
+        unavailable."""
+        cached = self._splitters.get(language)
+        if cached is not None and cached[0] == content_token_limit:
+            return cached[1]
+
+        if not has_language(language):
+            logger.info(
+                "No tree-sitter grammar named %s; falling back to token splitting",
+                language,
+            )
+            return None
+
+        try:
+            splitter = ChonkieCodeChunker(
+                tokenizer_or_token_counter=(
+                    lambda text: len(self.tokenizer.encode(text))
+                ),
+                chunk_size=content_token_limit,
+                language=language,
+                return_type="texts",
+            )
+        except Exception:
+            logger.warning(
+                "Could not load the tree-sitter grammar for language=%s; "
+                "falling back to token splitting.",
+                language,
+                exc_info=True,
+            )
+            return None
+
+        self._splitters[language] = (content_token_limit, splitter)
+        return splitter

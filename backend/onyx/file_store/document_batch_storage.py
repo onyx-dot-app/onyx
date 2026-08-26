@@ -4,7 +4,7 @@ from enum import Enum
 from io import StringIO
 from typing import List, Optional, TypeAlias
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from onyx.configs.constants import FileOrigin
 from onyx.connectors.models import (
@@ -18,32 +18,29 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+_KNOWN_SECTION_TYPES = frozenset(t.value for t in SectionType)
 
-def _has_legacy_tabular_section(doc_dict: dict) -> bool:
-    """True if a section is a pre-`csv_file_id` tabular section (inline text only).
-    Such a section was staged by an older docfetcher and the current file-backed-only
-    `TabularSection` can't validate it; during rolling-deploy skew we skip the doc
-    rather than fail the whole batch on `model_validate`."""
+
+def _skew_skip_reason(doc_dict: dict) -> str | None:
+    """Why a doc that failed validation looks like version skew, or None.
+
+    Rolling deploys mix worker versions in both directions: an older docfetcher
+    stages a pre-`csv_file_id` tabular section, a newer one stages a section
+    type this worker has no model for. Only consulted once validation has
+    already failed, so it decides how to react rather than what is valid.
+    """
     sections = doc_dict.get("sections")
     if not isinstance(sections, list):
-        return False
-    return any(
-        isinstance(s, dict) and s.get("type") == "tabular" and not s.get("csv_file_id")
-        for s in sections
-    )
-
-
-def _has_unknown_section_type(doc_dict: dict) -> bool:
-    """True if a section carries a `type` this worker's models don't know.
-    Such a doc was staged by a newer docfetcher during rolling-deploy skew;
-    we skip it rather than fail the whole batch on `model_validate`."""
-    known_types = {t.value for t in SectionType}
-    sections = doc_dict.get("sections")
-    if not isinstance(sections, list):
-        return False
-    return any(
-        isinstance(s, dict) and s.get("type") not in known_types for s in sections
-    )
+        return None
+    for section in sections:
+        if not isinstance(section, dict):
+            continue
+        section_type = section.get("type")
+        if section_type == SectionType.TABULAR.value and not section.get("csv_file_id"):
+            return "a legacy inline tabular section (no csv_file_id)"
+        if section_type not in _KNOWN_SECTION_TYPES:
+            return f"an unknown section type ({section_type!r})"
+    return None
 
 
 class DocumentBatchStorageStateType(str, Enum):
@@ -119,23 +116,22 @@ class DocumentBatchStorage(ABC):
         doc_dicts = json.loads(data)
         documents: list[Document] = []
         for doc_dict in doc_dicts:
-            if _has_legacy_tabular_section(doc_dict):
-                logger.warning(
-                    "Skipping doc %s with a legacy inline tabular section "
-                    "(no csv_file_id); it re-indexes on the next attempt",
-                    doc_dict.get("id", "unknown"),
+            try:
+                documents.append(
+                    Document.model_validate(self._normalize_doc_dict(doc_dict))
                 )
-                continue
-            if _has_unknown_section_type(doc_dict):
+            except ValidationError:
+                # Tolerate only the shapes a differently-versioned worker
+                # stages. Anything else is a real model error: raising keeps a
+                # bug from quietly indexing a short batch as a clean attempt.
+                skip_reason = _skew_skip_reason(doc_dict)
+                if skip_reason is None:
+                    raise
                 logger.warning(
-                    "Skipping doc %s with an unknown section type (staged by a "
-                    "newer worker); it re-indexes on the next attempt",
+                    "Skipping doc %s with %s; it re-indexes on the next attempt",
                     doc_dict.get("id", "unknown"),
+                    skip_reason,
                 )
-                continue
-            documents.append(
-                Document.model_validate(self._normalize_doc_dict(doc_dict))
-            )
         return documents
 
     def _normalize_doc_dict(self, doc_dict: dict) -> dict:
