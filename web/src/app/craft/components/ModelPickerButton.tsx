@@ -21,6 +21,9 @@ interface ModelPickerButtonProps {
   fallbackToDefault?: boolean;
   // Label shown when there is no selection and `fallbackToDefault` is false.
   placeholder?: string;
+  // Whether a pick should also be remembered as the user's personal choice.
+  // Admin contexts editing a workspace-wide setting pass `false`.
+  persistSelection?: boolean;
 }
 
 // Controlled model picker pill matching the main app's ModelSelector.
@@ -30,6 +33,7 @@ export default function ModelPickerButton({
   disabled = false,
   fallbackToDefault = true,
   placeholder = "Select model",
+  persistSelection = true,
 }: ModelPickerButtonProps) {
   const { llmProviders, defaultText, defaultCraft } = useLLMProviders();
   const { user } = useUser();
@@ -75,6 +79,7 @@ export default function ModelPickerButton({
       onSelectionChange={onChange}
       llmProviders={llmProviders}
       disabled={disabled}
+      persistSelection={persistSelection}
     >
       <div className="inline-flex">
         <SelectButton

@@ -106,14 +106,15 @@ export default function CraftPreferencesPage() {
   const [isSavingModel, setIsSavingModel] = useState(false);
 
   // Resolves only an explicitly configured default, so an unset default
-  // renders as unset rather than as a guessed model.
+  // renders as unset rather than as a guessed model. Hidden models still
+  // resolve, so an admin can clear or replace a default that was later hidden.
   const craftDefaultSelection = useMemo<BuildLlmSelection | null>(() => {
     if (!defaultCraft || !llmProviders) return null;
     const provider = llmProviders.find(
       (candidate) => candidate.id === defaultCraft.provider_id
     );
     const modelConfig = provider?.model_configurations.find(
-      (model) => model.is_visible && model.name === defaultCraft.model_name
+      (model) => model.name === defaultCraft.model_name
     );
     if (!provider || !modelConfig) return null;
     return {
@@ -230,6 +231,7 @@ export default function CraftPreferencesPage() {
                   onChange={saveDefaultModel}
                   disabled={isSavingModel}
                   fallbackToDefault={false}
+                  persistSelection={false}
                   placeholder={t("defaultModel.placeholder")}
                 />
                 {craftDefaultSelection && (
