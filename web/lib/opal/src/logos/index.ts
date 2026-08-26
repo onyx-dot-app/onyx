@@ -71,6 +71,7 @@ export { default as SvgOnyxTyped } from "@opal/logos/onyx-typed";
 export { default as SvgOpenai } from "@opal/logos/openai";
 export { default as SvgOpenrouter } from "@opal/logos/openrouter";
 export { default as SvgOracle } from "@opal/logos/oracle";
+export { default as SvgOrcarouter } from "@opal/logos/orcarouter";
 export { default as SvgOutline } from "@opal/logos/outline";
 export { default as SvgOutlook } from "@opal/logos/outlook";
 export { default as SvgPerplexity } from "@opal/logos/perplexity";

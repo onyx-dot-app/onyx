@@ -104,6 +104,8 @@ from onyx.server.manage.llm.models import (
     OpenRouterFinalModelResponse,
     OpenRouterModelDetails,
     OpenRouterModelsRequest,
+    OrcaRouterFinalModelResponse,
+    OrcaRouterModelsRequest,
     PortkeyFinalModelResponse,
     PortkeyModelsRequest,
     SyncModelEntry,
@@ -2317,6 +2319,113 @@ def get_portkey_available_models(
                 for r in sorted_results
             ],
             source_label="Portkey",
+        )
+
+    return sorted_results
+
+
+def _get_orcarouter_models_response(
+    api_base: str, api_key: str | None = None
+) -> dict:
+    """Fetch models from OrcaRouter's /v1/models endpoint.
+
+    OrcaRouter exposes a standard OpenAI-shaped /v1/models listing, so the base
+    may arrive as either `https://api.orcarouter.ai/v1` or `https://api.orcarouter.ai`.
+    """
+    cleaned_api_base = api_base.strip().rstrip("/")
+    if cleaned_api_base.endswith("/v1"):
+        url = f"{cleaned_api_base}/models"
+    else:
+        url = f"{cleaned_api_base}/v1/models"
+
+    return _get_openai_compatible_models_response(
+        url=url,
+        source_name="OrcaRouter",
+        api_key=api_key,
+    )
+
+
+@admin_router.post("/orcarouter/available-models")
+def get_orcarouter_available_models(
+    request: OrcaRouterModelsRequest,
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> list[OrcaRouterFinalModelResponse]:
+    """Fetch available models from OrcaRouter's /v1/models endpoint."""
+    api_key = _resolve_api_key(
+        request.api_key, request.provider_id, request.api_base, db_session
+    )
+
+    response_json = _get_orcarouter_models_response(
+        api_base=request.api_base, api_key=api_key
+    )
+
+    models = response_json.get("data", [])
+    if not isinstance(models, list) or len(models) == 0:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "No models found from your OrcaRouter endpoint",
+        )
+
+    results: list[OrcaRouterFinalModelResponse] = []
+    for model in models:
+        try:
+            model_id = model.get("id", "")
+            model_name = model.get("name", model_id)
+
+            if not model_id:
+                continue
+
+            # Skip embedding models
+            if is_embedding_model(model_id):
+                continue
+
+            results.append(
+                OrcaRouterFinalModelResponse(
+                    name=model_id,
+                    display_name=model_name,
+                    max_input_tokens=model.get("context_length"),
+                    supports_image_input=litellm_thinks_model_supports_image_input(
+                        model_id, LlmProviderNames.ORCAROUTER
+                    ),
+                    # Reasoning support from the LiteLLM cost map, with the
+                    # substring heuristic covering models LiteLLM doesn't know
+                    supports_reasoning=model_is_reasoning_model(
+                        model_id, LlmProviderNames.ORCAROUTER
+                    )
+                    or is_reasoning_model(model_id, model_name),
+                )
+            )
+        except Exception as e:
+            logger.warning(
+                "Failed to parse OrcaRouter model entry",
+                extra={"error": str(e), "item": str(model)[:1000]},
+            )
+
+    if not results:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "No compatible models found from your OrcaRouter endpoint",
+        )
+
+    sorted_results = sorted(results, key=lambda m: m.name.lower())
+
+    # Sync new models to DB if provider_id is specified
+    if request.provider_id is not None:
+        _sync_fetched_models(
+            db_session=db_session,
+            provider_id=request.provider_id,
+            models=[
+                SyncModelEntry(
+                    name=r.name,
+                    display_name=r.display_name,
+                    max_input_tokens=r.max_input_tokens,
+                    supports_image_input=r.supports_image_input,
+                    supports_reasoning=r.supports_reasoning,
+                )
+                for r in sorted_results
+            ],
+            source_label="OrcaRouter",
         )
 
     return sorted_results
