@@ -23,6 +23,7 @@ from onyx.voice.interface import (
     StreamingTranscriberProtocol,
     TranscriptResult,
 )
+from onyx.voice.types import voice_provider_requires_api_key
 
 logger = setup_logger()
 
@@ -518,7 +519,9 @@ async def websocket_transcribe(
                 )
                 return
 
-            if not provider_db.api_key:
+            if not provider_db.api_key and voice_provider_requires_api_key(
+                provider_db.provider_type
+            ):
                 logger.warning("WebSocket transcribe: STT provider has no API key")
                 await websocket.send_json(
                     {

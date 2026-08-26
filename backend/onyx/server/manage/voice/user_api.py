@@ -23,6 +23,7 @@ from onyx.server.manage.models import VoiceSettingsUpdateRequest
 from onyx.server.manage.voice.text_utils import strip_markdown_for_tts
 from onyx.utils.logger import setup_logger
 from onyx.voice.factory import get_voice_provider
+from onyx.voice.types import VoiceProviderType, voice_provider_requires_api_key
 
 logger = setup_logger()
 
@@ -39,6 +40,14 @@ class VoiceStatusResponse(BaseModel):
     tts_enabled: bool
 
 
+class TranscriptionResponse(BaseModel):
+    text: str
+
+
+def _provider_is_ready(provider_type: str, api_key: object | None) -> bool:
+    return bool(api_key) or not voice_provider_requires_api_key(provider_type)
+
+
 @router.get("/status")
 def get_voice_status(
     _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
@@ -48,7 +57,8 @@ def get_voice_status(
     stt_provider = fetch_default_stt_provider(db_session)
     tts_provider = fetch_default_tts_provider(db_session)
     return VoiceStatusResponse(
-        stt_enabled=stt_provider is not None and stt_provider.api_key is not None,
+        stt_enabled=stt_provider is not None
+        and _provider_is_ready(stt_provider.provider_type, stt_provider.api_key),
         tts_enabled=tts_provider is not None and tts_provider.api_key is not None,
     )
 
@@ -58,7 +68,7 @@ async def transcribe_audio(
     audio: UploadFile = File(...),
     _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
-) -> dict[str, str]:
+) -> TranscriptionResponse:
     """Transcribe audio to text using the default STT provider."""
     provider_db = fetch_default_stt_provider(db_session)
     if provider_db is None:
@@ -67,7 +77,7 @@ async def transcribe_audio(
             "No speech-to-text provider configured. Please contact your administrator.",
         )
 
-    if not provider_db.api_key:
+    if not _provider_is_ready(provider_db.provider_type, provider_db.api_key):
         raise OnyxError(
             OnyxErrorCode.VALIDATION_ERROR,
             "Voice provider API key not configured.",
@@ -97,7 +107,7 @@ async def transcribe_audio(
 
     try:
         text = await provider.transcribe(audio_data, audio_format)
-        return {"text": text}
+        return TranscriptionResponse(text=text)
     except NotImplementedError as exc:
         raise OnyxError(
             OnyxErrorCode.NOT_IMPLEMENTED,
@@ -105,6 +115,11 @@ async def transcribe_audio(
         ) from exc
     except Exception as exc:
         logger.error("Transcription failed: %s", exc)
+        if provider_db.provider_type == VoiceProviderType.OPENAI_COMPATIBLE:
+            raise OnyxError(
+                OnyxErrorCode.BAD_GATEWAY,
+                "The speech-to-text endpoint request failed.",
+            ) from exc
         raise OnyxError(
             OnyxErrorCode.INTERNAL_ERROR,
             "Transcription failed. Please try again.",
