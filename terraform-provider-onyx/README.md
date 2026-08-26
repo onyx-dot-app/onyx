@@ -23,6 +23,7 @@ providers.
 | `onyx_document_set` | Document sets (`/manage/admin/document-set`) | numeric id |
 | `onyx_custom_tool` | Custom actions (`/admin/tool/custom`) | numeric id |
 | `onyx_persona` | Agents / assistants (`/persona`) | numeric id |
+| `onyx_mcp_server` | MCP servers Onyx connects to (`/admin/mcp`) | numeric id |
 | `data.onyx_llm_providers` | Read-only list of providers + defaults | — |
 | `data.onyx_embedding_providers` | Read-only list of embedding providers | — |
 | `data.onyx_settings` | Read-only current settings (incl. license `tier`) | — |
@@ -115,6 +116,23 @@ and on Onyx Cloud the tenant is embedded in the key itself.
   built-ins instead.
 - **Deleting a custom action detaches it from every agent that uses it**, including agents
   Terraform does not manage, without an error or a warning.
+- **`onyx_mcp_server` manages only servers that need no interactive sign-in.** `NONE` and
+  `API_TOKEN` are supported; `OAUTH` and `PT_OAUTH` need a browser round-trip and are
+  refused while the plan is built, with a diagnostic naming the admin panel.
+- **Which tools an MCP server exposes is not managed.** Onyx only learns them by calling
+  the server, and it rejects both a tool selection and a Craft approval policy naming a
+  tool it has never seen. Neither attribute is exposed rather than exposing one that
+  silently does nothing on a server Terraform just created.
+- **An MCP server's description is preserved unless it is cleared explicitly.** The upsert
+  treats a missing description as "leave it alone", so the provider always sends the field.
+  The same body cannot carry `available_in_craft`, which lives on a different endpoint, so
+  setting it costs a second call.
+- **`auth_performer = "PER_USER"` credentials belong to the identity that applied them.**
+  Onyx stores `admin_credentials` against the applying user rather than the server, so a
+  Terraform-managed per-user server holds the API key's own credentials, not an
+  administrator's. It also masks them partially rather than fully, unlike a shared token.
+- **An MCP server URL cannot point at the Onyx host.** The SSRF guard refuses `localhost`
+  and link-local addresses by name at every protection level, not only the strictest.
 - **The model list read is the API's display view.** It hides obsolete models and dated
   duplicates, so writes (including the auto-mode pass-through, which is also not atomic
   with its read) cannot preserve rows the API hides. The admin UI round-trips the same
