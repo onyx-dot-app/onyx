@@ -187,7 +187,7 @@ the correct subject. Example: "How much did we quote ACME for project X", "ACME 
 - Even if only 1 of the adjacent sections is useful or there is a small piece in either that is useful.
 - Additional unseen sections are unlikely to contain valuable related information.
 
-**3 - INCLUDE_FULL_DOCUMENT**
+**3 - FULL_DOCUMENT**
 - Additional unseen sections are likely to contain valuable related information to the query.
 
 ## Additional Decision Notes
