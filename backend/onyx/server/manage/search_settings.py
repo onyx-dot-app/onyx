@@ -198,7 +198,7 @@ def set_new_search_settings(
 
     # Must stay below the calls above that commit. Written any earlier, a later failure
     # leaves the live index marked for reclaim with no FUTURE ever created.
-    _apply_reclaim_intent(db_session, search_settings, consented_deletions)
+    set_reclaim_intent_on_current__no_commit(db_session, consented_deletions)
 
     # Every new FUTURE reindexes via the port flow (re-embed PRESENT -> FUTURE in
     # place, no connector re-fetch). commit=False here and below so the FUTURE and
@@ -284,54 +284,34 @@ def _resolve_reclaim_intent(
     db_session: Session,
     switchover_type: SwitchoverType,
     acknowledged_wont_port_cc_pair_ids: list[int] | None,
-) -> list[int] | None:
-    """Work out which not-ported connectors the post-swap reclaim may delete. None is not
-    the empty list — it means reclaim nothing at all, not reclaim without deletions."""
-    wont_port_cc_pair_ids = compute_wont_port_cc_pair_ids(db_session, switchover_type)
-    consented_deletions = _resolve_consented_deletions(
-        acknowledged_wont_port_cc_pair_ids, wont_port_cc_pair_ids
+) -> list[int]:
+    """Raises when consent is missing or stale, so the request fails before the reindex
+    has committed anything."""
+    return _resolve_consented_deletions(
+        acknowledged_wont_port_cc_pair_ids,
+        compute_wont_port_cc_pair_ids(db_session, switchover_type),
     )
-    if consented_deletions is None:
-        logger.warning(
-            "Reindex has %d not-ported cc_pair(s) but no consent acknowledgment; "
-            "skipping old-index reclaim.",
-            len(wont_port_cc_pair_ids),
-        )
-    return consented_deletions
-
-
-def _apply_reclaim_intent(
-    db_session: Session,
-    present: SearchSettings,
-    consented_deletions: list[int] | None,
-) -> None:
-    """Always writes, even when reclaiming nothing. A reindex this one supersedes may have
-    left its own consent set on this same row, and this swap would then delete connectors
-    the admin never agreed to lose."""
-    if consented_deletions is None:
-        clear_reclaim_intent__no_commit(db_session, present.id)
-        return
-    set_reclaim_intent_on_current__no_commit(db_session, consented_deletions)
 
 
 def _resolve_consented_deletions(
     acknowledged: list[int] | None, server_wont_port: list[int]
-) -> list[int] | None:
-    """Resolve which not-ported cc_pairs the post-swap reclaim may delete, enforcing
-    informed consent. Returns the set to stamp, or None to skip reclaim entirely.
+) -> list[int]:
+    """The cc_pairs the post-swap reclaim may delete.
 
-    - Nothing won't-port: return [] — reclaim the old index as pure cleanup (all data
-      ported, no consent needed).
-    - Acknowledged: reject if the recomputed set drifted to include a cc_pair the admin
-      never saw (one that became INVALID/PAUSED after the page loaded) — non-consensual,
-      reconfirm; the opposite drift (a consented connector re-activated) just deletes less.
-    - No acknowledgment but there ARE not-ported cc_pairs (e.g. the pre-consent-modal
-      frontend): return None so the caller skips reclaim — reclaiming would drop their data
-      without consent."""
+    Missing consent raises rather than proceeding, because the old index is reclaimed
+    either way: a caller let through would leave a PAST row that nothing collects and the
+    name-reuse guard never releases, blocking the next reindex of that model. A stale
+    acknowledgment raises too, so a connector that became paused or invalid after the page
+    loaded is never deleted unseen. Drift the other way, where a consented connector went
+    active again, just deletes less."""
     if not server_wont_port:
         return []
     if acknowledged is None:
-        return None
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "Some connectors won't be carried into the new index. Acknowledge the ones "
+            "whose data you agree to delete before starting the reindex.",
+        )
     unacknowledged = set(server_wont_port) - set(acknowledged)
     if unacknowledged:
         raise OnyxError(

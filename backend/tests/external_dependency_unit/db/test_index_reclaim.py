@@ -447,39 +447,39 @@ def test_resolve_consent_nothing_wont_port_reclaims_only() -> None:
     assert search_settings_api._resolve_consented_deletions([1], []) == []
 
 
-def test_resolve_consent_no_acknowledgment_skips_reclaim() -> None:
-    """Not-ported connectors + no acknowledgment (e.g. pre-consent-modal frontend) -> None,
-    so the caller skips reclaim rather than drop their data without consent."""
-    assert search_settings_api._resolve_consented_deletions(None, [1, 2]) is None
+def test_resolve_consent_no_acknowledgment_is_rejected() -> None:
+    """Proceeding without consent would reclaim the old index anyway, so those connectors
+    would lose their data unannounced."""
+    with pytest.raises(OnyxError) as exc:
+        search_settings_api._resolve_consented_deletions(None, [1, 2])
+    assert exc.value.error_code == OnyxErrorCode.CONFLICT
 
 
-def test_no_acknowledgment_clears_intent_left_by_a_superseded_reindex(
+def test_reindex_replaces_consent_set_left_by_a_superseded_reindex(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
     present_search_settings: SearchSettings,  # noqa: ARG001
 ) -> None:
-    """A reindex that supersedes one which already stamped consent, and carries no
-    acknowledgment of its own, must clear the earlier intent. Both stamp the same PRESENT
-    row, so a surviving set would let the new swap delete connectors the admin never
-    consented to for it. Rolled back, never committed."""
+    """Both reindexes stamp the same PRESENT row, so the superseding one has to replace the
+    earlier consent set. Inheriting it would let this swap delete connectors the admin only
+    agreed to lose on the reindex that never happened."""
     invalid = _make_cc_pair_with_status(
         db_session, ConnectorCredentialPairStatus.INVALID
     )
     present = get_current_search_settings(db_session)
     try:
         set_reclaim_intent_on_current__no_commit(db_session, [101, 202])
-        assert present.reclaim_status == IndexReclaimStatus.PENDING
+        assert present.pending_cc_pair_deletions == [101, 202]
 
         consented = search_settings_api._resolve_reclaim_intent(
             db_session,
             SwitchoverType.REINDEX,
-            acknowledged_wont_port_cc_pair_ids=None,
+            acknowledged_wont_port_cc_pair_ids=[invalid.id],
         )
-        assert consented is None
-        search_settings_api._apply_reclaim_intent(db_session, present, consented)
+        assert consented == [invalid.id]
+        set_reclaim_intent_on_current__no_commit(db_session, consented)
 
-        assert present.reclaim_status is None
-        assert present.pending_cc_pair_deletions is None
+        assert present.pending_cc_pair_deletions == [invalid.id]
     finally:
         db_session.rollback()
         cleanup_cc_pair(db_session, invalid)
