@@ -7,7 +7,7 @@ import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { Section } from "@/layouts/general-layouts";
 import { useFederatedConnectors, useLlmManager } from "@/lib/hooks";
 import { useSendChatMessageFromURL } from "@/lib/chat/hooks";
-import { useForcedTools } from "@/lib/tools/hooks";
+import { useToolsController } from "@/lib/tools/hooks";
 import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { useSettings } from "@/lib/settings/hooks";
@@ -163,12 +163,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     lastFailedFiles,
     clearLastFailedFiles,
   } = useProjectsContext();
-
-  // When changing from project chat to main chat (or vice-versa), clear forced tools
-  const { clearForcedTool } = useForcedTools();
-  useEffect(() => {
-    clearForcedTool();
-  }, [currentProjectId, clearForcedTool]);
 
   const isInitialLoad = useRef(true);
 
@@ -448,6 +442,9 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     refreshChatSessions,
     onSubmit,
   });
+
+  // Drops the forced tool when the agent, project or chat changes under it.
+  useToolsController();
 
   // A link can arrive carrying both a prompt and a search scope. Declared here
   // because it submits, so it needs `onSubmit` above it.

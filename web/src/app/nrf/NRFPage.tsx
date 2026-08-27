@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { useUser } from "@/providers/UserProvider";
 import { toast } from "@opal/layouts";
 import AppInputBar, { AppInputBarHandle } from "@/sections/input/AppInputBar";
+import { useToolsController } from "@/lib/tools/hooks";
 import { Button } from "@opal/components";
 import { Modal } from "@opal/components";
 import { useLlmManager } from "@/lib/hooks";
@@ -260,6 +261,9 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     setCurrentMessageFiles([]);
     chatInputBarRef.current?.reset();
   }, [setMessage, setCurrentMessageFiles]);
+
+  // Drops the forced tool when the agent, project or chat changes under it.
+  useToolsController();
 
   // Chat controller for submitting messages
   const { onSubmit, stopGenerating, handleMessageSpecificFileUpload } =

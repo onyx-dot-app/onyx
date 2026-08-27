@@ -15,7 +15,7 @@ import {
   MCPAuthenticationPerformer,
   SecondaryViewState,
 } from "@/lib/tools/types";
-import { useForcedTools, useForcedToolsController } from "@/lib/tools/hooks";
+import { useForcedTools } from "@/lib/tools/hooks";
 import { useAgentPreferences } from "@/lib/agents/hooks";
 import { MinimalAgent } from "@/lib/agents/types";
 import { useUser } from "@/providers/UserProvider";
@@ -160,7 +160,6 @@ export default function ToolsPopover({
     useAgentPreferences();
 
   const { forcedToolId, toggleForcedTool, clearForcedTool } = useForcedTools();
-  useForcedToolsController(agent);
 
   const { permissions } = useUser();
   const { vectorDbEnabled } = useSettings();

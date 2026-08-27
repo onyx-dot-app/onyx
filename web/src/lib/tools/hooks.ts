@@ -2,7 +2,7 @@
 
 import useSWR, { mutate } from "swr";
 import { create } from "zustand";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import type {
@@ -10,7 +10,9 @@ import type {
   MCPServersResponse,
   ToolSnapshot,
 } from "@/lib/tools/types";
-import { MinimalAgent } from "@/lib/agents/types";
+import { useActiveAgent } from "@/lib/agents/hooks";
+import { useActiveProject } from "@/lib/projects/hooks";
+import useChatSessions from "@/hooks/useChatSessions";
 
 /**
  * Every MCP server the current user can reach.
@@ -144,13 +146,41 @@ export const useForcedTools = create<ForcedToolState>(function (set, get) {
   };
 });
 
-export function useForcedToolsController(agent: MinimalAgent) {
+/**
+ * Drops the forced tool when the conversation it was meant for goes away.
+ *
+ * A forced tool is a choice about the next message, so it should not outlive
+ * the context that choice was made in: switching agent, switching project, or
+ * moving to a different chat all leave it meaningless.
+ *
+ * One exception, and it is the common path rather than an edge case. Sending
+ * the first message is what creates the chat, so the session id goes from null
+ * to an id on the way out — clearing there would discard the tool the user
+ * forced by the very act of using it. That is a chat appearing, not a chat
+ * being left, so it does not reset.
+ *
+ * Mount this once per chat surface, above whatever renders the tools popover.
+ * The popover itself is rendered only when there is an agent, which is the
+ * wrong lifetime for a rule about losing one.
+ */
+export function useToolsController() {
+  const agent = useActiveAgent();
+  const { currentChatSessionId } = useChatSessions();
+  const activeProject = useActiveProject();
   const { clearForcedTool } = useForcedTools();
 
-  // Reset state when agent changes
+  const priorSessionIdRef = useRef(currentChatSessionId);
+
   useEffect(() => {
+    const priorSessionId = priorSessionIdRef.current;
+    priorSessionIdRef.current = currentChatSessionId;
+
+    // The user's own send created this chat; the tool is for the message
+    // already on its way.
+    if (priorSessionId === null && currentChatSessionId !== null) return;
+
     clearForcedTool();
-  }, [agent.id]);
+  }, [agent?.id, currentChatSessionId, activeProject?.id, clearForcedTool]);
 }
 
 /**
