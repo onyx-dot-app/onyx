@@ -1022,6 +1022,26 @@ def update_default_chat_naming_provider(
 def update_default_craft_provider(
     provider_id: int, model_name: str, db_session: Session
 ) -> None:
+    # CRAFT is a pointer flow, not a capability: nothing populates it during
+    # provider upsert, so the row has to be created before it can be defaulted.
+    model_config = db_session.scalar(
+        select(ModelConfiguration).where(
+            ModelConfiguration.llm_provider_id == provider_id,
+            ModelConfiguration.name == model_name,
+        )
+    )
+    if not model_config:
+        raise ValueError(
+            f"Model '{model_name}' is not a valid model for provider_id={provider_id}"
+        )
+
+    create_new_flow_mapping__no_commit(
+        db_session=db_session,
+        model_configuration_id=model_config.id,
+        flow_type=LLMModelFlowType.CRAFT,
+    )
+    db_session.flush()
+
     _update_default_model(
         db_session,
         provider_id,
