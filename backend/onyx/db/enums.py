@@ -311,6 +311,9 @@ class SupportedLanguage(str, PyEnum):
     PT = "pt"
     FR = "fr"
     DE = "de"
+    JA = "ja"
+    ZH = "zh"
+    KO = "ko"
 
 
 class DefaultAppMode(str, PyEnum):
