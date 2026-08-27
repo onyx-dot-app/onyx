@@ -496,6 +496,8 @@ def connector_permission_sync_generator_task(
 
     sync_start = time.monotonic()
     connector_type: str = "unknown"
+    tasks_generated = 0
+    docs_with_errors = 0
     try:
         with get_session_with_current_tenant() as db_session:
             cc_pair = get_connector_credential_pair_from_id(
@@ -568,82 +570,85 @@ def connector_permission_sync_generator_task(
                 redis_connector, lock, r, timeout_seconds=JOB_TIMEOUT
             )
 
-            # pass in the capability to fetch all existing docs for the cc_pair
-            # this is can be used to determine documents that are "missing" and thus
-            # should no longer be accessible. The decision as to whether we should find
-            # every document during the doc sync process is connector-specific.
-            def fetch_all_existing_docs_fn(
-                sort_order: SortOrder | None = None,
-            ) -> list[DocumentRow]:
+        # The crawl runs for hours issuing no queries. A session held across it pins
+        # one pooled connection until PgBouncer drops it at client_idle_timeout.
+
+        # cc_pair is detached here: read only eager-loaded connector/credential columns.
+
+        # lets each connector decide which existing docs are now missing and should
+        # lose access
+        def fetch_all_existing_docs_fn(
+            sort_order: SortOrder | None = None,
+        ) -> list[DocumentRow]:
+            with get_session_with_current_tenant() as fetch_session:
                 result = get_documents_for_connector_credential_pair_limited_columns(
-                    db_session=db_session,
+                    db_session=fetch_session,
                     connector_id=cc_pair.connector.id,
                     credential_id=cc_pair.credential.id,
                     sort_order=sort_order,
                 )
                 return list(result)
 
-            def fetch_all_existing_docs_ids_fn() -> list[str]:
-                result = get_document_ids_for_connector_credential_pair(
-                    db_session=db_session,
+        def fetch_all_existing_docs_ids_fn() -> list[str]:
+            with get_session_with_current_tenant() as fetch_session:
+                return get_document_ids_for_connector_credential_pair(
+                    db_session=fetch_session,
                     connector_id=cc_pair.connector.id,
                     credential_id=cc_pair.credential.id,
                 )
-                return result
 
-            doc_sync_func = sync_config.doc_sync_config.doc_sync_func
-            document_external_accesses = doc_sync_func(
-                cc_pair,
-                fetch_all_existing_docs_fn,
-                fetch_all_existing_docs_ids_fn,
-                callback,
-            )
+        doc_sync_func = sync_config.doc_sync_config.doc_sync_func
+        document_external_accesses = doc_sync_func(
+            cc_pair,
+            fetch_all_existing_docs_fn,
+            fetch_all_existing_docs_ids_fn,
+            callback,
+        )
 
-            task_logger.info(
-                f"RedisConnector.permissions.generate_tasks starting. cc_pair={cc_pair_id}"
-            )
+        task_logger.info(
+            f"RedisConnector.permissions.generate_tasks starting. cc_pair={cc_pair_id}"
+        )
 
-            tasks_generated = 0
-            docs_with_errors = 0
-            for doc_external_access in document_external_accesses:
-                if callback.should_stop():
-                    raise RuntimeError(
-                        f"Permission sync task timed out or stop signal detected: "
-                        f"cc_pair={cc_pair_id} "
-                        f"tasks_generated={tasks_generated}"
-                    )
-
-                result = redis_connector.permissions.update_db(
-                    lock=lock,
-                    new_permissions=[doc_external_access],
-                    source_string=connector_type,
-                    connector_id=cc_pair.connector.id,
-                    credential_id=cc_pair.credential.id,
-                    task_logger=task_logger,
+        for doc_external_access in document_external_accesses:
+            if callback.should_stop():
+                raise RuntimeError(
+                    f"Permission sync task timed out or stop signal detected: "
+                    f"cc_pair={cc_pair_id} "
+                    f"tasks_generated={tasks_generated}"
                 )
-                tasks_generated += result.num_updated
-                docs_with_errors += result.num_errors
 
-            task_logger.info(
-                f"RedisConnector.permissions.generate_tasks finished. "
-                f"cc_pair={cc_pair_id} tasks_generated={tasks_generated} docs_with_errors={docs_with_errors}"
+            result = redis_connector.permissions.update_db(
+                lock=lock,
+                new_permissions=[doc_external_access],
+                source_string=connector_type,
+                connector_id=cc_pair.connector.id,
+                credential_id=cc_pair.credential.id,
+                task_logger=task_logger,
             )
+            tasks_generated += result.num_updated
+            docs_with_errors += result.num_errors
 
-            inc_doc_perm_sync_docs_processed(connector_type, tasks_generated)
-            if docs_with_errors > 0:
-                inc_doc_perm_sync_errors(connector_type, docs_with_errors)
+        task_logger.info(
+            f"RedisConnector.permissions.generate_tasks finished. "
+            f"cc_pair={cc_pair_id} tasks_generated={tasks_generated} docs_with_errors={docs_with_errors}"
+        )
 
+        inc_doc_perm_sync_docs_processed(connector_type, tasks_generated)
+        if docs_with_errors > 0:
+            inc_doc_perm_sync_errors(connector_type, docs_with_errors)
+
+        with get_session_with_current_tenant() as db_session:
             complete_doc_permission_sync_attempt(
                 db_session=db_session,
                 attempt_id=attempt_id,
                 total_docs_synced=tasks_generated,
                 docs_with_permission_errors=docs_with_errors,
             )
-            task_logger.info(
-                f"Completed doc permission sync attempt {attempt_id}: {tasks_generated} docs, {docs_with_errors} errors"
-            )
+        task_logger.info(
+            f"Completed doc permission sync attempt {attempt_id}: {tasks_generated} docs, {docs_with_errors} errors"
+        )
 
-            redis_connector.permissions.generator_complete = tasks_generated
+        redis_connector.permissions.generator_complete = tasks_generated
 
     except Exception as e:
         error_msg = format_error_for_logging(e)
@@ -662,6 +667,8 @@ def connector_permission_sync_generator_task(
                 db_session,
                 error_message=error_msg,
                 full_exception_trace=full_exception_trace,
+                total_docs_synced=tasks_generated,
+                docs_with_permission_errors=docs_with_errors,
             )
 
         redis_connector.permissions.generator_clear()

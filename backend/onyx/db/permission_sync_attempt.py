@@ -148,6 +148,8 @@ def mark_doc_permission_sync_attempt_failed(
     db_session: Session,
     error_message: str,
     full_exception_trace: str | None = None,
+    total_docs_synced: int = 0,
+    docs_with_permission_errors: int = 0,
 ) -> None:
     """Mark a doc permission sync attempt as failed.
 
@@ -157,6 +159,10 @@ def mark_doc_permission_sync_attempt_failed(
     originates from an ``except`` block, callers should pass
     ``traceback.format_exc()`` so the full stack is persisted alongside
     the short ``error_message``.
+
+    The progress counters default to 0 for call sites that fail before any
+    document is processed. A sync that fails partway through keeps the work
+    it already committed, so those callers pass the counts they reached.
     """
     try:
         attempt = db_session.execute(
@@ -171,6 +177,10 @@ def mark_doc_permission_sync_attempt_failed(
         attempt.time_finished = func.now()
         attempt.error_message = error_message
         attempt.full_exception_trace = full_exception_trace
+        attempt.total_docs_synced = (attempt.total_docs_synced or 0) + total_docs_synced
+        attempt.docs_with_permission_errors = (
+            attempt.docs_with_permission_errors or 0
+        ) + docs_with_permission_errors
         db_session.commit()
 
         # Add telemetry for permission sync attempt status change
