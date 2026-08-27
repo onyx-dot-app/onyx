@@ -22,15 +22,10 @@ from onyx.utils.text_processing import clean_code_text
 
 logger = setup_logger()
 
-# Loading a grammar the pack has not cached makes it fetch its bundle, and a
-# firewalled network drops those packets rather than refusing them, so the
-# attempt blocks until timeout (60s in testing). That cost is per call and the
-# cause is shared — one unreachable bundle fails every language — so back off
-# across all of them rather than per language. A grammar that is merely absent
-# fails fast and locally, and has_language() already filters unknown names.
-#
-# Module-level because a Chunker is built per document batch, and shared
-# across worker threads, which the breaker is built for.
+# An uncached grammar makes the pack fetch its archive, which on a firewalled
+# network blocks until timeout (60s in testing). One archive serves every
+# language, so the failure is shared and the breaker covers all loads.
+# Module-level: a Chunker is built per document batch.
 _GRAMMAR_LOADS = CircuitBreaker()
 
 

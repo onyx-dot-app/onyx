@@ -39,15 +39,12 @@ SENSITIVE_FILE_PATTERNS = (
     "*.kdbx",
 )
 
-# Grammars the pack resolves for prose and tabular formats. They parse, but
-# their chunk boundaries mean nothing for retrieval, and .csv/.tsv have a
-# TabularSection path built for them. Subtracted so each connector does not
-# have to rediscover that .txt resolves to the Vim help-file grammar.
+# Formats the pack has grammars for but that are not code: .txt resolves to
+# the Vim help-file grammar, and .csv/.tsv have a TabularSection path.
 NON_CODE_LANGUAGES = frozenset({"vimdoc", "rst", "csv", "tsv"})
 
 
-# The pack's registry is extension-only, so the canonical extensionless names
-# resolve to nothing even though their grammars ship with it.
+# The pack's registry is extension-only, so these resolve to nothing.
 BASENAME_LANGUAGES = {
     "makefile": "make",
     "gnumakefile": "make",
@@ -76,7 +73,6 @@ def infer_code_language(file_path: str | None) -> str | None:
     known = BASENAME_LANGUAGES.get(basename)
     if known is not None:
         return known
-    # Dockerfile.dev / Dockerfile.prod and the like.
     if basename.startswith("dockerfile."):
         return "dockerfile"
     # Local import: keeps the language pack off the connector import path.
