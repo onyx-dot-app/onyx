@@ -104,9 +104,8 @@ const MODEL_TAB_SELF = "self-hosted";
 // Developer-facing log label only; the user-visible copy comes from `t`.
 const CONTEXTUAL_MODEL_UPDATE_LOG = "Failed to update Contextual Retrieval LLM";
 
-// Connectors whose data won't be carried into the new index — mirrors the backend's
-// compute_wont_port_cc_pair_ids so the modal shows the same set the server deletes.
-// Paused connectors are dropped only under ACTIVE_ONLY (they port under REINDEX/INSTANT).
+// Mirrors the backend's compute_wont_port_cc_pair_ids, so the modal shows the admin the
+// same set the server will delete. The two have to be changed together.
 function computeWontPortConnectors(
   statuses: ConnectorIndexingStatusLite[],
   switchoverType: SwitchoverType
@@ -764,13 +763,13 @@ export default function IndexSettingsPage() {
   const customModelModal = useCreateModal();
   const wontPortConsentModal = useCreateModal();
 
-  // Connector statuses drive the won't-port consent list. Kept subscribed through a
-  // reindex (only skipped on Cloud, which has no banner): pausing then resuming the hook
-  // would make SWR serve hours-old cached statuses with isLoading=false right after the
-  // reindex, enabling Apply on a stale set. Continuous 30s polling keeps it fresh instead.
+  // SWR reports isLoading=false the instant it serves a cached list, so stale statuses can
+  // look ready. Staying subscribed through a reindex, rather than pausing and resuming the
+  // hook, keeps the 30s poll refreshing them. Cloud skips this and has no banner.
   const {
     data: indexingStatusData,
     isLoading: isLoadingStatuses,
+    isValidating: isValidatingStatuses,
     error: statusesError,
   } = useConnectorIndexingStatusWithPagination(
     { get_all_connectors: true },
@@ -789,15 +788,20 @@ export default function IndexSettingsPage() {
     () => computeWontPortConnectors(connectorStatuses, switchoverType),
     [connectorStatuses, switchoverType]
   );
-  // The won't-port set the admin is confirming, frozen at Apply-time. Both the modal and
-  // the submitted acknowledgement read this — not the live memo above — so a background
-  // poll can't grow the set out from under an open confirmation. A ref (not state) so the
-  // no-modal Apply path can submit synchronously with the just-frozen value.
+  // Frozen when Apply is pressed, and read by both the modal and the submitted
+  // acknowledgement, so a background poll can't grow the set under an open confirmation.
+  // A ref rather than state so the no-modal path can submit the value it just froze.
   const frozenWontPortRef = useRef<ConnectorIndexingStatusLite[]>([]);
-  // An empty won't-port set is only trustworthy once statuses have loaded — while loading
-  // or on error it's a false empty, and submitting then skips the consent modal and gets
-  // rejected by the server's drift check.
-  const connectorStatusesReady = !isLoadingStatuses && !statusesError;
+  // Waits for the mount revalidation to settle, not just for isLoading to clear, so a
+  // cached list can't pass as ready. Later 30s polls leave this true, so Apply doesn't
+  // flicker between enabled and disabled.
+  const [statusesSettled, setStatusesSettled] = useState(false);
+  useEffect(() => {
+    if (!isLoadingStatuses && !isValidatingStatuses) setStatusesSettled(true);
+  }, [isLoadingStatuses, isValidatingStatuses]);
+  // An empty won't-port set before the statuses arrive is a false empty, and submitting on
+  // it skips the consent modal only to be rejected by the server's drift check.
+  const connectorStatusesReady = statusesSettled && !statusesError;
 
   const {
     llmProviders,
@@ -1032,8 +1036,8 @@ export default function IndexSettingsPage() {
               });
 
               if (!response.ok) {
-                // Surface the server's detail (e.g. the consent-drift conflict telling
-                // the admin the connector set changed) instead of a generic failure.
+                // The server's detail tells the admin the connector set drifted and to
+                // reload; a generic failure would lose that.
                 const detail = await response
                   .json()
                   .then((body) => body?.detail as string | undefined)
@@ -1120,8 +1124,6 @@ export default function IndexSettingsPage() {
               const rebuildButton = (
                 <Button
                   onClick={() => {
-                    // Freeze the set being acted on, then confirm the data loss when
-                    // connectors won't be ported; otherwise submit directly.
                     frozenWontPortRef.current = wontPortConnectors;
                     if (wontPortConnectors.length > 0) {
                       wontPortConsentModal.toggle(true);

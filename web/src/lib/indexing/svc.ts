@@ -180,8 +180,8 @@ interface SetNewSearchSettingsArgs {
   switchoverType: SwitchoverType;
   enableContextualRag: boolean;
   contextualRagModelConfigurationId: number | null;
-  // cc_pairs the admin consented to delete (shown as "won't be re-indexed"). The server
-  // recomputes the authoritative set and rejects if it includes an unacknowledged one.
+  // The server recomputes this set itself and rejects the reindex if its own set contains
+  // a cc_pair the admin never acknowledged.
   acknowledgedWontPortCcPairIds: number[];
 }
 
