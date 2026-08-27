@@ -158,6 +158,14 @@ def test_unhashed_file_signals_size_and_mtime_changes() -> None:
     assert top(base) != top(OutputEntry("big.bin", False, size=10, mtime_ns=2))
     assert top(OutputEntry("big.bin", False)) is None
 
+    # Partial metadata degrades to what is present, never to no signal.
+    assert top(OutputEntry("big.bin", False, size=10)) != top(
+        OutputEntry("big.bin", False, size=20)
+    )
+    assert top(OutputEntry("big.bin", False, mtime_ns=1)) != top(
+        OutputEntry("big.bin", False, mtime_ns=2)
+    )
+
     # The same surrogate drives the directory hash for nested unhashed files.
     def nested(entry: OutputEntry) -> str | None:
         return derive_artifacts([OutputEntry("d", True), entry])[0].content_hash

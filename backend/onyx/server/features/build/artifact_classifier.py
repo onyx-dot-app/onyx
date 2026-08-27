@@ -117,7 +117,10 @@ def _is_visible(path: str) -> bool:
 
 def _file_signal(entry: OutputEntry) -> str | None:
     """Change signal for a file: its hash, or a size-and-mtime surrogate for
-    files past the hash ceiling, shaped so it can never read as a real sha."""
+    files past the hash ceiling, shaped so it can never read as a real sha.
+    The manifest carries fstat size and mtime for every file it lists. An
+    adapter omitting one degrades detection to the other field alone, which
+    still beats no signal, so partial metadata is accepted."""
     if entry.sha256 is not None:
         return entry.sha256
     if entry.size is None and entry.mtime_ns is None:
