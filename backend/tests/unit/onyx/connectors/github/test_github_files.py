@@ -592,7 +592,7 @@ def test_nonexistent_branch_raises_clear_error(
     )
 
     with pytest.raises(ConnectorValidationError, match="no-such-branch"):
-        connector._list_indexable_files(mock_repo)
+        connector._list_indexable_files(mock_repo, is_slim=False)
 
 
 def test_prs_disabled_404_does_not_crash_files(

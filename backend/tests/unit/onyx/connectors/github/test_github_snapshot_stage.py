@@ -88,7 +88,9 @@ def test_connector_files_stage_uses_snapshot_not_api(
 def test_connector_falls_back_to_api_when_resolution_fails() -> None:
     """No resolved SHA, no snapshot: the branch could move under a
     branch-keyed cache."""
-    connector = GithubConnector(repo_owner="o", repositories="r")
+    connector = GithubConnector(
+        repo_owner="o", repositories="r", include_code_files=True
+    )
     provider = FakeArchiveProvider(
         archives={}, resolve_error=OnyxError(OnyxErrorCode.RATE_LIMITED)
     )
@@ -98,13 +100,57 @@ def test_connector_falls_back_to_api_when_resolution_fails() -> None:
 
 
 def test_connector_falls_back_to_api_when_download_fails() -> None:
-    connector = GithubConnector(repo_owner="o", repositories="r")
+    connector = GithubConnector(
+        repo_owner="o", repositories="r", include_code_files=True
+    )
     provider = FakeArchiveProvider(archives={SHA: b"x" * 100}, refs={"main": SHA})
     with (
         _patch_provider(provider),
         patch("onyx.connectors.github.connector.REPO_ARCHIVE_MAX_BYTES", 10),
     ):
         assert connector._ensure_snapshot(make_mock_repo()) is None
+
+
+def test_document_only_connector_never_downloads_an_archive() -> None:
+    """Existing doc connectors fetch a few markdown files. A whole-repo
+    tarball would cost far more than the API calls it replaces."""
+    connector = GithubConnector(
+        repo_owner="o", repositories="r", include_files=True, include_code_files=False
+    )
+    provider = FakeArchiveProvider(
+        archives={SHA: make_repo_tarball(FILES)}, refs={"main": SHA}
+    )
+
+    with _patch_provider(provider):
+        assert connector._ensure_snapshot(make_mock_repo()) is None
+
+    assert provider.resolve_calls == 0
+    assert provider.downloads == []
+
+
+def test_slim_listing_never_downloads_an_archive(
+    mock_github_client: MagicMock,
+) -> None:
+    """Permission sync only needs paths, which one tree call gives, and it
+    runs far more often than indexing does."""
+    mock_repo = make_mock_repo(files=FILES)
+    connector = GithubConnector(
+        repo_owner="test-org",
+        repositories="test-repo",
+        include_files=True,
+        include_code_files=True,
+    )
+    connector.github_client = mock_github_client
+    provider = FakeArchiveProvider(
+        archives={SHA: make_repo_tarball(FILES)}, refs={"main": SHA}
+    )
+
+    with _patch_provider(provider):
+        paths, _ = connector._list_indexable_files(mock_repo, is_slim=True)
+
+    assert paths == ["README.md", "src/main.py"]
+    assert provider.downloads == []
+    mock_repo.get_git_tree.assert_called_once()
 
 
 def test_snapshot_walk_failure_falls_back_to_tree_listing(
@@ -130,7 +176,7 @@ def test_snapshot_walk_failure_falls_back_to_tree_listing(
             RepoSnapshot, "walk_files", side_effect=RepoSnapshotError("pruned")
         ),
     ):
-        paths, truncated = connector._list_indexable_files(mock_repo)
+        paths, truncated = connector._list_indexable_files(mock_repo, is_slim=False)
 
     assert paths == ["README.md", "src/main.py"]
     assert truncated is False
