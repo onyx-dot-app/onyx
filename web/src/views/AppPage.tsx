@@ -7,7 +7,7 @@ import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { Section } from "@/layouts/general-layouts";
 import { useFederatedConnectors, useLlmManager } from "@/lib/hooks";
 import { useSendChatMessageFromURL } from "@/lib/chat/hooks";
-import { useForcedTools } from "@/lib/hooks/useForcedTools";
+import { useForcedTools } from "@/lib/tools/hooks";
 import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { useSettings } from "@/lib/settings/hooks";

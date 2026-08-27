@@ -80,7 +80,7 @@ import {
 import { Packet, MessageStart } from "@/app/app/services/streamingModels";
 import { SelectedModel } from "@/sections/model-selector/MultiModelSelector";
 import { useAgentPreferences } from "@/lib/agents/hooks";
-import { useForcedTools } from "@/lib/hooks/useForcedTools";
+import { useForcedTools } from "@/lib/tools/hooks";
 import { ProjectFile, useProjectsContext } from "@/lib/projects/providers";
 import { useIncognito } from "@/providers/IncognitoProvider";
 import { useAppParams } from "@/hooks/appNavigation";

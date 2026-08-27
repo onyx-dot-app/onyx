@@ -1,6 +1,10 @@
 "use client";
 
-import { FILE_READER_TOOL_ID, SEARCH_TOOL_ID } from "@/lib/tools/constants";
+import {
+  FILE_READER_TOOL_ID,
+  NO_DISABLED_TOOLS,
+  SEARCH_TOOL_ID,
+} from "@/lib/tools/constants";
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useFocusOnMount } from "@opal/hooks";
 import { InputTypeIn, Button, Popover, PopoverMenu } from "@opal/components";
@@ -11,7 +15,7 @@ import {
   MCPAuthenticationPerformer,
   SecondaryViewState,
 } from "@/lib/tools/types";
-import { useForcedTools } from "@/lib/hooks/useForcedTools";
+import { useForcedTools } from "@/lib/tools/hooks";
 import { useAgentPreferences } from "@/lib/agents/hooks";
 import { MinimalAgent } from "@/lib/agents/types";
 import { useUser } from "@/providers/UserProvider";
@@ -19,7 +23,6 @@ import { hasPermission } from "@/lib/permissions";
 import { useSourcePreferences } from "@/lib/searchFilters/hooks";
 import MCPApiKeyModal from "@/components/chat/MCPApiKeyModal";
 import { Permission, ValidSources } from "@/lib/types";
-import { NO_DISABLED_TOOLS } from "@/lib/tools/constants";
 import { getAdminConfigureInfo, getToolTooltip } from "@/lib/tools/utils";
 import { getConfiguredSources } from "@/lib/sources";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
@@ -162,7 +165,7 @@ export default function ToolsPopover({
     setForcedToolIds([]);
   }, [agent.id, setForcedToolIds]);
 
-  const { isAdmin, permissions } = useUser();
+  const { permissions } = useUser();
   const { vectorDbEnabled } = useSettings();
 
   const { tools: availableTools } = useAvailableTools();

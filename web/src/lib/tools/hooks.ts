@@ -1,6 +1,7 @@
 "use client";
 
 import useSWR, { mutate } from "swr";
+import { create } from "zustand";
 import { useMemo } from "react";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -110,3 +111,38 @@ export function useCraftMcpServers(enabled: boolean = true) {
 
   return { data, error, isLoading, refresh };
 }
+
+interface ForcedToolsState {
+  forcedToolIds: number[];
+  setForcedToolIds: (ids: number[]) => void;
+  toggleForcedTool: (id: number) => void;
+  clearForcedTools: () => void;
+}
+
+/**
+ * Zustand store for managing forced tool IDs.
+ * This is local UI state - tools that are forced to be used in the next message.
+ *
+ * When a tool is "forced", it will be included in the next chat request
+ * regardless of whether the LLM would normally choose to use it.
+ */
+export const useForcedTools = create<ForcedToolsState>(function (set, get) {
+  return {
+    forcedToolIds: [],
+
+    setForcedToolIds: (ids) => set({ forcedToolIds: ids }),
+
+    toggleForcedTool: (id) => {
+      const { forcedToolIds } = get();
+      if (forcedToolIds.includes(id)) {
+        // If clicking already forced tool, clear all forced tools
+        set({ forcedToolIds: [] });
+      } else {
+        // Replace with single forced tool
+        set({ forcedToolIds: [id] });
+      }
+    },
+
+    clearForcedTools: () => set({ forcedToolIds: [] }),
+  };
+});

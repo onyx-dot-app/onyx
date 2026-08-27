@@ -28,7 +28,7 @@ import {
   useChatSessionStore,
   useCurrentMessageHistory,
 } from "@/app/app/stores/useChatSessionStore";
-import { useForcedTools } from "@/lib/hooks/useForcedTools";
+import { useForcedTools } from "@/lib/tools/hooks";
 import { useIncognito } from "@/providers/IncognitoProvider";
 import type { ProjectFile } from "@/lib/projects/types";
 import {
