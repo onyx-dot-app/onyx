@@ -25,7 +25,10 @@ import pytest
 from sqlalchemy.orm import Session
 
 import onyx.server.manage.search_settings as search_settings_api
-from onyx.context.search.models import SavedSearchSettings
+from onyx.context.search.models import (
+    SavedSearchSettings,
+    SearchSettingsCreationRequest,
+)
 from onyx.db.connector_credential_pair import (
     compute_wont_port_cc_pair_ids,
     mark_cc_pairs_deleting_if_still_wont_port__no_commit,
@@ -49,6 +52,8 @@ from onyx.db.search_settings import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.natural_language_processing.search_nlp_models import clean_model_name
+from shared_configs.configs import ALT_INDEX_SUFFIX
 from tests.external_dependency_unit.indexing_helpers import (
     cleanup_cc_pair,
     make_cc_pair,
@@ -296,6 +301,59 @@ def test_fetch_reclaimable_respects_limit(
 # --- name-reuse guard (server/manage/search_settings.py) ------------------------
 
 
+def test_case_variant_model_gets_the_alt_index_not_the_live_one(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    """A model name differing from the live one only by case or separator cleans to the
+    same index name. Keying the ALT suffix on the raw names would skip it and hand the new
+    FUTURE the live index's own name, so the port would write into the index still serving
+    search. Keyed on the cleaned names, the reindex proceeds onto the alternate index."""
+    model = f"acme/test-{uuid4().hex[:8]}"
+    live = _make_settings(
+        db_session,
+        None,
+        index_name=f"danswer_chunk_{clean_model_name(model)}",
+        status=IndexModelStatus.PRESENT,
+    )
+    live.model_name = model
+    # A secondary is refused earlier by the one-reindex-at-a-time check, and the database
+    # ships with a seeded FUTURE row.
+    futures = list(
+        db_session.query(SearchSettings).filter(
+            SearchSettings.status == IndexModelStatus.FUTURE
+        )
+    )
+    for ss in futures:
+        ss.status = IndexModelStatus.PAST
+    db_session.commit()
+
+    variant = model.upper().replace("-", "_")
+    assert variant != model
+    assert clean_model_name(variant) == clean_model_name(model)
+
+    try:
+        computed = search_settings_api._compute_index_name(
+            SearchSettingsCreationRequest.model_validate(
+                {
+                    **SavedSearchSettings.from_db_model(live).model_dump(),
+                    "model_name": variant,
+                    "index_name": None,
+                }
+            ),
+            live,
+        )
+        assert computed != live.index_name
+        assert computed.endswith(ALT_INDEX_SUFFIX)
+    finally:
+        db_session.rollback()
+        for ss in futures:
+            ss.status = IndexModelStatus.FUTURE
+        db_session.commit()
+        db_session.delete(live)
+        db_session.commit()
+
+
 def test_guard_no_collision_is_noop(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
@@ -351,7 +409,7 @@ def test_guard_conflicts_while_index_unreclaimed(
         with pytest.raises(OnyxError) as exc:
             search_settings_api._guard_index_name_reuse(db_session, name)
         assert exc.value.error_code == OnyxErrorCode.CONFLICT
-        assert "earlier reindex" in exc.value.detail
+        assert "earlier re-index" in exc.value.detail
         db_session.refresh(ss)
         assert ss.reclaim_status == IndexReclaimStatus.DELETING  # pulled into reclaim
         assert ss.reclaim_stopped_reading_at is None  # skip-soak

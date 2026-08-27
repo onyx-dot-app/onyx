@@ -31,6 +31,7 @@ from onyx.db.port_attempt import (
 from onyx.db.search_settings import (
     create_search_settings,
     find_unreclaimed_past_by_index_name,
+    get_current_search_settings,
     get_search_settings_by_id,
 )
 from onyx.document_index.opensearch.client import OpenSearchIndexClient
@@ -290,6 +291,34 @@ def test_deleting_complete_marks_reclaimed_and_keeps_row(
         row = get_search_settings_by_id(db_session, ss_id)
         assert row is not None
         assert row.reclaim_status == IndexReclaimStatus.RECLAIMED
+    finally:
+        _delete_settings(db_session, ss)
+
+
+def test_deleting_refuses_to_delete_the_live_index(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Nothing should mark a row that names the live index, but this step is the only one
+    that destroys data, so it must refuse rather than trust the row."""
+    deleted: list[str] = []
+    monkeypatch.setattr(
+        reclaim_tasks,
+        "reclaim_index_data",
+        lambda name, *_a, **_k: deleted.append(name) or ReclaimOutcome.COMPLETE,
+    )
+    live_name = get_current_search_settings(db_session).index_name
+    ss = _make_past_settings(
+        db_session, IndexReclaimStatus.DELETING, index_name=live_name
+    )
+    try:
+        reclaim_tasks.run_old_index_reclaim(db_session, MagicMock(), "tenant", ss)
+        db_session.refresh(ss)
+
+        assert deleted == []
+        assert ss.reclaim_status != IndexReclaimStatus.RECLAIMED
+        assert ss.reclaim_attempts == 1  # recorded as a failure, not a silent skip
     finally:
         _delete_settings(db_session, ss)
 

@@ -188,6 +188,15 @@ def _drive_deleting(db_session: Session, search_settings: SearchSettings) -> Non
     # normal old-index reclaim — those attempts target the FUTURE, not this swapped-out PRESENT.
     if has_active_port_attempts(db_session, search_settings.id):
         return
+
+    # This is the only place that actually destroys data, so it re-checks rather than
+    # trust whichever path marked the row.
+    if search_settings.index_name == get_current_search_settings(db_session).index_name:
+        raise RuntimeError(
+            f"Reclaim target {search_settings.id} names the live index "
+            f"{search_settings.index_name}; refusing to delete it."
+        )
+
     index_name = search_settings.index_name
     settings_id = search_settings.id
     tenant_state = TenantState(

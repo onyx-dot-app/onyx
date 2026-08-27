@@ -159,19 +159,23 @@ def set_new_search_settings(
         )
 
     if search_settings_new.index_name is None:
-        # We define index name here.
-        index_name = f"danswer_chunk_{clean_model_name(search_settings_new.model_name)}"
-        if (
-            search_settings_new.model_name == search_settings.model_name
-            and not search_settings.index_name.endswith(ALT_INDEX_SUFFIX)
-        ):
-            index_name += ALT_INDEX_SUFFIX
         search_values = search_settings_new.model_dump()
-        search_values["index_name"] = index_name
+        search_values["index_name"] = _compute_index_name(
+            search_settings_new, search_settings
+        )
         new_search_settings_request = SavedSearchSettings(**search_values)
     else:
         new_search_settings_request = SavedSearchSettings(
             **search_settings_new.model_dump()
+        )
+
+    # An explicit index_name can still name the live index, and the port would then write
+    # this generation's chunks into the index serving search.
+    if new_search_settings_request.index_name == search_settings.index_name:
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "The new index would take the name of the one currently serving search. "
+            "Check the embedding model name, or set an explicit index name.",
         )
 
     # ALT_INDEX_SUFFIX alternation can make this FUTURE's index_name equal a PAST's whose
@@ -262,6 +266,23 @@ def set_new_search_settings(
     return IdReturn(id=new_search_settings.id)
 
 
+def _compute_index_name(
+    requested: SearchSettingsCreationRequest, present: SearchSettings
+) -> str:
+    """The index name a new FUTURE takes when the caller doesn't supply one.
+
+    The suffix keys on the cleaned names, not the raw ones: clean_model_name lowercases and
+    folds "/", "-" and "." together, so "intfloat/E5-Base" and "intfloat/e5-base" reduce to
+    one index name. Comparing raw would skip the suffix for those and hand the new FUTURE
+    the live index's own name, leaving the port writing into the index serving search."""
+    index_name = f"danswer_chunk_{clean_model_name(requested.model_name)}"
+    if clean_model_name(requested.model_name) == clean_model_name(
+        present.model_name
+    ) and not present.index_name.endswith(ALT_INDEX_SUFFIX):
+        index_name += ALT_INDEX_SUFFIX
+    return index_name
+
+
 def _guard_index_name_reuse(db_session: Session, index_name: str) -> None:
     """Refuse a reindex whose new index_name still holds a PAST generation's data (reusing
     it would adopt that data), and pull the occupant into the reclaim cycle so it drains
@@ -343,13 +364,24 @@ def _reclaim_abandoned_future(
     row for the reclaim loop; single-tenant additionally drops the index inline so retry
     works immediately, independent of the reclaim kill switch (MT shares the physical
     index across tenants, so its per-tenant slice is left to the loop). Caller commits."""
+    # Checked before marking: marking hands the row to the reclaim loop, which deletes
+    # whatever index_name it carries, so skipping only the inline drop below saves nothing.
+    if abandoned_future.index_name == present.index_name:
+        logger.error(
+            "Abandoned FUTURE %s names the live index %s; leaving it for an operator "
+            "rather than handing it to the reclaim loop.",
+            abandoned_future.id,
+            abandoned_future.index_name,
+        )
+        return
+
     mark_abandoned_future_for_reclaim__no_commit(abandoned_future)
     # Don't drop the index while a canceled port task may still be writing to it; leave the
     # row DELETING for the reclaim loop.
     if has_active_port_attempts(db_session, abandoned_future.id):
         return
-    # Defensive: never drop an index the live PRESENT is serving from.
-    if MULTI_TENANT or abandoned_future.index_name == present.index_name:
+    # MT shares the physical index across tenants, so leave its slice to the loop.
+    if MULTI_TENANT:
         return
     try:
         if (
