@@ -321,7 +321,7 @@ const AppInputBar = React.memo(
       }
     }, [isNewSession, initialMessage]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const { forcedToolIds, setForcedToolIds } = useForcedTools();
+    const { forcedToolId, clearForcedTool } = useForcedTools();
     const { currentMessageFiles, setCurrentMessageFiles } =
       useProjectsContext();
     const { isLoading: isLoadingProjects } = useProjects();
@@ -693,32 +693,25 @@ const AppInputBar = React.memo(
               )
             )}
 
-            {activeAgent &&
-              forcedToolIds.length > 0 &&
-              forcedToolIds.map((toolId) => {
-                const tool = activeAgent.tools.find(
-                  (tool) => tool.id === toolId
-                );
-                if (!tool) {
-                  return null;
-                }
-                return (
-                  <Disabled disabled={disabled} key={toolId}>
-                    <SelectButton
-                      variant="select-light"
-                      icon={getIconForAction(tool)}
-                      onClick={() => {
-                        setForcedToolIds(
-                          forcedToolIds.filter((id) => id !== toolId)
-                        );
-                      }}
-                      state="selected"
-                    >
-                      {tool.display_name}
-                    </SelectButton>
-                  </Disabled>
-                );
-              })}
+            {(() => {
+              if (!activeAgent || forcedToolId === null) return null;
+              const tool = activeAgent.tools.find(
+                (tool) => tool.id === forcedToolId
+              );
+              if (!tool) return null;
+              return (
+                <Disabled disabled={disabled}>
+                  <SelectButton
+                    variant="select-light"
+                    icon={getIconForAction(tool)}
+                    onClick={clearForcedTool}
+                    state="selected"
+                  >
+                    {tool.display_name}
+                  </SelectButton>
+                </Disabled>
+              );
+            })()}
           </div>
         </div>
 

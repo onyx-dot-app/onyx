@@ -165,10 +165,10 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   } = useProjectsContext();
 
   // When changing from project chat to main chat (or vice-versa), clear forced tools
-  const { setForcedToolIds } = useForcedTools();
+  const { clearForcedTool } = useForcedTools();
   useEffect(() => {
-    setForcedToolIds([]);
-  }, [currentProjectId, setForcedToolIds]);
+    clearForcedTool();
+  }, [currentProjectId, clearForcedTool]);
 
   const isInitialLoad = useRef(true);
 

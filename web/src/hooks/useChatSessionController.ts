@@ -123,7 +123,7 @@ export default function useChatSessionController({
   );
   const currentChatHistory = useCurrentMessageHistory();
   const chatSessions = useChatSessionStore((state) => state.sessions);
-  const { setForcedToolIds } = useForcedTools();
+  const { clearForcedTool } = useForcedTools();
   const { setIncognitoEnabled, setIncognitoSessionId } = useIncognito();
 
   // Fetch chat messages for the chat session
@@ -162,7 +162,7 @@ export default function useChatSessionController({
         setSelectedDocuments([]);
 
         // Clear forced tool ids if and only if we're switching to a new chat session
-        setForcedToolIds([]);
+        clearForcedTool();
       }
     }
 

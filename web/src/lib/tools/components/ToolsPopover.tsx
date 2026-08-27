@@ -15,7 +15,7 @@ import {
   MCPAuthenticationPerformer,
   SecondaryViewState,
 } from "@/lib/tools/types";
-import { useForcedTools } from "@/lib/tools/hooks";
+import { useForcedTools, useForcedToolsController } from "@/lib/tools/hooks";
 import { useAgentPreferences } from "@/lib/agents/hooks";
 import { MinimalAgent } from "@/lib/agents/types";
 import { useUser } from "@/providers/UserProvider";
@@ -28,7 +28,7 @@ import { getConfiguredSources } from "@/lib/sources";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { SourceMetadata } from "@/lib/search/interfaces";
 import { SourceIcon } from "@/components/SourceIcon";
-import { useAvailableTools } from "@/hooks/useAvailableTools";
+import { useAvailableTools } from "@/lib/tools/hooks";
 import { useAvailableSources } from "@/lib/connectors/hooks";
 import useCCPairs from "@/hooks/useCCPairs";
 import { useLLMProviders } from "@/lib/languageModels/hooks";
@@ -158,12 +158,9 @@ export default function ToolsPopover({
   // Get the agent preference for this assistant
   const { agentPreferences, setSpecificAgentPreferences } =
     useAgentPreferences();
-  const { forcedToolIds, setForcedToolIds } = useForcedTools();
 
-  // Reset state when assistant changes
-  useEffect(() => {
-    setForcedToolIds([]);
-  }, [agent.id, setForcedToolIds]);
+  const { forcedToolId, toggleForcedTool, clearForcedTool } = useForcedTools();
+  useForcedToolsController(agent);
 
   const { permissions } = useUser();
   const { vectorDbEnabled } = useSettings();
@@ -189,30 +186,17 @@ export default function ToolsPopover({
       });
 
       // If we're disabling a tool that is currently forced, remove it from forced tools
-      if (!disabled && forcedToolIds.includes(toolId)) {
-        setForcedToolIds(forcedToolIds.filter((id) => id !== toolId));
+      if (!disabled && forcedToolId === toolId) {
+        clearForcedTool();
       }
     },
     [
       disabledToolIds,
       agent.id,
       setSpecificAgentPreferences,
-      forcedToolIds,
-      setForcedToolIds,
+      forcedToolId,
+      clearForcedTool,
     ]
-  );
-
-  const toggleForcedTool = useCallback(
-    (toolId: number) => {
-      if (forcedToolIds.includes(toolId)) {
-        // If clicking on already forced tool, unforce it
-        setForcedToolIds([]);
-      } else {
-        // If clicking on a new tool, replace any existing forced tools with just this one
-        setForcedToolIds([toolId]);
-      }
-    },
-    [forcedToolIds, setForcedToolIds]
   );
 
   // Get internal search tool reference for auto-pin logic
@@ -247,28 +231,31 @@ export default function ToolsPopover({
   const enableAllSources = useCallback(() => {
     setSelectedSources(getConfiguredSources(effectiveAvailableSources));
 
-    if (internalSearchTool) {
-      setForcedToolIds([internalSearchTool.id]);
+    // Toggling an already-forced tool would unforce it, so only fire when it
+    // is not the forced one.
+    if (internalSearchTool && forcedToolId !== internalSearchTool.id) {
+      toggleForcedTool(internalSearchTool.id);
     }
   }, [
     effectiveAvailableSources,
     setSelectedSources,
     internalSearchTool,
-    setForcedToolIds,
+    forcedToolId,
+    toggleForcedTool,
   ]);
 
   const disableAllSources = useCallback(() => {
     baseDisableAllSources();
     const willUnpin =
-      internalSearchTool && forcedToolIds.includes(internalSearchTool.id);
+      internalSearchTool && forcedToolId === internalSearchTool.id;
     if (willUnpin) {
-      setForcedToolIds([]);
+      clearForcedTool();
     }
   }, [
     baseDisableAllSources,
     internalSearchTool,
-    forcedToolIds,
-    setForcedToolIds,
+    forcedToolId,
+    clearForcedTool,
   ]);
 
   const toggleSource = useCallback(
@@ -278,7 +265,9 @@ export default function ToolsPopover({
 
       if (internalSearchTool) {
         if (!wasEnabled) {
-          setForcedToolIds([internalSearchTool.id]);
+          if (forcedToolId !== internalSearchTool.id) {
+            toggleForcedTool(internalSearchTool.id);
+          }
         } else {
           const allSources = getConfiguredSources(effectiveAvailableSources);
           const remainingEnabled = allSources.filter(
@@ -287,9 +276,9 @@ export default function ToolsPopover({
           );
           if (
             remainingEnabled.length === 0 &&
-            forcedToolIds.includes(internalSearchTool.id)
+            forcedToolId === internalSearchTool.id
           ) {
-            setForcedToolIds([]);
+            clearForcedTool();
           }
         }
       }
@@ -299,8 +288,9 @@ export default function ToolsPopover({
       internalSearchTool,
       isSourceEnabled,
       effectiveAvailableSources,
-      forcedToolIds,
-      setForcedToolIds,
+      forcedToolId,
+      toggleForcedTool,
+      clearForcedTool,
     ]
   );
 
@@ -561,7 +551,9 @@ export default function ToolsPopover({
     setSpecificAgentPreferences(agent.id, {
       disabled_tool_ids: merged,
     });
-    setForcedToolIds(forcedToolIds.filter((id) => !serverToolIds.includes(id)));
+    if (forcedToolId !== null && serverToolIds.includes(forcedToolId)) {
+      clearForcedTool();
+    }
   };
 
   const enableAllToolsForSelectedServer = () => {
@@ -728,7 +720,7 @@ export default function ToolsPopover({
                 key={tool.id}
                 tool={tool}
                 disabled={disabledToolIds.includes(tool.id)}
-                isForced={forcedToolIds.includes(tool.id)}
+                isForced={forcedToolId === tool.id}
                 isUnavailable={isUnavailable}
                 tooltip={getToolTooltip(
                   tool,
@@ -742,7 +734,7 @@ export default function ToolsPopover({
                 onForceToggle={() =>
                   handleForceToggleWithTracking(
                     tool.id,
-                    forcedToolIds.includes(tool.id)
+                    forcedToolId === tool.id
                   )
                 }
                 onSourceManagementOpen={() =>
