@@ -1,5 +1,6 @@
 from typing import Any
 
+from pydantic import BaseModel
 from sqlalchemy import Select, select, update
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.expression import and_, or_
@@ -14,6 +15,8 @@ from onyx.db.models import (
     Credential__UserGroup,
     DocumentByConnectorCredentialPair,
     User,
+    User__UserGroup,
+    UserGroup__ConnectorCredentialPair,
 )
 from onyx.db.user_group import assert_not_shared_with_default_group
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -136,13 +139,42 @@ def fetch_credentials_by_source(
     return list(credentials)
 
 
-def fetch_github_access_token_for_repo(
+class ConnectorRepoAccess(BaseModel):
+    """What a connector lends the coding agent for one repository."""
+
+    token: str
+    # The connector's configured branch, or None for the repo's default. The
+    # grant covers what the connector indexes, so the caller reads this branch
+    # rather than one the LLM asked for.
+    branch: str | None
+
+
+def _group_shared_cc_pair_ids(db_session: Session, user: User) -> set[int]:
+    """cc-pair ids the user reaches through their own group membership."""
+    return set(
+        db_session.scalars(
+            select(UserGroup__ConnectorCredentialPair.cc_pair_id)
+            .join(
+                User__UserGroup,
+                User__UserGroup.user_group_id
+                == UserGroup__ConnectorCredentialPair.user_group_id,
+            )
+            .where(
+                User__UserGroup.user_id == user.id,
+                UserGroup__ConnectorCredentialPair.is_current.is_(True),
+            )
+        )
+    )
+
+
+def fetch_github_repo_access(
     db_session: Session,
     repo_owner: str,
     repo_name: str,
     user: User,
-) -> str | None:
-    """Access token of the GitHub connector credential that indexes the repo.
+) -> ConnectorRepoAccess | None:
+    """Access a GitHub connector lends for the repo: its credential's token
+    and the branch it indexes.
 
     A connector that indexes a repo's source code is treated as making that
     code available to whoever may read the connector, and the coding agent
@@ -150,8 +182,11 @@ def fetch_github_access_token_for_repo(
     user's own access rather than a separate admin toggle.
 
     A pair qualifies only when:
-    - `user` may read the pair (public, or a user group they belong to), which
-      is what `get_connector_credential_pairs_for_user` answers;
+    - `user` may read the pair: public, or a user group they belong to.
+      `get_connector_credential_pairs_for_user` answers most of that, but it
+      hands every pair to anyone with READ_CONNECTORS — right for a picker,
+      wrong for handing out a PAT — so group membership is checked here for
+      anyone who does not manage connectors outright;
     - the pair is NOT permission-synced. SYNC pairs carry per-document ACLs, so
       a user entitled to some of a repo's files can be entitled to few of them
       — and a repo archive is all-or-nothing, so cc-pair access cannot stand in
@@ -165,13 +200,18 @@ def fetch_github_access_token_for_repo(
 
     Known asymmetry: indexing exposes a filtered subset (sensitive files
     skipped, document extensions subtracted, size caps), while the token reads
-    the whole tree. Filtering what the agent receives to the indexed set would
-    close it; until then the checks above bound who can ask.
+    the whole tree. The caller filters the tree it hands on; the checks above
+    bound who can ask.
 
     `user` is the actor recorded in the credential-access audit line.
 
     Returns None when no eligible pair matches (public-repo access only).
     """
+    # An anonymous visitor is not a person the audit line can name, and a
+    # PUBLIC connector says nothing about who may hold its credential.
+    if user.is_anonymous:
+        return None
+
     # Imported lazily: connector_credential_pair imports this module, and the
     # GitHub connector utils pull in PyGithub.
     from onyx.connectors.github.utils import parse_repositories_config
@@ -190,8 +230,20 @@ def fetch_github_access_token_for_repo(
         get_editable=False,
         source=DocumentSource.GITHUB,
     )
+    manages_connectors = Permission.MANAGE_CONNECTORS in get_effective_permissions(user)
+    group_shared_ids = (
+        set() if manages_connectors else _group_shared_cc_pair_ids(db_session, user)
+    )
 
-    for cc_pair in cc_pairs:
+    # Newest pair first, so several connectors indexing the same repo resolve
+    # to the same credential every time and the audit trail reproduces.
+    for cc_pair in sorted(cc_pairs, key=lambda pair: pair.id, reverse=True):
+        if (
+            not manages_connectors
+            and cc_pair.access_type != AccessType.PUBLIC
+            and cc_pair.id not in group_shared_ids
+        ):
+            continue
         # Per-document ACLs cannot gate an all-or-nothing repo archive.
         if cc_pair.access_type == AccessType.SYNC:
             continue
@@ -224,8 +276,10 @@ def fetch_github_access_token_for_repo(
                 provider=DocumentSource.GITHUB.value,
                 row_id=credential.id,
                 user_id=str(user.id),
+                resource=f"{repo_owner}/{repo_name}",
             )
-            return token
+            branch = str(config.get("branch") or "").strip()
+            return ConnectorRepoAccess(token=token, branch=branch or None)
 
     return None
 

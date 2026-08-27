@@ -2,8 +2,8 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 from uuid import UUID
 
-from onyx.db.credentials import fetch_github_access_token_for_repo
-from onyx.db.enums import AccessType, ConnectorCredentialPairStatus
+from onyx.db.credentials import ConnectorRepoAccess, fetch_github_repo_access
+from onyx.db.enums import AccessType, ConnectorCredentialPairStatus, Permission
 from onyx.utils.sensitive import SensitiveValue
 
 _CC_PAIRS_FN = (
@@ -13,9 +13,10 @@ _CC_PAIRS_FN = (
 _USER_ID = UUID("11111111-2222-3333-4444-555555555555")
 
 
-def _user() -> MagicMock:
+def _user(is_anonymous: bool = False) -> MagicMock:
     user = MagicMock()
     user.id = _USER_ID
+    user.is_anonymous = is_anonymous
     return user
 
 
@@ -34,8 +35,11 @@ def _cc_pair(
     include_code_files: bool = True,
     access_type: AccessType = AccessType.PUBLIC,
     status: ConnectorCredentialPairStatus = ConnectorCredentialPairStatus.ACTIVE,
+    branch: str | None = None,
+    pair_id: int = 1,
 ) -> MagicMock:
     cc_pair = MagicMock()
+    cc_pair.id = pair_id
     cc_pair.access_type = access_type
     cc_pair.status = status
     cc_pair.credential = credential
@@ -43,23 +47,51 @@ def _cc_pair(
         "repo_owner": repo_owner,
         "repositories": repositories,
         "include_code_files": include_code_files,
+        "branch": branch,
     }
     return cc_pair
 
 
-def _fetch(cc_pairs: list[Any], repo_owner: str, repo_name: str) -> str | None:
-    user = _user()
-    with patch(_CC_PAIRS_FN, return_value=cc_pairs) as lookup:
-        token = fetch_github_access_token_for_repo(
+def _access(
+    cc_pairs: list[Any],
+    repo_owner: str,
+    repo_name: str,
+    user: MagicMock | None = None,
+    group_shared_ids: set[int] | None = None,
+    manages_connectors: bool = True,
+) -> ConnectorRepoAccess | None:
+    user = user or _user()
+    with (
+        patch(_CC_PAIRS_FN, return_value=cc_pairs) as lookup,
+        patch(
+            "onyx.db.credentials.get_effective_permissions",
+            return_value=(
+                {Permission.MANAGE_CONNECTORS} if manages_connectors else set()
+            ),
+        ),
+        patch(
+            "onyx.db.credentials._group_shared_cc_pair_ids",
+            return_value=group_shared_ids or set(),
+        ),
+    ):
+        access = fetch_github_repo_access(
             db_session=MagicMock(),
             repo_owner=repo_owner,
             repo_name=repo_name,
             user=user,
         )
+    if user.is_anonymous:
+        lookup.assert_not_called()
+        return access
     # The gate is the acting user's own read access, not a global listing.
     assert lookup.call_args.kwargs["user"] is user
     assert lookup.call_args.kwargs["get_editable"] is False
-    return token
+    return access
+
+
+def _fetch(cc_pairs: list[Any], repo_owner: str, repo_name: str) -> str | None:
+    access = _access(cc_pairs, repo_owner, repo_name)
+    return access.token if access else None
 
 
 def _credential_with_token() -> MagicMock:
@@ -90,6 +122,7 @@ def test_emits_audit_event_with_actor_on_decrypt() -> None:
         provider="github",
         row_id=7,
         user_id=str(_USER_ID),
+        resource="owner/repo",
     )
 
 
@@ -154,3 +187,56 @@ def test_skips_non_public_and_inactive_pairs() -> None:
         status=ConnectorCredentialPairStatus.PAUSED,
     )
     assert _fetch([paused], "owner", "repo") is None
+
+
+def test_anonymous_users_never_receive_a_credential() -> None:
+    """An anonymously reachable persona must not turn a PUBLIC connector into
+    private source access, and the audit line would name nobody."""
+    cc_pair = _cc_pair(_credential_with_token(), "owner", "repo")
+
+    assert _access([cc_pair], "owner", "repo", user=_user(is_anonymous=True)) is None
+
+
+def test_curator_without_group_membership_is_refused() -> None:
+    """READ_CONNECTORS (implied by managing document sets) returns every pair
+    from the listing. Listing a connector is not holding its PAT."""
+    private = _cc_pair(
+        _credential_with_token(), "owner", "repo", access_type=AccessType.PRIVATE
+    )
+
+    assert _access([private], "owner", "repo", manages_connectors=False) is None
+    assert (
+        _access(
+            [private],
+            "owner",
+            "repo",
+            manages_connectors=False,
+            group_shared_ids={private.id},
+        )
+        is not None
+    )
+
+
+def test_access_reports_the_indexed_branch() -> None:
+    """The grant covers what the connector indexes, so the caller can pin the
+    read to that branch instead of one the model asked for."""
+    cc_pair = _cc_pair(_credential_with_token(), "owner", "repo", branch=" main ")
+
+    access = _access([cc_pair], "owner", "repo")
+
+    assert access == ConnectorRepoAccess(token="tok", branch="main")
+
+
+def test_the_newest_matching_pair_wins() -> None:
+    """Several connectors can index one repo with different PATs; which one
+    answers must not depend on row order."""
+    older = _cc_pair(_credential_with_token(), "owner", "repo", pair_id=1)
+    newer_credential = MagicMock()
+    newer_credential.id = 9
+    newer_credential.credential_json = _sensitive_json(
+        '{"github_access_token": "newer"}'
+    )
+    newer = _cc_pair(newer_credential, "owner", "repo", pair_id=2)
+
+    assert _fetch([older, newer], "owner", "repo") == "newer"
+    assert _fetch([newer, older], "owner", "repo") == "newer"
