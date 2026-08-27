@@ -31,7 +31,6 @@ from onyx.server.features.build.sandbox.models import (
     CraftLLMProviderConfig,
     CraftMCPServerConfig,
     FileSet,
-    FilesystemEntry,
     SandboxInfo,
 )
 from onyx.server.features.build.sandbox.user_library import USER_LIBRARY_MOUNT_PATH
@@ -379,65 +378,6 @@ class TestRestoreFailureRecovery:
         refreshed = db_session.get(Sandbox, row.id)
         assert refreshed is not None
         assert refreshed.status == SandboxStatus.RUNNING
-
-
-class TestListArtifacts:
-    def _seed_session(self, db_session: Session, user: User) -> BuildSession:
-        session = BuildSession(
-            id=uuid4(),
-            user_id=user.id,
-            name="artifacts",
-            status=BuildSessionStatus.ACTIVE,
-        )
-        db_session.add(session)
-        db_session.commit()
-        return session
-
-    def test_transient_sandbox_error_degrades_to_empty(
-        self,
-        db_session: Session,
-        test_user: User,
-        sandbox: Callable[..., Sandbox],
-        stub_sandbox_manager: StubSandboxManager,
-        session_manager_with_stub: SessionManager,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        # list_directory reaches into the sandbox and can fail transiently
-        # while the pod is still coming up after a restore. list_artifacts must
-        # degrade to [] (200) rather than propagating a 500.
-        sandbox(user=test_user, status=SandboxStatus.RUNNING)
-        session = self._seed_session(db_session, test_user)
-
-        def _raise_transient(**_kwargs: object) -> list[FilesystemEntry]:
-            raise RuntimeError("Failed to list directory: pod not ready")
-
-        monkeypatch.setattr(stub_sandbox_manager, "list_directory", _raise_transient)
-
-        result = session_manager_with_stub.list_artifacts(session.id, test_user.id)
-
-        assert result == []
-
-    def test_lists_webapp_when_sandbox_reachable(
-        self,
-        db_session: Session,
-        test_user: User,
-        sandbox: Callable[..., Sandbox],
-        stub_sandbox_manager: StubSandboxManager,
-        session_manager_with_stub: SessionManager,
-    ) -> None:
-        # Sanity: when the sandbox is reachable and outputs/web exists, the
-        # web_app artifact is still surfaced (no regression from the new guard).
-        sandbox(user=test_user, status=SandboxStatus.RUNNING)
-        session = self._seed_session(db_session, test_user)
-
-        stub_sandbox_manager.list_directory_returns = [
-            FilesystemEntry(name="web", path="outputs/web", is_directory=True),
-        ]
-
-        result = session_manager_with_stub.list_artifacts(session.id, test_user.id)
-
-        assert result is not None
-        assert [a["type"] for a in result] == ["web_app"]
 
 
 class TestIdleCleanupSelection:

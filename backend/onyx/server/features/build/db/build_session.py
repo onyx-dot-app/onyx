@@ -74,6 +74,22 @@ def get_build_session(
     return db_session.scalar(stmt)
 
 
+def get_build_session_for_viewer(
+    session_id: UUID,
+    user_id: UUID,
+    db_session: Session,
+) -> BuildSession | None:
+    """The session when ``user_id`` may read it: the owner, or anyone in the
+    org once the session is shared org-wide. Mirrors ``_check_webapp_access``
+    in webapp_proxy.py, keep the two in sync."""
+    stmt = select(BuildSession).where(
+        BuildSession.id == session_id,
+        (BuildSession.user_id == user_id)
+        | (BuildSession.sharing_scope == SharingScope.PUBLIC_ORG),
+    )
+    return db_session.scalar(stmt)
+
+
 def get_orphan_build_session_ids(
     session_ids: list[UUID],
     user_id: UUID,

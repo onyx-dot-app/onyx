@@ -10,7 +10,6 @@ import io
 import json
 import mimetypes
 import threading
-import uuid
 import zipfile
 from collections.abc import Callable, Generator
 from contextlib import AbstractContextManager, nullcontext
@@ -25,10 +24,10 @@ from sqlalchemy.orm import Session as DBSession
 from onyx.cache.factory import get_cache_backend
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import MessageType
-from onyx.db.enums import BuildSessionStatus, SandboxStatus, SessionOrigin
+from onyx.db.enums import ArtifactType, BuildSessionStatus, SandboxStatus, SessionOrigin
 from onyx.db.external_app import get_connectable_apps_for_user
 from onyx.db.llm import fetch_all_accessible_llm_providers
-from onyx.db.models import BuildMessage, BuildSession, Sandbox, User
+from onyx.db.models import Artifact, BuildMessage, BuildSession, Sandbox, User
 from onyx.db.users import fetch_user_by_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -38,12 +37,14 @@ from onyx.server.features.build.configs import (
     MAX_UPLOAD_FILES_PER_SESSION,
     is_hidden_workspace_name,
 )
+from onyx.server.features.build.db.artifact import get_artifact_by_id
 from onyx.server.features.build.db.build_session import (
     create_build_session__no_commit,
     create_message,
     delete_build_session__no_commit,
     finalize_session_initialization__no_commit,
     get_build_session,
+    get_build_session_for_viewer,
     get_empty_session_for_user,
     get_session_messages,
     get_user_build_sessions,
@@ -1258,69 +1259,74 @@ class SessionManager:
                     continue
         return buffer.getvalue()
 
-    def list_artifacts(
-        self,
-        session_id: UUID,
-        user_id: UUID,
-    ) -> list[dict[str, Any]] | None:
+    def _viewer_serving_context(
+        self, session_id: UUID, viewer_user_id: UUID, artifact_id: UUID
+    ) -> tuple[UUID, Artifact] | None:
+        """Owner id and live artifact row for serving an artifact to a viewer.
+
+        None means not found (missing, deleted, or not visible), while a
+        sandbox that is not running raises CONFLICT: these methods cannot
+        wake a pod, and a shared view must never wake another user's. Serving
+        is best-effort against the loaded workspace, a session not restored
+        into the running pod reads as absent until archives land.
         """
-        List artifacts generated in a session.
-
-        Returns artifacts in the format expected by the frontend (matching ArtifactResponse).
-
-        Args:
-            session_id: The session UUID
-            user_id: The user ID to verify ownership
-
-        Returns:
-            List of artifact dicts or None if session not found or user doesn't own session
-        """
-        resolved = self._resolve_owned_session_and_sandbox(session_id, user_id)
-        if resolved is None:
-            return None
-        _, sandbox = resolved
-
-        artifacts: list[dict[str, Any]] = []
-        now = datetime.now(timezone.utc)
-
-        try:
-            output_entries = self._sandbox_manager.list_directory(
-                sandbox_id=sandbox.id,
-                session_id=session_id,
-                path="outputs",
-            )
-        except ValueError:
-            # outputs/ doesn't exist yet — no artifacts.
-            return artifacts
-        except Exception:
-            # Sandbox transiently unreachable — degrade to no artifacts, not 500.
-            logger.warning(
-                "Could not list artifacts for session %s; sandbox not reachable",
-                session_id,
-                exc_info=True,
-            )
-            return artifacts
-
-        # Check for webapp (web directory in outputs)
-        has_webapp = any(
-            entry.is_directory and entry.name == "web" for entry in output_entries
+        session = get_build_session_for_viewer(
+            session_id, viewer_user_id, self._db_session
         )
-
-        if has_webapp:
-            artifacts.append(
-                {
-                    "id": str(uuid.uuid4()),
-                    "session_id": str(session_id),
-                    "type": "web_app",  # Use web_app to match streaming packet type
-                    "name": "Web Application",
-                    "path": "outputs/web",
-                    "preview_url": None,  # Preview is via webapp URL, not artifact preview
-                    "created_at": now.isoformat(),
-                    "updated_at": now.isoformat(),
-                }
+        if session is None or session.user_id is None:
+            return None
+        owner_id = session.user_id
+        artifact = get_artifact_by_id(
+            self._db_session, session_id=session_id, artifact_id=artifact_id
+        )
+        if artifact is None or artifact.deleted:
+            return None
+        sandbox = get_sandbox_by_user_id(self._db_session, owner_id)
+        if sandbox is None or not sandbox.status.is_active():
+            raise OnyxError(
+                OnyxErrorCode.CONFLICT,
+                "The session's sandbox is not running",
             )
+        return owner_id, artifact
 
-        return artifacts
+    def artifact_download_by_id(
+        self, session_id: UUID, viewer_user_id: UUID, artifact_id: UUID
+    ) -> tuple[bytes, str, str] | None:
+        """Current bytes for an artifact row: file content, or a zip for
+        directory and webapp artifacts."""
+        context = self._viewer_serving_context(session_id, viewer_user_id, artifact_id)
+        if context is None:
+            return None
+        owner_id, artifact = context
+        outputs_path = f"outputs/{artifact.path}"
+        if artifact.type == ArtifactType.WEB_APP:
+            zipped = self.download_webapp_zip(session_id, owner_id)
+        elif artifact.type == ArtifactType.DIRECTORY:
+            zipped = self.download_directory(session_id, owner_id, outputs_path)
+        else:
+            return self.download_artifact(session_id, owner_id, outputs_path)
+        if zipped is None:
+            return None
+        zip_bytes, filename = zipped
+        return zip_bytes, "application/zip", filename
+
+    def artifact_pptx_preview_by_id(
+        self, session_id: UUID, viewer_user_id: UUID, artifact_id: UUID
+    ) -> dict[str, Any] | None:
+        context = self._viewer_serving_context(session_id, viewer_user_id, artifact_id)
+        if context is None:
+            return None
+        owner_id, artifact = context
+        return self.get_pptx_preview(session_id, owner_id, f"outputs/{artifact.path}")
+
+    def artifact_docx_export_by_id(
+        self, session_id: UUID, viewer_user_id: UUID, artifact_id: UUID
+    ) -> tuple[bytes, str] | None:
+        context = self._viewer_serving_context(session_id, viewer_user_id, artifact_id)
+        if context is None:
+            return None
+        owner_id, artifact = context
+        return self.export_docx(session_id, owner_id, f"outputs/{artifact.path}")
 
     def download_artifact(
         self,

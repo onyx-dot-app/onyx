@@ -15,7 +15,7 @@ from onyx.db.enums import (
 from onyx.server.features.build.db.build_session import session_runtime_stale
 
 if TYPE_CHECKING:
-    from onyx.db.models import BuildSession, Sandbox
+    from onyx.db.models import Artifact, BuildSession, Sandbox
 
 
 # ===== Session Models =====
@@ -78,20 +78,30 @@ class ArtifactResponse(BaseModel):
     type: ArtifactType
     name: str
     path: str
+    # Always None. The model has no preview column, previews come from the
+    # pptx-preview route and the webapp proxy. The field exists only for the
+    # frontend response shape.
     preview_url: str | None
+    version: int
+    deleted: bool
+    size_bytes: int | None
+    turn_index: int | None
     created_at: datetime
     updated_at: datetime
 
     @classmethod
-    def from_model(cls, artifact: Any) -> "ArtifactResponse":
-        """Convert Artifact ORM model to response."""
+    def from_model(cls, artifact: "Artifact") -> "ArtifactResponse":
         return cls(
             id=str(artifact.id),
             session_id=str(artifact.session_id),
             type=artifact.type,
             name=artifact.name,
             path=artifact.path,
-            preview_url=getattr(artifact, "preview_url", None),
+            preview_url=None,
+            version=artifact.version,
+            deleted=artifact.deleted,
+            size_bytes=artifact.size_bytes,
+            turn_index=artifact.turn_index,
             created_at=artifact.created_at,
             updated_at=artifact.updated_at,
         )
@@ -135,7 +145,13 @@ class SessionResponse(BaseModel):
             last_activity_at=session.last_activity_at,
             nextjs_port=session.nextjs_port,
             sandbox=(SandboxResponse.from_model(sandbox) if sandbox else None),
-            artifacts=[ArtifactResponse.from_model(a) for a in session.artifacts],
+            # Tombstones stay off the session response, the artifact list
+            # route serves them on request via include_deleted.
+            artifacts=[
+                ArtifactResponse.from_model(a)
+                for a in session.artifacts
+                if not a.deleted
+            ],
             sharing_scope=session.sharing_scope,
             origin=session.origin,
             agent_provider=session.agent_provider,

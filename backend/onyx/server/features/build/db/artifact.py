@@ -123,6 +123,20 @@ def mark_artifacts_deleted(
     )
 
 
+def get_artifact_by_id(
+    db_session: Session,
+    *,
+    session_id: UUID,
+    artifact_id: UUID,
+) -> Artifact | None:
+    """Session-scoped so an id from one session cannot address another's row."""
+    return db_session.scalar(
+        select(Artifact).where(
+            Artifact.id == artifact_id, Artifact.session_id == session_id
+        )
+    )
+
+
 def get_session_artifacts(
     db_session: Session,
     *,

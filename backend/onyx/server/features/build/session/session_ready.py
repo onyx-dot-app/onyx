@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session as DBSession
 from onyx.db.enums import BuildSessionStatus
 from onyx.db.external_app import get_connectable_apps_for_user
 from onyx.db.models import BuildSession, Sandbox, User
+from onyx.server.features.build.db.artifact import get_session_artifacts
 from onyx.server.features.build.db.build_session import (
     reserve_nextjs_port__no_commit,
     session_runtime_stale,
@@ -24,6 +25,7 @@ from onyx.server.features.build.db.sandbox import (
     get_sandbox_by_user_id,
     update_sandbox_heartbeat,
 )
+from onyx.server.features.build.outputs_reconciler import reconcile_session_outputs
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.util.agent_instructions import (
     build_connectable_apps_list,
@@ -103,6 +105,7 @@ def ensure_session_ready(
         else:
             update_sandbox_heartbeat(db_session, sandbox.id)
             db_session.commit()
+        lazily_index_outputs(db_session, sandbox_manager, session_id, sandbox.id)
         return sandbox
 
     if not session.nextjs_port:
@@ -165,7 +168,42 @@ def ensure_session_ready(
     session.skills_hash = sandbox_skills_hash
     session.mcp_config_hash = sandbox_mcp_config_hash
     db_session.commit()
+    if snapshot:
+        lazily_index_outputs(db_session, sandbox_manager, session_id, sandbox.id)
     return sandbox
+
+
+def lazily_index_outputs(
+    db_session: DBSession,
+    sandbox_manager: SandboxManager,
+    session_id: UUID,
+    sandbox_id: UUID,
+) -> None:
+    """Give a session that predates the artifact index its rows.
+
+    Best-effort and guarded to sessions with no rows at all, so the walk
+    stops once any row lands. Sessions with rows are reconciled at every
+    turn end instead. No producing turn is known, so ``turn_index`` stays
+    NULL.
+    """
+    try:
+        if get_session_artifacts(
+            db_session, session_id=session_id, include_deleted=True
+        ):
+            return
+        reconcile_session_outputs(
+            db_session,
+            sandbox_manager,
+            sandbox_id=sandbox_id,
+            session_id=session_id,
+            turn_index=None,
+        )
+        db_session.commit()
+    except Exception:
+        logger.warning(
+            "Lazy outputs indexing failed for session %s", session_id, exc_info=True
+        )
+        db_session.rollback()
 
 
 def _discard_partial_workspace(
