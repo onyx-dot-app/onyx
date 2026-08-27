@@ -1,13 +1,15 @@
 """Provider-agnostic identity of a repository revision and of a local archive."""
 
 import hashlib
+import re
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, ValidationInfo, field_validator
 
-# Segments that would let one repo alias another once `key_prefix` is used as
-# a file-store id prefix, or that escape the key space entirely.
-_REJECTED_SEGMENTS = frozenset({"", ".", ".."})
+# What GitHub and GitLab allow in a namespace or repository name. Anything
+# else could alias another repo once `key_prefix` becomes a file-store id
+# prefix, or escape the key space entirely.
+_PATH_SEGMENT = re.compile(r"(?!\.+\Z)[A-Za-z0-9._-]+\Z")
 
 
 class RepoRef(BaseModel):
@@ -23,9 +25,9 @@ class RepoRef(BaseModel):
     @field_validator("owner", "name")
     @classmethod
     def _validate_path_part(cls, value: str, info: ValidationInfo) -> str:
-        """`owner` and `name` become path segments of a cache key, so reject
-        empty values, leading/trailing "/", and "." / ".." segments."""
-        if any(segment in _REJECTED_SEGMENTS for segment in value.split("/")):
+        """`owner` and `name` become path segments of a cache key, so every
+        "/"-separated segment must be a plain name."""
+        if not all(_PATH_SEGMENT.match(segment) for segment in value.split("/")):
             raise ValueError(f"Invalid repo {info.field_name}: {value!r}")
         return value
 

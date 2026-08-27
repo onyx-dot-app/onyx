@@ -128,8 +128,44 @@ def test_stale_snapshots_are_pruned(tmp_path: Path) -> None:
     snap = get_or_create_snapshot(rev, _opener(tmp_path, make_repo_tarball(FILES), rev))
     old = time.time() - snapshot.REPO_SNAPSHOT_TTL_SECONDS - 60
     os.utime(snap.root, (old, old))
-    snapshot._prune_stale_snapshots()
+    snapshot._prune_snapshots()
     assert not snap.root.exists()
+
+
+def test_reading_a_file_keeps_the_snapshot_alive(tmp_path: Path) -> None:
+    """A connector that walks once and then streams files for hours must not
+    have its snapshot pruned out from under it."""
+    rev = _rev("touch-on-read")
+    snap = get_or_create_snapshot(rev, _opener(tmp_path, make_repo_tarball(FILES), rev))
+    old = time.time() - snapshot.REPO_SNAPSHOT_TTL_SECONDS - 60
+    os.utime(snap.root, (old, old))
+
+    snap.read_file("README.md", max_size_bytes=1_000_000)
+    snapshot._prune_snapshots()
+
+    assert snap.root.exists()
+
+
+def test_least_recently_used_snapshots_are_evicted_over_the_total_cap(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The per-archive cap bounds one extraction; only the total cap bounds
+    what a worker accumulates across repos."""
+    snaps = []
+    for index in range(3):
+        rev = _rev(f"lru{index}")
+        snaps.append(
+            get_or_create_snapshot(
+                rev, _opener(tmp_path, make_repo_tarball(FILES), rev)
+            )
+        )
+        os.utime(snaps[-1].root, (time.time() - 100 + index, time.time() - 100 + index))
+
+    one_snapshot = sum(len(content) for content in FILES.values())
+    monkeypatch.setattr(snapshot, "REPO_SNAPSHOT_MAX_TOTAL_BYTES", 2 * one_snapshot)
+    snapshot._prune_snapshots()
+
+    assert [snap.root.exists() for snap in snaps] == [False, True, True]
 
 
 # --- Concurrency ---------------------------------------------------------------------

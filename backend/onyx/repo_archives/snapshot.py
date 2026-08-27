@@ -27,6 +27,7 @@ from pathlib import Path
 from onyx.configs.app_configs import (
     REPO_SNAPSHOT_MAX_ARCHIVE_MEMBERS,
     REPO_SNAPSHOT_MAX_EXTRACTED_BYTES,
+    REPO_SNAPSHOT_MAX_TOTAL_BYTES,
     REPO_SNAPSHOT_TTL_SECONDS,
 )
 from onyx.repo_archives.models import RepoArchive, RepoRevision
@@ -82,6 +83,9 @@ class RepoSnapshot:
         Refuses paths that resolve outside the snapshot (including through
         symlinks), non-regular files, and files above `max_size_bytes`.
         """
+        # Reads count as use: a checkpointed connector streams files for
+        # hours after its one walk, and eviction is by idle time.
+        _touch(self.root)
         full_path = (self.root / rel_path).resolve()
         if not full_path.is_relative_to(self._resolved_root):
             raise RepoSnapshotError(f"Path escapes snapshot root: {rel_path}")
@@ -101,9 +105,9 @@ class RepoSnapshot:
 
 class _ExtractionLimits:
     """tarfile filter: the "data" filter plus archive-wide member-count and
-    total-size caps. Sizes are the header-declared member sizes, which is
-    exactly how many bytes tarfile writes per member, so the caps hold
-    before any write."""
+    total-size caps. Sizes come from the member headers, which for the
+    regular files a repo archive holds is exactly what tarfile writes, so
+    the caps hold before any write."""
 
     def __init__(self) -> None:
         self.members = 0
@@ -140,17 +144,49 @@ def _touch(snapshot_root: Path) -> None:
         raise RepoSnapshotError(f"Snapshot is missing: {e}") from e
 
 
-def _prune_stale_snapshots() -> None:
-    """Remove snapshots (and orphaned staging dirs) idle past the TTL."""
+def _snapshot_bytes(entry: Path) -> int:
+    total = 0
+    for dirpath, _dirnames, filenames in os.walk(entry, followlinks=False):
+        for filename in filenames:
+            try:
+                total += os.lstat(os.path.join(dirpath, filename)).st_size
+            except OSError:
+                continue
+    return total
+
+
+def _prune_snapshots() -> None:
+    """Drop snapshots (and orphaned staging dirs) idle past the TTL, then
+    evict least recently used ones until the cache fits
+    REPO_SNAPSHOT_MAX_TOTAL_BYTES.
+
+    Without the total cap the only bound is the per-archive cap times the
+    repos indexed within a TTL, on a worker's own disk. Runs only before an
+    extraction, the one thing that grows the cache, so sizing snapshots
+    costs far less than the extraction that follows.
+    """
     if not _CACHE_ROOT.is_dir():
         return
     cutoff = time.time() - REPO_SNAPSHOT_TTL_SECONDS
+    live: list[tuple[float, Path]] = []
     for entry in _CACHE_ROOT.iterdir():
         try:
-            if entry.stat().st_mtime < cutoff:
-                shutil.rmtree(entry, ignore_errors=True)
+            mtime = entry.stat().st_mtime
         except OSError:
             continue
+        if mtime < cutoff:
+            shutil.rmtree(entry, ignore_errors=True)
+        else:
+            live.append((mtime, entry))
+
+    sized = [(mtime, entry, _snapshot_bytes(entry)) for mtime, entry in live]
+    total = sum(size for _mtime, _entry, size in sized)
+    for _mtime, entry, size in sorted(sized, key=lambda item: item[0]):
+        if total <= REPO_SNAPSHOT_MAX_TOTAL_BYTES:
+            return
+        logger.info("Evicting repo snapshot %s (%s bytes) for space", entry.name, size)
+        shutil.rmtree(entry, ignore_errors=True)
+        total -= size
 
 
 def _extracted_root(tree: Path) -> Path:
@@ -205,8 +241,6 @@ def get_or_create_snapshot(
     Errors it raises propagate unchanged; extraction problems raise
     RepoSnapshotError.
     """
-    _prune_stale_snapshots()
-
     dest = _snapshot_dir(revision)
     if dest.is_dir():
         try:
@@ -215,7 +249,9 @@ def get_or_create_snapshot(
         except RepoSnapshotError:
             pass  # Pruned by another worker between the check and the touch.
 
-    _CACHE_ROOT.mkdir(parents=True, exist_ok=True)
+    # 0o700: the cache path is predictable and the temp dir is shared.
+    _CACHE_ROOT.mkdir(parents=True, exist_ok=True, mode=0o700)
+    _prune_snapshots()
     # Unique per attempt: concurrent misses for the same key must not share
     # a staging directory.
     staging = dest.with_name(f"{dest.name}.tmp{os.getpid()}_{uuid.uuid4().hex[:8]}")

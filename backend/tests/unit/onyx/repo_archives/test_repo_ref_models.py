@@ -1,5 +1,6 @@
 """RepoRef's identity invariants: `owner` and `name` become path segments of
-a file-store id, so they must not be empty or contain traversal segments."""
+a file-store id, so each must be a plain name of the kind hosting providers
+actually issue."""
 
 import pytest
 from pydantic import ValidationError
@@ -11,12 +12,17 @@ def _repo_ref(owner: str = "org", name: str = "repo") -> RepoRef:
     return RepoRef(provider="test", host="test.local", owner=owner, name=name)
 
 
-@pytest.mark.parametrize("owner", ["org", "group/subgroup", "a/b/c", "dot.org"])
+@pytest.mark.parametrize(
+    "owner", ["org", "group/subgroup", "a/b/c", "dot.org", "-lead", "under_score"]
+)
 def test_valid_owner_paths(owner: str) -> None:
     assert _repo_ref(owner=owner).owner == owner
 
 
-@pytest.mark.parametrize("bad", ["", "..", "/org", "org/", "a/../b", "a//b", "."])
+@pytest.mark.parametrize(
+    "bad",
+    ["", "..", "/org", "org/", "a/../b", "a//b", ".", "a\\b", "a b", "org\x00", "C:"],
+)
 def test_invalid_owner_is_rejected(bad: str) -> None:
     with pytest.raises(ValidationError):
         _repo_ref(owner=bad)
