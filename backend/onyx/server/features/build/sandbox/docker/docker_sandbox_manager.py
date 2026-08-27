@@ -1637,6 +1637,11 @@ fi
             result = _run_in_container_as_sandbox_user(
                 container,
                 [
+                    # exec_run has no timeout, so a pathological walk must
+                    # not hang the turn's terminal handling. 30s matches the
+                    # kubernetes RPC bound.
+                    "/usr/bin/timeout",
+                    "30",
                     "/usr/local/bin/python3",
                     "-E",
                     "-s",

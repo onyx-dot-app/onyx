@@ -41,6 +41,7 @@ import time
 from typing import Any
 from uuid import UUID
 
+from onyx.cache.factory import get_cache_backend
 from onyx.configs.constants import MessageType, NotificationType
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import ScheduledTaskErrorClass, ScheduledTaskRunStatus, SessionOrigin
@@ -51,12 +52,17 @@ from onyx.server.features.build.db.build_session import (
     get_session_messages,
 )
 from onyx.server.features.build.db.sandbox import update_sandbox_heartbeat
+from onyx.server.features.build.outputs_reconciler import (
+    announce_artifacts,
+    reconcile_session_outputs,
+)
 from onyx.server.features.build.sandbox.event_schema import (
     TURN_ERROR_CODE_TIMEOUT,
     Error,
     PromptResponse,
     RequestPermissionRequest,
 )
+from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.session.locks import session_creation_lock
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.session.streaming import BuildStreamingState
@@ -381,6 +387,26 @@ def _drive_agent(
         state = BuildStreamingState(turn_index=0)
         deadline = time.monotonic() + budget_seconds
 
+        cache = get_cache_backend()
+
+        def reconcile_outputs() -> None:
+            """Best-effort outputs index update on every owned terminal branch,
+            while the prompt slot is still held. Failures never block the run
+            status."""
+            try:
+                packets = reconcile_session_outputs(
+                    db_session,
+                    get_sandbox_manager(),
+                    sandbox_id=sandbox_id,
+                    session_id=session_id,
+                    turn_index=0,
+                )
+                db_session.commit()
+                announce_artifacts(session_id, packets, cache)
+            except Exception:
+                logger.exception("Outputs reconcile failed for run %s", run_id)
+                db_session.rollback()
+
         # Mirror the interactive path's serialization invariant. Each
         # scheduled run has a fresh BuildSession so the lock never
         # contends today, but acquire it anyway so any future change
@@ -477,6 +503,8 @@ def _drive_agent(
                 # agent can't keep growing the transcript.
                 if time.monotonic() > deadline:
                     session_manager.finalize_persist(session_id, state)
+                    db_session.commit()
+                    reconcile_outputs()
                     mark_run_status(
                         db_session=db_session,
                         run_id=run_id,
@@ -511,6 +539,7 @@ def _drive_agent(
                 summary = summary_from_chunks or _summary_from_session_messages(
                     session_id, db_session
                 )
+                reconcile_outputs()
                 mark_run_status(
                     db_session=db_session,
                     run_id=run_id,
@@ -531,6 +560,7 @@ def _drive_agent(
             if terminal_error is not None or cancelled or not got_prompt_response:
                 session_manager.finalize_persist(session_id, state)
                 db_session.commit()
+                reconcile_outputs()
                 if terminal_error is not None:
                     error_class = (
                         ScheduledTaskErrorClass.TIMEOUT
@@ -575,6 +605,7 @@ def _drive_agent(
             summary_from_chunks = _summary_from_state(state)
             session_manager.finalize_persist(session_id, state)
             db_session.commit()
+            reconcile_outputs()
             summary = summary_from_chunks or _summary_from_session_messages(
                 session_id, db_session
             )
@@ -597,6 +628,8 @@ def _drive_agent(
             # to FAILED. Do NOT re-raise — Celery would retry, which is
             # explicitly out of scope for V1.
             db_session.rollback()
+            if not slot.lost:
+                reconcile_outputs()
             exc_name = type(exc).__name__
             exc_message = str(exc)
             # Keep the specific exception class name visible by prepending

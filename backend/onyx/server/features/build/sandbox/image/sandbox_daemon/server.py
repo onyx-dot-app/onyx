@@ -1,3 +1,11 @@
+"""Sandbox daemon HTTP server.
+
+Runs standalone inside the sandbox container with only stdlib, fastapi, and
+pydantic available. ``onyx.*`` is unimportable here, so routes raise
+``HTTPException`` directly instead of the api-server's ``OnyxError`` contract,
+and the api-server's SidecarClient translates failures for its callers.
+"""
+
 import asyncio
 import base64
 import binascii
