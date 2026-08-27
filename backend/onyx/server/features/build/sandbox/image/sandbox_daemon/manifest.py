@@ -115,6 +115,9 @@ def _walk_directory(walk: _Walk, dir_fd: int, prefix: str, depth: int) -> None:
                 resp.truncated = True
                 children = children[:MANIFEST_MAX_DIR_CHILDREN]
         except OSError:
+            # The listing failed after the open, so the directory's contents
+            # are unknown: admit the gap instead of looking complete.
+            resp.skipped_unreadable += 1
             return
         for child in children:
             if len(resp.entries) >= MANIFEST_MAX_ENTRIES:
@@ -126,6 +129,8 @@ def _walk_directory(walk: _Walk, dir_fd: int, prefix: str, depth: int) -> None:
             try:
                 st = child.stat(follow_symlinks=False)
             except OSError:
+                # Vanished or unreadable between scandir and stat.
+                resp.skipped_unreadable += 1
                 continue
             relative = f"{prefix}{child.name}"
             if stat.S_ISLNK(st.st_mode):

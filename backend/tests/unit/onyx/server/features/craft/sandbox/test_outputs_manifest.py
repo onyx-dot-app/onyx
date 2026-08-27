@@ -131,6 +131,23 @@ def test_special_files_skipped(manifest_module: ModuleType, tmp_path: Path) -> N
     assert result.skipped_special == 1
 
 
+def test_unreadable_directory_counted_not_listed(
+    manifest_module: ModuleType, tmp_path: Path
+) -> None:
+    if os.geteuid() == 0:
+        pytest.skip("root bypasses directory permissions")
+    locked = tmp_path / "locked"
+    locked.mkdir()
+    (locked / "hidden.txt").write_bytes(b"x")
+    locked.chmod(0o000)
+    try:
+        result = manifest_module.build_manifest_for_root(tmp_path)
+    finally:
+        locked.chmod(0o755)
+    assert [e.path for e in result.entries] == []
+    assert result.skipped_unreadable == 1
+
+
 def test_truncation_flags_instead_of_growing(
     manifest_module: ModuleType,
     tmp_path: Path,
