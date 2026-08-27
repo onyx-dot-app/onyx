@@ -112,6 +112,9 @@ from onyx.server.features.build.sandbox.docker.internal.exec_helpers import (
     stream_stdin_to_container,
     stream_stdout_from_container,
 )
+from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
+    OutputsManifestResponse,
+)
 from onyx.server.features.build.sandbox.labels import (
     LABEL_K8S_MANAGED_BY,
     LABEL_K8S_MANAGED_BY_ONYX,
@@ -1620,6 +1623,32 @@ fi
 
         entries = self._parse_ls_output(output, clean_path)
         return sorted(entries, key=lambda e: (not e.is_directory, e.name.lower()))
+
+    def get_outputs_manifest(
+        self, sandbox_id: UUID, session_id: UUID
+    ) -> OutputsManifestResponse:
+        container = self._require_container(sandbox_id)
+        try:
+            # Root-owned interpreter and module: the sandbox user owns
+            # /workspace, so anything under it could be swapped to lie.
+            # workdir=/opt is load-bearing, python -m imports the root-owned
+            # /opt/sandbox_daemon only because cwd leads sys.path. -E -s
+            # ignore PYTHON* env vars and the user site directory.
+            result = _run_in_container_as_sandbox_user(
+                container,
+                [
+                    "/usr/local/bin/python3",
+                    "-E",
+                    "-s",
+                    "-m",
+                    "sandbox_daemon.manifest",
+                    str(session_id),
+                ],
+                workdir="/opt",
+            )
+        except ExecError as e:
+            raise RuntimeError(f"Failed to build outputs manifest: {e}") from e
+        return OutputsManifestResponse.model_validate_json(result.stdout_text)
 
     def _parse_ls_output(self, ls_output: str, base_path: str) -> list[FilesystemEntry]:
         entries: list[FilesystemEntry] = []

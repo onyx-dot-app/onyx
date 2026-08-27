@@ -85,6 +85,7 @@ from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
     SIDECAR_OPENCODE_HISTORY_RESTORE_PATH,
     SIDECAR_PUSH_PUBLIC_KEY_ENV_VAR,
     SIDECAR_SNAPSHOT_CREATE_PATH,
+    OutputsManifestResponse,
     SnapshotCreateRequest,
     sidecar_snapshot_restore_path,
 )
@@ -2031,6 +2032,16 @@ fi
             raise RuntimeError(f"Failed to list directory: {e}") from e
         except SidecarRequestError as e:
             raise RuntimeError(f"Failed to list directory: {e}") from e
+
+    def get_outputs_manifest(
+        self, sandbox_id: UUID, session_id: UUID
+    ) -> OutputsManifestResponse:
+        try:
+            return self._sidecar_client.outputs_manifest(
+                sandbox_id=sandbox_id, session_id=session_id
+            )
+        except SidecarRequestError as e:
+            raise RuntimeError(f"Failed to build outputs manifest: {e}") from e
 
     def read_file(self, sandbox_id: UUID, session_id: UUID, path: str) -> bytes:
         """Read a file from the session's workspace.
