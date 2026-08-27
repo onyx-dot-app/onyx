@@ -1,5 +1,4 @@
 from collections.abc import Iterator
-from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -63,10 +62,9 @@ def _cached(store: MagicMock, archive: bytes = ARCHIVE) -> None:
     store.read_file.return_value = BytesIO(archive)
 
 
-def _record(file_id: str, age: timedelta = timedelta(0)) -> MagicMock:
+def _record(file_id: str) -> MagicMock:
     record = MagicMock()
     record.file_id = file_id
-    record.updated_at = datetime.now(timezone.utc) - age
     return record
 
 
@@ -136,6 +134,21 @@ def test_cached_entry_above_caller_cap_is_skipped_without_transfer(
 
     assert archive == ARCHIVE
     mock_file_store.read_file.assert_not_called()
+    assert provider.downloads == [SHA]
+
+
+def test_cached_object_larger_than_its_record_is_a_miss(
+    mock_file_store: MagicMock,
+) -> None:
+    """The size check is on the record, so the transfer has to be bounded by
+    it for the caller's cap to mean anything."""
+    _cached(mock_file_store)
+    mock_file_store.read_file.return_value = BytesIO(ARCHIVE + b"x" * MAX_BYTES)
+    provider = _provider()
+
+    archive, _, _ = _fetch(provider)
+
+    assert archive == ARCHIVE
     assert provider.downloads == [SHA]
 
 

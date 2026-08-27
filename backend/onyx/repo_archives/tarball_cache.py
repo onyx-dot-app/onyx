@@ -25,12 +25,11 @@ can leave a record without a backing object; its next read fails, falls back
 to a download, and re-caches.
 """
 
-import shutil
 import tempfile
 from collections.abc import Iterator
 from contextlib import AbstractContextManager, contextmanager
 from pathlib import Path
-from typing import BinaryIO
+from typing import IO, BinaryIO
 
 from onyx.configs.app_configs import (
     REPO_ARCHIVE_CACHE_MAX_BYTES,
@@ -48,6 +47,7 @@ logger = setup_logger()
 
 _FILE_ID_PREFIX = "repo_archive_cache/"
 _TARBALL_MIME_TYPE = "application/gzip"
+_COPY_BLOCK_BYTES = 1024 * 1024
 
 
 def _file_id(revision: RepoRevision) -> str:
@@ -77,6 +77,19 @@ def resolve_revision(
         return None
 
 
+def _copy_bounded(source: IO[bytes], sink: BinaryIO, limit: int) -> int:
+    """Copy up to `limit` bytes; return how many, or `limit` + 1 if more
+    remain."""
+    copied = 0
+    while copied <= limit:
+        block = source.read(min(_COPY_BLOCK_BYTES, limit + 1 - copied))
+        if not block:
+            break
+        sink.write(block)
+        copied += len(block)
+    return copied
+
+
 def _read_cached_archive(
     file_id: str, max_size_bytes: int, sink: BinaryIO
 ) -> int | None:
@@ -100,7 +113,10 @@ def _read_cached_archive(
         ):
             return None
         with file_store.read_file(file_id, mode="b", use_tempfile=True) as cached:
-            shutil.copyfileobj(cached, sink)
+            # Copy at most what the record claimed, so a stored object that
+            # disagrees with it cannot push the caller past its cap.
+            if _copy_bounded(cached, sink, size) != size:
+                return None
     except Exception:
         logger.warning("Failed to read cached repo archive %s", file_id, exc_info=True)
         return None

@@ -1,5 +1,5 @@
-"""tarball_cache against the real file store: eviction, TTL pruning, and the
-upsert semantics the unit tests can only mock."""
+"""tarball_cache against the real file store: eviction and the upsert
+semantics the unit tests can only mock."""
 
 import uuid
 from collections.abc import Iterator
@@ -85,3 +85,22 @@ def test_same_sha_double_write_is_an_upsert(repo: RepoRef) -> None:
     assert _cached_ids(repo) == {file_id}
     with store.read_file(file_id, mode="b") as f:
         assert f.read() == b"second"
+
+
+def test_underscore_in_a_repo_name_does_not_evict_a_sibling() -> None:
+    """ "_" is a LIKE wildcard, so an unescaped eviction prefix for "my_repo"
+    also matches "myXrepo" and the two repos evict each other forever."""
+    owner = f"org-{uuid.uuid4().hex[:8]}"
+    mine = RepoRef(provider="test", host="test.local", owner=owner, name="my_repo")
+    sibling = RepoRef(provider="test", host="test.local", owner=owner, name="myXrepo")
+    sibling_sha = "4" * 40
+
+    try:
+        _fetch(sibling, sibling_sha)
+        _fetch(mine, "5" * 40)
+        _fetch(mine, "6" * 40)
+
+        assert _cached_ids(sibling) == {_file_id(revision(sibling_sha, sibling))}
+    finally:
+        _cleanup(mine)
+        _cleanup(sibling)

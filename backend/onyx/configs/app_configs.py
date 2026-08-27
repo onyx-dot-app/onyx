@@ -1400,9 +1400,14 @@ REPO_SNAPSHOT_MAX_TOTAL_BYTES = int(
 )
 
 # Repo archive (tarball) cache in the file store, shared by the connectors'
-# snapshots and the coding agent. Archives above the cap are served but not
-# cached. A write drops the repo's older revisions, so the cache holds at
-# most one archive per repository.
+# snapshots and the coding agent. A write drops the repo's older revisions,
+# so the cache holds at most one archive per repository.
+#
+# The cap is a memory bound, not a storage one: the file store buffers a whole
+# archive in memory per concurrent write. Archives between this and
+# REPO_ARCHIVE_MAX_BYTES are served but re-downloaded every run, so raise it
+# (toward REPO_ARCHIVE_MAX_BYTES) to cache large repos, at that cost per
+# in-flight fetch.
 REPO_ARCHIVE_CACHE_MAX_BYTES = int(
     os.environ.get("REPO_ARCHIVE_CACHE_MAX_BYTES") or 100 * 1024 * 1024
 )

@@ -48,7 +48,6 @@ def isolate_repo_archive_caches(
     """Keep both repo-archive caches inside `tmp_path` and out of the file
     store. Returns the stub store, which reports every entry as a miss."""
     store = MagicMock()
-    store.has_file.return_value = False
     store.read_file_record.side_effect = FileRecordNotFoundError("no cached archive")
     store.list_files_by_prefix.return_value = []
     monkeypatch.setattr(snapshot, "_CACHE_ROOT", tmp_path / "snapshot_cache")
