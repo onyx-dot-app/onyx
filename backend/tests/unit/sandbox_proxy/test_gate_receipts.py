@@ -195,3 +195,74 @@ def test_hooks_ignore_unrecorded_flows(
     asyncio.run(addon.error(tflow.tflow()))
 
     assert calls == []
+
+
+def test_always_policy_writes_still_record(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    addon = _addon()
+    recorded: list[Any] = []
+
+    async def _fake_record(*args: Any, **kwargs: Any) -> None:
+        recorded.append((args, kwargs))
+
+    session_id = uuid4()
+    monkeypatch.setattr(addon, "_record_receipts", _fake_record)
+    monkeypatch.setattr(
+        addon, "_resolve_gated_session", lambda _flow, _sandbox: session_id
+    )
+    flow = tflow.tflow()
+    sandbox = _ctx().without_session()
+
+    asyncio.run(addon._record_always_write_receipts(flow, sandbox, _MATCHED))
+
+    assert len(recorded) == 1
+    ctx = recorded[0][0][1]
+    assert ctx.session_id == session_id
+
+
+def test_always_policy_reads_skip_session_resolution(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    addon = _addon()
+
+    def _must_not_resolve(_flow: Any, _sandbox: Any) -> None:
+        raise AssertionError("reads must not pay session resolution")
+
+    monkeypatch.setattr(addon, "_resolve_gated_session", _must_not_resolve)
+    read_only = AllMatchedActions(
+        actions=(
+            MatchedAction(
+                action_type="slack.messages.read",
+                display_name="Read messages",
+                description="Read messages.",
+                policy=EndpointPolicy.ALWAYS,
+                effect=ActionEffect.READ,
+            ),
+        ),
+        target=GatedTarget(kind=GatedAppKind.EXTERNAL_APP, id=1, app_name="Slack"),
+    )
+
+    asyncio.run(
+        addon._record_always_write_receipts(
+            tflow.tflow(), _ctx().without_session(), read_only
+        )
+    )
+
+
+def test_always_policy_unattributable_write_goes_unrecorded(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    addon = _addon()
+
+    async def _must_not_record(*_args: Any, **_kwargs: Any) -> None:
+        raise AssertionError("unattributable writes record nothing")
+
+    monkeypatch.setattr(addon, "_record_receipts", _must_not_record)
+    monkeypatch.setattr(addon, "_resolve_gated_session", lambda _flow, _sandbox: None)
+
+    asyncio.run(
+        addon._record_always_write_receipts(
+            tflow.tflow(), _ctx().without_session(), _MATCHED
+        )
+    )

@@ -26,6 +26,7 @@ from onyx.cache.interface import CACHE_TRANSIENT_ERRORS, CacheBackend
 from onyx.configs.constants import NotificationType
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import (
+    ActionEffect,
     ApprovalDecidedVia,
     ApprovalDecision,
     EndpointPolicy,
@@ -520,6 +521,39 @@ class GateAddon:
             )
             await self._record_receipts(flow, ctx, matched_actions, approval_id)
 
+    async def _record_always_write_receipts(
+        self,
+        flow: http.HTTPFlow,
+        sandbox: ResolvedSandbox,
+        matched_actions: AllMatchedActions,
+    ) -> None:
+        """An admin-set ALWAYS policy must not exempt a write from the
+        activity record. Best-effort: the ALWAYS path deliberately skips
+        session resolution, so a write resolves it here and an unattributable
+        one goes unrecorded rather than blocked."""
+        if not any(
+            action.effect is ActionEffect.WRITE for action in matched_actions.actions
+        ):
+            return
+        try:
+            session_id = self._resolve_gated_session(flow, sandbox)
+        except Exception:
+            logger.exception(
+                "receipt_session_lookup_error tenant=%s sandbox=%s host=%s",
+                sandbox.tenant_id,
+                sandbox_log_label(sandbox),
+                flow.request.host,
+            )
+            return
+        if session_id is None:
+            return
+        await self._record_receipts(
+            flow,
+            sandbox.with_session(session_id),
+            matched_actions,
+            approval_id=None,
+        )
+
     async def _record_receipts(
         self,
         flow: http.HTTPFlow,
@@ -766,6 +800,7 @@ class GateAddon:
                     ),
                     credential_outcome_label(injection),
                 )
+                await self._record_always_write_receipts(flow, sandbox, matched_actions)
             return None
 
         # ASK: resolve the originating session before prompting. An
