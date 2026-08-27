@@ -6,7 +6,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { Section } from "@/layouts/general-layouts";
 import { useFederatedConnectors, useLlmManager } from "@/lib/hooks";
-import { useSearchFilters, useTags } from "@/lib/searchFilters/hooks";
+import { useTags } from "@/lib/searchFilters/hooks";
+import { useSharedSearchFilters } from "@/lib/searchFilters/providers";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
@@ -320,7 +321,9 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const chatInputBarRef = useRef<AppInputBarHandle>(null);
 
-  const filterManager = useSearchFilters();
+  // Shared with AppInputBar's tools popover below, which edits the same
+  // selection this page sends. Mounted by the route.
+  const filterManager = useSharedSearchFilters();
 
   // An unresolved agent reads as plain chat, so a named-agent layout never
   // flashes for an agent that is not there yet.
@@ -511,7 +514,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     handleMessageSpecificFileUpload,
     availableContextTokens,
   } = useChatController({
-    filterManager,
     llmManager,
     availableAgents: agents,
     activeAgent,
@@ -528,7 +530,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   } = useChatSessionController({
     existingChatSessionId: currentChatSessionId,
     searchParams,
-    filterManager,
     firstMessage,
     setSelectedDocuments,
     setCurrentMessageFiles,
@@ -1089,7 +1090,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         }
                         toggleDeepResearch={toggleDeepResearch}
                         isMultiModelActive={multiModel.isMultiModelActive}
-                        filterManager={filterManager}
                         llmManager={llmManager}
                         initialMessage={
                           searchParams?.get(SEARCH_PARAM_NAMES.USER_PROMPT) ||

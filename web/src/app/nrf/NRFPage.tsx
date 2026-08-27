@@ -9,7 +9,6 @@ import AppInputBar, { AppInputBarHandle } from "@/sections/input/AppInputBar";
 import { Button } from "@opal/components";
 import { Modal } from "@opal/components";
 import { useLlmManager } from "@/lib/hooks";
-import { useSearchFilters } from "@/lib/searchFilters/hooks";
 import Dropzone from "react-dropzone";
 import { getPanelOrigin } from "@/lib/extension/utils";
 import { sendSetDefaultNewTabMessage } from "@/lib/extension/svc";
@@ -63,7 +62,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   const { setUseOnyxAsNewTab } = useNRFPreferences();
 
   const searchParams = useSearchParams();
-  const filterManager = useSearchFilters();
+  // Shared with the tools popover in AppInputBar below. Mounted by the route.
   const { user, authTypeMetadata } = useUser();
 
   // Chat sessions
@@ -265,7 +264,6 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   // Chat controller for submitting messages
   const { onSubmit, stopGenerating, handleMessageSpecificFileUpload } =
     useChatController({
-      filterManager,
       llmManager,
       availableAgents: availableAgents || [],
       activeAgent,
@@ -279,7 +277,6 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   const { currentSessionFileTokenCount } = useChatSessionController({
     existingChatSessionId,
     searchParams: searchParams!,
-    filterManager,
     firstMessage: undefined,
     setSelectedDocuments: () => {}, // No-op: NRF doesn't support document selection
     setCurrentMessageFiles,
@@ -543,7 +540,6 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                 deepResearchEnabled={deepResearchEnabled}
                 toggleDeepResearch={toggleDeepResearch}
                 isMultiModelActive={multiModel.isMultiModelActive}
-                filterManager={filterManager}
                 llmManager={llmManager}
                 initialMessage={message}
                 stopGenerating={stopGenerating}

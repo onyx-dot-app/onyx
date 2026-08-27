@@ -31,7 +31,7 @@ import { Button } from "@opal/components";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import AppInputBar from "@/sections/input/AppInputBar";
 import { useLlmManager } from "@/lib/hooks";
-import { useSearchFilters } from "@/lib/searchFilters/hooks";
+import { SearchFiltersProvider } from "@/lib/searchFilters/providers";
 import { formatMmDdYyyy } from "@/lib/dateUtils";
 import { useProjectsContext } from "@/lib/projects/providers";
 import { FileCard } from "@/sections/cards/FileCard";
@@ -129,23 +129,25 @@ interface AgentChatInputProps {
 }
 function AgentChatInput({ agent, onSubmit }: AgentChatInputProps) {
   const llmManager = useLlmManager(undefined, agent);
-  const filterManager = useSearchFilters();
 
   return (
-    <AppInputBar
-      onSubmit={onSubmit}
-      llmManager={llmManager}
-      chatState="input"
-      filterManager={filterManager}
-      activeAgent={agent}
-      stopGenerating={() => {}}
-      handleFileUpload={() => {}}
-      currentSessionFileTokenCount={0}
-      availableContextTokens={Infinity}
-      deepResearchEnabled={false}
-      toggleDeepResearch={() => {}}
-      disabled={false}
-    />
+    // Its own instance, so source toggles made while previewing an agent do not
+    // reach the chat this modal opened over.
+    <SearchFiltersProvider>
+      <AppInputBar
+        onSubmit={onSubmit}
+        llmManager={llmManager}
+        chatState="input"
+        activeAgent={agent}
+        stopGenerating={() => {}}
+        handleFileUpload={() => {}}
+        currentSessionFileTokenCount={0}
+        availableContextTokens={Infinity}
+        deepResearchEnabled={false}
+        toggleDeepResearch={() => {}}
+        disabled={false}
+      />
+    </SearchFiltersProvider>
   );
 }
 

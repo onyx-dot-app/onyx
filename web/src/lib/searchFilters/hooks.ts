@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -18,52 +18,56 @@ export function useSearchFilters(): SearchFilters {
   );
   const [selectedTags, setSelectedTags] = useState<Tag[]>([]);
 
-  function getFilterString() {
-    const params = new URLSearchParams();
+  const getFilterString = useCallback(
+    function () {
+      const params = new URLSearchParams();
 
-    if (timeRange) {
-      params.set("from", timeRange.from.toISOString());
-      params.set("to", timeRange.to.toISOString());
-    }
+      if (timeRange) {
+        params.set("from", timeRange.from.toISOString());
+        params.set("to", timeRange.to.toISOString());
+      }
 
-    if (selectedSources.length > 0) {
-      const sourcesParam = selectedSources
-        .map((source) => encodeURIComponent(source.internalName))
-        .join(",");
-      params.set("sources", sourcesParam);
-    }
+      if (selectedSources.length > 0) {
+        const sourcesParam = selectedSources
+          .map((source) => encodeURIComponent(source.internalName))
+          .join(",");
+        params.set("sources", sourcesParam);
+      }
 
-    if (selectedDocumentSets.length > 0) {
-      const docSetsParam = selectedDocumentSets
-        .map((ds) => encodeURIComponent(ds))
-        .join(",");
-      params.set("documentSets", docSetsParam);
-    }
+      if (selectedDocumentSets.length > 0) {
+        const docSetsParam = selectedDocumentSets
+          .map((ds) => encodeURIComponent(ds))
+          .join(",");
+        params.set("documentSets", docSetsParam);
+      }
 
-    if (selectedTags.length > 0) {
-      const tagsParam = selectedTags
-        .map((tag) => encodeURIComponent(tag.tag_value))
-        .join(",");
-      params.set("tags", tagsParam);
-    }
+      if (selectedTags.length > 0) {
+        const tagsParam = selectedTags
+          .map((tag) => encodeURIComponent(tag.tag_value))
+          .join(",");
+        params.set("tags", tagsParam);
+      }
 
-    const queryString = params.toString();
-    return queryString ? `&${queryString}` : "";
-  }
+      const queryString = params.toString();
+      return queryString ? `&${queryString}` : "";
+      // Setters are stable by React's contract, so only the values are deps.
+    },
+    [timeRange, selectedSources, selectedDocumentSets, selectedTags]
+  );
 
-  function clearFilters() {
+  const clearFilters = useCallback(function () {
     setTimeRange(null);
     setSelectedSources([]);
     setSelectedDocumentSets([]);
     setSelectedTags([]);
-  }
+  }, []);
 
-  function buildFiltersFromQueryString(
+  const buildFiltersFromQueryString = useCallback(function (
     filterString: string,
     availableSources: SourceMetadata[],
     availableDocumentSets: string[],
     availableTags: Tag[]
-  ): void {
+  ) {
     const params = new URLSearchParams(filterString);
 
     // Parse the "from" parameter as a DateRangePickerValue
@@ -108,26 +112,40 @@ export function useSearchFilters(): SearchFilters {
       );
     }
 
-    // Update filter manager's values instead of returning
+    // Update the selection instead of returning it
     setTimeRange(newTimeRange);
     setSelectedSources(newSelectedSources);
     setSelectedDocumentSets(newSelectedDocSets);
     setSelectedTags(newSelectedTags);
-  }
+  }, []);
 
-  return {
-    clearFilters,
-    timeRange,
-    setTimeRange,
-    selectedSources,
-    setSelectedSources,
-    selectedDocumentSets,
-    setSelectedDocumentSets,
-    selectedTags,
-    setSelectedTags,
-    getFilterString,
-    buildFiltersFromQueryString,
-  };
+  // Memoized so the identity changes only when a filter does. Consumers read
+  // this through a context, where a fresh object every render would re-render
+  // all of them for nothing.
+  return useMemo(
+    () => ({
+      clearFilters,
+      timeRange,
+      setTimeRange,
+      selectedSources,
+      setSelectedSources,
+      selectedDocumentSets,
+      setSelectedDocumentSets,
+      selectedTags,
+      setSelectedTags,
+      getFilterString,
+      buildFiltersFromQueryString,
+    }),
+    [
+      clearFilters,
+      timeRange,
+      selectedSources,
+      selectedDocumentSets,
+      selectedTags,
+      getFilterString,
+      buildFiltersFromQueryString,
+    ]
+  );
 }
 
 interface UseSourcePreferencesProps {

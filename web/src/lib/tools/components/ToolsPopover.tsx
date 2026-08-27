@@ -41,7 +41,7 @@ import {
   saveMCPUserCredentials,
   startMCPUserOAuth,
 } from "@/lib/tools/svc";
-import type { SearchFilters } from "@/lib/searchFilters/types";
+import { useSharedSearchFilters } from "@/lib/searchFilters/providers";
 
 /**
  * The actions popover.
@@ -56,13 +56,11 @@ import type { SearchFilters } from "@/lib/searchFilters/types";
  */
 export interface ToolsPopoverProps {
   agent: MinimalAgent;
-  filterManager: SearchFilters;
   disabled?: boolean;
 }
 
 export default function ToolsPopover({
   agent,
-  filterManager,
   disabled = false,
 }: ToolsPopoverProps) {
   const { availableSources } = useAvailableSources();
@@ -74,7 +72,7 @@ export default function ToolsPopover({
   const focusOnMount = useFocusOnMount<HTMLInputElement>();
   // const [showFadeMask, setShowFadeMask] = useState(false);
   // const [showTopShadow, setShowTopShadow] = useState(false);
-  const { selectedSources, setSelectedSources } = filterManager;
+  const { selectedSources, setSelectedSources } = useSharedSearchFilters();
   const [mcpServers, setMcpServers] = useState<MCPServer[]>([]);
   const { llmProviders, isLoading: isLLMLoading } = useLLMProviders(agent.id);
   const hasAnyProvider = !isLLMLoading && (llmProviders?.length ?? 0) > 0;
