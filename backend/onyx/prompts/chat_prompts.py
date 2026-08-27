@@ -49,6 +49,16 @@ CITATION_REMINDER = """
 Remember to provide inline citations in the format [1], [2], [3], etc. based on the "document" field of the documents.
 """.strip()
 
+# Pushes the answer to cover every part of the question with the concrete
+# values the sources state. Benchmarked on EnterpriseRAG-Bench (500 questions):
+# +3.3 combined score on the default pipeline, driven by answer completeness
+# (77% -> 80%) with correctness flat. The final sentence keeps
+# "information not found" answers short; broader brevity or hedging clauses
+# tested worse.
+ANSWER_COMPLETENESS_REMINDER = """
+Address every part of the question explicitly. When the source documents state specific values, limits, dates, names, commands, or steps relevant to the question, include them exactly rather than summarizing them away. Before finishing, check the question for sub-parts you have not answered. If the requested information is not available, state that briefly without adding related background.
+""".strip()
+
 LAST_CYCLE_CITATION_REMINDER = """
 You are on your last cycle and no longer have any tool calls available. You must answer the query now to the best of your ability.
 """.strip()
