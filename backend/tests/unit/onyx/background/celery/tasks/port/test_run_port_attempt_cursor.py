@@ -54,6 +54,7 @@ def _patched(copy_result: tuple[int, bool], attempt: MagicMock) -> Any:
         # Startup target-validation guard: the attempt's settings is still the port target.
         "port_target_settings_id": MagicMock(return_value=attempt.search_settings_id),
         "mark_port_in_progress": MagicMock(return_value=True),
+        "request_port_cancel": MagicMock(),
         "PortCopier": MagicMock(return_value=copier),
         "get_connector_credential_pair_from_id": MagicMock(return_value=cc_pair),
         "get_document_ids_for_cc_pair_batch": MagicMock(
@@ -123,8 +124,8 @@ def test_copy_batch_bails_between_retries_on_abort() -> None:
 
 
 def test_cancels_when_no_longer_port_target() -> None:
-    # A revert/supersede (or stale enqueue) left this attempt pointing at a FUTURE that is
-    # no longer the port target: the startup guard cancels it before any copy work.
+    # Goes through request_port_cancel rather than terminalizing: the attempt isn't claimed
+    # yet, so an IN_PROGRESS row belongs to another worker still writing.
     attempt = _make_attempt()
     patches = _patched((5, False), attempt)
     patches["port_target_settings_id"] = MagicMock(
@@ -134,7 +135,8 @@ def test_cancels_when_no_longer_port_target() -> None:
     with patch.multiple(port_tasks, **patches):
         port_tasks.run_port_attempt(port_attempt_id=1)
 
-    patches["mark_port_canceled"].assert_called_once()
+    patches["request_port_cancel"].assert_called_once()
+    patches["mark_port_canceled"].assert_not_called()
     patches["mark_port_in_progress"].assert_not_called()
     patches["commit_port_cursor"].assert_not_called()
     patches["mark_port_succeeded"].assert_not_called()

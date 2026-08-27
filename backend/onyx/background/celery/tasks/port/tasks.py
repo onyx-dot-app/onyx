@@ -69,6 +69,7 @@ from onyx.db.port_attempt import (
     mark_port_succeeded,
     pause_port_attempt,
     port_backfill_has_pending_work,
+    request_port_cancel,
     resume_paused_port_attempt,
     touch_port_progress,
 )
@@ -258,9 +259,10 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
             )
             return
         if attempt.cancel_requested:
-            # nothing written yet; ack immediately
-            mark_port_canceled(db_session, port_attempt_id)
-            log.info("Port cancel requested at startup; acknowledged and stopping")
+            # Don't ack: this task hasn't claimed the attempt yet (the claim is below), so
+            # the row belongs to a worker still writing, which acks after its last write.
+            # Acking for it would open the reclaim gate mid-write.
+            log.info("Port cancel requested at startup; stopping")
             return
 
         cc_pair_id = attempt.cc_pair_id
@@ -285,13 +287,14 @@ def run_port_attempt(port_attempt_id: int, celery_task_id: str | None = None) ->
             return
         # Refuse a FUTURE that is no longer the port target: a revert/supersede or stale
         # enqueue can leave a fresh attempt that cancel_active_port_attempts never flagged.
-        # Safe to cancel outright — nothing is written yet (like the resume path's re-check).
+        # Cancel through request_port_cancel, not outright — a second dispatch of an
+        # attempt another worker owns must not ack for it.
         target_id = port_target_settings_id(
             get_current_search_settings(db_session),
             get_secondary_search_settings(db_session),
         )
         if target_id != attempt.search_settings_id:
-            mark_port_canceled(db_session, port_attempt_id)
+            request_port_cancel(db_session, port_attempt_id)
             log.info(
                 "PortAttempt targets settings %s, no longer the port target (now %s); "
                 "canceling",
