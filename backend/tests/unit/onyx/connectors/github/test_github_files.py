@@ -83,6 +83,13 @@ def test_is_indexable_path(path: str, size: int | None, expected: bool) -> None:
         # size cap and denylist still apply to code
         ("huge.py", 5_000_000, False),
         ("node_modules/pkg/index.js", 100, False),
+        ("target/debug/gen.rs", 100, False),
+        ("web/.next/static/chunk.js", 100, False),
+        ("coverage/lcov-report/index.js", 100, False),
+        # generated files are code, and are still not worth indexing
+        ("package-lock.json", 100, False),
+        ("Cargo.lock", 100, False),
+        ("static/jquery.min.js", 100, False),
         # docs still included alongside code
         ("README.md", 100, True),
     ],
@@ -491,6 +498,36 @@ def test_resumed_checkpoint_from_other_branch_relists(
     mock_repo.get_git_tree.assert_called_once_with("gh-pages", recursive=True)
     assert checkpoint.file_paths == ["new-only.md"]
     assert checkpoint.file_paths_branch == "gh-pages"
+
+
+def test_resumed_checkpoint_relists_when_code_indexing_is_toggled(
+    mock_github_client: MagicMock,
+    create_mock_repo: Callable[..., MagicMock],
+) -> None:
+    """Turning code indexing on changes what the listing contains, so a
+    checkpoint listed under the old setting has to be discarded like one
+    listed from another branch."""
+    connector = _build_connector(mock_github_client, include_code_files=True)
+    mock_repo = create_mock_repo({"README.md": b"docs", "main.py": b"code"})
+
+    checkpoint = connector.build_dummy_checkpoint()
+    checkpoint.stage = GithubConnectorStage.FILES
+    checkpoint.file_paths = ["README.md"]  # listed with code indexing off
+    checkpoint.file_paths_include_code = False
+    checkpoint.file_paths_branch = connector._resolve_branch(mock_repo)
+
+    list(
+        connector._fetch_repo_files(
+            mock_repo,
+            checkpoint,
+            start=None,
+            is_slim=False,
+            repo_external_access=None,
+        )
+    )
+
+    assert sorted(checkpoint.file_paths or []) == ["README.md", "main.py"]
+    assert checkpoint.file_paths_include_code is True
 
 
 def test_resumed_branch_change_bypasses_pushed_at_gate(

@@ -39,6 +39,21 @@ SENSITIVE_FILE_PATTERNS = (
     "*.kdbx",
 )
 
+# Machine-written files: build output and dependency lock files. They are
+# large, they dominate a repo's file count, and they are noise in retrieval.
+GENERATED_FILE_PATTERNS = (
+    "*.min.*",
+    "*.lock",
+    "*-lock.json",
+    "*-lock.yaml",
+    "*.lockb",
+    "*.pb.go",
+    "*.pb.cc",
+    "*.pb.h",
+    "*_pb2.py",
+    "*_pb2_grpc.py",
+)
+
 # Formats the pack has grammars for but that are not code: .txt resolves to
 # the Vim help-file grammar, and .csv/.tsv have a TabularSection path.
 NON_CODE_LANGUAGES = frozenset({"vimdoc", "rst", "csv", "tsv"})
@@ -99,3 +114,15 @@ def is_sensitive_code_file(file_path: str | None) -> bool:
     if any(fnmatch(basename, pattern) for pattern in SENSITIVE_FILE_PATTERNS):
         return True
     return infer_code_language(file_path) in SENSITIVE_FILE_LANGUAGES
+
+
+def is_generated_code_file(file_path: str | None) -> bool:
+    """True when the path names build output or a dependency lock file.
+
+    Separate from language inference: a lock file has a perfectly good
+    grammar, it is just not worth indexing.
+    """
+    if not file_path:
+        return False
+    basename = PurePosixPath(file_path.replace("\\", "/")).name.lower()
+    return any(fnmatch(basename, pattern) for pattern in GENERATED_FILE_PATTERNS)

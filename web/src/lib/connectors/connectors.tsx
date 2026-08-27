@@ -2152,7 +2152,8 @@ export interface GithubConfig {
   include_prs: boolean;
   include_issues: boolean;
   include_files: boolean;
-  include_code_files: boolean;
+  // Absent from every connector saved before code indexing existed.
+  include_code_files?: boolean;
   branch?: string;
 }
 

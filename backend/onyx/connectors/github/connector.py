@@ -27,7 +27,11 @@ from onyx.configs.constants import (
     DocumentSource,
 )
 from onyx.connectors.connector_runner import CheckpointOutputWrapper, ConnectorRunner
-from onyx.connectors.cross_connector_utils.code_file_utils import infer_code_language
+from onyx.connectors.cross_connector_utils.code_file_utils import (
+    infer_code_language,
+    is_generated_code_file,
+    is_sensitive_code_file,
+)
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
     CredentialExpiredError,
@@ -111,14 +115,29 @@ GITHUB_INDEXABLE_FILENAMES = {
     "support",
 }
 # Path segments whose presence anywhere in a file's path excludes it.
+# Dependency trees and build output: with code indexing on these hold most
+# of a repo's files and none of its source.
 GITHUB_PATH_DENYLIST = {
     ".git",
-    "node_modules",
-    "vendor",
-    "dist",
-    "build",
+    ".gradle",
+    ".mypy_cache",
+    ".next",
+    ".nuxt",
+    ".pytest_cache",
+    ".terraform",
+    ".tox",
     ".venv",
     "__pycache__",
+    "bower_components",
+    "build",
+    "coverage",
+    "dist",
+    "node_modules",
+    "out",
+    "Pods",
+    "target",
+    "third_party",
+    "vendor",
 }
 # Skip files larger than this (checked against the git tree size before fetching).
 GITHUB_MAX_FILE_SIZE_BYTES = 1_000_000
@@ -134,8 +153,13 @@ def _code_language(path: str) -> str | None:
 
     Document extensions are never code — grammars exist for prose formats
     like markdown, so the docs set must be subtracted, not just preferred.
+    Generated files are dropped for the same reason the denylist drops
+    build directories. Credential files are never indexed at all; the chunker
+    refuses them again for sections that arrive from the ingestion API.
     """
     if get_file_ext(path) in GITHUB_INDEXABLE_FILE_EXTENSIONS:
+        return None
+    if is_sensitive_code_file(path) or is_generated_code_file(path):
         return None
     return infer_code_language(path)
 
@@ -628,9 +652,11 @@ class GithubConnectorCheckpoint(ConnectorCheckpoint):
     # Resolved + filtered file paths for the current repo's FILES stage.
     # Populated once when the stage begins, then paginated via curr_page.
     file_paths: list[str] | None = None
-    # Branch file_paths was listed from; a resumed checkpoint whose branch no
-    # longer matches (connector edited, default branch changed) is re-listed.
+    # Branch and code-file setting file_paths was listed under. A resumed
+    # checkpoint that no longer matches (connector edited, default branch
+    # changed) is re-listed, since both decide what the listing contains.
     file_paths_branch: str | None = None
+    file_paths_include_code: bool | None = None
 
     # Used for the fallback cursor-based pagination strategy
     num_retrieved: int
@@ -638,14 +664,15 @@ class GithubConnectorCheckpoint(ConnectorCheckpoint):
 
     def reset(self) -> None:
         """
-        Resets curr_page, num_retrieved, cursor_url, file_paths, and
-        file_paths_branch to their initial values (0, 0, None, None, None)
+        Resets curr_page, num_retrieved, cursor_url, and the file listing
+        to their initial values (0, 0, None, None, None, None)
         """
         self.curr_page = 0
         self.num_retrieved = 0
         self.cursor_url = None
         self.file_paths = None
         self.file_paths_branch = None
+        self.file_paths_include_code = None
 
 
 def make_cursor_url_callback(
@@ -917,25 +944,27 @@ class GithubConnector(
         caller should return the checkpoint to resume), False once drained.
         """
         branch = self._resolve_branch(repo)
-        branch_changed = (
-            checkpoint.file_paths is not None and checkpoint.file_paths_branch != branch
+        listing_stale = checkpoint.file_paths is not None and (
+            checkpoint.file_paths_branch != branch
+            or checkpoint.file_paths_include_code != self.include_code_files
         )
-        if branch_changed:
-            # The cached listing came from a different branch (resumed
-            # checkpoint after a connector edit or default-branch change) —
-            # discard it so paths and content come from the same branch.
+        if listing_stale:
+            # The cached listing came from a different branch or filter (a
+            # resumed checkpoint after a connector edit or default-branch
+            # change) — discard it so paths and content agree.
             checkpoint.file_paths = None
             checkpoint.file_paths_branch = None
+            checkpoint.file_paths_include_code = None
             checkpoint.curr_page = 0
 
         if checkpoint.file_paths is None:
             pushed_at = (
                 repo.pushed_at.replace(tzinfo=timezone.utc) if repo.pushed_at else None
             )
-            # After a branch change the new branch was never indexed, so the
-            # pushed_at freshness gate must not skip the re-listing.
+            # After a branch or filter change the listing was never taken
+            # this way, so the pushed_at gate must not skip the re-listing.
             if (
-                not branch_changed
+                not listing_stale
                 and start is not None
                 and pushed_at is not None
                 and pushed_at < start
@@ -944,11 +973,13 @@ class GithubConnector(
                 logger.info("Skipping files for repo %s (pushed_at < start)", repo.name)
                 checkpoint.file_paths = []
                 checkpoint.file_paths_branch = branch
+                checkpoint.file_paths_include_code = self.include_code_files
             else:
                 logger.info("Listing files for repo: %s", repo.name)
                 paths, truncated = self._list_indexable_files(repo)
                 checkpoint.file_paths = paths
                 checkpoint.file_paths_branch = branch
+                checkpoint.file_paths_include_code = self.include_code_files
                 logger.info(
                     "Found %s indexable files for repo: %s", len(paths), repo.name
                 )
