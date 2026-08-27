@@ -33,6 +33,10 @@ from onyx.server.features.build.interactive_turns.state import (
     get_active_turn,
     touch_turn,
 )
+from onyx.server.features.build.outputs_reconciler import (
+    announce_artifacts,
+    reconcile_session_outputs,
+)
 from onyx.server.features.build.sandbox.event_schema import (
     ActivityTimeoutError,
     PromptResponse,
@@ -292,6 +296,24 @@ def _drive_interactive_turn(
                     "Failed to persist turn error message for turn %s", turn_id
                 )
 
+        def reconcile_outputs() -> None:
+            """Best-effort outputs index update on every owned terminal branch,
+            while the prompt slot is still held. Failures never block
+            finish_turn."""
+            try:
+                packets = reconcile_session_outputs(
+                    db_session,
+                    get_sandbox_manager(),
+                    sandbox_id=sandbox.id,
+                    session_id=session_id,
+                    turn_index=turn_index,
+                )
+                db_session.commit()
+                announce_artifacts(session_id, packets, cache)
+            except Exception:
+                logger.exception("Outputs reconcile failed for turn %s", turn_id)
+                db_session.rollback()
+
         prompt_slot_cm = session_manager.prompt_slot(
             sandbox.id,
             session_id,
@@ -359,6 +381,7 @@ def _drive_interactive_turn(
             if interrupt_requested():
                 session_manager.finalize_persist(session_id, state)
                 db_session.commit()
+                reconcile_outputs()
                 finish_turn(
                     cache=cache,
                     turn_id=turn_id,
@@ -414,6 +437,8 @@ def _drive_interactive_turn(
                         persist_turn_error(
                             "This turn was interrupted and could not finish."
                         )
+                        # No reconcile here: the lease is lost, so the slot
+                        # holder owns the index now.
                         finish_turn(
                             cache=cache,
                             turn_id=turn_id,
@@ -441,6 +466,7 @@ def _drive_interactive_turn(
                         session_manager.finalize_persist(session_id, state)
                         db_session.commit()
                         persist_turn_error(sandbox_event.message)
+                        reconcile_outputs()
                         finish_turn(
                             cache=cache,
                             turn_id=turn_id,
@@ -491,6 +517,7 @@ def _drive_interactive_turn(
 
             session_manager.finalize_persist(session_id, state)
             db_session.commit()
+            reconcile_outputs()
 
             if deadline_exceeded:
                 persist_turn_error(
@@ -543,6 +570,8 @@ def _drive_interactive_turn(
             except Exception:
                 logger.exception("Failed to finalize persistence for turn %s", turn_id)
             persist_turn_error("This turn failed unexpectedly.")
+            if not slot.lost:
+                reconcile_outputs()
             finish_turn(
                 cache=cache,
                 turn_id=turn_id,

@@ -18,9 +18,8 @@ Sandbox events (re-emitted from :mod:`sandbox.event_schema`):
 - prompt_response: Agent finished processing
 - error: An error occurred
 
-Custom Onyx packets (defined here):
-- error: Onyx-specific errors (e.g., session not found)
-- subagent_started: A child opencode session was created under a parent turn
+The custom Onyx packet classes below are the authoritative list; the
+``BuildPacket`` union at the bottom names them all.
 """
 
 from datetime import datetime, timezone
@@ -28,6 +27,8 @@ from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
+
+from onyx.db.enums import ArtifactType
 
 # =============================================================================
 # Base Packet Type
@@ -89,6 +90,26 @@ class ConnectAppRequestPacket(BasePacket):
     reason: str | None = None
 
 
+class ArtifactPacket(BasePacket):
+    """An artifact row was produced, changed, or deleted at turn end.
+
+    Carries the full row, unlike the ids-only approval packet, so a consumer
+    can render a card with no round trip. The version is pinned at announce
+    time and the index refetch at turn end is the completeness guarantee.
+    """
+
+    type: Literal["artifact"] = "artifact"
+    artifact_id: UUID
+    session_id: UUID
+    path: str
+    name: str
+    artifact_type: ArtifactType
+    version: int
+    turn_index: int | None
+    size_bytes: int | None
+    deleted: bool
+
+
 class ContextUsagePacket(BasePacket):
     type: Literal["context_usage"] = "context_usage"
     used_tokens: int
@@ -109,6 +130,7 @@ BuildPacket = (
     | ApprovalRequestedPacket
     | SubagentStartedPacket
     | ConnectAppRequestPacket
+    | ArtifactPacket
     | ContextUsagePacket
     | CompactionPacket
 )

@@ -9,7 +9,7 @@ event.
 
 from uuid import UUID
 
-from sqlalchemy import case, desc, func, select
+from sqlalchemy import case, desc, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -92,6 +92,35 @@ def mark_artifact_deleted(
     artifact.deleted = True
     db_session.flush()
     return artifact
+
+
+def mark_artifacts_deleted(
+    db_session: Session,
+    *,
+    session_id: UUID,
+    paths: list[str],
+) -> list[Artifact]:
+    """Flag every live row whose path vanished from the manifest, in one
+    statement. Returns the rows that actually flipped."""
+    if not paths:
+        return []
+    stmt = (
+        update(Artifact)
+        .where(
+            Artifact.session_id == session_id,
+            Artifact.path.in_(paths),
+            Artifact.deleted.is_(False),
+        )
+        .values(deleted=True, updated_at=func.now())
+        .returning(Artifact)
+    )
+    return list(
+        db_session.execute(
+            select(Artifact)
+            .from_statement(stmt)
+            .execution_options(populate_existing=True)
+        ).scalars()
+    )
 
 
 def get_session_artifacts(

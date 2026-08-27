@@ -44,8 +44,10 @@ from onyx.server.features.build.db.sandbox import (
     get_sandbox_by_user_id,
     update_sandbox_heartbeat,
 )
+from onyx.server.features.build.outputs_reconciler import pop_artifact_announcement
 from onyx.server.features.build.packets import (
     ApprovalRequestedPacket,
+    ArtifactPacket,
     BuildPacket,
     CompactionPacket,
     ConnectAppRequestPacket,
@@ -278,6 +280,7 @@ def event_to_sse(event: Any) -> str:
         event,
         (
             ApprovalRequestedPacket,
+            ArtifactPacket,
             ErrorPacket,
             SubagentStartedPacket,
             ConnectAppRequestPacket,
@@ -301,10 +304,10 @@ def merge_events_with_announces(
 ) -> Generator[Any, None, None]:
     """Merge sandbox events and announces into one stream.
 
-    Three producer threads feed a shared queue: the sandbox-event iterator, and
-    two BLPOP pollers that inject an `ApprovalRequestedPacket` / a
-    `ConnectAppRequestPacket` when a request is announced from another worker.
-    Announce latency is bounded by the 1s BLPOP.
+    Four producer threads feed a shared queue: the sandbox-event iterator, and
+    three BLPOP pollers that inject an `ApprovalRequestedPacket`, a
+    `ConnectAppRequestPacket`, or an `ArtifactPacket` when one is announced
+    from another worker. Announce latency is bounded by the 1s BLPOP.
     """
     output: queue_lib.Queue[Any] = queue_lib.Queue()
     stop = threading.Event()
@@ -367,6 +370,21 @@ def merge_events_with_announces(
                 )
             )
 
+    def drive_artifact_announces() -> None:
+        cache = get_cache_backend(tenant_id=tenant_id)
+        while not stop.is_set():
+            try:
+                packet = pop_artifact_announcement(session_id, timeout_s=1, cache=cache)
+            except Exception:
+                logger.exception(
+                    "artifact.announce_poll_failed session_id=%s", session_id
+                )
+                time.sleep(1)
+                continue
+            if packet is None:
+                continue
+            output.put(packet)
+
     # Spawn via the context-preserving helper so the event iterator's lazy
     # tenant-scoped DB access (e.g. event-bus creation) sees the caller's
     # contextvars instead of raising "Tenant ID is not set".
@@ -385,6 +403,11 @@ def merge_events_with_announces(
     start_thread_with_context(
         drive_connect_app_announces,
         name=f"connect-app-pump-{session_id}",
+        daemon=True,
+    )
+    start_thread_with_context(
+        drive_artifact_announces,
+        name=f"artifact-pump-{session_id}",
         daemon=True,
     )
     try:
