@@ -18,9 +18,8 @@ MASK_CREDENTIAL_LONG_RE = re.compile(r"^.{4}\.{3}.{4}$")
 
 SOURCE_TYPE = "source_type"
 
-# Document-metadata contract for source-code files. Connectors set these;
-# retrieval and the coding agent read them, so the keys live here rather than
-# under `connectors/` where retrieval would have to import across layers.
+# Document-metadata contract for source-code files. Here rather than under
+# `connectors/` so retrieval can read it without importing across layers.
 CODE_FILE_METADATA_TYPE = "CodeFile"
 CODE_FILE_TYPE_KEY = "type"
 CODE_FILE_LANGUAGE_KEY = "language"

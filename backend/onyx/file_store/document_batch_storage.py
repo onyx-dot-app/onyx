@@ -121,9 +121,8 @@ class DocumentBatchStorage(ABC):
                     Document.model_validate(self._normalize_doc_dict(doc_dict))
                 )
             except ValidationError:
-                # Tolerate only the shapes a differently-versioned worker
-                # stages. Anything else is a real model error: raising keeps a
-                # bug from quietly indexing a short batch as a clean attempt.
+                # Anything but version skew is a real model error: raising
+                # keeps a bug from indexing a short batch as a clean attempt.
                 skip_reason = _skew_skip_reason(doc_dict)
                 if skip_reason is None:
                     raise

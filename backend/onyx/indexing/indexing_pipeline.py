@@ -1132,12 +1132,12 @@ def _apply_document_ingestion_hook(
                 "Document ingestion hook dropped document doc_id=%r: %s", doc.id, reason
             )
             return None
-        # The hook's sections carry no type. A rewritten code section must
-        # come back as code: as prose it loses syntax chunking and file_path,
-        # which is what the chunker uses to refuse a credential file. Match on
-        # the link the hook kept, else by position when it returned the same
-        # number of sections. TabularSection cannot be recovered either way —
-        # its content lives in csv_file_id, which the hook never sees.
+        # The hook's sections carry no type. Returned as prose, a code
+        # section loses syntax chunking and file_path — the signal the chunker
+        # uses to refuse a credential file. Recover it by the link the hook
+        # kept, else by position when the section count is unchanged.
+        # TabularSection cannot be: its content lives in csv_file_id, which
+        # the hook never sees.
         originals = list(doc.sections)
         aligned = len(hook_result.sections) == len(originals)
         code_by_link = {
@@ -1262,22 +1262,20 @@ def _maybe_push_documents(
             doc = doc_map.get(doc_id)
             if doc is None:
                 continue
-            # Prose only. is_text_bearing now covers CodeSection, but a
-            # deployment that enabled this sink for documents did not agree to
-            # ship repository source off-box, and turning code indexing on
-            # must not change what leaves the deployment.
-            pushable = [
+            # A deployment that enabled this sink for documents did not agree
+            # to ship repository source off-box.
+            prose_sections = [
                 s
                 for s in doc.sections
                 if is_text_bearing(s) and not isinstance(s, CodeSection)
             ]
-            content = " ".join(s.text for s in pushable if s.text)
+            content = " ".join(s.text for s in prose_sections if s.text)
             payload = DocumentPushPayload(
                 document_id=doc_id,
                 title=doc.title or doc.semantic_identifier,
                 content=content,
                 source=str(doc.source.value) if doc.source else "unknown",
-                url=next((s.link for s in pushable if s.link), None),
+                url=next((s.link for s in prose_sections if s.link), None),
                 doc_updated_at=(
                     doc.doc_updated_at.isoformat() if doc.doc_updated_at else None
                 ),

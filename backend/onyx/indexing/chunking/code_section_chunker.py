@@ -1,4 +1,4 @@
-from typing import cast
+from typing import NamedTuple, cast
 
 from chonkie import CodeChunker as ChonkieCodeChunker
 from tree_sitter_language_pack import has_language
@@ -22,6 +22,20 @@ from onyx.utils.text_processing import clean_code_text
 logger = setup_logger()
 
 
+class _CachedSplitter(NamedTuple):
+    """A splitter and the token budget it was built for. The budget varies per
+    document, so an entry built for a different one is rebuilt."""
+
+    token_limit: int
+    splitter: ChonkieCodeChunker
+
+
+def _line_range(text: str, first_line: int) -> tuple[int, int]:
+    """Lines `text` spans, starting from its first non-blank line."""
+    start = first_line + len(text) - len(text.lstrip("\n"))
+    return start, start + text.strip("\n").count("\n")
+
+
 def _line_anchored_link(link: str, start_line: int, end_line: int) -> str:
     """Append a line-range fragment to a code file link (GitHub-style anchors)."""
     if not link or "#" in link:
@@ -38,11 +52,7 @@ class CodeChunker(SectionChunker):
 
     def __init__(self, tokenizer: BaseTokenizer) -> None:
         self.tokenizer = tokenizer
-        # One chonkie splitter per language, stored with the token budget it
-        # was built for. The budget varies per document (title/metadata
-        # deductions), so a mismatched entry is rebuilt; keying by language
-        # alone keeps the cache bounded.
-        self._splitters: dict[str, tuple[int, ChonkieCodeChunker]] = {}
+        self._splitters: dict[str, _CachedSplitter] = {}
 
     def chunk_section(
         self,
@@ -55,9 +65,8 @@ class CodeChunker(SectionChunker):
                 f"CodeChunker received a non-code section: {type(section).__name__}"
             )
 
-        # Enforced here, not only in connectors: sections can arrive from the
-        # ingestion API with any path/language, and a supplied language must
-        # not bypass the credential-format exclusion.
+        # Also enforced in connectors, but sections can arrive from the
+        # ingestion API with any path or language.
         if is_sensitive_code_file(section.file_path):
             logger.warning(
                 "Refusing to chunk sensitive code file %s; section dropped",
@@ -72,7 +81,6 @@ class CodeChunker(SectionChunker):
         section_link = section.link or ""
         language = section.language or infer_code_language(section.file_path)
 
-        # Flush any buffered prose — code chunks stay pure code.
         payloads = accumulator.flush_to_list()
         payloads.extend(
             self._chunk_code(
@@ -129,8 +137,8 @@ class CodeChunker(SectionChunker):
 
         payloads: list[ChunkPayload] = []
         for i, (text, start_line, end_line) in enumerate(spans):
-            # A single syntax node can exceed the budget (e.g. a giant
-            # literal); build_payloads hard-splits it.
+            # A single syntax node can exceed the budget; build_payloads
+            # hard-splits it.
             payloads.extend(
                 code_payloads(
                     text,
@@ -155,19 +163,14 @@ class CodeChunker(SectionChunker):
         if splitter is None:
             return None
 
-        # chonkie's chunk texts are contiguous and reconstruct the input
-        # exactly, so one running line counter covers the whole file.
-        # (CodeChunk carries start_line/end_line fields, but chonkie never
-        # populates them.)
+        # chonkie's chunks reconstruct the input exactly, so a running counter
+        # tracks lines. Its CodeChunk.start_line is never populated.
         texts = cast(list[str], splitter.chunk(section_text))
         spans: list[tuple[str, int, int]] = []
         line = 1
         for text in texts:
             if text.strip():
-                # Anchor to the first real code line, past any leading newlines.
-                start_line = line + len(text) - len(text.lstrip("\n"))
-                end_line = start_line + text.strip("\n").count("\n")
-                spans.append((text, start_line, end_line))
+                spans.append((text, *_line_range(text, line)))
             line += text.count("\n")
         return spans
 
@@ -177,8 +180,8 @@ class CodeChunker(SectionChunker):
         """Cached chonkie splitter for a language, or None when its grammar is
         unavailable."""
         cached = self._splitters.get(language)
-        if cached is not None and cached[0] == content_token_limit:
-            return cached[1]
+        if cached is not None and cached.token_limit == content_token_limit:
+            return cached.splitter
 
         if not has_language(language):
             logger.info(
@@ -205,5 +208,5 @@ class CodeChunker(SectionChunker):
             )
             return None
 
-        self._splitters[language] = (content_token_limit, splitter)
+        self._splitters[language] = _CachedSplitter(content_token_limit, splitter)
         return splitter

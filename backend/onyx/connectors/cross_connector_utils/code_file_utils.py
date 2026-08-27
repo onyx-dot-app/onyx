@@ -13,9 +13,8 @@ from pathlib import PurePosixPath
 SENSITIVE_FILE_LANGUAGES = frozenset({"dotenv", "pem"})
 
 # The grammar detector keys off the final extension, so it misses the names
-# secrets are usually stored under: `.env.local` and `.env.production` resolve
-# to no grammar at all, as do key files with no extension. Match the basename
-# instead, since that is what the convention is about.
+# secrets are stored under: `.env.local` and key files resolve to no grammar
+# at all. Match the basename, which is what the convention is about.
 SENSITIVE_FILE_PATTERNS = (
     ".env*",
     "*.env",

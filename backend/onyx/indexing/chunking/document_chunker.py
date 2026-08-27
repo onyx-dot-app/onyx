@@ -91,8 +91,6 @@ class DocumentChunker:
         payloads: list[ChunkPayload] = []
 
         for section_idx, section in enumerate(sections):
-            # Code keeps its punctuation and emoji: they are meaningful in
-            # literals, and the indexed text should match the linked file.
             cleaner = (
                 clean_code_text if isinstance(section, CodeSection) else clean_text
             )
