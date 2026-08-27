@@ -396,19 +396,19 @@ def record_failure__no_commit(
     return False
 
 
-def find_unreclaimed_past_by_index_name(
+def find_unreclaimed_by_index_name(
     db_session: Session, index_name: str
 ) -> list[SearchSettings]:
-    """PAST rows sharing this physical index_name whose data is not yet reclaimed.
-    The name-reuse guard uses this: ALT_INDEX_SUFFIX alternation can make a new FUTURE's
-    index_name equal an old PAST's, and reusing it would adopt the old data. Multiple
-    generations can share one physical index, so this returns all of them.
+    """Rows other than the live one whose index_name still holds data, so a new reindex
+    must not take that name. ALT_INDEX_SUFFIX alternation can hand a new FUTURE the same
+    name as an existing row, and several generations can share one physical index.
 
-    "Not reclaimed" = anything but RECLAIMED, including reclaim_status NULL — legacy PAST
-    rows from before this feature, whose orphaned index still physically exists. Only
-    RECLAIMED means the data is confirmed gone."""
+    FUTURE counts, not just PAST: a superseded reindex is only flipped to PAST later in
+    the submit, so a PAST-only lookup lets its replacement adopt the half-ported index.
+    A NULL reclaim_status counts too — those are rows from before reclamation existed,
+    whose index was never deleted. Only RECLAIMED means the data is confirmed gone."""
     stmt = select(SearchSettings).where(
-        SearchSettings.status == IndexModelStatus.PAST,
+        SearchSettings.status != IndexModelStatus.PRESENT,
         SearchSettings.index_name == index_name,
         or_(
             SearchSettings.reclaim_status.is_(None),
@@ -416,3 +416,19 @@ def find_unreclaimed_past_by_index_name(
         ),
     )
     return list(db_session.scalars(stmt))
+
+
+def set_reclaim_intent_on_abandoned_future__no_commit(
+    search_settings: SearchSettings,
+) -> None:
+    """Hand a superseded or canceled FUTURE to the background reclaim so its half-ported
+    index gets deleted. Left at NULL the row falls in a gap — no reclaim task collects it,
+    yet the name-reuse guard keeps refusing its index name, and dropping the index by hand
+    does not help because the guard reads rows rather than OpenSearch. Rows that already
+    carry intent are left alone so a real consent set survives."""
+    if search_settings.reclaim_status is not None:
+        return
+    search_settings.reclaim_status = IndexReclaimStatus.PENDING
+    search_settings.pending_cc_pair_deletions = None
+    search_settings.reclaim_attempts = 0
+    search_settings.reclaim_last_error = None

@@ -13,7 +13,7 @@ in test_index_reclaim_task.py; here we cover the guards + query logic):
   soak anchor); clear_reclaim_intent resets the row
 - fetch_reclaimable_past_settings: actionable PAST rows only, excludes BLOCKED, honors limit
 - name-reuse guard: refuses a reindex whose new index_name still belongs to a not-yet-
-  reclaimed PAST; find_unreclaimed_past_by_index_name decides which rows count
+  reclaimed PAST; find_unreclaimed_by_index_name decides which rows count
 - consent: set_reclaim_intent stamps the PRESENT; drift enforcement rejects deleting a
   cc_pair the admin never acknowledged
 """
@@ -42,8 +42,9 @@ from onyx.db.search_settings import (
     clear_reclaim_intent__no_commit,
     create_search_settings,
     fetch_reclaimable_past_settings,
-    find_unreclaimed_past_by_index_name,
+    find_unreclaimed_by_index_name,
     get_current_search_settings,
+    set_reclaim_intent_on_abandoned_future__no_commit,
     set_reclaim_intent_on_current__no_commit,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -59,6 +60,7 @@ def _make_past_settings(
     reclaim_status: IndexReclaimStatus | None = None,
     *,
     index_name: str | None = None,
+    status: IndexModelStatus = IndexModelStatus.PAST,
 ) -> SearchSettings:
     saved = SavedSearchSettings(
         model_name="test-reclaim-model",
@@ -72,7 +74,7 @@ def _make_past_settings(
         index_name=index_name or f"test_reclaim_{uuid4().hex[:8]}",
         enable_contextual_rag=False,
     )
-    ss = create_search_settings(saved, db_session, status=IndexModelStatus.PAST)
+    ss = create_search_settings(saved, db_session, status=status)
     if reclaim_status is not None:
         ss.reclaim_status = reclaim_status
         db_session.commit()
@@ -340,13 +342,75 @@ def test_find_unreclaimed_includes_blocked_and_legacy_excludes_reclaimed(
         db_session, IndexReclaimStatus.RECLAIMED, index_name=name
     )
     try:
-        found = {s.id for s in find_unreclaimed_past_by_index_name(db_session, name)}
+        found = {s.id for s in find_unreclaimed_by_index_name(db_session, name)}
         assert blocked.id in found
         assert legacy.id in found
         assert reclaimed.id not in found
     finally:
         for row in (blocked, legacy, reclaimed):
             db_session.delete(row)
+        db_session.commit()
+
+
+def test_guard_conflicts_while_superseded_future_still_holds_the_name(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    """Resubmitting the same model while a reindex is in flight computes the identical
+    index_name, and that FUTURE is only flipped to PAST later in the submit."""
+    name = f"test_reclaim_inflight_{uuid4().hex[:8]}"
+    future = _make_past_settings(
+        db_session, None, index_name=name, status=IndexModelStatus.FUTURE
+    )
+    try:
+        with pytest.raises(OnyxError) as exc:
+            search_settings_api._guard_index_name_reuse(db_session, name)
+        assert exc.value.error_code == OnyxErrorCode.CONFLICT
+    finally:
+        db_session.delete(future)
+        db_session.commit()
+
+
+def test_abandoned_future_becomes_reclaimable(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    """Left at NULL the row is invisible to the reclaim task but still blocks the
+    name-reuse guard, so its index name would never become usable again."""
+    name = f"test_reclaim_abandoned_{uuid4().hex[:8]}"
+    abandoned = _make_past_settings(
+        db_session, None, index_name=name, status=IndexModelStatus.FUTURE
+    )
+    try:
+        assert abandoned.reclaim_status is None
+        assert abandoned not in fetch_reclaimable_past_settings(db_session, limit=50)
+
+        abandoned.status = IndexModelStatus.PAST
+        set_reclaim_intent_on_abandoned_future__no_commit(abandoned)
+        db_session.commit()
+
+        assert abandoned.reclaim_status == IndexReclaimStatus.PENDING
+        assert abandoned.pending_cc_pair_deletions is None
+        assert abandoned in fetch_reclaimable_past_settings(db_session, limit=50)
+    finally:
+        db_session.delete(abandoned)
+        db_session.commit()
+
+
+def test_abandoned_future_intent_never_overwrites_a_real_consent_set(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    ss = _make_past_settings(db_session, IndexReclaimStatus.PENDING)
+    try:
+        ss.pending_cc_pair_deletions = [7, 9]
+        db_session.commit()
+
+        set_reclaim_intent_on_abandoned_future__no_commit(ss)
+
+        assert ss.pending_cc_pair_deletions == [7, 9]
+    finally:
+        db_session.delete(ss)
         db_session.commit()
 
 
