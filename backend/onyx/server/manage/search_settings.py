@@ -271,13 +271,22 @@ def set_new_search_settings(
 
 
 def _guard_index_name_reuse(db_session: Session, index_name: str) -> None:
-    if find_unreclaimed_by_index_name(db_session, index_name):
+    colliding = find_unreclaimed_by_index_name(db_session, index_name)
+    if not colliding:
+        return
+
+    if any(ss.status == IndexModelStatus.FUTURE for ss in colliding):
         raise OnyxError(
             OnyxErrorCode.CONFLICT,
-            "An index of the same name from an earlier reindex still holds data and "
-            "hasn't been reclaimed. Wait for reclamation to finish, or remove that index, "
-            "before starting the reindex.",
+            "A reindex is already in progress and its new index has the name this one "
+            "would use. Let it finish or cancel it, then wait for the index it leaves "
+            "behind to be reclaimed before starting another.",
         )
+    raise OnyxError(
+        OnyxErrorCode.CONFLICT,
+        "An index of the same name from an earlier reindex still holds data. Wait for "
+        "reclamation to finish before starting this reindex.",
+    )
 
 
 def _resolve_reclaim_intent(

@@ -344,6 +344,7 @@ def test_guard_conflicts_while_index_unreclaimed(
         with pytest.raises(OnyxError) as exc:
             search_settings_api._guard_index_name_reuse(db_session, name)
         assert exc.value.error_code == OnyxErrorCode.CONFLICT
+        assert "earlier reindex" in exc.value.detail
         db_session.refresh(ss)
         assert ss.reclaim_status == reclaim_status  # untouched
     finally:
@@ -380,7 +381,9 @@ def test_guard_conflicts_while_superseded_future_still_holds_the_name(
     tenant_context: None,  # noqa: ARG001
 ) -> None:
     """Resubmitting the same model while a reindex is in flight computes the identical
-    index_name, and that FUTURE is only flipped to PAST later in the submit."""
+    index_name, and that FUTURE is only flipped to PAST later in the submit. The message
+    has to name the running reindex: nothing reclaims a FUTURE, so advising the admin to
+    wait for reclamation would send them somewhere that never happens."""
     name = f"test_reclaim_inflight_{uuid4().hex[:8]}"
     future = _make_settings(
         db_session, None, index_name=name, status=IndexModelStatus.FUTURE
@@ -389,6 +392,7 @@ def test_guard_conflicts_while_superseded_future_still_holds_the_name(
         with pytest.raises(OnyxError) as exc:
             search_settings_api._guard_index_name_reuse(db_session, name)
         assert exc.value.error_code == OnyxErrorCode.CONFLICT
+        assert "already in progress" in exc.value.detail
     finally:
         db_session.delete(future)
         db_session.commit()
