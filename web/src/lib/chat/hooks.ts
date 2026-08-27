@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { OnSubmitProps } from "@/hooks/useChatController";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
@@ -118,10 +118,18 @@ export function useSendChatMessageFromURL({
   );
 
   // Arriving with the parameters already on the URL.
+  //
+  // Guarded because `send` changes identity as the filters, sets, tags and
+  // project files resolve, and `router.replace` only drops `send-on-load` a
+  // tick later — so without this the effect re-runs inside that window and
+  // sends the same prompt twice.
+  const sentForRef = useRef<string | null>(null);
   useEffect(() => {
-    if (searchParams?.get(SEARCH_PARAM_NAMES.SEND_ON_LOAD)) {
-      send(searchParams.toString());
-    }
+    if (!searchParams?.get(SEARCH_PARAM_NAMES.SEND_ON_LOAD)) return;
+    const query = searchParams.toString();
+    if (sentForRef.current === query) return;
+    sentForRef.current = query;
+    send(query);
   }, [searchParams, send]);
 
   // The extension navigating the embedded page without a reload.
