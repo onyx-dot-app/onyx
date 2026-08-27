@@ -1971,8 +1971,11 @@
         "help": {
           "description": "Craft verwendet dieses Modell für neue Sitzungen und geplante Aufgaben. Ohne Festlegung greift Craft auf das Standard-Chatmodell des Arbeitsbereichs zurück."
         },
+        "inheritedTag": {
+          "label": "Arbeitsbereich-Standard"
+        },
         "label": "Standardmodell",
-        "placeholder": "Standard des Arbeitsbereichs",
+        "placeholder": "Modell auswählen",
         "resetError": {
           "message": "Das Standardmodell konnte nicht gelöscht werden"
         },

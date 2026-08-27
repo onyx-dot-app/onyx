@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import useSWR, { mutate, useSWRConfig } from "swr";
-import { Button, Card, Text } from "@opal/components";
+import { Button, Card, Tag, Text } from "@opal/components";
 import {
   IllustrationContent,
   InputVertical,
@@ -25,6 +25,7 @@ import { updateAdminSettings } from "@/lib/settings/svc";
 import useUnsavedChangesGuard from "@/hooks/useUnsavedChangesGuard";
 import UnsavedChangesModal from "@/sections/modals/UnsavedChangesModal";
 import { useAdminLLMProviders } from "@/lib/languageModels/hooks";
+import { DefaultModel } from "@/lib/languageModels/types";
 import {
   deleteDefaultCraftModel,
   setDefaultCraftModel,
@@ -102,28 +103,46 @@ export default function CraftPreferencesPage() {
   }
 
   const { mutate: mutateScoped } = useSWRConfig();
-  const { llmProviders, defaultCraft } = useAdminLLMProviders();
+  const { llmProviders, defaultCraft, defaultText } = useAdminLLMProviders();
   const [isSavingModel, setIsSavingModel] = useState(false);
 
-  // Resolves only an explicitly configured default, so an unset default
-  // renders as unset rather than as a guessed model. Hidden models still
-  // resolve, so an admin can clear or replace a default that was later hidden.
-  const craftDefaultSelection = useMemo<BuildLlmSelection | null>(() => {
-    if (!defaultCraft || !llmProviders) return null;
-    const provider = llmProviders.find(
-      (candidate) => candidate.id === defaultCraft.provider_id
-    );
-    const modelConfig = provider?.model_configurations.find(
-      (model) => model.name === defaultCraft.model_name
-    );
-    if (!provider || !modelConfig) return null;
-    return {
-      providerId: provider.id,
-      providerName: provider.name ?? "",
-      provider: provider.provider,
-      modelName: defaultCraft.model_name,
-    };
-  }, [defaultCraft, llmProviders]);
+  // Hidden models still resolve, so an admin can clear or replace a default
+  // that was later hidden.
+  const resolveSelection = useCallback(
+    (model: DefaultModel | null): BuildLlmSelection | null => {
+      if (!model || !llmProviders) return null;
+      const provider = llmProviders.find(
+        (candidate) => candidate.id === model.provider_id
+      );
+      const modelConfig = provider?.model_configurations.find(
+        (candidate) => candidate.name === model.model_name
+      );
+      if (!provider || !modelConfig) return null;
+      return {
+        providerId: provider.id,
+        providerName: provider.name ?? "",
+        provider: provider.provider,
+        modelName: model.model_name,
+      };
+    },
+    [llmProviders]
+  );
+
+  // The explicitly configured Craft default — what Clear clears.
+  const configuredSelection = useMemo(
+    () => resolveSelection(defaultCraft),
+    [resolveSelection, defaultCraft]
+  );
+
+  // What Craft actually runs today: the configured default, or the workspace
+  // chat default it falls back to. Resolved here rather than inside the picker
+  // so this admin's own remembered pick can't leak in as the workspace value.
+  const inheritedSelection = useMemo(
+    () => resolveSelection(defaultText),
+    [resolveSelection, defaultText]
+  );
+  const effectiveSelection = configuredSelection ?? inheritedSelection;
+  const isInherited = !configuredSelection && !!inheritedSelection;
 
   async function saveDefaultModel(selection: BuildLlmSelection) {
     setIsSavingModel(true);
@@ -227,14 +246,17 @@ export default function CraftPreferencesPage() {
             <InputVertical title={t("defaultModel.label")} withLabel>
               <div className="flex items-center gap-2">
                 <ModelPickerButton
-                  selection={craftDefaultSelection}
+                  selection={effectiveSelection}
                   onChange={saveDefaultModel}
                   disabled={isSavingModel}
                   fallbackToDefault={false}
                   persistSelection={false}
                   placeholder={t("defaultModel.placeholder")}
                 />
-                {craftDefaultSelection && (
+                {isInherited && (
+                  <Tag title={t("defaultModel.inheritedTag.label")} />
+                )}
+                {configuredSelection && (
                   <Button
                     icon={SvgRefreshCw}
                     variant="danger"

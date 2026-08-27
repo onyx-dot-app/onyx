@@ -1971,8 +1971,11 @@
         "help": {
           "description": "O Craft usa este modelo para novas sessões e tarefas agendadas. Quando não definido, o Craft recorre ao modelo de chat padrão do espaço de trabalho."
         },
+        "inheritedTag": {
+          "label": "Padrão do espaço de trabalho"
+        },
         "label": "Modelo padrão",
-        "placeholder": "Padrão do espaço de trabalho",
+        "placeholder": "Selecionar modelo",
         "resetError": {
           "message": "Falha ao limpar o modelo padrão"
         },

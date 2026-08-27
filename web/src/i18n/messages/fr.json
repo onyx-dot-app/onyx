@@ -1971,8 +1971,11 @@
         "help": {
           "description": "Craft utilise ce modèle pour les nouvelles sessions et les tâches planifiées. S'il n'est pas défini, Craft utilise le modèle de chat par défaut de l'espace de travail."
         },
+        "inheritedTag": {
+          "label": "Valeur par défaut de l’espace de travail"
+        },
         "label": "Modèle par défaut",
-        "placeholder": "Valeur par défaut de l'espace de travail",
+        "placeholder": "Sélectionner un modèle",
         "resetError": {
           "message": "Échec de l'effacement du modèle par défaut"
         },

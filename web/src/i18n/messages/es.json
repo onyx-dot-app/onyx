@@ -1971,8 +1971,11 @@
         "help": {
           "description": "Craft usa este modelo para las sesiones nuevas y las tareas programadas. Si no se define, Craft recurre al modelo de chat predeterminado del espacio de trabajo."
         },
+        "inheritedTag": {
+          "label": "Predeterminado del espacio de trabajo"
+        },
         "label": "Modelo predeterminado",
-        "placeholder": "Predeterminado del espacio de trabajo",
+        "placeholder": "Seleccionar modelo",
         "resetError": {
           "message": "No se pudo borrar el modelo predeterminado"
         },

@@ -1971,8 +1971,11 @@
         "help": {
           "description": "Craft uses this model for new sessions and scheduled tasks. When unset, Craft falls back to the workspace default chat model."
         },
+        "inheritedTag": {
+          "label": "Workspace default"
+        },
         "label": "Default model",
-        "placeholder": "Workspace default",
+        "placeholder": "Select model",
         "resetError": {
           "message": "Failed to clear the default model"
         },
