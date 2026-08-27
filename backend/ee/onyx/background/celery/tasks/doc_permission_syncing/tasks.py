@@ -141,11 +141,22 @@ def _get_fence_validation_block_expiration() -> int:
 """Jobs / utils for kicking off doc permissions sync tasks."""
 
 
-def _fail_doc_permission_sync_attempt(attempt_id: int, error_msg: str) -> None:
+def _fail_doc_permission_sync_attempt(
+    attempt_id: int,
+    error_msg: str,
+    full_exception_trace: str | None = None,
+    total_docs_synced: int = 0,
+    docs_with_permission_errors: int = 0,
+) -> None:
     """Helper to mark a doc permission sync attempt as failed with an error message."""
     with get_session_with_current_tenant() as db_session:
         mark_doc_permission_sync_attempt_failed(
-            attempt_id, db_session, error_message=error_msg
+            attempt_id,
+            db_session,
+            error_message=error_msg,
+            full_exception_trace=full_exception_trace,
+            total_docs_synced=total_docs_synced,
+            docs_with_permission_errors=docs_with_permission_errors,
         )
 
 
@@ -499,6 +510,9 @@ def connector_permission_sync_generator_task(
     tasks_generated = 0
     docs_with_errors = 0
     try:
+        # Scoped to setup, never across the crawl below: on multi-tenant this session
+        # is bound to one checked-out Connection, which PgBouncer closes once the gaps
+        # between its queries pass client_idle_timeout.
         with get_session_with_current_tenant() as db_session:
             cc_pair = get_connector_credential_pair_from_id(
                 db_session=db_session,
@@ -570,10 +584,8 @@ def connector_permission_sync_generator_task(
                 redis_connector, lock, r, timeout_seconds=JOB_TIMEOUT
             )
 
-        # The crawl runs for hours issuing no queries. A session held across it pins
-        # one pooled connection until PgBouncer drops it at client_idle_timeout.
-
-        # cc_pair is detached here: read only eager-loaded connector/credential columns.
+            connector_id = cc_pair.connector.id
+            credential_id = cc_pair.credential.id
 
         # lets each connector decide which existing docs are now missing and should
         # lose access
@@ -581,22 +593,25 @@ def connector_permission_sync_generator_task(
             sort_order: SortOrder | None = None,
         ) -> list[DocumentRow]:
             with get_session_with_current_tenant() as fetch_session:
-                result = get_documents_for_connector_credential_pair_limited_columns(
-                    db_session=fetch_session,
-                    connector_id=cc_pair.connector.id,
-                    credential_id=cc_pair.credential.id,
-                    sort_order=sort_order,
+                return list(
+                    get_documents_for_connector_credential_pair_limited_columns(
+                        db_session=fetch_session,
+                        connector_id=connector_id,
+                        credential_id=credential_id,
+                        sort_order=sort_order,
+                    )
                 )
-                return list(result)
 
         def fetch_all_existing_docs_ids_fn() -> list[str]:
             with get_session_with_current_tenant() as fetch_session:
                 return get_document_ids_for_connector_credential_pair(
                     db_session=fetch_session,
-                    connector_id=cc_pair.connector.id,
-                    credential_id=cc_pair.credential.id,
+                    connector_id=connector_id,
+                    credential_id=credential_id,
                 )
 
+        # cc_pair is detached: connectors may read eager-loaded connector/credential
+        # columns off it, never a lazy relationship.
         doc_sync_func = sync_config.doc_sync_config.doc_sync_func
         document_external_accesses = doc_sync_func(
             cc_pair,
@@ -621,8 +636,8 @@ def connector_permission_sync_generator_task(
                 lock=lock,
                 new_permissions=[doc_external_access],
                 source_string=connector_type,
-                connector_id=cc_pair.connector.id,
-                credential_id=cc_pair.credential.id,
+                connector_id=connector_id,
+                credential_id=credential_id,
                 task_logger=task_logger,
             )
             tasks_generated += result.num_updated
@@ -661,15 +676,13 @@ def connector_permission_sync_generator_task(
             f"Permission sync exceptioned: cc_pair={cc_pair_id} payload_id={payload_id}"
         )
 
-        with get_session_with_current_tenant() as db_session:
-            mark_doc_permission_sync_attempt_failed(
-                attempt_id,
-                db_session,
-                error_message=error_msg,
-                full_exception_trace=full_exception_trace,
-                total_docs_synced=tasks_generated,
-                docs_with_permission_errors=docs_with_errors,
-            )
+        _fail_doc_permission_sync_attempt(
+            attempt_id,
+            error_msg,
+            full_exception_trace=full_exception_trace,
+            total_docs_synced=tasks_generated,
+            docs_with_permission_errors=docs_with_errors,
+        )
 
         redis_connector.permissions.generator_clear()
         redis_connector.permissions.taskset_clear()

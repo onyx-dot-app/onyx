@@ -160,9 +160,10 @@ def mark_doc_permission_sync_attempt_failed(
     ``traceback.format_exc()`` so the full stack is persisted alongside
     the short ``error_message``.
 
-    The progress counters default to 0 for call sites that fail before any
-    document is processed. A sync that fails partway through keeps the work
-    it already committed, so those callers pass the counts they reached.
+    A sync that fails partway through keeps the work it already committed, so
+    callers pass the counts they reached. These assign rather than accumulate:
+    a failure raised after ``complete_doc_permission_sync_attempt`` has already
+    committed would otherwise count the same documents twice.
     """
     try:
         attempt = db_session.execute(
@@ -177,10 +178,8 @@ def mark_doc_permission_sync_attempt_failed(
         attempt.time_finished = func.now()
         attempt.error_message = error_message
         attempt.full_exception_trace = full_exception_trace
-        attempt.total_docs_synced = (attempt.total_docs_synced or 0) + total_docs_synced
-        attempt.docs_with_permission_errors = (
-            attempt.docs_with_permission_errors or 0
-        ) + docs_with_permission_errors
+        attempt.total_docs_synced = total_docs_synced
+        attempt.docs_with_permission_errors = docs_with_permission_errors
         db_session.commit()
 
         # Add telemetry for permission sync attempt status change
