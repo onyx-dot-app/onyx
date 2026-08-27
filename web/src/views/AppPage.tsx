@@ -5,7 +5,8 @@ import { endIncognitoSession } from "@/app/app/services/lib";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { Section } from "@/layouts/general-layouts";
-import { useFederatedConnectors, useFilters, useLlmManager } from "@/lib/hooks";
+import { useFederatedConnectors, useLlmManager } from "@/lib/hooks";
+import { useSearchFilters, useTags } from "@/lib/searchFilters/hooks";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
@@ -14,7 +15,6 @@ import Dropzone from "react-dropzone";
 import AppInputBar, { AppInputBarHandle } from "@/sections/input/AppInputBar";
 import useChatSessions from "@/hooks/useChatSessions";
 import useCCPairs from "@/hooks/useCCPairs";
-import useTags from "@/hooks/useTags";
 import { useDocumentSets } from "@/lib/hooks/useDocumentSets";
 import { useAgents } from "@/lib/agents/hooks";
 import { AppPopup } from "@/app/app/components/AppPopup";
@@ -320,7 +320,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const chatInputBarRef = useRef<AppInputBarHandle>(null);
 
-  const filterManager = useFilters();
+  const filterManager = useSearchFilters();
 
   // An unresolved agent reads as plain chat, so a named-agent layout never
   // flashes for an agent that is not there yet.

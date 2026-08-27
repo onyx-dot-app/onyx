@@ -32,7 +32,7 @@ import { MinimalAgent } from "@/lib/agents/types";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { SEARCH_TOOL_ID } from "@/lib/tools/constants";
 import { OnyxDocument } from "@/lib/search/interfaces";
-import { FilterManager, LlmDescriptor, LlmManager } from "@/lib/hooks";
+import { LlmDescriptor, LlmManager } from "@/lib/hooks";
 import {
   BackendMessage,
   ChatFileType,
@@ -59,7 +59,7 @@ import {
   CurrentMessageFIFO,
   updateCurrentMessageFIFO,
 } from "@/app/app/services/currentMessageFIFO";
-import { buildFilters } from "@/lib/search/utils";
+import { buildFilters } from "@/lib/searchFilters/utils";
 import { toast } from "@opal/layouts";
 import {
   ReadonlyURLSearchParams,
@@ -85,6 +85,7 @@ import { ProjectFile, useProjectsContext } from "@/lib/projects/providers";
 import { useIncognito } from "@/providers/IncognitoProvider";
 import { useAppParams } from "@/hooks/appNavigation";
 import { projectFilesToFileDescriptors } from "@/lib/projects/utils";
+import type { SearchFilters } from "@/lib/searchFilters/types";
 
 const SYSTEM_MESSAGE_ID = -3;
 
@@ -116,7 +117,7 @@ interface RegenerationRequest {
 }
 
 interface UseChatControllerProps {
-  filterManager: FilterManager;
+  filterManager: SearchFilters;
   llmManager: LlmManager;
   activeAgent: MinimalAgent | undefined;
   availableAgents: MinimalAgent[];

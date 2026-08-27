@@ -154,17 +154,6 @@ export interface SearchDefaultOverrides {
   offset: number;
 }
 
-export interface TimeRange {
-  start: Date | string | null;
-  end: Date | string | null;
-}
-
-export interface Filters {
-  source_type: string[] | null;
-  document_set: string[] | null;
-  updated_at_range: TimeRange | null;
-}
-
 export interface SearchRequestArgs {
   query: string;
   agentic?: boolean;
