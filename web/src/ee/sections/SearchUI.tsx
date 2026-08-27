@@ -14,7 +14,7 @@ import SvgNoResult from "@opal/illustrations/no-result";
 import { getSourceMetadata } from "@/lib/sources";
 import { Tag, ValidSources } from "@/lib/types";
 import { getTimeFilterDate, TimeFilter } from "@opal/time";
-import useTags from "@/hooks/useTags";
+import { useTags } from "@/lib/searchFilters/hooks";
 import { SourceIcon } from "@/components/SourceIcon";
 import Text from "@/refresh-components/texts/Text";
 import { Section } from "@/layouts/general-layouts";
@@ -115,7 +115,10 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
   }, [results]);
 
   // Create a set for fast lookup of LLM-selected docs
-  const llmSelectedSet = new Set(llmSelectedDocIds ?? []);
+  const llmSelectedSet = useMemo(
+    () => new Set(llmSelectedDocIds ?? []),
+    [llmSelectedDocIds]
+  );
 
   // Filter and sort results
   const filteredAndSortedResults = useMemo(() => {
@@ -309,7 +312,7 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
             </Popover>
           </div>
 
-          <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+          <Divider paddingParallel={0} paddingPerpendicular={0} />
         </div>
 
         {!showEmpty && (
@@ -320,7 +323,7 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
               </Text>
             </Section>
 
-            <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+            <Divider paddingParallel={0} paddingPerpendicular={0} />
           </div>
         )}
       </div>
@@ -365,7 +368,7 @@ export default function SearchUI({ onDocumentClick }: SearchResultsProps) {
 
         {!showEmpty && (
           <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-4 px-1">
-            <Section gap={0.25} height="fit">
+            <Section gap={1} height="fit">
               {sourcesWithMeta.map(({ source, meta, count }) => (
                 <LineItemButton
                   key={source}

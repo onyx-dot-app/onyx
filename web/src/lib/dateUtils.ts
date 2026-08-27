@@ -3,6 +3,8 @@
 import { useEffect } from "react";
 import { useState } from "react";
 
+import { DEFAULT_LOCALE } from "@/i18n/config";
+
 export const useNightTime = () => {
   const [isNight, setIsNight] = useState(false);
 
@@ -28,11 +30,37 @@ export function getXDaysAgo(daysAgo: number) {
   return daysAgoDate;
 }
 
+export function convertDateToEndOfDay(date?: Date | null) {
+  if (!date) {
+    return date;
+  }
+
+  const dateCopy = new Date(date);
+  dateCopy.setHours(23, 59, 59, 999);
+  return dateCopy;
+}
+
+export function convertDateToStartOfDay(date?: Date | null) {
+  if (!date) {
+    return date;
+  }
+
+  const dateCopy = new Date(date);
+  dateCopy.setHours(0, 0, 0, 0);
+  return dateCopy;
+}
+
 export function getXYearsAgo(yearsAgo: number) {
   const today = new Date();
   const yearsAgoDate = new Date(today);
   yearsAgoDate.setFullYear(yearsAgoDate.getFullYear() - yearsAgo);
   return yearsAgoDate;
+}
+
+export function formatDateForApiParam(date: Date): string {
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
 }
 
 export function normalizeDate(date: Date): Date {
@@ -50,15 +78,7 @@ export function isDateInFuture(date: Date): boolean {
 }
 
 export const timestampToDateString = (timestamp: string) => {
-  const date = new Date(timestamp);
-  const year = date.getFullYear();
-  const month = date.getMonth() + 1; // getMonth() is zero-based
-  const day = date.getDate();
-
-  const formattedDate = `${year}-${month.toString().padStart(2, "0")}-${day
-    .toString()
-    .padStart(2, "0")}`;
-  return formattedDate;
+  return formatDateForApiParam(new Date(timestamp));
 };
 
 // Options for formatting the date
@@ -94,7 +114,8 @@ export const buildDateString = (date: Date | null) => {
 
 export const getFormattedDateRangeString = (
   from: Date | null,
-  to: Date | null
+  to: Date | null,
+  locale: string = DEFAULT_LOCALE
 ) => {
   if (!from || !to) return null;
 
@@ -103,8 +124,8 @@ export const getFormattedDateRangeString = (
     day: "numeric",
     year: "numeric",
   };
-  const fromString = from.toLocaleDateString("en-US", options);
-  const toString = to.toLocaleDateString("en-US", options);
+  const fromString = from.toLocaleDateString(locale, options);
+  const toString = to.toLocaleDateString(locale, options);
 
   return `${fromString} - ${toString}`;
 };
@@ -151,14 +172,28 @@ export const getTimeAgoString = (date: Date | null) => {
  * Format a date to short format like "Jan 27, 2026".
  * Always shows date, never time.
  */
-export const formatDateShort = (dateStr: string | null | undefined): string => {
+export const formatDateShort = (
+  dateStr: string | null | undefined,
+  locale: string = DEFAULT_LOCALE
+): string => {
   if (!dateStr) return "—";
-  return new Date(dateStr).toLocaleDateString("en-US", {
+  return new Date(dateStr).toLocaleDateString(locale, {
     month: "short",
     day: "numeric",
     year: "numeric",
   });
 };
+
+// Parses at local midnight so the day never shifts the way `formatDateShort` can for callers west of UTC.
+export const formatCalendarDay = (
+  dateStr: string,
+  { withYear = false }: { withYear?: boolean } = {}
+): string =>
+  new Date(`${dateStr}T00:00:00`).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    ...(withYear && { year: "numeric" }),
+  });
 
 /**
  * Format an ISO timestamp as "YYYY/MM/DD HH:MM:SS" (24-hour, local time).
@@ -201,7 +236,10 @@ export function formatElapsedTime(totalSeconds: number): string {
     .padStart(2, "0")}`;
 }
 
-export const getFormattedDateTime = (date: Date | null) => {
+export const getFormattedDateTime = (
+  date: Date | null,
+  locale: string = DEFAULT_LOCALE
+) => {
   if (!date) return null;
 
   const now = new Date();
@@ -209,14 +247,14 @@ export const getFormattedDateTime = (date: Date | null) => {
 
   if (isToday) {
     // If it's today, return the time in format like "3:45 PM"
-    return date.toLocaleTimeString("en-US", {
+    return date.toLocaleTimeString(locale, {
       hour: "numeric",
       minute: "2-digit",
       hour12: true,
     });
   } else {
     // Otherwise return the date in format like "Jan 15, 2023"
-    return date.toLocaleDateString("en-US", {
+    return date.toLocaleDateString(locale, {
       month: "short",
       day: "numeric",
       year: "numeric",

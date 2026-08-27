@@ -49,7 +49,7 @@ function Card({
 }: CardProps) {
   return (
     <div className="opal-auth-card-outer">
-      <OpalCard padding="lg" rounding="lg" shadow="lg">
+      <OpalCard padding={6} rounding={4} shadow="lg">
         <div className="flex flex-col gap-6">
           <div className="flex flex-col gap-3">
             <div className="p-0.5">
@@ -121,7 +121,8 @@ type SubmitLabel =
   | "join"
   | "reset"
   | "impersonate"
-  | "logout";
+  | "logout"
+  | "continue";
 
 interface SubmitProps {
   label: SubmitLabel;
@@ -138,6 +139,7 @@ const SUBMIT_LABEL_TEXT: Record<SubmitLabel, string> = {
   reset: "Reset Password",
   impersonate: "Impersonate",
   logout: "Sign Out",
+  continue: "Continue",
 };
 
 function Submit({ label, isSubmitting, isValid, dirty, onClick }: SubmitProps) {

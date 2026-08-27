@@ -1,22 +1,32 @@
 // Memoized on packet count, not array identity: a row re-renders only when its own packets grow.
-import { memo, useMemo, useState } from "react";
+import { Fragment, memo, useMemo, useState } from "react";
 import { View } from "react-native";
 
 import { selectSources } from "@/chat/citations";
 import { Message } from "@/chat/interfaces";
+import { StopReason } from "@/chat/streamingModels";
+import { resolveGroupReasoning } from "@/chat/timeline/reasoningState";
 import { MinimalAgent } from "@/chat/agents";
 import { getErrorTitle } from "@/chat/errorHelpers";
 import { fileDescriptorToDisplayFile } from "@/chat/fileDescriptors";
+import { openSource } from "@/chat/openSource";
 import { AgentTimeline } from "@/components/chat/AgentTimeline";
 import {
   CitedSourcesBar,
   CitedSourcesSheet,
 } from "@/components/chat/CitedSources";
 import { FileCard } from "@/components/chat/FileCard";
+import { RendererComponent } from "@/components/chat/renderers/RendererComponent";
+import type { FullChatState } from "@/components/chat/renderers/registry";
+import { ReasoningTextSheet } from "@/components/chat/timeline/ReasoningTextSheet";
 import { Icon } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
 import SvgAlertCircle from "@/icons/alert-circle";
-import { usePacketDisplay } from "@/hooks/usePacketDisplay";
+import { usePacedTurnGroups } from "@/hooks/timeline/usePacedTurnGroups";
+import { usePacketProcessor } from "@/hooks/timeline/usePacketProcessor";
+
+// Non-final display groups don't complete the message.
+const NOOP = (): void => {};
 
 function UserMessage({ node }: { node: Message }) {
   const files = node.files.map(fileDescriptorToDisplayFile);
@@ -30,7 +40,7 @@ function UserMessage({ node }: { node: Message }) {
         </View>
       ) : null}
       {node.message.length > 0 ? (
-        // Web parity: HumanMessage bubble with asymmetric corners (square bottom-right).
+        // Web HumanMessage bubble: squared bottom-right corner.
         <View className="max-w-[85%] rounded-t-16 rounded-bl-16 bg-background-tint-02 px-12 py-8">
           {/* 14px body: deliberate reduction from web's 16px, which reads oversized on a phone. */}
           <Text font="main-ui-body" color="text-05">
@@ -42,7 +52,7 @@ function UserMessage({ node }: { node: Message }) {
   );
 }
 
-// Web parity: ErrorBanner — code-derived title + raw error. Single alert icon; no regenerate yet.
+// Web ErrorBanner. No regenerate action yet.
 function ErrorMessage({ node }: { node: Message }) {
   return (
     <View className="py-6">
@@ -72,29 +82,114 @@ function AssistantMessage({
   node: Message;
   agent: MinimalAgent | null;
 }) {
-  const { renderer, packets, processed } = usePacketDisplay(node);
-  const [sourcesOpen, setSourcesOpen] = useState(false);
-  const Renderer = renderer?.Component;
-  const hasContent = Renderer != null && packets.length > 0;
+  const {
+    processed,
+    toolTurnGroups,
+    displayGroups,
+    hasSteps,
+    stopPacketSeen,
+    stopReason,
+    isGeneratingImage,
+    generatedImageCount,
+    finalAnswerComing,
+    toolProcessingDuration,
+    onRenderComplete,
+  } = usePacketProcessor(node.packets, node.nodeId);
 
-  // Sources appear only once the answer completes (web parity; avoids mid-stream layout shift).
-  // Memoized on `processed` so toggling the sheet open/closed doesn't re-run the selector.
+  // Withholds the answer until every step has been revealed.
+  const { pacedTurnGroups, pacedDisplayGroups, pacedFinalAnswerComing } =
+    usePacedTurnGroups(
+      toolTurnGroups,
+      displayGroups,
+      stopPacketSeen,
+      node.nodeId,
+      finalAnswerComing,
+    );
+
+  const [sourcesOpen, setSourcesOpen] = useState(false);
+  // Which step's text the full-text reader is showing. Owned here, not in the step: the timeline
+  // auto-collapses when the answer starts, which would unmount the step mid-read.
+  const [fullTextKey, setFullTextKey] = useState<string | null>(null);
+  const hasDisplayContent = pacedDisplayGroups.length > 0;
+
+  // Re-derived every flush so the reader keeps up with a step that is still streaming; parking the
+  // string at open time would freeze the body and make Copy yield a truncated prefix.
+  const fullText = useMemo(
+    () => resolveGroupReasoning(processed.groupedPacketsMap, fullTextKey),
+    [fullTextKey, processed],
+  );
+
+  // Only after the answer completes, to avoid mid-stream layout shift.
   const sources = useMemo(
     () => (processed.isComplete ? selectSources(processed) : null),
     [processed],
   );
 
-  // Web AgentMessage: timeline (avatar + status) above the answer; the timeline owns the loader.
+  // Keyed on the maps, not on web's `citations.length` proxy: web gets away with a count because it
+  // mutates one map in place, but mobile rebuilds state each flush, so a count would pin a stale map
+  // and a re-cited document would resolve against old metadata.
+  const chatState = useMemo<FullChatState>(
+    () => ({
+      agent,
+      citations: processed.citationMap,
+      documentMap: processed.documentMap,
+      openSource,
+      openFullText: setFullTextKey,
+    }),
+    [agent, processed.citationMap, processed.documentMap],
+  );
+
+  // The timeline owns the loading state, so there's no separate spinner here.
   return (
     <View className="gap-12 py-6">
       <AgentTimeline
-        agent={agent}
-        isLoading={!hasContent && !processed.isComplete}
+        turnGroups={pacedTurnGroups}
+        chatState={chatState}
+        stopPacketSeen={stopPacketSeen}
+        stopReason={stopReason}
+        hasDisplayContent={hasDisplayContent}
+        finalAnswerComing={pacedFinalAnswerComing}
+        processingDurationSeconds={node.processingDurationSeconds ?? undefined}
+        isGeneratingImage={isGeneratingImage}
+        generatedImageCount={generatedImageCount}
+        toolProcessingDuration={toolProcessingDuration}
+        streamingStartTime={node.streamingStartedAt}
       />
-      {hasContent ? (
-        // Inset (px-12) aligns the answer under the avatar rail, matching web's px-3.
+      {hasDisplayContent ? (
+        // px-12 aligns the answer under the avatar rail (web's px-3).
+        <View className="gap-12 px-12">
+          {pacedDisplayGroups.map((displayGroup, groupIndex) => (
+            <RendererComponent
+              key={`${displayGroup.turn_index}-${displayGroup.tab_index}`}
+              packets={displayGroup.packets}
+              chatState={chatState}
+              messageNodeId={node.nodeId}
+              hasTimelineThinking={pacedTurnGroups.length > 0 || hasSteps}
+              // Only the last group completes the message.
+              onComplete={
+                groupIndex === pacedDisplayGroups.length - 1
+                  ? onRenderComplete
+                  : NOOP
+              }
+              animate={!stopPacketSeen}
+              stopPacketSeen={stopPacketSeen}
+              stopReason={stopReason}
+            >
+              {(results) => (
+                <>
+                  {results.map((result, index) => (
+                    <Fragment key={index}>{result.content}</Fragment>
+                  ))}
+                </>
+              )}
+            </RendererComponent>
+          ))}
+        </View>
+      ) : stopReason === StopReason.USER_CANCELLED ? (
         <View className="px-12">
-          <Renderer packets={packets} processed={processed} />
+          <Text font="secondary-body" color="text-04">
+            User has stopped generation
+          </Text>
         </View>
       ) : null}
       {sources && sources.hasSources ? (
@@ -110,6 +205,13 @@ function AssistantMessage({
             sources={sources}
           />
         </View>
+      ) : null}
+      {fullText !== null ? (
+        <ReasoningTextSheet
+          visible
+          onClose={() => setFullTextKey(null)}
+          content={fullText}
+        />
       ) : null}
     </View>
   );
@@ -135,9 +237,10 @@ export const MessageRow = memo(
     prev.node.message === next.node.message &&
     prev.node.messageId === next.node.messageId &&
     prev.node.errorCode === next.node.errorCode &&
+    prev.node.streamingStartedAt === next.node.streamingStartedAt &&
+    prev.node.processingDurationSeconds ===
+      next.node.processingDurationSeconds &&
     prev.node.packets.length === next.node.packets.length &&
-    // user attachment chips: re-render if the files array is replaced
     prev.node.files === next.node.files &&
-    // assistant avatar: re-render if the session's agent changes
     prev.agent === next.agent,
 );

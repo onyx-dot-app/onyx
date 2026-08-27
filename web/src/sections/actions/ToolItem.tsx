@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo } from "react";
+import { useTranslations } from "next-intl";
 import { cn } from "@opal/utils";
 import { Switch } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
@@ -73,6 +74,7 @@ export interface ToolItemProps {
 
   // Handlers
   onToggle?: (enabled: boolean) => void;
+  canToggle?: boolean;
 
   // Optional styling
   className?: string;
@@ -87,8 +89,11 @@ const ToolItem: React.FC<ToolItemProps> = ({
   variant = "mcp",
   openApiMetadata,
   onToggle,
+  canToggle = true,
   className,
 }) => {
+  const t = useTranslations("actions");
+
   const isMcpVariant = variant === "mcp";
 
   const unavailableStyles =
@@ -211,7 +216,7 @@ const ToolItem: React.FC<ToolItemProps> = ({
               <div className="flex gap-0.5 items-center">
                 <div className="flex items-center px-0.5">
                   <Text as="p" text03 secondaryBody className="text-right">
-                    Tool unavailable
+                    {t("toolItem.unavailable.label")}
                   </Text>
                 </div>
                 <div className="flex items-center justify-center p-0.5 w-4 h-4">
@@ -226,7 +231,7 @@ const ToolItem: React.FC<ToolItemProps> = ({
             <Switch
               checked={isEnabled}
               onCheckedChange={onToggle}
-              disabled={!isAvailable}
+              disabled={!isAvailable || !canToggle}
               aria-label={`tool-toggle-${name}`}
             />
           </div>

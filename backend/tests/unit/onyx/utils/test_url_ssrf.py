@@ -255,8 +255,9 @@ class TestSsrfSafeGet:
                 assert call_args[1]["headers"]["Host"] == "example.com"
                 assert response == mock_response
 
-    def test_makes_request_with_original_url_https(self) -> None:
-        """Test that HTTPS requests use original URL for TLS."""
+    def test_https_request_pins_validated_ip_with_sni_hostname(self) -> None:
+        """HTTPS requests go to the validated IP (rebinding defense) while the
+        Host header and SNI carry the real hostname."""
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.is_redirect = False
@@ -264,15 +265,18 @@ class TestSsrfSafeGet:
         with patch("onyx.utils.url.socket.getaddrinfo") as mock_getaddrinfo:
             mock_getaddrinfo.return_value = [(2, 1, 6, "", ("93.184.216.34", 443))]
 
-            with patch("onyx.utils.url.requests.get") as mock_get:
-                mock_get.return_value = mock_response
+            with patch("onyx.utils.url.requests.Session") as mock_session_cls:
+                session = mock_session_cls.return_value.__enter__.return_value
+                session.get.return_value = mock_response
 
                 response = ssrf_safe_get("https://example.com/path")
 
-                # For HTTPS, we use original URL for TLS
-                mock_get.assert_called_once()
-                call_args = mock_get.call_args
-                assert call_args[0][0] == "https://example.com/path"
+                session.get.assert_called_once()
+                call_args = session.get.call_args
+                assert call_args[0][0] == "https://93.184.216.34/path"
+                assert call_args[1]["headers"]["Host"] == "example.com"
+                adapter = session.mount.call_args[0][1]
+                assert adapter._hostname == "example.com"
                 assert response == mock_response
 
     def test_passes_custom_headers(self) -> None:
@@ -340,16 +344,19 @@ class TestSsrfSafeGetAllowPrivateNetwork:
         with patch("onyx.utils.url.socket.getaddrinfo") as mock_getaddrinfo:
             mock_getaddrinfo.return_value = [(2, 1, 6, "", ("10.0.0.1", 443))]
 
-            with patch("onyx.utils.url.requests.get") as mock_get:
-                mock_get.return_value = mock_response
+            with patch("onyx.utils.url.requests.Session") as mock_session_cls:
+                session = mock_session_cls.return_value.__enter__.return_value
+                session.get.return_value = mock_response
 
                 ssrf_safe_get(
                     "https://js.jpl.nasa.gov/docs",
                     allow_private_network=True,
                 )
 
-                mock_get.assert_called_once()
-                assert mock_get.call_args[0][0] == "https://js.jpl.nasa.gov/docs"
+                session.get.assert_called_once()
+                # Pinned to the resolved private IP, hostname kept for Host/SNI.
+                assert session.get.call_args[0][0] == "https://10.0.0.1/docs"
+                assert session.get.call_args[1]["headers"]["Host"] == "js.jpl.nasa.gov"
 
     def test_still_blocks_metadata_hostname_when_enabled(self) -> None:
         """The blocked-hostname list (e.g. metadata.google.internal) must
@@ -600,3 +607,25 @@ class TestValidateOutboundHttpUrl:
                 block_loopback_and_link_local=True,
             )
             assert validated == "https://internal-only.company.com/"
+
+
+class TestSsrfSafeGetHttpsOnly:
+    def test_redirect_cannot_downgrade_to_http(self) -> None:
+        """A https_only fetch must refuse a redirect hop to plain http."""
+        redirect = MagicMock()
+        redirect.is_redirect = True
+        redirect.headers = {"Location": "http://cdn.example.com/keys"}
+
+        with patch("onyx.utils.url.socket.getaddrinfo") as mock_getaddrinfo:
+            mock_getaddrinfo.return_value = [(2, 1, 6, "", ("93.184.216.34", 443))]
+
+            with patch("onyx.utils.url.requests.Session") as mock_session_cls:
+                session = mock_session_cls.return_value.__enter__.return_value
+                session.get.return_value = redirect
+
+                with pytest.raises(SSRFException, match="Only https"):
+                    ssrf_safe_get("https://idp.example.com/keys", https_only=True)
+
+    def test_rejects_plain_http_upfront(self) -> None:
+        with pytest.raises(SSRFException, match="Only https"):
+            ssrf_safe_get("http://idp.example.com/keys", https_only=True)

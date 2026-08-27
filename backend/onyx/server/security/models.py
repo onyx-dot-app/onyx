@@ -4,6 +4,8 @@ from typing import NamedTuple
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from typing_extensions import Self
 
+from onyx.db.enums import IncognitoRecordMode
+
 
 class SSRFProtectionLevel(str, Enum):
     """How aggressively outbound HTTP requests are validated against private /
@@ -81,6 +83,7 @@ PASSWORD_MAX_LENGTH_FLOOR = 4
 
 
 _OPERATOR_LOCKED_MARKER = "operator_locked"
+_ENV_PINNED_MARKER = "env_pinned"
 
 
 def _operator_locked() -> dict[str, bool]:
@@ -91,6 +94,24 @@ def _operator_locked() -> dict[str, bool]:
 def _tenant_editable() -> dict[str, bool]:
     """Field marker: tenant admins may override at runtime."""
     return {_OPERATOR_LOCKED_MARKER: False}
+
+
+def _env_pinned() -> dict[str, bool]:
+    """Field marker: a set env var wins over any stored override, so infra can
+    keep auth-gating values as reviewable config-as-code that an app-level
+    admin compromise cannot flip. Also operator-locked: never tenant-editable
+    in multi-tenant, and single-tenant editable only while env is unset."""
+    return {_OPERATOR_LOCKED_MARKER: True, _ENV_PINNED_MARKER: True}
+
+
+class IncognitoAvailability(str, Enum):
+    """Who may start incognito chats. Secure default is OFF: the feature is
+    invisible until an admin turns it on."""
+
+    OFF = "off"
+    EVERYONE = "everyone"
+    # Only members of user groups whose incognito_enabled flag is set.
+    GROUPS = "groups"
 
 
 class SecuritySettingsOverrides(BaseModel):
@@ -105,6 +126,12 @@ class SecuritySettingsOverrides(BaseModel):
         default=None, json_schema_extra=_tenant_editable()
     )
     track_external_idp_expiry: bool | None = Field(
+        default=None, json_schema_extra=_tenant_editable()
+    )
+    incognito_availability: IncognitoAvailability | None = Field(
+        default=None, json_schema_extra=_tenant_editable()
+    )
+    incognito_record_mode: IncognitoRecordMode | None = Field(
         default=None, json_schema_extra=_tenant_editable()
     )
     ssrf_protection_level: SSRFProtectionLevel | None = Field(
@@ -142,6 +169,15 @@ class SecuritySettingsOverrides(BaseModel):
     # backports without a schema migration.
     password_auth_enabled: bool | None = Field(
         default=None, json_schema_extra=_operator_locked()
+    )
+    jwt_public_key_url: str | None = Field(
+        default=None, json_schema_extra=_env_pinned()
+    )
+    jwt_expected_audience: str | None = Field(
+        default=None, json_schema_extra=_env_pinned()
+    )
+    jwt_expected_issuer: str | None = Field(
+        default=None, json_schema_extra=_env_pinned()
     )
 
     @field_validator("valid_email_domains")
@@ -181,6 +217,18 @@ def _derive_operator_locked_fields() -> frozenset[str]:
 OPERATOR_LOCKED_FIELDS: frozenset[str] = _derive_operator_locked_fields()
 
 
+def _derive_env_pinned_fields() -> frozenset[str]:
+    return frozenset(
+        name
+        for name, info in SecuritySettingsOverrides.model_fields.items()
+        if isinstance(info.json_schema_extra, dict)
+        and info.json_schema_extra.get(_ENV_PINNED_MARKER)
+    )
+
+
+ENV_PINNED_FIELDS: frozenset[str] = _derive_env_pinned_fields()
+
+
 class SecuritySettings(BaseModel):
     """Effective, env-merged, immutable security settings."""
 
@@ -188,6 +236,8 @@ class SecuritySettings(BaseModel):
 
     user_directory_admin_only: bool
     track_external_idp_expiry: bool
+    incognito_availability: IncognitoAvailability
+    incognito_record_mode: IncognitoRecordMode
     ssrf_protection_level: SSRFProtectionLevel
     mask_credential_prefix: bool
     llm_custom_config_env_injection: bool
@@ -199,6 +249,10 @@ class SecuritySettings(BaseModel):
     password_require_digit: bool
     password_require_special_char: bool
     password_auth_enabled: bool
+    # None disables JWT bearer auth / the corresponding claim check entirely.
+    jwt_public_key_url: str | None
+    jwt_expected_audience: str | None
+    jwt_expected_issuer: str | None
 
     @model_validator(mode="after")
     def _check_password_length_invariants(self) -> Self:

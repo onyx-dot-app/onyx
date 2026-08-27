@@ -1,10 +1,6 @@
 "use client";
 
 import { Logo } from "@/lib/app/components";
-import {
-  getRandomGreeting,
-  GREETING_MESSAGES,
-} from "@/lib/chat/greetingMessages";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import Text from "@/refresh-components/texts/Text";
 import { MinimalAgent } from "@/lib/agents/types";
@@ -12,6 +8,9 @@ import { useState, useEffect } from "react";
 import { useSettings } from "@/lib/settings/hooks";
 import FrostedDiv from "@/refresh-components/FrostedDiv";
 import { Section } from "@/layouts/general-layouts";
+import { SvgEyeClosed } from "@opal/icons";
+import { useIncognito } from "@/providers/IncognitoProvider";
+import { useTranslations } from "next-intl";
 
 export interface WelcomeMessageProps {
   agent?: MinimalAgent;
@@ -22,28 +21,48 @@ export default function WelcomeMessage({
   agent,
   isDefaultAgent,
 }: WelcomeMessageProps) {
+  const t = useTranslations("chat.welcome");
   const settings = useSettings();
 
   // Use a stable default for SSR, then randomize on client after hydration
-  const [greeting, setGreeting] = useState(GREETING_MESSAGES[0]);
+  const [greeting, setGreeting] = useState(t("greeting.helpText"));
 
   useEffect(() => {
     if (settings.enterprise?.custom_greeting_message) {
       setGreeting(settings.enterprise.custom_greeting_message);
     } else {
-      setGreeting(getRandomGreeting());
+      setGreeting(
+        Math.random() < 0.5 ? t("greeting.helpText") : t("greeting.startText")
+      );
     }
-  }, [settings.enterprise?.custom_greeting_message]);
+  }, [settings.enterprise?.custom_greeting_message, t]);
+
+  const { incognitoEnabled } = useIncognito();
 
   let content: React.ReactNode = null;
 
-  if (isDefaultAgent) {
+  if (incognitoEnabled) {
+    content = (
+      <Section
+        data-testid="incognito-intro"
+        flexDirection="column"
+        alignItems="start"
+        gap={0.5}
+        width="fit"
+      >
+        <SvgEyeClosed size={32} className="text-text-04" />
+        <Text as="p" headingH2>
+          {t("incognito.title")}
+        </Text>
+      </Section>
+    );
+  } else if (isDefaultAgent) {
     content = (
       <Section
         data-testid="onyx-logo"
         flexDirection="column"
         alignItems="start"
-        gap={0.5}
+        gap={2}
         width="fit"
       >
         <Logo folded size={32} />
@@ -58,7 +77,7 @@ export default function WelcomeMessage({
         data-testid="agent-name-display"
         flexDirection="column"
         alignItems="start"
-        gap={0.5}
+        gap={2}
         width="fit"
       >
         <AgentAvatar agent={agent} size={36} />

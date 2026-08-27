@@ -16,6 +16,7 @@ from ee.onyx.server.enterprise_settings.api import (
 )
 from ee.onyx.server.evals.api import router as evals_router
 from ee.onyx.server.features.hooks.api import router as hook_router
+from ee.onyx.server.gateway.api import router as llm_gateway_router
 from ee.onyx.server.license.api import router as license_router
 from ee.onyx.server.log_export.api import router as log_export_router
 from ee.onyx.server.manage.standard_answer import router as standard_answer_router
@@ -142,6 +143,7 @@ def get_application() -> FastAPI:
     include_router_with_global_prefix_prepended(application, ee_document_cc_pair_router)
     include_router_with_global_prefix_prepended(application, evals_router)
     include_router_with_global_prefix_prepended(application, hook_router)
+    include_router_with_global_prefix_prepended(application, llm_gateway_router)
 
     # Enterprise-only global settings
     include_router_with_global_prefix_prepended(

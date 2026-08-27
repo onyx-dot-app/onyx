@@ -82,7 +82,7 @@ export default function ExternalAppsOAuthCallbackPage() {
         description="Finishing the OAuth handshake…"
       />
       <SettingsLayouts.Body>
-        <Card background="light" border="solid" rounding="lg">
+        <Card background="light" border="solid" rounding={4}>
           <div className="flex flex-col gap-2">
             {status === "exchanging" && (
               <Text font="main-content-body">

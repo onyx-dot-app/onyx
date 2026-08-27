@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import { mutate } from "swr";
 import {
   Button,
@@ -15,6 +16,7 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import type { ReindexErrorRow } from "@/lib/indexing/types";
 
 function ResumeButton({ row }: { row: ReindexErrorRow }) {
+  const t = useTranslations("admin.indexSettings");
   const [busy, setBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -25,7 +27,9 @@ function ResumeButton({ row }: { row: ReindexErrorRow }) {
       await resumePausedPort(row);
     } catch (e) {
       console.error("Failed to resume paused port unit:", e);
-      setErrorMsg(e instanceof Error ? e.message : "Failed to resume.");
+      setErrorMsg(
+        e instanceof Error ? e.message : t("errorsModal.resumeFailed")
+      );
       setBusy(false);
       return;
     }
@@ -49,7 +53,9 @@ function ResumeButton({ row }: { row: ReindexErrorRow }) {
         disabled={busy}
         onClick={onResume}
       >
-        {busy ? "Resuming…" : "Resume"}
+        {busy
+          ? t("errorsModal.resumingButton.label")
+          : t("errorsModal.resumeButton.label")}
       </Button>
       {errorMsg && (
         <Text font="secondary-body" color="status-error-05">
@@ -61,67 +67,6 @@ function ResumeButton({ row }: { row: ReindexErrorRow }) {
 }
 
 const tc = createTableColumns<ReindexErrorRow>();
-const COLUMNS = [
-  tc.column("scope", {
-    header: "Type",
-    weight: 12,
-    cell: (value) => (
-      <Text font="secondary-body" color="text-04">
-        {value === "connector" ? "Connector" : "User Files"}
-      </Text>
-    ),
-  }),
-  tc.column("name", {
-    header: "Name",
-    weight: 22,
-    cell: (value) => (
-      <Text font="secondary-body" color="text-04">
-        {value}
-      </Text>
-    ),
-  }),
-  tc.displayColumn({
-    id: "entity_id",
-    header: "ID",
-    width: { weight: 12 },
-    cell: (row) => (
-      <Text font="secondary-body" color="text-03" nowrap>
-        {row.cc_pair_id != null
-          ? String(row.cc_pair_id)
-          : row.user_id
-            ? row.user_id.slice(0, 8)
-            : "—"}
-      </Text>
-    ),
-  }),
-  tc.displayColumn({
-    id: "status",
-    header: "Status",
-    width: { weight: 12 },
-    cell: (row) =>
-      row.paused ? (
-        <Tag color="amber" icon={SvgPauseCircle} title="Paused" />
-      ) : (
-        <Tag color="red" icon={SvgAlertCircle} title="Failed" />
-      ),
-  }),
-  tc.column("error_msg", {
-    header: "Error",
-    weight: 30,
-    enableSorting: false,
-    cell: (value) => (
-      <Text font="secondary-body" color="text-03">
-        {value ?? "Unknown error"}
-      </Text>
-    ),
-  }),
-  tc.displayColumn({
-    id: "actions",
-    header: "",
-    width: { weight: 12 },
-    cell: (row) => (row.paused ? <ResumeButton row={row} /> : null),
-  }),
-];
 
 interface ReindexErrorsModalProps {
   onClose: () => void;
@@ -130,29 +75,105 @@ interface ReindexErrorsModalProps {
 export default function ReindexErrorsModal({
   onClose,
 }: ReindexErrorsModalProps) {
+  const t = useTranslations("admin.indexSettings");
   const { data: rows, isLoading, error } = useReindexErrors(true);
+
+  const columns = useMemo(
+    () => [
+      tc.column("scope", {
+        header: t("errorsModal.columns.type"),
+        weight: 12,
+        cell: (value) => (
+          <Text font="secondary-body" color="text-04">
+            {value === "connector"
+              ? t("errorsModal.scope.connector")
+              : t("errorsModal.scope.userFiles")}
+          </Text>
+        ),
+      }),
+      tc.column("name", {
+        header: t("errorsModal.columns.name"),
+        weight: 22,
+        cell: (value) => (
+          <Text font="secondary-body" color="text-04">
+            {value}
+          </Text>
+        ),
+      }),
+      tc.displayColumn({
+        id: "entity_id",
+        header: t("errorsModal.columns.id"),
+        width: { weight: 12 },
+        cell: (row) => (
+          <Text font="secondary-body" color="text-03" nowrap>
+            {row.cc_pair_id != null
+              ? String(row.cc_pair_id)
+              : row.user_id
+                ? row.user_id.slice(0, 8)
+                : "—"}
+          </Text>
+        ),
+      }),
+      tc.displayColumn({
+        id: "status",
+        header: t("errorsModal.columns.status"),
+        width: { weight: 12 },
+        cell: (row) =>
+          row.paused ? (
+            <Tag
+              color="amber"
+              icon={SvgPauseCircle}
+              title={t("errorsModal.status.paused")}
+            />
+          ) : (
+            <Tag
+              color="red"
+              icon={SvgAlertCircle}
+              title={t("errorsModal.status.failed")}
+            />
+          ),
+      }),
+      tc.column("error_msg", {
+        header: t("errorsModal.columns.error"),
+        weight: 30,
+        enableSorting: false,
+        cell: (value) => (
+          <Text font="secondary-body" color="text-03">
+            {value ?? t("errorsModal.unknownError")}
+          </Text>
+        ),
+      }),
+      tc.displayColumn({
+        id: "actions",
+        header: "",
+        width: { weight: 12 },
+        cell: (row) => (row.paused ? <ResumeButton row={row} /> : null),
+      }),
+    ],
+    [t]
+  );
 
   return (
     <Modal open onOpenChange={onClose}>
       <Modal.Content width="xl" height="sm">
         <Modal.Header
           icon={SvgAlertCircle}
-          title="Re-index Attention"
-          description="Connectors and user files whose latest re-index attempt failed (auto-retrying) or was paused (Resume to retry)."
+          title={t("errorsModal.title")}
+          description={t("errorsModal.description")}
           onClose={onClose}
         />
         <Modal.Body>
           {isLoading ? (
             <Text as="p" color="text-03">
-              Loading…
+              {t("errorsModal.loading")}
             </Text>
           ) : error ? (
             <Text as="p" color="status-error-05">
-              Couldn&apos;t load re-index status. Please try again.
+              {t("errorsModal.loadError")}
             </Text>
           ) : !rows || rows.length === 0 ? (
             <Text as="p" color="text-03">
-              Nothing needs attention.
+              {t("errorsModal.empty")}
             </Text>
           ) : (
             <div className="w-full">
@@ -160,7 +181,7 @@ export default function ReindexErrorsModal({
                   table shrinking to content and left-packing. */}
               <Table
                 data={rows}
-                columns={COLUMNS}
+                columns={columns}
                 getRowId={(row) =>
                   `${row.scope}-${row.cc_pair_id ?? row.user_id}`
                 }

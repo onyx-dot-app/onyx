@@ -28,6 +28,7 @@ const MockInput = (props: React.InputHTMLAttributes<HTMLInputElement>) => (
 const MockSwitch = () => (
   <button
     type="button"
+    aria-label="Toggle"
     className="w-10 h-5 rounded-full bg-background-neutral-03 relative"
   >
     <span className="absolute left-0.5 top-0.5 w-4 h-4 rounded-full bg-background-neutral-00 transition-transform" />

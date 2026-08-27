@@ -1,24 +1,37 @@
+from collections import defaultdict
 from collections.abc import Sequence
 from operator import and_
+from typing import NamedTuple
 from uuid import UUID
 
-from fastapi import HTTPException
-from sqlalchemy import Select, delete, func, select, update
+from sqlalchemy import Select, delete, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, selectinload
 
 from ee.onyx.server.user_group.models import (
-    SetCuratorRequest,
     UserGroupCreate,
     UserGroupUpdate,
 )
+from onyx.auth.permissions import (
+    NON_TOGGLEABLE_PERMISSIONS,
+    get_effective_permissions,
+    has_global_permission,
+    has_permission,
+    resolve_effective_permissions,
+)
+from onyx.auth.scoped_permissions import assert_manages_group, assert_within_scope
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
-from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
+from onyx.db.connector_credential_pair import (
+    get_cc_pair_groups_for_ids,
+    get_connector_credential_pair_from_id,
+)
 from onyx.db.enums import (
     AccessType,
+    AccountType,
     ConnectorCredentialPairStatus,
     GrantSource,
     Permission,
+    PermissionAuthority,
 )
 from onyx.db.models import (
     ConnectorCredentialPair,
@@ -40,13 +53,17 @@ from onyx.db.models import (
     User__UserGroup,
     UserGroup,
     UserGroup__ConnectorCredentialPair,
-    UserRole,
 )
 from onyx.db.permissions import (
     recompute_permissions_for_group__no_commit,
     recompute_user_permissions__no_commit,
 )
-from onyx.db.users import fetch_user_by_id
+from onyx.db.users import (
+    assert_admin_access_survives_removal,
+    assert_group_membership_survives_removal,
+    fetch_users_by_ids,
+    lock_group_membership,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.audit import (
@@ -58,6 +75,12 @@ from onyx.utils.audit import (
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+_NON_GROUP_ACCOUNT_TYPES = (
+    AccountType.BOT,
+    AccountType.EXT_PERM_USER,
+    AccountType.ANONYMOUS,
+)
 
 
 def _cleanup_user__user_group_relationships__no_commit(
@@ -182,73 +205,6 @@ def _cleanup_document_set__user_group_relationships__no_commit(
     )
 
 
-def validate_object_creation_for_user(
-    db_session: Session,
-    user: User,
-    target_group_ids: list[int] | None = None,
-    object_is_public: bool | None = None,
-    object_is_perm_sync: bool | None = None,
-    object_is_owned_by_user: bool = False,
-    object_is_new: bool = False,
-) -> None:
-    """
-    All users can create/edit permission synced objects if they don't specify a group
-    All admin actions are allowed.
-    Curators and global curators can create public objects.
-    Prevents other non-admins from creating/editing:
-    - public objects
-    - objects with no groups
-    - objects that belong to a group they don't curate
-    """
-    if object_is_perm_sync and not target_group_ids:
-        return
-
-    # Admins are allowed
-    if user.role == UserRole.ADMIN:
-        return
-
-    # Allow curators and global curators to create public objects
-    # w/o associated groups IF the object is new/owned by them
-    if (
-        object_is_public
-        and user.role in [UserRole.CURATOR, UserRole.GLOBAL_CURATOR]
-        and (object_is_new or object_is_owned_by_user)
-    ):
-        return
-
-    if object_is_public and user.role == UserRole.BASIC:
-        detail = "User does not have permission to create public objects"
-        logger.error(detail)
-        raise HTTPException(
-            status_code=400,
-            detail=detail,
-        )
-
-    if not target_group_ids:
-        detail = "Curators must specify 1+ groups"
-        logger.error(detail)
-        raise HTTPException(
-            status_code=400,
-            detail=detail,
-        )
-
-    user_curated_groups = fetch_user_groups_for_user(
-        db_session=db_session,
-        user_id=user.id,
-        # Global curators can curate all groups they are member of
-        only_curator_groups=user.role != UserRole.GLOBAL_CURATOR,
-    )
-    user_curated_group_ids = set([group.id for group in user_curated_groups])
-    target_group_ids_set = set(target_group_ids)
-    if not target_group_ids_set.issubset(user_curated_group_ids):
-        detail = "Curators cannot control groups they don't curate"
-        logger.error(detail)
-        raise HTTPException(
-            status_code=400,
-            detail=detail,
-        )
-
-
 def fetch_user_group(db_session: Session, user_group_id: int) -> UserGroup | None:
     stmt = select(UserGroup).where(UserGroup.id == user_group_id)
     return db_session.scalar(stmt)
@@ -314,6 +270,7 @@ def fetch_user_groups(
     only_up_to_date: bool = True,
     eager_load_for_snapshot: bool = False,
     include_default: bool = True,
+    restrict_to_group_ids: set[int] | None = None,
 ) -> Sequence[UserGroup]:
     """
     Fetches user groups from the database.
@@ -329,6 +286,9 @@ def fetch_user_groups(
         eager_load_for_snapshot: If True, adds eager loading for all relationships
             needed by UserGroup.from_model snapshot creation.
         include_default: If False, excludes system default groups (is_default=True).
+        restrict_to_group_ids: If provided, limits the result to these group ids — the
+            scoped-manager variant passes the groups they manage. An empty set returns
+            nothing (fail-closed); ``None`` returns all groups (admin/global).
 
     Returns:
         Sequence[UserGroup]: A sequence of `UserGroup` objects matching the query criteria.
@@ -338,6 +298,8 @@ def fetch_user_groups(
         stmt = stmt.where(UserGroup.is_up_to_date == True)  # noqa: E712
     if not include_default:
         stmt = stmt.where(UserGroup.is_default == False)  # noqa: E712
+    if restrict_to_group_ids is not None:
+        stmt = stmt.where(UserGroup.id.in_(restrict_to_group_ids))
     if eager_load_for_snapshot:
         stmt = _add_user_group_snapshot_eager_loads(stmt)
     return db_session.scalars(stmt).unique().all()
@@ -346,7 +308,6 @@ def fetch_user_groups(
 def fetch_user_groups_for_user(
     db_session: Session,
     user_id: UUID,
-    only_curator_groups: bool = False,
     eager_load_for_snapshot: bool = False,
     include_default: bool = True,
 ) -> Sequence[UserGroup]:
@@ -359,8 +320,6 @@ def fetch_user_groups_for_user(
         )
         .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
     )
-    if only_curator_groups:
-        stmt = stmt.where(User__UserGroup.is_curator == True)  # noqa: E712
     if not include_default:
         stmt = stmt.where(UserGroup.is_default == False)  # noqa: E712
     if eager_load_for_snapshot:
@@ -537,6 +496,18 @@ def _add_user_group__cc_pair_relationships__no_commit(
     return relationships
 
 
+def set_user_group_incognito(
+    db_session: Session, user_group_id: int, enabled: bool
+) -> UserGroup:
+    """Flip whether members may use incognito under groups-only availability."""
+    group = db_session.scalar(select(UserGroup).where(UserGroup.id == user_group_id))
+    if group is None:
+        raise ValueError(f"UserGroup with id '{user_group_id}' not found")
+    group.incognito_enabled = enabled
+    db_session.commit()
+    return group
+
+
 def insert_user_group(db_session: Session, user_group: UserGroupCreate) -> UserGroup:
     db_user_group = UserGroup(
         name=user_group.name,
@@ -586,175 +557,20 @@ def _mark_user_group__cc_pair_relationships_outdated__no_commit(
         user_group__cc_pair_relationship.is_current = False
 
 
-def _validate_curator_status__no_commit(
-    db_session: Session,
-    users: list[User],
-) -> None:
-    for user in users:
-        # Check if the user is a curator in any of their groups
-        curator_relationships = (
-            db_session.query(User__UserGroup)
-            .filter(
-                User__UserGroup.user_id == user.id,
-                User__UserGroup.is_curator == True,  # noqa: E712
-            )
-            .all()
-        )
+def _current_cc_pair_ids(db_user_group: UserGroup) -> list[int]:
+    """The cc_pairs currently attached to the group — is_current junction rows only.
 
-        # if the user is a curator in any of their groups, set their role to CURATOR
-        # otherwise, set their role to BASIC only if they were previously a CURATOR
-        if curator_relationships:
-            user.role = UserRole.CURATOR
-        elif user.role == UserRole.CURATOR:
-            user.role = UserRole.BASIC
-        db_session.add(user)
-
-
-def remove_curator_status__no_commit(db_session: Session, user: User) -> None:
-    stmt = (
-        update(User__UserGroup)
-        .where(User__UserGroup.user_id == user.id)
-        .values(is_curator=False)
-    )
-    db_session.execute(stmt)
-    _validate_curator_status__no_commit(db_session, [user])
-
-
-def _validate_curator_can_modify_group(
-    db_session: Session,
-    user: User,
-    user_group_id: int,
-) -> None:
-    """Validates that ``user`` is permitted to modify the given user group
-    (its membership, cc_pair assignments, or curator relationships).
-
-    - ADMIN may modify any group.
-    - GLOBAL_CURATOR may modify any group they are a member of.
-    - CURATOR may only modify groups they actually curate.
-
-    Raises ``OnyxError(UNAUTHORIZED)`` if a curator / global_curator attempts to
-    modify a group that is outside their scope. This is intentionally an
-    authorization (403) error rather than a "not found" (404) so callers can
-    distinguish "not allowed" from "does not exist".
+    A removed cc_pair keeps a stale ``is_current=False`` row until the Vespa sync
+    deletes it, and the plain ``cc_pairs`` relationship has no is_current filter, so
+    it would still surface the removed pair. Reading it as "current" lets a removed
+    (possibly public / out-of-scope) pair be re-attached without re-clearing the
+    scope gate, so always derive the current set from the live relationships.
     """
-    # Admins can modify any group.
-    if user.role == UserRole.ADMIN:
-        return
-
-    accessible_groups = fetch_user_groups_for_user(
-        db_session=db_session,
-        user_id=user.id,
-        # Curators are scoped to groups they actually curate; global curators
-        # may modify any group they are a member of.
-        only_curator_groups=user.role == UserRole.CURATOR,
-    )
-    accessible_group_ids = {group.id for group in accessible_groups}
-    if user_group_id not in accessible_group_ids:
-        logger.warning(
-            "User '%s' attempted to modify group '%s' which they do not curate",
-            user.email,
-            user_group_id,
-        )
-        raise OnyxError(
-            OnyxErrorCode.UNAUTHORIZED,
-            "Curators cannot control groups they don't curate",
-        )
-
-
-def _validate_curator_relationship_update_request(
-    db_session: Session,
-    user_group_id: int,
-    target_user: User,
-) -> None:
-    """
-    This function validates that the curator_relationship_update request itself is valid.
-    """
-    if target_user.role == UserRole.ADMIN:
-        raise ValueError(
-            f"User '{target_user.email}' is an admin and therefore has all permissions "
-            "of a curator. If you'd like this user to only have curator permissions, "
-            "you must update their role to BASIC then assign them to be CURATOR in the "
-            "appropriate groups."
-        )
-    elif target_user.role == UserRole.GLOBAL_CURATOR:
-        raise ValueError(
-            f"User '{target_user.email}' is a global_curator and therefore has all "
-            "permissions of a curator for all groups. If you'd like this user to only "
-            "have curator permissions for a specific group, you must update their role "
-            "to BASIC then assign them to be CURATOR in the appropriate groups."
-        )
-    elif target_user.role not in [UserRole.CURATOR, UserRole.BASIC]:
-        raise ValueError(
-            f"This endpoint can only be used to update the curator relationship for "
-            "users with the CURATOR or BASIC role. \n"
-            f"Target user: {target_user.email} \n"
-            f"Target user role: {target_user.role} \n"
-        )
-
-    # check if the target user is in the group they are changing the curator relationship for
-    requested_user_groups = fetch_user_groups_for_user(
-        db_session=db_session,
-        user_id=target_user.id,
-        only_curator_groups=False,
-    )
-    group_ids = [group.id for group in requested_user_groups]
-    if user_group_id not in group_ids:
-        raise ValueError(
-            f"target user {target_user.email} is not in group '{user_group_id}'"
-        )
-
-
-def update_user_curator_relationship(
-    db_session: Session,
-    user_group_id: int,
-    set_curator_request: SetCuratorRequest,
-    user_making_change: User,
-) -> None:
-    target_user = fetch_user_by_id(db_session, set_curator_request.user_id)
-    if not target_user:
-        raise ValueError(f"User with id '{set_curator_request.user_id}' not found")
-
-    _validate_curator_relationship_update_request(
-        db_session=db_session,
-        user_group_id=user_group_id,
-        target_user=target_user,
-    )
-
-    _validate_curator_can_modify_group(
-        db_session=db_session,
-        user=user_making_change,
-        user_group_id=user_group_id,
-    )
-
-    logger.info(
-        "user_making_change=%s is updating the curator relationship for user=%s in group=%s to is_curator=%s",
-        user_making_change.email if user_making_change else "None",
-        target_user.email,
-        user_group_id,
-        set_curator_request.is_curator,
-    )
-
-    relationship_to_update = (
-        db_session.query(User__UserGroup)
-        .filter(
-            User__UserGroup.user_group_id == user_group_id,
-            User__UserGroup.user_id == set_curator_request.user_id,
-        )
-        .first()
-    )
-
-    if relationship_to_update:
-        relationship_to_update.is_curator = set_curator_request.is_curator
-    else:
-        relationship_to_update = User__UserGroup(
-            user_group_id=user_group_id,
-            user_id=set_curator_request.user_id,
-            is_curator=True,
-        )
-        db_session.add(relationship_to_update)
-
-    _validate_curator_status__no_commit(db_session, [target_user])
-    db_session.commit()
+    return [
+        relationship.cc_pair_id
+        for relationship in db_user_group.cc_pair_relationships
+        if relationship.is_current
+    ]
 
 
 def add_users_to_user_group(
@@ -763,28 +579,26 @@ def add_users_to_user_group(
     user_group_id: int,
     user_ids: list[UUID],
 ) -> UserGroup:
-    # Curators may only modify groups they curate. Validate before any read of
-    # the target group's data so a curator cannot inspect (or mutate) a group
-    # outside their scope, even on the early-return path below.
-    _validate_curator_can_modify_group(
-        db_session=db_session,
-        user=user,
-        user_group_id=user_group_id,
-    )
+    # Gate before any read of the group's data so a non-manager can't confirm a
+    # group exists, even on the early-return path below.
+    assert_manages_group(user, db_session, group_id=user_group_id)
+
+    lock_group_membership(db_session)
 
     db_user_group = fetch_user_group(db_session=db_session, user_group_id=user_group_id)
     if db_user_group is None:
         raise ValueError(f"UserGroup with id '{user_group_id}' not found")
 
-    missing_users = [
-        user_id for user_id in user_ids if fetch_user_by_id(db_session, user_id) is None
-    ]
+    found_ids = {user.id for user in fetch_users_by_ids(db_session, user_ids)}
+    missing_users = [user_id for user_id in user_ids if user_id not in found_ids]
     if missing_users:
         raise ValueError(
             f"User(s) not found: {', '.join(str(user_id) for user_id in missing_users)}"
         )
 
     _check_user_group_is_modifiable(db_user_group)
+    # gate here too: the no-op early return below skips update_user_group's copy
+    _assert_default_group_update_allowed(user, db_user_group, attaching_cc_pairs=False)
 
     current_user_ids = [user.id for user in db_user_group.users]
     current_user_ids_set = set(current_user_ids)
@@ -797,7 +611,7 @@ def add_users_to_user_group(
 
     user_group_update = UserGroupUpdate(
         user_ids=current_user_ids + new_user_ids,
-        cc_pair_ids=[cc_pair.id for cc_pair in db_user_group.cc_pairs],
+        cc_pair_ids=_current_cc_pair_ids(db_user_group),
     )
 
     return update_user_group(
@@ -806,6 +620,154 @@ def add_users_to_user_group(
         user_group_id=user_group_id,
         user_group_update=user_group_update,
     )
+
+
+def _assert_no_privilege_amplification(
+    db_session: Session,
+    user: User,
+    user_group_id: int,
+    added_user_ids: list[UUID],
+) -> None:
+    """Adding a member hands them the group's grants, so a MANAGE_USER_GROUPS holder
+    could otherwise join the seeded Admin group and become admin. Never blocks a
+    group's own manager: a manager is always a member, so already holds its grants."""
+    if not added_user_ids:
+        return
+
+    group_permissions = set(
+        db_session.scalars(
+            select(PermissionGrant.permission).where(
+                PermissionGrant.group_id == user_group_id,
+                PermissionGrant.is_deleted.is_(False),
+            )
+        )
+    )
+    # seeded into every group, so requiring it would block group-less actors
+    group_permissions.discard(Permission.BASIC_ACCESS)
+    excess = group_permissions - get_effective_permissions(user)
+    if excess:
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "You can't add members to a group that grants permissions you don't "
+            "hold: " + ", ".join(sorted(permission.value for permission in excess)),
+        )
+
+
+def _assert_users_can_join_groups(added_users: list[User]) -> None:
+    """Only STANDARD and SERVICE_ACCOUNT enter the group system. The picker hides
+    the rest, but the route accepts any uuid."""
+    rejected = sorted(
+        f"{added_user.email} ({added_user.account_type.value})"
+        for added_user in added_users
+        if added_user.account_type in _NON_GROUP_ACCOUNT_TYPES
+    )
+    if rejected:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "These accounts can't join a group: " + ", ".join(rejected),
+        )
+
+
+def _assert_default_group_update_allowed(
+    user: User,
+    db_user_group: UserGroup,
+    *,
+    attaching_cc_pairs: bool,
+) -> None:
+    """Members are all a default group has, and only a full admin may change them. Lives
+    here because both write paths reach it, and because connectors ride in the same PATCH
+    payload as membership — there is no group-side connector route to guard, unlike agents
+    and document sets."""
+    if not db_user_group.is_default:
+        return
+
+    if not has_global_permission(user, Permission.FULL_ADMIN_PANEL_ACCESS):
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Only administrators can change the membership of a default system group.",
+        )
+    if attaching_cc_pairs:
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "A default system group holds only members, so it can't take connectors.",
+        )
+
+
+def _assert_group_update_within_scope(
+    db_session: Session,
+    user: User,
+    user_group_id: int,
+    added_cc_pair_ids: set[int],
+) -> None:
+    """GATE 2 for a scoped manager editing a group: the group must be one they
+    manage, and every newly-attached cc_pair must be a private one within their
+    managed scope — otherwise the junction rewrite could attach a public or
+    out-of-scope connector to the group, granting its members access. Admins /
+    global holders bypass both checks."""
+    assert_manages_group(user, db_session, group_id=user_group_id)
+
+    # The cc_pair re-attach vector only applies to scoped managers; a global
+    # MANAGE_USER_GROUPS holder keeps today's unrestricted attach behavior.
+    if (
+        has_permission(user, Permission.MANAGE_USER_GROUPS)
+        is not PermissionAuthority.SCOPED
+    ):
+        return
+
+    current_groups_by_cc_pair: dict[int, list[int]] = defaultdict(list)
+    for row in get_cc_pair_groups_for_ids(db_session, list(added_cc_pair_ids)):
+        if row.is_current and row.cc_pair_id is not None:
+            current_groups_by_cc_pair[row.cc_pair_id].append(row.user_group_id)
+
+    cc_pairs_by_id = {
+        cc_pair.id: cc_pair
+        for cc_pair in db_session.scalars(
+            select(ConnectorCredentialPair).where(
+                ConnectorCredentialPair.id.in_(added_cc_pair_ids)
+            )
+        )
+    }
+
+    for cc_pair_id in added_cc_pair_ids:
+        cc_pair = cc_pairs_by_id.get(cc_pair_id)
+        if cc_pair is None:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                f"Connector credential pair '{cc_pair_id}' not found.",
+            )
+        assert_within_scope(
+            user,
+            db_session,
+            permission=Permission.MANAGE_CONNECTORS,
+            current_group_ids=current_groups_by_cc_pair[cc_pair_id],
+            requested_group_ids=[user_group_id],
+            is_non_public=cc_pair.access_type != AccessType.PUBLIC,
+        )
+
+
+def _retains_group_admin_without(
+    user: User, group_id: int, db_session: Session
+) -> bool:
+    """Whether ``user`` would still hold global MANAGE_USER_GROUPS with ``group_id`` gone.
+
+    Reads grants directly rather than ``effective_permissions``, which still reflects the
+    membership being removed."""
+    granted = {
+        permission.value
+        for permission in db_session.scalars(
+            select(PermissionGrant.permission)
+            .join(
+                User__UserGroup,
+                User__UserGroup.user_group_id == PermissionGrant.group_id,
+            )
+            .where(
+                User__UserGroup.user_id == user.id,
+                User__UserGroup.user_group_id != group_id,
+                PermissionGrant.is_deleted.is_(False),
+            )
+        )
+    }
+    return Permission.MANAGE_USER_GROUPS.value in resolve_effective_permissions(granted)
 
 
 def update_user_group(
@@ -818,14 +780,13 @@ def update_user_group(
     That will be processed by check_for_vespa_user_groups_sync_task and trigger
     a long running background sync to Vespa.
     """
-    # Curators may only modify groups they curate. Validate before any mutation
-    # so a curator cannot rewrite the membership / cc_pair assignments of a
-    # group outside their scope.
-    _validate_curator_can_modify_group(
-        db_session=db_session,
-        user=user,
-        user_group_id=user_group_id,
-    )
+    # Gate before any read so a non-manager can't confirm the group exists; the
+    # cc_pair scope check below needs the group row and runs after.
+    assert_manages_group(user, db_session, group_id=user_group_id)
+
+    # Locked before the reads below, adds included: an add that lands after a
+    # deletion's roster snapshot is wiped by its cleanup without being checked.
+    lock_group_membership(db_session)
 
     stmt = select(UserGroup).where(UserGroup.id == user_group_id)
     db_user_group = db_session.scalar(stmt)
@@ -834,28 +795,54 @@ def update_user_group(
 
     _check_user_group_is_modifiable(db_user_group)
 
+    current_cc_pair_ids = set(_current_cc_pair_ids(db_user_group))
+    requested_cc_pair_ids = set(user_group_update.cc_pair_ids)
+    _assert_default_group_update_allowed(
+        user, db_user_group, attaching_cc_pairs=bool(requested_cc_pair_ids)
+    )
+    _assert_group_update_within_scope(
+        db_session,
+        user,
+        user_group_id,
+        added_cc_pair_ids=requested_cc_pair_ids - current_cc_pair_ids,
+    )
+
     current_user_ids = set([user.id for user in db_user_group.users])
     updated_user_ids = set(user_group_update.user_ids)
     added_user_ids = list(updated_user_ids - current_user_ids)
     removed_user_ids = list(current_user_ids - updated_user_ids)
 
+    _assert_no_privilege_amplification(db_session, user, user_group_id, added_user_ids)
+    # Runs before the manager guard below so the admin-specific message wins.
+    assert_admin_access_survives_removal(
+        db_session, user, user_group_id, removed_user_ids
+    )
+    assert_group_membership_survives_removal(
+        db_session, user_group_id, removed_user_ids
+    )
+
+    # Removing yourself drops the membership row carrying is_manager, and
+    # effective_permissions is derived from group grants — so leaving can revoke the very
+    # authority that admitted you. Allowed only when a grant survives the removal.
+    if user.id in removed_user_ids and not _retains_group_admin_without(
+        user, user_group_id, db_session
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "You can't remove yourself from a group you manage.",
+        )
+
     if added_user_ids:
+        added_users = fetch_users_by_ids(db_session, added_user_ids)
+        found_ids = {added_user.id for added_user in added_users}
         missing_users = [
-            user_id
-            for user_id in added_user_ids
-            if fetch_user_by_id(db_session, user_id) is None
+            user_id for user_id in added_user_ids if user_id not in found_ids
         ]
         if missing_users:
             raise ValueError(
                 f"User(s) not found: {', '.join(str(user_id) for user_id in missing_users)}"
             )
-
-    # LEAVING THIS HERE FOR NOW FOR GIVING DIFFERENT ROLES
-    # ACCESS TO DIFFERENT PERMISSIONS
-    # if (removed_user_ids or added_user_ids) and (
-    #     not user or user.role != UserRole.ADMIN
-    # ):
-    #     raise ValueError("Only admins can add or remove users from user groups")
+        _assert_users_can_join_groups(added_users)
 
     if removed_user_ids:
         _cleanup_user__user_group_relationships__no_commit(
@@ -871,9 +858,7 @@ def update_user_group(
             user_ids=added_user_ids,
         )
 
-    cc_pairs_updated = set([cc_pair.id for cc_pair in db_user_group.cc_pairs]) != set(
-        user_group_update.cc_pair_ids
-    )
+    cc_pairs_updated = current_cc_pair_ids != requested_cc_pair_ids
     if cc_pairs_updated:
         _mark_user_group__cc_pair_relationships_outdated__no_commit(
             db_session=db_session, user_group_id=user_group_id
@@ -887,22 +872,6 @@ def update_user_group(
     if cc_pairs_updated and not DISABLE_VECTOR_DB:
         db_user_group.is_up_to_date = False
 
-    removed_users = db_session.scalars(
-        select(User).where(
-            User.id.in_(removed_user_ids)  # ty: ignore[unresolved-attribute]
-        )
-    ).unique()
-
-    # Filter out admin and global curator users before validating curator status
-    users_to_validate = [
-        user
-        for user in removed_users
-        if user.role not in [UserRole.ADMIN, UserRole.GLOBAL_CURATOR]
-    ]
-
-    if users_to_validate:
-        _validate_curator_status__no_commit(db_session, users_to_validate)
-
     # update "time_updated" to now
     db_user_group.time_last_modified_by_user = func.now()
 
@@ -912,6 +881,13 @@ def update_user_group(
 
     db_session.commit()
 
+    group_name = db_user_group.name
+    group_is_default = db_user_group.is_default
+
+    # Core writes above leave the loaded ORM collections stale, and sessions run
+    # expire_on_commit=False — without this the caller serializes pre-update membership.
+    db_session.expire(db_user_group)
+
     if added_user_ids or removed_user_ids:
         emit_audit_event(
             AuditAction.USER_GROUP_CHANGE,
@@ -920,12 +896,47 @@ def update_user_group(
             resource_type="user_group",
             resource_id=user_group_id,
             extra={
+                "group_name": group_name,
+                "is_default": group_is_default,
                 "added_user_ids": [str(uid) for uid in added_user_ids],
                 "removed_user_ids": [str(uid) for uid in removed_user_ids],
             },
         )
 
     return db_user_group
+
+
+def _set_group_manager__no_commit(
+    db_session: Session, *, user_id: UUID, group_id: int, is_manager: bool
+) -> None:
+    edge = db_session.scalar(
+        select(User__UserGroup).where(
+            User__UserGroup.user_id == user_id,
+            User__UserGroup.user_group_id == group_id,
+        )
+    )
+    if edge is None:
+        raise ValueError(f"User '{user_id}' is not a member of group '{group_id}'")
+    edge.is_manager = is_manager
+    # Refresh the affected user's cached is_group_manager flag; a pure manager flip
+    # (no membership change) otherwise leaves the route-gate flag stale.
+    recompute_user_permissions__no_commit([user_id], db_session)
+
+
+def make_group_manager(db_session: Session, user_id: UUID, group_id: int) -> None:
+    """Flip is_manager=true on the (user, group) edge. The row must already exist —
+    a manager is always a member — else ValueError. Idempotent. Does NOT commit."""
+    _set_group_manager__no_commit(
+        db_session, user_id=user_id, group_id=group_id, is_manager=True
+    )
+
+
+def revoke_group_manager(db_session: Session, user_id: UUID, group_id: int) -> None:
+    """Flip is_manager=false on the (user, group) edge. The row must exist else
+    ValueError. Idempotent. Does NOT commit."""
+    _set_group_manager__no_commit(
+        db_session, user_id=user_id, group_id=group_id, is_manager=False
+    )
 
 
 def rename_user_group(
@@ -953,6 +964,27 @@ def rename_user_group(
 
     db_session.commit()
     return db_user_group
+
+
+def assert_group_membership_survives_deletion(
+    db_session: Session, user_group_id: int
+) -> None:
+    """Deletion drops every membership, so the strand rule covers the whole roster.
+    Guards the route, not prepare_user_group_for_deletion — the sync task re-runs
+    that one, and raising there would wedge a scheduled deletion."""
+    # Locked first: cleanup deletes every membership, including ones added after this read.
+    lock_group_membership(db_session)
+
+    member_ids: list[UUID] = [
+        user_id
+        for user_id in db_session.scalars(
+            select(User__UserGroup.user_id).where(
+                User__UserGroup.user_group_id == user_group_id
+            )
+        ).all()
+        if user_id is not None
+    ]
+    assert_group_membership_survives_removal(db_session, user_group_id, member_ids)
 
 
 def prepare_user_group_for_deletion(db_session: Session, user_group_id: int) -> None:
@@ -1061,44 +1093,101 @@ def delete_user_group_cc_pair_relationship__no_commit(
     db_session.execute(delete_stmt)
 
 
-def set_group_permission__no_commit(
+class PermissionChange(NamedTuple):
+    """The diff is computed here, not by the caller, because this is the only place
+    holding the row lock. A caller diffing before and after would race a concurrent
+    save and would read whatever the ORM had already cached.
+    """
+
+    enabled: list[Permission]
+    added: list[Permission]
+    removed: list[Permission]
+
+
+def set_group_permissions_bulk__no_commit(
     group_id: int,
-    permission: Permission,
-    enabled: bool,
+    desired_permissions: set[Permission],
     granted_by: UUID,
     db_session: Session,
-) -> None:
-    """Grant or revoke a single permission for a group using soft-delete.
+) -> PermissionChange:
+    """Set the full desired permission state for a group in one pass.
 
-    Does NOT commit — caller must commit the session.
+    Enables permissions in `desired_permissions`, disables any toggleable
+    permission not in the set. Non-toggleable permissions are ignored.
+    Calls recompute once at the end. Does NOT commit.
+
+    Grants are soft-deleted: revoking flips `is_deleted`, re-granting flips it back and
+    re-stamps `granted_by`/`granted_at`, so a row is INSERTed only once per group and the
+    grant history survives. Readers must filter `is_deleted.is_(False)`.
     """
-    existing = db_session.execute(
-        select(PermissionGrant)
-        .where(
-            PermissionGrant.group_id == group_id,
-            PermissionGrant.permission == permission,
-        )
-        .with_for_update()
-    ).scalar_one_or_none()
 
-    if enabled:
+    existing_grants = (
+        db_session.execute(
+            select(PermissionGrant)
+            .where(PermissionGrant.group_id == group_id)
+            .with_for_update()
+        )
+        .scalars()
+        .all()
+    )
+
+    grant_map: dict[Permission, PermissionGrant] = {
+        g.permission: g for g in existing_grants
+    }
+
+    # Non-toggleable grants (e.g. the SYSTEM basic_access every group gets) are
+    # not managed here — never enabled, never disabled.
+    desired_permissions = desired_permissions - NON_TOGGLEABLE_PERMISSIONS
+
+    added: list[Permission] = []
+    removed: list[Permission] = []
+
+    # Enable desired permissions
+    for perm in desired_permissions:
+        existing = grant_map.get(perm)
         if existing is not None:
             if existing.is_deleted:
                 existing.is_deleted = False
                 existing.granted_by = granted_by
                 existing.granted_at = func.now()
+                added.append(perm)
         else:
             db_session.add(
                 PermissionGrant(
                     group_id=group_id,
-                    permission=permission,
+                    permission=perm,
                     grant_source=GrantSource.USER,
                     granted_by=granted_by,
                 )
             )
-    else:
-        if existing is not None and not existing.is_deleted:
-            existing.is_deleted = True
+            added.append(perm)
+
+    # Disable toggleable permissions not in the desired set
+    for perm, grant in grant_map.items():
+        if (
+            perm not in desired_permissions
+            and perm not in NON_TOGGLEABLE_PERMISSIONS
+            and not grant.is_deleted
+        ):
+            grant.is_deleted = True
+            removed.append(perm)
 
     db_session.flush()
     recompute_permissions_for_group__no_commit(group_id, db_session)
+
+    enabled = [
+        g.permission
+        for g in db_session.execute(
+            select(PermissionGrant).where(
+                PermissionGrant.group_id == group_id,
+                PermissionGrant.is_deleted.is_(False),
+            )
+        )
+        .scalars()
+        .all()
+    ]
+    return PermissionChange(
+        enabled=enabled,
+        added=sorted(added, key=lambda p: p.value),
+        removed=sorted(removed, key=lambda p: p.value),
+    )

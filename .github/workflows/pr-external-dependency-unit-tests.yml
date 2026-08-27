@@ -13,7 +13,6 @@ on:
       - "uv.lock"
       - ".github/workflows/pr-external-dependency-unit-tests.yml"
       - ".github/actions/setup-python-and-install-dependencies/**"
-      - ".github/actions/setup-playwright/**"
       - ".github/actions/login-ecr-pullthrough-cache/**"
       - "deployment/docker_compose/docker-compose.yml"
       - "deployment/docker_compose/docker-compose.dev.yml"
@@ -68,7 +67,7 @@ jobs:
       test-dirs: ${{ steps.set-matrix.outputs.test-dirs }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -102,7 +101,7 @@ jobs:
       - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -114,12 +113,9 @@ jobs:
             backend/requirements/dev.txt
             backend/requirements/ee.txt
 
-      - name: Setup Playwright
-        uses: ./.github/actions/setup-playwright
-
       - name: Setup Helm
         if: matrix.test-dir == 'craft_helm'
-        uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # ratchet:azure/setup-helm@v5.0.0
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # ratchet:azure/setup-helm@v5.0.1
         with:
           version: v3.19.0
 
@@ -162,11 +158,9 @@ jobs:
             code-interpreter
 
       - name: Run migrations
+        working-directory: backend
         run: |
-          cd backend
-          # Run migrations to head
           alembic upgrade head
-          alembic heads --verbose
 
       # A real OIDC server for the live multi-provider login test. Auth leg only.
       # Fail if it never becomes ready, otherwise the live tests would silently skip.

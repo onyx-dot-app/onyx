@@ -28,10 +28,11 @@ import { ExternalAppUserResponse } from "@/app/craft/v1/apps/registry";
 import {
   ConnectableApp,
   ConnectableKind,
-  CRAFT_APPS_TAB_PARAM,
   externalAppToConnectable,
+  KIND_ORDER,
   mcpServerToConnectable,
   parseConnectableTab,
+  useConnectableTab,
 } from "@/app/craft/v1/apps/connectableApps";
 import UserCredentialsModal from "@/app/craft/v1/apps/UserCredentialsModal";
 import { useUser } from "@/providers/UserProvider";
@@ -65,8 +66,6 @@ const KIND_COPY: Record<
     empty: "No MCP servers have been made available to Craft.",
   },
 };
-
-const KIND_ORDER: ConnectableKind[] = ["app", "mcp"];
 
 // The user's own app connections. Org-wide configuration lives in the admin
 // panel's Craft section; admins get a shortcut button to it here.
@@ -129,11 +128,7 @@ function AppConnections({ query }: AppConnectionsProps) {
   const { data: skillsData, refresh: refreshSkills } = useUserSkills();
   const searchParams = useSearchParams();
   const connectParam = searchParams.get("connect");
-  const urlTab = parseConnectableTab(searchParams.get(CRAFT_APPS_TAB_PARAM));
-  // The tab is deep-linkable (`?tab=mcp`), so the URL drives it — including on a
-  // client-side navigation from this same page, which doesn't remount.
-  const [tab, setTab] = useState<ConnectableKind>(urlTab);
-  useEffect(() => setTab(urlTab), [urlTab]);
+  const [tab, setTab] = useConnectableTab();
 
   // Apps with at least one associated skill switched off. Both skill lists
   // matter: a built-in provider's associated skill is a built-in row, so
@@ -184,7 +179,7 @@ function AppConnections({ query }: AppConnectionsProps) {
 
   if (isLoading) {
     return (
-      <Card background="none" border="dashed" rounding="lg">
+      <Card background="none" border="dashed" rounding={4}>
         <Text font="main-content-body">Loading…</Text>
       </Card>
     );
@@ -432,11 +427,11 @@ function ConnectableCard({
           highlight && "ring-2 ring-action-selection-04"
         )}
       >
-        <Card background="light" border="solid" rounding="lg">
+        <Card background="light" border="solid" rounding={4}>
           <ContentAction
             sizePreset="main-ui"
             variant="section"
-            padding="fit"
+            padding={0}
             center
             icon={Logo}
             title={app.name}
@@ -444,7 +439,7 @@ function ConnectableCard({
             description={statusLine(app, needsSkillSetup)}
             descriptionMaxLines={1}
             rightChildren={
-              <Section flexDirection="row" width="fit" height="fit" gap={0.5}>
+              <Section flexDirection="row" width="fit" height="fit" gap={2}>
                 {app.authenticated ? (
                   <>
                     {/* Only the problem state gets a glyph — "Connected" in the

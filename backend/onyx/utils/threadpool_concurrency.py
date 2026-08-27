@@ -106,7 +106,7 @@ class ThreadSafeDict(MutableMapping[KT, VT]):
     @overload
     def get(self, key: KT, default: VT | _T) -> VT | _T: ...
 
-    def get(self, key: KT, default: Any = None) -> Any:
+    def get(self, key: KT, default: Any = None) -> Any:  # ty: ignore[invalid-method-override]
         """Get a value with a default, atomically."""
         with self.lock:
             return self._dict.get(key, default)
@@ -118,9 +118,7 @@ class ThreadSafeDict(MutableMapping[KT, VT]):
                 return self._dict.pop(key)
             return self._dict.pop(key, default)
 
-    def setdefault(  # ty: ignore[invalid-method-override]
-        self, key: KT, default: VT
-    ) -> VT:
+    def setdefault(self, key: KT, default: VT) -> VT:
         """Set a default value if key is missing, atomically."""
         with self.lock:
             return self._dict.setdefault(key, default)
@@ -528,8 +526,8 @@ def run_with_timeout(
     timeout: float, func: Callable[..., R], *args: Any, **kwargs: Any
 ) -> R:
     """
-    Executes a function with a timeout. If the function doesn't complete within the specified
-    timeout, raises TimeoutError.
+    Executes a function with a timeout. If the function doesn't complete within
+    the specified timeout, raises TimeoutError.
     """
     context = contextvars.copy_context()
     task = TimeoutThread(timeout, context.run, func, *args, **kwargs)
@@ -589,7 +587,7 @@ def parallel_yield(gens: list[Iterator[R]], max_workers: int = 10) -> Iterator[R
     for some extra generator code to run and not have the result(s) yielded.
     """
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_to_index: dict[Future[tuple[int, R | None]], int] = (  # type: ignore
+        future_to_index: dict[Future[tuple[int, R | None]], int] = (  # ty: ignore[invalid-assignment]
             {
                 executor.submit(_next_or_none, ind, gen): ind
                 for ind, gen in enumerate(gens)

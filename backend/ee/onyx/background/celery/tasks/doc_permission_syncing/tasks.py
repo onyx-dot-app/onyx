@@ -60,6 +60,7 @@ from onyx.db.engine.sql_engine import (
 )
 from onyx.db.enums import (
     AccessType,
+    CapabilityCheckTrigger,
     ConnectorCredentialPairStatus,
     SyncStatus,
     SyncType,
@@ -191,7 +192,7 @@ def _is_external_doc_permissions_sync_due(cc_pair: ConnectorCredentialPair) -> b
     return False
 
 
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.CHECK_FOR_DOC_PERMISSIONS_SYNC,
     ignore_result=True,
     soft_time_limit=JOB_TIMEOUT,
@@ -220,9 +221,11 @@ def check_for_doc_permissions_sync(self: Task, *, tenant_id: str) -> bool | None
         with get_session_with_current_tenant() as db_session:
             cc_pairs = get_all_auto_sync_cc_pairs(db_session)
 
-            for cc_pair in cc_pairs:
-                if _is_external_doc_permissions_sync_due(cc_pair):
-                    cc_pair_ids_to_sync.append(cc_pair.id)
+            cc_pair_ids_to_sync.extend(
+                cc_pair.id
+                for cc_pair in cc_pairs
+                if _is_external_doc_permissions_sync_due(cc_pair)
+            )
 
         # Tenant-work-gating hook: refresh this tenant's active-set membership
         # whenever doc-permission sync has any due cc_pairs to dispatch.
@@ -392,7 +395,7 @@ def try_creating_permissions_sync_task(
     return payload_id
 
 
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.CONNECTOR_PERMISSION_SYNC_GENERATOR_TASK,
     acks_late=False,
     soft_time_limit=JOB_TIMEOUT,
@@ -414,7 +417,7 @@ def connector_permission_sync_generator_task(
 
     LoggerContextVars.reset()
 
-    doc_permission_sync_ctx_dict = doc_permission_sync_ctx.get()
+    doc_permission_sync_ctx_dict = dict(doc_permission_sync_ctx.get())
     doc_permission_sync_ctx_dict["cc_pair_id"] = cc_pair_id
     doc_permission_sync_ctx_dict["request_id"] = self.request.id
     doc_permission_sync_ctx.set(doc_permission_sync_ctx_dict)
@@ -513,6 +516,7 @@ def connector_permission_sync_generator_task(
                     cc_pair.access_type,
                     db_session,
                     enforce_creation=False,
+                    trigger=CapabilityCheckTrigger.PERM_SYNC_ATTEMPT,
                 )
                 if not created:
                     task_logger.warning(

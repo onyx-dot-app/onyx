@@ -1,4 +1,4 @@
-import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
+import { DateRangePickerValue } from "@/refresh-components/DateRangePicker";
 import { Tag, ValidSources } from "../types";
 import { Agent } from "@/lib/agents/types";
 
@@ -152,17 +152,6 @@ export interface SourceMetadata {
 export interface SearchDefaultOverrides {
   forceDisplayQA: boolean;
   offset: number;
-}
-
-export interface TimeRange {
-  start: Date | string | null;
-  end: Date | string | null;
-}
-
-export interface Filters {
-  source_type: string[] | null;
-  document_set: string[] | null;
-  updated_at_range: TimeRange | null;
 }
 
 export interface SearchRequestArgs {

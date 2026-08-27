@@ -7,7 +7,13 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.constants import TokenRateLimitScope
 from onyx.db.models import TokenRateLimit, TokenRateLimit__UserGroup, User__UserGroup
-from onyx.server.token_rate_limits.models import TokenRateLimitArgs
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
+from onyx.server.token_rate_limits.models import (
+    MAX_TOKEN_BUDGET_THOUSANDS,
+    TokenRateLimitArgs,
+    TokenRateLimitUpdateArgs,
+)
 
 
 def fetch_all_user_token_rate_limits(
@@ -108,14 +114,45 @@ def insert_global_token_rate_limit(
     return token_limit
 
 
+def get_token_rate_limit_scope_and_group_ids(
+    db_session: Session, token_rate_limit_id: int
+) -> tuple[TokenRateLimitScope, list[int]]:
+    """Scope + every group id a rate limit is attached to (empty unless USER_GROUP). Raises
+    ValueError if the id is unknown. The API attaches a limit to one group today, but the schema
+    allows many-to-many, so an authorizing caller must check every group returned, not just one."""
+    token_limit = db_session.get(TokenRateLimit, token_rate_limit_id)
+    if token_limit is None:
+        raise ValueError(f"TokenRateLimit with id '{token_rate_limit_id}' not found")
+    if token_limit.scope != TokenRateLimitScope.USER_GROUP:
+        return token_limit.scope, []
+    group_ids = list(
+        db_session.scalars(
+            select(TokenRateLimit__UserGroup.user_group_id).where(
+                TokenRateLimit__UserGroup.rate_limit_id == token_rate_limit_id
+            )
+        ).all()
+    )
+    return token_limit.scope, group_ids
+
+
 def update_token_rate_limit(
     db_session: Session,
     token_rate_limit_id: int,
-    token_rate_limit_settings: TokenRateLimitArgs,
+    token_rate_limit_settings: TokenRateLimitUpdateArgs,
 ) -> TokenRateLimit:
     token_limit = db_session.get(TokenRateLimit, token_rate_limit_id)
     if token_limit is None:
         raise ValueError(f"TokenRateLimit with id '{token_rate_limit_id}' not found")
+
+    if (
+        token_rate_limit_settings.token_budget is not None
+        and token_rate_limit_settings.token_budget > MAX_TOKEN_BUDGET_THOUSANDS
+        and token_rate_limit_settings.token_budget != token_limit.token_budget
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "Token budgets cannot exceed 1T tokens.",
+        )
 
     token_limit.enabled = token_rate_limit_settings.enabled
     token_limit.token_budget = token_rate_limit_settings.token_budget

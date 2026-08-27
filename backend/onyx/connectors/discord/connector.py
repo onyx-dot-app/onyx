@@ -52,8 +52,8 @@ def _convert_message_to_document(
     if isinstance(message.channel, TextChannel) and (
         channel_name := message.channel.name
     ):
-        metadata["Channel"] = channel_name  # ty: ignore[possibly-unresolved-reference]
-        semantic_substring += f" in Channel: #{channel_name}"  # ty: ignore[possibly-unresolved-reference]
+        metadata["Channel"] = channel_name
+        semantic_substring += f" in Channel: #{channel_name}"
 
     # Single messages dont have a title
     title = ""
@@ -266,12 +266,16 @@ def _manage_async_retrieval(
 class DiscordConnector(PollConnector, LoadConnector):
     def __init__(
         self,
-        server_ids: list[str] = [],
-        channel_names: list[str] = [],
+        server_ids: list[str] | None = None,
+        channel_names: list[str] | None = None,
         # YYYY-MM-DD
         start_date: str | None = None,
         batch_size: int = INDEX_BATCH_SIZE,
     ):
+        if channel_names is None:
+            channel_names = []
+        if server_ids is None:
+            server_ids = []
         self.batch_size = batch_size
         self.channel_names: list[str] = channel_names if channel_names else []
         self.server_ids: list[int] = (

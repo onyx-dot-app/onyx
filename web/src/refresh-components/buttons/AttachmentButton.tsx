@@ -110,21 +110,21 @@ export default function AttachmentButton({
   return (
     <button
       type="button"
-      className="attachment-button"
+      className="attachment-item"
       data-state={state}
       {...props}
     >
-      <div className="attachment-button__content">
-        <div className="attachment-button__icon-wrapper">
+      <div className="attachment-item__content">
+        <div className="attachment-item__icon-wrapper">
           {selected ? (
             <Checkbox checked />
           ) : (
-            <Icon className="attachment-button__icon" />
+            <Icon className="attachment-item__icon" />
           )}
         </div>
-        <div className="attachment-button__text-container">
-          <div className="attachment-button__title-row">
-            <div className="attachment-button__title-wrapper">
+        <div className="attachment-item__text-container">
+          <div className="attachment-item__title-row">
+            <div className="attachment-item__title-wrapper">
               <Truncated mainUiMuted text04 nowrap>
                 {children}
               </Truncated>
@@ -135,7 +135,7 @@ export default function AttachmentButton({
                 icon={SvgExternalLink}
                 onClick={noProp(onView)}
                 internal
-                className="attachment-button__view-button"
+                className="attachment-item__view"
               />
             )}
           </div>
@@ -147,14 +147,14 @@ export default function AttachmentButton({
         </div>
       </div>
 
-      <div className="attachment-button__actions">
+      <div className="attachment-item__actions">
         {rightText && (
           <Text as="p" secondaryBody text03>
             {rightText}
           </Text>
         )}
         {actionIcon && onAction && (
-          <div className="attachment-button__action-button">
+          <div className="attachment-item__action">
             <Button
               icon={actionIcon}
               onClick={noProp(onAction)}

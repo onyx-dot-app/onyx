@@ -30,17 +30,14 @@ interface TooltipProps {
   align?: TooltipAlign;
 
   /**
-   * Controlled open state. When provided, the tooltip's visibility is
-   * externally managed. When omitted, the tooltip uses Radix's default
-   * hover-based open handling.
+   * Shows nothing on hover, but keeps the trigger in place.
+   *
+   * Use this when the children hold state that is tied to the node: a ref
+   * that a measurement reads, a running animation, or focus. Dropping
+   * `tooltip` instead returns `children` bare, and the change of tree shape
+   * remounts them.
    */
-  open?: boolean;
-
-  /**
-   * Callback fired when the tooltip's open state changes. Use with `open`
-   * for controlled behavior.
-   */
-  onOpenChange?: (open: boolean) => void;
+  suppressed?: boolean;
 
   /**
    * Delay in milliseconds before the tooltip appears on hover.
@@ -68,21 +65,23 @@ interface TooltipProps {
  * Renders nothing extra when `tooltip` is `undefined` — just passes children
  * through. When `tooltip` is provided, wraps children with a Radix tooltip.
  *
- * Supports both uncontrolled (default hover behavior) and controlled
- * (`open` + `onOpenChange`) modes.
+ * Hover is Radix's to track. There is deliberately no controlled `open`: Radix
+ * drops any open change that already matches the value it was given, so a
+ * caller that gates `open` on something other than the hover state stops
+ * hearing about closes and holds a hover that ended. Use `suppressed` to turn
+ * a tooltip off instead.
  *
  * @example
  * ```tsx
  * import { Tooltip } from "@opal/components";
  *
- * // Uncontrolled (default)
  * <Tooltip tooltip="Delete this item">
  *   <Button icon={SvgTrash} />
  * </Tooltip>
  *
- * // Controlled
- * <Tooltip tooltip="Details" open={isOpen} onOpenChange={setIsOpen}>
- *   <Button icon={SvgInfo} />
+ * // Off for now, but the trigger stays put
+ * <Tooltip tooltip="Rename" suppressed={!isCollapsed}>
+ *   <Button icon={SvgEdit} />
  * </Tooltip>
  * ```
  */
@@ -90,8 +89,7 @@ function Tooltip({
   tooltip,
   side = "right",
   align = "center",
-  open,
-  onOpenChange,
+  suppressed,
   delayDuration,
   sideOffset = 4,
   children,
@@ -109,21 +107,27 @@ function Tooltip({
 
   return (
     <TooltipPrimitive.Root
-      open={open}
-      onOpenChange={onOpenChange}
       delayDuration={delayDuration}
+      /* Radix closes on a pointer that leaves the trigger from the content
+      itself, which tracks the pointer across the gap between the two. A
+      suppressed tooltip renders no content, so the trigger has to do the
+      closing. Without this the tooltip stays open in Radix's eyes, and it
+      appears the moment the suppression lifts. */
+      disableHoverableContent={suppressed}
     >
       <TooltipPrimitive.Trigger asChild>{children}</TooltipPrimitive.Trigger>
-      <TooltipPrimitive.Portal>
-        <TooltipPrimitive.Content
-          className="opal-tooltip"
-          side={side}
-          align={align}
-          sideOffset={sideOffset}
-        >
-          {content}
-        </TooltipPrimitive.Content>
-      </TooltipPrimitive.Portal>
+      {!suppressed && (
+        <TooltipPrimitive.Portal>
+          <TooltipPrimitive.Content
+            className="opal-tooltip"
+            side={side}
+            align={align}
+            sideOffset={sideOffset}
+          >
+            {content}
+          </TooltipPrimitive.Content>
+        </TooltipPrimitive.Portal>
+      )}
     </TooltipPrimitive.Root>
   );
 }

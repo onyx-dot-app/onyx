@@ -8,6 +8,7 @@ import React, {
   useRef,
   useMemo,
 } from "react";
+import { useFocusOnMount } from "@opal/hooks";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import * as VisuallyHidden from "@radix-ui/react-visually-hidden";
 import useContainerCenter from "@/hooks/useContainerCenter";
@@ -439,6 +440,8 @@ function CommandMenuHeader({
   onClose,
   onEmptyBackspace,
 }: CommandMenuHeaderProps) {
+  const focusOnMount = useFocusOnMount<HTMLInputElement>();
+
   // Prevent default for arrow/enter keys so they don't move cursor or submit forms
   // The actual handling happens in Root's centralized handler via event bubbling
   const handleInputKeyDown = useCallback(
@@ -458,12 +461,7 @@ function CommandMenuHeader({
     <div className="shrink-0">
       {/* Top row: Search icon, filters, close button */}
       <div className="px-3 pt-3 flex flex-row justify-between items-center">
-        <Section
-          flexDirection="row"
-          justifyContent="start"
-          gap={0.5}
-          width="fit"
-        >
+        <Section flexDirection="row" justifyContent="start" gap={2} width="fit">
           {/* Standalone search icon */}
           <SvgSearch className="w-6 h-6 stroke-text-04" />
           {filters.map((filter) => (
@@ -498,7 +496,7 @@ function CommandMenuHeader({
           value={value}
           onChange={(e) => onValueChange?.(e.target.value)}
           onKeyDown={handleInputKeyDown}
-          autoFocus
+          ref={focusOnMount}
         />
       </div>
     </div>
@@ -536,6 +534,7 @@ function CommandMenuList({ children, emptyMessage }: CommandMenuListProps) {
   return (
     <ScrollIndicatorDiv
       role="listbox"
+      tabIndex={-1}
       aria-label="Command menu options"
       className="p-1 gap-1 max-h-[60vh] bg-background-tint-01"
       backgroundColor="var(--background-tint-01)"
@@ -745,12 +744,7 @@ function CommandMenuAction({
 function CommandMenuFooter({ leftActions }: CommandMenuFooterProps) {
   return (
     <div className="shrink-0">
-      <Section
-        flexDirection="row"
-        justifyContent="start"
-        gap={1}
-        padding={0.75}
-      >
+      <Section flexDirection="row" justifyContent="start" gap={4} padding={3}>
         {leftActions}
       </Section>
     </div>

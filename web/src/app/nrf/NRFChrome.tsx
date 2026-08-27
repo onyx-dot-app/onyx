@@ -5,10 +5,7 @@ import { ensureHrefProtocol, noProp } from "@/lib/utils";
 import { cn } from "@opal/utils";
 import type { Components } from "react-markdown";
 import Text from "@/refresh-components/texts/Text";
-import { Popover } from "@opal/components";
-import { OpenButton } from "@opal/components";
-import LineItem from "@/refresh-components/buttons/LineItem";
-import { Button } from "@opal/components";
+import { Button, LineItemButton, OpenButton, Popover } from "@opal/components";
 import { SvgBubbleText, SvgSearchMenu, SvgSidebar } from "@opal/icons";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 import { useIsSearchModeAvailable } from "@/lib/settings/hooks";
@@ -90,6 +87,7 @@ export default function NRFChrome() {
             <Button
               prominence="internal"
               icon={SvgSidebar}
+              aria-label="Open Sidebar"
               onClick={() => setFolded(false)}
             />
           )}
@@ -106,28 +104,30 @@ export default function NRFChrome() {
               </Popover.Trigger>
               <Popover.Content align="start" width="lg">
                 <Popover.Menu>
-                  <LineItem
+                  <LineItemButton
+                    sizePreset="main-ui"
+                    rounding={2}
                     icon={SvgSearchMenu}
-                    selected={effectiveMode === "search"}
+                    state={effectiveMode === "search" ? "selected" : "empty"}
                     description="Quick search for documents"
                     onClick={noProp(() => {
                       setAppMode("search");
                       setModePopoverOpen(false);
                     })}
-                  >
-                    Search
-                  </LineItem>
-                  <LineItem
+                    title="Search"
+                  />
+                  <LineItemButton
+                    sizePreset="main-ui"
+                    rounding={2}
                     icon={SvgBubbleText}
-                    selected={effectiveMode === "chat"}
+                    state={effectiveMode === "chat" ? "selected" : "empty"}
                     description="Conversation and research"
                     onClick={noProp(() => {
                       setAppMode("chat");
                       setModePopoverOpen(false);
                     })}
-                  >
-                    Chat
-                  </LineItem>
+                    title="Chat"
+                  />
                 </Popover.Menu>
               </Popover.Content>
             </Popover>

@@ -160,36 +160,36 @@ const iconClasses = (transient: boolean | undefined) =>
       secondary: {
         enabled: [
           "stroke-text-03",
-          "group-hover/IconButton:stroke-text-04",
+          "group-hover/IconAction:stroke-text-04",
           transient && "stroke-text-04",
-          "group-active/IconButton:stroke-text-05",
+          "group-active/IconAction:stroke-text-05",
         ],
         disabled: ["stroke-text-01"],
       },
       tertiary: {
         enabled: [
           "stroke-text-03",
-          "group-hover/IconButton:stroke-text-04",
+          "group-hover/IconAction:stroke-text-04",
           transient && "stroke-text-04",
-          "group-active/IconButton:stroke-text-05",
+          "group-active/IconAction:stroke-text-05",
         ],
         disabled: ["stroke-text-01"],
       },
       internal: {
         enabled: [
           "stroke-text-02",
-          "group-hover/IconButton:stroke-text-04",
+          "group-hover/IconAction:stroke-text-04",
           transient && "stroke-text-04",
-          "group-active/IconButton:stroke-text-05",
+          "group-active/IconAction:stroke-text-05",
         ],
         disabled: ["stroke-text-01"],
       },
       small: {
         enabled: [
           "stroke-text-02",
-          "group-hover/IconButton:stroke-text-04",
+          "group-hover/IconAction:stroke-text-04",
           transient && "stroke-text-04",
-          "group-active/IconButton:stroke-text-05",
+          "group-active/IconAction:stroke-text-05",
         ],
         disabled: ["stroke-text-01"],
       },
@@ -202,36 +202,36 @@ const iconClasses = (transient: boolean | undefined) =>
       secondary: {
         enabled: [
           "stroke-action-selection-05",
-          "group-hover/IconButton:stroke-action-selection-05",
+          "group-hover/IconAction:stroke-action-selection-05",
           transient && "stroke-action-selection-05",
-          "group-active/IconButton:stroke-action-selection-06",
+          "group-active/IconAction:stroke-action-selection-06",
         ],
         disabled: ["stroke-action-selection-02"],
       },
       tertiary: {
         enabled: [
           "stroke-action-selection-05",
-          "group-hover/IconButton:stroke-action-selection-05",
+          "group-hover/IconAction:stroke-action-selection-05",
           transient && "stroke-action-selection-05",
-          "group-active/IconButton:stroke-action-selection-06",
+          "group-active/IconAction:stroke-action-selection-06",
         ],
         disabled: ["stroke-action-selection-02"],
       },
       internal: {
         enabled: [
           "stroke-action-selection-05",
-          "group-hover/IconButton:stroke-action-selection-05",
+          "group-hover/IconAction:stroke-action-selection-05",
           transient && "stroke-action-selection-05",
-          "group-active/IconButton:stroke-action-selection-06",
+          "group-active/IconAction:stroke-action-selection-06",
         ],
         disabled: ["stroke-action-selection-02"],
       },
       small: {
         enabled: [
           "stroke-action-selection-05",
-          "group-hover/IconButton:stroke-action-selection-05",
+          "group-hover/IconAction:stroke-action-selection-05",
           transient && "stroke-action-selection-05",
-          "group-active/IconButton:stroke-action-selection-06",
+          "group-active/IconAction:stroke-action-selection-06",
         ],
         disabled: ["stroke-action-selection-02"],
       },
@@ -244,36 +244,36 @@ const iconClasses = (transient: boolean | undefined) =>
       secondary: {
         enabled: [
           "stroke-action-danger-05",
-          "group-hover/IconButton:stroke-action-danger-05",
+          "group-hover/IconAction:stroke-action-danger-05",
           transient && "stroke-action-danger-05",
-          "group-active/IconButton:stroke-action-danger-06",
+          "group-active/IconAction:stroke-action-danger-06",
         ],
         disabled: ["stroke-action-danger-02"],
       },
       tertiary: {
         enabled: [
           "stroke-action-danger-05",
-          "group-hover/IconButton:stroke-action-danger-05",
+          "group-hover/IconAction:stroke-action-danger-05",
           transient && "stroke-action-danger-05",
-          "group-active/IconButton:stroke-action-danger-06",
+          "group-active/IconAction:stroke-action-danger-06",
         ],
         disabled: ["stroke-action-danger-02"],
       },
       internal: {
         enabled: [
           "stroke-action-danger-05",
-          "group-hover/IconButton:stroke-action-danger-05",
+          "group-hover/IconAction:stroke-action-danger-05",
           transient && "stroke-action-danger-05",
-          "group-active/IconButton:stroke-action-danger-06",
+          "group-active/IconAction:stroke-action-danger-06",
         ],
         disabled: ["stroke-action-danger-02"],
       },
       small: {
         enabled: [
           "stroke-action-danger-05",
-          "group-hover/IconButton:stroke-action-danger-05",
+          "group-hover/IconAction:stroke-action-danger-05",
           transient && "stroke-action-danger-05",
-          "group-active/IconButton:stroke-action-danger-06",
+          "group-active/IconAction:stroke-action-danger-06",
         ],
         disabled: ["stroke-action-danger-02"],
       },
@@ -365,7 +365,7 @@ export default function IconButton({
     <button
       type="button"
       className={cn(
-        "flex items-center justify-center h-fit w-fit group/IconButton",
+        "flex items-center justify-center h-fit w-fit group/IconAction",
         small || internal ? "p-1" : "p-2",
         disabled && "cursor-not-allowed",
         small || internal ? "rounded-08" : "rounded-12",

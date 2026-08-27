@@ -1,41 +1,99 @@
 "use client";
 
-import {
-  Table,
-  TableHead,
-  TableRow,
-  TableBody,
-  TableCell,
-} from "@/components/ui/table";
-import Title from "@/components/ui/title";
-import { DeleteButton } from "@/components/DeleteButton";
+import { useLocale, useTranslations } from "next-intl";
 import { deleteTokenRateLimit, updateTokenRateLimit } from "./lib";
-import { PageLoader } from "@opal/layouts";
+import { ContentAction, PageLoader, Section, toast } from "@opal/layouts";
 import { TokenRateLimitDisplay } from "./types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useSWR, { mutate } from "swr";
-import { Checkbox } from "@opal/components";
-import { TableHeader } from "@/components/ui/table";
-import { Text } from "@opal/components";
-import { Spacer } from "@opal/components";
+import { Button, Switch, Text } from "@opal/components";
+import { SvgTrash, SvgUsers, SvgWallet } from "@opal/icons";
+import { formatCurrencyFromCents, formatTokenCount } from "@/lib/format";
 
 const HOURS_PER_DAY = 24;
-const UTC_DAY_LABEL = "UTC day";
-const HOUR_LABEL = "hour";
-const COST_ONLY_LABEL = "Cost only";
 
-function formatPeriod(tokenRateLimit: TokenRateLimitDisplay): string {
-  const isTokenBudget = tokenRateLimit.token_budget !== null;
-  const value = isTokenBudget
-    ? tokenRateLimit.period_hours / HOURS_PER_DAY
-    : tokenRateLimit.period_hours;
-  const unit = isTokenBudget ? UTC_DAY_LABEL : HOUR_LABEL;
-  return `${value} ${unit}${value === 1 ? "" : "s"}`;
+interface LimitRowProps {
+  limit: TokenRateLimitDisplay;
+  isAdmin: boolean;
+  onToggle: (id: number) => void;
+  onDelete: (id: number) => void;
+}
+
+function LimitRow({ limit, isAdmin, onToggle, onDelete }: LimitRowProps) {
+  const t = useTranslations("admin.tokenRateLimits");
+  const locale = useLocale();
+
+  const cost =
+    limit.cost_budget_cents != null
+      ? formatCurrencyFromCents(limit.cost_budget_cents, locale)
+      : null;
+  const tokens =
+    limit.token_budget != null
+      ? formatTokenCount(limit.token_budget * 1000, locale)
+      : null;
+
+  const budget =
+    cost !== null && tokens !== null
+      ? t("limits.budget.both", { cost, tokens })
+      : cost !== null
+        ? t("limits.budget.cost", { cost })
+        : tokens !== null
+          ? t("limits.budget.tokens", { tokens })
+          : t("limits.budget.none");
+  const cadence = t("limits.cadence.label", {
+    days: limit.period_hours / HOURS_PER_DAY,
+  });
+  const limitLabel = t("limits.row.label", { budget, cadence });
+
+  return (
+    <div className="rounded-12 border border-border-01 bg-background-neutral-00">
+      <ContentAction
+        sizePreset="main-ui"
+        variant="section"
+        icon={limit.group_name !== undefined ? SvgUsers : SvgWallet}
+        title={budget}
+        description={cadence}
+        tag={
+          limit.group_name !== undefined
+            ? { title: limit.group_name }
+            : undefined
+        }
+        padding={1}
+        center
+        rightChildren={
+          <div className="flex items-center gap-2">
+            <Switch
+              checked={limit.enabled}
+              disabled={!isAdmin}
+              onCheckedChange={() => onToggle(limit.token_id)}
+              aria-label={
+                limit.enabled
+                  ? t("limits.row.disable.ariaLabel", { label: limitLabel })
+                  : t("limits.row.enable.ariaLabel", { label: limitLabel })
+              }
+            />
+            {isAdmin && (
+              <Button
+                variant="danger"
+                prominence="tertiary"
+                icon={SvgTrash}
+                size="sm"
+                tooltip={t("limits.row.delete.tooltip")}
+                aria-label={t("limits.row.delete.ariaLabel", {
+                  label: limitLabel,
+                })}
+                onClick={() => onDelete(limit.token_id)}
+              />
+            )}
+          </div>
+        }
+      />
+    </div>
+  );
 }
 
 type TokenRateLimitTableArgs = {
   tokenRateLimits: TokenRateLimitDisplay[];
-  title?: string;
   description?: string;
   fetchUrl: string;
   hideHeading?: boolean;
@@ -44,18 +102,14 @@ type TokenRateLimitTableArgs = {
 
 export const TokenRateLimitTable = ({
   tokenRateLimits,
-  title,
   description,
   fetchUrl,
   hideHeading,
   isAdmin,
 }: TokenRateLimitTableArgs) => {
-  const shouldRenderGroupName = () =>
-    tokenRateLimits.length > 0 &&
-    tokenRateLimits[0] !== undefined &&
-    tokenRateLimits[0].group_name !== undefined;
+  const t = useTranslations("admin.tokenRateLimits");
 
-  const handleEnabledChange = (id: number) => {
+  const handleEnabledChange = async (id: number) => {
     const tokenRateLimit = tokenRateLimits.find(
       (tokenRateLimit) => tokenRateLimit.token_id === id
     );
@@ -64,141 +118,74 @@ export const TokenRateLimitTable = ({
       return;
     }
 
-    updateTokenRateLimit(id, {
-      token_budget: tokenRateLimit.token_budget,
-      period_hours: tokenRateLimit.period_hours,
-      enabled: !tokenRateLimit.enabled,
-    }).then(() => {
-      mutate(fetchUrl);
-    });
+    try {
+      await updateTokenRateLimit(id, {
+        token_budget: tokenRateLimit.token_budget,
+        period_hours: tokenRateLimit.period_hours,
+        cost_budget_cents: tokenRateLimit.cost_budget_cents,
+        enabled: !tokenRateLimit.enabled,
+      });
+      await mutate(fetchUrl);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : t("limits.updateFailed.error")
+      );
+    }
   };
 
-  const handleDelete = (id: number) =>
-    deleteTokenRateLimit(id).then(() => {
-      mutate(fetchUrl);
-    });
-
-  if (tokenRateLimits.length === 0) {
-    return (
-      <div className="w-full">
-        {!hideHeading && title && <Title>{title}</Title>}
-        {!hideHeading && description && (
-          <>
-            <Spacer rem={0.5} />
-            <Text as="p">{description}</Text>
-            <Spacer rem={0.5} />
-          </>
-        )}
-        {!hideHeading && <Spacer rem={2} />}
-        <Text as="p">No token rate limits set!</Text>
-        {!hideHeading && <Spacer rem={2} />}
-      </div>
-    );
-  }
+  const handleDelete = async (id: number) => {
+    try {
+      await deleteTokenRateLimit(id);
+      await mutate(fetchUrl);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : t("limits.deleteFailed.error")
+      );
+    }
+  };
 
   return (
-    <div className="w-full">
-      {!hideHeading && title && <Title>{title}</Title>}
+    <Section alignItems="stretch" height="auto" gap={2}>
       {!hideHeading && description && (
-        <>
-          <Spacer rem={0.5} />
-          <Text as="p">{description}</Text>
-          <Spacer rem={0.5} />
-        </>
+        <Text font="secondary-body" color="text-03" as="p">
+          {description}
+        </Text>
       )}
-      <Table
-        className={`overflow-visible ${
-          !hideHeading && "my-8"
-        } [&_td]:text-center [&_th]:text-center`}
-      >
-        <TableHeader>
-          <TableRow>
-            <TableHead>Enabled</TableHead>
-            {shouldRenderGroupName() && <TableHead>Group Name</TableHead>}
-            <TableHead>Time Window</TableHead>
-            <TableHead>Token Budget (Thousands)</TableHead>
-            {isAdmin && <TableHead>Delete</TableHead>}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {tokenRateLimits.map((tokenRateLimit) => {
-            return (
-              <TableRow key={tokenRateLimit.token_id}>
-                <TableCell>
-                  <div className="flex justify-center">
-                    <div
-                      onClick={
-                        isAdmin
-                          ? () => handleEnabledChange(tokenRateLimit.token_id)
-                          : undefined
-                      }
-                      className={`px-1 py-0.5 rounded select-none w-24 ${
-                        isAdmin
-                          ? "hover:bg-accent-background cursor-pointer"
-                          : "opacity-50"
-                      }`}
-                    >
-                      <div className="flex items-center justify-center">
-                        <Checkbox
-                          checked={tokenRateLimit.enabled}
-                          onCheckedChange={
-                            isAdmin
-                              ? () =>
-                                  handleEnabledChange(tokenRateLimit.token_id)
-                              : undefined
-                          }
-                        />
-                        <p className="ml-2">
-                          {tokenRateLimit.enabled ? "Enabled" : "Disabled"}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </TableCell>
-                {shouldRenderGroupName() && (
-                  <TableCell className="font-bold text-text-darker">
-                    {tokenRateLimit.group_name}
-                  </TableCell>
-                )}
-                <TableCell>{formatPeriod(tokenRateLimit)}</TableCell>
-                <TableCell>
-                  {tokenRateLimit.token_budget === null
-                    ? COST_ONLY_LABEL
-                    : `${tokenRateLimit.token_budget} thousand tokens`}
-                </TableCell>
-                {isAdmin && (
-                  <TableCell>
-                    <div className="flex justify-center">
-                      <DeleteButton
-                        onClick={() => handleDelete(tokenRateLimit.token_id)}
-                      />
-                    </div>
-                  </TableCell>
-                )}
-              </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
-    </div>
+      {tokenRateLimits.length === 0 ? (
+        <div className="rounded-12 border border-dashed border-border-02 p-4">
+          <Text font="secondary-body" color="text-03" as="p">
+            {t("limits.empty.message")}
+          </Text>
+        </div>
+      ) : (
+        tokenRateLimits.map((tokenRateLimit) => (
+          <LimitRow
+            key={tokenRateLimit.token_id}
+            limit={tokenRateLimit}
+            isAdmin={isAdmin}
+            onToggle={handleEnabledChange}
+            onDelete={handleDelete}
+          />
+        ))
+      )}
+    </Section>
   );
 };
 
 export const GenericTokenRateLimitTable = ({
   fetchUrl,
-  title,
   description,
   hideHeading,
   responseMapper,
   isAdmin = true,
 }: {
   fetchUrl: string;
-  title?: string;
   description?: string;
   hideHeading?: boolean;
   responseMapper?: (data: any) => TokenRateLimitDisplay[];
   isAdmin?: boolean;
 }) => {
+  const t = useTranslations("admin.tokenRateLimits");
   const { data, isLoading, error } = useSWR<TokenRateLimitDisplay[]>(
     fetchUrl,
     errorHandlingFetcher
@@ -209,7 +196,7 @@ export const GenericTokenRateLimitTable = ({
   }
 
   if (!isLoading && error) {
-    return <Text as="p">Failed to load token rate limits</Text>;
+    return <Text as="p">{t("limits.loadFailed.error")}</Text>;
   }
 
   let processedData = data;
@@ -221,7 +208,6 @@ export const GenericTokenRateLimitTable = ({
     <TokenRateLimitTable
       tokenRateLimits={processedData ?? []}
       fetchUrl={fetchUrl}
-      title={title}
       description={description}
       hideHeading={hideHeading}
       isAdmin={isAdmin}

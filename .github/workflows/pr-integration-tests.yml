@@ -24,6 +24,7 @@ permissions:
 env:
   # Test Environment Variables
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
   SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
   SLACK_BOT_TOKEN_TEST_SPACE: ${{ secrets.SLACK_BOT_TOKEN_TEST_SPACE }}
   CONFLUENCE_TEST_SPACE_URL: ${{ vars.CONFLUENCE_TEST_SPACE_URL }}
@@ -59,10 +60,11 @@ jobs:
       pull-requests: read
     outputs:
       integration: ${{ steps.filter.outputs.integration || 'true' }}
+      gateway: ${{ steps.filter.outputs.gateway || 'true' }}
     steps:
       - name: Checkout code
         if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
       - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706
@@ -80,8 +82,11 @@ jobs:
               - 'uv.lock'
               - '.github/workflows/pr-integration-tests.yml'
               - '.github/actions/setup-test-license/**'
-              - '.github/actions/install-deps-and-generate-openapi-client/**'
+              - '.github/actions/install-python-deps/**'
               - '.github/actions/login-ecr-pullthrough-cache/**'
+            gateway:
+              - 'backend/onyx/server/gateway/**'
+              - 'backend/tests/integration/tests/gateway_clients/**'
 
   discover-test-dirs:
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
@@ -94,16 +99,21 @@ jobs:
       editions: ${{ steps.set-editions.outputs.editions }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
       - name: Discover test directories
         id: set-matrix
+        env:
+          GATEWAY_CHANGED: ${{ needs.changes.outputs.gateway }}
         run: |
           # Find all leaf-level directories in both test directories.
           # ``craft`` excluded: needs sandbox infra this lane doesn't set up;
-          tests_dirs=$(find backend/tests/integration/tests -mindepth 1 -maxdepth 1 -type d ! -name "__pycache__" ! -name "mcp" ! -name "no_vectordb" ! -name "migrations" ! -name "craft" -exec basename {} \; | sort)
+          tests_dirs=$(find backend/tests/integration/tests -mindepth 1 -maxdepth 1 -type d ! -name "__pycache__" ! -name "mcp" ! -name "no_vectordb" ! -name "migrations" ! -name "craft" ! -name "gateway_clients" -exec basename {} \; | sort)
+          if [[ "$GATEWAY_CHANGED" == "true" ]]; then
+            tests_dirs="$tests_dirs gateway_clients"
+          fi
           connector_dirs=$(find backend/tests/integration/connector_job_tests -mindepth 1 -maxdepth 1 -type d ! -name "__pycache__" -exec basename {} \; | sort)
 
           # Create JSON array with directory info
@@ -143,7 +153,7 @@ jobs:
     steps:
       - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -174,7 +184,7 @@ jobs:
     steps:
       - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -209,6 +219,10 @@ jobs:
           build-args: |
             BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
           tags: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }}
+          # Attestations attach as ECR referrers to the image digest, which is
+          # stable across runs and caps out at 100 per subject.
+          provenance: false
+          sbom: false
           cache-from: |
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:devcontainer-cache-${{ github.event.pull_request.head.sha || github.sha }}
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:devcontainer-cache-${{ steps.format-branch.outputs.cache-suffix }}
@@ -246,7 +260,7 @@ jobs:
     steps:
       - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -305,6 +319,10 @@ jobs:
           EOF
           fi
 
+      # NOTE: only `inference_model_server` runs. `indexing_model_server` is the
+      # same image with the same routes (INDEXING_ONLY only changes the log
+      # request-id prefix), so the tests point both hosts at the one container
+      # and skip a second load of the embedding model.
       - name: Start Docker containers
         run: |
           cd deployment/docker_compose
@@ -314,8 +332,7 @@ jobs:
             opensearch \
             cache \
             minio \
-            inference_model_server \
-            indexing_model_server
+            inference_model_server
         id: start_docker
 
       - name: Start Mock Services
@@ -329,7 +346,7 @@ jobs:
         if: contains(matrix.test-dir.path, 'tests/cli')
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # zizmor: ignore[cache-poisoning]
         with:
-          go-version: "1.26.4"
+          go-version: "1.26.5"
           cache-dependency-path: "cli/go.sum"
 
       - name: Compile CLI binary
@@ -338,8 +355,8 @@ jobs:
           cd cli
           GOARCH=arm64 GOOS=linux go build -o ${{ github.workspace }}/onyx-cli-test .
 
-      - name: Install Python deps and generate OpenAPI client
-        uses: ./.github/actions/install-deps-and-generate-openapi-client
+      - name: Install Python deps
+        uses: ./.github/actions/install-python-deps
         with:
           devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }}
 
@@ -351,6 +368,16 @@ jobs:
           retry_wait_seconds: 10
           command: |
             echo "Running ${{ matrix.edition }} integration tests for ${{ matrix.test-dir.path }}..."
+
+            # gateway_clients drives real CLI subprocesses, which need a real
+            # TCP api_server; run one inside the test container and make every
+            # missing prerequisite a hard failure instead of a skip.
+            GATEWAY_CLIENTS_STRICT=""
+            RUN_CMD="uv run --no-sync pytest -v --tb=short -rs tests/integration/${{ matrix.test-dir.path }}"
+            if [ "${{ matrix.test-dir.path }}" = "tests/gateway_clients" ]; then
+              GATEWAY_CLIENTS_STRICT="true"
+              RUN_CMD="bash tests/integration/tests/gateway_clients/run_with_server.sh"
+            fi
 
             # Mount CLI binary into the container if it exists (CLI tests only)
             CLI_VOLUME=""
@@ -377,11 +404,13 @@ jobs:
               -e OPENSEARCH_HOST=opensearch \
               -e REDIS_HOST=cache \
               -e MODEL_SERVER_HOST=inference_model_server \
-              -e INDEXING_MODEL_SERVER_HOST=indexing_model_server \
+              -e INDEXING_MODEL_SERVER_HOST=inference_model_server \
               -e S3_ENDPOINT_URL=http://minio:9000 \
               -e S3_AWS_ACCESS_KEY_ID=minioadmin \
               -e S3_AWS_SECRET_ACCESS_KEY=minioadmin \
               -e OPENAI_API_KEY=${OPENAI_API_KEY} \
+              -e ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY} \
+              -e GATEWAY_CLIENT_TESTS_REQUIRED=${GATEWAY_CLIENTS_STRICT} \
               -e EXA_API_KEY=${EXA_API_KEY} \
               -e SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN} \
               -e SLACK_BOT_TOKEN_TEST_SPACE=${SLACK_BOT_TOKEN_TEST_SPACE} \
@@ -410,7 +439,7 @@ jobs:
               -e ENABLE_CRAFT=true \
               -e ONYX_DEV_LICENSE \
               ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }} \
-              uv run --no-sync pytest -v --tb=short -rs tests/integration/${{ matrix.test-dir.path }}
+              $RUN_CMD
 
       # ------------------------------------------------------------
       # Always gather logs BEFORE "down". The test-runner container's
@@ -447,7 +476,7 @@ jobs:
     steps:
       - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -484,8 +513,8 @@ jobs:
             relational_db
         id: start_docker_onyx_lite
 
-      - name: Install Python deps and generate OpenAPI client
-        uses: ./.github/actions/install-deps-and-generate-openapi-client
+      - name: Install Python deps
+        uses: ./.github/actions/install-python-deps
         with:
           devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }}
 
@@ -554,7 +583,7 @@ jobs:
     steps:
       - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -563,6 +592,8 @@ jobs:
         with:
           ecr-registry: ${{ vars.ECR_REGISTRY }}
 
+      # NOTE: `indexing_model_server` is intentionally not started. See the
+      # integration-tests job above.
       - name: Start Docker containers for multi-tenant tests
         env:
           ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
@@ -584,12 +615,11 @@ jobs:
             opensearch \
             cache \
             minio \
-            inference_model_server \
-            indexing_model_server
+            inference_model_server
         id: start_docker_multi_tenant
 
-      - name: Install Python deps and generate OpenAPI client
-        uses: ./.github/actions/install-deps-and-generate-openapi-client
+      - name: Install Python deps
+        uses: ./.github/actions/install-python-deps
         with:
           devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }}
 
@@ -614,7 +644,7 @@ jobs:
             -e OPENSEARCH_HOST=opensearch \
             -e REDIS_HOST=cache \
             -e MODEL_SERVER_HOST=inference_model_server \
-            -e INDEXING_MODEL_SERVER_HOST=indexing_model_server \
+            -e INDEXING_MODEL_SERVER_HOST=inference_model_server \
             -e S3_ENDPOINT_URL=http://minio:9000 \
             -e S3_AWS_ACCESS_KEY_ID=minioadmin \
             -e S3_AWS_SECRET_ACCESS_KEY=minioadmin \

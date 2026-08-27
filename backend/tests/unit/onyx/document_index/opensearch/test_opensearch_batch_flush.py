@@ -183,8 +183,7 @@ def test_multiple_docs_each_under_limit_flush_per_doc() -> None:
     chunks = []
     for doc_idx in range(3):
         doc_id = f"doc_{doc_idx}"
-        for chunk_idx in range(50):
-            chunks.append(_make_chunk(doc_id, chunk_idx))
+        chunks.extend(_make_chunk(doc_id, chunk_idx) for chunk_idx in range(50))
 
     metadata = IndexingMetadata(
         doc_id_to_chunk_cnt_diff={

@@ -22,7 +22,7 @@ describe("useLLMProviders", () => {
     mockUseSWR.mockReset();
   });
 
-  test("uses public providers endpoint when personaId is not provided", () => {
+  test("uses public providers endpoint when personaId is not provided", async () => {
     const mockMutate = jest.fn();
     mockUseSWR.mockReturnValue({
       data: undefined,
@@ -42,10 +42,11 @@ describe("useLLMProviders", () => {
       })
     );
     expect(result.current.isLoading).toBe(true);
-    expect(result.current.refetch).toBe(mockMutate);
+    await result.current.refetch();
+    expect(mockMutate).toHaveBeenCalled();
   });
 
-  test("uses persona-specific providers endpoint when personaId is provided", () => {
+  test("uses persona-specific providers endpoint when personaId is provided", async () => {
     const mockMutate = jest.fn();
     const providers = [{ name: "Persona Provider", model_configurations: [] }];
     mockUseSWR.mockReturnValue({
@@ -67,7 +68,8 @@ describe("useLLMProviders", () => {
     );
     expect(result.current.llmProviders).toEqual(providers);
     expect(result.current.isLoading).toBe(false);
-    expect(result.current.refetch).toBe(mockMutate);
+    await result.current.refetch();
+    expect(mockMutate).toHaveBeenCalled();
   });
 
   test("reports not loading when SWR returns an error", () => {

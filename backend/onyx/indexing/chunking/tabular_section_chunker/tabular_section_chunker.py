@@ -72,7 +72,7 @@ def format_columns_header(headers: list[str]) -> str:
 
 
 def _row_to_pairs(headers: list[str], row: list[str]) -> list[tuple[str, str]]:
-    return [(h, v) for h, v in zip(headers, row) if v.strip()]
+    return [(h, v) for h, v in zip(headers, row, strict=False) if v.strip()]
 
 
 def pack_chunk(chunk: str, new_row: str) -> str:
@@ -113,13 +113,13 @@ def _split_row_by_pairs(
             current_tokens = 0
 
         if pair_tokens > max_tokens:
-            for split_text in split_text_by_tokens(pair_str, tokenizer, max_tokens):
-                pieces.append(
-                    _TokenizedText(
-                        text=split_text,
-                        token_count=count_tokens(split_text, tokenizer),
-                    )
+            pieces.extend(
+                _TokenizedText(
+                    text=split_text,
+                    token_count=count_tokens(split_text, tokenizer),
                 )
+                for split_text in split_text_by_tokens(pair_str, tokenizer, max_tokens)
+            )
         else:
             current_parts = [pair_str]
             current_tokens = pair_tokens

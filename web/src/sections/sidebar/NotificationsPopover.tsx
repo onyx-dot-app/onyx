@@ -1,12 +1,23 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useRouter } from "next/navigation";
-import { Route } from "next";
+import { useTranslations } from "next-intl";
 import { track, AnalyticsEvent } from "@/lib/analytics/utils";
 import type { Notification as NotificationData } from "@/lib/notifications/interfaces";
 import { NotificationType } from "@/lib/notifications/interfaces";
-import { getNotificationIcon } from "@/lib/notifications";
+import {
+  getNotificationIcon,
+  isExternalLink,
+  openNotificationLink,
+} from "@/lib/notifications";
 import {
   dismissAllNotifications,
   dismissNotification,
@@ -53,6 +64,8 @@ function NotificationItem({
   onClick,
   dismiss,
 }: NotificationItemProps) {
+  const t = useTranslations("sidebar");
+
   return (
     <Hoverable.Root group="notifications-popover/NotificationItem">
       <LineItemButton
@@ -60,12 +73,12 @@ function NotificationItem({
         title={notification.title}
         description={notification.description ?? undefined}
         sizePreset="main-ui"
-        rounding="sm"
+        rounding={2}
         color={state === "new" ? undefined : "muted"}
         onClick={onClick}
         rightChildren={
           <Section justifyContent="start">
-            <Section height="fit" gap={0.5} flexDirection="row">
+            <Section height="fit" gap={2} flexDirection="row">
               <Text font="secondary-body" color="text-02">
                 {timeAgo(notification.first_shown) ?? ""}
               </Text>
@@ -87,7 +100,7 @@ function NotificationItem({
                       size="xs"
                       prominence="tertiary"
                       onClick={noProp(dismiss)}
-                      tooltip="Mark as Read"
+                      tooltip={t("notifications.markAsReadButton.tooltip")}
                     />
                   </Hoverable.Item>
                 </div>
@@ -115,6 +128,7 @@ export default function NotificationsPopover({
   onNavigate,
   onShowBuildIntro,
 }: NotificationsPopoverProps) {
+  const t = useTranslations("sidebar");
   const router = useRouter();
   const {
     notifications,
@@ -128,7 +142,12 @@ export default function NotificationsPopover({
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const loadMoreRef = useRef(loadMore);
   const lastLoadScrollTopRef = useRef<number | null>(null);
-  loadMoreRef.current = loadMore;
+
+  // Layout effect: an already-scheduled observer callback must not see the
+  // previous page's loadMore after commit.
+  useLayoutEffect(() => {
+    loadMoreRef.current = loadMore;
+  }, [loadMore]);
 
   // Track IDs dismissed during this session (before popover closes)
   const [sessionDismissedIds, setSessionDismissedIds] = useState<Set<number>>(
@@ -171,19 +190,13 @@ export default function NotificationsPopover({
         });
       }
 
-      if (link.startsWith("http://") || link.startsWith("https://")) {
-        if (!notification.dismissed) {
-          handleDismiss(notification.id);
-        }
-        window.open(link, "_blank", "noopener,noreferrer");
-        return;
-      }
-
       if (!notification.dismissed) {
         handleDismiss(notification.id);
       }
-      onNavigate();
-      router.push(link as Route);
+      if (!isExternalLink(link)) {
+        onNavigate();
+      }
+      openNotificationLink(link, router);
     },
     [handleDismiss, onNavigate, onShowBuildIntro, router]
   );
@@ -286,21 +299,23 @@ export default function NotificationsPopover({
 
   return (
     <Section gap={0} justifyContent="start" alignItems="stretch">
-      <Section flexDirection="row" padding={0.325}>
-        <Section flexDirection="row" gap={0.25} justifyContent="start">
+      <Section flexDirection="row" padding={1.5}>
+        <Section flexDirection="row" gap={1} justifyContent="start">
           <Button
             icon={SvgChevronLeft}
             size="sm"
             prominence="tertiary"
             onClick={onClose}
           />
-          <Text color="text-02">Notifications</Text>
+          <Text color="text-02">{t("notifications.header.title")}</Text>
         </Section>
 
-        <Section flexDirection="row" gap={0.25} justifyContent="end">
+        <Section flexDirection="row" gap={1} justifyContent="end">
           {undismissedCount !== 0 && (
             <span className="text-action-selection-05 font-secondary-body">
-              {`${undismissedCount} unread`}
+              {t("notifications.unreadCount.label", {
+                count: undismissedCount,
+              })}
             </span>
           )}
           <Button
@@ -308,7 +323,7 @@ export default function NotificationsPopover({
             size="sm"
             prominence="tertiary"
             onClick={handleDismissAll}
-            tooltip="Mark All as Read"
+            tooltip={t("notifications.markAllAsReadButton.tooltip")}
             disabled={undismissedCount === 0}
           />
         </Section>
@@ -339,7 +354,7 @@ export default function NotificationsPopover({
           <div className="h-(--notifications-popover)">
             <Section>
               <IllustrationContent
-                title="No notifications"
+                title={t("notifications.empty.title")}
                 illustration={SvgEmpty}
               />
             </Section>
@@ -352,7 +367,7 @@ export default function NotificationsPopover({
         >
           {newNotifications.length > 0 && (
             <>
-              <Divider title="New" />
+              <Divider title={t("notifications.newSection.title")} />
               <div className="flex flex-col gap-1">
                 {newNotifications.map((notification) => (
                   <NotificationItem
@@ -369,7 +384,7 @@ export default function NotificationsPopover({
 
           {olderNotifications.length > 0 && (
             <>
-              <Divider title="Older" />
+              <Divider title={t("notifications.olderSection.title")} />
               <div className="flex flex-col gap-1">
                 {olderNotifications.map((notification) => (
                   <NotificationItem

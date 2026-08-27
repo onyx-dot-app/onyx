@@ -206,7 +206,7 @@ func runCI(cmd *cobra.Command, args []string, opts *RunCIOptions) {
 		pushArgs = append(pushArgs, "--no-verify")
 	}
 	pushArgs = append(pushArgs, "--quiet", "-f", "-u", "origin", ciBranch)
-	if err := git.RunCommand(pushArgs...); err != nil {
+	if err := pushWithHookHint(opts.NoVerify, func() error { return git.RunCommand(pushArgs...) }); err != nil {
 		// Switch back to original branch before exiting
 		if switchErr := git.RunCommand("switch", "--quiet", originalBranch); switchErr != nil {
 			log.Warnf("Failed to switch back to original branch: %v", switchErr)

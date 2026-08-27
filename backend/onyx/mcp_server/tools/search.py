@@ -8,6 +8,7 @@ import httpx
 from fastmcp.server.auth.auth import AccessToken
 from pydantic import BaseModel, TypeAdapter, ValidationError
 
+from onyx.configs.app_configs import MCP_SERVER_API_REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import DocumentSource
 from onyx.mcp_server.api import mcp_server
 from onyx.mcp_server.utils import (
@@ -53,6 +54,9 @@ async def _post_model(
             "Authorization": f"Bearer {access_token.token}",
             "Content-Type": "application/json",
         },
+        timeout=httpx.Timeout(
+            float(MCP_SERVER_API_REQUEST_TIMEOUT_SECONDS), connect=10.0
+        ),
     )
 
 

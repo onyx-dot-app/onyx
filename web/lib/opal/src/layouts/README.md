@@ -9,7 +9,7 @@ Layout primitives for composing content blocks. These components handle sizing, 
 | Component | Description | Docs |
 |---|---|---|
 | [`Content`](./content/README.md) | Icon + title + description row. Routes to an internal layout (`ContentXl`, `ContentLg`, `ContentMd`, or `ContentSm`) based on `sizePreset` and `variant`. | [Content README](./content/README.md) |
-| [`ContentAction`](./content-action/README.md) | Wraps `Content` in a flex-row with an optional `rightChildren` slot for action buttons. Adds padding alignment via the shared `SizeVariant` scale. | [ContentAction README](./content-action/README.md) |
+| [`ContentAction`](./content-action/README.md) | Wraps `Content` in a flex-row with an optional `rightChildren` slot for action buttons. Adds padding alignment with adjacent interactive elements. | [ContentAction README](./content-action/README.md) |
 | [`IllustrationContent`](./illustration-content/README.md) | Center-aligned illustration + title + description stack for empty states, error pages, and placeholders. | [IllustrationContent README](./illustration-content/README.md) |
 
 ## Quick Start
@@ -46,7 +46,7 @@ import SvgNoResult from "@opal/illustrations/no-result";
   description="Some description"
   sizePreset="main-content"
   variant="section"
-  padding="lg"
+  padding={2}
   rightChildren={
     <Button icon={SvgSettings} prominence="tertiary" />
   }
@@ -71,9 +71,12 @@ import SvgNoResult from "@opal/illustrations/no-result";
 
 Valid preset/variant combinations are enforced at the type level via a discriminated union. See the [Content README](./content/README.md) for the full matrix.
 
-### Shared size scale (`ContentAction`)
+### Padding alignment (`ContentAction`)
 
-`ContentAction` uses the same `SizeVariant` scale (`lg`, `md`, `sm`, `xs`, `2xs`, `fit`) defined in `@opal/shared` that powers `Interactive.Container` and `Button`. This ensures that padding on content rows aligns with adjacent interactive elements at the same size.
+`ContentAction.padding` is a spacing step (`N / 4` rem), narrowed to `0 | 0.5 | 1 | 2`. Those four
+are exactly the paddings `Interactive.Container` applies at its size presets, so a content row still
+lines up with an adjacent button of the same size — `lg` → `2`, `md` and `sm` → `1`, `xs` and `2xs`
+→ `0.5`, `fit` → `0`.
 
 ## Exports
 

@@ -19,6 +19,7 @@ import {
 } from "@/refresh-components/buttons/source-tag/sourceTagUtils";
 import { openDocument } from "@/lib/search/utils";
 import { ensureHrefProtocol } from "@/lib/utils";
+import { useTranslations } from "next-intl";
 
 interface DocumentCardProps {
   document: LoadedOnyxDocument;
@@ -142,6 +143,7 @@ export const MemoizedLink = memo(
     node?: any;
     [key: string]: any;
   }) => {
+    const t = useTranslations("chat.messages");
     const value = rest.children;
 
     // Convert document to SourceInfo for SourceTag
@@ -175,7 +177,7 @@ export const MemoizedLink = memo(
 
       const displayName = document
         ? getDisplayNameForSource(document as OnyxDocument)
-        : question?.question || "Question";
+        : question?.question || t("memoizedLink.questionFallback.label");
 
       return (
         <SourceTag
@@ -197,19 +199,20 @@ export const MemoizedLink = memo(
       const fileId = url!.split("/api/chat/file/")[1]?.split(/[?#]/)[0] || "";
       const filename = value?.toString() || "download";
       return (
-        <a
-          href="#"
-          onClick={(e) => {
-            e.preventDefault();
+        <button
+          type="button"
+          onClick={() =>
             updatePresentingDocument({
               document_id: fileId,
               semantic_identifier: filename,
-            });
-          }}
-          className="cursor-pointer text-link hover:text-link-hover"
+            })
+          }
+          // `inline`: a button is inline-block by default, which would break
+          // the surrounding prose differently than the <a> it replaces.
+          className="inline cursor-pointer text-link hover:text-link-hover"
         >
           {rest.children}
-        </a>
+        </button>
       );
     }
 

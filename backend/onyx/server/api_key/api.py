@@ -26,7 +26,7 @@ router = APIRouter(prefix="/admin/api-key")
 
 @router.get("")
 def list_api_keys(
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_SERVICE_ACCOUNT_API_KEYS)),
     db_session: Session = Depends(get_session),
 ) -> list[ApiKeyDescriptor]:
     return fetch_api_keys(db_session)
@@ -35,9 +35,13 @@ def list_api_keys(
 @router.post("")
 def create_api_key(
     api_key_args: APIKeyArgs,
-    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_SERVICE_ACCOUNT_API_KEYS)
+    ),
     db_session: Session = Depends(get_session),
 ) -> ApiKeyDescriptor:
+    # Admin-equivalent by design: group_ids is deliberately uncapped, so a holder may
+    # assign a key to any group, Admin included. Granting this permission grants admin.
     api_key = insert_api_key(db_session, api_key_args, user.id)
     emit_audit_event(
         AuditAction.API_KEY_CREATE,
@@ -45,6 +49,7 @@ def create_api_key(
         actor=actor_from_user(user),
         resource_type="api_key",
         resource_id=api_key.api_key_id,
+        extra={"name": api_key_args.name, "group_ids": list(api_key_args.group_ids)},
     )
     return api_key
 
@@ -52,7 +57,9 @@ def create_api_key(
 @router.post("/{api_key_id}/regenerate")
 def regenerate_existing_api_key(
     api_key_id: int,
-    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_SERVICE_ACCOUNT_API_KEYS)
+    ),
     db_session: Session = Depends(get_session),
 ) -> ApiKeyDescriptor:
     api_key = regenerate_api_key(db_session, api_key_id)
@@ -70,16 +77,31 @@ def regenerate_existing_api_key(
 def update_existing_api_key(
     api_key_id: int,
     api_key_args: APIKeyArgs,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_SERVICE_ACCOUNT_API_KEYS)
+    ),
     db_session: Session = Depends(get_session),
 ) -> ApiKeyDescriptor:
-    return update_api_key(db_session, api_key_id, api_key_args)
+    # update_api_key replaces every group the service account belongs to, and
+    # those groups are what grant the key its permissions.
+    api_key = update_api_key(db_session, api_key_id, api_key_args)
+    emit_audit_event(
+        AuditAction.API_KEY_UPDATE,
+        AuditOutcome.SUCCESS,
+        actor=actor_from_user(user),
+        resource_type="api_key",
+        resource_id=api_key_id,
+        extra={"name": api_key_args.name, "group_ids": list(api_key_args.group_ids)},
+    )
+    return api_key
 
 
 @router.delete("/{api_key_id}")
 def delete_api_key(
     api_key_id: int,
-    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    user: User = Depends(
+        require_permission(Permission.MANAGE_SERVICE_ACCOUNT_API_KEYS)
+    ),
     db_session: Session = Depends(get_session),
 ) -> None:
     remove_api_key(db_session, api_key_id)

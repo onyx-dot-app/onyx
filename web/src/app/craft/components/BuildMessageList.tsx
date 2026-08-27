@@ -15,6 +15,8 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import TextChunk from "@/app/craft/components/TextChunk";
 import ThinkingCard from "@/app/craft/components/ThinkingCard";
 import { BlinkingBar } from "@/app/app/message/BlinkingBar";
+import { ErrorBanner } from "@/app/app/message/Resubmit";
+import { RATE_LIMITED_ERROR_CODE } from "@/app/app/interfaces";
 import { convertMarkdownTablesToTsv } from "@/app/app/message/copyingUtils";
 import CompactionMarker from "@/app/craft/components/CompactionMarker";
 import CraftToolCard from "@/app/craft/components/tool-cards/CraftToolCard";
@@ -211,7 +213,9 @@ export default function BuildMessageList({
               initial={
                 opts.isCurrentStream ? { opacity: 0, y: -4, height: 0 } : false
               }
+              // oxlint-disable-next-line react-doctor/no-layout-property-animation -- height 0/auto must reflow the message list, transform cannot
               animate={{ opacity: 1, y: 0, height: "auto" }}
+              // oxlint-disable-next-line react-doctor/no-layout-property-animation -- height/marginTop collapse must reflow the message list, transform cannot
               exit={{ opacity: 0, y: -6, height: 0, marginTop: 0 }}
               transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
             >
@@ -248,6 +252,18 @@ export default function BuildMessageList({
             </div>
           );
         case "error":
+          if (item.rateLimit) {
+            return (
+              <div key={item.id} className={cn(topMargin)}>
+                <ErrorBanner
+                  error={item.content}
+                  errorCode={RATE_LIMITED_ERROR_CODE}
+                  isRetryable={false}
+                  details={item.rateLimit}
+                />
+              </div>
+            );
+          }
           return (
             <div
               key={item.id}

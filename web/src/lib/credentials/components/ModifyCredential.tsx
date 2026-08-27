@@ -66,7 +66,9 @@ function CredentialSelectionTable({
       <table className="w-full text-sm border-collapse">
         <thead className="sticky top-0 w-full">
           <tr className="bg-neutral-100 dark:bg-neutral-900">
-            <th className="p-2 text-left font-medium text-neutral-600 dark:text-neutral-400"></th>
+            <th className="p-2 text-left font-medium text-neutral-600 dark:text-neutral-400">
+              <span className="sr-only">Select</span>
+            </th>
             <th className="p-2 text-left font-medium text-neutral-600 dark:text-neutral-400">
               ID
             </th>
@@ -79,7 +81,9 @@ function CredentialSelectionTable({
             <th className="p-2 text-left font-medium text-neutral-600 dark:text-neutral-400">
               Last Updated
             </th>
-            <th />
+            <th>
+              <span className="sr-only">Actions</span>
+            </th>
           </tr>
         </thead>
 

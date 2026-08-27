@@ -16,6 +16,12 @@ func (in *installer) printPlan(defaultTag string) {
 	if in.craft {
 		in.plainf("  • Include Craft: true")
 	}
+	if in.dev {
+		in.plainf("  • Dev overlay: true (service ports published on the host)")
+	}
+	if name := in.composeOverrideName(); name != "" {
+		in.plainf("  • Compose override: %s (yours, applied last)", name)
+	}
 	if in.opts.Project != "" {
 		in.plainf("  • Compose project: %s", in.opts.Project)
 	}

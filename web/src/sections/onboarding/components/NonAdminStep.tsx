@@ -1,19 +1,20 @@
 "use client";
 
 import React, { useRef, useState, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import Text from "@/refresh-components/texts/Text";
 import { InputTypeIn } from "@opal/components";
 import { updateUserPersonalization } from "@/lib/users/svc";
 import { useUser } from "@/providers/UserProvider";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import { Button } from "@opal/components";
 import InputAvatar from "@/refresh-components/inputs/InputAvatar";
-import { cn } from "@opal/utils";
+import { cn, clickOnKeyDown } from "@opal/utils";
 import { SvgCheckCircle, SvgEdit, SvgUser, SvgX } from "@opal/icons";
 import { ContentAction, InputHorizontal, toast } from "@opal/layouts";
 import { Hoverable } from "@opal/core";
 
 export default function NonAdminStep() {
+  const t = useTranslations("onboarding");
   const inputRef = useRef<HTMLInputElement>(null);
   const { user, refreshUser } = useUser();
   const [name, setName] = useState("");
@@ -33,6 +34,11 @@ export default function NonAdminStep() {
     "flex items-center justify-between w-full p-3 bg-background-tint-00 rounded-16 border border-border-01 mb-4"
   );
 
+  const handleEdit = () => {
+    setIsEditing(true);
+    setName(savedName);
+  };
+
   const handleSave = () => {
     updateUserPersonalization({ name })
       .then(() => {
@@ -45,7 +51,7 @@ export default function NonAdminStep() {
         // refreshUser() is called in handleDismissConfirmation instead.
       })
       .catch((error) => {
-        toast.error("Failed to save name. Please try again.");
+        toast.error(t("nonAdminStep.toasts.saveNameFailed"));
         console.error(error);
       });
   };
@@ -69,11 +75,11 @@ export default function NonAdminStep() {
                 {...props}
               />
             )}
-            title="You're all set!"
+            title={t("nonAdminStep.confirmation.title")}
             sizePreset="main-ui"
             variant="body"
             color="muted"
-            padding="fit"
+            padding={0}
             rightChildren={
               <Button
                 prominence="tertiary"
@@ -88,48 +94,52 @@ export default function NonAdminStep() {
       {isEditing ? (
         <div
           className={containerClasses}
-          onClick={() => inputRef.current?.focus()}
           role="group"
           aria-label="non-admin-name-prompt"
         >
-          <InputHorizontal
-            responsive
-            icon={SvgUser}
-            title="What should Onyx call you?"
-            description="We will display this name in the app."
+          {/* Pointer convenience only — the input is already keyboard reachable. */}
+          <div
+            role="presentation"
+            className="contents"
+            onClick={() => inputRef.current?.focus()}
           >
-            <div className="flex w-full items-center gap-2">
-              <InputTypeIn
-                ref={inputRef}
-                placeholder="Your name"
-                value={name || ""}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                  setName(e.target.value)
-                }
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && name && name.trim().length > 0) {
-                    e.preventDefault();
-                    handleSave();
+            <InputHorizontal
+              responsive
+              icon={SvgUser}
+              title={t("nameStep.title")}
+              description={t("nameStep.description")}
+            >
+              <div className="flex w-full items-center gap-2">
+                <InputTypeIn
+                  ref={inputRef}
+                  placeholder={t("nameStep.input.placeholder")}
+                  value={name || ""}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                    setName(e.target.value)
                   }
-                }}
-              />
-              <Button disabled={name === ""} onClick={handleSave}>
-                Save
-              </Button>
-            </div>
-          </InputHorizontal>
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && name && name.trim().length > 0) {
+                      e.preventDefault();
+                      handleSave();
+                    }
+                  }}
+                />
+                <Button disabled={name === ""} onClick={handleSave}>
+                  {t("nonAdminStep.save.label")}
+                </Button>
+              </div>
+            </InputHorizontal>
+          </div>
         </div>
       ) : (
         <Hoverable.Root group="nonAdminName" width="full">
           <div
             className={containerClasses}
-            aria-label="Edit display name"
+            aria-label={t("nameStep.edit.ariaLabel")}
             role="button"
             tabIndex={0}
-            onClick={() => {
-              setIsEditing(true);
-              setName(savedName);
-            }}
+            onClick={handleEdit}
+            onKeyDown={clickOnKeyDown(handleEdit)}
           >
             <div className="flex items-center gap-1">
               <InputAvatar
@@ -149,7 +159,12 @@ export default function NonAdminStep() {
             <div className="p-1 flex items-center gap-1">
               {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
               <Hoverable.Item group="nonAdminName" variant="appear-on-hover">
-                <IconButton internal icon={SvgEdit} tooltip="Edit" />
+                <Button
+                  prominence="internal"
+                  size="sm"
+                  icon={SvgEdit}
+                  tooltip={t("nameStep.edit.tooltip")}
+                />
               </Hoverable.Item>
               <SvgCheckCircle className="w-4 h-4 stroke-status-success-05" />
             </div>

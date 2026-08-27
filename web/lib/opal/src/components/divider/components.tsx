@@ -2,16 +2,12 @@
 
 import "@opal/components/divider/styles.css";
 import { useState, useCallback } from "react";
-import type {
-  OrientationVariants,
-  PaddingVariants,
-  RichStr,
-} from "@opal/types";
+import type { OrientationVariants, RichStr } from "@opal/types";
 import { Button, Text } from "@opal/components";
 import { SvgChevronRight } from "@opal/icons";
 import { Interactive } from "@opal/core";
 import { cn } from "@opal/utils";
-import { paddingXVariants, paddingYVariants } from "@opal/shared";
+import { spacingToRem } from "@opal/shared";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -31,6 +27,15 @@ interface DividerSharedProps {
   children?: never;
 }
 
+/**
+ * The insets a divider offers, as spacing steps (`N / 4` rem).
+ *
+ * A closed set rather than an open number: a divider's inset is a shared rhythm
+ * across the surfaces it separates, so an arbitrary step would only ever put one
+ * divider out of step with the rest.
+ */
+type DividerSpacing = 0 | 0.5 | 1 | 2 | 4 | 6;
+
 /** Plain line — no title, no description. */
 type DividerBareProps = Omit<
   DividerSharedProps,
@@ -38,10 +43,10 @@ type DividerBareProps = Omit<
 > & {
   /** Orientation of the line. Default: `"horizontal"`. */
   orientation?: OrientationVariants;
-  /** Padding along the line direction. Default: `"sm"` (0.5rem). */
-  paddingParallel?: PaddingVariants;
-  /** Padding perpendicular to the line. Default: `"xs"` (0.25rem). */
-  paddingPerpendicular?: PaddingVariants;
+  /** Padding along the line direction, as a spacing step. Default: `2` (0.5rem). */
+  paddingParallel?: DividerSpacing;
+  /** Padding perpendicular to the line, as a spacing step. Default: `1` (0.25rem). */
+  paddingPerpendicular?: DividerSpacing;
 };
 
 /** Line with a title to the left. */
@@ -93,19 +98,19 @@ function Divider(props: DividerProps) {
     title,
     description,
     orientation = "horizontal",
-    paddingParallel = "sm",
-    paddingPerpendicular = "xs",
+    paddingParallel = 2,
+    paddingPerpendicular = 1,
   } = props;
 
   if (orientation === "vertical") {
     return (
       <div
         ref={ref}
-        className={cn(
-          "opal-divider-vertical",
-          paddingXVariants[paddingPerpendicular],
-          paddingYVariants[paddingParallel]
-        )}
+        className="opal-divider-vertical"
+        style={{
+          paddingInline: spacingToRem(paddingPerpendicular),
+          paddingBlock: spacingToRem(paddingParallel),
+        }}
       >
         <div className="opal-divider-line-vertical" />
       </div>
@@ -115,11 +120,11 @@ function Divider(props: DividerProps) {
   return (
     <div
       ref={ref}
-      className={cn(
-        "opal-divider",
-        paddingXVariants[paddingParallel],
-        paddingYVariants[paddingPerpendicular]
-      )}
+      className="opal-divider"
+      style={{
+        paddingInline: spacingToRem(paddingParallel),
+        paddingBlock: spacingToRem(paddingPerpendicular),
+      }}
     >
       <div className="opal-divider-row">
         {title && (
@@ -171,7 +176,7 @@ function FoldableDivider({
         interaction={isOpen ? "hover" : "rest"}
         onClick={toggle}
       >
-        <Interactive.Container rounding="sm" size="fit" width="full">
+        <Interactive.Container rounding={2} size="fit" width="full">
           <div className="opal-divider">
             <div className="opal-divider-row">
               <div className="opal-divider-title">
@@ -196,4 +201,4 @@ function FoldableDivider({
   );
 }
 
-export { Divider, type DividerProps };
+export { Divider, type DividerProps, type DividerSpacing };

@@ -81,6 +81,12 @@ func (f containerFacts) diagnose(status string) string {
 	case f.Restarts >= crashLoop:
 		return fmt.Sprintf("has restarted %d times (%s) — it is crash-looping, not starting",
 			f.Restarts, exitReason(f.ExitCode))
+	case healthDetail(status) == "waiting":
+		// Inside a health check's start period, failing probes are how a
+		// container comes up — nothing to call a fault yet. The restart count
+		// above is what separates a slow start from a crash loop, and it has
+		// already had its say.
+		return ""
 	case f.probe() != "":
 		return "is running, but its health check keeps failing: " + f.probe()
 	case strings.Contains(status, "(unhealthy)"):

@@ -7,6 +7,7 @@ from onyx.configs.app_configs import (
     IMAGE_SUMMARIZATION_SYSTEM_PROMPT,
     IMAGE_SUMMARIZATION_USER_PROMPT,
 )
+from onyx.configs.chat_configs import IMAGE_SUMMARIZATION_TIMEOUT
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import (
     ChatCompletionMessage,
@@ -137,7 +138,9 @@ def _summarize_image(
             input_messages=[{"type": "image_summarization_request"}],
         ) as span_generation:
             # Note: We don't include the actual image in the span input to avoid bloating traces
-            response = llm.invoke(messages)
+            response = llm.invoke(
+                messages, total_timeout_override=IMAGE_SUMMARIZATION_TIMEOUT
+            )
             record_llm_response(span_generation, response)
             summary = llm_response_to_string(response)
 

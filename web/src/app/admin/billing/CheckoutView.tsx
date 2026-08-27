@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import { Section } from "@/layouts/general-layouts";
 import { InputHorizontal } from "@opal/layouts";
 import { Button, Divider } from "@opal/components";
@@ -33,6 +34,8 @@ function BillingOption({
   price,
   badge,
 }: BillingOptionProps) {
+  const t = useTranslations("admin.billing");
+
   return (
     <Card
       onClick={onClick}
@@ -42,7 +45,7 @@ function BillingOption({
     >
       <Section
         flexDirection="row"
-        gap={0.5}
+        gap={2}
         height="fit"
         justifyContent="between"
         alignItems="start"
@@ -59,17 +62,17 @@ function BillingOption({
           </Text>
           <div className="billing-option-price">
             <Text mainContentEmphasis text04>
-              ${price}
+              {t("checkout.price.label", { price })}
             </Text>
             <Text secondaryBody text03 nowrap>
-              per seat/month
+              {t("checkout.perSeatMonth.label")}
             </Text>
           </div>
         </Section>
         {badge && (
           <Section
             flexDirection="row"
-            gap={0.25}
+            gap={1}
             alignItems="center"
             justifyContent="end"
             width="fit"
@@ -95,6 +98,7 @@ interface CheckoutViewProps {
 }
 
 export default function CheckoutView({ onAdjustPlan }: CheckoutViewProps) {
+  const t = useTranslations("admin.billing");
   const { user } = useUser();
   const { data: usersData } = useUsers({ includeApiKeys: false });
 
@@ -146,7 +150,9 @@ export default function CheckoutView({ onAdjustPlan }: CheckoutViewProps) {
     } catch (err) {
       console.error("Error creating checkout session:", err);
       setError(
-        err instanceof Error ? err.message : "Failed to create checkout session"
+        err instanceof Error
+          ? err.message
+          : t("checkout.createSessionFailed.error")
       );
     } finally {
       setIsSubmitting(false);
@@ -160,23 +166,23 @@ export default function CheckoutView({ onAdjustPlan }: CheckoutViewProps) {
         flexDirection="row"
         justifyContent="between"
         alignItems="start"
-        padding={1}
+        padding={4}
         height="auto"
       >
         <Section
           flexDirection="column"
           alignItems="start"
-          gap={0.25}
+          gap={1}
           height="auto"
           width="fit"
         >
           <SvgUsers size={24} />
           <Text headingH2 text04>
-            Business
+            {t("checkout.plan.title")}
           </Text>
         </Section>
         <Button prominence="secondary" onClick={onAdjustPlan}>
-          Adjust Plan
+          {t("checkout.adjustPlan.label")}
         </Button>
       </Section>
 
@@ -185,19 +191,19 @@ export default function CheckoutView({ onAdjustPlan }: CheckoutViewProps) {
         <Section
           flexDirection="column"
           alignItems="stretch"
-          gap={1}
-          padding={1}
+          gap={4}
+          padding={4}
           height="auto"
         >
           {/* Billing Cycle */}
           <InputHorizontal
-            title="Billing Cycle"
-            description="after your 1-month free trial"
+            title={t("checkout.billingCycle.title")}
+            description={t("checkout.billingCycle.description")}
             withLabel
           >
             <Section
               flexDirection="row"
-              gap={0.25}
+              gap={1}
               width="fit"
               height="auto"
               justifyContent="start"
@@ -205,27 +211,27 @@ export default function CheckoutView({ onAdjustPlan }: CheckoutViewProps) {
               <BillingOption
                 selected={billingPeriod === "monthly"}
                 onClick={() => setBillingPeriod("monthly")}
-                title="Monthly"
+                title={t("checkout.monthly.label")}
                 price={monthlyPrice}
               />
               <BillingOption
                 selected={billingPeriod === "annual"}
                 onClick={() => setBillingPeriod("annual")}
-                title="Annual"
+                title={t("checkout.annual.label")}
                 price={annualPrice}
-                badge="Save 20%"
+                badge={t("checkout.annualBadge.label")}
               />
             </Section>
           </InputHorizontal>
 
-          <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+          <Divider paddingParallel={0} paddingPerpendicular={0} />
 
           {/* Seats */}
           <InputHorizontal
-            title="Seats"
-            description={`Minimum ${minRequiredSeats} seat${
-              minRequiredSeats !== 1 ? "s" : ""
-            } required for your current users and Slack accounts.`}
+            title={t("checkout.seats.title")}
+            description={t("checkout.seats.description", {
+              count: minRequiredSeats,
+            })}
             withLabel
           >
             <InputNumber
@@ -244,7 +250,7 @@ export default function CheckoutView({ onAdjustPlan }: CheckoutViewProps) {
         flexDirection="row"
         alignItems="center"
         justifyContent="between"
-        padding={1}
+        padding={4}
         height="auto"
       >
         {error ? (
@@ -253,18 +259,23 @@ export default function CheckoutView({ onAdjustPlan }: CheckoutViewProps) {
           </Text>
         ) : !annualPriceSelected ? (
           <Text secondaryBody text03>
-            You will be billed on{" "}
-            <Text secondaryBody text04>
-              {trialEndDate}
-            </Text>{" "}
-            After your 1-month free trial ends.
+            {t.rich("checkout.trialBilling.text", {
+              date: trialEndDate,
+              value: (chunks) => (
+                <Text secondaryBody text04>
+                  {chunks}
+                </Text>
+              ),
+            })}
           </Text>
         ) : (
           // Empty div to maintain space-between alignment
           <div></div>
         )}
         <Button disabled={isSubmitting} onClick={handleSubmit}>
-          {isSubmitting ? "Loading..." : "Continue to Payment"}
+          {isSubmitting
+            ? t("checkout.loading.label")
+            : t("checkout.continueToPayment.label")}
         </Button>
       </Section>
     </Card>

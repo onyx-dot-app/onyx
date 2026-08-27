@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
 import { useAdminLLMProviders } from "@/lib/languageModels/hooks";
 import { PageLoader } from "@opal/layouts";
@@ -19,11 +20,11 @@ import { SettingsLayouts } from "@opal/layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import { getProvider } from "@/lib/languageModels";
-import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 import {
-  deleteLlmProvider,
-  setDefaultLlmModel,
-} from "@/lib/languageModels/svc";
+  refreshLlmProviderCaches,
+  setDefaultLlmModelAndRefresh,
+} from "@/lib/languageModels/cache";
+import { deleteLlmProvider } from "@/lib/languageModels/svc";
 import ModelSelector from "@/sections/model-selector/ModelSelector";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import { useCreateModal } from "@opal/components";
@@ -31,6 +32,7 @@ import { LLMProviderName, LLMProviderView } from "@/lib/languageModels/types";
 import { Section } from "@/layouts/general-layouts";
 import { markdown } from "@opal/utils";
 import { usePHFeatureFlag, PHFeatureFlag } from "@/lib/analytics/hooks";
+import CostOverridesPanel from "@/views/admin/CostOverridesPanel";
 
 const route = ADMIN_ROUTES.LLM_MODELS;
 
@@ -46,6 +48,8 @@ function providerDisplayName(provider: LLMProviderView): string {
 // match the backend's WELL_KNOWN_PROVIDER_NAMES (minus any that lack a
 // dedicated modal); order within each group controls display order.
 interface ProviderGroup {
+  // Stable React key, independent of the translated title.
+  id: string;
   title: string;
   description?: string;
   // Emphasized (main-content) header vs. a lighter secondary sub-header.
@@ -54,40 +58,6 @@ interface ProviderGroup {
   // Append the custom-provider card to this group.
   includeCustom?: boolean;
 }
-
-const PROVIDER_GROUPS: ProviderGroup[] = [
-  {
-    title: "Add Provider",
-    description: "Onyx supports both popular providers and self-hosted models.",
-    emphasis: true,
-    providerNames: [
-      LLMProviderName.OPENAI,
-      LLMProviderName.ANTHROPIC,
-      LLMProviderName.VERTEX_AI,
-      LLMProviderName.BEDROCK,
-      LLMProviderName.AZURE,
-    ],
-  },
-  {
-    title: "Gateways & Routers",
-    providerNames: [
-      LLMProviderName.OPENROUTER,
-      LLMProviderName.LITELLM_PROXY,
-      LLMProviderName.PORTKEY,
-      LLMProviderName.NEBIUS_TOKENFACTORY,
-      LLMProviderName.BIFROST,
-    ],
-  },
-  {
-    title: "Self-hosted & Custom",
-    providerNames: [
-      LLMProviderName.OLLAMA_CHAT,
-      LLMProviderName.LM_STUDIO,
-      LLMProviderName.OPENAI_COMPATIBLE,
-    ],
-    includeCustom: true,
-  },
-];
 
 // ============================================================================
 // ExistingProviderCard — card for configured (existing) providers
@@ -104,6 +74,7 @@ function ExistingProviderCard({
   isDefault,
   isLastProvider,
 }: ExistingProviderCardProps) {
+  const t = useTranslations("admin.languageModels");
   const { mutate } = useSWRConfig();
   const [isOpen, setIsOpen] = useState(false);
   const deleteModal = useCreateModal();
@@ -113,10 +84,10 @@ function ExistingProviderCard({
       await deleteLlmProvider(provider.id, isLastProvider);
       await refreshLlmProviderCaches(mutate);
       deleteModal.toggle(false);
-      toast.success("Provider deleted successfully!");
+      toast.success(t("toasts.providerDeleted"));
     } catch (e) {
-      const message = e instanceof Error ? e.message : "Unknown error";
-      toast.error(`Failed to delete provider: ${message}`);
+      const message = e instanceof Error ? e.message : t("toasts.unknownError");
+      toast.error(t("toasts.providerDeleteFailed", { message }));
     }
   };
 
@@ -131,7 +102,9 @@ function ExistingProviderCard({
       {deleteModal.isOpen && (
         <ConfirmationModalLayout
           icon={SvgTrash}
-          title={markdown(`Delete *${providerDisplayName(provider)}*`)}
+          title={markdown(
+            t("deleteModal.title", { provider: providerDisplayName(provider) })
+          )}
           onClose={() => deleteModal.toggle(false)}
           submit={
             <Button
@@ -139,28 +112,27 @@ function ExistingProviderCard({
               onClick={handleDelete}
               disabled={isDefault && !isLastProvider}
             >
-              Delete
+              {t("deleteModal.submit.label")}
             </Button>
           }
         >
-          <Section alignItems="start" gap={0.5}>
+          <Section alignItems="start" gap={2}>
             {isDefault && !isLastProvider ? (
               <Text font="main-ui-body" color="text-03">
-                Cannot delete the default provider. Select another provider as
-                the default prior to deleting this one.
+                {t("deleteModal.defaultProviderWarning")}
               </Text>
             ) : (
               <>
                 <Text font="main-ui-body" color="text-03">
                   {markdown(
-                    `All LLM models from provider **${providerDisplayName(
-                      provider
-                    )}** will be removed and unavailable for future chats. Chat history will be preserved.`
+                    t("deleteModal.description", {
+                      provider: providerDisplayName(provider),
+                    })
                   )}
                 </Text>
                 {isLastProvider && (
                   <Text font="main-ui-body" color="text-03">
-                    Connect another provider to continue using chats.
+                    {t("deleteModal.lastProviderNote")}
                   </Text>
                 )}
               </>
@@ -175,8 +147,12 @@ function ExistingProviderCard({
       >
         <SelectCard
           state="filled"
-          padding="sm"
-          rounding="lg"
+          padding={2}
+          rounding={4}
+          // A name to select the card by. The Edit and Delete buttons inside
+          // are labelled "Edit <name>" / "Delete <name>", so an exact match on
+          // the bare name reaches the card alone.
+          aria-label={providerDisplayName(provider)}
           onClick={() => setIsOpen(true)}
         >
           <ContentAction
@@ -185,8 +161,12 @@ function ExistingProviderCard({
             description={companyName}
             sizePreset="main-ui"
             variant="section"
-            padding="lg"
-            tag={isDefault ? { title: "Default", color: "blue" } : undefined}
+            padding={2}
+            tag={
+              isDefault
+                ? { title: t("providerCard.defaultTag.label"), color: "blue" }
+                : undefined
+            }
             rightChildren={
               <div className="flex flex-row">
                 <Hoverable.Item
@@ -196,7 +176,9 @@ function ExistingProviderCard({
                   <Button
                     icon={SvgTrash}
                     prominence="tertiary"
-                    aria-label={`Delete ${providerDisplayName(provider)}`}
+                    aria-label={t("providerCard.deleteButton.ariaLabel", {
+                      provider: providerDisplayName(provider),
+                    })}
                     onClick={(e) => {
                       e.stopPropagation();
                       deleteModal.toggle(true);
@@ -206,7 +188,9 @@ function ExistingProviderCard({
                 <Button
                   icon={SvgSettings}
                   prominence="tertiary"
-                  aria-label={`Edit ${providerDisplayName(provider)}`}
+                  aria-label={t("providerCard.editButton.ariaLabel", {
+                    provider: providerDisplayName(provider),
+                  })}
                   onClick={(e) => {
                     e.stopPropagation();
                     setIsOpen(true);
@@ -234,14 +218,22 @@ function NewProviderCard({
   providerName,
   isFirstProvider,
 }: NewProviderCardProps) {
+  const t = useTranslations("admin.languageModels");
   const [isOpen, setIsOpen] = useState(false);
   const { icon, productName, companyName, Modal } = getProvider(providerName);
 
   return (
     <SelectCard
       state="empty"
-      padding="sm"
-      rounding="lg"
+      padding={2}
+      rounding={4}
+      // A name to select the card by. It carries the company as well as the
+      // product, because the card reads "GPT" with "OpenAI" underneath and
+      // callers look for the company.
+      aria-label={t("newProviderCard.ariaLabel", {
+        company: companyName,
+        product: productName,
+      })}
       onClick={() => setIsOpen(true)}
     >
       <ContentAction
@@ -250,7 +242,7 @@ function NewProviderCard({
         description={companyName}
         sizePreset="main-ui"
         variant="section"
-        padding="lg"
+        padding={2}
         rightChildren={
           <Button
             rightIcon={SvgArrowExchange}
@@ -260,7 +252,7 @@ function NewProviderCard({
               setIsOpen(true);
             }}
           >
-            Connect
+            {t("newProviderCard.connectButton.label")}
           </Button>
         }
       />
@@ -282,6 +274,7 @@ interface NewCustomProviderCardProps {
 function NewCustomProviderCard({
   isFirstProvider,
 }: NewCustomProviderCardProps) {
+  const t = useTranslations("admin.languageModels");
   const [isOpen, setIsOpen] = useState(false);
   const { icon, productName, companyName, Modal } = getProvider("custom");
 
@@ -293,8 +286,8 @@ function NewCustomProviderCard({
 
       <SelectCard
         state="empty"
-        padding="sm"
-        rounding="lg"
+        padding={2}
+        rounding={4}
         onClick={() => setIsOpen(true)}
       >
         <ContentAction
@@ -303,7 +296,7 @@ function NewCustomProviderCard({
           description={companyName}
           sizePreset="main-ui"
           variant="section"
-          padding="lg"
+          padding={2}
           rightChildren={
             <Button
               rightIcon={SvgArrowExchange}
@@ -313,7 +306,7 @@ function NewCustomProviderCard({
                 setIsOpen(true);
               }}
             >
-              Set Up
+              {t("newCustomProviderCard.setUpButton.label")}
             </Button>
           }
         />
@@ -327,6 +320,7 @@ function NewCustomProviderCard({
 // ============================================================================
 
 export default function LanguageModelsPage() {
+  const t = useTranslations("admin.languageModels");
   const { mutate } = useSWRConfig();
   const { llmProviders: existingLlmProviders, defaultText } =
     useAdminLLMProviders();
@@ -346,6 +340,46 @@ export default function LanguageModelsPage() {
       )?.id ?? null
     );
   }, [defaultText, existingLlmProviders]);
+
+  const providerGroups = useMemo<ProviderGroup[]>(
+    () => [
+      {
+        id: "addProvider",
+        title: t("groups.addProvider.title"),
+        description: t("groups.addProvider.description"),
+        emphasis: true,
+        providerNames: [
+          LLMProviderName.OPENAI,
+          LLMProviderName.ANTHROPIC,
+          LLMProviderName.VERTEX_AI,
+          LLMProviderName.BEDROCK,
+          LLMProviderName.AZURE,
+        ],
+      },
+      {
+        id: "gateways",
+        title: t("groups.gateways.title"),
+        providerNames: [
+          LLMProviderName.OPENROUTER,
+          LLMProviderName.LITELLM_PROXY,
+          LLMProviderName.PORTKEY,
+          LLMProviderName.NEBIUS_TOKENFACTORY,
+          LLMProviderName.BIFROST,
+        ],
+      },
+      {
+        id: "selfHosted",
+        title: t("groups.selfHosted.title"),
+        providerNames: [
+          LLMProviderName.OLLAMA_CHAT,
+          LLMProviderName.LM_STUDIO,
+          LLMProviderName.OPENAI_COMPATIBLE,
+        ],
+        includeCustom: true,
+      },
+    ],
+    [t]
+  );
 
   if (!existingLlmProviders) {
     return <PageLoader />;
@@ -380,15 +414,7 @@ export default function LanguageModelsPage() {
     const separatorIndex = compositeValue.indexOf(":");
     const providerId = Number(compositeValue.slice(0, separatorIndex));
     const modelName = compositeValue.slice(separatorIndex + 1);
-
-    try {
-      await setDefaultLlmModel(providerId, modelName);
-      await refreshLlmProviderCaches(mutate);
-      toast.success("Default model updated successfully!");
-    } catch (e) {
-      const message = e instanceof Error ? e.message : "Unknown error";
-      toast.error(`Failed to set default model: ${message}`);
-    }
+    await setDefaultLlmModelAndRefresh(providerId, modelName, mutate);
   }
 
   return (
@@ -397,10 +423,10 @@ export default function LanguageModelsPage() {
 
       <SettingsLayouts.Body>
         {hasProviders ? (
-          <Card border="solid" rounding="lg">
+          <Card border="solid" rounding={4}>
             <InputHorizontal
-              title="Default Model"
-              description="This model will be used by Onyx by default in your chats."
+              title={t("defaultModel.title")}
+              description={t("defaultModel.description")}
               center
               withLabel
             >
@@ -423,23 +449,20 @@ export default function LanguageModelsPage() {
             </InputHorizontal>
           </Card>
         ) : (
-          <MessageCard
-            variant="info"
-            title="Set up an LLM provider to start chatting."
-          />
+          <MessageCard variant="info" title={t("noProviders.title")} />
         )}
 
         {/* ── Available Providers (only when providers exist) ── */}
         {hasProviders && (
           <>
             <GeneralLayouts.Section
-              gap={0.75}
+              gap={3}
               height="fit"
               alignItems="stretch"
               justifyContent="start"
             >
               <Content
-                title="Available Providers"
+                title={t("availableProviders.title")}
                 sizePreset="main-content"
                 variant="section"
               />
@@ -456,26 +479,26 @@ export default function LanguageModelsPage() {
               </div>
             </GeneralLayouts.Section>
 
-            <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+            <Divider paddingParallel={0} paddingPerpendicular={0} />
           </>
         )}
 
         {/* ── LLM configuration disablement notice ── */}
         {isConfigurationDisabled && (
           <MessageCard
-            title="New LLM configuration temporarily unavailable."
-            description="Existing LLM providers can still be used and updated."
-            headerPadding="xs"
+            title={t("configurationDisabled.title")}
+            description={t("configurationDisabled.description")}
+            headerPadding={1}
           />
         )}
 
         {/* ── Add Provider groups (always visible) ── */}
         <Disabled disabled={isConfigurationDisabled}>
-          <div className="flex flex-col gap-8">
-            {PROVIDER_GROUPS.map((group) => (
+          <div className="@container/providercards flex flex-col gap-8">
+            {providerGroups.map((group) => (
               <GeneralLayouts.Section
-                key={group.title}
-                gap={0.75}
+                key={group.id}
+                gap={3}
                 height="fit"
                 alignItems="stretch"
                 justifyContent="start"
@@ -493,7 +516,7 @@ export default function LanguageModelsPage() {
                   </Text>
                 )}
 
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 @xl/providercards:grid-cols-2 gap-2">
                   {group.providerNames.map((name) => (
                     <NewProviderCard
                       key={name}
@@ -509,6 +532,11 @@ export default function LanguageModelsPage() {
             ))}
           </div>
         </Disabled>
+
+        <Divider paddingParallel={0} paddingPerpendicular={0} />
+
+        {/* ── Cost Overrides — negotiated per-model rates for usage costing ── */}
+        <CostOverridesPanel />
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
   );

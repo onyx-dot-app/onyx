@@ -1,15 +1,16 @@
 "use client";
 
 import React, { useState } from "react";
+import { useTranslations } from "next-intl";
+import { Button } from "@opal/components";
 import { cn } from "@opal/utils";
-import { ActionStatus } from "@/lib/tools/interfaces";
+import { ActionStatus } from "@/lib/tools/types";
 import Text from "@/refresh-components/texts/Text";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
 import type { IconProps } from "@opal/types";
 import Truncated from "@/refresh-components/texts/Truncated";
 import { SvgEdit } from "@opal/icons";
-import { useActionCardContext } from "@/sections/actions/ActionCardContext";
+import { Hoverable } from "@opal/core";
 
 interface ActionCardHeaderProps {
   title: string;
@@ -28,15 +29,15 @@ function ActionCardHeader({
   onEdit,
   onRename,
 }: ActionCardHeaderProps) {
+  const t = useTranslations("actions");
   const [isRenaming, setIsRenaming] = useState(false);
-  const { isHovered } = useActionCardContext();
 
   const isConnected = status === ActionStatus.CONNECTED;
   const isPending = status === ActionStatus.PENDING;
   const isDisconnected = status === ActionStatus.DISCONNECTED;
   const isFetching = status === ActionStatus.FETCHING;
 
-  const showRenameIcon = onRename && isHovered && !isRenaming;
+  const showRenameIcon = onRename && !isRenaming;
 
   const handleRename = async (newName: string) => {
     if (onRename) {
@@ -102,7 +103,7 @@ function ActionCardHeader({
               text03
               className="shrink-0 whitespace-nowrap"
             >
-              (Not Authenticated)
+              {t("cardHeader.notAuthenticated.label")}
             </Text>
           )}
           {isDisconnected && !isRenaming && (
@@ -112,20 +113,22 @@ function ActionCardHeader({
               text02
               className="shrink-0 whitespace-nowrap"
             >
-              (Disconnected)
+              {t("cardHeader.disconnected.label")}
             </Text>
           )}
           {showRenameIcon && (
-            // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
-            <IconButton
-              icon={SvgEdit}
-              tooltip="Rename"
-              internal
-              tertiary
-              onClick={handleRenameClick}
-              className="h-6 w-6 opacity-70 hover:opacity-100"
-              aria-label={`Rename ${title}`}
-            />
+            <Hoverable.Item group="action-card" variant="appear-on-hover">
+              <div className="opacity-70 hover:opacity-100">
+                <Button
+                  icon={SvgEdit}
+                  tooltip={t("cardHeader.renameButton.tooltip")}
+                  prominence="tertiary"
+                  size="sm"
+                  onClick={handleRenameClick}
+                  aria-label={t("cardHeader.renameButton.ariaLabel", { title })}
+                />
+              </div>
+            </Hoverable.Item>
           )}
         </div>
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import { SettingsLayouts, toast } from "@opal/layouts";
 import { Content } from "@opal/layouts";
 import ProviderCard from "@/sections/admin/ProviderCard";
@@ -49,6 +50,7 @@ const route = ADMIN_ROUTES.WEB_SEARCH;
 // ---------------------------------------------------------------------------
 
 export default function WebSearchPage() {
+  const t = useTranslations("admin.webSearch");
   const [activeProvider, setActiveProvider] =
     useState<ProviderModalState | null>(null);
   const [disconnectTarget, setDisconnectTarget] =
@@ -161,13 +163,13 @@ export default function WebSearchPage() {
           provider.provider_type,
           provider.name
         ),
-        subtitle: "Custom integration",
+        subtitle: t("customIntegration.subtitle"),
         logo: undefined,
         provider,
       }));
 
     return [...ordered, ...additional];
-  }, [searchProviders]);
+  }, [searchProviders, t]);
 
   const combinedContentProviders = useMemo(() => {
     const byType = new Map(
@@ -251,7 +253,7 @@ export default function WebSearchPage() {
     const message =
       searchProvidersError?.message ||
       contentProvidersError?.message ||
-      "Unable to load web search configuration.";
+      t("loadError.description");
 
     const detail =
       (searchProvidersError instanceof FetchError &&
@@ -267,14 +269,14 @@ export default function WebSearchPage() {
       <SettingsLayouts.Root>
         <SettingsLayouts.Header
           icon={route.icon}
-          title={route.title}
-          description="Search settings for external search across the internet."
+          title={t("header.title")}
+          description={t("header.description")}
           divider
         />
         <SettingsLayouts.Body>
           <MessageCard
             variant="error"
-            title="Failed to load web search settings"
+            title={t("loadError.title")}
             description={detail ?? message}
           />
         </SettingsLayouts.Body>
@@ -287,8 +289,8 @@ export default function WebSearchPage() {
       <SettingsLayouts.Root>
         <SettingsLayouts.Header
           icon={route.icon}
-          title={route.title}
-          description="Search settings for external search across the internet."
+          title={t("header.title")}
+          description={t("header.description")}
           divider
         />
         <SettingsLayouts.Body>
@@ -304,7 +306,7 @@ export default function WebSearchPage() {
       await mutateSearchProviders();
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Unexpected error occurred.";
+        error instanceof Error ? error.message : t("unexpectedError.message");
       toast.error(message);
     }
   }
@@ -315,7 +317,7 @@ export default function WebSearchPage() {
       await mutateSearchProviders();
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Unexpected error occurred.";
+        error instanceof Error ? error.message : t("unexpectedError.message");
       toast.error(message);
     }
   }
@@ -328,7 +330,7 @@ export default function WebSearchPage() {
       await mutateContentProviders();
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Unexpected error occurred.";
+        error instanceof Error ? error.message : t("unexpectedError.message");
       toast.error(message);
     }
   }
@@ -342,7 +344,7 @@ export default function WebSearchPage() {
       await mutateContentProviders();
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Unexpected error occurred.";
+        error instanceof Error ? error.message : t("unexpectedError.message");
       toast.error(message);
     }
   }
@@ -352,16 +354,16 @@ export default function WebSearchPage() {
       <SettingsLayouts.Root>
         <SettingsLayouts.Header
           icon={route.icon}
-          title={route.title}
-          description="Search settings for external search across the internet."
+          title={t("header.title")}
+          description={t("header.description")}
           divider
         />
 
         <SettingsLayouts.Body>
           <div className="flex w-full flex-col gap-3">
             <Content
-              title="Search Engine"
-              description="External search engine API used for web search result URLs, snippets, and metadata."
+              title={t("searchEngine.title")}
+              description={t("searchEngine.description")}
               sizePreset="main-content"
               variant="section"
             />
@@ -371,8 +373,8 @@ export default function WebSearchPage() {
                 variant="info"
                 title={
                   hasConfiguredSearchProvider
-                    ? "Select a search engine to enable web search."
-                    : "Connect a search engine to set up web search."
+                    ? t("searchEngine.selectPrompt.title")
+                    : t("searchEngine.connectPrompt.title")
                 }
               />
             )}
@@ -469,8 +471,8 @@ export default function WebSearchPage() {
 
           <div className="flex w-full flex-col gap-3">
             <Content
-              title="Web Crawler"
-              description="Used to read the full contents of search result pages."
+              title={t("crawler.title")}
+              description={t("crawler.description")}
               sizePreset="main-content"
               variant="section"
             />
@@ -524,7 +526,7 @@ export default function WebSearchPage() {
                     title={label}
                     description={subtitle}
                     status={status}
-                    selectedLabel="Current Crawler"
+                    selectedLabel={t("crawler.currentCrawler.label")}
                     onConnect={() => {
                       openContentModal(provider.provider_type, provider);
                     }}

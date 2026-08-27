@@ -1,13 +1,15 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { useSearchParams } from "next/navigation";
 import { useUser } from "@/providers/UserProvider";
 import { toast } from "@opal/layouts";
 import AppInputBar, { AppInputBarHandle } from "@/sections/input/AppInputBar";
 import { Button } from "@opal/components";
 import { Modal } from "@opal/components";
-import { useFilters, useLlmManager } from "@/lib/hooks";
+import { useLlmManager } from "@/lib/hooks";
+import { useSearchFilters } from "@/lib/searchFilters/hooks";
 import Dropzone from "react-dropzone";
 import { getPanelOrigin } from "@/lib/extension/utils";
 import { sendSetDefaultNewTabMessage } from "@/lib/extension/svc";
@@ -18,11 +20,11 @@ import { CHROME_MESSAGE } from "@/lib/extension/constants";
 import { SettingsPanel } from "@/app/components/nrf/SettingsPanel";
 import LoginPage from "@/app/auth/login/LoginPage";
 import { useAgents } from "@/lib/agents/hooks";
-import { useProjectsContext } from "@/providers/ProjectsContext";
+import { useProjectsContext } from "@/lib/projects/providers";
 import useDeepResearchToggle from "@/hooks/useDeepResearchToggle";
 import useChatController from "@/hooks/useChatController";
 import useChatSessionController from "@/hooks/useChatSessionController";
-import { useAgentController } from "@/lib/agents/hooks";
+import { useActiveAgent } from "@/lib/agents/hooks";
 import {
   useCurrentChatState,
   useCurrentMessageHistory,
@@ -41,7 +43,6 @@ import { useAppBackground } from "@/providers/AppBackgroundProvider";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import DocumentsSidebar from "@/sections/document-sidebar/DocumentsSidebar";
 import PreviewModal from "@/sections/modals/PreviewModal";
-import { personaIncludesRetrieval } from "@/app/app/services/lib";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { paidTierGated } from "@/ce";
 import EESearchUI from "@/ee/sections/SearchUI";
@@ -62,7 +63,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   const { setUseOnyxAsNewTab } = useNRFPreferences();
 
   const searchParams = useSearchParams();
-  const filterManager = useFilters();
+  const filterManager = useSearchFilters();
   const { user, authTypeMetadata } = useUser();
 
   // Chat sessions
@@ -94,17 +95,16 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   }, [lastFailedFiles, clearLastFailedFiles]);
 
   // Assistant controller
-  const { selectedAgent, setSelectedAgentFromId, liveAgent } =
-    useAgentController(undefined, () => {});
+  const activeAgent = useActiveAgent();
 
   // LLM manager for model selection.
   // - currentChatSession: undefined because NRF always starts new chats
-  // - liveAgent: uses the selected assistant, or undefined to fall back
+  // - activeAgent: uses the selected assistant, or undefined to fall back
   //   to system-wide default LLM provider.
   //
   // If no LLM provider is configured (e.g., fresh signup), the input bar is
   // disabled and a "Set up an LLM" button is shown (see bottom of component).
-  const llmManager = useLlmManager(undefined, liveAgent ?? undefined);
+  const llmManager = useLlmManager(undefined, activeAgent ?? undefined);
   const multiModel = useMultiModelChat(llmManager);
 
   // Sync single-model selection to llmManager so the submission path
@@ -118,12 +118,15 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       if (
         model.provider !== current.provider ||
         model.modelName !== current.modelName ||
-        model.name !== current.name
+        model.name !== current.name ||
+        (model.modelConfigurationId ?? null) !==
+          (current.modelConfigurationId ?? null)
       ) {
         llmManager.updateCurrentLlm({
           name: model.name,
           provider: model.provider,
           modelName: model.modelName,
+          modelConfigurationId: model.modelConfigurationId,
         });
       }
     }
@@ -133,7 +136,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   // Deep research toggle
   const { deepResearchEnabled, toggleDeepResearch } = useDeepResearchToggle({
     chatSessionId: existingChatSessionId,
-    agentId: selectedAgent?.id,
+    agentId: activeAgent?.id,
   });
 
   // State
@@ -192,7 +195,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   const hasMessages = messageHistory.length > 0;
 
   // Resolved assistant to use throughout the component
-  const resolvedAgent = liveAgent ?? undefined;
+  const resolvedAgent = activeAgent ?? undefined;
 
   // Auto-scroll preference from user settings (matches ChatPage pattern)
   const autoScrollEnabled = user?.preferences?.auto_scroll !== false;
@@ -200,14 +203,6 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
   // Query controller for search/chat classification (EE feature)
   const { submit: submitQuery, state } = useQueryController();
-
-  // Determine if retrieval (search) is enabled based on the agent
-  const retrievalEnabled = useMemo(() => {
-    if (liveAgent) {
-      return personaIncludesRetrieval(liveAgent);
-    }
-    return false;
-  }, [liveAgent]);
 
   // Check if we're in search mode
   const isSearch =
@@ -273,12 +268,11 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       filterManager,
       llmManager,
       availableAgents: availableAgents || [],
-      liveAgent,
+      activeAgent,
       existingChatSessionId,
       selectedDocuments: [],
       searchParams: searchParams!,
       resetInputBar,
-      setSelectedAgentFromId,
     });
 
   // Chat session controller for loading sessions
@@ -287,7 +281,6 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     searchParams: searchParams!,
     filterManager,
     firstMessage: undefined,
-    setSelectedAgentFromId,
     setSelectedDocuments: () => {}, // No-op: NRF doesn't support document selection
     setCurrentMessageFiles,
     chatSessionIdRef: { current: null },
@@ -484,7 +477,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                   hideScrollbar={isSidePanel}
                 >
                   <ChatUI
-                    liveAgent={resolvedAgent}
+                    activeAgent={resolvedAgent}
                     llmManager={llmManager}
                     currentMessageFiles={currentMessageFiles}
                     setPresentingDocument={setPresentingDocument}
@@ -510,7 +503,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                   className="max-w-(--app-page-main-content-width)"
                 >
                   <WelcomeMessage isDefaultAgent />
-                  {liveAgent && (
+                  {activeAgent && (
                     <MultiModelSelector
                       selectedModels={multiModel.selectedModels}
                       onAdd={multiModel.addModel}
@@ -533,7 +526,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                 !isSidePanel && "max-w-(--app-page-main-content-width)"
               )}
             >
-              {hasMessages && liveAgent && (
+              {hasMessages && activeAgent && (
                 <div className="pb-1">
                   <MultiModelSelector
                     selectedModels={multiModel.selectedModels}
@@ -558,7 +551,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                 chatState={currentChatState}
                 currentSessionFileTokenCount={currentSessionFileTokenCount}
                 availableContextTokens={AVAILABLE_CONTEXT_TOKENS}
-                selectedAgent={liveAgent ?? undefined}
+                activeAgent={activeAgent}
                 handleFileUpload={handleFileUpload}
                 disabled={
                   !llmManager.isLoadingProviders && !llmManager.hasAnyProvider
@@ -680,7 +673,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
           width="full"
           prominence="secondary"
           onClick={() => {
-            window.location.href = "/admin/configuration/language-models";
+            window.location.href = ADMIN_ROUTES.LLM_MODELS.path;
           }}
         >
           Set up an LLM.

@@ -270,6 +270,7 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
   const [currentMessageFiles, setCurrentMessageFiles] = useState<BuildFile[]>(
     []
   );
+  const currentMessageFilesRef = useRef<BuildFile[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
 
   // Get triggerFilesRefresh from the store to refresh the file explorer
@@ -305,6 +306,10 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
     );
   }, [currentMessageFiles]);
 
+  useEffect(() => {
+    currentMessageFilesRef.current = currentMessageFiles;
+  }, [currentMessageFiles]);
+
   // =========================================================================
   // Internal operations (not exposed to consumers)
   // =========================================================================
@@ -318,26 +323,23 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
     async (sessionId: string): Promise<void> => {
       if (isUploadingPendingRef.current) return;
 
-      // Read current files and find pending ones atomically
-      let pendingFiles: BuildFile[] = [];
-      setCurrentMessageFiles((prev) => {
-        pendingFiles = prev.filter(
-          (f) => f.status === UploadFileStatus.PENDING && f.file
-        );
-        // Mark as uploading in the same state update to avoid race conditions
-        if (pendingFiles.length > 0) {
-          return prev.map((f) =>
-            pendingFiles.some((pf) => pf.id === f.id)
-              ? { ...f, status: UploadFileStatus.UPLOADING }
-              : f
-          );
-        }
-        return prev;
-      });
+      const currentFiles = currentMessageFilesRef.current;
+      const pendingFiles = currentFiles.filter(
+        (f) => f.status === UploadFileStatus.PENDING && f.file
+      );
 
       if (pendingFiles.length === 0) return;
 
       isUploadingPendingRef.current = true;
+      // Functional update so a concurrent add/remove in the same batch is
+      // never clobbered. The ref syncs from state in its own effect.
+      setCurrentMessageFiles((prev) =>
+        prev.map((f) =>
+          pendingFiles.some((pf) => pf.id === f.id)
+            ? { ...f, status: UploadFileStatus.UPLOADING }
+            : f
+        )
+      );
 
       try {
         // Upload in parallel
@@ -699,23 +701,22 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
       // Track this deletion to prevent refetch race condition
       activeDeletionsRef.current.add(fileId);
 
-      // Use functional update to get current state and avoid stale closures
-      let removedFile: BuildFile | null = null;
-      let removedIndex = -1;
+      const currentFiles = currentMessageFilesRef.current;
+      const removedIndex = currentFiles.findIndex((f) => f.id === fileId);
+      if (removedIndex === -1) {
+        activeDeletionsRef.current.delete(fileId);
+        return;
+      }
 
-      setCurrentMessageFiles((prev) => {
-        const index = prev.findIndex((f) => f.id === fileId);
-        if (index === -1) return prev;
+      const removedFile = currentFiles[removedIndex];
+      if (!removedFile) {
+        activeDeletionsRef.current.delete(fileId);
+        return;
+      }
 
-        // Capture file info for potential rollback and backend deletion
-        const file = prev[index];
-        if (!file) return prev;
-        removedFile = file;
-        removedIndex = index;
-
-        // Return filtered array (optimistic removal)
-        return prev.filter((f) => f.id !== fileId);
-      });
+      // Functional update keeps concurrent same-batch changes. The ref syncs
+      // from state in its own effect.
+      setCurrentMessageFiles((prev) => prev.filter((f) => f.id !== fileId));
 
       // After state update, trigger backend deletion if needed
       // Use setTimeout to ensure state update has completed

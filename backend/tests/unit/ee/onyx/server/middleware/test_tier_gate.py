@@ -1,5 +1,6 @@
 """Tests for the unified tier_gate middleware."""
 
+import json
 from collections.abc import Awaitable, Callable
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -40,7 +41,7 @@ def middleware_harness() -> MiddlewareHarness:
         response.status_code = 200
         return response
 
-    return captured, call_next  # ty: ignore[invalid-return-type]
+    return captured, call_next
 
 
 def _make_request(path: str) -> MagicMock:
@@ -61,6 +62,29 @@ async def test_community_blocked_from_business_path(
 
 
 @pytest.mark.asyncio
+@patch("onyx.server.middleware.api_prefix.APP_API_PREFIX", "v2")
+@patch("ee.onyx.server.middleware.tier_gate.get_tier")
+async def test_custom_api_prefix_still_applies_tier_gate(
+    mock_get_tier: MagicMock, middleware_harness: MiddlewareHarness
+) -> None:
+    mock_get_tier.return_value = Tier.COMMUNITY
+    middleware, call_next = middleware_harness
+    response = await middleware(_make_request("/v2/admin/hooks"), call_next)
+    assert response.status_code == 402
+
+
+@pytest.mark.asyncio
+@patch("ee.onyx.server.middleware.tier_gate.get_tier")
+async def test_bare_path_still_applies_tier_gate(
+    mock_get_tier: MagicMock, middleware_harness: MiddlewareHarness
+) -> None:
+    mock_get_tier.return_value = Tier.COMMUNITY
+    middleware, call_next = middleware_harness
+    response = await middleware(_make_request("/admin/query-history"), call_next)
+    assert response.status_code == 402
+
+
+@pytest.mark.asyncio
 @patch("ee.onyx.server.middleware.tier_gate.get_tier")
 async def test_business_passes_business_path(
     mock_get_tier: MagicMock, middleware_harness: MiddlewareHarness
@@ -68,6 +92,34 @@ async def test_business_passes_business_path(
     mock_get_tier.return_value = Tier.BUSINESS
     middleware, call_next = middleware_harness
     response = await middleware(_make_request("/api/admin/query-history"), call_next)
+    assert response.status_code == 200
+
+
+@pytest.mark.asyncio
+@patch("ee.onyx.server.middleware.tier_gate.get_tier")
+async def test_community_blocked_from_gateway(
+    mock_get_tier: MagicMock, middleware_harness: MiddlewareHarness
+) -> None:
+    mock_get_tier.return_value = Tier.COMMUNITY
+    middleware, call_next = middleware_harness
+    response = await middleware(_make_request("/api/gateway/v1/models"), call_next)
+
+    assert response.status_code == 402
+    assert json.loads(bytes(response.body))["required_tier"] == "business"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("current_tier", [Tier.BUSINESS, Tier.ENTERPRISE])
+@patch("ee.onyx.server.middleware.tier_gate.get_tier")
+async def test_paid_tiers_pass_gateway(
+    mock_get_tier: MagicMock,
+    current_tier: Tier,
+    middleware_harness: MiddlewareHarness,
+) -> None:
+    mock_get_tier.return_value = current_tier
+    middleware, call_next = middleware_harness
+    response = await middleware(_make_request("/api/gateway/v1/models"), call_next)
+
     assert response.status_code == 200
 
 
@@ -100,9 +152,7 @@ async def test_business_blocked_from_log_export(
 ) -> None:
     mock_get_tier.return_value = Tier.BUSINESS
     middleware, call_next = middleware_harness
-    response = await middleware(
-        _make_request("/api/admin/log-export/download"), call_next
-    )
+    response = await middleware(_make_request("/api/admin/log-export"), call_next)
     assert response.status_code == 402
 
 
@@ -113,9 +163,7 @@ async def test_enterprise_passes_log_export(
 ) -> None:
     mock_get_tier.return_value = Tier.ENTERPRISE
     middleware, call_next = middleware_harness
-    response = await middleware(
-        _make_request("/api/admin/log-export/download"), call_next
-    )
+    response = await middleware(_make_request("/api/admin/log-export"), call_next)
     assert response.status_code == 200
 
 
@@ -175,7 +223,5 @@ async def test_402_payload_includes_required_tier(
     response = await middleware(_make_request("/api/admin/hooks"), call_next)
     assert response.status_code == 402
     # Body is set on JSONResponse via `content`, accessible as `.body`.
-    import json
-
     payload = json.loads(bytes(response.body))
     assert payload["required_tier"] == "enterprise"

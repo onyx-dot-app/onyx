@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import * as TableLayouts from "@/layouts/table-layouts";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import Text from "@/refresh-components/texts/Text";
@@ -38,6 +39,7 @@ export function KnowledgeSidebar({
   onNavigateToSource,
   vectorDbEnabled,
 }: KnowledgeSidebarProps) {
+  const t = useTranslations("knowledge");
   return (
     <TableLayouts.SidebarLayout aria-label="knowledge-sidebar">
       <LineItem
@@ -54,7 +56,7 @@ export function KnowledgeSidebar({
           ) : undefined
         }
       >
-        Your Files
+        {t("sidebar.yourFiles.label")}
       </LineItem>
 
       {vectorDbEnabled && (
@@ -76,10 +78,10 @@ export function KnowledgeSidebar({
               ) : undefined
             }
           >
-            Document Set
+            {t("sidebar.documentSet.label")}
           </LineItem>
 
-          <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+          <Divider paddingParallel={0} paddingPerpendicular={0} />
 
           {connectedSources.map((connectedSource) => {
             const sourceMetadata = getSourceMetadata(connectedSource.source);

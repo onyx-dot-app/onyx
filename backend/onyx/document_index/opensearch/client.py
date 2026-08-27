@@ -160,9 +160,25 @@ _DOCUMENT_MISSING_ERROR_TYPE = "document_missing_exception"
 _VERSION_CONFLICT_ERROR_TYPE = "version_conflict_engine_exception"
 # Raised by a search whose PIT has expired/been deleted; we re-open and retry.
 _SEARCH_CONTEXT_MISSING_ERROR_TYPE = "search_context_missing"
+# Rejection by an index/cluster block, e.g. the read_only_allow_delete block
+# OpenSearch applies when disk usage crosses the flood-stage watermark.
+_CLUSTER_BLOCK_ERROR_TYPE = "cluster_block_exception"
 # Chunks per PIT-scan page. A port doc-batch is small (INDEX_BATCH_SIZE docs), so
 # one page covers a batch; paging still protects against a pathological doc.
 _PIT_SCAN_PAGE_SIZE = 1000
+
+
+def is_cluster_block_error(e: Exception) -> bool:
+    """True when a request was rejected by an index/cluster block rather than a
+    problem with the request itself."""
+    return isinstance(e, TransportError) and _CLUSTER_BLOCK_ERROR_TYPE in str(e.error)
+
+
+class OpenSearchIndexWriteBlockedError(Exception):
+    """An existing index rejected a metadata write because of a block (e.g.
+    read_only_allow_delete applied at the disk flood-stage watermark). The
+    index is still fully readable — callers that can serve degraded may catch
+    this. Never raised for a missing index or a blocked index creation."""
 
 
 class OpenSearchServerSideTimeout(Exception):
@@ -382,22 +398,21 @@ class OpenSearchClient(AbstractContextManager):
             A list of IndexInfo objects for each index.
         """
         response = self._client.cat.indices(format="json")
-        indices: list[IndexInfo] = []
-        for raw_index_info in response:
-            indices.append(
-                IndexInfo(
-                    name=raw_index_info.get("index", ""),
-                    health=raw_index_info.get("health", ""),
-                    status=raw_index_info.get("status", ""),
-                    num_primary_shards=raw_index_info.get("pri", ""),
-                    num_replica_shards=raw_index_info.get("rep", ""),
-                    docs_count=raw_index_info.get("docs.count", ""),
-                    docs_deleted=raw_index_info.get("docs.deleted", ""),
-                    created_at=raw_index_info.get("creation.date.string", ""),
-                    total_size=raw_index_info.get("store.size", ""),
-                    primary_shards_size=raw_index_info.get("pri.store.size", ""),
-                )
+        indices: list[IndexInfo] = [
+            IndexInfo(
+                name=raw_index_info.get("index", ""),
+                health=raw_index_info.get("health", ""),
+                status=raw_index_info.get("status", ""),
+                num_primary_shards=raw_index_info.get("pri", ""),
+                num_replica_shards=raw_index_info.get("rep", ""),
+                docs_count=raw_index_info.get("docs.count", ""),
+                docs_deleted=raw_index_info.get("docs.deleted", ""),
+                created_at=raw_index_info.get("creation.date.string", ""),
+                total_size=raw_index_info.get("store.size", ""),
+                primary_shards_size=raw_index_info.get("pri.store.size", ""),
             )
+            for raw_index_info in response
+        ]
         return indices
 
     @log_function_time(print_only=True, debug_only=True, include_args=True)
@@ -1361,16 +1376,15 @@ class OpenSearchIndexClient(OpenSearchClient):
             len(document_chunk_ids),
             self._index_name,
         )
-        data = []
-        for document_chunk_id in document_chunk_ids:
-            data.append(
-                {
-                    "_index": self._index_name,
-                    "_id": document_chunk_id,
-                    "_op_type": "update",
-                    "doc": properties_to_update,
-                }
-            )
+        data = [
+            {
+                "_index": self._index_name,
+                "_id": document_chunk_id,
+                "_op_type": "update",
+                "doc": properties_to_update,
+            }
+            for document_chunk_id in document_chunk_ids
+        ]
         # max_retries is the number of times to retry a request if we get a 429.
         # We do not raise on error (the default behavior of ``bulk`` is to
         # raise) because we want to attempt to retry certain failed chunks in

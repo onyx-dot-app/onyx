@@ -46,7 +46,8 @@ CLI, by .env, and by the running containers (drift between them is flagged),
 plus per-container status and health.
 
 Read-only. Exit codes make it usable as a probe: 0 when everything is up and
-healthy, 9 when no install exists, 1 when stopped or degraded.`,
+healthy, 9 when no install exists, 1 when stopped, degraded, or still coming
+up.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			d := install.NewDeps(ios, fullVersion())

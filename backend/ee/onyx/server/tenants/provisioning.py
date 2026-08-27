@@ -9,6 +9,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ee.onyx.configs.app_configs import HUBSPOT_TRACKING_URL
+from ee.onyx.db.user_tenant_mapping import (
+    add_users_to_tenant,
+    resolve_tenant_id,
+    user_owns_a_tenant,
+)
 from ee.onyx.server.tenants.access import generate_data_plane_token
 from ee.onyx.server.tenants.models import (
     TenantByDomainResponse,
@@ -20,12 +25,6 @@ from ee.onyx.server.tenants.schema_management import (
     drop_schema,
     run_alembic_migrations,
 )
-from ee.onyx.server.tenants.user_mapping import (
-    add_users_to_tenant,
-    get_tenant_id_for_email,
-    user_owns_a_tenant,
-)
-from onyx.auth.users import exceptions
 from onyx.configs.app_configs import (
     ANTHROPIC_DEFAULT_API_KEY,
     AUTO_PROVISION_DEFAULT_LLM_PROVIDERS,
@@ -37,6 +36,7 @@ from onyx.configs.app_configs import (
     VERTEXAI_DEFAULT_CREDENTIALS,
     VERTEXAI_DEFAULT_LOCATION,
 )
+from onyx.db.engine.shard_routing import get_shard_for_new_tenant
 from onyx.db.engine.sql_engine import (
     get_session_with_shared_schema,
     get_session_with_tenant,
@@ -55,6 +55,7 @@ from onyx.db.models import (
     SearchSettings,
     UserTenantMapping,
 )
+from onyx.db.tenant_shard import clear_tenant_placement, record_tenant_placement
 from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
 from onyx.llm.well_known_providers.constants import (
     ANTHROPIC_PROVIDER_NAME,
@@ -90,11 +91,16 @@ async def get_or_provision_tenant(
     email: str,
     referral_source: str | None = None,
     request: Request | None = None,
+    oauth_name: str | None = None,
+    account_id: str | None = None,
 ) -> str:
     """
     Get existing tenant ID for an email or create a new tenant if none exists.
     This function should only be called after we have verified we want this user's tenant to exist.
     It returns the tenant ID associated with the email, creating a new tenant if necessary.
+
+    When the caller knows the IdP subject it is tried before the email, which is
+    what stops a renamed user being treated as a brand new signup.
     """
     # Early return for non-multi-tenant mode
     if not MULTI_TENANT:
@@ -103,14 +109,9 @@ async def get_or_provision_tenant(
     if referral_source and request:
         await submit_to_hubspot(email, referral_source, request)
 
-    # First, check if the user already has a tenant
-    tenant_id: str | None = None
-    try:
-        tenant_id = get_tenant_id_for_email(email)
+    tenant_id = resolve_tenant_id(email, oauth_name, account_id)
+    if tenant_id:
         return tenant_id
-    except exceptions.UserNotExists:
-        # User doesn't exist, so we need to create a new tenant or assign an existing one
-        pass
 
     try:
         # Try to get a pre-provisioned tenant
@@ -202,9 +203,15 @@ async def provision_tenant(tenant_id: str, email: str) -> None:
             status_code=409, detail="User already belongs to an organization"
         )
 
-    logger.debug("Provisioning tenant %s for user %s", tenant_id, email)
+    shard_name = get_shard_for_new_tenant()
+    logger.debug(
+        "Provisioning tenant %s for user %s on shard %s", tenant_id, email, shard_name
+    )
 
     try:
+        # Before schema creation: every step below routes via the catalog.
+        record_tenant_placement(tenant_id, shard_name)
+
         # Create the schema for the tenant
         if not create_schema_if_not_exists(tenant_id):
             logger.debug("Created schema for tenant %s", tenant_id)
@@ -262,8 +269,10 @@ async def rollback_tenant_provisioning(tenant_id: str) -> None:
     rollback_errors = []
 
     # 1. Try to drop the tenant's schema
+    schema_dropped = False
     try:
         drop_schema(tenant_id)
+        schema_dropped = True
         logger.info("Successfully dropped schema for tenant %s", tenant_id)
     except Exception as e:
         error_msg = f"Failed to drop schema for tenant {tenant_id}: {str(e)}"
@@ -314,6 +323,26 @@ async def rollback_tenant_provisioning(tenant_id: str) -> None:
         error_msg = f"Failed to remove tenant {tenant_id} from available tenants table: {str(e)}"
         logger.error(error_msg)
         rollback_errors.append(error_msg)
+
+    # 4. Drop the shard mapping — last, and only if the schema is actually gone.
+    # The mapping is the only route to that schema, so clearing it after a failed
+    # drop strands it on a shard nothing can resolve.
+    if schema_dropped:
+        try:
+            clear_tenant_placement(tenant_id)
+            logger.info("Successfully cleared shard mapping for tenant %s", tenant_id)
+        except Exception as e:
+            error_msg = (
+                f"Failed to clear shard mapping for tenant {tenant_id}: {str(e)}"
+            )
+            logger.error(error_msg)
+            rollback_errors.append(error_msg)
+    else:
+        logger.warning(
+            "Keeping shard mapping for tenant %s: its schema was not dropped, and the "
+            "mapping is what a retry needs to find it",
+            tenant_id,
+        )
 
     # Log summary of rollback operation
     if rollback_errors:

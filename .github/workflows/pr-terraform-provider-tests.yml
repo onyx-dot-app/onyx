@@ -1,0 +1,405 @@
+# Runs the Terraform provider acceptance suite against a real Onyx stack.
+#
+# The provider's unit tests run in pr-golang-tests.yml, which discovers every
+# go.mod and runs `go test -race ./...`. That lane leaves TF_ACC unset, so the
+# acceptance tests skip there and the provider's real coverage — every resource
+# driven end to end through terraform plan/apply/destroy against live API
+# routes — never ran in CI. This lane runs it.
+#
+# The suite needs Enterprise Edition (user groups, private agents and document
+# sets) and needs celery: several resources only settle once the sync gate
+# marks them up to date, and that gate is driven by beat-scheduled tasks. So
+# the stack here is api_server + background (supervisord runs the workers and
+# beat), not the in-process TestClient the python integration lane uses.
+#
+# Two auth legs run in parallel. `bootstrap` lets the harness register an admin
+# and mint its own key. `api-key` mints a key first with the documented
+# examples/bootstrap/mint_api_key.sh and passes it in, which covers the
+# ONYX_TF_ACC_API_KEY path a user actually takes.
+#
+# PRs only trigger the suite for provider and compose changes: it is a heavy
+# lane and the provider changes far less often than the routes it calls. The
+# nightly run is what catches a backend change that breaks the provider.
+
+name: Terraform Provider Tests
+
+concurrency:
+  group: Terraform-Provider-Tests-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+on:
+  schedule:
+    - cron: "0 8 * * *" # 08:00 UTC nightly
+  merge_group:
+  pull_request:
+    branches: [main]
+    # NOTE: Intentionally no `paths:` filter. We always trigger and let the
+    # `changes` job below decide whether the real test job runs. This avoids
+    # the dual-workflow skip pattern where a `paths-ignore`'d skip workflow can
+    # race the real workflow's same-named status check under branch protection.
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  GO_VERSION: "1.26.5"
+  IMAGE_TAG: "latest"
+  POSTGRES_USER: "postgres"
+  POSTGRES_PASSWORD: "password"
+  # Pin defensively. Compose's ${VAR:-default} prefers a leaked host value over
+  # the --env-file one.
+  S3_ENDPOINT_URL: "http://minio:9000"
+
+jobs:
+  changes:
+    # Decides whether the heavy acceptance job runs. On pull_request /
+    # merge_group we use paths-filter; on schedule / push (tags) /
+    # workflow_dispatch the filter is skipped and the output defaults to
+    # `true` so everything runs.
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # paths-filter needs pull-requests:read to list PR files on private repos.
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      provider: ${{ steps.filter.outputs.provider || 'true' }}
+    steps:
+      - name: Checkout code
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # ratchet:dorny/paths-filter@v3
+        id: filter
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        with:
+          filters: |
+            provider:
+              - 'terraform-provider-onyx/**'
+              - 'backend/Dockerfile'
+              - 'deployment/docker_compose/docker-compose.yml'
+              - 'deployment/docker_compose/docker-compose.dev.yml'
+              - 'deployment/docker_compose/env.template'
+              - '.github/workflows/pr-terraform-provider-tests.yml'
+              - '.github/actions/login-ecr-pullthrough-cache/**'
+
+  docs-check:
+    # docs/ is generated from the schema descriptions and examples/. A hand-edited
+    # page silently drifts from the schema, so regenerate and fail on any diff.
+    # tfplugindocs needs the terraform CLI, and is version-pinned in main.go so
+    # this check only moves when someone moves it.
+    needs: changes
+    if: needs.changes.outputs.provider == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # ratchet:actions/setup-go@v5 # zizmor: ignore[cache-poisoning]
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: terraform-provider-onyx/go.sum
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # ratchet:hashicorp/setup-terraform@v4.0.1
+        with:
+          terraform_wrapper: false
+
+      - name: Regenerate docs
+        working-directory: terraform-provider-onyx
+        run: go generate .
+
+      - name: Fail on uncommitted docs changes
+        working-directory: terraform-provider-onyx
+        # `git status --porcelain`, not `git diff`: a new resource's page is
+        # generated untracked, and git diff does not see untracked files, so the
+        # likeliest drift of all would pass silently.
+        run: |
+          drift=$(git status --porcelain -- docs/)
+          if [ -n "${drift}" ]; then
+            echo "${drift}"
+            git diff -- docs/ || true
+            echo "::error::docs/ is out of date -- run 'go generate .' in terraform-provider-onyx/ and commit the result"
+            exit 1
+          fi
+
+  build-backend-image:
+    # Built once and pushed to the shared ECR repo so both auth legs pull a
+    # prebuilt image instead of cold-building.
+    needs: changes
+    if: needs.changes.outputs.provider == 'true'
+    runs-on:
+      - runs-on
+      - runner=8cpu-linux-x64
+      - spot=false
+      - volume=100gb
+      - ${{ format('run-id={0}-tf-provider-build', github.run_id) }}
+      - extras=ecr-cache
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc # ratchet:runs-on/action@v1
+
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Log in to ECR pull-through cache
+        uses: ./.github/actions/login-ecr-pullthrough-cache
+        with:
+          ecr-registry: ${{ vars.ECR_REGISTRY }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # ratchet:docker/setup-buildx-action@v4
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # ratchet:docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          # The production image; the Dockerfile's default (last) stage is the
+          # dev variant.
+          target: runtime
+          platforms: linux/amd64
+          build-args: |
+            BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
+          tags: ${{ env.RUNS_ON_ECR_CACHE }}:tf-provider-backend-${{ github.run_id }}
+          push: true
+          # Attestations attach as ECR referrers to the image digest, which is
+          # stable across runs and caps out at 100 per subject.
+          provenance: false
+          sbom: false
+          cache-from: type=gha,scope=tf-provider-backend
+          cache-to: type=gha,scope=tf-provider-backend,mode=max
+
+  acceptance:
+    name: acceptance (${{ matrix.auth }})
+    needs: [changes, build-backend-image]
+    if: needs.changes.outputs.provider == 'true'
+    permissions:
+      contents: read
+    runs-on:
+      - runs-on
+      - runner=4cpu-linux-x64
+      - spot=false
+      - volume=100gb
+      - ${{ format('run-id={0}-tf-provider-acceptance-{1}', github.run_id, matrix.auth) }}
+      - extras=ecr-cache
+    # Bounds the steps below rather than cutting across them: stack-up (10m) +
+    # celery readiness (5m) + the test step (35m) have to fit inside it.
+    timeout-minutes: 60
+
+    strategy:
+      # fail-fast off so one leg's failure does not cancel the other.
+      fail-fast: false
+      matrix:
+        auth: [bootstrap, api-key]
+
+    steps:
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc # ratchet:runs-on/action@v1
+
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # ratchet:actions/setup-go@v5 # zizmor: ignore[cache-poisoning]
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: terraform-provider-onyx/go.sum
+
+      - name: Log in to ECR pull-through cache
+        uses: ./.github/actions/login-ecr-pullthrough-cache
+        with:
+          ecr-registry: ${{ vars.ECR_REGISTRY }}
+
+      # Retag the prebuilt image to the local name compose expects (compose
+      # consumes local docker images directly, so pull+tag is enough).
+      - name: Pull the backend image and pin the model server to the cache
+        env:
+          ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -eo pipefail
+          docker pull "${ECR_CACHE}:tf-provider-backend-${RUN_ID}"
+          docker tag "${ECR_CACHE}:tf-provider-backend-${RUN_ID}" \
+            "onyxdotapp/onyx-backend:latest"
+
+          # Every other image already resolves through the pull-through cache:
+          # compose writes them as ${BASE_IMAGE_REGISTRY:-docker.io}/... and the
+          # ECR login step exports that. The model servers are the exception --
+          # their default carries no registry, so they would come straight from
+          # Docker Hub, anonymously and rate-limited, and they are the largest
+          # images in the stack.
+          echo "ONYX_MODEL_SERVER_IMAGE=${BASE_IMAGE_REGISTRY}/onyxdotapp/onyx-model-server:${IMAGE_TAG}" \
+            >> "$GITHUB_ENV"
+
+      # LICENSE_ENFORCEMENT_ENABLED already defaults to false; it is set here so
+      # the lane keeps working if that default changes, and so it needs no
+      # license and no AWS credentials.
+      - name: Write compose .env
+        working-directory: deployment/docker_compose
+        run: |
+          cat <<'EOF' > .env
+          AUTH_TYPE=basic
+          REQUIRE_EMAIL_VERIFICATION=false
+          DISABLE_TELEMETRY=true
+          ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true
+          LICENSE_ENFORCEMENT_ENABLED=false
+          USER_AUTH_SECRET=tf-provider-ci-only-dummy-secret
+          POSTGRES_POOL_PRE_PING=true
+          POSTGRES_USE_NULL_POOL=true
+          EOF
+
+      # api_server and background are named; depends_on pulls in db / cache /
+      # opensearch / model servers / minio. web_server + nginx are omitted.
+      - name: Bring up the stack
+        working-directory: deployment/docker_compose
+        run: |
+          docker compose \
+            -f docker-compose.yml \
+            -f docker-compose.dev.yml \
+            --env-file env.template \
+            up -d --wait --wait-timeout 600 \
+            api_server background
+
+      # Several resources only settle once the sync gate marks them up to date,
+      # and beat is what schedules the task that moves the gate. Without this
+      # check a missing beat surfaces much later as an unexplained test timeout.
+      - name: Check celery beat and workers are running
+        working-directory: deployment/docker_compose
+        run: |
+          set -uo pipefail
+          programs="celery_beat celery_worker_primary celery_worker_light"
+          # -c is required. supervisorctl only searches <exec>/etc, ./etc,
+          # /etc/supervisord.conf and /etc/supervisor/supervisord.conf, and the
+          # image puts the file in /etc/supervisor/conf.d/ -- so without this it
+          # silently falls back to its built-in http://localhost:9001 and
+          # reports a refused connection. Same path the entrypoint uses.
+          supervisor_conf=/etc/supervisor/conf.d/supervisord.conf
+          # `background` declares no healthcheck, so `--wait` returns as soon as
+          # the container starts and every worker still has the whole app to
+          # import. 150 x 2s covers a cold runner; a healthy stack exits in
+          # seconds.
+          for _ in $(seq 150); do
+            status=$(docker compose -f docker-compose.yml -f docker-compose.dev.yml \
+              --env-file env.template \
+              exec -T background \
+              supervisorctl -c "${supervisor_conf}" status ${programs} 2>&1 || true)
+            if [ "$(echo "${status}" | grep -c RUNNING)" -eq 3 ]; then
+              echo "${status}"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "celery did not reach RUNNING for: ${programs}"
+          echo "${status:-<no supervisorctl output>}"
+          exit 1
+
+      - name: Run acceptance tests (${{ matrix.auth }})
+        working-directory: terraform-provider-onyx
+        # Deliberately above the -timeout below: go test's own timeout dumps
+        # every goroutine, while a step timeout kills the job with no diagnosis.
+        timeout-minutes: 35
+        env:
+          AUTH_MODE: ${{ matrix.auth }}
+          TF_ACC: "1"
+          ONYX_TF_ACC_SERVER_URL: http://localhost:8080
+          # mint_api_key.sh requires these rather than defaulting them, so that
+          # it cannot quietly create a known-password admin on a real
+          # deployment. Here they match the harness's own defaults, against a
+          # throwaway stack this job tears down with `down -v`.
+          ACC_ADMIN_EMAIL: admin_user@example.com
+          ACC_ADMIN_PASSWORD: TestPassword123!
+        run: |
+          set -uo pipefail
+          # Mint the key in this step so the material never lands in the job
+          # environment or a step output.
+          if [ "${AUTH_MODE}" = "api-key" ]; then
+            key=$(ONYX_SERVER_URL="${ONYX_TF_ACC_SERVER_URL}" \
+              ONYX_ADMIN_EMAIL="${ACC_ADMIN_EMAIL}" \
+              ONYX_ADMIN_PASSWORD="${ACC_ADMIN_PASSWORD}" \
+              ONYX_API_KEY_NAME=terraform-provider-ci \
+              ./examples/bootstrap/mint_api_key.sh)
+            # An empty key would send the harness down its own bootstrap path,
+            # so this leg would pass while testing the other one.
+            if [ -z "${key}" ]; then
+              echo "::error::mint_api_key.sh returned no key; this leg cannot test the API key path"
+              exit 1
+            fi
+            echo "::add-mask::${key}"
+            export ONYX_TF_ACC_API_KEY="${key}"
+          fi
+          go test ./internal/provider/... -count=1 -timeout 30m
+
+      - name: Collect compose logs
+        if: ${{ !success() }}
+        working-directory: deployment/docker_compose
+        run: |
+          mkdir -p "${GITHUB_WORKSPACE}/compose-logs"
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml \
+            --env-file env.template \
+            logs --no-color > "${GITHUB_WORKSPACE}/compose-logs/compose.log" || true
+
+      - name: Upload logs
+        if: ${{ !success() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # ratchet:actions/upload-artifact@v4
+        with:
+          name: tf-provider-compose-logs-${{ matrix.auth }}
+          path: compose-logs/
+          retention-days: 7
+
+      - name: Teardown
+        if: always()
+        working-directory: deployment/docker_compose
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml \
+            --env-file env.template down -v || true
+
+  terraform-provider-required:
+    # Single required status check for this suite. Always runs so branch
+    # protection has a stable target, and passes cleanly when `changes` reports
+    # no relevant paths changed (i.e. the test job was legitimately skipped).
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [changes, docs-check, build-backend-image, acceptance]
+    if: ${{ always() }}
+    steps:
+      - name: Check job status
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          RUN_TESTS: ${{ needs.changes.outputs.provider }}
+          DOCS_RESULT: ${{ needs.docs-check.result }}
+          BUILD_RESULT: ${{ needs.build-backend-image.result }}
+          TEST_RESULT: ${{ needs.acceptance.result }}
+        run: |
+          # Fail closed if `changes` didn't succeed. Otherwise an empty
+          # RUN_TESTS (what we'd see when `changes` failed or was cancelled)
+          # would be indistinguishable from "no relevant paths changed" and we
+          # would incorrectly pass the required check.
+          if [ "${CHANGES_RESULT}" != "success" ]; then
+            echo "changes job did not succeed (result: ${CHANGES_RESULT})"
+            exit 1
+          fi
+          if [ "${RUN_TESTS}" != "true" ]; then
+            echo "No relevant paths changed -- required check passes."
+            exit 0
+          fi
+          if [ "${DOCS_RESULT}" != "success" ] || [ "${BUILD_RESULT}" != "success" ]; then
+            echo "Setup results: docs-check=${DOCS_RESULT}, build-backend-image=${BUILD_RESULT}"
+            exit 1
+          fi
+          if [ "${TEST_RESULT}" != "success" ]; then
+            echo "Test result: ${TEST_RESULT}"
+            exit 1
+          fi
+          echo "All acceptance tests passed."

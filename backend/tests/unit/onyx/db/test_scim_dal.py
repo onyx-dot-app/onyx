@@ -1,11 +1,11 @@
 import logging
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
 
 from ee.onyx.db.scim import ScimDAL
-from onyx.db.models import ScimGroupMapping, ScimToken, ScimUserMapping
+from onyx.db.models import ScimGroupMapping, ScimToken, ScimUserMapping, User
 from tests.unit.onyx.db.conftest import model_attrs
 
 
@@ -187,3 +187,49 @@ class TestScimDALGroupMappings:
 
         mock_db_session.delete.assert_not_called()
         assert "SCIM group mapping 999 not found" in caplog.text
+
+
+class TestScimDALUserRename:
+    """A SCIM rename goes through the same reconciliation a login-driven one does.
+
+    Rebuilding `prior_emails` from the request's own `User` snapshot loses an
+    alias when two renames overlap, and it leaves the other address-keyed rows
+    behind. The shared path locks and moves them.
+    """
+
+    _RECONCILE = "ee.onyx.db.scim.reconcile_user_email__no_commit"
+
+    def test_a_rename_delegates_to_the_locking_reconcile(
+        self, scim_dal: ScimDAL, mock_db_session: MagicMock
+    ) -> None:
+        user = User(id=uuid4(), email="old@example.com")
+
+        with patch(self._RECONCILE) as reconcile:
+            scim_dal.update_user(user, email="New@Example.com")
+
+        reconcile.assert_called_once_with(user.id, "New@Example.com", mock_db_session)
+
+    def test_the_alias_math_is_not_reimplemented_here(
+        self, scim_dal: ScimDAL, mock_db_session: MagicMock
+    ) -> None:
+        """A case-only change is a no-op, and deciding that is the shared path's
+        job. Pre-filtering here would drift from the login path."""
+        user = User(id=uuid4(), email="user@example.com", prior_emails=["old@e.com"])
+
+        with patch(self._RECONCILE) as reconcile:
+            scim_dal.update_user(user, email="User@Example.com")
+
+        reconcile.assert_called_once_with(user.id, "User@Example.com", mock_db_session)
+        assert user.prior_emails == ["old@e.com"]
+
+    def test_updating_other_fields_never_touches_the_address(
+        self, scim_dal: ScimDAL
+    ) -> None:
+        user = User(id=uuid4(), email="user@example.com", prior_emails=["old@e.com"])
+
+        with patch(self._RECONCILE) as reconcile:
+            scim_dal.update_user(user, is_active=False)
+
+        reconcile.assert_not_called()
+        assert user.email == "user@example.com"
+        assert user.prior_emails == ["old@e.com"]

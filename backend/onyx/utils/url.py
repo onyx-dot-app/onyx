@@ -5,6 +5,7 @@ from typing import Any
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 import requests
+from requests.adapters import HTTPAdapter
 
 from onyx.utils.logger import setup_logger
 
@@ -309,11 +310,100 @@ def validate_outbound_http_url(
 MAX_REDIRECTS = 10
 
 
+class _PinnedHostAdapter(HTTPAdapter):
+    """Connects to a pre-validated IP while doing TLS against the real
+    hostname (SNI and certificate verification), so the request cannot
+    re-resolve DNS after validation (rebinding defense)."""
+
+    def __init__(self, hostname: str, **kwargs: Any) -> None:
+        self._hostname = hostname
+        super().__init__(**kwargs)
+
+    def init_poolmanager(self, *args: Any, **kwargs: Any) -> None:
+        kwargs["server_hostname"] = self._hostname
+        kwargs["assert_hostname"] = self._hostname
+        super().init_poolmanager(*args, **kwargs)
+
+
+def _pinned_get(
+    url: str,
+    validated_ip: str,
+    hostname: str,
+    port: int,
+    headers: dict[str, str] | None,
+    timeout: float | tuple[float, float],
+    **kwargs: Any,
+) -> requests.Response:
+    """GET the already-validated IP directly, presenting ``hostname`` for the
+    Host header and (on https) SNI + certificate verification."""
+    parsed = urlparse(url)
+    ip_literal = f"[{validated_ip}]" if ":" in validated_ip else validated_ip
+    default_port = 443 if parsed.scheme == "https" else 80
+    netloc = f"{ip_literal}:{port}" if port != default_port else ip_literal
+    request_url = urlunparse(
+        (parsed.scheme, netloc, parsed.path, parsed.params, parsed.query, "")
+    )
+    request_headers = headers.copy() if headers else {}
+    request_headers["Host"] = f"{hostname}:{port}" if port != default_port else hostname
+
+    if parsed.scheme != "https":
+        return requests.get(
+            request_url,
+            headers=request_headers,
+            timeout=timeout,
+            allow_redirects=False,
+            **kwargs,
+        )
+
+    with requests.Session() as session:
+        session.mount("https://", _PinnedHostAdapter(hostname))
+        return session.get(
+            request_url,
+            headers=request_headers,
+            timeout=timeout,
+            allow_redirects=False,
+            **kwargs,
+        )
+
+
+def _resolve_permissive_ip(
+    hostname: str,
+    port: int,
+    *,
+    block_loopback: bool,
+    block_link_local: bool,
+) -> str:
+    """One DNS resolution for the permissive path: any address is acceptable
+    except the targeted-blocked classes the caller keeps."""
+    try:
+        return str(ipaddress.ip_address(hostname))
+    except ValueError:
+        pass
+    try:
+        addr_info = socket.getaddrinfo(hostname, port)
+    except socket.gaierror as e:
+        raise SSRFException(f"Could not resolve hostname '{hostname}': {e}")
+    for info in addr_info:
+        ip_str = str(info[4][0])
+        if not _is_targeted_blocked_ip(
+            ipaddress.ip_address(ip_str),
+            block_loopback=block_loopback,
+            block_link_local=block_link_local,
+        ):
+            return ip_str
+    raise SSRFException(
+        f"Hostname '{hostname}' resolves only to blocked address classes."
+    )
+
+
 def _make_ssrf_safe_request(
     url: str,
     headers: dict[str, str] | None = None,
     timeout: float | tuple[float, float] = 15,
     allow_private_network: bool = False,
+    block_loopback_and_link_local: bool = True,
+    block_link_local_only: bool = False,
+    https_only: bool = False,
     **kwargs: Any,
 ) -> requests.Response:
     """
@@ -321,72 +411,49 @@ def _make_ssrf_safe_request(
 
     Returns the response which may be a redirect (3xx status).
 
+    The hostname is resolved exactly once, validated, and the request is made
+    directly to the validated IP (with Host/SNI set to the hostname), so a
+    rebinding DNS server cannot swap the destination after validation.
+
     When ``allow_private_network`` is True, the private-IP guard is skipped
     so operators on trusted networks can fetch URLs that resolve to RFC1918
-    addresses (e.g. internal docs sites behind split-horizon DNS). Scheme,
-    credential, and blocked-hostname checks still apply, and the always-
-    dangerous IP classes (loopback / unspecified / link-local, which contains
-    cloud-metadata endpoints) remain blocked on this path since callers are
-    LLM-controlled and need a stricter floor than admin-configured paths.
+    addresses. ``block_loopback_and_link_local`` (default True) keeps the
+    strict floor for LLM-controlled callers; admin-configured paths may lower
+    it to ``block_link_local_only`` so loopback services are reachable while
+    cloud-metadata stays blocked.
     """
+    if https_only and urlparse(url).scheme != "https":
+        raise SSRFException(
+            f"Invalid URL scheme '{urlparse(url).scheme}'. Only https is allowed."
+        )
+
     if allow_private_network:
         validate_outbound_http_url(
             url,
             allow_private_network=True,
-            block_loopback_and_link_local=True,
+            block_loopback_and_link_local=block_loopback_and_link_local,
+            block_link_local_only=block_link_local_only,
+            https_only=https_only,
         )
-        return requests.get(
-            url,
-            headers=headers,
-            timeout=timeout,
-            allow_redirects=False,
-            **kwargs,
+        parsed = urlparse(url)
+        hostname = parsed.hostname or ""
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        block_loopback = block_loopback_and_link_local
+        block_link_local = block_loopback_and_link_local or block_link_local_only
+        validated_ip = _resolve_permissive_ip(
+            hostname,
+            port,
+            block_loopback=block_loopback,
+            block_link_local=block_link_local,
+        )
+        return _pinned_get(
+            url, validated_ip, hostname, port, headers, timeout, **kwargs
         )
 
     # Validate and resolve the URL to get a safe IP
     validated_ip, original_hostname, port = _validate_and_resolve_url(url)
-
-    # Parse the URL to rebuild it with the IP
-    parsed = urlparse(url)
-
-    # Build the new URL using the validated IP
-    # For HTTPS, we need to use the original hostname for TLS verification
-    if parsed.scheme == "https":
-        # For HTTPS, make request to original URL but we've validated the IP
-        # The TLS handshake needs the hostname for SNI
-        # We rely on the short time window between validation and request
-        # A more robust solution would require custom SSL context
-        request_url = url
-    else:
-        # For HTTP, we can safely request directly to the IP
-        netloc = f"{validated_ip}:{port}" if port not in (80, 443) else validated_ip
-        request_url = urlunparse(
-            (
-                parsed.scheme,
-                netloc,
-                parsed.path,
-                parsed.params,
-                parsed.query,
-                parsed.fragment,
-            )
-        )
-
-    # Prepare headers
-    request_headers = headers.copy() if headers else {}
-
-    # Set Host header to original hostname (required for virtual hosting)
-    if parsed.scheme == "http":
-        request_headers["Host"] = (
-            f"{original_hostname}:{port}" if port != 80 else original_hostname
-        )
-
-    # Disable automatic redirects to prevent SSRF bypass via redirect
-    return requests.get(
-        request_url,
-        headers=request_headers,
-        timeout=timeout,
-        allow_redirects=False,
-        **kwargs,
+    return _pinned_get(
+        url, validated_ip, original_hostname, port, headers, timeout, **kwargs
     )
 
 
@@ -396,6 +463,9 @@ def ssrf_safe_get(
     timeout: float | tuple[float, float] = 15,
     follow_redirects: bool = True,
     allow_private_network: bool = False,
+    block_loopback_and_link_local: bool = True,
+    block_link_local_only: bool = False,
+    https_only: bool = False,
     **kwargs: Any,
 ) -> requests.Response:
     """
@@ -429,6 +499,9 @@ def ssrf_safe_get(
         headers,
         timeout,
         allow_private_network=allow_private_network,
+        block_loopback_and_link_local=block_loopback_and_link_local,
+        block_link_local_only=block_link_local_only,
+        https_only=https_only,
         **kwargs,
     )
 
@@ -466,6 +539,9 @@ def ssrf_safe_get(
             headers,
             timeout,
             allow_private_network=allow_private_network,
+            block_loopback_and_link_local=block_loopback_and_link_local,
+            block_link_local_only=block_link_local_only,
+            https_only=https_only,
             **kwargs,
         )
 

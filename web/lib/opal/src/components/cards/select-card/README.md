@@ -36,41 +36,41 @@ The `Interactive.Stateful` Slot merges onto the div, producing a single DOM elem
 
 Inherits **all** props from `InteractiveStatefulProps` (except `variant`, which is hardcoded to `select-card`) plus:
 
-| Prop | Type | Default | Description |
-|---|---|---|---|
-| `padding` | `PaddingVariants` | `"md"` | Padding preset |
-| `rounding` | `RoundingVariants` | `"md"` | Border-radius preset |
-| `border` | `BorderVariants` | `"solid"` | Border style (`"none"` \| `"dashed"` \| `"solid"`) |
-| `ref` | `React.Ref<HTMLDivElement>` | — | Ref forwarded to the root div |
-| `children` | `React.ReactNode` | — | Card content |
+| Prop       | Type                        | Default   | Description                                        |
+| ---------- | --------------------------- | --------- | -------------------------------------------------- |
+| `padding`  | `Spacing`                   | `4`       | Padding, as a spacing step (`N / 4` rem)           |
+| `rounding` | `Rounding`                  | `3`       | Corner radius step (`N / 4` rem, or `"full"`)      |
+| `border`   | `BorderVariants`            | `"solid"` | Border style (`"none"` \| `"dashed"` \| `"solid"`) |
+| `ref`      | `React.Ref<HTMLDivElement>` | —         | Ref forwarded to the root div                      |
+| `children` | `React.ReactNode`           | —         | Card content                                       |
 
 ### Padding scale
 
-| `padding` | Class   |
-|-----------|---------|
-| `"lg"`    | `p-6`   |
-| `"md"`    | `p-4`   |
-| `"sm"`    | `p-2`   |
-| `"xs"`    | `p-1`   |
-| `"2xs"`   | `p-0.5` |
-| `"fit"`   | `p-0`   |
+`padding` is a spacing step, not a preset: `N` is `N / 4` rem, the same scale Tailwind
+uses. So `padding={2}` is the same distance as `p-2`, and the default `4` is `1rem`.
 
 ### Rounding scale
 
-| `rounding` | Class        |
-|------------|--------------|
-| `"xs"`     | `rounded-04` |
-| `"sm"`     | `rounded-08` |
-| `"md"`     | `rounded-12` |
-| `"lg"`     | `rounded-16` |
+`Rounding` is on the same scale as `Spacing`: `N` is `N / 4` rem, so
+`rounding={2}` is the same distance as `padding={2}`.
+
+| `rounding` | rem     | px   |
+| ---------- | ------- | ---- |
+| `0.5`      | `0.125` | 2    |
+| `1`        | `0.25`  | 4    |
+| `2`        | `0.5`   | 8    |
+| `3`        | `0.75`  | 12   |
+| `4`        | `1`     | 16   |
+| `5`        | `1.25`  | 20   |
+| `"full"`   | —       | pill |
 
 ### State colors (`select-card` variant)
 
-| State | Rest background | Rest foreground |
-|---|---|---|
-| `empty` | transparent | `text-04` / icon `text-03` |
-| `filled` | `background-tint-00` | `text-04` / icon `text-03` |
-| `selected` | `action-selection-01` | `action-selection-05` |
+| State      | Rest background       | Rest foreground            |
+| ---------- | --------------------- | -------------------------- |
+| `empty`    | transparent           | `text-04` / icon `text-03` |
+| `filled`   | `background-tint-00`  | `text-04` / icon `text-03` |
+| `selected` | `action-selection-01` | `action-selection-05`      |
 
 ## CSS
 
@@ -97,12 +97,16 @@ import { CardHeaderLayout } from "@opal/layouts";
     description="Search engine"
     sizePreset="main-ui"
     variant="section"
-    rightChildren={<Button icon={SvgCheckSquare} variant="action" prominence="tertiary">Current Default</Button>}
+    rightChildren={
+      <Button icon={SvgCheckSquare} variant="action" prominence="tertiary">
+        Current Default
+      </Button>
+    }
     bottomRightChildren={
       <Button icon={SvgSettings} size="sm" prominence="tertiary" />
     }
   />
-</SelectCard>
+</SelectCard>;
 ```
 
 ### Disconnected state (clickable)
@@ -115,7 +119,11 @@ import { CardHeaderLayout } from "@opal/layouts";
     description="Not configured"
     sizePreset="main-ui"
     variant="section"
-    rightChildren={<Button rightIcon={SvgArrowExchange} prominence="tertiary">Connect</Button>}
+    rightChildren={
+      <Button rightIcon={SvgArrowExchange} prominence="tertiary">
+        Connect
+      </Button>
+    }
   />
 </SelectCard>
 ```

@@ -2,7 +2,7 @@ from sqlalchemy import delete, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, load_only, selectinload
 
-from onyx.auth.schemas import UserRole
+from onyx.auth.permissions import Permission, has_global_permission
 from onyx.db.enums import LLMModelFlowType
 from onyx.db.models import CloudEmbeddingProvider as CloudEmbeddingProviderModel
 from onyx.db.models import (
@@ -21,6 +21,10 @@ from onyx.db.models import (
 from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.db.models import Tool as ToolModel
 from onyx.db.persona import get_raw_personas_for_user
+from onyx.db.user_group import assert_not_shared_with_default_group
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
+from onyx.llm.models import ReasoningEffort
 from onyx.llm.utils import model_supports_image_input
 from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
 from onyx.server.manage.embedding.models import (
@@ -31,8 +35,11 @@ from onyx.server.manage.llm.models import (
     LLMProviderUpsertRequest,
     LLMProviderView,
     SyncModelEntry,
+    ensure_default_within_max,
 )
+from onyx.utils.encryption import is_masked_credential, mask_string
 from onyx.utils.logger import setup_logger
+from onyx.utils.sensitive import SensitiveValue
 from shared_configs.enums import EmbeddingProvider
 
 logger = setup_logger()
@@ -43,6 +50,8 @@ def update_group_llm_provider_relationships__no_commit(
     group_ids: list[int] | None,
     db_session: Session,
 ) -> None:
+    assert_not_shared_with_default_group(db_session, group_ids or [])
+
     # Delete existing relationships
     db_session.query(LLMProvider__UserGroup).filter(
         LLMProvider__UserGroup.llm_provider_id == llm_provider_id
@@ -108,7 +117,7 @@ def can_user_access_llm_provider(
     provider: LLMProviderModel,
     user_group_ids: set[int],
     persona: Persona | None,
-    is_admin: bool = False,
+    can_manage_llms: bool = False,
 ) -> bool:
     """Check if a user may use an LLM provider.
 
@@ -116,23 +125,23 @@ def can_user_access_llm_provider(
         provider: The LLM provider to check access for
         user_group_ids: Set of user group IDs the user belongs to
         persona: The persona being used (if any)
-        is_admin: If True, bypass user group restrictions but still respect persona restrictions
+        can_manage_llms: If True, bypass user group restrictions but still respect persona restrictions
 
     Access logic:
     - is_public controls USER access (group bypass): when True, all users can access
       regardless of group membership. When False, user must be in a whitelisted group
-      (or be admin).
+      (or hold MANAGE_LLMS).
     - Persona restrictions are ALWAYS enforced when set, regardless of is_public.
-      This allows admins to make a provider available to all users while still
-      restricting which personas (assistants) can use it.
+      This allows MANAGE_LLMS holders to make a provider available to all users
+      while still restricting which personas (assistants) can use it.
 
     Decision matrix:
     1. is_public=True, no personas set → everyone has access
     2. is_public=True, personas set → all users, but only whitelisted personas
-    3. is_public=False, groups+personas set → must satisfy BOTH (admins bypass groups)
-    4. is_public=False, only groups set → must be in group (admins bypass)
+    3. is_public=False, groups+personas set → must satisfy BOTH (MANAGE_LLMS bypasses groups)
+    4. is_public=False, only groups set → must be in group (MANAGE_LLMS bypasses)
     5. is_public=False, only personas set → must use whitelisted persona
-    6. is_public=False, neither set → admin-only (locked)
+    6. is_public=False, neither set → MANAGE_LLMS-only (locked)
     """
     provider_group_ids = {g.id for g in (provider.groups or [])}
     provider_persona_ids = {p.id for p in (provider.personas or [])}
@@ -147,10 +156,10 @@ def can_user_access_llm_provider(
         return True
 
     if has_groups:
-        return is_admin or bool(user_group_ids & provider_group_ids)
+        return can_manage_llms or bool(user_group_ids & provider_group_ids)
 
-    # No groups: either persona-whitelisted (already passed) or admin-only if locked
-    return has_personas or is_admin
+    # No groups: either persona-whitelisted (already passed) or MANAGE_LLMS-only if locked
+    return has_personas or can_manage_llms
 
 
 def validate_persona_ids_exist(
@@ -194,6 +203,40 @@ def fetch_persona_with_groups(db_session: Session, persona_id: int) -> Persona |
     )
 
 
+def _resolve_embedding_api_key(
+    incoming: str | None, existing: SensitiveValue[str] | None
+) -> str | None:
+    """Restore the stored key when the caller submits the masked placeholder.
+
+    Reads mask the key, so a read-modify-write cycle would otherwise persist the
+    mask itself as the real credential. Mirrors resolve_masked_credentials in
+    onyx/db/external_app.py.
+    """
+    if incoming is None:
+        return incoming
+
+    stored = existing.get_value(apply_mask=False) if existing is not None else None
+    if stored is not None:
+        # Compare against this key's own mask rather than the general shape
+        # test, so a real key that happens to look like a placeholder is still
+        # stored instead of being swallowed. Whatever is stored is preserved:
+        # the stored value cannot be told apart from a real key of the same
+        # shape, so refusing it would break providers holding a valid one.
+        #
+        # A caller rotating to a key that equals this mask exactly is read as an
+        # unchanged echo, and keeps the old key. Only a changed-flag on the
+        # request can separate the two, as LLMProviderUpsertRequest does.
+        return stored if incoming == mask_string(stored) else incoming
+
+    if is_masked_credential(incoming):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "api_key was submitted masked but has no stored value to restore — "
+            "provide the actual key.",
+        )
+    return incoming
+
+
 def upsert_cloud_embedding_provider(
     db_session: Session, provider: CloudEmbeddingProviderCreationRequest
 ) -> CloudEmbeddingProvider:
@@ -203,10 +246,16 @@ def upsert_cloud_embedding_provider(
         .first()
     )
     if existing_provider:
-        for key, value in provider.model_dump().items():
+        updates = provider.model_dump()
+        updates["api_key"] = _resolve_embedding_api_key(
+            provider.api_key, existing_provider.api_key
+        )
+        for key, value in updates.items():
             setattr(existing_provider, key, value)
     else:
-        new_provider = CloudEmbeddingProviderModel(**provider.model_dump())
+        creation = provider.model_dump()
+        creation["api_key"] = _resolve_embedding_api_key(provider.api_key, None)
+        new_provider = CloudEmbeddingProviderModel(**creation)
 
         db_session.add(new_provider)
         existing_provider = new_provider
@@ -319,6 +368,24 @@ def upsert_llm_provider(
 
         existing = existing_by_name.get(model_config.name)
         if existing:
+            # An omitted field keeps the stored value. Validate the merged
+            # policy, not just what was sent.
+            merged_reasoning_max = (
+                model_config.reasoning_effort_max
+                if model_config.reasoning_effort_max_provided
+                else existing.reasoning_effort_max
+            )
+            merged_reasoning_default = (
+                model_config.reasoning_effort_default
+                if model_config.reasoning_effort_default_provided
+                else existing.reasoning_effort_default
+            )
+            merged_temperature = (
+                model_config.temperature_default
+                if model_config.temperature_default_provided
+                else existing.temperature_default
+            )
+            ensure_default_within_max(merged_reasoning_default, merged_reasoning_max)
             update_model_configuration__no_commit(
                 db_session=db_session,
                 model_configuration_id=existing.id,
@@ -327,6 +394,9 @@ def upsert_llm_provider(
                 max_input_tokens=model_config.max_input_tokens,
                 display_name=model_config.display_name,
                 custom_display_name=model_config.custom_display_name,
+                reasoning_effort_max=merged_reasoning_max,
+                reasoning_effort_default=merged_reasoning_default,
+                temperature_default=merged_temperature,
             )
         else:
             insert_new_model_configuration__no_commit(
@@ -338,6 +408,9 @@ def upsert_llm_provider(
                 max_input_tokens=model_config.max_input_tokens,
                 display_name=model_config.display_name,
                 custom_display_name=model_config.custom_display_name,
+                reasoning_effort_max=model_config.reasoning_effort_max,
+                reasoning_effort_default=model_config.reasoning_effort_default,
+                temperature_default=model_config.temperature_default,
             )
 
     # Make sure the relationship table stays up to date
@@ -546,7 +619,7 @@ def fetch_first_accessible_llm_provider_by_type(
         .order_by(LLMProviderModel.id.asc())
     )
     user_group_ids = fetch_user_group_ids(db_session, user)
-    is_admin = user.role == UserRole.ADMIN
+    can_manage_llms = has_global_permission(user, Permission.MANAGE_LLMS)
     provider = next(
         (
             provider
@@ -555,7 +628,7 @@ def fetch_first_accessible_llm_provider_by_type(
                 provider,
                 user_group_ids,
                 persona=None,
-                is_admin=is_admin,
+                can_manage_llms=can_manage_llms,
             )
         ),
         None,
@@ -582,14 +655,14 @@ def fetch_all_accessible_llm_providers(
         )
     )
     user_group_ids = fetch_user_group_ids(db_session, user)
-    is_admin = user.role == UserRole.ADMIN
+    can_manage_llms = has_global_permission(user, Permission.MANAGE_LLMS)
     # This per-turn catalog never uses the key (the gateway injects it per
     # selected model), so skip the per-provider decrypt + audit.
     return [
         LLMProviderView.from_model(p, include_api_key=False)
         for p in provider_models
         if can_user_access_llm_provider(
-            p, user_group_ids, persona=None, is_admin=is_admin
+            p, user_group_ids, persona=None, can_manage_llms=can_manage_llms
         )
     ]
 
@@ -609,17 +682,17 @@ def fetch_all_llm_providers_accessible_in_any_context(
     }
     provider_models = fetch_existing_llm_providers(db_session, [])
     user_group_ids = fetch_user_group_ids(db_session, user)
-    is_admin = user.role == UserRole.ADMIN
+    can_manage_llms = has_global_permission(user, Permission.MANAGE_LLMS)
 
     def is_accessible(provider: LLMProviderModel) -> bool:
         if can_user_access_llm_provider(
-            provider, user_group_ids, persona=None, is_admin=is_admin
+            provider, user_group_ids, persona=None, can_manage_llms=can_manage_llms
         ):
             return True
         return any(
             persona.id in accessible_persona_ids
             and can_user_access_llm_provider(
-                provider, user_group_ids, persona, is_admin=is_admin
+                provider, user_group_ids, persona, can_manage_llms=can_manage_llms
             )
             for persona in provider.personas
         )
@@ -634,9 +707,11 @@ def fetch_all_llm_providers_accessible_in_any_context(
 def fetch_existing_llm_provider(
     name: str, db_session: Session
 ) -> LLMProviderModel | None:
+    # Duplicate names can predate upsert validation; order by id for determinism.
     provider_model = db_session.scalar(
         select(LLMProviderModel)
         .where(LLMProviderModel.name == name)
+        .order_by(LLMProviderModel.id)
         .options(
             selectinload(LLMProviderModel.model_configurations),
             selectinload(LLMProviderModel.groups),
@@ -676,7 +751,7 @@ def fetch_accessible_llm_provider_by_id(
         provider_model,
         user_group_ids,
         persona=None,
-        is_admin=user.role == UserRole.ADMIN,
+        can_manage_llms=has_global_permission(user, Permission.MANAGE_LLMS),
     ):
         return None
     return LLMProviderView.from_model(provider_model)
@@ -905,7 +980,9 @@ def update_default_vision_provider(
     if provider is None:
         raise ValueError(f"LLM Provider with id={provider_id} does not exist")
 
-    if not model_supports_image_input(vision_model, provider.provider):
+    if not model_supports_image_input(
+        vision_model, provider.provider, provider.deployment_name
+    ):
         raise ValueError(
             f"Model '{vision_model}' for provider '{provider.provider} does not support image input"
         )
@@ -1157,6 +1234,9 @@ def insert_new_model_configuration__no_commit(
     max_input_tokens: int | None,
     display_name: str | None,
     custom_display_name: str | None = None,
+    reasoning_effort_max: ReasoningEffort | None = None,
+    reasoning_effort_default: ReasoningEffort | None = None,
+    temperature_default: float | None = None,
 ) -> int | None:
     result = db_session.execute(
         insert(ModelConfiguration)
@@ -1168,6 +1248,9 @@ def insert_new_model_configuration__no_commit(
             display_name=display_name,
             custom_display_name=custom_display_name,
             supports_image_input=LLMModelFlowType.VISION in supported_flows,
+            reasoning_effort_max=reasoning_effort_max,
+            reasoning_effort_default=reasoning_effort_default,
+            temperature_default=temperature_default,
         )
         .on_conflict_do_nothing()
         .returning(ModelConfiguration.id)
@@ -1196,6 +1279,9 @@ def update_model_configuration__no_commit(
     max_input_tokens: int | None,
     display_name: str | None,
     custom_display_name: str | None = None,
+    reasoning_effort_max: ReasoningEffort | None = None,
+    reasoning_effort_default: ReasoningEffort | None = None,
+    temperature_default: float | None = None,
 ) -> None:
     result = db_session.execute(
         update(ModelConfiguration)
@@ -1205,6 +1291,9 @@ def update_model_configuration__no_commit(
             display_name=display_name,
             custom_display_name=custom_display_name,
             supports_image_input=LLMModelFlowType.VISION in supported_flows,
+            reasoning_effort_max=reasoning_effort_max,
+            reasoning_effort_default=reasoning_effort_default,
+            temperature_default=temperature_default,
         )
         .where(ModelConfiguration.id == model_configuration_id)
         .returning(ModelConfiguration)

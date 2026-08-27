@@ -41,8 +41,8 @@ from onyx.db.models import (
     User,
     User__UserGroup,
     UserGroup,
-    UserRole,
 )
+from onyx.db.users import reconcile_user_email__no_commit
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -165,6 +165,16 @@ class ScimDAL(DAL):
             select(ScimUserMapping).where(ScimUserMapping.user_id == user_id)
         )
 
+    def get_user_mapping_by_scim_username(
+        self, scim_username: str
+    ) -> ScimUserMapping | None:
+        """Look up a user mapping by the provisioned userName (case-insensitive)."""
+        return self._session.scalar(
+            select(ScimUserMapping).where(
+                func.lower(ScimUserMapping.scim_username) == scim_username.lower()
+            )
+        )
+
     def list_user_mappings(
         self,
         start_index: int = 1,
@@ -211,6 +221,12 @@ class ScimDAL(DAL):
         mapping.external_id = external_id
         return mapping
 
+    def reassign_user_mapping(
+        self, mapping: ScimUserMapping, new_user_id: UUID
+    ) -> None:
+        """Point a SCIM mapping at a different user (rename-collision adoption)."""
+        mapping.user_id = new_user_id
+
     def delete_user_mapping(self, mapping_id: int) -> None:
         """Delete a user mapping by ID. No-op if already deleted."""
         mapping = self._session.get(ScimUserMapping, mapping_id)
@@ -247,18 +263,20 @@ class ScimDAL(DAL):
         email: str | None = None,
         is_active: bool | None = None,
         personal_name: str | None = None,
-        role: UserRole | None = None,
         account_type: AccountType | None = None,
     ) -> None:
-        """Update user attributes. Only sets fields that are provided."""
+        """Update user attributes. Only sets fields that are provided.
+
+        A rename runs the same reconciliation a login-driven one does, so the
+        replaced address keeps reaching documents whose indexed ACLs still name
+        it and every other row keyed by the address moves with it.
+        """
         if email is not None:
-            user.email = email
+            reconcile_user_email__no_commit(user.id, email, self._session)
         if is_active is not None:
             user.is_active = is_active
         if personal_name is not None:
             user.personal_name = personal_name
-        if role is not None:
-            user.role = role
         if account_type is not None:
             user.account_type = account_type
 
@@ -294,11 +312,12 @@ class ScimDAL(DAL):
         if scim_filter:
             attr = scim_filter.attribute.lower()
             if attr == "username":
-                # arg-type: fastapi-users types User.email as str, not a column expression
-                # assignment: union return type widens but query is still Select[tuple[User]]
+                # userName matches the provisioned userName, so IdP matching
+                # survives the email diverging from it (identity decoupling).
+                # Legacy mappings without one fall back to the email.
                 query = _apply_scim_string_op(
                     query,
-                    User.email,  # ty: ignore[invalid-argument-type]
+                    func.coalesce(ScimUserMapping.scim_username, User.email),
                     scim_filter,
                 )
             elif attr == "active":
@@ -681,11 +700,26 @@ class ScimDAL(DAL):
         )
 
     def replace_group_members(self, group_id: int, user_ids: list[UUID]) -> None:
-        """Replace all members of a group."""
-        self._session.execute(
-            sa_delete(User__UserGroup).where(User__UserGroup.user_group_id == group_id)
-        )
-        self.upsert_group_members(group_id, user_ids)
+        """Replace all members of a group, leaving retained members' rows untouched.
+
+        Diffs rather than delete-all-then-reinsert: the membership row carries
+        ``is_manager``, and ``upsert_group_members`` doesn't name that column, so
+        re-inserting a retained member silently demotes them to the server_default.
+        IdPs push a full ``PUT /Groups`` on routine reconciliation, so delete-all
+        would strip every group manager on each sync, unaudited.
+        """
+        requested = set(user_ids)
+        current = {
+            uid
+            for uid in self._session.scalars(
+                select(User__UserGroup.user_id).where(
+                    User__UserGroup.user_group_id == group_id
+                )
+            )
+            if uid is not None
+        }
+        self.remove_group_members(group_id, list(current - requested))
+        self.upsert_group_members(group_id, list(requested - current))
 
     def remove_group_members(self, group_id: int, user_ids: list[UUID]) -> None:
         """Remove specific members from a group."""

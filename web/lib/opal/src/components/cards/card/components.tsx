@@ -3,66 +3,54 @@ import "@opal/components/cards/card/styles.css";
 import type {
   BackgroundVariants,
   BorderVariants,
-  PaddingVariants,
-  RoundingVariants,
+  Spacing,
+  Rounding,
   ShadowVariants,
   SizeVariants,
   StatusVariants,
 } from "@opal/types";
-import {
-  paddingVariants,
-  cardRoundingVariants,
-  cardTopRoundingVariants,
-  cardBottomRoundingVariants,
-} from "@opal/shared";
+import { roundingToRem, spacingToRem } from "@opal/shared";
 import { cn } from "@opal/utils";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
+/** What React accepts as the value of a `data-*` attribute. */
+type DataAttributeValue = string | number | boolean | null | undefined;
+
 /**
  * Props shared by both plain and expandable Card modes.
  */
 type CardBaseProps = {
   /**
-   * Padding preset.
+   * Padding.
    *
-   * | Value   | Class   |
-   * |---------|---------|
-   * | `"lg"`  | `p-6`   |
-   * | `"md"`  | `p-4`   |
-   * | `"sm"`  | `p-2`   |
-   * | `"xs"`  | `p-1`   |
-   * | `"2xs"` | `p-0.5` |
-   * | `"fit"` | `p-0`   |
+   * A spacing step: `N` is `N / 4` rem, so `4` is `1rem`.
    *
    * In expandable mode, applied **only** to the header region. The
    * `expandedContent` slot has no intrinsic padding — callers own any padding
    * inside the content they pass in.
    *
-   * @default "md"
+   * @default 4
    */
-  padding?: PaddingVariants;
+  padding?: Spacing;
 
   /**
    * Border-radius preset.
    *
    * | Value  | Class        |
    * |--------|--------------|
-   * | `"xs"` | `rounded-04` |
-   * | `"sm"` | `rounded-08` |
-   * | `"md"` | `rounded-12` |
-   * | `"lg"` | `rounded-16` |
-   * | `"xl"` | `rounded-20` |
+   * `N` is `N / 4` rem, so `rounding={2}` is the same distance as
+   * `padding={2}`. `"full"` is a pill.
    *
    * In expandable mode when expanded, rounding applies only to the header's
    * top corners and the expandedContent's bottom corners so the two join seamlessly.
    * When collapsed, rounding applies to all four corners of the header.
    *
-   * @default "md"
+   * @default 3
    */
-  rounding?: RoundingVariants;
+  rounding?: Rounding;
 
   /**
    * Background fill intensity.
@@ -106,6 +94,20 @@ type CardBaseProps = {
    */
   shadow?: ShadowVariants;
 
+  /**
+   * Marks the card unavailable: dimmed, with a not-allowed cursor.
+   *
+   * Visual only. Children stay interactive, because a card is a container and
+   * suppressing its contents is a stronger claim than dimming them — compose
+   * `Disabled` from `@opal/core` when clicks should be blocked too.
+   *
+   * A boolean rather than a variant, so it stacks with `background` and
+   * `border` instead of replacing them.
+   *
+   * @default false
+   */
+  disabled?: boolean;
+
   /** Ref forwarded to the root `<div>`. */
   ref?: React.Ref<HTMLDivElement>;
 
@@ -114,6 +116,11 @@ type CardBaseProps = {
    * header region (the part that stays put whether expanded or collapsed).
    */
   children?: React.ReactNode;
+
+  /**
+   * Test hooks and analytics markers forwarded to the outer element.
+   */
+  [key: `data-${string}`]: DataAttributeValue;
 };
 
 type CardPlainProps = CardBaseProps & {
@@ -182,7 +189,7 @@ type CardProps = CardPlainProps | CardExpandableProps;
  *
  * @example Plain
  * ```tsx
- * <Card padding="md" border="solid">
+ * <Card padding={4} border="solid">
  *   <p>Hello</p>
  * </Card>
  * ```
@@ -200,30 +207,65 @@ type CardProps = CardPlainProps | CardExpandableProps;
  * </Card>
  * ```
  */
+/**
+ * The `data-*` entries a caller passed in.
+ *
+ * A card owns how it looks, not what the surrounding app calls it — `data-*` is
+ * the app's namespace, used for test hooks and analytics, and silently dropping
+ * it is worse than either forwarding or rejecting it. Only `data-*` is picked
+ * up: `className` and `style` stay out by design, and behavioural props like
+ * `onClick` are a deliberate API decision rather than something to inherit.
+ */
+function dataAttributes(props: CardProps): Record<string, DataAttributeValue> {
+  const attributes: Record<string, DataAttributeValue> = {};
+  for (const key of Object.keys(props)) {
+    if (!key.startsWith("data-")) continue;
+    // SAFETY: the prefix check above proves `key` matches the `data-${string}`
+    // index signature, which is the only shape that reads back as a value.
+    attributes[key] = props[key as `data-${string}`];
+  }
+  return attributes;
+}
+
 function Card(props: CardProps) {
   const {
-    padding: paddingProp = "md",
-    rounding: roundingProp = "md",
+    padding: paddingProp = 4,
+    rounding: roundingProp = 3,
     background = "light",
     border = "none",
     borderColor = "default",
     shadow = "none",
+    disabled = false,
     ref,
     children,
   } = props;
 
-  const padding = paddingVariants[paddingProp];
+  const paddingStyle = { padding: spacingToRem(paddingProp) };
+  const radius = roundingToRem(roundingProp);
+  // Expanded, the header rounds only at the top and the body only at the
+  // bottom, so the two halves read as one card rather than two.
+  const topRadius = {
+    borderTopLeftRadius: radius,
+    borderTopRightRadius: radius,
+  };
+  const bottomRadius = {
+    borderBottomLeftRadius: radius,
+    borderBottomRightRadius: radius,
+  };
 
   // Plain mode — unchanged behavior
   if (!props.expandable) {
     return (
       <div
         ref={ref}
-        className={cn("opal-card", padding, cardRoundingVariants[roundingProp])}
+        className="opal-card"
+        style={{ ...paddingStyle, borderRadius: radius }}
+        {...dataAttributes(props)}
         data-background={background}
         data-border={border}
         data-opal-status-border={borderColor}
         data-shadow={shadow}
+        data-disabled={disabled || undefined}
       >
         {children}
       </div>
@@ -237,14 +279,19 @@ function Card(props: CardProps) {
     expandableContentHeight = "md",
   } = props;
   const showContent = expanded && expandedContent !== undefined;
-  const headerRounding = showContent
-    ? cardTopRoundingVariants[roundingProp]
-    : cardRoundingVariants[roundingProp];
+  const headerRadius = showContent ? topRadius : { borderRadius: radius };
 
   return (
-    <div ref={ref} className="opal-card-expandable" data-shadow={shadow}>
+    <div
+      ref={ref}
+      className="opal-card-expandable"
+      {...dataAttributes(props)}
+      data-shadow={shadow}
+      data-disabled={disabled || undefined}
+    >
       <div
-        className={cn("opal-card-expandable-header", padding, headerRounding)}
+        className="opal-card-expandable-header"
+        style={{ ...paddingStyle, ...headerRadius }}
         data-background={background}
         data-border={border}
         data-opal-status-border={borderColor}
@@ -258,10 +305,8 @@ function Card(props: CardProps) {
         >
           <div className="opal-card-expandable-inner">
             <div
-              className={cn(
-                "opal-card-expandable-body",
-                cardBottomRoundingVariants[roundingProp]
-              )}
+              className="opal-card-expandable-body"
+              style={bottomRadius}
               data-border={border}
               data-opal-status-border={borderColor}
               data-content-height={expandableContentHeight}

@@ -1,16 +1,18 @@
 import { Formik, Form } from "formik";
+import * as Yup from "yup";
 import { Modal } from "@opal/components";
 import { Button } from "@opal/components";
 import { InputVertical } from "@opal/layouts";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import { SvgEdit } from "@opal/icons";
+import { useTranslations } from "next-intl";
 
 export interface EditPropertyModalProps {
   propertyTitle: string;
   propertyDetails?: string;
   propertyName: string;
   propertyValue: string;
-  validationSchema: object;
+  validationSchema: Yup.AnySchema;
   onClose: () => void;
   onSubmit: (propertyName: string, propertyValue: string) => Promise<void>;
 }
@@ -24,12 +26,14 @@ export default function EditPropertyModal({
   onClose,
   onSubmit,
 }: EditPropertyModalProps) {
+  const t = useTranslations("chat.modals.editProperty");
+
   return (
     <Modal open onOpenChange={onClose}>
       <Modal.Content width="sm">
         <Modal.Header
           icon={SvgEdit}
-          title={`Edit ${propertyTitle}`}
+          title={t("header.title", { property: propertyTitle })}
           onClose={onClose}
         />
         <Formik
@@ -56,7 +60,7 @@ export default function EditPropertyModal({
                 >
                   <InputTypeInField
                     name="propertyValue"
-                    placeholder="Property value"
+                    placeholder={t("valueInput.placeholder")}
                   />
                 </InputVertical>
               </Modal.Body>
@@ -69,7 +73,9 @@ export default function EditPropertyModal({
                   }
                   type="submit"
                 >
-                  {isSubmitting ? "Updating..." : "Update property"}
+                  {isSubmitting
+                    ? t("submitButton.loadingLabel")
+                    : t("submitButton.label")}
                 </Button>
               </Modal.Footer>
             </Form>

@@ -398,7 +398,6 @@ def kg_classify_document(
         return None
 
     # prepare prompt
-    implied_extraction.document_entity
     company_participants = implied_extraction.company_participant_emails
     account_participants = implied_extraction.account_participant_emails
     content = (
@@ -603,7 +602,7 @@ def get_batch_documents_metadata(
 
 def trackinfo_to_str(
     trackinfo: KGAttributeTrackInfo | None,
-) -> str:  # ty: ignore[invalid-return-type]
+) -> str:
     """Convert trackinfo to an LLM friendly string"""
     if trackinfo is None:
         return ""

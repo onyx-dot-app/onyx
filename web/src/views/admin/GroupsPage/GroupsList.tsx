@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { useTranslations } from "next-intl";
 import type { UserGroup } from "@/lib/types";
 import { Divider } from "@opal/components";
 import GroupCard from "./GroupCard";
@@ -15,6 +16,7 @@ interface GroupsListProps {
 }
 
 function GroupsList({ groups, searchQuery }: GroupsListProps) {
+  const t = useTranslations("admin.groups");
   const filtered = useMemo(() => {
     if (!searchQuery.trim()) return groups;
     const q = searchQuery.toLowerCase();
@@ -25,8 +27,8 @@ function GroupsList({ groups, searchQuery }: GroupsListProps) {
     return (
       <IllustrationContent
         illustration={SvgNoResult}
-        title="No groups found"
-        description={`No groups matching "${searchQuery}"`}
+        title={t("list.noResults.title")}
+        description={t("list.noResults.description", { query: searchQuery })}
       />
     );
   }
@@ -35,13 +37,13 @@ function GroupsList({ groups, searchQuery }: GroupsListProps) {
   const customGroups = filtered.filter((g) => !isBuiltInGroup(g));
 
   return (
-    <Section flexDirection="column" gap={0.5}>
+    <Section flexDirection="column" gap={2}>
       {builtInGroups.map((group) => (
         <GroupCard key={group.id} group={group} />
       ))}
 
       {builtInGroups.length > 0 && customGroups.length > 0 && (
-        <Divider paddingPerpendicular="sm" paddingParallel="fit" />
+        <Divider paddingPerpendicular={2} paddingParallel={0} />
       )}
 
       {customGroups.map((group) => (

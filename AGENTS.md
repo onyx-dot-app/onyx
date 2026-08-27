@@ -63,8 +63,20 @@ pre-commit run --files <path> [<path> ...]
 
 NOTE: Always make sure everything is strictly typed (both in Python and Typescript).
 
-NOTE: Keep comments brief and focused on information that stays relevant long-term. Don't write
-comments that only describe the instantaneous change (e.g. what was just added/removed/refactored).
+NOTE: Keep code comments brief and focused on information that stays relevant long-term.
+
+## Writing
+
+These rules apply to all prose you write: docs, commit messages, PR descriptions, reports, and replies.
+
+Follow ASD-STE100 Simplified Technical English for technical text:
+
+- Use approved words only. Each word has one meaning.
+- Use one word for one idea. Do not use two words for the same thing.
+- Write short sentences. Use 20 words or less for instructions.
+- Use active voice. Write "Turn the switch", not "The switch must be turned".
+- Write short paragraphs. Keep one topic in each paragraph.
+- Keep code comments focused on information that is relevant long-term or for future readers.
 
 ## Testing
 

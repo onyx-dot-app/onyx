@@ -1,13 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import { Table, createTableColumns } from "@opal/components";
 import { Content, toast } from "@opal/layouts";
 import { Button } from "@opal/components";
 import { SvgDownload, SvgSimpleLoader } from "@opal/icons";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { IllustrationContent } from "@opal/layouts";
-import { UserRole, UserStatus, USER_STATUS_LABELS } from "@/lib/types";
+import { AccountType, UserStatus } from "@/lib/types";
 import { timeAgo } from "@opal/time";
 import Text from "@/refresh-components/texts/Text";
 import { InputTypeIn } from "@opal/components";
@@ -17,7 +18,7 @@ import { downloadUsersCsv } from "./svc";
 import UserFilters from "./UserFilters";
 import GroupsCell from "./GroupsCell";
 import UserRowActions from "./UserRowActions";
-import UserRoleCell from "./UserRoleCell";
+import AccountTypeCell from "./AccountTypeCell";
 import type {
   UserRow,
   GroupOption,
@@ -42,15 +43,19 @@ function renderNameColumn(email: string, row: UserRow) {
   );
 }
 
-function renderStatusColumn(value: UserStatus, row: UserRow) {
+function renderStatusColumn(
+  value: UserStatus,
+  row: UserRow,
+  labels: ColumnLabels
+) {
   return (
     <div className="flex flex-col">
       <Text as="span" mainUiBody text03>
-        {USER_STATUS_LABELS[value] ?? value}
+        {labels.status[value] ?? value}
       </Text>
       {row.is_scim_synced && (
         <Text as="span" secondaryBody text03>
-          SCIM synced
+          {labels.scimSynced}
         </Text>
       )}
     </div>
@@ -71,7 +76,17 @@ function renderLastUpdatedColumn(value: string | null) {
 
 const tc = createTableColumns<UserRow>();
 
-function buildColumns(onMutate: () => void) {
+interface ColumnLabels {
+  name: string;
+  groups: string;
+  accountType: string;
+  lastUpdated: string;
+  statusHeader: string;
+  status: Record<UserStatus, string>;
+  scimSynced: string;
+}
+
+function buildColumns(onMutate: () => void, labels: ColumnLabels) {
   return [
     tc.qualifier({
       content: "icon",
@@ -87,30 +102,30 @@ function buildColumns(onMutate: () => void) {
       },
     }),
     tc.column("email", {
-      header: "Name",
+      header: labels.name,
       weight: 22,
       cell: renderNameColumn,
     }),
     tc.column("groups", {
-      header: "Groups",
+      header: labels.groups,
       weight: 24,
       enableSorting: false,
       cell: (value, row) => (
         <GroupsCell groups={value} user={row} onMutate={onMutate} />
       ),
     }),
-    tc.column("role", {
-      header: "Account Type",
+    tc.column("account_type", {
+      header: labels.accountType,
       weight: 16,
-      cell: (_value, row) => <UserRoleCell user={row} onMutate={onMutate} />,
+      cell: (_value, row) => <AccountTypeCell user={row} onMutate={onMutate} />,
     }),
     tc.column("status", {
-      header: "Status",
+      header: labels.statusHeader,
       weight: 14,
-      cell: renderStatusColumn,
+      cell: (value, row) => renderStatusColumn(value, row, labels),
     }),
     tc.column("updated_at", {
-      header: "Last Updated",
+      header: labels.lastUpdated,
       weight: 14,
       cell: renderLastUpdatedColumn,
     }),
@@ -129,21 +144,24 @@ const PAGE_SIZE = 8;
 interface UsersTableProps {
   selectedStatuses: StatusFilter;
   onStatusesChange: (statuses: StatusFilter) => void;
-  roleCounts: Record<string, number>;
+  accountTypeCounts: Record<string, number>;
   statusCounts: StatusCountMap;
 }
 
 export default function UsersTable({
   selectedStatuses,
   onStatusesChange,
-  roleCounts,
+  accountTypeCounts,
   statusCounts,
 }: UsersTableProps) {
+  const t = useTranslations("admin.users");
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedRoles, setSelectedRoles] = useState<UserRole[]>([]);
+  const [selectedAccountTypes, setSelectedAccountTypes] = useState<
+    AccountType[]
+  >([]);
   const [selectedGroups, setSelectedGroups] = useState<number[]>([]);
 
-  const { data: allGroups } = useGroups();
+  const { data: allGroups } = useGroups(true);
 
   const groupOptions: GroupOption[] = useMemo(
     () =>
@@ -157,15 +175,34 @@ export default function UsersTable({
 
   const { users, isLoading, error, refresh } = useAdminUsers();
 
-  const columns = useMemo(() => buildColumns(refresh), [refresh]);
+  const columns = useMemo(
+    () =>
+      buildColumns(refresh, {
+        name: t("table.columns.name.header"),
+        groups: t("table.columns.groups.header"),
+        accountType: t("table.columns.accountType.header"),
+        lastUpdated: t("table.columns.lastUpdated.header"),
+        statusHeader: t("table.columns.status.header"),
+        status: {
+          [UserStatus.ACTIVE]: t("status.active.label"),
+          [UserStatus.INACTIVE]: t("status.inactive.label"),
+          [UserStatus.INVITED]: t("status.invited.label"),
+          [UserStatus.REQUESTED]: t("status.requested.label"),
+        },
+        scimSynced: t("table.status.scimSynced.label"),
+      }),
+    [refresh, t]
+  );
 
   // Client-side filtering
   const filteredUsers = useMemo(() => {
     let result = users;
 
-    if (selectedRoles.length > 0) {
+    if (selectedAccountTypes.length > 0) {
       result = result.filter(
-        (u) => u.role !== null && selectedRoles.includes(u.role)
+        (u) =>
+          u.account_type !== null &&
+          selectedAccountTypes.includes(u.account_type)
       );
     }
 
@@ -180,7 +217,7 @@ export default function UsersTable({
     }
 
     return result;
-  }, [users, selectedRoles, selectedStatuses, selectedGroups]);
+  }, [users, selectedAccountTypes, selectedStatuses, selectedGroups]);
 
   if (isLoading) {
     return (
@@ -193,7 +230,7 @@ export default function UsersTable({
   if (error) {
     return (
       <Text as="p" secondaryBody text03>
-        Failed to load users. Please try refreshing the page.
+        {t("table.error.description")}
       </Text>
     );
   }
@@ -203,18 +240,18 @@ export default function UsersTable({
       <InputTypeIn
         value={searchTerm}
         onChange={(e) => setSearchTerm(e.target.value)}
-        placeholder="Search users..."
+        placeholder={t("table.search.placeholder")}
         searchIcon
       />
       <UserFilters
-        selectedRoles={selectedRoles}
-        onRolesChange={setSelectedRoles}
+        selectedAccountTypes={selectedAccountTypes}
+        onAccountTypesChange={setSelectedAccountTypes}
         selectedGroups={selectedGroups}
         onGroupsChange={setSelectedGroups}
         groups={groupOptions}
         selectedStatuses={selectedStatuses}
         onStatusesChange={onStatusesChange}
-        roleCounts={roleCounts}
+        accountTypeCounts={accountTypeCounts}
         statusCounts={statusCounts}
       />
       <Table
@@ -226,8 +263,8 @@ export default function UsersTable({
         emptyState={
           <IllustrationContent
             illustration={SvgNoResult}
-            title="No users found"
-            description="No users match the current filters."
+            title={t("table.empty.title")}
+            description={t("table.empty.description")}
           />
         }
         footer={{
@@ -236,14 +273,14 @@ export default function UsersTable({
               icon={SvgDownload}
               prominence="tertiary"
               size="sm"
-              tooltip="Download CSV"
-              aria-label="Download CSV"
+              tooltip={t("table.downloadCsvButton.tooltip")}
+              aria-label={t("table.downloadCsvButton.ariaLabel")}
               onClick={() => {
                 downloadUsersCsv().catch((err) => {
                   toast.error(
                     err instanceof Error
                       ? err.message
-                      : "Failed to download CSV"
+                      : t("table.toasts.downloadFailed")
                   );
                 });
               }}

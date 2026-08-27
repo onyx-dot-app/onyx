@@ -1,4 +1,4 @@
-from sqlalchemy import String, and_, cast, select
+from sqlalchemy import String, and_, case, cast, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -6,6 +6,8 @@ from onyx.background.task_utils import QUERY_REPORT_NAME_PREFIX
 from onyx.configs.constants import FileOrigin, FileType
 from onyx.db.enums import IndexingStatus
 from onyx.db.models import FileRecord, IndexAttempt
+from onyx.file_store.constants import INCOGNITO_SESSION_METADATA_KEY
+from shared_configs.contextvars import CURRENT_CONTENT_FREE_SESSION_ID_CONTEXTVAR
 
 
 def get_query_history_export_files(
@@ -52,6 +54,37 @@ def get_filerecord_by_file_id(
         )
 
     return filestore
+
+
+def get_filerecords_by_file_ids(
+    file_ids: list[str],
+    db_session: Session,
+) -> list[FileRecord]:
+    """Fetch all matching file records in a single query. Missing IDs are
+    simply absent from the result."""
+    if not file_ids:
+        return []
+    return list(
+        db_session.scalars(select(FileRecord).where(FileRecord.file_id.in_(file_ids)))
+    )
+
+
+def update_filerecord_file_sizes(
+    file_sizes: dict[str, int],
+    db_session: Session,
+) -> None:
+    """Persist lazily-discovered sizes for records written before the
+    file_size column existed. Caller commits."""
+    if not file_sizes:
+        return
+    db_session.execute(
+        update(FileRecord)
+        .where(FileRecord.file_id.in_(file_sizes.keys()))
+        # Only fill still-empty sizes: a concurrent overwrite may have
+        # persisted a fresh size after this listing's lookup started.
+        .where(FileRecord.file_size.is_(None))
+        .values(file_size=case(file_sizes, value=FileRecord.file_id))
+    )
 
 
 def get_filerecord_by_prefix(
@@ -156,9 +189,21 @@ def upsert_filerecord(
     object_key: str,
     db_session: Session,
     file_metadata: dict | None = None,
+    file_size: int | None = None,
 ) -> FileRecord:
     """Atomic upsert using INSERT ... ON CONFLICT DO UPDATE to avoid
-    race conditions when concurrent calls target the same file_id."""
+    race conditions when concurrent calls target the same file_id.
+
+    Every backend writes its record here, so this is also where a blob saved
+    during a content-free chat turn gets stamped with its session. The stamp
+    is the only handle cleanup has, and it lands with the record itself.
+    """
+    session_id = CURRENT_CONTENT_FREE_SESSION_ID_CONTEXTVAR.get()
+    if session_id is not None:
+        file_metadata = {
+            **(file_metadata or {}),
+            INCOGNITO_SESSION_METADATA_KEY: session_id,
+        }
     stmt = insert(FileRecord).values(
         file_id=file_id,
         display_name=display_name,
@@ -167,6 +212,7 @@ def upsert_filerecord(
         file_metadata=file_metadata,
         bucket_name=bucket_name,
         object_key=object_key,
+        file_size=file_size,
     )
     stmt = stmt.on_conflict_do_update(
         index_elements=[FileRecord.file_id],
@@ -177,8 +223,42 @@ def upsert_filerecord(
             "file_metadata": stmt.excluded.file_metadata,
             "bucket_name": stmt.excluded.bucket_name,
             "object_key": stmt.excluded.object_key,
+            "file_size": stmt.excluded.file_size,
         },
     )
     db_session.execute(stmt)
 
     return db_session.get(FileRecord, file_id)  # ty: ignore[invalid-return-type]
+
+
+def get_incognito_file_ids(session_id: str, db_session: Session) -> list[str]:
+    """Ids of blobs a content-free session produced and has not deleted yet."""
+    return list(
+        db_session.scalars(
+            select(FileRecord.file_id).where(
+                FileRecord.file_metadata[INCOGNITO_SESSION_METADATA_KEY].astext
+                == session_id
+            )
+        )
+    )
+
+
+def get_session_ids_with_incognito_files(
+    db_session: Session, limit: int | None = None
+) -> list[str]:
+    """Sessions still holding blobs. Empty in steady state, since teardown
+    deletes the records, so this only sees what a store failure left.
+
+    Sampled at random when limited: every row here is a retry, so a set that
+    keeps failing must not occupy the batch and hide the sessions behind it.
+    """
+    stmt = (
+        select(FileRecord.file_metadata[INCOGNITO_SESSION_METADATA_KEY].astext)
+        .distinct()
+        .where(FileRecord.file_metadata.has_key(INCOGNITO_SESSION_METADATA_KEY))
+    )
+    if limit is not None:
+        # Postgres rejects ORDER BY random() on a DISTINCT select, so the
+        # sample draws from a subquery.
+        stmt = select(stmt.subquery()).order_by(func.random()).limit(limit)
+    return list(db_session.scalars(stmt))

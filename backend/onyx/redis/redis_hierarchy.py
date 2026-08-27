@@ -228,6 +228,22 @@ def evict_hierarchy_nodes_from_cache(
     redis_client.hdel(raw_id_key, *raw_node_ids)
 
 
+def invalidate_hierarchy_cache_for_source(
+    redis_client: TenantRedisClient,
+    source: DocumentSource,
+) -> None:
+    """Drop all cached ancestor mappings for a source.
+
+    Next ancestor lookup refreshes from Postgres. Use after source-wide
+    node deletes or reparents so stale parent chains cannot be served.
+    """
+    redis_client.delete(
+        _cache_key(source),
+        _raw_id_cache_key(source),
+        _source_node_key(source),
+    )
+
+
 def get_node_id_from_raw_id(
     redis_client: TenantRedisClient,
     source: DocumentSource,

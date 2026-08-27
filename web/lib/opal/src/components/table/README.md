@@ -48,23 +48,24 @@ function UsersTable({ users }: { users: User[] }) {
 
 ## Props
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `data` | `TData[]` | required | Row data array |
-| `columns` | `OnyxColumnDef<TData>[]` | required | Column definitions from `createTableColumns()` |
-| `getRowId` | `(row: TData) => string` | required | Unique row identifier |
-| `pageSize` | `number` | `10` | Rows per page (`Infinity` disables pagination) |
-| `size` | `"md" \| "lg"` | `"lg"` | Density variant |
-| `footer` | `DataTableFooterConfig` | — | Footer configuration (mode is derived from `selectionBehavior`) |
-| `initialSorting` | `SortingState` | — | Initial sort state |
-| `initialColumnVisibility` | `VisibilityState` | — | Initial column visibility |
-| `draggable` | `DataTableDraggableConfig` | — | Enable drag-and-drop reordering |
-| `onSelectionChange` | `(ids: string[]) => void` | — | Selection callback |
-| `onRowClick` | `(row: TData) => void` | — | Row click handler |
-| `searchTerm` | `string` | — | Global text filter |
-| `height` | `number \| string` | — | Max scrollable height |
-| `serverSide` | `ServerSideConfig` | — | Server-side pagination/sorting/filtering |
-| `emptyState` | `ReactNode` | — | Empty state content |
+| Prop                      | Type                       | Default  | Description                                                     |
+| ------------------------- | -------------------------- | -------- | --------------------------------------------------------------- |
+| `data`                    | `TData[]`                  | required | Row data array                                                  |
+| `columns`                 | `OnyxColumnDef<TData>[]`   | required | Column definitions from `createTableColumns()`                  |
+| `getRowId`                | `(row: TData) => string`   | required | Unique row identifier                                           |
+| `pageSize`                | `number`                   | `10`     | Rows per page (`Infinity` disables pagination)                  |
+| `size`                    | `"md" \| "lg"`             | `"lg"`   | Density variant                                                 |
+| `footer`                  | `DataTableFooterConfig`    | —        | Footer configuration (mode is derived from `selectionBehavior`) |
+| `initialSorting`          | `SortingState`             | —        | Initial sort state                                              |
+| `initialColumnVisibility` | `VisibilityState`          | —        | Initial column visibility                                       |
+| `draggable`               | `DataTableDraggableConfig` | —        | Enable drag-and-drop reordering                                 |
+| `onSelectionChange`       | `(ids: string[]) => void`  | —        | Selection callback                                              |
+| `onRowClick`              | `(row: TData) => void`     | —        | Row click handler                                               |
+| `getRowLabel`             | `(row: TData) => string`   | —        | Accessible action label for clickable rows                      |
+| `searchTerm`              | `string`                   | —        | Global text filter                                              |
+| `height`                  | `number \| string`         | —        | Max scrollable height                                           |
+| `serverSide`              | `ServerSideConfig`         | —        | Server-side pagination/sorting/filtering                        |
+| `emptyState`              | `ReactNode`                | —        | Empty state content                                             |
 
 ## Column Builder
 
@@ -78,5 +79,6 @@ function UsersTable({ users }: { users: User[] }) {
 ## Footer
 
 The footer mode is derived automatically from `selectionBehavior`:
+
 - **Selection footer** (when `selectionBehavior` is `"single-select"` or `"multi-select"`) — shows selection count, optional view/clear buttons, count pagination
 - **Summary footer** (when `selectionBehavior` is `"no-select"` or omitted) — shows "Showing X\~Y of Z", list pagination, optional extra element

@@ -24,14 +24,17 @@ import {
   SvgUser,
   SvgNotificationBubble,
 } from "@opal/icons";
-import { Content, toast } from "@opal/layouts";
+import { Content, toast, useSidebarFolded } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
 import useAppFocus from "@/hooks/useAppFocus";
+import useScreenSize from "@/hooks/useScreenSize";
 import { useSettings } from "@/lib/settings/hooks";
 import UserAvatar from "@/refresh-components/avatars/UserAvatar";
+import SidebarTabSkeleton from "@/refresh-components/skeletons/SidebarTabSkeleton";
 import { useNotificationSummary } from "@/hooks/useNotifications";
 import { SvgOnyxLogo } from "@opal/logos";
 import { markdown } from "@opal/utils";
+import { useTranslations } from "next-intl";
 
 interface SettingsPopoverProps {
   onUserSettingsClick: () => void;
@@ -44,7 +47,8 @@ function SettingsPopover({
   onOpenNotifications,
   undismissedCount,
 }: SettingsPopoverProps) {
-  const { user } = useUser();
+  const t = useTranslations("accountPopover");
+  const { user, userResolution } = useUser();
   const settings = useSettings();
   const enterpriseSettings = settings.enterprise;
   const router = useRouter();
@@ -63,11 +67,13 @@ function SettingsPopover({
     router.push(`/auth/login?next=${encodedRedirect}`);
   };
 
+  const logoutFailedMessage = t("logoutFailed.message");
+
   const handleLogout = () => {
     logout()
       .then((response) => {
         if (!response?.ok) {
-          alert("Failed to logout");
+          alert(logoutFailedMessage);
           return;
         }
 
@@ -81,7 +87,7 @@ function SettingsPopover({
       })
 
       .catch(() => {
-        toast.error("Failed to logout");
+        toast.error(logoutFailedMessage);
       });
   };
 
@@ -89,16 +95,23 @@ function SettingsPopover({
     <PopoverMenu>
       {[
         <div key="user-email" className="p-2">
-          <Content sizePreset="main-ui" title={getUserEmail(user)} />
+          <Content
+            sizePreset="main-ui"
+            title={
+              userResolution === "unavailable"
+                ? t("profileUnavailable.title")
+                : getUserEmail(user)
+            }
+          />
         </div>,
         null,
         <div key="user-settings" data-testid="Settings/user-settings">
           <LineItemButton
             sizePreset="main-ui"
             variant="section"
-            rounding="sm"
+            rounding={2}
             icon={SvgSliders}
-            title="Settings"
+            title={t("settings.label")}
             href="/app/settings"
             onClick={onUserSettingsClick}
           />
@@ -107,9 +120,9 @@ function SettingsPopover({
           key="notifications"
           sizePreset="main-ui"
           variant="section"
-          rounding="sm"
+          rounding={2}
           icon={SvgBell}
-          title="Notifications"
+          title={t("notifications.label")}
           onClick={onOpenNotifications}
           rightChildren={
             undismissedCount ? (
@@ -121,9 +134,9 @@ function SettingsPopover({
           key="help-faq"
           sizePreset="main-ui"
           variant="section"
-          rounding="sm"
+          rounding={2}
           icon={SvgHelpCircle}
-          title="Help & FAQ"
+          title={t("helpFaq.label")}
           href="https://docs.onyx.app"
           target="_blank"
         />,
@@ -132,7 +145,7 @@ function SettingsPopover({
             key="custom-help-link"
             sizePreset="main-ui"
             variant="section"
-            rounding="sm"
+            rounding={2}
             icon={SvgExternalLink}
             title={
               enterpriseSettings.custom_help_link_label ||
@@ -147,9 +160,9 @@ function SettingsPopover({
             key="log-in"
             sizePreset="main-ui"
             variant="section"
-            rounding="sm"
+            rounding={2}
             icon={SvgUser}
-            title="Log in"
+            title={t("logIn.label")}
             onClick={handleLogin}
           />
         ),
@@ -159,9 +172,9 @@ function SettingsPopover({
             sizePreset="main-ui"
             variant="section"
             color="danger"
-            rounding="sm"
+            rounding={2}
             icon={SvgLogOut}
-            title="Log Out"
+            title={t("signOut.label")}
             onClick={handleLogout}
           />
         ),
@@ -186,23 +199,25 @@ function SettingsPopover({
 }
 
 export interface SettingsProps {
-  folded?: boolean;
   onShowBuildIntro?: () => void;
 }
 
-export default function AccountPopover({
-  folded,
-  onShowBuildIntro,
-}: SettingsProps) {
+export default function AccountPopover({ onShowBuildIntro }: SettingsProps) {
+  const t = useTranslations("accountPopover");
+  const folded = useSidebarFolded();
   const [popupState, setPopupState] = useState<
     "Settings" | "Notifications" | undefined
   >(undefined);
-  const { user } = useUser();
+  const { user, userResolution } = useUser();
   const appFocus = useAppFocus();
+  const { isMobile } = useScreenSize();
   const { vectorDbEnabled } = useSettings();
   const { undismissedCount, refresh: refreshNotificationSummary } =
     useNotificationSummary();
-  const userDisplayName = getUserDisplayName(user);
+  const userDisplayName =
+    userResolution === "unavailable"
+      ? t("accountFallback.label")
+      : getUserDisplayName(user);
 
   const handlePopoverOpen = (state: boolean) => {
     if (state) {
@@ -219,6 +234,9 @@ export default function AccountPopover({
       setPopupState(undefined);
     }
   };
+  if (userResolution === "loading") {
+    return <SidebarTabSkeleton folded={folded} />;
+  }
 
   return (
     <Popover open={!!popupState} onOpenChange={handlePopoverOpen}>
@@ -232,14 +250,13 @@ export default function AccountPopover({
             )}
             rightChildren={
               undismissedCount ? (
-                <Section padding={0.5}>
+                <Section padding={2}>
                   <SvgNotificationBubble count={undismissedCount} />
                 </Section>
               ) : undefined
             }
             type="button"
             selected={!!popupState || appFocus.isUserSettings()}
-            folded={folded}
           >
             {userDisplayName}
           </SidebarTab>
@@ -247,8 +264,8 @@ export default function AccountPopover({
       </Popover.Trigger>
 
       <Popover.Content
-        align="end"
-        side="right"
+        align={isMobile ? "start" : "end"}
+        side={isMobile ? "top" : "right"}
         width={popupState === "Notifications" ? "2xl" : "lg"}
       >
         {popupState === "Settings" && (

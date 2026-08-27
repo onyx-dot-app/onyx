@@ -1,4 +1,4 @@
-import base64
+import contextvars
 import hashlib
 import os
 import random
@@ -6,6 +6,7 @@ import secrets
 import string
 import uuid
 from collections.abc import AsyncGenerator, Sequence
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from functools import partial
 from typing import Any, Dict, List, Literal, Optional, Protocol, Tuple, TypeVar, cast
@@ -56,7 +57,6 @@ from httpx_oauth.exceptions import GetIdEmailError
 from httpx_oauth.integrations.fastapi import OAuth2AuthorizeCallback
 from httpx_oauth.oauth2 import BaseOAuth2, GetAccessTokenError, OAuth2Token
 from pydantic import BaseModel
-from sqlalchemy import nulls_last, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
@@ -76,8 +76,11 @@ from onyx.auth.mobile_sso.sso_completion import (
     complete_mobile_sso,
     is_mobile_sso,
 )
+from onyx.auth.oidc_client import log_token_exchange_failure
 from onyx.auth.pat import get_hashed_pat_from_request
-from onyx.auth.schemas import AuthBackend, UserCreate, UserRole
+from onyx.auth.permissions import has_global_permission
+from onyx.auth.pkce import generate_pkce_pair
+from onyx.auth.schemas import AuthBackend, UserCreate
 from onyx.auth.session_tokens import (
     SESSION_TOKEN_GRACE_PERIOD_SECONDS,
     SessionRejection,
@@ -97,7 +100,6 @@ from onyx.configs.app_configs import (
     DEV_MODE,
     EMAIL_CONFIGURED,
     INTEGRATION_TESTS_MODE,
-    JWT_PUBLIC_KEY_URL,
     REDIS_AUTH_KEY_PREFIX,
     REQUIRE_EMAIL_VERIFICATION,
     SESSION_EXPIRE_TIME_SECONDS,
@@ -116,9 +118,8 @@ from onyx.configs.constants import (
     MilestoneRecordType,
     OnyxRedisLocks,
 )
-from onyx.db.api_key import fetch_user_for_api_key
+from onyx.db.api_key import fetch_api_key_auth_result
 from onyx.db.auth import (
-    SQLAlchemyUserAdminDB,
     get_access_token_db,
     get_default_admin_user_emails,
     get_user_count,
@@ -132,13 +133,16 @@ from onyx.db.engine.sql_engine import (
     get_session_with_current_tenant,
     get_session_with_tenant,
 )
-from onyx.db.enums import AccountType, Permission
-from onyx.db.models import AccessToken, OAuthAccount, Persona, User
+from onyx.db.enums import AccountType, PatType, Permission
+from onyx.db.models import AccessToken, OAuthAccount, User
 from onyx.db.pat import resolve_pat
+from onyx.db.pinned_personas import seed_pinned_personas_from_featured
 from onyx.db.users import (
     assign_user_to_default_groups__no_commit,
     get_user_by_email,
+    get_user_by_oauth_account,
     is_limited_user,
+    reconcile_user_email__no_commit,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import (
@@ -168,9 +172,13 @@ from shared_configs.configs import (
 )
 from shared_configs.contextvars import (
     CURRENT_TENANT_ID_CONTEXTVAR,
+    CURRENT_USAGE_CREDENTIAL_CONTEXTVAR,
     CURRENT_USER_ID_CONTEXTVAR,
+    SESSION_TENANT_OVERRIDE_CONTEXTVAR,
+    UsageCredentialIdentity,
     get_current_tenant_id,
 )
+from shared_configs.enums import UsageCredentialType
 
 logger = setup_logger()
 
@@ -178,7 +186,7 @@ REGISTER_INVITE_ONLY_CODE = "REGISTER_INVITE_ONLY"
 
 
 def is_user_admin(user: User) -> bool:
-    return user.role == UserRole.ADMIN
+    return has_global_permission(user, Permission.FULL_ADMIN_PANEL_ACCESS)
 
 
 def verify_auth_setting() -> None:
@@ -333,9 +341,57 @@ def verify_email_is_invited(email: str) -> None:
     )
 
 
-def verify_email_in_whitelist(email: str, tenant_id: str) -> None:
+def remove_user_from_invited_users_after_login(
+    email: str, user_id: uuid.UUID, tenant_id: str
+) -> None:
+    """Best-effort invite cleanup. A leftover entry is inert once the user is a
+    member, so a failure must not fail the login."""
+    try:
+        remove_user_from_invited_users(email)
+    except Exception:
+        logger.warning(
+            "Invite cleanup failed after login: user_id=%s tenant=%s",
+            user_id,
+            tenant_id,
+            exc_info=True,
+        )
+
+
+def rekey_tenant_mapping_after_login(
+    email: str,
+    tenant_id: str,
+    oauth_identities: list[tuple[str, str]],
+    previous_email: str | None = None,
+) -> None:
+    """Best-effort catalog rekey for a login that has already succeeded.
+
+    Tenant resolution routes by linked subject, so a membership row left under
+    the old address still reaches the right workspace and the next login retries.
+    """
+    try:
+        fetch_ee_implementation_or_noop(
+            "onyx.db.user_tenant_mapping", "rekey_user_mapping_email", None
+        )(email, tenant_id, oauth_identities, previous_email)
+    except Exception:
+        logger.warning(
+            "Tenant mapping rekey failed after login: tenant=%s",
+            tenant_id,
+            exc_info=True,
+        )
+
+
+def verify_email_in_whitelist(
+    email: str,
+    tenant_id: str,
+    oauth_name: str | None = None,
+    account_id: str | None = None,
+) -> None:
     with get_session_with_tenant(tenant_id=tenant_id) as db_session:
         user = get_user_by_email(email, db_session)
+        if user is None and oauth_name and account_id:
+            # A linked subject proves this is an existing member even when the
+            # provider has renamed their address since the previous login.
+            user = get_user_by_oauth_account(oauth_name, account_id, db_session)
         # A permission-sync placeholder is not a member: appearing in a
         # connector's ACLs must not satisfy invite-only, so the invite check
         # applies until the person actually joins.
@@ -470,19 +526,50 @@ def _invalidate_license_cache_after_seat_change() -> None:
     )()
 
 
+async def resolve_tenant_for_user(email: str, request: Request | None = None) -> str:
+    """Workspace to bind a user to. An explicit override wins, since an SSO login
+    knows its workspace before the user row exists."""
+    override = SESSION_TENANT_OVERRIDE_CONTEXTVAR.get()
+    if override is not None:
+        return override
+
+    return await fetch_ee_implementation_or_noop(
+        "onyx.server.tenants.provisioning",
+        "get_or_provision_tenant",
+        async_return_default_schema,
+    )(email=email, request=request)
+
+
 class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     reset_password_token_secret = USER_AUTH_SECRET
     verification_token_secret = USER_AUTH_SECRET
     verification_token_lifetime_seconds = AUTH_COOKIE_EXPIRE_TIME_SECONDS
     user_db: SQLAlchemyUserDatabase[User, uuid.UUID]
 
+    @asynccontextmanager
+    async def _tenant_session_with_bound_user_db(
+        self, tenant_id: str
+    ) -> AsyncGenerator[AsyncSession, None]:
+        """Run tenant work on one AsyncSession; user_db writes use that connection."""
+        token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
+        previous_user_db = self.user_db
+        try:
+            async with get_async_session_context_manager(tenant_id) as db_session:
+                self.user_db = SQLAlchemyUserDatabase[User, uuid.UUID](
+                    db_session, User, OAuthAccount
+                )
+                yield db_session
+        finally:
+            self.user_db = previous_user_db
+            CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+
     async def get_by_email(self, user_email: str) -> User:
         tenant_id = fetch_ee_implementation_or_noop(
-            "onyx.server.tenants.user_mapping", "get_tenant_id_for_email", None
+            "onyx.db.user_tenant_mapping", "get_tenant_id_for_email", None
         )(user_email)
         async with get_async_session_context_manager(tenant_id) as db_session:
             if MULTI_TENANT:
-                tenant_user_db = SQLAlchemyUserAdminDB[User, uuid.UUID](
+                tenant_user_db = SQLAlchemyUserDatabase[User, uuid.UUID](
                     db_session, User, OAuthAccount
                 )
                 user = await tenant_user_db.get_by_email(user_email)
@@ -521,7 +608,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
         try:
             tenant_id = fetch_ee_implementation_or_noop(
-                "onyx.server.tenants.user_mapping",
+                "onyx.db.user_tenant_mapping",
                 "get_tenant_id_for_email",
                 None,
             )(email)
@@ -531,7 +618,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         contextvar_token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
         try:
             async with get_async_session_context_manager(tenant_id) as db_session:
-                tenant_user_db = SQLAlchemyUserAdminDB[User, uuid.UUID](
+                tenant_user_db = SQLAlchemyUserDatabase[User, uuid.UUID](
                     db_session, User, OAuthAccount
                 )
 
@@ -658,22 +745,16 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     # Single-tenant: the gate self-skips when invite-only is off
                     verify_email_is_invited(user_create.email)
                 if MULTI_TENANT:
-                    tenant_user_db = SQLAlchemyUserAdminDB[User, uuid.UUID](
+                    tenant_user_db = SQLAlchemyUserDatabase[User, uuid.UUID](
                         db_session, User, OAuthAccount
                     )
                     self.user_db = tenant_user_db
 
-                if hasattr(user_create, "role"):
-                    user_create.role = UserRole.BASIC  # ty: ignore[invalid-assignment]
-
-                    user_count = await get_user_count()
-                    if (
-                        user_count == 0
-                        or user_create.email in get_default_admin_user_emails()
-                    ):
-                        user_create.role = (  # ty: ignore[invalid-assignment]
-                            UserRole.ADMIN
-                        )
+                user_count = await get_user_count()
+                is_admin = (
+                    user_count == 0
+                    or user_create.email in get_default_admin_user_emails()
+                )
 
                 # Lock + check on the same session that does the insert.
                 existing = await self.user_db.session.run_sync(
@@ -719,7 +800,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     # object triggers a sync lazy-load which raises MissingGreenlet
                     # in this async context.
                     user_id = user.id
-                    self._upgrade_user_to_standard__sync(user_id, user_create)
+                    self._upgrade_user_to_standard__sync(user_id, user_create, is_admin)
                     # Expire so the async session re-fetches the row updated by
                     # the sync session above.
                     self.user_db.session.expire(user)
@@ -749,7 +830,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     # object triggers a sync lazy-load which raises MissingGreenlet
                     # in this async context.
                     user_id = user.id
-                    self._upgrade_user_to_standard__sync(user_id, user_create)
+                    self._upgrade_user_to_standard__sync(user_id, user_create, is_admin)
                     # Expire so the async session re-fetches the row updated by
                     # the sync session above.
                     self.user_db.session.expire(user)
@@ -757,45 +838,19 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                         user_id
                     )
                 if user_created:
-                    await self._assign_default_pinned_assistants(user, db_session)
+                    await seed_pinned_personas_from_featured(
+                        db_session=db_session, user=user
+                    )
                 remove_user_from_invited_users(user_create.email)
         finally:
             CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
         return user
 
-    async def _assign_default_pinned_assistants(
-        self, user: User, db_session: AsyncSession
-    ) -> None:
-        if user.pinned_assistants is not None:
-            return
-
-        result = await db_session.execute(
-            select(Persona.id)
-            .where(
-                Persona.is_featured.is_(True),
-                Persona.is_public.is_(True),
-                Persona.is_listed.is_(True),
-                Persona.deleted.is_(False),
-            )
-            .order_by(
-                nulls_last(Persona.display_priority.asc()),
-                Persona.id.asc(),
-            )
-        )
-        default_persona_ids = list(result.scalars().all())
-        if not default_persona_ids:
-            return
-
-        await self.user_db.update(
-            user,
-            {"pinned_assistants": default_persona_ids},
-        )
-        user.pinned_assistants = default_persona_ids
-
     def _upgrade_user_to_standard__sync(
         self,
         user_id: uuid.UUID,
         user_create: UserCreate,
+        is_admin: bool,
     ) -> None:
         """Upgrade a non-web user to STANDARD + assign groups in one tx.
 
@@ -820,12 +875,11 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     user_create.password
                 )
                 sync_user.is_verified = user_create.is_verified or False
-                sync_user.role = user_create.role
                 sync_user.account_type = AccountType.STANDARD
                 assign_user_to_default_groups__no_commit(
                     sync_db,
                     sync_user,
-                    is_admin=(user_create.role == UserRole.ADMIN),
+                    is_admin=is_admin,
                 )
                 sync_db.commit()
             else:
@@ -888,12 +942,17 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         associate_by_email: bool = False,
         is_verified_by_default: bool = False,
         allowed_email_domains_override: Sequence[str] | None = None,
+        enforce_verified_domain: bool = False,
     ) -> User:
         referral_source = (
             getattr(request.state, "referral_source", None) if request else None
         )
 
-        tenant_id = await fetch_ee_implementation_or_noop(
+        # A workspace-configured provider vouches for who someone is, never for
+        # where they belong, so a pinned login (override set) skips provisioning
+        # entirely and lets the invite gate below decide whether it admits them.
+        override = SESSION_TENANT_OVERRIDE_CONTEXTVAR.get()
+        tenant_id = override or await fetch_ee_implementation_or_noop(
             "onyx.server.tenants.provisioning",
             "get_or_provision_tenant",
             async_return_default_schema,
@@ -901,17 +960,15 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             email=account_email,
             referral_source=referral_source,
             request=request,
+            oauth_name=oauth_name,
+            account_id=account_id,
         )
 
         if not tenant_id:
             raise HTTPException(status_code=401, detail="User not found")
 
-        # Proceed with the tenant context
-        token = None
-        async with get_async_session_context_manager(tenant_id) as db_session:
-            token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
-
-            verify_email_in_whitelist(account_email, tenant_id)
+        async with self._tenant_session_with_bound_user_db(tenant_id) as db_session:
+            verify_email_in_whitelist(account_email, tenant_id, oauth_name, account_id)
             oauth_security_settings = get_security_settings()
             effective_valid_email_domains = (
                 allowed_email_domains_override
@@ -923,13 +980,19 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 valid_email_domains=effective_valid_email_domains,
             )
 
-            # NOTE(rkuo): If this UserManager is instantiated per connection
-            # should we even be doing this here?
-            if MULTI_TENANT:
-                tenant_user_db = SQLAlchemyUserAdminDB[User, uuid.UUID](
-                    db_session, User, OAuthAccount
-                )
-                self.user_db = tenant_user_db
+            if override is not None and enforce_verified_domain:
+                # Current active members are exempt from the domain gate.
+                already_member = fetch_ee_implementation_or_noop(
+                    "onyx.db.user_tenant_mapping", "is_active_member", False
+                )(tenant_id, account_email, oauth_name, account_id)
+                if not already_member and not fetch_ee_implementation_or_noop(
+                    "onyx.db.tenant_sso_domain", "is_email_domain_verified", False
+                )(tenant_id, account_email):
+                    raise OnyxError(
+                        OnyxErrorCode.UNAUTHORIZED,
+                        "This workspace has not verified your email domain for "
+                        "single sign-on.",
+                    )
 
             oauth_account_dict = {
                 "oauth_name": oauth_name,
@@ -953,14 +1016,21 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     user = await self.user_db.get_by_email(account_email)
                     if user is None:
                         raise exceptions.UserNotExists()
-                    if not associate_by_email and user.account_type.is_web_login():
-                        # Linking a login to an existing same-email account is
-                        # an account-takeover vector unless explicitly enabled.
-                        # Non-web-login placeholders (permission-sync
-                        # EXT_PERM_USER, bots) carry no credentials or sessions,
-                        # so there is nothing to take over, and the non-web-login
-                        # upgrade below claims them.
-                        raise exceptions.UserAlreadyExists()
+                    # Placeholders (EXT_PERM_USER, bots) carry no credentials or
+                    # sessions, so neither check applies and the upgrade claims them.
+                    if user.account_type.is_web_login():
+                        # Linking commits, so a disabled row comes back unlinked.
+                        # Linking would hand it to this identity on reactivation.
+                        if not user.is_active:
+                            return user
+
+                        # An owned row must not take a second provider, and a
+                        # rename stops the address identifying the row. All else
+                        # is claimable, password signups included.
+                        if not associate_by_email and (
+                            user.oauth_accounts or user.prior_emails
+                        ):
+                            raise exceptions.UserAlreadyExists()
 
                     user = await self.user_db.add_oauth_account(
                         user, oauth_account_dict
@@ -990,7 +1060,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
                     user = await self.user_db.create(user_dict)
                     await self.user_db.add_oauth_account(user, oauth_account_dict)
-                    await self._assign_default_pinned_assistants(user, db_session)
+                    await seed_pinned_personas_from_featured(
+                        db_session=db_session, user=user
+                    )
                     await self.on_after_register(user, request)
 
             else:
@@ -1009,6 +1081,47 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                                 oauth_account_dict,
                             )
 
+            assert user is not None
+
+            if override is not None:
+                # A pinned login skipped the provisioning that records
+                # membership. Record it here, before the link below needs the row.
+                fetch_ee_implementation_or_noop(
+                    "onyx.db.user_tenant_mapping", "ensure_tenant_membership", None
+                )(user.email, tenant_id, oauth_name, account_id)
+
+            # Keyed on the stored email rather than the one the IdP just sent.
+            # The membership row moves onto the new address at the rekey below.
+            fetch_ee_implementation_or_noop(
+                "onyx.db.user_tenant_mapping", "record_oauth_identity", None
+            )(user.email, tenant_id, oauth_name, account_id)
+
+            # The provider is authoritative for the address, so adopt it when it
+            # moves. Not gated on multi-tenant: single-tenant reaches the same
+            # user by subject and so arrives here with a stale email too.
+            email_reconcile_result = await db_session.run_sync(
+                partial(reconcile_user_email__no_commit, user.id, account_email)
+            )
+            replaced_email: str | None = None
+            if email_reconcile_result is not None:
+                replaced_email, reconciled_prior_emails = email_reconcile_result
+                # Retire the consumed invite before the rename commits. A failure
+                # afterwards leaves it able to authorize the address's next holder,
+                # and no later login reports that address again.
+                remove_user_from_invited_users(replaced_email)
+                await db_session.commit()
+                user.email = account_email.lower()
+                user.prior_emails = reconciled_prior_emails
+
+            oauth_identities = [
+                (oauth_account.oauth_name, oauth_account.account_id)
+                for oauth_account in user.oauth_accounts
+            ]
+
+            rekey_tenant_mapping_after_login(
+                user.email, tenant_id, oauth_identities, replaced_email
+            )
+
             # NOTE: Most IdPs have very short expiry times, and we don't want to force the user to
             # re-authenticate that frequently, so by default this is disabled
             track_external_idp_expiry = (
@@ -1022,14 +1135,10 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
             # Handle case where user has used product outside of web and is now creating an account through web
             if not user.account_type.is_web_login():
-                # We must use the existing user in the session if it matches
-                # the user we just got by email/oauth. Note that this only applies
-                # to multi-tenant, due to the overwriting of the user_db
-                if MULTI_TENANT:
-                    if user.id:
-                        user_by_session = await db_session.get(User, user.id)
-                        if user_by_session:
-                            user = user_by_session
+                if user.id:
+                    user_by_session = await db_session.get(User, user.id)
+                    if user_by_session:
+                        user = user_by_session
 
                 # Lock + check + upgrade in one transaction.
                 was_inactive = not user.is_active
@@ -1050,7 +1159,6 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                             enforce_seat_limit_locked(sync_db, seats_needed=1)
                             seat_added = True
                         sync_user.is_verified = is_verified_by_default
-                        sync_user.role = UserRole.BASIC
                         sync_user.account_type = AccountType.STANDARD
                         if was_inactive:
                             sync_user.is_active = True
@@ -1075,9 +1183,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             if user.oidc_expiry is not None and not track_external_idp_expiry:
                 await self.user_db.update(user, {"oidc_expiry": None})
                 user.oidc_expiry = None  # ty: ignore[invalid-assignment]
-            remove_user_from_invited_users(user.email)
-            if token:
-                CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+            remove_user_from_invited_users_after_login(user.email, user.id, tenant_id)
 
             return user
 
@@ -1115,16 +1221,10 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     async def on_after_register(
         self, user: User, request: Optional[Request] = None
     ) -> None:
-        tenant_id = await fetch_ee_implementation_or_noop(
-            "onyx.server.tenants.provisioning",
-            "get_or_provision_tenant",
-            async_return_default_schema,
-        )(
-            email=user.email,
-            request=request,
-        )
+        tenant_id = await resolve_tenant_for_user(user.email, request)
 
         user_count = None
+        is_admin = False
         token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
         try:
             user_count = await get_user_count()
@@ -1187,9 +1287,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             and (marketing_cookie_value := request.cookies.get(marketing_cookie_name))
             and (parsed_cookie := parse_posthog_cookie(marketing_cookie_value))
         ):
-            marketing_anonymous_id = parsed_cookie[  # ty: ignore[possibly-unresolved-reference]
-                "distinct_id"
-            ]
+            marketing_anonymous_id = parsed_cookie["distinct_id"]
 
             # Technically, USER_SIGNED_UP is only fired from the cloud site when
             # it is the first user in a tenant. However, it is semantically correct
@@ -1199,7 +1297,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 "email": user.email,
                 "onyx_cloud_user_id": str(user.id),
                 "tenant_id": str(tenant_id) if tenant_id else None,
-                "role": user.role.value,
+                "account_type": user.account_type.value,
                 "is_first_user": user_count == 1,
                 "source": "marketing_site_signup",
                 "conversion_timestamp": datetime.now(timezone.utc).isoformat(),
@@ -1209,7 +1307,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             for (
                 key,
                 value,
-            ) in parsed_cookie.items():  # ty: ignore[possibly-unresolved-reference]
+            ) in parsed_cookie.items():
                 if key != "distinct_id":
                     properties.setdefault(key, value)
 
@@ -1230,6 +1328,10 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             AuditAction.REGISTER,
             AuditOutcome.SUCCESS,
             actor=AuditActor(user_id=str(user.id), email=user.email),
+            # This is the only record of the first-user and
+            # DEFAULT_ADMIN_USER_EMAILS admin grants; neither one goes through
+            # the admin-access route.
+            extra={"is_admin": is_admin},
         )
 
     async def on_after_forgot_password(
@@ -1302,23 +1404,39 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         # marks the account verified, and the log stream is a wider audience
         # than the intended email channel.
         logger.notice("Verification requested for user %s", user.id)
-        user_count = await get_user_count()
+
+        # This endpoint is unauthenticated, so the request resolves to the
+        # default schema. On multi-tenant that schema owns neither the user rows
+        # nor the branding the email is built from, and the audit event reads
+        # the tenant off the contextvar, so bind the address's own workspace.
+        tenant_id: str = fetch_ee_implementation_or_noop(
+            "onyx.db.user_tenant_mapping",
+            "get_tenant_id_for_email",
+            POSTGRES_DEFAULT_SCHEMA,
+        )(user.email)
+        contextvar_token: contextvars.Token[str | None] = (
+            CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
+        )
         try:
+            user_count = await get_user_count()
             send_user_verification_email(
                 user.email, token, new_organization=user_count == 1
             )
+            emit_audit_event(
+                AuditAction.EMAIL_VERIFY,
+                AuditOutcome.SUCCESS,
+                actor=AuditActor(user_id=str(user.id), email=user.email),
+            )
         except Exception as e:
-            logger.error("Failed to send verification email to %s: %s", user.email, e)
+            # The count, the branding lookup and the SMTP call all land here,
+            # so on-call needs the traceback to tell which one broke.
+            logger.exception("Failed to send verification email to %s", user.email)
             raise OnyxError(
                 OnyxErrorCode.SERVICE_UNAVAILABLE,
                 "Failed to send the verification email.",
             ) from e
-
-        emit_audit_event(
-            AuditAction.EMAIL_VERIFY,
-            AuditOutcome.SUCCESS,
-            actor=AuditActor(user_id=str(user.id), email=user.email),
-        )
+        finally:
+            CURRENT_TENANT_ID_CONTEXTVAR.reset(contextvar_token)
 
     @log_function_time(print_only=True)
     async def authenticate(
@@ -1342,12 +1460,16 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         tenant_id: str | None = None
         try:
             tenant_id = fetch_ee_implementation_or_noop(
-                "onyx.server.tenants.provisioning",
+                "onyx.db.user_tenant_mapping",
                 "get_tenant_id_for_email",
                 POSTGRES_DEFAULT_SCHEMA,
             )(
                 email=email,
             )
+        except OnyxError:
+            # Ambiguous membership is actionable, so it has to reach the caller
+            # rather than be flattened into a generic credential failure.
+            raise
         except Exception as e:
             logger.warning(
                 "User attempted to login with invalid credentials: %s", str(e)
@@ -1492,11 +1614,9 @@ class TenantAwareRedisStrategy(RedisStrategy[User, uuid.UUID]):
     async def write_token(self, user: User) -> str:
         redis = await get_async_redis_connection()
 
-        tenant_id = await fetch_ee_implementation_or_noop(
-            "onyx.server.tenants.provisioning",
-            "get_or_provision_tenant",
-            async_return_default_schema,
-        )(email=user.email)
+        # The token names the workspace every later request runs against, so it
+        # has to agree with the one the login actually entered.
+        tenant_id = await resolve_tenant_for_user(user.email)
 
         now = datetime.now(timezone.utc)
         token = secrets.token_urlsafe()
@@ -1778,12 +1898,12 @@ class FastAPIUserWithRefreshRouter(FastAPIUsers[models.UP, models.ID]):
 
                 # Check if strategy supports refreshing
                 supports_refresh = hasattr(strategy, "refresh_token") and callable(
-                    getattr(strategy, "refresh_token")
+                    getattr(strategy, "refresh_token")  # noqa: B009
                 )
 
                 if supports_refresh:
                     try:
-                        refresh_method = getattr(strategy, "refresh_token")
+                        refresh_method = getattr(strategy, "refresh_token")  # noqa: B009
                         new_token = await refresh_method(token, user)
                         logger.info(
                             "Successfully refreshed session token for user %s",
@@ -1886,7 +2006,7 @@ async def _get_or_create_user_from_jwt(
         valid_email_domains=get_security_settings().valid_email_domains,
     )
 
-    user_db: SQLAlchemyUserAdminDB[User, uuid.UUID] = SQLAlchemyUserAdminDB(
+    user_db: SQLAlchemyUserDatabase[User, uuid.UUID] = SQLAlchemyUserDatabase(
         async_db_session, User, OAuthAccount
     )
     user_manager = UserManager(user_db)
@@ -1934,7 +2054,7 @@ async def _check_for_saml_and_jwt(
     async_db_session: AsyncSession,
 ) -> User | None:
     # If user is None, check for JWT in Authorization header
-    if user is None and JWT_PUBLIC_KEY_URL is not None:
+    if user is None and get_security_settings().jwt_public_key_url is not None:
         auth_header = request.headers.get("Authorization")
         if auth_header and auth_header.startswith("Bearer "):
             token = auth_header[len("Bearer ") :].strip()
@@ -1943,6 +2063,10 @@ async def _check_for_saml_and_jwt(
                 user = await _get_or_create_user_from_jwt(
                     payload, request, async_db_session
                 )
+                if user is not None:
+                    request.state.usage_credential = UsageCredentialIdentity(
+                        UsageCredentialType.JWT
+                    )
 
     return user
 
@@ -2012,6 +2136,11 @@ async def _resolve_optional_user(
     user: User | None,
     user_manager: BaseUserManager[User, uuid.UUID],
 ) -> User | None:
+    if user is not None:
+        request.state.usage_credential = UsageCredentialIdentity(
+            UsageCredentialType.SESSION
+        )
+
     if user := await _check_for_saml_and_jwt(request, user, async_db_session):
         # If user is already set, _check_for_saml_and_jwt returns the same user object
         await _maybe_refresh_oauth_tokens(user, async_db_session, user_manager)
@@ -2025,8 +2154,26 @@ async def _resolve_optional_user(
                 # Expose the token's scopes so require_permission can cap the
                 # request to them.
                 request.state.token_scopes = pat.scopes
+                request.state.usage_credential = UsageCredentialIdentity(
+                    (
+                        UsageCredentialType.CRAFT_PAT
+                        if pat.pat_type == PatType.CRAFT
+                        else UsageCredentialType.PAT
+                    ),
+                    str(pat.pat_id),
+                    pat.pat_name,
+                    pat.pat_display,
+                )
         elif hashed_api_key := get_hashed_api_key_from_request(request):
-            user = await fetch_user_for_api_key(hashed_api_key, async_db_session)
+            api_key = await fetch_api_key_auth_result(hashed_api_key, async_db_session)
+            if api_key is not None:
+                user = api_key.user
+                request.state.usage_credential = UsageCredentialIdentity(
+                    UsageCredentialType.API_KEY,
+                    str(api_key.api_key_id),
+                    api_key.api_key_name,
+                    api_key.api_key_display,
+                )
     except ValueError:
         logger.warning("Issue with validating authentication token")
         return None
@@ -2060,9 +2207,13 @@ async def optional_user(
         user_manager,
     )
     token = CURRENT_USER_ID_CONTEXTVAR.set(str(user.id) if user is not None else None)
+    credential_token = CURRENT_USAGE_CREDENTIAL_CONTEXTVAR.set(
+        getattr(request.state, "usage_credential", None)
+    )
     try:
         yield user
     finally:
+        CURRENT_USAGE_CREDENTIAL_CONTEXTVAR.reset(credential_token)
         CURRENT_USER_ID_CONTEXTVAR.reset(token)
 
 
@@ -2075,7 +2226,6 @@ def get_anonymous_user() -> User:
         is_active=True,
         is_verified=True,
         is_superuser=False,
-        role=UserRole.LIMITED,
         account_type=AccountType.ANONYMOUS,
         effective_permissions=[Permission.BASIC_ACCESS.value],
         use_memories=False,
@@ -2155,26 +2305,6 @@ async def current_user(
         raise BasicAuthenticationError(
             detail="Access denied. User has limited permissions.",
         )
-    return user
-
-
-_CURATOR_OR_ADMIN_ROLES = frozenset(
-    {UserRole.GLOBAL_CURATOR, UserRole.CURATOR, UserRole.ADMIN}
-)
-
-
-def is_user_curator_or_admin(user: User) -> bool:
-    return user.role in _CURATOR_OR_ADMIN_ROLES
-
-
-async def current_curator_or_admin_user(
-    user: User = Depends(current_user),
-) -> User:
-    if not is_user_curator_or_admin(user):
-        raise BasicAuthenticationError(
-            detail="Access denied. User is not a curator or admin.",
-        )
-
     return user
 
 
@@ -2333,16 +2463,6 @@ def generate_csrf_token() -> str:
     return secrets.token_urlsafe(32)
 
 
-def _base64url_encode(data: bytes) -> str:
-    return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
-
-
-def generate_pkce_pair() -> tuple[str, str]:
-    verifier = secrets.token_urlsafe(64)
-    challenge = _base64url_encode(hashlib.sha256(verifier.encode("ascii")).digest())
-    return verifier, challenge
-
-
 def get_pkce_cookie_name(state: str) -> str:
     state_hash = hashlib.sha256(state.encode("utf-8")).hexdigest()
     return f"{PKCE_COOKIE_NAME_PREFIX}_{state_hash}"
@@ -2404,9 +2524,17 @@ async def complete_login_flow(
     associate_by_email: bool,
     is_verified_by_default: bool,
     allowed_email_domains_override: Sequence[str] | None = None,
+    enforce_verified_domain: bool = False,
 ) -> RedirectResponse:
     """Shared post-token OAuth/OIDC login: read the verified identity, create or
-    authenticate the user, and return a web or mobile redirect."""
+    authenticate the user, and return a web or mobile redirect.
+
+    Runs inside whatever tenant context the caller set. An SSO login pins its
+    workspace via SESSION_TENANT_OVERRIDE_CONTEXTVAR, which keeps a pinned login
+    inside that one workspace: session issuance and the post-register hook read
+    the same override rather than re-deriving a workspace from the address, which
+    a first-time member does not yet answer to.
+    """
     # Convert a failed or unverified userinfo fetch into a controlled login
     # rejection. OnyxError has a global handler, GetIdEmailError would 500.
     try:
@@ -2425,21 +2553,25 @@ async def complete_login_flow(
             ErrorCode.OAUTH_NOT_AVAILABLE_EMAIL,
         )
 
-    # Snapshot the raw IdP claims for directory-profile enrichment and the
-    # admin "OAuth Test" page. Best-effort — never raises, no-op unless
-    # IDP_PROFILE_ENRICHMENT_ENABLED.
-    await capture_oauth_login_claims(oauth_client, account_email, token)
-
     next_url = sanitize_next_url(state_data.get("next_url"))
     referral_source = state_data.get("referral_source", None)
-    try:
-        tenant_id = fetch_ee_implementation_or_noop(
-            "onyx.server.tenants.user_mapping", "get_tenant_id_for_email", None
-        )(account_email)
-    except exceptions.UserNotExists:
-        tenant_id = None
+    # Drives the new_team redirect below. Resolving differently from the login
+    # itself would greet a returning user as a brand new signup.
+    tenant_id = (
+        SESSION_TENANT_OVERRIDE_CONTEXTVAR.get()
+        or fetch_ee_implementation_or_noop(
+            "onyx.db.user_tenant_mapping", "resolve_tenant_id", None
+        )(account_email, oauth_client.name, account_id)
+    )
 
     request.state.referral_source = referral_source
+
+    # Snapshot the raw IdP claims for directory-profile enrichment and the admin
+    # "OAuth Test" page. The subject-resolved tenant keeps capture working after
+    # an IdP rename. Never raises, no-op unless IDP_PROFILE_ENRICHMENT_ENABLED.
+    await capture_oauth_login_claims(
+        oauth_client, account_email, token, tenant_id=tenant_id
+    )
 
     try:
         user = await user_manager.oauth_callback(  # ty: ignore[invalid-argument-type]
@@ -2453,6 +2585,7 @@ async def complete_login_flow(
             associate_by_email=associate_by_email,
             is_verified_by_default=is_verified_by_default,
             allowed_email_domains_override=allowed_email_domains_override,  # ty: ignore[unknown-argument]
+            enforce_verified_domain=enforce_verified_domain,  # ty: ignore[unknown-argument]
         )
     except UserAlreadyExists:
         raise OnyxError(
@@ -2790,7 +2923,8 @@ def get_oauth_router(
                 token = await oauth_client.get_access_token(
                     code, callback_redirect_url, code_verifier
                 )
-            except GetAccessTokenError:
+            except GetAccessTokenError as e:
+                log_token_exchange_failure(e)
                 return build_error_response(
                     OnyxError(
                         OnyxErrorCode.VALIDATION_ERROR,

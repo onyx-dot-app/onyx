@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { PageLoader } from "@opal/layouts";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SettingsLayouts } from "@opal/layouts";
@@ -56,6 +57,7 @@ function ClaimsTable({
   subtitle: string;
   claims: Record<string, unknown>;
 }) {
+  const t = useTranslations("admin.oauthTest");
   const entries = Object.entries(claims);
   return (
     <div className="flex flex-col gap-2">
@@ -65,14 +67,16 @@ function ClaimsTable({
       </Text>
       {entries.length === 0 ? (
         <Text font="main-ui-body" color="text-03">
-          No claims received.
+          {t("claims.empty.message")}
         </Text>
       ) : (
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-64">Claim</TableHead>
-              <TableHead>Value</TableHead>
+              <TableHead className="w-64">
+                {t("claims.table.claim.header")}
+              </TableHead>
+              <TableHead>{t("claims.table.value.header")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -94,6 +98,7 @@ function ClaimsTable({
 }
 
 function Main() {
+  const t = useTranslations("admin.oauthTest");
   const {
     data: snapshot,
     error,
@@ -110,7 +115,7 @@ function Main() {
   if (error || !snapshot) {
     return (
       <ErrorCallout
-        errorTitle="Failed to load OAuth claims"
+        errorTitle={t("loadFailed.title")}
         errorMsg={error?.info?.detail || String(error)}
       />
     );
@@ -120,64 +125,70 @@ function Main() {
     <div className="flex flex-col gap-6 pb-8">
       <div className="flex flex-col gap-2">
         <Text font="main-ui-body" color="text-03">
-          Shows the raw fields your identity provider sent about you during your
-          last OAuth/OIDC login: the id_token claims and the userinfo endpoint
-          response. Use it to verify which attributes the IdP is configured to
-          release. Claims are captured at every login.
+          {t("intro.description")}
         </Text>
         <div>
           <Button onClick={() => (window.location.href = RERUN_URL)}>
-            Re-run OAuth login
+            {t("rerun.label")}
           </Button>
         </div>
       </div>
 
       {!snapshot.found ? (
         <ErrorCallout
-          errorTitle="No captured claims yet"
-          errorMsg={`No OAuth login snapshot found for ${snapshot.email}. Log in through the identity provider (button above) and reload this page.`}
+          errorTitle={t("noSnapshot.title")}
+          errorMsg={t("noSnapshot.description", { email: snapshot.email })}
         />
       ) : (
         <>
           <div className="flex flex-col gap-1">
             <Text font="main-ui-body" color="text-03">
-              {`User: ${snapshot.email}`}
+              {t("snapshot.user.label", { email: snapshot.email })}
             </Text>
             <Text font="main-ui-body" color="text-03">
-              {`Provider: ${snapshot.oauth_name ?? "-"}`}
+              {t("snapshot.provider.label", {
+                provider: snapshot.oauth_name ?? "-",
+              })}
             </Text>
             <Text font="main-ui-body" color="text-03">
-              {`Captured at: ${snapshot.captured_at ?? "-"}`}
+              {t("snapshot.capturedAt.label", {
+                timestamp: snapshot.captured_at ?? "-",
+              })}
             </Text>
             <Text font="main-ui-body" color="text-03">
-              {`Token response fields: ${formatClaimValue(
-                snapshot.token_meta?.keys ?? []
-              )}`}
+              {t("snapshot.tokenFields.label", {
+                fields: formatClaimValue(snapshot.token_meta?.keys ?? []),
+              })}
             </Text>
           </div>
 
           <ClaimsTable
-            title="id_token claims"
-            subtitle="Decoded from the id_token JWT returned by the token endpoint."
+            title={t("idToken.title")}
+            subtitle={t("idToken.subtitle")}
             claims={snapshot.id_token_claims ?? {}}
           />
           <ClaimsTable
-            title="userinfo claims"
-            subtitle="Response of the OIDC userinfo endpoint for your access token."
+            title={t("userinfo.title")}
+            subtitle={t("userinfo.subtitle")}
             claims={snapshot.userinfo ?? {}}
           />
           {snapshot.directory_profile && (
             <ClaimsTable
-              title={`Directory profile (${snapshot.directory_source ?? "provider API"})`}
-              subtitle="Directory fields fetched from the provider API — e.g. Microsoft Graph /me for Entra ID, which carries country/usageLocation that the id_token omits unless the ctry optional claim is configured."
+              title={t("directory.title", {
+                source:
+                  snapshot.directory_source ?? t("directory.fallbackSource"),
+              })}
+              subtitle={t("directory.subtitle")}
               claims={snapshot.directory_profile}
             />
           )}
           {snapshot.resolved_profile &&
             Object.keys(snapshot.resolved_profile).length > 0 && (
               <ClaimsTable
-                title="Resolved profile (used for prompts)"
-                subtitle="The claim-mapped directory profile that actually feeds the Organization Profile prompt block and {{user.*}} placeholders."
+                title={t("resolved.title")}
+                subtitle={t("resolved.subtitle", {
+                  placeholder: "{{user.*}}",
+                })}
                 claims={snapshot.resolved_profile}
               />
             )}

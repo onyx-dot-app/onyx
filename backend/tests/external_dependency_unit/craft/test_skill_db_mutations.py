@@ -7,7 +7,6 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from onyx.auth.schemas import UserRole
 from onyx.db.enums import SkillSharePermission
 from onyx.db.models import Skill, Skill__User, Skill__UserGroup, UserSkillPreference
 from onyx.db.skill import (
@@ -132,7 +131,7 @@ def test_new_skill_name_is_not_reserved_by_external_app_association(
 def test_orphaned_private_skill_has_boolean_admin_state(
     db_session: Session,
 ) -> None:
-    admin = make_user(db_session, role=UserRole.ADMIN)
+    admin = make_user(db_session, is_admin=True)
     orphaned_skill = make_skill(
         db_session,
         is_public=False,

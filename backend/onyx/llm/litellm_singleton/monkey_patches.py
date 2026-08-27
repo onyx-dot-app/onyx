@@ -20,7 +20,15 @@ Status checked against LiteLLM v1.93.0 (2026-07-20):
    - LiteLLM passes through reasoning_summary_text.delta content as-is without
      separating different summary_index sections
    - Our patch inserts "\\n\\n" when the summary_index changes
-   STATUS: STILL NEEDED - Upstream does not insert separators between summary sections.
+   - Also normalizes terminal events (response.completed/incomplete/failed)
+     whose response carries "output": null (newer Bifrost gateways, e.g.
+     fronting Bedrock) — upstream iterates output and raises TypeError
+   - Also turns empty function_call_arguments.delta events into no-op chunks;
+     Anthropic-backed gateways open tool-call streams with an empty delta and
+     upstream raises ValueError on falsy deltas
+   STATUS: STILL NEEDED - Upstream does not insert separators between summary sections,
+           does not guard against null output in terminal events, and rejects empty
+           tool-argument deltas.
 
 3. OpenAI Responses API Non-Streaming (_patch_openai_responses_transform_response):
    - LiteLLM's transform_response joins multiple reasoning summary parts with spaces
@@ -28,15 +36,16 @@ Status checked against LiteLLM v1.93.0 (2026-07-20):
    STATUS: STILL NEEDED - Upstream now uses " ".join() instead of discarding earlier
            parts, but we override to use "\\n\\n".join() for readable section breaks.
 
-4. Azure Responses API Fake Streaming (_patch_azure_responses_should_fake_stream):
-   - LiteLLM uses "fake streaming" (MockResponsesAPIStreamingIterator) for models
-     not in its database, which buffers the entire response before yielding
-   - This causes poor time-to-first-token for Azure custom model deployments
-   - Azure's Responses API supports native streaming, so we force real streaming
-   STATUS: STILL NEEDED - AzureOpenAIResponsesAPIConfig does NOT override should_fake_stream,
-           so it inherits from OpenAIResponsesAPIConfig which returns True for models not
-           in litellm.utils.supports_native_streaming(). Custom Azure deployments will
-           still use fake streaming without this patch.
+4. Responses API Fake Streaming (_patch_openai_responses_should_fake_stream):
+   - LiteLLM fake-streams (MockResponsesAPIStreamingIterator) any responses-API
+     call whose model its registry doesn't recognize, buffering the whole
+     generation before the first chunk. Azure custom deployments and
+     OpenAI-compatible gateway aliases (Bifrost/Portkey responses mode) are
+     never in the registry
+   - Patched on the base OpenAIResponsesAPIConfig; AzureOpenAIResponsesAPIConfig
+     inherits it (no upstream override). Models the registry explicitly marks
+     supports_native_streaming=False (e.g. o1-pro) keep the fake stream
+   STATUS: STILL NEEDED - v1.93.0 treats a registry miss as "cannot stream".
 
 # Note: 5 and 6 suppress a warning and may fix usage info but are not strictly required
 5. Responses API Usage Format Mismatch (_patch_responses_api_usage_format):
@@ -56,7 +65,22 @@ Status checked against LiteLLM v1.93.0 (2026-07-20):
    STATUS: STILL NEEDED - Upstream still mutates result.response.usage in place via
          setattr in v1.93.0. Our patch rebuilds the response via model_construct so the
          original ResponseAPIUsage object is preserved. Handles ResponseCompletedEvent,
-         ResponseIncompleteEvent, and ResponseFailedEvent (matching upstream).
+         ResponseIncompleteEvent, and ResponseFailedEvent (matching upstream), and
+         tolerates result.response being a plain dict (validation-fallback payloads
+         from gateways whose responses litellm cannot strictly parse).
+
+7. Explicit responses/ Prefix Ignored (_patch_responses_api_bridge_check):
+   - responses_api_bridge_check only engages the completions->responses bridge when
+     the model is unknown to LiteLLM's registry (model_info mode is None / lookup
+     raises). Gateway model ids like "anthropic/claude-haiku-4-5" resolve in the
+     registry (valid provider prefix + known tail, mode "chat"), so an explicit
+     "responses/" prefix is left attached and the request is sent to
+     /chat/completions with the mangled model name
+   - The prefix is only ever set deliberately (Onyx API-surface routing for
+     OpenAI-compatible gateways such as Bifrost and Portkey), so honor it
+     unconditionally and pass the remainder through as the literal model id
+   STATUS: STILL NEEDED - v1.93.0 consults the registry before honoring the prefix.
+
 """
 
 import time
@@ -225,9 +249,7 @@ def _patch_ollama_chunk_parser() -> None:
         except Exception as e:
             raise e
 
-    OllamaChatCompletionResponseIterator.chunk_parser = (  # ty: ignore[invalid-assignment]
-        _patched_chunk_parser
-    )
+    OllamaChatCompletionResponseIterator.chunk_parser = _patched_chunk_parser
 
 
 def _patch_responses_reasoning_summary_newlines() -> None:
@@ -292,11 +314,35 @@ def _patch_responses_reasoning_summary_newlines() -> None:
                     ]
                 )
 
+        # Gateways may open tool-call streams with an empty arguments delta;
+        # upstream raises on falsy deltas, so emit a no-op chunk instead.
+        if event_type == "response.function_call_arguments.delta" and not (
+            isinstance(parsed_chunk, dict) and parsed_chunk.get("delta")
+        ):
+            return ModelResponseStream(
+                choices=[StreamingChoices(index=0, delta=Delta(), finish_reason=None)]
+            )
+
+        # Terminal events may carry "output": null, which upstream iterates.
+        if (
+            event_type
+            in (
+                "response.completed",
+                "response.incomplete",
+                "response.failed",
+            )
+            and isinstance(parsed_chunk, dict)
+            and isinstance(parsed_chunk.get("response"), dict)
+            and parsed_chunk["response"].get("output") is None
+        ):
+            parsed_chunk["response"]["output"] = []
+            chunk = parsed_chunk
+
         # For all other event types, use the original upstream chunk_parser
         return _original_responses_chunk_parser(self, chunk)
 
     _patched_responses_chunk_parser.__name__ = "_patched_responses_chunk_parser"
-    OpenAiResponsesToChatCompletionStreamIterator.chunk_parser = (  # ty: ignore[invalid-assignment]
+    OpenAiResponsesToChatCompletionStreamIterator.chunk_parser = (
         _patched_responses_chunk_parser
     )
 
@@ -376,45 +422,49 @@ def _patch_openai_responses_transform_response() -> None:
         return result
 
     _patched_transform_response.__name__ = "_patched_transform_response"
-    LiteLLMResponsesTransformationHandler.transform_response = (  # ty: ignore[invalid-assignment]
+    LiteLLMResponsesTransformationHandler.transform_response = (
         _patched_transform_response
     )
 
 
-def _patch_azure_responses_should_fake_stream() -> None:
+def _patch_openai_responses_should_fake_stream() -> None:
     """
-    Patches AzureOpenAIResponsesAPIConfig.should_fake_stream to always return False.
-
-    By default, LiteLLM uses "fake streaming" (MockResponsesAPIStreamingIterator) for models
-    not in its database. This causes Azure custom model deployments to buffer the entire
-    response before yielding, resulting in poor time-to-first-token.
-
-    Azure's Responses API supports native streaming, so we override this to always use
-    real streaming (SyncResponsesAPIStreamingIterator).
+    Patches OpenAIResponsesAPIConfig.should_fake_stream so a registry miss
+    (e.g. a gateway model alias or Azure custom deployment) streams natively
+    instead of buffering the generation. Models explicitly marked
+    supports_native_streaming=False (e.g. o1-pro) keep the fake stream — a
+    native stream request would be rejected upstream.
+    AzureOpenAIResponsesAPIConfig inherits this patch.
     """
-    from litellm.llms.azure.responses.transformation import (
-        AzureOpenAIResponsesAPIConfig,
-    )
+    from litellm.llms.openai.responses.transformation import OpenAIResponsesAPIConfig
 
     if (
-        getattr(AzureOpenAIResponsesAPIConfig.should_fake_stream, "__name__", "")
-        == "_patched_should_fake_stream"
+        getattr(OpenAIResponsesAPIConfig.should_fake_stream, "__name__", "")
+        == "_patched_openai_should_fake_stream"
     ):
         return
 
-    def _patched_should_fake_stream(
+    def _patched_openai_should_fake_stream(
         self: Any,  # noqa: ARG001
-        model: Optional[str],  # noqa: ARG001
-        stream: Optional[bool],  # noqa: ARG001
-        custom_llm_provider: Optional[str] = None,  # noqa: ARG001
+        model: Optional[str],
+        stream: Optional[bool],
+        custom_llm_provider: Optional[str] = None,
     ) -> bool:
-        # Azure Responses API supports native streaming - never fake it
-        return False
+        import litellm
 
-    _patched_should_fake_stream.__name__ = "_patched_should_fake_stream"
-    AzureOpenAIResponsesAPIConfig.should_fake_stream = (  # ty: ignore[invalid-assignment]
-        _patched_should_fake_stream
-    )
+        if stream is not True or model is None:
+            return False
+        try:
+            model_info = litellm.get_model_info(
+                model=model, custom_llm_provider=custom_llm_provider
+            )
+        except Exception:
+            # Registry miss (e.g. gateway alias): assume native streaming.
+            return False
+        return model_info.get("supports_native_streaming") is False
+
+    _patched_openai_should_fake_stream.__name__ = "_patched_openai_should_fake_stream"
+    OpenAIResponsesAPIConfig.should_fake_stream = _patched_openai_should_fake_stream
 
 
 def _patch_responses_api_usage_format() -> None:
@@ -545,15 +595,30 @@ def _patch_logging_assembled_streaming_response() -> None:
             result,
             (ResponseCompletedEvent, ResponseIncompleteEvent, ResponseFailedEvent),
         ):
-            # Get the original response data
+            # result.response stays a plain dict when the payload failed
+            # litellm's strict validation; handle both shapes.
             original_response = result.response
-            response_data = original_response.model_dump()
+            if isinstance(original_response, dict):
+                response_data = dict(original_response)
+                raw_usage = original_response.get("usage")
+                usage: ResponseAPIUsage | None = (
+                    ResponseAPIUsage.model_construct(**raw_usage)
+                    if isinstance(raw_usage, dict) and "input_tokens" in raw_usage
+                    else None
+                )
+            else:
+                response_data = original_response.model_dump()
+                usage = (
+                    original_response.usage
+                    if isinstance(original_response.usage, ResponseAPIUsage)
+                    else None
+                )
 
             # Transform usage if present
-            if isinstance(original_response.usage, ResponseAPIUsage):
+            if usage is not None:
                 transformed_usage = (
                     ResponseAPILoggingUtils._transform_response_api_usage_to_chat_usage(
-                        original_response.usage
+                        usage
                     )
                 )
                 # Put the transformed usage (in chat completion format) into response_data
@@ -578,8 +643,54 @@ def _patch_logging_assembled_streaming_response() -> None:
     _patched_get_assembled_streaming_response._is_patched = (  # ty: ignore[unresolved-attribute]
         True
     )
-    LiteLLMLoggingObj._get_assembled_streaming_response = (  # ty: ignore[invalid-assignment]
+    LiteLLMLoggingObj._get_assembled_streaming_response = (
         _patched_get_assembled_streaming_response
+    )
+
+
+def _patch_responses_api_bridge_check() -> None:
+    """
+    Patches litellm.main.responses_api_bridge_check to honor an explicit
+    "responses/" model prefix unconditionally.
+
+    Upstream only bridges when its registry doesn't recognize the model, so
+    gateway ids like "anthropic/claude-haiku-4-5" (valid provider prefix +
+    registry-known tail) skip the bridge and hit /chat/completions with the
+    prefix still attached. The prefix is only ever set deliberately, so it
+    always wins; the remainder passes through as the literal model id.
+    """
+    import litellm.main as litellm_main
+
+    if (
+        getattr(litellm_main.responses_api_bridge_check, "__name__", "")
+        == "_patched_responses_api_bridge_check"
+    ):
+        return
+
+    original_bridge_check = litellm_main.responses_api_bridge_check
+
+    def _patched_responses_api_bridge_check(
+        model: str,
+        custom_llm_provider: str,
+        web_search_options: Optional[Any] = None,
+        tools: Optional[list[Any]] = None,
+        reasoning_effort: Optional[Any] = None,
+        reasoning_summary: Optional[Any] = None,
+    ) -> tuple[dict, str]:
+        if model.startswith("responses/"):
+            return {"mode": "responses"}, model.removeprefix("responses/")
+        return original_bridge_check(
+            model=model,
+            custom_llm_provider=custom_llm_provider,
+            web_search_options=web_search_options,
+            tools=tools,
+            reasoning_effort=reasoning_effort,
+            reasoning_summary=reasoning_summary,
+        )
+
+    _patched_responses_api_bridge_check.__name__ = "_patched_responses_api_bridge_check"
+    litellm_main.responses_api_bridge_check = (  # ty: ignore[invalid-assignment]
+        _patched_responses_api_bridge_check
     )
 
 
@@ -591,13 +702,16 @@ def apply_monkey_patches() -> None:
     - Patching OllamaChatCompletionResponseIterator.chunk_parser for streaming content
     - Patching chunk_parser for reasoning summary newline insertion between sections
     - Patching LiteLLMResponsesTransformationHandler.transform_response for non-streaming responses
-    - Patching AzureOpenAIResponsesAPIConfig.should_fake_stream to enable native streaming
+    - Patching OpenAIResponsesAPIConfig.should_fake_stream (Azure inherits) to stream
+      natively on registry misses
     - Patching ResponsesAPIResponse.model_construct to fix usage format in all code paths
     - Patching Logging._get_assembled_streaming_response to avoid mutating original response
+    - Patching responses_api_bridge_check to always honor an explicit responses/ prefix
     """
     _patch_ollama_chunk_parser()
     _patch_responses_reasoning_summary_newlines()
     _patch_openai_responses_transform_response()
-    _patch_azure_responses_should_fake_stream()
+    _patch_openai_responses_should_fake_stream()
     _patch_responses_api_usage_format()
     _patch_logging_assembled_streaming_response()
+    _patch_responses_api_bridge_check()

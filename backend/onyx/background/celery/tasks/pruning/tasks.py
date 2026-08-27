@@ -56,12 +56,10 @@ from onyx.db.enums import (
     SyncType,
 )
 from onyx.db.hierarchy import (
-    delete_orphaned_hierarchy_nodes,
+    cleanup_unowned_hierarchy_nodes,
+    persist_hierarchy_nodes_for_cc_pair,
     remove_stale_hierarchy_node_cc_pair_entries,
-    reparent_orphaned_hierarchy_nodes,
     update_document_parent_hierarchy_nodes,
-    upsert_hierarchy_node_cc_pair_entries,
-    upsert_hierarchy_nodes_batch,
 )
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import HierarchyNode as DBHierarchyNode
@@ -209,7 +207,7 @@ def _is_pruning_due(cc_pair: ConnectorCredentialPair) -> bool:
     return datetime.now(timezone.utc) >= next_prune
 
 
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.CHECK_FOR_PRUNING,
     ignore_result=True,
     soft_time_limit=JOB_TIMEOUT,
@@ -238,8 +236,7 @@ def check_for_pruning(self: Task, *, tenant_id: str) -> bool | None:
             cc_pair_ids: list[int] = []
             with get_session_with_current_tenant() as db_session:
                 cc_pairs = get_connector_credential_pairs(db_session)
-                for cc_pair_entry in cc_pairs:
-                    cc_pair_ids.append(cc_pair_entry.id)
+                cc_pair_ids.extend(cc_pair_entry.id for cc_pair_entry in cc_pairs)
 
             prune_dispatched = False
             for cc_pair_id in cc_pair_ids:
@@ -473,7 +470,7 @@ def try_creating_prune_generator_task(
     return payload_id
 
 
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.CONNECTOR_PRUNING_GENERATOR_TASK,
     acks_late=False,
     soft_time_limit=JOB_TIMEOUT,
@@ -496,7 +493,7 @@ def connector_pruning_generator_task(
 
     LoggerContextVars.reset()
 
-    pruning_ctx_dict = pruning_ctx.get()
+    pruning_ctx_dict = dict(pruning_ctx.get())
     pruning_ctx_dict["cc_pair_id"] = cc_pair_id
     pruning_ctx_dict["request_id"] = self.request.id
     pruning_ctx.set(pruning_ctx_dict)
@@ -635,24 +632,15 @@ def connector_pruning_generator_task(
 
             upserted_nodes: list[DBHierarchyNode] = []
             if extraction_result.hierarchy_nodes:
-                upserted_nodes = upsert_hierarchy_nodes_batch(
+                upserted_nodes = persist_hierarchy_nodes_for_cc_pair(
                     db_session=db_session,
                     nodes=extraction_result.hierarchy_nodes,
                     source=source,
-                    commit=False,
-                    is_connector_public=is_connector_public,
-                )
-
-                upsert_hierarchy_node_cc_pair_entries(
-                    db_session=db_session,
-                    hierarchy_node_ids=[n.id for n in upserted_nodes],
                     connector_id=connector_id,
                     credential_id=credential_id,
+                    is_connector_public=is_connector_public,
                     commit=False,
                 )
-
-                # Single commit so the FK reference in the join table can never
-                # outrun the parent hierarchy_node insert.
                 db_session.commit()
 
                 cache_entries = [
@@ -738,12 +726,7 @@ def connector_pruning_generator_task(
                 live_hierarchy_node_ids=live_node_ids,
                 commit=True,
             )
-            deleted_raw_ids = delete_orphaned_hierarchy_nodes(
-                db_session=db_session,
-                source=source,
-                commit=True,
-            )
-            reparented_nodes = reparent_orphaned_hierarchy_nodes(
+            deleted_raw_ids, reparented_nodes = cleanup_unowned_hierarchy_nodes(
                 db_session=db_session,
                 source=source,
                 commit=True,

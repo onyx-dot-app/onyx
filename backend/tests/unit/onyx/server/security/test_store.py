@@ -5,6 +5,9 @@ derivation reads controlled values instead of the process environment.
 """
 
 import logging
+from collections.abc import Iterator
+from contextlib import contextmanager
+from typing import Any
 
 import pytest
 
@@ -134,3 +137,124 @@ def test_llm_env_injection_no_critical_log_when_invariant_holds(
     with caplog.at_level(logging.CRITICAL):
         assert store.llm_custom_config_env_injection_enabled() is False
     assert not caplog.records
+
+
+def _set_jwt_env(
+    monkeypatch: pytest.MonkeyPatch,
+    url: str | None = None,
+    audience: str | None = None,
+    issuer: str | None = None,
+) -> None:
+    monkeypatch.setattr(store._cfg, "JWT_PUBLIC_KEY_URL", url)
+    monkeypatch.setattr(store._cfg, "JWT_EXPECTED_AUDIENCE", audience)
+    monkeypatch.setattr(store._cfg, "JWT_EXPECTED_ISSUER", issuer)
+
+
+def test_env_pin_wins_over_stored_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    _set_jwt_env(monkeypatch, audience="env-aud")
+    overrides = SecuritySettingsOverrides(jwt_expected_audience="db-aud")
+    assert store.merge_with_env(overrides).jwt_expected_audience == "env-aud"
+
+
+def test_db_override_is_truth_when_env_unset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _set_jwt_env(monkeypatch)
+    overrides = SecuritySettingsOverrides(
+        jwt_public_key_url="https://idp/keys", jwt_expected_issuer="https://idp"
+    )
+    effective = store.merge_with_env(overrides)
+    assert effective.jwt_public_key_url == "https://idp/keys"
+    assert effective.jwt_expected_issuer == "https://idp"
+    assert effective.jwt_expected_audience is None
+
+
+def test_unset_everywhere_means_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    _set_jwt_env(monkeypatch)
+    effective = store.merge_with_env(SecuritySettingsOverrides())
+    assert effective.jwt_public_key_url is None
+    assert effective.jwt_expected_audience is None
+    assert effective.jwt_expected_issuer is None
+
+
+def test_env_pinned_active_fields_track_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    _set_jwt_env(monkeypatch, url="https://idp/keys", issuer="https://idp")
+    assert store.env_pinned_active_fields() == {
+        "jwt_public_key_url",
+        "jwt_expected_issuer",
+    }
+    _set_jwt_env(monkeypatch)
+    assert store.env_pinned_active_fields() == frozenset()
+
+
+@pytest.fixture
+def seed_seams(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
+    """In-memory stand-ins for the DB row, KV overlay, and distributed lock."""
+    state: dict[str, Any] = {"row": SecuritySettingsOverrides(), "writes": 0}
+
+    @contextmanager
+    def fake_lock() -> Iterator[None]:
+        yield
+
+    def fake_load() -> SecuritySettingsOverrides:
+        return state["row"]
+
+    def fake_store(overrides: SecuritySettingsOverrides) -> None:
+        state["row"] = overrides
+        state["writes"] += 1
+
+    monkeypatch.setattr(store, "security_settings_write_lock", fake_lock)
+    monkeypatch.setattr(store, "_load_raw_overrides_unlocked", fake_load)
+    monkeypatch.setattr(store, "_store_overrides_unlocked", fake_store)
+    return state
+
+
+def test_seed_writes_env_values_once(
+    monkeypatch: pytest.MonkeyPatch, seed_seams: dict[str, Any]
+) -> None:
+    _set_jwt_env(monkeypatch, url="https://idp/keys", audience="aud")
+    store.seed_jwt_settings_from_env()
+    assert seed_seams["row"].jwt_public_key_url == "https://idp/keys"
+    assert seed_seams["row"].jwt_expected_audience == "aud"
+    assert seed_seams["writes"] == 1
+
+    store.seed_jwt_settings_from_env()
+    assert seed_seams["writes"] == 1
+
+
+def test_seed_resyncs_a_changed_env_value(
+    monkeypatch: pytest.MonkeyPatch, seed_seams: dict[str, Any]
+) -> None:
+    seed_seams["row"] = SecuritySettingsOverrides(jwt_public_key_url="https://old")
+    _set_jwt_env(monkeypatch, url="https://new")
+    store.seed_jwt_settings_from_env()
+    assert seed_seams["row"].jwt_public_key_url == "https://new"
+
+
+def test_seed_skips_entirely_when_env_unset(
+    monkeypatch: pytest.MonkeyPatch, seed_seams: dict[str, Any]
+) -> None:
+    _set_jwt_env(monkeypatch)
+    store.seed_jwt_settings_from_env()
+    assert seed_seams["writes"] == 0
+
+
+def test_seed_noop_on_multi_tenant(
+    monkeypatch: pytest.MonkeyPatch, seed_seams: dict[str, Any]
+) -> None:
+    monkeypatch.setattr(store, "MULTI_TENANT", True)
+    _set_jwt_env(monkeypatch, url="https://idp/keys")
+    store.seed_jwt_settings_from_env()
+    assert seed_seams["writes"] == 0
+
+
+def test_seed_failure_never_raises(
+    monkeypatch: pytest.MonkeyPatch, seed_seams: dict[str, Any]
+) -> None:
+    def boom() -> SecuritySettingsOverrides:
+        raise RuntimeError("db down")
+
+    monkeypatch.setattr(store, "_load_raw_overrides_unlocked", boom)
+    _set_jwt_env(monkeypatch, url="https://idp/keys")
+    store.seed_jwt_settings_from_env()
+    assert seed_seams["writes"] == 0

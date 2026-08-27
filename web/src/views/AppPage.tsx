@@ -1,11 +1,12 @@
 "use client";
 
 import { redirect, useRouter, useSearchParams } from "next/navigation";
-import { personaIncludesRetrieval } from "@/app/app/services/lib";
+import { endIncognitoSession } from "@/app/app/services/lib";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { Section } from "@/layouts/general-layouts";
-import { useFederatedConnectors, useFilters, useLlmManager } from "@/lib/hooks";
+import { useFederatedConnectors, useLlmManager } from "@/lib/hooks";
+import { useSearchFilters, useTags } from "@/lib/searchFilters/hooks";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
@@ -14,28 +15,28 @@ import Dropzone from "react-dropzone";
 import AppInputBar, { AppInputBarHandle } from "@/sections/input/AppInputBar";
 import useChatSessions from "@/hooks/useChatSessions";
 import useCCPairs from "@/hooks/useCCPairs";
-import useTags from "@/hooks/useTags";
 import { useDocumentSets } from "@/lib/hooks/useDocumentSets";
 import { useAgents } from "@/lib/agents/hooks";
 import { AppPopup } from "@/app/app/components/AppPopup";
 import { useUser } from "@/providers/UserProvider";
 import { useCurrentUser } from "@/lib/users/hooks";
-import NoAgentModal from "@/sections/modals/NoAgentModal";
+import { NoAgentModal } from "@/lib/agents/components";
 import PreviewModal from "@/sections/modals/PreviewModal";
 import { Modal } from "@opal/components";
 import { useSendMessageToParent } from "@/lib/extension/hooks";
 import { SUBMIT_MESSAGE_TYPES } from "@/lib/extension/constants";
 import { getSourceMetadata } from "@/lib/sources";
 import { SourceMetadata } from "@/lib/search/interfaces";
-import { FederatedConnectorDetail, UserRole, ValidSources } from "@/lib/types";
+import { FederatedConnectorDetail, ValidSources } from "@/lib/types";
 import DocumentsSidebar from "@/sections/document-sidebar/DocumentsSidebar";
 import useChatController from "@/hooks/useChatController";
 import useMultiModelChat from "@/hooks/useMultiModelChat";
 import MultiModelSelector from "@/sections/model-selector/MultiModelSelector";
-import { useAgentController } from "@/lib/agents/hooks";
+import { useActiveAgent } from "@/lib/agents/hooks";
 import useChatSessionController from "@/hooks/useChatSessionController";
 import useDeepResearchToggle from "@/hooks/useDeepResearchToggle";
-import { useIsDefaultAgent } from "@/lib/agents/hooks";
+import { useIncognito } from "@/providers/IncognitoProvider";
+import { isAssistant } from "@/lib/agents/utils";
 import AgentDescription from "@/app/app/components/AgentDescription";
 import {
   useChatSessionStore,
@@ -52,10 +53,13 @@ import FederatedOAuthModal from "@/components/chat/FederatedOAuthModal";
 import ChatScrollContainer, {
   ChatScrollContainerHandle,
 } from "@/sections/chat/ChatScrollContainer";
-import ProjectContextPanel from "@/sections/projects/ProjectContextPanel";
-import { useProjectsContext } from "@/providers/ProjectsContext";
+import {
+  ProjectContextPanel,
+  ProjectChatSessionList,
+} from "@/lib/projects/components";
+import { useProjectsContext } from "@/lib/projects/providers";
+import { useActiveProject, useProjects } from "@/lib/projects/hooks";
 import { getProjectTokenCount } from "@/lib/projects/svc";
-import ProjectChatSessionList from "@/sections/projects/ProjectChatSessionList";
 import { cn } from "@opal/utils";
 import Suggestions from "@/sections/Suggestions";
 import OnboardingFlow from "@/sections/onboarding/OnboardingFlow";
@@ -81,6 +85,8 @@ import { paidTierGated } from "@/ce";
 import EESearchUI from "@/ee/sections/SearchUI";
 const SearchUI = paidTierGated(EESearchUI);
 import { motion, AnimatePresence } from "motion/react";
+import { useChatSessionSupportsRetrieval } from "@/lib/app/hooks";
+import { useTranslations } from "next-intl";
 
 interface FadeProps {
   show: boolean;
@@ -128,13 +134,14 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   //   }
   // });
 
+  const t = useTranslations("chat.app");
   const router = useRouter();
   const appFocus = useAppFocus();
   const { isMobile } = useScreenSize();
 
   useToastFromQuery({
     oauth_connected: {
-      message: "Authentication successful",
+      message: t("oauthConnected.toast"),
       type: "success",
     },
   });
@@ -207,30 +214,54 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     }
   }
 
-  const { selectedAgent, setSelectedAgentFromId, liveAgent } =
-    useAgentController(currentChatSession, () => {
-      // Only remove project context if user explicitly selected an agent
-      // (i.e., agentId is present). Avoid clearing project when agentId was removed.
-      const newSearchParams = new URLSearchParams(
-        searchParams?.toString() || ""
-      );
-      if (newSearchParams.has(SEARCH_PARAM_NAMES.PERSONA_ID)) {
-        newSearchParams.delete(SEARCH_PARAM_NAMES.PROJECT_ID);
-        router.replace(`?${newSearchParams.toString()}`, { scroll: false });
-      }
-    });
+  const activeAgent = useActiveAgent();
+
+  // An explicit agent pick supersedes project context — the two cannot both
+  // scope a new chat. This used to ride on the agent-selection callback, but
+  // it is a URL concern, so it is stated against the URL.
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams?.toString() || "");
+    if (
+      params.has(SEARCH_PARAM_NAMES.AGENT_ID) &&
+      params.has(SEARCH_PARAM_NAMES.PROJECT_ID)
+    ) {
+      params.delete(SEARCH_PARAM_NAMES.PROJECT_ID);
+      router.replace(`?${params.toString()}`, { scroll: false });
+    }
+  }, [searchParams, router]);
 
   const { deepResearchEnabled, toggleDeepResearch } = useDeepResearchToggle({
     chatSessionId: currentChatSessionId,
-    agentId: selectedAgent?.id,
+    agentId: activeAgent?.id,
   });
+
+  // Incognito lives in context so the top-bar toggle and this page stay in
+  // sync. This page owns the derived lock, the teardown on leaving a session,
+  // and the unload beacon.
+  const {
+    incognitoEnabled,
+    incognitoEnabledRef,
+    setIncognitoEnabled,
+    setIncognitoLocked,
+  } = useIncognito();
+  // Resolved from the chat, not the URL: `projectId` is dropped once a chat
+  // opens (`PARAMS_TO_SKIP` in `app/app/services/lib.tsx`), so `currentProjectId`
+  // is null inside a project chat. This value is what reaches the backend, so
+  // reading the search param let a project chat send deep research and error.
+  const { isLoading: isLoadingProjects } = useProjects();
+  const activeProject = useActiveProject();
+  // Withhold until the projects snapshot has loaded: an unloaded list makes a
+  // project chat look like a normal one, and this value reaches the backend.
   const deepResearchEnabledForCurrentWorkflow =
-    currentProjectId === null && deepResearchEnabled;
+    !isLoadingProjects && activeProject === null && deepResearchEnabled;
 
   const [presentingDocument, setPresentingDocument] =
     useState<MinimalOnyxDocument | null>(null);
 
-  const llmManager = useLlmManager(currentChatSession ?? undefined, liveAgent);
+  const llmManager = useLlmManager(
+    currentChatSession ?? undefined,
+    activeAgent
+  );
 
   const {
     showOnboarding,
@@ -241,13 +272,11 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     finishOnboarding,
     hideOnboarding,
   } = useShowOnboarding({
-    liveAgent,
+    activeAgent,
     isLoadingChatSessions,
     chatSessionsCount: chatSessions.length,
     userId: user?.id,
   });
-
-  const noAgents = liveAgent === null || liveAgent === undefined;
 
   const availableSources: ValidSources[] = useMemo(() => {
     return ccPairs.map((ccPair) => ccPair.source);
@@ -283,24 +312,19 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     if (lastFailedFiles && lastFailedFiles.length > 0) {
       const names = lastFailedFiles.map((f) => f.name).join(", ");
       toast.error(
-        lastFailedFiles.length === 1
-          ? `File failed and was removed: ${names}`
-          : `Files failed and were removed: ${names}`
+        t("failedFiles.toast", { count: lastFailedFiles.length, names })
       );
       clearLastFailedFiles();
     }
-  }, [lastFailedFiles, clearLastFailedFiles]);
+  }, [lastFailedFiles, clearLastFailedFiles, t]);
 
   const chatInputBarRef = useRef<AppInputBarHandle>(null);
 
-  const filterManager = useFilters();
+  const filterManager = useSearchFilters();
 
-  const isDefaultAgent = useIsDefaultAgent(
-    liveAgent,
-    currentChatSessionId,
-    currentChatSession ?? undefined,
-    disable_default_assistant ?? false
-  );
+  // An unresolved agent reads as plain chat, so a named-agent layout never
+  // flashes for an agent that is not there yet.
+  const isPlainChat = !activeAgent || isAssistant(activeAgent);
 
   const scrollContainerRef = useRef<ChatScrollContainerHandle>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
@@ -364,31 +388,47 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   const messageHistory = useCurrentMessageHistory();
   const messageTree = useCurrentMessageTree();
 
-  // Block input when the last turn is multi-model and the user hasn't
-  // selected a preferred response yet. Without a selection, it's ambiguous
-  // which model's response should be used as context for the next message.
-  const awaitingPreferredSelection = useMemo(() => {
-    if (!messageTree || currentChatState !== "input") return false;
-    // Find the last user message in the history
-    const lastUserMsg = [...messageHistory]
-      .reverse()
-      .find((m) => m.type === "user");
-    if (!lastUserMsg) return false;
-    const childIds = lastUserMsg.childrenNodeIds ?? [];
-    if (childIds.length < 2) return false;
-    // Check if children are multi-model (have modelDisplayName)
-    const multiModelChildren = childIds
-      .map((id) => messageTree.get(id))
-      .filter(
-        (m) =>
-          m &&
-          (m.type === "assistant" || m.type === "error") &&
-          (m.modelDisplayName || m.overridden_model)
-      );
-    if (multiModelChildren.length < 2) return false;
-    // Check if a preferred response has been set on this user message
-    return lastUserMsg.preferredResponseId == null;
-  }, [messageHistory, messageTree, currentChatState]);
+  // The mode pins on creation, so lock the toggle whenever a session exists,
+  // even an empty one: submitting would reuse it with its pinned mode.
+  useEffect(() => {
+    setIncognitoLocked(
+      messageHistory.length > 0 || currentChatSessionId !== null
+    );
+  }, [messageHistory.length, currentChatSessionId, setIncognitoLocked]);
+
+  // Leaving an incognito session tears it down, whether the user goes to a
+  // fresh chat or straight into another one. Only the id changing tells us
+  // this happened, since incognito sessions never enter the sessions list.
+  const prevSessionIdForIncognito = useRef(currentChatSessionId);
+  useEffect(() => {
+    const previous = prevSessionIdForIncognito.current;
+    prevSessionIdForIncognito.current = currentChatSessionId;
+    if (!previous || previous === currentChatSessionId) return;
+    if (!incognitoEnabledRef.current) return;
+    // Incognito must clear either way: the user is now in a different chat and
+    // the badge would lie. A failure has no client retry path from here, so the
+    // orphan sweep is what eventually deletes the context and its uploads.
+    void endIncognitoSession(previous).then((tornDown) => {
+      if (!tornDown) {
+        console.error(
+          `Incognito teardown failed for ${previous}; leaving it to the server sweep`
+        );
+      }
+    });
+    setIncognitoEnabled(false);
+  }, [currentChatSessionId, setIncognitoEnabled]);
+
+  // Best-effort teardown when the tab closes over a live incognito session.
+  // sendBeacon survives unload where fetch would be cancelled.
+  useEffect(() => {
+    if (!incognitoEnabled || !currentChatSessionId) return;
+    const sessionId = currentChatSessionId;
+    const handlePageHide = () => {
+      navigator.sendBeacon(`/api/chat/end-incognito-session/${sessionId}`);
+    };
+    window.addEventListener("pagehide", handlePageHide);
+    return () => window.removeEventListener("pagehide", handlePageHide);
+  }, [incognitoEnabled, currentChatSessionId]);
 
   // Determine anchor: second-to-last message (last user message before current response)
   const anchorMessage = messageHistory.at(-2) ?? messageHistory[0];
@@ -408,10 +448,11 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const { fullWidthChat } = useFullWidthChat();
 
-  // Full-width only takes effect inside an actual conversation, not the
-  // new-session view (where only the input bar is shown).
+  // Full-width applies in a conversation and on the new-session view, where
+  // it widens the greeting row and the composer.
   const fullWidthActive =
-    fullWidthChat && appFocus.isChat() && !!currentChatSessionId;
+    fullWidthChat &&
+    ((appFocus.isChat() && !!currentChatSessionId) || appFocus.isNewSession());
 
   // Auto-fold sidebar when a multi-model message is submitted.
   // Stays collapsed until the user exits multi-model mode (removes models).
@@ -450,12 +491,15 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       if (
         model.provider !== current.provider ||
         model.modelName !== current.modelName ||
-        model.name !== current.name
+        model.name !== current.name ||
+        (model.modelConfigurationId ?? null) !==
+          (current.modelConfigurationId ?? null)
       ) {
         llmManager.updateCurrentLlm({
           name: model.name,
           provider: model.provider,
           modelName: model.modelName,
+          modelConfigurationId: model.modelConfigurationId,
         });
       }
     }
@@ -470,12 +514,11 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     filterManager,
     llmManager,
     availableAgents: agents,
-    liveAgent,
+    activeAgent,
     existingChatSessionId: currentChatSessionId,
     selectedDocuments,
     searchParams,
     resetInputBar,
-    setSelectedAgentFromId,
   });
 
   const {
@@ -487,7 +530,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     searchParams,
     filterManager,
     firstMessage,
-    setSelectedAgentFromId,
     setSelectedDocuments,
     setCurrentMessageFiles,
     chatSessionIdRef,
@@ -501,23 +543,38 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   useSendMessageToParent();
 
-  const retrievalEnabled = useMemo(() => {
-    if (liveAgent) {
-      return personaIncludesRetrieval(liveAgent);
-    }
-    return false;
-  }, [liveAgent]);
+  const retrievalEnabled = useChatSessionSupportsRetrieval();
 
+  // Close the sources panel once it has nothing left to show. The panel is not
+  // rendered for an agent that cannot retrieve, so this clears a visible flag
+  // left behind by the previous agent.
   useEffect(() => {
-    if (
-      (!personaIncludesRetrieval &&
-        (!selectedDocuments || selectedDocuments.length === 0) &&
-        documentSidebarVisible) ||
-      !currentChatSessionId
-    ) {
+    // Already closed.
+    if (!documentSidebarVisible) return;
+
+    // Retrieval is not known yet. Closing now would need a reopen later.
+    if (retrievalEnabled === null) return;
+
+    // Not reading a conversation, so there are no sources to show.
+    if (!appFocus.isChattable()) {
       updateCurrentDocumentSidebarVisible(false);
+      return;
     }
-  }, [currentChatSessionId]);
+
+    // The agent can retrieve, so it can still cite sources.
+    if (retrievalEnabled) return;
+
+    // The user picked documents by hand.
+    if (selectedDocuments.length > 0) return;
+
+    updateCurrentDocumentSidebarVisible(false);
+  }, [
+    documentSidebarVisible,
+    appFocus,
+    retrievalEnabled,
+    selectedDocuments,
+    updateCurrentDocumentSidebarVisible,
+  ]);
 
   const handleResubmitLastMessage = useCallback(() => {
     // Grab the last user-type message
@@ -526,7 +583,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       .reverse()
       .find((m) => m.type === "user");
     if (!lastUserMsg) {
-      toast.error("No previously-submitted user message found.");
+      toast.error(t("noPreviousMessage.toast"));
       return;
     }
 
@@ -544,6 +601,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     currentMessageFiles,
     deepResearchEnabledForCurrentWorkflow,
     multiModel.isMultiModelActive,
+    t,
   ]);
 
   if (resolvedUser === null) {
@@ -601,6 +659,12 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     if (!isNewSession && isSearch) resetInputBar();
   }, [isNewSession, defaultAppMode, isSearch, resetInputBar, setAppMode]);
 
+  // Declared after the default-mode reset so incognito wins the same commit:
+  // search mode has its own persistence and no incognito safeguards.
+  useEffect(() => {
+    if (incognitoEnabled) setAppMode("chat");
+  }, [incognitoEnabled, setAppMode]);
+
   const handleSearchDocumentClick = useCallback(
     (doc: MinimalOnyxDocument) => setPresentingDocument(doc),
     []
@@ -628,6 +692,13 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
         return;
       }
 
+      // Incognito always routes to chat: the search path runs its own
+      // persistence and none of the incognito safeguards.
+      if (incognitoEnabledRef.current) {
+        onChat(message);
+        return;
+      }
+
       // For new sessions, let the query controller handle routing.
       // resetInputBar is called inside onChat for chat-routed queries.
       // For search-routed queries, the input bar is intentionally kept
@@ -638,6 +709,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       currentChatSessionId,
       submitQuery,
       onChat,
+      incognitoEnabledRef,
       resetInputBar,
       onSubmit,
       currentMessageFiles,
@@ -688,14 +760,14 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     };
   }, [currentChatSessionId, currentProjectId, currentProjectDetails?.files]);
 
-  // handle error case where no assistants are available
-  // Only show this after agents have loaded to prevent flash during initial load
-  if (noAgents && !isLoadingAgents) {
+  // Handle error case where no agents are available.
+  // Only show this after agents have loaded to prevent flash during initial load.
+  if (!activeAgent && !isLoadingAgents) {
     return <NoAgentModal />;
   }
 
   const hasAgentStarterMessages =
-    (liveAgent?.starter_messages?.length ?? 0) > 0;
+    (activeAgent?.starter_messages?.length ?? 0) > 0;
 
   const isWelcomeFocus =
     (appFocus.isNewSession() || appFocus.isAgent()) &&
@@ -731,32 +803,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     <>
       <AppPopup />
 
-      {retrievalEnabled && documentSidebarVisible && isMobile && (
-        <Modal
-          open
-          onOpenChange={() => updateCurrentDocumentSidebarVisible(false)}
-        >
-          <Modal.Content>
-            <Modal.Header
-              icon={SvgFileText}
-              title="Sources"
-              onClose={() => updateCurrentDocumentSidebarVisible(false)}
-            />
-            <Modal.Body>
-              {/* IMPORTANT: this is a memoized component, and it's very important
-              for performance reasons that this stays true. MAKE SURE that all function
-              props are wrapped in useCallback. */}
-              <DocumentsSidebar
-                setPresentingDocument={setPresentingDocument}
-                modal
-                closeSidebar={handleMobileDocumentSidebarClose}
-                selectedDocuments={selectedDocuments}
-              />
-            </Modal.Body>
-          </Modal.Content>
-        </Modal>
-      )}
-
       {presentingDocument && (
         <PreviewModal
           presentingDocument={presentingDocument}
@@ -766,23 +812,50 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
       <FederatedOAuthModal />
 
-      {!(noAgents && !isLoadingAgents) && retrievalEnabled && !isMobile && (
-        <RootLayout.RightPanel>
-          <div
-            className={cn(
-              "overflow-hidden transition-all duration-300 ease-in-out h-full",
-              documentSidebarVisible ? "w-100" : "w-0"
-            )}
-          >
-            <DocumentsSidebar
-              setPresentingDocument={setPresentingDocument}
-              modal={false}
-              closeSidebar={handleDesktopDocumentSidebarClose}
-              selectedDocuments={selectedDocuments}
-            />
-          </div>
-        </RootLayout.RightPanel>
-      )}
+      {retrievalEnabled &&
+        (isMobile ? (
+          documentSidebarVisible && (
+            <Modal
+              open
+              onOpenChange={() => updateCurrentDocumentSidebarVisible(false)}
+            >
+              <Modal.Content>
+                <Modal.Header
+                  icon={SvgFileText}
+                  title={t("sourcesModal.title")}
+                  onClose={() => updateCurrentDocumentSidebarVisible(false)}
+                />
+                <Modal.Body>
+                  {/* IMPORTANT: this is a memoized component, and it's very important
+                for performance reasons that this stays true. MAKE SURE that all function
+                props are wrapped in useCallback. */}
+                  <DocumentsSidebar
+                    setPresentingDocument={setPresentingDocument}
+                    modal
+                    closeSidebar={handleMobileDocumentSidebarClose}
+                    selectedDocuments={selectedDocuments}
+                  />
+                </Modal.Body>
+              </Modal.Content>
+            </Modal>
+          )
+        ) : (
+          <RootLayout.RightPanel>
+            <div
+              className={cn(
+                "overflow-hidden transition-all duration-300 ease-in-out h-full",
+                documentSidebarVisible ? "w-100" : "w-0"
+              )}
+            >
+              <DocumentsSidebar
+                setPresentingDocument={setPresentingDocument}
+                modal={false}
+                closeSidebar={handleDesktopDocumentSidebarClose}
+                selectedDocuments={selectedDocuments}
+              />
+            </div>
+          </RootLayout.RightPanel>
+        ))}
 
       <div className="w-full h-full overflow-hidden">
         <Dropzone
@@ -810,7 +883,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     show={
                       appFocus.isChat() &&
                       !!currentChatSessionId &&
-                      !!liveAgent &&
+                      !!activeAgent &&
                       !sessionFetchError
                     }
                     className="h-full w-full flex flex-col items-center"
@@ -825,7 +898,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       fullWidth={fullWidthActive}
                     >
                       <ChatUI
-                        liveAgent={liveAgent!}
+                        activeAgent={activeAgent!}
                         llmManager={llmManager}
                         deepResearchEnabled={
                           deepResearchEnabledForCurrentWorkflow
@@ -852,7 +925,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       <Section
                         flexDirection="column"
                         alignItems="center"
-                        gap={1}
+                        gap={4}
                       >
                         <IllustrationContent
                           illustration={
@@ -862,21 +935,21 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                           }
                           title={
                             sessionFetchError.type === "not_found"
-                              ? "Chat not found"
+                              ? t("sessionNotFound.title")
                               : sessionFetchError.type === "access_denied"
-                                ? "Access denied"
-                                : "Something went wrong"
+                                ? t("sessionAccessDenied.title")
+                                : t("sessionGenericError.title")
                           }
                           description={
                             sessionFetchError.type === "not_found"
-                              ? "This chat session doesn't exist or has been deleted."
+                              ? t("sessionNotFound.description")
                               : sessionFetchError.type === "access_denied"
-                                ? "You don't have permission to view this chat session."
+                                ? t("sessionAccessDenied.description")
                                 : sessionFetchError.detail
                           }
                         />
                         <Button href="/app" prominence="secondary">
-                          Start a new chat
+                          {t("newChatButton.label")}
                         </Button>
                       </Section>
                     )}
@@ -902,17 +975,20 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       flexDirection="row"
                       justifyContent="between"
                       alignItems="end"
-                      className="max-w-(--app-page-main-content-width)"
+                      className={cn(
+                        !fullWidthActive &&
+                          "max-w-(--app-page-main-content-width)"
+                      )}
                     >
                       <WelcomeMessage
-                        agent={liveAgent}
-                        isDefaultAgent={isDefaultAgent}
+                        agent={activeAgent}
+                        isDefaultAgent={isPlainChat}
                       />
                       {!isSearch &&
                         !(
                           state.phase === "idle" && state.appMode === "search"
                         ) &&
-                        liveAgent &&
+                        activeAgent &&
                         llmManager.hasAnyProvider && (
                           <MultiModelSelector
                             selectedModels={multiModel.selectedModels}
@@ -941,7 +1017,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       "relative w-full flex flex-col",
                       onboardingVisible && "min-h-0",
                       !fullWidthActive &&
-                        "max-w-(--app-page-main-content-width)"
+                        "md:max-w-(--app-page-main-content-width)"
                     )}
                   >
                     {/* Scroll to bottom button - positioned absolutely above AppInputBar */}
@@ -950,7 +1026,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         <Button
                           icon={SvgChevronDown}
                           onClick={handleScrollToBottom}
-                          aria-label="Scroll to bottom"
+                          aria-label={t("scrollToBottomButton.label")}
                           prominence="secondary"
                         />
                       </div>
@@ -994,7 +1070,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                           isSearch ? "h-[14px]" : "h-0"
                         )}
                       />
-                      {appFocus.isChat() && liveAgent && (
+                      {appFocus.isChat() && activeAgent && (
                         <div className="pb-1">
                           <MultiModelSelector
                             selectedModels={multiModel.selectedModels}
@@ -1028,7 +1104,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                             : projectContextTokenCount
                         }
                         availableContextTokens={availableContextTokens}
-                        selectedAgent={selectedAgent || liveAgent}
+                        activeAgent={activeAgent}
                         handleFileUpload={handleMessageSpecificFileUpload}
                         setPresentingDocument={setPresentingDocument}
                         // Intentionally enabled during name-only onboarding (showOnboarding=false)
@@ -1041,7 +1117,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                             onboardingState.currentStep !==
                               OnboardingStep.Complete)
                         }
-                        awaitingPreferredSelection={awaitingPreferredSelection}
                       />
                       <div
                         className={cn(
@@ -1057,10 +1132,10 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                 <div className="row-start-3 min-h-0 overflow-hidden flex flex-col items-center w-full px-2 sm:px-4">
                   {/* Agent description below input */}
                   {(appFocus.isNewSession() || appFocus.isAgent()) &&
-                    !isDefaultAgent && (
+                    !isPlainChat && (
                       <>
                         <Spacer rem={1} />
-                        <AgentDescription agent={liveAgent} />
+                        <AgentDescription agent={activeAgent} />
                         <Spacer rem={1.5} />
                       </>
                     )}

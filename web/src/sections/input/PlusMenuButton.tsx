@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef, type ReactNode } from "react";
+import { useTranslations } from "next-intl";
 import { Button, Popover } from "@opal/components";
 import { SvgChevronRight, SvgPlus } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
@@ -89,9 +90,10 @@ function FlyoutRow({
 export function PlusMenuButton({
   items,
   disabled = false,
-  tooltip = "Add",
-  ariaLabel = "Open add menu",
+  tooltip,
+  ariaLabel,
 }: PlusMenuButtonProps) {
+  const t = useTranslations("chat.input");
   const [open, setOpen] = useState(false);
   const [openKey, setOpenKey] = useState<string | null>(null);
   const pendingSwapRef = useRef<number | null>(null);
@@ -194,8 +196,8 @@ export function PlusMenuButton({
           icon={SvgPlus}
           prominence="tertiary"
           disabled={disabled}
-          tooltip={tooltip}
-          aria-label={ariaLabel}
+          tooltip={tooltip ?? t("plusMenuButton.trigger.tooltip")}
+          aria-label={ariaLabel ?? t("plusMenuButton.trigger.ariaLabel")}
         />
       </Popover.Trigger>
 

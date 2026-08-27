@@ -1,21 +1,25 @@
 "use client";
 
 import { useState } from "react";
-import { SvgCheck, SvgUser, SvgUserManage, SvgUsers } from "@opal/icons";
-import { SvgSlack } from "@opal/logos";
-import type { IconFunctionComponent } from "@opal/types";
-import { FilterButton } from "@opal/components";
-import { Popover } from "@opal/components";
-import { InputTypeIn } from "@opal/components";
-import LineItem from "@/refresh-components/buttons/LineItem";
-import Text from "@/refresh-components/texts/Text";
-import { ShadowDiv } from "@opal/components";
+import { useTranslations } from "next-intl";
 import {
-  UserRole,
-  UserStatus,
-  USER_ROLE_LABELS,
-  USER_STATUS_LABELS,
-} from "@/lib/types";
+  SvgCheck,
+  SvgSlack,
+  SvgUser,
+  SvgGlobe,
+  SvgKey,
+  SvgUsers,
+} from "@opal/icons";
+import type { IconFunctionComponent } from "@opal/types";
+import {
+  FilterButton,
+  InputTypeIn,
+  LineItemButton,
+  Popover,
+  ShadowDiv,
+} from "@opal/components";
+import Text from "@/refresh-components/texts/Text";
+import { AccountType, UserStatus } from "@/lib/types";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import type { GroupOption, StatusFilter, StatusCountMap } from "./interfaces";
 
@@ -23,27 +27,28 @@ import type { GroupOption, StatusFilter, StatusCountMap } from "./interfaces";
 // Constants
 // ---------------------------------------------------------------------------
 
-const VISIBLE_FILTER_ROLES: UserRole[] = [
-  UserRole.ADMIN,
-  UserRole.GLOBAL_CURATOR,
-  UserRole.BASIC,
-  UserRole.SLACK_USER,
+const FILTERABLE_ACCOUNT_TYPES: AccountType[] = [
+  AccountType.STANDARD,
+  AccountType.BOT,
+  AccountType.EXT_PERM_USER,
+  AccountType.SERVICE_ACCOUNT,
 ];
 
-const FILTERABLE_ROLES = VISIBLE_FILTER_ROLES.map(
-  (role) => [role, USER_ROLE_LABELS[role]] as [UserRole, string]
+const FILTERABLE_STATUSES: UserStatus[] = [
+  UserStatus.ACTIVE,
+  UserStatus.INACTIVE,
+  UserStatus.INVITED,
+  UserStatus.REQUESTED,
+].filter(
+  (value) => value !== UserStatus.REQUESTED || NEXT_PUBLIC_CLOUD_ENABLED
 );
 
-const FILTERABLE_STATUSES = (
-  Object.entries(USER_STATUS_LABELS) as [UserStatus, string][]
-).filter(
-  ([value]) => value !== UserStatus.REQUESTED || NEXT_PUBLIC_CLOUD_ENABLED
-);
-
-const ROLE_ICONS: Partial<Record<UserRole, IconFunctionComponent>> = {
-  [UserRole.ADMIN]: SvgUserManage,
-  [UserRole.SLACK_USER]: SvgSlack,
-};
+const ACCOUNT_TYPE_ICONS: Partial<Record<AccountType, IconFunctionComponent>> =
+  {
+    [AccountType.BOT]: SvgSlack,
+    [AccountType.EXT_PERM_USER]: SvgGlobe,
+    [AccountType.SERVICE_ACCOUNT]: SvgKey,
+  };
 
 /** Map UserStatus enum values to the keys returned by the counts endpoint. */
 const STATUS_COUNT_KEY: Record<UserStatus, keyof StatusCountMap> = {
@@ -70,39 +75,65 @@ function CountBadge({ count }: { count: number | undefined }) {
 // ---------------------------------------------------------------------------
 
 interface UserFiltersProps {
-  selectedRoles: UserRole[];
-  onRolesChange: (roles: UserRole[]) => void;
+  selectedAccountTypes: AccountType[];
+  onAccountTypesChange: (types: AccountType[]) => void;
   selectedGroups: number[];
   onGroupsChange: (groupIds: number[]) => void;
   groups: GroupOption[];
   selectedStatuses: StatusFilter;
   onStatusesChange: (statuses: StatusFilter) => void;
-  roleCounts: Record<string, number>;
+  accountTypeCounts: Record<string, number>;
   statusCounts: StatusCountMap;
 }
 
 export default function UserFilters({
-  selectedRoles,
-  onRolesChange,
+  selectedAccountTypes,
+  onAccountTypesChange,
   selectedGroups,
   onGroupsChange,
   groups,
   selectedStatuses,
   onStatusesChange,
-  roleCounts,
+  accountTypeCounts,
   statusCounts,
 }: UserFiltersProps) {
-  const hasRoleFilter = selectedRoles.length > 0;
+  const t = useTranslations("admin.users");
+  const accountTypeLabels: Record<AccountType, string> = {
+    [AccountType.STANDARD]: t("accountType.standard.label"),
+    [AccountType.BOT]: t("accountType.bot.label"),
+    [AccountType.EXT_PERM_USER]: t("accountType.extPermUser.label"),
+    [AccountType.SERVICE_ACCOUNT]: t("accountType.serviceAccount.label"),
+    [AccountType.ANONYMOUS]: t("accountType.anonymous.label"),
+  };
+  const statusLabels: Record<UserStatus, string> = {
+    [UserStatus.ACTIVE]: t("status.active.label"),
+    [UserStatus.INACTIVE]: t("status.inactive.label"),
+    [UserStatus.INVITED]: t("status.invited.label"),
+    [UserStatus.REQUESTED]: t("status.requested.label"),
+  };
+
+  // Names of the first two selections, plus a count of the rest.
+  const summarize = (names: string[], selectedCount: number) => {
+    const shown = names.slice(0, 2).join(", ");
+    return selectedCount > 2
+      ? t("filters.button.moreLabel", {
+          names: shown,
+          count: selectedCount - 2,
+        })
+      : shown;
+  };
+
+  const hasTypeFilter = selectedAccountTypes.length > 0;
   const hasGroupFilter = selectedGroups.length > 0;
   const hasStatusFilter = selectedStatuses.length > 0;
   const [groupSearch, setGroupSearch] = useState("");
   const [groupPopoverOpen, setGroupPopoverOpen] = useState(false);
 
-  const toggleRole = (role: UserRole) => {
-    if (selectedRoles.includes(role)) {
-      onRolesChange(selectedRoles.filter((r) => r !== role));
+  const toggleAccountType = (type: AccountType) => {
+    if (selectedAccountTypes.includes(type)) {
+      onAccountTypesChange(selectedAccountTypes.filter((t) => t !== type));
     } else {
-      onRolesChange([...selectedRoles, role]);
+      onAccountTypesChange([...selectedAccountTypes, type]);
     }
   };
 
@@ -122,32 +153,30 @@ export default function UserFilters({
     }
   };
 
-  const roleLabel = hasRoleFilter
-    ? FILTERABLE_ROLES.filter(([role]) => selectedRoles.includes(role))
-        .map(([, label]) => label)
-        .slice(0, 2)
-        .join(", ") +
-      (selectedRoles.length > 2 ? `, +${selectedRoles.length - 2}` : "")
-    : "All Account Types";
+  const typeLabel = hasTypeFilter
+    ? summarize(
+        FILTERABLE_ACCOUNT_TYPES.filter((type) =>
+          selectedAccountTypes.includes(type)
+        ).map((type) => accountTypeLabels[type]),
+        selectedAccountTypes.length
+      )
+    : t("filters.accountType.allOption.label");
 
   const groupLabel = hasGroupFilter
-    ? groups
-        .filter((g) => selectedGroups.includes(g.id))
-        .map((g) => g.name)
-        .slice(0, 2)
-        .join(", ") +
-      (selectedGroups.length > 2 ? `, +${selectedGroups.length - 2}` : "")
-    : "All Groups";
+    ? summarize(
+        groups.filter((g) => selectedGroups.includes(g.id)).map((g) => g.name),
+        selectedGroups.length
+      )
+    : t("filters.group.allOption.label");
 
   const statusLabel = hasStatusFilter
-    ? FILTERABLE_STATUSES.filter(([status]) =>
-        selectedStatuses.includes(status)
+    ? summarize(
+        FILTERABLE_STATUSES.filter((status) =>
+          selectedStatuses.includes(status)
+        ).map((status) => statusLabels[status]),
+        selectedStatuses.length
       )
-        .map(([, label]) => label)
-        .slice(0, 2)
-        .join(", ") +
-      (selectedStatuses.length > 2 ? `, +${selectedStatuses.length - 2}` : "")
-    : "All Status";
+    : t("filters.status.allOption.label");
 
   const filteredGroups = groupSearch
     ? groups.filter((g) =>
@@ -157,43 +186,44 @@ export default function UserFilters({
 
   return (
     <div className="flex gap-2">
-      {/* Role filter */}
+      {/* Account type filter */}
       <Popover>
         <Popover.Trigger asChild>
           <FilterButton
-            aria-label="Filter by role"
+            aria-label={t("filters.accountType.button.ariaLabel")}
             icon={SvgUsers}
-            active={hasRoleFilter}
-            onClear={() => onRolesChange([])}
+            active={hasTypeFilter}
+            onClear={() => onAccountTypesChange([])}
           >
-            {roleLabel}
+            {typeLabel}
           </FilterButton>
         </Popover.Trigger>
         <Popover.Content align="start">
           <div className="flex flex-col gap-1 p-1 min-w-[200px]">
-            <LineItem
-              icon={!hasRoleFilter ? SvgCheck : SvgUsers}
-              selected={!hasRoleFilter}
-              emphasized={!hasRoleFilter}
-              onClick={() => onRolesChange([])}
-            >
-              All Account Types
-            </LineItem>
-            {FILTERABLE_ROLES.map(([role, label]) => {
-              const isSelected = selectedRoles.includes(role);
-              const roleIcon = ROLE_ICONS[role] ?? SvgUser;
+            <LineItemButton
+              sizePreset="main-ui"
+              rounding={2}
+              icon={!hasTypeFilter ? SvgCheck : SvgUsers}
+              state={!hasTypeFilter ? "selected" : "empty"}
+              selectVariant={!hasTypeFilter ? "select-heavy" : "select-light"}
+              onClick={() => onAccountTypesChange([])}
+              title={t("filters.accountType.allOption.label")}
+            />
+            {FILTERABLE_ACCOUNT_TYPES.map((type) => {
+              const isSelected = selectedAccountTypes.includes(type);
+              const typeIcon = ACCOUNT_TYPE_ICONS[type] ?? SvgUser;
               return (
-                <LineItem
-                  key={role}
-                  icon={isSelected ? SvgCheck : roleIcon}
-                  strokeIcon={isSelected || role !== UserRole.SLACK_USER}
-                  selected={isSelected}
-                  emphasized={isSelected}
-                  onClick={() => toggleRole(role)}
-                  rightChildren={<CountBadge count={roleCounts[role]} />}
-                >
-                  {label}
-                </LineItem>
+                <LineItemButton
+                  sizePreset="main-ui"
+                  rounding={2}
+                  key={type}
+                  icon={isSelected ? SvgCheck : typeIcon}
+                  state={isSelected ? "selected" : "empty"}
+                  selectVariant={isSelected ? "select-heavy" : "select-light"}
+                  onClick={() => toggleAccountType(type)}
+                  rightChildren={<CountBadge count={accountTypeCounts[type]} />}
+                  title={accountTypeLabels[type]}
+                />
               );
             })}
           </div>
@@ -210,7 +240,7 @@ export default function UserFilters({
       >
         <Popover.Trigger asChild>
           <FilterButton
-            aria-label="Filter by group"
+            aria-label={t("filters.group.button.ariaLabel")}
             icon={SvgUsers}
             active={hasGroupFilter}
             onClear={() => onGroupsChange([])}
@@ -223,37 +253,39 @@ export default function UserFilters({
             <InputTypeIn
               value={groupSearch}
               onChange={(e) => setGroupSearch(e.target.value)}
-              placeholder="Search groups..."
+              placeholder={t("filters.group.search.placeholder")}
               searchIcon
               variant="internal"
             />
-            <LineItem
+            <LineItemButton
+              sizePreset="main-ui"
+              rounding={2}
               icon={!hasGroupFilter ? SvgCheck : SvgUsers}
-              selected={!hasGroupFilter}
-              emphasized={!hasGroupFilter}
+              state={!hasGroupFilter ? "selected" : "empty"}
+              selectVariant={!hasGroupFilter ? "select-heavy" : "select-light"}
               onClick={() => onGroupsChange([])}
-            >
-              All Groups
-            </LineItem>
+              title={t("filters.group.allOption.label")}
+            />
             <ShadowDiv className="flex flex-col gap-1 max-h-[240px]">
               {filteredGroups.map((group) => {
                 const isSelected = selectedGroups.includes(group.id);
                 return (
-                  <LineItem
+                  <LineItemButton
+                    sizePreset="main-ui"
+                    rounding={2}
                     key={group.id}
                     icon={isSelected ? SvgCheck : SvgUsers}
-                    selected={isSelected}
-                    emphasized={isSelected}
+                    state={isSelected ? "selected" : "empty"}
+                    selectVariant={isSelected ? "select-heavy" : "select-light"}
                     onClick={() => toggleGroup(group.id)}
                     rightChildren={<CountBadge count={group.memberCount} />}
-                  >
-                    {group.name}
-                  </LineItem>
+                    title={group.name}
+                  />
                 );
               })}
               {filteredGroups.length === 0 && (
                 <Text as="span" secondaryBody text03 className="px-2 py-1.5">
-                  No groups found
+                  {t("filters.group.empty.label")}
                 </Text>
               )}
             </ShadowDiv>
@@ -265,7 +297,7 @@ export default function UserFilters({
       <Popover>
         <Popover.Trigger asChild>
           <FilterButton
-            aria-label="Filter by status"
+            aria-label={t("filters.status.button.ariaLabel")}
             icon={SvgUsers}
             active={hasStatusFilter}
             onClear={() => onStatusesChange([])}
@@ -275,28 +307,30 @@ export default function UserFilters({
         </Popover.Trigger>
         <Popover.Content align="start">
           <div className="flex flex-col gap-1 p-1 min-w-[200px]">
-            <LineItem
+            <LineItemButton
+              sizePreset="main-ui"
+              rounding={2}
               icon={!hasStatusFilter ? SvgCheck : SvgUser}
-              selected={!hasStatusFilter}
-              emphasized={!hasStatusFilter}
+              state={!hasStatusFilter ? "selected" : "empty"}
+              selectVariant={!hasStatusFilter ? "select-heavy" : "select-light"}
               onClick={() => onStatusesChange([])}
-            >
-              All Status
-            </LineItem>
-            {FILTERABLE_STATUSES.map(([status, label]) => {
+              title={t("filters.status.allOption.label")}
+            />
+            {FILTERABLE_STATUSES.map((status) => {
               const isSelected = selectedStatuses.includes(status);
               const countKey = STATUS_COUNT_KEY[status];
               return (
-                <LineItem
+                <LineItemButton
+                  sizePreset="main-ui"
+                  rounding={2}
                   key={status}
                   icon={isSelected ? SvgCheck : SvgUser}
-                  selected={isSelected}
-                  emphasized={isSelected}
+                  state={isSelected ? "selected" : "empty"}
+                  selectVariant={isSelected ? "select-heavy" : "select-light"}
                   onClick={() => toggleStatus(status)}
                   rightChildren={<CountBadge count={statusCounts[countKey]} />}
-                >
-                  {label}
-                </LineItem>
+                  title={statusLabels[status]}
+                />
               );
             })}
           </div>

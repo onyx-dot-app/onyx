@@ -22,8 +22,8 @@ global:
 # -- Custom (private/internal) CA certificates for outbound TLS.
 # When enabled, every pod that makes outbound TLS connections mounts the
 # referenced Secret/ConfigMap and trusts its roots. Keys must be PEM certs
-# ending in `.crt` (model servers also accept `.pem`). Two mechanisms, by pod
-# type:
+# ending in `.crt` (model servers also accept `.pem`). The handling varies by
+# pod type:
 #   - Shell-based pods (api server, celery workers, bots, MCP server) mount at
 #     /usr/local/share/ca-certificates, run `update-ca-certificates` at startup,
 #     and get REQUESTS_CA_BUNDLE / SSL_CERT_FILE pointed at the merged system
@@ -32,6 +32,10 @@ global:
 #   - Model servers run on a distroless image with no shell, so they mount at
 #     /etc/onyx/certs and merge the mounted roots with certifi's public roots in
 #     Python at startup (additive — public roots stay trusted). No root required.
+#   - The Craft sandbox proxy runs non-root on a read-only root filesystem. An
+#     init container builds an additive bundle in its writable confdir and
+#     configures mitmproxy through SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA
+#     to use that bundle for upstream TLS verification.
 # Version coupling: chart >= 0.7.0 pairs with the distroless model-server image
 # and can't run older ones — the model servers now run nonroot (1001, see their
 # securityContext below) and read ONYX_CUSTOM_CA_CERTS_DIR. Upgrade the chart and
@@ -43,6 +47,22 @@ customCACerts:
   # Exactly one of secretName / configMapName must be set when enabled.
   secretName: ""
   configMapName: ""
+
+# -- TLS verification for PostgreSQL connections.
+# When enabled, the chart mounts one CA certificate into each backend workload
+# that connects to PostgreSQL and configures libpq-compatible POSTGRES_SSL*
+# settings. The certificate source must already exist in the release namespace.
+postgresTls:
+  enabled: false
+  # verify-ca validates the server certificate without requiring POSTGRES_HOST
+  # to be one of the certificate's DNS names. Use verify-full when it is.
+  sslMode: verify-ca
+  # Exactly one of caSecretName / caConfigMapName must be set when enabled.
+  caSecretName: ""
+  caConfigMapName: ""
+  caKey: ca.crt
+  # Full path exposed to POSTGRES_SSLROOTCERT.
+  caMountPath: /etc/postgres-ca/ca.crt
 
 # Uncomment to skip the bundled CNPG operator and its CRDs, and let an existing
 # cluster-managed CloudNativePG operator reconcile the Cluster CR below (keep
@@ -554,9 +574,20 @@ api:
       cpu: 3000m
       memory: 3Gi
 
-  # Optional health probes
+  # Optional health probes.
+  #
+  # Match the path to the probe. /health/ready reports not-ready once the request
+  # threadpool is saturated, which is what should pull a pod out of the Service.
+  # /health only reports that the process is up. Do NOT put /health/ready on the
+  # liveness probe: saturation is load-induced and hits every replica at once,
+  # so restarting on it turns a slowdown into an outage.
+  #
   # Example:
   # readinessProbe:
+  #   httpGet:
+  #     path: /health/ready
+  #     port: api-server-port
+  # livenessProbe:
   #   httpGet:
   #     path: /health
   #     port: api-server-port
@@ -1263,7 +1294,8 @@ externalSecret:
 # -- If set, adds `envFrom: - secretRef: name: <value>` to every backend
 # deployment so all keys in the named Secret are injected as env vars. Intended
 # for secrets that today live in plaintext under the `configMap:` block and
-# should move into a Secret (e.g. LINEAR_CLIENT_SECRET, BRAINTRUST_API_KEY).
+# should move into a Secret (e.g. LINEAR_CLIENT_SECRET,
+# SALESFORCE_CLIENT_ID, SALESFORCE_CLIENT_SECRET, BRAINTRUST_API_KEY).
 # Typically set to the same value as externalSecret.secretName.
 extraEnvFromSecret: ""
 
@@ -1471,6 +1503,9 @@ configMap:
   # Leave SANDBOX_PROXY_PORT unset; the chart owns the internal proxy port.
   # SANDBOX_PROXY_HOST defaults to the chart-managed Service DNS name and may be
   # overridden only if sandboxes must reach a different proxy host.
+  # MODEL_SERVER_HOST / INDEXING_MODEL_SERVER_HOST default to the chart-managed
+  # model Services; set them here to point at external model servers instead
+  # (the chart defaults are then not rendered).
   # See deployment/helm/README.md for the external-Redis / ElastiCache path.
 
   # Authentication is always enabled (email/password). SSO (Google/OIDC/SAML)
@@ -1531,6 +1566,8 @@ configMap:
   # Gen AI Settings
   GEN_AI_MAX_TOKENS: ""
   LLM_SOCKET_READ_TIMEOUT: "60"
+  IMAGE_SUMMARIZATION_TIMEOUT: "300"
+  CONTEXTUAL_RAG_LLM_TIMEOUT: "180"
   MAX_CHUNKS_FED_TO_CHAT: ""
   # Usage / cost accounting
   # Records priced generation spans into the per-user usage ledger (default on).
@@ -1589,6 +1626,10 @@ configMap:
   CELERY_WORKER_LIGHT_CONCURRENCY: ""
   CELERY_WORKER_LIGHT_PREFETCH_MULTIPLIER: ""
   CELERY_WORKER_USER_FILE_PROCESSING_CONCURRENCY: ""
+  # Per-connector external group sync lock TTL in seconds (default 300); raise
+  # toward the 6h crawl deadline if group syncs run long, so periodic
+  # re-dispatches can't start concurrent duplicate syncs.
+  CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT: ""
   # OnyxBot SlackBot Configs
   ONYX_BOT_DISABLE_DOCS_ONLY_ANSWER: ""
   ONYX_BOT_DISPLAY_ERROR_MSGS: ""

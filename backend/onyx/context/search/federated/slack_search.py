@@ -40,6 +40,7 @@ from onyx.indexing.chunker import Chunker
 from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.models import DocAwareChunk
 from onyx.llm.factory import get_default_llm
+from onyx.llm.interfaces import LLM
 from onyx.onyxbot.slack.models import ChannelType, SlackContext
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.federated.models import FederatedConnectorDetail
@@ -1005,6 +1006,7 @@ def slack_retrieval(
     team_id: str | None = None,
     # Pre-fetched data — when provided, avoids DB query (no session needed)
     search_settings: SearchSettings | None = None,
+    llm: LLM | None = None,
 ) -> list[InferenceChunk]:
     """
     Main entry point for Slack federated search with entity filtering.
@@ -1069,8 +1071,10 @@ def slack_retrieval(
             entities, channel_metadata_dict
         )
 
-    # Query slack with entity filtering
-    llm = get_default_llm()
+    # Query slack with entity filtering. Inside a chat turn the caller's LLM
+    # carries request policy (e.g. incognito retention headers) that a freshly
+    # constructed default would drop.
+    llm = llm or get_default_llm()
     query_items = build_slack_queries(query, llm, entities, available_channels)
 
     # Partition into direct thread fetches and search query strings
@@ -1148,23 +1152,23 @@ def slack_retrieval(
             ),  # ALWAYS apply exclude_channels
         }
 
-        for query_string in query_strings:
-            search_tasks.append(
+        search_tasks.extend(
+            (
+                query_slack,
                 (
-                    query_slack,
-                    (
-                        query_string,
-                        access_token,
-                        query_limit,
-                        allowed_private_channel,
-                        bot_token,
-                        include_dm,
-                        dm_entities,
-                        available_channels,
-                        channel_metadata_dict,
-                    ),
-                )
+                    query_string,
+                    access_token,
+                    query_limit,
+                    allowed_private_channel,
+                    bot_token,
+                    include_dm,
+                    dm_entities,
+                    available_channels,
+                    channel_metadata_dict,
+                ),
             )
+            for query_string in query_strings
+        )
 
     # Execute searches in parallel
     results = run_functions_tuples_in_parallel(search_tasks)
@@ -1233,7 +1237,7 @@ def slack_retrieval(
         access_token=access_token,
         team_id=team_id,
     )
-    for slack_message, thread_text in zip(slack_messages, thread_texts):
+    for slack_message, thread_text in zip(slack_messages, thread_texts, strict=True):
         slack_message.text = thread_text
 
     # get the highlighted texts from shortest to longest
@@ -1303,7 +1307,7 @@ def slack_retrieval(
         for chunk in chunks:
             match_highlight = chunk.content
             for highlight in sorted_highlighted_texts:  # faster than re sub
-                match_highlight = match_highlight.replace(  # ty: ignore[no-matching-overload]
+                match_highlight = match_highlight.replace(
                     highlight, f"<hi>{highlight}</hi>"
                 )
 

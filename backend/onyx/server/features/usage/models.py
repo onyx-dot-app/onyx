@@ -41,10 +41,14 @@ class CostOverride(BaseModel):
 
 class UsageExportRecord(BaseModel):
     model: str
+    flow: str
+    provider: str
+    incognito: bool
     day: str  # YYYY-MM-DD
     input_tokens: int
     output_tokens: int
     cache_read_tokens: int
+    cache_creation_tokens: int
     cost_cents: float
 
 
@@ -52,6 +56,7 @@ class UsageExportTotals(BaseModel):
     input_tokens: int
     output_tokens: int
     cache_read_tokens: int
+    cache_creation_tokens: int
     cost_cents: float
 
 
@@ -83,6 +88,7 @@ class EffectiveCostBudget(BaseModel):
     budget_cents: float
     remaining_cents: float
     period_hours: int
+    reset_at: datetime
 
 
 class UserUsageResponse(BaseModel):
@@ -92,5 +98,6 @@ class UserUsageResponse(BaseModel):
     budget_cents: float | None
     budget_remaining_cents: float | None
     budget_period_hours: int | None = None
+    budget_reset_at: datetime | None = None
     selected_model_price: ModelPrice | None
     available_model_prices: list[ModelPrice] = Field(default_factory=list)

@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { Text } from "@opal/components";
 import { IndexAttemptStageMetric } from "@/lib/types";
 import { formatDurationMs } from "@opal/time";
@@ -11,10 +12,12 @@ interface BatchTotalHeaderProps {
 export default function BatchTotalHeader({
   batchTotal,
 }: BatchTotalHeaderProps) {
+  const t = useTranslations("admin.connector");
+
   if (!batchTotal || batchTotal.event_count === 0) {
     return (
       <Text font="main-ui-action" color="text-04">
-        No completed batches yet
+        {t("stageMetrics.batchTotal.empty")}
       </Text>
     );
   }
@@ -30,9 +33,10 @@ export default function BatchTotalHeader({
 
   return (
     <Text font="main-ui-action" color="text-05">
-      {`Average batch: ${avgLabel}, ${batchTotal.event_count} ${
-        batchTotal.event_count === 1 ? "batch" : "batches"
-      } — distribution shown below.`}
+      {t("stageMetrics.batchTotal.summary", {
+        avgLabel,
+        count: batchTotal.event_count,
+      })}
     </Text>
   );
 }

@@ -10,14 +10,13 @@ import {
   updateCredential,
   updateCredentialWithPrivateKey,
 } from "@/lib/credential";
-import { toast } from "@opal/layouts";
+import { Section, toast } from "@opal/layouts";
 import { CCPairFullInfo } from "@/app/admin/connector/[ccPairId]/types";
-import { Card, Text } from "@opal/components";
+import { Button, Card, Modal, Text } from "@opal/components";
 import {
   buildCCPairInfoUrl,
   buildSimilarCredentialInfoURL,
 } from "@/app/admin/connector/[ccPairId]/lib";
-import { Modal } from "@opal/components";
 import { getSourceDisplayName } from "@/lib/sources";
 import {
   ConfluenceCredentialJson,
@@ -32,8 +31,16 @@ import { isTypedFileField, TypedFile } from "@/lib/connectors/fileTypes";
 import { SvgEdit, SvgKey } from "@opal/icons";
 import CreateCredential from "@/lib/credentials/components/CreateCredential";
 import { CreateStdOAuthCredential } from "@/lib/credentials/components/CreateStdOAuthCredential";
+import {
+  CredentialCreationMethod,
+  getCredentialCreationActionLabel,
+  getCredentialCreationMethods,
+  shouldRedirectToOAuth,
+} from "@/lib/credentials/credentialCreation";
 import EditCredential from "@/lib/credentials/components/EditCredential";
 import ModifyCredential from "@/lib/credentials/components/ModifyCredential";
+
+const OAUTH_REDIRECT_ERROR = "Unable to start OAuth";
 
 export interface CredentialSectionProps {
   ccPair: CCPairFullInfo;
@@ -59,27 +66,52 @@ export default function CredentialSection({
   const { data: oauthDetails, isLoading: oauthDetailsLoading } =
     useOAuthDetails(sourceType);
 
-  const makeShowCreateCredential = async () => {
-    if (oauthDetailsLoading || !oauthDetails) {
+  const credentialCreationMethods = getCredentialCreationMethods(oauthDetails);
+  const sourceDisplayName = getSourceDisplayName(sourceType) || sourceType;
+
+  const openCredentialCreationMethod = async (
+    method: CredentialCreationMethod
+  ) => {
+    if (
+      method === CredentialCreationMethod.OAuth &&
+      oauthDetails &&
+      shouldRedirectToOAuth(oauthDetails)
+    ) {
+      try {
+        const redirectUrl = await getConnectorOauthRedirectUrl(sourceType, {});
+        window.location.href = redirectUrl;
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : OAUTH_REDIRECT_ERROR
+        );
+      }
+      return;
+    }
+    if (method === CredentialCreationMethod.OAuth && !oauthDetails) {
       return;
     }
 
-    if (oauthDetails.oauth_enabled) {
-      if (oauthDetails.additional_kwargs.length > 0) {
-        setShowModifyCredential(false);
-        setEditingCredential(null);
-        setShowCreateCredential(true);
-      } else {
-        const redirectUrl = await getConnectorOauthRedirectUrl(sourceType, {});
-        if (redirectUrl) {
-          window.location.href = redirectUrl;
-        }
-      }
-    } else {
-      setShowModifyCredential(false);
-      setEditingCredential(null);
-      setShowCreateCredential(true);
+    setShowModifyCredential(false);
+    setEditingCredential(null);
+    setCredentialCreationMethod(method);
+    setShowCreateCredential(true);
+  };
+
+  const makeShowCreateCredential = async () => {
+    if (oauthDetailsLoading) {
+      return;
     }
+
+    const onlyMethod = credentialCreationMethods.at(0);
+    if (credentialCreationMethods.length === 1 && onlyMethod) {
+      await openCredentialCreationMethod(onlyMethod);
+      return;
+    }
+
+    setShowModifyCredential(false);
+    setEditingCredential(null);
+    setCredentialCreationMethod(null);
+    setShowCreateCredential(true);
   };
 
   const onSwap = async (
@@ -151,6 +183,8 @@ export default function CredentialSection({
 
   const [showModifyCredential, setShowModifyCredential] = useState(false);
   const [showCreateCredential, setShowCreateCredential] = useState(false);
+  const [credentialCreationMethod, setCredentialCreationMethod] =
+    useState<CredentialCreationMethod | null>(null);
   const [editingCredential, setEditingCredential] =
     useState<Credential<any> | null>(null);
 
@@ -166,6 +200,7 @@ export default function CredentialSection({
 
   const closeCreateCredential = () => {
     setShowCreateCredential(false);
+    setCredentialCreationMethod(null);
   };
 
   const closeEditingCredential = () => {
@@ -217,7 +252,7 @@ export default function CredentialSection({
       rounded-lg
       bg-background"
     >
-      <Card padding="lg" border="solid" rounding="lg">
+      <Card padding={6} border="solid" rounding={4}>
         <div className="flex items-center">
           <div className="shrink-0 mr-3">
             <SvgKey size={16} className="text-muted-foreground" />
@@ -278,28 +313,57 @@ export default function CredentialSection({
             />
             <Modal.Body alignItems="stretch">
               {showCreateCredential ? (
-                <>
-                  {oauthDetailsLoading ? (
-                    <Spinner />
+                oauthDetailsLoading ? (
+                  <Spinner />
+                ) : credentialCreationMethod === null ? (
+                  <Section alignItems="start" gap={1}>
+                    {credentialCreationMethods.map((method) => (
+                      <Button
+                        key={method}
+                        onClick={() => openCredentialCreationMethod(method)}
+                      >
+                        {getCredentialCreationActionLabel(
+                          method,
+                          sourceDisplayName,
+                          true
+                        )}
+                      </Button>
+                    ))}
+                  </Section>
+                ) : credentialCreationMethod ===
+                    CredentialCreationMethod.OAuth && oauthDetails ? (
+                  shouldRedirectToOAuth(oauthDetails) ? (
+                    <Section alignItems="start">
+                      <Text as="p" font="main-ui-body" color="text-03">
+                        {`We couldn't redirect you to sign in with ${getSourceDisplayName(
+                          sourceType
+                        )}. Please try again.`}
+                      </Text>
+                      <Button
+                        onClick={() =>
+                          openCredentialCreationMethod(
+                            CredentialCreationMethod.OAuth
+                          )
+                        }
+                      >
+                        Retry
+                      </Button>
+                    </Section>
                   ) : (
-                    <>
-                      {oauthDetails && oauthDetails.oauth_enabled ? (
-                        <CreateStdOAuthCredential
-                          sourceType={sourceType}
-                          additionalFields={oauthDetails.additional_kwargs}
-                        />
-                      ) : (
-                        <CreateCredential
-                          sourceType={sourceType}
-                          accessType={ccPair.access_type}
-                          swapConnector={ccPair.connector}
-                          onSwap={onSwap}
-                          onClose={closeCreateCredential}
-                        />
-                      )}
-                    </>
-                  )}
-                </>
+                    <CreateStdOAuthCredential
+                      sourceType={sourceType}
+                      additionalFields={oauthDetails.additional_kwargs}
+                    />
+                  )
+                ) : (
+                  <CreateCredential
+                    sourceType={sourceType}
+                    accessType={ccPair.access_type}
+                    swapConnector={ccPair.connector}
+                    onSwap={onSwap}
+                    onClose={closeCreateCredential}
+                  />
+                )
               ) : editingCredential ? (
                 <EditCredential
                   onUpdate={onUpdateCredential}

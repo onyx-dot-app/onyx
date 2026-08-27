@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import { Modal } from "@opal/components";
 import { Button } from "@opal/components";
 import { Input } from "@/components/ui/input";
@@ -19,12 +20,12 @@ interface MCPApiKeyModalProps {
   serverName: string;
   serverId: number;
   authTemplate?: MCPAuthTemplate;
-  onSubmit: (serverId: number, apiKey: string) => void;
+  onSubmit: (serverId: number, apiKey: string) => Promise<void> | void;
   onSubmitCredentials?: (
     serverId: number,
     credentials: Record<string, string>
-  ) => void;
-  onSuccess?: () => void;
+  ) => Promise<void> | void;
+  onSuccess?: () => Promise<void> | void;
   isAuthenticated?: boolean;
   existingCredentials?: Record<string, string>;
 }
@@ -41,6 +42,7 @@ export default function MCPApiKeyModal({
   isAuthenticated = false,
   existingCredentials,
 }: MCPApiKeyModalProps) {
+  const t = useTranslations("chat.mcpApiKey");
   const [apiKey, setApiKey] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
   const [credentials, setCredentials] = useState<Record<string, string>>({});
@@ -85,12 +87,12 @@ export default function MCPApiKeyModal({
         }
         setCredentials({});
         if (onSuccess) {
-          onSuccess();
+          await onSuccess();
         }
         onClose();
       } catch (error) {
         console.error("Error submitting credentials:", error);
-        let errorMessage = "Failed to save credentials";
+        let errorMessage = t("saveCredentialsError.message");
         if (error instanceof Error) {
           errorMessage = error.message;
         } else if (typeof error === "string") {
@@ -109,12 +111,12 @@ export default function MCPApiKeyModal({
         await onSubmit(serverId, apiKey);
         setApiKey("");
         if (onSuccess) {
-          onSuccess();
+          await onSuccess();
         }
         onClose();
       } catch (error) {
         console.error("Error submitting API key:", error);
-        let errorMessage = "Failed to save API key";
+        let errorMessage = t("saveApiKeyError.message");
         if (error instanceof Error) {
           errorMessage = error.message;
         } else if (typeof error === "string") {
@@ -150,25 +152,45 @@ export default function MCPApiKeyModal({
     }));
   };
 
-  const credsType = isTemplateMode ? "Credentials" : "API Key";
+  // Credentials and API key wording differ per branch, so each variant is a
+  // whole message instead of a sentence built from fragments.
+  const modalTitle = isAuthenticated
+    ? isTemplateMode
+      ? t("header.manageCredentials.title")
+      : t("header.manageApiKey.title")
+    : isTemplateMode
+      ? t("header.enterCredentials.title")
+      : t("header.enterApiKey.title");
+  const introText = isAuthenticated
+    ? isTemplateMode
+      ? t("intro.updateCredentials.text", { server: serverName })
+      : t("intro.updateApiKey.text", { server: serverName })
+    : isTemplateMode
+      ? t("intro.enterCredentials.text", { server: serverName })
+      : t("intro.enterApiKey.text", { server: serverName });
+  const validationText = isAuthenticated
+    ? t("validationNote.authenticated.text")
+    : isTemplateMode
+      ? t("validationNote.credentials.text")
+      : t("validationNote.apiKey.text");
+  const submitLabel = isSubmitting
+    ? t("submitButton.saving.label")
+    : isAuthenticated
+      ? isTemplateMode
+        ? t("submitButton.updateCredentials.label")
+        : t("submitButton.updateApiKey.label")
+      : isTemplateMode
+        ? t("submitButton.saveCredentials.label")
+        : t("submitButton.saveApiKey.label");
+
   return (
     <Modal open={isOpen} onOpenChange={handleClose}>
       <Modal.Content width="sm" height="sm">
-        <Modal.Header
-          icon={SvgKey}
-          title={isAuthenticated ? `Manage ${credsType}` : `Enter ${credsType}`}
-          onClose={handleClose}
-        />
+        <Modal.Header icon={SvgKey} title={modalTitle} onClose={handleClose} />
         <Modal.Body>
-          <Text as="p">
-            {isAuthenticated
-              ? `Update your ${credsType} for ${serverName}.`
-              : `Enter your ${credsType} for ${serverName} to enable authentication.`}
-          </Text>
+          <Text as="p">{introText}</Text>
           <Text as="p" text02>
-            {isAuthenticated
-              ? "Changes will be validated against the server before being saved."
-              : `Your ${credsType} will be validated against the server and stored securely.`}
+            {validationText}
           </Text>
 
           {error && (
@@ -199,7 +221,9 @@ export default function MCPApiKeyModal({
                         onChange={(e) =>
                           updateCredential(field, e.target.value)
                         }
-                        placeholder={`Enter your ${field.replace(/_/g, " ")}`}
+                        placeholder={t("credentialField.placeholder", {
+                          field: field.replace(/_/g, " "),
+                        })}
                         className="pr-10"
                         required
                       />
@@ -209,8 +233,8 @@ export default function MCPApiKeyModal({
                         className="absolute right-3 top-1/2 -translate-y-1/2 text-subtle hover:text-emphasis"
                         aria-label={
                           showCredentials[field]
-                            ? "Hide credential"
-                            : "Show credential"
+                            ? t("credentialVisibilityButton.hideAriaLabel")
+                            : t("credentialVisibilityButton.showAriaLabel")
                         }
                       >
                         {showCredentials[field] ? (
@@ -227,7 +251,7 @@ export default function MCPApiKeyModal({
               // Legacy API key field
               <div className="space-y-2">
                 <Label label="apiKey">
-                  <Text>{credsType}</Text>
+                  <Text>{t("apiKeyField.label")}</Text>
                 </Label>
                 <div className="relative">
                   <Input
@@ -235,7 +259,7 @@ export default function MCPApiKeyModal({
                     type={showApiKey ? "text" : "password"}
                     value={apiKey}
                     onChange={(e) => setApiKey(e.target.value)}
-                    placeholder={`Enter your ${credsType}`}
+                    placeholder={t("apiKeyField.placeholder")}
                     className="pr-10"
                     required
                   />
@@ -243,7 +267,11 @@ export default function MCPApiKeyModal({
                     type="button"
                     onClick={() => setShowApiKey(!showApiKey)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-subtle hover:text-emphasis"
-                    aria-label={showApiKey ? "Hide API key" : "Show API key"}
+                    aria-label={
+                      showApiKey
+                        ? t("apiKeyVisibilityButton.hideAriaLabel")
+                        : t("apiKeyVisibilityButton.showAriaLabel")
+                    }
                   >
                     {showApiKey ? (
                       <SvgEyeClosed className="h-4 w-4" />
@@ -261,7 +289,7 @@ export default function MCPApiKeyModal({
                 prominence="secondary"
                 onClick={handleClose}
               >
-                Cancel
+                {t("cancelButton.label")}
               </Button>
               <Button
                 disabled={
@@ -274,11 +302,7 @@ export default function MCPApiKeyModal({
                 }
                 type="submit"
               >
-                {isSubmitting
-                  ? "Saving..."
-                  : isAuthenticated
-                    ? `Update ${credsType}`
-                    : `Save ${credsType}`}
+                {submitLabel}
               </Button>
             </div>
           </form>

@@ -1,13 +1,18 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useCreateModal } from "@opal/components";
+import {
+  Button,
+  CopyButton,
+  Divider,
+  LineItemButton,
+  Popover,
+  Text,
+  useCreateModal,
+} from "@opal/components";
 import { noProp } from "@/lib/utils";
 import { formatDateTimeLog } from "@/lib/dateUtils";
-import { Button, Divider, Text } from "@opal/components";
 import { Content } from "@opal/layouts";
-import LineItem from "@/refresh-components/buttons/LineItem";
-import { Popover } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import {
   SvgAlertTriangle,
@@ -16,7 +21,6 @@ import {
   SvgXOctagon,
   SvgSimpleLoader,
 } from "@opal/icons";
-import { CopyButton } from "@opal/components";
 import { Hoverable } from "@opal/core";
 import { useHookExecutionLogs } from "@/ee/hooks/useHookExecutionLogs";
 import HookLogsModal from "@/ee/views/admin/HooksPage/HookLogsModal";
@@ -39,8 +43,8 @@ function ErrorLogRow({
         flexDirection="column"
         justifyContent="start"
         alignItems="start"
-        gap={0.25}
-        padding={0.25}
+        gap={1}
+        padding={1}
         height="fit"
       >
         <Section
@@ -221,8 +225,8 @@ export default function HookStatusPopover({
                   ? 20
                   : 12.5
             }
-            padding={0.125}
-            gap={0.25}
+            padding={0.5}
+            gap={1}
           >
             {isLoading ? (
               <Section justifyContent="center">
@@ -250,14 +254,14 @@ export default function HookStatusPopover({
 
                 {topErrors.length > 0 ? (
                   <>
-                    <Divider paddingPerpendicular="fit" />
+                    <Divider paddingPerpendicular={0} />
 
                     <Section
                       flexDirection="column"
                       justifyContent="start"
                       alignItems="start"
-                      gap={0.25}
-                      padding={0.25}
+                      gap={1}
+                      padding={1}
                       height="fit"
                     >
                       {topErrors.map((log, idx) => (
@@ -270,19 +274,20 @@ export default function HookStatusPopover({
                     </Section>
                   </>
                 ) : (
-                  <Divider paddingPerpendicular="fit" />
+                  <Divider paddingPerpendicular={0} />
                 )}
 
-                <LineItem
-                  muted
+                <LineItemButton
+                  sizePreset="main-ui"
+                  rounding={2}
+                  color="muted"
                   icon={SvgMaximize2}
                   onClick={noProp(() => {
                     handleOpenChange(false);
                     logsModal.toggle(true);
                   })}
-                >
-                  View More Lines
-                </LineItem>
+                  title="View More Lines"
+                />
               </>
             ) : hasRecentErrors ? (
               <>
@@ -307,15 +312,15 @@ export default function HookStatusPopover({
                   />
                 </div>
 
-                <Divider paddingPerpendicular="fit" />
+                <Divider paddingPerpendicular={0} />
 
                 {/* Log rows — at most 3, timestamp first then error message */}
                 <Section
                   flexDirection="column"
                   justifyContent="start"
                   alignItems="start"
-                  gap={0.25}
-                  padding={0.25}
+                  gap={1}
+                  padding={1}
                   height="fit"
                 >
                   {recentErrors.slice(0, 3).map((log, idx) => (
@@ -328,16 +333,17 @@ export default function HookStatusPopover({
                 </Section>
 
                 {/* View More Lines */}
-                <LineItem
-                  muted
+                <LineItemButton
+                  sizePreset="main-ui"
+                  rounding={2}
+                  color="muted"
                   icon={SvgMaximize2}
                   onClick={noProp(() => {
                     handleOpenChange(false);
                     logsModal.toggle(true);
                   })}
-                >
-                  View More Lines
-                </LineItem>
+                  title="View More Lines"
+                />
               </>
             ) : (
               // No errors state
@@ -352,19 +358,20 @@ export default function HookStatusPopover({
                   />
                 </div>
 
-                <Divider paddingPerpendicular="fit" />
+                <Divider paddingPerpendicular={0} />
 
                 {/* View Older Errors */}
-                <LineItem
-                  muted
+                <LineItemButton
+                  sizePreset="main-ui"
+                  rounding={2}
+                  color="muted"
                   icon={SvgMaximize2}
                   onClick={noProp(() => {
                     handleOpenChange(false);
                     logsModal.toggle(true);
                   })}
-                >
-                  View Older Errors
-                </LineItem>
+                  title="View Older Errors"
+                />
               </>
             )}
           </Section>

@@ -3,9 +3,21 @@ import {
   type LLMProviderView,
   type WellKnownLLMProviderDescriptor,
   type ModelConfiguration,
+  type ReasoningEffortOverride,
 } from "@/lib/languageModels/types";
+import {
+  ALL_REASONING_STOPS,
+  maxReasoningStop,
+} from "@/sections/model-selector/setting-controls";
 import * as Yup from "yup";
+import type { useTranslations } from "next-intl";
 import { useWellKnownLLMProvider } from "@/lib/languageModels/hooks";
+
+/** Translator for the `admin.languageModels.modals` namespace, threaded into
+ *  helpers that live outside a component and so cannot call the hook. */
+export type LlmModalsTranslator = ReturnType<
+  typeof useTranslations<"admin.languageModels.modals">
+>;
 
 // ─── useInitialValues ─────────────────────────────────────────────────────
 
@@ -21,7 +33,7 @@ function buildModelConfigurations(
   wellKnownModels.forEach((m) => modelMap.set(m.name, m));
   existingModels.forEach((m) => modelMap.set(m.name, m));
 
-  return Array.from(modelMap.values());
+  return Array.from(modelMap.values()).map(clampModelSettings);
 }
 
 /** Shared initial values for all LLM provider forms (both onboarding and admin). */
@@ -42,6 +54,7 @@ export function useInitialValues(
     wellKnownLLMProvider?.recommended_default_model?.name;
 
   return {
+    id: existingLlmProvider?.id,
     provider: existingLlmProvider?.provider ?? providerName,
     name: isOnboarding
       ? providerName
@@ -68,6 +81,7 @@ interface ValidationSchemaOptions {
 /**
  * Builds the validation schema for a modal.
  *
+ * @param t — translator for the modal namespace.
  * @param isOnboarding — controls the base schema:
  *   - `true`:  minimal (only `test_model_name`).
  *   - `false`: full admin schema (display name, access, models, etc.).
@@ -76,22 +90,23 @@ interface ValidationSchemaOptions {
  * @param options.extra — arbitrary Yup fields for provider-specific validation.
  */
 export function buildValidationSchema(
+  t: LlmModalsTranslator,
   isOnboarding: boolean,
   { apiKey, apiBase, extra }: ValidationSchemaOptions = {}
 ) {
   const providerFields: Yup.ObjectShape = {
     ...(apiKey && {
-      api_key: Yup.string().required("API Key is required"),
+      api_key: Yup.string().required(t("validation.apiKeyRequired")),
     }),
     ...(apiBase && {
-      api_base: Yup.string().required("API Base URL is required"),
+      api_base: Yup.string().required(t("validation.apiBaseRequired")),
     }),
     ...extra,
   };
 
   if (isOnboarding) {
     return Yup.object().shape({
-      test_model_name: Yup.string().required("Model name is required"),
+      test_model_name: Yup.string().required(t("validation.modelNameRequired")),
       ...providerFields,
     });
   }
@@ -102,7 +117,7 @@ export function buildValidationSchema(
     is_auto_mode: Yup.boolean().required(),
     groups: Yup.array().of(Yup.number()),
     personas: Yup.array().of(Yup.number()),
-    test_model_name: Yup.string().required("Model name is required"),
+    test_model_name: Yup.string().required(t("validation.modelNameRequired")),
     ...providerFields,
   });
 }
@@ -111,6 +126,7 @@ export function buildValidationSchema(
 
 /** Base form values that all provider forms share. */
 export interface BaseLLMFormValues {
+  id?: number;
   name?: string;
   api_key?: string;
   api_base?: string;
@@ -125,27 +141,74 @@ export interface BaseLLMFormValues {
   custom_config?: Record<string, string>;
 }
 
+/** Bound stored policy by current capability, which can shrink after a save. */
+export function clampModelSettings<
+  T extends Pick<
+    ModelConfiguration,
+    | "supported_reasoning_efforts"
+    | "reasoning_effort_max"
+    | "reasoning_effort_default"
+  >,
+>(model: T): T {
+  const highestIndex = maxReasoningStop(model.supported_reasoning_efforts);
+  if (highestIndex < 0) return model;
+  const bound = (effort: ReasoningEffortOverride | null | undefined) =>
+    effort && ALL_REASONING_STOPS.indexOf(effort) > highestIndex
+      ? ALL_REASONING_STOPS[highestIndex]
+      : effort;
+  return {
+    ...model,
+    reasoning_effort_max: bound(model.reasoning_effort_max),
+    reasoning_effort_default: bound(model.reasoning_effort_default),
+  };
+}
+
 // ─── mergeFetchedModelConfigurations ──────────────────────────────────────
 
 /**
  * Merges a freshly-fetched model list with the current form state so that
- * refreshing the model list does not clobber the user's selections.
+ * refreshing the model list does not clobber the user's selections. Call it
+ * from a functional `setValues` so a fetch that lands late cannot revert edits
+ * made while it was in flight.
  *
  * - If the form has no models yet (first fetch / onboarding), the fetched
- *   list is returned as-is so each provider's own default `is_visible` applies.
- * - Otherwise, models that already exist in the form keep their prior
- *   `is_visible` value, and newly-discovered models are added unselected so
- *   the user can opt-in explicitly.
+ *   list is used with only settings clamped, so each provider's own default
+ *   `is_visible` applies.
+ * - Otherwise, models that already exist in the form keep their prior unsaved
+ *   edits (visibility, rename, admin settings), and newly-discovered models are
+ *   added unselected so the user can opt-in explicitly.
  */
 export function mergeFetchedModelConfigurations(
   fetched: ModelConfiguration[],
   existing: ModelConfiguration[]
 ): ModelConfiguration[] {
-  if (existing.length === 0) return fetched;
+  if (existing.length === 0) return fetched.map(clampModelSettings);
   const priorByName = new Map(existing.map((m) => [m.name, m]));
   return fetched.map((model) => {
     const prior = priorByName.get(model.name);
-    return { ...model, is_visible: prior ? prior.is_visible : false };
+    if (!prior) return clampModelSettings({ ...model, is_visible: false });
+    // Unsaved edits live only in form state, so a refetch has to carry them.
+    return clampModelSettings({
+      ...model,
+      is_visible: prior.is_visible,
+      custom_display_name: prior.custom_display_name,
+      reasoning_effort_max: prior.reasoning_effort_max,
+      reasoning_effort_default: prior.reasoning_effort_default,
+      temperature_default: prior.temperature_default,
+    });
+  });
+}
+
+/** Functional `setValues` updater applying {@link mergeFetchedModelConfigurations}. */
+export function withFetchedModels<
+  T extends { model_configurations: ModelConfiguration[] },
+>(fetched: ModelConfiguration[]) {
+  return (prev: T): T => ({
+    ...prev,
+    model_configurations: mergeFetchedModelConfigurations(
+      fetched,
+      prev.model_configurations
+    ),
   });
 }
 

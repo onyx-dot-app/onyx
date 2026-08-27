@@ -7,7 +7,8 @@ dependencies = [
     "aioboto3==15.1.0",
     "cohere==7.0.5",
     "fastapi==0.133.1",
-    "google-genai==1.52.0",
+    "google-genai==2.18.1",
+    "huggingface-hub==1.26.0",
     "litellm[google]==1.93.0",
     "openai==2.38.0",
     "pydantic==2.12.5",
@@ -26,7 +27,7 @@ dependencies = [
 
 [dependency-groups]
 backend = [
-    "aiohttp==3.14.1",
+    "aiohttp==3.14.3",
     "alembic==1.18.4",
     "asyncpg==0.30.0",
     "atlassian-python-api==4.0.7",
@@ -91,13 +92,15 @@ backend = [
     "python-docx==1.1.2",
     "python-gitlab==5.6.0",
     "python-pptx==0.6.23",
-    "pypdf==6.14.2",
+    "pypdf==6.15.0",
     "pypdfium2==5.9.0",
     "python-dotenv==1.2.2",
     "python-slugify==8.0.4",
     "pywikibot==11.4.2",
     "readerwriterlock==1.0.9",
     "redis==5.0.8",
+    # PDF generation for the usage report review pack.
+    "reportlab==5.0.0",
     "requests==2.33.0",
     "requests-oauthlib==2.0.0",
     "simple-salesforce==1.12.6",
@@ -121,7 +124,7 @@ backend = [
     "sendgrid==6.12.5",
     "exa_py==1.15.4",
     "braintrust==0.3.9",
-    "langfuse==3.10.0",
+    "langfuse==4.14.4",
     "nest_asyncio==1.6.0",
     "openinference-instrumentation==0.1.42",
     "opentelemetry-proto>=1.42.1",
@@ -138,8 +141,8 @@ dev = [
     "ipykernel==6.29.5",
     "manygo==0.2.0",
     "matplotlib==3.10.8",
-    "ty==0.0.31",
-    "onyx-devtools==0.10.5",
+    "ty==0.0.63",
+    "onyx-devtools==0.13.0",
     "openapi-generator-cli==7.17.0",
     "pre-commit==3.2.2",
     "pytest-alembic==0.12.1",
@@ -153,7 +156,7 @@ dev = [
     "release-tag==0.5.2",
     # Keep in sync with the pinned `ruff==` in the ruff / ruff-format hooks in
     # .pre-commit-config.yaml, which install ruff into an isolated overlay.
-    "ruff==0.16.0",
+    "ruff==0.16.1",
     "types-docker==7.1.0.20260518",
     "types-beautifulsoup4==4.12.0.3",
     "types-html5lib==1.1.11.13",
@@ -178,9 +181,9 @@ zizmor = ["zizmor==1.25.2"]
 # Enterprise Edition features
 ee = ["posthog==3.7.4"]
 
-# Locust load-test runtime (the loadtest/ project). Kept OUT of default-groups
+# Locust load-test runtime (the tools/loadtest/ project). Kept OUT of default-groups
 # so a normal `uv sync` doesn't pull locust's heavy gevent/flask/socketio tree.
-# Opt in with `uv sync --group loadtest`. See loadtest/README.md.
+# Opt in with `uv sync --group loadtest`. See tools/loadtest/README.md.
 loadtest = [
     "locust>=2.32",
     "fastapi>=0.115",
@@ -190,18 +193,12 @@ loadtest = [
 
 # Model server specific dependencies (ML packages)
 model_server = [
-    "accelerate==1.6.0",
+    "accelerate==1.14.0",
     "einops==0.8.1",
     "numpy==2.4.1",
     "sentence-transformers==5.4.1",
     "torch==2.9.1",
-    # Do NOT upgrade to >=5 without addressing the `from_pretrained()` buffer
-    # corruption bug: persistent=False buffers (notably RoPE `inv_freq`) are
-    # loaded with garbage memory, producing all-NaN embeddings.
-    # See https://github.com/huggingface/transformers/issues/44534 and
-    # https://github.com/huggingface/transformers/issues/43950 (both closed
-    # wontfix upstream).
-    "transformers==4.57.6",
+    "transformers==5.14.1",
     "sentry-sdk[fastapi,celery,starlette]==2.14.0",
 ]
 
@@ -251,6 +248,12 @@ exclude = [
 # with # ty: ignore[rule] comments. New code that introduces these errors will
 # fail CI.
 all = "error"
+# Opted out of the strict default above. Both landed as new rules in ty 0.0.63
+# and are style/strictness rules rather than correctness ones; adopting either
+# is a four-figure mechanical change (no autofix available) and belongs in its
+# own PR rather than a version bump.
+missing-override-decorator = "ignore"  # ~1.1k methods across ~250 files.
+missing-type-argument = "ignore"  # ~1k bare generics across ~350 files.
 
 [tool.uv.workspace]
 members = ["tools/ods"]
@@ -284,9 +287,32 @@ ignore = [
     # Tracked in kanban ticket #491 — to be removed once existing violations are
     # cleaned up:
     "S113", # request-without-timeout (~463 existing violations).
+    # flake8-bugbear (B) rule deferred — to be removed once existing violations
+    # are cleaned up:
+    "B904", # raise-without-from-inside-except (~465 existing violations).
 ]
 # G004: f-strings in logging break Sentry's message-pattern grouping.
-select = ["ARG", "E", "F", "G004", "I", "S", "W"]
+select = ["ARG", "B", "C901", "E", "F", "G004", "I", "PERF", "S", "W"]
+
+[tool.ruff.lint.mccabe]
+# Ruff's default is 10, which flags 429 functions. 20 is a ratchet: it stops new
+# highly-branched functions without a repo-wide refactor. The 82 functions above
+# it are listed in per-file-ignores below. Lower this as those get simplified.
+# NOTE: ruff counts a nested function's branches toward the function that
+# encloses it, so lifting closures to module scope often fixes a violation.
+max-complexity = 20
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI dependency-injection markers are the intended way to write these
+# defaults, so B008 must not flag them.
+extend-immutable-calls = [
+    "fastapi.Body",
+    "fastapi.Depends",
+    "fastapi.File",
+    "fastapi.Form",
+    "fastapi.Query",
+    "onyx.auth.permissions.require_permission",
+]
 
 [tool.ruff.lint.isort]
 known-first-party = ["onyx", "ee", "tests", "shared_configs", "model_server"]
@@ -304,3 +330,73 @@ known-first-party = ["onyx", "ee", "tests", "shared_configs", "model_server"]
 # pipe shell commands, and build ad-hoc SQL against trusted internal inputs
 # (tenant IDs, schema names). Other S rules still apply.
 "backend/scripts/**" = ["S108", "S602", "S608"]
+# Functions above the max-complexity of 20 when C901 was enabled. The trailing
+# number is the highest complexity in that file at the time. Remove an entry
+# once its functions are simplified. NOTE: the ignore is per file, so it also
+# hides new complex functions added to these files. Tracked in #2403.
+"backend/ee/onyx/background/celery/tasks/doc_permission_syncing/tasks.py" = ["C901"] # 21
+"backend/ee/onyx/external_permissions/google_drive/doc_sync.py" = ["C901"] # 21
+"backend/ee/onyx/server/gateway/anthropic_passthrough.py" = ["C901"] # 23
+"backend/ee/onyx/server/gateway/api.py" = ["C901"] # 27
+"backend/ee/onyx/server/gateway/openai_passthrough.py" = ["C901"] # 32
+"backend/onyx/auth/users.py" = ["C901"] # 30
+"backend/onyx/background/celery/tasks/docfetching/tasks.py" = ["C901"] # 43
+"backend/onyx/background/celery/tasks/docprocessing/tasks.py" = ["C901"] # 24
+"backend/onyx/background/celery/tasks/port/tasks.py" = ["C901"] # 27
+"backend/onyx/background/indexing/run_docfetching.py" = ["C901"] # 33
+"backend/onyx/chat/citation_processor.py" = ["C901"] # 30
+"backend/onyx/chat/llm_loop.py" = ["C901"] # 46
+"backend/onyx/chat/llm_step.py" = ["C901"] # 51
+"backend/onyx/chat/process_message.py" = ["C901"] # 47
+"backend/onyx/connectors/blob/connector.py" = ["C901"] # 24
+"backend/onyx/connectors/confluence/connector.py" = ["C901"] # 22
+"backend/onyx/connectors/confluence/onyx_confluence.py" = ["C901"] # 22
+"backend/onyx/connectors/connector_runner.py" = ["C901"] # 26
+"backend/onyx/connectors/drupal_wiki/connector.py" = ["C901"] # 21
+"backend/onyx/connectors/github/connector.py" = ["C901"] # 28
+"backend/onyx/connectors/gitlab/connector.py" = ["C901"] # 22
+"backend/onyx/connectors/google_drive/connector.py" = ["C901"] # 22
+"backend/onyx/connectors/google_drive/doc_conversion.py" = ["C901"] # 24
+"backend/onyx/connectors/hubspot/connector.py" = ["C901"] # 23
+"backend/onyx/connectors/notion/connector.py" = ["C901"] # 22
+"backend/onyx/connectors/sharepoint/connector.py" = ["C901"] # 34
+"backend/onyx/connectors/slack/connector.py" = ["C901"] # 26
+"backend/onyx/connectors/testrail/connector.py" = ["C901"] # 21
+"backend/onyx/connectors/web/connector.py" = ["C901"] # 23
+"backend/onyx/context/search/federated/slack_search.py" = ["C901"] # 31
+"backend/onyx/db/persona.py" = ["C901"] # 49
+"backend/onyx/deep_research/dr_loop.py" = ["C901"] # 26
+"backend/onyx/document_index/opensearch/search.py" = ["C901"] # 48
+"backend/onyx/document_index/vespa/shared_utils/vespa_request_builders.py" = ["C901"] # 41
+"backend/onyx/federated_connectors/federated_retrieval.py" = ["C901"] # 21
+"backend/onyx/kg/extractions/extraction_processing.py" = ["C901"] # 30
+"backend/onyx/llm/multi_llm.py" = ["C901"] # 45
+"backend/onyx/llm/utils.py" = ["C901"] # 30
+"backend/onyx/onyxbot/slack/handlers/handle_message.py" = ["C901"] # 34
+"backend/onyx/onyxbot/slack/handlers/handle_regular_answer.py" = ["C901"] # 22
+"backend/onyx/onyxbot/slack/listener.py" = ["C901"] # 28
+"backend/onyx/secondary_llm_flows/document_filter.py" = ["C901"] # 31
+"backend/onyx/server/documents/connector.py" = ["C901"] # 28
+"backend/onyx/server/features/build/interactive_turns/api.py" = ["C901"] # 22
+"backend/onyx/server/features/build/interactive_turns/executor.py" = ["C901"] # 35
+"backend/onyx/server/features/build/sandbox/opencode/serve_client.py" = ["C901"] # 56
+"backend/onyx/server/features/build/session/streaming.py" = ["C901"] # 24
+"backend/onyx/server/features/mcp/api.py" = ["C901"] # 33
+"backend/onyx/server/manage/users.py" = ["C901"] # 22
+"backend/onyx/server/manage/voice/websocket_api.py" = ["C901"] # 29
+"backend/onyx/server/query_and_chat/session_loading.py" = ["C901"] # 42
+"backend/onyx/skills/builtin/gmail/gmail_api.py" = ["C901"] # 23
+"backend/onyx/skills/builtin/google-drive/gdrive_api.py" = ["C901"] # 26
+"backend/onyx/skills/builtin/notion/notion_api.py" = ["C901"] # 28
+"backend/onyx/skills/ingest_from_github.py" = ["C901"] # 27
+"backend/onyx/tools/tool_constructor.py" = ["C901"] # 40
+"backend/onyx/tools/tool_implementations/search/search_tool.py" = ["C901"] # 25
+"backend/onyx/tools/tool_runner.py" = ["C901"] # 21
+"backend/onyx/utils/jsonriver/tokenize.py" = ["C901"] # 22
+"backend/onyx/voice/providers/elevenlabs.py" = ["C901"] # 21
+"backend/scripts/rotate_llm_provider_keys.py" = ["C901"] # 25
+"backend/scripts/tenant_cleanup/cleanup_tenants.py" = ["C901"] # 27
+"backend/scripts/tenant_cleanup/mark_connectors_for_deletion.py" = ["C901"] # 31
+"backend/scripts/tenant_cleanup/no_bastion_cleanup_tenants.py" = ["C901"] # 49
+"backend/scripts/tenant_cleanup/no_bastion_mark_connectors.py" = ["C901"] # 39
+"backend/tests/unit/onyx/connectors/salesforce/test_salesforce_sqlite.py" = ["C901"] # 24

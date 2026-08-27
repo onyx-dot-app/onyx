@@ -1,3 +1,5 @@
+"use client";
+
 import {
   Table,
   TableHead,
@@ -12,12 +14,9 @@ import SvgSimpleLoader from "@opal/icons/simple-loader";
 import { ChatSessionMinimal } from "@/app/ee/admin/performance/usage/types";
 import { Section } from "@/layouts/general-layouts";
 import { timestampToReadableDate } from "@/lib/dateUtils";
-import { Dispatch, SetStateAction, useCallback, useState } from "react";
+import { Dispatch, SetStateAction, useState } from "react";
 import { Feedback, TaskStatus } from "@/lib/types";
-import {
-  DateRange,
-  AdminDateRangeSelector,
-} from "@/components/dateRangeSelectors/AdminDateRangeSelector";
+import { DateRange } from "@/refresh-components/DateRangePicker";
 import { PageSelector } from "@/components/PageSelector";
 import Link from "next/link";
 import type { Route } from "next";
@@ -50,6 +49,7 @@ import {
   SvgThumbsDown,
   SvgThumbsUp,
 } from "@opal/icons";
+
 function QueryHistoryTableRow({
   chatSessionMinimal,
 }: {
@@ -101,7 +101,7 @@ function SelectFeedbackType({
   onValueChange: (value: Feedback | "all") => void;
 }) {
   return (
-    <Section alignItems="start" gap={0.25}>
+    <Section alignItems="start" gap={1}>
       <Text as="p" className="font-medium">
         Feedback Type
       </Text>
@@ -244,14 +244,26 @@ function PreviousQueryHistoryExportsModal({
   );
 }
 
-export function QueryHistoryTable() {
-  const [dateRange, setDateRange] = useState<DateRange>(undefined);
-  const [filters, setFilters] = useState<{
-    feedback_type?: Feedback | "all";
-    start_time?: string;
-    end_time?: string;
-  }>({});
+export type QueryHistoryFilters = Record<
+  string,
+  string | number | boolean | string[] | Date
+> & {
+  feedback_type?: Feedback | "all";
+  start_time?: string;
+  end_time?: string;
+};
 
+interface QueryHistoryTableProps {
+  dateRange: DateRange;
+  filters: QueryHistoryFilters;
+  setFilters: Dispatch<SetStateAction<QueryHistoryFilters>>;
+}
+
+export function QueryHistoryTable({
+  dateRange,
+  filters,
+  setFilters,
+}: QueryHistoryTableProps) {
   const [showModal, setShowModal] = useState(false);
 
   const {
@@ -267,25 +279,6 @@ export function QueryHistoryTable() {
     endpoint: "/api/admin/chat-session-history",
     filter: filters,
   });
-
-  const onTimeRangeChange = useCallback((value: DateRange) => {
-    setDateRange(value);
-
-    if (value?.from && value?.to) {
-      setFilters((prev) => ({
-        ...prev,
-        start_time: value.from.toISOString(),
-        end_time: value.to.toISOString(),
-      }));
-    } else {
-      setFilters((prev) => {
-        const newFilters = { ...prev };
-        delete newFilters.start_time;
-        delete newFilters.end_time;
-        return newFilters;
-      });
-    }
-  }, []);
 
   if (error) {
     return (
@@ -314,11 +307,6 @@ export function QueryHistoryTable() {
                   return newFilters;
                 });
               }}
-            />
-
-            <AdminDateRangeSelector
-              value={dateRange}
-              onValueChange={onTimeRangeChange}
             />
           </div>
           <div className="flex flex-row w-full items-center gap-x-2">

@@ -87,6 +87,7 @@ repos:
               |docker-compose\.prod-no-letsencrypt\.yml
               |docker-compose\.onyx-lite\.yml
               |docker-compose\.craft\.yml
+              |docker-compose\.dev\.yml
               |env\.template
               |env\.prod\.template
               |env\.nginx\.template
@@ -104,7 +105,7 @@ repos:
         # Scope to backend/, matching `[tool.ty.src] include = ["backend"]` in
         # pyproject. The full ty run only discovers backend/, but pre-commit
         # passes explicit filenames, which bypass that discovery-time include —
-        # without this, a touched file outside backend/ (examples/, loadtest/,
+        # without this, a touched file outside backend/ (examples/, tools/loadtest/,
         # tools/, …) would get type-checked against the backend venv it was
         # never meant to run in.
         files: ^backend/
@@ -134,6 +135,28 @@ repos:
         args: ["--no-project", "--with=ruff==0.16.0", "ruff", "format"]
         pass_filenames: true
         types_or: [python]
+      - id: uv-run
+        alias: terraform-fmt
+        name: terraform fmt
+        # Applies hclwrite.Format, the routine `terraform fmt` itself uses, so
+        # the result matches terraform byte for byte without needing the
+        # binary on PATH. Replaces the pre-commit-terraform terraform_fmt hook.
+        # `ods fmt tf` and `ods lint tf` ship in onyx-devtools (tools/ods), and
+        # `--with=onyx-devtools` resolves the published wheel, so both hooks
+        # need an ods release before they can run. Tag `ods/` first.
+        args: ["--no-project", "--with=onyx-devtools", "ods", "fmt", "tf"]
+        pass_filenames: true
+        files: \.tf$
+      - id: uv-run
+        alias: terraform-public-safe
+        name: terraform public-safe values
+        # These modules are published but stay in sync with what Onyx runs, so
+        # an internal value can travel across by accident. Fails on account
+        # ids, access key ids, routable IPv4 CIDRs, and email addresses.
+        # Append '# public-safe: ok' to accept a line.
+        args: ["--no-project", "--with=onyx-devtools", "ods", "lint", "tf"]
+        pass_filenames: true
+        files: ^deployment/terraform/.*\.tf$
       - id: uv-run
         alias: zizmor
         name: zizmor
@@ -182,7 +205,7 @@ repos:
     rev: 5d1e709b7be35cb2025444e19de266b056b7b7ee # frozen: v2.10.1
     hooks:
       - id: golangci-lint
-        language_version: "1.26.4"
+        language_version: "1.26.5"
         entry: bash -c "find . -name go.mod -not -path './.venv/*' -print0 | xargs -0 -I{} bash -c 'cd \"$(dirname {})\" && golangci-lint run ./...'"
 
   - repo: https://github.com/sirwart/ripsecrets
@@ -191,14 +214,27 @@ repos:
       - id: ripsecrets
         args:
           - --strict-ignore
+          # ripsecrets joins every pattern into one regex and runs it over the
+          # whole file, so `^`/`$` anchor to the start and end of the file, not
+          # a line -- an anchored pattern here silently matches nothing.
+          # `\b` keeps the prefix a real token start: without it the pattern
+          # matches inside words, e.g. the "sk-" in "celery-task-meta-<uuid>".
+          # The capture group makes ripsecrets test the key body for
+          # randomness, which drops placeholders like "sk-test-key-0000...".
           - --additional-pattern
-          - ^sk-[A-Za-z0-9_\-]{20,}$
+          - \bsk-([A-Za-z0-9_\-]{20,})
 
   - repo: https://github.com/antonbabenko/pre-commit-terraform
     rev: d0e12caebb2ab0ee8bf98181c8bfe9702bca103d
     hooks:
-      - id: terraform_fmt
-        files: \.tf$
+      # terraform_fmt is replaced by `ods fmt tf` above, which needs no local
+      # terraform. terraform_validate stays: it resolves provider schemas via
+      # `terraform init`, so it catches wrong argument names and bad module
+      # references that no in-process HCL parser can see.
+      - id: terraform_validate
+        files: ^deployment/terraform/.*\.tf$
+        args:
+          - --tf-init-args=-backend=false
 
   - repo: local
     hooks:
@@ -304,7 +340,9 @@ repos:
 
         language: system
         pass_filenames: false
-        files: ^web/.*\.(ts|tsx)$
+        # The i18n catalogs are part of the type graph: keyParity.ts turns a
+        # missing or extra locale key into a compile error.
+        files: ^web/(.*\.(ts|tsx)|src/i18n/messages/.*\.json)$
 
       - id: widget-typescript-check
         name: widget TypeScript type check

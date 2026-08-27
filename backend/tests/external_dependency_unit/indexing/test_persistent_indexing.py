@@ -372,7 +372,7 @@ def test_threshold_default_aborts_attempt(
 
     try:
         mock_app = MagicMock()
-        with pytest.raises(Exception):
+        with pytest.raises(RuntimeError, match="too many errors"):
             run_docfetching_entrypoint(
                 app=mock_app,
                 index_attempt_id=attempt_id,

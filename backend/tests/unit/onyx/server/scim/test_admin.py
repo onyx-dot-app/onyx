@@ -82,7 +82,7 @@ class TestCreateToken:
 
         # Simulate one existing active token that should get revoked
         existing = _make_token(1, "old-token", is_active=True)
-        scim_dal._session.scalars.return_value.all.return_value = (  # type: ignore
+        scim_dal._session.scalars.return_value.all.return_value = (  # ty: ignore[unresolved-attribute]
             [existing]
         )
 

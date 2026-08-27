@@ -5,7 +5,8 @@ import { FullImageModal } from "@/app/app/components/files/images/FullImageModal
 import { buildImgUrl } from "@/app/app/components/files/images/utils";
 import { Button } from "@opal/components";
 import { Hoverable } from "@opal/core";
-import { cn } from "@opal/utils";
+import { cn, clickOnKeyDown } from "@opal/utils";
+import { useTranslations } from "next-intl";
 
 const DEFAULT_SHAPE: ImageShape = "square";
 
@@ -39,6 +40,7 @@ export const InMessageImage = memo(function InMessageImage({
   fileName,
   shape = DEFAULT_SHAPE,
 }: InMessageImageProps) {
+  const t = useTranslations("chat.files");
   const [fullImageShowing, setFullImageShowing] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(loadedImages.has(fileId));
 
@@ -78,7 +80,16 @@ export const InMessageImage = memo(function InMessageImage({
       />
 
       <Hoverable.Root group="messageImage" width="fit">
-        <div className={cn("relative", shapeContainerClasses)}>
+        {/* The container holds its own download button, so it takes the button
+            semantics rather than a <button> wrapping a <button>. */}
+        <div
+          className={cn("relative", shapeContainerClasses)}
+          role="button"
+          tabIndex={0}
+          aria-label={t("inMessageImage.viewFullImage.label")}
+          onClick={() => setFullImageShowing(true)}
+          onKeyDown={clickOnKeyDown(() => setFullImageShowing(true))}
+        >
           {!imageLoaded && (
             <div className="absolute inset-0 bg-background-tint-02 animate-pulse rounded-lg" />
           )}
@@ -86,7 +97,7 @@ export const InMessageImage = memo(function InMessageImage({
           <img
             width={1200}
             height={1200}
-            alt="Chat Message Image"
+            alt={t("inMessageImage.image.alt")}
             onLoad={() => {
               loadedImages.add(fileId);
               setImageLoaded(true);
@@ -96,7 +107,6 @@ export const InMessageImage = memo(function InMessageImage({
               shapeImageClasses,
               imageLoaded ? "opacity-100" : "opacity-0"
             )}
-            onClick={() => setFullImageShowing(true)}
             src={buildImgUrl(fileId)}
             loading="lazy"
           />
@@ -106,7 +116,7 @@ export const InMessageImage = memo(function InMessageImage({
             <Hoverable.Item group="messageImage" variant="appear-on-hover">
               <Button
                 icon={SvgDownload}
-                tooltip="Download"
+                tooltip={t("inMessageImage.downloadButton.tooltip")}
                 onClick={handleDownload}
               />
             </Hoverable.Item>

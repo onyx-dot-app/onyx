@@ -2,6 +2,7 @@ import copy
 import os
 from collections.abc import Iterator
 from datetime import datetime, timezone
+from functools import partial
 from typing import Any
 
 import msal
@@ -72,11 +73,13 @@ class TeamsConnector(
         self,
         # TODO: (chris) move from "Display Names" to IDs, since display names
         # are not necessarily guaranteed to be unique
-        teams: list[str] = [],
+        teams: list[str] | None = None,
         max_workers: int = MAX_WORKERS,
         authority_host: str = DEFAULT_AUTHORITY_HOST,
         graph_api_host: str = DEFAULT_GRAPH_API_HOST,
     ) -> None:
+        if teams is None:
+            teams = []
         self.graph_client: GraphClient | None = None
         self.msal_app: msal.ConfidentialClientApplication | None = None
         self.max_workers = max_workers
@@ -593,9 +596,7 @@ def _collect_all_teams(
 
             if next_url:
                 url = next_url
-                query.before_execute(
-                    lambda req: _update_request_url(request=req, next_url=url)
-                )
+                query.before_execute(partial(_update_request_url, next_url=url))
 
             team_collection = execute_query_with_retry(
                 query, method_name="_collect_all_teams"
@@ -784,9 +785,7 @@ def _collect_all_channels_from_team(
         )
         if next_url:
             url = next_url
-            query = query.before_execute(
-                lambda req: _update_request_url(request=req, next_url=url)
-            )
+            query = query.before_execute(partial(_update_request_url, next_url=url))
 
         channel_collection = execute_query_with_retry(
             query, method_name="_collect_all_channels_from_team"
@@ -870,7 +869,7 @@ if __name__ == "__main__":
     )
     teams_connector.validate_connector_settings()
 
-    for slim_doc in teams_connector.retrieve_all_slim_docs_perm_sync():
+    for _slim_doc in teams_connector.retrieve_all_slim_docs_perm_sync():
         ...
 
     for doc in load_all_from_connector(

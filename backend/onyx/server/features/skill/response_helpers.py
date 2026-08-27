@@ -1,16 +1,21 @@
 from sqlalchemy.orm import Session
 
-from onyx.auth.schemas import UserRole
-from onyx.db.enums import SkillAccessLevel, SkillSharePermission
+from onyx.auth.permissions import has_global_permission, has_permission
+from onyx.db.enums import (
+    Permission,
+    PermissionAuthority,
+    SkillAccessLevel,
+    SkillSharePermission,
+)
 from onyx.db.external_app import (
     SkillExternalAppDependencyState,
     get_skill_external_app_dependencies,
 )
 from onyx.db.models import Skill, User
 from onyx.db.persona_sharing import (
-    get_curated_user_group_ids_for_user,
     get_user_group_ids_for_user,
 )
+from onyx.db.scoped_permissions import fetch_managed_group_ids
 from onyx.db.skill import SkillUserState, skill_user_states
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -47,15 +52,17 @@ def user_permission_for_skill(
     skill: Skill,
     user: User,
     user_group_ids: set[int],
-    curated_user_group_ids: set[int] | None = None,
+    managed_user_group_ids: set[int] | None = None,
 ) -> SkillAccessLevel | None:
+    """Read-side mirror of ``_is_editable_by_user``; the two must agree or the UI
+    offers actions the write path rejects."""
     if not skill.is_custom:
         return SkillAccessLevel.VIEWER
 
     if skill.author_user_id == user.id:
         return SkillAccessLevel.OWNER
 
-    if user.role == UserRole.ADMIN:
+    if has_global_permission(user, Permission.MANAGE_SKILLS):
         return SkillAccessLevel.EDITOR
 
     direct_permissions = {
@@ -71,21 +78,19 @@ def user_permission_for_skill(
     is_org_shared = skill.public_permission is not None
     is_shared_with_user = bool(share_permissions)
     group_share_ids = {share.user_group_id for share in skill.group_shares}
-    curator_managed_group_ids = set[int]()
-    if user.role == UserRole.GLOBAL_CURATOR:
-        curator_managed_group_ids = user_group_ids
-    elif user.role == UserRole.CURATOR:
-        curator_managed_group_ids = curated_user_group_ids or set()
-    is_curator_managed = (
-        bool(group_share_ids)
-        and bool(curator_managed_group_ids)
-        and group_share_ids <= curator_managed_group_ids
+    # Same rule as within_managed_scope_clause: non-public, in >=1 managed group,
+    # and no group outside the manager's scope.
+    is_manager_managed = (
+        not is_org_shared
+        and bool(group_share_ids)
+        and bool(managed_user_group_ids)
+        and group_share_ids <= (managed_user_group_ids or set())
     )
     has_explicit_edit = SkillSharePermission.EDITOR in share_permissions or (
         is_org_shared and skill.public_permission == SkillSharePermission.EDITOR
     )
 
-    if has_explicit_edit or is_curator_managed:
+    if has_explicit_edit or is_manager_managed:
         return SkillAccessLevel.EDITOR
 
     if is_org_shared or is_shared_with_user:
@@ -101,7 +106,7 @@ def skill_response_for_user(
     *,
     state: SkillUserState | None = None,
     user_group_ids: set[int] | None = None,
-    curated_user_group_ids: set[int] | None = None,
+    managed_user_group_ids: set[int] | None = None,
     include_share_details: bool = False,
 ) -> SkillResponse:
     if state is None:
@@ -121,10 +126,11 @@ def skill_response_for_user(
 
     if user_group_ids is None:
         user_group_ids = get_user_group_ids_for_user(db_session, user.id)
-    if curated_user_group_ids is None and user.role == UserRole.CURATOR:
-        curated_user_group_ids = get_curated_user_group_ids_for_user(
-            db_session, user.id
-        )
+    if (
+        managed_user_group_ids is None
+        and has_permission(user, Permission.MANAGE_SKILLS) is PermissionAuthority.SCOPED
+    ):
+        managed_user_group_ids = fetch_managed_group_ids(user, db_session)
     return SkillResponse.from_custom(
         skill,
         enabled=state.enabled,
@@ -133,7 +139,7 @@ def skill_response_for_user(
             skill,
             user,
             user_group_ids,
-            curated_user_group_ids,
+            managed_user_group_ids,
         ),
         include_share_details=include_share_details,
         external_app=_dependency_response(state.external_app_dependency),
@@ -148,9 +154,9 @@ def skills_list_response_for_user(
     builtins: list[SkillResponse] = []
     customs: list[SkillResponse] = []
     user_group_ids = get_user_group_ids_for_user(db_session, user.id)
-    curated_user_group_ids = (
-        get_curated_user_group_ids_for_user(db_session, user.id)
-        if user.role == UserRole.CURATOR
+    managed_user_group_ids = (
+        fetch_managed_group_ids(user, db_session)
+        if has_permission(user, Permission.MANAGE_SKILLS) is PermissionAuthority.SCOPED
         else set()
     )
     states = skill_user_states(user, (skill.id for skill in rows), db_session)
@@ -172,7 +178,7 @@ def skills_list_response_for_user(
             db_session,
             state=states[skill.id],
             user_group_ids=user_group_ids,
-            curated_user_group_ids=curated_user_group_ids,
+            managed_user_group_ids=managed_user_group_ids,
         )
         (customs if skill.is_custom else builtins).append(response)
 

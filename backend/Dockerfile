@@ -111,8 +111,12 @@ COPY --from=builder \
     /usr/local/bin/playwright \
     /usr/local/bin/
 
-# Install the Chromium browser used by Playwright and its OS-level runtime libraries. Must run after
+# Install the Chromium build used by Playwright and its OS-level runtime libraries. Must run after
 # the site-packages copy above so the playwright CLI is available.
+#
+# `--only-shell` installs the headless shell and skips the full headed Chromium build (~364 MB). Every
+# launch site in the backend passes headless=True with no channel, so Playwright picks the shell.
+# Remove the flag if a call site ever needs a headed browser or a branded channel.
 #
 # perl-base is part of the base Python Debian image but not needed for Onyx functionality; it is
 # removed for CVE surface reduction (requires --allow-remove-essential). It must be removed AFTER the
@@ -121,7 +125,7 @@ COPY --from=builder \
 # chromium runtime libs (libnss3, libnspr4, etc.) that autoremove swept up in the cascade. The
 # runtime image stays perl-free from here on.
 RUN ln -s /usr/local/bin/supervisord /usr/bin/supervisord && \
-    playwright install chromium && \
+    playwright install --only-shell chromium && \
     playwright install-deps chromium && \
     apt-get remove -y --allow-remove-essential perl-base && \
     apt-get autoremove -y && \

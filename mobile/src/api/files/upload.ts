@@ -1,11 +1,10 @@
 import { File, UploadType } from "expo-file-system";
 
 import { getBaseUrl } from "@/api/config";
-import { getToken } from "@/api/auth/tokenStore";
+import { getValidToken } from "@/api/auth/refreshState";
 import { ApiError } from "@/api/errors";
 import type { CategorizedFiles } from "@/chat/contracts/projects";
 
-// A picked file normalized across the document + image pickers.
 export interface NormalizedAsset {
   uri: string;
   name: string;
@@ -20,16 +19,16 @@ export function generateTempId(): string {
   return `temp-${Date.now()}-${tempIdCounter}`;
 }
 
-// Must match the backend `build_hashed_file_key` + web `buildFileKey`:
-// `${size}|${name[:50]}`, so the server can echo our temp_id back. Some picks
-// have no size → empty segment.
+/*
+ * Must match the backend's `build_hashed_file_key` (empty segment when a pick has no size) or the
+ * server can't echo our temp_id back.
+ */
 export function buildFileKey(asset: NormalizedAsset): string {
   const namePrefix = asset.name.slice(0, 50);
   return `${asset.size ?? ""}|${namePrefix}`;
 }
 
-// The uploader resolves for non-2xx, so the status is checked here; a 2xx body that
-// isn't the expected JSON shape is an error too.
+// The uploader resolves for non-2xx too, so the status is checked here rather than caught.
 function parseUploadResponse(status: number, body: string): CategorizedFiles {
   if (status < 200 || status >= 300) {
     throw new ApiError({ status, detail: "Failed to upload file.", body });
@@ -55,15 +54,19 @@ function parseUploadResponse(status: number, body: string): CategorizedFiles {
   return parsed as CategorizedFiles;
 }
 
-// A started, cancelable upload. `cancel()` aborts the in-flight request; the epoch guard (not
-// cancellation) is what guarantees a late result can't land.
+/*
+ * `cancel()` aborts the in-flight request, but it's the epoch guard — not cancellation — that
+ * guarantees a late result can't land.
+ */
 export interface StartedUpload {
   result: Promise<CategorizedFiles>;
   cancel: () => void;
 }
 
-// Native multipart uploader (streams from disk). Bypasses apiFetch (bearer attached
-// manually). `projectId` null → an unlinked per-message file.
+/*
+ * Bypasses apiFetch so expo can stream the file from disk. Null `projectId` leaves the file
+ * unlinked — a per-message attachment.
+ */
 export function startUpload(
   asset: NormalizedAsset,
   projectId: number | null,
@@ -73,7 +76,7 @@ export function startUpload(
   const controller = new AbortController();
 
   const result = (async () => {
-    const token = await getToken();
+    const token = await getValidToken();
     const url = `${getBaseUrl()}/user/projects/file/upload`;
 
     const parameters: Record<string, string> = {

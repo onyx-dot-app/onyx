@@ -10,6 +10,7 @@ import {
 } from "@/lib/analytics/utils";
 import {
   BaseLLMFormValues,
+  LlmModalsTranslator,
   TestApiKeyResult,
 } from "@/sections/modals/languageModels/utils";
 
@@ -41,6 +42,7 @@ const submitLlmTestRequest = async (
 };
 
 export const testApiKeyHelper = async (
+  t: LlmModalsTranslator,
   providerName: string,
   formValues: Record<string, unknown>,
   apiKey?: string,
@@ -79,18 +81,16 @@ export const testApiKeyHelper = async (
     model: modelName ?? (formValues?.test_model_name as string) ?? "",
   };
 
-  return await submitLlmTestRequest(
-    payload,
-    "An error occurred while testing the API key."
-  );
+  return await submitLlmTestRequest(payload, t("toasts.testApiKeyFailed"));
 };
 
 export const testCustomProvider = async (
+  t: LlmModalsTranslator,
   formValues: Record<string, unknown>
 ): Promise<TestApiKeyResult> => {
   return await submitLlmTestRequest(
     { ...formValues },
-    "An error occurred while testing the custom provider."
+    t("toasts.testCustomProviderFailed")
   );
 };
 
@@ -99,6 +99,8 @@ export const testCustomProvider = async (
 export interface SubmitProviderParams<
   T extends BaseLLMFormValues = BaseLLMFormValues,
 > {
+  /** Translator for the `admin.languageModels.modals` namespace. */
+  t: LlmModalsTranslator;
   providerName: string;
   values: T;
   initialValues: T;
@@ -115,6 +117,7 @@ export interface SubmitProviderParams<
 }
 
 export async function submitProvider<T extends BaseLLMFormValues>({
+  t,
   providerName,
   values,
   initialValues,
@@ -186,7 +189,7 @@ export async function submitProvider<T extends BaseLLMFormValues>({
         model: testModelName,
         id: existingLlmProvider?.id,
       },
-      "An error occurred while testing the provider."
+      t("toasts.testProviderFailed")
     );
     setStatus({ isTesting: false });
 
@@ -216,8 +219,8 @@ export async function submitProvider<T extends BaseLLMFormValues>({
   if (!response.ok) {
     const errorMsg = (await response.json()).detail;
     const fullErrorMsg = existingLlmProvider
-      ? `Failed to update provider: ${errorMsg}`
-      : `Failed to enable provider: ${errorMsg}`;
+      ? t("toasts.providerUpdateFailed", { message: errorMsg })
+      : t("toasts.providerEnableFailed", { message: errorMsg });
     toast.error(fullErrorMsg);
     setSubmitting(false);
     return;
@@ -238,13 +241,13 @@ export async function submitProvider<T extends BaseLLMFormValues>({
         });
         if (!setDefaultResponse.ok) {
           const err = await setDefaultResponse.json().catch(() => ({}));
-          toast.error(err?.detail ?? "Failed to set provider as default");
+          toast.error(err?.detail ?? t("toasts.setDefaultFailed"));
           setSubmitting(false);
           return;
         }
       }
     } catch {
-      toast.error("Failed to set new provider as default");
+      toast.error(t("toasts.setNewDefaultFailed"));
     }
   }
 

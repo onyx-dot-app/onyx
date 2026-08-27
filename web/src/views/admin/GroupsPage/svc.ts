@@ -1,8 +1,33 @@
 /** API helpers for the Groups pages. */
 
+import type { ScopedMutator } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
 const USER_GROUP_URL = SWR_KEYS.adminUserGroups;
+
+/**
+ * Refresh both group-list caches. These pages read the include_default key, but the users
+ * and connector pages read the plain one, so a rename, membership edit or delete has to
+ * reach both or they keep serving a stale name or a group that no longer exists.
+ */
+async function refreshGroupLists(mutate: ScopedMutator): Promise<void> {
+  await Promise.all([
+    mutate(SWR_KEYS.adminUserGroups),
+    mutate(SWR_KEYS.adminUserGroupsWithDefault),
+  ]);
+}
+
+// Logs an unparseable body — without it a proxy's HTML 502 is indistinguishable from a
+// clean API error at the call site.
+async function responseError(res: Response, action: string): Promise<Error> {
+  try {
+    const detail = (await res.json())?.detail;
+    if (detail) return new Error(detail);
+  } catch (err) {
+    console.error(`${action}: unparseable error body`, res.status, err);
+  }
+  return new Error(`${action}: ${res.statusText}`);
+}
 
 async function renameGroup(groupId: number, newName: string): Promise<void> {
   const res = await fetch(`${USER_GROUP_URL}/rename`, {
@@ -11,10 +36,7 @@ async function renameGroup(groupId: number, newName: string): Promise<void> {
     body: JSON.stringify({ id: groupId, name: newName }),
   });
   if (!res.ok) {
-    const detail = await res.json().catch(() => null);
-    throw new Error(
-      detail?.detail ?? `Failed to rename group: ${res.statusText}`
-    );
+    throw await responseError(res, "Failed to rename group");
   }
 }
 
@@ -33,10 +55,7 @@ async function createGroup(
     }),
   });
   if (!res.ok) {
-    const detail = await res.json().catch(() => null);
-    throw new Error(
-      detail?.detail ?? `Failed to create group: ${res.statusText}`
-    );
+    throw await responseError(res, "Failed to create group");
   }
   const group = await res.json();
   return group.id;
@@ -56,9 +75,23 @@ async function updateGroup(
     }),
   });
   if (!res.ok) {
+    throw await responseError(res, "Failed to update group");
+  }
+}
+
+async function setGroupIncognito(
+  groupId: number,
+  enabled: boolean
+): Promise<void> {
+  const res = await fetch(`${USER_GROUP_URL}/${groupId}/incognito`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ enabled }),
+  });
+  if (!res.ok) {
     const detail = await res.json().catch(() => null);
     throw new Error(
-      detail?.detail ?? `Failed to update group: ${res.statusText}`
+      detail?.detail ?? `Failed to update incognito access: ${res.statusText}`
     );
   }
 }
@@ -68,10 +101,7 @@ async function deleteGroup(groupId: number): Promise<void> {
     method: "DELETE",
   });
   if (!res.ok) {
-    const detail = await res.json().catch(() => null);
-    throw new Error(
-      detail?.detail ?? `Failed to delete group: ${res.statusText}`
-    );
+    throw await responseError(res, "Failed to delete group");
   }
 }
 
@@ -98,27 +128,16 @@ async function updateAgentGroupSharing(
     body: JSON.stringify({ added_agent_ids, removed_agent_ids }),
   });
   if (!res.ok) {
-    const detail = await res.json().catch(() => null);
-    throw new Error(
-      detail?.detail ?? `Failed to update agent sharing: ${res.statusText}`
-    );
+    throw await responseError(res, "Failed to update agent sharing");
   }
 }
 
 // ---------------------------------------------------------------------------
-// Document set sharing — managed from the document set side
+// Document set sharing
 // ---------------------------------------------------------------------------
 
-interface DocumentSetSummary {
-  id: number;
-  description: string;
-  cc_pair_summaries: { id: number }[];
-  federated_connector_summaries: { id: number }[];
-  is_public: boolean;
-  users: string[];
-  groups: number[];
-}
-
+// Written from the group's side: the document-set route needs MANAGE_DOCUMENT_SETS,
+// which a groups admin doesn't hold.
 async function updateDocSetGroupSharing(
   groupId: number,
   initialDocSetIds: number[],
@@ -127,71 +146,27 @@ async function updateDocSetGroupSharing(
   const initialSet = new Set(initialDocSetIds);
   const currentSet = new Set(currentDocSetIds);
 
-  const added = currentDocSetIds.filter((id) => !initialSet.has(id));
-  const removed = initialDocSetIds.filter((id) => !currentSet.has(id));
+  const added_document_set_ids = currentDocSetIds.filter(
+    (id) => !initialSet.has(id)
+  );
+  const removed_document_set_ids = initialDocSetIds.filter(
+    (id) => !currentSet.has(id)
+  );
 
-  if (added.length === 0 && removed.length === 0) return;
-
-  // Fetch all document sets to get their current state
-  const allRes = await fetch("/api/manage/document-set");
-  if (!allRes.ok) {
-    throw new Error("Failed to fetch document sets");
-  }
-  const allDocSets: DocumentSetSummary[] = await allRes.json();
-  const docSetMap = new Map(allDocSets.map((ds) => [ds.id, ds]));
-
-  for (const dsId of added) {
-    const ds = docSetMap.get(dsId);
-    if (!ds) {
-      throw new Error(`Document set ${dsId} not found`);
-    }
-    const updatedGroups = ds.groups.includes(groupId)
-      ? ds.groups
-      : [...ds.groups, groupId];
-    const res = await fetch("/api/manage/admin/document-set", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        id: ds.id,
-        description: ds.description,
-        cc_pair_ids: ds.cc_pair_summaries.map((cc) => cc.id),
-        federated_connectors: ds.federated_connector_summaries.map((fc) => ({
-          federated_connector_id: fc.id,
-        })),
-        is_public: ds.is_public,
-        users: ds.users,
-        groups: updatedGroups,
-      }),
-    });
-    if (!res.ok) {
-      throw new Error(`Failed to add group to document set ${dsId}`);
-    }
+  if (
+    added_document_set_ids.length === 0 &&
+    removed_document_set_ids.length === 0
+  ) {
+    return;
   }
 
-  for (const dsId of removed) {
-    const ds = docSetMap.get(dsId);
-    if (!ds) {
-      throw new Error(`Document set ${dsId} not found`);
-    }
-    const updatedGroups = ds.groups.filter((id) => id !== groupId);
-    const res = await fetch("/api/manage/admin/document-set", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        id: ds.id,
-        description: ds.description,
-        cc_pair_ids: ds.cc_pair_summaries.map((cc) => cc.id),
-        federated_connectors: ds.federated_connector_summaries.map((fc) => ({
-          federated_connector_id: fc.id,
-        })),
-        is_public: ds.is_public,
-        users: ds.users,
-        groups: updatedGroups,
-      }),
-    });
-    if (!res.ok) {
-      throw new Error(`Failed to remove group from document set ${dsId}`);
-    }
+  const res = await fetch(`${USER_GROUP_URL}/${groupId}/document-sets`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ added_document_set_ids, removed_document_set_ids }),
+  });
+  if (!res.ok) {
+    throw await responseError(res, "Failed to update document set sharing");
   }
 }
 
@@ -202,15 +177,27 @@ async function updateDocSetGroupSharing(
 const HOURS_PER_DAY = 24;
 
 interface TokenLimitPayload {
+  tokenId?: number | null;
+  enabled?: boolean;
   tokenBudget: number | null;
   periodDays: number | null;
+  costBudgetDollars: number | null;
 }
 
 interface ExistingTokenLimit {
   token_id: number;
   enabled: boolean;
-  token_budget: number;
+  token_budget: number | null;
   period_hours: number;
+  cost_budget_cents: number | null;
+}
+
+interface ValidTokenLimit {
+  tokenId: number | null;
+  enabled: boolean;
+  tokenBudget: number | null;
+  periodDays: number;
+  costBudgetCents: number | null;
 }
 
 async function saveTokenLimits(
@@ -218,48 +205,56 @@ async function saveTokenLimits(
   limits: TokenLimitPayload[],
   existing: ExistingTokenLimit[]
 ): Promise<void> {
-  // Filter to only valid (non-null) limits
-  const validLimits = limits.filter(
-    (l): l is { tokenBudget: number; periodDays: number } =>
-      l.tokenBudget != null && l.periodDays != null
-  );
+  const validLimits: ValidTokenLimit[] = limits
+    .map((l) => {
+      const costBudgetCents =
+        l.costBudgetDollars != null
+          ? Math.round(l.costBudgetDollars * 100)
+          : null;
+      return {
+        tokenId: l.tokenId ?? null,
+        enabled: l.enabled ?? true,
+        tokenBudget: l.tokenBudget,
+        periodDays: l.periodDays,
+        costBudgetCents,
+      };
+    })
+    .filter(
+      (l): l is ValidTokenLimit =>
+        l.periodDays != null &&
+        (l.tokenBudget != null || l.costBudgetCents != null)
+    );
 
-  // Update existing limits (match by index position)
-  const toUpdate = Math.min(validLimits.length, existing.length);
-  for (let i = 0; i < toUpdate; i++) {
-    const limit = validLimits[i]!;
-    const existingLimit = existing[i]!;
+  for (const limit of validLimits.filter((item) => item.tokenId !== null)) {
     const updateRes = await fetch(
-      `/api/admin/token-rate-limits/rate-limit/${existingLimit.token_id}`,
+      `/api/admin/token-rate-limits/user-group/${groupId}/rate-limit/${limit.tokenId}`,
       {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          enabled: existingLimit.enabled,
+          enabled: limit.enabled,
           token_budget: limit.tokenBudget,
           period_hours: limit.periodDays * HOURS_PER_DAY,
+          cost_budget_cents: limit.costBudgetCents,
         }),
       }
     );
     if (!updateRes.ok) {
-      throw new Error(
-        `Failed to update token rate limit ${existingLimit.token_id}`
-      );
+      throw new Error(`Failed to update token rate limit ${limit.tokenId}`);
     }
   }
 
-  // Create new limits beyond existing count
-  for (let i = toUpdate; i < validLimits.length; i++) {
-    const limit = validLimits[i]!;
+  for (const limit of validLimits.filter((item) => item.tokenId === null)) {
     const createRes = await fetch(
       `/api/admin/token-rate-limits/user-group/${groupId}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          enabled: true,
+          enabled: limit.enabled,
           token_budget: limit.tokenBudget,
           period_hours: limit.periodDays * HOURS_PER_DAY,
+          cost_budget_cents: limit.costBudgetCents,
         }),
       }
     );
@@ -268,11 +263,15 @@ async function saveTokenLimits(
     }
   }
 
-  // Delete excess existing limits
-  for (let i = toUpdate; i < existing.length; i++) {
-    const existingLimit = existing[i]!;
+  const retainedIds = new Set(
+    validLimits.flatMap((limit) =>
+      limit.tokenId === null ? [] : [limit.tokenId]
+    )
+  );
+  for (const existingLimit of existing) {
+    if (retainedIds.has(existingLimit.token_id)) continue;
     const deleteRes = await fetch(
-      `/api/admin/token-rate-limits/rate-limit/${existingLimit.token_id}`,
+      `/api/admin/token-rate-limits/user-group/${groupId}/rate-limit/${existingLimit.token_id}`,
       { method: "DELETE" }
     );
     if (!deleteRes.ok) {
@@ -283,12 +282,49 @@ async function saveTokenLimits(
   }
 }
 
+// ---------------------------------------------------------------------------
+// Group permissions — bulk set desired permissions in a single request
+// ---------------------------------------------------------------------------
+
+async function saveGroupPermissions(
+  groupId: number,
+  enabledPermissions: Set<string>
+): Promise<void> {
+  const res = await fetch(`${USER_GROUP_URL}/${groupId}/permissions`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ permissions: Array.from(enabledPermissions) }),
+  });
+  if (!res.ok) {
+    throw await responseError(res, "Failed to update permissions");
+  }
+}
+
+async function setGroupManager(
+  groupId: number,
+  userId: string,
+  isManager: boolean
+): Promise<void> {
+  const res = await fetch(`${USER_GROUP_URL}/${groupId}/manager`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ user_id: userId, is_manager: isManager }),
+  });
+  if (!res.ok) {
+    throw await responseError(res, "Failed to update group manager");
+  }
+}
+
 export {
+  refreshGroupLists,
   renameGroup,
   createGroup,
   updateGroup,
+  setGroupIncognito,
   deleteGroup,
   updateAgentGroupSharing,
   updateDocSetGroupSharing,
   saveTokenLimits,
+  saveGroupPermissions,
+  setGroupManager,
 };

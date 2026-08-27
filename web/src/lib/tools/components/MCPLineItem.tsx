@@ -1,0 +1,136 @@
+"use client";
+
+import React from "react";
+import {
+  MCPAuthenticationType,
+  MCPAuthenticationPerformer,
+  ToolSnapshot,
+} from "@/lib/tools/types";
+import LineItem from "@/refresh-components/buttons/LineItem";
+import { noProp } from "@/lib/utils";
+import { cn } from "@opal/utils";
+import type { IconProps } from "@opal/types";
+import {
+  SvgCheck,
+  SvgChevronRight,
+  SvgKey,
+  SvgLock,
+  SvgServer,
+  SvgSimpleLoader,
+} from "@opal/icons";
+import { Section } from "@/layouts/general-layouts";
+import EnabledCount from "@/refresh-components/EnabledCount";
+
+export interface MCPServer {
+  id: number;
+  name: string;
+  owner_email: string;
+  server_url: string;
+  auth_type: MCPAuthenticationType;
+  auth_performer: MCPAuthenticationPerformer;
+  user_can_authenticate?: boolean;
+  auth_template?: any;
+  user_credentials?: Record<string, string>;
+}
+
+export interface MCPLineItemProps {
+  server: MCPServer;
+  isActive: boolean;
+  onSelect: () => void;
+  onAuthenticate: () => void;
+  tools: ToolSnapshot[];
+  enabledTools: ToolSnapshot[];
+  isAuthenticated: boolean;
+  isLoading: boolean;
+}
+
+export default function MCPLineItem({
+  server,
+  isActive,
+  onSelect,
+  onAuthenticate,
+  tools,
+  enabledTools,
+  isAuthenticated,
+  isLoading,
+}: MCPLineItemProps) {
+  const showAuthTrigger =
+    server.auth_performer === MCPAuthenticationPerformer.PER_USER &&
+    server.auth_type !== MCPAuthenticationType.NONE;
+
+  const canClickIntoServer = isAuthenticated && tools.length > 0;
+  const showInlineReauth = showAuthTrigger && canClickIntoServer;
+  const showReauthButton = showAuthTrigger && !showInlineReauth;
+
+  function getServerIcon(): React.FunctionComponent<IconProps> {
+    if (isLoading) return SvgSimpleLoader;
+    if (isAuthenticated) {
+      return (({ className }) => (
+        <SvgCheck className={cn(className, "stroke-status-success-05")} />
+      )) as React.FunctionComponent<IconProps>;
+    }
+    if (server.auth_type === MCPAuthenticationType.NONE) return SvgServer;
+    if (server.auth_performer === MCPAuthenticationPerformer.PER_USER) {
+      return (({ className }) => (
+        <SvgKey className={cn(className, "stroke-status-warning-05")} />
+      )) as React.FunctionComponent<IconProps>;
+    }
+    return (({ className }) => (
+      <SvgLock className={cn(className, "stroke-status-error-05")} />
+    )) as React.FunctionComponent<IconProps>;
+  }
+
+  const handleClick = noProp(() => {
+    if (canClickIntoServer) {
+      onSelect();
+      return;
+    }
+    if (showAuthTrigger) {
+      onAuthenticate();
+    }
+  });
+
+  const allToolsDisabled = enabledTools.length === 0 && tools.length > 0;
+
+  return (
+    <LineItem
+      data-mcp-server-id={server.id}
+      data-mcp-server-name={server.name}
+      icon={getServerIcon()}
+      onClick={handleClick}
+      strikethrough={allToolsDisabled}
+      selected={isActive}
+      rightChildren={
+        <Section gap={1} flexDirection="row">
+          {isAuthenticated &&
+            tools.length > 0 &&
+            enabledTools.length > 0 &&
+            tools.length !== enabledTools.length && (
+              <EnabledCount
+                enabledCount={enabledTools.length}
+                totalCount={tools.length}
+              />
+            )}
+          {canClickIntoServer && (
+            <span
+              aria-hidden="true"
+              className="pointer-events-none flex size-6 shrink-0 items-center justify-center"
+            >
+              <SvgChevronRight className="size-4 stroke-text-03" />
+            </span>
+          )}
+          {showReauthButton && (
+            <span
+              aria-hidden="true"
+              className="pointer-events-none flex size-6 shrink-0 items-center justify-center"
+            >
+              <SvgKey className="size-4 stroke-text-03" />
+            </span>
+          )}
+        </Section>
+      }
+    >
+      {server.name}
+    </LineItem>
+  );
+}

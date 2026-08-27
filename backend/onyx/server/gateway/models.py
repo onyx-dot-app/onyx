@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from typing import Any, Literal, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -201,3 +202,652 @@ class ChatCompletionChunk(_WireModel):
             ],
             **chunk_kwargs,
         )
+
+
+class ModelListEntry(_WireModel):
+    id: str
+    object: Literal["model"] = "model"
+    owned_by: str
+
+    @classmethod
+    def from_descriptor(cls, descriptor: GatewayModelDescriptor) -> "ModelListEntry":
+        return cls(id=descriptor.id, object="model", owned_by=descriptor.provider)
+
+
+class ModelListResponse(_WireModel):
+    object: Literal["list"] = "list"
+    data: list[ModelListEntry]
+
+    @classmethod
+    def from_catalog(
+        cls, catalog: Sequence[GatewayModelDescriptor]
+    ) -> "ModelListResponse":
+        return cls(
+            object="list",
+            data=[ModelListEntry.from_descriptor(d) for d in catalog],
+        )
+
+
+class ResponsesRequest(BaseModel):
+    """Conversation persistence is not implemented: every request must carry its
+    own history. ``previous_response_id`` is declared so it is refused rather
+    than silently ignored by ``extra="allow"``.
+
+    ``store`` stays tolerated-and-ignored on purpose — the retrieval endpoint it
+    implies does not exist, so a caller cannot be misled into trusting stored
+    state mid-turn, and OpenAI's own default is ``true``."""
+
+    model_config = ConfigDict(extra="allow")
+
+    model: str
+    input: str | list[dict[str, Any]] = Field(default_factory=list)
+    instructions: str | None = None
+    tools: list[dict[str, Any]] | None = None
+    tool_choice: Any = None
+    stream: bool = False
+    max_output_tokens: int | None = None
+    temperature: float | None = None
+    reasoning: dict[str, Any] | None = None
+    previous_response_id: str | None = None
+
+
+# Subset of the Responses error enum we can actually produce; the schema has
+# no timeout code, so timeouts report as server_error.
+ResponsesErrorCode: TypeAlias = Literal["server_error", "rate_limit_exceeded"]
+
+
+class ResponsesOutputTextPart(_WireModel):
+    type: Literal["output_text"] = "output_text"
+    text: str
+    annotations: list[Any] = Field(default_factory=list)
+
+    @classmethod
+    def create(cls, *, text: str) -> "ResponsesOutputTextPart":
+        return cls(type="output_text", text=text, annotations=[])
+
+
+class ResponsesMessageItem(_WireModel):
+    type: Literal["message"] = "message"
+    id: str
+    status: str
+    role: Literal["assistant"] = "assistant"
+    content: list[ResponsesOutputTextPart]
+
+    @classmethod
+    def create(
+        cls, *, id: str, status: str, content: list[ResponsesOutputTextPart]
+    ) -> "ResponsesMessageItem":
+        return cls(
+            type="message", id=id, status=status, role="assistant", content=content
+        )
+
+
+class ResponsesFunctionCallItem(_WireModel):
+    type: Literal["function_call"] = "function_call"
+    id: str
+    call_id: str
+    name: str
+    arguments: str
+    status: str = "completed"
+
+    @classmethod
+    def create(
+        cls, *, id: str, call_id: str, name: str, arguments: str
+    ) -> "ResponsesFunctionCallItem":
+        return cls(
+            type="function_call",
+            id=id,
+            call_id=call_id,
+            name=name,
+            arguments=arguments,
+            status="completed",
+        )
+
+
+ResponsesOutputItem: TypeAlias = ResponsesMessageItem | ResponsesFunctionCallItem
+
+
+class ResponsesUsagePayload(_WireModel):
+    input_tokens: int
+    output_tokens: int
+    total_tokens: int
+
+    @classmethod
+    def from_usage(cls, usage: Usage) -> "ResponsesUsagePayload":
+        return cls(
+            input_tokens=usage.prompt_tokens,
+            output_tokens=usage.completion_tokens,
+            total_tokens=usage.total_tokens,
+        )
+
+
+class ResponsesObjectPayload(_WireModel):
+    id: str
+    object: Literal["response"] = "response"
+    created_at: int
+    status: str
+    model: str
+    output: list[ResponsesOutputItem]
+    # Required by the Responses schema even when empty, so a strict SDK client
+    # can parse the object; we do not echo the request's tools.
+    parallel_tool_calls: bool = True
+    tool_choice: str = "auto"
+    tools: list[dict[str, Any]] = Field(default_factory=list)
+    usage: ResponsesUsagePayload | None = None
+    error: dict[str, Any] | None = None
+
+    @classmethod
+    def from_parts(
+        cls,
+        *,
+        response_id: str,
+        created_at: int,
+        model: str,
+        status: str,
+        output: list[ResponsesOutputItem],
+        usage: Usage | None = None,
+    ) -> "ResponsesObjectPayload":
+        kwargs: dict[str, Any] = {}
+        if usage is not None:
+            kwargs["usage"] = ResponsesUsagePayload.from_usage(usage)
+        return cls(
+            id=response_id,
+            object="response",
+            created_at=created_at,
+            status=status,
+            model=model,
+            output=output,
+            parallel_tool_calls=True,
+            tool_choice="auto",
+            tools=[],
+            **kwargs,
+        )
+
+    @classmethod
+    def failed(
+        cls,
+        *,
+        response_id: str,
+        created_at: int,
+        model: str,
+        message: str,
+        code: ResponsesErrorCode = "server_error",
+    ) -> "ResponsesObjectPayload":
+        return cls(
+            id=response_id,
+            object="response",
+            created_at=created_at,
+            status="failed",
+            model=model,
+            output=[],
+            parallel_tool_calls=True,
+            tool_choice="auto",
+            tools=[],
+            error={"code": code, "message": message},
+        )
+
+
+class ResponsesCreatedEvent(_WireModel):
+    type: Literal["response.created"] = "response.created"
+    response: ResponsesObjectPayload
+
+    @classmethod
+    def create(cls, response: ResponsesObjectPayload) -> "ResponsesCreatedEvent":
+        return cls(type="response.created", response=response)
+
+
+class ResponsesOutputTextDeltaEvent(_WireModel):
+    type: Literal["response.output_text.delta"] = "response.output_text.delta"
+    item_id: str
+    output_index: int = 0
+    content_index: int = 0
+    delta: str
+    logprobs: list[Any] = Field(default_factory=list)
+
+    @classmethod
+    def create(cls, *, item_id: str, delta: str) -> "ResponsesOutputTextDeltaEvent":
+        return cls(
+            type="response.output_text.delta",
+            item_id=item_id,
+            output_index=0,
+            content_index=0,
+            delta=delta,
+            logprobs=[],
+        )
+
+
+class ResponsesOutputItemAddedEvent(_WireModel):
+    type: Literal["response.output_item.added"] = "response.output_item.added"
+    output_index: int = 0
+    item: ResponsesOutputItem
+
+    @classmethod
+    def create(
+        cls, *, output_index: int, item: ResponsesOutputItem
+    ) -> "ResponsesOutputItemAddedEvent":
+        return cls(
+            type="response.output_item.added", output_index=output_index, item=item
+        )
+
+
+class ResponsesOutputItemDoneEvent(_WireModel):
+    type: Literal["response.output_item.done"] = "response.output_item.done"
+    output_index: int = 0
+    item: ResponsesOutputItem
+
+    @classmethod
+    def create(
+        cls, *, output_index: int, item: ResponsesOutputItem
+    ) -> "ResponsesOutputItemDoneEvent":
+        return cls(
+            type="response.output_item.done", output_index=output_index, item=item
+        )
+
+
+class ResponsesContentPartAddedEvent(_WireModel):
+    type: Literal["response.content_part.added"] = "response.content_part.added"
+    item_id: str
+    output_index: int = 0
+    content_index: int = 0
+    part: ResponsesOutputTextPart
+
+    @classmethod
+    def create(
+        cls, *, item_id: str, output_index: int, part: ResponsesOutputTextPart
+    ) -> "ResponsesContentPartAddedEvent":
+        return cls(
+            type="response.content_part.added",
+            item_id=item_id,
+            output_index=output_index,
+            content_index=0,
+            part=part,
+        )
+
+
+class ResponsesContentPartDoneEvent(_WireModel):
+    type: Literal["response.content_part.done"] = "response.content_part.done"
+    item_id: str
+    output_index: int = 0
+    content_index: int = 0
+    part: ResponsesOutputTextPart
+
+    @classmethod
+    def create(
+        cls, *, item_id: str, output_index: int, part: ResponsesOutputTextPart
+    ) -> "ResponsesContentPartDoneEvent":
+        return cls(
+            type="response.content_part.done",
+            item_id=item_id,
+            output_index=output_index,
+            content_index=0,
+            part=part,
+        )
+
+
+class ResponsesOutputTextDoneEvent(_WireModel):
+    type: Literal["response.output_text.done"] = "response.output_text.done"
+    item_id: str
+    output_index: int = 0
+    content_index: int = 0
+    text: str
+    logprobs: list[Any] = Field(default_factory=list)
+
+    @classmethod
+    def create(
+        cls, *, item_id: str, output_index: int, text: str
+    ) -> "ResponsesOutputTextDoneEvent":
+        return cls(
+            type="response.output_text.done",
+            item_id=item_id,
+            output_index=output_index,
+            content_index=0,
+            text=text,
+            logprobs=[],
+        )
+
+
+class ResponsesFunctionCallArgumentsDoneEvent(_WireModel):
+    type: Literal["response.function_call_arguments.done"] = (
+        "response.function_call_arguments.done"
+    )
+    item_id: str
+    output_index: int = 0
+    arguments: str
+    name: str
+
+    @classmethod
+    def create(
+        cls, *, item_id: str, output_index: int, arguments: str, name: str
+    ) -> "ResponsesFunctionCallArgumentsDoneEvent":
+        return cls(
+            type="response.function_call_arguments.done",
+            item_id=item_id,
+            output_index=output_index,
+            arguments=arguments,
+            name=name,
+        )
+
+
+class ResponsesCompletedEvent(_WireModel):
+    type: Literal["response.completed"] = "response.completed"
+    response: ResponsesObjectPayload
+
+    @classmethod
+    def create(cls, response: ResponsesObjectPayload) -> "ResponsesCompletedEvent":
+        return cls(type="response.completed", response=response)
+
+
+class ResponsesFailedEvent(_WireModel):
+    type: Literal["response.failed"] = "response.failed"
+    response: ResponsesObjectPayload
+
+    @classmethod
+    def create(cls, response: ResponsesObjectPayload) -> "ResponsesFailedEvent":
+        return cls(type="response.failed", response=response)
+
+
+class AnthropicMessagesRequest(BaseModel):
+    """Anthropic Messages API request. ``extra="allow"`` so unknown params
+    (new client fields, provider-specific extensions) are tolerated rather
+    than rejected. ``stop_sequences`` is declared but tolerated-and-ignored:
+    the LLM interface has no stop support, and refusing the request would
+    block Claude Code outright — a dropped stop sequence degrades output
+    shape but cannot corrupt the conversation. ``top_p``/``top_k`` stay
+    tolerated (undeclared) for the same reason: dropping them only shapes
+    sampling. ``metadata`` is accepted and unused."""
+
+    model_config = ConfigDict(extra="allow")
+
+    model: str
+    messages: list[dict[str, Any]]
+    max_tokens: int
+    system: str | list[dict[str, Any]] | None = None
+    tools: list[dict[str, Any]] | None = None
+    tool_choice: dict[str, Any] | None = None
+    stream: bool = False
+    temperature: float | None = None
+    thinking: dict[str, Any] | None = None
+    output_config: dict[str, Any] | None = None
+    stop_sequences: list[str] | None = None
+    metadata: dict[str, Any] | None = None
+
+
+class AnthropicCountTokensRequest(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    model: str
+    messages: list[dict[str, Any]]
+    system: str | list[dict[str, Any]] | None = None
+    tools: list[dict[str, Any]] | None = None
+
+
+class AnthropicTextBlock(_WireModel):
+    type: Literal["text"] = "text"
+    text: str
+
+    @classmethod
+    def create(cls, *, text: str) -> "AnthropicTextBlock":
+        return cls(type="text", text=text)
+
+
+class AnthropicToolUseBlock(_WireModel):
+    type: Literal["tool_use"] = "tool_use"
+    id: str
+    name: str
+    input: dict[str, Any]
+
+    @classmethod
+    def create(
+        cls, *, id: str, name: str, input: dict[str, Any]
+    ) -> "AnthropicToolUseBlock":
+        return cls(type="tool_use", id=id, name=name, input=input)
+
+
+class AnthropicThinkingBlock(_WireModel):
+    type: Literal["thinking"] = "thinking"
+    thinking: str
+    signature: str
+
+    @classmethod
+    def create(cls, *, thinking: str, signature: str) -> "AnthropicThinkingBlock":
+        return cls(type="thinking", thinking=thinking, signature=signature)
+
+
+class AnthropicRedactedThinkingBlock(_WireModel):
+    type: Literal["redacted_thinking"] = "redacted_thinking"
+    data: str
+
+    @classmethod
+    def create(cls, *, data: str) -> "AnthropicRedactedThinkingBlock":
+        return cls(type="redacted_thinking", data=data)
+
+
+AnthropicContentBlock: TypeAlias = (
+    AnthropicTextBlock
+    | AnthropicToolUseBlock
+    | AnthropicThinkingBlock
+    | AnthropicRedactedThinkingBlock
+)
+
+
+class AnthropicUsagePayload(_WireModel):
+    input_tokens: int
+    output_tokens: int
+    cache_creation_input_tokens: int
+    cache_read_input_tokens: int
+
+    @classmethod
+    def from_usage(cls, usage: Usage) -> "AnthropicUsagePayload":
+        # LiteLLM normalizes usage to OpenAI accounting, where prompt_tokens
+        # INCLUDES cache reads/writes; Anthropic's input_tokens EXCLUDES both.
+        input_tokens = max(
+            usage.prompt_tokens
+            - usage.cache_read_input_tokens
+            - usage.cache_creation_input_tokens,
+            0,
+        )
+        return cls(
+            input_tokens=input_tokens,
+            output_tokens=usage.completion_tokens,
+            cache_creation_input_tokens=usage.cache_creation_input_tokens,
+            cache_read_input_tokens=usage.cache_read_input_tokens,
+        )
+
+    @classmethod
+    def zero(cls) -> "AnthropicUsagePayload":
+        return cls(
+            input_tokens=0,
+            output_tokens=0,
+            cache_creation_input_tokens=0,
+            cache_read_input_tokens=0,
+        )
+
+
+class AnthropicMessageResponse(_WireModel):
+    id: str
+    type: Literal["message"] = "message"
+    role: Literal["assistant"] = "assistant"
+    model: str
+    content: list[AnthropicContentBlock]
+    stop_reason: str | None
+    stop_sequence: str | None
+    usage: AnthropicUsagePayload
+
+    @classmethod
+    def from_parts(
+        cls,
+        *,
+        message_id: str,
+        model: str,
+        content: list[AnthropicContentBlock],
+        stop_reason: str | None,
+        usage: AnthropicUsagePayload,
+    ) -> "AnthropicMessageResponse":
+        # stop_sequence is assigned explicitly (present-and-null) — exclude_unset
+        # would otherwise drop it, but the wire contract always carries the key.
+        return cls(
+            id=message_id,
+            type="message",
+            role="assistant",
+            model=model,
+            content=content,
+            stop_reason=stop_reason,
+            stop_sequence=None,
+            usage=usage,
+        )
+
+
+class AnthropicMessageStartEvent(_WireModel):
+    type: Literal["message_start"] = "message_start"
+    message: AnthropicMessageResponse
+
+    @classmethod
+    def create(cls, message: AnthropicMessageResponse) -> "AnthropicMessageStartEvent":
+        return cls(type="message_start", message=message)
+
+
+class AnthropicPingEvent(_WireModel):
+    type: Literal["ping"] = "ping"
+
+    @classmethod
+    def create(cls) -> "AnthropicPingEvent":
+        return cls(type="ping")
+
+
+class AnthropicContentBlockStartEvent(_WireModel):
+    type: Literal["content_block_start"] = "content_block_start"
+    index: int
+    content_block: AnthropicContentBlock
+
+    @classmethod
+    def create(
+        cls, *, index: int, content_block: AnthropicContentBlock
+    ) -> "AnthropicContentBlockStartEvent":
+        return cls(type="content_block_start", index=index, content_block=content_block)
+
+
+class AnthropicTextDelta(_WireModel):
+    type: Literal["text_delta"] = "text_delta"
+    text: str
+
+    @classmethod
+    def create(cls, *, text: str) -> "AnthropicTextDelta":
+        return cls(type="text_delta", text=text)
+
+
+class AnthropicInputJsonDelta(_WireModel):
+    type: Literal["input_json_delta"] = "input_json_delta"
+    partial_json: str
+
+    @classmethod
+    def create(cls, *, partial_json: str) -> "AnthropicInputJsonDelta":
+        return cls(type="input_json_delta", partial_json=partial_json)
+
+
+class AnthropicThinkingDelta(_WireModel):
+    type: Literal["thinking_delta"] = "thinking_delta"
+    thinking: str
+
+    @classmethod
+    def create(cls, *, thinking: str) -> "AnthropicThinkingDelta":
+        return cls(type="thinking_delta", thinking=thinking)
+
+
+class AnthropicSignatureDelta(_WireModel):
+    type: Literal["signature_delta"] = "signature_delta"
+    signature: str
+
+    @classmethod
+    def create(cls, *, signature: str) -> "AnthropicSignatureDelta":
+        return cls(type="signature_delta", signature=signature)
+
+
+AnthropicContentDelta: TypeAlias = (
+    AnthropicTextDelta
+    | AnthropicInputJsonDelta
+    | AnthropicThinkingDelta
+    | AnthropicSignatureDelta
+)
+
+
+class AnthropicContentBlockDeltaEvent(_WireModel):
+    type: Literal["content_block_delta"] = "content_block_delta"
+    index: int
+    delta: AnthropicContentDelta
+
+    @classmethod
+    def create(
+        cls, *, index: int, delta: AnthropicContentDelta
+    ) -> "AnthropicContentBlockDeltaEvent":
+        return cls(type="content_block_delta", index=index, delta=delta)
+
+
+class AnthropicContentBlockStopEvent(_WireModel):
+    type: Literal["content_block_stop"] = "content_block_stop"
+    index: int
+
+    @classmethod
+    def create(cls, *, index: int) -> "AnthropicContentBlockStopEvent":
+        return cls(type="content_block_stop", index=index)
+
+
+class AnthropicMessageDeltaPayload(_WireModel):
+    stop_reason: str | None
+    stop_sequence: str | None
+
+    @classmethod
+    def create(cls, *, stop_reason: str | None) -> "AnthropicMessageDeltaPayload":
+        return cls(stop_reason=stop_reason, stop_sequence=None)
+
+
+class AnthropicMessageDeltaEvent(_WireModel):
+    type: Literal["message_delta"] = "message_delta"
+    delta: AnthropicMessageDeltaPayload
+    usage: AnthropicUsagePayload
+
+    @classmethod
+    def create(
+        cls, *, delta: AnthropicMessageDeltaPayload, usage: AnthropicUsagePayload
+    ) -> "AnthropicMessageDeltaEvent":
+        return cls(type="message_delta", delta=delta, usage=usage)
+
+
+class AnthropicMessageStopEvent(_WireModel):
+    type: Literal["message_stop"] = "message_stop"
+
+    @classmethod
+    def create(cls) -> "AnthropicMessageStopEvent":
+        return cls(type="message_stop")
+
+
+class AnthropicErrorPayload(_WireModel):
+    type: str
+    message: str
+
+    @classmethod
+    def create(cls, *, error_type: str, message: str) -> "AnthropicErrorPayload":
+        return cls(type=error_type, message=message)
+
+
+class AnthropicErrorEvent(_WireModel):
+    type: Literal["error"] = "error"
+    error: AnthropicErrorPayload
+
+    @classmethod
+    def create(cls, *, message: str, error_type: str) -> "AnthropicErrorEvent":
+        return cls(
+            type="error",
+            error=AnthropicErrorPayload.create(error_type=error_type, message=message),
+        )
+
+
+AnthropicStreamEvent: TypeAlias = (
+    AnthropicMessageStartEvent
+    | AnthropicPingEvent
+    | AnthropicContentBlockStartEvent
+    | AnthropicContentBlockDeltaEvent
+    | AnthropicContentBlockStopEvent
+    | AnthropicMessageDeltaEvent
+    | AnthropicMessageStopEvent
+    | AnthropicErrorEvent
+)

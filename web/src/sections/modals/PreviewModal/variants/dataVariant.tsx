@@ -26,9 +26,11 @@ export const dataVariant: PreviewVariant = {
 
   headerDescription: (ctx) =>
     ctx.fileContent
-      ? `${ctx.language} - ${ctx.lineCount} ${
-          ctx.lineCount === 1 ? "line" : "lines"
-        } · ${ctx.fileSize}`
+      ? ctx.t("code.headerDescription", {
+          fileSize: ctx.fileSize,
+          language: ctx.language,
+          lineCount: ctx.lineCount,
+        })
       : "",
 
   renderContent: (ctx) => {
@@ -40,7 +42,7 @@ export const dataVariant: PreviewVariant = {
 
   renderFooterLeft: (ctx) => (
     <Text font="main-ui-body" color="text-03">
-      {`${ctx.lineCount} ${ctx.lineCount === 1 ? "line" : "lines"}`}
+      {ctx.t("lineCount.label", { count: ctx.lineCount })}
     </Text>
   ),
 
@@ -48,7 +50,7 @@ export const dataVariant: PreviewVariant = {
     <Section flexDirection="row" width="fit">
       <CopyButton
         size="sm"
-        tooltip="Copy content"
+        tooltip={ctx.t("copyButton.tooltip")}
         getCopyText={() => ctx.fileContent}
       />
       <DownloadButton fileUrl={ctx.fileUrl} fileName={ctx.fileName} />

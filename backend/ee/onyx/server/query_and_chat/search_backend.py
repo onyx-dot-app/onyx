@@ -52,7 +52,7 @@ router = APIRouter(prefix="/search")
 @router.post("/search-flow-classification")
 def search_flow_classification(
     request: SearchFlowClassificationRequest,
-    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    _: User = Depends(require_permission(Permission.READ_SEARCH)),
     db_session: Session = Depends(get_session),
 ) -> SearchFlowClassificationResponse:
     query = request.user_query
@@ -92,7 +92,7 @@ def search_flow_classification(
 )
 def handle_send_search_message(
     request: SendSearchQueryRequest,
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User = Depends(require_permission(Permission.READ_SEARCH)),
     db_session: Session = Depends(get_session),
 ) -> StreamingResponse | SearchFullResponse:
     """
@@ -142,7 +142,7 @@ def handle_send_search_message(
 def get_search_history(
     limit: int = 100,
     filter_days: int | None = None,
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User = Depends(require_permission(Permission.READ_SEARCH)),
     db_session: Session = Depends(get_session),
 ) -> SearchHistoryResponse:
     """

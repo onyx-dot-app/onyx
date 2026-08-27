@@ -1,15 +1,16 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { toast } from "@opal/layouts";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import ActionCard from "@/sections/actions/ActionCard";
 import Actions from "@/sections/actions/Actions";
 import ToolsList from "@/sections/actions/ToolsList";
 import { useCreateModal } from "@opal/components";
-import { ToolSnapshot, ActionStatus, MethodSpec } from "@/lib/tools/interfaces";
+import { ToolSnapshot, ActionStatus, MethodSpec } from "@/lib/tools/types";
 import ToolItem from "@/sections/actions/ToolItem";
-import { extractMethodSpecsFromDefinition } from "@/lib/tools/openApiService";
-import { updateToolStatus } from "@/lib/tools/mcpService";
+import { extractMethodSpecsFromDefinition } from "@/lib/tools/utils";
+import { updateToolStatus } from "@/lib/tools/svc";
+import { can } from "@/lib/permissions/resource-actions";
 import { SvgServer, SvgTrash } from "@opal/icons";
 import { ConfirmationModalLayout as Modal } from "@opal/layouts";
 import { Button } from "@opal/components";
@@ -22,7 +23,7 @@ export interface OpenApiActionCardProps {
   onManage?: (tool: ToolSnapshot) => void;
   onDelete?: (tool: ToolSnapshot) => Promise<void> | void;
   onRename?: (toolId: number, newName: string) => Promise<void>;
-  mutateOpenApiTools: () => Promise<unknown> | void;
+  mutateOpenApiTools: () => Promise<void> | void;
   onOpenDisconnectModal?: (tool: ToolSnapshot) => void;
 }
 
@@ -35,10 +36,18 @@ export default function OpenApiActionCard({
   mutateOpenApiTools,
   onOpenDisconnectModal,
 }: OpenApiActionCardProps) {
+  const t = useTranslations("actions");
   const [isToolsExpanded, setIsToolsExpanded] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const deleteModal = useCreateModal();
+
+  const canEdit = can(tool, "edit");
+  const canDelete = can(tool, "delete");
+  const canToggle = can(tool, "toggle");
+  // Authenticate manages the OAuth config (owner-or-admin) — gate on the server capability,
+  // not canEdit, so a scoped non-owner isn't shown a 403 button.
+  const canAuthenticate = can(tool, "authenticate");
 
   const methodSpecs = useMemo<MethodSpec[]>(() => {
     try {
@@ -121,16 +130,24 @@ export default function OpenApiActionCard({
         toolCount={methodSpecs.length}
         isToolsExpanded={isToolsExpanded}
         onToggleTools={methodSpecs.length ? handleToggleTools : undefined}
-        onDisconnect={() => onOpenDisconnectModal?.(tool)}
-        onManage={onManage ? () => onManage(tool) : undefined}
-        onAuthenticate={() => {
-          onAuthenticate(tool);
-        }}
-        onReconnect={() => handleConnectionUpdate(true)}
-        onDelete={onDelete ? () => deleteModal.toggle(true) : undefined}
+        onDisconnect={
+          canToggle ? () => onOpenDisconnectModal?.(tool) : undefined
+        }
+        onManage={canEdit && onManage ? () => onManage(tool) : undefined}
+        onAuthenticate={
+          canAuthenticate ? () => onAuthenticate(tool) : undefined
+        }
+        onReconnect={canToggle ? () => handleConnectionUpdate(true) : undefined}
+        onDelete={
+          canDelete && onDelete ? () => deleteModal.toggle(true) : undefined
+        }
       />
     ),
     [
+      canAuthenticate,
+      canDelete,
+      canEdit,
+      canToggle,
       deleteModal,
       handleConnectionUpdate,
       handleToggleTools,
@@ -159,27 +176,27 @@ export default function OpenApiActionCard({
         icon={SvgServer}
         status={status}
         actions={actionsComponent}
-        onRename={handleRename}
+        onRename={canEdit ? handleRename : undefined}
         isExpanded={isToolsExpanded}
         onExpandedChange={setIsToolsExpanded}
         enableSearch={true}
         searchQuery={searchQuery}
         onSearchQueryChange={setSearchQuery}
         onFold={handleFold}
-        ariaLabel={`${tool.name} OpenAPI action card`}
+        ariaLabel={t("openApiCard.card.ariaLabel", { name: tool.name })}
       >
         <ToolsList
           isEmpty={filteredTools.length === 0}
           searchQuery={searchQuery}
-          emptyMessage="No actions defined for this OpenAPI schema"
-          emptySearchMessage="No actions match your search"
+          emptyMessage={t("openApiCard.toolsList.emptyMessage")}
+          emptySearchMessage={t("openApiCard.toolsList.emptySearchMessage")}
           className="gap-2"
         >
           {filteredTools.map((method) => (
             <ToolItem
               key={`${tool.id}-${method.method}-${method.path}-${method.name}`}
               name={method.name}
-              description={method.summary || "No summary provided"}
+              description={method.summary || t("openApiCard.method.noSummary")}
               variant="openapi"
               openApiMetadata={{
                 method: method.method,
@@ -195,7 +212,7 @@ export default function OpenApiActionCard({
           icon={({ className }) => (
             <SvgTrash className={cn(className, "stroke-action-danger-05")} />
           )}
-          title="Delete OpenAPI action"
+          title={t("openApiCard.deleteModal.title")}
           onClose={() => deleteModal.toggle(false)}
           submit={
             <Button
@@ -205,17 +222,19 @@ export default function OpenApiActionCard({
                 deleteModal.toggle(false);
               }}
             >
-              Delete
+              {t("openApiCard.deleteModal.submitButton.label")}
             </Button>
           }
         >
           <div className="flex flex-col gap-4">
             <Text as="p" text03>
-              This will permanently delete the OpenAPI action <b>{tool.name}</b>{" "}
-              and its configuration.
+              {t.rich("openApiCard.deleteModal.body.description", {
+                name: tool.name,
+                emphasis: (chunks) => <b>{chunks}</b>,
+              })}
             </Text>
             <Text as="p" text03>
-              Are you sure you want to delete this OpenAPI action?
+              {t("openApiCard.deleteModal.body.confirmation")}
             </Text>
           </div>
         </Modal>

@@ -1,0 +1,66 @@
+@reference "#reference.css";
+
+/* ===========================================================================
+   SidebarTab
+
+   The folded look is CSS, not React state. `SidebarRoot` publishes its
+   effective fold state as `data-folded` on `.opal-sidebar-root__inner`, and
+   the rules below read it from any depth. Tabs therefore render once and stay
+   rendered while the sidebar folds, and the label fades in step with the
+   200ms column width transition instead of popping.
+
+   An explicit `folded` prop sets `data-folded` on the tab itself and wins over
+   the enclosing sidebar. Tabs outside a sidebar have no `data-folded`
+   ancestor, so they stay expanded.
+
+   This assumes sidebar roots are never nested in the DOM: a descendant
+   selector matches every `[data-folded="true"]` ancestor, not the nearest one.
+   `SidebarRoot` renders one column per sidebar, side by side, so the app never
+   builds that shape.
+   =========================================================================== */
+
+.opal-sidebar-tab {
+  @apply relative;
+
+  --sidebar-tab-label-opacity: 1;
+  --sidebar-tab-label-visibility: visible;
+  /* Applied to visibility, so it flips only after the label has faded out. */
+  --sidebar-tab-label-visibility-delay: 0s;
+  /* Clipped while folding, so the label never flashes an ellipsis as the
+     column narrows. */
+  --sidebar-tab-label-overflow: ellipsis;
+  --sidebar-tab-actions-display: flex;
+}
+
+.opal-sidebar-tab[data-folded="true"],
+:where(.opal-sidebar-root__inner[data-folded="true"])
+  .opal-sidebar-tab:not([data-folded="false"]) {
+  --sidebar-tab-label-opacity: 0;
+  --sidebar-tab-label-visibility: hidden;
+  --sidebar-tab-label-visibility-delay: 200ms;
+  --sidebar-tab-label-overflow: clip;
+  --sidebar-tab-actions-display: none;
+}
+
+/* The label is `ContentSm`'s title node — the one child of the content row
+   that is not the icon container.
+
+   `visibility` (not `opacity` alone) keeps the folded label out of the
+   accessibility tree and out of the tab order, so a screen reader never
+   announces a label the sidebar is hiding. */
+.opal-sidebar-tab .opal-content-sm > :not(.opal-content-sm-icon-container) {
+  opacity: var(--sidebar-tab-label-opacity);
+  visibility: var(--sidebar-tab-label-visibility);
+  text-overflow: var(--sidebar-tab-label-overflow);
+  transition:
+    opacity 200ms ease-in-out,
+    visibility 0s linear var(--sidebar-tab-label-visibility-delay);
+}
+
+/* `rightChildren` — absolutely positioned above the `Link` overlay. Hidden
+   outright when folded: there is no room for them beside the icon. */
+.opal-sidebar-tab__actions {
+  @apply absolute z-100 right-1.5 top-0 bottom-0 flex-col justify-center items-center pointer-events-auto;
+
+  display: var(--sidebar-tab-actions-display);
+}

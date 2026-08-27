@@ -9,16 +9,20 @@ routes per-DSN, not per-host, so a second database is a faithful stand-in for a
 second instance and keeps the tests self-contained.
 """
 
-from collections.abc import Generator
-from typing import Any
+import os
+from collections.abc import AsyncGenerator, Generator
+from typing import Any, cast
+from unittest import mock
 from uuid import uuid4
 
 import pytest
+import pytest_asyncio
 from sqlalchemy import Column, Integer, MetaData, String, Table, select, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import OperationalError, ProgrammingError
+from sqlalchemy.pool import QueuePool
 
-from onyx.configs.app_configs import POSTGRES_DB
+from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_SIZE, POSTGRES_DB
 from onyx.db.engine import shard_registry, shard_routing, shard_version
 from onyx.db.engine.shard_registry import (
     ShardConfigurationError,
@@ -44,10 +48,12 @@ from onyx.db.engine.sql_engine import (
     get_session_with_tenant,
 )
 from onyx.db.models import PublicBase, TenantShard
+from tests.external_dependency_unit.db.shard_test_utils import (
+    DEFAULT_SHARD,
+    schema_exists,
+)
 
-# Shard names used throughout. DEFAULT_SHARD must match ONYX_DB_DEFAULT_SHARD,
-# which the `two_shards` fixture pins.
-DEFAULT_SHARD = "default"
+# SECOND_SHARD is per-suite; DEFAULT_SHARD is shared.
 SECOND_SHARD = "shard-test-b"
 
 # Standalone probe table. `schema=None` so `schema_translate_map` rewrites it to
@@ -82,38 +88,6 @@ def _clear_tenant_shard(tenant_id: str) -> None:
             {"t": tenant_id},
         )
         conn.commit()
-
-
-def _admin_engine() -> Engine:
-    """Engine on the `postgres` maintenance DB, for CREATE/DROP DATABASE."""
-    from sqlalchemy import create_engine
-
-    return create_engine(
-        build_connection_string(db_api=SYNC_DB_API, db="postgres"),
-        isolation_level="AUTOCOMMIT",
-    )
-
-
-@pytest.fixture(scope="module")
-def second_database() -> Generator[str, None, None]:
-    """Create a throwaway second database for the duration of the module."""
-    db_name = f"onyx_shard_test_{uuid4().hex[:8]}"
-    admin = _admin_engine()
-    with admin.connect() as conn:
-        conn.execute(text(f'CREATE DATABASE "{db_name}"'))
-    try:
-        yield db_name
-    finally:
-        with admin.connect() as conn:
-            conn.execute(
-                text(
-                    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
-                    "WHERE datname = :db AND pid <> pg_backend_pid()"
-                ),
-                {"db": db_name},
-            )
-            conn.execute(text(f'DROP DATABASE IF EXISTS "{db_name}"'))
-        admin.dispose()
 
 
 @pytest.fixture(scope="function")
@@ -316,16 +290,114 @@ def test_requesting_an_unconfigured_shard_raises(two_shards: dict[str, Any]) -> 
         shard_registry.get_engine_for_shard("no-such-shard")
 
 
-def test_pool_budget_is_divided_not_multiplied(two_shards: dict[str, Any]) -> None:  # noqa: ARG001
-    """Adding a shard must not multiply the connection load on the database."""
+def test_pool_budget_is_per_shard_not_split(two_shards: dict[str, Any]) -> None:  # noqa: ARG001
+    """Configuring a second shard must not shrink the first shard's pool.
+
+    A connection limit belongs to a database: a pool against the new shard consumes
+    nothing from the default shard's `max_connections`. Splitting would cut capacity on
+    the database still carrying every tenant in order to relieve one that is empty.
+    """
     assert len(get_shard_specs()) == 2
     assert shard_registry.is_sharded()
 
-    pool_size, max_overflow = shard_registry.divide_pool_budget(20, 10)
-    assert (pool_size, max_overflow) == (10, 5)
+    assert shard_registry.pool_budget_for_shard(DEFAULT_SHARD, 20, 10) == (20, 10)
+    assert shard_registry.pool_budget_for_shard(SECOND_SHARD, 20, 10) == (20, 10)
 
-    # An explicit zero-overflow budget (celery beat) must survive the division.
-    assert shard_registry.divide_pool_budget(20, 0) == (10, 0)
+    # An explicit zero-overflow budget (celery beat) stays 0 on every shard.
+    assert shard_registry.pool_budget_for_shard(SECOND_SHARD, 20, 0) == (20, 0)
+
+
+def test_shard_pool_settings_are_rejected_at_config_parse(
+    two_shards: dict[str, Any],  # noqa: ARG001
+) -> None:
+    """A bad value must stop the process, not surface on the first request routed to a
+    shard — those engines are built lazily, so the failure would land far from its cause.
+
+    0 is rejected for pool_size specifically because SQLAlchemy reads it as "no size
+    limit", which uncaps the shard instead of constraining it.
+    """
+    import importlib
+
+    from onyx.configs import app_configs
+
+    for value, setting in (
+        ("0", "ONYX_DB_SHARD_POOL_SIZE"),
+        ("-1", "ONYX_DB_SHARD_POOL_SIZE"),
+        ("-1", "ONYX_DB_SHARD_POOL_OVERFLOW"),
+    ):
+        with mock.patch.dict(os.environ, {setting: value}):
+            with pytest.raises(ValueError, match=setting):
+                importlib.reload(app_configs)
+
+    # Restore the module other tests imported from.
+    importlib.reload(app_configs)
+
+
+def test_zero_overflow_is_a_valid_shard_setting(
+    two_shards: dict[str, Any],  # noqa: ARG001
+) -> None:
+    """Unlike pool_size, 0 overflow is meaningful — it means no growth past pool_size."""
+    import importlib
+
+    from onyx.configs import app_configs
+
+    with mock.patch.dict(os.environ, {"ONYX_DB_SHARD_POOL_OVERFLOW": "0"}):
+        importlib.reload(app_configs)
+        assert app_configs.ONYX_DB_SHARD_POOL_OVERFLOW == 0
+
+    importlib.reload(app_configs)
+
+
+def test_shard_engines_are_actually_built_with_their_own_pool(
+    two_shards: dict[str, Any],  # noqa: ARG001
+) -> None:
+    """The arithmetic only matters if the engines consume it.
+
+    Asserts on the pools of the real sync and async engines rather than on the helper's
+    return value, so a regression in the engine wiring cannot pass while the helper
+    stays correct.
+    """
+    from onyx.db.engine.async_sql_engine import (
+        abandon_async_engines,
+        get_async_engine_for_shard,
+    )
+
+    SqlEngine.reset_engine()
+    abandon_async_engines()
+    shard_registry.ShardRegistry.reset()
+    SqlEngine.init_engine(pool_size=7, max_overflow=3)
+
+    default_pool = cast(QueuePool, SqlEngine.get_engine().pool)
+    shard_pool = cast(QueuePool, shard_registry.get_engine_for_shard(SECOND_SHARD).pool)
+
+    # Two shards configured: the old behaviour would have halved both to 3 and 1.
+    assert default_pool.size() == 7
+    assert shard_pool.size() == 7
+
+    # Same for the async engines, which size themselves independently.
+    async_shard_pool = cast(
+        QueuePool, get_async_engine_for_shard(SECOND_SHARD).sync_engine.pool
+    )
+    assert async_shard_pool.size() == POSTGRES_API_SERVER_POOL_SIZE
+
+    # Restore what the fixture built, so its teardown still has an engine.
+    SqlEngine.reset_engine()
+    abandon_async_engines()
+    shard_registry.ShardRegistry.reset()
+    SqlEngine.init_engine(pool_size=5, max_overflow=2)
+
+
+def test_extra_shards_can_be_given_a_smaller_pool(
+    two_shards: dict[str, Any],  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A shard that is still filling up does not need the default's full budget."""
+    monkeypatch.setattr(shard_registry, "ONYX_DB_SHARD_POOL_SIZE", 4)
+    monkeypatch.setattr(shard_registry, "ONYX_DB_SHARD_POOL_OVERFLOW", 2)
+
+    # The default shard is deliberately unaffected by the override.
+    assert shard_registry.pool_budget_for_shard(DEFAULT_SHARD, 20, 10) == (20, 10)
+    assert shard_registry.pool_budget_for_shard(SECOND_SHARD, 20, 10) == (4, 2)
 
 
 def _poll_immediately(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -398,19 +470,6 @@ def test_propagation_window_exceeds_the_poll_interval(
     )
 
 
-def _schema_exists(engine: Engine, schema: str) -> bool:
-    with engine.connect() as conn:
-        return (
-            conn.execute(
-                text(
-                    "SELECT 1 FROM information_schema.schemata WHERE schema_name = :s"
-                ),
-                {"s": schema},
-            ).scalar()
-            is not None
-        )
-
-
 def test_schema_creation_follows_the_shard_map(
     two_shards: dict[str, Any],  # noqa: ARG001
 ) -> None:
@@ -431,8 +490,8 @@ def test_schema_creation_follows_the_shard_map(
     try:
         create_schema_if_not_exists(tenant_id)
 
-        assert _schema_exists(second_engine, tenant_id)
-        assert not _schema_exists(default_engine, tenant_id)
+        assert schema_exists(second_engine, tenant_id)
+        assert not schema_exists(default_engine, tenant_id)
     finally:
         with second_engine.connect() as conn:
             conn.execute(text(f'DROP SCHEMA IF EXISTS "{tenant_id}" CASCADE'))
@@ -449,11 +508,11 @@ def test_drop_schema_follows_the_shard_map(two_shards: dict[str, Any]) -> None:
 
     tenant_b = two_shards["tenant_b"]
     second_engine = shard_registry.get_engine_for_shard(SECOND_SHARD)
-    assert _schema_exists(second_engine, tenant_b)
+    assert schema_exists(second_engine, tenant_b)
 
     drop_schema(tenant_b)
 
-    assert not _schema_exists(second_engine, tenant_b)
+    assert not schema_exists(second_engine, tenant_b)
 
 
 def test_alembic_url_targets_the_tenants_shard(two_shards: dict[str, Any]) -> None:
@@ -754,9 +813,31 @@ def test_sqlalchemy_url_option_is_still_ignored_by_env_py(
     )
 
 
+@pytest_asyncio.fixture
+async def isolated_async_engines() -> AsyncGenerator[None, None]:
+    """Async engines belonging to *this* test's event loop.
+
+    asyncpg binds a pool to the loop that created it, and pytest-asyncio gives every
+    test a fresh loop. An engine cached by an earlier test therefore belongs to a
+    closed loop: using it raises "attached to a different loop", and disposing it
+    raises "Event loop is closed" because asyncpg schedules the close there. So drop
+    whatever is cached on the way in without touching it, and dispose properly on the
+    way out, when the engines do belong to this loop.
+    """
+    from onyx.db.engine.async_sql_engine import (
+        abandon_async_engines,
+        reset_sqlalchemy_async_engine,
+    )
+
+    abandon_async_engines()
+    yield
+    await reset_sqlalchemy_async_engine()
+
+
 @pytest.mark.asyncio
 async def test_async_sessions_reach_different_physical_databases(
     two_shards: dict[str, Any],
+    isolated_async_engines: None,  # noqa: ARG001
 ) -> None:
     """Async sessions must route by shard, not just by schema.
 
@@ -764,42 +845,27 @@ async def test_async_sessions_reach_different_physical_databases(
     PAT, SAML, and token-refresh work for a migrated tenant would read a stale
     schema on the old database and write to an abandoned copy.
     """
-    from onyx.db.engine.async_sql_engine import (
-        get_async_session_context_manager,
-        reset_sqlalchemy_async_engine,
-    )
+    from onyx.db.engine.async_sql_engine import get_async_session_context_manager
 
-    try:
-        async with get_async_session_context_manager(two_shards["tenant_a"]) as session:
-            db_a = str(
-                (await session.execute(text("SELECT current_database()"))).scalar()
-            )
-        async with get_async_session_context_manager(two_shards["tenant_b"]) as session:
-            db_b = str(
-                (await session.execute(text("SELECT current_database()"))).scalar()
-            )
+    async with get_async_session_context_manager(two_shards["tenant_a"]) as session:
+        db_a = str((await session.execute(text("SELECT current_database()"))).scalar())
+    async with get_async_session_context_manager(two_shards["tenant_b"]) as session:
+        db_b = str((await session.execute(text("SELECT current_database()"))).scalar())
 
-        assert db_a == POSTGRES_DB
-        assert db_b == two_shards["second_db"]
-        assert db_a != db_b
-    finally:
-        # Async pools are bound to this test's event loop; leaving them open leaks
-        # connections and makes a later test fail depending on selection order.
-        await reset_sqlalchemy_async_engine()
+    assert db_a == POSTGRES_DB
+    assert db_b == two_shards["second_db"]
+    assert db_a != db_b
 
 
 @pytest.mark.asyncio
-async def test_async_engine_is_reused_per_shard(two_shards: dict[str, Any]) -> None:
+async def test_async_engine_is_reused_per_shard(
+    two_shards: dict[str, Any],
+    isolated_async_engines: None,  # noqa: ARG001
+) -> None:
     """One engine per shard, not one per call — pools must not multiply."""
-    from onyx.db.engine.async_sql_engine import (
-        get_async_engine_for_tenant,
-        reset_sqlalchemy_async_engine,
-    )
+    from onyx.db.engine.async_sql_engine import get_async_engine_for_tenant
 
-    try:
-        first = await get_async_engine_for_tenant(two_shards["tenant_b"])
-        second = await get_async_engine_for_tenant(two_shards["tenant_b"])
-        assert first is second
-        assert first is not await get_async_engine_for_tenant(two_shards["tenant_a"])
-    finally:
-        await reset_sqlalchemy_async_engine()
+    first = await get_async_engine_for_tenant(two_shards["tenant_b"])
+    second = await get_async_engine_for_tenant(two_shards["tenant_b"])
+    assert first is second
+    assert first is not await get_async_engine_for_tenant(two_shards["tenant_a"])

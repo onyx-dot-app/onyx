@@ -1,6 +1,7 @@
 "use client";
 
-import React from "react";
+import React, { useMemo } from "react";
+import { useTranslations } from "next-intl";
 import { PasswordInputTypeIn } from "@opal/components";
 import * as Yup from "yup";
 import { FormikField } from "@/refresh-components/form/FormikField";
@@ -24,11 +25,8 @@ const initialValues: OpenAIFormValues = {
   api_key: "",
 };
 
-const validationSchema = Yup.object().shape({
-  api_key: Yup.string().required("API Key is required"),
-});
-
 function OpenAIFormFields(props: ImageGenFormChildProps<OpenAIFormValues>) {
+  const t = useTranslations("admin.imageGeneration");
   const {
     apiStatus,
     showApiMessage,
@@ -49,7 +47,7 @@ function OpenAIFormFields(props: ImageGenFormChildProps<OpenAIFormValues>) {
           state={apiStatus === "error" ? "error" : state}
           className="w-full"
         >
-          <FormField.Label>API Key</FormField.Label>
+          <FormField.Label>{t("form.apiKey.label")}</FormField.Label>
           <FormField.Control>
             {apiKeyOptions.length > 0 ? (
               <InputComboBox
@@ -66,8 +64,8 @@ function OpenAIFormFields(props: ImageGenFormChildProps<OpenAIFormValues>) {
                 options={apiKeyOptions}
                 placeholder={
                   isLoadingCredentials
-                    ? "Loading..."
-                    : "Enter new API key or select existing provider"
+                    ? t("form.loading.placeholder")
+                    : t("form.apiKey.comboPlaceholder")
                 }
                 disabled={disabled}
                 isError={apiStatus === "error"}
@@ -80,7 +78,9 @@ function OpenAIFormFields(props: ImageGenFormChildProps<OpenAIFormValues>) {
                   resetApiState();
                 }}
                 placeholder={
-                  isLoadingCredentials ? "Loading..." : "Enter your API key"
+                  isLoadingCredentials
+                    ? t("form.loading.placeholder")
+                    : t("form.apiKey.placeholder")
                 }
                 disabled={disabled}
                 error={apiStatus === "error"}
@@ -91,15 +91,17 @@ function OpenAIFormFields(props: ImageGenFormChildProps<OpenAIFormValues>) {
             <FormField.APIMessage
               state={apiStatus}
               messages={{
-                loading: `Testing API key with ${imageProvider.title}...`,
-                success: "API key is valid. Configuration saved.",
-                error: errorMessage || "Invalid API key",
+                loading: t("form.apiKeyTest.loading", {
+                  title: imageProvider.title,
+                }),
+                success: t("form.apiKeyTest.success"),
+                error: errorMessage || t("form.apiKeyTest.error"),
               }}
             />
           ) : (
             <FormField.Message
               messages={{
-                idle: "Enter a new API key or select an existing provider.",
+                idle: t("form.apiKey.idle"),
                 error: meta.error,
               }}
             />
@@ -132,17 +134,26 @@ function transformValues(
 }
 
 export function OpenAIImageGenForm(props: ImageGenFormBaseProps) {
+  const t = useTranslations("admin.imageGeneration");
   const { imageProvider, existingConfig } = props;
+
+  const validationSchema = useMemo(
+    () =>
+      Yup.object().shape({
+        api_key: Yup.string().required(t("form.apiKey.required")),
+      }),
+    [t]
+  );
 
   return (
     <ImageGenFormWrapper<OpenAIFormValues>
       {...props}
       title={
         existingConfig
-          ? `Edit ${imageProvider.title}`
-          : `Connect ${imageProvider.title}`
+          ? t("form.editHeader.title", { title: imageProvider.title })
+          : t("form.connectHeader.title", { title: imageProvider.title })
       }
-      description={imageProvider.description}
+      description={t(imageProvider.descriptionKey)}
       initialValues={initialValues}
       validationSchema={validationSchema}
       getInitialValuesFromCredentials={getInitialValuesFromCredentials}

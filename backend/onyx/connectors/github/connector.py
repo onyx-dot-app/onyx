@@ -274,7 +274,7 @@ def _get_batch_rate_limited(
         # this is needed to capture the rate limit exception here (if one occurs)
         for obj in objs:
             if hasattr(obj, "raw_data"):
-                getattr(obj, "raw_data")
+                _ = obj.raw_data
         yield from objs
     except RateLimitExceededException:
         sleep_after_rate_limit_exception(github_client)
@@ -1489,7 +1489,7 @@ if __name__ == "__main__":
 
     # Run the connector
     while checkpoint.has_more:
-        for doc_batch, hierarchy_node_batch, failure, next_checkpoint in runner.run(
+        for doc_batch, _hierarchy_node_batch, failure, next_checkpoint in runner.run(
             checkpoint
         ):
             if doc_batch:
