@@ -19,6 +19,7 @@ in test_index_reclaim_task.py; here we cover the guards + query logic):
 """
 
 from collections.abc import Generator
+from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
@@ -351,6 +352,31 @@ def test_case_variant_model_gets_the_alt_index_not_the_live_one(
             ss.status = IndexModelStatus.FUTURE
         db_session.commit()
         db_session.delete(live)
+        db_session.commit()
+
+
+def test_cancel_keeps_reclaim_intent_a_newer_reindex_stamped(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    present_search_settings: SearchSettings,
+) -> None:
+    """Cancel commits the FUTURE to PAST before it clears intent, so a reindex submitted in
+    that window stamps its own intent on the same row and must not have it wiped."""
+    present = present_search_settings
+    newer_future = _make_settings(db_session, None, status=IndexModelStatus.FUTURE)
+    set_reclaim_intent_on_current__no_commit(db_session, [101, 202])
+    db_session.commit()
+    try:
+        search_settings_api.cancel_new_embedding(_=MagicMock(), db_session=db_session)
+
+        db_session.refresh(present)
+        assert present.reclaim_status == IndexReclaimStatus.PENDING
+        assert present.pending_cc_pair_deletions == [101, 202]
+    finally:
+        db_session.rollback()
+        clear_reclaim_intent__no_commit(db_session, present.id)
+        db_session.commit()
+        db_session.delete(newer_future)
         db_session.commit()
 
 

@@ -437,7 +437,6 @@ def cancel_new_embedding(
         db_session, search_settings_id=secondary_search_settings.id
     )
 
-    # remove the old index from the vector db
     primary_search_settings = get_current_search_settings(db_session)
 
     # The reverted FUTURE index holds abandoned partial-port data — reclaim it so a later
@@ -447,9 +446,15 @@ def cancel_new_embedding(
         db_session, secondary_search_settings, primary_search_settings
     )
 
-    # The canceled reindex stamped reclaim intent on this PRESENT (the would-be PAST);
-    # clear it so a later swap can't act on a stale consent set. No-op if unset.
-    clear_reclaim_intent__no_commit(db_session, primary_search_settings.id)
+    # Clear the intent this cancellation's own reindex stamped, so a later swap can't act
+    # on a stale consent set. Locked first, so a reindex submitted in between is either
+    # already visible below or waits for this commit.
+    get_current_search_settings(db_session, for_update=True)
+    a_newer_reindex_owns_the_intent = (
+        get_secondary_search_settings(db_session) is not None
+    )
+    if not a_newer_reindex_owns_the_intent:
+        clear_reclaim_intent__no_commit(db_session, primary_search_settings.id)
     db_session.commit()
 
     document_index = get_default_document_index(
