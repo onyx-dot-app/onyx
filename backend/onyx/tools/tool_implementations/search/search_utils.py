@@ -393,12 +393,11 @@ def _is_code_section(section: InferenceSection) -> bool:
 class SectionExpansionResult(BaseModel):
     """Outcome of classify-and-expand for one section.
 
-    ``section`` is None when the section was classified NOT_RELEVANT. The
-    classification is returned so callers can react to it (e.g. recommend
+    The classification is returned so callers can react to it (e.g. recommend
     repo-wide analysis for REPO_ANALYSIS) without side channels.
     """
 
-    section: InferenceSection | None
+    section: InferenceSection
     classification: ContextExpansionType
 
 
@@ -439,8 +438,8 @@ def expand_section_with_context(
     2. Uses LLM to classify relevance unless expand_override is True
     3. For FULL_DOCUMENT (and code FULL_FILE / REPO_ANALYSIS), fetches
        additional chunks
-    4. Returns the expanded section (None if not relevant) plus the
-       classification
+    4. Returns the section with whatever context its classification earns,
+       plus the classification itself
 
     Args:
         section: The InferenceSection to classify and expand
@@ -497,8 +496,10 @@ def expand_section_with_context(
 
     # Now build the expanded section based on classification
     if classification == ContextExpansionType.NOT_RELEVANT:
-        # Filter out this section
-        return SectionExpansionResult(section=None, classification=classification)
+        # Kept, not dropped: this classifier reads a truncated section, and
+        # trusting it to remove results would change recall for every search
+        # in the product. It just earns no extra context.
+        return SectionExpansionResult(section=section, classification=classification)
 
     elif classification == ContextExpansionType.MAIN_SECTION_ONLY:
         # Return original section unchanged

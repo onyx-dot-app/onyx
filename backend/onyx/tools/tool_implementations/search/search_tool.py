@@ -1197,15 +1197,13 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         ) -> SectionExpansionResult:
             """Wrapper that handles exceptions and returns original section on error."""
             try:
-                result = expand_section_with_context(
+                return expand_section_with_context(
                     section=section,
                     user_query=user_query,
                     llm=llm,
                     document_index=document_index,
                     expand_override=expand_override,
                 )
-                # A None section means NOT_RELEVANT; the caller drops it.
-                return result
             except Exception as e:
                 logger.warning(
                     "Error processing section context expansion: %s. Using original section.",
@@ -1238,9 +1236,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         expansion_results: list[SectionExpansionResult] = (
             run_functions_tuples_in_parallel(expansion_functions)
         )
-        expanded_sections = [
-            result.section for result in expansion_results if result.section
-        ]
+        expanded_sections = [result.section for result in expansion_results]
 
         # End timing for document expansion
         document_expansion_elapsed = time.time() - document_expansion_start_time
@@ -1266,6 +1262,13 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             token_counter=token_counter,
         )
 
+        # What the LLM actually receives. Sliced here rather than inside the
+        # converter so the note below can only cite files that survived.
+        llm_sections = merged_sections[: override_kwargs.max_llm_chunks]
+        visible_document_ids = {
+            section.center_chunk.document_id for section in llm_sections
+        }
+
         # Code-aware expansion can classify a section as needing repo-wide
         # analysis; surface those as an escalation hint for the main LLM
         # loop. Carried inside the JSON payload's `note` field — appending
@@ -1273,17 +1276,16 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         escalation_chunks: list[InferenceChunk] = [
             result.section.center_chunk
             for result in expansion_results
-            if result.section
-            and result.classification == ContextExpansionType.REPO_ANALYSIS
+            if result.classification == ContextExpansionType.REPO_ANALYSIS
+            and result.section.center_chunk.document_id in visible_document_ids
         ]
         combined_note = (scope_note or "") + (
             _build_repo_analysis_note(escalation_chunks) if escalation_chunks else ""
         )
 
         docs_str, citation_mapping = convert_inference_sections_to_llm_string(
-            top_sections=merged_sections,
+            top_sections=llm_sections,
             citation_start=override_kwargs.starting_citation_num,
-            limit=override_kwargs.max_llm_chunks,
             include_document_id=False,
             include_link=override_kwargs.include_link,
             note=combined_note or None,
