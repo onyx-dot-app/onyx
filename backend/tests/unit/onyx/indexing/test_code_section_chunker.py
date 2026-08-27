@@ -120,6 +120,29 @@ def test_unknown_language_falls_back_to_token_splitting() -> None:
         assert len(chunk.content) <= CHUNK_LIMIT
 
 
+def test_code_text_keeps_punctuation_and_emoji() -> None:
+    """The prose cleaner strips the General Punctuation and Emoticons blocks,
+    which are meaningful inside literals. Indexed code must match the file it
+    links to."""
+    code = 'MSG = "an — em dash"  # ✅ ok\n'
+    dc = _make_document_chunker()
+
+    chunks = _chunk(
+        dc,
+        [
+            CodeSection(
+                text=code,
+                language="python",
+                file_path="a.py",
+                link="https://git.example.com/blob/main/a.py",
+            )
+        ],
+    )
+
+    assert "—" in chunks[0].content
+    assert "✅" in chunks[0].content
+
+
 # --- Interaction with other sections ----------------------------------------------
 
 

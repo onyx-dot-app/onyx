@@ -17,7 +17,7 @@ from onyx.indexing.chunking.section_chunker import (
 )
 from onyx.natural_language_processing.utils import BaseTokenizer, count_tokens
 from onyx.utils.logger import setup_logger
-from onyx.utils.text_processing import clean_text
+from onyx.utils.text_processing import clean_code_text
 
 logger = setup_logger()
 
@@ -68,7 +68,7 @@ class CodeChunker(SectionChunker):
                 accumulator=AccumulatorState(),
             )
 
-        section_text = clean_text(section.text)
+        section_text = clean_code_text(section.text)
         section_link = section.link or ""
         language = section.language or infer_code_language(section.file_path)
 

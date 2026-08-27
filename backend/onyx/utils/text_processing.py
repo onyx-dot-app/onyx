@@ -275,6 +275,16 @@ def clean_text(text: str) -> str:
     return cleaned
 
 
+def clean_code_text(text: str) -> str:
+    """Strip control characters only, keeping every printable character.
+
+    clean_text also removes the General Punctuation and Emoticons blocks,
+    which are meaningful inside string literals and comments. Code is indexed
+    to be matched against the file it links to, so it keeps them.
+    """
+    return "".join(ch for ch in text if ch >= " " or ch in "\n\t")
+
+
 def is_valid_email(text: str) -> bool:
     """Can use a library instead if more detailed checks are needed"""
     regex = r"^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"

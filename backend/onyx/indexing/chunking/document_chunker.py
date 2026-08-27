@@ -1,6 +1,7 @@
 from chonkie import SentenceChunker
 
 from onyx.connectors.models import (
+    CodeSection,
     IndexingDocument,
     Section,
     SectionType,
@@ -18,7 +19,7 @@ from onyx.indexing.chunking.text_section_chunker import TextChunker
 from onyx.indexing.models import DocAwareChunk
 from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.utils.logger import setup_logger
-from onyx.utils.text_processing import clean_text
+from onyx.utils.text_processing import clean_code_text, clean_text
 
 logger = setup_logger()
 
@@ -90,7 +91,12 @@ class DocumentChunker:
         payloads: list[ChunkPayload] = []
 
         for section_idx, section in enumerate(sections):
-            section_text = clean_text(str(section.text or ""))
+            # Code keeps its punctuation and emoji: they are meaningful in
+            # literals, and the indexed text should match the linked file.
+            cleaner = (
+                clean_code_text if isinstance(section, CodeSection) else clean_text
+            )
+            section_text = cleaner(str(section.text or ""))
             # File-backed tabular sections hold their content in csv_file_id, not
             # text, so they look empty here — keep them for the tabular chunker.
             is_file_backed = (
