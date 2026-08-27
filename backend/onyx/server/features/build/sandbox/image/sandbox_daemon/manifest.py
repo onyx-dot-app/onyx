@@ -25,6 +25,7 @@ import sys
 from dataclasses import dataclass, field
 from itertools import islice
 from pathlib import Path
+from typing import NamedTuple
 from uuid import UUID
 
 from sandbox_daemon.contract import OutputsManifestEntry, OutputsManifestResponse
@@ -56,15 +57,20 @@ class _Walk:
     hash_budget: int = MANIFEST_MAX_TOTAL_HASH_BYTES
 
 
+class _HashedFile(NamedTuple):
+    stat: os.stat_result
+    # None means the file was past the hash allowance.
+    sha256: str | None
+    bytes_read: int
+
+
 def _hash_regular_file(
     dir_fd: int, name: str, allowed_bytes: int
-) -> tuple[os.stat_result, str | None, int] | None:
+) -> _HashedFile | None:
     """Open ``name`` relative to ``dir_fd`` and hash it.
 
-    None when the entry is not an openable regular file. Otherwise
-    ``(stat, sha256 or None, bytes read)``, where a None hash means the file
-    was past ``allowed_bytes``. O_NONBLOCK keeps a raced FIFO swap from
-    blocking the open.
+    None when the entry is not an openable regular file. O_NONBLOCK keeps a
+    raced FIFO swap from blocking the open.
     """
     try:
         fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=dir_fd)
@@ -75,15 +81,15 @@ def _hash_regular_file(
         if not stat.S_ISREG(st.st_mode):
             return None
         if st.st_size > allowed_bytes:
-            return st, None, 0
+            return _HashedFile(st, None, 0)
         digest = hashlib.sha256()
         read_total = 0
         while chunk := os.read(fd, _HASH_CHUNK_SIZE):
             digest.update(chunk)
             read_total += len(chunk)
             if read_total > allowed_bytes:
-                return st, None, read_total
-        return st, digest.hexdigest(), read_total
+                return _HashedFile(st, None, read_total)
+        return _HashedFile(st, digest.hexdigest(), read_total)
     except OSError:
         return None
     finally:
@@ -171,15 +177,14 @@ def _walk_directory(walk: _Walk, dir_fd: int, prefix: str, depth: int) -> None:
             if hashed is None:
                 resp.skipped_unreadable += 1
                 continue
-            file_st, sha256, bytes_read = hashed
-            walk.hash_budget -= bytes_read
+            walk.hash_budget -= hashed.bytes_read
             resp.entries.append(
                 OutputsManifestEntry(
                     path=relative,
                     is_directory=False,
-                    size=file_st.st_size,
-                    mtime_ns=file_st.st_mtime_ns,
-                    sha256=sha256,
+                    size=hashed.stat.st_size,
+                    mtime_ns=hashed.stat.st_mtime_ns,
+                    sha256=hashed.sha256,
                 )
             )
     finally:
