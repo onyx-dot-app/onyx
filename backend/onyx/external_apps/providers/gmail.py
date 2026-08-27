@@ -4,7 +4,7 @@ from onyx.configs.app_configs import (
     EXT_APP_GMAIL_CLIENT_ID,
     EXT_APP_GMAIL_CLIENT_SECRET,
 )
-from onyx.db.enums import EndpointPolicy, ExternalAppType
+from onyx.db.enums import ActionEffect, EndpointPolicy, ExternalAppType
 from onyx.external_apps.presentation.payload_decoders import (
     GmailRawMimeDecoder,
     PayloadDecoder,
@@ -79,12 +79,14 @@ _ENDPOINTS: list[EndpointSpec] = [
     ),
     EndpointSpec(
         id=GmailAction.MESSAGES_SEND,
+        effect=ActionEffect.WRITE,
         normalised_name="Send a message",
         description="Send an email from the connected account.",
         matches=(RestRoute(method="POST", path=f"{_MESSAGES}/send"),),
     ),
     EndpointSpec(
         id=GmailAction.MESSAGES_MODIFY,
+        effect=ActionEffect.WRITE,
         normalised_name="Modify message labels",
         description="Add or remove labels on a message (mark read, archive, …).",
         matches=(RestRoute(method="POST", path=f"{_MESSAGE_ITEM}/modify"),),
@@ -92,6 +94,7 @@ _ENDPOINTS: list[EndpointSpec] = [
     ),
     EndpointSpec(
         id=GmailAction.MESSAGES_TRASH,
+        effect=ActionEffect.WRITE,
         normalised_name="Trash a message",
         description="Move a message to the trash.",
         matches=(RestRoute(method="POST", path=f"{_MESSAGE_ITEM}/trash"),),
@@ -133,6 +136,7 @@ _ENDPOINTS: list[EndpointSpec] = [
     ),
     EndpointSpec(
         id=GmailAction.DRAFTS_CREATE,
+        effect=ActionEffect.WRITE,
         normalised_name="Create a draft",
         # Drafts aren't sent, so creating one is a safe place for the agent to
         # prepare an email for the user to review and send from Gmail.
@@ -142,6 +146,7 @@ _ENDPOINTS: list[EndpointSpec] = [
     ),
     EndpointSpec(
         id=GmailAction.DRAFTS_UPDATE,
+        effect=ActionEffect.WRITE,
         normalised_name="Update a draft",
         description="Replace the contents of an existing draft (not sent).",
         matches=(RestRoute(method="PUT", path=_DRAFT_ITEM),),
@@ -150,6 +155,7 @@ _ENDPOINTS: list[EndpointSpec] = [
     ),
     EndpointSpec(
         id=GmailAction.DRAFTS_DELETE,
+        effect=ActionEffect.WRITE,
         normalised_name="Delete a draft",
         description="Permanently delete a draft.",
         matches=(RestRoute(method="DELETE", path=_DRAFT_ITEM),),
@@ -157,6 +163,7 @@ _ENDPOINTS: list[EndpointSpec] = [
     ),
     EndpointSpec(
         id=GmailAction.DRAFTS_SEND,
+        effect=ActionEffect.WRITE,
         normalised_name="Send a draft",
         description="Send an existing draft as an email.",
         matches=(RestRoute(method="POST", path=f"{_DRAFTS}/send"),),

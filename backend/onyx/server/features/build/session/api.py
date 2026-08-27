@@ -29,6 +29,10 @@ from onyx.server.features.build.db.build_session import (
     get_build_session,
     set_build_session_sharing_scope,
 )
+from onyx.server.features.build.db.receipt import (
+    get_session_receipts,
+    sweep_stale_pending_receipts,
+)
 from onyx.server.features.build.db.sandbox import (
     get_sandbox_by_user_id,
     update_sandbox_heartbeat,
@@ -52,6 +56,7 @@ from onyx.server.features.build.session.models import (
     OpencodeHistorySnapshotResponse,
     PptxPreviewResponse,
     PreProvisionedCheckResponse,
+    ReceiptResponse,
     SandboxStatusResponse,
     SessionCreateRequest,
     SessionListResponse,
@@ -515,6 +520,27 @@ def list_artifacts(
         raise HTTPException(status_code=404, detail="Session not found")
 
     return artifacts
+
+
+@router.get("/{session_id}/receipts")
+def list_receipts(
+    session_id: UUID,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> list[ReceiptResponse]:
+    """List the session's external-action receipts.
+
+    Owner-only on purpose, destinations can leak even when the session is
+    shared. Orphaned PENDING rows sweep to UNKNOWN on read, so a stuck row
+    stops presenting as in progress once stale.
+    """
+    session = get_build_session(session_id, user.id, db_session)
+    if session is None:
+        raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND, "Session not found")
+    if sweep_stale_pending_receipts(db_session, session_id=session_id):
+        db_session.commit()
+    rows = get_session_receipts(db_session, session_id=session_id)
+    return [ReceiptResponse.from_model(row) for row in rows]
 
 
 @router.get("/{session_id}/files", response_model=DirectoryListing)

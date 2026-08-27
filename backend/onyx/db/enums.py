@@ -508,6 +508,15 @@ class EndpointPolicy(str, PyEnum):
     DENY = "DENY"  # block the call outright
 
 
+class ActionEffect(str, PyEnum):
+    """Whether a catalog action mutates its destination. Write-effect actions
+    always leave a receipt when they execute, reads only when an approval
+    covered them."""
+
+    READ = "read"
+    WRITE = "write"
+
+
 # Strictness ordering: higher = stricter. When one request matches several
 # actions, the strictest policy governs (sort/`max` with this key); readers
 # of a persisted `actions` list rely on `actions[0]` being the strictest.

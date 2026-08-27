@@ -25,7 +25,12 @@ from sqlalchemy.orm import Session
 from onyx.cache.interface import CACHE_TRANSIENT_ERRORS, CacheBackend
 from onyx.configs.constants import NotificationType
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.enums import ApprovalDecidedVia, ApprovalDecision, EndpointPolicy
+from onyx.db.enums import (
+    ApprovalDecidedVia,
+    ApprovalDecision,
+    EndpointPolicy,
+    ReceiptStatus,
+)
 from onyx.db.gated_app import get_gated_app_id
 from onyx.db.notification import create_notification
 from onyx.db.scheduled_task import ScheduledRunGrants, get_live_scheduled_run_grants
@@ -56,6 +61,10 @@ from onyx.sandbox_proxy.logging_utils import (
     full_log_id,
     sandbox_log_label,
     short_log_id,
+)
+from onyx.sandbox_proxy.receipt_recorder import (
+    finalize_receipts,
+    record_pending_receipts,
 )
 from onyx.sandbox_proxy.request_evaluator import RequestEvaluator
 from onyx.server.features.build.configs import (
@@ -196,6 +205,11 @@ class _ApprovalGrant:
 # TTL bounds staleness past a run's RUNNING -> terminal transition.
 _GRANT_CACHE_TTL_S = 60.0
 _GRANT_CACHE_MAX_ENTRIES = 4096
+
+
+# flow.metadata value for recorded receipts: primitives only, because
+# mitmproxy deep-copies and tnetstring-serializes flow metadata.
+RECEIPT_FLOW_KEY = "craft_recorded_receipts"
 
 
 class ParkedApprovals:
@@ -503,6 +517,92 @@ class GateAddon:
                 "egress_allow " + fields + " credential_outcome=%s",
                 *args,
                 credential_outcome_label(injection),
+            )
+            await self._record_receipts(flow, ctx, matched_actions, approval_id)
+
+    async def _record_receipts(
+        self,
+        flow: http.HTTPFlow,
+        ctx: SessionContext,
+        matched_actions: AllMatchedActions,
+        approval_id: UUID | None,
+    ) -> None:
+        """Write PENDING receipts and remember them on the flow for the
+        response and error hooks. Best-effort: the action proceeds either way,
+        and an unrecorded action is invisible, not blocked."""
+        try:
+            receipt_ids = await asyncio.to_thread(
+                record_pending_receipts,
+                tenant_id=ctx.tenant_id,
+                session_id=ctx.session_id,
+                matched_actions=matched_actions,
+                approval_id=approval_id,
+                cache_factory=self._cache_factory,
+            )
+        except Exception:
+            logger.exception(
+                "receipt_record_error tenant=%s session=%s action_type=%s",
+                ctx.tenant_id,
+                short_log_id(ctx.session_id),
+                matched_actions.governing_action.action_type,
+            )
+            return
+        if receipt_ids:
+            flow.metadata[RECEIPT_FLOW_KEY] = {
+                "tenant_id": ctx.tenant_id,
+                "session_id": str(ctx.session_id),
+                "receipt_ids": [str(receipt_id) for receipt_id in receipt_ids],
+            }
+
+    async def response(self, flow: http.HTTPFlow) -> None:
+        """Finalize recorded receipts from the origin's verdict.
+
+        Transport-level truth only: a non-error status whose body carries a
+        provider error still records CONFIRMED.
+        """
+        recorded = flow.metadata.pop(RECEIPT_FLOW_KEY, None)
+        if recorded is None:
+            return
+        confirmed = flow.response is not None and flow.response.status_code < 400
+        await self._finalize_recorded(
+            recorded,
+            ReceiptStatus.CONFIRMED if confirmed else ReceiptStatus.FAILED,
+        )
+
+    async def error(self, flow: http.HTTPFlow) -> None:
+        recorded = flow.metadata.pop(RECEIPT_FLOW_KEY, None)
+        if recorded is None:
+            return
+        # Non-error headers already came back, so the origin may well have
+        # committed the write: the outcome is unknown, not failed.
+        seen_ok = flow.response is not None and flow.response.status_code < 400
+        await self._finalize_recorded(
+            recorded,
+            ReceiptStatus.UNKNOWN if seen_ok else ReceiptStatus.FAILED,
+        )
+
+    async def _finalize_recorded(
+        self, recorded: dict[str, object], status: ReceiptStatus
+    ) -> None:
+        tenant_id = str(recorded["tenant_id"])
+        session_id = UUID(str(recorded["session_id"]))
+        receipt_ids_raw = recorded["receipt_ids"]
+        assert isinstance(receipt_ids_raw, list)
+        try:
+            await asyncio.to_thread(
+                finalize_receipts,
+                tenant_id=tenant_id,
+                session_id=session_id,
+                receipt_ids=[UUID(str(rid)) for rid in receipt_ids_raw],
+                status=status,
+                cache_factory=self._cache_factory,
+            )
+        except Exception:
+            logger.exception(
+                "receipt_finalize_error tenant=%s session=%s status=%s",
+                tenant_id,
+                short_log_id(session_id),
+                status.value,
             )
 
     # --------------------------------------------------------------------------
@@ -1113,6 +1213,9 @@ class GateAddon:
            winner) and wake its parked BLPOP.
         2. `asyncio.wait` on tracked `request()` tasks so they return to
            mitmproxy before the caller tears down connections.
+
+        Recorded receipts still PENDING at shutdown ride the stale sweep
+        to UNKNOWN.
         """
         for tenant_id, approval_ids in self._parked.snapshot():
             cache = self._cache_factory(tenant_id)

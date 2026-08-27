@@ -2,7 +2,7 @@ from onyx.configs.app_configs import (
     EXT_APP_GOOGLE_DRIVE_CLIENT_ID,
     EXT_APP_GOOGLE_DRIVE_CLIENT_SECRET,
 )
-from onyx.db.enums import EndpointPolicy, ExternalAppType
+from onyx.db.enums import ActionEffect, EndpointPolicy, ExternalAppType
 from onyx.external_apps.providers.actions import (
     EndpointSpec,
     ExternalAppAction,
@@ -91,6 +91,7 @@ _ENDPOINTS: list[EndpointSpec] = [
     ),
     EndpointSpec(
         id=GoogleDriveAction.FILES_CREATE,
+        effect=ActionEffect.WRITE,
         normalised_name="Create or upload a file",
         description=(
             "Create a folder/file or upload new content (optionally converting "
@@ -103,6 +104,7 @@ _ENDPOINTS: list[EndpointSpec] = [
     ),
     EndpointSpec(
         id=GoogleDriveAction.FILES_UPDATE,
+        effect=ActionEffect.WRITE,
         normalised_name="Edit a file",
         description="Update a file's metadata or replace its contents.",
         matches=(
@@ -112,6 +114,7 @@ _ENDPOINTS: list[EndpointSpec] = [
     ),
     EndpointSpec(
         id=GoogleDriveAction.FILES_DELETE,
+        effect=ActionEffect.WRITE,
         normalised_name="Delete a file",
         description="Trash or permanently delete a file.",
         matches=(RestRoute(method="DELETE", path=_FILE_ITEM),),
@@ -128,12 +131,14 @@ _ENDPOINTS: list[EndpointSpec] = [
     ),
     EndpointSpec(
         id=GoogleDriveAction.DOCS_CREATE,
+        effect=ActionEffect.WRITE,
         normalised_name="Create a document",
         description="Create a new, empty Google Doc via the Docs API.",
         matches=(RestRoute(method="POST", path=_DOCS),),
     ),
     EndpointSpec(
         id=GoogleDriveAction.DOCS_UPDATE,
+        effect=ActionEffect.WRITE,
         normalised_name="Edit a document",
         description="Apply edits to a Google Doc's contents via the Docs API.",
         matches=(RestRoute(method="POST", path=_DOC_ITEM),),
@@ -152,12 +157,14 @@ _ENDPOINTS: list[EndpointSpec] = [
     ),
     EndpointSpec(
         id=GoogleDriveAction.SHEETS_CREATE,
+        effect=ActionEffect.WRITE,
         normalised_name="Create a spreadsheet",
         description="Create a new Google Sheet via the Sheets API.",
         matches=(RestRoute(method="POST", path=_SHEETS),),
     ),
     EndpointSpec(
         id=GoogleDriveAction.SHEETS_UPDATE,
+        effect=ActionEffect.WRITE,
         normalised_name="Edit a spreadsheet",
         description=(
             "Write, append, or clear cell values and apply structural edits "
@@ -183,12 +190,14 @@ _ENDPOINTS: list[EndpointSpec] = [
     ),
     EndpointSpec(
         id=GoogleDriveAction.SLIDES_CREATE,
+        effect=ActionEffect.WRITE,
         normalised_name="Create a presentation",
         description="Create a new Google Slides presentation via the Slides API.",
         matches=(RestRoute(method="POST", path=_SLIDES),),
     ),
     EndpointSpec(
         id=GoogleDriveAction.SLIDES_UPDATE,
+        effect=ActionEffect.WRITE,
         normalised_name="Edit a presentation",
         description=(
             "Apply edits (add slides, insert or replace text, restyle) to a "

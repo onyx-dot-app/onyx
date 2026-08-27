@@ -6,8 +6,10 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from onyx.configs.constants import MessageType
 from onyx.db.enums import (
+    ActionEffect,
     ArtifactType,
     BuildSessionStatus,
+    ReceiptStatus,
     SandboxStatus,
     SessionOrigin,
     SharingScope,
@@ -15,7 +17,7 @@ from onyx.db.enums import (
 from onyx.server.features.build.db.build_session import session_runtime_stale
 
 if TYPE_CHECKING:
-    from onyx.db.models import BuildSession, Sandbox
+    from onyx.db.models import ActionReceipt, BuildSession, Sandbox
 
 
 # ===== Session Models =====
@@ -94,6 +96,32 @@ class ArtifactResponse(BaseModel):
             preview_url=getattr(artifact, "preview_url", None),
             created_at=artifact.created_at,
             updated_at=artifact.updated_at,
+        )
+
+
+class ReceiptResponse(BaseModel):
+    """One external-action receipt. Owner-only: destinations can leak."""
+
+    id: str
+    session_id: str
+    action_type: str
+    effect: ActionEffect
+    destination: str
+    link: str | None
+    status: ReceiptStatus
+    created_at: datetime
+
+    @classmethod
+    def from_model(cls, receipt: "ActionReceipt") -> "ReceiptResponse":
+        return cls(
+            id=str(receipt.id),
+            session_id=str(receipt.session_id),
+            action_type=receipt.action_type,
+            effect=receipt.effect,
+            destination=receipt.destination,
+            link=receipt.link,
+            status=receipt.status,
+            created_at=receipt.created_at,
         )
 
 

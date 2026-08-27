@@ -7,7 +7,7 @@ from onyx.configs.app_configs import (
     EXT_APP_HUBSPOT_CLIENT_ID,
     EXT_APP_HUBSPOT_CLIENT_SECRET,
 )
-from onyx.db.enums import EndpointPolicy, ExternalAppType
+from onyx.db.enums import ActionEffect, EndpointPolicy, ExternalAppType
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.actions import (
@@ -111,6 +111,7 @@ _ENDPOINTS: list[EndpointSpec] = [
     ),
     EndpointSpec(
         id=HubspotAction.CONTACTS_WRITE,
+        effect=ActionEffect.WRITE,
         normalised_name="Create or update contacts",
         description="Create a new contact or update an existing one.",
         matches=(
@@ -120,6 +121,7 @@ _ENDPOINTS: list[EndpointSpec] = [
     ),
     EndpointSpec(
         id=HubspotAction.COMPANIES_WRITE,
+        effect=ActionEffect.WRITE,
         normalised_name="Create or update companies",
         description="Create a new company or update an existing one.",
         matches=(
@@ -129,6 +131,7 @@ _ENDPOINTS: list[EndpointSpec] = [
     ),
     EndpointSpec(
         id=HubspotAction.DEALS_WRITE,
+        effect=ActionEffect.WRITE,
         normalised_name="Create or update deals",
         description="Create a new deal or update an existing one.",
         matches=(
