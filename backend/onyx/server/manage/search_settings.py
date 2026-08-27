@@ -160,11 +160,10 @@ def set_new_search_settings(
     if new_search_settings_request.index_name is not None:
         _guard_index_name_reuse(db_session, new_search_settings_request.index_name)
 
-    # Runs before the FUTURE and its index are created, so rejecting the consent set
-    # leaves nothing orphaned behind.
-    _apply_reclaim_intent(
+    # Resolve before the block below starts committing, so rejecting a stale consent set
+    # cannot first tear down the reindex this one supersedes.
+    consented_deletions = _resolve_reclaim_intent(
         db_session,
-        search_settings,
         search_settings_new.switchover_type,
         search_settings_new.acknowledged_wont_port_cc_pair_ids,
     )
@@ -196,6 +195,10 @@ def set_new_search_settings(
         cancel_active_port_attempts(
             db_session, search_settings_id=secondary_search_settings.id
         )
+
+    # Must stay below the calls above that commit. Written any earlier, a later failure
+    # leaves the live index marked for reclaim with no FUTURE ever created.
+    _apply_reclaim_intent(db_session, search_settings, consented_deletions)
 
     # Every new FUTURE reindexes via the port flow (re-embed PRESENT -> FUTURE in
     # place, no connector re-fetch). commit=False here and below so the FUTURE and
@@ -277,28 +280,35 @@ def _guard_index_name_reuse(db_session: Session, index_name: str) -> None:
         )
 
 
-def _apply_reclaim_intent(
+def _resolve_reclaim_intent(
     db_session: Session,
-    present: SearchSettings,
     switchover_type: SwitchoverType,
     acknowledged_wont_port_cc_pair_ids: list[int] | None,
-) -> None:
-    """Record what the post-swap reclaim may do to the current PRESENT, which becomes the
-    old index. Always writes: a reindex this one supersedes may have stamped its own
-    consent set on this same row, so declining to reclaim has to clear it, or this swap
-    would delete connectors the admin never agreed to lose."""
+) -> list[int] | None:
+    """Work out which not-ported connectors the post-swap reclaim may delete. None is not
+    the empty list — it means reclaim nothing at all, not reclaim without deletions."""
     wont_port_cc_pair_ids = compute_wont_port_cc_pair_ids(db_session, switchover_type)
     consented_deletions = _resolve_consented_deletions(
         acknowledged_wont_port_cc_pair_ids, wont_port_cc_pair_ids
     )
     if consented_deletions is None:
-        # Connectors that won't be carried over hold their only copy in the old index,
-        # so without the admin agreeing to lose them nothing here may be reclaimed.
         logger.warning(
             "Reindex has %d not-ported cc_pair(s) but no consent acknowledgment; "
             "skipping old-index reclaim.",
             len(wont_port_cc_pair_ids),
         )
+    return consented_deletions
+
+
+def _apply_reclaim_intent(
+    db_session: Session,
+    present: SearchSettings,
+    consented_deletions: list[int] | None,
+) -> None:
+    """Always writes, even when reclaiming nothing. A reindex this one supersedes may have
+    left its own consent set on this same row, and this swap would then delete connectors
+    the admin never agreed to lose."""
+    if consented_deletions is None:
         clear_reclaim_intent__no_commit(db_session, present.id)
         return
     set_reclaim_intent_on_current__no_commit(db_session, consented_deletions)

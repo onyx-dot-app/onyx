@@ -446,10 +446,13 @@ def test_no_acknowledgment_clears_intent_left_by_a_superseded_reindex(
         set_reclaim_intent_on_current__no_commit(db_session, [101, 202])
         assert present.reclaim_status == IndexReclaimStatus.PENDING
 
-        # The replacement: an INVALID cc_pair won't port, and no acknowledgment is sent.
-        search_settings_api._apply_reclaim_intent(
-            db_session, present, SwitchoverType.REINDEX, None
+        consented = search_settings_api._resolve_reclaim_intent(
+            db_session,
+            SwitchoverType.REINDEX,
+            acknowledged_wont_port_cc_pair_ids=None,
         )
+        assert consented is None
+        search_settings_api._apply_reclaim_intent(db_session, present, consented)
 
         assert present.reclaim_status is None
         assert present.pending_cc_pair_deletions is None
