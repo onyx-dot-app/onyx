@@ -1052,6 +1052,7 @@ export default function IndexSettingsPage() {
                 return;
               }
 
+              wontPortConsentModal.toggle(false);
               toast.success(t("toasts.reindexStarted"));
               setSwitchoverType(SwitchoverType.REINDEX);
               await Promise.all([
@@ -1211,10 +1212,7 @@ export default function IndexSettingsPage() {
                       submit={
                         <Button
                           variant="danger"
-                          onClick={() => {
-                            wontPortConsentModal.toggle(false);
-                            void submitForm();
-                          }}
+                          onClick={() => void submitForm()}
                         >
                           {t("wontPortConsentModal.submit")}
                         </Button>
