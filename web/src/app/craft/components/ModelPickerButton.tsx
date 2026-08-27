@@ -31,8 +31,8 @@ interface ModelPickerButtonProps {
   loading?: boolean;
 }
 
-// Figure spaces: hold the pill at roughly a model name's width while loading,
-// so the label swap doesn't shift the row.
+// Figure spaces: give the loading pill a model-name-ish width without a fixed
+// size, so the label swap doesn't shift the row.
 const SKELETON_LABEL = "\u2007".repeat(10);
 
 // Controlled model picker pill matching the main app's ModelSelector.
@@ -98,7 +98,10 @@ export default function ModelPickerButton({
       <div
         className={cn(
           "inline-flex",
-          isResolving && "motion-safe:animate-pulse"
+          // The pill's own fill is transparent, so the skeleton is painted on
+          // the wrapper — it tracks the button's real size with no fixed dims.
+          isResolving &&
+            "rounded-12 bg-background-tint-02 motion-safe:animate-pulse"
         )}
         aria-busy={isResolving}
       >
