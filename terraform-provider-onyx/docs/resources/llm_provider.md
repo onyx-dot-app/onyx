@@ -16,7 +16,11 @@ An Onyx LLM provider (OpenAI, Anthropic, Azure, Bedrock, ...) with its enabled m
 resource "onyx_llm_provider" "openai" {
   name          = "openai-prod"
   provider_type = "openai"
-  api_key       = var.openai_api_key
+  # api_key is kept in Terraform state. To keep the key out of state, swap in
+  # the write-only pair instead (needs Terraform 1.11 or later):
+  #   api_key_wo         = var.openai_api_key
+  #   api_key_wo_version = 1
+  api_key = var.openai_api_key
 
   # The complete set of enabled models: anything omitted here is
   # removed from the provider on apply.
@@ -44,10 +48,16 @@ resource "onyx_llm_provider" "openai" {
 
 ### Optional
 
+> **NOTE**: [Write-only arguments](https://developer.hashicorp.com/terraform/language/resources/ephemeral#write-only-arguments) are supported in Terraform 1.11 and later.
+
 - `api_base` (String) Custom API base URL (e.g. for Azure or self-hosted gateways).
-- `api_key` (String, Sensitive) Provider API key. The Onyx API masks this on read, so Terraform cannot detect out-of-band changes; the configured value is authoritative.
+- `api_key` (String, Sensitive) Provider API key. The Onyx API masks this on read, so Terraform cannot detect out-of-band changes; the configured value is authoritative. Prefer `api_key_wo`, which keeps the value out of state entirely; the two cannot be set together.
+- `api_key_wo` (String, Sensitive, [Write-only](https://developer.hashicorp.com/terraform/language/resources/ephemeral#write-only-arguments)) Provider API key, held only in configuration. Terraform sends it on every apply and stores nothing, so the key never reaches state. Pair it with `api_key_wo_version` to rotate it. Needs Terraform 1.11 or later.
+- `api_key_wo_version` (Number) Rotation counter for `api_key_wo`. Terraform never stores a write-only value and so cannot tell that the secret changed; raise this number to make the next apply send the current one. Do not derive it from the secret itself — unlike the secret, this number is kept in state.
 - `api_version` (String) API version (Azure).
-- `custom_config` (Map of String, Sensitive) Provider-specific config key/values (e.g. Vertex service-account JSON, Bedrock credentials). Masked on read like `api_key`.
+- `custom_config` (Map of String, Sensitive) Provider-specific config key/values (e.g. Vertex service-account JSON, Bedrock credentials). Masked on read like `api_key`. Prefer `custom_config_wo`, which keeps the value out of state entirely; the two cannot be set together.
+- `custom_config_wo` (Map of String, Sensitive, [Write-only](https://developer.hashicorp.com/terraform/language/resources/ephemeral#write-only-arguments)) Provider-specific config key/values, held only in configuration. Terraform sends them on every apply and stores nothing, so they never reach state. Pair with `custom_config_wo_version` to rotate them. Needs Terraform 1.11 or later.
+- `custom_config_wo_version` (Number) Rotation counter for `custom_config_wo`. Terraform never stores a write-only value and so cannot tell that the secret changed; raise this number to make the next apply send the current one. Do not derive it from the secret itself — unlike the secret, this number is kept in state.
 - `deployment_name` (String) Deployment name (Azure).
 - `force_delete` (Boolean) Allow destroying this provider even while it holds the deployment default model. Defaults to false, where such a destroy fails.
 - `groups` (Set of Number) User group ids the provider is restricted to (EE).

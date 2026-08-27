@@ -70,6 +70,74 @@ provider "onyx" {
 API keys work regardless of the deployment's human `AUTH_TYPE` (basic/OIDC/SAML/cloud),
 and on Onyx Cloud the tenant is embedded in the key itself.
 
+## Keeping secrets out of state
+
+Every secret this provider takes has two forms. The plain attribute is stored in Terraform
+state, where anyone who can read the state file can read the secret. The `_wo` twin is a
+[write-only argument](https://developer.hashicorp.com/terraform/language/resources/ephemeral#write-only-arguments):
+Terraform strips the value from the plan and the state, so it lives only in your
+configuration and never reaches a state file. Prefer the twin.
+
+| Resource | Stored | Write-only |
+| --- | --- | --- |
+| `onyx_llm_provider` | `api_key`, `custom_config` | `api_key_wo`, `custom_config_wo` |
+| `onyx_embedding_provider` | `api_key` | `api_key_wo` |
+| `onyx_credential` | `credential_json` | `credential_json_wo` |
+| `onyx_mcp_server` | `api_token`, `admin_credentials` | `api_token_wo`, `admin_credentials_wo` |
+| `onyx_custom_tool` | `custom_headers` | `custom_headers_wo` |
+
+Set one or the other, never both. `onyx_credential` needs exactly one of the two, because
+the payload is mandatory.
+
+Three secrets have no twin, and cannot get one:
+
+- **`onyx_api_key.api_key`** is the key Onyx mints, not one you supply. Terraform can only
+  hand back a generated value through state. Treat the state file as holding it.
+- **`onyx_mcp_server.auth_template_headers`** is computed — Onyx writes the template itself
+  for a shared token — and Terraform does not allow an argument to be both computed and
+  write-only. Its placeholder values are filled from `admin_credentials_wo`.
+- **The provider's own `api_key`** is provider configuration, which Terraform does not
+  write to state at all. Supply it from `ONYX_API_KEY` rather than in a `.tf` file.
+
+```hcl
+resource "onyx_llm_provider" "openai" {
+  name          = "openai"
+  provider_type = "openai"
+
+  api_key_wo         = var.openai_api_key
+  api_key_wo_version = 1
+
+  model_configurations = [{ name = "gpt-5-mini" }]
+}
+```
+
+Write-only arguments need Terraform 1.11 or later. An older CLI rejects a configuration
+that sets one.
+
+### Rotating a write-only secret
+
+A value Terraform never stores is a value it cannot diff, so changing `api_key_wo` on its
+own plans nothing at all. Each twin has a `_wo_version` counter for this: raise it, and the
+diff that produces makes the next apply send the current secret.
+
+Do not derive the counter from the secret (`md5(var.token)` and friends). Unlike the
+secret, the counter is kept in state.
+
+The counter only decides when an apply is *triggered*. Onyx replaces all fields on update,
+so the provider sends the secret on every apply it runs, whatever moved the plan.
+
+### Two things to know
+
+**`onyx_custom_tool` stops refreshing its headers.** Onyx returns action headers in full
+rather than masked, so `custom_headers` is normally refreshed and out-of-band edits show up
+in `terraform plan`. It cannot do that for `custom_headers_wo` without writing the secret
+into state, so it does not: a header changed in the admin UI goes unreported until the next
+apply overwrites it. This is the one place where the write-only form gives up something.
+
+**Importing takes one extra apply.** Import reads what the server has, so a secret Onyx
+returns unmasked lands in the stored attribute. The first apply against a configuration
+that uses the twin clears it from state and moves the resource onto the write-only path.
+
 ## Known limitations (by API design)
 
 - **Secret drift is undetectable.** The API masks `api_key`/`custom_config` on read, so
@@ -79,13 +147,14 @@ and on Onyx Cloud the tenant is embedded in the key itself.
   reset-settings API and no unset API for the text/vision defaults; destroy removes them
   from state with a warning and leaves the live values alone. The chat-naming default is
   the exception: it has an unset API and is cleared on destroy when managed.
-- **`onyx_embedding_provider` updates replace all fields.** Keep `api_key` in
-  configuration — an update applied without it clears the stored key (the API has no
-  keep-stored-key flag). The currently-active embedding provider also cannot be deleted.
+- **`onyx_embedding_provider` updates replace all fields.** Keep `api_key` (or
+  `api_key_wo`) in configuration — an update applied without it clears the stored key (the
+  API has no keep-stored-key flag). The currently-active embedding provider also cannot be
+  deleted.
 - **`model_configurations` is the list of record.** Models omitted from it are removed
   server-side, and removing the model currently set as deployment default fails — repoint
   `onyx_llm_provider_default` first (references order this correctly).
-- **`onyx_credential` payloads are write-only.** The API always returns `credential_json`
+- **`onyx_credential` payloads are never read back.** The API always returns the payload
   masked, so it is never refreshed or diffed. `admin_public`, `curator_public` and `groups`
   have no update endpoint and force replacement instead.
 - **`onyx_connector` does not own its access control.** `access_type` and `groups` are
