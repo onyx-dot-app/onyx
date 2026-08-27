@@ -103,7 +103,12 @@ export default function CraftPreferencesPage() {
   }
 
   const { mutate: mutateScoped } = useSWRConfig();
-  const { llmProviders, defaultCraft, defaultText } = useAdminLLMProviders();
+  const {
+    llmProviders,
+    defaultCraft,
+    defaultText,
+    isLoading: isLoadingModels,
+  } = useAdminLLMProviders();
   const [isSavingModel, setIsSavingModel] = useState(false);
 
   // Hidden models still resolve, so an admin can clear or replace a default
@@ -251,6 +256,7 @@ export default function CraftPreferencesPage() {
                   disabled={isSavingModel}
                   fallbackToDefault={false}
                   persistSelection={false}
+                  loading={isLoadingModels}
                   placeholder={t("defaultModel.placeholder")}
                 />
                 {isInherited && (

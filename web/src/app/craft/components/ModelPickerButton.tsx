@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { SelectButton } from "@opal/components";
+import { cn } from "@opal/utils";
 import { BuildLLMPopover } from "@/app/craft/components/BuildLLMPopover";
 import { useLLMProviders } from "@/lib/languageModels/hooks";
 import { getModelIcon } from "@/lib/languageModels";
@@ -24,7 +25,15 @@ interface ModelPickerButtonProps {
   // Whether a pick should also be remembered as the user's personal choice.
   // Admin contexts editing a workspace-wide setting pass `false`.
   persistSelection?: boolean;
+  // Set while the caller is still resolving `selection`. The picker also
+  // detects its own provider fetch, so callers only need this when their
+  // selection comes from a separate request.
+  loading?: boolean;
 }
+
+// Figure spaces: hold the pill at roughly a model name's width while loading,
+// so the label swap doesn't shift the row.
+const SKELETON_LABEL = "\u2007".repeat(10);
 
 // Controlled model picker pill matching the main app's ModelSelector.
 export default function ModelPickerButton({
@@ -34,6 +43,7 @@ export default function ModelPickerButton({
   fallbackToDefault = true,
   placeholder = "Select model",
   persistSelection = true,
+  loading = false,
 }: ModelPickerButtonProps) {
   const { llmProviders, defaultText, defaultCraft } = useLLMProviders();
   const { user } = useUser();
@@ -56,6 +66,10 @@ export default function ModelPickerButton({
       defaultText,
     ]
   );
+
+  // A placeholder here would read as "unset" while the value is merely
+  // unknown, so hold the skeleton until the providers land.
+  const isResolving = loading || !llmProviders;
 
   const displayName = useMemo(() => {
     if (!effective) return placeholder;
@@ -81,15 +95,21 @@ export default function ModelPickerButton({
       disabled={disabled}
       persistSelection={persistSelection}
     >
-      <div className="inline-flex">
+      <div
+        className={cn(
+          "inline-flex",
+          isResolving && "motion-safe:animate-pulse"
+        )}
+        aria-busy={isResolving}
+      >
         <SelectButton
-          icon={ModelIcon}
+          icon={isResolving ? undefined : ModelIcon}
           state="empty"
           variant="select-input"
           size="lg"
-          disabled={disabled}
+          disabled={disabled || isResolving}
         >
-          {displayName}
+          {isResolving ? SKELETON_LABEL : displayName}
         </SelectButton>
       </div>
     </BuildLLMPopover>
