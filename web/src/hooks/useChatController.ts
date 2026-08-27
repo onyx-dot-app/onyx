@@ -85,7 +85,7 @@ import { ProjectFile, useProjectsContext } from "@/lib/projects/providers";
 import { useIncognito } from "@/providers/IncognitoProvider";
 import { useAppParams } from "@/hooks/appNavigation";
 import { projectFilesToFileDescriptors } from "@/lib/projects/utils";
-import type { SearchFilters } from "@/lib/searchFilters/types";
+import { useSharedSearchFilters } from "@/lib/searchFilters/providers";
 
 const SYSTEM_MESSAGE_ID = -3;
 
@@ -117,7 +117,6 @@ interface RegenerationRequest {
 }
 
 interface UseChatControllerProps {
-  filterManager: SearchFilters;
   llmManager: LlmManager;
   activeAgent: MinimalAgent | undefined;
   availableAgents: MinimalAgent[];
@@ -141,7 +140,6 @@ async function stopChatSession(chatSessionId: string): Promise<void> {
 }
 
 export default function useChatController({
-  filterManager,
   llmManager,
   availableAgents,
   activeAgent,
@@ -149,6 +147,7 @@ export default function useChatController({
   selectedDocuments,
   resetInputBar,
 }: UseChatControllerProps) {
+  const searchFilters = useSharedSearchFilters();
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -1058,10 +1057,10 @@ export default function useChatController({
           })(),
           chatSessionId: currChatSessionId,
           filters: buildFilters(
-            filterManager.selectedSources,
-            filterManager.selectedDocumentSets,
-            filterManager.timeRange,
-            filterManager.selectedTags
+            searchFilters.selectedSources,
+            searchFilters.selectedDocumentSets,
+            searchFilters.timeRange,
+            searchFilters.selectedTags
           ),
           modelProvider: isMultiModel
             ? undefined
@@ -1469,10 +1468,10 @@ export default function useChatController({
     },
     [
       // Narrow to stable fields from managers to avoid re-creation
-      filterManager.selectedSources,
-      filterManager.selectedDocumentSets,
-      filterManager.selectedTags,
-      filterManager.timeRange,
+      searchFilters.selectedSources,
+      searchFilters.selectedDocumentSets,
+      searchFilters.selectedTags,
+      searchFilters.timeRange,
       llmManager.currentLlm,
       llmManager.temperature,
       llmManager.hasTemperatureOverride,

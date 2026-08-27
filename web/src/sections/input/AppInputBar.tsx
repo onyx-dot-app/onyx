@@ -71,7 +71,6 @@ import {
 } from "@/app/app/stores/useChatSessionStore";
 import QueuedMessageBar from "@/sections/input/QueuedMessageBar";
 import { handleInputNavKeys } from "@/sections/input/inputBarKeys";
-import type { SearchFilters } from "@/lib/searchFilters/types";
 
 export interface AppInputBarHandle {
   reset: () => void;
@@ -91,7 +90,6 @@ export interface AppInputBarProps {
   activeAgent: MinimalAgent | undefined;
 
   handleFileUpload: (files: File[]) => void;
-  filterManager: SearchFilters;
   deepResearchEnabled: boolean;
   setPresentingDocument?: (document: MinimalOnyxDocument) => void;
   toggleDeepResearch: () => void;
@@ -106,7 +104,6 @@ export interface AppInputBarProps {
 
 const AppInputBar = React.memo(
   ({
-    filterManager,
     initialMessage = "",
     stopGenerating,
     onSubmit,
@@ -654,7 +651,6 @@ const AppInputBar = React.memo(
               <ToolsPopover
                 key={activeAgent.id}
                 agent={activeAgent}
-                filterManager={filterManager}
                 disabled={disabled}
               />
             )}
