@@ -126,6 +126,21 @@ export class IndexSettingsPage {
       .fill(creds.deploymentName);
   }
 
+  async fillOpenAICompatibleCredentials(creds: {
+    apiBaseUrl: string;
+    apiKey: string;
+  }): Promise<void> {
+    await this.activeSetupModal.locator("#apiUrl").fill(creds.apiBaseUrl);
+    await this.activeSetupModal.locator("#apiKey").fill(creds.apiKey);
+  }
+
+  /** Optional Matryoshka trim field, offered only while creating a provider. */
+  async fillReducedDimension(reducedDimension: number): Promise<void> {
+    await this.activeSetupModal
+      .locator("#reducedDimension")
+      .fill(String(reducedDimension));
+  }
+
   async fillModelSpec(spec: {
     modelName: string;
     modelDim: number;

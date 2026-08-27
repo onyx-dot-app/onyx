@@ -1,4 +1,4 @@
-import { SvgHardDrive } from "@opal/icons";
+import { SvgHardDrive, SvgPlug } from "@opal/icons";
 import {
   SvgAzure,
   SvgCohere,
@@ -164,6 +164,14 @@ export const CLOUD_BASED_PROVIDERS: EmbeddingProvider[] = [
     displayName: "LiteLLM",
     icon: SvgLitellm,
     apiLink: "https://docs.litellm.ai/docs/proxy/quick_start",
+    embeddingModels: [],
+  },
+  {
+    providerName: EmbeddingProviderName.OPENAI_COMPATIBLE,
+    displayName: "OpenAI-Compatible",
+    icon: SvgPlug,
+    docsLink:
+      "https://platform.openai.com/docs/api-reference/embeddings/create",
     embeddingModels: [],
   },
   {

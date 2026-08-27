@@ -4649,6 +4649,7 @@
       "fields": {
         "apiKey": {
           "description": "モデルにアクセスするには、{provider} の [API キー]({link}) を貼り付けてください。",
+          "descriptionNoLink": "モデルにアクセスするには、{provider} エンドポイントの API キーを貼り付けてください。",
           "title": "API キー"
         },
         "googleCredentials": {
@@ -4795,6 +4796,20 @@
           "label": "一時的に利用不可"
         },
         "title": "マルチパスインデックス"
+      },
+      "openaiCompatible": {
+        "apiUrl": {
+          "description": "OpenAI 互換エンドポイントのベース URL（例: http://localhost:8000/v1）。Onyx が /embeddings パスを追加します。",
+          "title": "API ベース URL"
+        },
+        "modelName": {
+          "description": "Onyx は OpenAI 互換エンドポイント上のこのモデルに接続します。"
+        },
+        "reducedDimension": {
+          "description": "モデルに短いベクトルを要求します。これは Matryoshka Representation Learning に対応したモデルでのみ動作します。短いベクトルは保存容量が少なく、検索も高速です。空欄にすると、モデル本来のサイズを使用します。",
+          "placeholder": "例: 1024",
+          "title": "埋め込みの次元数"
+        }
       },
       "progressBanner": {
         "attentionButton": {

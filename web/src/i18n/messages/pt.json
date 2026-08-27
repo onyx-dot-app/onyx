@@ -4649,6 +4649,7 @@
       "fields": {
         "apiKey": {
           "description": "Cole sua [chave de API]({link}) do {provider} para acessar seus modelos.",
+          "descriptionNoLink": "Cole a chave de API do seu endpoint {provider} para acessar seus modelos.",
           "title": "Chave de API"
         },
         "googleCredentials": {
@@ -4795,6 +4796,20 @@
           "label": "temporariamente indisponível"
         },
         "title": "Indexação multipass"
+      },
+      "openaiCompatible": {
+        "apiUrl": {
+          "description": "URL base do seu endpoint compatível com OpenAI, por exemplo http://localhost:8000/v1. O Onyx adiciona o caminho /embeddings.",
+          "title": "URL base da API"
+        },
+        "modelName": {
+          "description": "O Onyx se conectará a este modelo no seu endpoint compatível com OpenAI."
+        },
+        "reducedDimension": {
+          "description": "Solicite vetores mais curtos ao modelo. Isso funciona apenas com modelos que suportam Matryoshka Representation Learning. Vetores mais curtos ocupam menos espaço e são pesquisados mais rápido. Deixe vazio para usar o tamanho completo do modelo.",
+          "placeholder": "ex.: 1024",
+          "title": "Dimensões do embedding"
+        }
       },
       "progressBanner": {
         "attentionButton": {
