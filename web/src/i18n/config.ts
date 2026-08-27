@@ -3,7 +3,16 @@
 // Must stay in sync with the backend `SupportedLanguage` enum in
 // backend/onyx/db/enums.py — config.test.ts pins this list, and
 // `PATCH /user/language` rejects values outside that enum.
-export const SUPPORTED_LOCALES = ["en", "es", "pt", "fr", "de"] as const;
+export const SUPPORTED_LOCALES = [
+  "en",
+  "es",
+  "pt",
+  "fr",
+  "de",
+  "ja",
+  "zh",
+  "ko",
+] as const;
 
 export type Locale = (typeof SUPPORTED_LOCALES)[number];
 
@@ -23,6 +32,9 @@ export const LOCALE_ENDONYMS = {
   pt: "Português",
   fr: "Français",
   de: "Deutsch",
+  ja: "日本語",
+  zh: "简体中文",
+  ko: "한국어",
 } satisfies Record<Locale, string>;
 
 export function isSupportedLocale(

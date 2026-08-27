@@ -12,7 +12,10 @@ import type de from "@/i18n/messages/de.json";
 import type en from "@/i18n/messages/en.json";
 import type es from "@/i18n/messages/es.json";
 import type fr from "@/i18n/messages/fr.json";
+import type ja from "@/i18n/messages/ja.json";
+import type ko from "@/i18n/messages/ko.json";
 import type pt from "@/i18n/messages/pt.json";
+import type zh from "@/i18n/messages/zh.json";
 
 /** Compiles only when `Catalog` has every key of `Shape`, same nesting. */
 type Covers<Catalog extends Shape, Shape> = Catalog;
@@ -33,4 +36,16 @@ export type FrenchParity = [
 export type GermanParity = [
   Covers<typeof de, typeof en>,
   Covers<typeof en, typeof de>,
+];
+export type JapaneseParity = [
+  Covers<typeof ja, typeof en>,
+  Covers<typeof en, typeof ja>,
+];
+export type SimplifiedChineseParity = [
+  Covers<typeof zh, typeof en>,
+  Covers<typeof en, typeof zh>,
+];
+export type KoreanParity = [
+  Covers<typeof ko, typeof en>,
+  Covers<typeof en, typeof ko>,
 ];
