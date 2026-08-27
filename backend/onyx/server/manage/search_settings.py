@@ -159,27 +159,14 @@ def set_new_search_settings(
     if new_search_settings_request.index_name is not None:
         _guard_index_name_reuse(db_session, new_search_settings_request.index_name)
 
-    # Reclaim intent for the current PRESENT (the future PAST): after swap, reclaim the old
-    # index + delete the consented not-ported cc_pairs. Resolved server-side BEFORE creating
-    # the FUTURE / its index so a consent rejection can't orphan one. Stamping only sets
-    # columns on PRESENT; it commits with the FUTURE at the atomic commit below.
-    wont_port_cc_pair_ids = compute_wont_port_cc_pair_ids(
-        db_session, search_settings_new.switchover_type
+    # Resolved server-side BEFORE creating the FUTURE / its index so a consent rejection
+    # can't orphan one. Only sets columns on PRESENT; they commit with the FUTURE below.
+    _apply_reclaim_intent(
+        db_session,
+        search_settings,
+        search_settings_new.switchover_type,
+        search_settings_new.acknowledged_wont_port_cc_pair_ids,
     )
-    consented_deletions = _resolve_consented_deletions(
-        search_settings_new.acknowledged_wont_port_cc_pair_ids, wont_port_cc_pair_ids
-    )
-    if consented_deletions is None:
-        # Not-ported connectors exist but the caller sent no acknowledgment (e.g. the
-        # pre-consent-modal frontend). Skip reclaim entirely — reclaiming the old index
-        # would drop their data (its only copy) without consent.
-        logger.warning(
-            "Reindex has %d not-ported cc_pair(s) but no consent acknowledgment; "
-            "skipping old-index reclaim.",
-            len(wont_port_cc_pair_ids),
-        )
-    else:
-        set_reclaim_intent_on_current__no_commit(db_session, consented_deletions)
 
     secondary_search_settings = get_secondary_search_settings(db_session)
 
@@ -286,6 +273,36 @@ def _guard_index_name_reuse(db_session: Session, index_name: str) -> None:
             "hasn't been reclaimed. Wait for reclamation to finish, or remove that index, "
             "before starting the reindex.",
         )
+
+
+def _apply_reclaim_intent(
+    db_session: Session,
+    present: SearchSettings,
+    switchover_type: SwitchoverType,
+    acknowledged_wont_port_cc_pair_ids: list[int] | None,
+) -> None:
+    """Record what the post-swap reclaim may do to the current PRESENT (the future PAST):
+    reclaim the old index and delete the consented not-ported cc_pairs, or nothing.
+
+    Always writes. A reindex this one supersedes may have stamped intent on this same
+    PRESENT, so declining to reclaim has to clear that set — leaving it standing would let
+    this swap delete connectors the admin never consented to for it. Caller commits."""
+    wont_port_cc_pair_ids = compute_wont_port_cc_pair_ids(db_session, switchover_type)
+    consented_deletions = _resolve_consented_deletions(
+        acknowledged_wont_port_cc_pair_ids, wont_port_cc_pair_ids
+    )
+    if consented_deletions is None:
+        # Not-ported connectors exist but the caller sent no acknowledgment (e.g. the
+        # pre-consent-modal frontend). Reclaiming the old index would drop their data —
+        # its only copy — without consent.
+        logger.warning(
+            "Reindex has %d not-ported cc_pair(s) but no consent acknowledgment; "
+            "skipping old-index reclaim.",
+            len(wont_port_cc_pair_ids),
+        )
+        clear_reclaim_intent__no_commit(db_session, present.id)
+        return
+    set_reclaim_intent_on_current__no_commit(db_session, consented_deletions)
 
 
 def _resolve_consented_deletions(

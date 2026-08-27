@@ -366,6 +366,34 @@ def test_resolve_consent_no_acknowledgment_skips_reclaim() -> None:
     assert search_settings_api._resolve_consented_deletions(None, [1, 2]) is None
 
 
+def test_no_acknowledgment_clears_intent_left_by_a_superseded_reindex(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> None:
+    """A reindex that supersedes one which already stamped consent, and carries no
+    acknowledgment of its own, must clear the earlier intent. Both stamp the same PRESENT
+    row, so a surviving set would let the new swap delete connectors the admin never
+    consented to for it. Rolled back, never committed."""
+    invalid = _make_cc_pair_with_status(
+        db_session, ConnectorCredentialPairStatus.INVALID
+    )
+    present = get_current_search_settings(db_session)
+    try:
+        set_reclaim_intent_on_current__no_commit(db_session, [101, 202])
+        assert present.reclaim_status == IndexReclaimStatus.PENDING
+
+        # The replacement: an INVALID cc_pair won't port, and no acknowledgment is sent.
+        search_settings_api._apply_reclaim_intent(
+            db_session, present, SwitchoverType.REINDEX, None
+        )
+
+        assert present.reclaim_status is None
+        assert present.pending_cc_pair_deletions is None
+    finally:
+        db_session.rollback()
+        cleanup_cc_pair(db_session, invalid)
+
+
 def test_resolve_consent_acknowledged_covers_returns_set() -> None:
     """Acknowledged covers the server set (incl. the safe drift where a consented connector
     re-activated) -> stamp the server set."""
