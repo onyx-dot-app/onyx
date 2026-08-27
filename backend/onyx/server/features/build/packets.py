@@ -96,6 +96,8 @@ class ArtifactPacket(BasePacket):
     Carries the full row, unlike the ids-only approval packet, so a consumer
     can render a card with no round trip. The version is pinned at announce
     time and the index refetch at turn end is the completeness guarantee.
+    No shipped client parses this type yet: clients ignore unknown packet
+    types by design, and the consumer lands with the output panel frontend.
     """
 
     type: Literal["artifact"] = "artifact"
