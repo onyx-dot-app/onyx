@@ -4,12 +4,11 @@ A scoped group manager reaches the report endpoints via ``allow_scope`` GATE 1.
 GATE 2 splits by scope: the credential scope follows credential visibility
 (creator-only for scoped managers), while the connector scope follows pairing
 visibility alone, bound to the caller's MANAGED scope -- read visibility would
-surface pairing outcomes (verdicts, probe errors, config hash) from every
-public or sync pairing, and is skipped entirely for READ_CONNECTORS holders.
-Pairing visibility does not require credential visibility: whoever manages the
-pairing may read its outcomes, as on the cc-pair detail endpoint.
-Failed-creation orphan rows (no cc-pair was ever created) stay a
-global-manager support surface.
+surface pairing outcomes (verdicts, probe errors, config hash) from every public
+or sync pairing, and is skipped entirely for READ_CONNECTORS holders. Pairing
+visibility does not require credential visibility: whoever manages the pairing
+may read its outcomes, as on the cc-pair detail endpoint. Failed-creation orphan
+rows (no cc-pair was ever created) stay a global-manager support surface.
 """
 
 import os
@@ -31,15 +30,50 @@ from tests.integration.common_utils.managers.connector import ConnectorManager
 from tests.integration.common_utils.managers.credential import CredentialManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
-from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.test_models import DATestUser, DATestUserGroup
 
 _CONNECTOR_CONFIG: dict[str, Any] = {"channels": ["general"]}
 
 _REPORTS_FOR_SOURCE_URL = f"{API_SERVER_URL}/manage/admin/credential/capability-reports"
 
 
+def _bootstrap_scoped_manager(
+    admin_user: DATestUser, suffix: str
+) -> tuple[DATestUser, DATestUserGroup]:
+    """
+    Creates a scoped manager and their managed group, synced and ready to pair.
+    """
+    manager = UserManager.create(name=f"scoped_manager_{suffix}")
+    managed_group = UserGroupManager.create(
+        name=f"managed_group_{suffix}",
+        user_ids=[manager.id],
+        cc_pair_ids=[],
+        user_performing_action=admin_user,
+    )
+    UserGroupManager.wait_for_sync(
+        user_groups_to_check=[managed_group],
+        user_performing_action=admin_user,
+    )
+    set_manager_response = UserGroupManager.set_manager(
+        user_group=managed_group,
+        user=manager,
+        is_manager=True,
+        user_performing_action=admin_user,
+    )
+    assert set_manager_response.status_code == 200
+    # Group edits mark the group as syncing; cc-pair creation refuses to relate
+    # a group mid-sync, so wait again before pairing.
+    UserGroupManager.wait_for_sync(
+        user_groups_to_check=[managed_group],
+        user_performing_action=admin_user,
+    )
+    return manager, managed_group
+
+
 def _seed_report_row(credential_id: int, connector_id: int) -> None:
-    """Writes one connector-scoped row the way the production blocking paths do."""
+    """
+    Writes one connector-scoped row the way the production blocking paths do.
+    """
     record_blocking_validation_outcome(
         credential_id=credential_id,
         connector_id=connector_id,
@@ -70,19 +104,14 @@ def _get_report(
 def test_scoped_manager_sees_only_their_groups_pairings(
     admin_user: DATestUser,
 ) -> None:
-    # Precondition. A scoped manager owning a credential probed against four
-    # connectors: paired in their managed group, paired in a foreign group,
-    # paired publicly (read-visible to everyone, managed by nobody here), and
-    # never successfully paired (failed-creation orphan).
-    # Run-unique names keep re-runs against a shared DB collision-free.
+    # Precondition.
+    # A scoped manager owning a credential probed against four connectors:
+    # paired in their managed group, paired in a foreign group, paired publicly
+    # (read-visible to everyone, managed by nobody here), and never successfully
+    # paired (failed-creation orphan). Run-unique names keep re-runs against a
+    # shared DB collision-free.
     suffix = uuid4().hex[:8]
-    manager = UserManager.create(name=f"scoped_manager_{suffix}")
-    managed_group = UserGroupManager.create(
-        name=f"managed_group_{suffix}",
-        user_ids=[manager.id],
-        cc_pair_ids=[],
-        user_performing_action=admin_user,
-    )
+    manager, managed_group = _bootstrap_scoped_manager(admin_user, suffix)
     foreign_group = UserGroupManager.create(
         name=f"foreign_group_{suffix}",
         user_ids=[],
@@ -90,20 +119,7 @@ def test_scoped_manager_sees_only_their_groups_pairings(
         user_performing_action=admin_user,
     )
     UserGroupManager.wait_for_sync(
-        user_groups_to_check=[managed_group, foreign_group],
-        user_performing_action=admin_user,
-    )
-    set_manager_response = UserGroupManager.set_manager(
-        user_group=managed_group,
-        user=manager,
-        is_manager=True,
-        user_performing_action=admin_user,
-    )
-    assert set_manager_response.status_code == 200
-    # Group edits mark the group as syncing; cc-pair creation refuses to
-    # relate a group mid-sync, so wait again before pairing.
-    UserGroupManager.wait_for_sync(
-        user_groups_to_check=[managed_group, foreign_group],
+        user_groups_to_check=[foreign_group],
         user_performing_action=admin_user,
     )
     credential = CredentialManager.create(
@@ -169,9 +185,10 @@ def test_scoped_manager_sees_only_their_groups_pairings(
     for connector_id in (in_group_connector.id, *hidden_connector_ids):
         _seed_report_row(credential.id, connector_id)
 
-    # Under test and postcondition. The manager sees only the pairing they
-    # manage; everything else -- foreign group, public (merely read-visible),
-    # orphan -- reads as absent, like rows that never existed.
+    # Under test and postcondition.
+    # The manager sees only the pairing they manage; everything else -- foreign
+    # group, public (merely read-visible), orphan -- reads as absent, like rows
+    # that never existed.
     assert _get_report(credential.id, in_group_connector.id, manager) is not None
     for connector_id in hidden_connector_ids:
         assert _get_report(credential.id, connector_id, manager) is None
@@ -188,9 +205,9 @@ def test_scoped_manager_sees_only_their_groups_pairings(
     for connector_id in hidden_connector_ids:
         assert connector_id not in listed_connector_ids
 
-    # A global grant that only implies READ_CONNECTORS (which skips the
-    # cc-pair read filter entirely) must not widen the gate: read visibility
-    # is not management scope.
+    # A global grant that only implies READ_CONNECTORS (which skips the cc-pair
+    # read filter entirely) must not widen the gate: read visibility is not
+    # management scope.
     UserGroupManager.wait_for_sync(
         user_groups_to_check=[managed_group],
         user_performing_action=admin_user,
@@ -218,35 +235,13 @@ def test_scoped_manager_sees_only_their_groups_pairings(
 def test_managed_pairing_is_readable_without_credential_visibility(
     admin_user: DATestUser,
 ) -> None:
-    # Precondition. An admin-created credential paired into the manager's
-    # managed group. The credential filter is creator-only for scoped
-    # managers (``admin_public`` notwithstanding), so the credential itself
-    # is invisible to them; only pairing visibility can admit its report.
+    # Precondition.
+    # An admin-created credential paired into the manager's managed group. The
+    # credential filter is creator-only for scoped managers (``admin_public``
+    # notwithstanding), so the credential itself is invisible to them; only
+    # pairing visibility can admit its report.
     suffix = uuid4().hex[:8]
-    manager = UserManager.create(name=f"scoped_manager_{suffix}")
-    managed_group = UserGroupManager.create(
-        name=f"managed_group_{suffix}",
-        user_ids=[manager.id],
-        cc_pair_ids=[],
-        user_performing_action=admin_user,
-    )
-    UserGroupManager.wait_for_sync(
-        user_groups_to_check=[managed_group],
-        user_performing_action=admin_user,
-    )
-    set_manager_response = UserGroupManager.set_manager(
-        user_group=managed_group,
-        user=manager,
-        is_manager=True,
-        user_performing_action=admin_user,
-    )
-    assert set_manager_response.status_code == 200
-    # Group edits mark the group as syncing; cc-pair creation refuses to
-    # relate a group mid-sync, so wait again before pairing.
-    UserGroupManager.wait_for_sync(
-        user_groups_to_check=[managed_group],
-        user_performing_action=admin_user,
-    )
+    manager, managed_group = _bootstrap_scoped_manager(admin_user, suffix)
     credential = CredentialManager.create(
         source=DocumentSource.SLACK,
         admin_public=True,
@@ -269,9 +264,10 @@ def test_managed_pairing_is_readable_without_credential_visibility(
     )
     _seed_report_row(credential.id, connector.id)
 
-    # Under test and postcondition. Pairing visibility alone authorizes the
-    # connector-scoped read; the credential scope stays gated on credential
-    # visibility and reads as inaccessible.
+    # Under test and postcondition.
+    # Pairing visibility alone authorizes the connector-scoped read; the
+    # credential scope stays gated on credential visibility and reads as
+    # inaccessible.
     assert _get_report(credential.id, connector.id, manager) is not None
     credential_scope_response = client.get(
         f"{API_SERVER_URL}/manage/admin/credential/{credential.id}/capability-report",

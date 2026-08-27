@@ -35,7 +35,9 @@ def _report_url(credential_id: int) -> str:
 def _seed_report_row(
     credential_id: int, connector_id: int, source: DocumentSource
 ) -> None:
-    """Writes one connector-scoped row the way the production blocking paths do."""
+    """
+    Writes one connector-scoped row the way the production blocking paths do.
+    """
     record_blocking_validation_outcome(
         credential_id=credential_id,
         connector_id=connector_id,
@@ -94,9 +96,10 @@ def test_scopes_without_rows_return_null(admin_user: DATestUser) -> None:
         source=DocumentSource.SLACK, user_performing_action=admin_user
     )
 
-    # Under test and postcondition. The recorder only writes connector-scoped
-    # rows, so both the credential scope and an unwritten connector scope read
-    # back as null rather than an error.
+    # Under test and postcondition.
+    # The recorder only writes connector-scoped rows, so both the credential
+    # scope and an unwritten connector scope read back as null rather than an
+    # error.
     for params in ({}, {"connector_id": 999_999_999}):
         response = client.get(
             _report_url(credential.id), params=params, headers=admin_user.headers

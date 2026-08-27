@@ -75,13 +75,12 @@ def _connector_pairing_visible(
 
     Global managers see every pairing, including failed-creation orphans whose
     cc-pair was never created (a support surface). Scoped managers see only
-    pairings within their managed scope: the read filter (``get_editable=False``)
-    would admit every public and sync pair, and is skipped outright for
-    READ_CONNECTORS holders, so it must not authorize report internals.
+    pairings within their managed scope: the read filter
+    (``get_editable=False``) would admit every public and sync pair, and is
+    skipped outright for READ_CONNECTORS holders, so it must not authorize
+    report internals.
     """
-    if has_global_permission(user, Permission.MANAGE_CONNECTORS):
-        return True
-    return (
+    return has_global_permission(user, Permission.MANAGE_CONNECTORS) or (
         get_connector_credential_pair_for_user(
             db_session,
             connector_id=connector_id,
@@ -175,15 +174,17 @@ def list_capability_reports_for_source(
                 processing_mode=None,
             )
         }
-    rows = []
-    for row in get_capability_report_rows_for_source(db_session, source):
+
+    def is_visible(row: CredentialCapabilityReportRow) -> bool:
         if row.connector_id is None:
-            visible = row.credential_id in visible_credential_ids
-        else:
-            visible = (
-                visible_pairings is None
-                or (row.connector_id, row.credential_id) in visible_pairings
-            )
-        if visible:
-            rows.append(row)
-    return [CapabilityReportSnapshot.from_row(row) for row in rows]
+            return row.credential_id in visible_credential_ids
+        return (
+            visible_pairings is None
+            or (row.connector_id, row.credential_id) in visible_pairings
+        )
+
+    return [
+        CapabilityReportSnapshot.from_row(row)
+        for row in get_capability_report_rows_for_source(db_session, source)
+        if is_visible(row)
+    ]
