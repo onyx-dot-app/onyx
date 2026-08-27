@@ -157,6 +157,17 @@ RUN python -c "import nltk; \
 RUN python -c "import tiktoken; \
 tiktoken.get_encoding('cl100k_base')"
 
+# Pre-downloading tree-sitter grammars for setups with limited egress. One
+# request caches an archive of every language, and each grammar is extracted
+# from it on demand, so a read-only /app/.cache needs a volume mounted there.
+# get_parser is the check: it raises if the archive did not arrive.
+RUN python -c "from tree_sitter_language_pack import get_parser, prefetch; \
+prefetch(['python']); \
+get_parser('python')"
+
+# The runtime user (uid 1001) reads everything cached above.
+RUN chown -R onyx:onyx /app/.cache /app/nltk_data
+
 # Set up application files
 WORKDIR /app
 
@@ -187,20 +198,6 @@ RUN chmod +x /app/scripts/supervisord_entrypoint.sh
 COPY --chown=onyx:onyx ./assets /app/assets
 
 ENV PYTHONPATH=/app
-
-# Pre-downloading tree-sitter grammars for setups with limited egress.
-# tree-sitter-language-pack ships none: the first call fetches one bundle for
-# every language, then extracts from it offline. The cache path embeds the
-# pack version, so the assertion fails the build when a bump leaves it stale.
-RUN python -c "import sys; \
-from onyx.connectors.cross_connector_utils.code_file_utils import DEFAULT_CODE_GRAMMARS; \
-from tree_sitter_language_pack import prefetch, downloaded_languages, cache_dir; \
-wanted = set(DEFAULT_CODE_GRAMMARS); \
-prefetch(sorted(wanted)); \
-missing = sorted(wanted - set(downloaded_languages())); \
-sys.exit(f'grammars missing from {cache_dir()}: {missing}') if missing else \
-print(f'cached {len(wanted)} grammars in {cache_dir()}')" && \
-    chown -R onyx:onyx /app/.cache /app/nltk_data
 
 # Default ONYX_VERSION, typically overriden during builds by GitHub Actions.
 ARG ONYX_VERSION=0.0.0-dev

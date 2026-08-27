@@ -39,59 +39,46 @@ SENSITIVE_FILE_PATTERNS = (
     "*.kdbx",
 )
 
-# Grammars the image build extracts ahead of time. Anything outside this set
-# still extracts on demand from the same bundle. Names are checked against the
-# pack's manifest by a unit test.
-DEFAULT_CODE_GRAMMARS = (
-    "bash",
-    "c",
-    "cpp",
-    "csharp",
-    "css",
-    "dockerfile",
-    "go",
-    "gomod",
-    "graphql",
-    "hcl",
-    "html",
-    "ini",
-    "java",
-    "javascript",
-    "json",
-    "kotlin",
-    "lua",
-    "make",
-    "markdown",
-    "php",
-    "powershell",
-    "proto",
-    "python",
-    "ruby",
-    "rust",
-    "scala",
-    "scss",
-    "sql",
-    "swift",
-    "terraform",
-    "toml",
-    "tsx",
-    "typescript",
-    "xml",
-    "yaml",
-)
+# Grammars the pack resolves for prose and tabular formats. They parse, but
+# their chunk boundaries mean nothing for retrieval, and .csv/.tsv have a
+# TabularSection path built for them. Subtracted so each connector does not
+# have to rediscover that .txt resolves to the Vim help-file grammar.
+NON_CODE_LANGUAGES = frozenset({"vimdoc", "rst", "csv", "tsv"})
+
+
+# The pack's registry is extension-only, so the canonical extensionless names
+# resolve to nothing even though their grammars ship with it.
+BASENAME_LANGUAGES = {
+    "makefile": "make",
+    "gnumakefile": "make",
+    "dockerfile": "dockerfile",
+    "containerfile": "dockerfile",
+    "cmakelists.txt": "cmake",
+    "gemfile": "ruby",
+    "rakefile": "ruby",
+    "brewfile": "ruby",
+}
 
 
 def infer_code_language(file_path: str | None) -> str | None:
     """Grammar name for a path, from tree-sitter-language-pack's extension
-    registry. None when the path is empty or the extension is unknown.
+    registry plus the extensionless names it does not cover. None when the
+    path is empty or nothing matches.
 
     A grammar lookup, not a code-vs-prose judgment: prose formats with
     grammars (e.g. .md -> markdown) return that grammar. Callers decide what
-    to exclude — connectors subtract their own document extensions, and both
-    connectors and the chunker call `is_sensitive_code_file` themselves.
+    to exclude — they subtract their own document extensions and
+    NON_CODE_LANGUAGES, and call `is_sensitive_code_file` themselves.
     """
     if not file_path:
         return None
+    basename = PurePosixPath(file_path.replace("\\", "/")).name.lower()
+    known = BASENAME_LANGUAGES.get(basename)
+    if known is not None:
+        return known
+    # Dockerfile.dev / Dockerfile.prod and the like.
+    if basename.startswith("dockerfile."):
+        return "dockerfile"
     # Local import: keeps the language pack off the connector import path.
     from tree_sitter_language_pack import detect_language_from_path
 

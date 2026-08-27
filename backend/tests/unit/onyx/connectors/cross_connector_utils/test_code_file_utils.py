@@ -2,7 +2,6 @@ import pytest
 from tree_sitter_language_pack import manifest_languages
 
 from onyx.connectors.cross_connector_utils.code_file_utils import (
-    DEFAULT_CODE_GRAMMARS,
     SENSITIVE_FILE_LANGUAGES,
     infer_code_language,
     is_sensitive_code_file,
@@ -12,22 +11,8 @@ from onyx.connectors.cross_connector_utils.code_file_utils import (
 def test_sensitive_languages_are_real_grammars() -> None:
     """A pack upgrade that renames a guarded grammar would make its entry
     dead — and credential files would silently start indexing. Fail here."""
-    manifest = set(manifest_languages())
-    unknown = SENSITIVE_FILE_LANGUAGES - manifest
+    unknown = SENSITIVE_FILE_LANGUAGES - set(manifest_languages())
     assert not unknown, f"Not grammars in tree-sitter-language-pack: {unknown}"
-
-
-def test_default_grammars_are_real_grammars() -> None:
-    """A name that is not a grammar is prefetched as a no-op, so the worker
-    would still download that language at index time. Fail here instead."""
-    manifest = set(manifest_languages())
-    unknown = set(DEFAULT_CODE_GRAMMARS) - manifest
-    assert not unknown, f"Not grammars in tree-sitter-language-pack: {unknown}"
-
-
-def test_default_grammars_exclude_credential_formats() -> None:
-    """Prefetching a guarded grammar would suggest those files are indexable."""
-    assert not set(DEFAULT_CODE_GRAMMARS) & SENSITIVE_FILE_LANGUAGES
 
 
 @pytest.mark.parametrize(
@@ -104,3 +89,32 @@ def test_credential_files_are_refused(path: str) -> None:
 def test_ordinary_files_are_not_refused(path: str) -> None:
     """The patterns must not swallow normal source files."""
     assert is_sensitive_code_file(path) is False
+
+
+@pytest.mark.parametrize(
+    "path,expected",
+    [
+        ("Makefile", "make"),
+        ("GNUmakefile", "make"),
+        ("Dockerfile", "dockerfile"),
+        ("Dockerfile.dev", "dockerfile"),
+        ("Containerfile", "dockerfile"),
+        ("CMakeLists.txt", "cmake"),
+        ("Gemfile", "ruby"),
+        ("deep/dir/Makefile", "make"),
+    ],
+)
+def test_extensionless_code_files_resolve(path: str, expected: str) -> None:
+    """The pack's registry is extension-only, so these canonical names —
+    which is how repositories actually spell them — resolve to nothing
+    without the basename map."""
+    assert infer_code_language(path) == expected
+
+
+@pytest.mark.parametrize(
+    "path", ["a.txt", "requirements.txt", "a.csv", "a.tsv", "a.rst"]
+)
+def test_prose_and_tabular_files_are_not_code(path: str) -> None:
+    """.txt resolves to the Vim help-file grammar and .csv/.tsv have their own
+    tabular path; chunking them as code produces meaningless boundaries."""
+    assert infer_code_language(path) is None
