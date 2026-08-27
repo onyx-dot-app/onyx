@@ -301,8 +301,13 @@ def set_reclaim_intent_on_current__no_commit(
     """Mark the current PRESENT index (the future PAST) for reclamation at reindex
     submit. Stores the consented not-ported cc_pairs. No-op if there is no PRESENT.
     Caller commits (atomically with FUTURE creation)."""
+    # Nothing enforces a single PRESENT row any more, so this has to order like
+    # get_current_search_settings or it stamps the consent set on a row that never
+    # becomes the old index.
     present = db_session.scalar(
-        select(SearchSettings).where(SearchSettings.status == IndexModelStatus.PRESENT)
+        select(SearchSettings)
+        .where(SearchSettings.status == IndexModelStatus.PRESENT)
+        .order_by(SearchSettings.id.desc())
     )
     if present is None:
         return

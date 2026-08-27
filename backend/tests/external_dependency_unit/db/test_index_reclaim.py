@@ -18,6 +18,7 @@ in test_index_reclaim_task.py; here we cover the guards + query logic):
   cc_pair the admin never acknowledged
 """
 
+from collections.abc import Generator
 from uuid import uuid4
 
 import pytest
@@ -55,7 +56,7 @@ from tests.external_dependency_unit.indexing_helpers import (
 )
 
 
-def _make_past_settings(
+def _make_settings(
     db_session: Session,
     reclaim_status: IndexReclaimStatus | None = None,
     *,
@@ -80,6 +81,30 @@ def _make_past_settings(
         db_session.commit()
         db_session.refresh(ss)
     return ss
+
+
+@pytest.fixture
+def present_search_settings(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> Generator[SearchSettings, None, None]:
+    """A PRESENT row for the tests that stamp reclaim intent. The db_session fixture
+    creates none and get_current_search_settings raises without one, so these tests would
+    otherwise depend on whatever the shared database holds. Reuses an existing row rather
+    than adding a second, which would be a state no deployment reaches."""
+    try:
+        existing: SearchSettings | None = get_current_search_settings(db_session)
+    except RuntimeError:
+        existing = None
+    if existing is not None:
+        yield existing
+        return
+
+    created = _make_settings(db_session, None, status=IndexModelStatus.PRESENT)
+    yield created
+    db_session.rollback()
+    db_session.delete(created)
+    db_session.commit()
 
 
 def _make_cc_pair_with_status(
@@ -185,7 +210,7 @@ def test_advance_to_soaking_is_noop_off_source_state(
 ) -> None:
     """A repeat call on an already-SOAKING row must not re-stamp the anchor (which
     would extend the soak) — it returns False and leaves the row untouched."""
-    ss = _make_past_settings(db_session)
+    ss = _make_settings(db_session)
     try:
         ss.reclaim_status = IndexReclaimStatus.PENDING
         assert advance_to_soaking__no_commit(ss) is True  # PENDING -> SOAKING, stamps
@@ -206,7 +231,7 @@ def test_clear_reclaim_intent_resets_fields(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
 ) -> None:
-    ss = _make_past_settings(db_session)
+    ss = _make_settings(db_session)
     try:
         ss.reclaim_status = IndexReclaimStatus.PENDING
         ss.pending_cc_pair_deletions = [1, 2, 3]
@@ -235,9 +260,9 @@ def test_fetch_reclaimable_includes_actionable_excludes_blocked(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
 ) -> None:
-    pending = _make_past_settings(db_session)
-    deleting = _make_past_settings(db_session)
-    blocked = _make_past_settings(db_session)
+    pending = _make_settings(db_session)
+    deleting = _make_settings(db_session)
+    blocked = _make_settings(db_session)
     pending.reclaim_status = IndexReclaimStatus.PENDING
     deleting.reclaim_status = IndexReclaimStatus.DELETING
     blocked.reclaim_status = IndexReclaimStatus.BLOCKED
@@ -257,7 +282,7 @@ def test_fetch_reclaimable_respects_limit(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
 ) -> None:
-    rows = [_make_past_settings(db_session) for _ in range(3)]
+    rows = [_make_settings(db_session) for _ in range(3)]
     for row in rows:
         row.reclaim_status = IndexReclaimStatus.PENDING
     db_session.commit()
@@ -288,7 +313,7 @@ def test_guard_reclaimed_past_same_name_is_noop(
 ) -> None:
     """A same-named PAST already RECLAIMED (its index is gone) is safe to reuse."""
     name = f"test_reclaimed_reuse_{uuid4().hex[:8]}"
-    ss = _make_past_settings(db_session, IndexReclaimStatus.RECLAIMED, index_name=name)
+    ss = _make_settings(db_session, IndexReclaimStatus.RECLAIMED, index_name=name)
     try:
         search_settings_api._guard_index_name_reuse(db_session, name)
     finally:
@@ -314,7 +339,7 @@ def test_guard_conflicts_while_index_unreclaimed(
     """Any collision whose index data is still present is refused — reclaim-tracked rows
     AND legacy NULL rows. The guard doesn't touch the row (no synchronous reclaim)."""
     name = f"test_collide_{uuid4().hex[:8]}"
-    ss = _make_past_settings(db_session, reclaim_status, index_name=name)
+    ss = _make_settings(db_session, reclaim_status, index_name=name)
     try:
         with pytest.raises(OnyxError) as exc:
             search_settings_api._guard_index_name_reuse(db_session, name)
@@ -334,11 +359,9 @@ def test_find_unreclaimed_includes_blocked_and_legacy_excludes_reclaimed(
     delete never finished) and a legacy NULL row (pre-feature orphan) both count; only
     RECLAIMED is gone."""
     name = f"test_find_unreclaimed_{uuid4().hex[:8]}"
-    blocked = _make_past_settings(
-        db_session, IndexReclaimStatus.BLOCKED, index_name=name
-    )
-    legacy = _make_past_settings(db_session, None, index_name=name)
-    reclaimed = _make_past_settings(
+    blocked = _make_settings(db_session, IndexReclaimStatus.BLOCKED, index_name=name)
+    legacy = _make_settings(db_session, None, index_name=name)
+    reclaimed = _make_settings(
         db_session, IndexReclaimStatus.RECLAIMED, index_name=name
     )
     try:
@@ -359,7 +382,7 @@ def test_guard_conflicts_while_superseded_future_still_holds_the_name(
     """Resubmitting the same model while a reindex is in flight computes the identical
     index_name, and that FUTURE is only flipped to PAST later in the submit."""
     name = f"test_reclaim_inflight_{uuid4().hex[:8]}"
-    future = _make_past_settings(
+    future = _make_settings(
         db_session, None, index_name=name, status=IndexModelStatus.FUTURE
     )
     try:
@@ -378,7 +401,7 @@ def test_abandoned_future_becomes_reclaimable(
     """Left at NULL the row is invisible to the reclaim task but still blocks the
     name-reuse guard, so its index name would never become usable again."""
     name = f"test_reclaim_abandoned_{uuid4().hex[:8]}"
-    abandoned = _make_past_settings(
+    abandoned = _make_settings(
         db_session, None, index_name=name, status=IndexModelStatus.FUTURE
     )
     try:
@@ -401,7 +424,7 @@ def test_abandoned_future_intent_never_overwrites_a_real_consent_set(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
 ) -> None:
-    ss = _make_past_settings(db_session, IndexReclaimStatus.PENDING)
+    ss = _make_settings(db_session, IndexReclaimStatus.PENDING)
     try:
         ss.pending_cc_pair_deletions = [7, 9]
         db_session.commit()
@@ -433,6 +456,7 @@ def test_resolve_consent_no_acknowledgment_skips_reclaim() -> None:
 def test_no_acknowledgment_clears_intent_left_by_a_superseded_reindex(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
+    present_search_settings: SearchSettings,  # noqa: ARG001
 ) -> None:
     """A reindex that supersedes one which already stamped consent, and carries no
     acknowledgment of its own, must clear the earlier intent. Both stamp the same PRESENT
@@ -478,6 +502,7 @@ def test_resolve_consent_rejects_unacknowledged_deletion() -> None:
 def test_set_reclaim_intent_marks_present_pending(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
+    present_search_settings: SearchSettings,  # noqa: ARG001
 ) -> None:
     """Consent capture stamps PENDING + the consented cc_pair ids on the current PRESENT
     (the future PAST). Asserted in-session then rolled back — never committed — so the
