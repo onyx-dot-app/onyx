@@ -6,7 +6,10 @@ import requests
 from onyx.configs.app_configs import INDEX_BATCH_SIZE, REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rate_limit_builder
-from onyx.connectors.document360.utils import flatten_child_categories
+from onyx.connectors.document360.utils import (
+    flatten_child_categories,
+    parse_document360_datetime,
+)
 from onyx.connectors.interfaces import (
     GenerateDocumentsOutput,
     LoadConnector,
@@ -129,12 +132,12 @@ class Document360Connector(LoadConnector, PollConnector):
                 f"Articles/{article['id']}", {"langCode": "en"}
             )
 
-            updated_at = datetime.strptime(
-                article_details["modified_at"], "%Y-%m-%dT%H:%M:%S.%fZ"
-            ).replace(tzinfo=timezone.utc)
-            created_at = datetime.strptime(
-                article_details["created_at"], "%Y-%m-%dT%H:%M:%S.%fZ"
-            ).replace(tzinfo=timezone.utc)
+            updated_at = parse_document360_datetime(
+                article_details["modified_at"]
+            )
+            created_at = parse_document360_datetime(
+                article_details["created_at"]
+            )
             if start is not None and updated_at < start:
                 continue
             if end is not None and updated_at > end:
