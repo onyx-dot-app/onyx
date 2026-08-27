@@ -18,105 +18,11 @@ export function useSearchFilters(): SearchFilters {
   );
   const [selectedTags, setSelectedTags] = useState<Tag[]>([]);
 
-  const getFilterString = useCallback(
-    function () {
-      const params = new URLSearchParams();
-
-      if (timeRange) {
-        params.set("from", timeRange.from.toISOString());
-        params.set("to", timeRange.to.toISOString());
-      }
-
-      if (selectedSources.length > 0) {
-        const sourcesParam = selectedSources
-          .map((source) => encodeURIComponent(source.internalName))
-          .join(",");
-        params.set("sources", sourcesParam);
-      }
-
-      if (selectedDocumentSets.length > 0) {
-        const docSetsParam = selectedDocumentSets
-          .map((ds) => encodeURIComponent(ds))
-          .join(",");
-        params.set("documentSets", docSetsParam);
-      }
-
-      if (selectedTags.length > 0) {
-        const tagsParam = selectedTags
-          .map((tag) => encodeURIComponent(tag.tag_value))
-          .join(",");
-        params.set("tags", tagsParam);
-      }
-
-      const queryString = params.toString();
-      return queryString ? `&${queryString}` : "";
-      // Setters are stable by React's contract, so only the values are deps.
-    },
-    [timeRange, selectedSources, selectedDocumentSets, selectedTags]
-  );
-
   const clearFilters = useCallback(function () {
     setTimeRange(null);
     setSelectedSources([]);
     setSelectedDocumentSets([]);
     setSelectedTags([]);
-  }, []);
-
-  const buildFiltersFromQueryString = useCallback(function (
-    filterString: string,
-    availableSources: SourceMetadata[],
-    availableDocumentSets: string[],
-    availableTags: Tag[]
-  ) {
-    const params = new URLSearchParams(filterString);
-
-    // Parse the "from" parameter as a DateRangePickerValue
-    let newTimeRange: DateRangePickerValue | null = null;
-    const fromParam = params.get("from");
-    const toParam = params.get("to");
-    if (fromParam && toParam) {
-      const fromDate = new Date(fromParam);
-      const toDate = new Date(toParam);
-      if (!isNaN(fromDate.getTime()) && !isNaN(toDate.getTime())) {
-        newTimeRange = { from: fromDate, to: toDate, selectValue: "" };
-      }
-    }
-
-    // Parse sources
-    let newSelectedSources: SourceMetadata[] = [];
-    const sourcesParam = params.get("sources");
-    if (sourcesParam) {
-      const sourceNames = sourcesParam.split(",").map(decodeURIComponent);
-      newSelectedSources = availableSources.filter((source) =>
-        sourceNames.includes(source.internalName)
-      );
-    }
-
-    // Parse document sets
-    let newSelectedDocSets: string[] = [];
-    const docSetsParam = params.get("documentSets");
-    if (docSetsParam) {
-      const docSetNames = docSetsParam.split(",").map(decodeURIComponent);
-      newSelectedDocSets = availableDocumentSets.filter((ds) =>
-        docSetNames.includes(ds)
-      );
-    }
-
-    // Parse tags
-    let newSelectedTags: Tag[] = [];
-    const tagsParam = params.get("tags");
-    if (tagsParam) {
-      const tagValues = tagsParam.split(",").map(decodeURIComponent);
-      newSelectedTags = availableTags.filter((tag) =>
-        tagValues.includes(tag.tag_value)
-      );
-    }
-
-    // Update the selection instead of returning it
-    setTimeRange(newTimeRange);
-    setSelectedSources(newSelectedSources);
-    setSelectedDocumentSets(newSelectedDocSets);
-    setSelectedTags(newSelectedTags);
   }, []);
 
   // Memoized so the identity changes only when a filter does. Consumers read
@@ -133,8 +39,6 @@ export function useSearchFilters(): SearchFilters {
       setSelectedDocumentSets,
       selectedTags,
       setSelectedTags,
-      getFilterString,
-      buildFiltersFromQueryString,
     }),
     [
       clearFilters,
@@ -142,8 +46,6 @@ export function useSearchFilters(): SearchFilters {
       selectedSources,
       selectedDocumentSets,
       selectedTags,
-      getFilterString,
-      buildFiltersFromQueryString,
     ]
   );
 }
