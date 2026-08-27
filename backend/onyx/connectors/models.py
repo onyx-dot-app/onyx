@@ -120,7 +120,11 @@ TextBearingSection = TextSection | CodeSection
 
 
 def is_text_bearing(section: "Section") -> TypeGuard[TextBearingSection]:
-    """Sections whose content is a text string (extend when adding one)."""
+    """Sections whose content is a text string (extend when adding one).
+
+    TabularSection is deliberately excluded: its content is file-backed via
+    csv_file_id, so it carries no inline text to read.
+    """
     return isinstance(section, (TextSection, CodeSection))
 
 

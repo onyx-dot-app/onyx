@@ -645,6 +645,33 @@ def test_document_ingestion_hook_new_section_stays_text() -> None:
     assert isinstance(result[0].sections[0], TextSection)
 
 
+def test_document_ingestion_hook_keeps_linkless_code_sections_as_code() -> None:
+    """A code section with no link cannot be matched by link. Losing its type
+    also loses file_path, which is the only signal the chunker uses to refuse
+    a credential file — so recover it by position instead."""
+    doc = _make_doc(
+        sections=[
+            CodeSection(
+                text="TOKEN=abc\n", link=None, language="dotenv", file_path=".env.local"
+            )
+        ]
+    )
+    with (
+        patch(
+            _PATCH_EXECUTE_HOOK,
+            return_value=DocumentIngestionResponse(
+                sections=[DocumentIngestionSection(text="TOKEN=redacted\n", link=None)]
+            ),
+        ),
+        patch(_PATCH_GET_SESSION),
+    ):
+        result = _apply_document_ingestion_hook([doc])
+
+    section = result[0].sections[0]
+    assert isinstance(section, CodeSection)
+    assert section.file_path == ".env.local"
+
+
 def test_document_ingestion_hook_preserves_image_section_order() -> None:
     """Hook receives all sections including images and controls final ordering."""
     image = ImageSection(image_file_id="img-1", link=None)

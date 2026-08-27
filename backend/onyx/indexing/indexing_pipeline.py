@@ -1132,30 +1132,37 @@ def _apply_document_ingestion_hook(
                 "Document ingestion hook dropped document doc_id=%r: %s", doc.id, reason
             )
             return None
-        # Hook sections carry no type, so a returned code section would come
-        # back as prose and lose syntax chunking; match on link to restore it.
-        # TabularSection cannot be recovered this way — its content lives in
-        # csv_file_id, which the hook never sees.
+        # The hook's sections carry no type. A rewritten code section must
+        # come back as code: as prose it loses syntax chunking and file_path,
+        # which is what the chunker uses to refuse a credential file. Match on
+        # the link the hook kept, else by position when it returned the same
+        # number of sections. TabularSection cannot be recovered either way —
+        # its content lives in csv_file_id, which the hook never sees.
+        originals = list(doc.sections)
+        aligned = len(hook_result.sections) == len(originals)
         code_by_link = {
-            section.link: section
-            for section in doc.sections
-            if isinstance(section, CodeSection) and section.link
+            s.link: s for s in originals if isinstance(s, CodeSection) and s.link
         }
+
         new_sections: list[TextSection | ImageSection | CodeSection] = []
-        for s in hook_result.sections:
+        for index, s in enumerate(hook_result.sections):
             if s.image_file_id is not None:
                 new_sections.append(
                     ImageSection(image_file_id=s.image_file_id, link=s.link)
                 )
             elif s.text is not None:
-                original_code = code_by_link.get(s.link) if s.link else None
-                if original_code is not None:
+                origin = (
+                    code_by_link.get(s.link)
+                    if s.link
+                    else (originals[index] if aligned else None)
+                )
+                if isinstance(origin, CodeSection):
                     new_sections.append(
                         CodeSection(
                             text=s.text,
                             link=s.link,
-                            language=original_code.language,
-                            file_path=original_code.file_path,
+                            language=origin.language,
+                            file_path=origin.file_path,
                         )
                     )
                 else:
@@ -1165,6 +1172,7 @@ def _apply_document_ingestion_hook(
                     "Document ingestion hook returned a section with neither text nor image_file_id for doc_id=%r — skipping section.",
                     doc.id,
                 )
+
         if not new_sections:
             logger.info(
                 "Document ingestion hook produced no valid sections for doc_id=%r — dropping document.",
@@ -1254,18 +1262,22 @@ def _maybe_push_documents(
             doc = doc_map.get(doc_id)
             if doc is None:
                 continue
-            content = " ".join(
-                s.text for s in doc.sections if is_text_bearing(s) and s.text
-            )
+            # Prose only. is_text_bearing now covers CodeSection, but a
+            # deployment that enabled this sink for documents did not agree to
+            # ship repository source off-box, and turning code indexing on
+            # must not change what leaves the deployment.
+            pushable = [
+                s
+                for s in doc.sections
+                if is_text_bearing(s) and not isinstance(s, CodeSection)
+            ]
+            content = " ".join(s.text for s in pushable if s.text)
             payload = DocumentPushPayload(
                 document_id=doc_id,
                 title=doc.title or doc.semantic_identifier,
                 content=content,
                 source=str(doc.source.value) if doc.source else "unknown",
-                url=next(
-                    (s.link for s in doc.sections if is_text_bearing(s) and s.link),
-                    None,
-                ),
+                url=next((s.link for s in pushable if s.link), None),
                 doc_updated_at=(
                     doc.doc_updated_at.isoformat() if doc.doc_updated_at else None
                 ),
