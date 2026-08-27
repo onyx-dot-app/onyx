@@ -343,8 +343,15 @@ class CloudEmbedding:
         self.sanitized_api_key = api_key[:4] + "********" + api_key[-4:]
 
     async def _embed_openai(
-        self, texts: list[str], model: str | None, reduced_dimension: int | None
+        self,
+        texts: list[str],
+        model: str | None,
+        reduced_dimension: int | None,
+        base_url: str | None = None,
     ) -> list[Embedding]:
+        """Embeds via the OpenAI SDK. `base_url` targets an OpenAI-compatible
+        endpoint instead of OpenAI itself; the SDK appends the `/embeddings`
+        path, so it expects a base URL such as `https://host/v1`."""
         if not model:
             model = DEFAULT_OPENAI_MODEL
 
@@ -352,7 +359,9 @@ class CloudEmbedding:
 
         # Use the OpenAI specific timeout for this one
         client = openai.AsyncOpenAI(
-            api_key=self.api_key, timeout=OPENAI_EMBEDDING_TIMEOUT
+            api_key=self.api_key,
+            timeout=OPENAI_EMBEDDING_TIMEOUT,
+            base_url=base_url,
         )
 
         final_embeddings: list[Embedding] = []
@@ -595,6 +604,18 @@ class CloudEmbedding:
         try:
             if self.provider == EmbeddingProvider.OPENAI:
                 return await self._embed_openai(texts, model_name, reduced_dimension)
+            elif self.provider == EmbeddingProvider.OPENAI_COMPATIBLE:
+                if not model_name:
+                    raise ValueError(
+                        "Model name is required for OpenAI-compatible embedding."
+                    )
+                if not self.api_url:
+                    raise ValueError(
+                        "API base URL is required for OpenAI-compatible embedding."
+                    )
+                return await self._embed_openai(
+                    texts, model_name, reduced_dimension, base_url=self.api_url
+                )
             elif self.provider == EmbeddingProvider.AZURE:
                 return await self._embed_azure(texts, f"azure/{deployment_name}")
             elif self.provider == EmbeddingProvider.LITELLM:
@@ -612,7 +633,7 @@ class CloudEmbedding:
             else:
                 raise ValueError(f"Unsupported provider: {self.provider}")
         except openai.AuthenticationError:
-            raise AuthenticationError(provider="OpenAI")
+            raise AuthenticationError(provider=str(self.provider))
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 401:
                 raise AuthenticationError(provider=str(self.provider))
