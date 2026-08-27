@@ -16,18 +16,22 @@ from onyx.indexing.chunking.section_chunker import (
     build_payloads,
 )
 from onyx.natural_language_processing.utils import BaseTokenizer, count_tokens
+from onyx.utils.circuit_breaker import CircuitBreaker
 from onyx.utils.logger import setup_logger
 from onyx.utils.text_processing import clean_code_text
 
 logger = setup_logger()
 
-# Grammars whose load already failed in this process. The pack fetches its
-# bundle on the first miss, and a firewalled network drops those packets
-# rather than refusing them, so each attempt blocks until timeout (60s in
-# testing). Without this an unreachable bundle costs one timeout per file.
-# Process-wide because a Chunker is built per document batch. Holds only
-# language names, so unlike the splitter cache it is safe to share.
-_UNAVAILABLE_GRAMMARS: set[str] = set()
+# Loading a grammar the pack has not cached makes it fetch its bundle, and a
+# firewalled network drops those packets rather than refusing them, so the
+# attempt blocks until timeout (60s in testing). That cost is per call and the
+# cause is shared — one unreachable bundle fails every language — so back off
+# across all of them rather than per language. A grammar that is merely absent
+# fails fast and locally, and has_language() already filters unknown names.
+#
+# Module-level because a Chunker is built per document batch, and shared
+# across worker threads, which the breaker is built for.
+_GRAMMAR_LOADS = CircuitBreaker()
 
 
 class _CodeSpan(NamedTuple):
@@ -211,7 +215,7 @@ class CodeChunker(SectionChunker):
             )
             return None
 
-        if language in _UNAVAILABLE_GRAMMARS:
+        if _GRAMMAR_LOADS.is_open:
             return None
 
         try:
@@ -224,16 +228,18 @@ class CodeChunker(SectionChunker):
                 return_type="texts",
             )
         except Exception:
-            _UNAVAILABLE_GRAMMARS.add(language)
-            logger.warning(
+            failures = _GRAMMAR_LOADS.record_failure()
+            log = logger.warning if failures == 1 else logger.debug
+            log(
                 "Could not load the tree-sitter grammar for language=%s; falling "
-                "back to token splitting for the rest of this process. Grammars "
+                "back to token splitting for now. Grammars "
                 "are extracted from a bundle the image build caches, so this "
                 "means that cache is missing or not writable.",
                 language,
-                exc_info=True,
+                exc_info=failures == 1,
             )
             return None
 
+        _GRAMMAR_LOADS.record_success()
         self._splitters[language] = _CachedSplitter(content_token_limit, splitter)
         return splitter

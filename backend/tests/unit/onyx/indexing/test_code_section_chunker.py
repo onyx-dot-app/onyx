@@ -8,6 +8,7 @@ from onyx.connectors.models import (
 )
 from onyx.indexing.chunking import DocumentChunker, code_section_chunker
 from onyx.indexing.chunking.code_section_chunker import _line_anchored_link
+from onyx.utils.circuit_breaker import CircuitBreaker
 from tests.unit.onyx.indexing.conftest import CHUNK_LIMIT, make_doc
 from tests.unit.onyx.indexing.conftest import (
     make_document_chunker as _make_document_chunker,
@@ -143,12 +144,13 @@ def test_code_text_keeps_punctuation_and_emoji() -> None:
     assert "✅" in chunks[0].content
 
 
-def test_unreachable_grammar_is_attempted_once_per_process(
+def test_unreachable_bundle_is_attempted_a_few_times_not_once_per_file(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A firewalled network blocks each bundle fetch until timeout, so the
-    failure must be remembered rather than repaid for every file."""
-    monkeypatch.setattr(code_section_chunker, "_UNAVAILABLE_GRAMMARS", set())
+    """Each failed load blocks until the fetch times out, and one unreachable
+    bundle fails every language — so the attempts must stop, not repeat per
+    file or per language."""
+    monkeypatch.setattr(code_section_chunker, "_GRAMMAR_LOADS", CircuitBreaker())
     attempts = 0
 
     def _blocked(**_kwargs: object) -> None:
@@ -158,18 +160,26 @@ def test_unreachable_grammar_is_attempted_once_per_process(
 
     monkeypatch.setattr(code_section_chunker, "ChonkieCodeChunker", _blocked)
 
-    section = CodeSection(
-        text="x " * 300,
-        language="python",
-        file_path="a.py",
-        link="https://git.example.com/blob/main/a.py",
-    )
-    for _ in range(3):
-        chunks = _chunk(_make_document_chunker(), [section])
-        assert len(chunks) > 1  # still indexed, via token splitting
+    for language in ["python", "go", "rust", "java", "ruby", "php", "scala"]:
+        _chunk(
+            _make_document_chunker(),
+            [
+                CodeSection(
+                    text="x " * 300,
+                    language=language,
+                    file_path=f"a.{language}",
+                    link=f"https://git.example.com/blob/main/a.{language}",
+                )
+            ],
+        )
 
-    assert attempts == 1
-    assert "python" in code_section_chunker._UNAVAILABLE_GRAMMARS
+    assert attempts == 3  # CircuitBreaker's default failures_before_open
+    # Still indexed, just without syntax boundaries.
+    chunks = _chunk(
+        _make_document_chunker(),
+        [CodeSection(text="x " * 300, language="python", file_path="a.py", link="")],
+    )
+    assert len(chunks) > 1
 
 
 # --- Interaction with other sections ----------------------------------------------
