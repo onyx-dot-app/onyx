@@ -326,7 +326,7 @@ def run_check_for_old_index_reclaim(tenant_id: str, celery_app: Celery) -> int |
     return enqueued
 
 
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.RUN_OLD_INDEX_RECLAIM,
     soft_time_limit=_RECLAIM_TASK_SOFT_TIME_LIMIT_S,
     bind=True,
@@ -337,7 +337,7 @@ def run_old_index_reclaim_task(
     execute_old_index_reclaim(self.app, tenant_id, search_settings_id)
 
 
-@shared_task(
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.CHECK_FOR_OLD_INDEX_RECLAIM,
     soft_time_limit=_RECLAIM_BEAT_SOFT_TIME_LIMIT_S,
     bind=True,
