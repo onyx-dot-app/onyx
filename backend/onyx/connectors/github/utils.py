@@ -48,9 +48,11 @@ def deserialize_repository(
     # Try to access the requester - different PyGithub versions may use different attribute names
     try:
         # Try to get the requester using getattr to avoid linter errors
-        requester = getattr(github_client, "_requester", None)
+        requester = getattr(github_client, "_requester", None)  # ods: ignore[getattr]
         if requester is None:
-            requester = getattr(github_client, "_Github__requester", None)
+            requester = getattr(  # ods: ignore[getattr]
+                github_client, "_Github__requester", None
+            )
         if requester is None:
             # If we can't find the requester attribute, we need to fall back to recreating the repo
             raise AttributeError("Could not find requester attribute")

@@ -100,7 +100,7 @@ def _unwrap_nested_exception(error: Exception) -> Exception:
     for _ in range(100):
         visited.add(id(current))
         candidate: Exception | None = None
-        cause = getattr(current, "__cause__", None)
+        cause = getattr(current, "__cause__", None)  # ods: ignore[getattr]
         if isinstance(cause, Exception):
             candidate = cause
         elif (
@@ -219,7 +219,7 @@ def litellm_exception_to_error_msg(
             else "The LLM provider"
         )
         upstream_detail: str | None = None
-        message_attr = getattr(core_exception, "message", None)
+        message_attr = getattr(core_exception, "message", None)  # ods: ignore[getattr]
         if message_attr:
             upstream_detail = str(message_attr)
         elif hasattr(core_exception, "api_error"):
@@ -292,7 +292,9 @@ def litellm_exception_to_error_msg(
         error_msg = "Request timed out: The operation took too long to complete. Please try again."
         error_code = "CONNECTION_ERROR"
         is_retryable = True
-    elif str(getattr(core_exception, "status_code", "")) == "413" or (
+    elif str(
+        getattr(core_exception, "status_code", "")  # ods: ignore[getattr]
+    ) == "413" or (
         "413" in error_msg and "request entity too large" in error_msg.lower()
     ):
         # Upstream proxy/gateway (e.g. nginx) rejected the request body as too large.

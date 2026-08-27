@@ -1013,7 +1013,10 @@ class DockerSandboxManager(SandboxManager):
         try:
             return self._docker.containers.create(**run_kwargs), True
         except APIError as e:
-            if "Conflict" in str(e) or getattr(e, "status_code", None) == 409:
+            if (
+                "Conflict" in str(e)
+                or getattr(e, "status_code", None) == 409  # ods: ignore[getattr]
+            ):
                 logger.info("Sandbox container %s already exists, reusing.", sandbox_id)
                 return self._require_container(sandbox_id), False
             raise RuntimeError(f"Failed to create sandbox container: {e}") from e

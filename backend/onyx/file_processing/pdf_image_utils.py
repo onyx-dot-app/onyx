@@ -94,7 +94,7 @@ def _to_int(value: Any) -> int:
 def _first_visit(obj: Any, seen: set[Any]) -> bool:
     """True on the first sighting of ``obj``'s indirect reference. Direct
     objects have no reference and are always treated as new."""
-    ref = getattr(obj, "indirect_reference", None)
+    ref = getattr(obj, "indirect_reference", None)  # ods: ignore[getattr]
     if ref is None:
         return True
     if ref in seen:
@@ -230,7 +230,8 @@ def iter_pdf_image_refs(reader: Any) -> Iterator[PdfImageRef]:
             width=_to_int(obj.get("/Width")),
             height=_to_int(obj.get("/Height")),
             is_transparency_mask=(
-                getattr(obj, "indirect_reference", None) in mask_refs
+                getattr(obj, "indirect_reference", None)  # ods: ignore[getattr]
+                in mask_refs
             ),
         )
     for page_index, page in enumerate(reader.pages):

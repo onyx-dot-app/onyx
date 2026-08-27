@@ -84,13 +84,17 @@ def on_task_postrun(
 
 @signals.task_retry.connect
 def on_task_retry(sender: Any | None = None, **kwargs: Any) -> None:  # noqa: ARG001
-    task_id = getattr(getattr(sender, "request", None), "id", None)
+    task_id = getattr(  # ods: ignore[getattr]
+        getattr(sender, "request", None),  # ods: ignore[getattr]
+        "id",
+        None,
+    )
     on_celery_task_retry(task_id, sender)
 
 
 @signals.task_revoked.connect
 def on_task_revoked(sender: Any | None = None, **kwargs: Any) -> None:
-    task_name = getattr(sender, "name", None) or str(sender)
+    task_name = getattr(sender, "name", None) or str(sender)  # ods: ignore[getattr]
     on_celery_task_revoked(kwargs.get("task_id"), task_name)
 
 
@@ -99,7 +103,7 @@ def on_task_rejected(sender: Any | None = None, **kwargs: Any) -> None:  # noqa:
     message = kwargs.get("message")
     task_name: str | None = None
     if message is not None:
-        headers = getattr(message, "headers", None) or {}
+        headers = getattr(message, "headers", None) or {}  # ods: ignore[getattr]
         task_name = headers.get("task")
     if task_name is None:
         task_name = "unknown"

@@ -545,7 +545,7 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     checked: set[Path] = set()
 
     for item in items:
-        path = getattr(item, "path", None)
+        path = getattr(item, "path", None)  # ods: ignore[getattr]
         if path is None or path in checked:
             continue
         checked.add(path)
