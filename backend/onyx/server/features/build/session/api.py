@@ -4,6 +4,7 @@ import json
 import time
 from collections.abc import Generator
 from datetime import datetime, timezone
+from urllib.parse import quote
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
@@ -25,8 +26,10 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.features.build.configs import SSE_KEEPALIVE_INTERVAL
+from onyx.server.features.build.db.artifact import get_session_artifacts
 from onyx.server.features.build.db.build_session import (
     get_build_session,
+    get_build_session_for_viewer,
     set_build_session_sharing_scope,
 )
 from onyx.server.features.build.db.sandbox import (
@@ -497,24 +500,112 @@ def create_session_opencode_history_snapshot(
 # =============================================================================
 
 
-@router.get(
-    "/{session_id}/artifacts",
-    response_model=list[ArtifactResponse],
-)
+def _attachment_headers(filename: str) -> dict[str, str]:
+    """Attachment disposition plus nosniff, so a crafted HTML artifact cannot
+    render and script against the API origin. The filename is agent-written,
+    so the quoted fallback strips header-breaking characters and the exact
+    name rides the RFC 5987 form."""
+    fallback = "".join(c for c in filename if c.isprintable() and c not in '"\\')
+    encoded = quote(filename, safe="")
+    return {
+        "Content-Disposition": (
+            f"attachment; filename=\"{fallback}\"; filename*=UTF-8''{encoded}"
+        ),
+        "X-Content-Type-Options": "nosniff",
+    }
+
+
+@router.get("/{session_id}/artifacts")
 def list_artifacts(
     session_id: UUID,
+    include_deleted: bool = False,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
-) -> list[dict]:
-    """List artifacts generated in the session."""
-    user_id: UUID = user.id
+) -> list[ArtifactResponse]:
+    """List the session's artifact index rows.
+
+    Reads rows only, never the sandbox, so the list works while the pod
+    sleeps. Access follows the session's sharing scope, and the deleted rows
+    exist so stale cards can grey out instead of vanishing.
+    """
+    session = get_build_session_for_viewer(session_id, user.id, db_session)
+    if session is None:
+        raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND, "Session not found")
+    rows = get_session_artifacts(
+        db_session, session_id=session_id, include_deleted=include_deleted
+    )
+    return [ArtifactResponse.from_model(row) for row in rows]
+
+
+@router.get("/{session_id}/artifact/{artifact_id}/download")
+def download_artifact_by_id(
+    session_id: UUID,
+    artifact_id: UUID,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> Response:
+    """Download an artifact's current bytes by row id. Directories and
+    webapps download as a zip."""
     session_manager = SessionManager(db_session)
+    try:
+        result = session_manager.artifact_download_by_id(
+            session_id, user.id, artifact_id
+        )
+    except ValueError as e:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))
+    if result is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Artifact not found")
+    content, mime_type, filename = result
+    return Response(
+        content=content,
+        media_type=mime_type,
+        headers=_attachment_headers(filename),
+    )
 
-    artifacts = session_manager.list_artifacts(session_id, user_id)
-    if artifacts is None:
-        raise HTTPException(status_code=404, detail="Session not found")
 
-    return artifacts
+@router.get("/{session_id}/artifact/{artifact_id}/pptx-preview")
+def pptx_preview_by_id(
+    session_id: UUID,
+    artifact_id: UUID,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> PptxPreviewResponse:
+    """Slide image previews for a pptx artifact, by row id."""
+    session_manager = SessionManager(db_session)
+    try:
+        result = session_manager.artifact_pptx_preview_by_id(
+            session_id, user.id, artifact_id
+        )
+    except ValueError as e:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))
+    if result is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Artifact not found")
+    return PptxPreviewResponse(**result)
+
+
+@router.get("/{session_id}/artifact/{artifact_id}/export-docx")
+def export_docx_by_id(
+    session_id: UUID,
+    artifact_id: UUID,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> Response:
+    """Export a markdown artifact as DOCX, by row id."""
+    session_manager = SessionManager(db_session)
+    try:
+        result = session_manager.artifact_docx_export_by_id(
+            session_id, user.id, artifact_id
+        )
+    except ValueError as e:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))
+    if result is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Artifact not found")
+    docx_bytes, filename = result
+    return Response(
+        content=docx_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers=_attachment_headers(filename),
+    )
 
 
 @router.get("/{session_id}/files", response_model=DirectoryListing)
@@ -583,26 +674,10 @@ def download_artifact(
         raise HTTPException(status_code=404, detail="Artifact not found")
 
     content, mime_type, filename = result
-
-    # Handle Unicode filenames in Content-Disposition header
-    # HTTP headers require Latin-1 encoding, so we use RFC 5987 for Unicode
-    try:
-        # Try Latin-1 encoding first (ASCII-compatible filenames)
-        filename.encode("latin-1")
-        content_disposition = f'attachment; filename="{filename}"'
-    except UnicodeEncodeError:
-        # Use RFC 5987 encoding for Unicode filenames
-        from urllib.parse import quote
-
-        encoded_filename = quote(filename, safe="")
-        content_disposition = f"attachment; filename*=UTF-8''{encoded_filename}"
-
     return Response(
         content=content,
         media_type=mime_type,
-        headers={
-            "Content-Disposition": content_disposition,
-        },
+        headers=_attachment_headers(filename),
     )
 
 
@@ -631,20 +706,10 @@ def export_docx(
         raise HTTPException(status_code=404, detail="File not found")
 
     docx_bytes, filename = result
-
-    try:
-        filename.encode("latin-1")
-        content_disposition = f'attachment; filename="{filename}"'
-    except UnicodeEncodeError:
-        from urllib.parse import quote
-
-        encoded_filename = quote(filename, safe="")
-        content_disposition = f"attachment; filename*=UTF-8''{encoded_filename}"
-
     return Response(
         content=docx_bytes,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        headers={"Content-Disposition": content_disposition},
+        headers=_attachment_headers(filename),
     )
 
 
