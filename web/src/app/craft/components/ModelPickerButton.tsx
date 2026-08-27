@@ -68,7 +68,9 @@ export default function ModelPickerButton({
   );
 
   // A placeholder here would read as "unset" while the value is merely
-  // unknown, so hold the skeleton until the providers land.
+  // unknown, so hold a blank label until the providers land. The button stays
+  // enabled — `select-input` goes transparent when disabled, and losing the
+  // box mid-load is worse than a popover that opens a beat early.
   const isResolving = loading || !llmProviders;
 
   const displayName = useMemo(() => {
@@ -98,10 +100,7 @@ export default function ModelPickerButton({
       <div
         className={cn(
           "inline-flex",
-          // The pill's own fill is transparent, so the skeleton is painted on
-          // the wrapper — it tracks the button's real size with no fixed dims.
-          isResolving &&
-            "rounded-12 bg-background-tint-02 motion-safe:animate-pulse"
+          isResolving && "motion-safe:animate-pulse"
         )}
         aria-busy={isResolving}
       >
@@ -110,7 +109,7 @@ export default function ModelPickerButton({
           state="empty"
           variant="select-input"
           size="lg"
-          disabled={disabled || isResolving}
+          disabled={disabled}
         >
           {isResolving ? SKELETON_LABEL : displayName}
         </SelectButton>
