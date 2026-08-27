@@ -44,11 +44,10 @@ from onyx.db.search_settings import (
     clear_reclaim_intent__no_commit,
     create_search_settings,
     delete_search_settings,
-    find_unreclaimed_by_index_name,
+    find_unreclaimed_past_by_index_name,
     get_current_search_settings,
     get_embedding_provider_from_provider_type,
     get_secondary_search_settings,
-    set_reclaim_intent_on_abandoned_future__no_commit,
     set_reclaim_intent_on_current__no_commit,
     update_current_search_settings,
     update_search_settings_status,
@@ -176,11 +175,6 @@ def set_new_search_settings(
             search_settings_id=secondary_search_settings.id, db_session=db_session
         )
 
-        # Must stay above the status flip, which commits on its own. Left to the commit
-        # at the end, a failure in between strands a PAST row at NULL reclaim_status and
-        # its index name is blocked for good.
-        set_reclaim_intent_on_abandoned_future__no_commit(secondary_search_settings)
-
         # Mark previous model as a past model directly.
         update_search_settings_status(
             search_settings=secondary_search_settings,
@@ -271,22 +265,12 @@ def set_new_search_settings(
 
 
 def _guard_index_name_reuse(db_session: Session, index_name: str) -> None:
-    colliding = find_unreclaimed_by_index_name(db_session, index_name)
-    if not colliding:
-        return
-
-    if any(ss.status == IndexModelStatus.FUTURE for ss in colliding):
+    if find_unreclaimed_past_by_index_name(db_session, index_name):
         raise OnyxError(
             OnyxErrorCode.CONFLICT,
-            "A reindex is already in progress and its new index has the name this one "
-            "would use. Let it finish or cancel it, then wait for the index it leaves "
-            "behind to be reclaimed before starting another.",
+            "An index of the same name from an earlier reindex still holds data. Wait "
+            "for reclamation to finish before starting this reindex.",
         )
-    raise OnyxError(
-        OnyxErrorCode.CONFLICT,
-        "An index of the same name from an earlier reindex still holds data. Wait for "
-        "reclamation to finish before starting this reindex.",
-    )
 
 
 def _resolve_reclaim_intent(
@@ -343,9 +327,6 @@ def cancel_new_embedding(
         expire_index_attempts(
             search_settings_id=secondary_search_settings.id, db_session=db_session
         )
-
-        # Must stay above the status flip, which commits on its own.
-        set_reclaim_intent_on_abandoned_future__no_commit(secondary_search_settings)
 
         update_search_settings_status(
             search_settings=secondary_search_settings,
