@@ -105,6 +105,7 @@ from onyx.db.enums import (
     PersonaSharePermission,
     PortAttemptStatus,
     ProcessingMode,
+    ReceiptStatus,
     SandboxStatus,
     ScheduledTaskRunStatus,
     ScheduledTaskStatus,
@@ -6357,6 +6358,9 @@ class BuildSession(Base):
     artifacts: Mapped[list["Artifact"]] = relationship(
         "Artifact", back_populates="session", cascade="all, delete-orphan"
     )
+    receipts: Mapped[list["ActionReceipt"]] = relationship(
+        "ActionReceipt", back_populates="session", cascade="all, delete-orphan"
+    )
     messages: Mapped[list["BuildMessage"]] = relationship(
         "BuildMessage", back_populates="session", cascade="all, delete-orphan"
     )
@@ -6467,6 +6471,23 @@ class Artifact(Base):
     # path of artifact in sandbox relative to outputs/
     path: Mapped[str] = mapped_column(String, nullable=False)
     name: Mapped[str] = mapped_column(String, nullable=False)
+    # Turn that last produced or changed this artifact. NULL when the
+    # producing turn is unknown.
+    turn_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    # Content hash from the sandbox manifest. Drives change detection: an
+    # upsert with a different hash bumps version and invalidates the archive.
+    content_hash: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Bumped on every content change so a consumer holding an earlier
+    # version can detect that it was superseded.
+    version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
+    # Deleted artifacts keep their row so stale cards grey out instead of 404ing.
+    deleted: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
+    # Reserved for archived bytes served without the sandbox. NULL until an
+    # archive exists.
+    archive_file_id: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -6485,6 +6506,82 @@ class Artifact(Base):
     __table_args__ = (
         Index("ix_artifact_session_created", "session_id", desc("created_at")),
         Index("ix_artifact_type", "type"),
+        # Upsert key: one row per file, edits update in place instead of
+        # duplicating.
+        Index("uq_artifact_session_path", "session_id", "path", unique=True),
+    )
+
+
+class ActionReceipt(Base):
+    """Record of one external action a session performed, covering
+    write-effect actions and anything that went through an approval.
+
+    Written PENDING before the action executes, finalized CONFIRMED or FAILED
+    by the recorder's response and error handling, swept to UNKNOWN when
+    orphaned. Only CONFIRMED rows are presented as proof.
+    """
+
+    __tablename__ = "action_receipt"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    session_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("build_session.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    # The gated target this action hit, via the polymorphic ``gated_app``
+    # identity row. Goes NULL when that target is deleted, the receipt stays
+    # as a record of what happened.
+    gated_app_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("gated_app.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    # The approval that authorized this action, when it went through one.
+    approval_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("action_approval.approval_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    # Typed action id, e.g. ``slack.messages.write`` or an MCP tool name.
+    action_type: Mapped[str] = mapped_column(String, nullable=False)
+    # Catalog effect kind (read/write) captured at record time, so the row is
+    # self-contained even if the catalog reclassifies later.
+    effect: Mapped[str] = mapped_column(String, nullable=False)
+    # Human-readable destination, e.g. ``#exec-team`` or ``Google Drive``.
+    destination: Mapped[str] = mapped_column(String, nullable=False)
+    # Deep link into the destination, when a provider extractor could read one
+    # from the response.
+    link: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Coalescing key so multi-request provider flows (a Slack upload spans
+    # several matched requests) collapse into one receipt.
+    operation_key: Mapped[str | None] = mapped_column(String, nullable=True)
+    status: Mapped[ReceiptStatus] = mapped_column(
+        Enum(ReceiptStatus, native_enum=False, name="receiptstatus"),
+        nullable=False,
+        # Non-native enums store the member NAME, so the default must match it.
+        server_default=ReceiptStatus.PENDING.name,
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    session: Mapped[BuildSession] = relationship(
+        "BuildSession", back_populates="receipts"
+    )
+
+    __table_args__ = (
+        Index("ix_action_receipt_session_created", "session_id", desc("created_at")),
+        # One receipt per logical operation. NULL keys stay independent rows.
+        Index(
+            "uq_action_receipt_session_operation",
+            "session_id",
+            "operation_key",
+            unique=True,
+            postgresql_where=text("operation_key IS NOT NULL"),
+        ),
     )
 
 
