@@ -67,8 +67,8 @@ from onyx.redis.redis_pool import get_redis_client
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
-_RECLAIM_BEAT_SOFT_TIME_LIMIT = 60 * 5
-_RECLAIM_TASK_SOFT_TIME_LIMIT = 60 * 5
+_RECLAIM_BEAT_SOFT_TIME_LIMIT_S = 60 * 5
+_RECLAIM_TASK_SOFT_TIME_LIMIT_S = 60 * 5
 
 # Per-DELETING-row wall-clock budget. On a whale (multi-tenant delete_by_query is
 # bounded per call), loop many bounded batches within one dispatch so it drains in
@@ -79,7 +79,7 @@ _DELETE_TIME_BUDGET_S = 60
 # Per-row lock TTL. Must exceed a single dispatch's max runtime (the delete budget +
 # overhead) so it isn't stolen mid-run; a dead worker's lock expires and the row is
 # retried next tick.
-_RECLAIM_TASK_LOCK_TTL = 60 * 5
+_RECLAIM_TASK_LOCK_TTL_S = 60 * 5
 
 _ACTIONABLE_RECLAIM_STATUSES = (
     IndexReclaimStatus.PENDING,
@@ -264,7 +264,7 @@ def execute_old_index_reclaim(
     redis_client = get_redis_client()
     row_lock: RedisLock = redis_client.lock(
         _reclaim_row_lock_key(search_settings_id),
-        timeout=_RECLAIM_TASK_LOCK_TTL,
+        timeout=_RECLAIM_TASK_LOCK_TTL_S,
     )
     if not row_lock.acquire(blocking=False):
         return
@@ -328,7 +328,7 @@ def run_check_for_old_index_reclaim(tenant_id: str, celery_app: Celery) -> int |
 
 @shared_task(
     name=OnyxCeleryTask.RUN_OLD_INDEX_RECLAIM,
-    soft_time_limit=_RECLAIM_TASK_SOFT_TIME_LIMIT,
+    soft_time_limit=_RECLAIM_TASK_SOFT_TIME_LIMIT_S,
     bind=True,
 )
 def run_old_index_reclaim_task(
@@ -339,7 +339,7 @@ def run_old_index_reclaim_task(
 
 @shared_task(
     name=OnyxCeleryTask.CHECK_FOR_OLD_INDEX_RECLAIM,
-    soft_time_limit=_RECLAIM_BEAT_SOFT_TIME_LIMIT,
+    soft_time_limit=_RECLAIM_BEAT_SOFT_TIME_LIMIT_S,
     bind=True,
 )
 def check_for_old_index_reclaim(self: Task, *, tenant_id: str) -> int | None:
