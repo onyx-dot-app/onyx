@@ -13,8 +13,10 @@ A per-row lock makes a duplicate/concurrent dispatch for the same row a no-op, s
 slow whale can't block newer rows or pile up. Every step is idempotent, so a crash
 between an OpenSearch side-effect and its DB commit is recovered by re-running the step
 next tick. A step that raises bumps the row's attempt counter and parks it BLOCKED at
-the cap (alerted). The whole feature no-ops while `OLD_INDEX_RECLAIM_ENABLED` is False
-(the kill switch / dark ship).
+the cap (alerted). `OLD_INDEX_RECLAIM_ENABLED` (default on) gates both the
+fan-out and each task body, so turning it off also stops tasks already on the queue. It
+is read from the environment at startup, so it takes effect once the workers restart,
+not the moment the config changes.
 """
 
 import time
