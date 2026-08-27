@@ -499,8 +499,9 @@ class CodeInterpreterClient:
     def upload_file(self, file_content: bytes | BinaryIO, filename: str) -> str:
         """Upload file to Code Interpreter and return file_id.
 
-        Pass an open binary file object instead of bytes for large uploads:
-        requests streams it straight from disk, so it never sits in memory.
+        A file object spares the caller from holding the bytes for its own
+        lifetime, but requests reads it in full to build the multipart body,
+        so the peak is still the file size.
         """
         url = f"{self.base_url}/v1/files"
 

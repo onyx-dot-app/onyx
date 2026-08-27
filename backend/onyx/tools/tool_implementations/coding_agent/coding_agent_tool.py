@@ -20,7 +20,7 @@ from onyx.configs.constants import (
     CODE_FILE_REPO_KEY,
     CODE_FILE_TYPE_KEY,
 )
-from onyx.db.credentials import fetch_github_access_token_for_repo
+from onyx.db.credentials import ConnectorRepoAccess, fetch_github_repo_access
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import User
 from onyx.llm.factory import get_llm_token_counter
@@ -189,27 +189,28 @@ class CodingAgentTool(Tool[CodingAgentToolOverrideKwargs]):
                 break
         return paths
 
-    def _fetch_connector_token(
+    def _fetch_connector_access(
         self, db_session: Session, repo_ref: RepoRef
-    ) -> str | None:
-        """Token of the GitHub connector that indexes ``repo_ref``, from the DB.
+    ) -> ConnectorRepoAccess | None:
+        """What a GitHub connector lends for ``repo_ref``: its token and the
+        branch it indexes.
 
-        The admin must have opted the connector in to coding-agent use, on top
-        of the other narrowing checks (see
-        fetch_github_access_token_for_repo). None → public-repo access only.
+        The grant follows this user's own access to the connector rather than
+        a separate admin toggle (see fetch_github_repo_access). None →
+        public-repo access only.
         """
-        token = fetch_github_access_token_for_repo(
+        access = fetch_github_repo_access(
             db_session=db_session,
             repo_owner=repo_ref.owner,
             repo_name=repo_ref.name,
             user=self._user,
         )
-        if token:
+        if access:
             logger.info(
                 "Using GitHub connector credential for coding agent repo %s",
                 repo_ref.display,
             )
-        return token
+        return access
 
     @override
     def run(
@@ -265,8 +266,21 @@ class CodingAgentTool(Tool[CodingAgentToolOverrideKwargs]):
         with get_session_with_current_tenant() as db_session:
             # Separate gates: seeding reads the index under the user's own
             # ACL, while the token lends a credential and exposes the tree.
-            connector_token = self._fetch_connector_token(db_session, repo_ref)
+            connector_access = self._fetch_connector_access(db_session, repo_ref)
             seed_paths = self._fetch_seed_paths(db_session, query, repo_ref)
+
+        if connector_access is not None:
+            # A lent credential covers what the connector indexes and no more,
+            # so the model does not get to choose the ref: an older branch can
+            # still hold what was deliberately removed from the indexed one.
+            if ref and ref != connector_access.branch:
+                logger.info(
+                    "Ignoring requested ref %s for %s; the connector indexes %s",
+                    ref,
+                    repo_ref.display,
+                    connector_access.branch or "the default branch",
+                )
+            ref = connector_access.branch
 
         synthetic_call = ToolCallKickoff(
             tool_call_id=str(uuid4()),
@@ -287,7 +301,7 @@ class CodingAgentTool(Tool[CodingAgentToolOverrideKwargs]):
             llm=self._llm,
             token_counter=token_counter,
             user_identity=None,
-            github_token=connector_token,
+            github_token=connector_access.token if connector_access else None,
             seed_paths=seed_paths,
             repo_ref=repo_ref,
         )

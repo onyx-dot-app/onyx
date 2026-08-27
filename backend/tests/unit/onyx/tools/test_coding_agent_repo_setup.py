@@ -1,20 +1,28 @@
+import tarfile
 from contextlib import nullcontext
+from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 from onyx.configs.app_configs import REPO_ARCHIVE_FETCH_TIMEOUT, REPO_ARCHIVE_MAX_BYTES
 from onyx.repo_archives.github import GitHubArchiveProvider
 from onyx.repo_archives.models import RepoArchive, RepoRevision
 from onyx.tools.fake_tools import coding_agent
+from tests.utils.repo_archives import make_repo_tarball
+
+REPO_FILES = {
+    "src/main.py": b"def main():\n    return 1\n",
+    ".env.production": b"SECRET=hunter2\n",
+    "deploy/server.key": b"-----BEGIN PRIVATE KEY-----\n",
+}
 
 
-def test_coding_agent_fetches_and_extracts_repo_with_existing_policy(
-    tmp_path: Path,
-) -> None:
+def _archive(tmp_path: Path) -> RepoArchive:
     archive_path = tmp_path / "repo.tar.gz"
-    archive_path.write_bytes(b"repository archive")
-    archive = RepoArchive(
+    archive_path.write_bytes(make_repo_tarball(REPO_FILES))
+    return RepoArchive(
         path=archive_path,
         size=archive_path.stat().st_size,
         revision=RepoRevision(
@@ -22,6 +30,9 @@ def test_coding_agent_fetches_and_extracts_repo_with_existing_policy(
             commit_sha="a" * 40,
         ),
     )
+
+
+def _client() -> MagicMock:
     client = MagicMock()
     client.__enter__.return_value = client
     client.__exit__.return_value = False
@@ -31,6 +42,14 @@ def test_coding_agent_fetches_and_extracts_repo_with_existing_policy(
         exit_code=0,
         stderr="",
     )
+    return client
+
+
+def test_coding_agent_fetches_and_extracts_repo_with_existing_policy(
+    tmp_path: Path,
+) -> None:
+    archive = _archive(tmp_path)
+    client = _client()
 
     with (
         patch.object(
@@ -54,11 +73,10 @@ def test_coding_agent_fetches_and_extracts_repo_with_existing_policy(
         "max_size_bytes": REPO_ARCHIVE_MAX_BYTES,
         "timeout": REPO_ARCHIVE_FETCH_TIMEOUT,
     }
-    # The archive streams straight off disk instead of being read into memory.
+    # Uploaded from a file object, so the bytes are not held for the run.
     client.upload_file.assert_called_once()
     uploaded_file, uploaded_name = client.upload_file.call_args.args
     assert uploaded_name == coding_agent.REPO_TARBALL_PATH
-    assert Path(uploaded_file.name) == archive_path
     assert uploaded_file.closed
     client.execute_bash_in_session.assert_called_once_with(
         session_id="session-id",
@@ -66,3 +84,35 @@ def test_coding_agent_fetches_and_extracts_repo_with_existing_policy(
         timeout_ms=coding_agent.CODING_AGENT_SETUP_TIMEOUT_MS,
     )
     client.delete_session.assert_called_once_with("session-id")
+
+
+def test_credential_files_never_reach_the_sandbox(tmp_path: Path) -> None:
+    """Indexing refuses these files. The agent runs shell commands over the
+    tree and answers to a user, so it must not receive them either."""
+    archive = _archive(tmp_path)
+    client = _client()
+    uploaded: dict[str, bytes] = {}
+
+    def _capture(file_obj: Any, _name: str) -> str:
+        uploaded["bytes"] = file_obj.read()
+        return "file-id"
+
+    client.upload_file.side_effect = _capture
+
+    with (
+        patch.object(
+            coding_agent, "open_repo_archive", return_value=nullcontext(archive)
+        ),
+        patch.object(coding_agent, "CodeInterpreterClient", return_value=client),
+        coding_agent._setup_session(
+            repo_ref=GitHubArchiveProvider.repo_ref_from_url("onyx-dot-app/onyx"),
+            github_token="secret",
+        ),
+    ):
+        pass
+
+    with tarfile.open(fileobj=BytesIO(uploaded["bytes"]), mode="r:gz") as sent:
+        names = {Path(name).name for name in sent.getnames()}
+
+    assert "main.py" in names
+    assert names.isdisjoint({".env.production", "server.key"})

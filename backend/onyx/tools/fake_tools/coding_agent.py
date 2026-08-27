@@ -1,6 +1,8 @@
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Callable
 
 from onyx.chat.emitter import Emitter
@@ -19,6 +21,9 @@ from onyx.coding_agent.mock_tools import (
 from onyx.coding_agent.models import CodingAgentCallResult, CodingAgentSpecialToolCalls
 from onyx.configs.app_configs import REPO_ARCHIVE_FETCH_TIMEOUT, REPO_ARCHIVE_MAX_BYTES
 from onyx.configs.constants import MessageType
+from onyx.connectors.cross_connector_utils.code_file_utils import (
+    is_sensitive_code_file,
+)
 from onyx.deep_research.dr_mock_tools import (
     THINK_TOOL_NAME,
     THINK_TOOL_RESPONSE_MESSAGE,
@@ -36,6 +41,7 @@ from onyx.prompts.coding_agent.coding_agent import (
     USER_FINAL_ANSWER_QUERY,
 )
 from onyx.prompts.prompt_utils import get_current_llm_day_time
+from onyx.repo_archives.filtering import write_filtered_archive
 from onyx.repo_archives.github import GitHubArchiveProvider
 from onyx.repo_archives.models import RepoRef
 from onyx.repo_archives.tarball_cache import open_repo_archive
@@ -102,11 +108,11 @@ def _setup_session(
     """
     provider = GitHubArchiveProvider.from_token(github_token)
 
-    with CodeInterpreterClient() as client:
-        # The archive can be hundreds of MB: it stays in a temp file that is
-        # removed when this block exits, right after the upload, so it isn't
+    with CodeInterpreterClient() as client, TemporaryDirectory() as staging:
+        # The archive can be hundreds of MB: it lives in temp files that are
+        # removed when this block exits, right after the upload, so nothing is
         # held for the agent's whole (potentially 25-minute) run. The upload
-        # streams from that file so the bytes never enter this process.
+        # itself still buffers the file, so peak memory is the archive size.
         with open_repo_archive(
             provider,
             repo_ref,
@@ -114,7 +120,20 @@ def _setup_session(
             max_size_bytes=REPO_ARCHIVE_MAX_BYTES,
             timeout=REPO_ARCHIVE_FETCH_TIMEOUT,
         ) as repo_archive:
-            with repo_archive.path.open("rb") as archive_file:
+            # Indexing refuses credential files, so the agent — which runs
+            # shell commands over the tree and answers to a user — must not
+            # receive them either.
+            sanitized = Path(staging) / REPO_TARBALL_PATH
+            dropped = write_filtered_archive(
+                repo_archive.path, sanitized, is_sensitive_code_file
+            )
+            if dropped:
+                logger.info(
+                    "Excluded %s credential file(s) from the %s archive",
+                    dropped,
+                    repo_ref.display,
+                )
+            with sanitized.open("rb") as archive_file:
                 ci_file_id = client.upload_file(archive_file, REPO_TARBALL_PATH)
             commit_sha = (
                 repo_archive.revision.commit_sha if repo_archive.revision else None
@@ -162,8 +181,10 @@ def _revision_line(commit_sha: str | None, ref: str | None) -> str:
     if commit_sha:
         requested = f"requested: {ref}" if ref else "current default-branch state"
         return f"Checked-out revision: {commit_sha} ({requested})"
+    # No SHA means resolution failed and the fetch was unpinned, so the ref
+    # could have moved mid-flight. Say so rather than implying precision.
     if ref:
-        return f"Checked-out revision: {ref}"
+        return f"Checked-out revision: {ref} (not pinned to a commit)"
     return "Checked-out revision: latest default-branch state"
 
 
@@ -336,8 +357,9 @@ def run_coding_agent_call(
                     seed_lines = "\n".join(f"- {p}" for p in seed_paths)
                     initial_message_str += (
                         "\n\nFiles the code search index ranks as most "
-                        "relevant to this query (start here, but verify "
-                        "before trusting):\n" + seed_lines
+                        "relevant to this query. The index reflects whenever "
+                        "the repository was last indexed, so a path may have "
+                        "moved or gone; start here, but verify:\n" + seed_lines
                     )
                 initial_user_message = ChatMessageSimple(
                     message=initial_message_str,
