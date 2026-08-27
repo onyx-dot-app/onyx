@@ -70,6 +70,8 @@ export interface EmbeddingModel {
   description: string;
 }
 
+export type EmbeddingModelSpec = Omit<EmbeddingModel, "description">;
+
 export interface RerankingModel {
   rerank_provider_type: RerankerProvider | null;
   modelName?: string;
