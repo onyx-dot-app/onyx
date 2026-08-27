@@ -120,6 +120,12 @@ interface ForcedToolState {
   forcedToolId: number | null;
   toggleForcedTool: (id: number) => void;
   clearForcedTool: () => void;
+  /**
+   * Called by the send path when a message is about to create the chat it is
+   * being sent to. Excuses exactly the next session change from the reset, so
+   * the tool survives to the request it was chosen for.
+   */
+  keepThroughNextSessionChange: () => void;
 }
 
 /**
@@ -141,6 +147,15 @@ function useForcedToolsState(): ForcedToolState {
   );
   const clearForcedTool = useCallback(() => setForcedToolId(null), []);
 
+  // Only the send path can tell "the chat I just created" from "a chat I
+  // navigated to" — both read as null -> id from here, and the URL marker the
+  // navigation carries is stripped with `history.replaceState`, so it is not
+  // reliably visible. So the send path says so instead of this guessing.
+  const keepThroughNextSessionChangeRef = useRef(false);
+  const keepThroughNextSessionChange = useCallback(() => {
+    keepThroughNextSessionChangeRef.current = true;
+  }, []);
+
   // Switching agent, project or chat leaves the choice meaningless, so it does
   // not survive them. The exception is the common path: sending the first
   // message is what creates the chat, so the session id goes null -> id on the
@@ -155,15 +170,37 @@ function useForcedToolsState(): ForcedToolState {
   useEffect(() => {
     const priorSessionId = priorSessionIdRef.current;
     priorSessionIdRef.current = currentChatSessionId;
-    if (priorSessionId === null && currentChatSessionId !== null) return;
+
+    const wasOwnSend = keepThroughNextSessionChangeRef.current;
+    keepThroughNextSessionChangeRef.current = false;
+    // Both parts are required: the flag alone would also excuse an agent or
+    // project change that happened to land first.
+    if (
+      wasOwnSend &&
+      priorSessionId === null &&
+      currentChatSessionId !== null
+    ) {
+      return;
+    }
+
     clearForcedTool();
   }, [agent?.id, currentChatSessionId, activeProject?.id, clearForcedTool]);
 
   // Memoized so consumers re-render when the forced tool changes and not
   // merely because the provider did.
   return useMemo(
-    () => ({ forcedToolId, toggleForcedTool, clearForcedTool }),
-    [forcedToolId, toggleForcedTool, clearForcedTool]
+    () => ({
+      forcedToolId,
+      toggleForcedTool,
+      clearForcedTool,
+      keepThroughNextSessionChange,
+    }),
+    [
+      forcedToolId,
+      toggleForcedTool,
+      clearForcedTool,
+      keepThroughNextSessionChange,
+    ]
   );
 }
 

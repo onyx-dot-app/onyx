@@ -155,7 +155,7 @@ export default function useChatController({
   const { refreshChatSessions, addPendingChatSession } = useChatSessions();
   const { pinnedAgents, togglePinnedAgent } = usePinnedAgents();
   const { agentPreferences } = useAgentPreferences();
-  const { forcedToolId } = useForcedTools();
+  const { forcedToolId, keepThroughNextSessionChange } = useForcedTools();
   const { fetchProjects, setCurrentMessageFiles, beginUpload } =
     useProjectsContext();
   const { incognitoEnabledRef, incognitoSessionId } = useIncognito();
@@ -529,6 +529,11 @@ export default function useChatController({
         (m) => m.type === "user"
       );
       if (isNewSession) {
+        // This send is what creates the chat, so the session change it causes
+        // is not the user leaving one — the forced tool belongs to the message
+        // already on its way.
+        keepThroughNextSessionChange();
+
         // There is no incognito agent chat, so incognito pins the default
         // assistant regardless of any selected agent.
         currChatSessionId = await createChatSession(
@@ -1485,6 +1490,7 @@ export default function useChatController({
       currentChatState,
       // Ensure latest forced tools are used when submitting
       forcedToolId,
+      keepThroughNextSessionChange,
       // Keep tool preference-derived values fresh
       agentPreferences,
       fetchProjects,
