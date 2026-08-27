@@ -1,10 +1,9 @@
-"""External dependency unit tests for the old-index-reclamation beat task
-(the state-machine driver introduced in PR3).
+"""External dependency unit tests for the old-index-reclamation state machine.
 
-The OpenSearch deletion primitive is proven against a real index in
-tests/external_dependency_unit/opensearch/test_opensearch_client.py; here we drive the
-state machine against real Postgres and control the primitive at the module boundary
-(COMPLETE/INCOMPLETE/raise), with one real single-tenant end-to-end through the driver.
+The OpenSearch deletion primitive is covered against a real index in
+tests/external_dependency_unit/opensearch/test_opensearch_client.py, so most tests here
+replace it at the module boundary and drive the state machine against real Postgres.
+One end-to-end test still runs the real primitive.
 """
 
 from datetime import datetime, timedelta, timezone
@@ -33,15 +32,8 @@ from tests.external_dependency_unit.indexing_helpers import (
 )
 
 
-def _make_past_settings(
-    db_session: Session,
-    reclaim_status: IndexReclaimStatus,
-    *,
-    pending_cc_pair_deletions: list[int] | None = None,
-    stopped_reading_at: datetime | None = None,
-    index_name: str | None = None,
-) -> SearchSettings:
-    saved = SavedSearchSettings(
+def _saved_settings(index_name: str | None = None) -> SavedSearchSettings:
+    return SavedSearchSettings(
         model_name="test-reclaim-task-model",
         model_dim=128,
         normalize=True,
@@ -53,13 +45,36 @@ def _make_past_settings(
         index_name=index_name or f"test_reclaim_task_{uuid4().hex[:8]}",
         enable_contextual_rag=False,
     )
-    ss = create_search_settings(saved, db_session, status=IndexModelStatus.PAST)
+
+
+def _make_past_settings(
+    db_session: Session,
+    reclaim_status: IndexReclaimStatus,
+    *,
+    pending_cc_pair_deletions: list[int] | None = None,
+    stopped_reading_at: datetime | None = None,
+    index_name: str | None = None,
+) -> SearchSettings:
+    ss = create_search_settings(
+        _saved_settings(index_name), db_session, status=IndexModelStatus.PAST
+    )
     ss.reclaim_status = reclaim_status
     ss.pending_cc_pair_deletions = pending_cc_pair_deletions
     ss.reclaim_stopped_reading_at = stopped_reading_at
     db_session.commit()
     db_session.refresh(ss)
     return ss
+
+
+def _make_present_settings(db_session: Session) -> SearchSettings:
+    """Without a PRESENT row the driver records the resulting error as a reclaim
+    attempt bump, so these tests own one instead of trusting whatever the shared DB
+    holds. get_current_search_settings reads the highest id, so this row always wins."""
+    return create_search_settings(
+        _saved_settings(f"test_reclaim_present_{uuid4().hex[:8]}"),
+        db_session,
+        status=IndexModelStatus.PRESENT,
+    )
 
 
 def _delete_settings(db_session: Session, ss: SearchSettings) -> None:
@@ -78,15 +93,11 @@ def _cc_pair_with_status(
     return pair
 
 
-# --- PENDING --------------------------------------------------------------------
-
-
 def test_pending_waits_while_port_still_reads_old_index(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The old index must not be touched while a port still backfills from it."""
     monkeypatch.setattr(
         reclaim_tasks, "is_active_port_backfill_source", lambda *_a, **_k: True
     )
@@ -135,8 +146,6 @@ def test_pending_revalidation_spares_reactivated_connector(
     tenant_context: None,  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A consented connector that became ACTIVE again before the port completes is not
-    deleted; a still-INVALID one is."""
     monkeypatch.setattr(
         reclaim_tasks, "is_active_port_backfill_source", lambda *_a, **_k: False
     )
@@ -155,15 +164,12 @@ def test_pending_revalidation_spares_reactivated_connector(
         db_session.refresh(reactivated)
         db_session.refresh(still_invalid)
 
-        assert reactivated.status == ConnectorCredentialPairStatus.ACTIVE  # spared
+        assert reactivated.status == ConnectorCredentialPairStatus.ACTIVE
         assert still_invalid.status == ConnectorCredentialPairStatus.DELETING
     finally:
         _delete_settings(db_session, ss)
         cleanup_cc_pair(db_session, reactivated)
         cleanup_cc_pair(db_session, still_invalid)
-
-
-# --- SOAKING --------------------------------------------------------------------
 
 
 def test_soaking_waits_until_retention_elapses(
@@ -175,7 +181,7 @@ def test_soaking_waits_until_retention_elapses(
     ss = _make_past_settings(
         db_session,
         IndexReclaimStatus.SOAKING,
-        stopped_reading_at=datetime.now(timezone.utc),  # just started soaking
+        stopped_reading_at=datetime.now(timezone.utc),
     )
     celery_app = MagicMock()
     try:
@@ -193,6 +199,7 @@ def test_soaking_advances_to_deleting_when_elapsed_and_healthy(
 ) -> None:
     monkeypatch.setattr(reclaim_tasks, "OLD_INDEX_RETENTION_HOURS", 0)
     monkeypatch.setattr(reclaim_tasks, "_new_index_can_serve", lambda _name: True)
+    present = _make_present_settings(db_session)
     ss = _make_past_settings(
         db_session,
         IndexReclaimStatus.SOAKING,
@@ -205,6 +212,7 @@ def test_soaking_advances_to_deleting_when_elapsed_and_healthy(
         assert ss.reclaim_status == IndexReclaimStatus.DELETING
     finally:
         _delete_settings(db_session, ss)
+        _delete_settings(db_session, present)
 
 
 def test_soaking_holds_when_new_index_cannot_serve(
@@ -212,10 +220,11 @@ def test_soaking_holds_when_new_index_cannot_serve(
     tenant_context: None,  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Never delete the old index while the new one can't serve — and it's a benign
-    wait, not a failure (no attempt bump)."""
+    """Waiting on the new index is not a failure, so it must not bump the attempt
+    counter — a benign wait counted as a failure would eventually BLOCK the row."""
     monkeypatch.setattr(reclaim_tasks, "OLD_INDEX_RETENTION_HOURS", 0)
     monkeypatch.setattr(reclaim_tasks, "_new_index_can_serve", lambda _name: False)
+    present = _make_present_settings(db_session)
     ss = _make_past_settings(
         db_session,
         IndexReclaimStatus.SOAKING,
@@ -229,9 +238,7 @@ def test_soaking_holds_when_new_index_cannot_serve(
         assert ss.reclaim_attempts == 0
     finally:
         _delete_settings(db_session, ss)
-
-
-# --- DELETING -------------------------------------------------------------------
+        _delete_settings(db_session, present)
 
 
 def test_deleting_complete_marks_reclaimed_and_keeps_row(
@@ -239,8 +246,6 @@ def test_deleting_complete_marks_reclaimed_and_keeps_row(
     tenant_context: None,  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """On COMPLETE we only delete the OpenSearch index — the PAST row is KEPT and
-    marked RECLAIMED (the durable record), not deleted."""
     monkeypatch.setattr(
         reclaim_tasks, "reclaim_index_data", lambda *_a, **_k: ReclaimOutcome.COMPLETE
     )
@@ -250,7 +255,7 @@ def test_deleting_complete_marks_reclaimed_and_keeps_row(
         reclaim_tasks.run_old_index_reclaim(db_session, MagicMock(), "tenant", ss)
         db_session.refresh(ss)
         row = get_search_settings_by_id(db_session, ss_id)
-        assert row is not None  # row kept
+        assert row is not None
         assert row.reclaim_status == IndexReclaimStatus.RECLAIMED
     finally:
         _delete_settings(db_session, ss)
@@ -261,10 +266,7 @@ def test_deleting_incomplete_stays_deleting(
     tenant_context: None,  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A bounded batch that doesn't finish leaves the row DELETING for the next tick."""
-    monkeypatch.setattr(
-        reclaim_tasks, "_DELETE_TIME_BUDGET_S", 0
-    )  # one batch, then yield
+    monkeypatch.setattr(reclaim_tasks, "_DELETE_TIME_BUDGET_S", 0)
     monkeypatch.setattr(
         reclaim_tasks, "reclaim_index_data", lambda *_a, **_k: ReclaimOutcome.INCOMPLETE
     )
@@ -282,14 +284,11 @@ def test_deleting_single_tenant_end_to_end_drops_real_index(
     tenant_context: None,  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Driver -> real primitive: a single-tenant DELETING step drops the physical index
-    and keeps the PAST row, marked RECLAIMED."""
     monkeypatch.setattr(reclaim_tasks, "MULTI_TENANT", False)
     index_name = f"test_reclaim_e2e_{uuid4().hex[:8]}"
     client = OpenSearchIndexClient(index_name=index_name)
-    client._client.indices.create(
-        index=index_name
-    )  # bare index; single-tenant drops it
+    # Single-tenant reclaim drops the whole index, so it needs no mappings or documents.
+    client._client.indices.create(index=index_name)
     ss = _make_past_settings(
         db_session, IndexReclaimStatus.DELETING, index_name=index_name
     )
@@ -298,9 +297,9 @@ def test_deleting_single_tenant_end_to_end_drops_real_index(
         reclaim_tasks.run_old_index_reclaim(db_session, MagicMock(), "tenant", ss)
         db_session.refresh(ss)
         row = get_search_settings_by_id(db_session, ss_id)
-        assert row is not None  # row kept
+        assert row is not None
         assert row.reclaim_status == IndexReclaimStatus.RECLAIMED
-        assert client.index_exists() is False  # OpenSearch index gone
+        assert client.index_exists() is False
     finally:
         try:
             client.delete_index()
@@ -308,9 +307,6 @@ def test_deleting_single_tenant_end_to_end_drops_real_index(
             pass
         client.close()
         _delete_settings(db_session, ss)
-
-
-# --- reliability ----------------------------------------------------------------
 
 
 def test_step_failure_bumps_attempts_then_blocks_at_cap(
@@ -338,9 +334,6 @@ def test_step_failure_bumps_attempts_then_blocks_at_cap(
         assert ss.reclaim_status == IndexReclaimStatus.BLOCKED
     finally:
         _delete_settings(db_session, ss)
-
-
-# --- beat fan-out plumbing (kill switch + enqueue) ------------------------------
 
 
 def _enqueued_settings_ids(celery_app: MagicMock) -> list[int]:
@@ -374,8 +367,8 @@ def test_enabled_fans_out_one_task_per_reclaimable_row(
     tenant_context: None,  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The beat only enqueues (row is not driven inline) — heavy work runs on the
-    light worker via the index_reclaim queue."""
+    """The beat must only enqueue and never drive a row inline, so the heavy deletion
+    runs on the light worker instead of the primary beat."""
     monkeypatch.setattr(reclaim_tasks, "OLD_INDEX_RECLAIM_ENABLED", True)
     ss = _make_past_settings(db_session, IndexReclaimStatus.PENDING)
     ss_id = ss.id
@@ -388,7 +381,7 @@ def test_enabled_fans_out_one_task_per_reclaimable_row(
         db_session.expire_all()
         still = get_search_settings_by_id(db_session, ss_id)
         assert still is not None
-        assert still.reclaim_status == IndexReclaimStatus.PENDING  # enqueue only
+        assert still.reclaim_status == IndexReclaimStatus.PENDING
     finally:
         _delete_settings(db_session, ss)
 
@@ -398,8 +391,6 @@ def test_execute_task_body_drives_one_step_under_lock(
     tenant_context: None,  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The dispatched task body loads the row under its per-row lock and drives one
-    step (PENDING -> SOAKING here)."""
     monkeypatch.setattr(reclaim_tasks, "OLD_INDEX_RECLAIM_ENABLED", True)
     monkeypatch.setattr(
         reclaim_tasks, "is_active_port_backfill_source", lambda *_a, **_k: False
@@ -408,7 +399,8 @@ def test_execute_task_body_drives_one_step_under_lock(
     ss_id = ss.id
     try:
         reclaim_tasks.execute_old_index_reclaim(MagicMock(), "tenant", ss_id)
-        db_session.expire_all()  # execute uses its own session
+        # The task body commits on its own session, so this one must re-read the row.
+        db_session.expire_all()
         driven = get_search_settings_by_id(db_session, ss_id)
         assert driven is not None
         assert driven.reclaim_status == IndexReclaimStatus.SOAKING
@@ -421,8 +413,8 @@ def test_execute_task_body_honors_kill_switch(
     tenant_context: None,  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A task queued before the flag was flipped off must not drive its row — the kill
-    switch is re-checked in the task body, so ENABLED=False is an instant stop."""
+    """A task already queued when the flag was turned off must not drive its row, so
+    disabling the feature stops work without waiting for the queue to drain."""
     monkeypatch.setattr(reclaim_tasks, "OLD_INDEX_RECLAIM_ENABLED", False)
     monkeypatch.setattr(
         reclaim_tasks, "is_active_port_backfill_source", lambda *_a, **_k: False
@@ -434,6 +426,6 @@ def test_execute_task_body_honors_kill_switch(
         db_session.expire_all()
         row = get_search_settings_by_id(db_session, ss_id)
         assert row is not None
-        assert row.reclaim_status == IndexReclaimStatus.PENDING  # untouched
+        assert row.reclaim_status == IndexReclaimStatus.PENDING
     finally:
         _delete_settings(db_session, ss)
