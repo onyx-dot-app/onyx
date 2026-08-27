@@ -16,7 +16,6 @@ import { DM_Mono, Hanken_Grotesk } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import { TooltipProvider } from "@radix-ui/react-tooltip";
 import StatsOverlayLoader from "@/components/dev/StatsOverlayLoader";
-import { cn } from "@opal/utils";
 import AppHealthBanner from "@/sections/banners/HealthBanner";
 import BannerQueue from "@/sections/banners/BannerQueue";
 import { AuthenticationShell } from "@/lib/auth/components";
@@ -25,34 +24,19 @@ import SWRConfigProvider from "@/providers/SWRConfigProvider";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages } from "next-intl/server";
 
-// Both fallback lists end with the same six CJK system fonts (macOS then
-// Windows, for ja/zh-CN/ko) — no font bytes shipped. Latin glyphs still come
-// from the loaded font; only CJK codepoints fall through. The lists must stay
-// inline literals: next/font evaluates its options at compile time and
-// rejects spreads and variables.
+// No generic at the end of either fallback list: the generic comes last in
+// the composed --font-* variables on <html> below, after the per-locale CJK
+// tail (--font-cjk-sans, defined in globals.css). A generic here would sit
+// before the CJK fonts and swallow every CJK codepoint.
 const hankenGrotesk = Hanken_Grotesk({
   subsets: ["latin"],
-  variable: "--font-hanken-grotesk",
   display: "swap",
-  fallback: [
-    "-apple-system",
-    "BlinkMacSystemFont",
-    "Segoe UI",
-    "Roboto",
-    "Hiragino Sans",
-    "Yu Gothic UI",
-    "PingFang SC",
-    "Microsoft YaHei",
-    "Apple SD Gothic Neo",
-    "Malgun Gothic",
-    "sans-serif",
-  ],
+  fallback: ["-apple-system", "BlinkMacSystemFont", "Segoe UI", "Roboto"],
 });
 
 const dmMono = DM_Mono({
   weight: "400",
   subsets: ["latin"],
-  variable: "--font-dm-mono",
   display: "swap",
   fallback: [
     "SF Mono",
@@ -61,13 +45,6 @@ const dmMono = DM_Mono({
     "Roboto Mono",
     "Consolas",
     "Courier New",
-    "Hiragino Sans",
-    "Yu Gothic UI",
-    "PingFang SC",
-    "Microsoft YaHei",
-    "Apple SD Gothic Neo",
-    "Malgun Gothic",
-    "monospace",
   ],
 });
 
@@ -92,7 +69,19 @@ export default async function Layout({ children }: LayoutProps) {
   return (
     <html
       lang={locale}
-      className={cn(hankenGrotesk.variable, dmMono.variable)}
+      // The app-wide font variables are composed here instead of with
+      // next/font's `variable` option: the CJK tail (--font-cjk-sans,
+      // globals.css) must vary with the locale, so the loaded-webfont chain
+      // and the tail have to be joined in one declaration. Every
+      // `var(--font-hanken-grotesk)` / `var(--font-dm-mono)` consumer (Opal
+      // text presets, the font-hanken/font-sans utilities, app CSS) resolves
+      // through these.
+      style={
+        {
+          "--font-hanken-grotesk": `${hankenGrotesk.style.fontFamily}, var(--font-cjk-sans), sans-serif`,
+          "--font-dm-mono": `${dmMono.style.fontFamily}, var(--font-cjk-sans), monospace`,
+        } as React.CSSProperties
+      }
       suppressHydrationWarning
     >
       <head>
