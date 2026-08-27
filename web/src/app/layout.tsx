@@ -25,6 +25,11 @@ import SWRConfigProvider from "@/providers/SWRConfigProvider";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages } from "next-intl/server";
 
+// Both fallback lists end with the same six CJK system fonts (macOS then
+// Windows, for ja/zh-CN/ko) — no font bytes shipped. Latin glyphs still come
+// from the loaded font; only CJK codepoints fall through. The lists must stay
+// inline literals: next/font evaluates its options at compile time and
+// rejects spreads and variables.
 const hankenGrotesk = Hanken_Grotesk({
   subsets: ["latin"],
   variable: "--font-hanken-grotesk",
@@ -34,6 +39,12 @@ const hankenGrotesk = Hanken_Grotesk({
     "BlinkMacSystemFont",
     "Segoe UI",
     "Roboto",
+    "Hiragino Sans",
+    "Yu Gothic UI",
+    "PingFang SC",
+    "Microsoft YaHei",
+    "Apple SD Gothic Neo",
+    "Malgun Gothic",
     "sans-serif",
   ],
 });
@@ -50,6 +61,12 @@ const dmMono = DM_Mono({
     "Roboto Mono",
     "Consolas",
     "Courier New",
+    "Hiragino Sans",
+    "Yu Gothic UI",
+    "PingFang SC",
+    "Microsoft YaHei",
+    "Apple SD Gothic Neo",
+    "Malgun Gothic",
     "monospace",
   ],
 });
