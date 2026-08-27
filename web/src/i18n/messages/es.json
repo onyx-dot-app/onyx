@@ -3969,11 +3969,11 @@
       "wontPortConsentModal": {
         "title": "Algunos conectores no se volverán a indexar",
         "submit": "Eliminar y reindexar",
-        "description": "{count, plural, one {Este conector no se trasladará al nuevo índice y sus datos existentes se eliminarán cuando termine la reindexación:} other {Estos # conectores no se trasladarán al nuevo índice y sus datos existentes se eliminarán cuando termine la reindexación:}}",
+        "description": "{count, plural, one {Este conector no se puede trasladar al nuevo índice. La reindexación lo elimina de Onyx, junto con los documentos que indexó:} other {Estos # conectores no se pueden trasladar al nuevo índice. La reindexación los elimina de Onyx, junto con los documentos que indexaron:}}",
         "connector": "{name} — {status}",
         "statusInvalid": "no válido",
         "statusPaused": "en pausa",
-        "restoreHint": "Para restaurar los datos de un conector más adelante, vuelve a indexarlo desde el principio."
+        "restoreHint": "Para volver a buscar en esas fuentes, añade los conectores de nuevo cuando termine la reindexación."
       }
     },
     "indexing": {

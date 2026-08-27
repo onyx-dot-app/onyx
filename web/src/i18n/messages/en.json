@@ -3969,11 +3969,11 @@
       "wontPortConsentModal": {
         "title": "Some connectors won't be re-indexed",
         "submit": "Delete & Re-index",
-        "description": "{count, plural, one {This connector won't be carried into the new index, and its existing data will be deleted once the re-index completes:} other {These # connectors won't be carried into the new index, and their existing data will be deleted once the re-index completes:}}",
+        "description": "{count, plural, one {This connector can't be carried into the new index. Re-indexing deletes it from Onyx, along with the documents it indexed:} other {These # connectors can't be carried into the new index. Re-indexing deletes them from Onyx, along with the documents they indexed:}}",
         "connector": "{name} — {status}",
         "statusInvalid": "invalid",
         "statusPaused": "paused",
-        "restoreHint": "To restore a connector's data later, re-index it from the beginning."
+        "restoreHint": "To search those sources again, add the connectors back after the re-index finishes."
       }
     },
     "indexing": {

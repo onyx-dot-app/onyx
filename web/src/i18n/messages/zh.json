@@ -3969,11 +3969,11 @@
       "wontPortConsentModal": {
         "title": "部分连接器不会被重新索引",
         "submit": "删除并重新索引",
-        "description": "{count, plural, one {该连接器不会被迁移到新索引，重新索引完成后其现有数据将被删除：} other {这 # 个连接器不会被迁移到新索引，重新索引完成后它们的现有数据将被删除：}}",
+        "description": "{count, plural, one {该连接器无法迁移到新索引。重新索引会将它以及它已索引的文档一并从 Onyx 中删除：} other {这 # 个连接器无法迁移到新索引。重新索引会将它们以及它们已索引的文档一并从 Onyx 中删除：}}",
         "connector": "{name} — {status}",
         "statusInvalid": "无效",
         "statusPaused": "已暂停",
-        "restoreHint": "如需稍后恢复连接器的数据，请从头重新索引该连接器。"
+        "restoreHint": "如需再次搜索这些来源，请在重新索引完成后重新添加这些连接器。"
       }
     },
     "indexing": {

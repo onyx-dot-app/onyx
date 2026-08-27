@@ -3588,8 +3588,8 @@
         },
         "applyReindex": {
           "label": "Anwenden & neu indizieren",
-          "statusesLoading": "Connector-Status wird geladen…",
-          "statusesFailed": "Connector-Status konnte nicht geladen werden — bitte vor dem Neuindizieren erneut versuchen."
+          "statusesLoading": "Konnektor-Status wird geladen…",
+          "statusesFailed": "Konnektor-Status konnte nicht geladen werden — bitte vor dem Neuindizieren erneut versuchen."
         },
         "rebuildAll": {
           "label": "Alle vorhandenen Dokumente neu aufbauen"
@@ -3967,13 +3967,13 @@
         "urlInvalid": "Muss eine gültige URL sein"
       },
       "wontPortConsentModal": {
-        "title": "Einige Connectors werden nicht neu indiziert",
+        "title": "Einige Konnektoren werden nicht neu indiziert",
         "submit": "Löschen & neu indizieren",
-        "description": "{count, plural, one {Dieser Connector wird nicht in den neuen Index übernommen, und seine vorhandenen Daten werden nach Abschluss der Neuindizierung gelöscht:} other {Diese # Connectors werden nicht in den neuen Index übernommen, und ihre vorhandenen Daten werden nach Abschluss der Neuindizierung gelöscht:}}",
+        "description": "{count, plural, one {Dieser Konnektor kann nicht in den neuen Index übernommen werden. Beim Neuindizieren wird er zusammen mit den von ihm indizierten Dokumenten aus Onyx gelöscht:} other {Diese # Konnektoren können nicht in den neuen Index übernommen werden. Beim Neuindizieren werden sie zusammen mit den von ihnen indizierten Dokumenten aus Onyx gelöscht:}}",
         "connector": "{name} — {status}",
         "statusInvalid": "ungültig",
         "statusPaused": "pausiert",
-        "restoreHint": "Um die Daten eines Connectors später wiederherzustellen, indizieren Sie ihn von Grund auf neu."
+        "restoreHint": "Um diese Quellen wieder zu durchsuchen, fügen Sie die Konnektoren nach Abschluss der Neuindizierung erneut hinzu."
       }
     },
     "indexing": {
