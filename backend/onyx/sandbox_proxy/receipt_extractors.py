@@ -137,7 +137,7 @@ def response_facts(action_type: str, response_body: bytes | None) -> ResponseFac
     if action_type.startswith("gdrive."):
         return _gdrive_facts(body)
     if action_type.startswith("gmail."):
-        return _gmail_facts(body)
+        return _gmail_facts(action_type, body)
     if action_type.startswith("linear."):
         return _linear_facts(body)
     return ResponseFacts()
@@ -185,10 +185,21 @@ def _slack_facts(action_type: str, body: dict[str, Any]) -> ResponseFacts:
     return ResponseFacts(link=link, operation_key=operation_key)
 
 
+# The dedicated editor APIs name their id after the product and return no
+# mimeType, so the key alone picks the link.
+_GDRIVE_LINKS_BY_ID_KEY = {
+    "documentId": "https://docs.google.com/document/d/{id}",
+    "spreadsheetId": "https://docs.google.com/spreadsheets/d/{id}",
+    "presentationId": "https://docs.google.com/presentation/d/{id}",
+}
+
+
 def _gdrive_facts(body: dict[str, Any]) -> ResponseFacts:
-    file_id = _safe_id(
-        body.get("id") or body.get("documentId") or body.get("spreadsheetId")
-    )
+    for key, template in _GDRIVE_LINKS_BY_ID_KEY.items():
+        editor_id = _safe_id(body.get(key))
+        if editor_id is not None:
+            return ResponseFacts(link=template.format(id=editor_id))
+    file_id = _safe_id(body.get("id"))
     if file_id is None:
         return ResponseFacts()
     mime = body.get("mimeType")
@@ -196,14 +207,16 @@ def _gdrive_facts(body: dict[str, Any]) -> ResponseFacts:
     return ResponseFacts(link=template.format(id=file_id))
 
 
-def _gmail_facts(body: dict[str, Any]) -> ResponseFacts:
+def _gmail_facts(action_type: str, body: dict[str, Any]) -> ResponseFacts:
     # Drafts nest the message, sends carry it at the top level.
     nested = body.get("message")
     message = nested if isinstance(nested, dict) else body
     message_id = _safe_id(message.get("id"))
-    if message_id is not None:
-        return ResponseFacts(link=f"https://mail.google.com/mail/u/0/#all/{message_id}")
-    return ResponseFacts()
+    if message_id is None:
+        return ResponseFacts()
+    # A draft is not in #all until sent, so link the drafts view instead.
+    view = "drafts" if action_type.startswith("gmail.drafts.") else "all"
+    return ResponseFacts(link=f"https://mail.google.com/mail/u/0/#{view}/{message_id}")
 
 
 def _linear_facts(body: dict[str, Any]) -> ResponseFacts:

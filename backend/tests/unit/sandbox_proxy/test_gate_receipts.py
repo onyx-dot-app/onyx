@@ -28,6 +28,7 @@ from onyx.sandbox_proxy.addons import gate as gate_module
 from onyx.sandbox_proxy.addons.gate import (
     RECEIPT_FLOW_KEY,
     GateAddon,
+    _CappedBodyCapture,
     _IdentityResolver,
 )
 from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
@@ -226,24 +227,31 @@ def test_oversized_decoded_body_refines_nothing(
     asyncio.run(addon.response(flow))
     assert calls[0]["response_body"] is None
 
-    # An undecodable body falls back to its raw bytes rather than raising;
-    # the extractors then simply fail to parse it.
+    # An undecodable body refines nothing rather than raising.
     flow = _recorded_flow(200)
     flow.response.headers["content-encoding"] = "gzip"
     flow.response.raw_content = b"not gzip"
     asyncio.run(addon.response(flow))
-    assert calls[1]["response_body"] == b"not gzip"
+    assert calls[1]["response_body"] is None
 
 
-def test_responseheaders_buffers_recorded_flows_without_declared_length() -> None:
+def test_responseheaders_caps_undeclared_recorded_flows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     addon = _addon()
 
-    # Chunked responses declare no length, but a recorded flow still buffers
-    # so the extractors can read it. Anything else streams as usual.
-    recorded = _recorded_flow(200)
-    del recorded.response.headers["content-length"]
-    addon.responseheaders(recorded)
-    assert recorded.response.stream is False
+    # Chunked responses declare no length, so a recorded flow streams through
+    # a capped observer the response hook reads. Small declared bodies buffer,
+    # oversize ones and unrecorded flows stream unobserved.
+    chunked = _recorded_flow(200)
+    del chunked.response.headers["content-length"]
+    addon.responseheaders(chunked)
+    capture = chunked.response.stream
+    assert isinstance(capture, _CappedBodyCapture)
+
+    small = _recorded_flow(200)
+    addon.responseheaders(small)
+    assert small.response.stream is False
 
     declared_oversize = _recorded_flow(200)
     declared_oversize.response.headers["content-length"] = str(2 * 1024 * 1024)
@@ -253,6 +261,35 @@ def test_responseheaders_buffers_recorded_flows_without_declared_length() -> Non
     unrecorded = tflow.tflow(resp=True)
     addon.responseheaders(unrecorded)
     assert unrecorded.response is not None and unrecorded.response.stream is True
+
+    # The observer passes chunks through untouched and the response hook
+    # reads the copy, so chunked provider responses still refine.
+    calls = _finalize_capture(monkeypatch)
+    payload = b'{"ok": true}'
+    assert capture(payload) == payload
+    assert capture(b"") == b""
+    asyncio.run(addon.response(chunked))
+    assert calls[0]["response_body"] == payload
+
+
+def test_capped_capture_drops_oversized_streams(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    addon = _addon()
+    calls = _finalize_capture(monkeypatch)
+    flow = _recorded_flow(200)
+    del flow.response.headers["content-length"]
+    addon.responseheaders(flow)
+    capture = flow.response.stream
+    assert isinstance(capture, _CappedBodyCapture)
+
+    chunk = b"x" * (512 * 1024)
+    for _ in range(5):
+        assert capture(chunk) == chunk
+    assert capture.overflowed and not capture.body
+
+    asyncio.run(addon.response(flow))
+    assert calls[0]["response_body"] is None
 
 
 def test_always_policy_writes_still_record(

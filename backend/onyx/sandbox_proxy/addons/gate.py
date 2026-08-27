@@ -11,6 +11,7 @@ import ipaddress
 import operator
 import socket
 import threading
+import zlib
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
@@ -217,6 +218,43 @@ RECEIPT_FLOW_KEY = "craft_recorded_receipts"
 RECEIPT_REFINE_MAX_BODY_BYTES = 1024 * 1024
 
 
+class _CappedBodyCapture:
+    """Streams a recorded flow's response through untouched while keeping a
+    copy for the extractors, up to the refine cap. Oversize drops the copy."""
+
+    def __init__(self) -> None:
+        self.body = bytearray()
+        self.overflowed = False
+
+    def __call__(self, chunk: bytes) -> bytes:
+        if chunk and not self.overflowed:
+            self.body.extend(chunk)
+            if len(self.body) > RECEIPT_REFINE_MAX_BODY_BYTES:
+                self.overflowed = True
+                self.body = bytearray()
+        return chunk
+
+
+def _bounded_decode(data: bytes, content_encoding: str) -> bytes | None:
+    """Undo Content-Encoding without trusting it: output is capped so a small
+    compressed body cannot balloon in memory. Unsupported or broken codings
+    refine nothing rather than risk an unbounded decode."""
+    coding = content_encoding.strip().lower()
+    if coding in ("", "identity"):
+        return data if len(data) <= RECEIPT_REFINE_MAX_BODY_BYTES else None
+    if coding not in ("gzip", "deflate"):
+        return None
+    wbits = 16 + zlib.MAX_WBITS if coding == "gzip" else zlib.MAX_WBITS
+    try:
+        decompressor = zlib.decompressobj(wbits=wbits)
+        decoded = decompressor.decompress(data, RECEIPT_REFINE_MAX_BODY_BYTES + 1)
+    except zlib.error:
+        return None
+    if len(decoded) > RECEIPT_REFINE_MAX_BODY_BYTES or decompressor.unconsumed_tail:
+        return None
+    return decoded
+
+
 class ParkedApprovals:
     """Approvals the proxy is currently parked on, grouped by tenant.
 
@@ -376,15 +414,18 @@ class GateAddon:
         if flow.response is None:
             return
         # A recorded flow's response feeds the receipt extractors: buffer it
-        # unless declared oversize (chunked declares nothing and must buffer).
-        # The decoded-length cap in `response` bounds the read either way.
+        # when its declared size fits, otherwise stream through a capped
+        # observer so chunked or lying origins can never grow proxy memory.
         if RECEIPT_FLOW_KEY in flow.metadata:
             declared = flow.response.headers.get("content-length")
             try:
                 length = int(declared) if declared is not None else None
             except ValueError:
                 length = None
-            if length is None or length <= RECEIPT_REFINE_MAX_BODY_BYTES:
+            if length is not None and length <= RECEIPT_REFINE_MAX_BODY_BYTES:
+                return
+            if length is None:
+                flow.response.stream = _CappedBodyCapture()
                 return
         flow.response.stream = True
 
@@ -627,12 +668,21 @@ class GateAddon:
             return
         confirmed = flow.response is not None and flow.response.status_code < 400
         response_body: bytes | None = None
-        if flow.response is not None and not flow.response.stream:
-            # get_content undoes Content-Encoding. raw_content is still
-            # compressed on the wire and would parse as garbage.
-            decoded = flow.response.get_content(strict=False)
-            if decoded is not None and len(decoded) <= RECEIPT_REFINE_MAX_BODY_BYTES:
-                response_body = decoded
+        if flow.response is not None:
+            stream = flow.response.stream
+            wire: bytes | None = None
+            if isinstance(stream, _CappedBodyCapture):
+                wire = bytes(stream.body) if not stream.overflowed else None
+            elif not stream:
+                raw = flow.response.raw_content
+                if raw is not None and len(raw) <= RECEIPT_REFINE_MAX_BODY_BYTES:
+                    wire = raw
+            if wire is not None:
+                # The wire body is still Content-Encoding compressed and
+                # would parse as garbage undecoded.
+                response_body = _bounded_decode(
+                    wire, flow.response.headers.get("content-encoding", "")
+                )
         await self._finalize_recorded(
             recorded,
             ReceiptStatus.CONFIRMED if confirmed else ReceiptStatus.FAILED,

@@ -7,6 +7,7 @@ nothing rather than raise.
 """
 
 import json
+from typing import Any
 from urllib.parse import urlencode
 
 import pytest
@@ -21,7 +22,7 @@ from onyx.sandbox_proxy.receipt_extractors import (
 )
 
 
-def _body(payload: dict) -> bytes:
+def _body(payload: dict[str, Any]) -> bytes:
     return json.dumps(payload).encode()
 
 
@@ -129,10 +130,24 @@ def test_gdrive_links_follow_the_mime_type(mime: str, prefix: str) -> None:
 def test_gmail_send_and_draft_shapes_both_link() -> None:
     sent = response_facts("gmail.messages.send", _body({"id": "m1", "threadId": "t1"}))
     assert sent.link == "https://mail.google.com/mail/u/0/#all/m1"
+    # A draft is not in #all until sent, so its link opens the drafts view.
     draft = response_facts(
         "gmail.drafts.create", _body({"id": "d1", "message": {"id": "m2"}})
     )
-    assert draft.link == "https://mail.google.com/mail/u/0/#all/m2"
+    assert draft.link == "https://mail.google.com/mail/u/0/#drafts/m2"
+
+
+@pytest.mark.parametrize(
+    "key,prefix",
+    [
+        ("documentId", "https://docs.google.com/document/d/"),
+        ("spreadsheetId", "https://docs.google.com/spreadsheets/d/"),
+        ("presentationId", "https://docs.google.com/presentation/d/"),
+    ],
+)
+def test_gdrive_editor_api_ids_link_without_a_mime_type(key: str, prefix: str) -> None:
+    facts = response_facts("gdrive.slides.create", _body({key: "p123"}))
+    assert facts.link == f"{prefix}p123"
 
 
 def test_linear_errors_fail_and_only_shaped_urls_pass() -> None:
