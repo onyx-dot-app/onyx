@@ -86,15 +86,24 @@ jobs:
 
       # Authenticate git the way actions/checkout does, with a header rather
       # than a URL, so the token never becomes part of a remote or a ref.
+      #
+      # The identity is not optional here: `git commit-tree` needs a committer,
+      # and a runner has none configured to fall back on.
       - name: Authenticate git against the mirror
         if: ${{ !inputs.dry_run }}
         env:
           GH_TOKEN: ${{ steps.mirror-token.outputs.token }}
+          APP_SLUG: ${{ steps.mirror-token.outputs.app-slug }}
         run: |
           set -euo pipefail
           auth=$(printf 'x-access-token:%s' "${GH_TOKEN}" | base64 -w0)
           git config --global "http.https://github.com/.extraheader" \
             "Authorization: Basic ${auth}"
+
+          bot_user_id="$(gh api "/users/${APP_SLUG}[bot]" --jq .id)"
+          git config --global user.name "${APP_SLUG}[bot]"
+          git config --global user.email \
+            "${bot_user_id}+${APP_SLUG}[bot]@users.noreply.github.com"
 
       # `git subtree split` walks every commit in this repository to find the
       # handful that touch the provider, which takes longer than the whole
@@ -123,8 +132,12 @@ jobs:
           Edit the provider there, never here."
           commit=$(git commit-tree "${tree}" "${parents[@]}" -m "${message}")
 
-          git push "${mirror}" "${commit}:refs/heads/main"
-          git push "${mirror}" "${commit}:refs/tags/${MIRROR_TAG}"
+          # One atomic push, so a rejected tag cannot leave main advanced
+          # without it. Re-running a version that already shipped is refused
+          # whole rather than adding a second commit for the same release.
+          git push --atomic "${mirror}" \
+            "${commit}:refs/heads/main" \
+            "${commit}:refs/tags/${MIRROR_TAG}"
           echo "Pushed ${commit} to ${MIRROR_REPO} as ${MIRROR_TAG}."
 
       # goreleaser reads the version from the tag it finds in the checkout it
