@@ -1,8 +1,7 @@
 "use client";
 
 import useSWR, { mutate } from "swr";
-import { create } from "zustand";
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import type {
@@ -10,6 +9,7 @@ import type {
   MCPServersResponse,
   ToolSnapshot,
 } from "@/lib/tools/types";
+import { createSharedHook } from "@opal/hooks";
 import { useActiveAgent } from "@/lib/agents/hooks";
 import { useActiveProject } from "@/lib/projects/hooks";
 import useChatSessions from "@/hooks/useChatSessions";
@@ -126,62 +126,61 @@ interface ForcedToolState {
  * The tool the next message will be made to use, if any.
  *
  * A forced tool runs whether or not the model would have chosen it. Only one
- * can be forced at a time — the request carries a single `forced_tool_id` —
- * so the state is that one id rather than a list that callers must keep to
- * one entry by convention.
- *
- * Local UI state, so a module-level store: every caller wants the same value
- * and none of them thread it.
+ * can be forced at a time — the request carries a single `forced_tool_id` — so
+ * the state is that one id rather than a list callers must keep to one entry
+ * by convention.
  */
-export const useForcedTools = create<ForcedToolState>(function (set, get) {
-  return {
-    forcedToolId: null,
+function useForcedToolsState(): ForcedToolState {
+  const [forcedToolId, setForcedToolId] = useState<number | null>(null);
 
-    // Clicking the tool that is already forced unforces it; clicking any other
-    // replaces it, since forcing two is not a state that can be sent.
-    toggleForcedTool: (id) =>
-      set({ forcedToolId: get().forcedToolId === id ? null : id }),
+  // Clicking the tool that is already forced unforces it; clicking any other
+  // replaces it, since forcing two is not a state that can be sent.
+  const toggleForcedTool = useCallback(
+    (id: number) => setForcedToolId((current) => (current === id ? null : id)),
+    []
+  );
+  const clearForcedTool = useCallback(() => setForcedToolId(null), []);
 
-    clearForcedTool: () => set({ forcedToolId: null }),
-  };
-});
-
-/**
- * Drops the forced tool when the conversation it was meant for goes away.
- *
- * A forced tool is a choice about the next message, so it should not outlive
- * the context that choice was made in: switching agent, switching project, or
- * moving to a different chat all leave it meaningless.
- *
- * One exception, and it is the common path rather than an edge case. Sending
- * the first message is what creates the chat, so the session id goes from null
- * to an id on the way out — clearing there would discard the tool the user
- * forced by the very act of using it. That is a chat appearing, not a chat
- * being left, so it does not reset.
- *
- * Mount this once per chat surface, above whatever renders the tools popover.
- * The popover itself is rendered only when there is an agent, which is the
- * wrong lifetime for a rule about losing one.
- */
-export function useToolsController() {
+  // Switching agent, project or chat leaves the choice meaningless, so it does
+  // not survive them. The exception is the common path: sending the first
+  // message is what creates the chat, so the session id goes null -> id on the
+  // way out, and clearing there would discard the tool the user forced by the
+  // act of using it. That is a chat appearing, not one being left. The provider
+  // is per surface rather than per agent, so an agent switch does not unmount
+  // it and this is what handles that case.
   const agent = useActiveAgent();
   const { currentChatSessionId } = useChatSessions();
   const activeProject = useActiveProject();
-  const { clearForcedTool } = useForcedTools();
-
   const priorSessionIdRef = useRef(currentChatSessionId);
-
   useEffect(() => {
     const priorSessionId = priorSessionIdRef.current;
     priorSessionIdRef.current = currentChatSessionId;
-
-    // The user's own send created this chat; the tool is for the message
-    // already on its way.
     if (priorSessionId === null && currentChatSessionId !== null) return;
-
     clearForcedTool();
   }, [agent?.id, currentChatSessionId, activeProject?.id, clearForcedTool]);
+
+  // Memoized so consumers re-render when the forced tool changes and not
+  // merely because the provider did.
+  return useMemo(
+    () => ({ forcedToolId, toggleForcedTool, clearForcedTool }),
+    [forcedToolId, toggleForcedTool, clearForcedTool]
+  );
 }
+
+/**
+ * Scoped to whatever tree mounts the provider, so one chat surface cannot
+ * disturb another's choice. A preview modal over a conversation gets its own,
+ * and opening it leaves the conversation's forced tool alone — which a
+ * module-level store could not promise without every new surface remembering
+ * to be careful.
+ *
+ * Mount above whatever reads it: the tools popover, the chip in the input bar,
+ * and the send path all do, and the send path runs from the page itself.
+ */
+export const [ForcedToolsProvider, useForcedTools] = createSharedHook(
+  useForcedToolsState,
+  "ForcedTools"
+);
 
 /**
  * Hook to fetch all available tools from the backend.
