@@ -1963,14 +1963,12 @@ jobs:
       - build-web-cloud-amd64
       - build-backend-amd64
       - build-model-server-amd64
-      - build-sandbox-amd64
     if: >-
       always() && !cancelled() &&
       (needs.build-web-amd64.result == 'success' ||
        needs.build-web-cloud-amd64.result == 'success' ||
        needs.build-backend-amd64.result == 'success' ||
-       needs.build-model-server-amd64.result == 'success' ||
-       needs.build-sandbox-amd64.result == 'success')
+       needs.build-model-server-amd64.result == 'success')
     runs-on:
       - runs-on
       # amd64 to match the images scanned: `ods audit image` uses the docker CLI,
@@ -1998,8 +1996,6 @@ jobs:
             registry-image: onyxdotapp/onyx-backend
           - component: model-server
             registry-image: onyxdotapp/onyx-model-server
-          - component: sandbox
-            registry-image: onyxdotapp/sandbox
     steps:
       - name: Check if this scan should run
         id: should-run
@@ -2009,7 +2005,6 @@ jobs:
             web-cloud) RESULT="$BUILD_WEB_CLOUD" ;;
             backend) RESULT="$BUILD_BACKEND" ;;
             model-server) RESULT="$BUILD_MODEL_SERVER" ;;
-            sandbox) RESULT="$BUILD_SANDBOX" ;;
           esac
           if [ "$RESULT" == "success" ]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
@@ -2022,7 +2017,6 @@ jobs:
           BUILD_WEB_CLOUD: ${{ needs.build-web-cloud-amd64.result }}
           BUILD_BACKEND: ${{ needs.build-backend-amd64.result }}
           BUILD_MODEL_SERVER: ${{ needs.build-model-server-amd64.result }}
-          BUILD_SANDBOX: ${{ needs.build-sandbox-amd64.result }}
 
       - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
         if: steps.should-run.outputs.run == 'true'
@@ -2066,7 +2060,6 @@ jobs:
             web-cloud) DIGEST="$DIGEST_WEB_CLOUD" ;;
             backend) DIGEST="$DIGEST_BACKEND" ;;
             model-server) DIGEST="$DIGEST_MODEL_SERVER" ;;
-            sandbox) DIGEST="$DIGEST_SANDBOX" ;;
           esac
           if [ "$IS_TEST_RUN" == "true" ]; then
             echo "image=${RUNS_ON_ECR_CACHE}@${DIGEST}" >> "$GITHUB_OUTPUT"
@@ -2081,7 +2074,6 @@ jobs:
           DIGEST_WEB_CLOUD: ${{ needs.build-web-cloud-amd64.outputs.digest }}
           DIGEST_BACKEND: ${{ needs.build-backend-amd64.outputs.digest }}
           DIGEST_MODEL_SERVER: ${{ needs.build-model-server-amd64.outputs.digest }}
-          DIGEST_SANDBOX: ${{ needs.build-sandbox-amd64.outputs.digest }}
 
       - name: Run image vulnerability audit
         if: steps.should-run.outputs.run == 'true'
