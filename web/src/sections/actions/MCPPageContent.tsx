@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { KeyedMutator } from "swr";
@@ -65,6 +65,11 @@ export default function MCPPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
+  // Server whose `?trigger_fetch=true` was already handled. The effect below
+  // re-runs whenever a dependency changes identity, and the URL param is only
+  // cleared after async work, so this keeps the fetch one-shot.
+  const handledTriggerFetchServerIdRef = useRef<number | null>(null);
+
   useEffect(() => {
     const serverId = searchParams.get("server_id");
     const triggerFetch = searchParams.get("trigger_fetch");
@@ -73,9 +78,11 @@ export default function MCPPageContent() {
     if (
       serverId &&
       triggerFetch === "true" &&
+      handledTriggerFetchServerIdRef.current !== parseInt(serverId) &&
       !fetchingToolsServerIds.includes(parseInt(serverId))
     ) {
       const serverIdInt = parseInt(serverId);
+      handledTriggerFetchServerIdRef.current = serverIdInt;
 
       const handleFetchingTools = async () => {
         try {
@@ -123,12 +130,17 @@ export default function MCPPageContent() {
 
   // Track fetching tools server IDs
   useEffect(() => {
-    if (mcpServers) {
-      const fetchingIds = mcpServers
-        .filter((server) => server.status === MCPServerStatus.FETCHING_TOOLS)
-        .map((server) => server.id);
-      setFetchingToolsServerIds(fetchingIds);
-    }
+    const fetchingIds = mcpServers
+      .filter((server) => server.status === MCPServerStatus.FETCHING_TOOLS)
+      .map((server) => server.id);
+    // Keep the previous array when the ids are unchanged so effects that
+    // depend on it do not re-run for a new identity with the same contents.
+    setFetchingToolsServerIds((prev) =>
+      prev.length === fetchingIds.length &&
+      prev.every((id, index) => id === fetchingIds[index])
+        ? prev
+        : fetchingIds
+    );
   }, [mcpServers]);
 
   // Track if any modal is open to manage the shared overlay
