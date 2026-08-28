@@ -19,7 +19,7 @@ import { useFocusOnMount } from "@opal/hooks";
 import { Section } from "@opal/layouts";
 import { SvgFolder, SvgFolderPlus } from "@opal/icons";
 import { useAppRouter } from "@/hooks/appNavigation";
-import { useAppPosition } from "@/lib/app/hooks";
+import { AppPosition, useAppPosition } from "@/lib/app/hooks";
 import { noProp } from "@/lib/utils";
 import { UNNAMED_CHAT } from "@/lib/constants";
 import { usePinChatAgent } from "@/lib/agents/hooks";
@@ -59,7 +59,7 @@ function ProjectPopoverRow({ match, onNavigate }: ProjectPopoverRowProps) {
     // Navigation closes the popover on its own, but re-selecting the project
     // you are already inside leaves the URL alone.
     onNavigate();
-    route({ projectId: match.project.id });
+    route(AppPosition.project(match.project.id));
   }
 
   return (

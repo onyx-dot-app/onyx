@@ -30,7 +30,7 @@ import {
 } from "@/lib/sidebar/utils";
 import { handleMoveOperation } from "@/lib/sidebar/svc";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
-import { useAppPosition } from "@/lib/app/hooks";
+import { AppPosition, useAppPosition } from "@/lib/app/hooks";
 import {
   SvgChevronLeft,
   SvgEdit,
@@ -318,7 +318,7 @@ const ChatButton = memo(
 
           // Only route if the deleted chat is the currently opened chat session
           if (active) {
-            route({ projectId: project.id });
+            route(AppPosition.project(project.id));
           }
         }
         await refreshChatSessions();
@@ -393,7 +393,7 @@ const ChatButton = memo(
         await performMove(newProject.id);
 
         // Navigate to the new project to see the chat
-        route({ projectId: newProject.id });
+        route(AppPosition.project(newProject.id));
         setNavigateAfterMoveProjectId(null);
       } catch (error) {
         console.error("Failed to create project and move chat:", error);
@@ -519,7 +519,7 @@ const ChatButton = memo(
                 await performMove(target);
                 // Navigate if this was triggered by creating a new project
                 if (shouldNavigate != null) {
-                  route({ projectId: shouldNavigate });
+                  route(AppPosition.project(shouldNavigate));
                   setNavigateAfterMoveProjectId(null);
                 }
               }

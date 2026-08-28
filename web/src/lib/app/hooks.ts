@@ -2,7 +2,9 @@
 
 import { useLayoutEffect, useMemo } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
+import type { Route } from "next";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
+import { routeWithQuery } from "@/lib/routes";
 import { useSettings } from "@/lib/settings/hooks";
 import { APP_SLOGAN } from "@/lib/constants";
 import useChatSessions from "@/hooks/useChatSessions";
@@ -23,6 +25,68 @@ export type AppPositionType =
 
 export class AppPosition {
   constructor(public value: AppPositionType) {}
+
+  static chat(id: string): AppPosition {
+    return new AppPosition({ location: "chat", id });
+  }
+
+  static agent(id: number): AppPosition {
+    return new AppPosition({ location: "agent", id: String(id) });
+  }
+
+  static project(id: number): AppPosition {
+    return new AppPosition({ location: "project", id: String(id) });
+  }
+
+  /** The agents listing, with one agent's viewer open over it. */
+  static agentViewer(id: number): AppPosition {
+    return new AppPosition({ location: "more-agents", id: String(id) });
+  }
+
+  /** The agents listing with nothing open. */
+  static moreAgents(): AppPosition {
+    return new AppPosition({ location: "more-agents", id: null });
+  }
+
+  static newSession(): AppPosition {
+    return new AppPosition({ location: "new-session" });
+  }
+
+  /**
+   * Where to navigate to reach this position.
+   *
+   * The mirror of the derivation below: one class owns which pathname and
+   * which parameter name each location lives at, so a caller names a position
+   * and never assembles a URL. Reading and writing cannot drift apart, because
+   * they are the same knowledge stated once in each direction.
+   */
+  href(): Route {
+    switch (this.value.location) {
+      case "chat":
+        return routeWithQuery("/app", {
+          [SEARCH_PARAM_NAMES.CHAT_ID]: this.value.id,
+        });
+      case "agent":
+        return routeWithQuery("/app", {
+          [SEARCH_PARAM_NAMES.AGENT_ID]: this.value.id,
+        });
+      case "project":
+        return routeWithQuery("/app", {
+          [SEARCH_PARAM_NAMES.PROJECT_ID]: this.value.id,
+        });
+      case "more-agents":
+        return this.value.id === null
+          ? ("/app/agents" as Route)
+          : routeWithQuery("/app/agents", {
+              [SEARCH_PARAM_NAMES.AGENT_ID]: this.value.id,
+            });
+      case "user-settings":
+        return "/app/settings" as Route;
+      case "shared-chat":
+      case "new-session":
+        return "/app" as Route;
+    }
+  }
 
   /**
    * The id of whatever this position names, or null.

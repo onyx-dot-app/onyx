@@ -1,31 +1,20 @@
 "use client";
 
-import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
-import { routeWithQuery } from "@/lib/routes";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback } from "react";
+import type { AppPosition } from "@/lib/app/hooks";
 
-interface UseAppRouterProps {
-  chatSessionId?: string;
-  agentId?: number;
-  projectId?: number;
-}
-
+/**
+ * Navigates to a position.
+ *
+ * The caller names where the user should end up; {@link AppPosition.href}
+ * knows what URL that is. Nothing here assembles one, so the pathname and
+ * parameter names stay in the one place that also reads them back.
+ */
 export function useAppRouter() {
   const router = useRouter();
   return useCallback(
-    ({ chatSessionId, agentId, projectId }: UseAppRouterProps = {}) => {
-      // At most one parameter is set, in this order of priority.
-      const query = chatSessionId
-        ? { [SEARCH_PARAM_NAMES.CHAT_ID]: chatSessionId }
-        : agentId
-          ? { [SEARCH_PARAM_NAMES.AGENT_ID]: agentId }
-          : projectId
-            ? { [SEARCH_PARAM_NAMES.PROJECT_ID]: projectId }
-            : {};
-
-      router.push(routeWithQuery("/app", query));
-    },
+    (position: AppPosition) => router.push(position.href()),
     [router]
   );
 }

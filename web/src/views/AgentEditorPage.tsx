@@ -89,6 +89,7 @@ import { AgentEditorMCPServer, MCPTool, ToolSnapshot } from "@/lib/tools/types";
 import useFilter from "@/hooks/useFilter";
 import EnabledCount from "@/refresh-components/EnabledCount";
 import { useAppRouter } from "@/hooks/appNavigation";
+import { AppPosition } from "@/lib/app/hooks";
 import { isDateInFuture } from "@/lib/dateUtils";
 import {
   deleteAgent,
@@ -1048,7 +1049,7 @@ export default function AgentEditorPage({
       }
 
       // Immediately start a chat with this agent.
-      appRouter({ agentId: agent.id });
+      appRouter(AppPosition.agent(agent.id));
     } catch (error) {
       console.error("Submit error:", error);
       toast.error(`An error occurred: ${error}`);

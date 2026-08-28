@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import type { Route } from "next";
 import { useAppRouter } from "@/hooks/appNavigation";
+import { AppPosition } from "@/lib/app/hooks";
 import CommandMenu, {
   useCommandMenuContext,
 } from "@/refresh-components/commandmenu/CommandMenu";
@@ -163,7 +164,7 @@ export default function ChatSearchCommandMenu({
 
   const handleChatSelect = useCallback(
     (chatId: string) => {
-      route({ chatSessionId: chatId });
+      route(AppPosition.chat(chatId));
       setOpen(false);
     },
     [route]
@@ -171,7 +172,7 @@ export default function ChatSearchCommandMenu({
 
   const handleProjectSelect = useCallback(
     (projectId: number) => {
-      route({ projectId });
+      route(AppPosition.project(projectId));
       setOpen(false);
     },
     [route]

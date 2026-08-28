@@ -42,6 +42,7 @@ import {
 import { useSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { useAppRouter } from "@/hooks/appNavigation";
+import { AppPosition } from "@/lib/app/hooks";
 import { ChatFileType } from "@/app/app/interfaces";
 import { toast } from "@opal/layouts";
 import { useProjects } from "@/lib/projects/hooks";
@@ -240,7 +241,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
       try {
         const project: Project = await svcCreateProject(name);
         // Navigate to the newly created project's page
-        route({ projectId: project.id });
+        route(AppPosition.project(project.id));
         // Refresh list to keep order consistent with backend
         await fetchProjects();
         return project;
@@ -292,7 +293,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
         setCurrentProjectDetails(null);
         setAllCurrentProjectFiles([]);
         projectToUploadFilesMapRef.current.delete(projectId);
-        route();
+        route(AppPosition.newSession());
       }
     },
     [fetchProjects, currentProjectId, projectToUploadFilesMapRef, route]

@@ -8,7 +8,7 @@ import { Button } from "@opal/components";
 import { useAppRouter } from "@/hooks/appNavigation";
 import { usePinnedAgents, useAgent } from "@/lib/agents/hooks";
 import { noProp } from "@/lib/utils";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { can } from "@/lib/permissions/resource-actions";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
@@ -24,8 +24,7 @@ import {
   SvgUser,
 } from "@opal/icons";
 import { useCreateModal } from "@opal/components";
-import { useAppPosition } from "@/lib/app/hooks";
-import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
+import { AppPosition, useAppPosition } from "@/lib/app/hooks";
 import { ShareAgentModal } from "@/lib/agents/components";
 import { AgentViewerModal } from "@/lib/agents/components";
 import { CardItemLayout } from "@/layouts/general-layouts";
@@ -52,18 +51,14 @@ export default function AgentCard({ agent }: AgentCardProps) {
   // The viewer is a position, not component state: it is in the URL, so it can
   // be linked to and dismissed with the back button.
   const appPosition = useAppPosition();
-  const searchParams = useSearchParams();
   const viewing = appPosition.previewedAgent() === String(agent.id);
 
   const setViewing = useCallback(
-    (open: boolean) => {
-      const params = new URLSearchParams(searchParams?.toString() ?? "");
-      if (open) params.set(SEARCH_PARAM_NAMES.AGENT_ID, String(agent.id));
-      else params.delete(SEARCH_PARAM_NAMES.AGENT_ID);
-      const query = params.toString();
-      router.push((query ? `/app/agents?${query}` : "/app/agents") as Route);
-    },
-    [agent.id, router, searchParams]
+    (open: boolean) =>
+      route(
+        open ? AppPosition.agentViewer(agent.id) : AppPosition.moreAgents()
+      ),
+    [agent.id, route]
   );
   // Affordances read the map the list endpoint stamped on `agent`, so icons render with
   // the card instead of popping in after the per-card fullAgent fetch resolves.
@@ -74,7 +69,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
     if (!pinned) {
       togglePinnedAgent(agent, true);
     }
-    route({ agentId: agent.id });
+    route(AppPosition.agent(agent.id));
   }, [pinned, togglePinnedAgent, agent, route]);
 
   // Declared once because it renders both bare and wrapped, depending on `pinned`.

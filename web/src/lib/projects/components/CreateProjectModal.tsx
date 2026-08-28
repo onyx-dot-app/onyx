@@ -6,6 +6,7 @@ import { Button } from "@opal/components";
 import { useProjectsContext } from "@/lib/projects/providers";
 import { InputVertical, toast } from "@opal/layouts";
 import { useAppRouter } from "@/hooks/appNavigation";
+import { AppPosition } from "@/lib/app/hooks";
 import { useModal } from "@opal/components";
 import { SvgFolderPlus } from "@opal/icons";
 import { Modal } from "@opal/components";
@@ -44,7 +45,7 @@ export default function CreateProjectModal({
             const name = values.projectName.trim();
             try {
               const newProject = await createProject(name);
-              route({ projectId: newProject.id });
+              route(AppPosition.project(newProject.id));
               modal.toggle(false);
             } catch {
               toast.error(`Failed to create the project ${name}`);
