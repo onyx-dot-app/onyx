@@ -2,8 +2,17 @@
 
 import { useEffect } from "react";
 import { useAgent } from "@/lib/agents/hooks";
+import { FetchError } from "@/lib/fetcher";
 import { AgentViewerModal } from "@/lib/agents/components";
 import { useAppPosition } from "@/lib/app/hooks";
+
+/** Whether the failure says the agent is absent, rather than unreachable. */
+function namesNoAgent(error: unknown): boolean {
+  return (
+    error instanceof FetchError &&
+    (error.status === 403 || error.status === 404)
+  );
+}
 
 /**
  * The agent viewer, opened by the URL rather than by whichever card was
@@ -26,7 +35,13 @@ export function AgentViewer() {
   // An id naming nothing the user can open is not a position, so it does not
   // stay in the URL. Replaced rather than pushed: going back should reach
   // wherever the user came from, not the address that named nothing.
-  const isUnopenable = previewed !== null && (!isRequestable || Boolean(error));
+  //
+  // A request that failed is not the same as an id that names nothing. Only a
+  // status saying the agent is not there, or not theirs, retires the position;
+  // a timeout or a 500 is left for SWR to retry, so a blip does not discard a
+  // link that works.
+  const isUnopenable =
+    previewed !== null && (!isRequestable || namesNoAgent(error));
   useEffect(() => {
     if (isUnopenable) appPosition.openMoreAgents({ replace: true });
   }, [isUnopenable, appPosition]);
