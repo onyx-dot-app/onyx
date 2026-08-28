@@ -1,0 +1,138 @@
+name: Release Terraform Provider
+
+# The public Terraform Registry only serves a provider from a repository named
+# after it, so the provider is published from a mirror,
+# onyx-dot-app/terraform-provider-onyx, rather than from this monorepo.
+#
+# This workflow does one thing: copy terraform-provider-onyx/ to that mirror as
+# one commit tagged vX.Y.Z. The tag push starts the mirror's own Publish
+# workflow, which builds and signs the release. That file lives at
+# terraform-provider-onyx/.github/workflows/publish.yml and travels with the
+# directory it publishes.
+#
+# Cut a release with `ods release tf-provider`, which pushes the tag below.
+
+on:
+  push:
+    tags:
+      - "tf-provider/v*.*.*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to mirror, without the leading v (e.g. 1.0.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: Release-Terraform-Provider-${{ github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  MIRROR_REPO: onyx-dot-app/terraform-provider-onyx
+  PROVIDER_DIR: terraform-provider-onyx
+
+jobs:
+  mirror:
+    name: Copy the provider to its release mirror
+    runs-on: ubuntu-latest
+    # Holds the mirror app credentials, and gates the job behind whatever
+    # reviewers the environment requires.
+    environment: release-terraform-provider
+    timeout-minutes: 15
+    steps:
+      - name: Resolve the release version
+        id: version
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [ -n "${INPUT_VERSION}" ]; then
+            version="${INPUT_VERSION#v}"
+          else
+            version="${REF_NAME#tf-provider/v}"
+          fi
+          if ! printf '%s' "${version}" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::'${version}' is not a semantic version; tag as tf-provider/vX.Y.Z"
+            exit 1
+          fi
+          echo "tag=v${version}" >> "$GITHUB_OUTPUT"
+          echo "Mirroring ${version}"
+
+      - name: Mint a token for the release mirror
+        id: mirror-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # ratchet:actions/create-github-app-token@v2
+        with:
+          client-id: ${{ vars.TF_PROVIDER_RELEASE_APP_ID }}
+          private-key: ${{ secrets.TF_PROVIDER_RELEASE_APP_PRIVATE_KEY }}
+          owner: onyx-dot-app
+          repositories: terraform-provider-onyx
+          permission-contents: write
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      # Authenticate git the way actions/checkout does, with a header rather
+      # than a URL, so the token never becomes part of a remote or a ref.
+      #
+      # The identity is not optional here: `git commit-tree` needs a committer,
+      # and a runner has none configured to fall back on.
+      - name: Authenticate git against the mirror
+        env:
+          GH_TOKEN: ${{ steps.mirror-token.outputs.token }}
+          APP_SLUG: ${{ steps.mirror-token.outputs.app-slug }}
+        run: |
+          set -euo pipefail
+          auth=$(printf 'x-access-token:%s' "${GH_TOKEN}" | base64 -w0)
+          git config --global "http.https://github.com/.extraheader" \
+            "Authorization: Basic ${auth}"
+
+          bot_user_id="$(gh api "/users/${APP_SLUG}[bot]" --jq .id)"
+          git config --global user.name "${APP_SLUG}[bot]"
+          git config --global user.email \
+            "${bot_user_id}+${APP_SLUG}[bot]@users.noreply.github.com"
+
+      # `git subtree split` walks every commit in this repository to find the
+      # handful that touch the provider, which takes longer than the whole
+      # release. The provider directory is already a complete tree, so commit
+      # that tree straight onto the mirror's history instead.
+      - name: Push the provider to the release mirror
+        env:
+          MIRROR_TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          mirror="https://github.com/${MIRROR_REPO}.git"
+
+          tree=$(git rev-parse "HEAD:${PROVIDER_DIR}")
+          parents=()
+          if git fetch --quiet "${mirror}" main 2>/dev/null; then
+            parents=(-p "$(git rev-parse FETCH_HEAD)")
+            echo "Building on the mirror's current main."
+          else
+            echo "The mirror has no main yet; this is its first commit."
+          fi
+
+          message="${MIRROR_TAG}
+
+          Published from ${GITHUB_REPOSITORY}@$(git rev-parse HEAD).
+          Edit the provider there, never here."
+          commit=$(git commit-tree "${tree}" "${parents[@]}" -m "${message}")
+
+          # One atomic push, so a rejected tag cannot leave main advanced
+          # without it. Re-running a version that already shipped is refused
+          # whole rather than adding a second commit for the same release.
+          git push --atomic "${mirror}" \
+            "${commit}:refs/heads/main" \
+            "${commit}:refs/tags/${MIRROR_TAG}"
+
+          {
+            echo "### Terraform provider ${MIRROR_TAG}"
+            echo "Mirrored \`${commit}\` to ${MIRROR_REPO}."
+            echo "The mirror's Publish workflow builds and signs the release:"
+            echo "https://github.com/${MIRROR_REPO}/actions"
+          } >> "$GITHUB_STEP_SUMMARY"
