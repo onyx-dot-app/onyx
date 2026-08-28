@@ -19,6 +19,7 @@ import {
 } from "@/refresh-components/buttons/source-tag/sourceTagUtils";
 import { openDocument } from "@/lib/search/utils";
 import { ensureHrefProtocol } from "@/lib/utils";
+import { useTranslations } from "next-intl";
 
 interface DocumentCardProps {
   document: LoadedOnyxDocument;
@@ -142,6 +143,7 @@ export const MemoizedLink = memo(
     node?: any;
     [key: string]: any;
   }) => {
+    const t = useTranslations("chat.messages");
     const value = rest.children;
 
     // Convert document to SourceInfo for SourceTag
@@ -175,7 +177,7 @@ export const MemoizedLink = memo(
 
       const displayName = document
         ? getDisplayNameForSource(document as OnyxDocument)
-        : question?.question || "Question";
+        : question?.question || t("memoizedLink.questionFallback.label");
 
       return (
         <SourceTag

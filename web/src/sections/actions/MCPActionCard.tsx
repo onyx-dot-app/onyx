@@ -7,6 +7,7 @@ import React, {
   useRef,
   useCallback,
 } from "react";
+import { useTranslations } from "next-intl";
 import ActionCard from "@/sections/actions/ActionCard";
 import Actions from "@/sections/actions/Actions";
 import ToolItem from "@/sections/actions/ToolItem";
@@ -106,6 +107,7 @@ export default function MCPActionCard({
   onUpdateToolsStatus,
   className,
 }: MCPActionCardProps) {
+  const t = useTranslations("actions");
   const [isToolsExpanded, setIsToolsExpanded] = useState(initialExpanded);
   const [searchQuery, setSearchQuery] = useState("");
   const [showOnlyEnabled, setShowOnlyEnabled] = useState(false);
@@ -268,13 +270,13 @@ export default function MCPActionCard({
             icon={isToolsRefreshing ? SvgSimpleLoader : SvgRefreshCw}
             prominence="internal"
             onClick={handleRefreshTools}
-            tooltip="Refresh tools"
-            aria-label="Refresh tools"
+            tooltip={t("mcpCard.refreshToolsButton.tooltip")}
+            aria-label={t("mcpCard.refreshToolsButton.ariaLabel")}
           />
         )}
         {lastRefreshedText && (
           <Text as="p" text03 mainUiBody className="whitespace-nowrap">
-            Tools last refreshed {lastRefreshedText}
+            {t("mcpCard.lastRefreshed.label", { time: lastRefreshedText })}
           </Text>
         )}
       </div>
@@ -286,6 +288,7 @@ export default function MCPActionCard({
     mutate,
     onRefreshTools,
     isToolsRefreshing,
+    t,
   ]);
 
   return (
@@ -305,7 +308,7 @@ export default function MCPActionCard({
         onSearchQueryChange={setSearchQuery}
         onFold={handleFold}
         className={className}
-        ariaLabel={`${title} MCP server card`}
+        ariaLabel={t("mcpCard.card.ariaLabel", { title })}
       >
         <ToolsList
           isFetching={
@@ -327,8 +330,8 @@ export default function MCPActionCard({
           }
           isEmpty={filteredTools.length === 0}
           searchQuery={searchQuery}
-          emptyMessage="No tools available"
-          emptySearchMessage="No tools found"
+          emptyMessage={t("toolsList.empty.message")}
+          emptySearchMessage={t("toolsList.empty.searchMessage")}
           leftAction={leftAction}
         >
           {filteredTools.map((tool) => (
@@ -354,7 +357,7 @@ export default function MCPActionCard({
           icon={({ className }) => (
             <SvgTrash className={cn(className, "stroke-action-danger-05")} />
           )}
-          title="Delete MCP server"
+          title={t("mcpCard.deleteModal.title")}
           onClose={() => deleteModal.toggle(false)}
           submit={
             <Button
@@ -370,17 +373,19 @@ export default function MCPActionCard({
                 }
               }}
             >
-              Delete
+              {t("mcpCard.deleteModal.submitButton.label")}
             </Button>
           }
         >
           <div className="flex flex-col gap-4">
             <Text as="p" text03>
-              All tools connected to <b>{title}</b> will be removed. Deletion is
-              irreversible.
+              {t.rich("mcpCard.deleteModal.body.description", {
+                title,
+                emphasis: (chunks) => <b>{chunks}</b>,
+              })}
             </Text>
             <Text as="p" text03>
-              Are you sure you want to delete this MCP server?
+              {t("mcpCard.deleteModal.body.confirmation")}
             </Text>
           </div>
         </Modal>

@@ -37,6 +37,10 @@ FASTAPI_USERS_AUTH_COOKIE_NAME = (
     os.environ.get("AUTH_COOKIE_NAME") or "fastapiusersauth"
 )
 ANONYMOUS_USER_COOKIE_NAME = "onyx_anonymous_user"
+# Locale cookie the Next.js server layout reads to render the UI language.
+# The backend owns this cookie: PATCH /user/language and GET /me set it from
+# the user's stored preference. Name must match web/src/i18n/config.ts.
+NEXT_LOCALE_COOKIE_NAME = "NEXT_LOCALE"
 
 # ID used in UserInfo API responses for anonymous users (not a UUID, just a string identifier)
 ANONYMOUS_USER_INFO_ID = "__anonymous_user__"
@@ -459,6 +463,9 @@ class OnyxCeleryQueues:
     CONNECTOR_EXTERNAL_GROUP_SYNC = "connector_external_group_sync"
     CONNECTOR_HIERARCHY_FETCHING = "connector_hierarchy_fetching"
     CSV_GENERATION = "csv_generation"
+    # Manual credential capability check runs; probes may legitimately hang up
+    # to their per-check guard, so they live with the long-running work.
+    CAPABILITY_CHECKS = "capability_checks"
 
     # Chat retention (TTL) hard-deletion queue, consumed by the light worker.
     # Kept off the primary "celery" queue so cleanup never starves check_for_indexing.
@@ -675,6 +682,9 @@ class OnyxCeleryTask:
     DOCUMENT_BY_CC_PAIR_CLEANUP_TASK = "document_by_cc_pair_cleanup_task"
     DOCUMENT_INDEX_METADATA_SYNC_TASK = "document_index_metadata_sync_task"
 
+    # Credential capability checks (granular runs of the registered checks)
+    RUN_CAPABILITY_CHECKS = "run_capability_checks"
+
     # chat retention
     CHECK_TTL_MANAGEMENT_TASK = "check_ttl_management_task"
     PERFORM_TTL_MANAGEMENT_TASK = "perform_ttl_management_task"
@@ -733,9 +743,9 @@ REDIS_SOCKET_KEEPALIVE_OPTIONS[socket.TCP_KEEPCNT] = 3
 # platform where the attribute actually resolves, since ty analyzes one
 # platform at a time and can't model cross-platform conditional unused-ignores.
 if platform.system() == "Darwin":
-    REDIS_SOCKET_KEEPALIVE_OPTIONS[getattr(socket, "TCP_KEEPALIVE")] = 60  # noqa: B009
+    REDIS_SOCKET_KEEPALIVE_OPTIONS[getattr(socket, "TCP_KEEPALIVE")] = 60  # noqa: B009  # ods: ignore[getattr]
 else:
-    REDIS_SOCKET_KEEPALIVE_OPTIONS[getattr(socket, "TCP_KEEPIDLE")] = 60  # noqa: B009
+    REDIS_SOCKET_KEEPALIVE_OPTIONS[getattr(socket, "TCP_KEEPIDLE")] = 60  # noqa: B009  # ods: ignore[getattr]
 
 
 class OnyxCallTypes(str, Enum):

@@ -90,7 +90,8 @@ def admin_patch_settings(
         # must not silently reset them to pydantic defaults.
         merged = existing.model_copy(
             update={
-                field: getattr(settings, field) for field in settings.model_fields_set
+                field: getattr(settings, field)  # ods: ignore[getattr]
+                for field in settings.model_fields_set
             }
         )
 

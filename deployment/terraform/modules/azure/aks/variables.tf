@@ -13,10 +13,21 @@ variable "location" {
   description = "Azure region, for example \"eastus\""
 }
 
+variable "node_pool_max_surge" {
+  type        = string
+  description = "Extra capacity AKS may add while upgrading a node pool, as a count or a percentage. Azure defaults this to 10%, which terraform would otherwise show as drift on every plan. The family vCPU quota has to cover the pool AND the surge: a single-node pool upgrading with a surge of one needs twice the pool's cores, and the upgrade fails outright without them."
+  default     = "10%"
+
+  validation {
+    condition     = can(regex("^[0-9]+%?$", var.node_pool_max_surge))
+    error_message = "max_surge is a node count or a percentage, e.g. \"1\" or \"10%\"."
+  }
+}
+
 variable "kubernetes_version" {
   type        = string
-  description = "Kubernetes version for the control plane. Move one minor at a time."
-  default     = "1.33"
+  description = "Kubernetes version for the control plane. Move one minor at a time. Versions age out of standard support and become Long-Term-Support only, at which point AKS refuses to build a cluster on them: check with az aks get-versions."
+  default     = "1.34"
 }
 
 variable "subnet_id" {

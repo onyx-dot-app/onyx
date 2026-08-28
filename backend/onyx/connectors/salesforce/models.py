@@ -139,9 +139,7 @@ class SalesforceSessionCredentials(BaseModel):
 
 def parse_salesforce_credentials(credentials: dict[str, Any]) -> SalesforceCredentials:
     authentication_method = credentials.get(AUTHENTICATION_METHOD_FIELD)
-    if authentication_method is None:
-        return SalesforceLegacyCredentials.model_validate(credentials)
-    if authentication_method == SalesforceAuthenticationMethod.PASSWORD:
+    if authentication_method in (None, SalesforceAuthenticationMethod.PASSWORD):
         return SalesforceLegacyCredentials.model_validate(credentials)
     if authentication_method == SalesforceAuthenticationMethod.OAUTH:
         return SalesforceOAuthCredentials.model_validate(credentials)

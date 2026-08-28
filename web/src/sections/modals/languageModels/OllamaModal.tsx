@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { Dispatch, SetStateAction, useMemo, useState } from "react";
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
@@ -54,9 +55,10 @@ function OllamaModalInternals({
   tab,
   setTab,
 }: OllamaModalInternalsProps) {
+  const t = useTranslations("admin.languageModels.modals");
   const formikProps = useFormikContext<OllamaModalValues>();
   const apiBaseSubDescription = useApiBaseSubDescription(
-    "The base URL for your Ollama instance."
+    t("ollama.apiBaseField.description")
   );
 
   const isFetchDisabled = useMemo(
@@ -90,20 +92,22 @@ function OllamaModalInternals({
         <Tabs value={tab} onValueChange={(value) => setTab(value as Tab)}>
           <Tabs.List>
             <Tabs.Trigger value={Tab.TAB_SELF_HOSTED}>
-              Self-hosted Ollama
+              {t("ollama.tabs.selfHosted.label")}
             </Tabs.Trigger>
-            <Tabs.Trigger value={Tab.TAB_CLOUD}>Ollama Cloud</Tabs.Trigger>
+            <Tabs.Trigger value={Tab.TAB_CLOUD}>
+              {t("ollama.tabs.cloud.label")}
+            </Tabs.Trigger>
           </Tabs.List>
           <div className="pt-4">
             <Tabs.Content value={Tab.TAB_SELF_HOSTED}>
               <InputVertical
                 withLabel="api_base"
-                title="API Base URL"
+                title={t("setup.apiBaseField.title")}
                 subDescription={apiBaseSubDescription}
               >
                 <InputTypeInField
                   name="api_base"
-                  placeholder="Your Ollama API base URL"
+                  placeholder={t("ollama.apiBaseField.placeholder")}
                 />
               </InputVertical>
             </Tabs.Content>
@@ -111,12 +115,12 @@ function OllamaModalInternals({
             <Tabs.Content value={Tab.TAB_CLOUD}>
               <InputVertical
                 withLabel="api_key"
-                title="API Key"
-                subDescription="Your Ollama Cloud API key."
+                title={t("setup.apiKeyField.title")}
+                subDescription={t("ollama.apiKeyField.description")}
               >
                 <PasswordInputTypeInField
                   name="api_key"
-                  placeholder="API Key"
+                  placeholder={t("ollama.apiKeyField.placeholder")}
                 />
               </InputVertical>
             </Tabs.Content>
@@ -155,6 +159,7 @@ export default function OllamaModal({
   onSuccess,
   analyticsSource,
 }: LLMProviderFormProps) {
+  const t = useTranslations("admin.languageModels.modals");
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
   const settings = useSettings();
@@ -179,11 +184,11 @@ export default function OllamaModal({
 
   const validationSchema = useMemo(
     () =>
-      buildValidationSchema(isOnboarding, {
+      buildValidationSchema(t, isOnboarding, {
         apiBase: tab === Tab.TAB_SELF_HOSTED,
         apiKey: tab === Tab.TAB_CLOUD,
       }),
-    [tab, isOnboarding]
+    [t, tab, isOnboarding]
   );
 
   return (
@@ -201,6 +206,7 @@ export default function OllamaModal({
         };
 
         await submitProvider({
+          t,
           analyticsSource:
             analyticsSource ??
             (isOnboarding
@@ -221,8 +227,8 @@ export default function OllamaModal({
               await refreshLlmProviderCaches(mutate);
               toast.success(
                 existingLlmProvider
-                  ? "Provider updated successfully!"
-                  : "Provider enabled successfully!"
+                  ? t("toasts.providerUpdated")
+                  : t("toasts.providerEnabled")
               );
             }
           },

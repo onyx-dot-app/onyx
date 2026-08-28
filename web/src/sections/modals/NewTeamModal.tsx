@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
 import { Button, Text } from "@opal/components";
@@ -23,6 +24,7 @@ export interface TenantByDomainResponse {
 }
 
 export default function NewTeamModal() {
+  const t = useTranslations("admin.modals.newTeam");
   const { showNewTeamModal, setShowNewTeamModal } = useModalContext();
   const [existingTenant, setExistingTenant] =
     useState<TenantByDomainResponse | null>(null);
@@ -72,7 +74,7 @@ export default function NewTeamModal() {
       setExistingTenant(data);
     } catch (error) {
       console.error("Failed to fetch tenant info:", error);
-      setError("Could not retrieve team information. Please try again later.");
+      setError(t("loadError.message"));
     } finally {
       setIsLoading(false);
     }
@@ -96,15 +98,17 @@ export default function NewTeamModal() {
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(
-          errorData.detail || errorData.message || "Failed to request invite"
+          errorData.detail ||
+            errorData.message ||
+            t("requestError.responseFallback")
         );
       }
 
       setHasRequestedInvite(true);
-      toast.success("Your invite request has been sent to the team admin.");
+      toast.success(t("inviteRequestedToast.message"));
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Failed to request an invite";
+        error instanceof Error ? error.message : t("requestError.message");
       setError(message);
       toast.error(message);
     } finally {
@@ -128,8 +132,8 @@ export default function NewTeamModal() {
 
   const headerIcon = hasRequestedInvite ? SvgCheckCircle : SvgOrganization;
   const headerTitle = hasRequestedInvite
-    ? "Join Request Sent"
-    : `We found an existing team for ${appDomain}`;
+    ? t("header.requestSentTitle")
+    : t("header.title", { domain: appDomain });
 
   return (
     <Modal
@@ -150,11 +154,11 @@ export default function NewTeamModal() {
             <InputErrorText>{error}</InputErrorText>
           ) : hasRequestedInvite ? (
             <Text font="main-ui-body" color="text-04">
-              {`Your join request has been sent. You can explore as your own team while waiting for an admin of ${appDomain} to approve your request.`}
+              {t("requestSentBody", { domain: appDomain })}
             </Text>
           ) : (
             <Text font="main-ui-body" color="text-03">
-              {`Your join request can be approved by any admin of ${appDomain}.`}
+              {t("body", { domain: appDomain })}
             </Text>
           )}
         </Modal.Body>
@@ -166,7 +170,7 @@ export default function NewTeamModal() {
               width="full"
               rightIcon={SvgArrowRight}
             >
-              Continue with new team
+              {t("continueButton.label")}
             </Button>
           ) : hasRequestedInvite ? (
             <Button
@@ -174,7 +178,7 @@ export default function NewTeamModal() {
               width="full"
               rightIcon={SvgArrowRight}
             >
-              Try Onyx while waiting
+              {t("tryOnyxButton.label")}
             </Button>
           ) : (
             <>
@@ -185,8 +189,8 @@ export default function NewTeamModal() {
                 icon={isSubmitting ? SvgSimpleLoader : SvgArrowUp}
               >
                 {isSubmitting
-                  ? "Sending request..."
-                  : "Request to join your team"}
+                  ? t("requestButton.pendingLabel")
+                  : t("requestButton.label")}
               </Button>
               <Button
                 onClick={handleContinueToNewOrg}
@@ -194,7 +198,7 @@ export default function NewTeamModal() {
                 icon={SvgPlus}
                 prominence="secondary"
               >
-                Continue with new team
+                {t("continueButton.label")}
               </Button>
             </>
           )}

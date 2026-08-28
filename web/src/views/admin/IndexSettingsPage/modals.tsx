@@ -1,6 +1,7 @@
 "use client";
 
 import { Formik, useFormikContext } from "formik";
+import { useTranslations } from "next-intl";
 import * as Yup from "yup";
 import { Button } from "@opal/components";
 import { SvgArrowExchange, SvgSimpleLoader } from "@opal/icons";
@@ -40,6 +41,7 @@ interface ModalShellProps {
 }
 
 function ModalShell({ provider, isEditing, children }: ModalShellProps) {
+  const t = useTranslations("admin.indexSettings");
   const { isValid, isSubmitting, submitForm, dirty } = useFormikContext();
   const onClose = useModalClose();
 
@@ -52,13 +54,15 @@ function ModalShell({ provider, isEditing, children }: ModalShellProps) {
           moreIcon2={SvgOnyxLogo}
           title={
             isEditing
-              ? `Manage ${provider.displayName}`
-              : `Set up ${provider.displayName}`
+              ? t("modal.manage.title", { provider: provider.displayName })
+              : t("modal.setUp.title", { provider: provider.displayName })
           }
           description={
             isEditing
-              ? `Manage ${provider.displayName} provider and model details.`
-              : `Connect to ${provider.displayName} and set up your ${provider.displayName} embedding models.`
+              ? t("modal.manage.description", {
+                  provider: provider.displayName,
+                })
+              : t("modal.setUp.description", { provider: provider.displayName })
           }
           onClose={onClose}
         />
@@ -67,14 +71,16 @@ function ModalShell({ provider, isEditing, children }: ModalShellProps) {
         </Modal.Body>
         <Modal.Footer>
           <Button prominence="secondary" onClick={onClose}>
-            Cancel
+            {t("modal.cancelButton.label")}
           </Button>
           <Button
             disabled={!isValid || !dirty || isSubmitting}
             onClick={submitForm}
             icon={isSubmitting ? SvgSimpleLoader : undefined}
           >
-            {isEditing ? "Update" : "Connect"}
+            {isEditing
+              ? t("modal.updateButton.label")
+              : t("modal.connectButton.label")}
           </Button>
         </Modal.Footer>
       </Modal.Content>
@@ -95,6 +101,7 @@ function ModalShell({ provider, isEditing, children }: ModalShellProps) {
 async function testAndSaveProviderCredentials({
   provider,
   apiKey,
+  unknownErrorMessage,
   apiUrl = "",
   modelName = "",
   apiVersion = null,
@@ -102,6 +109,8 @@ async function testAndSaveProviderCredentials({
 }: {
   provider: EmbeddingProvider;
   apiKey: string | null;
+  /** Fallback toast copy when the backend error carries no message. */
+  unknownErrorMessage: string;
   apiUrl?: string;
   modelName?: string;
   apiVersion?: string | null;
@@ -118,9 +127,7 @@ async function testAndSaveProviderCredentials({
     });
     return true;
   } catch (error: unknown) {
-    toast.error(
-      error instanceof Error ? error.message : "An unknown error occurred"
-    );
+    toast.error(error instanceof Error ? error.message : unknownErrorMessage);
     return false;
   }
 }
@@ -160,13 +167,14 @@ function StandardProviderModal({
   existingCredentials,
   onSubmit,
 }: ProviderModalProps) {
+  const t = useTranslations("admin.indexSettings");
   const isEditing = !!existingCredentials;
   const maskedApiKey = existingCredentials?.api_key ?? "";
 
   const schema = Yup.object({
     apiKey: isEditing
       ? Yup.string().trim()
-      : Yup.string().trim().required("API key is required"),
+      : Yup.string().trim().required(t("validation.apiKeyRequired")),
   });
 
   const initialValues: StandardFormValues = { apiKey: maskedApiKey };
@@ -179,7 +187,13 @@ function StandardProviderModal({
       onSubmit={async (values) => {
         const apiKey =
           values.apiKey === maskedApiKey ? null : values.apiKey || null;
-        if (await testAndSaveProviderCredentials({ provider, apiKey })) {
+        if (
+          await testAndSaveProviderCredentials({
+            provider,
+            apiKey,
+            unknownErrorMessage: t("toasts.unknownError"),
+          })
+        ) {
           onSubmit();
         }
       }}
@@ -203,16 +217,17 @@ function GoogleProviderModal({
   existingCredentials,
   onSubmit,
 }: ProviderModalProps) {
+  const t = useTranslations("admin.indexSettings");
   const isEditing = !!existingCredentials;
 
   const schema = Yup.object({
     apiKey: isEditing
       ? Yup.string()
       : Yup.string()
-          .required("Service account JSON is required")
+          .required(t("validation.serviceAccountJsonRequired"))
           .test(
             "service-account-json",
-            "Must be a valid Google service account JSON file",
+            t("validation.serviceAccountJsonInvalid"),
             (value) => {
               if (!value) return false;
               try {
@@ -241,6 +256,7 @@ function GoogleProviderModal({
           await testAndSaveProviderCredentials({
             provider,
             apiKey: values.apiKey || null,
+            unknownErrorMessage: t("toasts.unknownError"),
           })
         ) {
           onSubmit();
@@ -275,20 +291,25 @@ function AzureProviderModal({
   existingModel,
   onSubmit,
 }: ProviderModalProps) {
+  const t = useTranslations("admin.indexSettings");
   const isEditing = !!existingCredentials;
   const maskedApiKey = existingCredentials?.api_key ?? "";
 
   const schema = Yup.object({
     apiUrl: Yup.string()
       .trim()
-      .required("Target URL is required")
-      .url("Must be a valid URL"),
+      .required(t("validation.targetUrlRequired"))
+      .url(t("validation.urlInvalid")),
     apiKey: isEditing
       ? Yup.string().trim()
-      : Yup.string().trim().required("API key is required"),
-    apiVersion: Yup.string().trim().required("API version is required"),
-    deploymentName: Yup.string().trim().required("Deployment name is required"),
-    ...modelSpecSchemaShape,
+      : Yup.string().trim().required(t("validation.apiKeyRequired")),
+    apiVersion: Yup.string()
+      .trim()
+      .required(t("validation.apiVersionRequired")),
+    deploymentName: Yup.string()
+      .trim()
+      .required(t("validation.deploymentNameRequired")),
+    ...modelSpecSchemaShape(t),
   });
 
   const initialValues: AzureFormValues = {
@@ -315,6 +336,7 @@ function AzureProviderModal({
           await testAndSaveProviderCredentials({
             provider,
             apiKey,
+            unknownErrorMessage: t("toasts.unknownError"),
             apiUrl: values.apiUrl,
             apiVersion: values.apiVersion,
             deploymentName: values.deploymentName,
@@ -332,24 +354,26 @@ function AzureProviderModal({
     >
       <ModalShell provider={provider} isEditing={isEditing}>
         <ApiUrlField
-          title="Target URL"
+          title={t("azure.targetUrl.title")}
           placeholder="https://your_resource_name.openai.azure.com/openai/v1/embeddings"
         />
         <ApiKeyField provider={provider} />
         <TextField
           name="apiVersion"
-          title="API Version"
-          placeholder="e.g., 2023-05-15"
-          subDescription="The Azure OpenAI API version your deployment targets."
+          title={t("azure.apiVersion.title")}
+          placeholder={t("azure.apiVersion.placeholder")}
+          subDescription={t("azure.apiVersion.description")}
         />
         <TextField
           name="deploymentName"
-          title="Deployment Name"
-          placeholder="my-embedding-deployment"
-          subDescription="The deployment name you configured for this embedding model in Azure."
+          title={t("azure.deploymentName.title")}
+          placeholder={t("azure.deploymentName.placeholder")}
+          subDescription={t("azure.deploymentName.description")}
         />
 
-        <ModelSpecFields modelNameSubDescription="A label for this model in Onyx. Azure routes requests by deployment name, so this only needs to be a unique identifier." />
+        <ModelSpecFields
+          modelNameSubDescription={t("azure.modelName.description")}
+        />
       </ModalShell>
     </Formik>
   );
@@ -374,18 +398,19 @@ function LiteLLMProviderModal({
   existingModel,
   onSubmit,
 }: ProviderModalProps) {
+  const t = useTranslations("admin.indexSettings");
   const isEditing = !!existingCredentials;
   const maskedApiKey = existingCredentials?.api_key ?? "";
 
   const schema = Yup.object({
     apiUrl: Yup.string()
       .trim()
-      .required("API base URL is required")
-      .url("Must be a valid URL"),
+      .required(t("validation.apiBaseUrlRequired"))
+      .url(t("validation.urlInvalid")),
     apiKey: isEditing
       ? Yup.string().trim()
-      : Yup.string().trim().required("API key is required"),
-    ...modelSpecSchemaShape,
+      : Yup.string().trim().required(t("validation.apiKeyRequired")),
+    ...modelSpecSchemaShape(t),
   });
 
   const initialValues: LiteLLMFormValues = {
@@ -412,6 +437,7 @@ function LiteLLMProviderModal({
             apiKey,
             apiUrl: values.apiUrl,
             modelName: values.modelName.trim(),
+            unknownErrorMessage: t("toasts.unknownError"),
           })
         ) {
           onSubmit({
@@ -426,15 +452,19 @@ function LiteLLMProviderModal({
     >
       <ModalShell provider={provider} isEditing={isEditing}>
         <ApiUrlField
-          title="API Base URL"
+          title={t("litellm.apiUrl.title")}
           placeholder="https://..."
-          subDescription={`Paste your ${provider.displayName}-compatible endpoint URL.`}
+          subDescription={t("litellm.apiUrl.description", {
+            provider: provider.displayName,
+          })}
         />
 
         <ApiKeyField provider={provider} />
 
         <ModelSpecFields
-          modelNameSubDescription={`Onyx will connect to this model on your ${provider.displayName} proxy.`}
+          modelNameSubDescription={t("litellm.modelName.description", {
+            provider: provider.displayName,
+          })}
         />
       </ModalShell>
     </Formik>
@@ -445,13 +475,14 @@ function LiteLLMProviderModal({
 // Custom Self-Hosted
 // ---------------------------------------------------------------------------
 
-const customSchema = Yup.object(modelSpecSchemaShape);
 function CustomSelfHostedModal({
   provider,
   existingModel,
   onSubmit,
 }: ProviderModalProps) {
+  const t = useTranslations("admin.indexSettings");
   const isEditing = !!existingModel;
+  const customSchema = Yup.object(modelSpecSchemaShape(t));
 
   const initialValues: EmbeddingModelRequest = {
     modelName: existingModel?.modelName,

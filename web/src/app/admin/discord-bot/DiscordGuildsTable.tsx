@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useLocale, useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import {
   Table,
@@ -30,6 +31,8 @@ interface Props {
 }
 
 export function DiscordGuildsTable({ guilds, onRefresh }: Props) {
+  const t = useTranslations("admin.discordBot");
+  const locale = useLocale();
   const router = useRouter();
   const [guildToDelete, setGuildToDelete] = useState<DiscordGuildConfig | null>(
     null
@@ -42,10 +45,10 @@ export function DiscordGuildsTable({ guilds, onRefresh }: Props) {
     try {
       await deleteGuildConfig(guildId);
       onRefresh();
-      toast.success("Server configuration deleted");
+      toast.success(t("guilds.deleted.toast"));
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : "Failed to delete server config"
+        err instanceof Error ? err.message : t("guilds.deleteError.toast")
       );
     } finally {
       setGuildToDelete(null);
@@ -54,7 +57,7 @@ export function DiscordGuildsTable({ guilds, onRefresh }: Props) {
 
   const handleToggleEnabled = async (guild: DiscordGuildConfig) => {
     if (!guild.guild_id) {
-      toast.error("Server must be registered before it can be enabled");
+      toast.error(t("guilds.notRegistered.toast"));
       return;
     }
 
@@ -65,10 +68,12 @@ export function DiscordGuildsTable({ guilds, onRefresh }: Props) {
         default_persona_id: guild.default_persona_id,
       });
       onRefresh();
-      toast.success(`Server ${!guild.enabled ? "enabled" : "disabled"}`);
+      toast.success(
+        !guild.enabled ? t("guilds.enabled.toast") : t("guilds.disabled.toast")
+      );
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : "Failed to update server"
+        err instanceof Error ? err.message : t("guilds.updateError.toast")
       );
     } finally {
       setUpdatingGuildIds((prev) => {
@@ -84,8 +89,8 @@ export function DiscordGuildsTable({ guilds, onRefresh }: Props) {
       <EmptyMessageCard
         sizePreset="main-ui"
         icon={SvgServer}
-        title="No Discord servers configured yet"
-        description="Create a server configuration to get started."
+        title={t("guilds.empty.title")}
+        description={t("guilds.empty.description")}
       />
     );
   }
@@ -95,21 +100,24 @@ export function DiscordGuildsTable({ guilds, onRefresh }: Props) {
       {guildToDelete && (
         <ConfirmEntityModal
           danger
-          entityType="Discord server configuration"
-          entityName={guildToDelete.guild_name || `Server #${guildToDelete.id}`}
+          entityType={t("guilds.deleteModal.entityType")}
+          entityName={
+            guildToDelete.guild_name ||
+            t("guilds.fallbackName", { id: guildToDelete.id })
+          }
           onClose={() => setGuildToDelete(null)}
           onSubmit={() => handleDelete(guildToDelete.id)}
-          additionalDetails="This will remove all settings for this Discord server."
+          additionalDetails={t("guilds.deleteModal.additionalDetails")}
         />
       )}
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Server</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Registered</TableHead>
-            <TableHead>Enabled</TableHead>
-            <TableHead>Actions</TableHead>
+            <TableHead>{t("guilds.table.server.header")}</TableHead>
+            <TableHead>{t("guilds.table.status.header")}</TableHead>
+            <TableHead>{t("guilds.table.registered.header")}</TableHead>
+            <TableHead>{t("guilds.table.enabled.header")}</TableHead>
+            <TableHead>{t("guilds.table.actions.header")}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -122,19 +130,22 @@ export function DiscordGuildsTable({ guilds, onRefresh }: Props) {
                   onClick={() => router.push(`/admin/discord-bot/${guild.id}`)}
                   icon={SvgEdit}
                 >
-                  {guild.guild_name || `Server #${guild.id}`}
+                  {guild.guild_name ||
+                    t("guilds.fallbackName", { id: guild.id })}
                 </Button>
               </TableCell>
               <TableCell>
                 {guild.guild_id ? (
-                  <Badge variant="success">Registered</Badge>
+                  <Badge variant="success">
+                    {t("guilds.registered.badge")}
+                  </Badge>
                 ) : (
-                  <Badge variant="secondary">Pending</Badge>
+                  <Badge variant="secondary">{t("guilds.pending.badge")}</Badge>
                 )}
               </TableCell>
               <TableCell>
                 {guild.registered_at
-                  ? new Date(guild.registered_at).toLocaleDateString()
+                  ? new Date(guild.registered_at).toLocaleDateString(locale)
                   : "-"}
               </TableCell>
               <TableCell>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { useTranslations } from "next-intl";
 import {
   BasicModalFooter,
   Button,
@@ -58,27 +59,28 @@ function buildTags(entries: string[], existing: TagItem[]): TagItem[] {
 function buildMessage(
   tags: TagItem[],
   pendingEmail: string,
-  validCount: number
+  validCount: number,
+  copy: FieldMessageCopy
 ): FieldMessage | null {
   if (tags.length === 0 && pendingEmail === "") return null;
   if (tags.some((tag) => tag.error)) {
     return {
       icon: SvgAlertTriangle,
       color: "muted-warning",
-      text: "Some email addresses are invalid and will be skipped.",
+      text: copy.someInvalid,
     };
   }
   if (validCount === 0) {
     return {
       icon: SvgAlertTriangle,
       color: "muted-warning",
-      text: "Enter a valid email address to invite.",
+      text: copy.needsValidEmail,
     };
   }
   return {
     icon: SvgCheckCircle,
     color: "muted-success",
-    text: `${validCount} email${validCount > 1 ? "s" : ""} to invite`,
+    text: copy.readyCount,
   };
 }
 
@@ -97,6 +99,12 @@ interface FieldMessage {
   text: string;
 }
 
+interface FieldMessageCopy {
+  someInvalid: string;
+  needsValidEmail: string;
+  readyCount: string;
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -105,6 +113,7 @@ export default function InviteUsersModal({
   open,
   onOpenChange,
 }: InviteUsersModalProps) {
+  const t = useTranslations("admin.users");
   const [tags, setTags] = useState<TagItem[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -142,7 +151,11 @@ export default function InviteUsersModal({
     isValidEmail(pendingEmail) && !tags.some((tag) => tag.id === pendingEmail);
   const validCount =
     tags.filter((tag) => !tag.error).length + (pendingIsValid ? 1 : 0);
-  const message = buildMessage(tags, pendingEmail, validCount);
+  const message = buildMessage(tags, pendingEmail, validCount, {
+    someInvalid: t("inviteModal.message.someInvalid"),
+    needsValidEmail: t("inviteModal.message.needsValidEmail"),
+    readyCount: t("inviteModal.message.readyCount", { count: validCount }),
+  });
 
   const handleClose = useCallback(() => {
     onOpenChange(false);
@@ -177,7 +190,7 @@ export default function InviteUsersModal({
       .map((tag) => tag.label);
 
     if (validEmails.length === 0) {
-      toast.error("Please add at least one valid email address");
+      toast.error(t("inviteModal.toasts.noValidEmails"));
       return;
     }
 
@@ -194,12 +207,14 @@ export default function InviteUsersModal({
         mutate(SWR_KEYS.userCounts),
       ]).catch(() => {});
       toast.success(
-        `Invited ${validEmails.length} user${validEmails.length > 1 ? "s" : ""}`
+        t("inviteModal.toasts.invited", { count: validEmails.length })
       );
       handleClose();
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : "Failed to invite users"
+        err instanceof Error
+          ? err.message
+          : t("inviteModal.toasts.inviteFailed")
       );
     } finally {
       setIsSubmitting(false);
@@ -211,7 +226,7 @@ export default function InviteUsersModal({
       <Modal.Content width="sm" height="fit">
         <Modal.Header
           icon={SvgUsers}
-          title="Invite Users"
+          title={t("inviteModal.title")}
           onClose={isSubmitting ? undefined : handleClose}
         />
 
@@ -222,7 +237,7 @@ export default function InviteUsersModal({
             onAdd={handleAdd}
             value={inputValue}
             onChange={handleInputChange}
-            placeholder="Add emails to invite, space or comma separated"
+            placeholder={t("inviteModal.emails.placeholder")}
             minRows={EMAIL_FIELD_ROWS}
             focusOnMount
           />
@@ -246,7 +261,7 @@ export default function InviteUsersModal({
                 prominence="tertiary"
                 onClick={handleClose}
               >
-                Cancel
+                {t("inviteModal.cancelButton.label")}
               </Button>
             }
             submit={
@@ -255,7 +270,7 @@ export default function InviteUsersModal({
                 icon={isSubmitting ? SvgSimpleLoader : undefined}
                 onClick={handleInvite}
               >
-                Invite
+                {t("inviteModal.submitButton.label")}
               </Button>
             }
           />

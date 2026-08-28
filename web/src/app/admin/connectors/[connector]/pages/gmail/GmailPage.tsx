@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { useTranslations } from "next-intl";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { LoadingAnimation } from "@/components/Loading";
 import { toast } from "@opal/layouts";
@@ -29,6 +30,7 @@ export const GmailMain = ({
   buildMode = false,
   onOAuthRedirect,
 }: GmailMainProps) => {
+  const t = useTranslations("admin.connectorsList");
   const { user } = useUser();
   // See GoogleDrivePage — same gate, same reasoning.
   const { isGlobalHolder } = usePermissionAuthority(
@@ -65,11 +67,11 @@ export const GmailMain = ({
   }
 
   if (credentialsError || !credentialsData) {
-    return <ErrorCallout errorTitle="Failed to load credentials." />;
+    return <ErrorCallout errorTitle={t("credentialsLoadError.title")} />;
   }
 
   if (gmailCredentialsError || !gmailCredentials) {
-    return <ErrorCallout errorTitle="Failed to load Gmail credentials." />;
+    return <ErrorCallout errorTitle={t("gmail.credentialsLoadError.title")} />;
   }
 
   return (

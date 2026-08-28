@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import CardSection from "@/components/admin/CardSection";
 import { Button } from "@opal/components";
 import { InputTypeIn } from "@opal/components";
@@ -16,6 +17,7 @@ import { ADMIN_ROUTES } from "@/lib/admin-routes";
 const route = ADMIN_ROUTES.DOCUMENT_PROCESSING;
 
 function Main() {
+  const t = useTranslations("admin.documentProcessing");
   const {
     data: isApiKeySet,
     error,
@@ -68,31 +70,35 @@ function Main() {
             text05
             className="border-b border-border-01 pb-2"
           >
-            Process with Unstructured API
+            {t("unstructured.title")}
           </Text>
 
           <div className="flex flex-col gap-2">
             <Text as="p" mainContentBody text04 className="leading-relaxed">
-              Unstructured extracts and transforms complex data from formats
-              like .pdf, .docx, .png, .pptx, etc. into clean text for Onyx to
-              ingest. Provide an API key to enable Unstructured document
-              processing.
+              {t("unstructured.description")}
             </Text>
             <Text as="p" mainContentMuted text03>
-              <span className="font-main-ui-action text-text-03">Note:</span>{" "}
-              this will send documents to Unstructured servers for processing.
+              {t.rich("unstructured.note", {
+                label: (chunks) => (
+                  <span className="font-main-ui-action text-text-03">
+                    {chunks}
+                  </span>
+                ),
+              })}
             </Text>
             <Text as="p" mainContentBody text04 className="leading-relaxed">
-              Learn more about Unstructured{" "}
-              <a
-                href="https://docs.unstructured.io/welcome"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-action-selection-05 underline-offset-4 hover:underline"
-              >
-                here
-              </a>
-              .
+              {t.rich("unstructured.learnMore", {
+                link: (chunks) => (
+                  <a
+                    href="https://docs.unstructured.io/welcome"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-action-selection-05 underline-offset-4 hover:underline"
+                  >
+                    {chunks}
+                  </a>
+                ),
+              })}
             </Text>
             <div className="pt-1.5">
               {isApiKeySet ? (
@@ -121,7 +127,7 @@ function Main() {
                 </div>
               ) : (
                 <InputTypeIn
-                  placeholder="Enter API Key"
+                  placeholder={t("unstructured.apiKey.placeholder")}
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
                 />
@@ -131,15 +137,15 @@ function Main() {
               {isApiKeySet ? (
                 <>
                   <Button variant="danger" onClick={handleDelete}>
-                    Delete API Key
+                    {t("unstructured.deleteButton.label")}
                   </Button>
                   <Text as="p" mainContentBody text04 className="sm:mt-0">
-                    Delete the current API key before updating.
+                    {t("unstructured.deleteHint")}
                   </Text>
                 </>
               ) : (
                 <Button variant="action" onClick={handleSave}>
-                  Save API Key
+                  {t("unstructured.saveButton.label")}
                 </Button>
               )}
             </div>

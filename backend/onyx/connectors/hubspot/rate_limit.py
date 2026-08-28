@@ -30,7 +30,7 @@ def _extract_header(headers: Any, key: str) -> str | None:
     if headers is None:
         return None
 
-    getter = getattr(headers, "get", None)
+    getter = getattr(headers, "get", None)  # ods: ignore[getattr]
     if callable(getter):
         value = getter(key)
         if value is not None:
@@ -45,11 +45,11 @@ def _extract_header(headers: Any, key: str) -> str | None:
 
 
 def is_rate_limit_error(exception: Exception) -> bool:
-    status = getattr(exception, "status", None)
+    status = getattr(exception, "status", None)  # ods: ignore[getattr]
     if status == 429:
         return True
 
-    headers = getattr(exception, "headers", None)
+    headers = getattr(exception, "headers", None)  # ods: ignore[getattr]
     if headers is not None:
         remaining = _extract_header(headers, "x-hubspot-ratelimit-remaining")
         if remaining == "0":
@@ -65,7 +65,7 @@ def is_rate_limit_error(exception: Exception) -> bool:
 
 
 def get_rate_limit_retry_delay_seconds(exception: Exception) -> float:
-    headers = getattr(exception, "headers", None)
+    headers = getattr(exception, "headers", None)  # ods: ignore[getattr]
 
     retry_after = parse_retry_after_seconds(_extract_header(headers, "Retry-After"))
     if retry_after is not None:

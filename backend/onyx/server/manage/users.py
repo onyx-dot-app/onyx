@@ -1,14 +1,14 @@
 import csv
 import io
 from datetime import datetime, timedelta, timezone
-from typing import cast
+from typing import Any, cast
 from uuid import UUID
 
 import jwt
 from email_validator import EmailNotValidError, EmailUndeliverableError, validate_email
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -41,9 +41,14 @@ from onyx.configs.app_configs import (
     REDIS_AUTH_KEY_PREFIX,
     SESSION_EXPIRE_TIME_SECONDS,
     USER_AUTH_SECRET,
+    WEB_DOMAIN,
     AuthBackend,
 )
-from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME, PUBLIC_API_TAGS
+from onyx.configs.constants import (
+    FASTAPI_USERS_AUTH_COOKIE_NAME,
+    NEXT_LOCALE_COOKIE_NAME,
+    PUBLIC_API_TAGS,
+)
 from onyx.db.api_key import is_api_key_email_address
 from onyx.db.auth import get_live_users_count
 from onyx.db.engine.sql_engine import get_session, get_session_with_shared_schema
@@ -66,7 +71,9 @@ from onyx.db.user_preferences import (
     update_user_language,
     update_user_paste_as_tile,
     update_user_personalization,
+    update_user_reasoning_effort_default,
     update_user_shortcut_enabled,
+    update_user_temperature_default,
     update_user_temperature_override_enabled,
     update_user_theme_preference,
     update_users_craft_enabled,
@@ -86,6 +93,7 @@ from onyx.db.users import (
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.key_value_store.factory import get_kv_store
+from onyx.llm.models import ReasoningEffort, parse_user_selectable_reasoning_effort
 from onyx.redis.redis_pool import get_raw_redis_client, get_redis_client
 from onyx.server.documents.models import PaginatedReturn
 from onyx.server.features.projects.models import UserFileSnapshot
@@ -178,6 +186,7 @@ def set_user_admin_access_endpoint(
         resource_id=str(target.id),
         extra={
             "target_email": target.email,
+            "previous_is_admin": was_admin,
             "is_admin": admin_access_update_request.is_admin,
         },
     )
@@ -1040,6 +1049,7 @@ def get_current_user_permissions(
 @router.get("/me", tags=PUBLIC_API_TAGS, dependencies=[Depends(scope_exempt)])
 def verify_user_logged_in(
     request: Request,
+    response: Response,
     user: User | None = Depends(optional_user),
     db_session: Session = Depends(get_session),
 ) -> UserInfo:
@@ -1127,10 +1137,70 @@ def verify_user_logged_in(
         effective_permissions=sorted(p.value for p in get_effective_permissions(user)),
     )
 
+    # Reconcile the locale cookie with the stored preference so a login on a
+    # fresh browser (or after an identity switch) renders the user's language.
+    if request.cookies.get(NEXT_LOCALE_COOKIE_NAME) != user.language:
+        set_locale_cookie(response, user.language)
+
     return user_info
 
 
 """APIs to adjust user preferences"""
+
+
+class TemperatureDefaultRequest(BaseModel):
+    """The user's own default temperature. Null clears it."""
+
+    temperature_default: float | None = None
+
+    @field_validator("temperature_default")
+    @classmethod
+    def _validate_temperature(cls, value: float | None) -> float | None:
+        if value is not None and not 0 <= value <= 2:
+            raise OnyxError(
+                OnyxErrorCode.BAD_REQUEST,
+                f"temperature_default must be between 0 and 2, got {value}",
+            )
+        return value
+
+
+@router.patch("/temperature-default")
+def update_user_temperature_default_api(
+    request: TemperatureDefaultRequest,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> None:
+    update_user_temperature_default(user.id, request.temperature_default, db_session)
+
+
+class ReasoningEffortDefaultRequest(BaseModel):
+    """The user's own default reasoning effort. Null clears it."""
+
+    reasoning_effort_default: ReasoningEffort | None = None
+
+    @field_validator("reasoning_effort_default", mode="before")
+    @classmethod
+    def _validate_reasoning_effort(cls, value: Any) -> Any:
+        # AUTO has no rank and an unset column already means it.
+        if value is None:
+            return value
+        try:
+            return parse_user_selectable_reasoning_effort(
+                value.value if isinstance(value, ReasoningEffort) else value
+            )
+        except ValueError as e:
+            raise OnyxError(OnyxErrorCode.BAD_REQUEST, str(e))
+
+
+@router.patch("/reasoning-effort-default")
+def update_user_reasoning_effort_default_api(
+    request: ReasoningEffortDefaultRequest,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> None:
+    update_user_reasoning_effort_default(
+        user.id, request.reasoning_effort_default, db_session
+    )
 
 
 @router.patch("/temperature-override-enabled")
@@ -1184,13 +1254,33 @@ def update_user_theme_preference_api(
     update_user_theme_preference(user.id, request.theme_preference, db_session)
 
 
+LOCALE_COOKIE_MAX_AGE_SECONDS = 365 * 24 * 60 * 60
+
+
+def set_locale_cookie(response: Response, language: str) -> None:
+    """The backend owns the locale cookie: it is set from the stored
+    preference on PATCH /user/language and reconciled on GET /me, so the
+    client never writes it. The Next.js server layout is the only reader."""
+    response.set_cookie(
+        key=NEXT_LOCALE_COOKIE_NAME,
+        value=language,
+        max_age=LOCALE_COOKIE_MAX_AGE_SECONDS,
+        path="/",
+        secure=WEB_DOMAIN.startswith("https"),
+        httponly=True,
+        samesite="lax",
+    )
+
+
 @router.patch("/user/language")
 def update_user_language_api(
     request: LanguageRequest,
+    response: Response,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     update_user_language(user.id, request.language.value, db_session)
+    set_locale_cookie(response, request.language.value)
 
 
 @router.patch("/user/chat-background")

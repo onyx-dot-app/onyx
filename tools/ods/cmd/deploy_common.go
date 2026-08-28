@@ -27,8 +27,9 @@ const (
 	runDiscoveryTimeout  = 2 * time.Minute
 	runProgressInterval  = 30 * time.Second
 
-	// Build runs typically take 20-30 minutes.
-	buildPollTimeout = 60 * time.Minute
+	// Build runs typically take 15-30 minutes. The ceiling is hang detection:
+	// the workflow runs staged jobs that each get up to 90 minutes.
+	buildPollTimeout = 120 * time.Minute
 )
 
 // resolveDeployTarget returns the deploy target repo and workflow to use,

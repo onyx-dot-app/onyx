@@ -36,7 +36,7 @@ export default function Suggestions({ onSubmit }: SuggestionsProps) {
           prominence="tertiary"
           onClick={() => handleSuggestionClick(message)}
         >
-          <Interactive.Container width="full" rounding="sm" size="lg">
+          <Interactive.Container width="full" rounding={2} size="lg">
             <Content
               title={message}
               sizePreset="main-ui"

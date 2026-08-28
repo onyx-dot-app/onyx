@@ -10,6 +10,7 @@ import {
 import {
   applyPreferredResponse,
   chooseImplicitPreferred,
+  getMostVisibleResponseId,
   getMultiModelChildren,
   getUnresolvedMultiModelTurn,
 } from "@/app/app/message/multiModel";
@@ -29,9 +30,9 @@ import {
 } from "@/app/app/services/messageTree";
 import { MinimalAgent } from "@/lib/agents/types";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
-import { SEARCH_TOOL_ID } from "@/app/app/components/tools/constants";
+import { SEARCH_TOOL_ID } from "@/lib/tools/constants";
 import { OnyxDocument } from "@/lib/search/interfaces";
-import { FilterManager, LlmDescriptor, LlmManager } from "@/lib/hooks";
+import { LlmDescriptor, LlmManager } from "@/lib/hooks";
 import {
   BackendMessage,
   ChatFileType,
@@ -58,7 +59,7 @@ import {
   CurrentMessageFIFO,
   updateCurrentMessageFIFO,
 } from "@/app/app/services/currentMessageFIFO";
-import { buildFilters } from "@/lib/search/utils";
+import { buildFilters } from "@/lib/searchFilters/utils";
 import { toast } from "@opal/layouts";
 import {
   ReadonlyURLSearchParams,
@@ -80,10 +81,11 @@ import { Packet, MessageStart } from "@/app/app/services/streamingModels";
 import { SelectedModel } from "@/sections/model-selector/MultiModelSelector";
 import { useAgentPreferences } from "@/lib/agents/hooks";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
-import { ProjectFile, useProjectsContext } from "@/providers/ProjectsContext";
+import { ProjectFile, useProjectsContext } from "@/lib/projects/providers";
 import { useIncognito } from "@/providers/IncognitoProvider";
 import { useAppParams } from "@/hooks/appNavigation";
 import { projectFilesToFileDescriptors } from "@/lib/projects/utils";
+import { useSharedSearchFilters } from "@/lib/searchFilters/providers";
 
 const SYSTEM_MESSAGE_ID = -3;
 
@@ -115,7 +117,6 @@ interface RegenerationRequest {
 }
 
 interface UseChatControllerProps {
-  filterManager: FilterManager;
   llmManager: LlmManager;
   activeAgent: MinimalAgent | undefined;
   availableAgents: MinimalAgent[];
@@ -139,7 +140,6 @@ async function stopChatSession(chatSessionId: string): Promise<void> {
 }
 
 export default function useChatController({
-  filterManager,
   llmManager,
   availableAgents,
   activeAgent,
@@ -147,6 +147,7 @@ export default function useChatController({
   selectedDocuments,
   resetInputBar,
 }: UseChatControllerProps) {
+  const searchFilters = useSharedSearchFilters();
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -664,7 +665,8 @@ export default function useChatController({
           ? chooseImplicitPreferred(
               currentHistory,
               currentMessageTreeLocal,
-              unresolvedTurn
+              unresolvedTurn,
+              getMostVisibleResponseId(unresolvedTurn.userMessage.nodeId)
             )
           : null;
         if (
@@ -1055,10 +1057,10 @@ export default function useChatController({
           })(),
           chatSessionId: currChatSessionId,
           filters: buildFilters(
-            filterManager.selectedSources,
-            filterManager.selectedDocumentSets,
-            filterManager.timeRange,
-            filterManager.selectedTags
+            searchFilters.selectedSources,
+            searchFilters.selectedDocumentSets,
+            searchFilters.timeRange,
+            searchFilters.selectedTags
           ),
           modelProvider: isMultiModel
             ? undefined
@@ -1074,7 +1076,11 @@ export default function useChatController({
             : modelOverride
               ? (modelOverride.modelConfigurationId ?? undefined)
               : (llmManager.currentLlm.modelConfigurationId ?? undefined),
-          temperature: llmManager.temperature || undefined,
+          // Only a chosen temperature is sent, zero included. Without one the
+          // backend resolves the admin default, then GEN_AI_TEMPERATURE.
+          temperature: llmManager.hasTemperatureOverride
+            ? llmManager.temperature
+            : undefined,
           deepResearch,
           enabledToolIds:
             disabledToolIds && activeAgent
@@ -1462,12 +1468,13 @@ export default function useChatController({
     },
     [
       // Narrow to stable fields from managers to avoid re-creation
-      filterManager.selectedSources,
-      filterManager.selectedDocumentSets,
-      filterManager.selectedTags,
-      filterManager.timeRange,
+      searchFilters.selectedSources,
+      searchFilters.selectedDocumentSets,
+      searchFilters.selectedTags,
+      searchFilters.timeRange,
       llmManager.currentLlm,
       llmManager.temperature,
+      llmManager.hasTemperatureOverride,
       // Others that affect logic
       activeAgent,
       availableAgents,

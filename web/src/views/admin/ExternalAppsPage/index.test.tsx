@@ -19,7 +19,7 @@ import {
 } from "@/app/craft/v1/apps/registry";
 import { MCPServer, MCPServerStatus } from "@/lib/tools/types";
 import * as externalAppsService from "@/app/craft/services/externalAppsService";
-import * as mcpService from "@/lib/tools/mcpService";
+import * as mcpService from "@/lib/tools/svc";
 
 jest.mock("swr", () => ({
   __esModule: true,
@@ -28,7 +28,7 @@ jest.mock("swr", () => ({
 }));
 
 jest.mock("@/app/craft/services/externalAppsService");
-jest.mock("@/lib/tools/mcpService");
+jest.mock("@/lib/tools/svc");
 
 jest.mock("next/navigation", () => ({
   useRouter: () => ({ push: jest.fn(), replace: mockRouterReplace }),

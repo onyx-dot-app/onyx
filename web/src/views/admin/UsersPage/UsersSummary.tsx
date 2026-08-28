@@ -1,15 +1,13 @@
+import { useTranslations } from "next-intl";
 import { SvgArrowUpRight, SvgFilterPlus, SvgUserSync } from "@opal/icons";
 import { ContentAction } from "@opal/layouts";
 import { Button, Card } from "@opal/components";
 import { Hoverable } from "@opal/core";
 import { clickOnKeyDown } from "@opal/utils";
 import { Section } from "@/layouts/general-layouts";
-import IconButton from "@/refresh-components/buttons/IconButton";
 import Text from "@/refresh-components/texts/Text";
 import Link from "next/link";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import { useAuthTypeMetadata } from "@/lib/auth/hooks";
-import InviteOnlyCard from "./InviteOnlyCard";
 
 // ---------------------------------------------------------------------------
 // Stats cell — number + label + hover filter icon
@@ -22,6 +20,7 @@ type StatCellProps = {
 };
 
 function StatCell({ value, label, onFilter }: StatCellProps) {
+  const t = useTranslations("admin.users");
   const display = value === null ? "\u2014" : value.toLocaleString();
 
   const cellClassName = `relative flex flex-col items-start gap-0.5 w-full p-2 rounded-08 transition-colors ${
@@ -39,11 +38,11 @@ function StatCell({ value, label, onFilter }: StatCellProps) {
       {onFilter && (
         <div className="absolute right-1 top-1">
           <Hoverable.Item group="stat" variant="appear-on-hover">
-            <IconButton
-              tertiary
+            <Button
+              prominence="tertiary"
               icon={SvgFilterPlus}
-              tooltip="Add Filter"
-              toolTipPosition="left"
+              tooltip={t("summary.filterButton.tooltip")}
+              tooltipSide="left"
               onClick={(e) => {
                 e.stopPropagation();
                 onFilter();
@@ -64,7 +63,7 @@ function StatCell({ value, label, onFilter }: StatCellProps) {
           className={cellClassName}
           role="button"
           tabIndex={0}
-          aria-label={`Filter by ${label}`}
+          aria-label={t("summary.statCell.ariaLabel", { label })}
           onKeyDown={clickOnKeyDown(onFilter)}
           onClick={onFilter}
         >
@@ -82,13 +81,14 @@ function StatCell({ value, label, onFilter }: StatCellProps) {
 // ---------------------------------------------------------------------------
 
 function ScimCard() {
+  const t = useTranslations("admin.users");
   return (
-    <Card border="solid" padding={3} rounding="lg">
+    <Card border="solid" padding={3} rounding={4}>
       <Section alignItems="start" height="fit" gap={2}>
         <ContentAction
           icon={SvgUserSync}
-          title="SCIM Sync"
-          description="Users are synced from your identity provider."
+          title={t("summary.scim.title")}
+          description={t("summary.scim.description")}
           sizePreset="main-ui"
           variant="section"
           padding={0}
@@ -99,7 +99,7 @@ function ScimCard() {
                 rightIcon={SvgArrowUpRight}
                 size="sm"
               >
-                Manage
+                {t("summary.scim.manageButton.label")}
               </Button>
             </Link>
           }
@@ -110,7 +110,7 @@ function ScimCard() {
 }
 
 // ---------------------------------------------------------------------------
-// Stats bar — layout varies by SCIM / invite-only status
+// Stats bar: layout varies by SCIM status
 // ---------------------------------------------------------------------------
 
 type UsersSummaryProps = {
@@ -132,28 +132,27 @@ export default function UsersSummary({
   onFilterInvites,
   onFilterRequests,
 }: UsersSummaryProps) {
-  const { authTypeMetadata } = useAuthTypeMetadata();
-  const showInviteOnly = !showScim && authTypeMetadata?.multiTenant === false;
+  const t = useTranslations("admin.users");
   const showRequests = requests !== null && requests > 0;
 
   const statsCard = (
-    <Card border="solid" padding={2} rounding="lg">
+    <Card border="solid" padding={2} rounding={4}>
       <Section alignItems="start" height="fit">
         <Section flexDirection="row" gap={0}>
           <StatCell
             value={activeUsers}
-            label="active users"
+            label={t("summary.activeUsers.label")}
             onFilter={onFilterActive}
           />
           <StatCell
             value={pendingInvites}
-            label="pending invites"
+            label={t("summary.pendingInvites.label")}
             onFilter={onFilterInvites}
           />
           {showRequests && (
             <StatCell
               value={requests}
-              label="requests to join"
+              label={t("summary.requests.label")}
               onFilter={onFilterRequests}
             />
           )}
@@ -162,13 +161,7 @@ export default function UsersSummary({
     </Card>
   );
 
-  const rightCard = showScim ? (
-    <ScimCard />
-  ) : showInviteOnly ? (
-    <InviteOnlyCard />
-  ) : null;
-
-  if (rightCard) {
+  if (showScim) {
     return (
       <Section
         flexDirection="row"
@@ -177,7 +170,7 @@ export default function UsersSummary({
         gap={2}
       >
         {statsCard}
-        {rightCard}
+        <ScimCard />
       </Section>
     );
   }

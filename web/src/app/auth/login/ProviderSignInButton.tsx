@@ -20,6 +20,7 @@ import { Button } from "@opal/components";
 import { InputErrorText } from "@opal/layouts";
 import { SvgGoogle } from "@opal/logos";
 import { SSOProviderOption } from "@/lib/auth/types";
+import { useTranslations } from "next-intl";
 
 interface ProviderSignInButtonProps {
   provider: SSOProviderOption;
@@ -30,6 +31,7 @@ export default function ProviderSignInButton({
   provider,
   nextUrl,
 }: ProviderSignInButtonProps) {
+  const t = useTranslations("auth");
   const [isRedirecting, setIsRedirecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -46,11 +48,13 @@ export default function ProviderSignInButton({
       if (nextUrl) url.searchParams.set("next", nextUrl);
       const res = await fetch(url.toString(), { credentials: "include" });
       if (!res.ok) {
-        throw new Error(`Could not start sign-in (status ${res.status})`);
+        throw new Error(
+          t("login.ssoStartFailed.error", { status: res.status })
+        );
       }
       const data: { authorization_url?: string } = await res.json();
       if (!data.authorization_url) {
-        throw new Error("Sign-in response was missing the authorization URL");
+        throw new Error(t("login.ssoMissingAuthUrl.error"));
       }
       window.location.href = data.authorization_url;
     } catch (exc) {

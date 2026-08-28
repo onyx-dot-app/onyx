@@ -49,7 +49,7 @@ function Card({
 }: CardProps) {
   return (
     <div className="opal-auth-card-outer">
-      <OpalCard padding={6} rounding="lg" shadow="lg">
+      <OpalCard padding={6} rounding={4} shadow="lg">
         <div className="flex flex-col gap-6">
           <div className="flex flex-col gap-3">
             <div className="p-0.5">

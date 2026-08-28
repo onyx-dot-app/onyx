@@ -18,8 +18,9 @@ infrastructure for Onyx:
   and the document index, and optional GPU and sandbox pools
 - `postgres`: a PostgreSQL Flexible Server on a delegated subnet, its private
   DNS zone, and five metric alerts
-- `redis`: an Azure Cache for Redis behind a private endpoint, with four metric
-  alerts
+- `redis`: an Azure Managed Redis behind a private endpoint, with four metric
+  alerts. Off by default, because the in-cluster Redis needs no extra
+  configuration -- see below
 - `storage`: a storage account and container for the Onyx file store, with
   versioning, lifecycle rules and network rules
 - `waf`: a regional Web Application Firewall policy for an Application Gateway
@@ -132,7 +133,7 @@ variable set to a non-null value overrides its tier default.
 | index pool disk | 256 GiB | 512 GiB | 1024 GiB |
 | database SKU | `GP_Standard_D2ds_v5` | `GP_Standard_D2ds_v5` | `GP_Standard_D4ds_v5` |
 | database storage | 64 GiB | 128 GiB | 256 GiB |
-| cache | Standard C3 (6 GB) | Standard C4 (13 GB) | Standard C5 (26 GB) |
+| cache | `Balanced_B5` (~5 GB) | `Balanced_B10` (~10 GB) | `Balanced_B20` (~20 GB) |
 
 Roughly: small suits pilots and small teams, medium a department or company,
 large an org-wide deployment. The index pool is memory-optimised at every tier
@@ -192,8 +193,48 @@ and the database.
 
 ### `redis`
 
-An Azure Cache for Redis reachable only through a private endpoint, with its
-plaintext port disabled.
+An Azure Managed Redis reachable only through a private endpoint.
+
+Onyx runs on it, but not on the default settings, so `enable_redis` defaults
+to `false`. Two separate limits apply, both measured against live caches rather
+than assumed:
+
+- **Only database 0 exists.** `SELECT 1` and above return `DB index is out of
+  range` under every clustering policy, because that is a Redis Enterprise
+  property rather than a clustering one. Onyx defaults to database 0 for the
+  app, 14 for Celery results and 15 for the Celery broker, so a caller must set
+  `REDIS_DB_NUMBER`, `REDIS_DB_NUMBER_CELERY` and
+  `REDIS_DB_NUMBER_CELERY_RESULT_BACKEND` to `0`. The three key namespaces do
+  not collide: Onyx prefixes its own keys with the tenant, Celery results are
+  `celery-task-meta-*` and the broker uses `_kombu.binding.*` and bare queue
+  names.
+- **Sharded policies break Celery.** `EnterpriseCluster` presents one endpoint
+  but still shards, so kombu's priority-step pipeline fails on the first publish
+  with `CROSSSLOT`. `OSSCluster` needs a cluster-aware client, and kombu ships
+  none. The module therefore defaults to `clustering_policy = "NoCluster"`,
+  which reports `redis_mode=standalone` and runs Celery unchanged. `NoCluster`
+  is capped at 25 GB and cannot scale up without a policy change.
+  `EnterpriseCluster` stays selectable for a caller that sets a kombu
+  `global_keyprefix` carrying a hash tag, which puts every broker key in one
+  slot.
+
+The in-cluster Redis remains the default because it keeps databases 0, 14 and
+15 and so needs no extra configuration.
+
+Azure stopped accepting new **Azure Cache for Redis** instances -- a create now
+returns "Azure Cache for Redis is retiring, create Azure Managed Redis instance
+instead" -- so this module provisions the managed service. It is a different
+resource rather than a renamed one, and the differences show:
+
+- Sizing is one SKU name, `Balanced_B5` for about 5 GB, rather than a tier, a
+  family and a capacity.
+- It speaks TLS on **10000**, where the retiring service used 6380. There is no
+  plaintext port to disable and no minimum TLS version to set.
+- Eviction policies are spelled `VolatileLRU`, not `volatile-lru`.
+- Clustering is not really a choice for Onyx. Every instance shards unless the
+  policy says otherwise, so the module asks for `NoCluster`.
+- Alerts report under `Microsoft.Cache/redisEnterprise`, and the single-thread
+  server load metric is replaced by processor time.
 
 ### `storage`
 
@@ -216,7 +257,8 @@ Most of these follow from the platform rather than from taste.
 |---|---|---|
 | document index | managed OpenSearch domain, or in-cluster | in-cluster only; Azure has no managed OpenSearch, and Azure AI Search is a different API |
 | pod identity | IRSA: assume a role from an OIDC subject | federate a managed identity to a service account; same `system:serviceaccount:...` subject |
-| cache credential | you supply an auth token | Azure generates the keys; they come back as outputs |
+| cache credential | you supply an auth token | Azure generates the keys; they come back as outputs, read off the database rather than the cluster |
+| cache service | ElastiCache | Azure Managed Redis; Azure Cache for Redis is retired and will not accept new instances |
 | cluster autoscaler | Helm release plus a ClusterRole patch | part of a node pool |
 | GPU device plugin | Helm release | installed by AKS with the driver |
 | database storage | any GiB, with a growth ceiling | a fixed ladder of sizes, with auto-grow as a switch |
@@ -377,7 +419,8 @@ They do not prove the modules work against Azure. Only an apply does that.
 - Shared access keys on the storage account are off, and blobs are never
   anonymously readable.
 - The database and cache have no public endpoint.
-- The cache refuses its plaintext port, and both refuse TLS below 1.2.
+- The cache speaks TLS only; Managed Redis offers no plaintext port at all, and
+  the database refuses TLS below 1.2.
 - The API server will not be built open. You must set
   `api_server_authorized_ip_ranges`, or `private_cluster_enabled`, or
   `allow_unrestricted_api_server_access` to record that an open control plane is

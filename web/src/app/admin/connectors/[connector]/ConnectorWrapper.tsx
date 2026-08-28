@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import {
   ConfigurableSources,
   FederatedConnectorDetail,
@@ -13,7 +14,7 @@ import CreateConnectorSidebar, {
 } from "@/sections/sidebar/CreateConnectorSidebar";
 import { AdminCustomSidebarPortal } from "@/layouts/chromes/AdminChrome";
 import { HeaderTitle } from "@/components/header/HeaderTitle";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { isValidSource, getSourceMetadata } from "@/lib/sources";
 import { FederatedConnectorForm } from "@/components/admin/federated/FederatedConnectorForm";
 import { useSearchParams } from "next/navigation";
@@ -30,12 +31,13 @@ export default function ConnectorWrapper({
 }: {
   connector: ConfigurableSources;
 }) {
+  const t = useTranslations("admin.connectorsList");
   const searchParams = useSearchParams();
   const mode = searchParams?.get("mode"); // 'federated' or 'regular'
 
   useToastFromQuery({
     oauth_failed: {
-      message: "OAuth authentication failed. Please try again.",
+      message: t("oauthFailed.toast"),
       type: "error",
     },
   });
@@ -50,16 +52,15 @@ export default function ConnectorWrapper({
         <div className="mt-12 w-full max-w-3xl mx-auto">
           <div className="mx-auto flex flex-col gap-y-2">
             <HeaderTitle>
-              <p>&lsquo;{connector}&rsquo; is not a valid Connector Type!</p>
+              <p>{t("invalidConnector.title", { connector })}</p>
             </HeaderTitle>
-            {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
-            <Button
-              onClick={() => window.open("/admin/indexing/status", "_self")}
-              className="mr-auto"
-            >
-              {" "}
-              Go home{" "}
-            </Button>
+            <div className="mr-auto">
+              <Button
+                onClick={() => window.open("/admin/indexing/status", "_self")}
+              >
+                {t("invalidConnector.homeButton.label")}
+              </Button>
+            </div>
           </div>
         </div>
       </FormProvider>

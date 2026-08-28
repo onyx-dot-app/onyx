@@ -1,7 +1,8 @@
 "use client";
 
-import { adminSearch } from "./lib";
+import { adminSearch } from "@/lib/searchFilters/svc";
 import { useState, useEffect, useCallback } from "react";
+import { useTranslations } from "next-intl";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import { buildDocumentSummaryDisplay } from "@/components/search/DocumentDisplay";
 import { Checkbox } from "@opal/components";
@@ -10,8 +11,8 @@ import { toast } from "@opal/layouts";
 import { getErrorMsg } from "@/lib/fetchUtils";
 import { ScoreSection } from "../ScoreEditor";
 import { useRouter } from "next/navigation";
-import { useFilters } from "@/lib/hooks";
-import { buildFilters } from "@/lib/search/utils";
+import { useSearchFilters } from "@/lib/searchFilters/hooks";
+import { buildFilters } from "@/lib/searchFilters/utils";
 import { DocumentUpdatedAtBadge } from "@/components/search/DocumentUpdatedAtBadge";
 import { DocumentSetSummary } from "@/lib/types";
 import { SourceIcon } from "@/components/SourceIcon";
@@ -28,6 +29,8 @@ const DocumentDisplay = ({
   document: OnyxDocument;
   refresh: () => void;
 }) => {
+  const t = useTranslations("admin.documents");
+
   async function toggleHidden() {
     const response = await updateHiddenStatus(
       document.document_id,
@@ -36,7 +39,11 @@ const DocumentDisplay = ({
     if (response.ok) {
       refresh();
     } else {
-      toast.error(`Failed to update document - ${getErrorMsg(response)}`);
+      toast.error(
+        t("explorer.updateFailed.toast", {
+          detail: await getErrorMsg(response),
+        })
+      );
     }
   }
 
@@ -63,7 +70,7 @@ const DocumentDisplay = ({
       </div>
       <div className="flex flex-wrap gap-x-2 mt-1 text-xs">
         <div className="px-1 py-0.5 bg-accent-background-hovered rounded-sm flex">
-          <p className="mr-1 my-auto">Boost:</p>
+          <p className="mr-1 my-auto">{t("explorer.boost.label")}</p>
           <ScoreSection
             documentId={document.document_id}
             initialScore={document.boost}
@@ -74,16 +81,20 @@ const DocumentDisplay = ({
         <div
           role="button"
           tabIndex={0}
-          aria-label={document.hidden ? "Unhide document" : "Hide document"}
+          aria-label={
+            document.hidden
+              ? t("visibility.unhide.ariaLabel")
+              : t("visibility.hide.ariaLabel")
+          }
           onKeyDown={clickOnKeyDown(() => void toggleHidden())}
           onClick={() => void toggleHidden()}
           className="px-1 py-0.5 bg-accent-background-hovered hover:bg-accent-background rounded-sm flex cursor-pointer select-none"
         >
           <div className="my-auto">
             {document.hidden ? (
-              <div className="text-error">Hidden</div>
+              <div className="text-error">{t("visibility.hidden.label")}</div>
             ) : (
-              "Visible"
+              t("visibility.visible.label")
             )}
           </div>
           <div className="ml-1 my-auto">
@@ -112,6 +123,7 @@ export function Explorer({
   connectors: Connector<any>[];
   documentSets: DocumentSetSummary[];
 }) {
+  const t = useTranslations("admin.documents");
   const router = useRouter();
 
   const [query, setQuery] = useState(initialSearchValue || "");
@@ -119,7 +131,7 @@ export function Explorer({
   const [results, setResults] = useState<OnyxDocument[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  const filterManager = useFilters();
+  const filterManager = useSearchFilters();
 
   const onSearch = useCallback(
     async (query: string) => {
@@ -169,7 +181,7 @@ export function Explorer({
     <div className="flex flex-col gap-6">
       <div className="flex flex-col justify-center gap-2">
         <InputTypeIn
-          placeholder="Find documents based on title / content..."
+          placeholder={t("explorer.search.placeholder")}
           value={query}
           onChange={(event) => {
             setQuery(event.target.value);

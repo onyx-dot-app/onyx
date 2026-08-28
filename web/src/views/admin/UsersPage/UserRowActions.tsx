@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Button, Divider } from "@opal/components";
+import { useTranslations } from "next-intl";
+import { Button, Divider, LineItemButton, Popover } from "@opal/components";
 import {
   SvgMoreHorizontal,
   SvgUsers,
@@ -13,12 +14,10 @@ import {
   SvgUserManage,
 } from "@opal/icons";
 import { Disabled } from "@opal/core";
-import LineItem from "@/refresh-components/buttons/LineItem";
-import { Popover } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import Text from "@/refresh-components/texts/Text";
 import { AccountType, UserStatus } from "@/lib/types";
-import { toast } from "@opal/layouts";
+import { ContentAction, toast } from "@opal/layouts";
 import { approveRequest, setUserAdminAccess } from "./svc";
 import { useCanManageGroups } from "@/lib/permissions/hooks";
 import EditUserModal from "./EditUserModal";
@@ -57,6 +56,7 @@ export default function UserRowActions({
   user,
   onMutate,
 }: UserRowActionsProps) {
+  const t = useTranslations("admin.users");
   const [modal, setModal] = useState<Modal | null>(null);
   const [popoverOpen, setPopoverOpen] = useState(false);
   // below Business the group editor is empty, so don't offer it
@@ -82,18 +82,30 @@ export default function UserRowActions({
         await setUserAdminAccess(user.email, !user.is_admin);
         onMutate();
         toast.success(
-          user.is_admin ? "Admin access removed" : "User is now an admin"
+          user.is_admin
+            ? t("rowActions.toasts.adminAccessRemoved")
+            : t("rowActions.toasts.adminAccessGranted")
         );
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : "An error occurred");
+        toast.error(
+          err instanceof Error ? err.message : t("rowActions.toasts.error")
+        );
       }
     })();
   };
 
   const adminAccessItem = user.account_type === AccountType.STANDARD && (
-    <LineItem icon={SvgUserManage} onClick={toggleAdminAccess}>
-      {user.is_admin ? "Remove Admin Access" : "Make Admin"}
-    </LineItem>
+    <LineItemButton
+      sizePreset="main-ui"
+      rounding={2}
+      icon={SvgUserManage}
+      onClick={toggleAdminAccess}
+      title={
+        user.is_admin
+          ? t("rowActions.removeAdmin.label")
+          : t("rowActions.makeAdmin.label")
+      }
+    />
   );
 
   // Status-aware action menus
@@ -104,21 +116,31 @@ export default function UserRowActions({
       return (
         <>
           {user.id && canManageGroups && (
-            <LineItem
+            <LineItemButton
+              sizePreset="main-ui"
+              rounding={2}
               icon={SvgUsers}
               onClick={() => openModal(Modal.EDIT_GROUPS)}
-            >
-              Groups &amp; Roles
-            </LineItem>
+              title={t("rowActions.editGroups.label")}
+            />
           )}
+          {/* Shown so a SCIM admin can see the action exists, but it never
+              fires — so it is a label, not a button. Padding matches
+              LineItemButton so it lines up with the rows above. */}
           <Disabled disabled>
-            <LineItem danger icon={SvgUserX}>
-              Deactivate User
-            </LineItem>
+            <div className="w-full p-1.5">
+              <ContentAction
+                sizePreset="main-ui"
+                padding={0.5}
+                color="danger"
+                icon={SvgUserX}
+                title={t("rowActions.deactivate.label")}
+              />
+            </div>
           </Disabled>
           <Divider paddingPerpendicular={4} />
           <Text as="p" secondaryBody text03 className="px-3 py-1">
-            This is a synced SCIM user managed by your identity provider.
+            {t("rowActions.scimNotice.description")}
           </Text>
         </>
       );
@@ -127,18 +149,21 @@ export default function UserRowActions({
     switch (user.status) {
       case UserStatus.INVITED:
         return (
-          <LineItem
-            danger
+          <LineItemButton
+            sizePreset="main-ui"
+            rounding={2}
+            color="danger"
             icon={SvgXCircle}
             onClick={() => openModal(Modal.CANCEL_INVITE)}
-          >
-            Cancel Invite
-          </LineItem>
+            title={t("rowActions.cancelInvite.label")}
+          />
         );
 
       case UserStatus.REQUESTED:
         return (
-          <LineItem
+          <LineItemButton
+            sizePreset="main-ui"
+            rounding={2}
             icon={SvgUserCheck}
             onClick={() => {
               setPopoverOpen(false);
@@ -146,45 +171,49 @@ export default function UserRowActions({
                 try {
                   await approveRequest(user.email);
                   onMutate();
-                  toast.success("Request approved");
+                  toast.success(t("rowActions.toasts.requestApproved"));
                 } catch (err) {
                   toast.error(
-                    err instanceof Error ? err.message : "An error occurred"
+                    err instanceof Error
+                      ? err.message
+                      : t("rowActions.toasts.error")
                   );
                 }
               })();
             }}
-          >
-            Approve
-          </LineItem>
+            title={t("rowActions.approve.label")}
+          />
         );
 
       case UserStatus.ACTIVE:
         return (
           <>
             {user.id && canManageGroups && (
-              <LineItem
+              <LineItemButton
+                sizePreset="main-ui"
+                rounding={2}
                 icon={SvgUsers}
                 onClick={() => openModal(Modal.EDIT_GROUPS)}
-              >
-                Groups &amp; Roles
-              </LineItem>
+                title={t("rowActions.editGroups.label")}
+              />
             )}
             {user.id && adminAccessItem}
-            <LineItem
+            <LineItemButton
+              sizePreset="main-ui"
+              rounding={2}
               icon={SvgKey}
               onClick={() => openModal(Modal.RESET_PASSWORD)}
-            >
-              Reset Password
-            </LineItem>
+              title={t("rowActions.resetPassword.label")}
+            />
             <Divider paddingPerpendicular={4} />
-            <LineItem
-              danger
+            <LineItemButton
+              sizePreset="main-ui"
+              rounding={2}
+              color="danger"
               icon={SvgUserX}
               onClick={() => openModal(Modal.DEACTIVATE)}
-            >
-              Deactivate User
-            </LineItem>
+              title={t("rowActions.deactivate.label")}
+            />
           </>
         );
 
@@ -192,35 +221,39 @@ export default function UserRowActions({
         return (
           <>
             {user.id && canManageGroups && (
-              <LineItem
+              <LineItemButton
+                sizePreset="main-ui"
+                rounding={2}
                 icon={SvgUsers}
                 onClick={() => openModal(Modal.EDIT_GROUPS)}
-              >
-                Groups &amp; Roles
-              </LineItem>
+                title={t("rowActions.editGroups.label")}
+              />
             )}
             {user.id && adminAccessItem}
-            <LineItem
+            <LineItemButton
+              sizePreset="main-ui"
+              rounding={2}
               icon={SvgKey}
               onClick={() => openModal(Modal.RESET_PASSWORD)}
-            >
-              Reset Password
-            </LineItem>
+              title={t("rowActions.resetPassword.label")}
+            />
             <Divider paddingPerpendicular={4} />
-            <LineItem
+            <LineItemButton
+              sizePreset="main-ui"
+              rounding={2}
               icon={SvgUserPlus}
               onClick={() => openModal(Modal.ACTIVATE)}
-            >
-              Activate User
-            </LineItem>
+              title={t("rowActions.activate.label")}
+            />
             <Divider paddingPerpendicular={4} />
-            <LineItem
-              danger
+            <LineItemButton
+              sizePreset="main-ui"
+              rounding={2}
+              color="danger"
               icon={SvgUserX}
               onClick={() => openModal(Modal.DELETE)}
-            >
-              Delete User
-            </LineItem>
+              title={t("rowActions.delete.label")}
+            />
           </>
         );
 

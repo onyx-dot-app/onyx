@@ -22,7 +22,7 @@ import {
   SEARCH_PARAM_NAMES,
   shouldSubmitOnLoad,
 } from "@/app/app/services/searchParams";
-import { FilterManager } from "@/lib/hooks";
+
 import { OnyxDocument } from "@/lib/search/interfaces";
 import {
   useChatSessionStore,
@@ -36,6 +36,7 @@ import {
   getProjectFilesForSession,
 } from "@/lib/projects/svc";
 import { AppInputBarHandle } from "@/sections/input/AppInputBar";
+import { useSharedSearchFilters } from "@/lib/searchFilters/providers";
 
 // Runs currently being re-attached; module-level so effect re-runs (incl.
 // strict mode) can't start a second tail for the same run.
@@ -44,7 +45,6 @@ const resumingRuns = new Set<number>();
 interface UseChatSessionControllerProps {
   existingChatSessionId: string | null;
   searchParams: ReadonlyURLSearchParams;
-  filterManager: FilterManager;
   firstMessage?: string;
 
   // UI state setters
@@ -78,7 +78,6 @@ export type SessionFetchError = {
 export default function useChatSessionController({
   existingChatSessionId,
   searchParams,
-  filterManager,
   firstMessage,
   setSelectedDocuments,
   setCurrentMessageFiles,
@@ -90,6 +89,7 @@ export default function useChatSessionController({
   refreshChatSessions,
   onSubmit,
 }: UseChatSessionControllerProps) {
+  const searchFilters = useSharedSearchFilters();
   const [currentSessionFileTokenCount, setCurrentSessionFileTokenCount] =
     useState<number>(0);
   const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
@@ -149,9 +149,9 @@ export default function useChatSessionController({
     // Only reset filters/selections when switching between existing sessions
     if (isSwitchingBetweenSessions) {
       setSelectedDocuments([]);
-      filterManager.setSelectedDocumentSets([]);
-      filterManager.setSelectedTags([]);
-      filterManager.setTimeRange(null);
+      searchFilters.setSelectedDocumentSets([]);
+      searchFilters.setSelectedTags([]);
+      searchFilters.setTimeRange(null);
 
       // Remove uploaded files
       setCurrentMessageFiles([]);

@@ -82,15 +82,26 @@ def reasoning_effort_exceeds(effort: ReasoningEffort, cap: ReasoningEffort) -> b
     return _REASONING_EFFORT_RANK[effort] > _REASONING_EFFORT_RANK[cap]
 
 
+class UserChatDefaults(BaseModel):
+    """A user's own chat defaults, resolved below any admin per-model
+    setting. See resolve_reasoning_effort for the reasoning chain."""
+
+    temperature_default: float | None = None
+    reasoning_effort_default: ReasoningEffort | None = None
+
+
 def resolve_reasoning_effort(
     requested: ReasoningEffort,
+    *,
     default: ReasoningEffort | None,
+    user_default: ReasoningEffort | None,
     maximum: ReasoningEffort | None,
 ) -> ReasoningEffort:
-    """Settle a request against the admin's per-model default and cap.
+    """Settle a request against the admin's per-model default, the user's own
+    default, and the cap.
 
-    Ordered chain, first concrete source wins, so another tier (a per-user
-    default) is a one-line insert. The cap applies last and unconditionally.
+    Ordered chain, first concrete source wins. The cap applies last and
+    unconditionally.
 
     AUTO is concretized before clamping because it maps to medium downstream,
     which would quietly exceed a cap of LOW.
@@ -99,6 +110,8 @@ def resolve_reasoning_effort(
         effort = requested
     elif default is not None and default != ReasoningEffort.AUTO:
         effort = default
+    elif user_default is not None and user_default != ReasoningEffort.AUTO:
+        effort = user_default
     else:
         if maximum is None:
             return ReasoningEffort.AUTO

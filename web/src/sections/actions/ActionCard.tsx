@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import { useTranslations } from "next-intl";
 import ActionCardHeader from "@/sections/actions/ActionCardHeader";
 import ToolsSection from "@/sections/actions/ToolsSection";
 import { cn } from "@opal/utils";
@@ -70,6 +71,8 @@ export default function ActionCard({
   ariaLabel,
   className,
 }: ActionCardProps) {
+  const t = useTranslations("actions");
+
   // Internal state for uncontrolled mode
   const [internalExpanded, setInternalExpanded] = useState(initialExpanded);
 
@@ -110,7 +113,7 @@ export default function ActionCard({
           className
         )}
         role="article"
-        aria-label={ariaLabel || `${title} action card`}
+        aria-label={ariaLabel || t("actionCard.card.ariaLabel", { title })}
       >
         <div className="flex flex-col w-full">
           {/* Header Section */}

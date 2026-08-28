@@ -1963,7 +1963,7 @@ class OpenSearchIndexClient(OpenSearchClient):
         The type can be nested under root_cause, so match the stringified body.
         """
         return _SEARCH_CONTEXT_MISSING_ERROR_TYPE in str(
-            getattr(error, "info", "")
+            getattr(error, "info", "")  # ods: ignore[getattr]
         ) or _SEARCH_CONTEXT_MISSING_ERROR_TYPE in str(error)
 
     @log_function_time(print_only=True, debug_only=True)

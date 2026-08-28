@@ -1,4 +1,4 @@
-import { ProjectsProvider } from "@/providers/ProjectsContext";
+import { ProjectsProvider } from "@/lib/projects/providers";
 import { VoiceModeProvider } from "@/providers/VoiceModeProvider";
 
 export interface LayoutProps {

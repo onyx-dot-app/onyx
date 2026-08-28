@@ -4,6 +4,7 @@ import { MinimalOnyxDocument, OnyxDocument } from "@/lib/search/interfaces";
 import ChatDocumentDisplay from "@/sections/document-sidebar/ChatDocumentDisplay";
 import { removeDuplicateDocs } from "@/lib/documentUtils";
 import { Dispatch, SetStateAction, useMemo, memo } from "react";
+import { useTranslations } from "next-intl";
 import { getCitations } from "@/app/app/services/packetUtils";
 import {
   useCurrentMessageTree,
@@ -43,6 +44,8 @@ interface HeaderProps {
 }
 
 function Header({ children, onClose }: HeaderProps) {
+  const t = useTranslations("chat.documentSidebar");
+
   return (
     <div className="sticky top-0 z-sticky bg-background-tint-01">
       <div className="flex flex-row w-full items-center justify-between gap-2 py-3">
@@ -56,7 +59,7 @@ function Header({ children, onClose }: HeaderProps) {
           icon={SvgX}
           prominence="tertiary"
           onClick={onClose}
-          tooltip="Close Sidebar"
+          tooltip={t("closeButton.tooltip")}
         />
       </div>
       <Divider paddingParallel={0} paddingPerpendicular={0} />
@@ -92,6 +95,7 @@ const DocumentsSidebar = memo(
     selectedDocuments,
     setPresentingDocument,
   }: DocumentsSidebarProps) => {
+    const t = useTranslations("chat.documentSidebar");
     const idOfMessageToDisplay = useSelectedNodeForDocDisplay();
     const currentMessageTree = useCurrentMessageTree();
 
@@ -166,7 +170,7 @@ const DocumentsSidebar = memo(
         <div className="flex flex-col px-3 gap-6">
           {hasCited && (
             <div>
-              <Header onClose={closeSidebar}>Cited Sources</Header>
+              <Header onClose={closeSidebar}>{t("citedSources.title")}</Header>
               <ChatDocumentDisplayWrapper>
                 {citedDocuments.map((document) => (
                   <ChatDocumentDisplay
@@ -186,7 +190,9 @@ const DocumentsSidebar = memo(
           {hasOther && (
             <div>
               <Header onClose={closeSidebar}>
-                {citedDocuments.length > 0 ? "More" : "Found Sources"}
+                {citedDocuments.length > 0
+                  ? t("moreSources.title")
+                  : t("foundSources.title")}
               </Header>
               <ChatDocumentDisplayWrapper>
                 {otherDocuments.map((document) => (
@@ -206,7 +212,7 @@ const DocumentsSidebar = memo(
 
           {humanFileDescriptors && humanFileDescriptors.length > 0 && (
             <div>
-              <Header onClose={closeSidebar}>User Files</Header>
+              <Header onClose={closeSidebar}>{t("userFiles.title")}</Header>
               <ChatDocumentDisplayWrapper>
                 {humanFileDescriptors.map((file) => (
                   <ChatDocumentDisplay

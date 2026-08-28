@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strconv"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/mapvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -16,6 +17,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/setdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
+	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/onyx-dot-app/onyx/terraform-provider-onyx/internal/client"
 )
@@ -36,20 +38,24 @@ type llmProviderResource struct {
 }
 
 type llmProviderResourceModel struct {
-	ID                  types.String `tfsdk:"id"`
-	Name                types.String `tfsdk:"name"`
-	ProviderType        types.String `tfsdk:"provider_type"`
-	APIKey              types.String `tfsdk:"api_key"`
-	APIBase             types.String `tfsdk:"api_base"`
-	APIVersion          types.String `tfsdk:"api_version"`
-	DeploymentName      types.String `tfsdk:"deployment_name"`
-	CustomConfig        types.Map    `tfsdk:"custom_config"`
-	IsPublic            types.Bool   `tfsdk:"is_public"`
-	IsAutoMode          types.Bool   `tfsdk:"is_auto_mode"`
-	Groups              types.Set    `tfsdk:"groups"`
-	Personas            types.Set    `tfsdk:"personas"`
-	ForceDelete         types.Bool   `tfsdk:"force_delete"`
-	ModelConfigurations types.Set    `tfsdk:"model_configurations"`
+	ID                    types.String `tfsdk:"id"`
+	Name                  types.String `tfsdk:"name"`
+	ProviderType          types.String `tfsdk:"provider_type"`
+	APIKey                types.String `tfsdk:"api_key"`
+	APIKeyWO              types.String `tfsdk:"api_key_wo"`
+	APIKeyWOVersion       types.Int64  `tfsdk:"api_key_wo_version"`
+	APIBase               types.String `tfsdk:"api_base"`
+	APIVersion            types.String `tfsdk:"api_version"`
+	DeploymentName        types.String `tfsdk:"deployment_name"`
+	CustomConfig          types.Map    `tfsdk:"custom_config"`
+	CustomConfigWO        types.Map    `tfsdk:"custom_config_wo"`
+	CustomConfigWOVersion types.Int64  `tfsdk:"custom_config_wo_version"`
+	IsPublic              types.Bool   `tfsdk:"is_public"`
+	IsAutoMode            types.Bool   `tfsdk:"is_auto_mode"`
+	Groups                types.Set    `tfsdk:"groups"`
+	Personas              types.Set    `tfsdk:"personas"`
+	ForceDelete           types.Bool   `tfsdk:"force_delete"`
+	ModelConfigurations   types.Set    `tfsdk:"model_configurations"`
 }
 
 type modelConfigurationModel struct {
@@ -112,8 +118,21 @@ func (r *llmProviderResource) Schema(_ context.Context, _ resource.SchemaRequest
 				Optional:  true,
 				Sensitive: true,
 				MarkdownDescription: "Provider API key. The Onyx API masks this on read, so Terraform " +
-					"cannot detect out-of-band changes; the configured value is authoritative.",
+					"cannot detect out-of-band changes; the configured value is authoritative." +
+					writeOnlyDescription("api_key"),
 			},
+			"api_key_wo": schema.StringAttribute{
+				Optional:  true,
+				Sensitive: true,
+				WriteOnly: true,
+				MarkdownDescription: "Provider API key, held only in configuration. Terraform sends it on " +
+					"every apply and stores nothing, so the key never reaches state. Pair it with " +
+					"`api_key_wo_version` to rotate it. Needs Terraform 1.11 or later.",
+				Validators: []validator.String{
+					stringvalidator.ConflictsWith(path.MatchRoot("api_key")),
+				},
+			},
+			"api_key_wo_version": writeOnlyVersionAttribute("api_key_wo"),
 			"api_base": schema.StringAttribute{
 				Optional:            true,
 				MarkdownDescription: "Custom API base URL (e.g. for Azure or self-hosted gateways).",
@@ -131,8 +150,22 @@ func (r *llmProviderResource) Schema(_ context.Context, _ resource.SchemaRequest
 				Optional:    true,
 				Sensitive:   true,
 				MarkdownDescription: "Provider-specific config key/values (e.g. Vertex service-account " +
-					"JSON, Bedrock credentials). Masked on read like `api_key`.",
+					"JSON, Bedrock credentials). Masked on read like `api_key`." +
+					writeOnlyDescription("custom_config"),
 			},
+			"custom_config_wo": schema.MapAttribute{
+				ElementType: types.StringType,
+				Optional:    true,
+				Sensitive:   true,
+				WriteOnly:   true,
+				MarkdownDescription: "Provider-specific config key/values, held only in configuration. " +
+					"Terraform sends them on every apply and stores nothing, so they never reach state. " +
+					"Pair with `custom_config_wo_version` to rotate them. Needs Terraform 1.11 or later.",
+				Validators: []validator.Map{
+					mapvalidator.ConflictsWith(path.MatchRoot("custom_config")),
+				},
+			},
+			"custom_config_wo_version": writeOnlyVersionAttribute("custom_config_wo"),
 			"is_public": schema.BoolAttribute{
 				Optional:            true,
 				Computed:            true,
@@ -214,13 +247,29 @@ func (r *llmProviderResource) Configure(_ context.Context, req resource.Configur
 	r.client = clientFromResourceConfigure(req, resp)
 }
 
+// llmProviderSecrets carries the secret values in force for one apply, each
+// resolved from either the stored attribute or its write-only twin.
+type llmProviderSecrets struct {
+	apiKey       types.String
+	customConfig types.Map
+}
+
+// resolveLLMProviderSecrets reads the write-only twins, which live in
+// configuration only.
+func resolveLLMProviderSecrets(ctx context.Context, config tfsdk.Config, plan llmProviderResourceModel, diags *diag.Diagnostics) llmProviderSecrets {
+	return llmProviderSecrets{
+		apiKey:       resolveWriteOnly(ctx, config, path.Root("api_key_wo"), plan.APIKey, diags),
+		customConfig: resolveWriteOnly(ctx, config, path.Root("custom_config_wo"), plan.CustomConfig, diags),
+	}
+}
+
 // buildUpsertRequest converts a plan into the API's full-replace upsert body.
-func (r *llmProviderResource) buildUpsertRequest(ctx context.Context, plan llmProviderResourceModel, id *int64, apiKeyChanged bool, customConfigChanged bool, diags *diag.Diagnostics) client.LLMProviderUpsertRequest {
+func (r *llmProviderResource) buildUpsertRequest(ctx context.Context, plan llmProviderResourceModel, id *int64, secrets llmProviderSecrets, apiKeyChanged bool, customConfigChanged bool, diags *diag.Diagnostics) client.LLMProviderUpsertRequest {
 	upsert := client.LLMProviderUpsertRequest{
 		ID:                  id,
 		Name:                plan.Name.ValueStringPointer(),
 		Provider:            plan.ProviderType.ValueString(),
-		APIKey:              plan.APIKey.ValueStringPointer(),
+		APIKey:              secrets.apiKey.ValueStringPointer(),
 		APIBase:             plan.APIBase.ValueStringPointer(),
 		APIVersion:          plan.APIVersion.ValueStringPointer(),
 		DeploymentName:      plan.DeploymentName.ValueStringPointer(),
@@ -230,9 +279,9 @@ func (r *llmProviderResource) buildUpsertRequest(ctx context.Context, plan llmPr
 		CustomConfigChanged: customConfigChanged,
 	}
 
-	if !plan.CustomConfig.IsNull() {
+	if !secrets.customConfig.IsNull() {
 		customConfig := map[string]string{}
-		diags.Append(plan.CustomConfig.ElementsAs(ctx, &customConfig, false)...)
+		diags.Append(secrets.customConfig.ElementsAs(ctx, &customConfig, false)...)
 		upsert.CustomConfig = customConfig
 	}
 	diags.Append(plan.Groups.ElementsAs(ctx, &upsert.Groups, false)...)
@@ -261,8 +310,13 @@ func (r *llmProviderResource) Create(ctx context.Context, req resource.CreateReq
 		return
 	}
 
-	upsert := r.buildUpsertRequest(ctx, plan, nil,
-		!plan.APIKey.IsNull(), !plan.CustomConfig.IsNull(), &resp.Diagnostics)
+	secrets := resolveLLMProviderSecrets(ctx, req.Config, plan, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	upsert := r.buildUpsertRequest(ctx, plan, nil, secrets,
+		!secrets.apiKey.IsNull(), !secrets.customConfig.IsNull(), &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -390,12 +444,18 @@ func (r *llmProviderResource) Update(ctx context.Context, req resource.UpdateReq
 		return
 	}
 
-	// State holds real (never masked) secrets, so resend them with the
-	// changed flags on whenever either side has a value.
-	apiKeyChanged := !plan.APIKey.IsNull() || !state.APIKey.IsNull()
-	customConfigChanged := !plan.CustomConfig.IsNull() || !state.CustomConfig.IsNull()
+	secrets := resolveLLMProviderSecrets(ctx, req.Config, plan, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 
-	upsert := r.buildUpsertRequest(ctx, plan, &id, apiKeyChanged, customConfigChanged, &resp.Diagnostics)
+	// State holds real (never masked) secrets, so resend them with the changed
+	// flags on whenever either side has a value. A write-only secret sits in
+	// configuration on every apply, so it rides along the same way.
+	apiKeyChanged := !secrets.apiKey.IsNull() || !state.APIKey.IsNull()
+	customConfigChanged := !secrets.customConfig.IsNull() || !state.CustomConfig.IsNull()
+
+	upsert := r.buildUpsertRequest(ctx, plan, &id, secrets, apiKeyChanged, customConfigChanged, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
 	}

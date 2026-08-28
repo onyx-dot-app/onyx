@@ -27,7 +27,6 @@ from fastapi_users.password import PasswordHelper
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.orm import Session
 
-from onyx.auth.schemas import UserRole
 from onyx.auth.users import cookie_transport
 from onyx.db.enums import AccountType, SSOProviderType
 from onyx.db.models import ScimUserMapping, SSOProvider, User, User__UserGroup
@@ -163,7 +162,6 @@ def _provision(
         **{
             "email": _SCIM_USER,
             "hashed_password": pw_helper.hash(pw_helper.generate()),
-            "role": UserRole.BASIC,
             "account_type": AccountType.STANDARD,
             "is_active": True,
             "is_verified": True,

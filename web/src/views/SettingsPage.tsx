@@ -2,6 +2,7 @@
 
 import { useRef, useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { Section, AttachmentItemLayout } from "@/layouts/general-layouts";
 import {
   Content,
@@ -34,6 +35,12 @@ import { Switch } from "@opal/components";
 import { useUser } from "@/providers/UserProvider";
 import { useTheme } from "next-themes";
 import { MemoryItem, Permission, ThemePreference } from "@/lib/types";
+import {
+  DEFAULT_LOCALE,
+  LOCALE_ENDONYMS,
+  SUPPORTED_LOCALES,
+  type Locale,
+} from "@/i18n/config";
 import useUserPersonalization from "@/hooks/useUserPersonalization";
 import ModelSelector from "@/sections/model-selector/ModelSelector";
 import { structureValue } from "@/lib/languageModels/utils";
@@ -70,7 +77,14 @@ import { Interactive } from "@opal/core";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
 import { useIsSearchModeAvailable, useSettings } from "@/lib/settings/hooks";
-import { tierAtLeast } from "@/lib/tiers";
+import {
+  ALL_REASONING_STOPS,
+  PaneSlider,
+  REASONING_STOP_LABEL_KEYS,
+  UNSET_REASONING_STOP,
+  reasoningStopIndex,
+} from "@/sections/model-selector/setting-controls";
+import { LLM_GATEWAY_MIN_TIER, tierAtLeast } from "@/lib/tiers";
 import { Tooltip } from "@opal/components";
 import { useCloudSubscription } from "@/hooks/useCloudSubscription";
 import { useSmoothStreaming } from "@/hooks/useSmoothStreaming";
@@ -128,6 +142,7 @@ function ScopeSelector({
   scopesError,
   disabled,
 }: ScopeSelectorProps) {
+  const t = useTranslations("settings");
   const groups = useMemo(() => {
     const byLabel = new Map<string, ScopeGroup>();
     for (const option of scopeOptions) {
@@ -147,14 +162,14 @@ function ScopeSelector({
   if (scopesError) {
     return (
       <Text font="secondary-body" color="text-03">
-        Couldn&apos;t load permissions.
+        {t("apiKeys.scopeSelector.loadError")}
       </Text>
     );
   }
   if (scopeOptions.length === 0) {
     return (
       <Text font="secondary-body" color="text-03">
-        Loading permissions...
+        {t("apiKeys.scopeSelector.loading")}
       </Text>
     );
   }
@@ -186,8 +201,11 @@ function ScopeSelector({
                 />
                 <div className="flex flex-col">
                   <Text font="main-ui-body" color="text-04">
-                    {locked
-                      ? `${option.label} (included with ${lockReason})`
+                    {lockReason !== undefined
+                      ? t("apiKeys.scopeSelector.includedWith", {
+                          label: option.label,
+                          lockReason,
+                        })
                       : option.label}
                   </Text>
                   {/* Fixed 2-line slot so every row is the same height. */}
@@ -239,15 +257,17 @@ function PATModal({
   onCreate,
   createdToken,
 }: PATModalProps) {
+  const t = useTranslations("settings");
+
   if (createdToken?.token) {
     return (
       <Modal open onOpenChange={(open) => !open && onClose()}>
         <Modal.Content width="sm" height="sm">
           <Modal.Header
-            title="Access Token"
+            title={t("apiKeys.tokenCreatedModal.title")}
             icon={SvgKey}
             onClose={onClose}
-            description="Save this token before continuing. It won't be shown again."
+            description={t("apiKeys.tokenCreatedModal.description")}
           />
           <Modal.Body>
             <Code showCopyButton={false}>{createdToken.token}</Code>
@@ -259,7 +279,7 @@ function PATModal({
                   getCopyText={() => createdToken.token}
                   prominence="primary"
                 >
-                  Copy Token
+                  {t("apiKeys.tokenCreatedModal.copyButton")}
                 </CopyButton>
               }
             />
@@ -272,8 +292,8 @@ function PATModal({
   return (
     <ConfirmationModalLayout
       icon={SvgKey}
-      title="Create Access Token"
-      description="All API requests using this token will inherit your access permissions and be attributed to you as an individual."
+      title={t("apiKeys.createModal.title")}
+      description={t("apiKeys.createModal.description")}
       onClose={onClose}
       submit={
         <Button
@@ -284,14 +304,16 @@ function PATModal({
           }
           onClick={onCreate}
         >
-          {isCreating ? "Creating Token..." : "Create Token"}
+          {isCreating
+            ? t("apiKeys.createModal.submit.creating")
+            : t("apiKeys.createModal.submit.create")}
         </Button>
       }
     >
       <Section gap={4}>
-        <InputVertical title="Token Name" withLabel>
+        <InputVertical title={t("apiKeys.createModal.name.title")} withLabel>
           <InputTypeIn
-            placeholder="Name your token"
+            placeholder={t("apiKeys.createModal.name.placeholder")}
             value={newTokenName}
             onChange={(e) => setNewTokenName(e.target.value)}
             variant={isCreating ? "disabled" : undefined}
@@ -299,7 +321,7 @@ function PATModal({
           />
         </InputVertical>
         <InputVertical
-          title="Expires in"
+          title={t("apiKeys.createModal.expiration.title")}
           subDescription={
             expirationDays === "null"
               ? undefined
@@ -309,10 +331,13 @@ function PATModal({
                     expiryDate.getUTCDate() + parseInt(expirationDays)
                   );
                   expiryDate.setUTCHours(23, 59, 59, 999);
-                  return `This token will expire at: ${expiryDate
+                  const formattedDate = expiryDate
                     .toISOString()
                     .replace("T", " ")
-                    .replace(".999Z", " UTC")}`;
+                    .replace(".999Z", " UTC");
+                  return t("apiKeys.createModal.expiration.expiresAtNote", {
+                    date: formattedDate,
+                  });
                 })()
           }
           withLabel
@@ -322,21 +347,31 @@ function PATModal({
             onValueChange={setExpirationDays}
             disabled={isCreating}
           >
-            <InputSelect.Trigger placeholder="Select expiration" />
+            <InputSelect.Trigger
+              placeholder={t("apiKeys.createModal.expiration.placeholder")}
+            />
             <InputSelect.Content>
-              <InputSelect.Item value="7">7 days</InputSelect.Item>
-              <InputSelect.Item value="30">30 days</InputSelect.Item>
-              <InputSelect.Item value="365">365 days</InputSelect.Item>
-              <InputSelect.Item value="null">No expiration</InputSelect.Item>
+              <InputSelect.Item value="7">
+                {t("apiKeys.createModal.expiration.days7")}
+              </InputSelect.Item>
+              <InputSelect.Item value="30">
+                {t("apiKeys.createModal.expiration.days30")}
+              </InputSelect.Item>
+              <InputSelect.Item value="365">
+                {t("apiKeys.createModal.expiration.days365")}
+              </InputSelect.Item>
+              <InputSelect.Item value="null">
+                {t("apiKeys.createModal.expiration.noExpiration")}
+              </InputSelect.Item>
             </InputSelect.Content>
           </InputSelect>
         </InputVertical>
         <InputVertical
-          title="Permissions"
+          title={t("apiKeys.createModal.permissions.title")}
           subDescription={
             accessMode === "full"
-              ? "Inherits all of your permissions."
-              : "Limit this token to specific capabilities."
+              ? t("apiKeys.createModal.permissions.fullAccessNote")
+              : t("apiKeys.createModal.permissions.limitedAccessNote")
           }
           withLabel
         >
@@ -345,11 +380,15 @@ function PATModal({
             onValueChange={(value) => setAccessMode(value as AccessMode)}
             disabled={isCreating}
           >
-            <InputSelect.Trigger placeholder="Select permissions" />
+            <InputSelect.Trigger
+              placeholder={t("apiKeys.createModal.permissions.placeholder")}
+            />
             <InputSelect.Content>
-              <InputSelect.Item value="full">Full access</InputSelect.Item>
+              <InputSelect.Item value="full">
+                {t("apiKeys.createModal.permissions.fullAccessOption")}
+              </InputSelect.Item>
               <InputSelect.Item value="limited">
-                Limited access
+                {t("apiKeys.createModal.permissions.limitedAccessOption")}
               </InputSelect.Item>
             </InputSelect.Content>
           </InputSelect>
@@ -381,6 +420,7 @@ function usePATCreation({
   defaultScopes = [],
   onCreateSuccess,
 }: UsePATCreationOptions = {}) {
+  const t = useTranslations("settings");
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [newTokenName, setNewTokenName] = useState(defaultName);
@@ -418,7 +458,7 @@ function usePATCreation({
 
   const createPAT = useCallback(async () => {
     if (!newTokenName.trim()) {
-      toast.error("Token name is required");
+      toast.error(t("apiKeys.toasts.nameRequired"));
       return;
     }
 
@@ -442,15 +482,15 @@ function usePATCreation({
           token: data.token,
           name: newTokenName,
         });
-        toast.success("Token created successfully");
+        toast.success(t("apiKeys.toasts.created"));
         await onCreateSuccess?.();
       } else {
         const errorData = await response.json();
-        toast.error(errorData.detail || "Failed to create token");
+        toast.error(errorData.detail || t("apiKeys.toasts.createFailed"));
       }
     } catch (error) {
       console.error("Failed to create access token", error);
-      toast.error("Network error creating token");
+      toast.error(t("apiKeys.toasts.createNetworkError"));
     } finally {
       setIsCreating(false);
     }
@@ -460,6 +500,7 @@ function usePATCreation({
     newTokenName,
     onCreateSuccess,
     selectedScopes,
+    t,
   ]);
 
   return {
@@ -481,13 +522,16 @@ function usePATCreation({
 }
 
 function GeneralSettings() {
+  const t = useTranslations("settings");
   const {
     user,
     updateUserPersonalization,
     updateUserThemePreference,
     updateUserChatBackground,
+    updateUserLanguage,
   } = useUser();
   const { theme, setTheme, systemTheme } = useTheme();
+  const currentLanguage = user?.preferences?.language ?? DEFAULT_LOCALE;
 
   const applyBackground = useCallback(
     async (bg: (typeof CHAT_BACKGROUND_OPTIONS)[number]) => {
@@ -517,8 +561,8 @@ function GeneralSettings() {
     updatePersonalizationField,
     handleSavePersonalization,
   } = useUserPersonalization(user, updateUserPersonalization, {
-    onSuccess: () => toast.success("Personalization updated successfully"),
-    onError: () => toast.error("Failed to update personalization"),
+    onSuccess: () => toast.success(t("profile.toasts.updated")),
+    onError: () => toast.error(t("profile.toasts.updateFailed")),
   });
 
   // Track initial values to detect changes
@@ -536,25 +580,25 @@ function GeneralSettings() {
     try {
       const response = await deleteAllChatSessions();
       if (response.ok) {
-        toast.success("All your chat sessions have been deleted.");
+        toast.success(t("dangerZone.deleteAllChats.toasts.deleted"));
         await refreshChatSessions();
         setShowDeleteConfirmation(false);
       } else {
         throw new Error("Failed to delete all chat sessions");
       }
     } catch (error) {
-      toast.error("Failed to delete all chat sessions");
+      toast.error(t("dangerZone.deleteAllChats.toasts.deleteFailed"));
     } finally {
       setIsDeleting(false);
     }
-  }, [pathname, router, refreshChatSessions]);
+  }, [pathname, router, refreshChatSessions, t]);
 
   return (
     <>
       {showDeleteConfirmation && (
         <ConfirmationModalLayout
           icon={SvgTrash}
-          title="Delete All Chats"
+          title={t("dangerZone.deleteAllChats.confirm.title")}
           onClose={() => setShowDeleteConfirmation(false)}
           submit={
             <Button
@@ -564,17 +608,18 @@ function GeneralSettings() {
                 void handleDeleteAllChats();
               }}
             >
-              {isDeleting ? "Deleting..." : "Delete"}
+              {isDeleting
+                ? t("dangerZone.deleteAllChats.confirm.deleting")
+                : t("dangerZone.deleteAllChats.confirm.submit")}
             </Button>
           }
         >
           <Section gap={2} alignItems="start">
             <Text color="text-05">
-              All your chat sessions and history will be permanently deleted.
-              Deletion cannot be undone.
+              {t("dangerZone.deleteAllChats.confirm.description")}
             </Text>
             <Text color="text-05">
-              Are you sure you want to delete all chats?
+              {t("dangerZone.deleteAllChats.confirm.question")}
             </Text>
           </Section>
         </ConfirmationModalLayout>
@@ -583,22 +628,22 @@ function GeneralSettings() {
       <Section gap={8}>
         <Section gap={3}>
           <Content
-            title="Profile"
+            title={t("profile.title")}
             sizePreset="main-content"
             variant="section"
             width="full"
           />
-          <Card border="solid" rounding="lg">
+          <Card border="solid" rounding={4}>
             <Section alignItems="start" height="fit">
               <InputHorizontal
-                title="Full Name"
-                description="We'll display this name in the app."
+                title={t("profile.fullName.title")}
+                description={t("profile.fullName.description")}
                 center
                 withLabel
                 responsive
               >
                 <InputTypeIn
-                  placeholder="Your name"
+                  placeholder={t("profile.fullName.placeholder")}
                   value={personalizationValues.name}
                   onChange={(e) =>
                     updatePersonalizationField("name", e.target.value)
@@ -618,14 +663,14 @@ function GeneralSettings() {
                 />
               </InputHorizontal>
               <InputHorizontal
-                title="Work Role"
-                description="Share your role to better tailor responses."
+                title={t("profile.workRole.title")}
+                description={t("profile.workRole.description")}
                 center
                 withLabel
                 responsive
               >
                 <InputTypeIn
-                  placeholder="Your role"
+                  placeholder={t("profile.workRole.placeholder")}
                   value={personalizationValues.role}
                   onChange={(e) =>
                     updatePersonalizationField("role", e.target.value)
@@ -650,16 +695,16 @@ function GeneralSettings() {
 
         <Section gap={3}>
           <Content
-            title="Appearance"
+            title={t("appearance.title")}
             sizePreset="main-content"
             variant="section"
             width="full"
           />
-          <Card border="solid" rounding="lg">
+          <Card border="solid" rounding={4}>
             <Section alignItems="start" height="fit">
               <InputHorizontal
-                title="Color Mode"
-                description="Select your preferred color mode for the UI."
+                title={t("appearance.colorMode.title")}
+                description={t("appearance.colorMode.description")}
                 center
                 withLabel
               >
@@ -681,31 +726,32 @@ function GeneralSettings() {
                         />
                       )}
                       description={
-                        systemTheme
-                          ? systemTheme.charAt(0).toUpperCase() +
-                            systemTheme.slice(1)
-                          : undefined
+                        systemTheme === "light"
+                          ? t("appearance.colorMode.light")
+                          : systemTheme === "dark"
+                            ? t("appearance.colorMode.dark")
+                            : undefined
                       }
                     >
-                      Auto
+                      {t("appearance.colorMode.auto")}
                     </InputSelect.Item>
                     <InputSelect.Separator />
                     <InputSelect.Item
                       value={ThemePreference.LIGHT}
                       icon={() => <ColorSwatch light />}
                     >
-                      Light
+                      {t("appearance.colorMode.light")}
                     </InputSelect.Item>
                     <InputSelect.Item
                       value={ThemePreference.DARK}
                       icon={() => <ColorSwatch dark />}
                     >
-                      Dark
+                      {t("appearance.colorMode.dark")}
                     </InputSelect.Item>
                   </InputSelect.Content>
                 </InputSelect>
               </InputHorizontal>
-              <InputVertical title="Chat Background">
+              <InputVertical title={t("appearance.chatBackground.title")}>
                 <div className="flex flex-wrap gap-2">
                   {CHAT_BACKGROUND_OPTIONS.map((bg) => {
                     const currentBackgroundId =
@@ -719,13 +765,19 @@ function GeneralSettings() {
                         onClick={() => applyBackground(bg)}
                         className="relative overflow-hidden rounded-lg transition-all w-[90px] h-[68px] cursor-pointer border-none p-0 bg-transparent group"
                         title={bg.label}
-                        aria-label={`${bg.label} background${
-                          isSelected ? " (selected)" : ""
-                        }`}
+                        aria-label={t(
+                          "appearance.chatBackground.optionAriaLabel",
+                          {
+                            label: bg.label,
+                            selected: isSelected ? "true" : "false",
+                          }
+                        )}
                       >
                         {isNone ? (
                           <div className="absolute inset-0 bg-background flex items-center justify-center">
-                            <span className="text-xs text-text-02">None</span>
+                            <span className="text-xs text-text-02">
+                              {t("appearance.chatBackground.none")}
+                            </span>
                           </div>
                         ) : (
                           <div
@@ -755,20 +807,59 @@ function GeneralSettings() {
           </Card>
         </Section>
 
-        <Divider paddingParallel={0} paddingPerpendicular={0} />
-
         <Section gap={3}>
           <Content
-            title="Danger Zone"
+            title={t("language.title")}
             sizePreset="main-content"
             variant="section"
             width="full"
           />
-          <Card border="solid" rounding="lg">
+          <Card border="solid" rounding={4}>
             <Section alignItems="start" height="fit">
               <InputHorizontal
-                title="Delete All Chats"
-                description="Permanently delete all your chat sessions."
+                title={t("language.displayLanguage.title")}
+                description={t("language.displayLanguage.description")}
+                center
+                withLabel
+              >
+                <InputSelect
+                  value={currentLanguage}
+                  onValueChange={(value) => {
+                    // SAFETY: the items below only carry SUPPORTED_LOCALES
+                    // values, so the select can't emit anything else.
+                    updateUserLanguage(value as Locale).catch(() => {
+                      toast.error(t("language.toasts.updateFailed"));
+                    });
+                  }}
+                >
+                  <InputSelect.Trigger />
+                  <InputSelect.Content>
+                    {SUPPORTED_LOCALES.map((locale) => (
+                      <InputSelect.Item key={locale} value={locale}>
+                        {LOCALE_ENDONYMS[locale]}
+                      </InputSelect.Item>
+                    ))}
+                  </InputSelect.Content>
+                </InputSelect>
+              </InputHorizontal>
+            </Section>
+          </Card>
+        </Section>
+
+        <Divider paddingParallel={0} paddingPerpendicular={0} />
+
+        <Section gap={3}>
+          <Content
+            title={t("dangerZone.title")}
+            sizePreset="main-content"
+            variant="section"
+            width="full"
+          />
+          <Card border="solid" rounding={4}>
+            <Section alignItems="start" height="fit">
+              <InputHorizontal
+                title={t("dangerZone.deleteAllChats.title")}
+                description={t("dangerZone.deleteAllChats.description")}
                 center
               >
                 <Button
@@ -778,7 +869,7 @@ function GeneralSettings() {
                   icon={SvgTrash}
                   interaction={showDeleteConfirmation ? "hover" : "rest"}
                 >
-                  Delete All Chats
+                  {t("dangerZone.deleteAllChats.button")}
                 </Button>
               </InputHorizontal>
             </Section>
@@ -794,6 +885,7 @@ interface LocalShortcut extends InputPrompt {
 }
 
 function PromptShortcuts() {
+  const t = useTranslations("settings");
   const { promptShortcuts, isLoading, error, refresh } = usePromptShortcuts();
   const [shortcuts, setShortcuts] = useState<LocalShortcut[]>([]);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
@@ -829,8 +921,8 @@ function PromptShortcuts() {
   // Show error popup if fetch fails
   useEffect(() => {
     if (!error) return;
-    toast.error("Failed to load shortcuts");
-  }, [error]);
+    toast.error(t("promptShortcuts.toasts.loadFailed"));
+  }, [error, t]);
 
   const handleUpdateShortcut = useCallback(
     (index: number, field: "prompt" | "content", value: string) => {
@@ -902,22 +994,22 @@ function PromptShortcuts() {
         if (response.ok) {
           setShortcuts((prev) => prev.filter((_, i) => i !== index));
           await refresh();
-          toast.success("Shortcut deleted");
+          toast.success(t("promptShortcuts.toasts.deleted"));
         } else {
           throw new Error("Failed to delete shortcut");
         }
       } catch (error) {
-        toast.error("Failed to delete shortcut");
+        toast.error(t("promptShortcuts.toasts.deleteFailed"));
       }
     },
-    [shortcuts, refresh]
+    [shortcuts, refresh, t]
   );
 
   const handleSaveShortcut = useCallback(
     async (index: number) => {
       const shortcut = shortcuts[index];
       if (!shortcut || !shortcut.prompt.trim() || !shortcut.content.trim()) {
-        toast.error("Both shortcut and expansion are required");
+        toast.error(t("promptShortcuts.toasts.bothRequired"));
         return;
       }
 
@@ -937,7 +1029,7 @@ function PromptShortcuts() {
 
           if (response.ok) {
             await refresh();
-            toast.success("Shortcut created");
+            toast.success(t("promptShortcuts.toasts.created"));
           } else {
             throw new Error("Failed to create shortcut");
           }
@@ -956,16 +1048,16 @@ function PromptShortcuts() {
 
           if (response.ok) {
             await refresh();
-            toast.success("Shortcut updated");
+            toast.success(t("promptShortcuts.toasts.updated"));
           } else {
             throw new Error("Failed to update shortcut");
           }
         }
       } catch (error) {
-        toast.error("Failed to save shortcut");
+        toast.error(t("promptShortcuts.toasts.saveFailed"));
       }
     },
-    [shortcuts, refresh]
+    [shortcuts, refresh, t]
   );
 
   const handleBlurShortcut = useCallback(
@@ -1008,7 +1100,7 @@ function PromptShortcuts() {
               >
                 <InputTypeIn
                   prefixText="/"
-                  placeholder="Summarize"
+                  placeholder={t("promptShortcuts.row.promptPlaceholder")}
                   value={shortcut.prompt}
                   onChange={(e) =>
                     handleUpdateShortcut(index, "prompt", e.target.value)
@@ -1032,16 +1124,16 @@ function PromptShortcuts() {
                     icon={SvgMinusCircle}
                     onClick={() => void handleRemoveShortcut(index)}
                     prominence="tertiary"
-                    aria-label="Remove shortcut"
+                    aria-label={t("promptShortcuts.row.removeAriaLabel")}
                     tooltip={
                       shortcut.is_public
-                        ? "Cannot delete public prompt-shortcuts."
+                        ? t("promptShortcuts.row.publicTooltip")
                         : undefined
                     }
                   />
                 </Section>
                 <InputTextArea
-                  placeholder="Provide a concise 1–2 sentence summary of the following:"
+                  placeholder={t("promptShortcuts.row.contentPlaceholder")}
                   value={shortcut.content}
                   onChange={(e) =>
                     handleUpdateShortcut(index, "content", e.target.value)
@@ -1071,6 +1163,8 @@ function PromptShortcuts() {
 }
 
 function ChatPreferencesSettings() {
+  const t = useTranslations("settings");
+  const tModelSelector = useTranslations("chat.modelSelector");
   const {
     user,
     updateUserPersonalization,
@@ -1080,6 +1174,8 @@ function ChatPreferencesSettings() {
     updateUserDefaultModel,
     updateUserDefaultAppMode,
     updateUserVoiceSettings,
+    updateUserTemperatureDefault,
+    updateUserReasoningEffortDefault,
   } = useUser();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const searchUiEnabled = useIsSearchModeAvailable();
@@ -1096,8 +1192,8 @@ function ChatPreferencesSettings() {
     updateUserPreferences,
     handleSavePersonalization,
   } = useUserPersonalization(user, updateUserPersonalization, {
-    onSuccess: () => toast.success("Preferences saved"),
-    onError: () => toast.error("Failed to save preferences"),
+    onSuccess: () => toast.success(t("chats.toasts.saved")),
+    onError: () => toast.error(t("chats.toasts.saveFailed")),
   });
   const [draftVoicePlaybackSpeed, setDraftVoicePlaybackSpeed] = useState(
     user?.preferences.voice_playback_speed ?? 1
@@ -1115,12 +1211,61 @@ function ChatPreferencesSettings() {
     }) => {
       try {
         await updateUserVoiceSettings(settings);
+        toast.success(t("chats.toasts.saved"));
+      } catch {
+        toast.error(t("chats.toasts.saveFailed"));
+      }
+    },
+    [updateUserVoiceSettings, t]
+  );
+
+  const settings = useSettings();
+  const userTemperatureDefault = user?.preferences.temperature_default ?? null;
+  const userEffortDefault = user?.preferences.reasoning_effort_default ?? null;
+  // 0 mirrors the backend GEN_AI_TEMPERATURE fallback an untouched chat
+  // actually runs with, so the parked slider never overstates the default.
+  const [draftTemperature, setDraftTemperature] = useState(
+    userTemperatureDefault ?? 0
+  );
+  const [draftEffortStop, setDraftEffortStop] = useState(() => {
+    const stop = reasoningStopIndex(userEffortDefault);
+    return stop >= 0 ? stop : UNSET_REASONING_STOP;
+  });
+
+  useEffect(() => {
+    if (userTemperatureDefault != null) {
+      setDraftTemperature(userTemperatureDefault);
+    }
+  }, [userTemperatureDefault]);
+  useEffect(() => {
+    const stop = reasoningStopIndex(userEffortDefault);
+    if (stop >= 0) setDraftEffortStop(stop);
+  }, [userEffortDefault]);
+
+  const saveTemperatureDefault = useCallback(
+    async (value: number): Promise<void> => {
+      try {
+        await updateUserTemperatureDefault(value);
         toast.success("Preferences saved");
       } catch {
         toast.error("Failed to save preferences");
       }
     },
-    [updateUserVoiceSettings]
+    [updateUserTemperatureDefault]
+  );
+
+  const saveEffortDefault = useCallback(
+    async (effortStop: number): Promise<void> => {
+      try {
+        await updateUserReasoningEffortDefault(
+          ALL_REASONING_STOPS[effortStop] ?? null
+        );
+        toast.success("Preferences saved");
+      } catch {
+        toast.error("Failed to save preferences");
+      }
+    },
+    [updateUserReasoningEffortDefault]
   );
 
   const commitVoicePlaybackSpeed = useCallback(() => {
@@ -1153,16 +1298,16 @@ function ChatPreferencesSettings() {
     <Section gap={8}>
       <Section gap={3}>
         <Content
-          title="Chats"
+          title={t("chats.title")}
           sizePreset="main-content"
           variant="section"
           width="full"
         />
-        <Card border="solid" rounding="lg">
+        <Card border="solid" rounding={4}>
           <Section alignItems="start" height="fit">
             <InputHorizontal
-              title="Default Model"
-              description="This model will be used by Onyx by default in your chats."
+              title={t("chats.defaultModel.title")}
+              description={t("chats.defaultModel.description")}
               withLabel
             >
               <ModelSelector
@@ -1201,9 +1346,77 @@ function ChatPreferencesSettings() {
               />
             </InputHorizontal>
 
+            {(user?.preferences?.temperature_override_enabled ?? true) && (
+              <InputHorizontal
+                title={t("chats.defaultTemperature.title")}
+                description={t("chats.defaultTemperature.description")}
+                withLabel
+              >
+                <Section flexDirection="row" width="fit" height="auto" gap={3}>
+                  <Section width={8} height="auto">
+                    <PaneSlider
+                      compact
+                      value={draftTemperature}
+                      min={0}
+                      max={2}
+                      step={0.1}
+                      onValueChange={setDraftTemperature}
+                      onValueCommit={(value) => {
+                        void saveTemperatureDefault(value);
+                      }}
+                    />
+                  </Section>
+                  <Section width={4} height="auto" alignItems="end">
+                    <Text font="secondary-mono" color="text-04" nowrap>
+                      {draftTemperature.toFixed(1)}
+                    </Text>
+                  </Section>
+                </Section>
+              </InputHorizontal>
+            )}
+
+            {!settings.isLoading &&
+              (settings.reasoning_override_enabled ?? true) && (
+                <InputHorizontal
+                  title={t("chats.defaultReasoningLevel.title")}
+                  description={t("chats.defaultReasoningLevel.description")}
+                  withLabel
+                >
+                  <Section
+                    flexDirection="row"
+                    width="fit"
+                    height="auto"
+                    gap={3}
+                  >
+                    <Section width={8} height="auto">
+                      <PaneSlider
+                        compact
+                        value={draftEffortStop}
+                        min={0}
+                        max={ALL_REASONING_STOPS.length - 1}
+                        step={1}
+                        onValueChange={setDraftEffortStop}
+                        onValueCommit={(value) => {
+                          void saveEffortDefault(value);
+                        }}
+                      />
+                    </Section>
+                    <Section width={4} height="auto" alignItems="end">
+                      <Text font="secondary-mono" color="text-04" nowrap>
+                        {tModelSelector(
+                          REASONING_STOP_LABEL_KEYS[
+                            ALL_REASONING_STOPS[draftEffortStop] ?? "medium"
+                          ]
+                        )}
+                      </Text>
+                    </Section>
+                  </Section>
+                </InputHorizontal>
+              )}
+
             <InputHorizontal
-              title="Chat Auto-scroll"
-              description="Automatically scroll to new content as chat generates response."
+              title={t("chats.autoScroll.title")}
+              description={t("chats.autoScroll.description")}
               withLabel
             >
               <Switch
@@ -1215,8 +1428,8 @@ function ChatPreferencesSettings() {
             </InputHorizontal>
 
             <InputHorizontal
-              title="Smooth Streaming"
-              description="Animate streamed responses character-by-character. Disable to render chunks as they arrive."
+              title={t("chats.smoothStreaming.title")}
+              description={t("chats.smoothStreaming.description")}
               withLabel
             >
               <Switch
@@ -1226,8 +1439,8 @@ function ChatPreferencesSettings() {
             </InputHorizontal>
 
             <InputHorizontal
-              title="Collapse Large Pastes"
-              description="When pasting text longer than 3 lines or 200 characters, collapse it into a compact tile instead of inserting it inline. Click the tile to view or edit the full text."
+              title={t("chats.collapseLargePastes.title")}
+              description={t("chats.collapseLargePastes.description")}
               withLabel
             >
               <Switch
@@ -1243,13 +1456,13 @@ function ChatPreferencesSettings() {
                 tooltip={
                   searchUiEnabled
                     ? undefined
-                    : "Search UI is disabled and can only be enabled by an admin."
+                    : t("chats.defaultAppMode.disabledTooltip")
                 }
                 side="top"
               >
                 <InputHorizontal
-                  title="Default App Mode"
-                  description="Choose whether new sessions start in Search or Chat mode."
+                  title={t("chats.defaultAppMode.title")}
+                  description={t("chats.defaultAppMode.description")}
                   center
                   disabled={!searchUiEnabled}
                   withLabel
@@ -1263,8 +1476,12 @@ function ChatPreferencesSettings() {
                   >
                     <InputSelect.Trigger />
                     <InputSelect.Content>
-                      <InputSelect.Item value="CHAT">Chat</InputSelect.Item>
-                      <InputSelect.Item value="SEARCH">Search</InputSelect.Item>
+                      <InputSelect.Item value="CHAT">
+                        {t("chats.defaultAppMode.chatOption")}
+                      </InputSelect.Item>
+                      <InputSelect.Item value="SEARCH">
+                        {t("chats.defaultAppMode.searchOption")}
+                      </InputSelect.Item>
                     </InputSelect.Content>
                   </InputSelect>
                 </InputHorizontal>
@@ -1276,12 +1493,12 @@ function ChatPreferencesSettings() {
 
       <Section gap={3}>
         <InputVertical
-          title="Personal Preferences"
-          description="Provide your custom preferences in natural language."
+          title={t("personalPreferences.title")}
+          description={t("personalPreferences.description")}
           withLabel
         >
           <InputTextArea
-            placeholder="Describe how you want the system to behave and the tone it should use."
+            placeholder={t("personalPreferences.placeholder")}
             value={personalizationValues.user_preferences}
             onChange={(e) => updateUserPreferences(e.target.value)}
             onBlur={() => void handleSavePersonalization()}
@@ -1296,16 +1513,16 @@ function ChatPreferencesSettings() {
           />
         </InputVertical>
         <Content
-          title="Memory"
+          title={t("memory.title")}
           sizePreset="main-content"
           variant="section"
           width="full"
         />
-        <Card border="solid" rounding="lg">
+        <Card border="solid" rounding={4}>
           <Section alignItems="start" height="fit">
             <InputHorizontal
-              title="Reference Stored Memories"
-              description="Let Onyx reference stored memories in chats."
+              title={t("memory.referenceStoredMemories.title")}
+              description={t("memory.referenceStoredMemories.description")}
               withLabel
             >
               <Switch
@@ -1317,8 +1534,8 @@ function ChatPreferencesSettings() {
               />
             </InputHorizontal>
             <InputHorizontal
-              title="Update Memories"
-              description="Let Onyx generate and update stored memories."
+              title={t("memory.updateMemories.title")}
+              description={t("memory.updateMemories.description")}
               withLabel
             >
               <Switch
@@ -1346,16 +1563,16 @@ function ChatPreferencesSettings() {
 
       <Section gap={3}>
         <Content
-          title="Prompt Shortcuts"
+          title={t("promptShortcuts.title")}
           sizePreset="main-content"
           variant="section"
           width="full"
         />
-        <Card border="solid" rounding="lg">
+        <Card border="solid" rounding={4}>
           <Section alignItems="start" height="fit">
             <InputHorizontal
-              title="Use Prompt Shortcuts"
-              description="Enable shortcuts to quickly insert common prompts."
+              title={t("promptShortcuts.toggle.title")}
+              description={t("promptShortcuts.toggle.description")}
               withLabel
             >
               <Switch
@@ -1373,16 +1590,16 @@ function ChatPreferencesSettings() {
 
       <Section gap={3}>
         <Content
-          title="Voice"
+          title={t("voice.title")}
           sizePreset="main-content"
           variant="section"
           width="full"
         />
-        <Card border="solid" rounding="lg">
+        <Card border="solid" rounding={4}>
           <Section alignItems="start" height="fit">
             <InputHorizontal
-              title="Auto-Send on Pause"
-              description="Automatically send voice input when you stop speaking."
+              title={t("voice.autoSend.title")}
+              description={t("voice.autoSend.description")}
               withLabel
             >
               <Switch
@@ -1394,8 +1611,8 @@ function ChatPreferencesSettings() {
             </InputHorizontal>
 
             <InputHorizontal
-              title="Auto-Playback"
-              description="Automatically play voice responses."
+              title={t("voice.autoPlayback.title")}
+              description={t("voice.autoPlayback.description")}
               withLabel
             >
               <Switch
@@ -1407,8 +1624,8 @@ function ChatPreferencesSettings() {
             </InputHorizontal>
 
             <InputHorizontal
-              title="Playback Speed"
-              description="Adjust the speed of voice playback."
+              title={t("voice.playbackSpeed.title")}
+              description={t("voice.playbackSpeed.description")}
               withLabel
             >
               <div className="flex items-center gap-3">
@@ -1452,6 +1669,7 @@ interface GatewayCopyValueButtonProps {
 }
 
 function GatewayCopyValueButton({ value }: GatewayCopyValueButtonProps) {
+  const t = useTranslations("settings");
   const [copied, setCopied] = useState(false);
 
   async function handleCopy() {
@@ -1460,7 +1678,7 @@ function GatewayCopyValueButton({ value }: GatewayCopyValueButtonProps) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      toast.error("Could not copy value.");
+      toast.error(t("gateway.copyButton.copyError"));
     }
   }
 
@@ -1470,7 +1688,9 @@ function GatewayCopyValueButton({ value }: GatewayCopyValueButtonProps) {
       size="sm"
       onClick={handleCopy}
       rightIcon={copied ? SvgCheck : undefined}
-      tooltip={copied ? "Copied" : "Copy"}
+      tooltip={
+        copied ? t("gateway.copyButton.copied") : t("gateway.copyButton.copy")
+      }
     >
       {value}
     </Button>
@@ -1481,7 +1701,8 @@ function GatewayAccessSection({
   canCreateToken,
   onCreateToken,
 }: GatewayAccessSectionProps) {
-  const enterpriseTier = useTierAtLeast(Tier.ENTERPRISE);
+  const t = useTranslations("settings");
+  const gatewayTier = useTierAtLeast(LLM_GATEWAY_MIN_TIER);
   const { llmProviders } = useLLMProviders();
   const [gatewayUrl, setGatewayUrl] = useState("");
 
@@ -1523,7 +1744,7 @@ function GatewayAccessSection({
     0
   );
 
-  if (!enterpriseTier || availableModelCount === 0) {
+  if (!gatewayTier || availableModelCount === 0) {
     return null;
   }
 
@@ -1532,8 +1753,8 @@ function GatewayAccessSection({
   return (
     <Section gap={3}>
       <ContentAction
-        title="LLM Gateway"
-        description="Connect external tools to the models available to you in Onyx."
+        title={t("gateway.title")}
+        description={t("gateway.description")}
         sizePreset="main-content"
         variant="section"
         width="full"
@@ -1545,15 +1766,15 @@ function GatewayAccessSection({
             target="_blank"
             size="sm"
           >
-            Guide
+            {t("gateway.guideButton")}
           </Button>
         }
       />
-      <Card border="solid" rounding="lg" padding={3}>
+      <Card border="solid" rounding={4} padding={3}>
         <Section alignItems="start" height="fit" gap={3}>
           <InputHorizontal
-            title="Gateway URL"
-            description="Use this base URL with compatible OpenAI and Anthropic clients."
+            title={t("gateway.url.title")}
+            description={t("gateway.url.description")}
             center
           >
             <GatewayCopyValueButton value={gatewayAddress} />
@@ -1563,8 +1784,10 @@ function GatewayAccessSection({
 
           <Section gap={2} alignItems="start">
             <Content
-              title="Models"
-              description={`${availableModelCount} models are available to your account. Open a provider to copy an ID.`}
+              title={t("gateway.models.title")}
+              description={t("gateway.models.description", {
+                count: availableModelCount,
+              })}
               sizePreset="main-ui"
               variant="section"
             />
@@ -1574,9 +1797,9 @@ function GatewayAccessSection({
                 <SimpleCollapsible key={provider.id} defaultOpen={false}>
                   <SimpleCollapsible.Header
                     title={provider.name}
-                    description={`${provider.models.length} ${
-                      provider.models.length === 1 ? "model" : "models"
-                    } available`}
+                    description={t("gateway.provider.modelsAvailable", {
+                      count: provider.models.length,
+                    })}
                     sizePreset="main-ui"
                   />
                   <SimpleCollapsible.Content>
@@ -1606,8 +1829,8 @@ function GatewayAccessSection({
           <Divider />
 
           <InputHorizontal
-            title="Access token"
-            description="Create a scoped token before you connect an application."
+            title={t("gateway.accessToken.title")}
+            description={t("gateway.accessToken.description")}
             center
           >
             <Button
@@ -1616,7 +1839,7 @@ function GatewayAccessSection({
               disabled={!canCreateToken}
               onClick={onCreateToken}
             >
-              New token
+              {t("gateway.accessToken.button")}
             </Button>
           </InputHorizontal>
         </Section>
@@ -1626,6 +1849,7 @@ function GatewayAccessSection({
 }
 
 function LLMGatewaySettings() {
+  const t = useTranslations("settings");
   const { permissions } = useUser();
   // Same gate as the Access Tokens section: this is a second PAT-minting path.
   const canCreatePAT = hasPermission(
@@ -1634,7 +1858,7 @@ function LLMGatewaySettings() {
   );
   const canCreateTokens = useCloudSubscription();
   const tokenCreation = usePATCreation({
-    defaultName: "LLM Gateway",
+    defaultName: t("gateway.title"),
     defaultAccessMode: "limited",
     defaultScopes: ["use:llm_gateway"],
   });
@@ -1686,6 +1910,7 @@ function LLMGatewaySettings() {
 }
 
 function AccountsAccessSettings() {
+  const t = useTranslations("settings");
   const { user, authTypeMetadata, permissions } = useUser();
   const isMultiTenant = useIsMultiTenant();
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -1779,15 +2004,15 @@ function AccountsAccessSettings() {
   // Show error popup if SWR fetch fails
   useEffect(() => {
     if (error) {
-      toast.error("Failed to load tokens");
+      toast.error(t("apiKeys.toasts.loadFailed"));
     }
-  }, [error]);
+  }, [error, t]);
 
   useEffect(() => {
     if (scopeOptionsError) {
-      toast.error("Failed to load permission options");
+      toast.error(t("apiKeys.toasts.loadPermissionsFailed"));
     }
-  }, [scopeOptionsError]);
+  }, [scopeOptionsError, t]);
 
   const deletePAT = useCallback(
     async (patId: number) => {
@@ -1802,16 +2027,16 @@ function AccountsAccessSettings() {
             tokenCreation.closeTokenModal();
           }
           await mutate();
-          toast.success("Token deleted successfully");
+          toast.success(t("apiKeys.toasts.deleted"));
           setTokenToDelete(null);
         } else {
-          toast.error("Failed to delete token");
+          toast.error(t("apiKeys.toasts.deleteFailed"));
         }
       } catch (error) {
-        toast.error("Network error deleting token");
+        toast.error(t("apiKeys.toasts.deleteNetworkError"));
       }
     },
-    [mutate, tokenCreation]
+    [mutate, tokenCreation, t]
   );
 
   const handleChangePassword = useCallback(
@@ -1833,17 +2058,19 @@ function AccountsAccessSettings() {
         });
 
         if (response.ok) {
-          toast.success("Password updated successfully");
+          toast.success(t("accounts.passwordModal.toasts.updated"));
           setShowPasswordModal(false);
         } else {
           const errorData = await response.json();
-          toast.error(errorData.detail || "Failed to change password");
+          toast.error(
+            errorData.detail || t("accounts.passwordModal.toasts.updateFailed")
+          );
         }
       } catch (error) {
-        toast.error("An error occurred while changing the password");
+        toast.error(t("accounts.passwordModal.toasts.networkError"));
       }
     },
-    []
+    [t]
   );
 
   return (
@@ -1870,24 +2097,25 @@ function AccountsAccessSettings() {
       {tokenToDelete && (
         <ConfirmationModalLayout
           icon={SvgTrash}
-          title="Revoke Access Token"
+          title={t("apiKeys.revokeModal.title")}
           onClose={() => setTokenToDelete(null)}
           submit={
             <Button
               variant="danger"
               onClick={() => deletePAT(tokenToDelete.id)}
             >
-              Revoke
+              {t("apiKeys.revokeModal.submit")}
             </Button>
           }
         >
           <Section gap={2} alignItems="start">
             <Text color="text-05">
-              {`Any application using the token ${tokenToDelete.name} (${tokenToDelete.token_display}) will lose access to Onyx. This action cannot be undone.`}
+              {t("apiKeys.revokeModal.description", {
+                name: tokenToDelete.name,
+                tokenDisplay: tokenToDelete.token_display,
+              })}
             </Text>
-            <Text color="text-05">
-              Are you sure you want to revoke this token?
-            </Text>
+            <Text color="text-05">{t("apiKeys.revokeModal.question")}</Text>
           </Section>
         </ConfirmationModalLayout>
       )}
@@ -1918,7 +2146,7 @@ function AccountsAccessSettings() {
             <Form>
               <ConfirmationModalLayout
                 icon={SvgLock}
-                title="Change Password"
+                title={t("accounts.passwordModal.title")}
                 submit={
                   <Button
                     disabled={isSubmitting || !dirty || !isValid}
@@ -1931,7 +2159,9 @@ function AccountsAccessSettings() {
                       }
                     }}
                   >
-                    {isSubmitting ? "Updating..." : "Update"}
+                    {isSubmitting
+                      ? t("accounts.passwordModal.submit.updating")
+                      : t("accounts.passwordModal.submit.update")}
                   </Button>
                 }
                 onClose={() => {
@@ -1942,7 +2172,7 @@ function AccountsAccessSettings() {
                   <Section gap={1} alignItems="start">
                     <InputVertical
                       withLabel="currentPassword"
-                      title="Current Password"
+                      title={t("accounts.passwordModal.currentPassword.title")}
                     >
                       <PasswordInputTypeIn
                         name="currentPassword"
@@ -1956,7 +2186,10 @@ function AccountsAccessSettings() {
                     </InputVertical>
                   </Section>
                   <Section gap={1} alignItems="start">
-                    <InputVertical withLabel="newPassword" title="New Password">
+                    <InputVertical
+                      withLabel="newPassword"
+                      title={t("accounts.passwordModal.newPassword.title")}
+                    >
                       <PasswordInputTypeIn
                         name="newPassword"
                         value={values.newPassword}
@@ -1969,7 +2202,7 @@ function AccountsAccessSettings() {
                   <Section gap={1} alignItems="start">
                     <InputVertical
                       withLabel="confirmPassword"
-                      title="Confirm New Password"
+                      title={t("accounts.passwordModal.confirmPassword.title")}
                     >
                       <PasswordInputTypeIn
                         name="confirmPassword"
@@ -1992,25 +2225,27 @@ function AccountsAccessSettings() {
       <Section gap={8}>
         <Section gap={3}>
           <Content
-            title="Accounts"
+            title={t("accounts.title")}
             sizePreset="main-content"
             variant="section"
             width="full"
           />
-          <Card border="solid" rounding="lg">
+          <Card border="solid" rounding={4}>
             <Section alignItems="start" height="fit">
               <InputHorizontal
-                title="Email"
-                description="Your account email address."
+                title={t("accounts.email.title")}
+                description={t("accounts.email.description")}
                 center
               >
-                <Text color="text-05">{user?.email ?? "anonymous"}</Text>
+                <Text color="text-05">
+                  {user?.email ?? t("accounts.email.anonymousFallback")}
+                </Text>
               </InputHorizontal>
 
               {showPasswordSection && (
                 <InputHorizontal
-                  title="Password"
-                  description="Update your account password."
+                  title={t("accounts.password.title")}
+                  description={t("accounts.password.description")}
                   center
                 >
                   <Button
@@ -2019,7 +2254,7 @@ function AccountsAccessSettings() {
                     onClick={() => setShowPasswordModal(true)}
                     interaction={showPasswordModal ? "hover" : "rest"}
                   >
-                    Change Password
+                    {t("accounts.password.changeButton")}
                   </Button>
                 </InputHorizontal>
               )}
@@ -2030,13 +2265,13 @@ function AccountsAccessSettings() {
         {showTokensSection && (
           <Section gap={3}>
             <Content
-              title="Access Tokens"
+              title={t("apiKeys.section.title")}
               sizePreset="main-content"
               variant="section"
               width="full"
             />
             {canCreateTokens ? (
-              <Card border="solid" padding={1} rounding="lg">
+              <Card border="solid" padding={1} rounding={4}>
                 <Section alignItems="start" height="fit">
                   <Section gap={0}>
                     <Section flexDirection="row" padding={1} gap={2}>
@@ -2048,13 +2283,13 @@ function AccountsAccessSettings() {
                         >
                           <Text font="secondary-body" color="text-03">
                             {isLoading
-                              ? "Loading tokens..."
-                              : "No access tokens created."}
+                              ? t("apiKeys.list.loading")
+                              : t("apiKeys.list.empty")}
                           </Text>
                         </Section>
                       ) : (
                         <InputTypeIn
-                          placeholder="Search..."
+                          placeholder={t("apiKeys.list.searchPlaceholder")}
                           value={query}
                           onChange={(e) => setQuery(e.target.value)}
                           searchIcon
@@ -2072,11 +2307,11 @@ function AccountsAccessSettings() {
                           disabled={!canCreatePAT}
                           tooltip={
                             !canCreatePAT
-                              ? "You don't have permission to create access tokens"
+                              ? t("apiKeys.list.noPermissionTooltip")
                               : undefined
                           }
                         >
-                          New Access Token
+                          {t("apiKeys.list.newTokenButton")}
                         </Button>
                       </div>
                     </Section>
@@ -2090,31 +2325,33 @@ function AccountsAccessSettings() {
                             (1000 * 60 * 60 * 24)
                         );
 
-                        let expiryText = "Never expires";
+                        let expiryText = t("apiKeys.list.neverExpires");
                         if (pat.expires_at) {
                           const expiresDate = new Date(pat.expires_at);
                           const daysUntilExpiry = Math.ceil(
                             (expiresDate.getTime() - now.getTime()) /
                               (1000 * 60 * 60 * 24)
                           );
-                          expiryText = `Expires in ${daysUntilExpiry} day${
-                            daysUntilExpiry === 1 ? "" : "s"
-                          }`;
+                          expiryText = t("apiKeys.list.expiresIn", {
+                            count: daysUntilExpiry,
+                          });
                         }
 
                         const scopeText =
                           pat.scopes === null
-                            ? "Full access"
+                            ? t(
+                                "apiKeys.createModal.permissions.fullAccessOption"
+                              )
                             : pat.scopes
                                 .map((scope) => scopeLabels.get(scope) ?? scope)
                                 .join(", ");
 
                         const createdText =
                           daysSinceCreation === 0
-                            ? "Created today"
-                            : `Created ${daysSinceCreation} day${
-                                daysSinceCreation === 1 ? "" : "s"
-                              } ago`;
+                            ? t("apiKeys.list.createdToday")
+                            : t("apiKeys.list.createdDaysAgo", {
+                                count: daysSinceCreation,
+                              });
 
                         const middleText = `${createdText} - ${expiryText} - ${scopeText}`;
 
@@ -2136,7 +2373,10 @@ function AccountsAccessSettings() {
                                     onClick={() => setTokenToDelete(pat)}
                                     prominence="tertiary"
                                     size="sm"
-                                    aria-label={`Delete token ${pat.name}`}
+                                    aria-label={t(
+                                      "apiKeys.list.deleteTokenAriaLabel",
+                                      { name: pat.name }
+                                    )}
                                   />
                                 }
                               />
@@ -2149,14 +2389,14 @@ function AccountsAccessSettings() {
                 </Section>
               </Card>
             ) : (
-              <Card border="solid" rounding="lg">
+              <Card border="solid" rounding={4}>
                 <Section alignItems="start" height="fit">
                   <Section flexDirection="row" justifyContent="between">
                     <Text font="secondary-body" color="text-03">
-                      Access tokens require an active paid subscription.
+                      {t("apiKeys.upsell.description")}
                     </Text>
                     <Button prominence="secondary" href="/admin/billing">
-                      Upgrade Plan
+                      {t("apiKeys.upsell.upgradeButton")}
                     </Button>
                   </Section>
                 </Section>
@@ -2175,15 +2415,20 @@ interface IndexedConnectorCardProps {
 }
 
 function IndexedConnectorCard({ source, isActive }: IndexedConnectorCardProps) {
+  const t = useTranslations("settings");
   const sourceMetadata = getSourceMetadata(source);
 
   return (
-    <Card border="solid" rounding="lg">
+    <Card border="solid" rounding={4}>
       <Section alignItems="start" height="fit">
         <Content
           icon={sourceMetadata.icon}
           title={sourceMetadata.displayName}
-          description={isActive ? "Connected" : "Paused"}
+          description={
+            isActive
+              ? t("connectors.status.connected")
+              : t("connectors.status.paused")
+          }
           sizePreset="main-content"
           variant="section"
         />
@@ -2201,6 +2446,7 @@ function FederatedConnectorCard({
   connector,
   onDisconnectSuccess,
 }: FederatedConnectorCardProps) {
+  const t = useTranslations("settings");
   const [isDisconnecting, setIsDisconnecting] = useState(false);
   const [showDisconnectConfirmation, setShowDisconnectConfirmation] =
     useState(false);
@@ -2215,25 +2461,29 @@ function FederatedConnectorCard({
       );
 
       if (response.ok) {
-        toast.success("Disconnected successfully");
+        toast.success(t("connectors.toasts.disconnected"));
         setShowDisconnectConfirmation(false);
         onDisconnectSuccess();
       } else {
         throw new Error("Failed to disconnect");
       }
     } catch (error) {
-      toast.error("Failed to disconnect");
+      toast.error(t("connectors.toasts.disconnectFailed"));
     } finally {
       setIsDisconnecting(false);
     }
-  }, [connector.federated_connector_id, onDisconnectSuccess]);
+  }, [connector.federated_connector_id, onDisconnectSuccess, t]);
 
   return (
     <>
       {showDisconnectConfirmation && (
         <ConfirmationModalLayout
           icon={SvgUnplug}
-          title={markdown(`Disconnect *${sourceMetadata.displayName}*`)}
+          title={markdown(
+            t("connectors.disconnectModal.title", {
+              name: sourceMetadata.displayName,
+            })
+          )}
           onClose={() => setShowDisconnectConfirmation(false)}
           submit={
             <Button
@@ -2241,28 +2491,36 @@ function FederatedConnectorCard({
               variant="danger"
               onClick={() => void handleDisconnect()}
             >
-              {isDisconnecting ? "Disconnecting..." : "Disconnect"}
+              {isDisconnecting
+                ? t("connectors.disconnectModal.disconnecting")
+                : t("connectors.disconnectModal.submit")}
             </Button>
           }
         >
           <Section gap={2} alignItems="start">
             <Text color="text-05">
-              {`Onyx will no longer be able to access or search content from your ${sourceMetadata.displayName} account.`}
+              {t("connectors.disconnectModal.description", {
+                name: sourceMetadata.displayName,
+              })}
             </Text>
             <Text color="text-05">
-              {`You can still continue existing sessions referencing ${sourceMetadata.displayName} content.`}
+              {t("connectors.disconnectModal.continueNote", {
+                name: sourceMetadata.displayName,
+              })}
             </Text>
           </Section>
         </ConfirmationModalLayout>
       )}
 
-      <Card border="solid" padding={2} rounding="lg">
+      <Card border="solid" padding={2} rounding={4}>
         <Section alignItems="start" height="fit">
           <ContentAction
             icon={sourceMetadata.icon}
             title={sourceMetadata.displayName}
             description={
-              connector.has_oauth_token ? "Connected" : "Not connected"
+              connector.has_oauth_token
+                ? t("connectors.status.connected")
+                : t("connectors.status.notConnected")
             }
             sizePreset="main-content"
             variant="section"
@@ -2283,7 +2541,7 @@ function FederatedConnectorCard({
                   target="_blank"
                   rightIcon={SvgArrowExchange}
                 >
-                  Connect
+                  {t("connectors.connectButton")}
                 </Button>
               ) : undefined
             }
@@ -2295,6 +2553,7 @@ function FederatedConnectorCard({
 }
 
 function ConnectorsSettings() {
+  const t = useTranslations("settings");
   const {
     connectors: federatedConnectors,
     refetch: refetchFederatedConnectors,
@@ -2337,7 +2596,7 @@ function ConnectorsSettings() {
     <Section gap={8}>
       <Section gap={3} justifyContent="start">
         <Content
-          title="Connectors"
+          title={t("connectors.title")}
           sizePreset="main-content"
           variant="section"
           width="full"
@@ -2365,7 +2624,7 @@ function ConnectorsSettings() {
         ) : (
           <EmptyMessageCard
             sizePreset="main-ui"
-            title="No connectors set up for your organization."
+            title={t("connectors.emptyMessage")}
           />
         )}
       </Section>

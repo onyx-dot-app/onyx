@@ -6,7 +6,7 @@
 !/.vscode/launch.json
 !/.vscode/tasks.json
 .zed
-.cursor
+.cursor/*
 !/.cursor/mcp.json
 !/.cursor/skills/
 

@@ -25,8 +25,8 @@ def test_route_is_gated_by_admin_permission_dependency() -> None:
     are pinned, so removing or downgrading the gate must fail a test."""
     user_param = inspect.signature(get_oauth_login_claims).parameters["user"]
     dependency = user_param.default.dependency
-    assert getattr(dependency, "_is_require_permission", False)
-    required = getattr(dependency, "_required_permission", None)
+    assert getattr(dependency, "_is_require_permission", False)  # ods: ignore[getattr]
+    required = getattr(dependency, "_required_permission", None)  # ods: ignore[getattr]
     assert required is Permission.FULL_ADMIN_PANEL_ACCESS
 
 

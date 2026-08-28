@@ -4,7 +4,18 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { SettingsLayouts, toast } from "@opal/layouts";
 import * as GeneralLayouts from "@/layouts/general-layouts";
-import { Button, Card, Divider, MessageCard } from "@opal/components";
+import {
+  Button,
+  Card,
+  Divider,
+  InputTypeIn,
+  LineItemButton,
+  MessageCard,
+  Popover,
+  PopoverMenu,
+  Tooltip,
+  useCreateModal,
+} from "@opal/components";
 import { Hoverable, Disabled } from "@opal/core";
 import { FullAgent, PersonaSharingStatus } from "@/lib/agents/types";
 import { buildAgentAvatarUrl } from "@/lib/agents/utils";
@@ -36,19 +47,15 @@ import {
   SEARCH_TOOL_ID,
   OPEN_URL_TOOL_ID,
   CODING_AGENT_TOOL_ID,
-} from "@/app/app/components/tools/constants";
+} from "@/lib/tools/constants";
 import Text from "@/refresh-components/texts/Text";
 import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
 import SwitchField from "@/refresh-components/form/SwitchField";
-import { Tooltip } from "@opal/components";
 import { useDocumentSets } from "@/app/admin/documents/sets/hooks";
-import { useProjectsContext } from "@/providers/ProjectsContext";
-import { useCreateModal } from "@opal/components";
+import { useProjectsContext } from "@/lib/projects/providers";
 import UserFilesModal from "@/sections/modals/UserFilesModal";
 import { ProjectFile, UserFileStatus } from "@/lib/projects/types";
 import { ChatFileType } from "@/app/app/interfaces";
-import { Popover, PopoverMenu } from "@opal/components";
-import LineItem from "@/refresh-components/buttons/LineItem";
 import {
   SvgActions,
   SvgExpand,
@@ -77,9 +84,8 @@ import { AgentUpsertParameters } from "@/lib/agents/types";
 import { useMcpServersForAgent } from "@/lib/tools/hooks";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
 import { useAvailableTools } from "@/hooks/useAvailableTools";
-import { getActionIcon } from "@/lib/tools/mcpUtils";
+import { getActionIcon } from "@/lib/tools/utils";
 import { AgentEditorMCPServer, MCPTool, ToolSnapshot } from "@/lib/tools/types";
-import { InputTypeIn } from "@opal/components";
 import useFilter from "@/hooks/useFilter";
 import EnabledCount from "@/refresh-components/EnabledCount";
 import { useAppRouter } from "@/hooks/appNavigation";
@@ -239,14 +245,15 @@ function AgentIconEditor({ existingAgent }: AgentIconEditorProps) {
         <Popover.Content>
           <PopoverMenu>
             {[
-              <LineItem
+              <LineItemButton
+                sizePreset="main-ui"
+                rounding={2}
                 key="upload-image"
                 icon={SvgImage}
                 onClick={() => fileInputRef.current?.click()}
-                emphasized
-              >
-                Upload Image
-              </LineItem>,
+                selectVariant="select-heavy"
+                title="Upload Image"
+              />,
               null,
               <div key="icon-grid" className="grid grid-cols-4 gap-1">
                 <SquareButton
@@ -284,7 +291,7 @@ function OpenApiToolCard({ tool }: OpenApiToolCardProps) {
   const toolFieldName = `openapi_tool_${tool.id}`;
 
   return (
-    <Card border="solid" rounding="lg">
+    <Card border="solid" rounding={4}>
       <InputHorizontal
         icon={SvgActions}
         title={tool.display_name || tool.name}
@@ -344,7 +351,7 @@ function MCPServerCard({
             !getFieldMeta<boolean>(`${serverFieldName}.enabled`).value;
           return (
             <Disabled key={tool.id} disabled={toolDisabled}>
-              <Card border="solid" rounding="md" padding={2}>
+              <Card border="solid" rounding={3} padding={2}>
                 <ContentAction
                   icon={tool.icon ?? SvgSliders}
                   title={tool.name}
@@ -376,7 +383,7 @@ function MCPServerCard({
         expandable
         expanded={!isFolded}
         border="solid"
-        rounding="lg"
+        rounding={4}
         padding={2}
         expandedContent={cardContent}
       >
@@ -1502,7 +1509,7 @@ export default function AgentEditorPage({
                           sizePreset="main-content"
                           variant="section"
                         />
-                        <Card border="solid" rounding="lg">
+                        <Card border="solid" rounding={4}>
                           <GeneralLayouts.Section>
                             {canShare && (
                               <InputHorizontal
@@ -1597,7 +1604,7 @@ export default function AgentEditorPage({
                               disabled={!isImageGenerationAvailable}
                               tooltip={imageGenerationDisabledTooltip}
                             >
-                              <Card border="solid" rounding="lg">
+                              <Card border="solid" rounding={4}>
                                 <InputHorizontal
                                   withLabel="image_generation"
                                   title="Image Generation"
@@ -1613,7 +1620,7 @@ export default function AgentEditorPage({
                             </Disabled>
 
                             <Disabled disabled={!webSearchTool}>
-                              <Card border="solid" rounding="lg">
+                              <Card border="solid" rounding={4}>
                                 <InputHorizontal
                                   withLabel="web_search"
                                   title="Web Search"
@@ -1629,7 +1636,7 @@ export default function AgentEditorPage({
                             </Disabled>
 
                             <Disabled disabled={!openURLTool}>
-                              <Card border="solid" rounding="lg">
+                              <Card border="solid" rounding={4}>
                                 <InputHorizontal
                                   withLabel="open_url"
                                   title="Open URL"
@@ -1645,7 +1652,7 @@ export default function AgentEditorPage({
                             </Disabled>
 
                             <Disabled disabled={!codeInterpreterTool}>
-                              <Card border="solid" rounding="lg">
+                              <Card border="solid" rounding={4}>
                                 <InputHorizontal
                                   withLabel="code_interpreter"
                                   title="Code Interpreter"
@@ -1661,7 +1668,7 @@ export default function AgentEditorPage({
                             </Disabled>
 
                             <Disabled disabled={!codingAgentTool}>
-                              <Card border="solid" rounding="lg">
+                              <Card border="solid" rounding={4}>
                                 <InputHorizontal
                                   withLabel="coding_agent"
                                   title="Coding Agent"
@@ -1731,7 +1738,7 @@ export default function AgentEditorPage({
                         />
                         <SimpleCollapsible.Content>
                           <GeneralLayouts.Section>
-                            <Card border="solid" rounding="lg">
+                            <Card border="solid" rounding={4}>
                               <GeneralLayouts.Section>
                                 <InputHorizontal
                                   withLabel="llm_model"
@@ -1808,7 +1815,7 @@ export default function AgentEditorPage({
                             paddingPerpendicular={0}
                           />
 
-                          <Card border="solid" rounding="lg">
+                          <Card border="solid" rounding={4}>
                             <GeneralLayouts.Section>
                               {canUpdateFeaturedStatus && (
                                 <InputHorizontal

@@ -427,6 +427,7 @@ class LitellmLLM(LLM):
         extra_body: dict | None = LITELLM_EXTRA_BODY,
         model_kwargs: dict[str, Any] | None = None,
         reasoning_effort_default: ReasoningEffort | None = None,
+        reasoning_effort_user_default: ReasoningEffort | None = None,
         reasoning_effort_max: ReasoningEffort | None = None,
     ):
         # Timeout in seconds for each socket read operation (i.e., max time between
@@ -448,6 +449,7 @@ class LitellmLLM(LLM):
         self._max_input_tokens = max_input_tokens
         self._custom_config = custom_config
         self._reasoning_effort_default = reasoning_effort_default
+        self._reasoning_effort_user_default = reasoning_effort_user_default
         self._reasoning_effort_max = reasoning_effort_max
 
         self._api_surface = resolve_api_surface(model_provider, custom_config)
@@ -612,6 +614,7 @@ class LitellmLLM(LLM):
         )
         is_claude_model = any("claude" in name.lower() for name in model_identity_names)
         is_qwen_model = any("qwen" in name.lower() for name in model_identity_names)
+        is_glm_model = any("glm" in name.lower() for name in model_identity_names)
         uses_adaptive_thinking = any(
             anthropic_uses_adaptive_thinking(name) for name in model_identity_names
         )
@@ -687,16 +690,17 @@ class LitellmLLM(LLM):
 
         # Tool choice
         # Downgrade tool_choice=required to AUTO for models that mishandle it:
-        # Claude skips reasoning when it's set, and Qwen thinking models reject
-        # it with a 400. The chat loop's fallback tool-call extraction still
-        # enforces the forced tool. Matched by model name rather than
-        # `is_reasoning` because the litellm/local registry lags behind new
-        # Qwen releases (e.g. qwen3.7-plus).
+        # Claude skips reasoning when it's set, Qwen thinking models reject it
+        # with a 400, and Z.AI rejects any GLM tool_choice other than auto
+        # ("Tool choice must be auto"). The chat loop's fallback tool-call
+        # extraction still enforces the forced tool. Matched by model name
+        # rather than `is_reasoning` because the litellm/local registry lags
+        # behind new Qwen/GLM releases (e.g. qwen3.7-plus, glm-5.3).
         # A NamedToolChoice is deliberately NOT downgraded: legacy Claude
-        # thinking is skipped below instead, and Qwen thinking models may still
+        # thinking is skipped below instead, and the other models may still
         # reject the forced tool upstream (a loud 400 beats silently ignoring
         # the caller's forced tool).
-        if (is_claude_model or is_qwen_model) and (
+        if (is_claude_model or is_qwen_model or is_glm_model) and (
             tool_choice == ToolChoiceOptions.REQUIRED
         ):
             tool_choice = ToolChoiceOptions.AUTO
@@ -727,8 +731,9 @@ class LitellmLLM(LLM):
         # see the same effort the provider will.
         reasoning_effort = resolve_reasoning_effort(
             reasoning_effort,
-            self.config.reasoning_effort_default,
-            self.config.reasoning_effort_max,
+            default=self.config.reasoning_effort_default,
+            user_default=self.config.reasoning_effort_user_default,
+            maximum=self.config.reasoning_effort_max,
         )
 
         # Note, there is a reasoning_effort parameter in LiteLLM but it is completely jank and does not work for any
@@ -1059,6 +1064,7 @@ class LitellmLLM(LLM):
             custom_config=self._custom_config,
             max_input_tokens=self._max_input_tokens,
             reasoning_effort_default=self._reasoning_effort_default,
+            reasoning_effort_user_default=self._reasoning_effort_user_default,
             reasoning_effort_max=self._reasoning_effort_max,
         )
 

@@ -1,6 +1,7 @@
 import React from "react";
 import { TextArrayField } from "@/components/Field";
 import { useFormikContext } from "formik";
+import { useTranslations } from "next-intl";
 
 interface ListInputProps {
   name: string;
@@ -9,6 +10,7 @@ interface ListInputProps {
 }
 
 const ListInput: React.FC<ListInputProps> = ({ name, label, description }) => {
+  const t = useTranslations("admin.connectorsList");
   const { values } = useFormikContext<any>();
   return (
     <TextArrayField
@@ -18,9 +20,9 @@ const ListInput: React.FC<ListInputProps> = ({ name, label, description }) => {
       subtext={
         typeof description === "function" ? description(null) : description
       }
-      placeholder={`Enter ${
-        typeof label === "function" ? label(null) : label.toLowerCase()
-      }`}
+      placeholder={t("listInput.placeholder", {
+        label: typeof label === "function" ? label(null) : label.toLowerCase(),
+      })}
     />
   );
 };

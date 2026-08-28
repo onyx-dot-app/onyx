@@ -283,6 +283,10 @@ export async function expectScreenshot(
         path: screenshotPath,
         fullPage,
         mask: maskLocators.length > 0 ? maskLocators : undefined,
+        // `toHaveScreenshot()` disables animations by default; `screenshot()`
+        // does not. Match the assert path so a transition that starts after
+        // `waitForAnimations()` can't be captured mid-flight.
+        animations: "disabled",
         ...options.screenshotOptions,
       });
     }
@@ -373,6 +377,9 @@ export async function expectElementScreenshot(
       await locator.screenshot({
         path: screenshotPath,
         mask: maskLocators.length > 0 ? maskLocators : undefined,
+        // Same reasoning as `expectScreenshot()`: keep the capture-only path in
+        // step with `toHaveScreenshot()`, which disables animations by default.
+        animations: "disabled",
       });
     }
   } finally {

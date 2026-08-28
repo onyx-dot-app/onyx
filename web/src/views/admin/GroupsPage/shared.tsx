@@ -72,15 +72,26 @@ function renderAccountTypeColumn(_value: unknown, row: MemberRow) {
 
 export const tc = createTableColumns<MemberRow>();
 
+/** Translated copy for the member table. Columns are built outside React, so
+ *  the calling component threads the strings in. */
+export interface MemberColumnLabels {
+  name: string;
+  accountType: string;
+  manager: string;
+}
+
 // `isManager` is optional — only the group edit page knows who manages a group.
-function nameColumn(isManager?: (row: MemberRow) => boolean) {
+function nameColumn(
+  labels: MemberColumnLabels,
+  isManager?: (row: MemberRow) => boolean
+) {
   // Search/sort by a name+email composite so service accounts — whose email is a
   // "Service Account" placeholder — are findable by their API-key name.
   return tc.column(
     (row) => [row.personal_name, row.email].filter(Boolean).join(" "),
     {
       id: "name",
-      header: "Name",
+      header: labels.name,
       weight: 25,
       cell: (_searchValue, row) => (
         <Content
@@ -89,7 +100,9 @@ function nameColumn(isManager?: (row: MemberRow) => boolean) {
           title={row.personal_name ?? row.email}
           description={row.personal_name ? row.email : undefined}
           tag={
-            isManager?.(row) ? { title: "Manager", color: "blue" } : undefined
+            isManager?.(row)
+              ? { title: labels.manager, color: "blue" }
+              : undefined
           }
         />
       ),
@@ -97,10 +110,13 @@ function nameColumn(isManager?: (row: MemberRow) => boolean) {
   );
 }
 
-export function makeBaseColumns(isManager?: (row: MemberRow) => boolean) {
+export function makeBaseColumns(
+  labels: MemberColumnLabels,
+  isManager?: (row: MemberRow) => boolean
+) {
   return [
     tc.qualifier(),
-    nameColumn(isManager),
+    nameColumn(labels, isManager),
     tc.column("api_key_display", {
       header: "",
       weight: 15,
@@ -113,14 +129,13 @@ export function makeBaseColumns(isManager?: (row: MemberRow) => boolean) {
         ) : null,
     }),
     tc.column("account_type", {
-      header: "Account Type",
+      header: labels.accountType,
       weight: 15,
       cell: renderAccountTypeColumn,
     }),
   ];
 }
 
-export const memberTableColumns = [
-  ...makeBaseColumns(),
-  tc.actions({ showSorting: false }),
-];
+export function makeMemberTableColumns(labels: MemberColumnLabels) {
+  return [...makeBaseColumns(labels), tc.actions({ showSorting: false })];
+}

@@ -1,5 +1,6 @@
 import React from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
+import { render } from "@tests/setup/test-utils";
 import CraftInputBar from "@/app/craft/components/CraftInputBar";
 import {
   UploadFileStatus,
@@ -63,6 +64,8 @@ jest.mock("next/navigation", () => ({
 jest.mock("swr", () => ({
   __esModule: true,
   default: () => ({ data: [], mutate: jest.fn() }),
+  // The test-utils render wrapper mounts the real SWRConfig provider.
+  SWRConfig: jest.requireActual("swr").SWRConfig,
 }));
 
 jest.mock("@/hooks/useUserSkills", () => ({

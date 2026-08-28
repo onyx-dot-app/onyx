@@ -1,9 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { Button } from "@opal/components";
+import { useTranslations } from "next-intl";
+import {
+  Button,
+  LineItemButton,
+  Popover,
+  PopoverMenu,
+  useCreateModal,
+} from "@opal/components";
 // TODO(@raunakab): migrate to Opal LineItemButton once it supports danger variant
-import LineItem from "@/refresh-components/buttons/LineItem";
 import { cn, markdown } from "@opal/utils";
 import {
   SvgMoreHorizontal,
@@ -16,7 +22,6 @@ import {
   SvgBarChart,
   SvgTrash,
 } from "@opal/icons";
-import { Popover, PopoverMenu } from "@opal/components";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import Text from "@/refresh-components/texts/Text";
 import { toast } from "@opal/layouts";
@@ -29,7 +34,6 @@ import {
 import type { Agent } from "@/lib/agents/types";
 import type { Route } from "next";
 import { ShareAgentModal } from "@/lib/agents/components";
-import { useCreateModal } from "@opal/components";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
 import { can } from "@/lib/permissions/resource-actions";
@@ -51,6 +55,7 @@ export default function AgentRowActions({
   agent,
   onMutate,
 }: AgentRowActionsProps) {
+  const t = useTranslations("admin.agents");
   const router = useRouter();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const shareModal = useCreateModal();
@@ -77,10 +82,16 @@ export default function AgentRowActions({
     try {
       await action();
       onMutate();
-      toast.success(`${agent.name} updated successfully.`);
+      toast.success(
+        t("rowActions.updateSuccess.message", { name: agent.name })
+      );
       close();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "An error occurred");
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : t("rowActions.genericError.message")
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -106,8 +117,8 @@ export default function AgentRowActions({
             <Button
               prominence="tertiary"
               icon={SvgEdit}
-              tooltip="Edit Agent"
-              aria-label="Edit Agent"
+              tooltip={t("rowActions.editAgentButton.label")}
+              aria-label={t("rowActions.editAgentButton.label")}
               data-testid={`edit-agent-${agent.id}`}
               onClick={() =>
                 router.push(
@@ -124,8 +135,8 @@ export default function AgentRowActions({
               <Button
                 prominence="tertiary"
                 icon={SvgEyeOff}
-                tooltip="Re-list Agent"
-                aria-label="Re-list Agent"
+                tooltip={t("rowActions.relistAgentButton.label")}
+                aria-label={t("rowActions.relistAgentButton.label")}
                 onClick={() =>
                   handleAction(
                     () => toggleAgentListed(agent.id, agent.is_listed),
@@ -146,10 +157,14 @@ export default function AgentRowActions({
                   icon={SvgStar}
                   interaction={featuredOpen ? "hover" : "rest"}
                   tooltip={
-                    agent.is_featured ? "Remove Featured" : "Set as Featured"
+                    agent.is_featured
+                      ? t("rowActions.removeFeaturedButton.label")
+                      : t("rowActions.setFeaturedButton.label")
                   }
                   aria-label={
-                    agent.is_featured ? "Remove Featured" : "Set as Featured"
+                    agent.is_featured
+                      ? t("rowActions.removeFeaturedButton.label")
+                      : t("rowActions.setFeaturedButton.label")
                   }
                   onClick={() => {
                     setPopoverOpen(false);
@@ -172,7 +187,7 @@ export default function AgentRowActions({
                 <Button
                   prominence="tertiary"
                   icon={SvgMoreHorizontal}
-                  aria-label="Agent actions"
+                  aria-label={t("rowActions.menuButton.ariaLabel")}
                 />
               </Popover.Trigger>
             </div>
@@ -180,7 +195,9 @@ export default function AgentRowActions({
               <PopoverMenu>
                 {[
                   canList ? (
-                    <LineItem
+                    <LineItemButton
+                      sizePreset="main-ui"
+                      rounding={2}
                       key="visibility"
                       icon={agent.is_listed ? SvgEyeOff : SvgEye}
                       onClick={() => {
@@ -194,46 +211,52 @@ export default function AgentRowActions({
                           );
                         }
                       }}
-                    >
-                      {agent.is_listed ? "Unlist Agent" : "List Agent"}
-                    </LineItem>
+                      title={
+                        agent.is_listed
+                          ? t("rowActions.unlistItem.title")
+                          : t("rowActions.listItem.title")
+                      }
+                    />
                   ) : undefined,
                   canShare ? (
-                    <LineItem
+                    <LineItemButton
+                      sizePreset="main-ui"
+                      rounding={2}
                       key="share"
                       icon={SvgShare}
                       onClick={() => {
                         setPopoverOpen(false);
                         shareModal.toggle(true);
                       }}
-                    >
-                      Share
-                    </LineItem>
+                      title={t("rowActions.shareItem.title")}
+                    />
                   ) : undefined,
                   businessTier && canViewStats ? (
-                    <LineItem
+                    <LineItemButton
+                      sizePreset="main-ui"
+                      rounding={2}
                       key="stats"
                       icon={SvgBarChart}
                       onClick={() => {
                         setPopoverOpen(false);
                         router.push(`/ee/agents/stats/${agent.id}` as Route);
                       }}
-                    >
-                      Stats
-                    </LineItem>
+                      title={t("rowActions.statsItem.title")}
+                    />
                   ) : undefined,
                   canDeleteRow ? (
-                    <LineItem
+                    <LineItemButton
+                      sizePreset="main-ui"
+                      rounding={2}
                       key="delete"
                       icon={SvgTrash}
-                      danger
+                      color="danger"
                       onClick={() => {
                         setPopoverOpen(false);
                         setDeleteOpen(true);
                       }}
-                    >
-                      Delete
-                    </LineItem>
+                      title={t("rowActions.deleteItem.title")}
+                    />
                   ) : undefined,
                 ]}
               </PopoverMenu>
@@ -245,7 +268,7 @@ export default function AgentRowActions({
       {deleteOpen && (
         <ConfirmationModalLayout
           icon={SvgTrash}
-          title="Delete Agent"
+          title={t("deleteModal.header.title")}
           onClose={isSubmitting ? undefined : () => setDeleteOpen(false)}
           submit={
             <Button
@@ -258,16 +281,19 @@ export default function AgentRowActions({
                 );
               }}
             >
-              Delete
+              {t("deleteModal.submitButton.label")}
             </Button>
           }
         >
           <Text as="p" text03>
-            Are you sure you want to delete{" "}
-            <Text as="span" text05>
-              {agent.name}
-            </Text>
-            ? This action cannot be undone.
+            {t.rich("deleteModal.confirmation.description", {
+              name: agent.name,
+              emphasis: (chunks) => (
+                <Text as="span" text05>
+                  {chunks}
+                </Text>
+              ),
+            })}
           </Text>
         </ConfirmationModalLayout>
       )}
@@ -277,8 +303,8 @@ export default function AgentRowActions({
           icon={agent.is_featured ? SvgStarOff : SvgStar}
           title={
             agent.is_featured
-              ? `Remove ${agent.name} from Featured`
-              : `Feature ${agent.name}`
+              ? t("featuredModal.removeHeader.title", { name: agent.name })
+              : t("featuredModal.addHeader.title", { name: agent.name })
           }
           onClose={isSubmitting ? undefined : () => setFeaturedOpen(false)}
           submit={
@@ -291,18 +317,22 @@ export default function AgentRowActions({
                 );
               }}
             >
-              {agent.is_featured ? "Unfeature" : "Feature"}
+              {agent.is_featured
+                ? t("featuredModal.unfeatureButton.label")
+                : t("featuredModal.featureButton.label")}
             </Button>
           }
         >
           <div className="flex flex-col gap-2">
             <Text as="p" text03>
               {agent.is_featured
-                ? `This will remove ${agent.name} from the featured section on top of the explore agents list. New users will no longer see it pinned to their sidebar, but existing pins are unaffected.`
-                : "Featured agents appear at the top of the explore agents list and are automatically pinned to the sidebar for new users with access. Use this to highlight recommended agents across your organization."}
+                ? t("featuredModal.removeBody.description", {
+                    name: agent.name,
+                  })
+                : t("featuredModal.addBody.description")}
             </Text>
             <Text as="p" text03>
-              This does not change who can access this agent.
+              {t("modals.accessNote.description")}
             </Text>
           </div>
         </ConfirmationModalLayout>
@@ -311,7 +341,7 @@ export default function AgentRowActions({
       {unlistOpen && (
         <ConfirmationModalLayout
           icon={SvgEyeOff}
-          title={markdown(`Unlist *${agent.name}*`)}
+          title={markdown(t("unlistModal.header.title", { name: agent.name }))}
           onClose={isSubmitting ? undefined : () => setUnlistOpen(false)}
           submit={
             <Button
@@ -323,18 +353,16 @@ export default function AgentRowActions({
                 );
               }}
             >
-              Unlist
+              {t("unlistModal.submitButton.label")}
             </Button>
           }
         >
           <div className="flex flex-col gap-2">
             <Text as="p" text03>
-              Unlisted agents don&apos;t appear in the explore agents list but
-              remain accessible via direct link, and to users who have
-              previously used or pinned them.
+              {t("unlistModal.body.description")}
             </Text>
             <Text as="p" text03>
-              This does not change who can access this agent.
+              {t("modals.accessNote.description")}
             </Text>
           </div>
         </ConfirmationModalLayout>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import { mutate } from "swr";
 import useShareableGroups, {
   type MinimalUserGroupSnapshot,
@@ -44,8 +45,8 @@ import {
 } from "@/sections/modals/ShareModalPermissionControls";
 import { SharePermissionMenu } from "@/sections/modals/SharePermissionMenu";
 import {
-  PERMISSION_OPTIONS,
-  SCOPE_OPTIONS,
+  useSharePermissionOptions,
+  useShareScopeOptions,
 } from "@/sections/modals/shareAccessConstants";
 import {
   applyStagedShares,
@@ -132,7 +133,10 @@ export function ShareAgentModal({
   onShare,
   userIds = [],
 }: ShareAgentModalProps) {
+  const t = useTranslations("agents.modals");
   const shareAgentModal = useModal();
+  const permissionOptions = useSharePermissionOptions();
+  const scopeOptions = useShareScopeOptions();
   const { agent } = useAgent(agentId ?? null);
   const { data: shareableUsersData } = useShareableUsers({
     includeApiKeys: true,
@@ -271,7 +275,7 @@ export function ShareAgentModal({
     [draftState.groupShares]
   );
 
-  const agentName = agent?.name ?? "Agent";
+  const agentName = agent?.name ?? t("shareAgent.agentFallback.name");
 
   const closeModal = useCallback(() => {
     setView("share");
@@ -372,11 +376,11 @@ export function ShareAgentModal({
 
     try {
       await copyText(`${window.location.origin}/app?agentId=${agentId}`);
-      toast.success("Copied link.");
+      toast.success(t("shareAgent.toasts.linkCopied"));
     } catch {
-      toast.error("Failed to copy link.");
+      toast.error(t("shareAgent.toasts.copyLinkFailed"));
     }
-  }, [agentId]);
+  }, [agentId, t]);
 
   const handleSelfRemove = useCallback(async () => {
     // Create mode (no saved agent): mutate the local draft only.
@@ -403,9 +407,9 @@ export function ShareAgentModal({
     }
 
     await refreshAgentShareCaches(agentId);
-    toast.success("Access removed.");
+    toast.success(t("shareAgent.toasts.accessRemoved"));
     closeModal();
-  }, [agentId, closeModal, currentUser, removeUserShare]);
+  }, [agentId, closeModal, currentUser, removeUserShare, t]);
 
   async function handleSave() {
     if (!isDirty) {
@@ -460,7 +464,7 @@ export function ShareAgentModal({
       }
 
       await refreshAgentShareCaches(agentId);
-      toast.success("Sharing updated.");
+      toast.success(t("shareAgent.toasts.sharingUpdated"));
       closeModal();
     } finally {
       setIsSaving(false);
@@ -491,7 +495,7 @@ export function ShareAgentModal({
       }
 
       await refreshAgentShareCaches(agentId);
-      toast.success("Ownership transferred.");
+      toast.success(t("shareAgent.toasts.ownershipTransferred"));
       closeModal();
     } finally {
       setIsSaving(false);
@@ -550,7 +554,7 @@ export function ShareAgentModal({
           icon={scopeIcon}
           titleSlot={
             <SharePermissionMenu
-              ariaLabel="Change sharing scope"
+              ariaLabel={t("shareAgent.scopeMenu.ariaLabel")}
               // Stays visible so the current scope still reads; only changing it is gated.
               disabled={!canEditShares || !canPublish}
               menuWidth="2xl"
@@ -561,13 +565,13 @@ export function ShareAgentModal({
                   isPublic: scope === "PUBLIC",
                 }));
               }}
-              options={SCOPE_OPTIONS}
+              options={scopeOptions}
               value={effectiveState.isPublic ? "PUBLIC" : "PRIVATE"}
             />
           }
           rightChildren={
             <SharePermissionMenu
-              ariaLabel="Change public permission"
+              ariaLabel={t("shareAgent.publicPermissionMenu.ariaLabel")}
               disabled={!canEditShares || !canPublish}
               onChange={(permission) => {
                 setDraftState((currentDraftState) => ({
@@ -575,7 +579,7 @@ export function ShareAgentModal({
                   publicPermission: permission,
                 }));
               }}
-              options={PERMISSION_OPTIONS}
+              options={permissionOptions}
               value={effectiveState.publicPermission}
             />
           }
@@ -587,15 +591,22 @@ export function ShareAgentModal({
             on vacant agents this row carries the transfer affordance */}
         {agent ? (
           <ShareAccessRow
-            description={`${agent.admin_count} user${
-              agent.admin_count === 1 ? "" : "s"
-            }`}
+            description={t("shareAgent.admins.description", {
+              count: agent.admin_count,
+            })}
             icon={SvgUserManage}
             rightChildren={
               agent.ownership_vacant ? (
-                <StaticPermissionLabel icon={SvgUserManage} label="Owner" />
+                <StaticPermissionLabel
+                  icon={SvgUserManage}
+                  label={t("shareAgent.permission.owner.label")}
+                />
               ) : (
-                <StaticPermissionLabel icon={SvgEdit} label="Edit" muted />
+                <StaticPermissionLabel
+                  icon={SvgEdit}
+                  label={t("shareAgent.permission.edit.label")}
+                  muted
+                />
               )
             }
             trailing={
@@ -605,7 +616,7 @@ export function ShareAgentModal({
                 />
               ) : undefined
             }
-            title="Admins"
+            title={t("shareAgent.admins.title")}
           />
         ) : null}
 
@@ -616,7 +627,7 @@ export function ShareAgentModal({
             rightChildren={
               <StaticPermissionLabel
                 icon={SvgUserManage}
-                label="Owner"
+                label={t("shareAgent.permission.owner.label")}
                 muted={!canTransfer}
               />
             }
@@ -629,7 +640,7 @@ export function ShareAgentModal({
             }
             title={
               currentUser && agent.owner.id === currentUser.id
-                ? `${agent.owner.email} (you)`
+                ? t("shareAgent.row.you.title", { email: agent.owner.email })
                 : agent.owner.email
             }
           />
@@ -642,7 +653,7 @@ export function ShareAgentModal({
             rightChildren={
               <StaticPermissionLabel
                 icon={SvgUserManage}
-                label="Owner"
+                label={t("shareAgent.permission.owner.label")}
                 muted={!canTransfer}
               />
             }
@@ -667,7 +678,9 @@ export function ShareAgentModal({
               key={share.user.id}
               rightChildren={
                 <SharePermissionMenu
-                  ariaLabel={`Update access for ${share.user.email}`}
+                  ariaLabel={t("shareAgent.row.updateAccess.ariaLabel", {
+                    name: share.user.email,
+                  })}
                   disabled={!canEditShares && !isCurrentUser}
                   onChange={
                     canEditShares
@@ -682,12 +695,14 @@ export function ShareAgentModal({
                         ? () => removeUserShare(share.user.id)
                         : undefined
                   }
-                  options={PERMISSION_OPTIONS}
+                  options={permissionOptions}
                   value={share.permission}
                 />
               }
               title={
-                isCurrentUser ? `${share.user.email} (you)` : share.user.email
+                isCurrentUser
+                  ? t("shareAgent.row.you.title", { email: share.user.email })
+                  : share.user.email
               }
             />
           );
@@ -700,7 +715,9 @@ export function ShareAgentModal({
             key={share.group_id}
             rightChildren={
               <SharePermissionMenu
-                ariaLabel={`Update access for ${share.group_name}`}
+                ariaLabel={t("shareAgent.row.updateAccess.ariaLabel", {
+                  name: share.group_name,
+                })}
                 disabled={!canEditShares}
                 onChange={
                   canEditShares
@@ -713,7 +730,7 @@ export function ShareAgentModal({
                     ? () => removeGroupShare(share.group_id)
                     : undefined
                 }
-                options={PERMISSION_OPTIONS}
+                options={permissionOptions}
                 value={share.permission}
               />
             }
@@ -732,8 +749,8 @@ export function ShareAgentModal({
           onClose={closeModal}
           title={
             view === "transfer"
-              ? markdown(`Transfer *${agentName}*`)
-              : markdown(`Share *${agentName}*`)
+              ? markdown(t("shareAgent.transfer.title", { name: agentName }))
+              : markdown(t("shareAgent.share.title", { name: agentName }))
           }
         />
 
@@ -751,7 +768,7 @@ export function ShareAgentModal({
           ) : agentId && !agent && hydratedFromAgentRef.current === false ? (
             <div className="flex w-full items-center justify-center py-6">
               <Text color="text-03" font="secondary-body">
-                Loading sharing details...
+                {t("shareAgent.loading.description")}
               </Text>
             </div>
           ) : (
@@ -773,7 +790,7 @@ export function ShareAgentModal({
               }}
               prominence="secondary"
             >
-              Back
+              {t("shareAgent.back.label")}
             </Button>
           ) : agentId ? (
             <Button
@@ -781,7 +798,7 @@ export function ShareAgentModal({
               onClick={handleCopyLink}
               prominence="secondary"
             >
-              Copy Link
+              {t("shareAgent.copyLink.label")}
             </Button>
           ) : (
             <span aria-hidden />
@@ -795,7 +812,7 @@ export function ShareAgentModal({
                   onClick={closeModal}
                   prominence="secondary"
                 >
-                  Cancel
+                  {t("shareAgent.cancel.label")}
                 </Button>
               ) : null
             ) : (
@@ -804,7 +821,9 @@ export function ShareAgentModal({
                 onClick={closeModal}
                 prominence="secondary"
               >
-                {canEditShares ? "Cancel" : "Done"}
+                {canEditShares
+                  ? t("shareAgent.cancel.label")
+                  : t("shareAgent.done.label")}
               </Button>
             )}
             {view === "transfer" ? (
@@ -812,14 +831,14 @@ export function ShareAgentModal({
                 disabled={!transferTarget || isSaving}
                 onClick={handleTransfer}
               >
-                Transfer
+                {t("shareAgent.transfer.label")}
               </Button>
             ) : canEditShares ? (
               <Button
                 disabled={!isDirty || isSaving || isRemovingSelf}
                 onClick={handleSave}
               >
-                Save
+                {t("shareAgent.save.label")}
               </Button>
             ) : null}
           </div>

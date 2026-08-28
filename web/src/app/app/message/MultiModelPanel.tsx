@@ -4,7 +4,7 @@ import { useCallback } from "react";
 import { Button } from "@opal/components";
 import { Text } from "@opal/components";
 import { ContentAction } from "@opal/layouts";
-import { SvgEyeOff, SvgX } from "@opal/icons";
+import { SvgChevronLeft, SvgChevronRight, SvgEyeOff, SvgX } from "@opal/icons";
 import { getModelIcon } from "@/lib/languageModels";
 import AgentMessage, {
   AgentMessageProps,
@@ -12,6 +12,7 @@ import AgentMessage, {
 import { ErrorBanner } from "@/app/app/message/Resubmit";
 import { cn, clickOnKeyDown } from "@opal/utils";
 import { markdown } from "@opal/utils";
+import { useTranslations } from "next-intl";
 
 export interface MultiModelPanelProps {
   /** Provider name for icon lookup */
@@ -50,6 +51,17 @@ export interface MultiModelPanelProps {
   isGenerating?: boolean;
   /** Whether a send is in flight, which disables preferred selection */
   selectionDisabled?: boolean;
+  /** Narrow-carousel nav to the previous model, flanking the header left */
+  carouselPrev?: CarouselNeighbor;
+  /** Narrow-carousel nav to the next model, flanking the header right */
+  carouselNext?: CarouselNeighbor;
+}
+
+export interface CarouselNeighbor {
+  provider: string;
+  modelName: string;
+  displayName: string;
+  onClick: () => void;
 }
 
 /**
@@ -82,7 +94,10 @@ export default function MultiModelPanel({
   errorDetails,
   isGenerating,
   selectionDisabled,
+  carouselPrev,
+  carouselNext,
 }: MultiModelPanelProps) {
+  const t = useTranslations("chat.messages");
   const ModelIcon = getModelIcon(provider, modelName);
 
   const canSelect =
@@ -92,9 +107,18 @@ export default function MultiModelPanel({
     !selectionDisabled &&
     !readOnly;
 
-  const handlePanelClick = useCallback(() => {
-    if (canSelect) onSelect();
-  }, [canSelect, onSelect]);
+  // Whole-card select. Interactive descendants keep their own behavior, and a
+  // click that ends a text selection never counts as a pick.
+  const handleCardClick = useCallback(
+    (e: React.MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.closest('button, a, [role="button"], input, textarea, select'))
+        return;
+      if (window.getSelection()?.toString()) return;
+      onSelect();
+    },
+    [onSelect]
+  );
 
   const headerClassName = cn(
     "rounded-12 transition-colors",
@@ -116,18 +140,19 @@ export default function MultiModelPanel({
               <div className="flex items-center px-2">
                 <span className="text-action-selection-05 shrink-0">
                   <Text font="secondary-body" color="inherit" nowrap>
-                    Preferred Response
+                    {t("multiModelPanel.preferredResponse.label")}
                   </Text>
                 </span>
               </div>
             ) : undefined
           ) : (
+            // raw-ok: ContentAction rightChildren slot row, Section's inline gap/padding fight the px-2 chip alignment
             <div className="flex items-center gap-1 px-2">
               {isPreferred && (
                 <>
                   <span className="text-action-selection-05 shrink-0">
                     <Text font="secondary-body" color="inherit" nowrap>
-                      Preferred Response
+                      {t("multiModelPanel.preferredResponse.label")}
                     </Text>
                   </span>
                   {onDeselect && (
@@ -139,10 +164,24 @@ export default function MultiModelPanel({
                         e.stopPropagation();
                         onDeselect();
                       }}
-                      tooltip="Deselect preferred response"
+                      tooltip={t("multiModelPanel.deselectButton.tooltip")}
                     />
                   )}
                 </>
+              )}
+              {canSelect && (
+                <span className="opacity-0 group-hover/mm-panel:opacity-100 no-hover:opacity-100 transition-opacity">
+                  <Button
+                    prominence="tertiary"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSelect();
+                    }}
+                  >
+                    {t("multiModelPanel.selectButton.label")}
+                  </Button>
+                </span>
               )}
               {!isPreferred && (
                 <Button
@@ -153,7 +192,11 @@ export default function MultiModelPanel({
                     e.stopPropagation();
                     onToggleVisibility();
                   }}
-                  tooltip={isHidden ? "Show response" : "Hide response"}
+                  tooltip={
+                    isHidden
+                      ? t("multiModelPanel.showButton.tooltip")
+                      : t("multiModelPanel.hideButton.tooltip")
+                  }
                 />
               )}
             </div>
@@ -170,9 +213,11 @@ export default function MultiModelPanel({
       className={headerClassName}
       role="button"
       tabIndex={0}
-      aria-label={`Select the ${displayName} response`}
-      onKeyDown={clickOnKeyDown(handlePanelClick)}
-      onClick={handlePanelClick}
+      aria-label={t("multiModelPanel.selectPanel.ariaLabel", {
+        model: displayName,
+      })}
+      onKeyDown={clickOnKeyDown(onSelect)}
+      onClick={onSelect}
     >
       {headerContent}
     </div>
@@ -180,14 +225,64 @@ export default function MultiModelPanel({
     <div className={headerClassName}>{headerContent}</div>
   );
 
+  // Narrow-carousel header row: prev/next model nav flanks the model pill.
+  const headerWithNav =
+    carouselPrev || carouselNext ? (
+      // raw-ok: nav row around a flex-1 min-w-0 pill slot, grow semantics no Section width preset can express
+      <div className="flex items-center gap-1">
+        {carouselPrev ? (
+          <Button
+            prominence="tertiary"
+            icon={getModelIcon(carouselPrev.provider, carouselPrev.modelName)}
+            rightIcon={SvgChevronLeft}
+            onClick={carouselPrev.onClick}
+            tooltip={carouselPrev.displayName}
+            aria-label={t("multiModelPanel.showPanel.ariaLabel", {
+              model: carouselPrev.displayName,
+            })}
+          />
+        ) : null}
+        {/* raw-ok: flex-1 slot for the pill inside the nav row, no layout primitive exposes a bare grow wrapper */}
+        <div className="flex-1 min-w-0">{header}</div>
+        {carouselNext ? (
+          <Button
+            prominence="tertiary"
+            icon={SvgChevronRight}
+            rightIcon={getModelIcon(
+              carouselNext.provider,
+              carouselNext.modelName
+            )}
+            onClick={carouselNext.onClick}
+            tooltip={carouselNext.displayName}
+            aria-label={t("multiModelPanel.showPanel.ariaLabel", {
+              model: carouselNext.displayName,
+            })}
+          />
+        ) : null}
+      </div>
+    ) : (
+      header
+    );
+
   // Hidden/collapsed panel — just the header row
   if (isHidden) {
-    return header;
+    return headerWithNav;
   }
 
   return (
-    <div className="flex flex-col gap-3 min-w-0 rounded-16">
-      {header}
+    // oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- raw-ok: panel column with min-w-0 shrink semantics no Section preset provides, and the card click is a pointer-only convenience while the header carries the focusable role=button
+    <div
+      className={cn(
+        "group/mm-panel flex flex-col gap-3 min-w-0 rounded-16 transition-colors",
+        canSelect && "cursor-pointer hover:bg-background-tint-01"
+      )}
+      onClick={canSelect ? handleCardClick : undefined}
+    >
+      {/* Sticky keeps the model and select affordance in view while the
+          response scrolls. The solid backdrop stops body text showing through. */}
+      <div className="sticky top-0 z-10 bg-background-neutral-00 rounded-12">
+        {headerWithNav}
+      </div>
       {errorMessage ? (
         <div className="p-4">
           <ErrorBanner

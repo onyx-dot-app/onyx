@@ -13,7 +13,7 @@ import type {
   OverridableExtremaSizeVariants,
   ContainerSizeVariants,
   ExtremaSizeVariants,
-  RoundingVariants,
+  Rounding,
   Spacing,
 } from "@opal/types";
 
@@ -130,41 +130,27 @@ function spacingToRem(spacing: Spacing): string {
   return `${spacing / 4}rem`;
 }
 
-const cardRoundingVariants: Record<RoundingVariants, string> = {
-  xl: "rounded-20",
-  lg: "rounded-16",
-  md: "rounded-12",
-  sm: "rounded-08",
-  xs: "rounded-04",
-};
-
-const cardTopRoundingVariants: Record<RoundingVariants, string> = {
-  xl: "rounded-t-20",
-  lg: "rounded-t-16",
-  md: "rounded-t-12",
-  sm: "rounded-t-08",
-  xs: "rounded-t-04",
-};
-
-const cardBottomRoundingVariants: Record<RoundingVariants, string> = {
-  xl: "rounded-b-20",
-  lg: "rounded-b-16",
-  md: "rounded-b-12",
-  sm: "rounded-b-08",
-  xs: "rounded-b-04",
-};
+/**
+ * Converts a {@link Rounding} step to a CSS length.
+ *
+ * Separate from {@link spacingToRem} because of `"full"` — a pill has no step
+ * on the scale, and folding that case into the spacing converter would make
+ * `padding="full"` mean 62.5rem, which is meaningless.
+ */
+function roundingToRem(rounding: Rounding): string {
+  return rounding === "full" ? "var(--radius-round)" : spacingToRem(rounding);
+}
 
 export {
   type ExtremaSizeVariants,
   type ContainerSizeVariants,
   type OverridableExtremaSizeVariants,
+  type Rounding,
   type SizeVariants,
   type Spacing,
   containerSizeVariants,
   spacingToRem,
-  cardRoundingVariants,
-  cardTopRoundingVariants,
-  cardBottomRoundingVariants,
+  roundingToRem,
   widthVariants,
   heightVariants,
 };

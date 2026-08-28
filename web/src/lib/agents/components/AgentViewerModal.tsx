@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { FullAgent } from "@/lib/agents/types";
@@ -22,16 +23,17 @@ import {
   SvgUser,
 } from "@opal/icons";
 import { useMcpServers } from "@/lib/tools/hooks";
-import { getActionIcon } from "@/lib/tools/mcpUtils";
+import { getActionIcon } from "@/lib/tools/utils";
 import { MCPServer, ToolSnapshot } from "@/lib/tools/types";
 import { EmptyMessageCard } from "@opal/components";
 import { Switch } from "@opal/components";
 import { Button } from "@opal/components";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import AppInputBar from "@/sections/input/AppInputBar";
-import { useFilters, useLlmManager } from "@/lib/hooks";
+import { useLlmManager } from "@/lib/hooks";
+import { SearchFiltersProvider } from "@/lib/searchFilters/providers";
 import { formatMmDdYyyy } from "@/lib/dateUtils";
-import { useProjectsContext } from "@/providers/ProjectsContext";
+import { useProjectsContext } from "@/lib/projects/providers";
 import { FileCard } from "@/sections/cards/FileCard";
 import DocumentSetCard from "@/sections/cards/DocumentSetCard";
 import { getDisplayName } from "@/lib/languageModels/utils";
@@ -48,6 +50,7 @@ interface ViewerMCPServerCardProps {
 }
 
 function ViewerMCPServerCard({ server, tools }: ViewerMCPServerCardProps) {
+  const t = useTranslations("agents.modals");
   const [expanded, setExpanded] = useState(true);
   const serverIcon = getActionIcon(server.server_url, server.name);
 
@@ -56,7 +59,7 @@ function ViewerMCPServerCard({ server, tools }: ViewerMCPServerCardProps) {
       expandable
       expanded={expanded}
       border="solid"
-      rounding="lg"
+      rounding={4}
       padding={2}
       expandedContent={
         tools.length > 0 ? (
@@ -88,7 +91,9 @@ function ViewerMCPServerCard({ server, tools }: ViewerMCPServerCardProps) {
             rightIcon={expanded ? SvgFold : SvgExpand}
             onClick={() => setExpanded((prev) => !prev)}
           >
-            {expanded ? "Fold" : "Expand"}
+            {expanded
+              ? t("viewer.mcpCard.fold.label")
+              : t("viewer.mcpCard.expand.label")}
           </Button>
         }
       />
@@ -102,7 +107,7 @@ function ViewerMCPServerCard({ server, tools }: ViewerMCPServerCardProps) {
  */
 function ViewerOpenApiToolCard({ tool }: { tool: ToolSnapshot }) {
   return (
-    <Card border="solid" rounding="lg" padding={4}>
+    <Card border="solid" rounding={4} padding={4}>
       <Content
         icon={SvgActions}
         title={tool.display_name}
@@ -124,23 +129,25 @@ interface AgentChatInputProps {
 }
 function AgentChatInput({ agent, onSubmit }: AgentChatInputProps) {
   const llmManager = useLlmManager(undefined, agent);
-  const filterManager = useFilters();
 
   return (
-    <AppInputBar
-      onSubmit={onSubmit}
-      llmManager={llmManager}
-      chatState="input"
-      filterManager={filterManager}
-      activeAgent={agent}
-      stopGenerating={() => {}}
-      handleFileUpload={() => {}}
-      currentSessionFileTokenCount={0}
-      availableContextTokens={Infinity}
-      deepResearchEnabled={false}
-      toggleDeepResearch={() => {}}
-      disabled={false}
-    />
+    // Its own instance, so source toggles made while previewing an agent do not
+    // reach the chat this modal opened over.
+    <SearchFiltersProvider>
+      <AppInputBar
+        onSubmit={onSubmit}
+        llmManager={llmManager}
+        chatState="input"
+        activeAgent={agent}
+        stopGenerating={() => {}}
+        handleFileUpload={() => {}}
+        currentSessionFileTokenCount={0}
+        availableContextTokens={Infinity}
+        deepResearchEnabled={false}
+        toggleDeepResearch={() => {}}
+        disabled={false}
+      />
+    </SearchFiltersProvider>
   );
 }
 
@@ -169,6 +176,7 @@ export interface AgentViewerModalProps {
   agent: FullAgent;
 }
 export function AgentViewerModal({ agent }: AgentViewerModalProps) {
+  const t = useTranslations("agents.modals");
   const agentViewerModal = useModal();
   const router = useRouter();
   const { allRecentFiles } = useProjectsContext();
@@ -251,7 +259,7 @@ export function AgentViewerModal({ agent }: AgentViewerModalProps) {
             {agent.is_featured && (
               <Content
                 icon={SvgStar}
-                title="Featured"
+                title={t("viewer.featured.label")}
                 sizePreset="main-ui"
                 variant="body"
                 width="fit"
@@ -268,7 +276,7 @@ export function AgentViewerModal({ agent }: AgentViewerModalProps) {
             {agent.is_public && (
               <Content
                 icon={SvgOrganization}
-                title="Public to your organization"
+                title={t("viewer.public.label")}
                 sizePreset="main-ui"
                 variant="body"
                 color="muted"
@@ -284,7 +292,7 @@ export function AgentViewerModal({ agent }: AgentViewerModalProps) {
           <Divider paddingParallel={0} paddingPerpendicular={0} />
           <Section gap={2} alignItems="start">
             <Content
-              title="Knowledge"
+              title={t("viewer.knowledge.title")}
               sizePreset="main-content"
               variant="section"
             />
@@ -306,13 +314,16 @@ export function AgentViewerModal({ agent }: AgentViewerModalProps) {
                 })}
               </Section>
             ) : (
-              <EmptyMessageCard sizePreset="main-ui" title="No Knowledge" />
+              <EmptyMessageCard
+                sizePreset="main-ui"
+                title={t("viewer.knowledge.empty.title")}
+              />
             )}
           </Section>
 
           {/* Actions & Tools */}
           <SimpleCollapsible>
-            <SimpleCollapsible.Header title="Actions & Tools" />
+            <SimpleCollapsible.Header title={t("viewer.actions.title")} />
             <SimpleCollapsible.Content>
               {hasActions ? (
                 <Section gap={2} alignItems="start">
@@ -328,7 +339,10 @@ export function AgentViewerModal({ agent }: AgentViewerModalProps) {
                   ))}
                 </Section>
               ) : (
-                <EmptyMessageCard sizePreset="main-ui" title="No Actions" />
+                <EmptyMessageCard
+                  sizePreset="main-ui"
+                  title={t("viewer.actions.empty.title")}
+                />
               )}
             </SimpleCollapsible.Content>
           </SimpleCollapsible>
@@ -336,12 +350,12 @@ export function AgentViewerModal({ agent }: AgentViewerModalProps) {
           {/* More Info (Collapsible) */}
           <Divider paddingParallel={0} paddingPerpendicular={0} />
           <SimpleCollapsible>
-            <SimpleCollapsible.Header title="More Info" />
+            <SimpleCollapsible.Header title={t("viewer.moreInfo.title")} />
             <SimpleCollapsible.Content>
               <Section gap={2} alignItems="start">
                 {agent.system_prompt && (
                   <Content
-                    title="Instructions"
+                    title={t("viewer.instructions.title")}
                     description={agent.system_prompt}
                     sizePreset="main-ui"
                     variant="section"
@@ -349,16 +363,16 @@ export function AgentViewerModal({ agent }: AgentViewerModalProps) {
                 )}
                 {defaultModel && (
                   <InputHorizontal
-                    title="Default Model"
-                    description="This model will be used by Onyx by default in your chats."
+                    title={t("viewer.defaultModel.title")}
+                    description={t("viewer.defaultModel.description")}
                   >
                     <Text>{defaultModel}</Text>
                   </InputHorizontal>
                 )}
                 {agent.search_start_date && (
                   <InputHorizontal
-                    title="Knowledge Cutoff Date"
-                    description="Documents with a last-updated date prior to this will be ignored."
+                    title={t("viewer.knowledgeCutoff.title")}
+                    description={t("viewer.knowledgeCutoff.description")}
                   >
                     <Text mainUiMono>
                       {formatMmDdYyyy(agent.search_start_date)}
@@ -366,8 +380,8 @@ export function AgentViewerModal({ agent }: AgentViewerModalProps) {
                   </InputHorizontal>
                 )}
                 <InputHorizontal
-                  title="Overwrite System Prompts"
-                  description='Remove the base system prompt which includes useful instructions (e.g. "You can use Markdown tables"). This may affect response quality.'
+                  title={t("viewer.overwritePrompts.title")}
+                  description={t("viewer.overwritePrompts.description")}
                 >
                   <Switch disabled checked={agent.replace_base_system_prompt} />
                 </InputHorizontal>
@@ -380,7 +394,7 @@ export function AgentViewerModal({ agent }: AgentViewerModalProps) {
             <>
               <Divider paddingParallel={0} paddingPerpendicular={0} />
               <Content
-                title="Prompt Reminders"
+                title={t("viewer.promptReminders.title")}
                 description={agent.task_prompt}
                 sizePreset="main-content"
                 variant="section"
@@ -393,7 +407,7 @@ export function AgentViewerModal({ agent }: AgentViewerModalProps) {
             <>
               <Divider paddingParallel={0} paddingPerpendicular={0} />
               <Content
-                title="Conversation Starters"
+                title={t("viewer.conversationStarters.title")}
                 sizePreset="main-content"
                 variant="section"
               />

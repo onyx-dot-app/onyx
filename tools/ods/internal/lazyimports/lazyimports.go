@@ -2,6 +2,7 @@ package lazyimports
 
 import (
 	"bufio"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -107,7 +108,7 @@ type FileViolation struct {
 }
 
 // findEagerImports finds eager imports of protected modules in a given file.
-func findEagerImports(filePath string, patterns []modulePatterns) EagerImportResult {
+func findEagerImports(filePath string, patterns []modulePatterns) (EagerImportResult, error) {
 	result := EagerImportResult{
 		ViolationLines:  []ViolationLine{},
 		ViolatedModules: make(map[string]struct{}),
@@ -115,8 +116,8 @@ func findEagerImports(filePath string, patterns []modulePatterns) EagerImportRes
 
 	file, err := os.Open(filePath)
 	if err != nil {
-		log.Errorf("Error reading %s: %v", filePath, err)
-		return result
+		// Fail closed: an unreadable file must not pass the check.
+		return result, err
 	}
 	defer func() {
 		if err := file.Close(); err != nil {
@@ -163,10 +164,12 @@ func findEagerImports(filePath string, patterns []modulePatterns) EagerImportRes
 	}
 
 	if err := scanner.Err(); err != nil {
-		log.Errorf("Error scanning %s: %v", filePath, err)
+		// Scanner errors do not carry the path; add it so a multi-file run
+		// names the file that needs attention.
+		return result, fmt.Errorf("scanning %s: %w", filePath, err)
 	}
 
-	return result
+	return result, nil
 }
 
 // isValidPythonFile applies shared filtering rules.
@@ -199,32 +202,15 @@ func isValidPythonFile(filePath string) bool {
 	return true
 }
 
-// collectPythonFiles collects Python files from a list of start points.
+// collectPythonFiles collects Python files from a list of start points. A start
+// point that resolves to nothing is an error rather than a silent empty scan.
 func collectPythonFiles(startPoints []string, backendDir string) ([]string, error) {
 	var collected []string
-	backendReal, err := filepath.Abs(backendDir)
-	if err != nil {
-		return nil, err
-	}
 
 	for _, p := range startPoints {
-		absPath, err := filepath.Abs(p)
+		absPath, info, err := paths.ResolveInBackend(p, backendDir)
 		if err != nil {
-			log.Debugf("Skipping path that cannot be resolved: %s", p)
-			continue
-		}
-
-		// Check if path is within backend directory
-		relPath, err := filepath.Rel(backendReal, absPath)
-		if err != nil || strings.HasPrefix(relPath, "..") {
-			log.Debugf("Skipping path outside backend directory: %s", p)
-			continue
-		}
-
-		info, err := os.Stat(absPath)
-		if err != nil {
-			log.Debugf("Skipping non-existent path: %s", p)
-			continue
+			return nil, err
 		}
 
 		if info.IsDir() {
@@ -232,7 +218,8 @@ func collectPythonFiles(startPoints []string, backendDir string) ([]string, erro
 			var mu sync.Mutex
 			err := fastwalk.Walk(nil, absPath, func(path string, d fs.DirEntry, err error) error {
 				if err != nil {
-					return nil // Skip files with errors
+					// Fail closed: an unreadable file must not pass the check.
+					return err
 				}
 				if d.IsDir() {
 					// isValidPythonFile rejects these anyway; pruning avoids the descent.
@@ -249,12 +236,10 @@ func collectPythonFiles(startPoints []string, backendDir string) ([]string, erro
 				return nil
 			})
 			if err != nil {
-				log.Debugf("Error walking directory %s: %v", absPath, err)
+				return nil, err
 			}
-		} else {
-			if isValidPythonFile(absPath) {
-				collected = append(collected, absPath)
-			}
+		} else if isValidPythonFile(absPath) {
+			collected = append(collected, absPath)
 		}
 	}
 
@@ -337,7 +322,10 @@ func CheckLazyImports(modulesToLazyImport map[string]LazyImportSettings, provide
 			continue
 		}
 
-		result := findEagerImports(filePath, patternsToCheck)
+		result, err := findEagerImports(filePath, patternsToCheck)
+		if err != nil {
+			return nil, nil, err
+		}
 
 		if len(result.ViolationLines) > 0 {
 			relPath, err := filepath.Rel(backendDir, filePath)

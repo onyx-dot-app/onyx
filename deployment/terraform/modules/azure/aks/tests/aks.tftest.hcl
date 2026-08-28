@@ -47,6 +47,17 @@ run "defaults" {
   }
 }
 
+run "the_default_version_is_one_azure_still_builds" {
+  command = plan
+
+  # Versions age out of standard support into Long-Term-Support only, and AKS
+  # then refuses to build a cluster on them. 1.33 crossed that line.
+  assert {
+    condition     = azurerm_kubernetes_cluster.this.kubernetes_version == "1.34"
+    error_message = "The default version must be one AKS will still build without an LTS opt-in."
+  }
+}
+
 run "dns_service_ip_is_derived_from_the_service_range" {
   command = plan
 
@@ -118,6 +129,44 @@ run "optional_pools_are_tainted_and_labelled" {
     condition     = azurerm_kubernetes_cluster_node_pool.this["sandbox"].node_labels["onyx.app/workload"] == "sandbox"
     error_message = "Sandbox pods select their pool by label."
   }
+}
+
+run "the_cluster_has_an_identity_to_grant_roles_to" {
+  command = plan
+
+  # A public IP or subnet held outside the node resource group is only usable
+  # once this identity holds Network Contributor on it. Without an identity
+  # block there is no principal to grant, and the load balancer never attaches.
+  assert {
+    condition     = one(azurerm_kubernetes_cluster.this.identity).type == "SystemAssigned"
+    error_message = "The cluster needs its own identity, or a BYO ingress IP cannot be granted to it."
+  }
+}
+
+run "upgrade_settings_are_managed_not_left_to_azure" {
+  command = plan
+
+  # Azure fills this in itself. Unmanaged, it shows as drift on every plan and
+  # a stray apply changes upgrade behaviour without anyone asking for it.
+  assert {
+    condition     = one(one(azurerm_kubernetes_cluster.this.default_node_pool).upgrade_settings).max_surge == "10%"
+    error_message = "The system pool should declare its surge rather than inherit Azure's."
+  }
+
+  assert {
+    condition     = alltrue([for p in azurerm_kubernetes_cluster_node_pool.this : one(p.upgrade_settings).max_surge == "10%"])
+    error_message = "Every optional pool should declare its surge too."
+  }
+}
+
+run "rejects_a_max_surge_azure_would_not_take" {
+  command = plan
+
+  variables {
+    node_pool_max_surge = "lots"
+  }
+
+  expect_failures = [var.node_pool_max_surge]
 }
 
 run "no_storage_account_means_no_identity" {
@@ -345,7 +394,7 @@ run "a_long_namespace_still_produces_a_valid_credential_name" {
   variables {
     storage_account_ids                = ["/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/onyx-rg/providers/Microsoft.Storage/storageAccounts/onyxfilestore"]
     workload_service_account_namespace = "onyx-production-workloads-with-a-deliberately-long-namespace-nm"
-    workload_service_account_name       = "onyx-workload-access-with-a-deliberately-long-service-account-n"
+    workload_service_account_name      = "onyx-workload-access-with-a-deliberately-long-service-account-n"
   }
 
   assert {
@@ -390,7 +439,7 @@ run "an_open_control_plane_can_be_asked_for_explicitly" {
   command = plan
 
   variables {
-    api_server_authorized_ip_ranges     = []
+    api_server_authorized_ip_ranges      = []
     allow_unrestricted_api_server_access = true
   }
 
@@ -435,7 +484,7 @@ run "rejects_a_private_cluster_with_authorized_ranges" {
   command = plan
 
   variables {
-    private_cluster_enabled        = true
+    private_cluster_enabled         = true
     api_server_authorized_ip_ranges = ["203.0.113.0/24"]
   }
 
@@ -472,7 +521,7 @@ run "rejects_a_pool_name_azure_would_reject" {
 
   variables {
     node_pools = {
-      main               = { vm_size = "Standard_D8ds_v5" }
+      main                = { vm_size = "Standard_D8ds_v5" }
       document-index-pool = { vm_size = "Standard_E8ds_v5" }
     }
   }

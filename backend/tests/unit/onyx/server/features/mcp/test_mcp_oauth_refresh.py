@@ -549,13 +549,13 @@ def test_form_encoded_refresh_error_is_logged_without_secrets(
         for record in caplog.records
         if record.getMessage() == "mcp_oauth.refresh.started"
     )
-    assert getattr(failed_record, "oauth_error") == "bad_refresh_token"  # noqa: B009
+    assert getattr(failed_record, "oauth_error") == "bad_refresh_token"  # noqa: B009  # ods: ignore[getattr]
     assert (
-        getattr(failed_record, "response_content_type")  # noqa: B009
+        getattr(failed_record, "response_content_type")  # noqa: B009  # ods: ignore[getattr]
         == "application/x-www-form-urlencoded"
     )
-    assert getattr(failed_record, "response_body_format") == "form"  # noqa: B009
-    assert getattr(failed_record, "refresh_attempt_id") == getattr(  # noqa: B009
+    assert getattr(failed_record, "response_body_format") == "form"  # noqa: B009  # ods: ignore[getattr]
+    assert getattr(failed_record, "refresh_attempt_id") == getattr(  # noqa: B009  # ods: ignore[getattr]
         started_record,
         "refresh_attempt_id",  # noqa: B009
     )

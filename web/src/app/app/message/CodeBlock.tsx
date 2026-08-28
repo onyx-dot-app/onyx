@@ -2,6 +2,7 @@ import { cn } from "@opal/utils";
 import Text from "@/refresh-components/texts/Text";
 import React, { useState, ReactNode, useCallback, useMemo, memo } from "react";
 import { SvgCheck, SvgCode, SvgCopy } from "@opal/icons";
+import { useTranslations } from "next-intl";
 
 interface CodeBlockProps {
   className?: string;
@@ -22,6 +23,7 @@ export const CodeBlock = memo(function CodeBlock({
   showHeader = true,
   noPadding = false,
 }: CodeBlockProps) {
+  const t = useTranslations("chat.messages");
   const [copied, setCopied] = useState(false);
 
   const language = useMemo(() => {
@@ -50,14 +52,14 @@ export const CodeBlock = memo(function CodeBlock({
         <div className="flex items-center space-x-2">
           <SvgCheck height={14} width={14} stroke="currentColor" />
           <Text as="p" secondaryMono>
-            Copied!
+            {t("codeBlock.copyButton.copiedLabel")}
           </Text>
         </div>
       ) : (
         <div className="flex items-center space-x-2">
           <SvgCopy height={14} width={14} stroke="currentColor" />
           <Text as="p" secondaryMono>
-            Copy
+            {t("codeBlock.copyButton.label")}
           </Text>
         </div>
       )}

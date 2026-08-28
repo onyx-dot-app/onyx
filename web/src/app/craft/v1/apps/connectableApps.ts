@@ -15,13 +15,13 @@ import {
   getMCPUserOAuthNavigationUrl,
   saveMCPUserCredentials,
   startMCPUserOAuth,
-} from "@/lib/tools/mcpService";
+} from "@/lib/tools/svc";
 import {
   MCPAuthenticationPerformer,
   MCPAuthenticationType,
   MCPServer,
 } from "@/lib/tools/types";
-import { getActionIcon } from "@/lib/tools/mcpUtils";
+import { getActionIcon } from "@/lib/tools/utils";
 import { CRAFT_APPS_PATH } from "@/app/craft/v1/constants";
 
 /** Which system a connectable came from. Surfaced to the user: the two are

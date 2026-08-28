@@ -1258,7 +1258,7 @@ def test_user_group_projection_matches_gates(db_session: Session) -> None:
         )
         assert tags["manage"] == manage_enforced, actor.email
         assert tags["manage_members"] == manage_enforced, actor.email
-        assert tags["delete"] == _route_admits(delete_user_group, "_", actor), (
+        assert tags["delete"] == _route_admits(delete_user_group, "user", actor), (
             actor.email
         )
         assert tags["edit_permissions"] == _route_admits(

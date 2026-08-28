@@ -1,4 +1,7 @@
+"use client";
+
 import React from "react";
+import { useTranslations } from "next-intl";
 import { STEP_CONFIG } from "@/sections/onboarding/constants";
 import {
   OnboardingActions,
@@ -24,9 +27,12 @@ const OnboardingHeader = React.memo(
     handleHideOnboarding,
     handleFinishOnboarding,
   }: OnboardingHeaderProps) => {
+    const t = useTranslations("onboarding");
     const iconPercentage =
       STEP_CONFIG[onboardingState.currentStep].iconPercentage;
-    const stepButtonText = STEP_CONFIG[onboardingState.currentStep].buttonText;
+    const stepButtonText = t(
+      STEP_CONFIG[onboardingState.currentStep].buttonTextKey
+    );
     const isWelcomeStep =
       onboardingState.currentStep === OnboardingStep.Welcome;
     const isCompleteStep =
@@ -42,14 +48,14 @@ const OnboardingHeader = React.memo(
         border="solid"
         padding={2}
         data-label="onboarding-header"
-        rounding="lg"
+        rounding={4}
       >
         <Section alignItems="start" height="fit">
           <ContentAction
             icon={(props) => (
               <SvgProgressCircle value={iconPercentage} {...props} />
             )}
-            title={STEP_CONFIG[onboardingState.currentStep].title}
+            title={t(STEP_CONFIG[onboardingState.currentStep].titleKey)}
             sizePreset="main-ui"
             variant="body"
             color="muted"
@@ -59,8 +65,10 @@ const OnboardingHeader = React.memo(
                 <Section flexDirection="row">
                   {!isWelcomeStep && (
                     <Text as="p" text03 mainUiBody>
-                      Step {onboardingState.stepIndex} of{" "}
-                      {onboardingState.totalSteps}
+                      {t("header.progress.label", {
+                        current: onboardingState.stepIndex,
+                        total: onboardingState.totalSteps,
+                      })}
                     </Text>
                   )}
                   <Button

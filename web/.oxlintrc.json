@@ -1,9 +1,26 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["typescript", "unicorn", "oxc", "react", "nextjs", "jsx-a11y"],
+  "plugins": [
+    "typescript",
+    "unicorn",
+    "oxc",
+    "react",
+    "nextjs",
+    "jsx-a11y"
+  ],
   "jsPlugins": [
-    { "name": "react-doctor", "specifier": "oxlint-plugin-react-doctor" },
-    { "name": "anti-slop", "specifier": "./tools/oxlint/anti-slop/index.ts" }
+    {
+      "name": "react-doctor",
+      "specifier": "oxlint-plugin-react-doctor"
+    },
+    {
+      "name": "anti-slop",
+      "specifier": "./tools/oxlint/anti-slop/index.ts"
+    },
+    {
+      "name": "i18n",
+      "specifier": "./tools/oxlint/i18n/index.ts"
+    }
   ],
   "categories": {
     "correctness": "error"
@@ -37,7 +54,8 @@
     "anti-slop/no-unsafe-dictionary-type": "warn",
     "anti-slop/require-safety-comment-for-type-assertion": "warn",
     "anti-slop/no-runtime-typeof": "off",
-    "anti-slop/no-shape-in-symbol-names": "off"
+    "anti-slop/no-shape-in-symbol-names": "off",
+    "i18n/no-raw-jsx-text": "off"
   },
   "overrides": [
     {
@@ -68,6 +86,58 @@
         "anti-slop/no-widen-then-assert": "off",
         "anti-slop/require-safety-comment-for-type-assertion": "off"
       }
+    },
+    {
+      "files": [
+        "src/views/SettingsPage.tsx",
+        "src/views/AppPage.tsx",
+        "src/views/admin/**",
+        "src/sections/sidebar/**",
+        "src/sections/document-sidebar/**",
+        "src/sections/Suggestions.tsx",
+        "src/sections/modals/**",
+        "src/sections/actions/**",
+        "src/sections/knowledge/**",
+        "src/sections/onboarding/**",
+        "src/sections/usage/**",
+        "src/sections/cards/**",
+        "src/sections/agents/**",
+        "src/sections/skills/**",
+        "src/sections/settings/**",
+        "src/lib/agents/components/**",
+        "src/sections/banners/**",
+        "src/sections/chat/**",
+        "src/sections/input/**",
+        "src/sections/model-selector/**",
+        "src/components/chat/**",
+        "src/app/auth/**",
+        "src/app/admin/**",
+        "src/app/app/page.tsx",
+        "src/app/app/layout.tsx",
+        "src/app/app/components/**",
+        "src/app/app/message/**",
+        "src/app/app/shared/**"
+      ],
+      "rules": {
+        "i18n/no-raw-jsx-text": "error"
+      }
+    },
+    {
+      // Last override wins: keep dev-only files exempt from the i18n ratchet
+      // even when a migrated glob above matches them.
+      "files": [
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/*.spec.ts",
+        "**/*.spec.tsx",
+        "**/__tests__/**",
+        "**/__mocks__/**",
+        "tests/**",
+        "**/*.stories.tsx"
+      ],
+      "rules": {
+        "i18n/no-raw-jsx-text": "off"
+      }
     }
   ],
   "ignorePatterns": [
@@ -78,7 +148,8 @@
     "public",
     "storybook-static",
     "lib/opal/dist",
-    "tools/oxlint/anti-slop"
+    "tools/oxlint/anti-slop",
+    "tools/oxlint/i18n"
   ],
   "env": {
     "builtin": true

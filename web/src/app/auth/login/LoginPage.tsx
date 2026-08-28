@@ -9,6 +9,7 @@ import { NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED } from "@/lib/constants";
 import { useSendAuthRequiredMessage } from "@/lib/extension/hooks";
 import { Button, MessageCard } from "@opal/components";
 import { AuthLayouts } from "@opal/layouts";
+import { useTranslations } from "next-intl";
 
 interface LoginPageProps {
   authUrl: string | null;
@@ -27,6 +28,7 @@ export default function LoginPage({
   verified,
   isFirstUser,
 }: LoginPageProps) {
+  const t = useTranslations("auth");
   useSendAuthRequiredMessage();
 
   // Honor any existing nextUrl; only default to new team flow for first users with no nextUrl
@@ -42,7 +44,7 @@ export default function LoginPage({
       {verified && (
         <MessageCard
           variant="success"
-          title="Your email has been verified! Please sign in to continue."
+          title={t("login.verifiedMessage.title")}
         />
       )}
       {authTypeMetadata?.multiTenant === true && (
@@ -61,7 +63,9 @@ export default function LoginPage({
             nextUrl={effectiveNextUrl}
           />
           {NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED && (
-            <Button href="/auth/forgot-password">Reset Password</Button>
+            <Button href="/auth/forgot-password">
+              {t("login.resetPasswordButton.label")}
+            </Button>
           )}
         </div>
       )}
@@ -91,7 +95,7 @@ export default function LoginPage({
 
       {!hidePageRedirect && passwordAuthEnabled && (
         <p className="text-center mt-4">
-          Don&apos;t have an account?{" "}
+          {t("login.signupPrompt.text")}{" "}
           <button
             type="button"
             onClick={() => {
@@ -103,7 +107,7 @@ export default function LoginPage({
             }}
             className="text-link font-medium cursor-pointer"
           >
-            Create an account
+            {t("login.createAccountButton.label")}
           </button>
         </p>
       )}

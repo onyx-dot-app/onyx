@@ -1,6 +1,6 @@
 {
-  "version": "1.12",
-  "updated_at": "2026-08-17T00:00:00Z",
+  "version": "1.13",
+  "updated_at": "2026-08-24T00:00:00Z",
   "providers": {
     "openai": {
       "default_model": "gpt-5.6-sol",
@@ -54,11 +54,11 @@
       ]
     },
     "openrouter": {
-      "default_model": "z-ai/glm-5.2",
+      "default_model": "z-ai/glm-5.3",
       "additional_visible_models": [
         {
-          "name": "z-ai/glm-5.2",
-          "display_name": "GLM 5.2"
+          "name": "z-ai/glm-5.3",
+          "display_name": "GLM 5.3"
         },
         {
           "name": "deepseek/deepseek-v4-pro",

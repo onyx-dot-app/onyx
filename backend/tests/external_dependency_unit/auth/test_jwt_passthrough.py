@@ -28,6 +28,7 @@ import onyx.auth.jwt as jwt_module
 import onyx.auth.users as users_module
 from onyx.db.engine.async_sql_engine import get_async_session_context_manager
 from onyx.db.models import User
+from onyx.server.security.store import _build_env_defaults
 from tests.external_dependency_unit.conftest import create_test_user
 
 
@@ -137,9 +138,17 @@ def _reset_key_cache() -> Any:
 
 
 def _point_at(monkeypatch: pytest.MonkeyPatch, url: str) -> None:
-    # The URL is bound at import time in both modules; patch both bindings.
-    monkeypatch.setattr(jwt_module, "JWT_PUBLIC_KEY_URL", url)
-    monkeypatch.setattr(users_module, "JWT_PUBLIC_KEY_URL", url)
+    # Both modules read the shared security settings at call time. The URL is
+    # treated as env-pinned, matching the env-configured deployment this test
+    # simulates, so the local plain-http JWKS server stays fetchable.
+    settings = _build_env_defaults().model_copy(update={"jwt_public_key_url": url})
+    monkeypatch.setattr(jwt_module, "get_security_settings", lambda: settings)
+    monkeypatch.setattr(users_module, "get_security_settings", lambda: settings)
+    monkeypatch.setattr(
+        jwt_module,
+        "env_pinned_active_fields",
+        lambda: frozenset({"jwt_public_key_url"}),
+    )
 
 
 async def _authenticate(token: str) -> User | None:

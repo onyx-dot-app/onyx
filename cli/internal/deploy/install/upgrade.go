@@ -160,6 +160,9 @@ func (in *installer) runUpgrade(ctx context.Context) error {
 			craftNote += ", Dev overlay: true"
 		}
 		in.plainf("  • Mode: %s%s", in.modeName(), craftNote)
+		if name := in.composeOverrideName(); name != "" {
+			in.plainf("  • Compose override: %s (yours, applied last)", name)
+		}
 		if in.project != dockercmd.DefaultProjectName {
 			in.plainf("  • Compose project: %s", in.project)
 		}
@@ -198,6 +201,7 @@ func (in *installer) runUpgrade(ctx context.Context) error {
 	if err := in.materializeFiles(ctx, configRef, managedFiles(in.prod, in.lite, in.craft, in.dev), manifest, fetcher); err != nil {
 		return err
 	}
+	in.noteComposeOverride()
 
 	if in.craft {
 		in.ensureCraftResources(ctx)

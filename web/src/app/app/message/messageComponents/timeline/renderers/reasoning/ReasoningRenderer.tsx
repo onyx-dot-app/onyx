@@ -5,6 +5,7 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { useTranslations } from "next-intl";
 
 import {
   PacketType,
@@ -24,8 +25,6 @@ import {
 import { SvgCircle } from "@opal/icons";
 
 const THINKING_MIN_DURATION_MS = 500; // 0.5 second minimum for "Thinking" state
-
-const THINKING_STATUS = "Thinking";
 
 function extractFirstParagraph(content: string): {
   title: string | null;
@@ -93,6 +92,9 @@ export const ReasoningRenderer: MessageRenderer<
   ReasoningPacket,
   FullChatState
 > = ({ packets, onComplete, animate, children }) => {
+  const t = useTranslations("chat.messages.timeline");
+  const thinkingStatus = t("reasoning.thinking.status");
+
   const { hasStart, hasEnd, content } = useMemo(
     () => constructCurrentReasoningState(packets),
     [packets]
@@ -104,7 +106,7 @@ export const ReasoningRenderer: MessageRenderer<
   );
 
   // Use extracted title if available, otherwise default
-  const displayStatus = title || THINKING_STATUS;
+  const displayStatus = title || thinkingStatus;
   const displayContent = title ? remainingContent : content;
 
   // Track reasoning timing for minimum display duration
@@ -168,7 +170,7 @@ export const ReasoningRenderer: MessageRenderer<
     return children([
       {
         icon: SvgCircle,
-        status: THINKING_STATUS,
+        status: thinkingStatus,
         content: <></>,
         noPaddingRight: true,
       },
@@ -178,7 +180,7 @@ export const ReasoningRenderer: MessageRenderer<
   const reasoningContent = (
     <div className="pl-(--timeline-common-text-padding)">
       <ExpandableTextDisplay
-        title="Full text"
+        title={t("reasoning.fullText.title")}
         content={content}
         displayContent={displayContent}
         renderContent={renderMarkdown}

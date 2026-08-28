@@ -140,7 +140,11 @@ function WindowCostSection({ windowCostCents, rows }: WindowCostSectionProps) {
                     />
                   </div>
 
-                  <Text font="secondary-body" color="text-03">
+                  <Text
+                    font="secondary-body"
+                    color="text-03"
+                    data-testid="usage-model-tokens"
+                  >
                     {`${formatTokens(row.input_tokens)} in · ${formatTokens(
                       row.output_tokens
                     )} out${

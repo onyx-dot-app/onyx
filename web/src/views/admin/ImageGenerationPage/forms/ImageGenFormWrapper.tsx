@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import { Form, Formik, FormikProps } from "formik";
 import ProviderModal from "@/sections/modals/ProviderModal";
 import { ModelIcon } from "@/lib/languageModels/components";
@@ -34,6 +35,7 @@ export function ImageGenFormWrapper<T extends FormValues>({
   transformValues,
   getInitialValuesFromCredentials,
 }: ImageGenFormWrapperProps<T>) {
+  const t = useTranslations("admin.imageGeneration");
   // State management
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [apiStatus, setApiStatus] = useState<APIFormFieldState>("idle");
@@ -138,7 +140,7 @@ export function ImageGenFormWrapper<T extends FormValues>({
         const parts = apiKeyValue.split(":");
         const providerIdStr = parts[1];
         if (!providerIdStr) {
-          throw new Error("Invalid provider selection");
+          throw new Error(t("form.invalidProviderSelection.message"));
         }
         const providerId = parseInt(providerIdStr, 10);
 
@@ -153,7 +155,9 @@ export function ImageGenFormWrapper<T extends FormValues>({
 
         if (!result.ok) {
           setApiStatus("error");
-          setErrorMessage(result.errorMessage || "API key validation failed");
+          setErrorMessage(
+            result.errorMessage || t("form.apiKeyValidationFailed.message")
+          );
           setIsSubmitting(false);
           return;
         }
@@ -198,7 +202,9 @@ export function ImageGenFormWrapper<T extends FormValues>({
 
           if (!result.ok) {
             setApiStatus("error");
-            setErrorMessage(result.errorMessage || "API key validation failed");
+            setErrorMessage(
+              result.errorMessage || t("form.apiKeyValidationFailed.message")
+            );
             setIsSubmitting(false);
             return;
           }
@@ -236,7 +242,7 @@ export function ImageGenFormWrapper<T extends FormValues>({
       setIsSubmitting(false);
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Unknown error occurred";
+        error instanceof Error ? error.message : t("form.unknownError.message");
       setApiStatus("error");
       setErrorMessage(message);
       toast.error(message);

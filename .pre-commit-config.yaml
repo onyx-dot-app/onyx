@@ -59,6 +59,11 @@ repos:
           ]
         files: ^(pyproject\.toml|uv\.lock|backend/requirements/.*\.txt)$
       - id: uv-run
+        name: Check getattr
+        args: ["--no-project", "--with=onyx-devtools", "ods", "check-getattr"]
+        pass_filenames: true
+        files: ^backend/.*\.py$
+      - id: uv-run
         name: Check lazy imports
         args:
           ["--no-project", "--with=onyx-devtools", "ods", "check-lazy-imports"]
@@ -105,7 +110,7 @@ repos:
         # Scope to backend/, matching `[tool.ty.src] include = ["backend"]` in
         # pyproject. The full ty run only discovers backend/, but pre-commit
         # passes explicit filenames, which bypass that discovery-time include —
-        # without this, a touched file outside backend/ (examples/, loadtest/,
+        # without this, a touched file outside backend/ (examples/, tools/loadtest/,
         # tools/, …) would get type-checked against the backend venv it was
         # never meant to run in.
         files: ^backend/
@@ -340,7 +345,9 @@ repos:
 
         language: system
         pass_filenames: false
-        files: ^web/.*\.(ts|tsx)$
+        # The i18n catalogs are part of the type graph: keyParity.ts turns a
+        # missing or extra locale key into a compile error.
+        files: ^web/(.*\.(ts|tsx)|src/i18n/messages/.*\.json)$
 
       - id: widget-typescript-check
         name: widget TypeScript type check

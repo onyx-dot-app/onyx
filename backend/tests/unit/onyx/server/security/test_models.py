@@ -35,6 +35,9 @@ _VALID_EFFECTIVE_KWARGS: dict[str, Any] = {
     "password_require_digit": True,
     "password_require_special_char": False,
     "password_auth_enabled": True,
+    "jwt_public_key_url": None,
+    "jwt_expected_audience": None,
+    "jwt_expected_issuer": None,
 }
 
 

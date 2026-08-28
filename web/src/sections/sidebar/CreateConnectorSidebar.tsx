@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, ReactNode } from "react";
+import { useTranslations } from "next-intl";
 import { useFormContext } from "@/components/context/FormContext";
 import { credentialTemplates } from "@/lib/connectors/credentials";
 import { Content, SidebarLayouts, useSidebarState } from "@opal/layouts";
@@ -51,6 +52,7 @@ interface CreateConnectorSidebarShellProps {
 export function CreateConnectorSidebarShell({
   children,
 }: CreateConnectorSidebarShellProps) {
+  const t = useTranslations("sidebar");
   const showLogoWhenFolded = useShowLogoWhenFolded();
   const { folded } = useSidebarState();
 
@@ -74,27 +76,47 @@ export function CreateConnectorSidebarShell({
           variant="sidebar-light"
           folded={folded}
         >
-          Exit Connector Setup
+          {t("createConnector.exitSetup.label")}
         </SidebarTab>
       </SidebarLayouts.Footer>
     </SidebarLayouts.Root>
   );
 }
 
+interface SettingStep {
+  id: "credential" | "connector" | "advanced";
+  label: string;
+}
+
 export default function CreateConnectorSidebar() {
+  const t = useTranslations("sidebar");
   const { formStep, setFormStep, connector, allowAdvanced, allowCreate } =
     useFormContext();
   const noCredential = credentialTemplates[connector] == null;
 
-  const settingSteps = [
-    ...(!noCredential ? ["Credential"] : []),
-    "Connector",
-    ...(connector == "file" ? [] : ["Advanced (optional)"]),
+  const settingSteps: SettingStep[] = [
+    ...(noCredential
+      ? []
+      : [
+          {
+            id: "credential" as const,
+            label: t("createConnector.credentialStep.label"),
+          },
+        ]),
+    { id: "connector", label: t("createConnector.connectorStep.label") },
+    ...(connector == "file"
+      ? []
+      : [
+          {
+            id: "advanced" as const,
+            label: t("createConnector.advancedStep.label"),
+          },
+        ]),
   ];
 
   return (
     <CreateConnectorSidebarShell>
-      <div className="relative mx-2 flex flex-col">
+      <div className="relative mx-2 flex flex-col mt-2">
         {settingSteps.map((step, index) => {
           // The form numbers steps absolutely (0 = Credential, 1 = Connector,
           // 2 = Advanced) and clamps `formStep` to >= 1 when there's no
@@ -103,8 +125,8 @@ export default function CreateConnectorSidebar() {
           const stepValue = index + (noCredential ? 1 : 0);
 
           const allowed =
-            (step == "Connector" && allowCreate) ||
-            (step == "Advanced (optional)" && allowAdvanced) ||
+            (step.id === "connector" && allowCreate) ||
+            (step.id === "advanced" && allowAdvanced) ||
             stepValue <= formStep;
 
           const selected: SelectionType =
@@ -144,7 +166,7 @@ export default function CreateConnectorSidebar() {
                   sizePreset="main-ui"
                   variant="body"
                   icon={() => <SelectionIcon selected={selected} />}
-                  title={step}
+                  title={step.label}
                   color={selected === "future" ? "muted" : "default"}
                 />
               </button>

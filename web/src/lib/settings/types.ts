@@ -143,6 +143,7 @@ export interface EnterpriseSettings {
   consent_screen_prompt: string | null;
   show_first_visit_notice: boolean | null;
   custom_greeting_message: string | null;
+  custom_login_subtitle: string | null;
 
   // Custom help link surfaced in the profile dropdown alongside "Help & FAQ".
   custom_help_link_url: string | null;

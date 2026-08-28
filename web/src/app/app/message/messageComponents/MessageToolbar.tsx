@@ -1,6 +1,7 @@
 "use client";
 
 import React, { RefObject, useState, useCallback, useMemo } from "react";
+import { useTranslations } from "next-intl";
 import { Packet, StreamingCitation } from "@/app/app/services/streamingModels";
 import { FeedbackType, Message } from "@/app/app/interfaces";
 import { OnyxDocument } from "@/lib/search/interfaces";
@@ -56,6 +57,7 @@ const SourcesTagWrapper = React.memo(function SourcesTagWrapper({
   updateCurrentDocumentSidebarVisible,
   updateCurrentSelectedNodeForDocDisplay,
 }: SouurcesTagWrapperProps) {
+  const t = useTranslations("chat.messages");
   // Convert citations to SourceInfo array
   const sources = useMemo(
     () => citationsToSourceInfoArray(citations, documentMap),
@@ -84,7 +86,7 @@ const SourcesTagWrapper = React.memo(function SourcesTagWrapper({
   return (
     <SourceTag
       variant="button"
-      displayName="Sources"
+      displayName={t("toolbar.sourcesTag.label")}
       sources={sources}
       onSourceClick={handleSourceClick}
       toggleSource
@@ -146,6 +148,7 @@ export default function MessageToolbar({
   citations,
   documentMap,
 }: MessageToolbarProps) {
+  const t = useTranslations("chat.messages");
   // The message's own model. chatState carries the globally selected model,
   // so per-response attribution must come from the message node itself.
   const messageTree = useCurrentMessageTree();
@@ -297,7 +300,9 @@ export default function MessageToolbar({
                   variant="select-light"
                   state={isFeedbackTransient("like") ? "selected" : "empty"}
                   tooltip={
-                    currentFeedback === "like" ? "Remove Like" : "Good Response"
+                    currentFeedback === "like"
+                      ? t("toolbar.likeButton.removeTooltip")
+                      : t("toolbar.likeButton.tooltip")
                   }
                   data-testid="AgentMessage/like-button"
                 />
@@ -308,8 +313,8 @@ export default function MessageToolbar({
                   state={isFeedbackTransient("dislike") ? "selected" : "empty"}
                   tooltip={
                     currentFeedback === "dislike"
-                      ? "Remove Dislike"
-                      : "Bad Response"
+                      ? t("toolbar.dislikeButton.removeTooltip")
+                      : t("toolbar.dislikeButton.tooltip")
                   }
                   data-testid="AgentMessage/dislike-button"
                 />
@@ -378,7 +383,7 @@ export default function MessageToolbar({
                       return (
                         <OpenButton
                           icon={SvgRefreshCw}
-                          tooltip="Retry with"
+                          tooltip={t("toolbar.regenerateButton.tooltip")}
                           foldable={distinctModelsUsed <= 1}
                         >
                           {displayName}

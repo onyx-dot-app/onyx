@@ -896,7 +896,7 @@ class TestForgottenFileMetadata:
 
         # The original file message should NOT be in context
         assert not any(
-            getattr(m, "file_id", None) == "file-abc"
+            getattr(m, "file_id", None) == "file-abc"  # ods: ignore[getattr]
             and m.message_type == MessageType.USER
             for m in result
             if m is not forgotten

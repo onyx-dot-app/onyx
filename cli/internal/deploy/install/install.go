@@ -366,6 +366,7 @@ func (in *installer) runInstall(ctx context.Context) error {
 	if in.dev {
 		in.warnf("Dev overlay: Postgres, Redis, OpenSearch, MinIO, the model server and the API are published on this host, not just nginx. Only run it on a machine you trust the network of.")
 	}
+	in.noteComposeOverride()
 
 	// Captured for rollback: a failed pull must not leave .env pointing at a
 	// version that never ran (nil means there was no .env before this run).
@@ -1516,13 +1517,49 @@ func (in *installer) starRepo(ctx context.Context) {
 	}
 }
 
-// composeFileNames returns the -f list. Prod deployments run the standalone
-// docker-compose.prod.yml on its own; every other mode stacks overlays on
-// docker-compose.yml. With autoDetect, previously downloaded files are
-// picked up from disk so users don't have to repeat
-// --lite/--prod/--include-craft/--dev for lifecycle commands (install.sh's
-// build_compose_file_args true).
+// composeFileNames returns the -f list: the managed files for the mode, then
+// whichever of deployfiles.OverrideNames the deployment directory has. The
+// override always comes last so its edits win the merge, and it ignores
+// autoDetect — no flag selects it, only its presence on disk.
 func (in *installer) composeFileNames(autoDetect bool) []string {
+	files := in.managedComposeFiles(autoDetect)
+	if name := in.composeOverrideName(); name != "" {
+		files = append(files, name)
+	}
+	return files
+}
+
+// composeOverrideName returns the deployment directory's override filename,
+// resolved in deployfiles.OverrideNames precedence order (first match wins,
+// the same rule Compose's own auto-discovery uses), or "" when none is
+// present.
+func (in *installer) composeOverrideName() string {
+	for _, name := range deployfiles.OverrideNames {
+		if in.overlayOnDisk(name) {
+			return name
+		}
+	}
+	return ""
+}
+
+// noteComposeOverride says the override is in the -f list. Its presence on
+// disk is the only thing that selects it, so a run that stays quiet makes the
+// user's customizations look like they came from the managed files.
+func (in *installer) noteComposeOverride() {
+	name := in.composeOverrideName()
+	if name == "" {
+		return
+	}
+	in.infof("Using your %s — it is applied last, and the CLI never overwrites it", name)
+}
+
+// managedComposeFiles returns the CLI-managed part of the -f list. Prod
+// deployments run the standalone docker-compose.prod.yml on its own; every
+// other mode stacks overlays on docker-compose.yml. With autoDetect,
+// previously downloaded files are picked up from disk so users don't have to
+// repeat --lite/--prod/--include-craft/--dev for lifecycle commands
+// (install.sh's build_compose_file_args true).
+func (in *installer) managedComposeFiles(autoDetect bool) []string {
 	prodName := filepath.Base(deployfiles.ProdCompose.DestRel)
 	craftName := filepath.Base(deployfiles.CraftOverlay.DestRel)
 	if in.prod || (autoDetect && in.overlayOnDisk(prodName)) {
@@ -1540,8 +1577,9 @@ func (in *installer) composeFileNames(autoDetect bool) []string {
 	if in.craft || (autoDetect && in.overlayOnDisk(craftName)) {
 		files = append(files, craftName)
 	}
-	// Last, so the ports and build targets it publishes are the ones that
-	// survive the merge — that is the whole point of the overlay.
+	// Last of the managed files, so the ports and build targets it publishes
+	// are the ones that survive the merge — that is the whole point of the
+	// overlay.
 	devName := filepath.Base(deployfiles.DevOverlay.DestRel)
 	if in.dev || (autoDetect && in.overlayOnDisk(devName)) {
 		files = append(files, devName)

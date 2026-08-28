@@ -98,7 +98,7 @@ def _get_tenant_override(tenant_id: str, field_name: str) -> int | None:
 
         if overrides is not None:
             # Get the field value - None means not set, use default
-            return getattr(overrides, field_name, None)
+            return getattr(overrides, field_name, None)  # ods: ignore[getattr]
     except Exception:
         logger.exception(
             "Error getting tenant override for %s.%s falling back to defaults",

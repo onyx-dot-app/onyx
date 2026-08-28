@@ -1,5 +1,7 @@
+"use client";
+
 import { toast } from "@opal/layouts";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { useRef, useState } from "react";
 import type { DateRange } from "@/refresh-components/DateRangePicker";
 import { withRequestId, withDateRange } from "./utils";
@@ -15,8 +17,8 @@ import {
   SpinnerStatus,
   StartQueryHistoryExportResponse,
 } from "./types";
-import { cn } from "@opal/utils";
-import { SvgLoader, SvgPlayCircle } from "@opal/icons";
+import { SvgPlayCircle, SvgSimpleLoader } from "@opal/icons";
+
 export default function KickoffCSVExport({
   dateRange,
 }: {
@@ -113,21 +115,15 @@ export default function KickoffCSVExport({
 
   return (
     <div className="flex flex-1 flex-col w-full justify-center">
-      {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
-      <Button
-        className="ml-auto"
-        onClick={startExport}
-        danger={spinnerStatus === "spinning"}
-        leftIcon={
-          spinnerStatus === "spinning"
-            ? ({ className }) => (
-                <SvgLoader className={cn(className, "animate-spin")} />
-              )
-            : SvgPlayCircle
-        }
-      >
-        {spinnerStatus === "spinning" ? "Cancel" : "Kickoff Export"}
-      </Button>
+      <div className="ml-auto">
+        <Button
+          onClick={startExport}
+          variant={spinnerStatus === "spinning" ? "danger" : "default"}
+          icon={spinnerStatus === "spinning" ? SvgSimpleLoader : SvgPlayCircle}
+        >
+          {spinnerStatus === "spinning" ? "Cancel" : "Kickoff Export"}
+        </Button>
+      </div>
     </div>
   );
 }

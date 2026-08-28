@@ -1,4 +1,6 @@
 import { Agent } from "@/lib/agents/types";
+import type { ReasoningEffortOverride } from "@/lib/languageModels/types";
+import type { Locale } from "@/i18n/config";
 import { Credential } from "./connectors/credentials";
 import { Connector } from "./connectors/connectors";
 import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/types";
@@ -30,7 +32,11 @@ interface UserPreferences {
   auto_scroll: boolean;
   shortcut_enabled: boolean;
   temperature_override_enabled: boolean;
+  temperature_default?: number | null;
+  reasoning_effort_default?: ReasoningEffortOverride | null;
   theme_preference: ThemePreference | null;
+  // UI language, mirrors the backend SupportedLanguage enum
+  language: Locale | null;
   chat_background: string | null;
   default_app_mode: "AUTO" | "CHAT" | "SEARCH";
   // Input preferences
@@ -576,9 +582,9 @@ export type SSRFProtectionLevel =
   | "allow_private_network"
   | "disabled";
 
-// Read shape of GET /admin/security: effective, env-merged settings. Every
-// field is concrete, the backend never returns null here (see
-// `SecuritySettings` in backend/onyx/server/security/models.py).
+// Read shape of GET /admin/security: effective, env-merged settings (see
+// `SecuritySettings` in backend/onyx/server/security/models.py). Only the
+// jwt_* fields are nullable, null meaning that check is off.
 export interface SecuritySettings {
   user_directory_admin_only: boolean;
   incognito_availability: IncognitoAvailability;
@@ -595,6 +601,9 @@ export interface SecuritySettings {
   password_require_digit: boolean;
   password_require_special_char: boolean;
   password_auth_enabled: boolean;
+  jwt_public_key_url: string | null;
+  jwt_expected_audience: string | null;
+  jwt_expected_issuer: string | null;
 }
 
 export enum ValidSources {

@@ -8,6 +8,7 @@ import type {
   ExtremaSizeVariants,
   IconFunctionComponent,
   RichStr,
+  Rounding,
 } from "@opal/types";
 import {
   Text,
@@ -16,7 +17,7 @@ import {
   type TextFont,
   type TooltipSide,
 } from "@opal/components";
-import type { InteractiveContainerRoundingVariant } from "@opal/core";
+
 import { cn } from "@opal/utils";
 import { iconWrapper } from "@opal/components/buttons/icon-wrapper";
 import { ChevronIcon } from "@opal/components/buttons/chevron";
@@ -82,7 +83,7 @@ type OpenButtonProps = Omit<InteractiveStatefulProps, "variant"> & {
     tooltipSide?: TooltipSide;
 
     /** Override the default rounding derived from `size`. */
-    rounding?: InteractiveContainerRoundingVariant;
+    rounding?: Rounding;
 
     /** Applies disabled styling and suppresses clicks. */
     disabled?: boolean;
@@ -139,9 +140,7 @@ function OpenButton({
         type="button"
         size={size}
         width={width}
-        rounding={
-          roundingOverride ?? (isLarge ? "md" : size === "2xs" ? "xs" : "sm")
-        }
+        rounding={roundingOverride ?? (isLarge ? 3 : size === "2xs" ? 1 : 2)}
       >
         <div
           className={cn(
