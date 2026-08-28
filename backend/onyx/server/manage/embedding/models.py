@@ -51,6 +51,12 @@ class CloudEmbeddingProvider(BaseModel):
 class CloudEmbeddingProviderCreationRequest(BaseModel):
     provider_type: EmbeddingProvider
     api_key: str | None = None
+    # True takes api_key as given, False keeps the stored one. None means the
+    # caller does not use the flag, and the mask-echo heuristic decides — the
+    # only reading that keeps pre-flag clients working. Mirrors
+    # LLMProviderUpsertRequest.api_key_changed, which is a plain bool because
+    # every one of its callers sends it.
+    api_key_changed: bool | None = None
     api_url: str | None = None
     api_version: str | None = None
     deployment_name: str | None = None

@@ -141,3 +141,61 @@ def test_a_placeholder_shaped_stored_key_survives_a_write_back(
 
     assert _stored_key(db_session) == lookalike
     assert updated.api_url == "https://api.voyageai.example.com/v1"
+
+
+def test_changed_flag_lands_a_rotation_that_collides_with_the_mask(
+    db_session: Session,
+) -> None:
+    """The one case the mask-echo heuristic cannot resolve.
+
+    Rotating to a key whose value happens to equal the stored key's mask reads
+    as an unchanged echo. Only an explicit flag separates the two.
+    """
+    upsert_cloud_embedding_provider(
+        db_session,
+        CloudEmbeddingProviderCreationRequest(
+            provider_type=EmbeddingProvider.VOYAGE, api_key=_REAL_KEY
+        ),
+    )
+    collides_with_mask = mask_string(_REAL_KEY)
+
+    # Without the flag this is indistinguishable from an echo, and is kept.
+    upsert_cloud_embedding_provider(
+        db_session,
+        CloudEmbeddingProviderCreationRequest(
+            provider_type=EmbeddingProvider.VOYAGE, api_key=collides_with_mask
+        ),
+    )
+    assert _stored_key(db_session) == _REAL_KEY
+
+    # Stated explicitly, the rotation lands.
+    upsert_cloud_embedding_provider(
+        db_session,
+        CloudEmbeddingProviderCreationRequest(
+            provider_type=EmbeddingProvider.VOYAGE,
+            api_key=collides_with_mask,
+            api_key_changed=True,
+        ),
+    )
+    assert _stored_key(db_session) == collides_with_mask
+
+
+def test_changed_false_keeps_the_stored_key(db_session: Session) -> None:
+    upsert_cloud_embedding_provider(
+        db_session,
+        CloudEmbeddingProviderCreationRequest(
+            provider_type=EmbeddingProvider.VOYAGE, api_key=_REAL_KEY
+        ),
+    )
+
+    upsert_cloud_embedding_provider(
+        db_session,
+        CloudEmbeddingProviderCreationRequest(
+            provider_type=EmbeddingProvider.VOYAGE,
+            api_key="sk-something-else-entirely",
+            api_key_changed=False,
+            api_url="https://api.voyageai.example.com/v1",
+        ),
+    )
+
+    assert _stored_key(db_session) == _REAL_KEY

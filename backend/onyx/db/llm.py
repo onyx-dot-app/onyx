@@ -204,7 +204,9 @@ def fetch_persona_with_groups(db_session: Session, persona_id: int) -> Persona |
 
 
 def _resolve_embedding_api_key(
-    incoming: str | None, existing: SensitiveValue[str] | None
+    incoming: str | None,
+    existing: SensitiveValue[str] | None,
+    changed: bool | None = None,
 ) -> str | None:
     """Restore the stored key when the caller submits the masked placeholder.
 
@@ -212,10 +214,20 @@ def _resolve_embedding_api_key(
     mask itself as the real credential. Mirrors resolve_masked_credentials in
     onyx/db/external_app.py.
     """
+    stored = existing.get_value(apply_mask=False) if existing is not None else None
+
+    if changed is False:
+        # The caller states the key is unchanged, so nothing it sent is read.
+        return stored
+    if changed is True:
+        # The caller states this is a new key. Taken as given, which is the one
+        # case the heuristic below cannot get right: a rotation to a value that
+        # equals the stored key's mask reads as an unchanged echo.
+        return incoming
+
     if incoming is None:
         return incoming
 
-    stored = existing.get_value(apply_mask=False) if existing is not None else None
     if stored is not None:
         # Compare against this key's own mask rather than the general shape
         # test, so a real key that happens to look like a placeholder is still
@@ -246,15 +258,19 @@ def upsert_cloud_embedding_provider(
         .first()
     )
     if existing_provider:
-        updates = provider.model_dump()
+        # api_key_changed is a request-only flag; every remaining key is setattr'd
+        # straight onto the model.
+        updates = provider.model_dump(exclude={"api_key_changed"})
         updates["api_key"] = _resolve_embedding_api_key(
-            provider.api_key, existing_provider.api_key
+            provider.api_key, existing_provider.api_key, provider.api_key_changed
         )
         for key, value in updates.items():
             setattr(existing_provider, key, value)
     else:
-        creation = provider.model_dump()
-        creation["api_key"] = _resolve_embedding_api_key(provider.api_key, None)
+        creation = provider.model_dump(exclude={"api_key_changed"})
+        creation["api_key"] = _resolve_embedding_api_key(
+            provider.api_key, None, provider.api_key_changed
+        )
         new_provider = CloudEmbeddingProviderModel(**creation)
 
         db_session.add(new_provider)
