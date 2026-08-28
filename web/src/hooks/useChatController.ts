@@ -80,7 +80,7 @@ import {
 import { Packet, MessageStart } from "@/app/app/services/streamingModels";
 import { SelectedModel } from "@/sections/model-selector/MultiModelSelector";
 import { useAgentPreferences } from "@/lib/agents/hooks";
-import { useForcedTools } from "@/lib/hooks/useForcedTools";
+import { useForcedTools } from "@/lib/tools/hooks";
 import { ProjectFile, useProjectsContext } from "@/lib/projects/providers";
 import { useIncognito } from "@/providers/IncognitoProvider";
 import { useAppParams } from "@/hooks/appNavigation";
@@ -155,7 +155,7 @@ export default function useChatController({
   const { refreshChatSessions, addPendingChatSession } = useChatSessions();
   const { pinnedAgents, togglePinnedAgent } = usePinnedAgents();
   const { agentPreferences } = useAgentPreferences();
-  const { forcedToolIds } = useForcedTools();
+  const { forcedToolId, keepThroughNextSessionChange } = useForcedTools();
   const { fetchProjects, setCurrentMessageFiles, beginUpload } =
     useProjectsContext();
   const { incognitoEnabledRef, incognitoSessionId } = useIncognito();
@@ -529,6 +529,11 @@ export default function useChatController({
         (m) => m.type === "user"
       );
       if (isNewSession) {
+        // This send is what creates the chat, so the session change it causes
+        // is not the user leaving one — the forced tool belongs to the message
+        // already on its way.
+        keepThroughNextSessionChange();
+
         // There is no incognito agent chat, so incognito pins the default
         // assistant regardless of any selected agent.
         currChatSessionId = await createChatSession(
@@ -1029,12 +1034,10 @@ export default function useChatController({
 
         // Determine the forced tool ID:
         // 1. If forceSearch is true, use the search tool's numeric ID
-        // 2. Otherwise, use the first forced tool ID from the forcedToolIds array
+        // 2. Otherwise, whatever the user forced, if anything
         const effectiveForcedToolId = forceSearch
           ? (searchToolNumericId ?? null)
-          : forcedToolIds.length > 0
-            ? forcedToolIds[0]
-            : null;
+          : forcedToolId;
 
         // Determine origin for telemetry tracking (also used for frontend PostHog tracking below)
         const { isExtension, context: extensionContext } =
@@ -1486,7 +1489,8 @@ export default function useChatController({
       currentMessageTree,
       currentChatState,
       // Ensure latest forced tools are used when submitting
-      forcedToolIds,
+      forcedToolId,
+      keepThroughNextSessionChange,
       // Keep tool preference-derived values fresh
       agentPreferences,
       fetchProjects,
@@ -1526,7 +1530,7 @@ export default function useChatController({
       setCurrentMessageFiles((prev) => [...prev, ...uploadedMessageFiles]);
       updateChatStateAction(getCurrentSessionId(), "input");
     },
-    [activeAgent, llmManager, forcedToolIds]
+    [activeAgent, llmManager, forcedToolId]
   );
 
   useEffect(() => {

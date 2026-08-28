@@ -28,7 +28,6 @@ import {
   useChatSessionStore,
   useCurrentMessageHistory,
 } from "@/app/app/stores/useChatSessionStore";
-import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import { useIncognito } from "@/providers/IncognitoProvider";
 import type { ProjectFile } from "@/lib/projects/types";
 import {
@@ -123,7 +122,6 @@ export default function useChatSessionController({
   );
   const currentChatHistory = useCurrentMessageHistory();
   const chatSessions = useChatSessionStore((state) => state.sessions);
-  const { setForcedToolIds } = useForcedTools();
   const { setIncognitoEnabled, setIncognitoSessionId } = useIncognito();
 
   // Fetch chat messages for the chat session
@@ -160,9 +158,6 @@ export default function useChatSessionController({
       // If we're creating a brand new chat, then don't need to scroll
       if (priorChatSessionId !== null) {
         setSelectedDocuments([]);
-
-        // Clear forced tool ids if and only if we're switching to a new chat session
-        setForcedToolIds([]);
       }
     }
 

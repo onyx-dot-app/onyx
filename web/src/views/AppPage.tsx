@@ -7,7 +7,6 @@ import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { Section } from "@/layouts/general-layouts";
 import { useFederatedConnectors, useLlmManager } from "@/lib/hooks";
 import { useSendChatMessageFromURL } from "@/lib/chat/hooks";
-import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { useSettings } from "@/lib/settings/hooks";
@@ -163,12 +162,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     lastFailedFiles,
     clearLastFailedFiles,
   } = useProjectsContext();
-
-  // When changing from project chat to main chat (or vice-versa), clear forced tools
-  const { setForcedToolIds } = useForcedTools();
-  useEffect(() => {
-    setForcedToolIds([]);
-  }, [currentProjectId, setForcedToolIds]);
 
   const isInitialLoad = useRef(true);
 

@@ -18,7 +18,7 @@ import { useAvailableSources } from "@/lib/connectors/hooks";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { ChatState, MAX_QUEUED_MESSAGES } from "@/app/app/interfaces";
 import { useQueuedMessageNavigation } from "@/hooks/useQueuedMessageNavigation";
-import { useForcedTools } from "@/lib/hooks/useForcedTools";
+import { useForcedTools } from "@/lib/tools/hooks";
 import useAppFocus from "@/hooks/useAppFocus";
 import { useDraft, draftKey } from "@/hooks/useDraft";
 import { getPastedFilesIfNoText } from "@/lib/clipboard";
@@ -321,7 +321,7 @@ const AppInputBar = React.memo(
       }
     }, [isNewSession, initialMessage]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const { forcedToolIds, setForcedToolIds } = useForcedTools();
+    const { forcedToolId, clearForcedTool } = useForcedTools();
     const { currentMessageFiles, setCurrentMessageFiles } =
       useProjectsContext();
     const { isLoading: isLoadingProjects } = useProjects();
@@ -693,32 +693,25 @@ const AppInputBar = React.memo(
               )
             )}
 
-            {activeAgent &&
-              forcedToolIds.length > 0 &&
-              forcedToolIds.map((toolId) => {
-                const tool = activeAgent.tools.find(
-                  (tool) => tool.id === toolId
-                );
-                if (!tool) {
-                  return null;
-                }
-                return (
-                  <Disabled disabled={disabled} key={toolId}>
-                    <SelectButton
-                      variant="select-light"
-                      icon={getIconForAction(tool)}
-                      onClick={() => {
-                        setForcedToolIds(
-                          forcedToolIds.filter((id) => id !== toolId)
-                        );
-                      }}
-                      state="selected"
-                    >
-                      {tool.display_name}
-                    </SelectButton>
-                  </Disabled>
-                );
-              })}
+            {(() => {
+              if (!activeAgent || forcedToolId === null) return null;
+              const tool = activeAgent.tools.find(
+                (tool) => tool.id === forcedToolId
+              );
+              if (!tool) return null;
+              return (
+                <Disabled disabled={disabled}>
+                  <SelectButton
+                    variant="select-light"
+                    icon={getIconForAction(tool)}
+                    onClick={clearForcedTool}
+                    state="selected"
+                  >
+                    {tool.display_name}
+                  </SelectButton>
+                </Disabled>
+              );
+            })()}
           </div>
         </div>
 
