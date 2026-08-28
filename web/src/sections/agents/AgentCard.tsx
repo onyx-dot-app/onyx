@@ -6,7 +6,7 @@ import { MinimalAgent } from "@/lib/agents/types";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { Button } from "@opal/components";
 import { useAppRouter } from "@/hooks/appNavigation";
-import { usePinnedAgents, useAgent } from "@/lib/agents/hooks";
+import { usePinnedAgents } from "@/lib/agents/hooks";
 import { noProp } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
@@ -24,9 +24,8 @@ import {
   SvgUser,
 } from "@opal/icons";
 import { useCreateModal } from "@opal/components";
-import { AppPosition, useAppPosition } from "@/lib/app/hooks";
+import { AppPosition } from "@/lib/app/hooks";
 import { ShareAgentModal } from "@/lib/agents/components";
-import { AgentViewerModal } from "@/lib/agents/components";
 import { CardItemLayout } from "@/layouts/general-layouts";
 import { Content } from "@opal/layouts";
 import { Hoverable, Interactive } from "@opal/core";
@@ -47,22 +46,6 @@ export default function AgentCard({ agent }: AgentCardProps) {
   );
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const shareAgentModal = useCreateModal();
-
-  // The viewer is a position, not component state: it is in the URL, so it can
-  // be linked to and dismissed with the back button.
-  const appPosition = useAppPosition();
-  const viewing = appPosition.previewedAgent() === String(agent.id);
-
-  const setViewing = useCallback(
-    (open: boolean) =>
-      route(
-        open ? AppPosition.agentViewer(agent.id) : AppPosition.moreAgents()
-      ),
-    [agent.id, route]
-  );
-  // Affordances read the map the list endpoint stamped on `agent`, so icons render with
-  // the card instead of popping in after the per-card fullAgent fetch resolves.
-  const { agent: fullAgent } = useAgent(agent.id);
 
   // Start chat and auto-pin unpinned agents to the sidebar
   const handleStartChat = useCallback(() => {
@@ -89,12 +72,8 @@ export default function AgentCard({ agent }: AgentCardProps) {
         <ShareAgentModal agentId={agent.id} />
       </shareAgentModal.Provider>
 
-      {viewing && fullAgent && (
-        <AgentViewerModal agent={fullAgent} onClose={() => setViewing(false)} />
-      )}
-
       <Interactive.Simple
-        onClick={() => setViewing(true)}
+        onClick={() => route(AppPosition.agentViewer(agent.id))}
         group="group/AgentCard"
       >
         <Hoverable.Root group="AgentCard" height="full">

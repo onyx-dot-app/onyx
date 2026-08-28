@@ -14,7 +14,8 @@ import type { AppPosition } from "@/lib/app/hooks";
 export function useAppRouter() {
   const router = useRouter();
   return useCallback(
-    (position: AppPosition) => router.push(position.href()),
+    (position: AppPosition, { replace = false }: { replace?: boolean } = {}) =>
+      replace ? router.replace(position.href()) : router.push(position.href()),
     [router]
   );
 }

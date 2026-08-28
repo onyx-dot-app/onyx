@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useRef } from "react";
 import AgentCard from "@/sections/agents/AgentCard";
+import { AgentViewer } from "@/lib/agents/components";
 import { useUser } from "@/providers/UserProvider";
 import { hasPermission } from "@/lib/permissions";
 import { Permission } from "@/lib/types";
@@ -96,6 +97,7 @@ export default function AgentsNavigationPage() {
       data-testid="AgentsPage/container"
       aria-label="Agents Page"
     >
+      <AgentViewer />
       <SettingsLayouts.Header
         icon={SvgOnyxOctagon}
         title="Agents"
