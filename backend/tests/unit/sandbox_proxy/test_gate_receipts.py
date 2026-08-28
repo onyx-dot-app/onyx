@@ -258,6 +258,12 @@ def test_responseheaders_caps_undeclared_recorded_flows(
     addon.responseheaders(declared_oversize)
     assert declared_oversize.response.stream is True
 
+    # A negative declaration is a broken origin, not a small body.
+    declared_negative = _recorded_flow(200)
+    declared_negative.response.headers["content-length"] = "-1"
+    addon.responseheaders(declared_negative)
+    assert declared_negative.response.stream is True
+
     unrecorded = tflow.tflow(resp=True)
     addon.responseheaders(unrecorded)
     assert unrecorded.response is not None and unrecorded.response.stream is True

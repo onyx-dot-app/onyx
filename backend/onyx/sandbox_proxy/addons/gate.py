@@ -422,7 +422,7 @@ class GateAddon:
                 length = int(declared) if declared is not None else None
             except ValueError:
                 length = None
-            if length is not None and length <= RECEIPT_REFINE_MAX_BODY_BYTES:
+            if length is not None and 0 <= length <= RECEIPT_REFINE_MAX_BODY_BYTES:
                 return
             if length is None:
                 flow.response.stream = _CappedBodyCapture()
