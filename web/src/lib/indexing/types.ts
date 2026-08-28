@@ -70,6 +70,23 @@ export interface EmbeddingModel {
   description: string;
 }
 
+export type EmbeddingModelSpec = Omit<EmbeddingModel, "description">;
+
+/**
+ * Always write all three fields together. A name without its spec and provider forces
+ * the submit path to guess them back, which misroutes LiteLLM and Azure models.
+ */
+export interface EmbeddingModelSelection {
+  model_name: string;
+  model_spec: EmbeddingModelSpec | null;
+  model_provider: EmbeddingProviderName | null;
+}
+
+export interface ResolvedEmbeddingModelForApply {
+  model: EmbeddingModelSpec;
+  providerName: EmbeddingProviderName;
+}
+
 export interface RerankingModel {
   rerank_provider_type: RerankerProvider | null;
   modelName?: string;
