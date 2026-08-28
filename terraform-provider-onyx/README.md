@@ -323,26 +323,33 @@ The public Terraform Registry only serves a provider from a repository named aft
 releases go out through a mirror, `onyx-dot-app/terraform-provider-onyx`. The mirror holds
 no source of its own. It is written from this directory and never edited directly.
 
-`.github/workflows/release-terraform-provider.yml` does the whole thing:
+Two workflows split the work, one in each repository:
 
-1. A `tf-provider/vX.Y.Z` tag on the monorepo starts it.
-2. It commits this directory's tree onto the mirror's history and tags it `vX.Y.Z`.
-   (`git subtree split` would walk all ~10,000 monorepo commits to find the handful that
-   touch this directory, which takes longer than the rest of the release put together.)
-3. It clones the mirror and runs goreleaser there, where `vX.Y.Z` is the only tag in sight
-   and the version goreleaser stamps is therefore the right one.
+1. `ods release tf-provider` pushes a `tf-provider/vX.Y.Z` tag on the monorepo.
+2. `.github/workflows/release-terraform-provider.yml` commits this directory's tree onto
+   the mirror's history and tags it `vX.Y.Z`. (`git subtree split` would walk all ~10,000
+   monorepo commits to find the handful that touch this directory, which takes longer than
+   the rest of the release put together.)
+3. That tag starts `publish.yml` in the mirror. It lives here, at
+   `.github/workflows/publish.yml`, and travels with the directory it publishes — GitHub
+   only reads workflows from a repository's root, so it is inert in the monorepo.
 4. goreleaser builds every platform archive, signs the checksum file with the release GPG
-   key, and publishes a GitHub release on the mirror. The registry ingests it from there.
+   key, and publishes a GitHub release. The registry ingests it from there.
+
+goreleaser runs in the mirror rather than the monorepo because it takes the version from
+whatever tag the checkout has. Here it would find tags like `nightly-latest-...` and stamp
+them into every artifact name.
 
 ### Cutting a release
 
 ```console
-$ git tag tf-provider/v1.0.0
-$ git push origin tf-provider/v1.0.0
+$ ods release tf-provider              # bumps the patch version
+$ ods release tf-provider --bump minor
+$ ods release tf-provider --version 1.0.0
 ```
 
-To rehearse without touching anything, run the workflow by hand from the Actions tab. It
-defaults to a dry run, which builds every archive and publishes none of them.
+To rehearse, run **Publish** by hand from the mirror's Actions tab. It defaults to a dry
+run, which builds every archive and publishes none of them.
 
 ### One-time setup
 
@@ -355,10 +362,11 @@ None of this is done yet, and each step needs org permissions:
       goreleaser puts the file in every archive once it exists.
 - [ ] Create the release GPG key and register its public half with the Terraform Registry
       under the `onyx-dot-app` namespace.
-- [ ] Install a GitHub App with `contents: write` on the mirror.
-- [ ] Fill in the `release-terraform-provider` environment: the variable
-      `TF_PROVIDER_RELEASE_APP_ID`, and the secrets `TF_PROVIDER_RELEASE_APP_PRIVATE_KEY`,
-      `TF_PROVIDER_GPG_PRIVATE_KEY` and `TF_PROVIDER_GPG_PASSPHRASE`.
+- [ ] Install a GitHub App with `contents: write` on the mirror, and fill in the monorepo's
+      `release-terraform-provider` environment: the variable `TF_PROVIDER_RELEASE_APP_ID`
+      and the secret `TF_PROVIDER_RELEASE_APP_PRIVATE_KEY`.
+- [ ] Add the secrets `TF_PROVIDER_GPG_PRIVATE_KEY` and `TF_PROVIDER_GPG_PASSPHRASE` **to
+      the mirror**, which is where the signing happens. The monorepo never holds the key.
 - [ ] Link the mirror on registry.terraform.io as the `onyx-dot-app` organisation.
 
 Until then, install the provider with `dev_overrides` (above), or from a private registry
