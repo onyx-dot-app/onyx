@@ -1,10 +1,10 @@
 """Celery task running the granular capability checks for one scope.
 
-Enqueued by the capability-check trigger endpoint after it marks the scope's
-row RUNNING. Writes through the unconditional upsert: a granular run is the
-freshest truth and replaces whatever is stored (see the accessors' writer
-model). A task-level crash leaves the row RUNNING; the mark's staleness bound
-un-blocks re-triggering.
+Enqueued by the capability-check trigger endpoint after it marks the scope's row
+RUNNING. Writes through the unconditional upsert: a granular run is the freshest
+truth and replaces whatever is stored (see the accessors' writer model). A
+task-level crash leaves the row RUNNING; the mark's staleness bound un-blocks
+re-triggering.
 """
 
 from typing import Any

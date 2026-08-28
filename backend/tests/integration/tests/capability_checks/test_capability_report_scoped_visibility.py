@@ -310,8 +310,9 @@ def test_managed_pairing_is_readable_without_credential_visibility(
 def test_scoped_manager_cannot_trigger_foreign_pairings(
     admin_user: DATestUser,
 ) -> None:
-    # Precondition. Mirrors the read test on the trigger side, on the mock
-    # source so the one legitimately enqueued run needs no external service.
+    # Precondition.
+    # Mirrors the read test on the trigger side, on the mock source so the one
+    # legitimately enqueued run needs no external service.
     suffix = uuid4().hex[:8]
     manager, managed_group = _bootstrap_scoped_manager(admin_user, suffix)
     foreign_group = UserGroupManager.create(
@@ -364,8 +365,9 @@ def test_scoped_manager_cannot_trigger_foreign_pairings(
         user_performing_action=admin_user,
     )
 
-    # Under test and postcondition. Hidden pairings reject with the same shape
-    # as a nonexistent connector, and nothing gets marked RUNNING.
+    # Under test and postcondition.
+    # Hidden pairings reject with the same shape as a nonexistent connector, and
+    # nothing gets marked RUNNING.
     for connector_id in (foreign_connector.id, orphan_connector.id):
         response = client.post(
             _check_url(credential.id),
@@ -395,10 +397,11 @@ def test_scoped_manager_cannot_trigger_foreign_pairings(
 def test_managed_pairing_is_triggerable_without_credential_visibility(
     admin_user: DATestUser,
 ) -> None:
-    # Precondition. An admin-created credential paired into the manager's
-    # managed group: the trigger-side mirror of the read test above. The
-    # credential filter is creator-only for scoped managers, so only pairing
-    # visibility can admit the run.
+    # Precondition.
+    # An admin-created credential paired into the manager's managed group: the
+    # trigger-side mirror of the read test above. The credential filter is
+    # creator-only for scoped managers, so only pairing visibility can admit the
+    # run.
     suffix = uuid4().hex[:8]
     manager, managed_group = _bootstrap_scoped_manager(admin_user, suffix)
     credential = CredentialManager.create(
@@ -422,9 +425,10 @@ def test_managed_pairing_is_triggerable_without_credential_visibility(
         user_performing_action=admin_user,
     )
 
-    # Under test and postcondition. Pairing visibility alone authorizes the
-    # connector-scoped trigger; the credential-scoped trigger stays gated on
-    # credential visibility and reads as inaccessible.
+    # Under test and postcondition.
+    # Pairing visibility alone authorizes the connector-scoped trigger; the
+    # credential-scoped trigger stays gated on credential visibility and reads
+    # as inaccessible.
     response = client.post(
         _check_url(credential.id),
         json={"connector_id": connector.id},

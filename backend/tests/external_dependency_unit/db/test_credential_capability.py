@@ -290,7 +290,8 @@ def test_mark_running_replaces_a_stale_running_mark(db_session: Session) -> None
 @pytest.mark.usefixtures("tenant_context")
 def test_failed_run_mark_is_truthful_and_retriggerable(db_session: Session) -> None:
     """Verifies the failed-enqueue fixup: the mark retires to FAILED_TO_RUN."""
-    # Precondition. A completed report, then a RUNNING mark over it.
+    # Precondition.
+    # A completed report, then a RUNNING mark over it.
     cc_pair = make_cc_pair(db_session, source=DocumentSource.SLACK, commit=False)
     credential_id = cc_pair.credential_id
     upsert_completed_capability_report(
@@ -316,9 +317,9 @@ def test_failed_run_mark_is_truthful_and_retriggerable(db_session: Session) -> N
         db_session, credential_id=credential_id, connector_id=None
     )
 
-    # Postcondition. Pollers read FAILED_TO_RUN with the previous report
-    # preserved, and re-marking succeeds immediately instead of waiting out
-    # the bound.
+    # Postcondition.
+    # Pollers read FAILED_TO_RUN with the previous report preserved, and
+    # re-marking succeeds immediately instead of waiting out the bound.
     db_session.expire_all()
     row = get_capability_report_row(db_session, credential_id, None)
     assert row is not None

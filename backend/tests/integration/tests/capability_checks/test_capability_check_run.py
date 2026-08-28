@@ -139,8 +139,9 @@ def test_connector_scoped_run_carries_the_config_hash(admin_user: DATestUser) ->
 def test_second_trigger_while_a_run_is_active_is_a_noop(
     admin_user: DATestUser,
 ) -> None:
-    # Precondition. Seed an active RUNNING mark directly: a real run on the
-    # mock source completes too fast to race against.
+    # Precondition.
+    # Seed an active RUNNING mark directly: a real run on the mock source
+    # completes too fast to race against.
     credential = CredentialManager.create(
         source=DocumentSource.MOCK_CONNECTOR, user_performing_action=admin_user
     )
@@ -173,7 +174,8 @@ def test_second_trigger_while_a_run_is_active_is_a_noop(
 def test_stale_running_mark_is_replaced_and_the_run_proceeds(
     admin_user: DATestUser,
 ) -> None:
-    # Precondition. An hours-old RUNNING mark: a crashed or expired run.
+    # Precondition.
+    # An hours-old RUNNING mark: a crashed or expired run.
     credential = CredentialManager.create(
         source=DocumentSource.MOCK_CONNECTOR, user_performing_action=admin_user
     )

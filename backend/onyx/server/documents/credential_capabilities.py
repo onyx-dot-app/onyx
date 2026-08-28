@@ -1,9 +1,9 @@
 """API over stored credential capability reports.
 
 The blocking-validation recorder and the granular check-runner task write the
-rows; these endpoints read them and trigger runs. Reports are advisory:
-nothing here gates connector creation or indexing, and check failures are
-report content, never an HTTP error.
+rows; these endpoints read them and trigger runs. Reports are advisory: nothing
+here gates connector creation or indexing, and check failures are report
+content, never an HTTP error.
 """
 
 from datetime import datetime, timedelta
@@ -118,8 +118,8 @@ class CapabilityCheckRunRequest(BaseModel):
     not-yet-saved edit) and is only meaningful with ``connector_id``.
     """
 
-    # Both fields are optional, so a typoed field name would otherwise
-    # silently select the wrong scope.
+    # Both fields are optional, so a typoed field name would otherwise silently
+    # select the wrong scope.
     model_config = ConfigDict(extra="forbid")
 
     connector_id: int | None = None
@@ -144,9 +144,9 @@ def trigger_capability_check(
     """
     # GATE 2 for ``allow_scope``, mirroring the report reads: credential
     # visibility authorizes the credential scope; pairing visibility authorizes
-    # the connector scope on its own, so a pairing manager triggers its run
-    # even when the credential is outside their credential visibility. An
-    # unknown credential is indistinguishable from an inaccessible one.
+    # the connector scope on its own, so a pairing manager triggers its run even
+    # when the credential is outside their credential visibility. An unknown
+    # credential is indistinguishable from an inaccessible one.
     pairing_visible = request.connector_id is not None and _connector_pairing_visible(
         db_session, request.connector_id, credential_id, user
     )
@@ -169,9 +169,8 @@ def trigger_capability_check(
         )
     if request.connector_id is not None:
         connector = fetch_connector_by_id(request.connector_id, db_session)
-        # One shape for missing and inaccessible, so neither connector
-        # existence nor pairing membership leaks. The source check stays
-        # behind it.
+        # One shape for missing and inaccessible, so neither connector existence
+        # nor pairing membership leaks. The source check stays behind it.
         if connector is None or not pairing_visible:
             raise OnyxError(
                 OnyxErrorCode.CONNECTOR_NOT_FOUND,
@@ -200,8 +199,8 @@ def trigger_capability_check(
         )
         if standing is None:
             # The blocking row vanished between the two statements: the
-            # credential (or the paired connector) was deleted concurrently
-            # and its report rows cascaded away.
+            # credential (or the paired connector) was deleted concurrently and
+            # its report rows cascaded away.
             raise OnyxError(
                 OnyxErrorCode.CREDENTIAL_NOT_FOUND,
                 f"Credential {credential_id} or its paired connector was "

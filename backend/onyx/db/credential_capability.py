@@ -188,10 +188,10 @@ def mark_capability_report_running(
 ) -> CredentialCapabilityReportRow | None:
     """Flags the scope's row RUNNING unless an unexpired run already is.
 
-    The previous COMPLETED ``report`` stays readable while the run is in
-    flight. The guard compiles into ``ON CONFLICT DO UPDATE ... WHERE``: a
-    stored row blocks the mark only while it is RUNNING with a start time newer
-    than ``active_within`` ago, evaluated atomically by Postgres so concurrent
+    The previous COMPLETED ``report`` stays readable while the run is in flight.
+    The guard compiles into ``ON CONFLICT DO UPDATE ... WHERE``: a stored row
+    blocks the mark only while it is RUNNING with a start time newer than
+    ``active_within`` ago, evaluated atomically by Postgres so concurrent
     triggers cannot double-mark. A RUNNING mark older than the bound is a
     crashed or expired run and is replaced. Returns None when an active run
     blocked the mark.
@@ -230,8 +230,8 @@ def mark_capability_run_failed(
 
     For runs that verifiably will not happen (the trigger endpoint's failed
     enqueue): FAILED_TO_RUN is the truth pollers should read, and it does not
-    block re-marking, so the scope stays immediately re-triggerable. Guarded
-    on RUNNING so a completion that raced this write is never clobbered.
+    block re-marking, so the scope stays immediately re-triggerable. Guarded on
+    RUNNING so a completion that raced this write is never clobbered.
     """
     stmt = (
         update(CredentialCapabilityReportRow)
