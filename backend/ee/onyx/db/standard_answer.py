@@ -6,6 +6,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.db.models import StandardAnswer, StandardAnswerCategory
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -109,6 +111,36 @@ def remove_standard_answer(
         raise ValueError(f"No standard answer with id {standard_answer_id}")
 
     standard_answer.active = False
+    db_session.commit()
+
+
+def remove_standard_answer_category(
+    standard_answer_category_id: int,
+    db_session: Session,
+) -> None:
+    """Hard delete, unlike a standard answer, which deactivates. A category has
+    no active flag, and anything still pointing at it would be left dangling, so
+    a referenced category is refused instead."""
+    category = fetch_standard_answer_category(
+        standard_answer_category_id=standard_answer_category_id,
+        db_session=db_session,
+    )
+    if category is None:
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            f"No standard answer category with id {standard_answer_category_id}",
+        )
+
+    active_answers = [answer for answer in category.standard_answers if answer.active]
+    if active_answers or category.slack_channel_configs:
+        raise OnyxError(
+            OnyxErrorCode.RESOURCE_IN_USE,
+            f"Cannot delete this category: {len(active_answers)} standard "
+            f"answer(s) and {len(category.slack_channel_configs)} Slack channel "
+            "config(s) still use it.",
+        )
+
+    db_session.delete(category)
     db_session.commit()
 
 
