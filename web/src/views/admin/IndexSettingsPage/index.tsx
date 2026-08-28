@@ -53,6 +53,7 @@ import {
   type ConfiguredEmbeddingProvider,
   type EmbeddingModel,
   type EmbeddingModelRequest,
+  type EmbeddingModelSelection,
   type EmbeddingModelState,
   type EmbeddingProvider,
 } from "@/lib/indexing/types";
@@ -66,6 +67,11 @@ import {
   MAX_IMAGE_SIZE_OPTIONS,
   resolveProviderName,
 } from "@/lib/indexing";
+import {
+  isSameModelSelection,
+  resolveModelForApply,
+  savedModelSelection,
+} from "@/lib/indexing/utils";
 import {
   saveAdminSettings,
   cancelNewEmbedding,
@@ -191,11 +197,8 @@ interface ProviderGroupProps {
    */
   existingModel?: EmbeddingModel;
   /**
-   * Stage a model into the parent form. `customModel` is populated only when
-   * the provider has no pre-registered models and the user defined the spec in
-   * the connect modal (LiteLLM / Azure) — the parent uses it to set both
-   * `model_name` and `custom_model`, and to remember this cloud provider as the
-   * staged model's owner so submit doesn't misresolve it as self-hosted.
+   * `customModel` is set only for providers with no pre-registered models
+   * (LiteLLM / Azure), where the user defines the spec in the connect modal.
    */
   onSelectModel: (
     modelName: string,
@@ -573,26 +576,7 @@ function EmbeddingModelCard({
   );
 }
 
-interface IndexSettingsFormValues {
-  model_name: string;
-  /**
-   * Populated when the staged model came from the "Add Custom Model" modal
-   * — i.e. it's not in `CLOUD_BASED_PROVIDERS` / `SELF_HOSTED_PROVIDERS`.
-   * The submit path uses this directly instead of looking the name up in
-   * the static registry. Cleared whenever the user selects a registered
-   * model.
-   */
-  custom_model: EmbeddingModel | null;
-  /**
-   * The cloud provider that owns a staged `custom_model` (LiteLLM / Azure).
-   * Those providers have no pre-registered models, so `resolveProviderName`
-   * can't recover their identity from the model name alone and would fall
-   * through to `CUSTOM` (self-hosted) — sending `provider_type=null` to the
-   * backend and bypassing the cloud credentials. Carrying it explicitly keeps
-   * the staged model bound to its provider. `null` for registered or
-   * self-hosted models, where name-based resolution is sufficient.
-   */
-  custom_model_provider: EmbeddingProviderName | null;
+interface IndexSettingsFormValues extends EmbeddingModelSelection {
   enable_contextual_rag: boolean;
   contextual_rag_model_configuration_id: number | null;
 }
@@ -607,9 +591,7 @@ function isContextualModelOnlyChange(
     values.contextual_rag_model_configuration_id !== null &&
     values.contextual_rag_model_configuration_id !==
       initialValues.contextual_rag_model_configuration_id &&
-    values.model_name === initialValues.model_name &&
-    values.custom_model === null &&
-    values.custom_model_provider === null
+    isSameModelSelection(values, initialValues)
   );
 }
 
@@ -808,16 +790,23 @@ export default function IndexSettingsPage() {
     return null;
   }, [llmProviders, defaultVision]);
 
+  const savedSelection = useMemo(
+    () =>
+      savedModelSelection(
+        currentEmbeddingModelSpec,
+        currentEmbeddingModel?.provider_type ?? null
+      ),
+    [currentEmbeddingModelSpec, currentEmbeddingModel]
+  );
+
   const initialFormValues: IndexSettingsFormValues = useMemo(
     () => ({
-      model_name: currentEmbeddingModel?.model_name ?? "",
-      custom_model: null,
-      custom_model_provider: null,
+      ...savedSelection,
       enable_contextual_rag: searchSettings?.enable_contextual_rag ?? false,
       contextual_rag_model_configuration_id:
         searchSettings?.contextual_rag_model_configuration_id ?? null,
     }),
-    [currentEmbeddingModel, searchSettings]
+    [savedSelection, searchSettings]
   );
 
   const applyContextualModelForward = useCallback(
@@ -940,29 +929,15 @@ export default function IndexSettingsPage() {
                 toast.error(t("toasts.contextualModelRequired"));
                 return;
               }
-              // Custom self-hosted models live outside the static registry,
-              // so the form carries their spec (`modelDim`, `normalize`, etc.)
-              // in `custom_model` for submission. The provider, however, is
-              // ALWAYS resolved through `resolveProviderName` — see its NOTE
-              // for why this is the single source of truth for provider
-              // discrimination.
-              const stagedModel =
-                values.custom_model ?? findRegistryModel(values.model_name);
-              if (!stagedModel) {
+              const resolved = resolveModelForApply(values);
+              if (!resolved) {
                 toast.error(t("toasts.modelNotFound"));
                 return;
               }
-              // A staged custom model from a no-registry cloud provider
-              // (LiteLLM / Azure) carries its owning provider explicitly;
-              // otherwise fall back to resolving the provider from the model
-              // name against the static registry.
-              const providerName =
-                values.custom_model_provider ??
-                resolveProviderName(values.model_name, null);
 
               const response = await setNewSearchSettings({
-                model: stagedModel,
-                providerName,
+                model: resolved.model,
+                providerName: resolved.providerName,
                 switchoverType,
                 enableContextualRag: values.enable_contextual_rag,
                 contextualRagModelConfigurationId: values.enable_contextual_rag
@@ -984,6 +959,11 @@ export default function IndexSettingsPage() {
             }}
           >
             {({ values, dirty, setFieldValue, resetForm, submitForm }) => {
+              const applySelection = (selection: EmbeddingModelSelection) => {
+                void setFieldValue("model_name", selection.model_name);
+                void setFieldValue("model_spec", selection.model_spec);
+                void setFieldValue("model_provider", selection.model_provider);
+              };
               const isModelStaged =
                 values.model_name !== initialFormValues.model_name &&
                 !!values.model_name;
@@ -1096,15 +1076,15 @@ export default function IndexSettingsPage() {
                           : undefined
                       }
                       onSubmit={(customModel) => {
-                        if (customModel) {
-                          void setFieldValue(
-                            "model_name",
-                            customModel.modelName
-                          );
-                          void setFieldValue("custom_model", customModel);
-                          // Self-hosted custom models resolve to CUSTOM by
-                          // name — no cloud provider to bind.
-                          void setFieldValue("custom_model_provider", null);
+                        if (customModel?.modelName) {
+                          applySelection({
+                            model_name: customModel.modelName,
+                            model_spec: {
+                              ...customModel,
+                              modelName: customModel.modelName,
+                            },
+                            model_provider: null,
+                          });
                         }
                         customModelModal.toggle(false);
                       }}
@@ -1331,39 +1311,23 @@ export default function IndexSettingsPage() {
                                                 onSelectModel={(
                                                   name,
                                                   customModel
-                                                ) => {
-                                                  void setFieldValue(
-                                                    "model_name",
-                                                    name
-                                                  );
-                                                  void setFieldValue(
-                                                    "custom_model",
-                                                    customModel ?? null
-                                                  );
-                                                  // Bind a just-defined LiteLLM /
-                                                  // Azure model to its provider so
-                                                  // submit doesn't misresolve it.
-                                                  void setFieldValue(
-                                                    "custom_model_provider",
-                                                    customModel
+                                                ) =>
+                                                  applySelection({
+                                                    model_name: name,
+                                                    model_spec: customModel
+                                                      ? {
+                                                          ...customModel,
+                                                          modelName: name,
+                                                        }
+                                                      : null,
+                                                    model_provider: customModel
                                                       ? provider.providerName
-                                                      : null
-                                                  );
-                                                }}
-                                                onDeselectModel={() => {
-                                                  void setFieldValue(
-                                                    "model_name",
-                                                    initialFormValues.model_name
-                                                  );
-                                                  void setFieldValue(
-                                                    "custom_model",
-                                                    null
-                                                  );
-                                                  void setFieldValue(
-                                                    "custom_model_provider",
-                                                    null
-                                                  );
-                                                }}
+                                                      : null,
+                                                  })
+                                                }
+                                                onDeselectModel={() =>
+                                                  applySelection(savedSelection)
+                                                }
                                               />
                                             )
                                           )}
@@ -1399,34 +1363,16 @@ export default function IndexSettingsPage() {
                                                 selectedModelName={
                                                   stagedModelName ?? undefined
                                                 }
-                                                onSelectModel={(name) => {
-                                                  void setFieldValue(
-                                                    "model_name",
-                                                    name
-                                                  );
-                                                  void setFieldValue(
-                                                    "custom_model",
-                                                    null
-                                                  );
-                                                  void setFieldValue(
-                                                    "custom_model_provider",
-                                                    null
-                                                  );
-                                                }}
-                                                onDeselectModel={() => {
-                                                  void setFieldValue(
-                                                    "model_name",
-                                                    initialFormValues.model_name
-                                                  );
-                                                  void setFieldValue(
-                                                    "custom_model",
-                                                    null
-                                                  );
-                                                  void setFieldValue(
-                                                    "custom_model_provider",
-                                                    null
-                                                  );
-                                                }}
+                                                onSelectModel={(name) =>
+                                                  applySelection({
+                                                    model_name: name,
+                                                    model_spec: null,
+                                                    model_provider: null,
+                                                  })
+                                                }
+                                                onDeselectModel={() =>
+                                                  applySelection(savedSelection)
+                                                }
                                               />
                                             )
                                           )}
@@ -1526,20 +1472,9 @@ export default function IndexSettingsPage() {
                                             tooltip={t(
                                               "modelPicker.revertSelection.tooltip"
                                             )}
-                                            onClick={() => {
-                                              void setFieldValue(
-                                                "model_name",
-                                                initialFormValues.model_name
-                                              );
-                                              void setFieldValue(
-                                                "custom_model",
-                                                null
-                                              );
-                                              void setFieldValue(
-                                                "custom_model_provider",
-                                                null
-                                              );
-                                            }}
+                                            onClick={() =>
+                                              applySelection(savedSelection)
+                                            }
                                           />
                                         )}
                                         <Button
