@@ -22,7 +22,11 @@ class DisposableEmailValidator:
     """
     Thread-safe singleton validator for disposable email domains.
 
-    Fetches and caches the list of disposable domains, with periodic refresh.
+    Fetches and caches the list of disposable domains. Refreshes are
+    stale-while-revalidate: callers always get the cached set (or the
+    hardcoded fallback before the first fetch completes) immediately,
+    and a background thread updates the cache. Callers never wait on
+    the network.
     """
 
     _instance: "DisposableEmailValidator | None" = None
@@ -49,7 +53,10 @@ class DisposableEmailValidator:
         # conditional requests so unchanged lists are not re-downloaded.
         self._etag: str | None = None
         self._last_modified: str | None = None
-        self._fetch_lock = threading.Lock()
+        # Guards check-and-set of the refresh thread so only one refresh
+        # runs at a time. Never held during network calls.
+        self._spawn_lock = threading.Lock()
+        self._refresh_thread: threading.Thread | None = None
         # Cache for 1 hour
         self._cache_duration = 3600
         # Hardcoded fallback list of common disposable domains
@@ -146,27 +153,54 @@ class DisposableEmailValidator:
         # On error, keep the last good set (or the fallback if none exists)
         return self._previous_or_fallback_domains()
 
+    def _refresh(self) -> None:
+        """Fetch the list and swap the cache. Runs on the refresh thread."""
+        domains = self._fetch_domains()
+        self._domains = domains
+        self._last_fetch_time = time.time()
+
+    def _start_refresh(self) -> threading.Thread:
+        """
+        Start a background refresh unless one is already running.
+
+        Returns:
+            The running (or just-started) refresh thread
+        """
+        with self._spawn_lock:
+            thread = self._refresh_thread
+            if thread is not None:
+                if thread.is_alive():
+                    return thread
+                # Re-check staleness under the lock: a refresh may have
+                # completed after the caller decided one was needed
+                if not self._should_refresh():
+                    return thread
+            thread = threading.Thread(
+                target=self._refresh,
+                name="disposable-email-domains-refresh",
+                daemon=True,
+            )
+            self._refresh_thread = thread
+            thread.start()
+            return thread
+
     def get_domains(self) -> Set[str]:
         """
         Get the cached set of disposable email domains.
-        Refreshes the cache if needed.
+
+        Stale-while-revalidate: a stale cache triggers a background
+        refresh, and the current set is returned immediately. Before
+        the first fetch completes, this is the hardcoded fallback set.
 
         Returns:
             Set of disposable domain strings (lowercased)
         """
-        # Fast path: return cached domains if still fresh
-        if self._domains and not self._should_refresh():
-            return self._domains.copy()
+        if self._should_refresh():
+            self._start_refresh()
 
-        # Slow path: need to refresh
-        with self._fetch_lock:
-            # Double-check after acquiring lock
-            if self._domains and not self._should_refresh():
-                return self._domains.copy()
-
-            self._domains = self._fetch_domains()
-            self._last_fetch_time = time.time()
+        if self._domains:
             return self._domains.copy()
+        return self._fallback_domains.copy()
 
     def is_disposable(self, email: str) -> bool:
         """
@@ -217,7 +251,8 @@ def refresh_disposable_domains() -> None:
     Force a refresh of the disposable domains list.
 
     This can be called manually if you want to update the list
-    without waiting for the cache to expire.
+    without waiting for the cache to expire. Unlike normal cache
+    expiry, this blocks until the refresh completes.
     """
     _validator._last_fetch_time = 0
-    _validator.get_domains()
+    _validator._start_refresh().join()
