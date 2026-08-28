@@ -26,6 +26,8 @@ from onyx.db.users import (
     get_user_groups,
     set_user_groups__no_commit,
 )
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.api_key.models import APIKeyArgs
 from onyx.server.models import UserGroupInfo
 from onyx.utils.logger import setup_logger
@@ -174,7 +176,9 @@ def update_api_key(
 ) -> ApiKeyDescriptor:
     existing_api_key = db_session.scalar(select(ApiKey).where(ApiKey.id == api_key_id))
     if existing_api_key is None:
-        raise ValueError(f"API key with id {api_key_id} does not exist")
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND, f"API key with id {api_key_id} does not exist"
+        )
 
     existing_api_key.name = api_key_args.name
     api_key_user = db_session.scalar(

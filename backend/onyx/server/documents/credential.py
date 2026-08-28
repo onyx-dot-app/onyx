@@ -22,6 +22,8 @@ from onyx.db.credentials import (
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import DocumentSource, User
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.documents.models import (
     CredentialBase,
     CredentialDataUpdateRequest,
@@ -285,9 +287,9 @@ def get_credential_by_id(
         db_session,
     )
     if credential is None:
-        raise HTTPException(
-            status_code=401,
-            detail=f"Credential {credential_id} does not exist or does not belong to user",
+        raise OnyxError(
+            OnyxErrorCode.CREDENTIAL_NOT_FOUND,
+            f"Credential {credential_id} does not exist or does not belong to user",
         )
 
     return CredentialSnapshot.from_credential_db_model(
@@ -312,9 +314,9 @@ def update_credential_data(
     )
 
     if credential is None:
-        raise HTTPException(
-            status_code=401,
-            detail=f"Credential {credential_id} does not exist or does not belong to user",
+        raise OnyxError(
+            OnyxErrorCode.CREDENTIAL_NOT_FOUND,
+            f"Credential {credential_id} does not exist or does not belong to user",
         )
 
     return CredentialSnapshot.from_credential_db_model(
@@ -362,9 +364,9 @@ def update_credential_private_key(
     )
 
     if credential is None:
-        raise HTTPException(
-            status_code=401,
-            detail=f"Credential {credential_id} does not exist or does not belong to user",
+        raise OnyxError(
+            OnyxErrorCode.CREDENTIAL_NOT_FOUND,
+            f"Credential {credential_id} does not exist or does not belong to user",
         )
 
     return CredentialSnapshot.from_credential_db_model(
@@ -384,9 +386,9 @@ def update_credential_from_model(
         credential_id, credential_data, user, db_session
     )
     if updated_credential is None:
-        raise HTTPException(
-            status_code=401,
-            detail=f"Credential {credential_id} does not exist or does not belong to user",
+        raise OnyxError(
+            OnyxErrorCode.CREDENTIAL_NOT_FOUND,
+            f"Credential {credential_id} does not exist or does not belong to user",
         )
 
     emit_audit_event(

@@ -446,8 +446,8 @@ def test_delete_default_llm_provider_rejected(
         f"{API_SERVER_URL}/admin/llm/provider/{created_provider['id']}",
         headers=admin_user.headers,
     )
-    assert delete_response.status_code == 400
-    assert "Cannot delete the default LLM provider" in delete_response.json()["detail"]
+    assert delete_response.status_code == 409
+    assert "chat default model" in delete_response.json()["detail"]
 
     # Verify provider still exists
     provider_data = _get_provider_by_id(admin_user, created_provider["id"])

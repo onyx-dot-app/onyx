@@ -98,8 +98,9 @@ def delete_embedding_provider(
         and provider_type == embedding_provider.provider_type
     ):
         raise OnyxError(
-            OnyxErrorCode.VALIDATION_ERROR,
-            "You can't delete a currently active model",
+            OnyxErrorCode.RESOURCE_IN_USE,
+            "You can't delete the embedding provider the current search settings "
+            "use. Point search settings at another provider first.",
         )
 
     remove_embedding_provider(db_session, provider_type=provider_type)

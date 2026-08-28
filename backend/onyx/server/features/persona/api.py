@@ -588,6 +588,23 @@ def delete_persona(
         )
     except ValueError as e:
         logger.exception("Failed to delete persona")
+        # An agent this caller may edit but which is already a tombstone is gone,
+        # not forbidden. Only checked once the delete has already failed, so the
+        # happy path costs no extra query.
+        try:
+            get_persona_by_id(
+                persona_id=persona_id,
+                user=user,
+                db_session=db_session,
+                include_deleted=True,
+            )
+        except ValueError:
+            pass
+        else:
+            raise OnyxError(
+                OnyxErrorCode.PERSONA_NOT_FOUND,
+                f"Agent with ID {persona_id} is already deleted",
+            ) from e
         # A non-owner failed the ownership check; its ValueError would 400 via the global
         # handler, so surface the real authorization failure as a 403.
         raise OnyxError(
@@ -673,13 +690,21 @@ def get_persona(
     user_group_ids: set[int] = (
         get_user_group_ids_for_user(db_session, user.id) if user is not None else set()
     )
-    persona = get_persona_by_id(
-        persona_id=persona_id,
-        user=user,
-        db_session=db_session,
-        is_for_edit=False,
-        user_group_ids=user_group_ids,
-    )
+    try:
+        persona = get_persona_by_id(
+            persona_id=persona_id,
+            user=user,
+            db_session=db_session,
+            is_for_edit=False,
+            user_group_ids=user_group_ids,
+        )
+    except ValueError as e:
+        # Caller-scoped, like GET /manage/admin/document-set/{id}: someone who
+        # cannot see the agent gets not-found rather than a 403 that leaks it.
+        raise OnyxError(
+            OnyxErrorCode.PERSONA_NOT_FOUND,
+            f"Agent with ID {persona_id} does not exist",
+        ) from e
 
     # Validate and clear the model override if the referenced model is no longer
     # accessible to this persona (e.g. provider was restricted after the persona was saved).

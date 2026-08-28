@@ -450,8 +450,12 @@ def fetch_user_groups_for_documents(
 
 def _check_user_group_is_modifiable(user_group: UserGroup) -> None:
     if not user_group.is_up_to_date:
-        raise ValueError(
-            "Specified user group is currently syncing. Wait until the current sync has finished before editing."
+        # OnyxError, not ValueError: the routes map ValueError to NOT_FOUND, so a
+        # syncing group used to be indistinguishable from a deleted one.
+        raise OnyxError(
+            OnyxErrorCode.RESOURCE_SYNCING,
+            "Specified user group is currently syncing. Wait until the current "
+            "sync has finished before editing.",
         )
 
 
