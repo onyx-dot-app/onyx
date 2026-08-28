@@ -19,7 +19,7 @@ import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { ChatState, MAX_QUEUED_MESSAGES } from "@/app/app/interfaces";
 import { useQueuedMessageNavigation } from "@/hooks/useQueuedMessageNavigation";
 import { useForcedTools } from "@/lib/tools/hooks";
-import useAppFocus from "@/hooks/useAppFocus";
+import { useAppPosition } from "@/lib/position/hooks";
 import { useDraft, draftKey } from "@/hooks/useDraft";
 import { getPastedFilesIfNoText } from "@/lib/clipboard";
 import PasteTilePopover from "@/sections/input/PasteTilePopover";
@@ -201,14 +201,14 @@ const AppInputBar = React.memo(
       isTTSPlaying || isTTSLoading || isAwaitingAutoPlaybackStart;
     const isVoicePlaybackControllable = isVoicePlaybackActive && !isRecording;
     const isTTSActuallySpeaking = isTTSPlaying || isManualTTSPlaying;
-    const appFocus = useAppFocus();
-    const isNewSession = appFocus.isNewSession();
+    const appPosition = useAppPosition();
+    const isNewSession = appPosition.isNewSession();
     const appMode = state.phase === "idle" ? state.appMode : undefined;
     const isSearchMode =
       (isNewSession && appMode === "search") || isSearchActive;
 
     // Keyed by chat session id, or "new" until the session is created.
-    const chatSessionId = appFocus.isChat() ? appFocus.getId() : null;
+    const chatSessionId = appPosition.chat();
     const chatDraftStorageKey = draftKey("chat", chatSessionId ?? "new");
     const {
       draft: chatDraft,

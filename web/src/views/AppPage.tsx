@@ -71,7 +71,8 @@ import {
   useToastFromQuery,
 } from "@opal/layouts";
 import { SvgNotFound, SvgNoAccess } from "@opal/illustrations";
-import useAppFocus from "@/hooks/useAppFocus";
+import { useChatSessionSupportsRetrieval } from "@/lib/app/hooks";
+import { useAppPosition } from "@/lib/position/hooks";
 import useScreenSize from "@/hooks/useScreenSize";
 import { useSidebarState } from "@opal/layouts";
 import { useQueryController } from "@/providers/QueryControllerProvider";
@@ -82,7 +83,6 @@ import { paidTierGated } from "@/ce";
 import EESearchUI from "@/ee/sections/SearchUI";
 const SearchUI = paidTierGated(EESearchUI);
 import { motion, AnimatePresence } from "motion/react";
-import { useChatSessionSupportsRetrieval } from "@/lib/app/hooks";
 import { useTranslations } from "next-intl";
 
 interface FadeProps {
@@ -133,7 +133,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const t = useTranslations("chat.app");
   const router = useRouter();
-  const appFocus = useAppFocus();
+  const appPosition = useAppPosition();
   const { isMobile } = useScreenSize();
 
   useToastFromQuery({
@@ -355,7 +355,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   // it widens the greeting row and the composer.
   const fullWidthActive =
     fullWidthChat &&
-    ((appFocus.isChat() && !!currentChatSessionId) || appFocus.isNewSession());
+    ((appPosition.isChat() && !!currentChatSessionId) ||
+      appPosition.isNewSession());
 
   // Auto-fold sidebar when a multi-model message is submitted.
   // Stays collapsed until the user exits multi-model mode (removes models).
@@ -464,7 +465,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     if (retrievalEnabled === null) return;
 
     // Not reading a conversation, so there are no sources to show.
-    if (!appFocus.isChattable()) {
+    if (!appPosition.isChattable()) {
       updateCurrentDocumentSidebarVisible(false);
       return;
     }
@@ -478,7 +479,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     updateCurrentDocumentSidebarVisible(false);
   }, [
     documentSidebarVisible,
-    appFocus,
+    appPosition,
     retrievalEnabled,
     selectedDocuments,
     updateCurrentDocumentSidebarVisible,
@@ -555,7 +556,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     (user?.preferences?.default_app_mode?.toLowerCase() as "chat" | "search") ??
     "chat";
 
-  const isNewSession = appFocus.isNewSession();
+  const isNewSession = appPosition.isNewSession();
 
   const isSearch =
     state.phase === "searching" || state.phase === "search-results";
@@ -678,7 +679,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     (activeAgent?.starter_messages?.length ?? 0) > 0;
 
   const isWelcomeFocus =
-    (appFocus.isNewSession() || appFocus.isAgent()) &&
+    (appPosition.isNewSession() || appPosition.isAgent()) &&
     (state.phase === "idle" || state.phase === "classifying");
 
   const onboardingVisible =
@@ -698,9 +699,9 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       ? "minmax(min-content, 1fr) minmax(0, max-content) minmax(0, 1fr)"
       : isSearch
         ? "0fr auto 1fr"
-        : appFocus.isChat()
+        : appPosition.isChat()
           ? "1fr auto 0fr"
-          : appFocus.isProject()
+          : appPosition.isProject()
             ? "auto auto 1fr"
             : "1fr auto 1fr",
   };
@@ -789,7 +790,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                   {/* ChatUI */}
                   <Fade
                     show={
-                      appFocus.isChat() &&
+                      appPosition.isChat() &&
                       !!currentChatSessionId &&
                       !!activeAgent &&
                       !sessionFetchError
@@ -826,7 +827,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
                   {/* Session fetch error (404 / 403) */}
                   <Fade
-                    show={appFocus.isChat() && sessionFetchError !== null}
+                    show={appPosition.isChat() && sessionFetchError !== null}
                     className="h-full w-full flex flex-col items-center justify-center px-2 sm:px-4"
                   >
                     {sessionFetchError && (
@@ -864,7 +865,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                   </Fade>
 
                   {/* ProjectUI */}
-                  {appFocus.isProject() && (
+                  {appPosition.isProject() && (
                     <div className="w-full max-h-[50vh] overflow-y-auto overscroll-y-none px-2 sm:px-4">
                       <ProjectContextPanel
                         projectTokenCount={projectContextTokenCount}
@@ -929,7 +930,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     )}
                   >
                     {/* Scroll to bottom button - positioned absolutely above AppInputBar */}
-                    {appFocus.isChat() && showScrollButton && (
+                    {appPosition.isChat() && showScrollButton && (
                       <div className="absolute -top-14 self-center">
                         <Button
                           icon={SvgChevronDown}
@@ -978,7 +979,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                           isSearch ? "h-[14px]" : "h-0"
                         )}
                       />
-                      {appFocus.isChat() && activeAgent && (
+                      {appPosition.isChat() && activeAgent && (
                         <div className="pb-1">
                           <MultiModelSelector
                             selectedModels={multiModel.selectedModels}
@@ -1028,7 +1029,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       <div
                         className={cn(
                           "transition-all duration-150 ease-in-out overflow-hidden",
-                          appFocus.isChat() ? "h-[14px]" : "h-0"
+                          appPosition.isChat() ? "h-[14px]" : "h-0"
                         )}
                       />
                     </div>
@@ -1038,7 +1039,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                 {/* ── Bottom: SearchResults + SourceFilter / Suggestions / ProjectChatList ── */}
                 <div className="row-start-3 min-h-0 overflow-hidden flex flex-col items-center w-full px-2 sm:px-4">
                   {/* Agent description below input */}
-                  {(appFocus.isNewSession() || appFocus.isAgent()) &&
+                  {(appPosition.isNewSession() || appPosition.isAgent()) &&
                     !isPlainChat && (
                       <>
                         <Spacer rem={1} />
@@ -1047,7 +1048,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       </>
                     )}
                   {/* ProjectChatSessionList */}
-                  {appFocus.isProject() && (
+                  {appPosition.isProject() && (
                     <div className="w-full max-w-(--app-page-main-content-width) h-full overflow-y-auto overscroll-y-none mx-auto">
                       <ProjectChatSessionList />
                     </div>
@@ -1056,7 +1057,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                   {/* SuggestionsUI */}
                   <Fade
                     show={
-                      (appFocus.isNewSession() || appFocus.isAgent()) &&
+                      (appPosition.isNewSession() || appPosition.isAgent()) &&
                       hasAgentStarterMessages
                     }
                     className="h-full flex-1 w-full max-w-(--app-page-main-content-width)"

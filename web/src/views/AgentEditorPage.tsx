@@ -88,7 +88,7 @@ import { getActionIcon } from "@/lib/tools/utils";
 import { AgentEditorMCPServer, MCPTool, ToolSnapshot } from "@/lib/tools/types";
 import useFilter from "@/hooks/useFilter";
 import EnabledCount from "@/refresh-components/EnabledCount";
-import { useAppRouter } from "@/hooks/appNavigation";
+import { useAppPosition } from "@/lib/position/hooks";
 import { isDateInFuture } from "@/lib/dateUtils";
 import {
   deleteAgent,
@@ -551,8 +551,8 @@ export default function AgentEditorPage({
   agent: existingAgent,
   refreshAgent,
 }: AgentEditorPageProps) {
+  const appPosition = useAppPosition();
   const router = useRouter();
-  const appRouter = useAppRouter();
   const { refresh: refreshAgents } = useAgents();
   const shareAgentModal = useCreateModal();
   const deleteAgentModal = useCreateModal();
@@ -1048,7 +1048,7 @@ export default function AgentEditorPage({
       }
 
       // Immediately start a chat with this agent.
-      appRouter({ agentId: agent.id });
+      appPosition.openAgent(agent.id);
     } catch (error) {
       console.error("Submit error:", error);
       toast.error(`An error occurred: ${error}`);

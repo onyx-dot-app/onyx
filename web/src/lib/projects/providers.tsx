@@ -41,7 +41,7 @@ import {
 } from "@/lib/projects/svc";
 import { useSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
-import { useAppRouter } from "@/hooks/appNavigation";
+import { useAppPosition } from "@/lib/position/hooks";
 import { ChatFileType } from "@/app/app/interfaces";
 import { toast } from "@opal/layouts";
 import { useProjects } from "@/lib/projects/hooks";
@@ -138,6 +138,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
   // Uploads made in an incognito chat are tied to its session so the server
   // deletes them at teardown. Optional: falls back to disabled when no
   // IncognitoProvider is mounted above.
+  const appPosition = useAppPosition();
   const incognitoCtx = useIncognitoOptional();
   const incognitoUploadsEnabled = incognitoCtx?.incognitoEnabled ?? false;
   const incognitoSessionId = incognitoUploadsEnabled
@@ -169,7 +170,6 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
   const projectToUploadFilesMapRef = useRef<Map<number, ProjectFile[]>>(
     new Map()
   );
-  const route = useAppRouter();
   const settingsData = useSettings();
   const userFileMaxUploadSizeMb = settingsData.user_file_max_upload_size_mb;
 
@@ -240,7 +240,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
       try {
         const project: Project = await svcCreateProject(name);
         // Navigate to the newly created project's page
-        route({ projectId: project.id });
+        appPosition.openProject(project.id);
         // Refresh list to keep order consistent with backend
         await fetchProjects();
         return project;
@@ -250,7 +250,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
         throw err;
       }
     },
-    [fetchProjects, route]
+    [fetchProjects, appPosition]
   );
 
   const renameProject = useCallback(
@@ -292,10 +292,10 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
         setCurrentProjectDetails(null);
         setAllCurrentProjectFiles([]);
         projectToUploadFilesMapRef.current.delete(projectId);
-        route();
+        appPosition.openNewSession();
       }
     },
-    [fetchProjects, currentProjectId, projectToUploadFilesMapRef, route]
+    [fetchProjects, currentProjectId, projectToUploadFilesMapRef, appPosition]
   );
 
   const getRecentFiles = useCallback(async (): Promise<ProjectFile[]> => {

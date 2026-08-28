@@ -5,7 +5,6 @@ import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { FullAgent } from "@/lib/agents/types";
-import { useModal } from "@opal/components";
 import { Modal } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { Content, ContentAction, InputHorizontal } from "@opal/layouts";
@@ -177,10 +176,11 @@ function AgentChatInput({ agent, onSubmit }: AgentChatInputProps) {
  */
 export interface AgentViewerModalProps {
   agent: FullAgent;
+  /** Removes this agent from the URL, which is what closes the modal. */
+  onClose: () => void;
 }
-export function AgentViewerModal({ agent }: AgentViewerModalProps) {
+export function AgentViewerModal({ agent, onClose }: AgentViewerModalProps) {
   const t = useTranslations("agents.modals");
-  const agentViewerModal = useModal();
   const router = useRouter();
   const { allRecentFiles } = useProjectsContext();
   const { llmProviders } = useLLMProviders(agent.id);
@@ -193,9 +193,8 @@ export function AgentViewerModal({ agent }: AgentViewerModalProps) {
         [SEARCH_PARAM_NAMES.SEND_ON_LOAD]: "true",
       });
       router.push(`/app?${params.toString()}` as Route);
-      agentViewerModal.toggle(false);
     },
-    [agent.id, router, agentViewerModal]
+    [agent.id, router]
   );
 
   const hasKnowledge =
@@ -242,8 +241,10 @@ export function AgentViewerModal({ agent }: AgentViewerModalProps) {
 
   return (
     <Modal
-      open={agentViewerModal.isOpen}
-      onOpenChange={agentViewerModal.toggle}
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
     >
       <Modal.Content
         width="lg"
@@ -253,7 +254,7 @@ export function AgentViewerModal({ agent }: AgentViewerModalProps) {
         <Modal.Header
           icon={(props) => <AgentAvatar agent={agent} {...props} size={24} />}
           title={agent.name}
-          onClose={() => agentViewerModal.toggle(false)}
+          onClose={onClose}
         />
 
         <Modal.Body>

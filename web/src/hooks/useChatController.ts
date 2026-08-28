@@ -83,7 +83,6 @@ import { useAgentPreferences } from "@/lib/agents/hooks";
 import { useForcedTools } from "@/lib/tools/hooks";
 import { ProjectFile, useProjectsContext } from "@/lib/projects/providers";
 import { useIncognito } from "@/providers/IncognitoProvider";
-import { useAppParams } from "@/hooks/appNavigation";
 import { projectFilesToFileDescriptors } from "@/lib/projects/utils";
 import { useSharedSearchFilters } from "@/lib/searchFilters/providers";
 
@@ -151,7 +150,6 @@ export default function useChatController({
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const params = useAppParams();
   const { refreshChatSessions, addPendingChatSession } = useChatSessions();
   const { pinnedAgents, togglePinnedAgent } = usePinnedAgents();
   const { agentPreferences } = useAgentPreferences();
@@ -398,7 +396,7 @@ export default function useChatController({
       const incognito = incognitoEnabledRef.current ?? false;
       const isMultiModel =
         !regenerationRequest && (selectedModels?.length ?? 0) >= 2;
-      const projectId = params(SEARCH_PARAM_NAMES.PROJECT_ID);
+      const projectId = searchParams.get(SEARCH_PARAM_NAMES.PROJECT_ID);
       {
         const params = new URLSearchParams(searchParams?.toString() || "");
         if (params.has(SEARCH_PARAM_NAMES.PROJECT_ID)) {

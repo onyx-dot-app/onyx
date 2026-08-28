@@ -9,7 +9,6 @@ import { ChatSession } from "@/app/app/interfaces";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import { noProp } from "@/lib/utils";
 import { Popover, PopoverMenu } from "@opal/components";
-import { useAppRouter } from "@/hooks/appNavigation";
 import type { Project } from "@/lib/projects/types";
 import {
   removeChatSessionFromProject,
@@ -30,7 +29,7 @@ import {
 } from "@/lib/sidebar/utils";
 import { handleMoveOperation } from "@/lib/sidebar/svc";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
-import useAppFocus from "@/hooks/useAppFocus";
+import { useAppPosition } from "@/lib/position/hooks";
 import {
   SvgChevronLeft,
   SvgEdit,
@@ -105,12 +104,11 @@ export interface ChatButtonProps {
 const ChatButton = memo(
   ({ chatSession, project, draggable = false }: ChatButtonProps) => {
     const t = useTranslations("sidebar");
-    const route = useAppRouter();
-    const activeSidebarTab = useAppFocus();
+    const appPosition = useAppPosition();
+    const activeSidebarTab = useAppPosition();
     const active = useMemo(
       () =>
-        activeSidebarTab.isChat() &&
-        activeSidebarTab.getId() === chatSession.id,
+        activeSidebarTab.isChat() && activeSidebarTab.chat() === chatSession.id,
       [activeSidebarTab, chatSession.id]
     );
     const mounted = useOnMount();
@@ -319,7 +317,7 @@ const ChatButton = memo(
 
           // Only route if the deleted chat is the currently opened chat session
           if (active) {
-            route({ projectId: project.id });
+            appPosition.openProject(project.id);
           }
         }
         await refreshChatSessions();
@@ -394,7 +392,7 @@ const ChatButton = memo(
         await performMove(newProject.id);
 
         // Navigate to the new project to see the chat
-        route({ projectId: newProject.id });
+        appPosition.openProject(newProject.id);
         setNavigateAfterMoveProjectId(null);
       } catch (error) {
         console.error("Failed to create project and move chat:", error);
@@ -520,7 +518,7 @@ const ChatButton = memo(
                 await performMove(target);
                 // Navigate if this was triggered by creating a new project
                 if (shouldNavigate != null) {
-                  route({ projectId: shouldNavigate });
+                  appPosition.openProject(shouldNavigate);
                   setNavigateAfterMoveProjectId(null);
                 }
               }
