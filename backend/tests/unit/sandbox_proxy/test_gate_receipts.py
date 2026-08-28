@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import gzip
 from typing import Any, cast
 from uuid import UUID, uuid4
 
@@ -27,6 +28,7 @@ from onyx.sandbox_proxy.addons import gate as gate_module
 from onyx.sandbox_proxy.addons.gate import (
     RECEIPT_FLOW_KEY,
     GateAddon,
+    _CappedBodyCapture,
     _IdentityResolver,
 )
 from onyx.sandbox_proxy.credential_injection import CredentialInjectionDispatcher
@@ -79,9 +81,9 @@ def test_record_stashes_a_serializable_carrier(
     receipt_id = uuid4()
     calls: list[dict[str, Any]] = []
 
-    def _fake_record(**kwargs: Any) -> list[UUID]:
+    def _fake_record(**kwargs: Any) -> list[tuple[UUID, str]]:
         calls.append(kwargs)
-        return [receipt_id]
+        return [(receipt_id, "slack.messages.write")]
 
     monkeypatch.setattr(gate_module, "record_pending_receipts", _fake_record)
     addon = _addon()
@@ -94,7 +96,7 @@ def test_record_stashes_a_serializable_carrier(
     assert carrier == {
         "tenant_id": "public",
         "session_id": str(ctx.session_id),
-        "receipt_ids": [str(receipt_id)],
+        "receipts": [[str(receipt_id), "slack.messages.write"]],
     }
     # mitmproxy deep-copies and serializes metadata, so primitives only.
     assert copy.deepcopy(carrier) == carrier
@@ -104,7 +106,7 @@ def test_record_stashes_a_serializable_carrier(
 def test_record_failure_never_blocks_the_request(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def _boom(**_kwargs: Any) -> list[UUID]:
+    def _boom(**_kwargs: Any) -> list[tuple[UUID, str]]:
         raise RuntimeError("db down")
 
     monkeypatch.setattr(gate_module, "record_pending_receipts", _boom)
@@ -125,7 +127,7 @@ def _finalize_capture(
     def _fake_finalize(**kwargs: Any) -> None:
         calls.append(kwargs)
 
-    monkeypatch.setattr(gate_module, "finalize_receipts", _fake_finalize)
+    monkeypatch.setattr(gate_module, "finalize_recorded_flow", _fake_finalize)
     return calls
 
 
@@ -137,7 +139,7 @@ def _recorded_flow(status_code: int | None) -> Any:
     flow.metadata[RECEIPT_FLOW_KEY] = {
         "tenant_id": "public",
         "session_id": str(uuid4()),
-        "receipt_ids": [str(uuid4())],
+        "receipts": [[str(uuid4()), "slack.messages.write"]],
     }
     return flow
 
@@ -162,7 +164,7 @@ def test_response_hook_maps_status_to_verdict(
 
     asyncio.run(addon.response(flow))
 
-    assert calls[0]["status"] is expected
+    assert calls[0]["transport_status"] is expected
     # The carrier is consumed, a later hook cannot double-finalize.
     assert RECEIPT_FLOW_KEY not in flow.metadata
     asyncio.run(addon.response(flow))
@@ -178,11 +180,11 @@ def test_error_after_ok_headers_is_unknown(
     # Headers said 200, the body never finished: the origin may have
     # committed, so the verdict is UNKNOWN.
     asyncio.run(addon.error(_recorded_flow(200)))
-    assert calls[0]["status"] is ReceiptStatus.UNKNOWN
+    assert calls[0]["transport_status"] is ReceiptStatus.UNKNOWN
 
     # No response at all: the request never got a verdict, FAILED.
     asyncio.run(addon.error(_recorded_flow(None)))
-    assert calls[1]["status"] is ReceiptStatus.FAILED
+    assert calls[1]["transport_status"] is ReceiptStatus.FAILED
 
 
 def test_hooks_ignore_unrecorded_flows(
@@ -195,6 +197,94 @@ def test_hooks_ignore_unrecorded_flows(
     asyncio.run(addon.error(tflow.tflow()))
 
     assert calls == []
+
+
+def test_response_hook_hands_extractors_the_decoded_body(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = _finalize_capture(monkeypatch)
+    addon = _addon()
+    flow = _recorded_flow(200)
+    payload = b'{"ok": true, "channel": "C1", "ts": "1.2"}'
+    flow.response.headers["content-encoding"] = "gzip"
+    flow.response.raw_content = gzip.compress(payload)
+
+    asyncio.run(addon.response(flow))
+
+    assert calls[0]["response_body"] == payload
+
+
+def test_oversized_decoded_body_refines_nothing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = _finalize_capture(monkeypatch)
+    addon = _addon()
+
+    # A small compressed body must not smuggle a huge decoded one past the cap.
+    flow = _recorded_flow(200)
+    flow.response.headers["content-encoding"] = "gzip"
+    flow.response.raw_content = gzip.compress(b" " * (2 * 1024 * 1024))
+    asyncio.run(addon.response(flow))
+    assert calls[0]["response_body"] is None
+
+    # An undecodable body refines nothing rather than raising.
+    flow = _recorded_flow(200)
+    flow.response.headers["content-encoding"] = "gzip"
+    flow.response.raw_content = b"not gzip"
+    asyncio.run(addon.response(flow))
+    assert calls[1]["response_body"] is None
+
+
+def test_responseheaders_caps_every_recorded_flow(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    addon = _addon()
+
+    # Every recorded flow streams through a capped observer the response hook
+    # reads, regardless of what length the origin declares. Unrecorded flows
+    # stream unobserved.
+    recorded = _recorded_flow(200)
+    addon.responseheaders(recorded)
+    capture = recorded.response.stream
+    assert isinstance(capture, _CappedBodyCapture)
+
+    chunked = _recorded_flow(200)
+    del chunked.response.headers["content-length"]
+    addon.responseheaders(chunked)
+    assert isinstance(chunked.response.stream, _CappedBodyCapture)
+
+    unrecorded = tflow.tflow(resp=True)
+    addon.responseheaders(unrecorded)
+    assert unrecorded.response is not None and unrecorded.response.stream is True
+
+    # The observer passes chunks through untouched and the response hook
+    # reads the copy, so streamed provider responses still refine.
+    calls = _finalize_capture(monkeypatch)
+    payload = b'{"ok": true}'
+    assert capture(payload) == payload
+    assert capture(b"") == b""
+    asyncio.run(addon.response(recorded))
+    assert calls[0]["response_body"] == payload
+
+
+def test_capped_capture_drops_oversized_streams(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    addon = _addon()
+    calls = _finalize_capture(monkeypatch)
+    flow = _recorded_flow(200)
+    del flow.response.headers["content-length"]
+    addon.responseheaders(flow)
+    capture = flow.response.stream
+    assert isinstance(capture, _CappedBodyCapture)
+
+    chunk = b"x" * (512 * 1024)
+    for _ in range(5):
+        assert capture(chunk) == chunk
+    assert capture.overflowed and not capture.body
+
+    asyncio.run(addon.response(flow))
+    assert calls[0]["response_body"] is None
 
 
 def test_always_policy_writes_still_record(

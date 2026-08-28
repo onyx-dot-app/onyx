@@ -11,6 +11,7 @@ import ipaddress
 import operator
 import socket
 import threading
+import zlib
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
@@ -64,7 +65,7 @@ from onyx.sandbox_proxy.logging_utils import (
     short_log_id,
 )
 from onyx.sandbox_proxy.receipt_recorder import (
-    finalize_receipts,
+    finalize_recorded_flow,
     record_pending_receipts,
 )
 from onyx.sandbox_proxy.request_evaluator import RequestEvaluator
@@ -211,6 +212,47 @@ _GRANT_CACHE_MAX_ENTRIES = 4096
 # flow.metadata value for recorded receipts: primitives only, because
 # mitmproxy deep-copies and tnetstring-serializes flow metadata.
 RECEIPT_FLOW_KEY = "craft_recorded_receipts"
+
+# Bodies past this cap refine nothing: request facts and response links are
+# small JSON, and handing the extractors a huge body buys nothing.
+RECEIPT_REFINE_MAX_BODY_BYTES = 1024 * 1024
+
+
+class _CappedBodyCapture:
+    """Streams a recorded flow's response through untouched while keeping a
+    copy for the extractors, up to the refine cap. Oversize drops the copy."""
+
+    def __init__(self) -> None:
+        self.body = bytearray()
+        self.overflowed = False
+
+    def __call__(self, chunk: bytes) -> bytes:
+        if chunk and not self.overflowed:
+            self.body.extend(chunk)
+            if len(self.body) > RECEIPT_REFINE_MAX_BODY_BYTES:
+                self.overflowed = True
+                self.body = bytearray()
+        return chunk
+
+
+def _bounded_decode(data: bytes, content_encoding: str) -> bytes | None:
+    """Undo Content-Encoding without trusting it: output is capped so a small
+    compressed body cannot balloon in memory. Unsupported or broken codings
+    refine nothing rather than risk an unbounded decode."""
+    coding = content_encoding.strip().lower()
+    if coding in ("", "identity"):
+        return data if len(data) <= RECEIPT_REFINE_MAX_BODY_BYTES else None
+    if coding not in ("gzip", "deflate"):
+        return None
+    wbits = 16 + zlib.MAX_WBITS if coding == "gzip" else zlib.MAX_WBITS
+    try:
+        decompressor = zlib.decompressobj(wbits=wbits)
+        decoded = decompressor.decompress(data, RECEIPT_REFINE_MAX_BODY_BYTES + 1)
+    except zlib.error:
+        return None
+    if len(decoded) > RECEIPT_REFINE_MAX_BODY_BYTES or decompressor.unconsumed_tail:
+        return None
+    return decoded
 
 
 class ParkedApprovals:
@@ -369,8 +411,15 @@ class GateAddon:
         """
         if not self._stream_responses:
             return
-        if flow.response is not None:
-            flow.response.stream = True
+        if flow.response is None:
+            return
+        # A recorded flow's response feeds the receipt extractors: stream it
+        # through a capped observer, trusting no declared length, so no origin
+        # can grow proxy memory past the refine cap.
+        if RECEIPT_FLOW_KEY in flow.metadata:
+            flow.response.stream = _CappedBodyCapture()
+            return
+        flow.response.stream = True
 
     async def request(self, flow: http.HTTPFlow) -> None:
         task = asyncio.current_task()
@@ -564,14 +613,22 @@ class GateAddon:
         """Write PENDING receipts and remember them on the flow for the
         response and error hooks. Best-effort: the action proceeds either way,
         and an unrecorded action is invisible, not blocked."""
+        request_body = flow.request.raw_content
+        if (
+            request_body is not None
+            and len(request_body) > RECEIPT_REFINE_MAX_BODY_BYTES
+        ):
+            request_body = None
         try:
-            receipt_ids = await asyncio.to_thread(
+            entries = await asyncio.to_thread(
                 record_pending_receipts,
                 tenant_id=ctx.tenant_id,
                 session_id=ctx.session_id,
                 matched_actions=matched_actions,
                 approval_id=approval_id,
                 cache_factory=self._cache_factory,
+                request_path=flow.request.path,
+                request_body=request_body,
             )
         except Exception:
             logger.exception(
@@ -581,26 +638,47 @@ class GateAddon:
                 matched_actions.governing_action.action_type,
             )
             return
-        if receipt_ids:
+        if entries:
             flow.metadata[RECEIPT_FLOW_KEY] = {
                 "tenant_id": ctx.tenant_id,
                 "session_id": str(ctx.session_id),
-                "receipt_ids": [str(receipt_id) for receipt_id in receipt_ids],
+                "receipts": [
+                    [str(receipt_id), action_type]
+                    for receipt_id, action_type in entries
+                ],
             }
 
     async def response(self, flow: http.HTTPFlow) -> None:
         """Finalize recorded receipts from the origin's verdict.
 
-        Transport-level truth only: a non-error status whose body carries a
-        provider error still records CONFIRMED.
+        The buffered body rides along so the extractors can refine it; a
+        provider error hiding inside a non-error status is downgraded to
+        FAILED downstream.
         """
         recorded = flow.metadata.pop(RECEIPT_FLOW_KEY, None)
         if recorded is None:
             return
         confirmed = flow.response is not None and flow.response.status_code < 400
+        response_body: bytes | None = None
+        if flow.response is not None:
+            stream = flow.response.stream
+            wire: bytes | None = None
+            if isinstance(stream, _CappedBodyCapture):
+                wire = bytes(stream.body) if not stream.overflowed else None
+            elif not stream:
+                raw = flow.response.raw_content
+                if raw is not None and len(raw) <= RECEIPT_REFINE_MAX_BODY_BYTES:
+                    wire = raw
+            if wire is not None:
+                # The wire body is still Content-Encoding compressed and
+                # would parse as garbage undecoded.
+                response_body = _bounded_decode(
+                    wire, flow.response.headers.get("content-encoding", "")
+                )
         await self._finalize_recorded(
             recorded,
             ReceiptStatus.CONFIRMED if confirmed else ReceiptStatus.FAILED,
+            response_body=response_body,
         )
 
     async def error(self, flow: http.HTTPFlow) -> None:
@@ -613,22 +691,32 @@ class GateAddon:
         await self._finalize_recorded(
             recorded,
             ReceiptStatus.UNKNOWN if seen_ok else ReceiptStatus.FAILED,
+            response_body=None,
         )
 
     async def _finalize_recorded(
-        self, recorded: dict[str, object], status: ReceiptStatus
+        self,
+        recorded: dict[str, object],
+        status: ReceiptStatus,
+        *,
+        response_body: bytes | None,
     ) -> None:
         tenant_id = str(recorded["tenant_id"])
         session_id = UUID(str(recorded["session_id"]))
-        receipt_ids_raw = recorded["receipt_ids"]
-        assert isinstance(receipt_ids_raw, list)
+        entries_raw = recorded["receipts"]
+        assert isinstance(entries_raw, list)
         try:
             await asyncio.to_thread(
-                finalize_receipts,
+                finalize_recorded_flow,
                 tenant_id=tenant_id,
                 session_id=session_id,
-                receipt_ids=[UUID(str(rid)) for rid in receipt_ids_raw],
-                status=status,
+                entries=[
+                    (UUID(str(entry[0])), str(entry[1]))
+                    for entry in entries_raw
+                    if isinstance(entry, list) and len(entry) == 2
+                ],
+                transport_status=status,
+                response_body=response_body,
                 cache_factory=self._cache_factory,
             )
         except Exception:

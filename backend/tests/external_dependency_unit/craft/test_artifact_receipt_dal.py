@@ -14,13 +14,14 @@ import pytest
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import ArtifactType, ReceiptStatus
-from onyx.db.models import ActionReceipt, Artifact, BuildSession
+from onyx.db.models import Artifact, BuildSession
 from onyx.server.features.build.db.artifact import (
     get_session_artifacts,
     mark_artifact_deleted,
     upsert_artifact,
 )
 from onyx.server.features.build.db.receipt import (
+    InsertReceiptResult,
     finalize_receipt,
     get_session_receipts,
     insert_pending_receipt,
@@ -135,7 +136,7 @@ def _pending(
     *,
     operation_key: str | None = None,
     action_type: str = "slack.messages.write",
-) -> ActionReceipt:
+) -> InsertReceiptResult:
     return insert_pending_receipt(
         db_session,
         session_id=session.id,
@@ -159,8 +160,9 @@ def test_pending_receipt_coalesces_on_operation_key(
     third = _pending(db_session, session, operation_key="upload-2")
     db_session.commit()
 
-    assert second.id == first.id
-    assert third.id != first.id
+    assert first.created and third.created and not second.created
+    assert second.receipt.id == first.receipt.id
+    assert third.receipt.id != first.receipt.id
     assert len(get_session_receipts(db_session, session_id=session.id)) == 2
 
 
@@ -170,26 +172,41 @@ def test_finalize_is_terminal_and_rejects_pending(
     build_session_with_user: Callable[..., BuildSession],
 ) -> None:
     session = build_session_with_user()
-    receipt = _pending(db_session, session)
+    receipt = _pending(db_session, session).receipt
     db_session.commit()
 
-    confirmed = finalize_receipt(
+    confirmed, changed = finalize_receipt(
         db_session,
         receipt_id=receipt.id,
         status=ReceiptStatus.CONFIRMED,
         link="https://slack.com/archives/C1/p1",
     )
     db_session.commit()
+    assert changed
     assert confirmed is not None
     assert confirmed.status == ReceiptStatus.CONFIRMED
     assert confirmed.link is not None
 
-    flipped = finalize_receipt(
+    flipped, changed = finalize_receipt(
         db_session, receipt_id=receipt.id, status=ReceiptStatus.FAILED
     )
     db_session.commit()
+    assert not changed
     assert flipped is not None
     assert flipped.status == ReceiptStatus.CONFIRMED
+
+    # A coalesced flow's later failure is allowed to overturn the early
+    # CONFIRMED, and only then.
+    downgraded, changed = finalize_receipt(
+        db_session,
+        receipt_id=receipt.id,
+        status=ReceiptStatus.FAILED,
+        allow_failed_downgrade=True,
+    )
+    db_session.commit()
+    assert changed
+    assert downgraded is not None
+    assert downgraded.status == ReceiptStatus.FAILED
 
     with pytest.raises(ValueError):
         finalize_receipt(
@@ -203,8 +220,8 @@ def test_sweep_marks_only_stale_pending_unknown(
     build_session_with_user: Callable[..., BuildSession],
 ) -> None:
     session = build_session_with_user()
-    stale = _pending(db_session, session, action_type="drive.files.upload")
-    fresh = _pending(db_session, session)
+    stale = _pending(db_session, session, action_type="drive.files.upload").receipt
+    fresh = _pending(db_session, session).receipt
     db_session.commit()
 
     force_receipt_created_at(
