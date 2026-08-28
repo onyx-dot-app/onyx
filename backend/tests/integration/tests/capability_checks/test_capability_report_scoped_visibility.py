@@ -22,7 +22,12 @@ from onyx.connectors.capability_checks.recorder import (
     record_blocking_validation_outcome,
 )
 from onyx.connectors.models import InputType
-from onyx.db.enums import AccessType, CapabilityCheckTrigger, Permission
+from onyx.db.enums import (
+    AccessType,
+    CapabilityCheckTrigger,
+    CapabilityReportRunStatus,
+    Permission,
+)
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
@@ -33,6 +38,12 @@ from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.test_models import DATestUser, DATestUserGroup
 
 _CONNECTOR_CONFIG: dict[str, Any] = {"channels": ["general"]}
+
+_MOCK_CONFIG: dict[str, Any] = {
+    "mock_server_host": "localhost",
+    # A closed local port: instantiation fails fast without leaving the host.
+    "mock_server_port": 9,
+}
 
 _REPORTS_FOR_SOURCE_URL = f"{API_SERVER_URL}/manage/admin/credential/capability-reports"
 
@@ -95,6 +106,10 @@ def _get_report(
     )
     response.raise_for_status()
     return response.json()
+
+
+def _check_url(credential_id: int) -> str:
+    return f"{API_SERVER_URL}/manage/admin/credential/{credential_id}/capability-check"
 
 
 @pytest.mark.skipif(
@@ -286,3 +301,146 @@ def test_managed_pairing_is_readable_without_credential_visibility(
     listing_response.raise_for_status()
     listed_connector_ids = {row["connector_id"] for row in listing_response.json()}
     assert connector.id in listed_connector_ids
+
+
+@pytest.mark.skipif(
+    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    reason="Scoped group managers are enterprise only",
+)
+def test_scoped_manager_cannot_trigger_foreign_pairings(
+    admin_user: DATestUser,
+) -> None:
+    # Precondition.
+    # Mirrors the read test on the trigger side, on the mock source so the one
+    # legitimately enqueued run needs no external service.
+    suffix = uuid4().hex[:8]
+    manager, managed_group = _bootstrap_scoped_manager(admin_user, suffix)
+    foreign_group = UserGroupManager.create(
+        name=f"foreign_group_{suffix}",
+        user_ids=[],
+        cc_pair_ids=[],
+        user_performing_action=admin_user,
+    )
+    UserGroupManager.wait_for_sync(
+        user_groups_to_check=[foreign_group],
+        user_performing_action=admin_user,
+    )
+    credential = CredentialManager.create(
+        source=DocumentSource.MOCK_CONNECTOR,
+        admin_public=True,
+        curator_public=False,
+        groups=[],
+        user_performing_action=manager,
+    )
+    in_group_connector = ConnectorManager.create(
+        source=DocumentSource.MOCK_CONNECTOR,
+        input_type=InputType.POLL,
+        connector_specific_config=_MOCK_CONFIG,
+        user_performing_action=admin_user,
+    )
+    foreign_connector = ConnectorManager.create(
+        source=DocumentSource.MOCK_CONNECTOR,
+        input_type=InputType.POLL,
+        connector_specific_config=_MOCK_CONFIG,
+        user_performing_action=admin_user,
+    )
+    orphan_connector = ConnectorManager.create(
+        source=DocumentSource.MOCK_CONNECTOR,
+        input_type=InputType.POLL,
+        connector_specific_config=_MOCK_CONFIG,
+        user_performing_action=admin_user,
+    )
+    CCPairManager.create(
+        connector_id=in_group_connector.id,
+        credential_id=credential.id,
+        access_type=AccessType.PRIVATE,
+        groups=[managed_group.id],
+        user_performing_action=admin_user,
+    )
+    CCPairManager.create(
+        connector_id=foreign_connector.id,
+        credential_id=credential.id,
+        access_type=AccessType.PRIVATE,
+        groups=[foreign_group.id],
+        user_performing_action=admin_user,
+    )
+
+    # Under test and postcondition.
+    # Hidden pairings reject with the same shape as a nonexistent connector, and
+    # nothing gets marked RUNNING.
+    for connector_id in (foreign_connector.id, orphan_connector.id):
+        response = client.post(
+            _check_url(credential.id),
+            json={"connector_id": connector_id},
+            headers=manager.headers,
+        )
+        assert response.status_code == 404
+        assert response.json()["error_code"] == "CONNECTOR_NOT_FOUND"
+        assert _get_report(credential.id, connector_id, admin_user) is None
+
+    # The manager's own group's pairing triggers normally.
+    response = client.post(
+        _check_url(credential.id),
+        json={"connector_id": in_group_connector.id},
+        headers=manager.headers,
+    )
+    response.raise_for_status()
+    accepted = response.json()
+    assert accepted["run_status"] == CapabilityReportRunStatus.RUNNING.value
+    assert accepted["connector_id"] == in_group_connector.id
+
+
+@pytest.mark.skipif(
+    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    reason="Scoped group managers are enterprise only",
+)
+def test_managed_pairing_is_triggerable_without_credential_visibility(
+    admin_user: DATestUser,
+) -> None:
+    # Precondition.
+    # An admin-created credential paired into the manager's managed group: the
+    # trigger-side mirror of the read test above. The credential filter is
+    # creator-only for scoped managers, so only pairing visibility can admit the
+    # run.
+    suffix = uuid4().hex[:8]
+    manager, managed_group = _bootstrap_scoped_manager(admin_user, suffix)
+    credential = CredentialManager.create(
+        source=DocumentSource.MOCK_CONNECTOR,
+        admin_public=True,
+        curator_public=False,
+        groups=[],
+        user_performing_action=admin_user,
+    )
+    connector = ConnectorManager.create(
+        source=DocumentSource.MOCK_CONNECTOR,
+        input_type=InputType.POLL,
+        connector_specific_config=_MOCK_CONFIG,
+        user_performing_action=admin_user,
+    )
+    CCPairManager.create(
+        connector_id=connector.id,
+        credential_id=credential.id,
+        access_type=AccessType.PRIVATE,
+        groups=[managed_group.id],
+        user_performing_action=admin_user,
+    )
+
+    # Under test and postcondition.
+    # Pairing visibility alone authorizes the connector-scoped trigger; the
+    # credential-scoped trigger stays gated on credential visibility and reads
+    # as inaccessible.
+    response = client.post(
+        _check_url(credential.id),
+        json={"connector_id": connector.id},
+        headers=manager.headers,
+    )
+    response.raise_for_status()
+    accepted = response.json()
+    assert accepted["run_status"] == CapabilityReportRunStatus.RUNNING.value
+    assert accepted["connector_id"] == connector.id
+    credential_scope_response = client.post(
+        _check_url(credential.id), json={}, headers=manager.headers
+    )
+    assert credential_scope_response.status_code == 404
+    error_code = credential_scope_response.json()["error_code"]
+    assert error_code == "CREDENTIAL_NOT_FOUND"

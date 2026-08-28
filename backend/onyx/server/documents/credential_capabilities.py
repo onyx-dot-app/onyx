@@ -1,19 +1,31 @@
-"""Read-only API over stored credential capability reports.
+"""API over stored credential capability reports.
 
-The blocking-validation recorder writes these rows today; the granular
-check-runner task will write them too once it exists. Reports are advisory:
-nothing here gates connector creation or indexing.
+The blocking-validation recorder and the granular check-runner task write the
+rows; these endpoints read them and trigger runs. Reports are advisory: nothing
+here gates connector creation or indexing, and check failures are report
+content, never an HTTP error.
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
+from typing import Any
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import has_global_permission, require_permission
-from onyx.configs.constants import DocumentSource
+from onyx.background.celery.versioned_apps.client import app as client_app
+from onyx.configs.constants import (
+    DocumentSource,
+    OnyxCeleryPriority,
+    OnyxCeleryQueues,
+    OnyxCeleryTask,
+)
 from onyx.connectors.capability_checks.models import CredentialCapabilityReport
+from onyx.connectors.capability_checks.runner import (
+    CAPABILITY_CHECK_RUN_STALENESS_SECONDS,
+)
+from onyx.db.connector import fetch_connector_by_id
 from onyx.db.connector_credential_pair import (
     get_connector_credential_pair_for_user,
     get_connector_credential_pairs_for_user,
@@ -21,6 +33,8 @@ from onyx.db.connector_credential_pair import (
 from onyx.db.credential_capability import (
     get_capability_report_row,
     get_capability_report_rows_for_source,
+    mark_capability_report_running,
+    mark_capability_run_failed,
 )
 from onyx.db.credentials import (
     fetch_credential_by_id,
@@ -32,6 +46,10 @@ from onyx.db.enums import CapabilityCheckTrigger, CapabilityReportRunStatus, Per
 from onyx.db.models import CredentialCapabilityReportRow, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import get_current_tenant_id
+
+logger = setup_logger()
 
 router = APIRouter(prefix="/manage")
 
@@ -90,6 +108,144 @@ def _connector_pairing_visible(
         )
         is not None
     )
+
+
+class CapabilityCheckRunRequest(BaseModel):
+    """Body of the trigger endpoint: which scope to run against.
+
+    Both fields absent is the config-less credential-scoped run.
+    ``connector_specific_config`` overrides the connector's stored config (a
+    not-yet-saved edit) and is only meaningful with ``connector_id``.
+    """
+
+    # Both fields are optional, so a typoed field name would otherwise silently
+    # select the wrong scope.
+    model_config = ConfigDict(extra="forbid")
+
+    connector_id: int | None = None
+    connector_specific_config: dict[str, Any] | None = None
+
+
+@router.post("/admin/credential/{credential_id}/capability-check")
+def trigger_capability_check(
+    credential_id: int,
+    request: CapabilityCheckRunRequest,
+    user: User = Depends(
+        require_permission(Permission.MANAGE_CONNECTORS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> CapabilityReportSnapshot:
+    """Marks the scope RUNNING, enqueues the check run, and returns the row.
+
+    Accepted-style: the run happens on a worker and the caller polls the GET;
+    the previous report stays readable meanwhile. A run already RUNNING within
+    the staleness bound makes this a no-op returning the standing row. A
+    connector-scoped trigger requires the pairing to be visible to the caller.
+    """
+    # GATE 2 for ``allow_scope``, mirroring the report reads: credential
+    # visibility authorizes the credential scope; pairing visibility authorizes
+    # the connector scope on its own, so a pairing manager triggers its run even
+    # when the credential is outside their credential visibility. An unknown
+    # credential is indistinguishable from an inaccessible one.
+    pairing_visible = request.connector_id is not None and _connector_pairing_visible(
+        db_session, request.connector_id, credential_id, user
+    )
+    credential = fetch_credential_by_id_for_user(credential_id, user, db_session)
+    if credential is None and pairing_visible:
+        # The run needs the credential row itself; the unfiltered fetch also
+        # keeps an unknown credential a 404 for global managers, whose pairing
+        # shortcut checks nothing.
+        credential = fetch_credential_by_id(credential_id, db_session)
+    if credential is None:
+        raise OnyxError(
+            OnyxErrorCode.CREDENTIAL_NOT_FOUND,
+            f"Credential {credential_id} does not exist or is not accessible.",
+        )
+    if request.connector_specific_config is not None and request.connector_id is None:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "connector_specific_config requires connector_id: the "
+            "credential-scoped run is config-less by definition.",
+        )
+    if request.connector_id is not None:
+        connector = fetch_connector_by_id(request.connector_id, db_session)
+        # One shape for missing and inaccessible, so neither connector existence
+        # nor pairing membership leaks. The source check stays behind it.
+        if connector is None or not pairing_visible:
+            raise OnyxError(
+                OnyxErrorCode.CONNECTOR_NOT_FOUND,
+                f"Connector {request.connector_id} does not exist or is not "
+                "accessible.",
+            )
+        if connector.source != credential.source:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                f"Connector {request.connector_id} is a "
+                f"{connector.source.value} connector; credential "
+                f"{credential_id} is for {credential.source.value}.",
+            )
+    row = mark_capability_report_running(
+        db_session,
+        credential_id=credential_id,
+        connector_id=request.connector_id,
+        source=credential.source,
+        trigger=CapabilityCheckTrigger.MANUAL,
+        active_within=timedelta(seconds=CAPABILITY_CHECK_RUN_STALENESS_SECONDS),
+    )
+    if row is None:
+        # An unexpired run is in flight; return its row without re-enqueueing.
+        standing = get_capability_report_row(
+            db_session, credential_id, request.connector_id
+        )
+        if standing is None:
+            # The blocking row vanished between the two statements: the
+            # credential (or the paired connector) was deleted concurrently and
+            # its report rows cascaded away.
+            raise OnyxError(
+                OnyxErrorCode.CREDENTIAL_NOT_FOUND,
+                f"Credential {credential_id} or its paired connector was "
+                "deleted while the request was in flight.",
+            )
+        return CapabilityReportSnapshot.from_row(standing)
+    snapshot = CapabilityReportSnapshot.from_row(row)
+    # Commit before enqueueing so the worker can only observe the RUNNING mark.
+    db_session.commit()
+    try:
+        client_app.send_task(
+            OnyxCeleryTask.RUN_CAPABILITY_CHECKS,
+            kwargs=dict(
+                credential_id=credential_id,
+                connector_id=request.connector_id,
+                connector_specific_config=request.connector_specific_config,
+                tenant_id=get_current_tenant_id(),
+            ),
+            queue=OnyxCeleryQueues.CAPABILITY_CHECKS,
+            priority=OnyxCeleryPriority.HIGH,
+            # The queued run and its RUNNING mark go stale together, so an
+            # expired task never strands an unmarkable scope.
+            expires=CAPABILITY_CHECK_RUN_STALENESS_SECONDS,
+        )
+    except Exception:
+        # The 503 handler logs no traceback, so record the cause here (broker
+        # down and a bad task payload must stay distinguishable in the logs).
+        logger.exception(
+            "Capability check enqueue failed for credential %s, connector %s.",
+            credential_id,
+            request.connector_id,
+        )
+        # No run was enqueued: FAILED_TO_RUN is the truth pollers should read,
+        # and it does not block an immediate re-trigger.
+        mark_capability_run_failed(
+            db_session,
+            credential_id=credential_id,
+            connector_id=request.connector_id,
+        )
+        db_session.commit()
+        raise OnyxError(
+            OnyxErrorCode.SERVICE_UNAVAILABLE,
+            "Could not enqueue the capability check run; try again shortly.",
+        )
+    return snapshot
 
 
 @router.get("/admin/credential/{credential_id}/capability-report")
