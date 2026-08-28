@@ -244,6 +244,44 @@ ods web lint
 ods web test --watch
 ```
 
+### `test` - Run Tests
+
+Run the repo's Go test suites without changing directories or remembering
+which module owns a file.
+
+```shell
+ods test <suite|path> [args...]
+```
+
+The first argument is a suite name or a path inside a module. A path selects
+the suite that covers it, so you can pass a file straight from your editor. All
+later arguments go to `go test`.
+
+| Suite | Aliases | Module |
+| --- | --- | --- |
+| `ods` | | `tools/ods` |
+| `cli` | | `cli` |
+| `terraform` | `tf` | `terraform-provider-onyx` |
+
+The suites run with `-race`, the same as `pr-golang-tests.yml`. `go test` takes
+packages rather than files, so a file argument runs the package that holds it,
+and `<file>::<TestName>` becomes a `-run` filter.
+
+**Examples:**
+
+```shell
+# Run a whole module
+ods test ods
+
+# Run one package, one file's package, or one test
+ods test tools/ods/internal/testsuite
+ods test tools/ods/internal/testsuite/testsuite_test.go
+ods test tools/ods/internal/testsuite/testsuite_test.go::TestResolveGoTargets
+
+# Forward arguments to go test
+ods test cli -run TestChat -v
+```
+
 ### `dev` - Devcontainer Management
 
 Manage the Onyx devcontainer. Also available as `ods dc`.
