@@ -168,14 +168,20 @@ class DisposableEmailValidator:
         """
         with self._spawn_lock:
             thread = self._refresh_thread
-            if thread is None or not thread.is_alive():
-                thread = threading.Thread(
-                    target=self._refresh,
-                    name="disposable-email-domains-refresh",
-                    daemon=True,
-                )
-                self._refresh_thread = thread
-                thread.start()
+            if thread is not None:
+                if thread.is_alive():
+                    return thread
+                # Re-check staleness under the lock: a refresh may have
+                # completed after the caller decided one was needed
+                if not self._should_refresh():
+                    return thread
+            thread = threading.Thread(
+                target=self._refresh,
+                name="disposable-email-domains-refresh",
+                daemon=True,
+            )
+            self._refresh_thread = thread
+            thread.start()
             return thread
 
     def get_domains(self) -> Set[str]:

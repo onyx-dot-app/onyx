@@ -44,7 +44,8 @@ def _response(
 
 
 def _refresh_and_get(validator: DisposableEmailValidator) -> set[str]:
-    """Run a refresh to completion and return the resulting domains."""
+    """Force a refresh, run it to completion, and return the domains."""
+    validator._last_fetch_time = 0
     thread = validator._start_refresh()
     thread.join(timeout=5)
     assert not thread.is_alive()
@@ -208,6 +209,25 @@ class TestStaleWhileRevalidate:
 
             assert client.get.call_count == 1
             assert "fetched-domain.example" in fresh_validator.get_domains()
+
+    def test_no_redundant_refresh_when_cache_became_fresh(
+        self, fresh_validator: DisposableEmailValidator
+    ) -> None:
+        with mock.patch(
+            "onyx.auth.disposable_email_validator.httpx.Client"
+        ) as mock_client:
+            client = mock_client.return_value.__enter__.return_value
+            client.get.return_value = _response(
+                200, json_body=["fetched-domain.example"], headers={"ETag": _ETAG}
+            )
+            _refresh_and_get(fresh_validator)
+            assert client.get.call_count == 1
+
+            # A caller that saw a stale cache before this refresh finished
+            # must not trigger a second fetch now that the cache is fresh
+            thread = fresh_validator._start_refresh()
+            thread.join(timeout=5)
+            assert client.get.call_count == 1
 
 
 class TestDisposableEmailValidator:
