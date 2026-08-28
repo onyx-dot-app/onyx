@@ -11,7 +11,7 @@ import { routeWithQuery } from "@/lib/routes";
 // somewhere — or to know where they are — states it as a URL and reads it back
 // here, rather than keeping a second copy of the answer in component state.
 
-export type AppPositionType =
+type AppPositionType =
   // Chat ids are opaque; agent and project ids are rows.
   | { location: "chat"; id: string }
   | { location: "agent" | "project"; id: number }
@@ -68,9 +68,9 @@ function hrefFor(value: AppPositionType): Route {
   }
 }
 
-export class AppPosition {
+class AppPosition {
   constructor(
-    public value: AppPositionType,
+    private value: AppPositionType,
     private router: Router
   ) {}
 
