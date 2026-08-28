@@ -2367,3 +2367,52 @@ def test_get_llm_provider_by_id(reset: None) -> None:  # noqa: ARG001
     )
     assert missing.status_code == 404
     assert missing.json()["error_code"] == "NOT_FOUND"
+
+
+def test_keep_existing_models_preserves_unsent_models(
+    reset: None,  # noqa: ARG001
+) -> None:
+    """Without the flag the model list is a full replace, which silently drops
+    rows the read hides (obsolete models, dated duplicates)."""
+    admin_user = UserManager.create(name="admin_user")
+    name = str(uuid.uuid4())
+
+    created = client.put(
+        f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
+        headers=admin_user.headers,
+        json={
+            "name": name,
+            "provider": LlmProviderNames.OPENAI,
+            "api_key": "sk-000000000000000000000000000000000000000000000000",
+            "model_configurations": [
+                {"name": "gpt-4", "is_visible": True},
+                {"name": "gpt-4o", "is_visible": True},
+            ],
+            "is_public": True,
+            "groups": [],
+        },
+    )
+    assert created.status_code == 200
+    provider_id = created.json()["id"]
+
+    def _update(keep: bool) -> list[str]:
+        response = client.put(
+            f"{API_SERVER_URL}/admin/llm/provider",
+            headers=admin_user.headers,
+            json={
+                "id": provider_id,
+                "name": name,
+                "provider": LlmProviderNames.OPENAI,
+                "model_configurations": [{"name": "gpt-4", "is_visible": True}],
+                "is_public": True,
+                "groups": [],
+                "keep_existing_models": keep,
+            },
+        )
+        assert response.status_code == 200
+        return sorted(mc["name"] for mc in response.json()["model_configurations"])
+
+    # Sending only gpt-4 keeps gpt-4o.
+    assert _update(keep=True) == ["gpt-4", "gpt-4o"]
+    # The default is still a full replace.
+    assert _update(keep=False) == ["gpt-4"]
