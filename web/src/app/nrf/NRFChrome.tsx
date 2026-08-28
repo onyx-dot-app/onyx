@@ -10,7 +10,7 @@ import { SvgBubbleText, SvgSearchMenu, SvgSidebar } from "@opal/icons";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 import { useIsSearchModeAvailable } from "@/lib/settings/hooks";
 import { useCustomFooterContent } from "@/lib/app/hooks";
-import { useAppPosition } from "@/lib/app/position";
+import { useAppPosition } from "@/lib/position/hooks";
 import type { AppMode } from "@/providers/QueryControllerProvider";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";

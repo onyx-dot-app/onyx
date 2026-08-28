@@ -26,7 +26,7 @@ import {
   SvgTrash,
 } from "@opal/icons";
 import ChatButton from "@/sections/sidebar/ChatButton";
-import { useAppPosition } from "@/lib/app/position";
+import { useAppPosition } from "@/lib/position/hooks";
 import { noProp } from "@/lib/utils";
 import { DRAG_TYPES } from "@/lib/sidebar/constants";
 import { useActiveProject } from "@/lib/projects/hooks";

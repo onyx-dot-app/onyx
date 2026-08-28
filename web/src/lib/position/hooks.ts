@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useMemo } from "react";
 import type { Route } from "next";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
@@ -26,13 +26,6 @@ interface NavigationOptions {
 
 type Router = ReturnType<typeof useRouter>;
 
-/**
- * Which pathname and which parameter name each location lives at.
- *
- * The mirror of the derivation at the bottom of this file, so reading a
- * position and going to one cannot drift apart: they are the same knowledge,
- * stated once in each direction.
- */
 /** A row id, or null for a parameter that is absent or is not one. */
 function rowId(raw: string | null): number | null {
   if (raw === null) return null;
@@ -40,6 +33,13 @@ function rowId(raw: string | null): number | null {
   return Number.isInteger(parsed) ? parsed : null;
 }
 
+/**
+ * Which pathname and which parameter name each location lives at.
+ *
+ * The mirror of the derivation at the bottom of this file, so reading a
+ * position and going to one cannot drift apart: they are the same knowledge,
+ * stated once in each direction.
+ */
 function hrefFor(value: AppPositionType): Route {
   switch (value.location) {
     case "chat":
@@ -258,10 +258,4 @@ export function useAppPosition(): AppPosition {
     }
     return new AppPosition({ location: "new-session" }, router);
   }, [pathname, chatId, agentId, projectId, router]);
-}
-
-/** One search parameter by name, for the few reads that are not a position. */
-export function useAppParams() {
-  const searchParams = useSearchParams();
-  return useCallback((name: string) => searchParams.get(name), [searchParams]);
 }

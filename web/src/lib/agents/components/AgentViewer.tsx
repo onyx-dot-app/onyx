@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { useAgent } from "@/lib/agents/hooks";
 import { FetchError } from "@/lib/fetcher";
 import { AgentViewerModal } from "@/lib/agents/components";
-import { useAppPosition } from "@/lib/app/position";
+import { useAppPosition } from "@/lib/position/hooks";
 
 /** Whether the failure says the agent is absent, rather than unreachable. */
 function namesNoAgent(error: unknown): boolean {

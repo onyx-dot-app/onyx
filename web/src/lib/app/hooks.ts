@@ -2,7 +2,7 @@
 
 import { useLayoutEffect } from "react";
 import { usePathname } from "next/navigation";
-import { useAppPosition } from "@/lib/app/position";
+import { useAppPosition } from "@/lib/position/hooks";
 import { useSettings } from "@/lib/settings/hooks";
 import { APP_SLOGAN } from "@/lib/constants";
 import useChatSessions from "@/hooks/useChatSessions";

@@ -41,7 +41,7 @@ import {
 } from "@/lib/projects/svc";
 import { useSearchParams } from "next/navigation";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
-import { useAppPosition } from "@/lib/app/position";
+import { useAppPosition } from "@/lib/position/hooks";
 import { ChatFileType } from "@/app/app/interfaces";
 import { toast } from "@opal/layouts";
 import { useProjects } from "@/lib/projects/hooks";

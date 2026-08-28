@@ -23,7 +23,7 @@ import {
   SvgUser,
 } from "@opal/icons";
 import { useCreateModal } from "@opal/components";
-import { useAppPosition } from "@/lib/app/position";
+import { useAppPosition } from "@/lib/position/hooks";
 import { ShareAgentModal } from "@/lib/agents/components";
 import { CardItemLayout } from "@/layouts/general-layouts";
 import { Content } from "@opal/layouts";
