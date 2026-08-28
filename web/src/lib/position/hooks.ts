@@ -98,10 +98,6 @@ class AppPosition {
     this.go({ location: "project", id: projectId }, options);
   }
 
-  openMoreAgents(options?: NavigationOptions) {
-    this.go({ location: "more-agents" }, options);
-  }
-
   openNewSession(options?: NavigationOptions) {
     this.go({ location: "new-session" }, options);
   }
