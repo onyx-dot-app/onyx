@@ -13,6 +13,7 @@ from mcp.client.auth import OAuthClientProvider
 from mcp.shared.auth import OAuthClientInformationFull
 from mcp.types import Tool as MCPLibTool
 from pydantic import AnyUrl, BaseModel
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.auth.oauth_token_manager import validate_oauth_endpoint_url
@@ -1491,9 +1492,7 @@ def _upsert_db_tools(
     processed_names: set[str],
     mcp_server_id: int,
     db: Session,
-) -> bool:
-    db_dirty = False
-
+) -> None:
     for tool in discovered_tools:
         tool_name = tool.name
         if not tool_name:
@@ -1506,15 +1505,9 @@ def _upsert_db_tools(
         input_schema = tool.inputSchema
 
         if existing_tool := existing_by_name.get(tool_name):
-            if existing_tool.description != description:
-                existing_tool.description = description
-                db_dirty = True
-            if existing_tool.display_name != display_name:
-                existing_tool.display_name = display_name
-                db_dirty = True
-            if existing_tool.mcp_input_schema != input_schema:
-                existing_tool.mcp_input_schema = input_schema
-                db_dirty = True
+            existing_tool.description = description
+            existing_tool.display_name = display_name
+            existing_tool.mcp_input_schema = input_schema
             continue
 
         new_tool = create_tool__no_commit(
@@ -1530,8 +1523,43 @@ def _upsert_db_tools(
         )
         new_tool.display_name = display_name
         new_tool.mcp_input_schema = input_schema
-        db_dirty = True
-    return db_dirty
+        # Register it so a repeated name in this response is not inserted again.
+        existing_by_name[tool_name] = new_tool
+
+
+def _sync_mcp_server_tools(
+    mcp_server_id: int,
+    discovered_tools: list[MCPLibTool],
+    db: Session,
+) -> None:
+    """Make the stored tools for the server match the discovered tools.
+
+    Locks the server row so concurrent refreshes run one at a time. The second
+    caller then sees the rows the first one committed instead of inserting them
+    again. The commit at the end releases the lock.
+    """
+    db.execute(
+        select(DbMCPServer.id).where(DbMCPServer.id == mcp_server_id).with_for_update()
+    )
+
+    existing_by_name: dict[str, Tool] = {}
+    for db_tool in get_tools_by_mcp_server_id(mcp_server_id, db, order_by_id=True):
+        if db_tool.name in existing_by_name:
+            # Duplicate left by an earlier unguarded sync; keep the oldest row.
+            delete_tool__no_commit(db_tool.id, db)
+            continue
+        existing_by_name[db_tool.name] = db_tool
+
+    processed_names: set[str] = set()
+    _upsert_db_tools(
+        discovered_tools, existing_by_name, processed_names, mcp_server_id, db
+    )
+
+    for name, db_tool in existing_by_name.items():
+        if name not in processed_names:
+            delete_tool__no_commit(db_tool.id, db)
+
+    db.commit()
 
 
 def _list_mcp_tools_by_id(
@@ -1611,21 +1639,7 @@ def _list_mcp_tools_by_id(
     db.commit()
 
     if is_admin:
-        existing_tools = get_tools_by_mcp_server_id(mcp_server.id, db)
-        existing_by_name = {db_tool.name: db_tool for db_tool in existing_tools}
-        processed_names: set[str] = set()
-
-        db_dirty = _upsert_db_tools(
-            discovered_tools, existing_by_name, processed_names, mcp_server.id, db
-        )
-
-        for name, db_tool in existing_by_name.items():
-            if name not in processed_names:
-                delete_tool__no_commit(db_tool.id, db)
-                db_dirty = True
-
-        if db_dirty:
-            db.commit()
+        _sync_mcp_server_tools(mcp_server.id, discovered_tools, db)
 
     # Truncate tool descriptions to prevent overly long responses
     for tool in discovered_tools:
