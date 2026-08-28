@@ -119,8 +119,14 @@ def remove_standard_answer_category(
     db_session: Session,
 ) -> None:
     """Hard delete, unlike a standard answer, which deactivates. A category has
-    no active flag, and anything still pointing at it would be left dangling, so
-    a referenced category is refused instead."""
+    no active flag, and anything still in use pointing at it would be left
+    dangling, so a referenced category is refused instead.
+
+    A deactivated standard answer does not block: it is already gone from every
+    caller's point of view, and there is no route that revives one. Its rows in
+    the association table go with the category, which SQLAlchemy removes itself
+    for a `secondary` relationship.
+    """
     category = fetch_standard_answer_category(
         standard_answer_category_id=standard_answer_category_id,
         db_session=db_session,
