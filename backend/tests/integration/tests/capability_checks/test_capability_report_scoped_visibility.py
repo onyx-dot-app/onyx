@@ -313,34 +313,15 @@ def test_scoped_manager_cannot_trigger_foreign_pairings(
     # Precondition. Mirrors the read test on the trigger side, on the mock
     # source so the one legitimately enqueued run needs no external service.
     suffix = uuid4().hex[:8]
-    manager = UserManager.create(name=f"trigger_manager_{suffix}")
-    managed_group = UserGroupManager.create(
-        name=f"trigger_managed_{suffix}",
-        user_ids=[manager.id],
-        cc_pair_ids=[],
-        user_performing_action=admin_user,
-    )
+    manager, managed_group = _bootstrap_scoped_manager(admin_user, suffix)
     foreign_group = UserGroupManager.create(
-        name=f"trigger_foreign_{suffix}",
+        name=f"foreign_group_{suffix}",
         user_ids=[],
         cc_pair_ids=[],
         user_performing_action=admin_user,
     )
     UserGroupManager.wait_for_sync(
-        user_groups_to_check=[managed_group, foreign_group],
-        user_performing_action=admin_user,
-    )
-    set_manager_response = UserGroupManager.set_manager(
-        user_group=managed_group,
-        user=manager,
-        is_manager=True,
-        user_performing_action=admin_user,
-    )
-    assert set_manager_response.status_code == 200
-    # Group edits mark the group as syncing; cc-pair creation refuses to
-    # relate a group mid-sync, so wait again before pairing.
-    UserGroupManager.wait_for_sync(
-        user_groups_to_check=[managed_group, foreign_group],
+        user_groups_to_check=[foreign_group],
         user_performing_action=admin_user,
     )
     credential = CredentialManager.create(
@@ -419,30 +400,7 @@ def test_managed_pairing_is_triggerable_without_credential_visibility(
     # credential filter is creator-only for scoped managers, so only pairing
     # visibility can admit the run.
     suffix = uuid4().hex[:8]
-    manager = UserManager.create(name=f"trigger_manager_{suffix}")
-    managed_group = UserGroupManager.create(
-        name=f"trigger_managed_{suffix}",
-        user_ids=[manager.id],
-        cc_pair_ids=[],
-        user_performing_action=admin_user,
-    )
-    UserGroupManager.wait_for_sync(
-        user_groups_to_check=[managed_group],
-        user_performing_action=admin_user,
-    )
-    set_manager_response = UserGroupManager.set_manager(
-        user_group=managed_group,
-        user=manager,
-        is_manager=True,
-        user_performing_action=admin_user,
-    )
-    assert set_manager_response.status_code == 200
-    # Group edits mark the group as syncing; cc-pair creation refuses to
-    # relate a group mid-sync, so wait again before pairing.
-    UserGroupManager.wait_for_sync(
-        user_groups_to_check=[managed_group],
-        user_performing_action=admin_user,
-    )
+    manager, managed_group = _bootstrap_scoped_manager(admin_user, suffix)
     credential = CredentialManager.create(
         source=DocumentSource.MOCK_CONNECTOR,
         admin_public=True,
