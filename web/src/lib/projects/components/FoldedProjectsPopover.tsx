@@ -18,7 +18,7 @@ import {
 import { useFocusOnMount } from "@opal/hooks";
 import { Section } from "@opal/layouts";
 import { SvgFolder, SvgFolderPlus } from "@opal/icons";
-import { useAppPosition } from "@/lib/app/hooks";
+import { useAppPosition } from "@/lib/app/position";
 import { noProp } from "@/lib/utils";
 import { UNNAMED_CHAT } from "@/lib/constants";
 import { usePinChatAgent } from "@/lib/agents/hooks";

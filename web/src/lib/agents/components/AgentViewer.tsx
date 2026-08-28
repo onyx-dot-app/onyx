@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { useAgent } from "@/lib/agents/hooks";
 import { FetchError } from "@/lib/fetcher";
 import { AgentViewerModal } from "@/lib/agents/components";
-import { useAppPosition } from "@/lib/app/hooks";
+import { useAppPosition } from "@/lib/app/position";
 
 /** Whether the failure says the agent is absent, rather than unreachable. */
 function namesNoAgent(error: unknown): boolean {
@@ -26,11 +26,8 @@ function namesNoAgent(error: unknown): boolean {
 export function AgentViewer() {
   const appPosition = useAppPosition();
 
-  const previewed = appPosition.previewedAgent();
-  const agentId = previewed === null ? null : Number(previewed);
-  const isRequestable = agentId !== null && Number.isInteger(agentId);
-
-  const { agent, isLoading, error } = useAgent(isRequestable ? agentId : null);
+  const previewedAgentId = appPosition.previewedAgent();
+  const { agent, isLoading, error } = useAgent(previewedAgentId);
 
   // An id naming nothing the user can open is not a position, so it does not
   // stay in the URL. Replaced rather than pushed: going back should reach
@@ -40,15 +37,14 @@ export function AgentViewer() {
   // status saying the agent is not there, or not theirs, retires the position;
   // a timeout or a 500 is left for SWR to retry, so a blip does not discard a
   // link that works.
-  const isUnopenable =
-    previewed !== null && (!isRequestable || namesNoAgent(error));
+  const isUnopenable = previewedAgentId !== null && namesNoAgent(error);
   useEffect(() => {
     if (isUnopenable) appPosition.openMoreAgents({ replace: true });
   }, [isUnopenable, appPosition]);
 
   // Nothing is rendered while the agent loads. The listing stays interactive
   // underneath, and a modal appearing late reads better than an empty one.
-  if (previewed === null || isLoading || agent === null) return null;
+  if (previewedAgentId === null || isLoading || agent === null) return null;
 
   return (
     <AgentViewerModal

@@ -8,7 +8,7 @@ import {
   SearchFullResponse,
 } from "@/lib/search/interfaces";
 import { classifyQuery, searchDocuments } from "@/ee/lib/search/svc";
-import { useAppPosition } from "@/lib/app/hooks";
+import { useAppPosition } from "@/lib/app/position";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
 import { useIsSearchModeAvailable } from "@/lib/settings/hooks";

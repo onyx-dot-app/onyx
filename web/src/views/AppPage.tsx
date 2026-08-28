@@ -71,10 +71,8 @@ import {
   useToastFromQuery,
 } from "@opal/layouts";
 import { SvgNotFound, SvgNoAccess } from "@opal/illustrations";
-import {
-  useAppPosition,
-  useChatSessionSupportsRetrieval,
-} from "@/lib/app/hooks";
+import { useChatSessionSupportsRetrieval } from "@/lib/app/hooks";
+import { useAppPosition } from "@/lib/app/position";
 import useScreenSize from "@/hooks/useScreenSize";
 import { useSidebarState } from "@opal/layouts";
 import { useQueryController } from "@/providers/QueryControllerProvider";

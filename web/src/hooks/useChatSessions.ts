@@ -12,7 +12,7 @@ import { ChatSession, ChatSessionSharedStatus } from "@/app/app/interfaces";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { MinimalAgent } from "@/lib/agents/types";
-import { useAppPosition } from "@/lib/app/hooks";
+import { useAppPosition } from "@/lib/app/position";
 import { useAgents } from "@/lib/agents/hooks";
 import { useActiveProject } from "@/lib/projects/hooks";
 import { DEFAULT_AGENT_ID } from "@/lib/constants";
@@ -129,7 +129,7 @@ function useFindAgentForCurrentChatSession(
   // Or this could be a new chat-session with an agent.
   else {
     const agentId = appPosition.agent();
-    if (agentId !== null) agentIdToFind = Number.parseInt(agentId);
+    if (agentId !== null) agentIdToFind = agentId;
   }
 
   return agents.find((agent) => agent.id === agentIdToFind) ?? null;

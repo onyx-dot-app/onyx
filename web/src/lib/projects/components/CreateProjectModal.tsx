@@ -5,7 +5,7 @@ import * as Yup from "yup";
 import { Button } from "@opal/components";
 import { useProjectsContext } from "@/lib/projects/providers";
 import { InputVertical, toast } from "@opal/layouts";
-import { useAppPosition } from "@/lib/app/hooks";
+import { useAppPosition } from "@/lib/app/position";
 import { useModal } from "@opal/components";
 import { SvgFolderPlus } from "@opal/icons";
 import { Modal } from "@opal/components";

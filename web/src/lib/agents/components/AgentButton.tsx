@@ -12,7 +12,7 @@ import useOnMount from "@/hooks/useOnMount";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { SvgX } from "@opal/icons";
 import { Hoverable } from "@opal/core";
-import { useAppPosition } from "@/lib/app/hooks";
+import { useAppPosition } from "@/lib/app/position";
 interface SortableItemProps {
   id: number;
   children?: React.ReactNode;

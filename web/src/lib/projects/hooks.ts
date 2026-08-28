@@ -6,7 +6,7 @@ import { Project, ProjectSearchMatch } from "@/lib/projects/types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { UNNAMED_CHAT } from "@/lib/constants";
-import { useAppPosition } from "@/lib/app/hooks";
+import { useAppPosition } from "@/lib/app/position";
 
 export function useProjects() {
   const { data, error, mutate } = useSWR<Project[]>(
@@ -43,9 +43,7 @@ export function useActiveProject(): Project | null {
   return useMemo(() => {
     const projectId = appPosition.project();
     if (projectId !== null) {
-      return (
-        projects.find((project) => String(project.id) === projectId) ?? null
-      );
+      return projects.find((project) => project.id === projectId) ?? null;
     }
 
     const chatId = appPosition.chat();

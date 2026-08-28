@@ -83,7 +83,7 @@ import { useAgentPreferences } from "@/lib/agents/hooks";
 import { useForcedTools } from "@/lib/tools/hooks";
 import { ProjectFile, useProjectsContext } from "@/lib/projects/providers";
 import { useIncognito } from "@/providers/IncognitoProvider";
-import { useAppParams } from "@/lib/app/hooks";
+import { useAppParams } from "@/lib/app/position";
 import { projectFilesToFileDescriptors } from "@/lib/projects/utils";
 import { useSharedSearchFilters } from "@/lib/searchFilters/providers";
 
