@@ -53,6 +53,7 @@ import {
   type ConfiguredEmbeddingProvider,
   type EmbeddingModel,
   type EmbeddingModelRequest,
+  type EmbeddingModelSelection,
   type EmbeddingModelState,
   type EmbeddingProvider,
 } from "@/lib/indexing/types";
@@ -63,13 +64,14 @@ import {
   findProvider,
   findRegistryModel,
   isCloudBased,
-  isSameModelSelection,
   MAX_IMAGE_SIZE_OPTIONS,
-  resolveModelForApply,
   resolveProviderName,
-  savedModelSelection,
-  type EmbeddingModelSelection,
 } from "@/lib/indexing";
+import {
+  isSameModelSelection,
+  resolveModelForApply,
+  savedModelSelection,
+} from "@/lib/indexing/utils";
 import {
   saveAdminSettings,
   cancelNewEmbedding,

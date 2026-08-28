@@ -2,7 +2,7 @@ import {
   isSameModelSelection,
   resolveModelForApply,
   savedModelSelection,
-} from "@/lib/indexing";
+} from "@/lib/indexing/utils";
 import {
   EmbeddingModelSpec,
   EmbeddingProviderName,
