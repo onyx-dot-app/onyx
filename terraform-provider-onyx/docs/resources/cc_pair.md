@@ -38,10 +38,9 @@ resource "onyx_cc_pair" "hr_handbook" {
   connector_id  = onyx_connector.hr_drive.id
   credential_id = onyx_credential.hr_drive.id
 
-  # Group ids come from the Onyx admin panel. There is no user group
-  # resource yet, so set them literally.
+  # This side owns the link, so a group never fights the pair over it.
   access_type = "private"
-  groups      = [4, 7]
+  groups      = [onyx_user_group.hr.id, onyx_user_group.legal.id]
 
   # Pause a pair to stop new index runs. It keeps the documents it has.
   paused = false

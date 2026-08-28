@@ -19,10 +19,10 @@ import { Button } from "@opal/components";
 import { Agent } from "@/lib/agents/types";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import PreviewModal from "@/sections/modals/PreviewModal";
-import { UNNAMED_CHAT } from "@/lib/constants";
 import Text from "@/refresh-components/texts/Text";
 import useOnMount from "@/hooks/useOnMount";
 import SharedAppInputBar from "@/sections/input/SharedAppInputBar";
+import { useTranslations } from "next-intl";
 
 export interface SharedChatDisplayProps {
   chatSession: BackendChatSession | null;
@@ -33,6 +33,7 @@ export default function SharedChatDisplay({
   chatSession,
   persona,
 }: SharedChatDisplayProps) {
+  const t = useTranslations("chat.sharedChat");
   const [presentingDocument, setPresentingDocument] =
     useState<MinimalOnyxDocument | null>(null);
 
@@ -52,11 +53,11 @@ export default function SharedChatDisplay({
         <Section flexDirection="column" alignItems="center" gap={4}>
           <IllustrationContent
             illustration={SvgNotFound}
-            title="Shared chat not found"
-            description="Did not find a shared chat with the specified ID."
+            title={t("notFound.title")}
+            description={t("notFound.description")}
           />
           <Button href="/app" prominence="secondary">
-            Start a new chat
+            {t("newChatButton.label")}
           </Button>
         </Section>
       </div>
@@ -77,11 +78,11 @@ export default function SharedChatDisplay({
         <Section flexDirection="column" alignItems="center" gap={4}>
           <IllustrationContent
             illustration={SvgNotFound}
-            title="Shared chat not found"
-            description="No messages found in shared chat."
+            title={t("notFound.title")}
+            description={t("emptyChat.description")}
           />
           <Button href="/app" prominence="secondary">
-            Start a new chat
+            {t("newChatButton.label")}
           </Button>
         </Section>
       </div>
@@ -101,15 +102,17 @@ export default function SharedChatDisplay({
         <div className="flex-1 flex flex-col items-center overflow-y-auto">
           <div className="sticky top-0 z-10 flex items-center justify-between w-full bg-background-tint-01 px-8 py-4">
             <Text as="p" text04 headingH2>
-              {chatSession.description || UNNAMED_CHAT}
+              {chatSession.description || t("header.untitledChat.title")}
             </Text>
             <div className="flex flex-col items-end">
               <Text as="p" text03 secondaryBody>
-                Shared on {humanReadableFormat(chatSession.time_created)}
+                {t("header.sharedOn.text", {
+                  date: humanReadableFormat(chatSession.time_created),
+                })}
               </Text>
               {chatSession.owner_name && (
                 <Text as="p" text03 secondaryBody>
-                  by {chatSession.owner_name}
+                  {t("header.owner.text", { name: chatSession.owner_name })}
                 </Text>
               )}
             </div>

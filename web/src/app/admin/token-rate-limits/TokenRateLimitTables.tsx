@@ -1,5 +1,6 @@
 "use client";
 
+import { useLocale, useTranslations } from "next-intl";
 import { deleteTokenRateLimit, updateTokenRateLimit } from "./lib";
 import { ContentAction, PageLoader, Section, toast } from "@opal/layouts";
 import { TokenRateLimitDisplay } from "./types";
@@ -10,26 +11,6 @@ import { SvgTrash, SvgUsers, SvgWallet } from "@opal/icons";
 import { formatCurrencyFromCents, formatTokenCount } from "@/lib/format";
 
 const HOURS_PER_DAY = 24;
-const UPDATE_ERROR_MESSAGE = "Failed to update token rate limit";
-const DELETE_ERROR_MESSAGE = "Failed to delete token rate limit";
-
-function formatBudget(limit: TokenRateLimitDisplay): string {
-  const parts: string[] = [];
-  if (limit.cost_budget_cents != null) {
-    parts.push(formatCurrencyFromCents(limit.cost_budget_cents));
-  }
-  if (limit.token_budget != null) {
-    parts.push(`${formatTokenCount(limit.token_budget * 1000)} tokens`);
-  }
-  if (parts.length === 0) return "No budget set";
-  return `Up to ${parts.join(" or ")}`;
-}
-
-function formatCadence(limit: TokenRateLimitDisplay): string {
-  const days = limit.period_hours / HOURS_PER_DAY;
-  const period = days === 1 ? "every day" : `every ${days} days`;
-  return `Resets ${period} at midnight UTC`;
-}
 
 interface LimitRowProps {
   limit: TokenRateLimitDisplay;
@@ -39,7 +20,30 @@ interface LimitRowProps {
 }
 
 function LimitRow({ limit, isAdmin, onToggle, onDelete }: LimitRowProps) {
-  const limitLabel = `${formatBudget(limit)}, ${formatCadence(limit)}`;
+  const t = useTranslations("admin.tokenRateLimits");
+  const locale = useLocale();
+
+  const cost =
+    limit.cost_budget_cents != null
+      ? formatCurrencyFromCents(limit.cost_budget_cents, locale)
+      : null;
+  const tokens =
+    limit.token_budget != null
+      ? formatTokenCount(limit.token_budget * 1000, locale)
+      : null;
+
+  const budget =
+    cost !== null && tokens !== null
+      ? t("limits.budget.both", { cost, tokens })
+      : cost !== null
+        ? t("limits.budget.cost", { cost })
+        : tokens !== null
+          ? t("limits.budget.tokens", { tokens })
+          : t("limits.budget.none");
+  const cadence = t("limits.cadence.label", {
+    days: limit.period_hours / HOURS_PER_DAY,
+  });
+  const limitLabel = t("limits.row.label", { budget, cadence });
 
   return (
     <div className="rounded-12 border border-border-01 bg-background-neutral-00">
@@ -47,8 +51,8 @@ function LimitRow({ limit, isAdmin, onToggle, onDelete }: LimitRowProps) {
         sizePreset="main-ui"
         variant="section"
         icon={limit.group_name !== undefined ? SvgUsers : SvgWallet}
-        title={formatBudget(limit)}
-        description={formatCadence(limit)}
+        title={budget}
+        description={cadence}
         tag={
           limit.group_name !== undefined
             ? { title: limit.group_name }
@@ -63,7 +67,9 @@ function LimitRow({ limit, isAdmin, onToggle, onDelete }: LimitRowProps) {
               disabled={!isAdmin}
               onCheckedChange={() => onToggle(limit.token_id)}
               aria-label={
-                limit.enabled ? `Disable ${limitLabel}` : `Enable ${limitLabel}`
+                limit.enabled
+                  ? t("limits.row.disable.ariaLabel", { label: limitLabel })
+                  : t("limits.row.enable.ariaLabel", { label: limitLabel })
               }
             />
             {isAdmin && (
@@ -72,8 +78,10 @@ function LimitRow({ limit, isAdmin, onToggle, onDelete }: LimitRowProps) {
                 prominence="tertiary"
                 icon={SvgTrash}
                 size="sm"
-                tooltip="Delete limit"
-                aria-label={`Delete ${limitLabel}`}
+                tooltip={t("limits.row.delete.tooltip")}
+                aria-label={t("limits.row.delete.ariaLabel", {
+                  label: limitLabel,
+                })}
                 onClick={() => onDelete(limit.token_id)}
               />
             )}
@@ -99,6 +107,8 @@ export const TokenRateLimitTable = ({
   hideHeading,
   isAdmin,
 }: TokenRateLimitTableArgs) => {
+  const t = useTranslations("admin.tokenRateLimits");
+
   const handleEnabledChange = async (id: number) => {
     const tokenRateLimit = tokenRateLimits.find(
       (tokenRateLimit) => tokenRateLimit.token_id === id
@@ -118,7 +128,7 @@ export const TokenRateLimitTable = ({
       await mutate(fetchUrl);
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : UPDATE_ERROR_MESSAGE
+        error instanceof Error ? error.message : t("limits.updateFailed.error")
       );
     }
   };
@@ -129,7 +139,7 @@ export const TokenRateLimitTable = ({
       await mutate(fetchUrl);
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : DELETE_ERROR_MESSAGE
+        error instanceof Error ? error.message : t("limits.deleteFailed.error")
       );
     }
   };
@@ -144,7 +154,7 @@ export const TokenRateLimitTable = ({
       {tokenRateLimits.length === 0 ? (
         <div className="rounded-12 border border-dashed border-border-02 p-4">
           <Text font="secondary-body" color="text-03" as="p">
-            No limits yet. Create a spending limit to cap usage.
+            {t("limits.empty.message")}
           </Text>
         </div>
       ) : (
@@ -175,6 +185,7 @@ export const GenericTokenRateLimitTable = ({
   responseMapper?: (data: any) => TokenRateLimitDisplay[];
   isAdmin?: boolean;
 }) => {
+  const t = useTranslations("admin.tokenRateLimits");
   const { data, isLoading, error } = useSWR<TokenRateLimitDisplay[]>(
     fetchUrl,
     errorHandlingFetcher
@@ -185,7 +196,7 @@ export const GenericTokenRateLimitTable = ({
   }
 
   if (!isLoading && error) {
-    return <Text as="p">Failed to load token rate limits</Text>;
+    return <Text as="p">{t("limits.loadFailed.error")}</Text>;
   }
 
   let processedData = data;

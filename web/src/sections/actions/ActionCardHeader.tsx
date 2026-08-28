@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { useTranslations } from "next-intl";
 import { Button } from "@opal/components";
 import { cn } from "@opal/utils";
 import { ActionStatus } from "@/lib/tools/types";
@@ -28,6 +29,7 @@ function ActionCardHeader({
   onEdit,
   onRename,
 }: ActionCardHeaderProps) {
+  const t = useTranslations("actions");
   const [isRenaming, setIsRenaming] = useState(false);
 
   const isConnected = status === ActionStatus.CONNECTED;
@@ -101,7 +103,7 @@ function ActionCardHeader({
               text03
               className="shrink-0 whitespace-nowrap"
             >
-              (Not Authenticated)
+              {t("cardHeader.notAuthenticated.label")}
             </Text>
           )}
           {isDisconnected && !isRenaming && (
@@ -111,7 +113,7 @@ function ActionCardHeader({
               text02
               className="shrink-0 whitespace-nowrap"
             >
-              (Disconnected)
+              {t("cardHeader.disconnected.label")}
             </Text>
           )}
           {showRenameIcon && (
@@ -119,11 +121,11 @@ function ActionCardHeader({
               <div className="opacity-70 hover:opacity-100">
                 <Button
                   icon={SvgEdit}
-                  tooltip="Rename"
+                  tooltip={t("cardHeader.renameButton.tooltip")}
                   prominence="tertiary"
                   size="sm"
                   onClick={handleRenameClick}
-                  aria-label={`Rename ${title}`}
+                  aria-label={t("cardHeader.renameButton.ariaLabel", { title })}
                 />
               </div>
             </Hoverable.Item>

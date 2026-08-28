@@ -1,10 +1,6 @@
 "use client";
 
 import { Logo } from "@/lib/app/components";
-import {
-  getRandomGreeting,
-  GREETING_MESSAGES,
-} from "@/lib/chat/greetingMessages";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import Text from "@/refresh-components/texts/Text";
 import { MinimalAgent } from "@/lib/agents/types";
@@ -14,6 +10,7 @@ import FrostedDiv from "@/refresh-components/FrostedDiv";
 import { Section } from "@/layouts/general-layouts";
 import { SvgEyeClosed } from "@opal/icons";
 import { useIncognito } from "@/providers/IncognitoProvider";
+import { useTranslations } from "next-intl";
 
 export interface WelcomeMessageProps {
   agent?: MinimalAgent;
@@ -24,18 +21,21 @@ export default function WelcomeMessage({
   agent,
   isDefaultAgent,
 }: WelcomeMessageProps) {
+  const t = useTranslations("chat.welcome");
   const settings = useSettings();
 
   // Use a stable default for SSR, then randomize on client after hydration
-  const [greeting, setGreeting] = useState(GREETING_MESSAGES[0]);
+  const [greeting, setGreeting] = useState(t("greeting.helpText"));
 
   useEffect(() => {
     if (settings.enterprise?.custom_greeting_message) {
       setGreeting(settings.enterprise.custom_greeting_message);
     } else {
-      setGreeting(getRandomGreeting());
+      setGreeting(
+        Math.random() < 0.5 ? t("greeting.helpText") : t("greeting.startText")
+      );
     }
-  }, [settings.enterprise?.custom_greeting_message]);
+  }, [settings.enterprise?.custom_greeting_message, t]);
 
   const { incognitoEnabled } = useIncognito();
 
@@ -52,7 +52,7 @@ export default function WelcomeMessage({
       >
         <SvgEyeClosed size={32} className="text-text-04" />
         <Text as="p" headingH2>
-          You&apos;re incognito
+          {t("incognito.title")}
         </Text>
       </Section>
     );

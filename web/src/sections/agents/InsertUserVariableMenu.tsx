@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { useFormikContext } from "formik";
 import { Button, LineItemButton, Popover, PopoverMenu } from "@opal/components";
 import { SvgBracketCurly } from "@opal/icons";
@@ -23,6 +24,7 @@ interface InsertUserVariableMenuProps {
 export default function InsertUserVariableMenu({
   fieldName,
 }: InsertUserVariableMenuProps) {
+  const t = useTranslations("agents");
   const [open, setOpen] = useState(false);
   const { setFieldValue, values } = useFormikContext<Record<string, unknown>>();
 
@@ -75,7 +77,7 @@ export default function InsertUserVariableMenu({
             prominence="internal"
             size="xs"
             icon={SvgBracketCurly}
-            tooltip="Insert user variable"
+            tooltip={t("userVariables.insert.tooltip")}
           />
         </div>
       </Popover.Trigger>

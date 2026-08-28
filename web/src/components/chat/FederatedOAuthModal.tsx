@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { Card, Modal } from "@opal/components";
 import { Button } from "@opal/components";
 import { ValidSources } from "@/lib/types";
@@ -100,6 +101,7 @@ function useFederatedOauthModal() {
 }
 
 export default function FederatedOAuthModal() {
+  const t = useTranslations("chat.federatedOAuth");
   const { appName: applicationName } = useSettings();
 
   const {
@@ -121,8 +123,8 @@ export default function FederatedOAuthModal() {
       <Modal.Content width="sm" height="sm">
         <Modal.Header
           icon={SvgLink}
-          title="Connect Your Apps"
-          description={`Improve answer quality by letting ${applicationName} search all your connected data.`}
+          title={t("header.title")}
+          description={t("header.description", { appName: applicationName })}
         />
         <Modal.Body>
           {needsAuth.map((connector) => {
@@ -149,7 +151,7 @@ export default function FederatedOAuthModal() {
                         target="_blank"
                         href={connector.authorize_url}
                       >
-                        Connect
+                        {t("connectButton.label")}
                       </Button>
                     }
                   />
@@ -159,7 +161,9 @@ export default function FederatedOAuthModal() {
           })}
         </Modal.Body>
         <Modal.Footer>
-          <Button onClick={handleOAuthModalSkip}>Skip for now</Button>
+          <Button onClick={handleOAuthModalSkip}>
+            {t("skipButton.label")}
+          </Button>
         </Modal.Footer>
       </Modal.Content>
     </Modal>

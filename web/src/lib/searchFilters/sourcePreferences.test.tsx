@@ -1,8 +1,8 @@
 import { renderHook, act } from "@testing-library/react";
 import { ValidSources } from "@/lib/types";
 import { SourceMetadata } from "@/lib/search/interfaces";
-import { useSourcePreferences } from "@/lib/hooks";
-import { buildFilters } from "@/lib/search/utils";
+import { useSourcePreferences } from "@/lib/searchFilters/hooks";
+import { buildFilters } from "@/lib/searchFilters/utils";
 
 beforeEach(() => {
   localStorage.clear();

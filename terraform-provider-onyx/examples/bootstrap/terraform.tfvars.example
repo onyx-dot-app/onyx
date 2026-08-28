@@ -1,0 +1,22 @@
+# Copy to terraform.tfvars and fill in. Keep terraform.tfvars out of version
+# control: it holds secrets.
+
+onyx_server_url = "http://localhost:8080"
+
+# The secrets stay commented so the environment wins by default. A value set
+# here overrides ONYX_API_KEY / TF_VAR_openai_api_key, so a placeholder left
+# in place would be sent as though it were a real key.
+#
+#   export ONYX_API_KEY="$(./mint_api_key.sh)"
+#   export TF_VAR_openai_api_key="sk-..."
+#
+# Uncomment instead to keep them in this file.
+#
+# onyx_api_key   = "on_..."
+# openai_api_key = "sk-..."
+
+company_name  = "ACME Corp"
+docs_base_url = "https://docs.onyx.app"
+
+# Enterprise Edition only.
+enable_enterprise_features = false

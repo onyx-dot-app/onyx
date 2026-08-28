@@ -11,7 +11,7 @@ import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 
 const LOCAL_STORAGE_KEY = "selectedInternalSearchSources";
 
-test.describe("ActionsPopover Tool Toggles", () => {
+test.describe("ToolsPopover Tool Toggles", () => {
   test.describe.configure({ mode: "serial" });
 
   let ccPairId: number | null = null;

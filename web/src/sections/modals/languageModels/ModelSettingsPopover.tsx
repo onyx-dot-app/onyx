@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { Button, Popover, Text, Tooltip } from "@opal/components";
 import { SvgBarChart, SvgCode, SvgSliders, SvgThermometer } from "@opal/icons";
 import { ContentAction, Section } from "@opal/layouts";
@@ -12,22 +13,18 @@ import { modelDisplayName } from "@/lib/languageModels/utils";
 import {
   ALL_REASONING_STOPS,
   PaneSlider,
-  REASONING_STOP_LABELS,
-  UNKNOWN_CONTEXT_TOOLTIP,
+  REASONING_STOP_LABEL_KEYS,
   formatContextWindow,
   maxReasoningStop,
   reasoningStopIndex,
 } from "@/sections/model-selector/setting-controls";
-
-const PINNED_TEMPERATURE_TOOLTIP =
-  "Reasoning models always run at temperature 1.";
 
 /** Where an unset slider parks: the backend default (medium reasoning,
  *  GEN_AI_TEMPERATURE for temperature). */
 const UNSET_REASONING_STOP = ALL_REASONING_STOPS.indexOf("medium");
 const UNSET_TEMPERATURE = 0;
 
-const TEMPERATURE_MARKS = ["Deterministic", "Balanced", "Creative"];
+const TEMPERATURE_MARK_COUNT = 3;
 
 export type ModelSettingsPatch = Partial<
   Pick<
@@ -171,6 +168,10 @@ export function ModelSettingsPopover({
   onChange,
   onOpenChange,
 }: ModelSettingsPopoverProps) {
+  const t = useTranslations("admin.languageModels.modals");
+  // The reasoning, context and temperature vocabulary is shared with the chat
+  // model selector, so both surfaces read the same messages.
+  const tModelSelector = useTranslations("chat.modelSelector");
   const [open, setOpen] = useState(false);
   function handleOpenChange(next: boolean) {
     setOpen(next);
@@ -199,17 +200,23 @@ export function ModelSettingsPopover({
       : Math.min(UNSET_REASONING_STOP, effectiveMaxStop);
 
   const reasoningMarks = ALL_REASONING_STOPS.slice(0, supportedStop + 1).map(
-    (stop) => REASONING_STOP_LABELS[stop]
+    (stop) => tModelSelector(REASONING_STOP_LABEL_KEYS[stop])
   );
+  const temperatureMarks = [
+    tModelSelector("temperature.deterministic.label"),
+    tModelSelector("temperature.balanced.label"),
+    tModelSelector("temperature.creative.label"),
+  ];
   const temperature = model.temperature_default ?? UNSET_TEMPERATURE;
   const temperatureMark = Math.min(
-    Math.floor((temperature / maxTemperature) * TEMPERATURE_MARKS.length),
-    TEMPERATURE_MARKS.length - 1
+    Math.floor((temperature / maxTemperature) * TEMPERATURE_MARK_COUNT),
+    TEMPERATURE_MARK_COUNT - 1
   );
 
   const capabilities = [
-    model.supports_reasoning && "reasoning",
-    model.supports_image_input && "multi-modal",
+    model.supports_reasoning && t("modelSettings.capabilities.reasoning.label"),
+    model.supports_image_input &&
+      t("modelSettings.capabilities.multiModal.label"),
   ].filter((c): c is string => Boolean(c));
 
   function setMax(stop: number) {
@@ -240,7 +247,7 @@ export function ModelSettingsPopover({
           icon={SvgSliders}
           prominence="internal"
           size="sm"
-          tooltip="Model Settings"
+          tooltip={t("modelSettings.trigger.tooltip")}
           onClick={(e: React.MouseEvent) => e.stopPropagation()}
         />
       </Popover.Trigger>
@@ -257,21 +264,25 @@ export function ModelSettingsPopover({
               {modelDisplayName(model)}
             </Text>
             <Text font="secondary-body" color="text-02">
-              {capabilities.length ? capabilities.join(", ") : "chat"}
+              {capabilities.length
+                ? capabilities.join(", ")
+                : t("modelSettings.capabilities.chat.label")}
             </Text>
           </Section>
 
           <SectionHeader
             icon={SvgCode}
-            title="Context Window"
-            caption="Tokens limit for each session"
+            title={tModelSelector("contextWindow.row.title")}
+            caption={tModelSelector("contextWindow.row.caption")}
             rightValue={
               model.max_input_tokens
                 ? formatContextWindow(model.max_input_tokens)
                 : "\u2014"
             }
             rightValueTooltip={
-              model.max_input_tokens ? undefined : UNKNOWN_CONTEXT_TOOLTIP
+              model.max_input_tokens
+                ? undefined
+                : tModelSelector("contextWindow.unknown.tooltip")
             }
           />
 
@@ -284,11 +295,11 @@ export function ModelSettingsPopover({
             >
               <SectionHeader
                 icon={SvgBarChart}
-                title="Reasoning Level"
-                caption="How much thinking the model should perform before answering"
+                title={tModelSelector("reasoningLevel.row.title")}
+                caption={tModelSelector("reasoningLevel.row.caption")}
               />
               <PolicySlider
-                label="Max Level"
+                label={t("modelSettings.reasoningLevel.maxSlider.label")}
                 value={effectiveMaxStop}
                 max={supportedStop}
                 step={1}
@@ -297,7 +308,7 @@ export function ModelSettingsPopover({
                 onChange={setMax}
               />
               <PolicySlider
-                label="Default"
+                label={t("modelSettings.reasoningLevel.defaultSlider.label")}
                 value={defaultSliderStop}
                 max={supportedStop}
                 step={1}
@@ -310,7 +321,7 @@ export function ModelSettingsPopover({
 
           <Disabled
             disabled={temperatureDisabled}
-            tooltip={PINNED_TEMPERATURE_TOOLTIP}
+            tooltip={t("modelSettings.temperature.pinned.tooltip")}
             tooltipSide="top"
           >
             <Section
@@ -321,15 +332,15 @@ export function ModelSettingsPopover({
             >
               <SectionHeader
                 icon={SvgThermometer}
-                title="Temperature"
-                caption="How predictable or creative the model should respond"
+                title={tModelSelector("temperature.row.title")}
+                caption={tModelSelector("temperature.row.caption")}
               />
               <PolicySlider
-                label="Default"
+                label={t("modelSettings.temperature.defaultSlider.label")}
                 value={temperatureDisabled ? 1 : temperature}
                 max={maxTemperature}
                 step={0.1}
-                marks={TEMPERATURE_MARKS}
+                marks={temperatureMarks}
                 activeMark={temperatureMark}
                 onChange={(v) => onChange({ temperature_default: v })}
               />

@@ -1,13 +1,8 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { Button } from "@opal/components";
 import type { EndpointPolicy } from "@/app/craft/v1/apps/registry";
-
-const POLICY_OPTIONS: { value: EndpointPolicy; label: string }[] = [
-  { value: "ALWAYS", label: "Auto-approve" },
-  { value: "ASK", label: "Ask" },
-  { value: "DENY", label: "Deny" },
-];
 
 interface PolicyToggleProps {
   value: EndpointPolicy;
@@ -17,9 +12,17 @@ interface PolicyToggleProps {
 /** Three-state Craft approval policy selector, shared by per-action and
  * per-tool policy rows. */
 export default function PolicyToggle({ value, onChange }: PolicyToggleProps) {
+  const t = useTranslations("actions");
+
+  const policyOptions: { value: EndpointPolicy; label: string }[] = [
+    { value: "ALWAYS", label: t("policyToggle.always.label") },
+    { value: "ASK", label: t("policyToggle.ask.label") },
+    { value: "DENY", label: t("policyToggle.deny.label") },
+  ];
+
   return (
     <div className="flex gap-1 shrink-0">
-      {POLICY_OPTIONS.map((option) => (
+      {policyOptions.map((option) => (
         <Button
           key={option.value}
           size="xs"

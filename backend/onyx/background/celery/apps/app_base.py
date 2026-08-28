@@ -273,14 +273,14 @@ def on_task_revoked(
     srem's the taskset) never fires. Without this, the stranded id keeps the
     taskset non-empty and wedges the sync fence until its 7-day TTL.
     """
-    task_id = getattr(request, "id", None)
+    task_id = getattr(request, "id", None)  # ods: ignore[getattr]
     if not task_id:
         return
 
     if not task_id.startswith(DOCUMENT_SYNC_PREFIX):
         return
 
-    request_kwargs = getattr(request, "kwargs", None) or {}
+    request_kwargs = getattr(request, "kwargs", None) or {}  # ods: ignore[getattr]
     tenant_id = cast(str, request_kwargs.get("tenant_id", POSTGRES_DEFAULT_SCHEMA))
 
     r = get_redis_client(tenant_id=tenant_id)

@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { Button, Card } from "@opal/components";
 import { Content } from "@opal/layouts";
 import { SvgPlusCircle } from "@opal/icons";
@@ -12,7 +13,7 @@ interface AdminListHeaderProps {
   searchQuery: string;
   /** Called when the search query changes. */
   onSearchQueryChange: (query: string) => void;
-  /** Search input placeholder. */
+  /** Search input placeholder. Defaults to the shared "Search..." copy. */
   placeholder?: string;
   /** Text shown in the empty-state card when no items exist. */
   emptyStateText: string;
@@ -54,11 +55,12 @@ export default function AdminListHeader({
   hasItems,
   searchQuery,
   onSearchQueryChange,
-  placeholder = "Search...",
+  placeholder,
   emptyStateText,
   onAction,
   actionLabel,
 }: AdminListHeaderProps) {
+  const t = useTranslations("admin.shared");
   // Pin the button to its label width — the flexible sibling (search input /
   // empty-state text) absorbs the row shrink; otherwise the button clips its label.
   const actionButton =
@@ -92,7 +94,7 @@ export default function AdminListHeader({
       <InputTypeIn
         variant="internal"
         searchIcon
-        placeholder={placeholder}
+        placeholder={placeholder ?? t("listHeader.search.placeholder")}
         value={searchQuery}
         onChange={(e) => onSearchQueryChange(e.target.value)}
       />

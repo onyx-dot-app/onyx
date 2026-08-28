@@ -194,7 +194,7 @@ def actor_from_user(
     try:
         return AuditActor(
             user_id=str(user.id),
-            email=getattr(user, "email", None),
+            email=getattr(user, "email", None),  # ods: ignore[getattr]
             auth_type=auth_type,
         )
     except Exception:

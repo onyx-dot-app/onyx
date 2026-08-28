@@ -1,40 +1,43 @@
-import { OnboardingStep, FinalStepItemProps } from "@/interfaces/onboarding";
+import { OnboardingStep } from "@/interfaces/onboarding";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { SvgGlobe, SvgImage, SvgUsers } from "@opal/icons";
+import type { IconFunctionComponent } from "@opal/types";
 
+// Modules cannot call hooks, so the configs below hold message keys (inside the
+// `onboarding` namespace) and the consuming components resolve them with `t`.
 type StepConfig = {
   index: number;
-  title: string;
-  buttonText: string;
+  titleKey: string;
+  buttonTextKey: string;
   iconPercentage: number;
 };
 
-export const STEP_CONFIG: Record<OnboardingStep, StepConfig> = {
+export const STEP_CONFIG = {
   [OnboardingStep.Welcome]: {
     index: 0,
-    title: "Let's take a moment to get you set up.",
-    buttonText: "Let's Go",
+    titleKey: "steps.welcome.title",
+    buttonTextKey: "steps.welcome.button.label",
     iconPercentage: 10,
   },
   [OnboardingStep.Name]: {
     index: 1,
-    title: "Let's take a moment to get you set up.",
-    buttonText: "Next",
+    titleKey: "steps.name.title",
+    buttonTextKey: "steps.name.button.label",
     iconPercentage: 40,
   },
   [OnboardingStep.LlmSetup]: {
     index: 2,
-    title: "Almost there! Connect your models to start chatting.",
-    buttonText: "Next",
+    titleKey: "steps.llmSetup.title",
+    buttonTextKey: "steps.llmSetup.button.label",
     iconPercentage: 70,
   },
   [OnboardingStep.Complete]: {
     index: 3,
-    title: "You're all set, review the optional settings or click Finish Setup",
-    buttonText: "Finish Setup",
+    titleKey: "steps.complete.title",
+    buttonTextKey: "steps.complete.button.label",
     iconPercentage: 100,
   },
-} as const;
+} as const satisfies Record<OnboardingStep, StepConfig>;
 
 export const TOTAL_STEPS = 3;
 
@@ -54,26 +57,34 @@ export const STEP_NAVIGATION: Record<
   [OnboardingStep.Complete]: { prev: OnboardingStep.LlmSetup },
 };
 
-export const FINAL_SETUP_CONFIG: FinalStepItemProps[] = [
+export type FinalSetupItemConfig = {
+  titleKey: string;
+  descriptionKey: string;
+  icon: IconFunctionComponent;
+  buttonTextKey: string;
+  buttonHref: string;
+};
+
+export const FINAL_SETUP_CONFIG = [
   {
-    title: "Select web search provider",
-    description: "Enable Onyx to search the internet for information.",
+    titleKey: "finalStep.webSearch.title",
+    descriptionKey: "finalStep.webSearch.description",
     icon: SvgGlobe,
-    buttonText: "Web Search",
+    buttonTextKey: "finalStep.webSearch.button.label",
     buttonHref: ADMIN_ROUTES.WEB_SEARCH.path,
   },
   {
-    title: "Enable image generation",
-    description: "Set up models to create images in your chats.",
+    titleKey: "finalStep.imageGeneration.title",
+    descriptionKey: "finalStep.imageGeneration.description",
     icon: SvgImage,
-    buttonText: "Image Generation",
+    buttonTextKey: "finalStep.imageGeneration.button.label",
     buttonHref: ADMIN_ROUTES.IMAGE_GENERATION.path,
   },
   {
-    title: "Invite your team",
-    description: "Manage users and permissions for your team",
+    titleKey: "finalStep.inviteTeam.title",
+    descriptionKey: "finalStep.inviteTeam.description",
     icon: SvgUsers,
-    buttonText: "Manage Users",
+    buttonTextKey: "finalStep.inviteTeam.button.label",
     buttonHref: ADMIN_ROUTES.USERS.path,
   },
-];
+] as const satisfies readonly FinalSetupItemConfig[];

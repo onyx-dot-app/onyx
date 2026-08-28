@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useMemo } from "react";
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
@@ -78,15 +79,16 @@ function ModelConfigurationItem({
   onRemove,
   canRemove,
 }: ModelConfigurationItemProps) {
+  const t = useTranslations("admin.languageModels.modals");
   return (
     <>
       <InputTypeIn
-        placeholder="Model name"
+        placeholder={t("custom.modelRow.namePlaceholder")}
         value={model.name}
         onChange={(e) => onChange({ ...model, name: e.target.value })}
       />
       <InputTypeIn
-        placeholder="Display name"
+        placeholder={t("custom.modelRow.displayNamePlaceholder")}
         value={model.display_name}
         onChange={(e) => onChange({ ...model, display_name: e.target.value })}
       />
@@ -96,14 +98,20 @@ function ModelConfigurationItem({
           onChange({ ...model, supports_image_input: value === "text-image" })
         }
       >
-        <InputSelect.Trigger placeholder="Input type" />
+        <InputSelect.Trigger
+          placeholder={t("custom.modelRow.inputTypePlaceholder")}
+        />
         <InputSelect.Content>
-          <InputSelect.Item value="text-only">Text Only</InputSelect.Item>
-          <InputSelect.Item value="text-image">Text & Image</InputSelect.Item>
+          <InputSelect.Item value="text-only">
+            {t("custom.modelRow.textOnly.label")}
+          </InputSelect.Item>
+          <InputSelect.Item value="text-image">
+            {t("custom.modelRow.textImage.label")}
+          </InputSelect.Item>
         </InputSelect.Content>
       </InputSelect>
       <InputTypeIn
-        placeholder="Default"
+        placeholder={t("custom.modelRow.maxTokensPlaceholder")}
         value={model.max_input_tokens?.toString() ?? ""}
         onChange={(e) =>
           onChange({
@@ -129,6 +137,7 @@ function ModelConfigurationItem({
 }
 
 function ModelConfigurationList() {
+  const t = useTranslations("admin.languageModels.modals");
   const formikProps = useFormikContext<{
     model_configurations: CustomModelConfiguration[];
   }>();
@@ -165,11 +174,11 @@ function ModelConfigurationList() {
       {models.length > 0 ? (
         <div className={`grid items-center gap-1 ${MODEL_GRID_COLS}`}>
           <div className="pb-1">
-            <Text mainUiAction>Model Name</Text>
+            <Text mainUiAction>{t("custom.modelTable.name.header")}</Text>
           </div>
-          <Text mainUiAction>Display Name</Text>
-          <Text mainUiAction>Input Type</Text>
-          <Text mainUiAction>Max Tokens</Text>
+          <Text mainUiAction>{t("custom.modelTable.displayName.header")}</Text>
+          <Text mainUiAction>{t("custom.modelTable.inputType.header")}</Text>
+          <Text mainUiAction>{t("custom.modelTable.maxTokens.header")}</Text>
           <div aria-hidden />
           <div aria-hidden />
 
@@ -184,7 +193,7 @@ function ModelConfigurationList() {
           ))}
         </div>
       ) : (
-        <EmptyMessageCard title="No models added yet." padding={2} />
+        <EmptyMessageCard title={t("custom.models.empty.title")} padding={2} />
       )}
 
       <Button
@@ -193,13 +202,14 @@ function ModelConfigurationList() {
         onClick={handleAdd}
         type="button"
       >
-        Add Model
+        {t("custom.addModelButton.label")}
       </Button>
     </div>
   );
 }
 
 function CustomConfigKeyValue() {
+  const t = useTranslations("admin.languageModels.modals");
   const formikProps = useFormikContext<{ custom_config_list: KeyValue[] }>();
   return (
     <KeyValueInput
@@ -208,7 +218,7 @@ function CustomConfigKeyValue() {
       onChange={(items) =>
         formikProps.setFieldValue("custom_config_list", items)
       }
-      addButtonLabel="Add Line"
+      addButtonLabel={t("custom.envVars.addButton.label")}
     />
   );
 }
@@ -216,6 +226,7 @@ function CustomConfigKeyValue() {
 // ─── Provider Name Select ─────────────────────────────────────────────────────
 
 function ProviderNameSelect({ disabled }: { disabled?: boolean }) {
+  const t = useTranslations("admin.languageModels.modals");
   const { customProviderNames } = useCustomProviderNames();
   const { values, setFieldValue } = useFormikContext<{ provider: string }>();
 
@@ -234,9 +245,9 @@ function ProviderNameSelect({ disabled }: { disabled?: boolean }) {
       value={values.provider}
       onValueChange={(value) => setFieldValue("provider", value)}
       options={options}
-      placeholder="Provider ID string as shown on LiteLLM"
+      placeholder={t("custom.providerField.placeholder")}
       disabled={disabled}
-      createPrefix="Use"
+      createPrefix={t("custom.providerField.createPrefix")}
       dropdownMaxHeight="60vh"
     />
   );
@@ -262,6 +273,7 @@ export default function CustomModal({
   onSuccess,
   analyticsSource,
 }: LLMProviderFormProps) {
+  const t = useTranslations("admin.languageModels.modals");
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
   const apiBaseSubDescription = useApiBaseSubDescription();
@@ -315,7 +327,7 @@ export default function CustomModal({
   };
 
   const modelConfigurationSchema = Yup.object({
-    name: Yup.string().required("Model name is required"),
+    name: Yup.string().required(t("validation.modelNameRequired")),
     max_input_tokens: Yup.number()
       .transform((value, originalValue) =>
         originalValue === "" || originalValue === undefined ? null : value
@@ -326,12 +338,16 @@ export default function CustomModal({
 
   const validationSchema = isOnboarding
     ? Yup.object().shape({
-        provider: Yup.string().required("Provider Name is required"),
+        provider: Yup.string().required(
+          t("custom.validation.providerNameRequired")
+        ),
         model_configurations: Yup.array(modelConfigurationSchema),
       })
     : Yup.object().shape({
-        name: Yup.string().required("Display Name is required"),
-        provider: Yup.string().required("Provider Name is required"),
+        name: Yup.string().required(t("custom.validation.displayNameRequired")),
+        provider: Yup.string().required(
+          t("custom.validation.providerNameRequired")
+        ),
         model_configurations: Yup.array(modelConfigurationSchema),
       });
 
@@ -342,7 +358,7 @@ export default function CustomModal({
       onClose={onClose}
       initialValues={initialValues}
       validationSchema={validationSchema}
-      description="Connect models from other LiteLLM-compatible providers."
+      description={t("custom.description")}
       onSubmit={async (values, { setSubmitting, setStatus }) => {
         setSubmitting(true);
 
@@ -363,7 +379,7 @@ export default function CustomModal({
           }));
 
         if (modelConfigurations.length === 0) {
-          toast.error("At least one model name is required");
+          toast.error(t("custom.toasts.modelNameRequired"));
           setSubmitting(false);
           return;
         }
@@ -374,6 +390,7 @@ export default function CustomModal({
         const customConfig = keyValueListToDict(values.custom_config_list);
 
         await submitProvider({
+          t,
           analyticsSource:
             analyticsSource ??
             (isOnboarding
@@ -402,8 +419,8 @@ export default function CustomModal({
               await refreshLlmProviderCaches(mutate);
               toast.success(
                 existingLlmProvider
-                  ? "Provider updated successfully!"
-                  : "Provider enabled successfully!"
+                  ? t("toasts.providerUpdated")
+                  : t("toasts.providerEnabled")
               );
             }
           },
@@ -413,10 +430,8 @@ export default function CustomModal({
       <InputPadder>
         <InputVertical
           withLabel="provider"
-          title="Provider"
-          subDescription={markdown(
-            "See full list of supported LLM providers at [LiteLLM](https://docs.litellm.ai/docs/providers)."
-          )}
+          title={t("custom.providerField.title")}
+          subDescription={markdown(t("custom.providerField.description"))}
         >
           <ProviderNameSelect disabled={!!existingLlmProvider} />
         </InputVertical>
@@ -424,7 +439,7 @@ export default function CustomModal({
 
       <APIKeyField
         optional
-        subDescription="Paste your API key if your model provider requires authentication."
+        subDescription={t("custom.apiKeyField.description")}
       />
 
       <APIBaseField optional subDescription={apiBaseSubDescription} />
@@ -432,8 +447,8 @@ export default function CustomModal({
       <InputPadder>
         <InputVertical
           withLabel="api_version"
-          title="API Version"
-          suffix="optional"
+          title={t("custom.apiVersionField.title")}
+          suffix={t("setup.optionalSuffix.label")}
         >
           <InputTypeInField name="api_version" />
         </InputVertical>
@@ -442,10 +457,8 @@ export default function CustomModal({
       <InputPadder>
         <Section gap={3}>
           <Content
-            title="Environment Variables"
-            description={markdown(
-              "Add extra properties as needed by the model provider. These are passed to LiteLLM's `completion()` call as [environment variables](https://docs.litellm.ai/docs/set_keys#environment-variables). See [documentation](https://docs.onyx.app/admins/ai_models/custom_inference_provider) for more instructions."
-            )}
+            title={t("custom.envVars.title")}
+            description={markdown(t("custom.envVars.description"))}
             width="full"
             variant="section"
             sizePreset="main-content"
@@ -466,8 +479,8 @@ export default function CustomModal({
       <Section gap={2}>
         <InputPadder>
           <Content
-            title="Models"
-            description="List LLM models you wish to use and their configurations for this provider. See full list of models at LiteLLM."
+            title={t("custom.models.title")}
+            description={t("custom.models.description")}
             variant="section"
             sizePreset="main-content"
             width="full"

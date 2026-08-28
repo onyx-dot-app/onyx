@@ -5,6 +5,15 @@ describe("SUPPORTED_LOCALES", () => {
     // Pin the locale list that mirrors the backend `SupportedLanguage` enum
     // (backend/onyx/db/enums.py). If this test fails, update both places
     // together.
-    expect([...SUPPORTED_LOCALES]).toEqual(["en", "es", "pt", "fr", "de"]);
+    expect([...SUPPORTED_LOCALES]).toEqual([
+      "en",
+      "es",
+      "pt",
+      "fr",
+      "de",
+      "ja",
+      "zh",
+      "ko",
+    ]);
   });
 });

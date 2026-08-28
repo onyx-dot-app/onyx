@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useCallback } from "react";
+import { useTranslations } from "next-intl";
 import { MinimalAgent } from "@/lib/agents/types";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { Button } from "@opal/components";
@@ -35,6 +36,7 @@ export interface AgentCardProps {
 }
 
 export default function AgentCard({ agent }: AgentCardProps) {
+  const t = useTranslations("agents");
   const route = useAppRouter();
   const router = useRouter();
   const { pinnedAgents, togglePinnedAgent } = usePinnedAgents();
@@ -63,7 +65,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
       icon={pinned ? SvgPinned : SvgPin}
       prominence="tertiary"
       onClick={noProp(() => togglePinnedAgent(agent, !pinned))}
-      tooltip={pinned ? "Unpin from Sidebar" : "Pin to Sidebar"}
+      tooltip={pinned ? t("card.unpin.tooltip") : t("card.pin.tooltip")}
     />
   );
 
@@ -104,7 +106,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
                           onClick={noProp(() =>
                             router.push(`/ee/agents/stats/${agent.id}` as Route)
                           )}
-                          tooltip="View Agent Stats"
+                          tooltip={t("card.viewStats.tooltip")}
                         />
                       </Hoverable.Item>
                     )}
@@ -116,7 +118,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
                           onClick={noProp(() =>
                             router.push(`/app/agents/edit/${agent.id}` as Route)
                           )}
-                          tooltip="Edit Agent"
+                          tooltip={t("card.edit.tooltip")}
                         />
                       </Hoverable.Item>
                     )}
@@ -126,7 +128,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
                           icon={SvgShare}
                           prominence="tertiary"
                           onClick={noProp(() => shareAgentModal.toggle(true))}
-                          tooltip="Share Agent"
+                          tooltip={t("card.share.tooltip")}
                         />
                       </Hoverable.Item>
                     )}
@@ -157,13 +159,9 @@ export default function AgentCard({ agent }: AgentCardProps) {
                 />
                 <Content
                   icon={SvgActions}
-                  title={
-                    agent.tools.length > 0
-                      ? `${agent.tools.length} Action${
-                          agent.tools.length > 1 ? "s" : ""
-                        }`
-                      : "No Actions"
-                  }
+                  title={t("card.actionsCount.label", {
+                    count: agent.tools.length,
+                  })}
                   sizePreset="secondary"
                   variant="body"
                   color="muted"
@@ -177,7 +175,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
                   rightIcon={SvgBubbleText}
                   onClick={noProp(handleStartChat)}
                 >
-                  Start Chat
+                  {t("card.startChat.label")}
                 </Button>
               </div>
             </div>

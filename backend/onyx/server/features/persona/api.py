@@ -94,7 +94,7 @@ def _validate_user_knowledge_enabled(
     settings = load_settings()
     if not settings.user_knowledge_enabled:
         # Only user files are supported going forward; keep getattr for backward compat
-        if persona_upsert_request.user_file_ids or getattr(
+        if persona_upsert_request.user_file_ids or getattr(  # ods: ignore[getattr]
             persona_upsert_request, "user_project_ids", None
         ):
             raise HTTPException(

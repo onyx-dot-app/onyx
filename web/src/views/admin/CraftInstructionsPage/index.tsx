@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import useSWR, { mutate } from "swr";
 import { Button, Card, Text } from "@opal/components";
 import {
@@ -27,6 +28,7 @@ import UnsavedChangesModal from "@/sections/modals/UnsavedChangesModal";
 const MAX_INSTRUCTIONS_LENGTH = 4000;
 
 function BaseInstructionsPreview() {
+  const t = useTranslations("admin.craftInstructions");
   const { data, error } = useSWR<{ content: string }>(
     SWR_KEYS.buildBaseInstructions,
     errorHandlingFetcher
@@ -35,7 +37,7 @@ function BaseInstructionsPreview() {
   if (error) {
     return (
       <Text font="secondary-body" color="text-03">
-        Failed to load the base instructions.
+        {t("baseInstructions.loadError.description")}
       </Text>
     );
   }
@@ -56,6 +58,7 @@ function BaseInstructionsPreview() {
 }
 
 export default function CraftInstructionsPage() {
+  const t = useTranslations("admin.craftInstructions");
   const settings = useSettings();
   const craftAvailable = settings?.onyx_craft_available === true;
   const savedInstructions = settings?.craft_instructions ?? "";
@@ -79,13 +82,11 @@ export default function CraftInstructionsPage() {
       });
       await mutate(SWR_KEYS.settings);
       setDraft(null);
-      toast.success("Craft instructions saved");
+      toast.success(t("saveSuccess.message"));
       return true;
     } catch (err) {
       console.error("Failed to save Craft instructions", err);
-      toast.error(
-        err instanceof Error ? err.message : "Failed to save instructions"
-      );
+      toast.error(err instanceof Error ? err.message : t("saveError.message"));
       return false;
     } finally {
       setIsSaving(false);
@@ -95,8 +96,8 @@ export default function CraftInstructionsPage() {
   const header = (
     <SettingsLayouts.Header
       icon={ADMIN_ROUTES.CRAFT_INSTRUCTIONS.icon}
-      title={ADMIN_ROUTES.CRAFT_INSTRUCTIONS.title}
-      description="Workspace-wide instructions every Craft agent follows, on top of Craft's built-in behavior."
+      title={t("header.title")}
+      description={t("header.description")}
       rightChildren={
         craftAvailable && !settings.isLoading && !settings.error ? (
           <div className="flex items-start gap-2">
@@ -105,10 +106,10 @@ export default function CraftInstructionsPage() {
               prominence="secondary"
               rightIcon={SvgArrowUpRight}
             >
-              Try in Craft
+              {t("tryInCraftButton.label")}
             </Button>
             <Button disabled={!isDirty || isSaving} onClick={() => save(value)}>
-              {isSaving ? "Saving…" : "Save"}
+              {isSaving ? t("saveButton.savingLabel") : t("saveButton.label")}
             </Button>
           </div>
         ) : undefined
@@ -126,7 +127,7 @@ export default function CraftInstructionsPage() {
         <SettingsLayouts.Body>
           {settings.error ? (
             <Text as="p" font="secondary-body" color="text-03">
-              Failed to load settings. Please try refreshing the page.
+              {t("settingsLoadError.description")}
             </Text>
           ) : (
             <div className="flex justify-center py-12">
@@ -145,8 +146,8 @@ export default function CraftInstructionsPage() {
         <SettingsLayouts.Body>
           <IllustrationContent
             illustration={SvgNoResult}
-            title="Craft isn't available on this deployment"
-            description="Craft is enabled per deployment by Onyx. Contact your Onyx representative to get access."
+            title={t("unavailable.title")}
+            description={t("unavailable.description")}
           />
         </SettingsLayouts.Body>
       </SettingsLayouts.Root>
@@ -160,14 +161,17 @@ export default function CraftInstructionsPage() {
         <Card border="solid" rounding={4}>
           <Section alignItems="stretch" gap={1}>
             <InputVertical
-              title="Workspace instructions"
-              topRight={`${value.length.toLocaleString()} / ${MAX_INSTRUCTIONS_LENGTH.toLocaleString()}`}
+              title={t("instructions.label")}
+              topRight={t("instructions.charCount.label", {
+                count: value.length,
+                max: MAX_INSTRUCTIONS_LENGTH,
+              })}
               withLabel
             >
               <InputTextArea
                 value={value}
                 onChange={(event) => setDraft(event.target.value)}
-                placeholder="e.g. Always follow our brand guidelines and prefer concise, formal copy."
+                placeholder={t("instructions.placeholder")}
                 rows={8}
                 autoResize
                 maxRows={24}
@@ -175,8 +179,7 @@ export default function CraftInstructionsPage() {
               />
               <div className="w-full flex items-center justify-between gap-4">
                 <Text font="secondary-body" color="text-03">
-                  Changes apply when a session starts or is restored — they
-                  don&apos;t reach into sessions mid-run.
+                  {t("instructions.help.description")}
                 </Text>
                 {savedInstructions && (
                   <Button
@@ -187,7 +190,7 @@ export default function CraftInstructionsPage() {
                     disabled={isSaving}
                     onClick={() => setResetConfirmOpen(true)}
                   >
-                    Reset to default
+                    {t("resetButton.label")}
                   </Button>
                 )}
               </div>
@@ -197,8 +200,8 @@ export default function CraftInstructionsPage() {
 
         <SimpleCollapsible defaultOpen={false}>
           <SimpleCollapsible.Header
-            title="View base instructions"
-            description="The built-in prompt your instructions are appended to. Dynamic sections are filled in per session."
+            title={t("baseInstructions.title")}
+            description={t("baseInstructions.description")}
           />
           <SimpleCollapsible.Content>
             <BaseInstructionsPreview />
@@ -209,7 +212,7 @@ export default function CraftInstructionsPage() {
       {resetConfirmOpen && (
         <ConfirmationModalLayout
           icon={ADMIN_ROUTES.CRAFT_INSTRUCTIONS.icon}
-          title="Reset Craft instructions?"
+          title={t("resetModal.header.title")}
           onClose={isSaving ? undefined : () => setResetConfirmOpen(false)}
           submit={
             <Button
@@ -221,12 +224,13 @@ export default function CraftInstructionsPage() {
                 }
               }}
             >
-              {isSaving ? "Resetting…" : "Reset"}
+              {isSaving
+                ? t("resetModal.resettingLabel")
+                : t("resetModal.submitButton.label")}
             </Button>
           }
         >
-          New Craft sessions will run with only the built-in instructions. This
-          removes your workspace instructions for everyone.
+          {t("resetModal.body.description")}
         </ConfirmationModalLayout>
       )}
       <UnsavedChangesModal

@@ -57,7 +57,7 @@ export async function toggleToolDisabled(
 
 /**
  * Open the source management secondary view for the internal search tool.
- * Assumes the ActionsPopover is already open.
+ * Assumes the ToolsPopover is already open.
  */
 export async function openSourceManagement(page: Page): Promise<void> {
   const searchOption = page.locator(TOOL_IDS.searchOption);

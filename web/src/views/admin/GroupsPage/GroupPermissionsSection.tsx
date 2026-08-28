@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment } from "react";
+import { useTranslations } from "next-intl";
 import useSWR from "swr";
 import { ContentAction } from "@opal/layouts";
 import {
@@ -55,6 +56,7 @@ function GroupPermissionsSection({
   enabledPermissions,
   onPermissionsChange,
 }: GroupPermissionsSectionProps) {
+  const t = useTranslations("admin.groups");
   const { data: registry, isLoading } = useSWR<PermissionRegistryEntry[]>(
     SWR_KEYS.permissionRegistry,
     errorHandlingFetcher
@@ -79,8 +81,8 @@ function GroupPermissionsSection({
   return (
     <SimpleCollapsible>
       <SimpleCollapsible.Header
-        title="Group Permissions"
-        description="Set access and permissions for members of this group."
+        title={t("permissions.section.title")}
+        description={t("permissions.section.description")}
       />
       <SimpleCollapsible.Content>
         {isLoading || !registry ? (

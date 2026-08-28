@@ -1,4 +1,5 @@
 import { JSX, Key, useMemo } from "react";
+import { useTranslations } from "next-intl";
 import {
   SvgCheckCircle,
   SvgCircle,
@@ -26,6 +27,12 @@ import { CodeBlock } from "@/app/app/message/CodeBlock";
 import ExpandableTextDisplay from "@/refresh-components/texts/ExpandableTextDisplay";
 import { Text } from "@opal/components";
 import { IoBlockLabel } from "@/app/app/message/messageComponents/IoBlockLabel";
+
+// Timeline copy is looked up in components and threaded into the plain step
+// helpers below, which cannot call hooks themselves.
+type TimelineTranslate = ReturnType<
+  typeof useTranslations<"chat.messages.timeline">
+>;
 
 function ensureBashHljsRegistered() {
   if (!hljs.listLanguages().includes("bash")) {
@@ -132,10 +139,12 @@ interface ThinkingStepProps {
 }
 
 function ThinkingStep({ step, isLastStep, isHover }: ThinkingStepProps) {
+  const t = useTranslations("chat.messages.timeline");
+
   return (
     <StepContainer
       stepIcon={SvgSparkle}
-      header="Thinking"
+      header={t("codingAgent.thinking.header")}
       isLastStep={isLastStep}
       isHover={isHover}
       collapsible={true}
@@ -150,10 +159,10 @@ function ThinkingStep({ step, isLastStep, isHover }: ThinkingStepProps) {
   );
 }
 
-function bashStepHeader(call: BashStepView): string {
-  if (!call.isComplete) return "Bash · running…";
-  if (call.timed_out) return "Bash · timed out";
-  return `Bash · exit ${call.exit_code ?? 0}`;
+function bashStepHeader(call: BashStepView, t: TimelineTranslate): string {
+  if (!call.isComplete) return t("codingAgent.bashRunning.header");
+  if (call.timed_out) return t("codingAgent.bashTimedOut.header");
+  return t("codingAgent.bashExit.header", { exitCode: call.exit_code ?? 0 });
 }
 
 function bashStepIcon(call: BashStepView) {
@@ -163,6 +172,7 @@ function bashStepIcon(call: BashStepView) {
 }
 
 function BashStepBody({ call }: { call: BashStepView }) {
+  const t = useTranslations("chat.messages.timeline");
   const hasStdout = call.stdout.length > 0;
   const hasStderr = call.stderr.length > 0;
   const hasResponse = hasStdout || hasStderr || call.isComplete;
@@ -170,7 +180,7 @@ function BashStepBody({ call }: { call: BashStepView }) {
   return (
     <div className="flex flex-col gap-3 pl-(--timeline-common-text-padding)">
       <div>
-        <IoBlockLabel label="Request" />
+        <IoBlockLabel label={t("codingAgent.bashRequest.label")} />
         <div className="prose max-w-full">
           <CodeBlock
             className="font-secondary-mono"
@@ -184,7 +194,7 @@ function BashStepBody({ call }: { call: BashStepView }) {
 
       {hasResponse && (
         <div className="flex flex-col gap-2">
-          <IoBlockLabel label="Response" />
+          <IoBlockLabel label={t("codingAgent.bashResponse.label")} />
           {hasStdout && (
             <ExpandableTextDisplay
               title="stdout"
@@ -201,7 +211,7 @@ function BashStepBody({ call }: { call: BashStepView }) {
           )}
           {!hasStdout && !hasStderr && call.isComplete && (
             <Text as="p" font="main-ui-muted" color="text-04">
-              No output
+              {t("codingAgent.noOutput.text")}
             </Text>
           )}
         </div>
@@ -217,10 +227,12 @@ interface BashCallStepProps {
 }
 
 function BashCallStep({ call, isLastStep, isHover }: BashCallStepProps) {
+  const t = useTranslations("chat.messages.timeline");
+
   return (
     <StepContainer
       stepIcon={bashStepIcon(call)}
-      header={bashStepHeader(call)}
+      header={bashStepHeader(call, t)}
       isLastStep={isLastStep}
       isHover={isHover}
       collapsible={true}
@@ -266,10 +278,12 @@ function CodingTaskStep({
   isLastStep,
   isHover,
 }: CodingTaskStepProps) {
+  const t = useTranslations("chat.messages.timeline");
+
   return (
     <StepContainer
       stepIcon={SvgCircle}
-      header="Coding Task"
+      header={t("codingAgent.task.header")}
       collapsible={true}
       isLastStep={isLastStep}
       isFirstStep={true}
@@ -291,10 +305,12 @@ interface ResponseStepProps {
 }
 
 function ResponseStep({ answer, isLastStep, isHover }: ResponseStepProps) {
+  const t = useTranslations("chat.messages.timeline");
+
   return (
     <StepContainer
       stepIcon={SvgCheckCircle}
-      header="Response"
+      header={t("codingAgent.response.header")}
       isLastStep={isLastStep}
       isHover={isHover}
       collapsible={true}
@@ -316,6 +332,7 @@ export const CodingAgentRenderer: MessageRenderer<CodingAgentPacket, {}> = ({
   isHover = false,
   children,
 }) => {
+  const t = useTranslations("chat.messages.timeline");
   const startPacket = packets.find(
     (p) => p.obj.type === PacketType.CODING_AGENT_START
   )?.obj as CodingAgentStart | undefined;
@@ -331,7 +348,10 @@ export const CodingAgentRenderer: MessageRenderer<CodingAgentPacket, {}> = ({
 
   const taskText = startPacket
     ? startPacket.repo
-      ? `${startPacket.query}\n\nRepository: ${startPacket.repo}`
+      ? t("codingAgent.taskWithRepo.text", {
+          query: startPacket.query,
+          repo: startPacket.repo,
+        })
       : startPacket.query
     : "";
 
@@ -355,24 +375,24 @@ export const CodingAgentRenderer: MessageRenderer<CodingAgentPacket, {}> = ({
     let body: JSX.Element | null = null;
 
     if (finalPacket) {
-      header = "Response";
+      header = t("codingAgent.response.header");
       body = (
         <Text as="p" font="main-ui-muted" color="text-02">
           {finalPacket.answer}
         </Text>
       );
     } else if (latestStep?.kind === "bash") {
-      header = bashStepHeader(latestStep);
+      header = bashStepHeader(latestStep, t);
       body = <BashStepBody call={latestStep} />;
     } else if (latestStep?.kind === "thinking") {
-      header = "Thinking";
+      header = t("codingAgent.thinking.header");
       body = (
         <Text as="p" font="main-ui-muted" color="text-02">
           {latestStep.content}
         </Text>
       );
     } else if (taskText) {
-      header = "Coding Task";
+      header = t("codingAgent.task.header");
       body = (
         <Text as="p" font="main-ui-muted" color="text-03">
           {taskText}

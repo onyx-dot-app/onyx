@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
 import { InputDivider, toast } from "@opal/layouts";
@@ -42,10 +43,11 @@ function OpenAICompatibleModalInternals({
   existingLlmProvider,
   isOnboarding,
 }: OpenAICompatibleModalInternalsProps) {
+  const t = useTranslations("admin.languageModels.modals");
   const formikProps = useFormikContext<OpenAICompatibleModalValues>();
   const apiBaseSubDescription = useApiBaseSubDescription(
-    "Paste your OpenAI-compatible endpoint URL.",
-    "[Learn More](https://docs.litellm.ai/docs/providers/openai_compatible)"
+    t("openAiCompatible.apiBaseField.description"),
+    t("openAiCompatible.apiBaseField.learnMore")
   );
 
   const isFetchDisabled = !formikProps.values.api_base;
@@ -71,7 +73,7 @@ function OpenAICompatibleModalInternals({
 
       <APIKeyField
         optional
-        subDescription="Paste your API key if your model provider requires authentication."
+        subDescription={t("openAiCompatible.apiKeyField.description")}
       />
 
       {!isOnboarding && (
@@ -105,6 +107,7 @@ export default function OpenAICompatibleModal({
   onSuccess,
   analyticsSource,
 }: LLMProviderFormProps) {
+  const t = useTranslations("admin.languageModels.modals");
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
 
@@ -116,7 +119,7 @@ export default function OpenAICompatibleModal({
     existingLlmProvider
   ) as OpenAICompatibleModalValues;
 
-  const validationSchema = buildValidationSchema(isOnboarding, {
+  const validationSchema = buildValidationSchema(t, isOnboarding, {
     apiBase: true,
   });
 
@@ -126,10 +129,11 @@ export default function OpenAICompatibleModal({
       llmProvider={existingLlmProvider}
       onClose={onClose}
       initialValues={initialValues}
-      description="Connect from other cloud or self-hosted models via OpenAI-compatible endpoints."
+      description={t("openAiCompatible.description")}
       validationSchema={validationSchema}
       onSubmit={async (values, { setSubmitting, setStatus }) => {
         await submitProvider({
+          t,
           analyticsSource:
             analyticsSource ??
             (isOnboarding
@@ -150,8 +154,8 @@ export default function OpenAICompatibleModal({
               await refreshLlmProviderCaches(mutate);
               toast.success(
                 existingLlmProvider
-                  ? "Provider updated successfully!"
-                  : "Provider enabled successfully!"
+                  ? t("toasts.providerUpdated")
+                  : t("toasts.providerEnabled")
               );
             }
           },

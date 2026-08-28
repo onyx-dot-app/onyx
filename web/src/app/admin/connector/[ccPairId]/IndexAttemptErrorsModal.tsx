@@ -12,6 +12,7 @@ import { localizeAndPrettify } from "@opal/time";
 import Text from "@/refresh-components/texts/Text";
 import { PageSelector } from "@/components/PageSelector";
 import { useMemo } from "react";
+import { useTranslations } from "next-intl";
 import { SvgAlertTriangle } from "@opal/icons";
 
 export interface IndexAttemptErrorsModalProps {
@@ -36,6 +37,7 @@ export default function IndexAttemptErrorsModal({
   onResolveAll,
   supportsTargetedReindex,
 }: IndexAttemptErrorsModalProps) {
+  const t = useTranslations("admin.connector");
   const hasUnresolvedErrors = useMemo(
     () => errors.items.some((error) => !error.is_resolved),
     [errors.items]
@@ -52,20 +54,17 @@ export default function IndexAttemptErrorsModal({
       <Modal.Content width="full" height="full">
         <Modal.Header
           icon={SvgAlertTriangle}
-          title="Indexing Errors"
+          title={t("errorsModal.title")}
           onClose={onClose}
           height="fit"
         />
         <Modal.Body height="full">
           <div className="flex flex-col gap-2 shrink-0">
-            <Text as="p">
-              Below are the errors encountered during indexing. Each row
-              represents a failed document or entity.
-            </Text>
+            <Text as="p">{t("errorsModal.description")}</Text>
             <Text as="p">
               {supportsTargetedReindex
-                ? "Click the button below to re-fetch only the failing documents. Much faster than a full re-index."
-                : "Click the button below to kick off a full re-index to try and resolve these errors. This full re-index may take much longer than a normal update."}
+                ? t("errorsModal.targetedReindex.description")
+                : t("errorsModal.fullReindex.description")}
             </Text>
           </div>
 
@@ -73,10 +72,12 @@ export default function IndexAttemptErrorsModal({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Time</TableHead>
-                  <TableHead>Document ID</TableHead>
-                  <TableHead className="w-1/2">Error Message</TableHead>
-                  <TableHead>Status</TableHead>
+                  <TableHead>{t("errorsModal.columns.time")}</TableHead>
+                  <TableHead>{t("errorsModal.columns.documentId")}</TableHead>
+                  <TableHead className="w-1/2">
+                    {t("errorsModal.columns.errorMessage")}
+                  </TableHead>
+                  <TableHead>{t("errorsModal.columns.status")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -94,10 +95,14 @@ export default function IndexAttemptErrorsModal({
                             rel="noopener noreferrer"
                             className="text-link hover:underline"
                           >
-                            {error.document_id || error.entity_id || "Unknown"}
+                            {error.document_id ||
+                              error.entity_id ||
+                              t("errorsModal.unknownDocument")}
                           </a>
                         ) : (
-                          error.document_id || error.entity_id || "Unknown"
+                          error.document_id ||
+                          error.entity_id ||
+                          t("errorsModal.unknownDocument")
                         )}
                       </TableCell>
                       <TableCell>
@@ -113,7 +118,9 @@ export default function IndexAttemptErrorsModal({
                               : "bg-status-error-02 text-status-error-05"
                           }`}
                         >
-                          {error.is_resolved ? "Resolved" : "Unresolved"}
+                          {error.is_resolved
+                            ? t("errorsModal.status.resolved")
+                            : t("errorsModal.status.unresolved")}
                         </span>
                       </TableCell>
                     </TableRow>
@@ -124,7 +131,7 @@ export default function IndexAttemptErrorsModal({
                       colSpan={4}
                       className="text-center py-8 text-text-03"
                     >
-                      No errors found on this page
+                      {t("errorsModal.empty.description")}
                     </TableCell>
                   </TableRow>
                 )}
@@ -145,7 +152,9 @@ export default function IndexAttemptErrorsModal({
         <Modal.Footer>
           {hasUnresolvedErrors && (
             <div className="ml-4">
-              <Button onClick={onResolveAll}>Resolve All</Button>
+              <Button onClick={onResolveAll}>
+                {t("errorsModal.resolveAllButton.label")}
+              </Button>
             </div>
           )}
         </Modal.Footer>

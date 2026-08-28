@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
 import Text from "@/refresh-components/texts/Text";
@@ -34,6 +35,7 @@ export function DocumentSetsTableContent({
   selectedDocumentSetIds,
   onDocumentSetToggle,
 }: DocumentSetsTableContentProps) {
+  const t = useTranslations("knowledge");
   const [searchValue, setSearchValue] = useState("");
 
   const filteredDocumentSets = useMemo(() => {
@@ -45,7 +47,7 @@ export function DocumentSetsTableContent({
   const columns: KnowledgeTableColumn<DocumentSetSummary>[] = [
     {
       key: "name",
-      header: "Name",
+      header: t("table.columns.name.header"),
       sortable: true,
       render: (ds) => (
         <Content
@@ -58,7 +60,7 @@ export function DocumentSetsTableContent({
     },
     {
       key: "sources",
-      header: "Sources",
+      header: t("table.columns.sources.header"),
       width: 8,
       render: (ds) => (
         <TableLayouts.SourceIconsRow>
@@ -87,8 +89,8 @@ export function DocumentSetsTableContent({
       onToggleItem={(id) => onDocumentSetToggle(id as number)}
       searchValue={searchValue}
       onSearchChange={setSearchValue}
-      searchPlaceholder="Filter document sets..."
-      emptyMessage="No document sets available."
+      searchPlaceholder={t("documentSets.filter.placeholder")}
+      emptyMessage={t("documentSets.empty.description")}
       ariaLabelPrefix="document-set-row"
     />
   );
@@ -158,6 +160,7 @@ export function RecentFilesTableContent({
   onUploadChange,
   hasProcessingFiles,
 }: RecentFilesTableContentProps) {
+  const t = useTranslations("knowledge");
   const [searchValue, setSearchValue] = useState("");
 
   const filteredFiles = useMemo(() => {
@@ -169,7 +172,7 @@ export function RecentFilesTableContent({
   const columns: KnowledgeTableColumn<ProjectFile>[] = [
     {
       key: "name",
-      header: "Name",
+      header: t("table.columns.name.header"),
       sortable: true,
       render: (file) => (
         <Content
@@ -182,7 +185,7 @@ export function RecentFilesTableContent({
     },
     {
       key: "lastUpdated",
-      header: "Last Updated",
+      header: t("table.columns.lastUpdated.header"),
       sortable: true,
       width: 8,
       render: (file) => (
@@ -212,7 +215,7 @@ export function RecentFilesTableContent({
         onToggleItem={(id) => onToggleFile(id as string)}
         searchValue={searchValue}
         onSearchChange={setSearchValue}
-        searchPlaceholder="Filter files..."
+        searchPlaceholder={t("recentFiles.filter.placeholder")}
         ariaLabelPrefix="user-file-row"
         headerActions={
           <Button
@@ -220,18 +223,16 @@ export function RecentFilesTableContent({
             icon={SvgPlusCircle}
             onClick={() => fileInputRef.current?.click()}
           >
-            Add File
+            {t("recentFiles.addFile.label")}
           </Button>
         }
-        emptyMessage="No files available. Upload files to get started."
+        emptyMessage={t("recentFiles.empty.description")}
       />
 
       {hasProcessingFiles && (
         <GeneralLayouts.Section height="auto" alignItems="start">
           <Text as="p" text03 secondaryBody>
-            Onyx is still processing your uploaded files. You can create the
-            agent now, but it will not have access to all files until processing
-            completes.
+            {t("recentFiles.processing.description")}
           </Text>
         </GeneralLayouts.Section>
       )}

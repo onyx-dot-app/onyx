@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import useSWR, { mutate } from "swr";
 import { useAuthTypeMetadata } from "@/lib/auth/hooks";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -34,6 +35,9 @@ import type {
 } from "@/lib/types";
 
 const route = ADMIN_ROUTES.SECURITY_HARDENING;
+
+// Technical literal, not copy — the characters the password policy accepts.
+const SPECIAL_PASSWORD_CHARACTERS = "!@#$%^&*()_+-=[]{}|;:,.<>?";
 
 // Write shape: a partial patch. The backend treats only the keys present in the
 // PUT body as explicit overrides; absent keys keep their stored value, while an
@@ -86,6 +90,7 @@ function JwtTextRow({
   pinned,
   onCommit,
 }: JwtTextRowProps) {
+  const t = useTranslations("admin.security");
   const [text, setText] = useState(value);
   // The revision bump resyncs after a commit settles even when `value` did not
   // move, e.g. a failed clear where the optimistic patch drops nulls. A focused
@@ -104,7 +109,7 @@ function JwtTextRow({
     return (
       <InputVertical
         title={title}
-        description="Pinned by an environment variable."
+        description={t("jwt.pinnedField.description")}
         withLabel
       >
         <Text font="main-ui-body" color="text-03">
@@ -144,6 +149,7 @@ function JwtTextRow({
 }
 
 export default function SecurityHardeningPage() {
+  const t = useTranslations("admin.security");
   const isMultiTenant = NEXT_PUBLIC_CLOUD_ENABLED;
   const { authTypeMetadata, isLoading: authTypeLoading } =
     useAuthTypeMetadata();
@@ -183,17 +189,17 @@ export default function SecurityHardeningPage() {
             rollbackOnError: true,
           }
         );
-        toast.success("Settings updated");
+        toast.success(t("toasts.settingsUpdated"));
       } catch (err) {
         console.error("Failed to update workspace settings", err);
         const message =
           err instanceof Error && err.message
             ? err.message
-            : "Failed to update settings";
+            : t("toasts.settingsUpdateFailed");
         toast.error(message);
       }
     },
-    [workspaceSettings]
+    [workspaceSettings, t]
   );
   const { data: pinnedFields } = useSWR<string[]>(
     SWR_KEYS.adminSecurityPinnedFields,
@@ -221,55 +227,58 @@ export default function SecurityHardeningPage() {
     if (settings && savesQueued.current === 0) setDraft(settings);
   }, [settings]);
 
-  const doSave = useCallback(async (updates: SecuritySettingsUpdate) => {
-    try {
-      const response = await fetch(SWR_KEYS.adminSecuritySettings, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        // Send ONLY the changed fields. The backend persists each present key
-        // as an explicit override and lets absent keys fall back to env
-        // defaults. Sending the full settings would freeze every env default
-        // as an override and 403 on operator-locked fields in multi-tenant.
-        body: JSON.stringify(updates),
-      });
-      if (!response.ok) {
-        const errorMsg = (await response.json()).detail;
-        throw new Error(errorMsg);
-      }
-      // PUT returns the new effective settings — adopt them as the source of
-      // truth so the UI matches what was actually persisted/merged.
-      const effective: SecuritySettings = await response.json();
-      if (savesQueued.current === 1) {
-        setDraft(effective);
-        await mutate(SWR_KEYS.adminSecuritySettings, effective, {
-          revalidate: false,
-        });
-      }
-      toast.success("Security settings updated");
-    } catch (error) {
-      // Re-sync from the server (the source of truth) rather than a possibly
-      // stale local snapshot — a late failure must not clobber other edits
-      // that may have succeeded while this request was in flight.
+  const doSave = useCallback(
+    async (updates: SecuritySettingsUpdate) => {
       try {
-        if (savesQueued.current === 1) {
-          const fresh = await mutate<SecuritySettings>(
-            SWR_KEYS.adminSecuritySettings
-          );
-          // Re-checked after the await: an edit queued during the fetch owns
-          // the draft now.
-          if (fresh && savesQueued.current === 1) setDraft(fresh);
+        const response = await fetch(SWR_KEYS.adminSecuritySettings, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          // Send ONLY the changed fields. The backend persists each present key
+          // as an explicit override and lets absent keys fall back to env
+          // defaults. Sending the full settings would freeze every env default
+          // as an override and 403 on operator-locked fields in multi-tenant.
+          body: JSON.stringify(updates),
+        });
+        if (!response.ok) {
+          const errorMsg = (await response.json()).detail;
+          throw new Error(errorMsg);
         }
-      } catch {
-        // If revalidation also fails (e.g. network down), the optimistic
-        // update stays until the next successful SWR refresh (e.g. focus).
+        // PUT returns the new effective settings — adopt them as the source of
+        // truth so the UI matches what was actually persisted/merged.
+        const effective: SecuritySettings = await response.json();
+        if (savesQueued.current === 1) {
+          setDraft(effective);
+          await mutate(SWR_KEYS.adminSecuritySettings, effective, {
+            revalidate: false,
+          });
+        }
+        toast.success(t("toasts.securitySettingsUpdated"));
+      } catch (error) {
+        // Re-sync from the server (the source of truth) rather than a possibly
+        // stale local snapshot — a late failure must not clobber other edits
+        // that may have succeeded while this request was in flight.
+        try {
+          if (savesQueued.current === 1) {
+            const fresh = await mutate<SecuritySettings>(
+              SWR_KEYS.adminSecuritySettings
+            );
+            // Re-checked after the await: an edit queued during the fetch owns
+            // the draft now.
+            if (fresh && savesQueued.current === 1) setDraft(fresh);
+          }
+        } catch {
+          // If revalidation also fails (e.g. network down), the optimistic
+          // update stays until the next successful SWR refresh (e.g. focus).
+        }
+        const message =
+          error instanceof Error
+            ? error.message
+            : t("toasts.securitySettingsUpdateFailed");
+        toast.error(message);
       }
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Failed to update security settings";
-      toast.error(message);
-    }
-  }, []);
+    },
+    [t]
+  );
 
   const saveSettings = useCallback(
     (updates: SecuritySettingsUpdate) => {
@@ -338,7 +347,7 @@ export default function SecurityHardeningPage() {
       <SettingsLayouts.Header
         icon={route.icon}
         title={route.title}
-        description="Runtime-configurable security settings. Unset values fall back to your deployment's environment configuration."
+        description={t("page.description")}
         divider
       />
 
@@ -346,7 +355,7 @@ export default function SecurityHardeningPage() {
         {/* Authentication */}
         <div className="flex w-full flex-col gap-3">
           <Content
-            title="Authentication"
+            title={t("authentication.section.title")}
             sizePreset="main-content"
             variant="section"
           />
@@ -354,8 +363,8 @@ export default function SecurityHardeningPage() {
           <Card border="solid" rounding={4}>
             <Section>
               <ToggleRow
-                title="Sync Session Expiry with Identity Provider"
-                description="Log users out when the upstream OAuth/OIDC provider session expires."
+                title={t("authentication.idpExpiry.title")}
+                description={t("authentication.idpExpiry.description")}
                 checked={draft.track_external_idp_expiry}
                 onCheckedChange={(checked) =>
                   void saveSettings({ track_external_idp_expiry: checked })
@@ -366,8 +375,8 @@ export default function SecurityHardeningPage() {
                 <>
                   {isSingleTenantRuntime && (
                     <ToggleRow
-                      title="Restrict Open Sign-Up"
-                      description="New users must be invited to join this workspace."
+                      title={t("authentication.openSignUp.title")}
+                      description={t("authentication.openSignUp.description")}
                       checked={workspaceSettings.invite_only_enabled ?? false}
                       onCheckedChange={(checked) =>
                         void saveWorkspaceSettings({
@@ -378,8 +387,8 @@ export default function SecurityHardeningPage() {
                   )}
 
                   <ToggleRow
-                    title="Restrict Email Domains"
-                    description="Limit new user registrations to specific email domains."
+                    title={t("authentication.emailDomains.title")}
+                    description={t("authentication.emailDomains.description")}
                     checked={showDomains}
                     onCheckedChange={(checked) => {
                       if (checked) {
@@ -394,8 +403,10 @@ export default function SecurityHardeningPage() {
 
                   {showDomains && (
                     <InputVertical
-                      title="Allowed Email Domains"
-                      subDescription="New users can only register new accounts with emails in this domain list."
+                      title={t("authentication.allowedEmailDomains.title")}
+                      subDescription={t(
+                        "authentication.allowedEmailDomains.subDescription"
+                      )}
                       withLabel
                     >
                       <InputChipField
@@ -404,7 +415,9 @@ export default function SecurityHardeningPage() {
                         onAdd={addDomain}
                         value={domainInput}
                         onChange={setDomainInput}
-                        placeholder="Add a domain (e.g. onyx.app)"
+                        placeholder={t(
+                          "authentication.allowedEmailDomains.placeholder"
+                        )}
                       />
                     </InputVertical>
                   )}
@@ -413,8 +426,8 @@ export default function SecurityHardeningPage() {
 
               {showPasswordLockdown && (
                 <ToggleRow
-                  title="Disable Password Login & Signup"
-                  description="Everyone signs in and registers through SSO only. Requires at least one enabled SSO provider."
+                  title={t("authentication.passwordLockdown.title")}
+                  description={t("authentication.passwordLockdown.description")}
                   checked={!draft.password_auth_enabled}
                   onCheckedChange={(checked) =>
                     void saveSettings({ password_auth_enabled: !checked })
@@ -429,8 +442,8 @@ export default function SecurityHardeningPage() {
             <Card border="solid" rounding={4}>
               <Section>
                 <Content
-                  title="Password Policy"
-                  description="Requirements for all new passwords. Applies to basic auth only."
+                  title={t("passwordPolicy.section.title")}
+                  description={t("passwordPolicy.section.description")}
                   sizePreset="main-ui"
                   variant="section"
                 />
@@ -438,8 +451,8 @@ export default function SecurityHardeningPage() {
                 <div className="flex w-full items-start gap-4">
                   <div className="flex-1">
                     <InputVertical
-                      title="Minimum Password Length"
-                      suffix="(characters)"
+                      title={t("passwordPolicy.minLength.title")}
+                      suffix={t("passwordPolicy.charactersSuffix.label")}
                       withLabel
                     >
                       <InputNumber
@@ -449,14 +462,16 @@ export default function SecurityHardeningPage() {
                         }
                         min={1}
                         max={1024}
-                        placeholder="Default"
+                        placeholder={t(
+                          "passwordPolicy.lengthInput.placeholder"
+                        )}
                       />
                     </InputVertical>
                   </div>
                   <div className="flex-1">
                     <InputVertical
-                      title="Maximum Password Length"
-                      suffix="(characters)"
+                      title={t("passwordPolicy.maxLength.title")}
+                      suffix={t("passwordPolicy.charactersSuffix.label")}
                       withLabel
                     >
                       <InputNumber
@@ -466,14 +481,16 @@ export default function SecurityHardeningPage() {
                         }
                         min={1}
                         max={1024}
-                        placeholder="Default"
+                        placeholder={t(
+                          "passwordPolicy.lengthInput.placeholder"
+                        )}
                       />
                     </InputVertical>
                   </div>
                 </div>
 
                 <ToggleRow
-                  title="Require Uppercase Letter"
+                  title={t("passwordPolicy.requireUppercase.title")}
                   checked={draft.password_require_uppercase}
                   onCheckedChange={(checked) =>
                     void saveSettings({ password_require_uppercase: checked })
@@ -481,7 +498,7 @@ export default function SecurityHardeningPage() {
                 />
 
                 <ToggleRow
-                  title="Require Lowercase Letter"
+                  title={t("passwordPolicy.requireLowercase.title")}
                   checked={draft.password_require_lowercase}
                   onCheckedChange={(checked) =>
                     void saveSettings({ password_require_lowercase: checked })
@@ -489,7 +506,7 @@ export default function SecurityHardeningPage() {
                 />
 
                 <ToggleRow
-                  title="Require Number"
+                  title={t("passwordPolicy.requireNumber.title")}
                   checked={draft.password_require_digit}
                   onCheckedChange={(checked) =>
                     void saveSettings({ password_require_digit: checked })
@@ -497,9 +514,13 @@ export default function SecurityHardeningPage() {
                 />
 
                 <ToggleRow
-                  title="Require Special Characters"
+                  title={t("passwordPolicy.requireSpecialChar.title")}
                   description={markdown(
-                    "Accepted characters: `!@#$%^&*()_+-=[]{}|;:,.<>?`"
+                    // Kept as an argument: the literal contains `{}`, which ICU
+                    // would otherwise parse as a message argument.
+                    t("passwordPolicy.requireSpecialChar.description", {
+                      characters: SPECIAL_PASSWORD_CHARACTERS,
+                    })
                   )}
                   checked={draft.password_require_special_char}
                   onCheckedChange={(checked) =>
@@ -518,15 +539,15 @@ export default function SecurityHardeningPage() {
             <Card border="solid" rounding={4}>
               <Section>
                 <Content
-                  title="External JWT Authentication"
-                  description="Accept RS256 bearer tokens signed by your identity provider. Values set by environment variables are pinned and cannot be edited here."
+                  title={t("jwt.section.title")}
+                  description={t("jwt.section.description")}
                   sizePreset="main-ui"
                   variant="section"
                 />
 
                 <JwtTextRow
-                  title="Public Key URL"
-                  description="JWKS or PEM endpoint used to verify token signatures. Leave empty to disable JWT authentication."
+                  title={t("jwt.publicKeyUrl.title")}
+                  description={t("jwt.publicKeyUrl.description")}
                   value={draft.jwt_public_key_url ?? ""}
                   placeholder="https://idp.example.com/.well-known/jwks.json"
                   pinned={pinnedFields.includes("jwt_public_key_url")}
@@ -536,8 +557,8 @@ export default function SecurityHardeningPage() {
                 />
 
                 <JwtTextRow
-                  title="Expected Audience"
-                  description="Reject tokens whose aud claim does not match. Empty disables the check."
+                  title={t("jwt.expectedAudience.title")}
+                  description={t("jwt.expectedAudience.description")}
                   value={draft.jwt_expected_audience ?? ""}
                   placeholder="onyx"
                   pinned={pinnedFields.includes("jwt_expected_audience")}
@@ -547,8 +568,8 @@ export default function SecurityHardeningPage() {
                 />
 
                 <JwtTextRow
-                  title="Expected Issuer"
-                  description="Reject tokens whose iss claim does not match. Empty disables the check."
+                  title={t("jwt.expectedIssuer.title")}
+                  description={t("jwt.expectedIssuer.description")}
                   value={draft.jwt_expected_issuer ?? ""}
                   placeholder="https://idp.example.com"
                   pinned={pinnedFields.includes("jwt_expected_issuer")}
@@ -564,7 +585,7 @@ export default function SecurityHardeningPage() {
         {/* Admin Controls */}
         <div className="flex w-full flex-col gap-3">
           <Content
-            title="Admin Controls"
+            title={t("adminControls.section.title")}
             sizePreset="main-content"
             variant="section"
           />
@@ -572,8 +593,8 @@ export default function SecurityHardeningPage() {
           <Card border="solid" rounding={4}>
             <Section>
               <InputHorizontal
-                title="Full User Directory Visibility"
-                description="Exact name and email lookups work regardless of this setting."
+                title={t("adminControls.userDirectory.title")}
+                description={t("adminControls.userDirectory.description")}
                 withLabel
                 responsive
               >
@@ -595,16 +616,20 @@ export default function SecurityHardeningPage() {
                       <InputSelect.Item
                         value="all_users"
                         wrapDescription
-                        description="Anyone signed in can see the full user list when sharing resources."
+                        description={t(
+                          "adminControls.userDirectory.allUsers.description"
+                        )}
                       >
-                        Visible to All Users
+                        {t("adminControls.userDirectory.allUsers.label")}
                       </InputSelect.Item>
                       <InputSelect.Item
                         value="admins_only"
                         wrapDescription
-                        description="Only admins can see the full user list."
+                        description={t(
+                          "adminControls.userDirectory.adminsOnly.description"
+                        )}
                       >
-                        Visible to Admins Only
+                        {t("adminControls.userDirectory.adminsOnly.label")}
                       </InputSelect.Item>
                     </InputSelect.Content>
                   </InputSelect>
@@ -612,8 +637,8 @@ export default function SecurityHardeningPage() {
               </InputHorizontal>
 
               <InputHorizontal
-                title="Incognito Chats"
-                description="Incognito chats never appear in their owner's history. Group access is configured per group under Groups."
+                title={t("adminControls.incognito.title")}
+                description={t("adminControls.incognito.description")}
                 withLabel
                 responsive
               >
@@ -632,23 +657,29 @@ export default function SecurityHardeningPage() {
                       <InputSelect.Item
                         value="off"
                         wrapDescription
-                        description="No one can start incognito chats."
+                        description={t(
+                          "adminControls.incognito.off.description"
+                        )}
                       >
-                        Off
+                        {t("adminControls.incognito.off.label")}
                       </InputSelect.Item>
                       <InputSelect.Item
                         value="everyone"
                         wrapDescription
-                        description="Anyone signed in can start incognito chats."
+                        description={t(
+                          "adminControls.incognito.everyone.description"
+                        )}
                       >
-                        Everyone
+                        {t("adminControls.incognito.everyone.label")}
                       </InputSelect.Item>
                       <InputSelect.Item
                         value="groups"
                         wrapDescription
-                        description="Only members of groups with incognito access enabled."
+                        description={t(
+                          "adminControls.incognito.groups.description"
+                        )}
                       >
-                        Designated Groups
+                        {t("adminControls.incognito.groups.label")}
                       </InputSelect.Item>
                     </InputSelect.Content>
                   </InputSelect>
@@ -656,8 +687,8 @@ export default function SecurityHardeningPage() {
               </InputHorizontal>
 
               <InputHorizontal
-                title="Incognito Chat Records"
-                description="What the workspace keeps from incognito chats. New sessions pin the mode active when they start."
+                title={t("adminControls.incognitoRecords.title")}
+                description={t("adminControls.incognitoRecords.description")}
                 withLabel
                 responsive
               >
@@ -675,16 +706,20 @@ export default function SecurityHardeningPage() {
                       <InputSelect.Item
                         value="usage_only"
                         wrapDescription
-                        description="No message content is stored. Token usage is still tracked, and these chats do not appear in query history."
+                        description={t(
+                          "adminControls.incognitoRecords.usageOnly.description"
+                        )}
                       >
-                        Usage Only
+                        {t("adminControls.incognitoRecords.usageOnly.label")}
                       </InputSelect.Item>
                       <InputSelect.Item
                         value="full_history"
                         wrapDescription
-                        description="Recorded like any other chat: query history, usage, and tracing. Hidden only from the owner's own history."
+                        description={t(
+                          "adminControls.incognitoRecords.fullHistory.description"
+                        )}
                       >
-                        Full History
+                        {t("adminControls.incognitoRecords.fullHistory.label")}
                       </InputSelect.Item>
                     </InputSelect.Content>
                   </InputSelect>
@@ -693,8 +728,8 @@ export default function SecurityHardeningPage() {
 
               {!isMultiTenant && (
                 <InputHorizontal
-                  title="Mask Stored Credentials"
-                  description="Display format for saved API keys and credentials for admins."
+                  title={t("adminControls.maskCredentials.title")}
+                  description={t("adminControls.maskCredentials.description")}
                   withLabel
                   responsive
                 >
@@ -714,16 +749,20 @@ export default function SecurityHardeningPage() {
                         <InputSelect.Item
                           value="masked"
                           wrapDescription
-                          description="Show only the first and last few characters (e.g. abcd...wxyz)."
+                          description={t(
+                            "adminControls.maskCredentials.masked.description"
+                          )}
                         >
-                          Partially Masked
+                          {t("adminControls.maskCredentials.masked.label")}
                         </InputSelect.Item>
                         <InputSelect.Item
                           value="visible"
                           wrapDescription
-                          description="Show the full credential value to admins."
+                          description={t(
+                            "adminControls.maskCredentials.visible.description"
+                          )}
                         >
-                          Fully Visible
+                          {t("adminControls.maskCredentials.visible.label")}
                         </InputSelect.Item>
                       </InputSelect.Content>
                     </InputSelect>
@@ -739,7 +778,7 @@ export default function SecurityHardeningPage() {
             (operator-controlled, env-driven in multi-tenant cloud). */}
         <div className="flex w-full flex-col gap-3">
           <Content
-            title="Network Safety"
+            title={t("networkSafety.section.title")}
             sizePreset="main-content"
             variant="section"
           />
@@ -747,11 +786,11 @@ export default function SecurityHardeningPage() {
           <Card border="solid" rounding={4}>
             <Section>
               <ToggleRow
-                title="LLM Environment Variable Injection"
+                title={t("networkSafety.envInjection.title")}
                 description={
                   isMultiTenant
-                    ? "Custom LLM provider configurations can never set process environment variables on multi-tenant deployments."
-                    : "Allow custom LLM provider configurations to temporarily set process environment variables during calls. Disable to require all provider settings to have a LiteLLM parameter equivalent."
+                    ? t("networkSafety.envInjection.multiTenantDescription")
+                    : t("networkSafety.envInjection.description")
                 }
                 checked={draft.llm_custom_config_env_injection}
                 onCheckedChange={(checked) =>
@@ -764,8 +803,8 @@ export default function SecurityHardeningPage() {
 
               {!isMultiTenant && (
                 <InputHorizontal
-                  title="SSRF Protection"
-                  description="Validate outbound requests against private or internal IPs for Server-Side Request Forgery (SSRF) protection."
+                  title={t("networkSafety.ssrf.title")}
+                  description={t("networkSafety.ssrf.description")}
                   withLabel
                   responsive
                 >
@@ -783,30 +822,38 @@ export default function SecurityHardeningPage() {
                         <InputSelect.Item
                           value="validate_all"
                           wrapDescription
-                          description="Most restrictive. All outbound requests refuse to reach private or internal IPs, including web connectors."
+                          description={t(
+                            "networkSafety.ssrf.validateAll.description"
+                          )}
                         >
-                          Validate All Requests
+                          {t("networkSafety.ssrf.validateAll.label")}
                         </InputSelect.Item>
                         <InputSelect.Item
                           value="validate_llm"
                           wrapDescription
-                          description="Validate all LLM-initiated URL fetches. Admin-configured connectors can still reach private or internal IPs."
+                          description={t(
+                            "networkSafety.ssrf.validateLlm.description"
+                          )}
                         >
-                          Validate LLM Requests
+                          {t("networkSafety.ssrf.validateLlm.label")}
                         </InputSelect.Item>
                         <InputSelect.Item
                           value="allow_private_network"
                           wrapDescription
-                          description="Like Validate LLM Requests, but admin-configured MCP/OAuth endpoints may also reach private LAN hosts. Loopback (the app host itself) and cloud-metadata stay blocked."
+                          description={t(
+                            "networkSafety.ssrf.allowPrivateNetwork.description"
+                          )}
                         >
-                          Allow Private Network
+                          {t("networkSafety.ssrf.allowPrivateNetwork.label")}
                         </InputSelect.Item>
                         <InputSelect.Item
                           value="disabled"
                           wrapDescription
-                          description="Use only in trusted networks. Allow all outbound requests — required for connecting to local LLM backends."
+                          description={t(
+                            "networkSafety.ssrf.disabled.description"
+                          )}
                         >
-                          Disabled
+                          {t("networkSafety.ssrf.disabled.label")}
                         </InputSelect.Item>
                       </InputSelect.Content>
                     </InputSelect>

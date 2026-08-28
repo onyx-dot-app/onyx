@@ -1,3 +1,4 @@
+import { useLocale, useTranslations } from "next-intl";
 import {
   useOnyxBotAnalytics,
   useQueryAnalytics,
@@ -10,19 +11,15 @@ import {
   useLoggedChartError,
 } from "@/sections/usage/AnalyticsChart";
 import { DateRangePickerValue } from "@/refresh-components/DateRangePicker";
+import { formatTokenCount } from "@/lib/format";
 
 interface TimeRangeProps {
   timeRange: DateRangePickerValue;
 }
 
-function formatCount(value: number): string {
-  return new Intl.NumberFormat("en-US", {
-    notation: "standard",
-    maximumFractionDigits: 0,
-  }).format(value);
-}
-
 export function UsageChart({ timeRange }: TimeRangeProps) {
+  const t = useTranslations("admin.analytics");
+  const locale = useLocale();
   const queryAnalytics = useQueryAnalytics(timeRange);
   const userAnalytics = useUserAnalytics(timeRange);
 
@@ -31,48 +28,61 @@ export function UsageChart({ timeRange }: TimeRangeProps) {
 
   return (
     <AnalyticsChart
-      title="Usage"
-      description="Usage over time"
+      title={t("usageChart.title")}
+      description={t("usageChart.description")}
       timeRange={timeRange}
       state={resolveChartState({
         isLoading: queryAnalytics.isLoading || userAnalytics.isLoading,
         error: queryAnalytics.error || userAnalytics.error,
         // Either endpoint can be the one that failed, so stay source-neutral.
-        errorMessage: "Failed to fetch usage data.",
-        emptyMessage: "No queries in the selected time range.",
+        errorMessage: t("usageChart.error"),
+        emptyMessage: t("usageChart.empty"),
         series: [
-          chartSeries("Queries", queryAnalytics.data, (e) => e.total_queries),
           chartSeries(
-            "Unique Users",
+            t("usageChart.series.queries.label"),
+            queryAnalytics.data,
+            (e) => e.total_queries
+          ),
+          chartSeries(
+            t("usageChart.series.uniqueUsers.label"),
             userAnalytics.data,
             (e) => e.total_active_users
           ),
         ],
       })}
       allowDecimals={false}
-      yAxisFormatter={formatCount}
+      yAxisFormatter={(value) => formatTokenCount(value, locale)}
     />
   );
 }
 
 export function FeedbackChart({ timeRange }: TimeRangeProps) {
+  const t = useTranslations("admin.analytics");
   const { data, isLoading, error } = useQueryAnalytics(timeRange);
 
   useLoggedChartError("Feedback", error);
 
   return (
     <AnalyticsChart
-      title="Feedback"
-      description="Thumbs Up / Thumbs Down over time"
+      title={t("feedbackChart.title")}
+      description={t("feedbackChart.description")}
       timeRange={timeRange}
       state={resolveChartState({
         isLoading,
         error,
-        errorMessage: "Failed to fetch feedback data.",
-        emptyMessage: "No feedback in the selected time range.",
+        errorMessage: t("feedbackChart.error"),
+        emptyMessage: t("feedbackChart.empty"),
         series: [
-          chartSeries("Positive Feedback", data, (e) => e.total_likes),
-          chartSeries("Negative Feedback", data, (e) => e.total_dislikes),
+          chartSeries(
+            t("feedbackChart.series.positive.label"),
+            data,
+            (e) => e.total_likes
+          ),
+          chartSeries(
+            t("feedbackChart.series.negative.label"),
+            data,
+            (e) => e.total_dislikes
+          ),
         ],
       })}
     />
@@ -80,24 +90,32 @@ export function FeedbackChart({ timeRange }: TimeRangeProps) {
 }
 
 export function SlackChannelChart({ timeRange }: TimeRangeProps) {
+  const t = useTranslations("admin.analytics");
   const { data, isLoading, error } = useOnyxBotAnalytics(timeRange);
 
   useLoggedChartError("OnyxBot", error);
 
   return (
     <AnalyticsChart
-      title="Slack Channel"
-      description="Total Queries vs Auto Resolved"
+      title={t("slackChannelChart.title")}
+      description={t("slackChannelChart.description")}
       timeRange={timeRange}
       state={resolveChartState({
         isLoading,
         error,
-        errorMessage: "Failed to fetch OnyxBot data.",
-        emptyMessage:
-          "No OnyxBot activity in this workspace for the selected time range.",
+        errorMessage: t("slackChannelChart.error"),
+        emptyMessage: t("slackChannelChart.empty"),
         series: [
-          chartSeries("Total Queries", data, (e) => e.total_queries),
-          chartSeries("Automatically Resolved", data, (e) => e.auto_resolved),
+          chartSeries(
+            t("slackChannelChart.series.totalQueries.label"),
+            data,
+            (e) => e.total_queries
+          ),
+          chartSeries(
+            t("slackChannelChart.series.autoResolved.label"),
+            data,
+            (e) => e.auto_resolved
+          ),
         ],
       })}
     />

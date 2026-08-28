@@ -5,7 +5,8 @@ import { endIncognitoSession } from "@/app/app/services/lib";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { Section } from "@/layouts/general-layouts";
-import { useFederatedConnectors, useFilters, useLlmManager } from "@/lib/hooks";
+import { useFederatedConnectors, useLlmManager } from "@/lib/hooks";
+import { useSendChatMessageFromURL } from "@/lib/chat/hooks";
 import { useForcedTools } from "@/lib/hooks/useForcedTools";
 import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
@@ -14,7 +15,6 @@ import Dropzone from "react-dropzone";
 import AppInputBar, { AppInputBarHandle } from "@/sections/input/AppInputBar";
 import useChatSessions from "@/hooks/useChatSessions";
 import useCCPairs from "@/hooks/useCCPairs";
-import useTags from "@/hooks/useTags";
 import { useDocumentSets } from "@/lib/hooks/useDocumentSets";
 import { useAgents } from "@/lib/agents/hooks";
 import { AppPopup } from "@/app/app/components/AppPopup";
@@ -24,8 +24,6 @@ import { NoAgentModal } from "@/lib/agents/components";
 import PreviewModal from "@/sections/modals/PreviewModal";
 import { Modal } from "@opal/components";
 import { useSendMessageToParent } from "@/lib/extension/hooks";
-import { SUBMIT_MESSAGE_TYPES } from "@/lib/extension/constants";
-import { getSourceMetadata } from "@/lib/sources";
 import { SourceMetadata } from "@/lib/search/interfaces";
 import { FederatedConnectorDetail, ValidSources } from "@/lib/types";
 import DocumentsSidebar from "@/sections/document-sidebar/DocumentsSidebar";
@@ -86,6 +84,7 @@ import EESearchUI from "@/ee/sections/SearchUI";
 const SearchUI = paidTierGated(EESearchUI);
 import { motion, AnimatePresence } from "motion/react";
 import { useChatSessionSupportsRetrieval } from "@/lib/app/hooks";
+import { useTranslations } from "next-intl";
 
 interface FadeProps {
   show: boolean;
@@ -133,13 +132,14 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   //   }
   // });
 
+  const t = useTranslations("chat.app");
   const router = useRouter();
   const appFocus = useAppFocus();
   const { isMobile } = useScreenSize();
 
   useToastFromQuery({
     oauth_connected: {
-      message: "Authentication successful",
+      message: t("oauthConnected.toast"),
       type: "success",
     },
   });
@@ -155,9 +155,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   } = useChatSessions();
   const { vectorDbEnabled, disable_default_assistant } = useSettings();
 
-  const { ccPairs } = useCCPairs(vectorDbEnabled);
-  const { tags } = useTags();
-  const { documentSets } = useDocumentSets();
   const {
     currentMessageFiles,
     setCurrentMessageFiles,
@@ -177,40 +174,12 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const { agents, isLoading: isLoadingAgents } = useAgents();
 
-  // Also fetch federated connectors for the sources list
-  const { data: federatedConnectorsData } = useFederatedConnectors();
-
   const { user } = useUser();
   // `useUser()` reports null while loading, so gating on it would redirect during
   // the /me load window. Read the raw result instead (undefined = loading, null =
   // resolved signed-out). This matters for anonymous users specifically: they're
   // kept on the login page, so unlike logged-in users they wouldn't bounce back.
   const { user: resolvedUser } = useCurrentUser();
-
-  function processSearchParamsAndSubmitMessage(searchParamsString: string) {
-    const newSearchParams = new URLSearchParams(searchParamsString);
-    const message = newSearchParams?.get("user-prompt");
-
-    filterManager.buildFiltersFromQueryString(
-      newSearchParams.toString(),
-      sources,
-      documentSets.map((ds) => ds.name),
-      tags
-    );
-
-    newSearchParams.delete(SEARCH_PARAM_NAMES.SEND_ON_LOAD);
-
-    router.replace(`?${newSearchParams.toString()}`, { scroll: false });
-
-    // If there's a message, submit it
-    if (message) {
-      onSubmit({
-        message,
-        currentMessageFiles,
-        deepResearch: deepResearchEnabledForCurrentWorkflow,
-      });
-    }
-  }
 
   const activeAgent = useActiveAgent();
 
@@ -276,51 +245,18 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     userId: user?.id,
   });
 
-  const availableSources: ValidSources[] = useMemo(() => {
-    return ccPairs.map((ccPair) => ccPair.source);
-  }, [ccPairs]);
-
-  const sources: SourceMetadata[] = useMemo(() => {
-    const uniqueSources = Array.from(new Set(availableSources));
-    const regularSources = uniqueSources.map((source) =>
-      getSourceMetadata(source)
-    );
-
-    // Add federated connectors as sources
-    const federatedSources =
-      federatedConnectorsData?.map((connector: FederatedConnectorDetail) => {
-        return getSourceMetadata(connector.source);
-      }) || [];
-
-    // Combine sources and deduplicate based on internalName
-    const allSources = [...regularSources, ...federatedSources];
-    const deduplicatedSources = allSources.reduce((acc, source) => {
-      const existing = acc.find((s) => s.internalName === source.internalName);
-      if (!existing) {
-        acc.push(source);
-      }
-      return acc;
-    }, [] as SourceMetadata[]);
-
-    return deduplicatedSources;
-  }, [availableSources, federatedConnectorsData]);
-
   // Show toast if any files failed in ProjectsContext reconciliation
   useEffect(() => {
     if (lastFailedFiles && lastFailedFiles.length > 0) {
       const names = lastFailedFiles.map((f) => f.name).join(", ");
       toast.error(
-        lastFailedFiles.length === 1
-          ? `File failed and was removed: ${names}`
-          : `Files failed and were removed: ${names}`
+        t("failedFiles.toast", { count: lastFailedFiles.length, names })
       );
       clearLastFailedFiles();
     }
-  }, [lastFailedFiles, clearLastFailedFiles]);
+  }, [lastFailedFiles, clearLastFailedFiles, t]);
 
   const chatInputBarRef = useRef<AppInputBarHandle>(null);
-
-  const filterManager = useFilters();
 
   // An unresolved agent reads as plain chat, so a named-agent layout never
   // flashes for an agent that is not there yet.
@@ -347,32 +283,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   const chatSessionIdRef = useRef<string | null>(currentChatSessionId);
   const loadedIdSessionRef = useRef<string | null>(currentChatSessionId);
   const submitOnLoadPerformed = useRef<boolean>(false);
-
-  function loadNewPageLogic(event: MessageEvent) {
-    if (event.data.type === SUBMIT_MESSAGE_TYPES.PAGE_CHANGE) {
-      try {
-        const url = new URL(event.data.href);
-        processSearchParamsAndSubmitMessage(url.searchParams.toString());
-      } catch (error) {
-        console.error("Error parsing URL:", error);
-      }
-    }
-  }
-
-  // Equivalent to `loadNewPageLogic`
-  useEffect(() => {
-    if (searchParams?.get(SEARCH_PARAM_NAMES.SEND_ON_LOAD)) {
-      processSearchParamsAndSubmitMessage(searchParams.toString());
-    }
-  }, [searchParams, router]);
-
-  useEffect(() => {
-    window.addEventListener("message", loadNewPageLogic);
-
-    return () => {
-      window.removeEventListener("message", loadNewPageLogic);
-    };
-  }, []);
 
   const [selectedDocuments, setSelectedDocuments] = useState<OnyxDocument[]>(
     []
@@ -511,7 +421,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     handleMessageSpecificFileUpload,
     availableContextTokens,
   } = useChatController({
-    filterManager,
     llmManager,
     availableAgents: agents,
     activeAgent,
@@ -528,7 +437,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   } = useChatSessionController({
     existingChatSessionId: currentChatSessionId,
     searchParams,
-    filterManager,
     firstMessage,
     setSelectedDocuments,
     setCurrentMessageFiles,
@@ -539,6 +447,13 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     submitOnLoadPerformed,
     refreshChatSessions,
     onSubmit,
+  });
+
+  // A link can arrive carrying both a prompt and a search scope. Declared here
+  // because it submits, so it needs `onSubmit` above it.
+  useSendChatMessageFromURL({
+    onSubmit,
+    deepResearch: deepResearchEnabledForCurrentWorkflow,
   });
 
   useSendMessageToParent();
@@ -583,7 +498,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       .reverse()
       .find((m) => m.type === "user");
     if (!lastUserMsg) {
-      toast.error("No previously-submitted user message found.");
+      toast.error(t("noPreviousMessage.toast"));
       return;
     }
 
@@ -601,6 +516,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     currentMessageFiles,
     deepResearchEnabledForCurrentWorkflow,
     multiModel.isMultiModelActive,
+    t,
   ]);
 
   if (resolvedUser === null) {
@@ -821,7 +737,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
               <Modal.Content>
                 <Modal.Header
                   icon={SvgFileText}
-                  title="Sources"
+                  title={t("sourcesModal.title")}
                   onClose={() => updateCurrentDocumentSidebarVisible(false)}
                 />
                 <Modal.Body>
@@ -934,21 +850,21 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                           }
                           title={
                             sessionFetchError.type === "not_found"
-                              ? "Chat not found"
+                              ? t("sessionNotFound.title")
                               : sessionFetchError.type === "access_denied"
-                                ? "Access denied"
-                                : "Something went wrong"
+                                ? t("sessionAccessDenied.title")
+                                : t("sessionGenericError.title")
                           }
                           description={
                             sessionFetchError.type === "not_found"
-                              ? "This chat session doesn't exist or has been deleted."
+                              ? t("sessionNotFound.description")
                               : sessionFetchError.type === "access_denied"
-                                ? "You don't have permission to view this chat session."
+                                ? t("sessionAccessDenied.description")
                                 : sessionFetchError.detail
                           }
                         />
                         <Button href="/app" prominence="secondary">
-                          Start a new chat
+                          {t("newChatButton.label")}
                         </Button>
                       </Section>
                     )}
@@ -1025,7 +941,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         <Button
                           icon={SvgChevronDown}
                           onClick={handleScrollToBottom}
-                          aria-label="Scroll to bottom"
+                          aria-label={t("scrollToBottomButton.label")}
                           prominence="secondary"
                         />
                       </div>
@@ -1088,7 +1004,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         }
                         toggleDeepResearch={toggleDeepResearch}
                         isMultiModelActive={multiModel.isMultiModelActive}
-                        filterManager={filterManager}
                         llmManager={llmManager}
                         initialMessage={
                           searchParams?.get(SEARCH_PARAM_NAMES.USER_PROMPT) ||

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import ActionCard from "@/sections/actions/ActionCard";
 import Actions from "@/sections/actions/Actions";
 import ToolsList from "@/sections/actions/ToolsList";
@@ -35,6 +36,7 @@ export default function OpenApiActionCard({
   mutateOpenApiTools,
   onOpenDisconnectModal,
 }: OpenApiActionCardProps) {
+  const t = useTranslations("actions");
   const [isToolsExpanded, setIsToolsExpanded] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [updatingStatus, setUpdatingStatus] = useState(false);
@@ -181,20 +183,20 @@ export default function OpenApiActionCard({
         searchQuery={searchQuery}
         onSearchQueryChange={setSearchQuery}
         onFold={handleFold}
-        ariaLabel={`${tool.name} OpenAPI action card`}
+        ariaLabel={t("openApiCard.card.ariaLabel", { name: tool.name })}
       >
         <ToolsList
           isEmpty={filteredTools.length === 0}
           searchQuery={searchQuery}
-          emptyMessage="No actions defined for this OpenAPI schema"
-          emptySearchMessage="No actions match your search"
+          emptyMessage={t("openApiCard.toolsList.emptyMessage")}
+          emptySearchMessage={t("openApiCard.toolsList.emptySearchMessage")}
           className="gap-2"
         >
           {filteredTools.map((method) => (
             <ToolItem
               key={`${tool.id}-${method.method}-${method.path}-${method.name}`}
               name={method.name}
-              description={method.summary || "No summary provided"}
+              description={method.summary || t("openApiCard.method.noSummary")}
               variant="openapi"
               openApiMetadata={{
                 method: method.method,
@@ -210,7 +212,7 @@ export default function OpenApiActionCard({
           icon={({ className }) => (
             <SvgTrash className={cn(className, "stroke-action-danger-05")} />
           )}
-          title="Delete OpenAPI action"
+          title={t("openApiCard.deleteModal.title")}
           onClose={() => deleteModal.toggle(false)}
           submit={
             <Button
@@ -220,17 +222,19 @@ export default function OpenApiActionCard({
                 deleteModal.toggle(false);
               }}
             >
-              Delete
+              {t("openApiCard.deleteModal.submitButton.label")}
             </Button>
           }
         >
           <div className="flex flex-col gap-4">
             <Text as="p" text03>
-              This will permanently delete the OpenAPI action <b>{tool.name}</b>{" "}
-              and its configuration.
+              {t.rich("openApiCard.deleteModal.body.description", {
+                name: tool.name,
+                emphasis: (chunks) => <b>{chunks}</b>,
+              })}
             </Text>
             <Text as="p" text03>
-              Are you sure you want to delete this OpenAPI action?
+              {t("openApiCard.deleteModal.body.confirmation")}
             </Text>
           </div>
         </Modal>

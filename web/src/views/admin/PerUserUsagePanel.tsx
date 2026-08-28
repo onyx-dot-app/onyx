@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
+import { useLocale, useTranslations } from "next-intl";
 import { Card, MessageCard, Text } from "@opal/components";
 import { SvgX } from "@opal/icons";
 import { PageLoader, Section } from "@opal/layouts";
@@ -48,6 +49,8 @@ interface PerUserUsagePanelProps {
 export default function PerUserUsagePanel({
   timeRange,
 }: PerUserUsagePanelProps) {
+  const t = useTranslations("admin.perUserUsage");
+  const locale = useLocale();
   const { usage, isLoading, error } = useUsageExport(timeRange);
   const [selectedEmail, setSelectedEmail] = useState<string | null>(null);
 
@@ -93,11 +96,14 @@ export default function PerUserUsagePanel({
       width="full"
       height="fit"
     >
-      <Text font="heading-h3">Usage overview</Text>
+      <Text font="heading-h3">{t("panel.title")}</Text>
       <Text font="secondary-body" color="text-03">
         {usage
-          ? `${formatDate(usage.start)} – ${formatDate(usage.end)} · Costs are calculated from recorded model usage.`
-          : "Per-user spend and token usage for the selected period."}
+          ? t("panel.description", {
+              start: formatDate(usage.start),
+              end: formatDate(usage.end),
+            })
+          : t("panel.emptyDescription")}
       </Text>
     </Section>
   );
@@ -131,7 +137,7 @@ export default function PerUserUsagePanel({
         <MessageCard
           variant="error"
           icon={SvgX}
-          title="Failed to load usage for this period."
+          title={t("panel.error.title")}
         />
       </Section>
     );
@@ -152,32 +158,34 @@ export default function PerUserUsagePanel({
         <div className="grid grid-cols-2 lg:grid-cols-4">
           <div className="border-b border-border-02 lg:border-b-0">
             <SummaryMetric
-              label="Workspace spend"
-              value={formatCost(totalCostCents)}
-              detail="Across all listed users"
+              label={t("summary.workspaceSpend.label")}
+              value={formatCost(totalCostCents, locale)}
+              detail={t("summary.workspaceSpend.detail")}
             />
           </div>
           <div className="border-b border-l border-border-02 lg:border-b-0">
             <SummaryMetric
-              label="Total tokens"
-              value={formatTokens(totalTokens)}
-              detail="Input (including cache reads) and output"
+              label={t("summary.totalTokens.label")}
+              value={formatTokens(totalTokens, locale)}
+              detail={t("summary.totalTokens.detail")}
             />
           </div>
           <div className="border-b border-border-02 lg:border-b-0 lg:border-l">
             <SummaryMetric
-              label="Active users"
-              value={activeUsers.toLocaleString()}
-              detail={`${users.length.toLocaleString()} users with records`}
+              label={t("summary.activeUsers.label")}
+              value={formatTokens(activeUsers, locale)}
+              detail={t("summary.activeUsers.detail", { count: users.length })}
             />
           </div>
           <div className="border-l border-border-02">
             <SummaryMetric
-              label="Top spender"
+              label={t("summary.topSpender.label")}
               value={
-                topSpender ? formatCost(topSpender.totals.cost_cents) : "—"
+                topSpender
+                  ? formatCost(topSpender.totals.cost_cents, locale)
+                  : "—"
               }
-              detail={topSpender?.email ?? "No spend recorded"}
+              detail={topSpender?.email ?? t("summary.topSpender.noSpend")}
             />
           </div>
         </div>
@@ -199,17 +207,16 @@ export default function PerUserUsagePanel({
           width="full"
           height="fit"
         >
-          <Text font="heading-h3">Users</Text>
+          <Text font="heading-h3">{t("users.title")}</Text>
           <Text font="secondary-body" color="text-03">
-            Spend is sorted highest first. Filter the list, then select a user
-            for a complete breakdown.
+            {t("users.description")}
           </Text>
         </Section>
 
         {users.length === 0 ? (
           <Card border="solid" rounding={4} padding={3}>
             <Text font="main-ui-body" color="text-03">
-              No usage recorded for this period.
+              {t("users.empty.description")}
             </Text>
           </Card>
         ) : (

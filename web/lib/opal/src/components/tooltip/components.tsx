@@ -119,7 +119,8 @@ function Tooltip({
       {!suppressed && (
         <TooltipPrimitive.Portal>
           <TooltipPrimitive.Content
-            className="opal-tooltip"
+            /* Dark surface in both themes, so the content resolves dark tokens. */
+            className="dark opal-tooltip"
             side={side}
             align={align}
             sideOffset={sideOffset}

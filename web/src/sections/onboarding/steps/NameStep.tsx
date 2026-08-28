@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useRef } from "react";
+import { useTranslations } from "next-intl";
 import Text from "@/refresh-components/texts/Text";
 import { Button, InputTypeIn } from "@opal/components";
 import {
@@ -21,6 +22,7 @@ export interface NameStepProps {
 
 const NameStep = React.memo(
   ({ state: onboardingState, actions: onboardingActions }: NameStepProps) => {
+    const t = useTranslations("onboarding");
     const { userName } = onboardingState.data;
     const { updateName, goToStep, setButtonActive, nextStep } =
       onboardingActions;
@@ -59,12 +61,12 @@ const NameStep = React.memo(
           <InputHorizontal
             responsive
             icon={SvgUser}
-            title="What should Onyx call you?"
-            description="We will display this name in the app."
+            title={t("nameStep.title")}
+            description={t("nameStep.description")}
           >
             <InputTypeIn
               ref={inputRef}
-              placeholder="Your name"
+              placeholder={t("nameStep.input.placeholder")}
               value={userName || ""}
               onChange={(e) => updateName(e.target.value)}
               onKeyDown={handleKeyDown}
@@ -78,7 +80,7 @@ const NameStep = React.memo(
           className={containerClasses}
           onClick={handleEdit}
           onKeyDown={clickOnKeyDown(handleEdit)}
-          aria-label="Edit display name"
+          aria-label={t("nameStep.edit.ariaLabel")}
           role="button"
           tabIndex={0}
         >
@@ -105,7 +107,7 @@ const NameStep = React.memo(
                 prominence="internal"
                 size="sm"
                 icon={SvgEdit}
-                tooltip="Edit"
+                tooltip={t("nameStep.edit.tooltip")}
               />
             </Hoverable.Item>
             <SvgCheckCircle

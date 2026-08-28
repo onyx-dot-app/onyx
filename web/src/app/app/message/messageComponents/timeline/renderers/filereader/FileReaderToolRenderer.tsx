@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { useTranslations } from "next-intl";
 import { Card } from "@opal/components";
 import { SvgFileText } from "@opal/icons";
 import {
@@ -54,18 +55,11 @@ function constructFileReaderState(
   };
 }
 
-function formatCharRange(
-  startChar: number,
-  endChar: number,
-  totalChars: number
-): string {
-  return `chars ${startChar.toLocaleString()}\u2013${endChar.toLocaleString()} of ${totalChars.toLocaleString()}`;
-}
-
 export const FileReaderToolRenderer: MessageRenderer<
   FileReaderToolPacket,
   {}
 > = ({ packets, onComplete, stopPacketSeen, renderType, children }) => {
+  const t = useTranslations("chat.messages.timeline");
   const state = constructFileReaderState(packets);
 
   useEffect(() => {
@@ -74,13 +68,15 @@ export const FileReaderToolRenderer: MessageRenderer<
     }
   }, [state.isComplete, onComplete]);
 
+  const charRange = {
+    start: state.startChar,
+    end: state.endChar,
+    total: state.totalChars,
+  };
+
   const statusText = state.fileName
-    ? `Read ${state.fileName} (${formatCharRange(
-        state.startChar,
-        state.endChar,
-        state.totalChars
-      )})`
-    : "Reading file";
+    ? t("fileReader.read.status", { fileName: state.fileName, ...charRange })
+    : t("fileReader.reading.status");
 
   const isCompact = renderType === RenderType.COMPACT;
 
@@ -119,11 +115,7 @@ export const FileReaderToolRenderer: MessageRenderer<
                   {state.fileName}
                 </Text>
                 <Text as="span" mainUiMuted text04>
-                  {formatCharRange(
-                    state.startChar,
-                    state.endChar,
-                    state.totalChars
-                  )}
+                  {t("fileReader.charRange.label", charRange)}
                 </Text>
               </Section>
               {hasPreview && (

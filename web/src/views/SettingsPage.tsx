@@ -80,7 +80,7 @@ import { useIsSearchModeAvailable, useSettings } from "@/lib/settings/hooks";
 import {
   ALL_REASONING_STOPS,
   PaneSlider,
-  REASONING_STOP_LABELS,
+  REASONING_STOP_LABEL_KEYS,
   UNSET_REASONING_STOP,
   reasoningStopIndex,
 } from "@/sections/model-selector/setting-controls";
@@ -751,32 +751,6 @@ function GeneralSettings() {
                   </InputSelect.Content>
                 </InputSelect>
               </InputHorizontal>
-              <InputHorizontal
-                title={t("appearance.language.title")}
-                description={t("appearance.language.description")}
-                center
-                withLabel
-              >
-                <InputSelect
-                  value={currentLanguage}
-                  onValueChange={(value) => {
-                    // SAFETY: the items below only carry SUPPORTED_LOCALES
-                    // values, so the select can't emit anything else.
-                    updateUserLanguage(value as Locale).catch(() => {
-                      toast.error(t("appearance.language.updateFailed"));
-                    });
-                  }}
-                >
-                  <InputSelect.Trigger />
-                  <InputSelect.Content>
-                    {SUPPORTED_LOCALES.map((locale) => (
-                      <InputSelect.Item key={locale} value={locale}>
-                        {LOCALE_ENDONYMS[locale]}
-                      </InputSelect.Item>
-                    ))}
-                  </InputSelect.Content>
-                </InputSelect>
-              </InputHorizontal>
               <InputVertical title={t("appearance.chatBackground.title")}>
                 <div className="flex flex-wrap gap-2">
                   {CHAT_BACKGROUND_OPTIONS.map((bg) => {
@@ -829,6 +803,45 @@ function GeneralSettings() {
                   })}
                 </div>
               </InputVertical>
+            </Section>
+          </Card>
+        </Section>
+
+        <Section gap={3}>
+          <Content
+            title={t("language.title")}
+            sizePreset="main-content"
+            variant="section"
+            width="full"
+          />
+          <Card border="solid" rounding={4}>
+            <Section alignItems="start" height="fit">
+              <InputHorizontal
+                title={t("language.displayLanguage.title")}
+                description={t("language.displayLanguage.description")}
+                center
+                withLabel
+              >
+                <InputSelect
+                  value={currentLanguage}
+                  onValueChange={(value) => {
+                    // SAFETY: the items below only carry SUPPORTED_LOCALES
+                    // values, so the select can't emit anything else.
+                    updateUserLanguage(value as Locale).catch(() => {
+                      toast.error(t("language.toasts.updateFailed"));
+                    });
+                  }}
+                >
+                  <InputSelect.Trigger />
+                  <InputSelect.Content>
+                    {SUPPORTED_LOCALES.map((locale) => (
+                      <InputSelect.Item key={locale} value={locale}>
+                        {LOCALE_ENDONYMS[locale]}
+                      </InputSelect.Item>
+                    ))}
+                  </InputSelect.Content>
+                </InputSelect>
+              </InputHorizontal>
             </Section>
           </Card>
         </Section>
@@ -1151,6 +1164,7 @@ function PromptShortcuts() {
 
 function ChatPreferencesSettings() {
   const t = useTranslations("settings");
+  const tModelSelector = useTranslations("chat.modelSelector");
   const {
     user,
     updateUserPersonalization,
@@ -1389,11 +1403,11 @@ function ChatPreferencesSettings() {
                     </Section>
                     <Section width={4} height="auto" alignItems="end">
                       <Text font="secondary-mono" color="text-04" nowrap>
-                        {
-                          REASONING_STOP_LABELS[
+                        {tModelSelector(
+                          REASONING_STOP_LABEL_KEYS[
                             ALL_REASONING_STOPS[draftEffortStop] ?? "medium"
                           ]
-                        }
+                        )}
                       </Text>
                     </Section>
                   </Section>

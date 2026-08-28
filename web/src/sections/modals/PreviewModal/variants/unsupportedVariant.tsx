@@ -13,10 +13,10 @@ export const unsupportedVariant: PreviewVariant = {
   renderContent: (ctx) => (
     <div className="flex flex-col items-center justify-center flex-1 w-full min-h-0 gap-4 p-6">
       <Text as="p" font="main-ui-body" color="text-03">
-        This file format is not supported for preview.
+        {ctx.t("unsupported.message")}
       </Text>
       <a href={ctx.fileUrl} download={ctx.fileName}>
-        <Button>Download File</Button>
+        <Button>{ctx.t("downloadButton.label")}</Button>
       </a>
     </div>
   ),

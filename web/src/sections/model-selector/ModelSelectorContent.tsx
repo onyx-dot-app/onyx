@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useRef, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import * as SliderPrimitive from "@radix-ui/react-slider";
 import {
   Button,
@@ -33,14 +34,10 @@ import {
 } from "@/lib/languageModels/options";
 import { ReasoningEffortOverride } from "@/lib/languageModels/types";
 import {
-  ADMIN_LIMITED_SETTING_TOOLTIP,
   ALL_REASONING_STOPS,
   PaneSlider,
-  REASONING_STOP_LABELS,
   SettingRow,
-  UNKNOWN_CONTEXT_TOOLTIP,
   UNSET_REASONING_STOP,
-  UNSUPPORTED_SETTING_TOOLTIP,
   cappedReasoningStop,
   formatContextWindow,
   maxReasoningStop,
@@ -158,6 +155,7 @@ interface ModelDetailPaneProps {
 }
 
 function ModelDetailPane({ option, managers, onBack }: ModelDetailPaneProps) {
+  const t = useTranslations("chat.modelSelector");
   const { user } = useUser();
   // Backend pins temperature to 1 (or omits it) for reasoning models, so
   // the slider is locked at 1.
@@ -202,8 +200,15 @@ function ModelDetailPane({ option, managers, onBack }: ModelDetailPaneProps) {
   );
 
   const displayTemperature = temperatureEnabled ? localTemperature : 1;
+  const reasoningStopLabels = {
+    off: t("reasoningLevel.off.label"),
+    low: t("reasoningLevel.low.label"),
+    medium: t("reasoningLevel.medium.label"),
+    high: t("reasoningLevel.high.label"),
+    xhigh: t("reasoningLevel.xhigh.label"),
+  } satisfies Record<ReasoningEffortOverride, string>;
   const effortLabel =
-    REASONING_STOP_LABELS[ALL_REASONING_STOPS[localEffortStop] ?? "medium"];
+    reasoningStopLabels[ALL_REASONING_STOPS[localEffortStop] ?? "medium"];
 
   const maxTemperature = temperatureManager?.maxTemperature ?? 2;
   const temperatureFraction =
@@ -245,10 +250,12 @@ function ModelDetailPane({ option, managers, onBack }: ModelDetailPaneProps) {
 
       <SettingRow
         icon={SvgCode}
-        title="Context Window"
+        title={t("contextWindow.row.title")}
         value={contextLabel ?? "—"}
-        valueTooltip={contextLabel ? undefined : UNKNOWN_CONTEXT_TOOLTIP}
-        caption="Tokens limit for each session"
+        valueTooltip={
+          contextLabel ? undefined : t("contextWindow.unknown.tooltip")
+        }
+        caption={t("contextWindow.row.caption")}
       />
 
       {/* A row is absent when an admin withheld the control, and greyed
@@ -257,11 +264,11 @@ function ModelDetailPane({ option, managers, onBack }: ModelDetailPaneProps) {
       {temperatureManager && (
         <SettingRow
           icon={SvgThermometer}
-          title="Temperature"
+          title={t("temperature.row.title")}
           value={displayTemperature.toFixed(1)}
-          caption="How predictable or creative the model should respond"
+          caption={t("temperature.row.caption")}
           disabled={!temperatureEnabled}
-          disabledTooltip={UNSUPPORTED_SETTING_TOOLTIP}
+          disabledTooltip={t("unsupportedSetting.tooltip")}
         >
           <PaneSlider
             value={displayTemperature}
@@ -275,7 +282,11 @@ function ModelDetailPane({ option, managers, onBack }: ModelDetailPaneProps) {
             }
           />
           <div className="flex flex-row items-center justify-between">
-            {["Deterministic", "Balanced", "Creative"].map((label, index) => (
+            {[
+              t("temperature.deterministic.label"),
+              t("temperature.balanced.label"),
+              t("temperature.creative.label"),
+            ].map((label, index) => (
               <Text
                 key={label}
                 font="figure-small-value"
@@ -291,11 +302,11 @@ function ModelDetailPane({ option, managers, onBack }: ModelDetailPaneProps) {
       {reasoningManager && (
         <SettingRow
           icon={SvgBarChart}
-          title="Reasoning Level"
+          title={t("reasoningLevel.row.title")}
           value={effortLabel}
-          caption="How much thinking the model should perform before answering"
+          caption={t("reasoningLevel.row.caption")}
           disabled={!reasoningEnabled}
-          disabledTooltip={UNSUPPORTED_SETTING_TOOLTIP}
+          disabledTooltip={t("unsupportedSetting.tooltip")}
         >
           <PaneSlider
             value={localEffortStop}
@@ -330,8 +341,8 @@ function ModelDetailPane({ option, managers, onBack }: ModelDetailPaneProps) {
                     disabled={reasoningEnabled && index > maxSupportedStop}
                     tooltip={
                       index > capabilityStop
-                        ? UNSUPPORTED_SETTING_TOOLTIP
-                        : ADMIN_LIMITED_SETTING_TOOLTIP
+                        ? t("unsupportedSetting.tooltip")
+                        : t("adminLimitedSetting.tooltip")
                     }
                     tooltipSide="top"
                   >
@@ -344,7 +355,7 @@ function ModelDetailPane({ option, managers, onBack }: ModelDetailPaneProps) {
                       }
                       nowrap
                     >
-                      {REASONING_STOP_LABELS[stop]}
+                      {reasoningStopLabels[stop]}
                     </Text>
                   </Disabled>
                 </div>
@@ -395,6 +406,7 @@ export default function ModelSelectorContent({
   modelDetail,
   onDetailSelect,
 }: ModelSelectorContentProps) {
+  const t = useTranslations("chat.modelSelector");
   const [detailOption, setDetailOption] = useState<LLMOption | null>(null);
   const {
     llmProviders: currentAgentProviderOptions,
@@ -501,8 +513,10 @@ export default function ModelSelectorContent({
                     icon={SvgSliders}
                     prominence="tertiary"
                     size="sm"
-                    aria-label={`${option.displayName} settings`}
-                    tooltip="Model settings"
+                    aria-label={t("modelSettingsButton.ariaLabel", {
+                      model: option.displayName,
+                    })}
+                    tooltip={t("modelSettingsButton.tooltip")}
                     onClick={(e) => {
                       e.stopPropagation();
                       onDetailSelect?.(option);
@@ -537,7 +551,7 @@ export default function ModelSelectorContent({
         variant="internal"
         value={searchQuery}
         onChange={(e) => setSearchQuery(e.target.value)}
-        placeholder="Search models..."
+        placeholder={t("searchInput.placeholder")}
       />
 
       <PopoverMenu scrollContainerRef={scrollContainerRef}>
@@ -563,13 +577,13 @@ export default function ModelSelectorContent({
           ...(isLoading
             ? [
                 <Text key="loading" font="secondary-body" color="text-03">
-                  Loading models...
+                  {t("list.loading.text")}
                 </Text>,
               ]
             : groupedOptions.length === 0
               ? [
                   <Text key="empty" font="secondary-body" color="text-03">
-                    No models found
+                    {t("list.empty.text")}
                   </Text>,
                 ]
               : groupedOptions.length === 1

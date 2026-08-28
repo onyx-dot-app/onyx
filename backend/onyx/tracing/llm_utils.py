@@ -188,13 +188,19 @@ def _build_usage_dict(usage: Any | None) -> dict[str, Any] | None:
         return usage
 
     usage_dict: dict[str, Any] = {}
-    prompt_tokens = getattr(usage, "prompt_tokens", None)
-    completion_tokens = getattr(usage, "completion_tokens", None)
-    input_tokens = getattr(usage, "input_tokens", None)
-    output_tokens = getattr(usage, "output_tokens", None)
-    total_tokens = getattr(usage, "total_tokens", None)
-    cache_read_input_tokens = getattr(usage, "cache_read_input_tokens", None)
-    cache_creation_input_tokens = getattr(usage, "cache_creation_input_tokens", None)
+    prompt_tokens = getattr(usage, "prompt_tokens", None)  # ods: ignore[getattr]
+    completion_tokens = getattr(  # ods: ignore[getattr]
+        usage, "completion_tokens", None
+    )
+    input_tokens = getattr(usage, "input_tokens", None)  # ods: ignore[getattr]
+    output_tokens = getattr(usage, "output_tokens", None)  # ods: ignore[getattr]
+    total_tokens = getattr(usage, "total_tokens", None)  # ods: ignore[getattr]
+    cache_read_input_tokens = getattr(  # ods: ignore[getattr]
+        usage, "cache_read_input_tokens", None
+    )
+    cache_creation_input_tokens = getattr(  # ods: ignore[getattr]
+        usage, "cache_creation_input_tokens", None
+    )
 
     if prompt_tokens is not None:
         usage_dict["input_tokens"] = prompt_tokens

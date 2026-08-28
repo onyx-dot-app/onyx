@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { DateRangePicker } from "@/refresh-components/DateRangePicker";
 import { useTimeRange } from "@/lib/usage/hooks";
 import {
@@ -16,6 +17,7 @@ import { SettingsLayouts } from "@opal/layouts";
 const route = ADMIN_ROUTES.WORKSPACE_ANALYTICS;
 
 export default function WorkspaceAnalyticsPage() {
+  const t = useTranslations("admin.analytics");
   const [timeRange, setTimeRange] = useTimeRange();
 
   return (
@@ -23,7 +25,7 @@ export default function WorkspaceAnalyticsPage() {
       <SettingsLayouts.Header
         icon={route.icon}
         title={route.title}
-        description="Understand how your workspace uses Onyx across queries, feedback, and agents."
+        description={t("page.description")}
         divider
         rightChildren={
           <DateRangePicker

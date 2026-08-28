@@ -696,7 +696,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             # Get captcha token from request body or headers
             captcha_token = None
             if hasattr(user_create, "captcha_token"):
-                captcha_token = getattr(user_create, "captcha_token", None)
+                captcha_token = getattr(  # ods: ignore[getattr]
+                    user_create, "captcha_token", None
+                )
 
             # Also check headers as a fallback
             if not captcha_token:
@@ -945,7 +947,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         enforce_verified_domain: bool = False,
     ) -> User:
         referral_source = (
-            getattr(request.state, "referral_source", None) if request else None
+            getattr(request.state, "referral_source", None)  # ods: ignore[getattr]
+            if request
+            else None
         )
 
         # A workspace-configured provider vouches for who someone is, never for
@@ -1898,12 +1902,12 @@ class FastAPIUserWithRefreshRouter(FastAPIUsers[models.UP, models.ID]):
 
                 # Check if strategy supports refreshing
                 supports_refresh = hasattr(strategy, "refresh_token") and callable(
-                    getattr(strategy, "refresh_token")  # noqa: B009
+                    getattr(strategy, "refresh_token")  # noqa: B009  # ods: ignore[getattr]
                 )
 
                 if supports_refresh:
                     try:
-                        refresh_method = getattr(strategy, "refresh_token")  # noqa: B009
+                        refresh_method = getattr(strategy, "refresh_token")  # noqa: B009  # ods: ignore[getattr]
                         new_token = await refresh_method(token, user)
                         logger.info(
                             "Successfully refreshed session token for user %s",
@@ -2124,8 +2128,10 @@ def _scoped_pat_permitted_on_route(
     if not isinstance(route, APIRoute):
         return False
     return any(
-        getattr(dependency.call, "_is_require_permission", False)
-        or getattr(dependency.call, "_is_scope_exempt", False)
+        getattr(  # ods: ignore[getattr]
+            dependency.call, "_is_require_permission", False
+        )
+        or getattr(dependency.call, "_is_scope_exempt", False)  # ods: ignore[getattr]
         for dependency in route.dependant.dependencies
     )
 
@@ -2181,7 +2187,7 @@ async def _resolve_optional_user(
     # Fail-closed: a scoped PAT may only reach routes guarded by a
     # require_permission its scopes can satisfy (see require_permission).
     if not _scoped_pat_permitted_on_route(
-        getattr(request.state, "token_scopes", None),
+        getattr(request.state, "token_scopes", None),  # ods: ignore[getattr]
         request.scope.get("route"),
     ):
         raise OnyxError(
@@ -2208,7 +2214,7 @@ async def optional_user(
     )
     token = CURRENT_USER_ID_CONTEXTVAR.set(str(user.id) if user is not None else None)
     credential_token = CURRENT_USAGE_CREDENTIAL_CONTEXTVAR.set(
-        getattr(request.state, "usage_credential", None)
+        getattr(request.state, "usage_credential", None)  # ods: ignore[getattr]
     )
     try:
         yield user

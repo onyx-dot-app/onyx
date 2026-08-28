@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import {
   InputTypeIn,
   LineItemButton,
@@ -30,6 +31,7 @@ function PersonaPicker({
   selectedAgent,
   onSelect,
 }: PersonaPickerProps) {
+  const t = useTranslations("admin.analytics");
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
 
@@ -53,7 +55,7 @@ function PersonaPicker({
           state="empty"
           variant="select-input"
         >
-          {selectedAgent?.name ?? "Select an agent to display"}
+          {selectedAgent?.name ?? t("agentPicker.placeholder")}
         </SelectButton>
       </Popover.Trigger>
       <Popover.Content align="start">
@@ -61,7 +63,7 @@ function PersonaPicker({
           {[
             <InputTypeIn
               key="agent-search"
-              placeholder="Search agents..."
+              placeholder={t("agentPicker.search.placeholder")}
               variant="internal"
               searchIcon
               value={search}
@@ -92,7 +94,7 @@ function PersonaPicker({
                     height="fit"
                   >
                     <Text font="secondary-body" color="text-03">
-                      No agents match that search
+                      {t("agentPicker.empty.label")}
                     </Text>
                   </Section>,
                 ]
@@ -109,6 +111,7 @@ interface PersonaMessagesChartProps {
 }
 
 export function PersonaMessagesChart({ timeRange }: PersonaMessagesChartProps) {
+  const t = useTranslations("admin.analytics");
   const [selectedPersonaId, setSelectedPersonaId] = useState<
     number | undefined
   >(undefined);
@@ -150,12 +153,12 @@ export function PersonaMessagesChart({ timeRange }: PersonaMessagesChartProps) {
 
   const series = [
     chartSeries(
-      "Messages",
+      t("agentChart.series.messages.label"),
       personaMessagesData,
       (entry) => entry.total_messages
     ),
     chartSeries(
-      "Unique Users",
+      t("agentChart.series.uniqueUsers.label"),
       personaUniqueUsersData,
       (entry) => entry.unique_users
     ),
@@ -163,14 +166,14 @@ export function PersonaMessagesChart({ timeRange }: PersonaMessagesChartProps) {
 
   return (
     <AnalyticsChart
-      title="Agent Analytics"
-      description="Messages and unique users per day for the selected agent"
+      title={t("agentChart.title")}
+      description={t("agentChart.description")}
       timeRange={timeRange}
       state={
         // The picker is only usable once the agent list resolves, so its
         // loading and error states outrank the "pick an agent" prompt.
         selectedPersonaId === undefined && !agentsLoading && !agentsError
-          ? { status: "empty", message: "Select an agent to view analytics." }
+          ? { status: "empty", message: t("agentChart.selectPrompt") }
           : resolveChartState({
               isLoading:
                 agentsLoading ||
@@ -178,9 +181,8 @@ export function PersonaMessagesChart({ timeRange }: PersonaMessagesChartProps) {
                 isPersonaUniqueUsersLoading,
               error:
                 agentsError || personaMessagesError || personaUniqueUsersError,
-              errorMessage: "Failed to fetch agent data.",
-              emptyMessage:
-                "No data found for the selected agent in this time range.",
+              errorMessage: t("agentChart.error"),
+              emptyMessage: t("agentChart.empty"),
               series,
             })
       }

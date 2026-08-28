@@ -17,11 +17,22 @@ import de from "@/i18n/messages/de.json";
 import en from "@/i18n/messages/en.json";
 import es from "@/i18n/messages/es.json";
 import fr from "@/i18n/messages/fr.json";
+import ja from "@/i18n/messages/ja.json";
+import ko from "@/i18n/messages/ko.json";
 import pt from "@/i18n/messages/pt.json";
+import zh from "@/i18n/messages/zh.json";
 
 type MessageTree = { [key: string]: string | MessageTree };
 
-const TARGET_LOCALES: Record<string, MessageTree> = { de, es, fr, pt };
+const TARGET_LOCALES: Record<string, MessageTree> = {
+  de,
+  es,
+  fr,
+  ja,
+  ko,
+  pt,
+  zh,
+};
 
 function flatten(tree: MessageTree, prefix = ""): Record<string, string> {
   const flat: Record<string, string> = {};

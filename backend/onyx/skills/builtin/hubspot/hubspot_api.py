@@ -68,7 +68,7 @@ def _object_arg(value: str) -> str:
 
 
 def _props(a: argparse.Namespace, obj: str) -> list[str]:
-    if getattr(a, "properties", None):
+    if getattr(a, "properties", None):  # ods: ignore[getattr]
         return [p.strip() for p in a.properties.split(",") if p.strip()]
     return _DEFAULT_PROPERTIES.get(obj, [])
 

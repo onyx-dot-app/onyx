@@ -59,6 +59,11 @@ repos:
           ]
         files: ^(pyproject\.toml|uv\.lock|backend/requirements/.*\.txt)$
       - id: uv-run
+        name: Check getattr
+        args: ["--no-project", "--with=onyx-devtools", "ods", "check-getattr"]
+        pass_filenames: true
+        files: ^backend/.*\.py$
+      - id: uv-run
         name: Check lazy imports
         args:
           ["--no-project", "--with=onyx-devtools", "ods", "check-lazy-imports"]

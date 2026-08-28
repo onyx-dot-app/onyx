@@ -1,17 +1,18 @@
 "use client";
 
 import { ChangeEvent, useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import { Button, LineItemButton, Tag, Text } from "@opal/components";
-import { SvgUser, SvgUsers, SvgX } from "@opal/icons";
+import { SvgBubbleText, SvgEdit, SvgUser, SvgUsers, SvgX } from "@opal/icons";
 import { cn } from "@opal/utils";
 import InputTypeIn from "@/refresh-components/inputs/InputTypeIn";
 import type { MinimalUserSnapshot } from "@/lib/types";
 import type { MinimalUserGroupSnapshot } from "@/hooks/useShareableGroups";
-import { SharePermissionMenu } from "@/sections/modals/SharePermissionMenu";
 import {
-  PERMISSION_OPTIONS,
-  type ShareAccessPermission,
-} from "@/sections/modals/shareAccessConstants";
+  SharePermissionMenu,
+  type SharePermissionMenuOption,
+} from "@/sections/modals/SharePermissionMenu";
+import type { ShareAccessPermission } from "@/sections/modals/shareAccessConstants";
 
 interface Suggestion {
   id: string;
@@ -51,6 +52,7 @@ export function AddPeoplePicker({
   stagedUsers,
   users,
 }: AddPeoplePickerProps) {
+  const t = useTranslations("chat.modals.share");
   const [query, setQuery] = useState("");
 
   const stagedUserIds = useMemo(
@@ -100,7 +102,22 @@ export function AddPeoplePicker({
   ]);
 
   const hasStagedItems = stagedUsers.length > 0 || stagedGroups.length > 0;
-  const permissionOptions = PERMISSION_OPTIONS;
+  const permissionOptions: SharePermissionMenuOption<ShareAccessPermission>[] =
+    useMemo(
+      () => [
+        {
+          icon: SvgBubbleText,
+          label: t("permissionMenu.viewAndChat.label"),
+          value: "VIEWER",
+        },
+        {
+          icon: SvgEdit,
+          label: t("permissionMenu.edit.label"),
+          value: "EDITOR",
+        },
+      ],
+      [t]
+    );
 
   function handleSelectSuggestion(suggestion: Suggestion) {
     if (suggestion.shared) {
@@ -175,7 +192,7 @@ export function AddPeoplePicker({
             onChange={(event: ChangeEvent<HTMLInputElement>) =>
               setQuery(event.target.value)
             }
-            placeholder="Add users, groups, and accounts"
+            placeholder={t("addPeople.searchInput.placeholder")}
             value={query}
             variant={disabled ? "disabled" : "primary"}
           />
@@ -190,13 +207,18 @@ export function AddPeoplePicker({
                   >
                     <LineItemButton
                       description={
-                        suggestion.type === "group" ? "Group" : undefined
+                        suggestion.type === "group"
+                          ? t("addPeople.groupSuggestion.description")
+                          : undefined
                       }
                       icon={suggestion.type === "group" ? SvgUsers : SvgUser}
                       onClick={() => handleSelectSuggestion(suggestion)}
                       rightChildren={
                         suggestion.shared ? (
-                          <Tag color="gray" title="Shared" />
+                          <Tag
+                            color="gray"
+                            title={t("addPeople.sharedTag.label")}
+                          />
                         ) : null
                       }
                       rounding={3}
@@ -217,7 +239,7 @@ export function AddPeoplePicker({
         {hasStagedItems ? (
           <div className="w-40 shrink-0">
             <SharePermissionMenu
-              ariaLabel="Select staged permission"
+              ariaLabel={t("addPeople.permissionMenu.ariaLabel")}
               onChange={onStagedPermissionChange}
               options={permissionOptions}
               value={stagedPermission}

@@ -13,7 +13,7 @@ import {
 } from "@tests/e2e/utils/mcpServer";
 import { AdminMcpServersPage } from "@tests/e2e/pages/AdminMcpServersPage";
 import { ChatPreferencesPage } from "@tests/e2e/pages/ChatPreferencesPage";
-import { ActionsPopover } from "@tests/e2e/pages/ActionsPopover";
+import { ToolsPopover } from "@tests/e2e/pages/ToolsPopover";
 import { AgentEditorPage } from "@tests/e2e/pages/AgentEditorPage";
 import {
   expectMcpToolInvoked,
@@ -181,7 +181,7 @@ test.describe("Default Agent MCP Integration", () => {
     await page.waitForURL("**/app**");
     await ensureOnboardingComplete(page);
 
-    const actions = new ActionsPopover(page);
+    const actions = new ToolsPopover(page);
     await actions.expectServerVisible(serverName);
     await actions.openServer(serverName);
 
@@ -229,7 +229,7 @@ test.describe("Default Agent MCP Integration", () => {
     await expectMcpToolInvoked(page, MCP_ASSERTED_TOOL_NAME, assertedToolId);
 
     // Disable the tool from the actions popover and confirm it no longer runs.
-    const actions = new ActionsPopover(page);
+    const actions = new ToolsPopover(page);
     await actions.openServer(serverName);
     await actions.searchTool(MCP_ASSERTED_TOOL_NAME);
     await actions.disableTool(MCP_ASSERTED_TOOL_NAME);
@@ -295,7 +295,7 @@ test.describe("Default Agent MCP Integration", () => {
     await page.goto("/app");
     await page.waitForURL("**/app**");
 
-    const actions = new ActionsPopover(page);
+    const actions = new ToolsPopover(page);
     await actions.expectServerVisible(serverName);
     await actions.openServer(serverName);
     await expect(actions.toolSwitches).not.toHaveCount(0);

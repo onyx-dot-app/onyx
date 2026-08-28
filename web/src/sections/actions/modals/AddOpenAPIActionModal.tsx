@@ -1,6 +1,7 @@
 "use client";
 
 import { markdown } from "@opal/utils";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { Modal } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
@@ -49,10 +50,6 @@ interface OpenAPIActionFormValues {
   definition: string;
 }
 
-const validationSchema = Yup.object().shape({
-  definition: Yup.string().required("OpenAPI schema definition is required"),
-});
-
 function parseJsonWithTrailingCommas(jsonString: string) {
   // Regular expression to remove trailing commas before } or ]
   let cleanedJsonString = jsonString.replace(/,\s*([}\]])/g, "$1");
@@ -82,6 +79,7 @@ function FormContent({
   onEditAuthentication,
   onDisconnectTool,
 }: FormContentProps) {
+  const t = useTranslations("actions");
   const { values, setFieldValue, setFieldError, dirty, isSubmitting } =
     useFormikContext<OpenAPIActionFormValues>();
 
@@ -109,9 +107,9 @@ function FormContent({
       setFieldValue("definition", formatted);
       setFieldError("definition", "");
     } catch {
-      setFieldError("definition", "Invalid JSON format");
+      setFieldError("definition", t("addOpenApiModal.definition.invalidJson"));
     }
-  }, [values.definition, setFieldValue, setFieldError]);
+  }, [values.definition, setFieldValue, setFieldError, t]);
 
   const validateDefinition = useCallback(
     async (
@@ -147,10 +145,13 @@ function FormContent({
         }
       } catch {
         setMethodSpecs(null);
-        setFieldError("definition", "Invalid JSON format");
+        setFieldError(
+          "definition",
+          t("addOpenApiModal.definition.invalidJson")
+        );
       }
     },
-    []
+    [t]
   );
 
   const debouncedValidateDefinition = useMemo(
@@ -158,17 +159,19 @@ function FormContent({
     [validateDefinition]
   );
 
-  const modalTitle = isEditMode ? "Edit OpenAPI action" : "Add OpenAPI action";
+  const modalTitle = isEditMode
+    ? t("addOpenApiModal.editHeader.title")
+    : t("addOpenApiModal.addHeader.title");
   const modalDescription = isEditMode
-    ? "Update the OpenAPI schema for this action."
-    : "Add OpenAPI schema to add custom actions.";
+    ? t("addOpenApiModal.editHeader.description")
+    : t("addOpenApiModal.addHeader.description");
   const primaryButtonLabel = isSubmitting
     ? isEditMode
-      ? "Saving..."
-      : "Adding..."
+      ? t("addOpenApiModal.submitButton.savingLabel")
+      : t("addOpenApiModal.submitButton.addingLabel")
     : isEditMode
-      ? "Save Changes"
-      : "Add Action";
+      ? t("addOpenApiModal.submitButton.saveLabel")
+      : t("addOpenApiModal.submitButton.addLabel");
 
   const hasOAuthConfig = Boolean(existingTool?.oauth_config_id);
   const hasCustomHeaders =
@@ -183,17 +186,19 @@ function FormContent({
     }
     if (hasOAuthConfig) {
       return existingTool.oauth_config_name
-        ? `OAuth connected via ${existingTool.oauth_config_name}`
-        : "OAuth authentication configured";
+        ? t("addOpenApiModal.authStatus.oauthNamedDescription", {
+            name: existingTool.oauth_config_name,
+          })
+        : t("addOpenApiModal.authStatus.oauthDescription");
     }
     if (hasCustomHeaders) {
-      return "Custom authentication headers configured";
+      return t("addOpenApiModal.authStatus.headersDescription");
     }
     if (hasPassthroughAuth) {
-      return "Passthrough authentication enabled";
+      return t("addOpenApiModal.authStatus.passthroughDescription");
     }
     return "";
-  }, [existingTool, hasOAuthConfig, hasCustomHeaders, hasPassthroughAuth]);
+  }, [existingTool, hasOAuthConfig, hasCustomHeaders, hasPassthroughAuth, t]);
 
   const showAuthenticationStatus = Boolean(
     isEditMode && existingTool?.enabled && hasAuthenticationConfigured
@@ -241,13 +246,11 @@ function FormContent({
       <Modal.Body>
         <InputVertical
           withLabel="definition"
-          title="OpenAPI Schema Definition"
+          title={t("addOpenApiModal.definition.title")}
           subDescription={markdown(
-            `Specify an OpenAPI schema that defines the APIs you want to make available as part of this action. ` +
-              `You can use the placeholders \`CHAT_SESSION_ID\`, \`MESSAGE_ID\`, \`USER_ID\`, and \`USER_EMAIL\` ` +
-              `anywhere in the schema (e.g. server URL, paths, parameter defaults) and they will be replaced with the ` +
-              `current request's values at call time. ` +
-              `Learn more about [OpenAPI actions](${DOCS_ADMINS_PATH}/actions/openapi).`
+            t("addOpenApiModal.definition.subDescription", {
+              docsUrl: `${DOCS_ADMINS_PATH}/actions/openapi`,
+            })
           )}
         >
           <Hoverable.Root group="definitionField" width="full">
@@ -263,13 +266,13 @@ function FormContent({
                         prominence="tertiary"
                         size="sm"
                         getCopyText={() => values.definition}
-                        tooltip="Copy definition"
+                        tooltip={t("addOpenApiModal.copyButton.tooltip")}
                       />
                       <Button
                         prominence="tertiary"
                         size="sm"
                         icon={SvgBracketCurly}
-                        tooltip="Format definition"
+                        tooltip={t("addOpenApiModal.formatButton.tooltip")}
                         onClick={handleFormat}
                       />
                     </div>
@@ -280,7 +283,7 @@ function FormContent({
                 <InputTextAreaField
                   name="definition"
                   rows={14}
-                  placeholder="Enter your OpenAPI schema here"
+                  placeholder={t("addOpenApiModal.definition.placeholder")}
                 />
               </div>
             </div>
@@ -302,7 +305,7 @@ function FormContent({
               <InfoBlock
                 icon={SvgAlertCircle}
                 title={url || ""}
-                description="URL found in the schema. Only connect to servers you trust."
+                description={t("addOpenApiModal.serverUrl.description")}
               />
             )}
             <Divider paddingParallel={0} paddingPerpendicular={0} />
@@ -311,7 +314,9 @@ function FormContent({
                 <ToolItem
                   key={`${method.method}-${method.path}-${method.name}`}
                   name={method.name}
-                  description={method.summary || "No summary provided"}
+                  description={
+                    method.summary || t("addOpenApiModal.method.noSummary")
+                  }
                   variant="openapi"
                   openApiMetadata={{
                     method: method.method,
@@ -324,9 +329,9 @@ function FormContent({
         ) : (
           <EmptyMessageCard
             sizePreset="main-ui"
-            title="No Actions Found"
+            title={t("addOpenApiModal.empty.title")}
             icon={SvgActions}
-            description="Provide OpenAPI schema to preview actions here."
+            description={t("addOpenApiModal.empty.description")}
           />
         )}
 
@@ -347,8 +352,8 @@ function FormContent({
                 <SvgCheckCircle className="w-4 h-4 stroke-status-success-05" />
                 <Text>
                   {existingTool?.enabled
-                    ? "Authenticated & Enabled"
-                    : "Authentication configured"}
+                    ? t("addOpenApiModal.authStatus.enabledTitle")
+                    : t("addOpenApiModal.authStatus.configuredTitle")}
                 </Text>
               </Section>
               {authenticationDescription && (
@@ -367,7 +372,7 @@ function FormContent({
                 icon={SvgUnplug}
                 prominence="tertiary"
                 type="button"
-                tooltip="Disable action"
+                tooltip={t("addOpenApiModal.disableButton.tooltip")}
                 onClick={() => {
                   if (!existingTool || !onDisconnectTool) {
                     return;
@@ -379,14 +384,14 @@ function FormContent({
                 disabled={!onEditAuthentication || !canEditAuthentication}
                 tooltip={
                   !canEditAuthentication
-                    ? "Only the action's creator or an admin can manage authentication"
+                    ? t("addOpenApiModal.editConfigsButton.disabledTooltip")
                     : undefined
                 }
                 prominence="secondary"
                 type="button"
                 onClick={handleEditAuthenticationClick}
               >
-                Edit Configs
+                {t("addOpenApiModal.editConfigsButton.label")}
               </Button>
             </Section>
           </Section>
@@ -400,7 +405,7 @@ function FormContent({
           type="button"
           onClick={handleClose}
         >
-          Cancel
+          {t("addOpenApiModal.cancelButton.label")}
         </Button>
         <Button disabled={isSubmitting || !dirty} type="submit">
           {primaryButtonLabel}
@@ -419,7 +424,12 @@ export default function AddOpenAPIActionModal({
   onEditAuthentication,
   onDisconnectTool,
 }: AddOpenAPIActionModalProps) {
+  const t = useTranslations("actions");
   const { isOpen, toggle } = useModal();
+
+  const validationSchema = Yup.object().shape({
+    definition: Yup.string().required(t("addOpenApiModal.definition.required")),
+  });
 
   const handleModalClose = useCallback(
     (open: boolean) => {
@@ -450,7 +460,7 @@ export default function AddOpenAPIActionModal({
       parsedDefinition = parseJsonWithTrailingCommas(values.definition);
     } catch (error) {
       console.error("Error parsing OpenAPI definition:", error);
-      toast.error("Invalid JSON format in OpenAPI schema definition");
+      toast.error(t("addOpenApiModal.toasts.invalidJson"));
       return;
     }
 
@@ -486,7 +496,7 @@ export default function AddOpenAPIActionModal({
         if (response.error) {
           toast.error(response.error);
         } else {
-          toast.success("OpenAPI action updated successfully");
+          toast.success(t("addOpenApiModal.toasts.actionUpdated"));
           handleClose();
           if (response.data && onUpdate) {
             onUpdate(response.data);
@@ -494,7 +504,7 @@ export default function AddOpenAPIActionModal({
         }
       } catch (error) {
         console.error("Error updating OpenAPI action:", error);
-        toast.error("Failed to update OpenAPI action");
+        toast.error(t("addOpenApiModal.toasts.updateFailed"));
       }
       return;
     }
@@ -511,7 +521,7 @@ export default function AddOpenAPIActionModal({
       if (response.error) {
         toast.error(response.error);
       } else {
-        toast.success("OpenAPI action created successfully");
+        toast.success(t("addOpenApiModal.toasts.actionCreated"));
         handleClose();
         if (response.data && onSuccess) {
           onSuccess(response.data);
@@ -519,7 +529,7 @@ export default function AddOpenAPIActionModal({
       }
     } catch (error) {
       console.error("Error creating OpenAPI action:", error);
-      toast.error("Failed to create OpenAPI action");
+      toast.error(t("addOpenApiModal.toasts.createFailed"));
     }
   };
 
