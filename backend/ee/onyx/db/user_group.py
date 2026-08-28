@@ -811,9 +811,16 @@ def update_user_group(
     _check_user_group_is_modifiable(db_user_group)
 
     current_cc_pair_ids = set(_current_cc_pair_ids(db_user_group))
-    requested_cc_pair_ids = set(user_group_update.cc_pair_ids)
+    leave_cc_pairs_alone = user_group_update.cc_pair_ids is None
+    requested_cc_pair_ids = (
+        current_cc_pair_ids
+        if leave_cc_pairs_alone
+        else set(user_group_update.cc_pair_ids or [])
+    )
     _assert_default_group_update_allowed(
-        user, db_user_group, attaching_cc_pairs=bool(requested_cc_pair_ids)
+        user,
+        db_user_group,
+        attaching_cc_pairs=not leave_cc_pairs_alone and bool(requested_cc_pair_ids),
     )
     _assert_group_update_within_scope(
         db_session,
@@ -881,7 +888,7 @@ def update_user_group(
         _add_user_group__cc_pair_relationships__no_commit(
             db_session=db_session,
             user_group_id=db_user_group.id,
-            cc_pair_ids=user_group_update.cc_pair_ids,
+            cc_pair_ids=list(requested_cc_pair_ids),
         )
 
     if cc_pairs_updated and not DISABLE_VECTOR_DB:
