@@ -27,7 +27,7 @@ import {
 } from "@opal/icons";
 import ChatButton from "@/sections/sidebar/ChatButton";
 import { useAppRouter } from "@/hooks/appNavigation";
-import useAppFocus from "@/hooks/useAppFocus";
+import useAppPosition from "@/hooks/useAppPosition";
 import { noProp } from "@/lib/utils";
 import { DRAG_TYPES } from "@/lib/sidebar/constants";
 import { useActiveProject } from "@/lib/projects/hooks";
@@ -138,7 +138,7 @@ export interface ProjectFolderButtonProps {
 }
 export function ProjectFolderButton({ project }: ProjectFolderButtonProps) {
   const route = useAppRouter();
-  const activeSidebar = useAppFocus();
+  const activeSidebar = useAppPosition();
   const activeProject = useActiveProject();
   const isActiveProject = activeProject?.id === project.id;
   const [open, setOpen] = useState(isActiveProject);

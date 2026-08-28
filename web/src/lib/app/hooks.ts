@@ -4,7 +4,7 @@ import { useLayoutEffect } from "react";
 import { usePathname } from "next/navigation";
 import { useSettings } from "@/lib/settings/hooks";
 import { APP_SLOGAN } from "@/lib/constants";
-import useAppFocus from "@/hooks/useAppFocus";
+import useAppPosition from "@/hooks/useAppPosition";
 import useChatSessions from "@/hooks/useChatSessions";
 import { useCurrentSessionPersonaId } from "@/app/app/stores/useChatSessionStore";
 import { useActiveAgent, useAgents } from "@/lib/agents/hooks";
@@ -19,16 +19,16 @@ export function useCustomFooterContent(): string {
 }
 
 export function useAppDocumentTitle(): void {
-  const appFocus = useAppFocus();
+  const appPosition = useAppPosition();
   const { appName } = useSettings();
   const { currentChatSession } = useChatSessions();
   useLayoutEffect(() => {
     const appendChatNameToDocumentTitle =
-      appFocus.isChattable() && currentChatSession?.name;
+      appPosition.isChattable() && currentChatSession?.name;
     document.title = appendChatNameToDocumentTitle
       ? `${currentChatSession.name} — ${appName}`
       : appName;
-  }, [currentChatSession?.name, appName, appFocus]);
+  }, [currentChatSession?.name, appName, appPosition]);
 }
 
 export function useAdminDocumentTitle(): void {
