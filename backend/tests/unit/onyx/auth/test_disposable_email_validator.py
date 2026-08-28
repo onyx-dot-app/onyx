@@ -2,6 +2,7 @@
 Tests for disposable email validation.
 """
 
+import threading
 from collections.abc import Generator
 from unittest import mock
 
@@ -42,6 +43,15 @@ def _response(
     )
 
 
+def _refresh_and_get(validator: DisposableEmailValidator) -> set[str]:
+    """Force a refresh, run it to completion, and return the domains."""
+    validator._last_fetch_time = 0
+    thread = validator._start_refresh()
+    thread.join(timeout=5)
+    assert not thread.is_alive()
+    return validator.get_domains()
+
+
 class TestConditionalFetch:
     """Test ETag / Last-Modified handling when fetching the domain list."""
 
@@ -58,7 +68,7 @@ class TestConditionalFetch:
                 headers={"ETag": _ETAG, "Last-Modified": _LAST_MODIFIED},
             )
 
-            domains = fresh_validator.get_domains()
+            domains = _refresh_and_get(fresh_validator)
 
         sent_headers = client.get.call_args.kwargs["headers"]
         assert "If-None-Match" not in sent_headers
@@ -80,12 +90,11 @@ class TestConditionalFetch:
                 json_body=["fetched-domain.example"],
                 headers={"ETag": _ETAG, "Last-Modified": _LAST_MODIFIED},
             )
-            fresh_validator.get_domains()
+            _refresh_and_get(fresh_validator)
 
-            # Expire the cache and answer the refresh with a 304
-            fresh_validator._last_fetch_time = 0
+            # Answer the next refresh with a 304
             client.get.return_value = _response(304)
-            domains = fresh_validator.get_domains()
+            domains = _refresh_and_get(fresh_validator)
 
         sent_headers = client.get.call_args.kwargs["headers"]
         assert sent_headers["If-None-Match"] == _ETAG
@@ -106,11 +115,10 @@ class TestConditionalFetch:
                 json_body=["fetched-domain.example"],
                 headers={"ETag": _ETAG},
             )
-            fresh_validator.get_domains()
+            _refresh_and_get(fresh_validator)
 
-            fresh_validator._last_fetch_time = 0
             client.get.side_effect = httpx.ConnectError("network down")
-            domains = fresh_validator.get_domains()
+            domains = _refresh_and_get(fresh_validator)
 
         assert "fetched-domain.example" in domains
         # Fallback domains stay included as well
@@ -124,9 +132,102 @@ class TestConditionalFetch:
         ) as mock_client:
             client = mock_client.return_value.__enter__.return_value
             client.get.side_effect = httpx.ConnectError("network down")
-            domains = fresh_validator.get_domains()
+            domains = _refresh_and_get(fresh_validator)
 
         assert domains == fresh_validator._fallback_domains
+
+
+class TestStaleWhileRevalidate:
+    """Test that callers never wait on the network for a refresh."""
+
+    def test_stale_cache_is_served_while_refresh_runs(
+        self, fresh_validator: DisposableEmailValidator
+    ) -> None:
+        with mock.patch(
+            "onyx.auth.disposable_email_validator.httpx.Client"
+        ) as mock_client:
+            client = mock_client.return_value.__enter__.return_value
+            client.get.return_value = _response(
+                200, json_body=["old-domain.example"], headers={"ETag": _ETAG}
+            )
+            _refresh_and_get(fresh_validator)
+
+            release = threading.Event()
+
+            def slow_get(*_args: object, **_kwargs: object) -> httpx.Response:
+                assert release.wait(timeout=5)
+                return _response(200, json_body=["new-domain.example"])
+
+            client.get.side_effect = slow_get
+
+            # Expire the cache: the next call must return the stale set
+            # immediately while the refresh runs in the background
+            fresh_validator._last_fetch_time = 0
+            stale = fresh_validator.get_domains()
+            assert "old-domain.example" in stale
+            assert "new-domain.example" not in stale
+
+            thread = fresh_validator._refresh_thread
+            assert thread is not None
+            assert thread.is_alive()
+
+            release.set()
+            thread.join(timeout=5)
+            assert not thread.is_alive()
+
+            assert "new-domain.example" in fresh_validator.get_domains()
+
+    def test_cold_start_returns_fallback_and_shares_one_refresh(
+        self, fresh_validator: DisposableEmailValidator
+    ) -> None:
+        with mock.patch(
+            "onyx.auth.disposable_email_validator.httpx.Client"
+        ) as mock_client:
+            client = mock_client.return_value.__enter__.return_value
+
+            release = threading.Event()
+
+            def slow_get(*_args: object, **_kwargs: object) -> httpx.Response:
+                assert release.wait(timeout=5)
+                return _response(200, json_body=["fetched-domain.example"])
+
+            client.get.side_effect = slow_get
+
+            # Both calls return the fallback immediately; the second call
+            # must not start a second refresh
+            first = fresh_validator.get_domains()
+            second = fresh_validator.get_domains()
+            assert first == fresh_validator._fallback_domains
+            assert second == fresh_validator._fallback_domains
+
+            thread = fresh_validator._refresh_thread
+            assert thread is not None
+
+            release.set()
+            thread.join(timeout=5)
+            assert not thread.is_alive()
+
+            assert client.get.call_count == 1
+            assert "fetched-domain.example" in fresh_validator.get_domains()
+
+    def test_no_redundant_refresh_when_cache_became_fresh(
+        self, fresh_validator: DisposableEmailValidator
+    ) -> None:
+        with mock.patch(
+            "onyx.auth.disposable_email_validator.httpx.Client"
+        ) as mock_client:
+            client = mock_client.return_value.__enter__.return_value
+            client.get.return_value = _response(
+                200, json_body=["fetched-domain.example"], headers={"ETag": _ETAG}
+            )
+            _refresh_and_get(fresh_validator)
+            assert client.get.call_count == 1
+
+            # A caller that saw a stale cache before this refresh finished
+            # must not trigger a second fetch now that the cache is fresh
+            thread = fresh_validator._start_refresh()
+            thread.join(timeout=5)
+            assert client.get.call_count == 1
 
 
 class TestDisposableEmailValidator:
