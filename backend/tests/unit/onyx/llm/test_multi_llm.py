@@ -1315,12 +1315,19 @@ def test_anthropic_model_passes_isolated_client() -> None:
         assert isinstance(kwargs["client"], HTTPHandler)
 
 
-def test_bedrock_model_passes_no_client() -> None:
-    """Test that Bedrock models don't get a client passed."""
+@pytest.mark.parametrize(
+    "model_provider",
+    [LlmProviderNames.BEDROCK, LlmProviderNames.BEDROCK_CONVERSE],
+)
+def test_bedrock_model_passes_isolated_client(model_provider: str) -> None:
+    """Bedrock gets a per-call HTTPHandler so abandoned streams can't deadlock
+    litellm's shared module_level_client pool (see _uses_isolated_client)."""
+    from litellm import HTTPHandler
+
     llm = LitellmLLM(
         api_key=None,
         timeout=30,
-        model_provider=LlmProviderNames.BEDROCK,
+        model_provider=model_provider,
         model_name="anthropic.claude-3-sonnet-20240229-v1:0",
         max_input_tokens=200000,
     )
@@ -1346,7 +1353,7 @@ def test_bedrock_model_passes_no_client() -> None:
 
         mock_completion.assert_called_once()
         kwargs = mock_completion.call_args.kwargs
-        assert kwargs["client"] is None
+        assert isinstance(kwargs["client"], HTTPHandler)
 
 
 def test_azure_openai_model_uses_httphandler_client() -> None:
