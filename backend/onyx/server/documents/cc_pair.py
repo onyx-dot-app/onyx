@@ -856,6 +856,12 @@ def associate_credential_to_connector(
             processing_mode=metadata.processing_mode,
         )
 
+        if not response.success:
+            # The pair already exists. This used to answer 200 with success in
+            # the body and the *connector* id in data, so a caller checking the
+            # status stored the wrong id and reported a no-op as a success.
+            raise OnyxError(OnyxErrorCode.CONFLICT, response.message)
+
         # Tenant-work-gating lifecycle hook: keep new-tenant latency to
         # seconds instead of one full-fanout interval.
         maybe_mark_tenant_active(tenant_id, caller="cc_pair_lifecycle")
@@ -872,17 +878,14 @@ def associate_credential_to_connector(
             response.data,
         )
 
-        # response.data is the cc_pair id only when the association was actually
-        # created; a no-op (credential already linked) returns success=False.
-        if response.success:
-            emit_audit_event(
-                AuditAction.CC_PAIR_CREATE,
-                AuditOutcome.SUCCESS,
-                actor=actor_from_user(user),
-                resource_type="cc_pair",
-                resource_id=response.data,
-                extra={"connector_id": connector_id, "credential_id": credential_id},
-            )
+        emit_audit_event(
+            AuditAction.CC_PAIR_CREATE,
+            AuditOutcome.SUCCESS,
+            actor=actor_from_user(user),
+            resource_type="cc_pair",
+            resource_id=response.data,
+            extra={"connector_id": connector_id, "credential_id": credential_id},
+        )
         return response
     except ValidationError as e:
         raise OnyxError(
@@ -903,6 +906,10 @@ def associate_credential_to_connector(
             f"{credential_id}.",
         )
 
+    except OnyxError:
+        # Deliberate, already-classified failures must not be re-rendered as 500
+        # by the catch-all below.
+        raise
     except Exception as e:
         logger.exception("Unexpected error: %s", e)
 
