@@ -2330,3 +2330,40 @@ def test_all_three_provider_types_no_mixup(reset: None) -> None:  # noqa: ARG001
 
     # Clean up: Delete the image gen config (to clean up the internal LLM provider)
     _delete_image_gen_config(admin_user, image_gen_provider_id)
+
+
+def test_get_llm_provider_by_id(reset: None) -> None:  # noqa: ARG001
+    """Reading one provider no longer requires listing (and decrypting) them all."""
+    admin_user = UserManager.create(name="admin_user")
+
+    created = client.put(
+        f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
+        headers=admin_user.headers,
+        json={
+            "name": str(uuid.uuid4()),
+            "provider": LlmProviderNames.OPENAI,
+            "api_key": "sk-000000000000000000000000000000000000000000000000",
+            "model_configurations": [{"name": "gpt-4", "is_visible": True}],
+            "is_public": True,
+            "groups": [],
+        },
+    )
+    assert created.status_code == 200
+    provider_id = created.json()["id"]
+
+    response = client.get(
+        f"{API_SERVER_URL}/admin/llm/provider/{provider_id}",
+        headers=admin_user.headers,
+    )
+    assert response.status_code == 200
+    fetched = response.json()
+    assert fetched["id"] == provider_id
+    # masked exactly as the listing masks it
+    assert fetched["api_key"] == "sk-0****0000"
+
+    missing = client.get(
+        f"{API_SERVER_URL}/admin/llm/provider/{provider_id + 10_000}",
+        headers=admin_user.headers,
+    )
+    assert missing.status_code == 404
+    assert missing.json()["error_code"] == "NOT_FOUND"

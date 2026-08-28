@@ -77,6 +77,28 @@ def fetch_api_keys(db_session: Session) -> list[ApiKeyDescriptor]:
     ]
 
 
+def fetch_api_key(db_session: Session, api_key_id: int) -> ApiKeyDescriptor | None:
+    api_key = db_session.scalar(
+        select(ApiKey).options(joinedload(ApiKey.user)).where(ApiKey.id == api_key_id)
+    )
+    if api_key is None:
+        return None
+
+    groups_by_user = batch_get_user_groups(
+        db_session, [api_key.user_id], include_default=True
+    )
+    return ApiKeyDescriptor(
+        api_key_id=api_key.id,
+        api_key_display=api_key.api_key_display,
+        api_key_name=api_key.name,
+        user_id=api_key.user_id,
+        groups=[
+            UserGroupInfo(id=gid, name=gname)
+            for gid, gname in groups_by_user.get(api_key.user_id, [])
+        ],
+    )
+
+
 async def fetch_user_for_api_key(
     hashed_api_key: str, async_db_session: AsyncSession
 ) -> User | None:

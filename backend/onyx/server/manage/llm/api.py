@@ -569,6 +569,24 @@ def list_llm_providers(
     )
 
 
+@admin_router.get("/provider/{provider_id}")
+def get_llm_provider(
+    provider_id: int,
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
+    db_session: Session = Depends(get_session),
+) -> LLMProviderView:
+    """Read one provider without listing (and decrypting) every provider."""
+    llm_provider_model = fetch_existing_llm_provider_by_id(provider_id, db_session)
+    if llm_provider_model is None:
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND, f"LLM provider {provider_id} does not exist"
+        )
+
+    provider_view = LLMProviderView.from_model(llm_provider_model)
+    _mask_provider_credentials(provider_view)
+    return provider_view
+
+
 @admin_router.put("/provider")
 def put_llm_provider(
     llm_provider_upsert_request: LLMProviderUpsertRequest,

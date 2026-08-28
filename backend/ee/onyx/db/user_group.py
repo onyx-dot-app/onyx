@@ -265,6 +265,17 @@ def _add_user_group_snapshot_eager_loads(
     )
 
 
+def fetch_user_group_for_snapshot(
+    db_session: Session, user_group_id: int
+) -> UserGroup | None:
+    """Eager-loaded for UserGroup.from_model, so reading one group costs one
+    query set instead of the whole tenant listing."""
+    stmt = _add_user_group_snapshot_eager_loads(
+        select(UserGroup).where(UserGroup.id == user_group_id)
+    )
+    return db_session.scalar(stmt)
+
+
 def fetch_user_groups(
     db_session: Session,
     only_up_to_date: bool = True,

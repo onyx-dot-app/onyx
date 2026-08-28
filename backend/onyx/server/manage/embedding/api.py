@@ -5,6 +5,7 @@ from onyx.auth.permissions import require_permission
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.llm import (
+    fetch_embedding_provider,
     fetch_existing_embedding_providers,
     remove_embedding_provider,
     upsert_cloud_embedding_provider,
@@ -84,6 +85,21 @@ def list_embedding_providers(
         CloudEmbeddingProvider.from_request(embedding_provider_model)
         for embedding_provider_model in fetch_existing_embedding_providers(db_session)
     ]
+
+
+@admin_router.get("/embedding-provider/{provider_type}")
+def get_embedding_provider(
+    provider_type: EmbeddingProvider,
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> CloudEmbeddingProvider:
+    embedding_provider = fetch_embedding_provider(db_session, provider_type)
+    if embedding_provider is None:
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            f"Embedding provider '{provider_type.value}' is not configured",
+        )
+    return CloudEmbeddingProvider.from_request(embedding_provider)
 
 
 @admin_router.delete("/embedding-provider/{provider_type}")

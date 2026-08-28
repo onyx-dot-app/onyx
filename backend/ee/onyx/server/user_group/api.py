@@ -8,6 +8,7 @@ from ee.onyx.db.user_group import (
     add_users_to_user_group,
     assert_group_membership_survives_deletion,
     fetch_user_group,
+    fetch_user_group_for_snapshot,
     fetch_user_groups,
     fetch_user_groups_for_user,
     insert_user_group,
@@ -130,6 +131,50 @@ def list_user_groups(
         )
         for user_group in user_groups
     ]
+
+
+@router.get("/admin/user-group/{user_group_id}")
+def get_user_group(
+    user_group_id: int,
+    user: User = Depends(
+        require_permission(Permission.READ_USER_GROUPS, allow_scope=True)
+    ),
+    db_session: Session = Depends(get_session),
+) -> UserGroup:
+    """Read one group. The listing carries every group with its nested connector,
+    document-set and agent snapshots, so reading one used to cost all of them."""
+    # GATE 2 (read): mirrors list_user_groups — a scoped manager may only read a
+    # group they manage, so they cannot enumerate the org one id at a time.
+    managed_group_ids = (
+        get_scoped_groups(user, db_session, Permission.MANAGE_USER_GROUPS)
+        if has_permission(user, Permission.MANAGE_USER_GROUPS)
+        is PermissionAuthority.SCOPED
+        else set[int]()
+    )
+    can_manage = manages_group(
+        user, db_session, group_id=user_group_id, managed_group_ids=managed_group_ids
+    )
+    if not has_global_permission(user, Permission.READ_USER_GROUPS) and not can_manage:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "User group not found")
+
+    user_group = fetch_user_group_for_snapshot(db_session, user_group_id)
+    if user_group is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "User group not found")
+
+    return UserGroup.from_model(
+        user_group,
+        mask_credential_prefix=get_security_settings().mask_credential_prefix,
+        permissions=user_group_permissions(
+            can_manage=can_manage,
+            is_user_groups_admin=has_global_permission(
+                user, Permission.MANAGE_USER_GROUPS
+            ),
+            is_full_admin=has_global_permission(
+                user, Permission.FULL_ADMIN_PANEL_ACCESS
+            ),
+            is_default=user_group.is_default,
+        ),
+    )
 
 
 @router.get("/user-groups/minimal")

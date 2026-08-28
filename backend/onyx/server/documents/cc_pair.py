@@ -24,6 +24,7 @@ from onyx.connectors.interfaces import Resolver
 from onyx.connectors.models import InputType
 from onyx.db.connector_credential_pair import (
     add_credential_to_connector,
+    get_cc_pair_groups_for_ids,
     get_cc_pair_ids_for_connector,
     get_connector_credential_pair_for_user,
     get_connector_credential_pair_from_id_for_user,
@@ -402,6 +403,10 @@ def get_cc_pair_full_info(
         mask_credential_prefix=get_security_settings().mask_credential_prefix,
         is_connectors_admin=has_global_permission(user, Permission.MANAGE_CONNECTORS),
         owns_groupless=user_owns_groupless_cc_pair(cc_pair, db_session, user),
+        groups=[
+            relationship.user_group_id
+            for relationship in get_cc_pair_groups_for_ids(db_session, [cc_pair_id])
+        ],
         number_of_index_attempts=count_index_attempts_for_cc_pair(
             db_session=db_session,
             cc_pair_id=cc_pair_id,
