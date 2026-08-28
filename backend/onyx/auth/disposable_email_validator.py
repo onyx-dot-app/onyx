@@ -45,6 +45,10 @@ class DisposableEmailValidator:
 
         self._domains: Set[str] = set()
         self._last_fetch_time: float = 0
+        # HTTP cache validators from the last successful fetch. Used for
+        # conditional requests so unchanged lists are not re-downloaded.
+        self._etag: str | None = None
+        self._last_modified: str | None = None
         self._fetch_lock = threading.Lock()
         # Cache for 1 hour
         self._cache_duration = 3600
@@ -70,9 +74,19 @@ class DisposableEmailValidator:
         """Check if the cached domains should be refreshed."""
         return (time.time() - self._last_fetch_time) > self._cache_duration
 
+    def _previous_or_fallback_domains(self) -> Set[str]:
+        """Return the last good set if one exists, else the hardcoded fallback."""
+        if self._domains:
+            return self._domains
+        return self._fallback_domains.copy()
+
     def _fetch_domains(self) -> Set[str]:
         """
         Fetch disposable email domains from the configured URL.
+
+        Sends a conditional request (If-None-Match / If-Modified-Since) when
+        validators from a previous fetch are available. A 304 response keeps
+        the cached set without downloading the full list again.
 
         Returns:
             Set of domain strings (lowercased)
@@ -81,13 +95,24 @@ class DisposableEmailValidator:
             logger.debug("DISPOSABLE_EMAIL_DOMAINS_URL not configured")
             return self._fallback_domains.copy()
 
+        headers: dict[str, str] = {}
+        if self._etag:
+            headers["If-None-Match"] = self._etag
+        if self._last_modified:
+            headers["If-Modified-Since"] = self._last_modified
+
         try:
             logger.info(
                 "Fetching disposable email domains from %s",
                 DISPOSABLE_EMAIL_DOMAINS_URL,
             )
             with httpx.Client(timeout=10.0) as client:
-                response = client.get(DISPOSABLE_EMAIL_DOMAINS_URL)
+                response = client.get(DISPOSABLE_EMAIL_DOMAINS_URL, headers=headers)
+
+                if response.status_code == 304 and self._domains:
+                    logger.info("Disposable email domains unchanged (304)")
+                    return self._domains
+
                 response.raise_for_status()
 
                 domains_list = response.json()
@@ -97,13 +122,16 @@ class DisposableEmailValidator:
                         "Expected list from disposable domains URL, got %s",
                         type(domains_list),
                     )
-                    return self._fallback_domains.copy()
+                    return self._previous_or_fallback_domains()
 
                 # Convert all to lowercase and create set
                 domains = {domain.lower().strip() for domain in domains_list if domain}
 
                 # Always include fallback domains
                 domains.update(self._fallback_domains)
+
+                self._etag = response.headers.get("ETag")
+                self._last_modified = response.headers.get("Last-Modified")
 
                 logger.info(
                     "Successfully fetched %s disposable email domains", len(domains)
@@ -115,8 +143,8 @@ class DisposableEmailValidator:
         except Exception as e:
             logger.warning("Failed to fetch disposable domains: %s", e)
 
-        # On error, return fallback domains
-        return self._fallback_domains.copy()
+        # On error, keep the last good set (or the fallback if none exists)
+        return self._previous_or_fallback_domains()
 
     def get_domains(self) -> Set[str]:
         """
