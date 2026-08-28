@@ -71,7 +71,10 @@ import {
   useToastFromQuery,
 } from "@opal/layouts";
 import { SvgNotFound, SvgNoAccess } from "@opal/illustrations";
-import useAppPosition from "@/hooks/useAppPosition";
+import {
+  useAppPosition,
+  useChatSessionSupportsRetrieval,
+} from "@/lib/app/hooks";
 import useScreenSize from "@/hooks/useScreenSize";
 import { useSidebarState } from "@opal/layouts";
 import { useQueryController } from "@/providers/QueryControllerProvider";
@@ -82,7 +85,6 @@ import { paidTierGated } from "@/ce";
 import EESearchUI from "@/ee/sections/SearchUI";
 const SearchUI = paidTierGated(EESearchUI);
 import { motion, AnimatePresence } from "motion/react";
-import { useChatSessionSupportsRetrieval } from "@/lib/app/hooks";
 import { useTranslations } from "next-intl";
 
 interface FadeProps {

@@ -6,7 +6,7 @@ import { Project, ProjectSearchMatch } from "@/lib/projects/types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { UNNAMED_CHAT } from "@/lib/constants";
-import useAppPosition from "@/hooks/useAppPosition";
+import { useAppPosition } from "@/lib/app/hooks";
 
 export function useProjects() {
   const { data, error, mutate } = useSWR<Project[]>(

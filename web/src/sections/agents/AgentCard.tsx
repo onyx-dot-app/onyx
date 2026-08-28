@@ -24,7 +24,7 @@ import {
   SvgUser,
 } from "@opal/icons";
 import { useCreateModal } from "@opal/components";
-import useAppPosition from "@/hooks/useAppPosition";
+import { useAppPosition } from "@/lib/app/hooks";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { ShareAgentModal } from "@/lib/agents/components";
 import { AgentViewerModal } from "@/lib/agents/components";

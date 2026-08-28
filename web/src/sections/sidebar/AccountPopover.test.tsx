@@ -15,9 +15,9 @@ jest.mock("@/sections/sidebar/NotificationsPopover", () => ({
   __esModule: true,
   default: () => null,
 }));
-jest.mock("@/hooks/useAppPosition", () => ({
+jest.mock("@/lib/app/hooks", () => ({
   __esModule: true,
-  default: () => ({ isUserSettings: () => false }),
+  useAppPosition: () => ({ isUserSettings: () => false }),
 }));
 jest.mock("@/hooks/useScreenSize", () => ({
   __esModule: true,

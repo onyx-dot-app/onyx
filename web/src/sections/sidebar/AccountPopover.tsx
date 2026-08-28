@@ -26,7 +26,7 @@ import {
 } from "@opal/icons";
 import { Content, toast, useSidebarFolded } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
-import useAppPosition from "@/hooks/useAppPosition";
+import { useAppPosition } from "@/lib/app/hooks";
 import useScreenSize from "@/hooks/useScreenSize";
 import { useSettings } from "@/lib/settings/hooks";
 import UserAvatar from "@/refresh-components/avatars/UserAvatar";

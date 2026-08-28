@@ -27,7 +27,7 @@ import {
 } from "@opal/icons";
 import ChatButton from "@/sections/sidebar/ChatButton";
 import { useAppRouter } from "@/hooks/appNavigation";
-import useAppPosition from "@/hooks/useAppPosition";
+import { useAppPosition } from "@/lib/app/hooks";
 import { noProp } from "@/lib/utils";
 import { DRAG_TYPES } from "@/lib/sidebar/constants";
 import { useActiveProject } from "@/lib/projects/hooks";

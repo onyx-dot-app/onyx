@@ -64,11 +64,14 @@ import {
 } from "@opal/icons";
 import { useIsSearchModeAvailable, useSettings } from "@/lib/settings/hooks";
 import type { AppMode } from "@/providers/QueryControllerProvider";
-import useAppPosition from "@/hooks/useAppPosition";
+import {
+  useAppDocumentTitle,
+  useAppPosition,
+  useCustomFooterContent,
+} from "@/lib/app/hooks";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
-import { useAppDocumentTitle, useCustomFooterContent } from "@/lib/app/hooks";
 import { useFullWidthChat } from "@/providers/FullWidthChatProvider";
 import { useIncognito } from "@/providers/IncognitoProvider";
 
