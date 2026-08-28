@@ -235,46 +235,35 @@ def test_oversized_decoded_body_refines_nothing(
     assert calls[1]["response_body"] is None
 
 
-def test_responseheaders_caps_undeclared_recorded_flows(
+def test_responseheaders_caps_every_recorded_flow(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     addon = _addon()
 
-    # Chunked responses declare no length, so a recorded flow streams through
-    # a capped observer the response hook reads. Small declared bodies buffer,
-    # oversize ones and unrecorded flows stream unobserved.
+    # Every recorded flow streams through a capped observer the response hook
+    # reads, regardless of what length the origin declares. Unrecorded flows
+    # stream unobserved.
+    recorded = _recorded_flow(200)
+    addon.responseheaders(recorded)
+    capture = recorded.response.stream
+    assert isinstance(capture, _CappedBodyCapture)
+
     chunked = _recorded_flow(200)
     del chunked.response.headers["content-length"]
     addon.responseheaders(chunked)
-    capture = chunked.response.stream
-    assert isinstance(capture, _CappedBodyCapture)
-
-    small = _recorded_flow(200)
-    addon.responseheaders(small)
-    assert small.response.stream is False
-
-    declared_oversize = _recorded_flow(200)
-    declared_oversize.response.headers["content-length"] = str(2 * 1024 * 1024)
-    addon.responseheaders(declared_oversize)
-    assert declared_oversize.response.stream is True
-
-    # A negative declaration is a broken origin, not a small body.
-    declared_negative = _recorded_flow(200)
-    declared_negative.response.headers["content-length"] = "-1"
-    addon.responseheaders(declared_negative)
-    assert declared_negative.response.stream is True
+    assert isinstance(chunked.response.stream, _CappedBodyCapture)
 
     unrecorded = tflow.tflow(resp=True)
     addon.responseheaders(unrecorded)
     assert unrecorded.response is not None and unrecorded.response.stream is True
 
     # The observer passes chunks through untouched and the response hook
-    # reads the copy, so chunked provider responses still refine.
+    # reads the copy, so streamed provider responses still refine.
     calls = _finalize_capture(monkeypatch)
     payload = b'{"ok": true}'
     assert capture(payload) == payload
     assert capture(b"") == b""
-    asyncio.run(addon.response(chunked))
+    asyncio.run(addon.response(recorded))
     assert calls[0]["response_body"] == payload
 
 

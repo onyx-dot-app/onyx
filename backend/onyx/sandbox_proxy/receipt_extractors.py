@@ -214,8 +214,10 @@ def _gmail_facts(action_type: str, body: dict[str, Any]) -> ResponseFacts:
     message_id = _safe_id(message.get("id"))
     if message_id is None:
         return ResponseFacts()
-    # A draft is not in #all until sent, so link the drafts view instead.
-    view = "drafts" if action_type.startswith("gmail.drafts.") else "all"
+    # An unsent draft is not in #all, so its link opens the drafts view.
+    # drafts.send returns the sent Message, which lives in #all like any send.
+    is_draft = action_type in ("gmail.drafts.create", "gmail.drafts.update")
+    view = "drafts" if is_draft else "all"
     return ResponseFacts(link=f"https://mail.google.com/mail/u/0/#{view}/{message_id}")
 
 

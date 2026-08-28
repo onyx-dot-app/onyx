@@ -413,20 +413,12 @@ class GateAddon:
             return
         if flow.response is None:
             return
-        # A recorded flow's response feeds the receipt extractors: buffer it
-        # when its declared size fits, otherwise stream through a capped
-        # observer so chunked or lying origins can never grow proxy memory.
+        # A recorded flow's response feeds the receipt extractors: stream it
+        # through a capped observer, trusting no declared length, so no origin
+        # can grow proxy memory past the refine cap.
         if RECEIPT_FLOW_KEY in flow.metadata:
-            declared = flow.response.headers.get("content-length")
-            try:
-                length = int(declared) if declared is not None else None
-            except ValueError:
-                length = None
-            if length is not None and 0 <= length <= RECEIPT_REFINE_MAX_BODY_BYTES:
-                return
-            if length is None:
-                flow.response.stream = _CappedBodyCapture()
-                return
+            flow.response.stream = _CappedBodyCapture()
+            return
         flow.response.stream = True
 
     async def request(self, flow: http.HTTPFlow) -> None:

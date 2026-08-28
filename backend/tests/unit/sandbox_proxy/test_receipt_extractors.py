@@ -135,6 +135,9 @@ def test_gmail_send_and_draft_shapes_both_link() -> None:
         "gmail.drafts.create", _body({"id": "d1", "message": {"id": "m2"}})
     )
     assert draft.link == "https://mail.google.com/mail/u/0/#drafts/m2"
+    # drafts.send consumes the draft and returns the sent Message.
+    sent_draft = response_facts("gmail.drafts.send", _body({"id": "m3"}))
+    assert sent_draft.link == "https://mail.google.com/mail/u/0/#all/m3"
 
 
 @pytest.mark.parametrize(
