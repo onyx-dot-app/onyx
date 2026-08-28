@@ -3,8 +3,7 @@
 import { useEffect } from "react";
 import { useAgent } from "@/lib/agents/hooks";
 import { AgentViewerModal } from "@/lib/agents/components";
-import { AppPosition, useAppPosition } from "@/lib/app/hooks";
-import { useAppRouter } from "@/hooks/appNavigation";
+import { useAppPosition } from "@/lib/app/hooks";
 
 /**
  * The agent viewer, opened by the URL rather than by whichever card was
@@ -17,7 +16,6 @@ import { useAppRouter } from "@/hooks/appNavigation";
  */
 export function AgentViewer() {
   const appPosition = useAppPosition();
-  const route = useAppRouter();
 
   const previewed = appPosition.previewedAgent();
   const agentId = previewed === null ? null : Number(previewed);
@@ -30,8 +28,8 @@ export function AgentViewer() {
   // wherever the user came from, not the address that named nothing.
   const isUnopenable = previewed !== null && (!isRequestable || Boolean(error));
   useEffect(() => {
-    if (isUnopenable) route(AppPosition.moreAgents(), { replace: true });
-  }, [isUnopenable, route]);
+    if (isUnopenable) appPosition.openMoreAgents({ replace: true });
+  }, [isUnopenable, appPosition]);
 
   // Nothing is rendered while the agent loads. The listing stays interactive
   // underneath, and a modal appearing late reads better than an empty one.
@@ -40,7 +38,7 @@ export function AgentViewer() {
   return (
     <AgentViewerModal
       agent={agent}
-      onClose={() => route(AppPosition.moreAgents())}
+      onClose={() => appPosition.openMoreAgents()}
     />
   );
 }

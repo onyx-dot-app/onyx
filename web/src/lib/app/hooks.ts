@@ -1,7 +1,7 @@
 "use client";
 
-import { useLayoutEffect, useMemo } from "react";
-import { usePathname, useSearchParams } from "next/navigation";
+import { useCallback, useLayoutEffect, useMemo } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { routeWithQuery } from "@/lib/routes";
@@ -23,69 +23,102 @@ export type AppPositionType =
   | { location: "more-agents"; id: string | null }
   | { location: "new-session" | "user-settings" | "shared-chat" };
 
+interface NavigationOptions {
+  /** Leaves no history entry, so going back skips this address. */
+  replace?: boolean;
+}
+
+type Router = ReturnType<typeof useRouter>;
+
+/**
+ * Which pathname and which parameter name each location lives at.
+ *
+ * The mirror of the derivation at the bottom of this file, so reading a
+ * position and going to one cannot drift apart: they are the same knowledge,
+ * stated once in each direction.
+ */
+function hrefFor(value: AppPositionType): Route {
+  switch (value.location) {
+    case "chat":
+      return routeWithQuery("/app", {
+        [SEARCH_PARAM_NAMES.CHAT_ID]: value.id,
+      });
+    case "agent":
+      return routeWithQuery("/app", {
+        [SEARCH_PARAM_NAMES.AGENT_ID]: value.id,
+      });
+    case "project":
+      return routeWithQuery("/app", {
+        [SEARCH_PARAM_NAMES.PROJECT_ID]: value.id,
+      });
+    case "more-agents":
+      return value.id === null
+        ? ("/app/agents" as Route)
+        : routeWithQuery("/app/agents", {
+            [SEARCH_PARAM_NAMES.AGENT_ID]: value.id,
+          });
+    case "user-settings":
+      return "/app/settings" as Route;
+    case "shared-chat":
+    case "new-session":
+      return "/app" as Route;
+  }
+}
+
 export class AppPosition {
-  constructor(public value: AppPositionType) {}
-
-  static chat(id: string): AppPosition {
-    return new AppPosition({ location: "chat", id });
-  }
-
-  static agent(id: number): AppPosition {
-    return new AppPosition({ location: "agent", id: String(id) });
-  }
-
-  static project(id: number): AppPosition {
-    return new AppPosition({ location: "project", id: String(id) });
-  }
-
-  /** The agents listing, with one agent's viewer open over it. */
-  static agentViewer(id: number): AppPosition {
-    return new AppPosition({ location: "more-agents", id: String(id) });
-  }
-
-  /** The agents listing with nothing open. */
-  static moreAgents(): AppPosition {
-    return new AppPosition({ location: "more-agents", id: null });
-  }
-
-  static newSession(): AppPosition {
-    return new AppPosition({ location: "new-session" });
-  }
+  constructor(
+    public value: AppPositionType,
+    private router: Router
+  ) {}
 
   /**
-   * Where to navigate to reach this position.
-   *
-   * The mirror of the derivation below: one class owns which pathname and
-   * which parameter name each location lives at, so a caller names a position
-   * and never assembles a URL. Reading and writing cannot drift apart, because
-   * they are the same knowledge stated once in each direction.
+   * Where this position lives, for a link rather than a click. An anchor keeps
+   * middle-click and open-in-new-tab, which a navigation method cannot.
    */
   href(): Route {
-    switch (this.value.location) {
-      case "chat":
-        return routeWithQuery("/app", {
-          [SEARCH_PARAM_NAMES.CHAT_ID]: this.value.id,
-        });
-      case "agent":
-        return routeWithQuery("/app", {
-          [SEARCH_PARAM_NAMES.AGENT_ID]: this.value.id,
-        });
-      case "project":
-        return routeWithQuery("/app", {
-          [SEARCH_PARAM_NAMES.PROJECT_ID]: this.value.id,
-        });
-      case "more-agents":
-        return this.value.id === null
-          ? ("/app/agents" as Route)
-          : routeWithQuery("/app/agents", {
-              [SEARCH_PARAM_NAMES.AGENT_ID]: this.value.id,
-            });
-      case "user-settings":
-        return "/app/settings" as Route;
-      case "shared-chat":
-      case "new-session":
-        return "/app" as Route;
-    }
+    return hrefFor(this.value);
+  }
+
+  // # NOTE (@raunakab):
+  // ## Going somewhere
+  //
+  // Reading is what this position is; the methods below are where the user
+  // could go next, which is why they are verbs. Naming them after the location
+  // alone would make `chat()` mean the current chat with no argument and a
+  // different chat with one — the same word for a question and a command.
+
+  openChat(chatSessionId: string, options?: NavigationOptions) {
+    this.go({ location: "chat", id: chatSessionId }, options);
+  }
+
+  openAgent(agentId: number, options?: NavigationOptions) {
+    this.go({ location: "agent", id: String(agentId) }, options);
+  }
+
+  openProject(projectId: number, options?: NavigationOptions) {
+    this.go({ location: "project", id: String(projectId) }, options);
+  }
+
+  openAgentViewer(agentId: number, options?: NavigationOptions) {
+    this.go({ location: "more-agents", id: String(agentId) }, options);
+  }
+
+  /** The agents listing with no viewer open, which is also how one closes. */
+  openMoreAgents(options?: NavigationOptions) {
+    this.go({ location: "more-agents", id: null }, options);
+  }
+
+  openNewSession(options?: NavigationOptions) {
+    this.go({ location: "new-session" }, options);
+  }
+
+  private go(
+    value: AppPositionType,
+    { replace = false }: NavigationOptions = {}
+  ) {
+    const href = hrefFor(value);
+    if (replace) this.router.replace(href);
+    else this.router.push(href);
   }
 
   /**
@@ -191,6 +224,7 @@ export class AppPosition {
 export function useAppPosition(): AppPosition {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const router = useRouter();
 
   const chatId = searchParams.get(SEARCH_PARAM_NAMES.CHAT_ID);
   const agentId = searchParams.get(SEARCH_PARAM_NAMES.AGENT_ID);
@@ -200,23 +234,25 @@ export function useAppPosition(): AppPosition {
   // AppPosition is immutable, so same inputs → same instance.
   return useMemo(() => {
     if (pathname.startsWith("/app/shared/")) {
-      return new AppPosition({ location: "shared-chat" });
+      return new AppPosition({ location: "shared-chat" }, router);
     }
     if (pathname.startsWith("/app/settings")) {
-      return new AppPosition({ location: "user-settings" });
+      return new AppPosition({ location: "user-settings" }, router);
     }
     // On the listing, an agent id names the viewer that is open rather than a
     // chat to start, which is why the same parameter reads differently here.
     if (pathname.startsWith("/app/agents")) {
-      return new AppPosition({ location: "more-agents", id: agentId });
+      return new AppPosition({ location: "more-agents", id: agentId }, router);
     }
-    if (chatId) return new AppPosition({ location: "chat", id: chatId });
-    if (agentId) return new AppPosition({ location: "agent", id: agentId });
+    if (chatId)
+      return new AppPosition({ location: "chat", id: chatId }, router);
+    if (agentId)
+      return new AppPosition({ location: "agent", id: agentId }, router);
     if (projectId) {
-      return new AppPosition({ location: "project", id: projectId });
+      return new AppPosition({ location: "project", id: projectId }, router);
     }
-    return new AppPosition({ location: "new-session" });
-  }, [pathname, chatId, agentId, projectId]);
+    return new AppPosition({ location: "new-session" }, router);
+  }, [pathname, chatId, agentId, projectId, router]);
 }
 
 export function useCustomFooterContent(): string {
@@ -287,4 +323,10 @@ export function useChatSessionSupportsRetrieval(): boolean | null {
       tool.in_code_tool_id &&
       [SEARCH_TOOL_ID, WEB_SEARCH_TOOL_ID].includes(tool.in_code_tool_id)
   );
+}
+
+/** One search parameter by name, for the few reads that are not a position. */
+export function useAppParams() {
+  const searchParams = useSearchParams();
+  return useCallback((name: string) => searchParams.get(name), [searchParams]);
 }

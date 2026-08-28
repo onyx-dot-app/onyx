@@ -5,7 +5,6 @@ import { useTranslations } from "next-intl";
 import { MinimalAgent } from "@/lib/agents/types";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { Button } from "@opal/components";
-import { useAppRouter } from "@/hooks/appNavigation";
 import { usePinnedAgents } from "@/lib/agents/hooks";
 import { noProp } from "@/lib/utils";
 import { useRouter } from "next/navigation";
@@ -24,7 +23,7 @@ import {
   SvgUser,
 } from "@opal/icons";
 import { useCreateModal } from "@opal/components";
-import { AppPosition } from "@/lib/app/hooks";
+import { useAppPosition } from "@/lib/app/hooks";
 import { ShareAgentModal } from "@/lib/agents/components";
 import { CardItemLayout } from "@/layouts/general-layouts";
 import { Content } from "@opal/layouts";
@@ -37,7 +36,7 @@ export interface AgentCardProps {
 
 export default function AgentCard({ agent }: AgentCardProps) {
   const t = useTranslations("agents");
-  const route = useAppRouter();
+  const appPosition = useAppPosition();
   const router = useRouter();
   const { pinnedAgents, togglePinnedAgent } = usePinnedAgents();
   const pinned = useMemo(
@@ -52,8 +51,8 @@ export default function AgentCard({ agent }: AgentCardProps) {
     if (!pinned) {
       togglePinnedAgent(agent, true);
     }
-    route(AppPosition.agent(agent.id));
-  }, [pinned, togglePinnedAgent, agent, route]);
+    appPosition.openAgent(agent.id);
+  }, [pinned, togglePinnedAgent, agent, appPosition]);
 
   // Declared once because it renders both bare and wrapped, depending on `pinned`.
   const pinButton = (
@@ -73,7 +72,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
       </shareAgentModal.Provider>
 
       <Interactive.Simple
-        onClick={() => route(AppPosition.agentViewer(agent.id))}
+        onClick={() => appPosition.openAgentViewer(agent.id)}
         group="group/AgentCard"
       >
         <Hoverable.Root group="AgentCard" height="full">

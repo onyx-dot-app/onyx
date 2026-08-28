@@ -9,7 +9,6 @@ import { ChatSession } from "@/app/app/interfaces";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import { noProp } from "@/lib/utils";
 import { Popover, PopoverMenu } from "@opal/components";
-import { useAppRouter } from "@/hooks/appNavigation";
 import type { Project } from "@/lib/projects/types";
 import {
   removeChatSessionFromProject,
@@ -30,7 +29,7 @@ import {
 } from "@/lib/sidebar/utils";
 import { handleMoveOperation } from "@/lib/sidebar/svc";
 import ButtonRenaming from "@/refresh-components/buttons/ButtonRenaming";
-import { AppPosition, useAppPosition } from "@/lib/app/hooks";
+import { useAppPosition } from "@/lib/app/hooks";
 import {
   SvgChevronLeft,
   SvgEdit,
@@ -105,7 +104,7 @@ export interface ChatButtonProps {
 const ChatButton = memo(
   ({ chatSession, project, draggable = false }: ChatButtonProps) => {
     const t = useTranslations("sidebar");
-    const route = useAppRouter();
+    const appPosition = useAppPosition();
     const activeSidebarTab = useAppPosition();
     const active = useMemo(
       () =>
@@ -318,7 +317,7 @@ const ChatButton = memo(
 
           // Only route if the deleted chat is the currently opened chat session
           if (active) {
-            route(AppPosition.project(project.id));
+            appPosition.openProject(project.id);
           }
         }
         await refreshChatSessions();
@@ -393,7 +392,7 @@ const ChatButton = memo(
         await performMove(newProject.id);
 
         // Navigate to the new project to see the chat
-        route(AppPosition.project(newProject.id));
+        appPosition.openProject(newProject.id);
         setNavigateAfterMoveProjectId(null);
       } catch (error) {
         console.error("Failed to create project and move chat:", error);
@@ -519,7 +518,7 @@ const ChatButton = memo(
                 await performMove(target);
                 // Navigate if this was triggered by creating a new project
                 if (shouldNavigate != null) {
-                  route(AppPosition.project(shouldNavigate));
+                  appPosition.openProject(shouldNavigate);
                   setNavigateAfterMoveProjectId(null);
                 }
               }

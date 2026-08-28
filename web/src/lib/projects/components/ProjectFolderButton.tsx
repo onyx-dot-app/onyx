@@ -26,8 +26,7 @@ import {
   SvgTrash,
 } from "@opal/icons";
 import ChatButton from "@/sections/sidebar/ChatButton";
-import { useAppRouter } from "@/hooks/appNavigation";
-import { AppPosition, useAppPosition } from "@/lib/app/hooks";
+import { useAppPosition } from "@/lib/app/hooks";
 import { noProp } from "@/lib/utils";
 import { DRAG_TYPES } from "@/lib/sidebar/constants";
 import { useActiveProject } from "@/lib/projects/hooks";
@@ -137,7 +136,7 @@ export interface ProjectFolderButtonProps {
   project: Project;
 }
 export function ProjectFolderButton({ project }: ProjectFolderButtonProps) {
-  const route = useAppRouter();
+  const appPosition = useAppPosition();
   const activeSidebar = useAppPosition();
   const activeProject = useActiveProject();
   const isActiveProject = activeProject?.id === project.id;
@@ -166,7 +165,7 @@ export function ProjectFolderButton({ project }: ProjectFolderButtonProps) {
   });
 
   function handleTextClick() {
-    route(AppPosition.project(project.id));
+    appPosition.openProject(project.id);
   }
 
   async function handleRename(newName: string) {
