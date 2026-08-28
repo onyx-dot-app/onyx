@@ -15,9 +15,9 @@ type AppPositionType =
   // Chat ids are opaque; agent and project ids are rows.
   | { location: "chat"; id: string }
   | { location: "agent" | "project"; id: number }
-  // The agents listing, holding the agent whose viewer is open over it, if any.
-  | { location: "more-agents"; id: number | null }
-  | { location: "new-session" | "user-settings" | "shared-chat" };
+  | {
+      location: "more-agents" | "new-session" | "user-settings" | "shared-chat";
+    };
 
 interface NavigationOptions {
   /** Leaves no history entry, so going back skips this address. */
@@ -55,11 +55,7 @@ function hrefFor(value: AppPositionType): Route {
         [SEARCH_PARAM_NAMES.PROJECT_ID]: value.id,
       });
     case "more-agents":
-      return value.id === null
-        ? ("/app/agents" as Route)
-        : routeWithQuery("/app/agents", {
-            [SEARCH_PARAM_NAMES.AGENT_ID]: value.id,
-          });
+      return "/app/agents" as Route;
     case "user-settings":
       return "/app/settings" as Route;
     case "shared-chat":
@@ -102,13 +98,8 @@ class AppPosition {
     this.go({ location: "project", id: projectId }, options);
   }
 
-  openAgentViewer(agentId: number, options?: NavigationOptions) {
-    this.go({ location: "more-agents", id: agentId }, options);
-  }
-
-  /** The agents listing with no viewer open, which is also how one closes. */
   openMoreAgents(options?: NavigationOptions) {
-    this.go({ location: "more-agents", id: null }, options);
+    this.go({ location: "more-agents" }, options);
   }
 
   openNewSession(options?: NavigationOptions) {
@@ -144,11 +135,6 @@ class AppPosition {
     return this.value.location === "chat" ? this.value.id : null;
   }
 
-  /** The agent whose viewer modal is open, if one is. */
-  previewedAgent(): number | null {
-    return this.value.location === "more-agents" ? this.value.id : null;
-  }
-
   isAgent(): boolean {
     return this.agent() !== null;
   }
@@ -169,11 +155,6 @@ class AppPosition {
     return this.value.location === "new-session";
   }
 
-  /**
-   * True on the agents listing, including while an agent's viewer is open over
-   * it. The modal is a position in its own right so it can be linked to and
-   * dismissed with the back button, but it is still that page underneath.
-   */
   isMoreAgents(): boolean {
     return this.value.location === "more-agents";
   }
@@ -244,10 +225,8 @@ export function useAppPosition(): AppPosition {
     if (pathname.startsWith("/app/settings")) {
       return new AppPosition({ location: "user-settings" }, router);
     }
-    // On the listing, an agent id names the viewer that is open rather than a
-    // chat to start, which is why the same parameter reads differently here.
     if (pathname.startsWith("/app/agents")) {
-      return new AppPosition({ location: "more-agents", id: agentId }, router);
+      return new AppPosition({ location: "more-agents" }, router);
     }
     if (chatId)
       return new AppPosition({ location: "chat", id: chatId }, router);

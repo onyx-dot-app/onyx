@@ -21,9 +21,15 @@ interface AgentsSectionProps {
   title: string;
   description?: string;
   agents: MinimalAgent[];
+  onView: (agentId: number) => void;
 }
 
-function AgentsSection({ title, description, agents }: AgentsSectionProps) {
+function AgentsSection({
+  title,
+  description,
+  agents,
+  onView,
+}: AgentsSectionProps) {
   if (agents.length === 0) return null;
 
   return (
@@ -40,7 +46,11 @@ function AgentsSection({ title, description, agents }: AgentsSectionProps) {
         {agents
           .sort((a, b) => b.id - a.id)
           .map((agent) => (
-            <AgentCard key={agent.id} agent={agent} />
+            <AgentCard
+              key={agent.id}
+              agent={agent}
+              onView={() => onView(agent.id)}
+            />
           ))}
       </div>
     </div>
@@ -52,6 +62,9 @@ export default function AgentsNavigationPage() {
   const { user, permissions } = useUser();
   const canCreateAgent = hasPermission(permissions, Permission.ADD_AGENTS);
   const [searchQuery, setSearchQuery] = useState("");
+  // One viewer for the listing, so the id lives here rather than in whichever
+  // card happened to be clicked.
+  const [viewedAgentId, setViewedAgentId] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<"all" | "your">("all");
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -97,7 +110,10 @@ export default function AgentsNavigationPage() {
       data-testid="AgentsPage/container"
       aria-label="Agents Page"
     >
-      <AgentViewer />
+      <AgentViewer
+        agentId={viewedAgentId}
+        onClose={() => setViewedAgentId(null)}
+      />
       <SettingsLayouts.Header
         icon={SvgOnyxOctagon}
         title="Agents"
@@ -161,8 +177,13 @@ export default function AgentsNavigationPage() {
               title="Featured Agents"
               description="Curated by your team"
               agents={featuredAgents}
+              onView={setViewedAgentId}
             />
-            <AgentsSection title="All Agents" agents={allAgents} />
+            <AgentsSection
+              title="All Agents"
+              agents={allAgents}
+              onView={setViewedAgentId}
+            />
             <TextSeparator
               count={agentCount}
               text={agentCount === 1 ? "Agent" : "Agents"}

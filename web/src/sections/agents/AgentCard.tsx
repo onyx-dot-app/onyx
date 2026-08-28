@@ -32,9 +32,11 @@ import { Card } from "@/refresh-components/cards";
 
 export interface AgentCardProps {
   agent: MinimalAgent;
+  /** Opens this agent's viewer, which the listing renders. */
+  onView: () => void;
 }
 
-export default function AgentCard({ agent }: AgentCardProps) {
+export default function AgentCard({ agent, onView }: AgentCardProps) {
   const t = useTranslations("agents");
   const appPosition = useAppPosition();
   const router = useRouter();
@@ -71,10 +73,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
         <ShareAgentModal agentId={agent.id} />
       </shareAgentModal.Provider>
 
-      <Interactive.Simple
-        onClick={() => appPosition.openAgentViewer(agent.id)}
-        group="group/AgentCard"
-      >
+      <Interactive.Simple onClick={onView} group="group/AgentCard">
         <Hoverable.Root group="AgentCard" height="full">
           <Card
             padding={0}
