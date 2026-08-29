@@ -557,6 +557,15 @@ class JiraConnector(
         return self._jira_client
 
     @property
+    def document_source(self) -> DocumentSource:
+        """Source of the documents of this connector.
+
+        It also prefixes the external group ids, so it must match the source of
+        the connector credential pair.
+        """
+        return DocumentSource.JIRA
+
+    @property
     def quoted_jira_project(self) -> str:
         # Quote the project name to handle reserved words
         if not self.jira_project:
@@ -583,6 +592,7 @@ class JiraConnector(
                 jira_client=self.jira_client,
                 jira_project=project_key,
                 add_prefix=add_prefix,
+                source=self.document_source,
             )
         return self._project_permissions_cache[cache_key]
 

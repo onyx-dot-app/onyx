@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 from pytest import LogCaptureFixture
 
 from ee.onyx.external_permissions.jira.page_access import get_project_permissions
+from onyx.configs.constants import DocumentSource
 from onyx.connectors.jira.utils import JIRA_CLOUD_API_VERSION, JIRA_SERVER_API_VERSION
 
 PROJECT_KEY = "PROJ"
@@ -317,3 +318,24 @@ def test_project_role_unknown_actor_type_is_still_unsupported(
     assert any(
         "unsupported actor shape" in record.getMessage() for record in caplog.records
     )
+
+
+def test_group_prefix_follows_the_requested_source() -> None:
+    """Service Management indexes Jira projects under its own source, so the
+    group ids must carry that source."""
+    jira_client = _jira_client(JIRA_SERVER_API_VERSION)
+    jira_client.project_permissionscheme.return_value = _project_permissions(
+        _permission({"type": "group", "parameter": "jira-developers"})
+    )
+
+    external_access = get_project_permissions(
+        jira_client,
+        PROJECT_KEY,
+        add_prefix=True,
+        source=DocumentSource.JIRA_SERVICE_MANAGEMENT,
+    )
+
+    assert external_access is not None
+    assert external_access.external_user_group_ids == {
+        "jira_service_management_jira-developers"
+    }

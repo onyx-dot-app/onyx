@@ -162,6 +162,11 @@ class JiraServiceManagementConnector(JiraConnector):
         self._jsm_field_ids: JsmFieldIds | None = None
         self._service_desk_project_keys: list[str] | None = None
 
+    @property
+    @override
+    def document_source(self) -> DocumentSource:
+        return DocumentSource.JIRA_SERVICE_MANAGEMENT
+
     @override
     def _build_document_id(self, issue_key: str) -> str:
         return f"{DOC_ID_PREFIX}{super()._build_document_id(issue_key)}"
@@ -178,7 +183,7 @@ class JiraServiceManagementConnector(JiraConnector):
             return None
 
         document.id = self._build_document_id(issue.key)
-        document.source = DocumentSource.JIRA_SERVICE_MANAGEMENT
+        document.source = self.document_source
         document.metadata.update(self._request_metadata(issue))
         return document
 
@@ -187,17 +192,15 @@ class JiraServiceManagementConnector(JiraConnector):
         self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
     ) -> str:
         jql = super()._get_jql_query(start, end)
-        if self.jql_query or self.jira_project:
+        if self.jira_project:
+            # validate_connector_settings checks that the project is a service desk.
             return jql
 
-        # Without a project or a custom query, index every service desk project
-        # instead of every Jira issue.
-        project_keys = self._get_service_desk_project_keys()
-        if not project_keys:
-            raise ConnectorValidationError(
-                "No Jira Service Management projects are visible to these credentials."
-            )
-        projects = ", ".join(f'"{project_key}"' for project_key in project_keys)
+        # Keep the query inside the visible service desk projects. A custom JQL
+        # query can match software project issues, and those are not requests.
+        projects = ", ".join(
+            f'"{project_key}"' for project_key in self._get_service_desk_project_keys()
+        )
         return f"project in ({projects}) AND {jql}"
 
     @override
@@ -205,6 +208,9 @@ class JiraServiceManagementConnector(JiraConnector):
         super().validate_connector_settings()
 
         if not self.jira_project:
+            # Resolve the scope now, so a connector that has no service desk
+            # project fails validation instead of its first indexing run.
+            self._get_service_desk_project_keys()
             return
 
         project = self.jira_client.project(self.jira_project)
@@ -216,6 +222,11 @@ class JiraServiceManagementConnector(JiraConnector):
             )
 
     def _get_service_desk_project_keys(self) -> list[str]:
+        """Keys of the service desk projects that the credentials can see.
+
+        Raises ConnectorValidationError if the credentials see no service desk
+        project, because then the connector has nothing to index.
+        """
         if self._service_desk_project_keys is None:
             projects = self.jira_client.projects()
             self._service_desk_project_keys = [
@@ -225,6 +236,12 @@ class JiraServiceManagementConnector(JiraConnector):
                 == SERVICE_DESK_PROJECT_TYPE
                 and _attribute_or_key(project, "key")
             ]
+
+        if not self._service_desk_project_keys:
+            raise ConnectorValidationError(
+                "No Jira Service Management projects are visible to these credentials."
+            )
+
         return self._service_desk_project_keys
 
     def _get_jsm_field_ids(self) -> JsmFieldIds:

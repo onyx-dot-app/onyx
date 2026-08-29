@@ -207,6 +207,26 @@ def test_jql_without_visible_service_desk_projects_fails(
         connector._get_jql_query(0, time.time())
 
 
+def test_custom_jql_stays_inside_service_desk_projects(
+    jira_base_url: str, mock_jira_client: MagicMock
+) -> None:
+    connector = JiraServiceManagementConnector(
+        jira_base_url=jira_base_url,
+        jql_query="status = Open",
+    )
+    connector._jira_client = mock_jira_client
+    cast(MagicMock, mock_jira_client.projects).return_value = [
+        _make_project("SUP", "service_desk"),
+        _make_project("ENG", "software"),
+    ]
+
+    jql = connector._get_jql_query(0, time.time())
+
+    assert jql.startswith('project in ("SUP") AND ')
+    assert "(status = Open)" in jql
+    assert "ENG" not in jql
+
+
 def test_jql_keeps_configured_project(
     jsm_connector: JiraServiceManagementConnector,
 ) -> None:
@@ -235,6 +255,46 @@ def test_validate_accepts_service_desk_project(
     )
 
     jsm_connector.validate_connector_settings()
+
+
+def test_validate_without_project_requires_a_service_desk_project(
+    jira_base_url: str, mock_jira_client: MagicMock
+) -> None:
+    connector = JiraServiceManagementConnector(jira_base_url=jira_base_url)
+    connector._jira_client = mock_jira_client
+    cast(MagicMock, mock_jira_client.projects).return_value = [
+        _make_project("ENG", "software")
+    ]
+
+    with pytest.raises(ConnectorValidationError, match="No Jira Service Management"):
+        connector.validate_connector_settings()
+
+
+def test_validate_without_project_accepts_a_service_desk_project(
+    jira_base_url: str, mock_jira_client: MagicMock
+) -> None:
+    connector = JiraServiceManagementConnector(jira_base_url=jira_base_url)
+    connector._jira_client = mock_jira_client
+    cast(MagicMock, mock_jira_client.projects).return_value = [
+        _make_project("SUP", "service_desk")
+    ]
+
+    connector.validate_connector_settings()
+
+
+def test_permissions_use_service_management_group_prefix(
+    jsm_connector: JiraServiceManagementConnector,
+) -> None:
+    """External group ids must carry the source of the connector credential pair."""
+    with patch(
+        "onyx.connectors.jira.connector.get_project_permissions"
+    ) as mock_get_project_permissions:
+        jsm_connector._get_project_permissions("SUP", add_prefix=True)
+
+    assert (
+        mock_get_project_permissions.call_args.kwargs["source"]
+        == DocumentSource.JIRA_SERVICE_MANAGEMENT
+    )
 
 
 def test_checkpoint_is_reused_from_jira_connector(
