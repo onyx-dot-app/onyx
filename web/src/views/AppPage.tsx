@@ -996,6 +996,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         </div>
                       )}
                       <AppInputBar
+                        toolConfiguration={toolConfiguration}
                         ref={chatInputBarRef}
                         deepResearchEnabled={
                           deepResearchEnabledForCurrentWorkflow

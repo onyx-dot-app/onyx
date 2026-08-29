@@ -540,6 +540,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                 </div>
               )}
               <AppInputBar
+                toolConfiguration={toolConfiguration}
                 ref={chatInputBarRef}
                 deepResearchEnabled={deepResearchEnabled}
                 toggleDeepResearch={toggleDeepResearch}
