@@ -14,12 +14,16 @@ package cmd
 //	E4 counter tag only on origin            -> fetched, counter continues,
 //	                                            tag name returned               TestReleaseBeta_fetchesRemoteOnlyCounterTags
 //	E5 --version with leading zeroes         -> rejected before any git work    TestReleaseBeta_rejectsLeadingZeroVersion
+//	E6 origin moves during the prompt        -> recompute mismatch aborts       TestReleaseBeta_staleStateAbortsBeforePush
+//	                                            before any tag or push          (tests the guard directly; the
+//	                                                                            prompt itself is interactive)
 
 import (
 	"strings"
 	"testing"
 
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/gittest"
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/release"
 )
 
 func TestReleaseBeta_dryRunCreatesNothing(t *testing.T) {
@@ -97,6 +101,36 @@ func TestReleaseBeta_rejectsLeadingZeroVersion(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), "--version must be X.Y.Z") {
 			t.Errorf("expected validation error for %q, got %v", version, err)
 		}
+	}
+}
+
+func TestReleaseBeta_staleStateAbortsBeforePush(t *testing.T) {
+	// Precondition: the tag computed before the confirmation prompt.
+	repo := gittest.SetupReleaseBranchRepo(t)
+	tag, sha, err := release.ComputeBetaTag("", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// An unchanged origin passes.
+	if err := verifyBetaStateUnchanged(tag, sha, &ReleaseBetaOptions{}); err != nil {
+		t.Errorf("expected the unchanged state to pass, got %v", err)
+	}
+
+	// Another release process ships the stable base while the prompt waits.
+	// Origin would accept the beta push (the tag name is new), and
+	// deployment.yml's image jobs would move the "beta" Docker tags backwards
+	// even though its tag check fails; the guard must abort instead.
+	gittest.Git(t, repo.Work, "tag", "v4.5.0", repo.CutSHA)
+	gittest.Git(t, repo.Work, "push", "--quiet", "origin", "v4.5.0")
+	gittest.Git(t, repo.Work, "tag", "-d", "v4.5.0")
+
+	// Under test.
+	err = verifyBetaStateUnchanged(tag, sha, &ReleaseBetaOptions{})
+
+	// Postcondition.
+	if err == nil || !strings.Contains(err.Error(), "origin changed while waiting") {
+		t.Errorf("expected an origin-changed error, got %v", err)
 	}
 }
 

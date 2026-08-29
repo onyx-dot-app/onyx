@@ -95,6 +95,14 @@ func releaseBeta(opts *ReleaseBetaOptions) (string, error) {
 			log.Info("Exiting...")
 			return "", nil
 		}
+		// The prompt can wait a long time, and origin does not reject a beta
+		// tag whose base shipped meanwhile (the tag name is new). CI's tag
+		// check rejects it, but deployment.yml's image jobs run regardless and
+		// would move the "beta" Docker tags backwards. Recompute so the push
+		// reflects origin's current state, not the pre-prompt snapshot.
+		if err := verifyBetaStateUnchanged(tag, sha, opts); err != nil {
+			return "", err
+		}
 	}
 
 	if err := git.RunCommand("tag", tag, sha); err != nil {
@@ -110,4 +118,18 @@ func releaseBeta(opts *ReleaseBetaOptions) (string, error) {
 	}
 	log.Infof("Pushed %s; deployment.yml will build the beta images.", tag)
 	return tag, nil
+}
+
+// verifyBetaStateUnchanged recomputes the beta tag and errors when the answer
+// no longer matches the one the user confirmed, which means origin moved
+// while the prompt was waiting.
+func verifyBetaStateUnchanged(tag, sha string, opts *ReleaseBetaOptions) error {
+	freshTag, freshSHA, err := release.ComputeBetaTag(opts.Ref, opts.Version)
+	if err != nil {
+		return err
+	}
+	if freshTag != tag || freshSHA != sha {
+		return fmt.Errorf("origin changed while waiting for confirmation: the computed tag was %s at %.10s but is now %s at %.10s; re-run to continue", tag, sha, freshTag, freshSHA)
+	}
+	return nil
 }
