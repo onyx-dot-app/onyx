@@ -40,6 +40,18 @@ func TagExists(dir, tag string) bool {
 	return cmd.Run() == nil
 }
 
+// RejectPushes configures the repository at dir to reject every push via a
+// pre-receive hook. The hook directory is pinned in local config so a global
+// core.hooksPath (as some dev setups carry) cannot bypass it.
+func RejectPushes(t *testing.T, dir string) {
+	t.Helper()
+	hookDir := filepath.Join(dir, "hooks")
+	if err := os.WriteFile(filepath.Join(hookDir, "pre-receive"), []byte("#!/bin/sh\nexit 1\n"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	Git(t, dir, "config", "core.hooksPath", hookDir)
+}
+
 // InitOriginAndWork creates a bare origin and a work clone wired to it, and
 // returns both paths. The work clone is configured like a single-branch
 // checkout of main so tests also pin that detection fetches release branches
