@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/onyx-dot-app/onyx/cli/internal/agents"
 	"github.com/onyx-dot-app/onyx/cli/internal/api"
 	"github.com/onyx-dot-app/onyx/cli/internal/browser"
 	"github.com/onyx-dot-app/onyx/cli/internal/config"
@@ -112,22 +113,51 @@ func cmdShowAgents(m Model) (Model, tea.Cmd) {
 }
 
 func cmdSelectAgent(m Model, idStr string) (Model, tea.Cmd) {
-	pid, err := strconv.Atoi(strings.TrimSpace(idStr))
-	if err != nil {
-		m.viewport.addWarning("Invalid agent ID. Use a number.")
-		return m, nil
+	idStr = strings.TrimSpace(idStr)
+	if idStr == "" {
+		return cmdShowAgents(m)
 	}
 
-	var target *models.AgentSummary
-	for i := range m.agents {
-		if m.agents[i].ID == pid {
-			target = &m.agents[i]
-			break
+	return applyAgentSelection(m, func() (*models.AgentSummary, error) {
+		if len(m.agents) == 0 {
+			return nil, fmt.Errorf("no agents available; run /agent to refresh the list")
 		}
-	}
 
-	if target == nil {
-		m.viewport.addWarning(fmt.Sprintf("Agent %d not found. Use /agent to see available agents.", pid))
+		// Exact name wins over numeric ID parsing (e.g. agent named "42").
+		switch exact := agents.ExactNameMatches(m.agents, idStr); len(exact) {
+		case 1:
+			return &exact[0], nil
+		case 0:
+			// fall through
+		default:
+			agent, err := agents.ResolveByName(m.agents, idStr)
+			if err != nil {
+				return nil, err
+			}
+			return &agent, nil
+		}
+
+		if pid, err := strconv.Atoi(idStr); err == nil {
+			for i := range m.agents {
+				if m.agents[i].ID == pid {
+					return &m.agents[i], nil
+				}
+			}
+			return nil, fmt.Errorf("agent %d not found. Use /agent to see available agents", pid)
+		}
+
+		agent, err := agents.ResolveByName(m.agents, idStr)
+		if err != nil {
+			return nil, err
+		}
+		return &agent, nil
+	})
+}
+
+func applyAgentSelection(m Model, lookup func() (*models.AgentSummary, error)) (Model, tea.Cmd) {
+	target, err := lookup()
+	if err != nil {
+		m.viewport.addWarning(err.Error())
 		return m, nil
 	}
 

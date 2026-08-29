@@ -21,11 +21,12 @@ const defaultMaxOutputBytes = 50000
 
 func newAskCmd(ios *iostreams.IOStreams) *cobra.Command {
 	var (
-		askAgentID int
-		askJSON    bool
-		askQuiet   bool
-		askPrompt  string
-		maxOutput  int
+		askAgentID   int
+		askAgentName string
+		askJSON      bool
+		askQuiet     bool
+		askPrompt    string
+		maxOutput    int
 	)
 
 	cmd := &cobra.Command{
@@ -43,6 +44,7 @@ to a temp file. Set --max-output 0 to disable truncation.`,
 		Args: cobra.MaximumNArgs(1),
 		Example: `  onyx-cli ask "What connectors are available?"
   onyx-cli ask --agent-id 3 "Summarize our Q4 revenue"
+  onyx-cli ask --agent-name "Support Agent" "hello"
   onyx-cli ask --json "List all users" | jq '.event.content'
   cat error.log | onyx-cli ask --prompt "Find the root cause"
   echo "what is onyx?" | onyx-cli ask`,
@@ -61,13 +63,21 @@ to a temp file. Set --max-output 0 to disable truncation.`,
 				return err
 			}
 
-			agentID := cfg.DefaultAgentID
-			if cmd.Flags().Changed("agent-id") {
-				agentID = askAgentID
-			}
-
 			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
+
+			agentID, _, err := resolveAgentSelection(
+				ctx,
+				client,
+				askAgentID,
+				cmd.Flags().Changed("agent-id"),
+				askAgentName,
+				cmd.Flags().Changed("agent-name"),
+				cfg.DefaultAgentID,
+			)
+			if err != nil {
+				return err
+			}
 
 			parentID := -1
 			ch := client.SendMessageStream(
@@ -191,6 +201,7 @@ to a temp file. Set --max-output 0 to disable truncation.`,
 	}
 
 	cmd.Flags().IntVar(&askAgentID, "agent-id", 0, "Agent ID to use")
+	cmd.Flags().StringVar(&askAgentName, "agent-name", "", "Agent name to use (exact or unique substring)")
 	cmd.Flags().BoolVar(&askJSON, "json", false, "Output NDJSON stream events instead of plain text")
 	cmd.Flags().BoolVarP(&askQuiet, "quiet", "q", false, "Buffer output and print once at end (no streaming)")
 	cmd.Flags().StringVar(&askPrompt, "prompt", "", "Question text (use with piped stdin context)")

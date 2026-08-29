@@ -198,6 +198,74 @@ func TestFormatPickerLabelAlignsDetail(t *testing.T) {
 	}
 }
 
+func TestSelectAgentByName(t *testing.T) {
+	m := NewModel(config.DefaultConfig(), nil)
+	m.agents = []models.AgentSummary{
+		{ID: 1, Name: "Support Agent"},
+		{ID: 2, Name: "Engineering Bot"},
+	}
+
+	m, _ = cmdSelectAgent(m, "support")
+	if m.agentID != 1 {
+		t.Errorf("agentID = %d, want 1", m.agentID)
+	}
+	if m.agentName != "Support Agent" {
+		t.Errorf("agentName = %q, want Support Agent", m.agentName)
+	}
+}
+
+func TestSelectAgentWithNoAgentsShowsHelpfulMessage(t *testing.T) {
+	m := NewModel(config.DefaultConfig(), nil)
+
+	m, _ = cmdSelectAgent(m, "support")
+
+	if len(m.viewport.entries) == 0 {
+		t.Fatal("expected a warning entry")
+	}
+	got := m.viewport.entries[len(m.viewport.entries)-1].content
+	want := "no agents available; run /agent to refresh the list"
+	if got != want {
+		t.Errorf("warning = %q, want %q", got, want)
+	}
+}
+
+func TestSelectAgentByID(t *testing.T) {
+	m := NewModel(config.DefaultConfig(), nil)
+	m.agents = []models.AgentSummary{
+		{ID: 1, Name: "Support Agent"},
+	}
+
+	m, _ = cmdSelectAgent(m, "1")
+	if m.agentID != 1 {
+		t.Errorf("agentID = %d, want 1", m.agentID)
+	}
+}
+
+func TestSelectAgentByNumericName(t *testing.T) {
+	m := NewModel(config.DefaultConfig(), nil)
+	m.agents = []models.AgentSummary{
+		{ID: 100, Name: "42"},
+		{ID: 1, Name: "Support Agent"},
+	}
+
+	m, _ = cmdSelectAgent(m, "42")
+	if m.agentID != 100 {
+		t.Errorf("agentID = %d, want 100 (match name before ID)", m.agentID)
+	}
+}
+
+func TestSelectAgentByNumericIDWhenNoNameMatch(t *testing.T) {
+	m := NewModel(config.DefaultConfig(), nil)
+	m.agents = []models.AgentSummary{
+		{ID: 5, Name: "Support Agent"},
+	}
+
+	m, _ = cmdSelectAgent(m, "5")
+	if m.agentID != 5 {
+		t.Errorf("agentID = %d, want 5", m.agentID)
+	}
+}
+
 func TestSelectModelInvalidIndex(t *testing.T) {
 	m := NewModel(config.DefaultConfig(), nil)
 	m, _ = cmdSelectModel(m, "5")
