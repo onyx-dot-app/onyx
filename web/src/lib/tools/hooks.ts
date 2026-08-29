@@ -310,7 +310,14 @@ function withToolState(
   }
   if (next !== null) updated[toolId] = next;
 
-  return updated;
+  // A change that changes nothing hands back what it was given. Callers read
+  // the result by identity to decide whether anything happened.
+  const ids = Object.keys(updated);
+  const same =
+    ids.length === Object.keys(configuration).length &&
+    ids.every((id) => updated[Number(id)] === configuration[Number(id)]);
+
+  return same ? configuration : updated;
 }
 
 /**
@@ -540,14 +547,15 @@ export function useToolConfiguration(
       change: (current: ToolState | null) => ToolState | null
     ) => {
       if (key === null) return;
-      setEntry((previous) => ({
-        key,
-        configuration: withToolState(
-          previous.key === key ? previous.configuration : NEUTRAL,
-          toolId,
-          change
-        ),
-      }));
+      setEntry((previous) => {
+        const current = previous.key === key ? previous.configuration : NEUTRAL;
+        const configuration = withToolState(current, toolId, change);
+        // Asking for the state it already holds has to leave the same entry
+        // behind. A new one every time is a change to everything reading it,
+        // and a caller that writes what it reads would never settle.
+        if (previous.key === key && configuration === current) return previous;
+        return { key, configuration };
+      });
     },
     [key]
   );
