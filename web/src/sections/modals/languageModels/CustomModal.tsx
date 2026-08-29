@@ -287,6 +287,10 @@ export default function CustomModal({
       existingLlmProvider
     ),
     provider: existingLlmProvider?.provider ?? "",
+    // Custom providers must never be in auto mode: the backend's auto-mode
+    // sync keys off the provider string, so a custom provider named e.g.
+    // "openai" would get the recommended OpenAI models merged into it.
+    is_auto_mode: false,
     api_version: existingLlmProvider?.api_version ?? "",
     model_configurations: existingLlmProvider?.model_configurations.map((mc) =>
       // Stored policy can exceed a capability that shrank since the save,
