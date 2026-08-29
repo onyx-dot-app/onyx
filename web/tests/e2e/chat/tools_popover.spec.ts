@@ -251,13 +251,18 @@ test.describe("ToolsPopover Tool Toggles", () => {
     expect(enabledAfter).toBe(enabledBefore);
   });
 
+  // Image generation rather than internal search: the search tool's state is
+  // re-derived on mount from the selected sources, which are still global in
+  // `localStorage`, so it would answer for those rather than for the chat.
+  const CONFIGURED_TOOL = TOOL_IDS.imageGenerationOption;
+
   /** The slash button reads "Disable" while the tool is on, "Enable" once off. */
   async function expectToolDisabled(
     page: Page,
     disabled: boolean
   ): Promise<void> {
     await openActionManagement(page);
-    const option = page.locator(TOOL_IDS.searchOption);
+    const option = page.locator(CONFIGURED_TOOL);
     await expect(option).toBeVisible({ timeout: 10000 });
     await option.hover();
     await expect(
@@ -269,7 +274,7 @@ test.describe("ToolsPopover Tool Toggles", () => {
 
   test("a new session forgets a disabled tool", async ({ page }) => {
     await expectToolDisabled(page, false);
-    await toggleToolDisabled(page, TOOL_IDS.searchOption);
+    await toggleToolDisabled(page, CONFIGURED_TOOL);
     await expectToolDisabled(page, true);
 
     // Nothing was chosen for a chat, because there is no chat yet.
@@ -283,7 +288,7 @@ test.describe("ToolsPopover Tool Toggles", () => {
     await page.waitForURL(/chatId=/, { timeout: 30000 });
 
     await expectToolDisabled(page, false);
-    await toggleToolDisabled(page, TOOL_IDS.searchOption);
+    await toggleToolDisabled(page, CONFIGURED_TOOL);
     await expectToolDisabled(page, true);
 
     await page.reload();
