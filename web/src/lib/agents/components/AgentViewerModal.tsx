@@ -31,7 +31,7 @@ import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import AppInputBar from "@/sections/input/AppInputBar";
 import { useLlmManager } from "@/lib/hooks";
 import { SearchFiltersProvider } from "@/lib/searchFilters/providers";
-import { ForcedToolsProvider } from "@/lib/tools/hooks";
+import { useToolConfiguration } from "@/lib/tools/hooks";
 import { formatMmDdYyyy } from "@/lib/dateUtils";
 import { useProjectsContext } from "@/lib/projects/providers";
 import { FileCard } from "@/sections/cards/FileCard";
@@ -129,26 +129,39 @@ interface AgentChatInputProps {
 }
 function AgentChatInput({ agent, onSubmit }: AgentChatInputProps) {
   const llmManager = useLlmManager(undefined, agent);
+  // Over the listing, so the URL says nothing about the chat this would
+  // start; the agent is named here instead.
+  const toolConfiguration = useToolConfiguration(agent.id);
+
+  // This send navigates in order to send, so the configuration is left where
+  // that page will find it rather than travelling with the call. Closing the
+  // viewer without sending leaves nothing behind.
+  const submit = useCallback(
+    (message: string) => {
+      toolConfiguration.handOffToNewChatWith(agent.id);
+      onSubmit(message);
+    },
+    [toolConfiguration, agent.id, onSubmit]
+  );
 
   return (
-    // Its own instances, so neither the source toggles nor a forced tool chosen
-    // while previewing an agent reach the chat this modal opened over.
+    // Its own instance, so source toggles made while previewing an agent do not
+    // reach the chat this modal opened over.
     <SearchFiltersProvider>
-      <ForcedToolsProvider>
-        <AppInputBar
-          onSubmit={onSubmit}
-          llmManager={llmManager}
-          chatState="input"
-          activeAgent={agent}
-          stopGenerating={() => {}}
-          handleFileUpload={() => {}}
-          currentSessionFileTokenCount={0}
-          availableContextTokens={Infinity}
-          deepResearchEnabled={false}
-          toggleDeepResearch={() => {}}
-          disabled={false}
-        />
-      </ForcedToolsProvider>
+      <AppInputBar
+        toolConfiguration={toolConfiguration}
+        onSubmit={submit}
+        llmManager={llmManager}
+        chatState="input"
+        activeAgent={agent}
+        stopGenerating={() => {}}
+        handleFileUpload={() => {}}
+        currentSessionFileTokenCount={0}
+        availableContextTokens={Infinity}
+        deepResearchEnabled={false}
+        toggleDeepResearch={() => {}}
+        disabled={false}
+      />
     </SearchFiltersProvider>
   );
 }

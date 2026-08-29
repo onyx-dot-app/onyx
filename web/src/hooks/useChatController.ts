@@ -79,8 +79,7 @@ import {
 } from "@/app/app/stores/useChatSessionStore";
 import { Packet, MessageStart } from "@/app/app/services/streamingModels";
 import { SelectedModel } from "@/sections/model-selector/MultiModelSelector";
-import { useAgentPreferences } from "@/lib/agents/hooks";
-import { useForcedTools } from "@/lib/tools/hooks";
+import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
 import { ProjectFile, useProjectsContext } from "@/lib/projects/providers";
 import { useIncognito } from "@/providers/IncognitoProvider";
 import { projectFilesToFileDescriptors } from "@/lib/projects/utils";
@@ -117,6 +116,8 @@ interface RegenerationRequest {
 
 interface UseChatControllerProps {
   llmManager: LlmManager;
+  /** Owned by the surface, so the input bar and this read the same one. */
+  toolConfiguration: ToolConfigurationHandle;
   activeAgent: MinimalAgent | undefined;
   availableAgents: MinimalAgent[];
   existingChatSessionId: string | null;
@@ -140,6 +141,7 @@ async function stopChatSession(chatSessionId: string): Promise<void> {
 
 export default function useChatController({
   llmManager,
+  toolConfiguration,
   availableAgents,
   activeAgent,
   existingChatSessionId,
@@ -152,8 +154,6 @@ export default function useChatController({
   const searchParams = useSearchParams();
   const { refreshChatSessions, addPendingChatSession } = useChatSessions();
   const { pinnedAgents, togglePinnedAgent } = usePinnedAgents();
-  const { agentPreferences } = useAgentPreferences();
-  const { forcedToolId, keepThroughNextSessionChange } = useForcedTools();
   const { fetchProjects, setCurrentMessageFiles, beginUpload } =
     useProjectsContext();
   const { incognitoEnabledRef, incognitoSessionId } = useIncognito();
@@ -527,11 +527,6 @@ export default function useChatController({
         (m) => m.type === "user"
       );
       if (isNewSession) {
-        // This send is what creates the chat, so the session change it causes
-        // is not the user leaving one — the forced tool belongs to the message
-        // already on its way.
-        keepThroughNextSessionChange();
-
         // There is no incognito agent chat, so incognito pins the default
         // assistant regardless of any selected agent.
         currChatSessionId = await createChatSession(
@@ -541,6 +536,10 @@ export default function useChatController({
           incognito,
           incognito ? incognitoSessionId : null
         );
+
+        // This send is what created the chat, so the configuration chosen for
+        // it moves onto the session before the id reaches the composer.
+        toolConfiguration.handOffTo(currChatSessionId);
 
         // Optimistically add the new chat session to the sidebar cache so
         // "New Chat" appears immediately. Incognito sessions are excluded: they
@@ -1021,21 +1020,28 @@ export default function useChatController({
         const lastSuccessfulMessageId = getLastSuccessfulMessageId(
           currentMessageTreeLocal
         );
-        const disabledToolIds = activeAgent
-          ? agentPreferences?.[activeAgent?.id]?.disabled_tool_ids
-          : undefined;
 
         // Find the search tool's numeric ID for forceSearch
         const searchToolNumericId = activeAgent?.tools.find(
           (tool) => tool.in_code_tool_id === SEARCH_TOOL_ID
         )?.id;
 
-        // Determine the forced tool ID:
-        // 1. If forceSearch is true, use the search tool's numeric ID
-        // 2. Otherwise, whatever the user forced, if anything
-        const effectiveForcedToolId = forceSearch
+        // The tool this message is made to use: the search tool when the
+        // caller asked for a search, otherwise whatever the chat has forced.
+        //
+        // Only if the agent still has it. A configuration outlives the agent
+        // being edited, and a chat can be handed one that named a tool this
+        // agent does not have; the backend raises on a forced tool it cannot
+        // find, so an id nobody can act on would fail the whole message rather
+        // than the model simply choosing for itself.
+        const requestedForcedToolId = forceSearch
           ? (searchToolNumericId ?? null)
-          : forcedToolId;
+          : toolConfiguration.forcedToolId;
+        const effectiveForcedToolId =
+          requestedForcedToolId !== null &&
+          activeAgent?.tools.some((tool) => tool.id === requestedForcedToolId)
+            ? requestedForcedToolId
+            : null;
 
         // Determine origin for telemetry tracking (also used for frontend PostHog tracking below)
         const { isExtension, context: extensionContext } =
@@ -1083,10 +1089,18 @@ export default function useChatController({
             ? llmManager.temperature
             : undefined,
           deepResearch,
+          // Only sent when something is actually disabled. To the backend an
+          // explicit list is a whitelist, and this one is built from the tools
+          // the frontend can see — which excludes those marked
+          // `expose_to_frontend=False`. Sending it always would quietly
+          // withhold tools nobody chose to disable.
           enabledToolIds:
-            disabledToolIds && activeAgent
+            activeAgent && toolConfiguration.disabledToolIds.length > 0
               ? activeAgent.tools
-                  .filter((tool) => !disabledToolIds?.includes(tool.id))
+                  .filter(
+                    (tool) =>
+                      !toolConfiguration.disabledToolIds.includes(tool.id)
+                  )
                   .map((tool) => tool.id)
               : undefined,
           forcedToolId: effectiveForcedToolId,
@@ -1486,11 +1500,9 @@ export default function useChatController({
       updateSelectedNodeForDocDisplay,
       currentMessageTree,
       currentChatState,
-      // Ensure latest forced tools are used when submitting
-      forcedToolId,
-      keepThroughNextSessionChange,
+      // Ensure the configuration the chat was given is what gets sent
+      toolConfiguration,
       // Keep tool preference-derived values fresh
-      agentPreferences,
       fetchProjects,
       // For auto-pinning agents
       pinnedAgents,
@@ -1528,7 +1540,7 @@ export default function useChatController({
       setCurrentMessageFiles((prev) => [...prev, ...uploadedMessageFiles]);
       updateChatStateAction(getCurrentSessionId(), "input");
     },
-    [activeAgent, llmManager, forcedToolId]
+    [activeAgent, llmManager, toolConfiguration]
   );
 
   useEffect(() => {

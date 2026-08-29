@@ -18,7 +18,7 @@ import { useAvailableSources } from "@/lib/connectors/hooks";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { ChatState, MAX_QUEUED_MESSAGES } from "@/app/app/interfaces";
 import { useQueuedMessageNavigation } from "@/hooks/useQueuedMessageNavigation";
-import { useForcedTools } from "@/lib/tools/hooks";
+import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
 import { useAppPosition } from "@/lib/position/hooks";
 import { useDraft, draftKey } from "@/hooks/useDraft";
 import { getPastedFilesIfNoText } from "@/lib/clipboard";
@@ -95,6 +95,11 @@ export interface AppInputBarProps {
   toggleDeepResearch: () => void;
   isMultiModelActive?: boolean;
   disabled: boolean;
+  /**
+   * Owned by the surface rather than read here, because the send path reads
+   * the same one and two instances would drift.
+   */
+  toolConfiguration: ToolConfigurationHandle;
   ref?: React.Ref<AppInputBarHandle>;
   // Side panel tab reading
   tabReadingEnabled?: boolean;
@@ -118,6 +123,7 @@ const AppInputBar = React.memo(
     isMultiModelActive,
     setPresentingDocument,
     disabled,
+    toolConfiguration,
     ref,
     tabReadingEnabled,
     currentTabUrl,
@@ -321,7 +327,7 @@ const AppInputBar = React.memo(
       }
     }, [isNewSession, initialMessage]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const { forcedToolId, clearForcedTool } = useForcedTools();
+    const { forcedToolId, clearForcedTool } = toolConfiguration;
     const { currentMessageFiles, setCurrentMessageFiles } =
       useProjectsContext();
     const { isLoading: isLoadingProjects } = useProjects();
@@ -651,6 +657,7 @@ const AppInputBar = React.memo(
               <ToolsPopover
                 key={activeAgent.id}
                 agent={activeAgent}
+                toolConfiguration={toolConfiguration}
                 disabled={disabled}
               />
             )}

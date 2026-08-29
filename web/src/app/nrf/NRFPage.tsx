@@ -21,6 +21,7 @@ import LoginPage from "@/app/auth/login/LoginPage";
 import { useAgents } from "@/lib/agents/hooks";
 import { useProjectsContext } from "@/lib/projects/providers";
 import useDeepResearchToggle from "@/hooks/useDeepResearchToggle";
+import { useToolConfiguration } from "@/lib/tools/hooks";
 import useChatController from "@/hooks/useChatController";
 import useChatSessionController from "@/hooks/useChatSessionController";
 import { useActiveAgent } from "@/lib/agents/hooks";
@@ -131,6 +132,8 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [multiModel.selectedModels]);
+
+  const toolConfiguration = useToolConfiguration();
 
   // Deep research toggle
   const { deepResearchEnabled, toggleDeepResearch } = useDeepResearchToggle({
@@ -265,6 +268,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   const { onSubmit, stopGenerating, handleMessageSpecificFileUpload } =
     useChatController({
       llmManager,
+      toolConfiguration,
       availableAgents: availableAgents || [],
       activeAgent,
       existingChatSessionId,
@@ -536,6 +540,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                 </div>
               )}
               <AppInputBar
+                toolConfiguration={toolConfiguration}
                 ref={chatInputBarRef}
                 deepResearchEnabled={deepResearchEnabled}
                 toggleDeepResearch={toggleDeepResearch}
