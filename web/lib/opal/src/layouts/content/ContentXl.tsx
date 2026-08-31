@@ -48,6 +48,9 @@ interface ContentXlProps {
   /** Clamp the title to N lines with ellipsis. Omit to wrap freely. */
   titleMaxLines?: number;
 
+  /** Strike the title through, for a row whose option is switched off. */
+  strikethrough?: boolean;
+
   /** Clamp the description to N lines. Maps to Text's maxLines prop. */
   descriptionMaxLines?: number;
 
@@ -108,6 +111,7 @@ function ContentXl({
   description,
   titleMaxLines,
   descriptionMaxLines,
+  strikethrough,
   editable,
   onTitleChange,
   moreIcon1: MoreIcon1,
@@ -214,6 +218,7 @@ function ContentXl({
             font={config.titleFont}
             color="inherit"
             maxLines={titleMaxLines}
+            strikethrough={strikethrough}
             title={toPlainString(title)}
             onClick={editable ? startEditing : undefined}
           >
