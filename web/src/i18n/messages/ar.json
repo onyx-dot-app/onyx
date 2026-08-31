@@ -2521,13 +2521,38 @@
         "description": "فشل تحميل المستخدمين. يرجى تحديث الصفحة."
       }
     },
-    "craftInstructions": {
+    "craftPreferences": {
       "baseInstructions": {
         "description": "المطالبة المدمجة التي تُلحق بها تعليماتك. تُملأ الأقسام الديناميكية لكل جلسة.",
         "loadError": {
           "description": "فشل تحميل التعليمات الأساسية."
         },
         "title": "عرض التعليمات الأساسية"
+      },
+      "defaultModel": {
+        "clearButton": {
+          "label": "مسح"
+        },
+        "help": {
+          "description": "يستخدم Craft هذا النموذج للجلسات الجديدة والمهام المجدولة. وعند عدم تعيينه، يعود Craft إلى نموذج المحادثة الافتراضي لمساحة العمل."
+        },
+        "inheritedTag": {
+          "label": "الافتراضي لمساحة العمل"
+        },
+        "label": "النموذج الافتراضي",
+        "placeholder": "اختر نموذجًا",
+        "resetError": {
+          "message": "تعذّر مسح النموذج الافتراضي"
+        },
+        "resetSuccess": {
+          "message": "تم مسح نموذج Craft الافتراضي"
+        },
+        "saveError": {
+          "message": "تعذّر حفظ النموذج الافتراضي"
+        },
+        "saveSuccess": {
+          "message": "تم حفظ نموذج Craft الافتراضي"
+        }
       },
       "header": {
         "description": "تعليمات على مستوى مساحة العمل يتبعها كل وكيل Craft، فوق سلوك Craft المدمج.",
@@ -9019,8 +9044,8 @@
         "craftApps": {
           "label": "التطبيقات"
         },
-        "craftInstructions": {
-          "label": "التعليمات"
+        "craftPreferences": {
+          "label": "التفضيلات"
         },
         "customAnalytics": {
           "label": "تحليلات مخصصة"
