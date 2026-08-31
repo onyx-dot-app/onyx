@@ -95,9 +95,6 @@ export function useChatSessions() {
       // Matches web; the compound-cursor fix stays out of scope to keep the port backend-free.
       return lastPage.sessions[lastPage.sessions.length - 1]!.time_updated;
     },
-    // A session created or renamed elsewhere (web, another device) should show up in the sidebar
-    // without needing to background and refocus the app. Only polls while this hook is mounted,
-    // and re-fetches every page already loaded, not just the first.
     refetchInterval: 60_000,
   });
 

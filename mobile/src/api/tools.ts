@@ -22,8 +22,6 @@ export function useAvailableTools() {
     queryKey: QUERY_KEYS.availableTools(serverUrl),
     enabled: serverUrl !== null,
     queryFn: ({ signal }) => apiFetch<AvailableTool[]>("/tool", { signal }),
-    // An admin configuring a tool's provider while this is mounted (e.g. the actions sheet is
-    // open) should un-gray it without needing to background and refocus the app.
     refetchInterval: 60_000,
   });
 
