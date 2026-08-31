@@ -360,6 +360,7 @@ def test_manager_prefers_provider_recommended_default_in_provider_order() -> Non
             "fetch_all_accessible_llm_providers",
             return_value=[anthropic, bedrock],
         ) as fetch_providers,
+        patch.object(manager_module, "fetch_default_llm_model", return_value=None),
     ):
         config = manager.build_llm_configs(user)
 
@@ -368,6 +369,110 @@ def test_manager_prefers_provider_recommended_default_in_provider_order() -> Non
     assert config.provider == "onyx"
     assert config.model_name == "7/bedrock-pro"
     fetch_providers.assert_called_once_with(manager._db_session, user)
+
+
+def test_manager_prefers_configured_default_over_recommendation() -> None:
+    anthropic = _provider(
+        3,
+        "anthropic",
+        [_model("claude-sonnet-5"), _model("claude-opus-5")],
+        name="Zulu provider",
+    )
+    bedrock = _provider(
+        7,
+        "bedrock",
+        [_model("bedrock-lite"), _model("bedrock-pro")],
+        name="Alpha provider",
+    )
+    manager = SessionManager.__new__(SessionManager)
+    manager._db_session = cast(Session, MagicMock(spec=Session))  # type: ignore[attr-defined]
+    user = cast(User, MagicMock(spec=User))
+
+    configured_default = MagicMock()
+    configured_default.configure_mock(llm_provider_id=3, name="claude-sonnet-5")
+    with (
+        patch.object(llm_config, "ONYX_SERVER_URL", "https://onyx.test"),
+        patch.object(
+            manager_module,
+            "fetch_all_accessible_llm_providers",
+            return_value=[anthropic, bedrock],
+        ),
+        patch.object(
+            manager_module, "fetch_default_llm_model", return_value=configured_default
+        ),
+    ):
+        config = manager.build_llm_configs(user)
+
+    assert config.model_name == "3/claude-sonnet-5"
+
+
+def test_manager_falls_back_to_recommendation_when_configured_default_not_visible() -> (
+    None
+):
+    anthropic = _provider(
+        3,
+        "anthropic",
+        [_model("claude-sonnet-5", is_visible=False), _model("claude-opus-5")],
+        name="Zulu provider",
+    )
+    bedrock = _provider(
+        7,
+        "bedrock",
+        [_model("bedrock-lite"), _model("bedrock-pro")],
+        name="Alpha provider",
+    )
+    manager = SessionManager.__new__(SessionManager)
+    manager._db_session = cast(Session, MagicMock(spec=Session))  # type: ignore[attr-defined]
+    user = cast(User, MagicMock(spec=User))
+
+    configured_default = MagicMock()
+    configured_default.configure_mock(llm_provider_id=3, name="claude-sonnet-5")
+    with (
+        patch.object(llm_config, "ONYX_SERVER_URL", "https://onyx.test"),
+        patch.object(
+            manager_module,
+            "fetch_all_accessible_llm_providers",
+            return_value=[anthropic, bedrock],
+        ),
+        patch.object(
+            manager_module, "fetch_default_llm_model", return_value=configured_default
+        ),
+    ):
+        config = manager.build_llm_configs(user)
+
+    assert config.model_name == "7/bedrock-pro"
+
+
+def test_selection_outranks_configured_default() -> None:
+    """A session's own pick must survive an org default pointing elsewhere —
+    reversing these two would silently move every existing session's model."""
+    anthropic = _provider(3, "anthropic", [_model("claude-sonnet-5")])
+    bedrock = _provider(7, "bedrock", [_model("bedrock-pro")])
+
+    with patch.object(llm_config, "ONYX_SERVER_URL", "https://onyx.test"):
+        config = llm_config.build_onyx_gateway_config(
+            [anthropic, bedrock],
+            llm_config.GatewaySelection(7, "bedrock-pro"),
+            llm_config.GatewaySelection(3, "claude-sonnet-5"),
+        )
+
+    assert config is not None
+    assert config.model_name == "7/bedrock-pro"
+
+
+def test_stale_selection_falls_through_to_configured_default() -> None:
+    anthropic = _provider(3, "anthropic", [_model("claude-sonnet-5")])
+    bedrock = _provider(7, "bedrock", [_model("bedrock-pro")])
+
+    with patch.object(llm_config, "ONYX_SERVER_URL", "https://onyx.test"):
+        config = llm_config.build_onyx_gateway_config(
+            [anthropic, bedrock],
+            llm_config.GatewaySelection(7, "retired-model"),
+            llm_config.GatewaySelection(3, "claude-sonnet-5"),
+        )
+
+    assert config is not None
+    assert config.model_name == "3/claude-sonnet-5"
 
 
 def _gateway_config() -> CraftLLMProviderConfig:

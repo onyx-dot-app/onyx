@@ -22,12 +22,14 @@ export default function ModelPickerButton({
   onChange,
   disabled = false,
 }: ModelPickerButtonProps) {
-  const { llmProviders } = useLLMProviders();
+  const { llmProviders, defaultText } = useLLMProviders();
   const { user } = useUser();
 
   const effective = useMemo(
-    () => selection ?? getPreferredLlmSelection(user?.id, llmProviders),
-    [selection, user?.id, llmProviders]
+    () =>
+      selection ??
+      getPreferredLlmSelection(user?.id, llmProviders, defaultText),
+    [selection, user?.id, llmProviders, defaultText]
   );
 
   const displayName = useMemo(() => {

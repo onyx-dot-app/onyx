@@ -5,6 +5,7 @@ import {
   providerHasVisibleModel,
   toLlmSelection,
 } from "@/app/craft/onboarding/constants";
+import { DefaultModel } from "@/lib/languageModels/types";
 import {
   readStorageItem,
   writeStorageItem,
@@ -71,14 +72,15 @@ function getStoredLlmSelection(
   return match ? toLlmSelection(match, modelName) : null;
 }
 
-// The user's last pick when still available, else the recommended default.
+// The user's last pick when still available, else the workspace default.
 export function getPreferredLlmSelection(
   userId: string | undefined,
-  llmProviders: MinimalLlmProvider[] | undefined
+  llmProviders: MinimalLlmProvider[] | undefined,
+  configuredDefault?: DefaultModel | null
 ): BuildLlmSelection | null {
   if (!llmProviders) return null;
   return (
     (userId ? getStoredLlmSelection(userId, llmProviders) : null) ??
-    getDefaultLlmSelection(llmProviders)
+    getDefaultLlmSelection(llmProviders, configuredDefault)
   );
 }
