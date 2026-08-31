@@ -11,6 +11,15 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+def _sanitize_body(body: Any, max_len: int = 200) -> str:
+    """Sanitizes/truncates response bodies for safe logging."""
+    try:
+        s = str(body)
+    except Exception:
+        return "[unserializable response body]"
+    s = s.replace("\n", " ").strip()
+    return s[:max_len] + "..." if len(s) > max_len else s
+
 class JiraConnector(PollConnector):
     def __init__(self, **kwargs: Any) -> None:
         self.url = ""
@@ -57,7 +66,8 @@ class JiraConnector(PollConnector):
             
             response = requests.get(url, headers=self.headers, params=query, timeout=30)
             if response.status_code != 200:
-                logger.error(f"Jira API Error: {response.text}")
+                # Log only status and a sanitized/truncated version of the body to avoid secret leakage.
+                logger.error("Jira API Error status=%s body=%s", response.status_code, _sanitize_body(response.text))
                 raise Exception(f"Sync failed with status {response.status_code}")
             
             data = response.json()
