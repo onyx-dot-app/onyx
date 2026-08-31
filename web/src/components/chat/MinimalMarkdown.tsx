@@ -14,6 +14,7 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 import { transformLinkUri } from "@/lib/utils";
+import { rehypeDirection } from "@/lib/rehypeDirection";
 import { cn } from "@opal/utils";
 
 type MinimalMarkdownComponentOverrides = Partial<Components>;
@@ -45,8 +46,9 @@ export default function MinimalMarkdown({
         ? [
             [rehypeHighlight, { detect: true, languages: highlightLanguages }],
             rehypeKatex,
+            rehypeDirection,
           ]
-        : [rehypeKatex],
+        : [rehypeKatex, rehypeDirection],
     [streaming, highlightLanguages]
   );
   const markdownComponents = useMemo(() => {

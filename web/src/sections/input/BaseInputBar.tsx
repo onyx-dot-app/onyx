@@ -295,6 +295,9 @@ const BaseInputBar = memo(
               <div
                 ref={inputRef}
                 contentEditable={!disabled}
+                // dir="auto": input direction follows what the user types,
+                // so RTL text (Arabic, Hebrew, ...) right-aligns.
+                dir="auto"
                 suppressContentEditableWarning
                 onPaste={handlePaste}
                 onInput={handleInput}

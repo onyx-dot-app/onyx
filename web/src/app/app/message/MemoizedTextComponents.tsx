@@ -231,15 +231,25 @@ export const MemoizedLink = memo(
 
 interface MemoizedParagraphProps {
   className?: string;
+  // Stamped per-paragraph by the rehypeDirection plugin so RTL and LTR
+  // paragraphs align independently. "auto" covers non-markdown callers.
+  dir?: React.HTMLAttributes<HTMLElement>["dir"];
   children?: React.ReactNode;
 }
 
 export const MemoizedParagraph = memo(function MemoizedParagraph({
   className,
+  dir,
   children,
 }: MemoizedParagraphProps) {
   return (
-    <Text as="p" mainContentBody text04 className={className}>
+    <Text
+      as="p"
+      dir={dir ?? "auto"}
+      mainContentBody
+      text04
+      className={className}
+    >
       {children}
     </Text>
   );

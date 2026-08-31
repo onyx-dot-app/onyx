@@ -21,6 +21,7 @@ import {
 } from "@/app/app/message/codeUtils";
 import { CodeBlock } from "@/app/app/message/CodeBlock";
 import { transformLinkUri } from "@/lib/utils";
+import { rehypeDirection } from "@/lib/rehypeDirection";
 import { cn } from "@opal/utils";
 import { InMessageImage } from "@/app/app/components/files/images/InMessageImage";
 import { extractChatImageFileId } from "@/app/app/components/files/images/utils";
@@ -133,7 +134,7 @@ export const useMarkdownComponents = (
 ) => {
   const paragraphCallback = useCallback(
     (props: any) => (
-      <MemoizedParagraph className={className}>
+      <MemoizedParagraph dir={props.dir} className={className}>
         {props.children}
       </MemoizedParagraph>
     ),
@@ -249,8 +250,8 @@ export const renderMarkdown = (
         ]}
         rehypePlugins={
           languages
-            ? [[rehypeHighlight, { languages }], rehypeKatex]
-            : [rehypeKatex]
+            ? [[rehypeHighlight, { languages }], rehypeKatex, rehypeDirection]
+            : [rehypeKatex, rehypeDirection]
         }
         urlTransform={transformLinkUri}
       >
