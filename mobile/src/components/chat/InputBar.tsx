@@ -54,11 +54,9 @@ export function InputBar({
 
   const isBusy = chatState === "loading" || chatState === "streaming";
   const hasFiles = attachments.files.length > 0;
-  // Typed text isn't required once a file is attached and has finished uploading.
+
   const canSend =
-    (value.trim().length > 0 || hasFiles) &&
-    !isBusy &&
-    !attachments.hasBlockingFiles;
+    value.trim().length > 0 && !isBusy && !attachments.hasBlockingFiles;
 
   const { data: recentFiles = [], isLoading: isLoadingRecent } =
     useRecentFiles(pickerOpen);

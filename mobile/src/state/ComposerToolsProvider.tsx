@@ -175,6 +175,7 @@ export function useComposerToolsState({
   const { selectedModel, selectModel } = useSelectedModel({
     chatSessionId,
     agentId,
+    projectId,
   });
   const { options: modelOptions, defaultOption: defaultModel } =
     useLlmProviders(effectiveAgentId ?? null, selectedModel?.modelVersion);

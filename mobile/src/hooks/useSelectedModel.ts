@@ -6,6 +6,8 @@ interface UseSelectedModelArgs {
   chatSessionId: string | null;
   // undefined = unresolved (agents loading, or a new session missing from the sessions list).
   agentId: number | undefined;
+  // Crossing this boundary releases the pick.
+  projectId: number | null;
 }
 
 export interface SelectedModel {
@@ -23,10 +25,12 @@ export interface SelectedModel {
 export function useSelectedModel({
   chatSessionId,
   agentId,
+  projectId,
 }: UseSelectedModelArgs): SelectedModel {
   const [selectedModel, setSelectedModel] = useState<ModelOption | null>(null);
   const previousChatSessionId = useRef<string | null>(chatSessionId);
   const previousAgentId = useRef<number | undefined>(agentId);
+  const previousProjectId = useRef<number | null>(projectId);
 
   useEffect(() => {
     const previousId = previousChatSessionId.current;
@@ -46,6 +50,18 @@ export function useSelectedModel({
       setSelectedModel(null);
     }
   }, [agentId]);
+
+  /*
+   * Two project landing composers both sit on a null session id and the default agent, so neither
+   * reset above fires between them and the pick would follow the user into the next project. No
+   * unresolved-value guard is needed here: the send reads its options before the route flips, so
+   * every project change is a real one.
+   */
+  useEffect(() => {
+    const previousId = previousProjectId.current;
+    previousProjectId.current = projectId;
+    if (previousId !== projectId) setSelectedModel(null);
+  }, [projectId]);
 
   const selectModel = useCallback(
     (model: ModelOption | null) => setSelectedModel(model),
