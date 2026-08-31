@@ -17,12 +17,12 @@ import SvgArrowUp from "@/icons/arrow-up";
 import SvgPaperclip from "@/icons/paperclip";
 import SvgStop from "@/icons/stop";
 
-// Fixed height via native min===max sizing, never a JS-computed height: a content-driven height
-// let a fast double-Enter paint the caret behind the toolbar.
+// The input height is fixed by setting min and max to the same value, never computed from
+// content: a content-driven height let a fast double-Enter paint the caret behind the toolbar.
 const INPUT_HEIGHT = 44;
 
-// Mirrors web `shadow-box-01` (tokens/shadow.json); RN renders one layer so we keep the primary
-// blur, Android uses `elevation`.
+// Mirrors web's `shadow-box-01` token (tokens/shadow.json). RN can only render one shadow layer,
+// so this keeps the primary blur; Android uses `elevation` instead.
 const SHADOW_BOX_01 = {
   shadowColor: "#000000",
   shadowOffset: { width: 0, height: 2 },
@@ -52,8 +52,12 @@ export function InputBar({
   const [pickerOpen, setPickerOpen] = useState(false);
 
   const isBusy = chatState === "loading" || chatState === "streaming";
+  const hasFiles = attachments.files.length > 0;
+  // Typed text isn't required once a file is attached and has finished uploading.
   const canSend =
-    value.trim().length > 0 && !isBusy && !attachments.hasBlockingFiles;
+    (value.trim().length > 0 || hasFiles) &&
+    !isBusy &&
+    !attachments.hasBlockingFiles;
 
   const { data: recentFiles = [], isLoading: isLoadingRecent } =
     useRecentFiles(pickerOpen);
@@ -62,7 +66,6 @@ export function InputBar({
     return recentFiles.filter((file) => !attachedIds.has(file.id));
   }, [attachments.files, recentFiles]);
 
-  const hasFiles = attachments.files.length > 0;
   const hasFailed = attachments.files.some(isFailedFile);
 
   return (
@@ -70,14 +73,15 @@ export function InputBar({
       className="bg-background-neutral-00 px-12 pt-8"
       style={{ paddingBottom: insets.bottom }}
     >
-      {/* Hairline border (web is borderless): in dark mode card and page are both near-black and the
-          shadow is invisible, so the border guarantees the card reads. */}
+      {/* Web leaves this borderless, but in dark mode the card and the page behind it are both
+          near-black and the shadow disappears, so mobile adds a hairline border to keep the
+          card visible. */}
       <View
         className="rounded-16 border border-border-01 bg-background-neutral-00"
         style={SHADOW_BOX_01}
       >
         {hasFiles ? (
-          // gap-8 (wider than web's 4px): mobile file chips are larger touch targets.
+          // Wider than web's 4px gap — mobile file chips are sized as larger touch targets.
           <View className="flex-row flex-wrap gap-8 px-12 pt-12">
             {attachments.files.map((file) => (
               <FileCard
@@ -106,7 +110,8 @@ export function InputBar({
           ]}
         />
 
-        {/* Only the actionable failed hint; in-progress uploads show a spinner on the chip. */}
+        {/* Only a failed attachment needs this hint — an in-progress one already shows a spinner
+            on its own chip. */}
         {hasFailed ? (
           <Text
             font="secondary-body"
@@ -118,8 +123,8 @@ export function InputBar({
         ) : null}
 
         <View className="min-h-40 flex-row items-center justify-between p-4">
-          {/* `min-w-0 shrink` so a long forced-tool pill compresses instead of pushing the send
-              cluster past the card's right edge — RN defaults flexShrink to 0. */}
+          {/* RN elements don't shrink by default, so a long forced-tool pill would push the send
+              button past the card's right edge without this. */}
           <View className="min-w-0 shrink flex-row items-center gap-8">
             <Button
               prominence="tertiary"
@@ -155,7 +160,8 @@ export function InputBar({
       <FilePickerSheet
         visible={pickerOpen}
         onClose={() => setPickerOpen(false)}
-        // Sheet closes itself (choose→onClose) and defers the action past dismiss — no setPickerOpen here.
+        // FilePickerSheet already closes itself and waits for its own dismiss animation before
+        // running the chosen action, so this doesn't need to call setPickerOpen too.
         onUploadDocuments={() => void attachments.addDocuments()}
         onUploadPhotos={() => void attachments.addImages()}
         recentFiles={linkableRecent}
