@@ -121,6 +121,8 @@ type MdContentProps = ContentBaseProps & {
   auxIcon?: "info-gray" | "info-blue" | "warning" | "error";
   /** Tag rendered beside the title. */
   tag?: TagProps;
+  /** Strike the title through, for a row whose option is switched off. */
+  strikethrough?: boolean;
   /** Slot for a control rendered to the right (desktop) / between title and description (mobile). See ContentMd. */
   rightChildren?: React.ReactNode;
 };

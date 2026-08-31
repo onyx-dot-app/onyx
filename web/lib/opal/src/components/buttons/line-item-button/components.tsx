@@ -19,7 +19,14 @@ type ContentPassthroughProps = DistributiveOmit<
 
 type LineItemButtonOwnProps = Pick<
   InteractiveStatefulProps,
-  "state" | "interaction" | "onClick" | "href" | "target" | "group" | "ref"
+  | "state"
+  | "interaction"
+  | "onClick"
+  | "href"
+  | "target"
+  | "group"
+  | "ref"
+  | "disabled"
 > & {
   /** Interactive select variant. @default "select-light" */
   selectVariant?: "select-light" | "select-heavy";
@@ -35,6 +42,12 @@ type LineItemButtonOwnProps = Pick<
 
   /** Which side the tooltip appears on. @default "top" */
   tooltipSide?: TooltipSide;
+
+  /**
+   * Test hook placed on the row element. Declared explicitly because the rest
+   * of the props go to `ContentAction`, which does not reach the DOM.
+   */
+  "data-testid"?: string;
 };
 
 type LineItemButtonProps = ContentPassthroughProps & LineItemButtonOwnProps;
@@ -89,6 +102,7 @@ function LineItemButton({
   target,
   group,
   ref,
+  disabled,
 
   // Sizing
   rounding = 3,
@@ -96,6 +110,7 @@ function LineItemButton({
   padding = 0.5,
   tooltip,
   tooltipSide = "top",
+  "data-testid": testId,
 
   // ContentAction pass-through
   ...contentActionProps
@@ -122,11 +137,13 @@ function LineItemButton({
       target={target}
       group={group}
       ref={ref}
+      disabled={disabled}
     >
       <Interactive.Container
         width={width}
         size="fit"
         rounding={rounding}
+        data-testid={testId}
         {...rowButtonProps}
       >
         <div className="w-full p-1.5">

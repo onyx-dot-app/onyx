@@ -22,7 +22,7 @@ import {
  * Extends standard `<div>` attributes (minus `className` and `style`).
  */
 interface InteractiveContainerProps extends WithoutStyles<
-  React.HTMLAttributes<HTMLDivElement>
+  React.HTMLAttributes<HTMLDivElement> & { "data-testid"?: string }
 > {
   /**
    * Ref forwarded to the underlying element.

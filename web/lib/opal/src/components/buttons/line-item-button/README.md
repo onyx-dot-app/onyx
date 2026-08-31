@@ -39,6 +39,7 @@ row's label lines up with an adjacent button. A step outside that set is a type 
 | `target`        | `string`                           | —                | Anchor target (e.g. `"_blank"`)                   |
 | `group`         | `string`                           | —                | Interactive group key                             |
 | `ref`           | `React.Ref<HTMLElement>`           | —                | Forwarded ref                                     |
+| `disabled`      | `boolean`                          | `false`          | Disabled colors; suppresses the row's own click only — nested `rightChildren` stay clickable |
 
 ### Sizing
 
@@ -49,6 +50,7 @@ row's label lines up with an adjacent button. A step outside that set is a type 
 | `padding`     | `0 \| 0.5 \| 1 \| 2` | `0.5`    | Padding around the inner `ContentAction`, as a spacing step (`N / 4` rem) |
 | `tooltip`     | `string`             | —        | Tooltip text shown on hover                                               |
 | `tooltipSide` | `TooltipSide`        | `"top"`  | Tooltip side                                                              |
+| `data-testid` | `string`             | —        | Test hook placed on the row element, not on the inner `ContentAction`     |
 
 ### Content (pass-through to ContentAction)
 
