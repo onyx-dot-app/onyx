@@ -44,35 +44,20 @@ function renderControls(overrides: Partial<ComposerTools> = {}) {
 }
 
 describe("ToolbarControls", () => {
-  it("renders nothing when deep research is gated off", () => {
-    renderControls({ showDeepResearch: false });
+  // Deep research now lives in the actions sheet, so ActionsMenu covers how it behaves.
+  it("keeps deep research out of the toolbar", () => {
+    renderControls();
     expect(screen.queryByLabelText("Deep Research")).toBeNull();
   });
 
-  it("renders the pill icon-only and unselected while off", () => {
-    renderControls();
-    const pill = screen.getByLabelText("Deep Research");
-    expect(pill.props.accessibilityState.selected).toBe(false);
-    expect(screen.queryByText("Deep Research")).toBeNull();
-  });
-
-  it("shows the label and the selected state once enabled", () => {
-    renderControls({ deepResearchEnabled: true });
-    expect(screen.getByText("Deep Research")).toBeTruthy();
-    expect(
-      screen.getByLabelText("Deep Research").props.accessibilityState.selected,
-    ).toBe(true);
-  });
-
-  it("toggles on press", () => {
-    const value = renderControls();
-    fireEvent.press(screen.getByLabelText("Deep Research"));
-    expect(value.toggleDeepResearch).toHaveBeenCalledTimes(1);
-  });
-
-  it("hides the actions trigger when the agent has no selectable tools", () => {
-    renderControls({ actionTools: [] });
+  it("hides the actions trigger when there is neither a tool nor deep research", () => {
+    renderControls({ actionTools: [], showDeepResearch: false });
     expect(screen.queryByLabelText("Manage Actions")).toBeNull();
+  });
+
+  it("keeps the actions trigger for a toolless agent that still offers deep research", () => {
+    renderControls({ actionTools: [], showDeepResearch: true });
+    expect(screen.getByLabelText("Manage Actions")).toBeTruthy();
   });
 
   it("shows the actions trigger once the agent has selectable tools", () => {

@@ -9,8 +9,13 @@ once the tools below are installed, see [`README.md`](./README.md) to install de
 
 ## iOS
 
-1. Install **Xcode** from the **Mac App Store**, then open it once so it finishes installing its
-   components.
+1. Install **Xcode 26.4 or later** from the **Mac App Store**, then open it once so it finishes
+   installing its components. An older Xcode fails to build the native project: `expo-modules-jsi`
+   (an `expo-router` dependency) hits a Swift/C++ interop compiler bug under Xcode 26.3 and
+   earlier — `'RuntimeScheduler' cannot be annotated with either SWIFT_RETURNS_RETAINED or
+SWIFT_RETURNS_UNRETAINED because it is not returning a SWIFT_SHARED_REFERENCE type` — confirmed
+   fixed by updating to Xcode 26.6 (upstream: [expo/expo#46242](https://github.com/expo/expo/issues/46242)
+   describes the same class of Swift 6.2 strictness issue in this package).
 2. **Add a simulator:** Xcode → **Settings → Platforms → iOS Simulator → ＋ Add Additional
    Simulators** to download a runtime, then **Window → Devices and Simulators → Simulators → ＋**
    to create one (the default iPhone is usually fine).
