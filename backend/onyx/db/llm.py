@@ -406,16 +406,22 @@ def upsert_llm_provider(
                 f"Cannot hide the default model '{name}'. It is the default for: "
                 f"{held}. Please change those defaults before hiding."
             )
-        if (
-            name in merged_capabilities
-            and flow_type in (LLMModelFlowType.VISION, LLMModelFlowType.REASONING)
-            and flow_type not in merged_capabilities[name]
+        # Dropping a capability deletes the flow row that represents it, so a
+        # model holding that flow's default must keep it.
+        for capability_flow in (
+            LLMModelFlowType.VISION,
+            LLMModelFlowType.REASONING,
         ):
-            raise ValueError(
-                f"Cannot disable {flow_type.value} support on '{name}': it is the "
-                f"deployment's {flow_type.value} default model. Change that "
-                "default first."
-            )
+            if (
+                capability_flow in held_flows
+                and name in merged_capabilities
+                and capability_flow not in merged_capabilities[name]
+            ):
+                raise ValueError(
+                    f"Cannot disable {capability_flow.value} support on '{name}'. "
+                    f"It is the deployment's {capability_flow.value} default "
+                    "model. Please change that default first."
+                )
 
     if removed_ids:
         db_session.query(ModelConfiguration).filter(
