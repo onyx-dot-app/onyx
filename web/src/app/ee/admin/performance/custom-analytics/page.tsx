@@ -1,4 +1,4 @@
-import { getAdminNavId } from "@/lib/adminNavLabels";
+import { getAdminNavId } from "@/lib/admin-sidebar-utils";
 import { getTranslations } from "next-intl/server";
 import { SettingsLayouts } from "@opal/layouts";
 import { CUSTOM_ANALYTICS_ENABLED } from "@/lib/constants";

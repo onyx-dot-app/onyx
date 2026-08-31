@@ -25,7 +25,6 @@ const route = ADMIN_ROUTES.INDEXING_STATUS;
 
 function Main() {
   const t = useTranslations("admin.indexing");
-  const adminRouteTitle = useAdminRouteTitle();
   const { vectorDbEnabled } = useSettings();
 
   // State for filter management

@@ -14,7 +14,6 @@ const route = ADMIN_ROUTES.DOCUMENT_FEEDBACK;
 
 function Main() {
   const t = useTranslations("admin.documents");
-  const adminRouteTitle = useAdminRouteTitle();
   const {
     data: mostLikedDocuments,
     isLoading: isMostLikedDocumentsLoading,

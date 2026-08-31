@@ -19,7 +19,6 @@ const route = ADMIN_ROUTES.DOCUMENT_PROCESSING;
 
 function Main() {
   const t = useTranslations("admin.documentProcessing");
-  const adminRouteTitle = useAdminRouteTitle();
   const {
     data: isApiKeySet,
     error,

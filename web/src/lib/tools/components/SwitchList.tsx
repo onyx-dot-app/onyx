@@ -44,6 +44,8 @@ export default function SwitchList({
   allDisabled,
   onDisableAll,
   onEnableAll,
+  disableAllLabel,
+  enableAllLabel,
   onBack,
   footer,
 }: SwitchListProps) {
@@ -91,11 +93,7 @@ export default function SwitchList({
           key="enable-disable-all"
           icon={allDisabled ? SvgPlug : SvgUnplug}
           onClick={allDisabled ? onEnableAll : onDisableAll}
-          title={
-            allDisabled
-              ? t("switchList.enableAll.label")
-              : t("switchList.disableAll.label")
-          }
+          title={allDisabled ? enableAllLabel : disableAllLabel}
         />,
 
         ...filteredItems.map((item) => {

@@ -18,7 +18,7 @@ import {
 const PRIVATE_KEY_FIELD_KEY = "private_key";
 
 // Localized message builders. Callers inside components pass translated
-// strings. The English defaults cover legacy call sites.
+// strings. The English defaults cover call sites that pass no messages.
 interface SubmitCredentialMessages {
   success: () => string;
   error: (detail: string) => string;

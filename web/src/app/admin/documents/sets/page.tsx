@@ -55,7 +55,6 @@ const FederatedConnectorTitle = ({
   isLink?: boolean;
 }) => {
   const t = useTranslations("admin.documents");
-  const adminRouteTitle = useAdminRouteTitle();
   const sourceType = federatedConnector.source.replace(/^federated_/, "");
 
   const mainSectionClassName = "text-blue-500 dark:text-blue-100 flex w-fit";
@@ -111,7 +110,6 @@ const EditRow = ({
   isEditable: boolean;
 }) => {
   const t = useTranslations("admin.documents");
-  const adminRouteTitle = useAdminRouteTitle();
   const router = useRouter();
 
   if (!isEditable) {
@@ -164,7 +162,6 @@ const DocumentSetTable = ({
   refresh,
 }: DocumentFeedbackTableProps) => {
   const t = useTranslations("admin.documents");
-  const adminRouteTitle = useAdminRouteTitle();
   const [page, setPage] = useState(1);
 
   // editable rows first, then by name — editability now rides on each row's
@@ -347,7 +344,6 @@ const DocumentSetTable = ({
 
 function Main() {
   const t = useTranslations("admin.documents");
-  const adminRouteTitle = useAdminRouteTitle();
   const {
     data: documentSets,
     isLoading: isDocumentSetsLoading,

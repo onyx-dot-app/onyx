@@ -55,7 +55,7 @@ const BackgroundThumbnail = ({
 }: BackgroundThumbnailProps) => {
   const t = useTranslations("chat");
   return (
-    /* raw-ok: pre-existing full-bleed image tile with selection ring, Button in components/buttons/button d.ts has no image-fill variant */
+    /* raw-ok: full-bleed image tile with selection ring, the opal Button has no image-fill variant */
     <button
       onClick={onClick}
       className="relative overflow-hidden rounded-xl transition-all aspect-video cursor-pointer border-none p-0 bg-transparent group"

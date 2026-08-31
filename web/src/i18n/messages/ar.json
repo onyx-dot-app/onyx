@@ -625,12 +625,6 @@
       "back": {
         "ariaLabel": "رجوع"
       },
-      "disableAll": {
-        "label": "تعطيل الكل"
-      },
-      "enableAll": {
-        "label": "تمكين الكل"
-      },
       "toggle": {
         "ariaLabel": "تبديل {name}"
       }
@@ -12947,6 +12941,23 @@
   },
   "sidebar": {
     "adminNav": {
+      "hiddenRoutes": {
+        "documentExplorer": {
+          "title": "مستكشف المستندات"
+        },
+        "documentFeedback": {
+          "title": "ملاحظات المستندات"
+        },
+        "documentProcessing": {
+          "title": "معالجة المستندات"
+        },
+        "oauthTest": {
+          "title": "اختبار OAuth"
+        },
+        "standardAnswers": {
+          "title": "الإجابات القياسية"
+        }
+      },
       "items": {
         "addConnector": {
           "label": "إضافة موصل"

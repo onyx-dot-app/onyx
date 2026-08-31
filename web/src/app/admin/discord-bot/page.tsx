@@ -26,7 +26,6 @@ const route = ADMIN_ROUTES.DISCORD_BOTS;
 
 function DiscordBotContent() {
   const t = useTranslations("admin.discordBot");
-  const adminRouteTitle = useAdminRouteTitle();
   const { data: guilds, isLoading, error, refreshGuilds } = useDiscordGuilds();
   const { data: botConfig, isManaged } = useDiscordBotConfig();
   const [registrationKey, setRegistrationKey] = useState<string | null>(null);

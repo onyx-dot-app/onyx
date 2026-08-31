@@ -76,7 +76,6 @@ function ExistingProviderCard({
   isLastProvider,
 }: ExistingProviderCardProps) {
   const t = useTranslations("admin.languageModels");
-  const adminRouteTitle = useAdminRouteTitle();
   const { mutate } = useSWRConfig();
   const [isOpen, setIsOpen] = useState(false);
   const deleteModal = useCreateModal();
@@ -221,7 +220,6 @@ function NewProviderCard({
   isFirstProvider,
 }: NewProviderCardProps) {
   const t = useTranslations("admin.languageModels");
-  const adminRouteTitle = useAdminRouteTitle();
   const [isOpen, setIsOpen] = useState(false);
   const { icon, productName, companyName, Modal } = getProvider(providerName);
 
@@ -278,7 +276,6 @@ function NewCustomProviderCard({
   isFirstProvider,
 }: NewCustomProviderCardProps) {
   const t = useTranslations("admin.languageModels");
-  const adminRouteTitle = useAdminRouteTitle();
   const [isOpen, setIsOpen] = useState(false);
   const { icon, productName, companyName, Modal } = getProvider("custom");
 

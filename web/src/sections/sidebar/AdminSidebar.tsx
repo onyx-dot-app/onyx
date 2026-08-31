@@ -29,7 +29,6 @@ import { markdown } from "@opal/utils";
 import {
   buildItems,
   groupBySection,
-  type AdminNavItemId,
   type AdminNavSectionId,
   type FeatureFlags,
   type SidebarItemEntry,

@@ -625,12 +625,6 @@
       "back": {
         "ariaLabel": "返回"
       },
-      "disableAll": {
-        "label": "全部禁用"
-      },
-      "enableAll": {
-        "label": "全部启用"
-      },
       "toggle": {
         "ariaLabel": "切换 {name}"
       }
@@ -12935,6 +12929,23 @@
   },
   "sidebar": {
     "adminNav": {
+      "hiddenRoutes": {
+        "documentExplorer": {
+          "title": "文档浏览器"
+        },
+        "documentFeedback": {
+          "title": "文档反馈"
+        },
+        "documentProcessing": {
+          "title": "文档处理"
+        },
+        "oauthTest": {
+          "title": "OAuth 测试"
+        },
+        "standardAnswers": {
+          "title": "标准回答"
+        }
+      },
       "items": {
         "addConnector": {
           "label": "添加连接器"

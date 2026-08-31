@@ -625,12 +625,6 @@
       "back": {
         "ariaLabel": "뒤로"
       },
-      "disableAll": {
-        "label": "모두 사용 안 함"
-      },
-      "enableAll": {
-        "label": "모두 사용"
-      },
       "toggle": {
         "ariaLabel": "{name} 전환"
       }
@@ -12935,6 +12929,23 @@
   },
   "sidebar": {
     "adminNav": {
+      "hiddenRoutes": {
+        "documentExplorer": {
+          "title": "문서 탐색기"
+        },
+        "documentFeedback": {
+          "title": "문서 피드백"
+        },
+        "documentProcessing": {
+          "title": "문서 처리"
+        },
+        "oauthTest": {
+          "title": "OAuth 테스트"
+        },
+        "standardAnswers": {
+          "title": "표준 답변"
+        }
+      },
       "items": {
         "addConnector": {
           "label": "커넥터 추가"

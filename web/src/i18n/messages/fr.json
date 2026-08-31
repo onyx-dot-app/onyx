@@ -625,12 +625,6 @@
       "back": {
         "ariaLabel": "Retour"
       },
-      "disableAll": {
-        "label": "Tout désactiver"
-      },
-      "enableAll": {
-        "label": "Tout activer"
-      },
       "toggle": {
         "ariaLabel": "Activer/désactiver {name}"
       }
@@ -12947,6 +12941,23 @@
   },
   "sidebar": {
     "adminNav": {
+      "hiddenRoutes": {
+        "documentExplorer": {
+          "title": "Explorateur de documents"
+        },
+        "documentFeedback": {
+          "title": "Retours sur les documents"
+        },
+        "documentProcessing": {
+          "title": "Traitement des documents"
+        },
+        "oauthTest": {
+          "title": "Test OAuth"
+        },
+        "standardAnswers": {
+          "title": "Réponses standard"
+        }
+      },
       "items": {
         "addConnector": {
           "label": "Ajouter un connecteur"

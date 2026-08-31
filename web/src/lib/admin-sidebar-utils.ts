@@ -115,6 +115,48 @@ export const NAV_ITEM_IDS: Record<
   PERFORMANCE: null,
 };
 
+/** Title id under `sidebar.adminNav.hiddenRoutes` for pages off the sidebar. */
+export type AdminHiddenRouteId =
+  | "documentExplorer"
+  | "documentFeedback"
+  | "documentProcessing"
+  | "oauthTest"
+  | "standardAnswers";
+
+const HIDDEN_ROUTE_IDS: Partial<
+  Record<keyof typeof ADMIN_ROUTES, AdminHiddenRouteId>
+> = {
+  DOCUMENT_EXPLORER: "documentExplorer",
+  DOCUMENT_FEEDBACK: "documentFeedback",
+  DOCUMENT_PROCESSING: "documentProcessing",
+  OAUTH_TEST: "oauthTest",
+  STANDARD_ANSWERS: "standardAnswers",
+};
+
+const ROUTE_KEYS = Object.keys(ADMIN_ROUTES) as (keyof typeof ADMIN_ROUTES)[];
+
+const NAV_ID_BY_PATH: Record<string, AdminNavItemId | null> =
+  Object.fromEntries(
+    ROUTE_KEYS.map((key) => [ADMIN_ROUTES[key].path, NAV_ITEM_IDS[key]])
+  );
+
+const HIDDEN_ID_BY_PATH: Record<string, AdminHiddenRouteId | undefined> =
+  Object.fromEntries(
+    ROUTE_KEYS.map((key) => [ADMIN_ROUTES[key].path, HIDDEN_ROUTE_IDS[key]])
+  );
+
+/** Nav id for a route, for server components that resolve labels themselves. */
+export function getAdminNavId(route: AdminRouteEntry): AdminNavItemId | null {
+  return NAV_ID_BY_PATH[route.path] ?? null;
+}
+
+/** Hidden-route title id for a route outside the sidebar, if it has one. */
+export function getAdminHiddenRouteId(
+  route: AdminRouteEntry
+): AdminHiddenRouteId | null {
+  return HIDDEN_ID_BY_PATH[route.path] ?? null;
+}
+
 /** Section heading id per `AdminRouteEntry.section` value. */
 const NAV_SECTION_IDS: readonly (readonly [
   section: string,

@@ -59,7 +59,6 @@ function ClaimsTable({
   claims: Record<string, unknown>;
 }) {
   const t = useTranslations("admin.oauthTest");
-  const adminRouteTitle = useAdminRouteTitle();
   const entries = Object.entries(claims);
   return (
     <div className="flex flex-col gap-2">
@@ -101,7 +100,6 @@ function ClaimsTable({
 
 function Main() {
   const t = useTranslations("admin.oauthTest");
-  const adminRouteTitle = useAdminRouteTitle();
   const {
     data: snapshot,
     error,

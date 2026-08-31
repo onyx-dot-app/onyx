@@ -108,7 +108,8 @@ import { hasPermission } from "@/lib/permissions";
 import { can } from "@/lib/permissions/resource-actions";
 import { useDraft, draftKey } from "@/hooks/useDraft";
 
-// Length of starterExamples in the editor body, used where hooks are out of reach.
+// Length of the translated starterExamples array, which is local to
+// AgentStarterMessages, shared here so the editor can size against it.
 const STARTER_MESSAGES_COUNT = 4;
 
 interface AgentIconEditorProps {

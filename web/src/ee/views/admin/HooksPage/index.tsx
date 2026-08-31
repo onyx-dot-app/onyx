@@ -233,7 +233,6 @@ function ConnectedHookCard({
   onToggled,
 }: ConnectedHookCardProps) {
   const t = useTranslations("admin.hooks");
-  const adminRouteTitle = useAdminRouteTitle();
   const [isBusy, setIsBusy] = useState(false);
   const disconnectModal = useCreateModal();
   const deleteModal = useCreateModal();

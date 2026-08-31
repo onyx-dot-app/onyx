@@ -17,7 +17,6 @@ const route = ADMIN_ROUTES.SLACK_BOTS;
 
 function Main() {
   const t = useTranslations("admin.slackBots");
-  const adminRouteTitle = useAdminRouteTitle();
   const {
     data: slackBots,
     isLoading: isSlackBotsLoading,

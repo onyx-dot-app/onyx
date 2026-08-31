@@ -58,7 +58,6 @@ function SourceTileTooltipWrapper({
   slackCredentials?: Credential<any>[];
 }) {
   const t = useTranslations("admin.addConnector");
-  const adminRouteTitle = useAdminRouteTitle();
 
   // Check if there's already a federated connector for this source
   const existingFederatedConnector = useMemo(() => {

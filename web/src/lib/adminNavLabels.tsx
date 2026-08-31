@@ -2,8 +2,13 @@
 
 import { useCallback, useMemo } from "react";
 import { useTranslations } from "next-intl";
-import { ADMIN_ROUTES, type AdminRouteEntry } from "@/lib/admin-routes";
-import { NAV_ITEM_IDS, type AdminNavItemId } from "@/lib/admin-sidebar-utils";
+import type { AdminRouteEntry } from "@/lib/admin-routes";
+import {
+  getAdminHiddenRouteId,
+  getAdminNavId,
+  type AdminHiddenRouteId,
+  type AdminNavItemId,
+} from "@/lib/admin-sidebar-utils";
 
 // Built with literal keys so the message ids stay statically checkable.
 export function useAdminNavLabels(): Record<AdminNavItemId, string> {
@@ -49,28 +54,33 @@ export function useAdminNavLabels(): Record<AdminNavItemId, string> {
   );
 }
 
-const NAV_ID_BY_PATH: Record<string, AdminNavItemId | null> =
-  Object.fromEntries(
-    (Object.keys(ADMIN_ROUTES) as (keyof typeof ADMIN_ROUTES)[]).map((key) => [
-      ADMIN_ROUTES[key].path,
-      NAV_ITEM_IDS[key],
-    ])
+function useAdminHiddenRouteTitles(): Record<AdminHiddenRouteId, string> {
+  const t = useTranslations("sidebar");
+  return useMemo<Record<AdminHiddenRouteId, string>>(
+    () => ({
+      documentExplorer: t("adminNav.hiddenRoutes.documentExplorer.title"),
+      documentFeedback: t("adminNav.hiddenRoutes.documentFeedback.title"),
+      documentProcessing: t("adminNav.hiddenRoutes.documentProcessing.title"),
+      oauthTest: t("adminNav.hiddenRoutes.oauthTest.title"),
+      standardAnswers: t("adminNav.hiddenRoutes.standardAnswers.title"),
+    }),
+    [t]
   );
-
-/** Nav id for a route, for server components that resolve labels themselves. */
-export function getAdminNavId(route: AdminRouteEntry): AdminNavItemId | null {
-  return NAV_ID_BY_PATH[route.path] ?? null;
 }
 
 // Page headers reuse the sidebar's translated labels so both stay in sync
-// across locales. Routes without a nav entry fall back to their raw title.
+// across locales. Pages outside the sidebar carry their own title keys.
+// Section stubs without a title of their own fall back to the raw title.
 export function useAdminRouteTitle(): (route: AdminRouteEntry) => string {
   const labels = useAdminNavLabels();
+  const hiddenTitles = useAdminHiddenRouteTitles();
   return useCallback(
     (route: AdminRouteEntry) => {
-      const navId = NAV_ID_BY_PATH[route.path];
-      return navId ? labels[navId] : route.title;
+      const navId = getAdminNavId(route);
+      if (navId) return labels[navId];
+      const hiddenId = getAdminHiddenRouteId(route);
+      return hiddenId ? hiddenTitles[hiddenId] : route.title;
     },
-    [labels]
+    [labels, hiddenTitles]
   );
 }

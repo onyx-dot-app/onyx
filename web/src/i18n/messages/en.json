@@ -625,12 +625,6 @@
       "back": {
         "ariaLabel": "Back"
       },
-      "disableAll": {
-        "label": "Disable All"
-      },
-      "enableAll": {
-        "label": "Enable All"
-      },
       "toggle": {
         "ariaLabel": "Toggle {name}"
       }
@@ -11255,7 +11249,7 @@
             "valueTitle": "Value"
           },
           "upstreamPatterns": {
-            "description": "Outbound URLs the proxy may inject credentials into. Use * to match any characters (e.g. https://api.example.com/* covers every path on that host). The host must be literal — no wildcards before the first slash. Type a pattern and press Enter.",
+            "description": "Outbound URLs the proxy may inject credentials into. Use * to match any characters (e.g. https://api.example.com/* covers every path on that host). The host must be literal, with no wildcards before the first slash. Type a pattern and press Enter.",
             "label": "Upstream URL patterns"
           }
         },
@@ -12947,6 +12941,23 @@
   },
   "sidebar": {
     "adminNav": {
+      "hiddenRoutes": {
+        "documentExplorer": {
+          "title": "Document Explorer"
+        },
+        "documentFeedback": {
+          "title": "Document Feedback"
+        },
+        "documentProcessing": {
+          "title": "Document Processing"
+        },
+        "oauthTest": {
+          "title": "OAuth Test"
+        },
+        "standardAnswers": {
+          "title": "Standard Answers"
+        }
+      },
       "items": {
         "addConnector": {
           "label": "Add Connector"

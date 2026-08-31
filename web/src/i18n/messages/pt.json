@@ -625,12 +625,6 @@
       "back": {
         "ariaLabel": "Voltar"
       },
-      "disableAll": {
-        "label": "Desativar tudo"
-      },
-      "enableAll": {
-        "label": "Ativar tudo"
-      },
       "toggle": {
         "ariaLabel": "Alternar {name}"
       }
@@ -12947,6 +12941,23 @@
   },
   "sidebar": {
     "adminNav": {
+      "hiddenRoutes": {
+        "documentExplorer": {
+          "title": "Explorador de documentos"
+        },
+        "documentFeedback": {
+          "title": "Feedback de documentos"
+        },
+        "documentProcessing": {
+          "title": "Processamento de documentos"
+        },
+        "oauthTest": {
+          "title": "Teste de OAuth"
+        },
+        "standardAnswers": {
+          "title": "Respostas padrão"
+        }
+      },
       "items": {
         "addConnector": {
           "label": "Adicionar conector"

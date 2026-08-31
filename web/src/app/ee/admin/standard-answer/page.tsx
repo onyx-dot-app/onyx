@@ -74,7 +74,6 @@ const CategoryBubble = ({
   onDelete?: () => void;
 }) => {
   const t = useTranslations("admin.standardAnswers");
-  const adminRouteTitle = useAdminRouteTitle();
   const className = cn(
     "inline-block px-2 py-1 me-1 mb-1 text-xs font-semibold text-emphasis bg-accent-background-hovered rounded-full items-center w-fit",
     onDelete && "cursor-pointer"
@@ -112,7 +111,6 @@ const StandardAnswersTableRow = ({
   handleDelete: (id: number) => void;
 }) => {
   const t = useTranslations("admin.standardAnswers");
-  const adminRouteTitle = useAdminRouteTitle();
   return (
     <RowTemplate
       id={standardAnswer.id}
@@ -174,7 +172,6 @@ const StandardAnswersTable = ({
   refresh: () => void;
 }) => {
   const t = useTranslations("admin.standardAnswers");
-  const adminRouteTitle = useAdminRouteTitle();
   const [query, setQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedCategories, setSelectedCategories] = useState<
@@ -353,7 +350,6 @@ const StandardAnswersTable = ({
 
 function Main() {
   const t = useTranslations("admin.standardAnswers");
-  const adminRouteTitle = useAdminRouteTitle();
   const {
     data: standardAnswers,
     error: standardAnswersError,

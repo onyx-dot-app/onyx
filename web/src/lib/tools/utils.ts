@@ -2,11 +2,7 @@ import { SOURCE_METADATA_MAP } from "@/lib/sources";
 import { MethodSpec, ToolSnapshot } from "@/lib/tools/types";
 import {
   ADMIN_CONFIG_LINKS,
-  CONFIGURE_MESSAGE,
-  DEFAULT_TOOL_DESCRIPTION,
   OPENAPI_ADMIN_CONFIG,
-  TOOL_DESCRIPTIONS,
-  USER_NOT_ADMIN_MESSAGE,
 } from "@/lib/tools/constants";
 import type { IconProps } from "@opal/types";
 import { SvgFileText, SvgServer } from "@opal/icons";

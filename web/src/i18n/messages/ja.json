@@ -625,12 +625,6 @@
       "back": {
         "ariaLabel": "戻る"
       },
-      "disableAll": {
-        "label": "すべて無効にする"
-      },
-      "enableAll": {
-        "label": "すべて有効にする"
-      },
       "toggle": {
         "ariaLabel": "{name} を切り替える"
       }
@@ -12935,6 +12929,23 @@
   },
   "sidebar": {
     "adminNav": {
+      "hiddenRoutes": {
+        "documentExplorer": {
+          "title": "ドキュメントエクスプローラー"
+        },
+        "documentFeedback": {
+          "title": "ドキュメントフィードバック"
+        },
+        "documentProcessing": {
+          "title": "ドキュメント処理"
+        },
+        "oauthTest": {
+          "title": "OAuth テスト"
+        },
+        "standardAnswers": {
+          "title": "標準回答"
+        }
+      },
       "items": {
         "addConnector": {
           "label": "コネクターを追加"
