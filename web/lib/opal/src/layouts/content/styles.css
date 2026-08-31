@@ -3,7 +3,9 @@
 /* ===========================================================================
    Content — Shared color properties
 
-   Two registered CSS custom properties drive all Content title + icon colors.
+   Three registered CSS custom properties drive every Content color. Nothing
+   inside a layout hardcodes one: a caller overriding the variables on the
+   wrapper reaches the title, the icon and the secondary text alike.
    The `data-content-color` attribute on the Content dispatcher's wrapper div
    selects the color mode. Since the properties use `inherits: true`, all
    descendant layout elements pick up the values automatically.
@@ -25,9 +27,22 @@
   initial-value: transparent;
 }
 
+/* Description and suffix — the muted text beside and below the title. */
+@property --content-foreground-secondary {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: transparent;
+}
+
 /* ---------------------------------------------------------------------------
    Color modes — driven by `data-content-color` on the dispatcher wrapper
    --------------------------------------------------------------------------- */
+
+/* Set once rather than per mode: the secondary text is `text-03` in all of
+   them. A mode that needs its own can still override below. */
+[data-content-color] {
+  --content-foreground-secondary: var(--text-03);
+}
 
 [data-content-color="default"] {
   --content-foreground: var(--text-04);
@@ -92,14 +107,8 @@
 .interactive[data-disabled] [data-content-color] {
   --content-foreground: var(--interactive-foreground);
   --content-foreground-icon: var(--interactive-foreground-icon);
+  --content-foreground-secondary: var(--interactive-foreground);
   color: var(--content-foreground);
-}
-
-/* The description and the suffix carry an explicit `Text` colour utility, and
-   an inherited value cannot beat a declaration on the element itself. Icons
-   are left out so they keep reading `--content-foreground-icon` above. */
-.interactive[data-disabled] [data-content-color] :is(span, p, li) {
-  color: var(--interactive-foreground);
 }
 
 /* ===========================================================================
@@ -190,6 +199,13 @@
 /* ---------------------------------------------------------------------------
    Description
    --------------------------------------------------------------------------- */
+
+.opal-content-xl-description,
+.opal-content-lg-description,
+.opal-content-md-description,
+.opal-content-md-suffix {
+  color: var(--content-foreground-secondary);
+}
 
 .opal-content-xl-description {
   @apply text-left w-full;

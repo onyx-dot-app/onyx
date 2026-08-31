@@ -249,7 +249,7 @@ function ContentXl({
         <div className="opal-content-xl-description">
           <Text
             font="secondary-body"
-            color="text-03"
+            color="inherit"
             as="p"
             maxLines={descriptionMaxLines}
           >
