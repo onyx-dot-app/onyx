@@ -209,7 +209,9 @@ export default function MCPOAuthCallbackPage() {
                 <IllustrationContent
                   illustration={SvgConnected}
                   title={t("mcpOauthCallback.success.title", {
-                    serverName: state.serverName,
+                    // FSI/PDI isolate the name so a mixed-direction server
+                    // name cannot reorder the surrounding sentence.
+                    serverName: `\u2068${state.serverName}\u2069`,
                   })}
                   description={t("mcpOauthCallback.success.description")}
                 />
