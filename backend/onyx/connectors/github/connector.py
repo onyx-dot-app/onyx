@@ -32,6 +32,7 @@ from onyx.connectors.github.utils import (
     deserialize_repository,
     get_external_access_permission,
     normalize_github_base_url,
+    validate_credential_base_url,
 )
 from onyx.connectors.interfaces import (
     CheckpointedConnectorWithPermSync,
@@ -633,9 +634,16 @@ class GithubConnector(
         # Prefer the per-credential URL so one deployment can index github.com
         # and a GitHub Enterprise Server at once; the env var is the fallback.
         # Normalize each side so a blank credential cannot shadow the env var.
-        base_url: str | None = normalize_github_base_url(
+        credential_base_url: str | None = normalize_github_base_url(
             credentials.get("github_base_url")
-        ) or normalize_github_base_url(GITHUB_CONNECTOR_BASE_URL)
+        )
+        # Only the credential is user input, so only it needs the SSRF check.
+        if credential_base_url is not None:
+            validate_credential_base_url(credential_base_url)
+
+        base_url: str | None = credential_base_url or normalize_github_base_url(
+            GITHUB_CONNECTOR_BASE_URL
+        )
 
         # defaults to 30 items per page, can be set to as high as 100
         self.github_client = (
