@@ -18,6 +18,9 @@ export function useAgents() {
     // No serverUrl → `getBaseUrl()` throws, so stay idle until connected.
     enabled: serverUrl !== null,
     queryFn: ({ signal }) => apiFetch<MinimalAgent[]>("/persona", { signal }),
+    // An agent created or reconfigured elsewhere (web, another device) should show up without
+    // needing to background and refocus the app. Only polls while this hook is actually mounted.
+    refetchInterval: 60_000,
   });
   return { ...query, agents: query.data ?? [] };
 }
