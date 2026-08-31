@@ -1,13 +1,7 @@
 "use client";
 
 import React from "react";
-import {
-  MCPAuthenticationType,
-  MCPAuthenticationPerformer,
-  ToolSnapshot,
-} from "@/lib/tools/types";
-import LineItem from "@/refresh-components/buttons/LineItem";
-import { noProp } from "@/lib/utils";
+import { LineItemButton } from "@opal/components";
 import { cn } from "@opal/utils";
 import type { IconProps } from "@opal/types";
 import {
@@ -18,7 +12,13 @@ import {
   SvgServer,
   SvgSimpleLoader,
 } from "@opal/icons";
+
 import { Section } from "@/layouts/general-layouts";
+import {
+  MCPAuthenticationType,
+  MCPAuthenticationPerformer,
+  ToolSnapshot,
+} from "@/lib/tools/types";
 import EnabledCount from "@/refresh-components/EnabledCount";
 
 export interface MCPServer {
@@ -33,7 +33,7 @@ export interface MCPServer {
   user_credentials?: Record<string, string>;
 }
 
-export interface MCPLineItemProps {
+export interface MCPItemProps {
   server: MCPServer;
   isActive: boolean;
   onSelect: () => void;
@@ -44,7 +44,7 @@ export interface MCPLineItemProps {
   isLoading: boolean;
 }
 
-export default function MCPLineItem({
+export default function MCPItem({
   server,
   isActive,
   onSelect,
@@ -53,7 +53,7 @@ export default function MCPLineItem({
   enabledTools,
   isAuthenticated,
   isLoading,
-}: MCPLineItemProps) {
+}: MCPItemProps) {
   const showAuthTrigger =
     server.auth_performer === MCPAuthenticationPerformer.PER_USER &&
     server.auth_type !== MCPAuthenticationType.NONE;
@@ -80,26 +80,25 @@ export default function MCPLineItem({
     )) as React.FunctionComponent<IconProps>;
   }
 
-  const handleClick = noProp(() => {
+  function handleClick() {
     if (canClickIntoServer) {
       onSelect();
       return;
     }
-    if (showAuthTrigger) {
-      onAuthenticate();
-    }
-  });
+    if (showAuthTrigger) onAuthenticate();
+  }
 
   const allToolsDisabled = enabledTools.length === 0 && tools.length > 0;
 
   return (
-    <LineItem
-      data-mcp-server-id={server.id}
-      data-mcp-server-name={server.name}
+    <LineItemButton
+      title={server.name}
       icon={getServerIcon()}
-      onClick={handleClick}
+      sizePreset="main-ui"
+      variant="section"
+      state={isActive ? "selected" : "empty"}
       strikethrough={allToolsDisabled}
-      selected={isActive}
+      onClick={handleClick}
       rightChildren={
         <Section gap={1} flexDirection="row">
           {isAuthenticated &&
@@ -129,8 +128,6 @@ export default function MCPLineItem({
           )}
         </Section>
       }
-    >
-      {server.name}
-    </LineItem>
+    />
   );
 }

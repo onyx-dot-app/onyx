@@ -4,7 +4,7 @@ import {
   MCPAuthenticationType,
   ToolSnapshot,
 } from "@/lib/tools/types";
-import MCPLineItem, { MCPServer } from "@/lib/tools/components/MCPLineItem";
+import MCPItem, { MCPServer } from "@/lib/tools/components/MCPItem";
 
 const oauthServer: MCPServer = {
   id: 1,
@@ -31,20 +31,20 @@ const tool: ToolSnapshot = {
   default_enabled: true,
 };
 
-interface RenderMCPLineItemOptions {
+interface RenderMCPItemOptions {
   isAuthenticated?: boolean;
   tools?: ToolSnapshot[];
 }
 
-function renderMCPLineItem({
+function renderMCPItem({
   isAuthenticated = false,
   tools = [],
-}: RenderMCPLineItemOptions = {}) {
+}: RenderMCPItemOptions = {}) {
   const onAuthenticate = jest.fn();
   const onSelect = jest.fn();
 
   render(
-    <MCPLineItem
+    <MCPItem
       server={oauthServer}
       isActive={false}
       onSelect={onSelect}
@@ -66,10 +66,10 @@ function getTrailingIndicator(row: HTMLElement): HTMLElement {
   return indicator;
 }
 
-describe("MCPLineItem", () => {
+describe("MCPItem", () => {
   it("authenticates once from either the row or key area", async () => {
     const user = setupUser();
-    const { onAuthenticate, onSelect } = renderMCPLineItem();
+    const { onAuthenticate, onSelect } = renderMCPItem();
     const row = screen.getByRole("button", { name: oauthServer.name });
 
     expect(screen.getAllByRole("button")).toHaveLength(1);
@@ -87,7 +87,7 @@ describe("MCPLineItem", () => {
 
   it("authenticates once per keyboard activation", async () => {
     const user = setupUser();
-    const { onAuthenticate, onSelect } = renderMCPLineItem();
+    const { onAuthenticate, onSelect } = renderMCPItem();
     const row = screen.getByRole("button", { name: oauthServer.name });
 
     row.focus();
@@ -104,7 +104,7 @@ describe("MCPLineItem", () => {
 
   it("selects once when the chevron area is clicked", async () => {
     const user = setupUser();
-    const { onAuthenticate, onSelect } = renderMCPLineItem({
+    const { onAuthenticate, onSelect } = renderMCPItem({
       isAuthenticated: true,
       tools: [tool],
     });

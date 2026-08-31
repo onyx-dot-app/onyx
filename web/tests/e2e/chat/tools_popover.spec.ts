@@ -2,6 +2,8 @@ import { test, expect, type Page } from "@playwright/test";
 import { loginAs } from "@tests/e2e/utils/auth";
 import {
   TOOL_IDS,
+  TOOL_NAMES,
+  toolOption,
   openActionManagement,
   openSourceManagement,
   toggleToolDisabled,
@@ -134,17 +136,15 @@ test.describe("ToolsPopover Tool Toggles", () => {
     await openActionManagement(page);
 
     // Internal search must be visible (connector was created in beforeAll)
-    await expect(page.locator(TOOL_IDS.searchOption)).toBeVisible({
+    await expect(toolOption(page, TOOL_NAMES.internalSearch)).toBeVisible({
       timeout: 10000,
     });
 
     // Soft-check other tools (depend on provider setup success)
-    const webVisible = await page
-      .locator(TOOL_IDS.webSearchOption)
+    const webVisible = await toolOption(page, TOOL_NAMES.webSearch)
       .isVisible()
       .catch(() => false);
-    const imgVisible = await page
-      .locator(TOOL_IDS.imageGenerationOption)
+    const imgVisible = await toolOption(page, TOOL_NAMES.imageGeneration)
       .isVisible()
       .catch(() => false);
     console.log(`[tools] web_search=${webVisible}, image_gen=${imgVisible}`);
@@ -154,7 +154,7 @@ test.describe("ToolsPopover Tool Toggles", () => {
     page,
   }) => {
     await openActionManagement(page);
-    await expect(page.locator(TOOL_IDS.searchOption)).toBeVisible({
+    await expect(toolOption(page, TOOL_NAMES.internalSearch)).toBeVisible({
       timeout: 10000,
     });
     await openSourceManagement(page);
@@ -201,7 +201,7 @@ test.describe("ToolsPopover Tool Toggles", () => {
     page,
   }) => {
     await openActionManagement(page);
-    await expect(page.locator(TOOL_IDS.searchOption)).toBeVisible({
+    await expect(toolOption(page, TOOL_NAMES.internalSearch)).toBeVisible({
       timeout: 10000,
     });
 
@@ -221,10 +221,10 @@ test.describe("ToolsPopover Tool Toggles", () => {
 
     // Go back to primary view
     await page.locator('button[aria-label="Back"]').click();
-    await expect(page.locator(TOOL_IDS.searchOption)).toBeVisible();
+    await expect(toolOption(page, TOOL_NAMES.internalSearch)).toBeVisible();
 
     // Disable the search tool
-    await toggleToolDisabled(page, TOOL_IDS.searchOption);
+    await toggleToolDisabled(toolOption(page, TOOL_NAMES.internalSearch));
 
     // Verify localStorage was written (the fix being tested)
     const stored = await page.evaluate(
@@ -234,7 +234,7 @@ test.describe("ToolsPopover Tool Toggles", () => {
     expect(stored).toBeTruthy();
 
     // Re-enable the search tool
-    await toggleToolDisabled(page, TOOL_IDS.searchOption);
+    await toggleToolDisabled(toolOption(page, TOOL_NAMES.internalSearch));
 
     // Verify sources were restored
     await openSourceManagement(page);
@@ -254,7 +254,7 @@ test.describe("ToolsPopover Tool Toggles", () => {
   // Image generation rather than internal search: the search tool's state is
   // re-derived on mount from the selected sources, which are still global in
   // `localStorage`, so it would answer for those rather than for the chat.
-  const CONFIGURED_TOOL = TOOL_IDS.imageGenerationOption;
+  const CONFIGURED_TOOL = TOOL_NAMES.imageGeneration;
 
   /** The slash button reads "Disable" while the tool is on, "Enable" once off. */
   async function expectToolDisabled(
@@ -262,7 +262,7 @@ test.describe("ToolsPopover Tool Toggles", () => {
     disabled: boolean
   ): Promise<void> {
     await openActionManagement(page);
-    const option = page.locator(CONFIGURED_TOOL);
+    const option = toolOption(page, CONFIGURED_TOOL);
     await expect(option).toBeVisible({ timeout: 10000 });
     await option.hover();
     await expect(
@@ -274,7 +274,7 @@ test.describe("ToolsPopover Tool Toggles", () => {
 
   test("a new session forgets a disabled tool", async ({ page }) => {
     await expectToolDisabled(page, false);
-    await toggleToolDisabled(page, CONFIGURED_TOOL);
+    await toggleToolDisabled(toolOption(page, CONFIGURED_TOOL));
     await expectToolDisabled(page, true);
 
     // Nothing was chosen for a chat, because there is no chat yet.
@@ -288,7 +288,7 @@ test.describe("ToolsPopover Tool Toggles", () => {
     await page.waitForURL(/chatId=/, { timeout: 30000 });
 
     await expectToolDisabled(page, false);
-    await toggleToolDisabled(page, CONFIGURED_TOOL);
+    await toggleToolDisabled(toolOption(page, CONFIGURED_TOOL));
     await expectToolDisabled(page, true);
 
     await page.reload();

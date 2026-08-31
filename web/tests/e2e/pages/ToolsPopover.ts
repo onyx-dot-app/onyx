@@ -82,7 +82,6 @@ export class ToolsPopover {
   readonly page: Page;
   readonly toggle: Locator;
   readonly popover: Locator;
-  readonly serverRows: Locator;
   readonly toolSwitches: Locator;
   readonly credentialsModal: McpCredentialsModal;
 
@@ -90,7 +89,6 @@ export class ToolsPopover {
     this.page = page;
     this.toggle = page.getByTestId("action-management-toggle");
     this.popover = page.locator(POPOVER);
-    this.serverRows = this.popover.locator("[data-mcp-server-name]");
     this.toolSwitches = this.popover.locator('[role="switch"]');
     this.credentialsModal = new McpCredentialsModal(page);
   }
@@ -98,6 +96,15 @@ export class ToolsPopover {
   // ---------------------------------------------------------------------------
   // Open / close / navigation
   // ---------------------------------------------------------------------------
+
+  /**
+   * The primary view's own search box. Every secondary view replaces it with
+   * one of its own ("Search Filters", "Search <server> tools"), so its
+   * presence is what says the popover is showing the action list.
+   */
+  private get actionSearch(): Locator {
+    return this.popover.getByPlaceholder("Search actions...");
+  }
 
   private get backButton(): Locator {
     return this.popover.getByRole("button", { name: /Back/i }).first();
@@ -116,7 +123,7 @@ export class ToolsPopover {
     if (!(await this.popover.isVisible().catch(() => false))) {
       return;
     }
-    if ((await this.serverRows.count()) > 0) {
+    if ((await this.actionSearch.count()) > 0) {
       return;
     }
     if ((await this.backButton.count()) > 0) {
