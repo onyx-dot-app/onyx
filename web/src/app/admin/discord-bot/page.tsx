@@ -1,5 +1,6 @@
 "use client";
 
+import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { PageLoader } from "@opal/layouts";
@@ -25,6 +26,7 @@ const route = ADMIN_ROUTES.DISCORD_BOTS;
 
 function DiscordBotContent() {
   const t = useTranslations("admin.discordBot");
+  const adminRouteTitle = useAdminRouteTitle();
   const { data: guilds, isLoading, error, refreshGuilds } = useDiscordGuilds();
   const { data: botConfig, isManaged } = useDiscordBotConfig();
   const [registrationKey, setRegistrationKey] = useState<string | null>(null);
@@ -126,12 +128,13 @@ function DiscordBotContent() {
 
 export default function Page() {
   const t = useTranslations("admin.discordBot");
+  const adminRouteTitle = useAdminRouteTitle();
 
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={route.icon}
-        title={route.title}
+        title={adminRouteTitle(route)}
         description={t("page.header.description")}
       />
       <SettingsLayouts.Body>

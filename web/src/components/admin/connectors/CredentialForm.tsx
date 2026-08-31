@@ -2,6 +2,7 @@ import React, { JSX } from "react";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import { toast } from "@opal/layouts";
+import { useTranslations } from "next-intl";
 import { ValidSources } from "@/lib/types";
 
 import {
@@ -16,13 +17,24 @@ import {
 
 const PRIVATE_KEY_FIELD_KEY = "private_key";
 
+// Localized message builders. Callers inside components pass translated
+// strings. The English defaults cover legacy call sites.
+interface SubmitCredentialMessages {
+  success: () => string;
+  error: (detail: string) => string;
+}
+
 export async function submitCredential<T>(
-  credential: CredentialBase<T> | CredentialWithPrivateKey<T>
+  credential: CredentialBase<T> | CredentialWithPrivateKey<T>,
+  messages?: SubmitCredentialMessages
 ): Promise<{
   credential?: Credential<any>;
   message: string;
   isSuccess: boolean;
 }> {
+  const buildSuccess = messages?.success ?? (() => "Success!");
+  const buildError =
+    messages?.error ?? ((detail: string) => `Error: ${detail}`);
   let isSuccess = false;
   try {
     let response: Response;
@@ -37,13 +49,16 @@ export async function submitCredential<T>(
       const parsed_response = await response.json();
       const credential = parsed_response.credential;
       isSuccess = true;
-      return { credential, message: "Success!", isSuccess: true };
+      return { credential, message: buildSuccess(), isSuccess: true };
     } else {
       const errorData = await response.json();
-      return { message: `Error: ${errorData.detail}`, isSuccess: false };
+      return {
+        message: buildError(String(errorData.detail)),
+        isSuccess: false,
+      };
     }
   } catch (error) {
-    return { message: `Error: ${error}`, isSuccess: false };
+    return { message: buildError(String(error)), isSuccess: false };
   }
 }
 
@@ -62,6 +77,7 @@ export function CredentialForm<T extends Yup.AnyObject>({
   source,
   onSubmit,
 }: Props<T>): JSX.Element {
+  const t = useTranslations("admin.connector.credentialForm");
   return (
     <>
       <Formik
@@ -69,13 +85,19 @@ export function CredentialForm<T extends Yup.AnyObject>({
         validationSchema={validationSchema}
         onSubmit={(values, formikHelpers) => {
           formikHelpers.setSubmitting(true);
-          submitCredential<T>({
-            credential_json: values,
-            admin_public: true,
-            curator_public: false,
-            groups: [],
-            source: source,
-          }).then(({ message, isSuccess }) => {
+          submitCredential<T>(
+            {
+              credential_json: values,
+              admin_public: true,
+              curator_public: false,
+              groups: [],
+              source: source,
+            },
+            {
+              success: () => t("successToast"),
+              error: (detail) => t("errorToast", { detail }),
+            }
+          ).then(({ message, isSuccess }) => {
             if (isSuccess) {
               toast.success(message);
             } else {
@@ -100,9 +122,9 @@ export function CredentialForm<T extends Yup.AnyObject>({
                 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring
                 disabled:pointer-events-none disabled:opacity-50
                 shadow hover:bg-primary/90 h-9 px-4 py-2"
-                aria-label="Update credentials"
+                aria-label={t("updateButton.ariaLabel")}
               >
-                Update
+                {t("updateButton.label")}
               </button>
             </div>
           </Form>

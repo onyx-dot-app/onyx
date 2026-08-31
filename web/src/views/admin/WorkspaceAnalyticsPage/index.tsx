@@ -1,5 +1,6 @@
 "use client";
 
+import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useTranslations } from "next-intl";
 import { DateRangePicker } from "@/refresh-components/DateRangePicker";
 import { useTimeRange } from "@/lib/usage/hooks";
@@ -18,13 +19,14 @@ const route = ADMIN_ROUTES.WORKSPACE_ANALYTICS;
 
 export default function WorkspaceAnalyticsPage() {
   const t = useTranslations("admin.analytics");
+  const adminRouteTitle = useAdminRouteTitle();
   const [timeRange, setTimeRange] = useTimeRange();
 
   return (
     <SettingsLayouts.Root width="lg">
       <SettingsLayouts.Header
         icon={route.icon}
-        title={route.title}
+        title={adminRouteTitle(route)}
         description={t("page.description")}
         divider
         rightChildren={

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useTranslations } from "next-intl";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
@@ -42,6 +43,7 @@ export default function FilesTab({
   isPreProvisioned = false,
   isProvisioning = false,
 }: FilesTabProps) {
+  const t = useTranslations("craft.filesTab");
   // Get persisted state from store (only used when not pre-provisioned)
   const filesTabState = useFilesTabState();
   const updateFilesTabState = useBuildSessionStore(
@@ -349,12 +351,10 @@ export default function FilesTab({
       >
         <SvgHardDrive size={48} className="stroke-text-02" />
         <Text font="heading-h3" color="text-03">
-          {isProvisioning ? "Preparing sandbox..." : "No files yet"}
+          {isProvisioning ? t("preparing.title") : t("empty.title")}
         </Text>
         <Text font="secondary-body" color="text-02">
-          {isProvisioning
-            ? "Setting up your development environment"
-            : "Files created during the build will appear here"}
+          {isProvisioning ? t("preparing.description") : t("empty.description")}
         </Text>
       </Section>
     );
@@ -370,7 +370,7 @@ export default function FilesTab({
       >
         <SvgHardDrive size={48} className="stroke-text-02" />
         <Text font="heading-h3" color="text-03">
-          Error loading files
+          {t("error.title")}
         </Text>
         <Text font="secondary-body" color="text-02">
           {error.message}
@@ -388,7 +388,7 @@ export default function FilesTab({
         padding={8}
       >
         <Text font="secondary-body" color="text-03">
-          Loading files...
+          {t("loading.label")}
         </Text>
       </Section>
     );
@@ -445,7 +445,7 @@ export default function FilesTab({
             padding={8}
           >
             <Text font="secondary-body" color="text-03">
-              No files in this directory
+              {t("emptyDirectory.label")}
             </Text>
           </Section>
         ) : (
@@ -493,6 +493,7 @@ function FileTreeNode({
   formatFileSize,
   parentIsLast = [],
 }: FileTreeNodeProps) {
+  const t = useTranslations("craft.filesTab");
   // Sort entries: directories first, then alphabetically
   const sortedEntries = [...entries].sort((a, b) => {
     if (a.is_directory && !b.is_directory) return -1;
@@ -639,7 +640,7 @@ function FileTreeNode({
                   style={{ paddingLeft: `${(depth + 1) * 20 + 24}px` }}
                 >
                   <Text font="secondary-body" color="text-02">
-                    Loading...
+                    {t("loadingChildren.label")}
                   </Text>
                 </div>
               )}

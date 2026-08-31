@@ -533,6 +533,15 @@ function GeneralSettings() {
   const { theme, setTheme, systemTheme } = useTheme();
   const currentLanguage = user?.preferences?.language ?? DEFAULT_LOCALE;
 
+  const tBg = useTranslations("common.chatBackgrounds");
+  const bgLabels: Record<string, string> = {
+    none: tBg("none.label"),
+    clouds: tBg("clouds.label"),
+    hills: tBg("hills.label"),
+    plant: tBg("plant.label"),
+    mountains: tBg("mountains.label"),
+    night: tBg("night.label"),
+  };
   const applyBackground = useCallback(
     async (bg: (typeof CHAT_BACKGROUND_OPTIONS)[number]) => {
       try {
@@ -764,11 +773,11 @@ function GeneralSettings() {
                         key={bg.id}
                         onClick={() => applyBackground(bg)}
                         className="relative overflow-hidden rounded-lg transition-all w-[90px] h-[68px] cursor-pointer border-none p-0 bg-transparent group"
-                        title={bg.label}
+                        title={bgLabels[bg.id] ?? bg.label}
                         aria-label={t(
                           "appearance.chatBackground.optionAriaLabel",
                           {
-                            label: bg.label,
+                            label: bgLabels[bg.id] ?? bg.label,
                             selected: isSelected ? "true" : "false",
                           }
                         )}
@@ -1246,12 +1255,12 @@ function ChatPreferencesSettings() {
     async (value: number): Promise<void> => {
       try {
         await updateUserTemperatureDefault(value);
-        toast.success("Preferences saved");
+        toast.success(t("chats.toasts.saved"));
       } catch {
-        toast.error("Failed to save preferences");
+        toast.error(t("chats.toasts.saveFailed"));
       }
     },
-    [updateUserTemperatureDefault]
+    [updateUserTemperatureDefault, t]
   );
 
   const saveEffortDefault = useCallback(
@@ -1260,12 +1269,12 @@ function ChatPreferencesSettings() {
         await updateUserReasoningEffortDefault(
           ALL_REASONING_STOPS[effortStop] ?? null
         );
-        toast.success("Preferences saved");
+        toast.success(t("chats.toasts.saved"));
       } catch {
-        toast.error("Failed to save preferences");
+        toast.error(t("chats.toasts.saveFailed"));
       }
     },
-    [updateUserReasoningEffortDefault]
+    [updateUserReasoningEffortDefault, t]
   );
 
   const commitVoicePlaybackSpeed = useCallback(() => {
@@ -1919,16 +1928,23 @@ function AccountsAccessSettings() {
   // constraints (max length, uppercase, lowercase, digit, special char) will be
   // wired up when this form is refreshed as part of auth-refresh.
   const passwordValidationSchema = Yup.object().shape({
-    currentPassword: Yup.string().required("Current password is required"),
+    currentPassword: Yup.string().required(
+      t("accounts.passwordModal.validation.currentRequired")
+    ),
     newPassword: Yup.string()
       .min(
         authTypeMetadata?.passwordMinLength ?? 0,
-        `Password must be at least ${authTypeMetadata?.passwordMinLength ?? 0} characters`
+        t("accounts.passwordModal.validation.minLength", {
+          min: authTypeMetadata?.passwordMinLength ?? 0,
+        })
       )
-      .required("New password is required"),
+      .required(t("accounts.passwordModal.validation.newRequired")),
     confirmPassword: Yup.string()
-      .oneOf([Yup.ref("newPassword")], "Passwords do not match")
-      .required("Please confirm your new password"),
+      .oneOf(
+        [Yup.ref("newPassword")],
+        t("accounts.passwordModal.validation.mismatch")
+      )
+      .required(t("accounts.passwordModal.validation.confirmRequired")),
   });
 
   const [tokenToDelete, setTokenToDelete] = useState<PAT | null>(null);
@@ -2353,7 +2369,11 @@ function AccountsAccessSettings() {
                                 count: daysSinceCreation,
                               });
 
-                        const middleText = `${createdText} - ${expiryText} - ${scopeText}`;
+                        const middleText = t("apiKeys.list.middleText", {
+                          created: createdText,
+                          expiry: expiryText,
+                          scope: scopeText,
+                        });
 
                         return (
                           <Interactive.Container

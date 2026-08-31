@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import { Modal } from "@opal/components";
 import {
   Button,
@@ -49,6 +50,7 @@ export default function UserCredentialsModal({
   credentialValues,
   save,
 }: UserCredentialsModalProps) {
+  const t = useTranslations("craft.apps.userCredentials");
   const [values, setValues] = useState<Record<string, string>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -88,8 +90,8 @@ export default function UserCredentialsModal({
       <Modal.Content width="md">
         <Modal.Header
           icon={Logo}
-          title={`Connect ${name}`}
-          description="Enter your credentials to authorize this app for your account."
+          title={t("title", { name })}
+          description={t("description")}
         />
         <Modal.Body>
           <div className="flex flex-col gap-4 w-full">
@@ -111,7 +113,7 @@ export default function UserCredentialsModal({
             {error && (
               <MessageCard
                 variant="error"
-                title="Couldn't connect"
+                title={t("errors.connectFailedTitle")}
                 description={error}
               />
             )}
@@ -124,10 +126,10 @@ export default function UserCredentialsModal({
               onClick={onClose}
               disabled={isSaving}
             >
-              Cancel
+              {t("cancelButton")}
             </Button>
             <Button onClick={saveValues} disabled={!canSave}>
-              {isSaving ? "Connecting…" : "Connect"}
+              {isSaving ? t("connectingButton") : t("connectButton")}
             </Button>
           </div>
         </Modal.Footer>

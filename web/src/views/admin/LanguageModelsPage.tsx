@@ -1,5 +1,6 @@
 "use client";
 
+import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useState, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
@@ -75,6 +76,7 @@ function ExistingProviderCard({
   isLastProvider,
 }: ExistingProviderCardProps) {
   const t = useTranslations("admin.languageModels");
+  const adminRouteTitle = useAdminRouteTitle();
   const { mutate } = useSWRConfig();
   const [isOpen, setIsOpen] = useState(false);
   const deleteModal = useCreateModal();
@@ -219,6 +221,7 @@ function NewProviderCard({
   isFirstProvider,
 }: NewProviderCardProps) {
   const t = useTranslations("admin.languageModels");
+  const adminRouteTitle = useAdminRouteTitle();
   const [isOpen, setIsOpen] = useState(false);
   const { icon, productName, companyName, Modal } = getProvider(providerName);
 
@@ -275,6 +278,7 @@ function NewCustomProviderCard({
   isFirstProvider,
 }: NewCustomProviderCardProps) {
   const t = useTranslations("admin.languageModels");
+  const adminRouteTitle = useAdminRouteTitle();
   const [isOpen, setIsOpen] = useState(false);
   const { icon, productName, companyName, Modal } = getProvider("custom");
 
@@ -321,6 +325,7 @@ function NewCustomProviderCard({
 
 export default function LanguageModelsPage() {
   const t = useTranslations("admin.languageModels");
+  const adminRouteTitle = useAdminRouteTitle();
   const { mutate } = useSWRConfig();
   const { llmProviders: existingLlmProviders, defaultText } =
     useAdminLLMProviders();
@@ -419,7 +424,11 @@ export default function LanguageModelsPage() {
 
   return (
     <SettingsLayouts.Root>
-      <SettingsLayouts.Header icon={route.icon} title={route.title} divider />
+      <SettingsLayouts.Header
+        icon={route.icon}
+        title={adminRouteTitle(route)}
+        divider
+      />
 
       <SettingsLayouts.Body>
         {hasProviders ? (

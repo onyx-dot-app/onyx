@@ -1,5 +1,6 @@
 "use client";
 
+import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useTranslations } from "next-intl";
 import { PageLoader } from "@opal/layouts";
 import { PageSelector } from "@/components/PageSelector";
@@ -40,6 +41,7 @@ import { SourceIcon } from "@/components/SourceIcon";
 import Link from "next/link";
 
 const route = ADMIN_ROUTES.DOCUMENT_SETS;
+
 const numToDisplay = 50;
 
 // Component to display federated connectors with consistent styling
@@ -53,6 +55,7 @@ const FederatedConnectorTitle = ({
   isLink?: boolean;
 }) => {
   const t = useTranslations("admin.documents");
+  const adminRouteTitle = useAdminRouteTitle();
   const sourceType = federatedConnector.source.replace(/^federated_/, "");
 
   const mainSectionClassName = "text-blue-500 dark:text-blue-100 flex w-fit";
@@ -108,6 +111,7 @@ const EditRow = ({
   isEditable: boolean;
 }) => {
   const t = useTranslations("admin.documents");
+  const adminRouteTitle = useAdminRouteTitle();
   const router = useRouter();
 
   if (!isEditable) {
@@ -160,6 +164,7 @@ const DocumentSetTable = ({
   refresh,
 }: DocumentFeedbackTableProps) => {
   const t = useTranslations("admin.documents");
+  const adminRouteTitle = useAdminRouteTitle();
   const [page, setPage] = useState(1);
 
   // editable rows first, then by name — editability now rides on each row's
@@ -342,6 +347,7 @@ const DocumentSetTable = ({
 
 function Main() {
   const t = useTranslations("admin.documents");
+  const adminRouteTitle = useAdminRouteTitle();
   const {
     data: documentSets,
     isLoading: isDocumentSetsLoading,
@@ -396,9 +402,14 @@ function Main() {
 }
 
 export default function Page() {
+  const adminRouteTitle = useAdminRouteTitle();
   return (
     <SettingsLayouts.Root>
-      <SettingsLayouts.Header icon={route.icon} title={route.title} divider />
+      <SettingsLayouts.Header
+        icon={route.icon}
+        title={adminRouteTitle(route)}
+        divider
+      />
       <SettingsLayouts.Body>
         <Main />
       </SettingsLayouts.Body>

@@ -1,5 +1,6 @@
 "use client";
 
+import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import CardSection from "@/components/admin/CardSection";
@@ -18,6 +19,7 @@ const route = ADMIN_ROUTES.DOCUMENT_PROCESSING;
 
 function Main() {
   const t = useTranslations("admin.documentProcessing");
+  const adminRouteTitle = useAdminRouteTitle();
   const {
     data: isApiKeySet,
     error,
@@ -157,9 +159,14 @@ function Main() {
 }
 
 export default function Page() {
+  const adminRouteTitle = useAdminRouteTitle();
   return (
     <SettingsLayouts.Root>
-      <SettingsLayouts.Header icon={route.icon} title={route.title} divider />
+      <SettingsLayouts.Header
+        icon={route.icon}
+        title={adminRouteTitle(route)}
+        divider
+      />
       <SettingsLayouts.Body>
         <Main />
       </SettingsLayouts.Body>

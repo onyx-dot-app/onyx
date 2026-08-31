@@ -69,7 +69,10 @@ export type AdminNavSectionId =
  * Sidebar id per admin route. `null` marks a route that never renders in the
  * sidebar, so a new route cannot silently arrive without a label.
  */
-const NAV_ITEM_IDS: Record<keyof typeof ADMIN_ROUTES, AdminNavItemId | null> = {
+export const NAV_ITEM_IDS: Record<
+  keyof typeof ADMIN_ROUTES,
+  AdminNavItemId | null
+> = {
   LLM_MODELS: "languageModels",
   WEB_SEARCH: "webSearch",
   IMAGE_GENERATION: "imageGeneration",

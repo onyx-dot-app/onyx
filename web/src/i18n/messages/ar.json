@@ -60,6 +60,26 @@
         "ariaLabel": "بطاقة الإجراء {title}"
       }
     },
+    "actionLineItem": {
+      "addConnectors": {
+        "label": "إضافة موصّلات"
+      },
+      "configure": {
+        "tooltip": "تكوين"
+      },
+      "configureConnectors": {
+        "label": "تكوين الموصّلات"
+      },
+      "disable": {
+        "label": "تعطيل"
+      },
+      "enable": {
+        "label": "تمكين"
+      },
+      "projectSearch": {
+        "label": "بحث المشروع"
+      }
+    },
     "addMcpModal": {
       "addHeader": {
         "description": "اربط خادم MCP (بروتوكول سياق النموذج) لإضافة إجراءات مخصصة.",
@@ -355,6 +375,53 @@
         "tooltip": "تحديث الأدوات"
       }
     },
+    "mcpOauthCallback": {
+      "autoRedirect": {
+        "text": "ستتم إعادتك تلقائيًا…"
+      },
+      "backToChatButton": {
+        "label": "العودة إلى الدردشة"
+      },
+      "cancelled": {
+        "description": "تم إلغاء التفويض أو رفضه، لذا لم يتم إنشاء أي اتصال. للمحاولة مرة أخرى، أعد بدء الاتصال من إعدادات المصادقة الخاصة بخادم MCP.",
+        "title": "تم إلغاء التفويض"
+      },
+      "continueButton": {
+        "label": "متابعة"
+      },
+      "genericError": {
+        "fallbackDetail": "تعذر إكمال التفويض",
+        "title": "حدث خطأ ما"
+      },
+      "invalidLink": {
+        "description": "يفتقد هذا الرابط معلمات التفويض المطلوبة. أعد بدء الاتصال من إعدادات المصادقة الخاصة بخادم MCP.",
+        "title": "رابط تفويض غير صالح"
+      },
+      "processing": {
+        "description": "جارٍ إنهاء الاتصال بخادم MCP الخاص بك. قد يستغرق ذلك بضع لحظات…",
+        "title": "جارٍ إكمال التفويض"
+      },
+      "serverNotFound": {
+        "description": "خادم MCP الذي ينتمي إليه هذا التفويض لم يعد موجودًا أو لم يعد مكونًا. أعد إنشاء الخادم أو إعادة تكوينه، ثم اتصل مرة أخرى.",
+        "title": "لم يتم العثور على خادم MCP"
+      },
+      "sessionExpired": {
+        "description": "رابط التفويض هذا غير صالح أو انتهت صلاحيته أو تم استخدامه من قبل. أعد بدء الاتصال من إعدادات المصادقة الخاصة بخادم MCP.",
+        "title": "انتهت صلاحية جلسة التفويض"
+      },
+      "success": {
+        "description": "اكتمل التفويض بنجاح. يمكنك الآن استخدام أدوات هذا الخادم في الدردشة.",
+        "title": "تم الاتصال بـ {serverName}"
+      },
+      "timedOut": {
+        "description": "لم يؤكد خادم MCP التفويض في الوقت المحدد. حاول الاتصال مرة أخرى، وإذا استمرت المشكلة، فتحقق من إعدادات OAuth للخادم.",
+        "title": "انتهت مهلة التفويض"
+      },
+      "tokenExchangeFailed": {
+        "description": "وافق المزود على التفويض ولكن تعذر الحصول على رمز وصول صالح. تحقق من بيانات اعتماد عميل OAuth ونقاط النهاية الخاصة بالخادم، ثم حاول الاتصال مرة أخرى.",
+        "title": "فشل تبادل الرمز المميز"
+      }
+    },
     "mcpPage": {
       "addButton": {
         "label": "إضافة خادم MCP"
@@ -554,6 +621,20 @@
         "label": "رفض"
       }
     },
+    "switchList": {
+      "back": {
+        "ariaLabel": "رجوع"
+      },
+      "disableAll": {
+        "label": "تعطيل الكل"
+      },
+      "enableAll": {
+        "label": "تمكين الكل"
+      },
+      "toggle": {
+        "ariaLabel": "تبديل {name}"
+      }
+    },
     "toolItem": {
       "unavailable": {
         "label": "الأداة غير متاحة"
@@ -578,6 +659,81 @@
       "showEnabledButton": {
         "ariaLabel": "عرض الأدوات المفعّلة فقط",
         "tooltip": "عرض المفعّلة فقط"
+      }
+    },
+    "toolsPopover": {
+      "configureLinks": {
+        "codeInterpreter": {
+          "tooltip": "تهيئة مفسر الأكواد"
+        },
+        "imageGeneration": {
+          "tooltip": "تهيئة توليد الصور"
+        },
+        "openapi": {
+          "tooltip": "إدارة إجراءات OpenAPI"
+        },
+        "webSearch": {
+          "tooltip": "تهيئة البحث في الويب"
+        }
+      },
+      "disableAllSources": {
+        "label": "تعطيل جميع المصادر"
+      },
+      "disableAllTools": {
+        "label": "تعطيل جميع الأدوات"
+      },
+      "enableAllSources": {
+        "label": "تمكين جميع المصادر"
+      },
+      "enableAllTools": {
+        "label": "تمكين جميع الأدوات"
+      },
+      "manageActions": {
+        "tooltip": "إدارة الإجراءات"
+      },
+      "mcpTools": {
+        "searchPlaceholder": "البحث في أدوات {server}"
+      },
+      "moreActions": {
+        "label": "المزيد من الإجراءات"
+      },
+      "reauthenticate": {
+        "label": "إعادة المصادقة"
+      },
+      "search": {
+        "placeholder": "البحث في الإجراءات..."
+      },
+      "serverFallback": {
+        "label": "الخادم"
+      },
+      "sourceFilters": {
+        "searchPlaceholder": "البحث في عوامل التصفية"
+      },
+      "tooltips": {
+        "askAdminSuffix": {
+          "text": "اطلب من مسؤول تهيئته."
+        },
+        "codingAgent": {
+          "description": "استقصِ مستودع GitHub وأجب عن أسئلة حول كوده."
+        },
+        "configureSuffix": {
+          "text": "اضغط على ترس الإعدادات للتفعيل."
+        },
+        "default": {
+          "description": "هذا الإجراء غير مهيأ بعد."
+        },
+        "imageGeneration": {
+          "description": "ولّد صورًا بناءً على مطالبة."
+        },
+        "python": {
+          "description": "نفّذ الأكواد لإجراء تحليلات معقدة."
+        },
+        "search": {
+          "description": "ابحث في المعرفة المتصلة لدعم الإجابة."
+        },
+        "webSearch": {
+          "description": "ابحث في الويب عن معلومات محدّثة."
+        }
       }
     },
     "toolsSection": {
@@ -631,7 +787,39 @@
         }
       }
     },
+    "agentStats": {
+      "chart": {
+        "description": "يوميًا للنطاق المحدد",
+        "title": "الرسائل والمستخدمون الفريدون"
+      },
+      "empty": {
+        "message": "لم يتم العثور على بيانات لهذا الوكيل في نطاق التاريخ المحدد."
+      },
+      "fetchFailed": {
+        "message": "فشل جلب إحصاءات الوكيل."
+      },
+      "permissionDenied": {
+        "message": "ليست لديك صلاحية لعرض هذه الإحصاءات."
+      },
+      "totalMessages": {
+        "label": "إجمالي الرسائل"
+      },
+      "totalUniqueUsers": {
+        "label": "إجمالي المستخدمين الفريدين"
+      },
+      "unknownError": {
+        "message": "حدث خطأ غير معروف"
+      }
+    },
     "agents": {
+      "collapsibleSection": {
+        "collapse": {
+          "ariaLabel": "طي القسم"
+        },
+        "expand": {
+          "ariaLabel": "توسيع القسم"
+        }
+      },
       "deleteModal": {
         "confirmation": {
           "description": "هل أنت متأكد من رغبتك في حذف <emphasis>{name}</emphasis>؟ لا يمكن التراجع عن هذا الإجراء."
@@ -1003,6 +1191,47 @@
         },
         "viewPlans": {
           "title": "عرض الخطط"
+        }
+      },
+      "info": {
+        "empty": {
+          "message": "لا تتوفر معلومات فوترة."
+        },
+        "loadError": {
+          "message": "حدث خطأ أثناء تحميل معلومات الفوترة. يرجى المحاولة مرة أخرى لاحقًا."
+        },
+        "loading": {
+          "label": "جارٍ التحميل..."
+        },
+        "manageSubscription": {
+          "description": "اعرض خطتك أو حدِّث الدفع أو غيِّر الاشتراك",
+          "title": "إدارة الاشتراك"
+        },
+        "page": {
+          "title": "معلومات الفوترة"
+        },
+        "portalError": {
+          "message": "حدث خطأ أثناء إنشاء جلسة بوابة العملاء"
+        },
+        "subscriptionDetails": {
+          "title": "تفاصيل الاشتراك"
+        },
+        "summary": {
+          "billingEnd": {
+            "label": "نهاية الفوترة"
+          },
+          "billingStart": {
+            "label": "بداية الفوترة"
+          },
+          "seats": {
+            "label": "المقاعد"
+          },
+          "status": {
+            "label": "حالة الاشتراك"
+          }
+        },
+        "updatedToast": {
+          "message": "تهانينا! تم تحديث اشتراكك بنجاح."
         }
       },
       "license": {
@@ -1517,6 +1746,25 @@
       }
     },
     "connector": {
+      "accessType": {
+        "autoSyncOption": {
+          "description": "سنقوم بمزامنة الأذونات تلقائيًا من المصدر. لن يكون المستند قابلًا للبحث في Onyx إلا إذا كان المستخدم الذي يجري البحث يملك إذن الوصول إلى المستند في المصدر.",
+          "disabledReason": "طريقة مصادقة بيانات الاعتماد الحالية لا تدعم مزامنة الأذونات تلقائيًا. يرجى تغيير طريقة المصادقة إلى طريقة مدعومة.",
+          "name": "مزامنة الأذونات تلقائيًا"
+        },
+        "heading": {
+          "description": "تحكّم في من يمكنه الوصول إلى المستندات المفهرسة بواسطة هذا الموصّل.",
+          "title": "الوصول إلى المستندات"
+        },
+        "privateOption": {
+          "description": "لا يمكن الوصول إلى المستندات التي يجلبها هذا الموصّل إلا للمستخدمين الذين مُنحوا حق الوصول إليه صراحةً (عبر صفحة مجموعات المستخدمين)",
+          "name": "خاص"
+        },
+        "publicOption": {
+          "description": "يمكن لأي شخص لديه حساب على Onyx الوصول إلى المستندات التي يجلبها هذا الموصّل",
+          "name": "عام"
+        }
+      },
       "advancedConfig": {
         "duration": {
           "days": "{count, plural, one {# يوم} other {# أيام}}",
@@ -1546,6 +1794,14 @@
           "label": "عرض أقل"
         }
       },
+      "credentialForm": {
+        "errorToast": "خطأ: {detail}",
+        "successToast": "تم بنجاح!",
+        "updateButton": {
+          "ariaLabel": "تحديث بيانات الاعتماد",
+          "label": "تحديث"
+        }
+      },
       "deleteModal": {
         "additionalDetails": "يؤدي حذف هذا الموصل إلى جدولة مهمة حذف تزيل مستنداته المفهرسة وتحذفه لجميع المستخدمين.",
         "entityType": "موصل"
@@ -1568,6 +1824,11 @@
         },
         "errorModal": {
           "title": "خطأ في مزامنة أذونات المستندات"
+        }
+      },
+      "docsLink": {
+        "checkOutDocs": {
+          "text": "راجع <link>مستنداتنا</link> لمزيد من المعلومات حول إعداد هذا الموصّل."
         }
       },
       "errorsModal": {
@@ -1649,6 +1910,14 @@
           "updateFailed": "فشل تحديث الملفات"
         }
       },
+      "fileUpload": {
+        "dropzone": {
+          "message": "اسحب وأفلت {multiple, select, true {ملفات} other {ملفًا}} هنا، أو انقر لتحديد {multiple, select, true {ملفات} other {ملف}}"
+        },
+        "selectedFiles": {
+          "heading": "{multiple, select, true {الملفات المحددة} other {الملف المحدد}}"
+        }
+      },
       "groupMembershipTable": {
         "columns": {
           "errorMessage": "رسالة الخطأ",
@@ -1664,6 +1933,23 @@
         },
         "errorModal": {
           "title": "خطأ في مزامنة عضويات المجموعات"
+        }
+      },
+      "groupSelector": {
+        "assignGroupAccess": {
+          "title": "إسناد وصول المجموعات لهذا الموصّل"
+        },
+        "assignToGroup": {
+          "title": "إسناد هذا الموصّل إلى مجموعة"
+        },
+        "scopedManagerGroups": {
+          "description": "حدد مجموعة أو أكثر من المجموعات التي تديرها لمنح حق الوصول إلى هذا الموصّل"
+        },
+        "syncGroups": {
+          "description": "تتحكم المجموعات أدناه في من يمكنه إدارة هذا الموصّل. يُورَّث الوصول إلى مستنداته من أذونات المصدر نفسه."
+        },
+        "visibleToGroups": {
+          "description": "سيكون هذا الموصّل مرئيًا ومتاحًا للمجموعات المحددة أدناه"
         }
       },
       "indexAttemptsTable": {
@@ -2022,6 +2308,22 @@
         "targetedReindexSubmitted": "أُرسلت إعادة الفهرسة الموجهة لـ {count, plural, one {مستند واحد} other {# مستندات}}. ستُمحى الأخطاء من القائمة مع انتهاء إعادة فهرسة المستندات."
       }
     },
+    "connectorTitle": {
+      "metadata": {
+        "channelRegexEnabled": "التعبير النمطي للقنوات مفعّل",
+        "channels": "القنوات",
+        "enabledTrue": "نعم",
+        "excludeChannelRegexEnabled": "التعبير النمطي لاستبعاد القنوات مفعّل",
+        "excludedChannels": "القنوات المستبعدة",
+        "includeBotMessages": "تضمين رسائل الروبوتات",
+        "jiraProjectUrl": "عنوان URL لمشروع Jira",
+        "multipleRepos": "مستودعات متعددة",
+        "pageId": "معرّف الصفحة",
+        "realm": "النطاق",
+        "repo": "المستودع",
+        "wikiUrl": "عنوان URL للويكي"
+      }
+    },
     "connectorsList": {
       "add": {
         "authorizeButton": {
@@ -2148,6 +2450,7 @@
           "description": "أدخل بريد مسؤول أو مالك مؤسسة Google التي تملك حسابات Google Drive المراد فهرستها.",
           "invalidEmail": "يجب أن يكون بريدًا إلكترونيًا صالحًا",
           "label": "بريد المسؤول الرئيسي",
+          "placeholder": "admin@yourcompany.com",
           "required": "مطلوب"
         },
         "section": {
@@ -2205,6 +2508,7 @@
           "description": "أدخل بريد مسؤول أو مالك مؤسسة Google التي تملك حسابات Gmail المراد فهرستها.",
           "invalidEmail": "يجب أن يكون بريدًا إلكترونيًا صالحًا",
           "label": "بريد المسؤول الرئيسي",
+          "placeholder": "admin@yourcompany.com",
           "required": "مطلوب"
         },
         "section": {
@@ -2602,6 +2906,171 @@
       "unavailable": {
         "description": "يُفعَّل Craft لكل نشر بواسطة Onyx. تواصل مع ممثل Onyx الخاص بك للحصول على صلاحية الوصول.",
         "title": "Craft غير متاح في هذا النشر"
+      }
+    },
+    "credentials": {
+      "card": {
+        "createdOn": {
+          "label": "تم الإنشاء في <i>{date}</i>"
+        },
+        "createdOnBy": {
+          "label": "تم الإنشاء في <i>{date}</i> بواسطة <i>{email}</i>"
+        },
+        "unnamed": {
+          "label": "بيانات الاعتماد رقم {id}"
+        }
+      },
+      "create": {
+        "createButton": {
+          "label": "إنشاء"
+        },
+        "created": {
+          "toast": "تم إنشاء بيانات اعتماد جديدة!"
+        },
+        "name": {
+          "label": "الاسم:",
+          "placeholder": "(اختياري) اسم بيانات الاعتماد..."
+        },
+        "submitError": {
+          "toast": "حدث خطأ أثناء إرسال بيانات الاعتماد"
+        }
+      },
+      "delete": {
+        "cancelButton": {
+          "label": "إلغاء"
+        },
+        "confirmBody": {
+          "message": "هل أنت متأكد من رغبتك في حذف بيانات الاعتماد هذه؟ لا يمكنك حذف بيانات اعتماد مرتبطة بموصّلات نشطة."
+        },
+        "confirmButton": {
+          "label": "تأكيد"
+        },
+        "confirmTitle": "تأكيد الحذف"
+      },
+      "edit": {
+        "name": {
+          "label": "الاسم (اختياري):"
+        },
+        "permissions": {
+          "note": "تأكد من التحديث إلى بيانات اعتماد ذات الأذونات المناسبة!"
+        },
+        "resetButton": {
+          "label": "إعادة تعيين التغييرات"
+        },
+        "updateButton": {
+          "label": "تحديث"
+        },
+        "updateError": {
+          "toast": "حدث خطأ أثناء تحديث بيانات الاعتماد"
+        }
+      },
+      "modal": {
+        "createTitle": "إنشاء بيانات اعتماد {source}",
+        "editTitle": "تعديل بيانات الاعتماد",
+        "updateTitle": "تحديث بيانات الاعتماد"
+      },
+      "modify": {
+        "createButton": {
+          "label": "إنشاء"
+        },
+        "instructions": {
+          "message": "حدد بيانات اعتماد حسب الحاجة! تأكد من تحديد بيانات اعتماد ذات الأذونات المناسبة لهذا الموصّل!"
+        },
+        "selectButton": {
+          "label": "تحديد"
+        }
+      },
+      "oauth": {
+        "connectButton": {
+          "label": "اتصال"
+        },
+        "connectError": {
+          "title": "تعذر الاتصال"
+        },
+        "redirectFailed": {
+          "message": "تعذر إعادة توجيهك لتسجيل الدخول باستخدام {source}. يرجى المحاولة مرة أخرى."
+        },
+        "retryButton": {
+          "label": "إعادة المحاولة"
+        },
+        "startError": {
+          "message": "تعذر بدء OAuth"
+        }
+      },
+      "swap": {
+        "error": {
+          "toast": "مشكلة في تبديل بيانات الاعتماد: {detail}"
+        },
+        "success": {
+          "toast": "تم تبديل بيانات الاعتماد بنجاح!"
+        }
+      },
+      "table": {
+        "actions": {
+          "label": "الإجراءات"
+        },
+        "created": {
+          "header": "تاريخ الإنشاء"
+        },
+        "edit": {
+          "ariaLabel": "تعديل بيانات الاعتماد"
+        },
+        "empty": {
+          "message": "لا توجد بيانات اعتماد لهذا الموصّل!"
+        },
+        "id": {
+          "header": "المعرّف"
+        },
+        "lastUpdated": {
+          "header": "آخر تحديث"
+        },
+        "name": {
+          "header": "الاسم"
+        },
+        "select": {
+          "label": "تحديد"
+        },
+        "selected": {
+          "badge": "محدد"
+        },
+        "untitled": {
+          "label": "بدون عنوان"
+        }
+      },
+      "update": {
+        "error": {
+          "toast": "مشكلة في تحديث بيانات الاعتماد"
+        },
+        "success": {
+          "toast": "تم تحديث بيانات الاعتماد"
+        }
+      }
+    },
+    "customAnalytics": {
+      "intro": {
+        "description": "يتيح لك هذا استخدام أداة التحليلات الخاصة بك مع Onyx! انسخ مقتطف الويب من مزود التحليلات لديك في المربع أدناه، وسنبدأ في إرسال أحداث الاستخدام."
+      },
+      "notEnabled": {
+        "description": "لإعداد نصوص التحليلات المخصصة، يرجى التعاون مع الفريق الذي قام بإعداد Onyx لديكم لتعيين متغير البيئة <i>CUSTOM_ANALYTICS_SECRET_KEY</i>.",
+        "title": "التحليلات المخصصة غير مفعّلة."
+      },
+      "script": {
+        "description": "حدد كود Javascript الذي يجب تشغيله عند تحميل الصفحة لتهيئة التتبع/التحليلات المخصصة لديك.",
+        "instructions": "لا تُدرج وسمي `<script></script>`. إذا رفعت نصًا برمجيًا أدناه ولم تتلقَّ أي أحداث في منصة التحليلات لديك، فجرّب إزالة جميع المسافات الزائدة قبل كل سطر من JavaScript.",
+        "label": "النص البرمجي"
+      },
+      "secretKey": {
+        "description": "لأسباب أمنية، يجب تقديم مفتاح سري لتحديث هذا النص البرمجي. يجب أن يكون هذا هو قيمة متغير البيئة <i>CUSTOM_ANALYTICS_SECRET_KEY</i> الذي تم تعيينه عند إعداد Onyx لأول مرة.",
+        "label": "المفتاح السري"
+      },
+      "updateButton": {
+        "label": "تحديث"
+      },
+      "updateFailed": {
+        "message": "فشل تحديث نص التحليلات المخصص: \"{error}\""
+      },
+      "updateSuccess": {
+        "message": "تم تحديث نص التحليلات المخصص بنجاح!"
       }
     },
     "discordBot": {
@@ -3059,6 +3528,83 @@
         }
       }
     },
+    "exportLogs": {
+      "button": {
+        "collecting": {
+          "label": "جارٍ الجمع..."
+        },
+        "downloading": {
+          "label": "جارٍ التنزيل..."
+        },
+        "export": {
+          "label": "تصدير السجلات"
+        },
+        "starting": {
+          "label": "جارٍ البدء..."
+        }
+      },
+      "downloadButton": {
+        "label": "تنزيل"
+      },
+      "exportCard": {
+        "description": "يجمع ملفات السجلات من خادم API والعمال في الخلفية في ملف zip واحد. يبدأ التنزيل تلقائيًا بمجرد انتهاء الجمع.",
+        "title": "تصدير السجلات"
+      },
+      "header": {
+        "description": "نزِّل ملف zip يحتوي على ملفات سجلات الخادم لإرفاقه بمحادثة دعم Onyx."
+      },
+      "receipt": {
+        "duplicateHost": {
+          "label": "مشمول بواسطة عامل آخر على المضيف نفسه"
+        },
+        "failed": {
+          "label": "فشل"
+        },
+        "failedWithError": {
+          "label": "فشل: {error}"
+        },
+        "noLogs": {
+          "label": "لم يتم العثور على ملفات سجلات"
+        },
+        "uploaded": {
+          "label": "{count, plural, one {تم رفع # ملف} other {تم رفع # ملفات}}"
+        }
+      },
+      "sensitiveWarning": {
+        "description": "قد تتضمن ملفات السجلات رسائل البريد الإلكتروني للمستخدمين وعناوين المستندات واستعلامات البحث ومحتوى الأخطاء. راجع المحتويات قبل مشاركتها خارج مؤسستك.",
+        "title": "قد تحتوي السجلات على بيانات حساسة"
+      },
+      "status": {
+        "startingCollection": {
+          "label": "جارٍ بدء الجمع..."
+        }
+      },
+      "toasts": {
+        "alreadyRunning": {
+          "message": "هناك عملية تصدير سجلات جارية بالفعل. حاول مرة أخرى بعد قليل."
+        },
+        "downloadFailed": {
+          "message": "فشل تنزيل تصدير السجلات."
+        },
+        "lostAccess": {
+          "message": "فُقد الوصول إلى عملية التصدير الجارية. ابدأ عملية جديدة."
+        },
+        "startFailed": {
+          "message": "فشل بدء تصدير السجلات."
+        },
+        "unreachable": {
+          "message": "تعذر الوصول إلى الخادم للتحقق من تقدم التصدير. ابدأ عملية تصدير جديدة بعد عودته."
+        }
+      },
+      "worker": {
+        "collecting": {
+          "label": "جارٍ الجمع..."
+        },
+        "missedDeadline": {
+          "label": "لم يقدم تقريرًا قبل الموعد النهائي"
+        }
+      }
+    },
     "externalApps": {
       "apps": {
         "empty": {
@@ -3165,9 +3711,137 @@
         "loadFailed": "فشل تحميل الموصل: {details}",
         "title": "خطأ"
       },
+      "form": {
+        "channelInput": {
+          "placeholder": "اكتب اسم القناة أو نمط تعبير نمطي ثم اضغط Enter"
+        },
+        "channelsRequired": {
+          "error": "مطلوب قناة واحدة على الأقل عند تعطيل 'البحث في جميع القنوات'"
+        },
+        "configSchemaLoadError": {
+          "message": "فشل تحميل مخطط الإعدادات: {error}"
+        },
+        "configTitle": {
+          "text": "إعدادات الموصّل الموحّد"
+        },
+        "configuration": {
+          "heading": "الإعدادات"
+        },
+        "create": {
+          "failed": "فشل إنشاء الموصّل الموحّد",
+          "success": "تم إنشاء الموصّل الموحّد بنجاح!"
+        },
+        "credentialField": {
+          "keepCurrentPlaceholder": "••••••••  (اتركه فارغًا للاحتفاظ بالقيمة الحالية)"
+        },
+        "credentialValidationFailed": {
+          "message": "فشل التحقق من بيانات الاعتماد: {message}"
+        },
+        "credentials": {
+          "description": "أدخل بيانات الاعتماد لهذا الموصّل.",
+          "heading": "بيانات الاعتماد"
+        },
+        "delete": {
+          "failed": "فشل حذف الموصّل الموحّد",
+          "success": "تم حذف الموصّل الموحّد بنجاح!"
+        },
+        "deleteConfirm": {
+          "message": "هل أنت متأكد من رغبتك في حذف هذا الموصّل الموحّد؟ لا يمكن التراجع عن هذا الإجراء."
+        },
+        "deleteError": {
+          "toast": "خطأ أثناء حذف الموصّل: {error}"
+        },
+        "deleteItem": {
+          "deleting": "جارٍ الحذف...",
+          "inProgressTooltip": "جارٍ الحذف",
+          "label": "حذف"
+        },
+        "federatedBadge": {
+          "label": "موحّد"
+        },
+        "federatedTooltip": {
+          "default": "هذا موصّل موحّد. سيؤدي إلى زمن استجابة أطول وجودة بحث أقل مقارنةً بالموصّلات العادية."
+        },
+        "genericError": {
+          "text": "خطأ: {error}"
+        },
+        "listInput": {
+          "placeholder": "اكتب واضغط Enter لإضافة عنصر"
+        },
+        "loadingSchema": {
+          "description": "جارٍ استرداد الحقول المطلوبة لهذا النوع من الموصّلات",
+          "title": "جارٍ تحميل مخطط بيانات الاعتماد..."
+        },
+        "manageButton": {
+          "label": "إدارة"
+        },
+        "missingFields": {
+          "message": "حقول مطلوبة مفقودة: {fields}"
+        },
+        "noConfigSchema": {
+          "message": "لا توجد إعدادات بحث متاحة لهذا النوع من الموصّلات."
+        },
+        "noCredentialSchema": {
+          "message": "لا يوجد مخطط بيانات اعتماد متاح لهذا النوع من الموصّلات."
+        },
+        "schemaLoadError": {
+          "message": "فشل تحميل مخطط بيانات الاعتماد: {error}"
+        },
+        "submitButton": {
+          "create": "إنشاء",
+          "creating": "جارٍ الإنشاء...",
+          "update": "تحديث",
+          "updating": "جارٍ التحديث..."
+        },
+        "title": {
+          "edit": "تعديل {name}",
+          "setup": "إعداد {name}"
+        },
+        "update": {
+          "failed": "فشل تحديث الموصّل الموحّد",
+          "success": "تم تحديث الموصّل الموحّد بنجاح!"
+        },
+        "validateBeforeEdit": {
+          "message": "أدخل قيم بيانات اعتماد جديدة قبل التحقق."
+        },
+        "validateButton": {
+          "label": "تحقق",
+          "validating": "جارٍ التحقق..."
+        },
+        "validation": {
+          "error": "خطأ في التحقق: {error}",
+          "failedStatus": "فشل التحقق: {statusText}",
+          "invalid": "بيانات الاعتماد غير صالحة",
+          "valid": "بيانات الاعتماد صالحة"
+        }
+      },
       "loading": {
         "description": "جارٍ جلب تفاصيل الموصل ومخطط بيانات الاعتماد",
         "title": "جارٍ تحميل تهيئة الموصل..."
+      }
+    },
+    "federatedCallback": {
+      "backButton": {
+        "label": "العودة إلى المحادثة"
+      },
+      "error": {
+        "title": "حدث خطأ ما"
+      },
+      "errors": {
+        "clientSecret": "بيانات اعتماد المصادقة مفقودة أو غير صالحة",
+        "oauth": "فشل تفويض OAuth",
+        "validation": "خطأ في التهيئة - يرجى التحقق من إعدادات الموصل"
+      },
+      "processing": {
+        "details": "يرجى الانتظار بينما نكمل الإعداد.",
+        "title": "جارٍ المعالجة..."
+      },
+      "redirecting": {
+        "text": "جارٍ التحويل إلى المحادثة خلال ثانيتين..."
+      },
+      "success": {
+        "detailsTemplate": "اكتمل تفويض {serviceName} بنجاح. يمكنك الآن استخدام هذا الموصل للبحث.",
+        "title": "نجاح!"
       }
     },
     "groups": {
@@ -3430,6 +4104,265 @@
           "header": "حد الرموز",
           "placeholder": "حد الرموز (بالآلاف)",
           "unit": "(بالآلاف)"
+        }
+      }
+    },
+    "hooks": {
+      "card": {
+        "delete": {
+          "ariaLabel": "حذف الخطاف",
+          "tooltip": "حذف"
+        },
+        "disconnect": {
+          "ariaLabel": "إلغاء تنشيط الخطاف",
+          "tooltip": "فصل الخطاف"
+        },
+        "disconnectedSuffix": {
+          "label": "(مفصول)"
+        },
+        "hookPoint": {
+          "description": "نقطة الخطاف: {name}"
+        },
+        "manage": {
+          "ariaLabel": "تكوين الخطاف",
+          "tooltip": "إدارة"
+        },
+        "reconnectButton": {
+          "label": "إعادة الاتصال"
+        },
+        "test": {
+          "ariaLabel": "إعادة التحقق من الخطاف",
+          "tooltip": "اختبار الاتصال"
+        }
+      },
+      "connectButton": {
+        "label": "اتصال"
+      },
+      "deleteModal": {
+        "body": {
+          "description": "سيُزال الخطاف ***{name}*** نهائيًا من نقطة الخطاف هذه. قد تحتفظ نقطة النهاية الخارجية بالبيانات المرسلة إليها سابقًا."
+        },
+        "delete": {
+          "label": "حذف"
+        },
+        "header": {
+          "title": "حذف *{name}*"
+        },
+        "permanent": {
+          "description": "لا يمكن التراجع عن الحذف."
+        }
+      },
+      "disconnectModal": {
+        "body": {
+          "description": "سيتوقف Onyx عن استدعاء نقطة النهاية هذه للخطاف ***{name}***. ستستمر الطلبات الجارية في التنفيذ. قد تحتفظ نقطة النهاية الخارجية بالبيانات المرسلة إليها سابقًا. يمكنك إعادة توصيل هذا الخطاف لاحقًا إذا لزم الأمر."
+        },
+        "deleteNote": {
+          "description": "يمكنك أيضًا حذف هذا الخطاف. لا يمكن التراجع عن الحذف."
+        },
+        "disconnect": {
+          "label": "فصل"
+        },
+        "disconnectAndDelete": {
+          "label": "فصل وحذف"
+        },
+        "header": {
+          "title": "فصل *{name}*"
+        }
+      },
+      "docsLink": {
+        "label": "الوثائق"
+      },
+      "form": {
+        "apiKey": {
+          "description": "سيستخدم Onyx هذا المفتاح للمصادقة مع نقطة نهاية API الخاصة بك.",
+          "keepCurrent": {
+            "placeholder": "اتركه فارغًا للاحتفاظ بالمفتاح الحالي"
+          },
+          "title": "مفتاح API"
+        },
+        "connectionValid": {
+          "label": "الاتصال صالح."
+        },
+        "createHeader": {
+          "description": "اربط نقطة نهاية API خارجية لتوسيع نقطة الخطاف.",
+          "title": "إعداد امتداد الخطاف"
+        },
+        "editHeader": {
+          "title": "إدارة امتداد الخطاف"
+        },
+        "endpoint": {
+          "description": "اتصل فقط بالخوادم التي تثق بها. أنت مسؤول عن الإجراءات المتخذة والبيانات المشاركة عبر هذا الاتصال.",
+          "title": "عنوان URL لنقطة نهاية API الخارجية"
+        },
+        "errors": {
+          "connect": "تعذر الاتصال بنقطة النهاية.",
+          "generic": "حدث خطأ ما.",
+          "invalidApiKey": "مفتاح API غير صالح.",
+          "timeout": "انتهت مهلة الاتصال. جرّب زيادة المهلة."
+        },
+        "failStrategy": {
+          "default": {
+            "label": "(افتراضي)"
+          },
+          "hard": {
+            "label": "إيقاف المسار عند الفشل"
+          },
+          "placeholder": "اختر استراتيجية",
+          "soft": {
+            "label": "تسجيل الخطأ والمتابعة"
+          },
+          "title": "استراتيجية الفشل"
+        },
+        "hookPoint": {
+          "label": "نقطة الخطاف"
+        },
+        "name": {
+          "placeholder": "سمِّ الامتداد الخاص بك عند نقطة الخطاف هذه",
+          "title": "اسم العرض"
+        },
+        "save": {
+          "label": "حفظ التغييرات"
+        },
+        "softStrategy": {
+          "description": "إذا أعادت نقطة النهاية خطأ، يسجّله Onyx ويواصل المسار كالمعتاد متجاهلاً نتيجة الخطاف."
+        },
+        "timeout": {
+          "description": "أقصى وقت ينتظره Onyx لاستجابة نقطة النهاية قبل تطبيق استراتيجية الفشل. يجب أن يكون أكبر من 0 وبحد أقصى {max} ثانية.",
+          "revert": {
+            "tooltip": "الرجوع إلى الافتراضي"
+          },
+          "suffix": "(ثوانٍ)",
+          "title": "المهلة"
+        },
+        "toasts": {
+          "created": {
+            "message": "تم إنشاء الخطاف."
+          },
+          "noHookPoint": {
+            "message": "لم يتم تحديد نقطة خطاف."
+          },
+          "updated": {
+            "message": "تم تحديث الخطاف."
+          }
+        },
+        "validation": {
+          "apiKeyRequired": "لا يمكن أن يكون مفتاح API فارغًا.",
+          "endpointRequired": "لا يمكن أن يكون عنوان URL لنقطة النهاية فارغًا.",
+          "nameRequired": "لا يمكن أن يكون اسم العرض فارغًا.",
+          "timeoutRange": "يجب أن تكون أكبر من 0 وبحد أقصى {max} ثانية.",
+          "timeoutRequired": "المهلة مطلوبة."
+        },
+        "verifying": {
+          "label": "جارٍ التحقق من الاتصال…"
+        }
+      },
+      "logs": {
+        "copy": {
+          "tooltip": "نسخ"
+        },
+        "download": {
+          "tooltip": "تنزيل"
+        },
+        "empty": {
+          "message": "لا توجد أخطاء خلال آخر 30 يومًا."
+        },
+        "header": {
+          "description": "الخطاف: {name} • نقطة الخطاف: {point}",
+          "title": "الأخطاء الأخيرة"
+        },
+        "lineCount": {
+          "label": "{count, plural, one {# سطر} other {# أسطر}}"
+        },
+        "loadFailed": {
+          "message": "فشل تحميل السجلات."
+        },
+        "older": {
+          "label": "أقدم"
+        },
+        "pastHour": {
+          "label": "الساعة الماضية"
+        },
+        "unknownError": {
+          "label": "خطأ غير معروف"
+        }
+      },
+      "modals": {
+        "cancel": {
+          "label": "إلغاء"
+        }
+      },
+      "page": {
+        "description": "وسّع مسارات Onyx بتسجيل نقاط نهاية API خارجية كاستدعاءات عند نقاط خطافات محددة مسبقًا.",
+        "empty": {
+          "title": "لا توجد نقاط خطافات متاحة"
+        },
+        "emptySearch": {
+          "description": "جرّب مصطلح بحث مختلفًا.",
+          "title": "لم يتم العثور على نتائج"
+        },
+        "enterpriseRequired": {
+          "message": "تتطلب امتدادات الخطافات ترخيص Enterprise."
+        },
+        "loadHooksFailed": {
+          "message": "فشل تحميل الخطافات. يرجى تحديث الصفحة."
+        },
+        "loadSpecsFailed": {
+          "message": "فشل تحميل مواصفات الخطافات. يرجى تحديث الصفحة."
+        },
+        "notEnabled": {
+          "message": "امتدادات الخطافات غير مفعّلة لهذا النشر."
+        },
+        "search": {
+          "placeholder": "ابحث في الخطافات..."
+        }
+      },
+      "status": {
+        "connected": {
+          "label": "متصل"
+        },
+        "connectionLost": {
+          "label": "انقطع الاتصال"
+        },
+        "errorCount": {
+          "title": "{count, plural, one {# خطأ} other {# أخطاء}}"
+        },
+        "noError": {
+          "title": "لا يوجد خطأ"
+        },
+        "pastHour": {
+          "description": "خلال الساعة الماضية"
+        },
+        "recentErrors": {
+          "title": "أحدث الأخطاء"
+        },
+        "viewMore": {
+          "label": "عرض المزيد من الأسطر"
+        },
+        "viewOlder": {
+          "label": "عرض الأخطاء الأقدم"
+        }
+      },
+      "toasts": {
+        "deactivateFailed": {
+          "message": "فشل إلغاء تنشيط الخطاف."
+        },
+        "deleteFailed": {
+          "message": "فشل حذف الخطاف."
+        },
+        "disconnectFailed": {
+          "message": "فشل فصل الخطاف."
+        },
+        "reconnectFailed": {
+          "message": "فشلت إعادة توصيل الخطاف."
+        },
+        "validateFailed": {
+          "message": "فشل التحقق من الخطاف."
+        },
+        "validateSuccess": {
+          "message": "تم التحقق من الخطاف بنجاح."
+        },
+        "validationFailed": {
+          "message": "فشل التحقق: {status}"
         }
       }
     },
@@ -4309,6 +5242,9 @@
               "label": "إضافة سطر"
             },
             "description": "أضف خصائص إضافية بحسب حاجة موفر النموذج. تُمرَّر هذه إلى استدعاء `completion()` في LiteLLM كـ[متغيرات بيئة](https://docs.litellm.ai/docs/set_keys#environment-variables). راجع [الوثائق](https://docs.onyx.app/admins/ai_models/custom_inference_provider) لمزيد من التعليمات.",
+            "keyInput": {
+              "placeholder": "مثل OPENAI_ORGANIZATION"
+            },
             "title": "متغيرات البيئة"
           },
           "modelRow": {
@@ -4820,6 +5756,132 @@
         "title": "المستخدمون"
       }
     },
+    "queryHistory": {
+      "assistant": {
+        "unknown": {
+          "label": "غير معروف"
+        }
+      },
+      "detail": {
+        "ai": {
+          "label": "الذكاء الاصطناعي"
+        },
+        "errorTitle": {
+          "title": "حدث خطأ ما :("
+        },
+        "feedback": {
+          "title": "الملاحظات"
+        },
+        "fetchFailed": {
+          "message": "فشل جلب جلسة الدردشة - {error}"
+        },
+        "header": {
+          "title": "تفاصيل جلسة الدردشة"
+        },
+        "referenceDocuments": {
+          "title": "المستندات المرجعية"
+        },
+        "user": {
+          "label": "المستخدم"
+        }
+      },
+      "export": {
+        "cancel": {
+          "label": "إلغاء"
+        },
+        "downloadFailed": {
+          "message": "فشل تنزيل سجل الاستعلامات."
+        },
+        "generating": {
+          "message": "جارٍ إنشاء تقرير CSV. انقر على زر \"{button}\" لعرض جميع المهام."
+        },
+        "kickoff": {
+          "label": "بدء التصدير"
+        }
+      },
+      "exportStatus": {
+        "failure": {
+          "label": "فشل"
+        },
+        "pending": {
+          "label": "قيد الانتظار"
+        },
+        "success": {
+          "label": "نجاح"
+        }
+      },
+      "exportsModal": {
+        "download": {
+          "header": "تنزيل"
+        },
+        "endRange": {
+          "header": "نهاية النطاق"
+        },
+        "generatedAt": {
+          "header": "وقت الإنشاء"
+        },
+        "header": {
+          "title": "عمليات تصدير سجل الاستعلامات السابقة"
+        },
+        "notReady": {
+          "tooltip": "التصدير غير جاهز بعد"
+        },
+        "startRange": {
+          "header": "بداية النطاق"
+        },
+        "status": {
+          "header": "الحالة"
+        }
+      },
+      "feedback": {
+        "dislike": {
+          "label": "عدم إعجاب"
+        },
+        "like": {
+          "label": "إعجاب"
+        },
+        "mixed": {
+          "label": "مختلط"
+        },
+        "na": {
+          "label": "غير متاح"
+        }
+      },
+      "filters": {
+        "any": {
+          "label": "الكل"
+        },
+        "feedbackType": {
+          "label": "نوع الملاحظات"
+        }
+      },
+      "previousExports": {
+        "label": "عرض عمليات التصدير"
+      },
+      "table": {
+        "date": {
+          "header": "التاريخ"
+        },
+        "feedback": {
+          "header": "الملاحظات"
+        },
+        "fetchError": {
+          "title": "خطأ في جلب سجل الاستعلامات"
+        },
+        "firstAiResponse": {
+          "header": "أول رد من الذكاء الاصطناعي"
+        },
+        "firstUserMessage": {
+          "header": "أول رسالة من المستخدم"
+        },
+        "persona": {
+          "header": "الشخصية"
+        },
+        "user": {
+          "header": "المستخدم"
+        }
+      }
+    },
     "scim": {
       "card": {
         "connected": {
@@ -4874,6 +5936,56 @@
         "generateFailed": "فشل توليد الرمز: {detail}",
         "genericError": "حدث خطأ ما. يرجى المحاولة مرة أخرى.",
         "regenerated": "أُعيد توليد الرمز"
+      }
+    },
+    "search": {
+      "errors": {
+        "classificationFailed": {
+          "message": "فشل تصنيف الاستعلام. سيتم الرجوع إلى الدردشة."
+        },
+        "searchFailed": {
+          "message": "فشل البحث في المستندات. يرجى المحاولة مرة أخرى."
+        }
+      },
+      "results": {
+        "count": {
+          "label": "{count, plural, one {# نتيجة} other {# نتائج}}"
+        },
+        "empty": {
+          "description": "تحقق من الموصلات/عوامل التصفية أو جرّب مصطلح بحث مختلفًا.",
+          "title": "لم يتم العثور على نتائج"
+        },
+        "failed": {
+          "title": "فشل البحث"
+        }
+      },
+      "tagFilter": {
+        "count": {
+          "label": "{count, plural, one {# وسم} other {# وسوم}}"
+        },
+        "empty": {
+          "label": "الوسوم"
+        },
+        "search": {
+          "placeholder": "تصفية الوسوم..."
+        }
+      },
+      "timeFilter": {
+        "all": {
+          "label": "كل الفترات"
+        },
+        "day": {
+          "label": "آخر 24 ساعة"
+        },
+        "month": {
+          "label": "الشهر الماضي"
+        },
+        "week": {
+          "label": "الأسبوع الماضي"
+        },
+        "year": {
+          "label": "العام الماضي"
+        }
       }
     },
     "security": {
@@ -5765,6 +6877,163 @@
         "unexpectedError": "حدث خطأ غير متوقع."
       }
     },
+    "standardAnswers": {
+      "categoryBubble": {
+        "remove": {
+          "ariaLabel": "إزالة الفئة {name}"
+        },
+        "removeButton": {
+          "ariaLabel": "إزالة الفئة"
+        }
+      },
+      "categoryDropdown": {
+        "categories": {
+          "label": "فئات الإجابات القياسية"
+        },
+        "fetchError": {
+          "message": "فشل جلب فئات الإجابات القياسية - {message}",
+          "title": "حدث خطأ ما :("
+        },
+        "search": {
+          "placeholder": "البحث في الفئات..."
+        }
+      },
+      "editPage": {
+        "title": "تعديل الإجابة القياسية"
+      },
+      "errors": {
+        "fetchAnswersFailed": {
+          "message": "فشل جلب الإجابات القياسية"
+        },
+        "fetchCategoriesFailed": {
+          "message": "فشل جلب فئات الإجابات القياسية"
+        },
+        "genericTitle": {
+          "title": "حدث خطأ ما :("
+        },
+        "loadAnswersFailed": {
+          "title": "خطأ في تحميل الإجابات القياسية"
+        },
+        "loadCategoriesFailed": {
+          "title": "خطأ في تحميل فئات الإجابات القياسية"
+        },
+        "notFound": {
+          "message": "لم يتم العثور على إجابة قياسية بالمعرف: {id}"
+        }
+      },
+      "filter": {
+        "allCategories": {
+          "label": "جميع الفئات"
+        }
+      },
+      "form": {
+        "allKeywords": {
+          "label": "كل هذه الكلمات المفتاحية، بأي ترتيب، مفصولة بمسافات",
+          "placeholder": "تذكرة تقنية"
+        },
+        "answer": {
+          "label": "الإجابة",
+          "placeholder": "الإجابة بصيغة Markdown. مثال: إذا احتجت إلى مساعدة من فريق تقنية المعلومات، فيرجى مراسلة internalsupport@company.com"
+        },
+        "anyKeywords": {
+          "label": "أي من هذه الكلمات المفتاحية، مفصولة بمسافات",
+          "placeholder": "تذكرة مشكلة عطل"
+        },
+        "categories": {
+          "label": "الفئات:",
+          "placeholder": "اكتب فئة واضغط Enter…"
+        },
+        "createButton": {
+          "label": "إنشاء!"
+        },
+        "keywords": {
+          "tooltip": "يجب أن يتطابق السؤال مع هذه الكلمات المفتاحية لتفعيل الإجابة."
+        },
+        "matchRegex": {
+          "description": "طابق نمط regex بدلاً من كلمة مفتاحية محددة",
+          "label": "مطابقة regex"
+        },
+        "regexPattern": {
+          "label": "نمط regex",
+          "tooltip": "يتم التفعيل إذا تطابق السؤال مع نمط regex هذا (باستخدام `re.search()` في Python)"
+        },
+        "strategy": {
+          "all": {
+            "label": "كل الكلمات المفتاحية"
+          },
+          "any": {
+            "label": "أي كلمات مفتاحية"
+          },
+          "description": "اختر ما إذا كان يجب أن يحتوي سؤال المستخدم على أيٍّ من الكلمات المفتاحية أعلاه أو كلها لعرض هذه الإجابة.",
+          "label": "استراتيجية اكتشاف الكلمات المفتاحية"
+        },
+        "toasts": {
+          "categoryCreateFailed": {
+            "message": "خطأ في إنشاء الفئة \"{name}\" - {error}"
+          },
+          "createFailed": {
+            "message": "خطأ في إنشاء الإجابة القياسية - {error}"
+          },
+          "updateFailed": {
+            "message": "خطأ في تحديث الإجابة القياسية - {error}"
+          }
+        },
+        "updateButton": {
+          "label": "تحديث!"
+        },
+        "validation": {
+          "answerRequired": "الإجابة مطلوبة",
+          "categoryRequired": "مطلوب فئة واحدة على الأقل",
+          "keywordRequired": "الكلمات المفتاحية أو النمط مطلوب"
+        }
+      },
+      "intro": {
+        "addFirst": {
+          "message": "أضف أول إجابة قياسية لك أدناه!"
+        },
+        "description": "أدر الإجابات القياسية للأسئلة المحددة مسبقًا.\nملاحظة: حاليًا، الأسئلة المطروحة من Slack فقط يمكن أن تتلقى إجابات قياسية."
+      },
+      "newStandardAnswer": {
+        "label": "إجابة قياسية جديدة"
+      },
+      "search": {
+        "placeholder": "ابحث عن الإجابات القياسية بكلمة مفتاحية أو عبارة..."
+      },
+      "table": {
+        "answer": {
+          "header": "الإجابة"
+        },
+        "categories": {
+          "header": "الفئات"
+        },
+        "empty": {
+          "message": "لم يتم العثور على إجابات قياسية مطابقة..."
+        },
+        "keywords": {
+          "header": "الكلمات المفتاحية/النمط"
+        },
+        "matchRegex": {
+          "header": "مطابقة regex؟"
+        },
+        "matchRegexNo": {
+          "label": "لا"
+        },
+        "matchRegexYes": {
+          "label": "نعم"
+        },
+        "slackNote": {
+          "message": "تأكد من أنك أضفت الفئة إلى [بوت Slack](/admin/bots) المعني."
+        }
+      },
+      "toasts": {
+        "deleteFailed": {
+          "message": "فشل حذف الإجابة القياسية - {error}"
+        },
+        "deleted": {
+          "message": "تم حذف الإجابة القياسية {id}"
+        }
+      }
+    },
     "status": {
       "badges": {
         "canceled": "ملغاة",
@@ -5795,6 +7064,142 @@
       },
       "webVersion": {
         "label": "إصدار الويب: "
+      }
+    },
+    "theme": {
+      "announcement": {
+        "description": "اعرض إعلان نظام دائمًا يمكن للمستخدمين إغلاقه.",
+        "header": {
+          "placeholder": "أضف إعلانًا"
+        },
+        "label": "إعلان النظام"
+      },
+      "announcementPopup": {
+        "description": "اعرض هذا الإشعار أيضًا كنافذة منبثقة بملء الشاشة عند الزيارة الأولى لجميع المستخدمين. استخدمه بحذر.",
+        "label": "إشعار منبثق عند الزيارة الأولى"
+      },
+      "appName": {
+        "description": "سيظهر هذا الاسم في جميع أنحاء التطبيق وسيحل محل \"Onyx\" في الواجهة.",
+        "label": "اسم عرض التطبيق"
+      },
+      "branding": {
+        "description": "أزل عبارة \"powered by Onyx\" وغيرها من عناصر علامة Onyx التجارية في التطبيق.",
+        "enterpriseTooltip": "إخفاء علامة Onyx التجارية هو ميزة في خطة Enterprise.",
+        "label": "إخفاء علامة Onyx التجارية"
+      },
+      "chatFooter": {
+        "description": "أضف محتوى ماركداون لإخلاء المسؤولية أو معلومات إضافية.",
+        "label": "نص تذييل الدردشة"
+      },
+      "chatHeader": {
+        "label": "نص ترويسة الدردشة"
+      },
+      "consent": {
+        "description": "اطلب من المستخدم قراءة الإشعار والموافقة عليه قبل الوصول إلى التطبيق.",
+        "label": "طلب الموافقة على الإشعار"
+      },
+      "consentPrompt": {
+        "label": "نص الموافقة على الإشعار"
+      },
+      "firstVisit": {
+        "description": "اعرض نافذة منبثقة لمرة واحدة للمستخدمين الجدد عند زيارتهم الأولى.",
+        "label": "عرض إشعار الزيارة الأولى"
+      },
+      "greeting": {
+        "description": "أضف رسالة قصيرة إلى الصفحة الرئيسية.",
+        "label": "رسالة الترحيب"
+      },
+      "helpLink": {
+        "description": "أضف رابط مساعدة مخصصًا في قائمة المستخدم بالإضافة إلى وثائق Onyx.",
+        "enterpriseTooltip": "رابط المساعدة المخصص هو ميزة في خطة Enterprise.",
+        "label": "رابط مساعدة مخصص"
+      },
+      "helpLinkLabel": {
+        "label": "تسمية رابط المساعدة المخصص",
+        "placeholder": "تسمية الرابط"
+      },
+      "loginSubtitle": {
+        "description": "استبدل الشعار النصي أسفل عنوان الترحيب في صفحة تسجيل الدخول.",
+        "label": "العنوان الفرعي لصفحة تسجيل الدخول"
+      },
+      "logo": {
+        "label": "شعار التطبيق",
+        "updateButton": {
+          "label": "تحديث"
+        }
+      },
+      "logoStyle": {
+        "both": {
+          "label": "الشعار والاسم",
+          "tooltip": "اعرض شعار تطبيقك واسمه معًا."
+        },
+        "description": "اختر ما يظهر في أعلى الشريط الجانبي. تصبح الخيارات متاحة بمجرد إضافة شعار أو اسم تطبيق.",
+        "label": "نمط عرض الشعار",
+        "logoOnly": {
+          "disabledTooltip": "ارفع شعارًا لتفعيل هذا الخيار.",
+          "label": "الشعار فقط",
+          "tooltip": "اعرض شعار تطبيقك فقط."
+        },
+        "nameOnly": {
+          "disabledTooltip": "أدخل اسم تطبيق لتفعيل هذا الخيار.",
+          "label": "الاسم فقط",
+          "tooltip": "اعرض اسم تطبيقك فقط."
+        }
+      },
+      "markdownContent": {
+        "placeholder": "أضف محتوى ماركداون"
+      },
+      "noticeContent": {
+        "label": "محتوى الإشعار"
+      },
+      "noticeHeader": {
+        "label": "ترويسة الإشعار"
+      },
+      "page": {
+        "announcementClearFailed": {
+          "message": "فشل مسح الإعلان."
+        },
+        "announcementSaveFailed": {
+          "message": "فشل حفظ الإعلان."
+        },
+        "applyButton": {
+          "label": "تطبيق التغييرات"
+        },
+        "applying": {
+          "label": "جارٍ التطبيق..."
+        },
+        "description": "خصص كيفية ظهور التطبيق للمستخدمين في مؤسستك.",
+        "logoUploadFailed": {
+          "message": "فشل رفع الشعار. {error}"
+        },
+        "saveSuccess": {
+          "message": "تم حفظ إعدادات المظهر بنجاح!"
+        },
+        "settingsSaveFailed": {
+          "message": "فشل تحديث الإعدادات. {error}"
+        },
+        "validation": {
+          "consentPromptRequired": "نص الموافقة على الإشعار مطلوب",
+          "invalidUrl": "يجب أن يكون عنوان URL صالحًا",
+          "maxChars": "{count} حرفًا كحد أقصى",
+          "noticeContentRequired": "محتوى الإشعار مطلوب",
+          "noticeHeaderRequired": "ترويسة الإشعار مطلوبة",
+          "urlRequiredWithLabel": "عنوان URL مطلوب عند تعيين تسمية"
+        }
+      },
+      "preview": {
+        "chatFooter": {
+          "placeholder": "محتوى تذييل الدردشة"
+        },
+        "chatHeader": {
+          "placeholder": "محتوى ترويسة الدردشة"
+        },
+        "greeting": {
+          "placeholder": "مرحبًا بك في Acme Chat"
+        },
+        "logo": {
+          "alt": "الشعار"
+        }
       }
     },
     "tokenRateLimits": {
@@ -6059,6 +7464,9 @@
             "label": "الإنفاق"
           }
         }
+      },
+      "page": {
+        "description": "راقب إنفاق مساحة العمل وراجع الاستخدام حسب المستخدم."
       },
       "spendByUser": {
         "columns": {
@@ -6656,6 +8064,204 @@
         "tooltip": "عرض إحصاءات الوكيل"
       }
     },
+    "editor": {
+      "actions": {
+        "codeInterpreter": {
+          "description": "أنشئ التعليمات البرمجية وشغّلها.",
+          "title": "مفسر التعليمات البرمجية"
+        },
+        "codingAgent": {
+          "description": "افحص مستودع GitHub وأجب عن الأسئلة المتعلقة بكوده.",
+          "title": "وكيل البرمجة"
+        },
+        "description": "الأدوات والقدرات المتاحة لهذا الوكيل لاستخدامها.",
+        "imageGeneration": {
+          "description": "أنشئ الصور وعالجها باستخدام أدوات مدعومة بالذكاء الاصطناعي.",
+          "title": "توليد الصور",
+          "unavailable": {
+            "tooltip": "يتطلب توليد الصور نموذجًا مهيأً. إذا كان لديك وصول، فقم بإعداد نموذج ضمن الإعدادات > توليد الصور، أو اطلب من المسؤول."
+          }
+        },
+        "openUrl": {
+          "description": "اجلب المحتوى من عناوين URL على الويب واقرأه.",
+          "title": "فتح عنوان URL"
+        },
+        "title": "الإجراءات",
+        "webSearch": {
+          "description": "ابحث في الويب عن معلومات فورية ونتائج محدثة.",
+          "title": "البحث على الويب"
+        }
+      },
+      "advanced": {
+        "description": "اضبط موجهات الوكيل ومعرفته بدقة.",
+        "overwritePrompt": {
+          "suffix": "(غير موصى به)",
+          "title": "استبدال موجه النظام"
+        },
+        "reminders": {
+          "description": "أضف تذكيرًا موجزًا إلى رسائل الموجه. استخدم هذا لتذكير الوكيل إذا وجدت أنه يميل إلى نسيان تعليمات معينة مع تقدم المحادثة. يجب أن يكون موجزًا وألا يتعارض مع رسائل المستخدم.",
+          "placeholder": "تذكر، أريد منك دائمًا تنسيق ردك كقائمة مرقمة.",
+          "title": "التذكيرات"
+        },
+        "title": "خيارات متقدمة"
+      },
+      "avatar": {
+        "edit": {
+          "label": "تعديل"
+        },
+        "uploadImage": {
+          "label": "رفع صورة"
+        }
+      },
+      "delete": {
+        "button": {
+          "label": "حذف الوكيل"
+        },
+        "description": "لن يتمكن أي شخص يستخدم هذا الوكيل من الوصول إليه بعد الآن.",
+        "title": "حذف هذا الوكيل"
+      },
+      "deleteModal": {
+        "body": {
+          "confirm": "هل أنت متأكد من رغبتك في حذف هذا الوكيل؟",
+          "warning": "لن يتمكن أي شخص يستخدم هذا الوكيل من الوصول إليه بعد الآن. لا يمكن التراجع عن الحذف."
+        },
+        "title": "حذف الوكيل"
+      },
+      "filesModal": {
+        "description": "جميع الملفات المحددة لهذا الوكيل",
+        "placeholderName": "ملف {id}",
+        "title": "ملفات المستخدم"
+      },
+      "general": {
+        "avatar": {
+          "title": "الصورة الرمزية للوكيل"
+        },
+        "descriptionField": {
+          "placeholder": "ماذا يفعل هذا الوكيل؟",
+          "title": "الوصف"
+        },
+        "name": {
+          "placeholder": "سمِّ وكيلك",
+          "title": "الاسم"
+        }
+      },
+      "header": {
+        "cancel": {
+          "label": "إلغاء"
+        },
+        "create": {
+          "label": "إنشاء"
+        },
+        "createTitle": "إنشاء وكيل",
+        "editTitle": "تعديل الوكيل",
+        "save": {
+          "label": "حفظ"
+        }
+      },
+      "mcp": {
+        "noAccess": {
+          "tooltip": "لم يعد لديك وصول إلى خادم MCP هذا. سيتم الاحتفاظ بأدواته الحالية."
+        },
+        "searchTools": {
+          "placeholder": "البحث عن أدوات..."
+        }
+      },
+      "page": {
+        "ariaLabel": "صفحة محرر الوكلاء"
+      },
+      "prompts": {
+        "instructions": {
+          "description": "أضف تعليمات لتخصيص استجابة هذا الوكيل.",
+          "placeholder": "فكر خطوة بخطوة وأظهر الاستدلال في المشكلات المعقدة. استخدم أمثلة محددة. أكّد على بنود العمل واترك فراغات ليملأها الإنسان عند وجود مجهول. استخدم نبرة مهذبة ومتحمسة.",
+          "title": "التعليمات"
+        },
+        "starters": {
+          "description": "رسائل نموذجية تساعد المستخدمين على فهم ما يمكن لهذا الوكيل فعله وكيفية التفاعل معه بفعالية.",
+          "title": "بادئات المحادثة"
+        }
+      },
+      "saveTooltip": {
+        "fixErrors": "يرجى إصلاح الأخطاء في النموذج قبل الحفظ.",
+        "noChanges": "لم يتم إجراء أي تغييرات.",
+        "saving": "جارٍ حفظ التغييرات...",
+        "uploading": "يرجى الانتظار حتى انتهاء رفع الملفات."
+      },
+      "share": {
+        "feature": {
+          "description": "اعرض هذا الوكيل في أعلى قائمة استكشاف الوكلاء وثبّته تلقائيًا في الشريط الجانبي للمستخدمين الجدد الذين لديهم وصول.",
+          "privateNotice": {
+            "title": "هذا الوكيل خاص بك وسيظهر مميزًا لك وحدك."
+          },
+          "title": "تمييز هذا الوكيل",
+          "unlistedWarning": {
+            "title": "هذا الوكيل غير مدرج ولن يظهر في قائمة المميزين."
+          }
+        },
+        "labels": {
+          "description": "أضف تسميات وفئات لمساعدة الآخرين على اكتشاف هذا الوكيل بشكل أفضل.",
+          "placeholder": "إضافة تسميات..."
+        },
+        "share": {
+          "button": {
+            "label": "مشاركة"
+          },
+          "description": "مع مستخدمين آخرين أو مجموعات أو الجميع في مؤسستك.",
+          "title": "مشاركة هذا الوكيل"
+        },
+        "title": "مشاركة الوكيل"
+      },
+      "starters": {
+        "examples": {
+          "engineeringGoals": "اجمع قائمة بأهدافنا الهندسية لهذا الربع.",
+          "overview": "أعطني نظرة عامة على بعض المستندات.",
+          "salesReport": "اعثر على أحدث تقرير مبيعات.",
+          "todayGoals": "لخّص أهدافي لليوم."
+        },
+        "placeholder": "أدخل بادئ محادثة..."
+      },
+      "suffix": {
+        "optional": "اختياري"
+      },
+      "toasts": {
+        "createFailed": "فشل إنشاء الوكيل - {detail}",
+        "created": "تم إنشاء الوكيل \"{name}\" بنجاح",
+        "deleteFailed": "فشل حذف الوكيل: {error}",
+        "deleted": "تم حذف الوكيل بنجاح",
+        "genericError": "حدث خطأ: {error}",
+        "noResponse": "لم يتم تلقي استجابة",
+        "sharingFailed": "تم إنشاء الوكيل، لكن فشلت المشاركة: {error}",
+        "toggleListedFailed": "فشل تبديل حالة الظهور",
+        "unknownDetail": "خطأ غير معروف",
+        "unknownError": "خطأ غير معروف",
+        "updateFailed": "فشل تحديث الوكيل - {detail}",
+        "updated": "تم تحديث الوكيل \"{name}\" بنجاح"
+      },
+      "validation": {
+        "cutoffInFuture": "يجب أن يكون تاريخ انقطاع المعرفة اليوم أو قبله.",
+        "descriptionMax": "يجب ألا يتجاوز الوصف {max} حرفًا",
+        "nameRequired": "اسم الوكيل مطلوب.",
+        "starterMax": "يجب ألا يتجاوز بادئ المحادثة {max} حرفًا"
+      },
+      "visibility": {
+        "relist": {
+          "button": {
+            "label": "إعادة إدراج الوكيل"
+          },
+          "description": "يظهر الوكلاء المعاد إدراجهم في قائمة استكشاف الوكلاء مجددًا.",
+          "title": "إعادة إدراج هذا الوكيل"
+        },
+        "unlist": {
+          "button": {
+            "label": "إلغاء إدراج الوكيل"
+          },
+          "description": "الوكلاء غير المدرجين لا يظهرون في قائمة استكشاف الوكلاء لكن يظل الوصول إليهم ممكنًا.",
+          "title": "إلغاء إدراج هذا الوكيل"
+        }
+      },
+      "warnings": {
+        "openUrl": "قد يؤدي البحث على الويب دون القدرة على فتح عناوين URL إلى نتائج ويب أسوأ بكثير."
+      }
+    },
     "filters": {
       "actions": {
         "all": {
@@ -6838,6 +8444,47 @@
         }
       }
     },
+    "navigation": {
+      "countSeparator": {
+        "label": "{count, plural, one {وكيل} other {وكلاء}}"
+      },
+      "empty": {
+        "description": "لم يتم العثور على وكلاء"
+      },
+      "header": {
+        "description": "خصص سلوك الذكاء الاصطناعي ومعرفته لحالات الاستخدام الخاصة بك وبفريقك.",
+        "title": "الوكلاء"
+      },
+      "newAgent": {
+        "label": "وكيل جديد",
+        "noPermission": {
+          "tooltip": "ليست لديك صلاحية إنشاء الوكلاء. تواصل مع المسؤول لطلب الوصول."
+        }
+      },
+      "page": {
+        "ariaLabel": "صفحة الوكلاء"
+      },
+      "search": {
+        "placeholder": "البحث عن وكلاء..."
+      },
+      "sections": {
+        "all": {
+          "title": "جميع الوكلاء"
+        },
+        "featured": {
+          "description": "مختارة من فريقك",
+          "title": "الوكلاء المميزون"
+        }
+      },
+      "tabs": {
+        "all": {
+          "label": "جميع الوكلاء"
+        },
+        "your": {
+          "label": "وكلاؤك"
+        }
+      }
+    },
     "userVariables": {
       "insert": {
         "tooltip": "إدراج متغير مستخدم"
@@ -6845,6 +8492,12 @@
     }
   },
   "auth": {
+    "anonymous": {
+      "redirecting": {
+        "description": "يرجى الانتظار بينما نقوم بإعداد جلستك المجهولة.",
+        "title": "جارٍ إعادة توجيهك إلى صفحة الدردشة..."
+      }
+    },
     "createAccount": {
       "createOrgButton": {
         "label": "إنشاء مؤسسة جديدة"
@@ -6866,6 +8519,55 @@
       },
       "signInLink": {
         "label": "تسجيل الدخول"
+      }
+    },
+    "emailPasswordForm": {
+      "accountExists": {
+        "error": "يوجد حساب بالفعل بالبريد الإلكتروني المحدد."
+      },
+      "continueAsGuest": {
+        "label": "أو تابع كضيف"
+      },
+      "email": {
+        "label": "عنوان البريد الإلكتروني",
+        "placeholder": "email@yourcompany.com"
+      },
+      "forgotPassword": {
+        "link": "[هل نسيت كلمة المرور؟]({url})"
+      },
+      "invalidCredentials": {
+        "error": "البريد الإلكتروني أو كلمة المرور غير صالحة"
+      },
+      "noPassword": {
+        "error": "أنشئ حسابًا لتعيين كلمة مرور"
+      },
+      "password": {
+        "label": "كلمة المرور",
+        "placeholder": "كلمة المرور"
+      },
+      "passwordDigit": {
+        "error": "يجب أن تحتوي كلمة المرور على رقم واحد على الأقل"
+      },
+      "passwordLength": {
+        "error": "يجب أن تتكون كلمة المرور من {min}–{max} حرفًا"
+      },
+      "passwordLoginDisabled": {
+        "error": "تسجيل الدخول بكلمة المرور معطّل. سجّل الدخول باستخدام موفّر الهوية الخاص بك."
+      },
+      "passwordLowercase": {
+        "error": "يجب أن تحتوي كلمة المرور على حرف صغير واحد على الأقل"
+      },
+      "passwordRequirements": {
+        "label": "متطلبات كلمة المرور:"
+      },
+      "passwordSpecialChar": {
+        "error": "يجب أن تحتوي كلمة المرور على رمز خاص واحد على الأقل"
+      },
+      "passwordUppercase": {
+        "error": "يجب أن تحتوي كلمة المرور على حرف كبير واحد على الأقل"
+      },
+      "tooManyRequests": {
+        "error": "عدد كبير جدًا من الطلبات. يرجى المحاولة مرة أخرى لاحقًا."
       }
     },
     "error": {
@@ -6906,6 +8608,31 @@
         "description": "انقطاع مؤقت في نظام المصادقة"
       }
     },
+    "errorDisplay": {
+      "anonymousDisabled": {
+        "toast": "فريقك لم يفعّل الوصول المجهول."
+      },
+      "generic": {
+        "toast": "حدث خطأ."
+      }
+    },
+    "flowContainer": {
+      "createAccountLink": {
+        "label": "إنشاء حساب"
+      },
+      "logo": {
+        "alt": "الشعار"
+      },
+      "signInLink": {
+        "label": "تسجيل الدخول"
+      },
+      "signinPrompt": {
+        "text": "هل لديك حساب بالفعل؟"
+      },
+      "signupPrompt": {
+        "text": "جديد على {appName}؟"
+      }
+    },
     "forgotPassword": {
       "backToLoginLink": {
         "label": "[العودة إلى تسجيل الدخول](/auth/login)"
@@ -6938,7 +8665,8 @@
         "placeholder": "أدخل مفتاح API"
       },
       "emailField": {
-        "label": "البريد الإلكتروني"
+        "label": "البريد الإلكتروني",
+        "placeholder": "email@yourcompany.com"
       },
       "genericError": {
         "toast": "فشل انتحال هوية المستخدم"
@@ -6999,6 +8727,23 @@
         "label": "البريد الإلكتروني للعمل"
       }
     },
+    "passwordRequirements": {
+      "digit": {
+        "label": "يحتوي على رقم."
+      },
+      "length": {
+        "label": "{min}–{max} حرفًا"
+      },
+      "lowercase": {
+        "label": "يحتوي على حرف صغير."
+      },
+      "specialChar": {
+        "label": "يحتوي على رمز خاص."
+      },
+      "uppercase": {
+        "label": "يحتوي على حرف كبير."
+      }
+    },
     "resetPassword": {
       "backToLoginLink": {
         "label": "[العودة إلى تسجيل الدخول](/auth/login)"
@@ -7040,6 +8785,31 @@
       },
       "unexpectedError": {
         "toast": "حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى."
+      }
+    },
+    "sessionEnd": {
+      "expired": {
+        "message": "انتهت صلاحية جلستك. يرجى تسجيل الدخول مرة أخرى للمتابعة."
+      },
+      "loginButton": {
+        "label": "تسجيل الدخول"
+      },
+      "modal": {
+        "title": "لقد تم تسجيل خروجك"
+      },
+      "terminated": {
+        "message": "تم تسجيل الخروج من هذه الجلسة. يرجى تسجيل الدخول مرة أخرى للمتابعة."
+      },
+      "unrecognized": {
+        "message": "تم تسجيل خروجك بشكل غير متوقع. يرجى تسجيل الدخول مرة أخرى للمتابعة. إذا استمر حدوث ذلك، فاتصل بالمسؤول."
+      }
+    },
+    "signIn": {
+      "captchaTokenError": {
+        "toast": "لم تُرجع grecaptcha.execute أي رمز مميز"
+      },
+      "google": {
+        "label": "المتابعة باستخدام Google"
       }
     },
     "signup": {
@@ -8471,6 +10241,75 @@
         "tooltip": "تعديل هذا الإعداد غير مدعوم لهذا النموذج."
       }
     },
+    "nrf": {
+      "page": {
+        "filesFailed": {
+          "toast": "{count, plural, one {فشل الملف وتمت إزالته: {names}} other {فشلت الملفات وتمت إزالتها: {names}}}"
+        },
+        "loginModal": {
+          "loginButton": {
+            "label": "تسجيل الدخول"
+          },
+          "title": "مرحبًا بك في Onyx"
+        },
+        "noResubmitMessage": {
+          "toast": "لم يتم العثور على رسالة مرسلة سابقًا."
+        },
+        "settingsButton": {
+          "tooltip": "فتح الإعدادات"
+        },
+        "setupLlmButton": {
+          "label": "قم بإعداد LLM."
+        },
+        "turnOffModal": {
+          "cancelButton": {
+            "label": "إلغاء"
+          },
+          "confirmButton": {
+            "label": "إيقاف"
+          },
+          "description": "سترى صفحة علامة التبويب الجديدة الافتراضية لمتصفحك بدلًا من ذلك. يمكنك إعادة تشغيلها في أي وقت من إعدادات Onyx.",
+          "title": "هل تريد إيقاف صفحة علامة التبويب الجديدة من Onyx؟"
+        }
+      },
+      "settingsPanel": {
+        "backgroundNone": {
+          "label": "بدون"
+        },
+        "backgroundOption": {
+          "ariaLabel": "خلفية {label}"
+        },
+        "backgroundOptionSelected": {
+          "ariaLabel": "خلفية {label} (محددة)"
+        },
+        "backgroundSection": {
+          "title": "الخلفية"
+        },
+        "closeButton": {
+          "tooltip": "إغلاق الإعدادات"
+        },
+        "generalSection": {
+          "title": "عام"
+        },
+        "header": {
+          "title": "الإعدادات"
+        },
+        "newTabToggle": {
+          "label": "استخدام Onyx كصفحة علامة تبويب جديدة"
+        },
+        "themeToggle": {
+          "tooltip": "{mode, select, light {التبديل إلى المظهر الفاتح} other {التبديل إلى المظهر الداكن}}"
+        }
+      },
+      "sidePanelHeader": {
+        "newChatButton": {
+          "tooltip": "دردشة جديدة"
+        },
+        "openInOnyxButton": {
+          "tooltip": "فتح في Onyx"
+        }
+      }
+    },
     "popup": {
       "consentCheckbox": {
         "label": "مربع الموافقة"
@@ -8486,6 +10325,128 @@
       },
       "startButton": {
         "label": "ابدأ"
+      }
+    },
+    "projects": {
+      "chatItem": {
+        "lastMessage": {
+          "description": "آخر رسالة {time}"
+        },
+        "projectFallback": {
+          "label": "المشروع"
+        }
+      },
+      "contextPanel": {
+        "addFilesButton": {
+          "label": "إضافة ملفات"
+        },
+        "contextExceeded": {
+          "message": "يتجاوز هذا المشروع حدود سياق النموذج. ستبحث الجلسات تلقائيًا عن الملفات ذات الصلة أولاً قبل إنشاء الاستجابة."
+        },
+        "dropFiles": {
+          "message": "أسقط الملفات هنا لإضافتها إلى هذا المشروع"
+        },
+        "emptyFiles": {
+          "message": "أضف مستندات أو نصوصًا أو صورًا لاستخدامها في المشروع. السحب والإفلات مدعوم."
+        },
+        "fileCount": {
+          "description": "{count, plural, one {# ملف} other {# ملفات}}"
+        },
+        "fileCountOverflow": {
+          "description": "أكثر من 100 ملف"
+        },
+        "files": {
+          "description": "يمكن للمحادثات في هذا المشروع الوصول إلى هذه الملفات.",
+          "title": "الملفات"
+        },
+        "filesModal": {
+          "description": "يمكن للجلسات في هذا المشروع الوصول إلى الملفات هنا.",
+          "title": "ملفات المشروع"
+        },
+        "instructions": {
+          "emptyDescription": "أضف تعليمات لتخصيص الاستجابة في هذا المشروع.",
+          "title": "التعليمات"
+        },
+        "loadingProject": {
+          "label": "جارٍ تحميل المشروع..."
+        },
+        "setInstructionsButton": {
+          "label": "تعيين التعليمات"
+        },
+        "viewAll": {
+          "label": "عرض الكل"
+        },
+        "viewFiles": {
+          "label": "عرض الملفات"
+        }
+      },
+      "createModal": {
+        "cancelButton": {
+          "label": "إلغاء"
+        },
+        "createError": {
+          "toast": "فشل إنشاء المشروع {name}"
+        },
+        "description": "استخدم المشاريع لتنظيم ملفاتك ومحادثاتك في مكان واحد، وأضف تعليمات مخصصة للعمل الجاري.",
+        "name": {
+          "label": "اسم المشروع",
+          "placeholder": "على ماذا تعمل؟"
+        },
+        "nameRequired": {
+          "error": "اسم المشروع مطلوب"
+        },
+        "submitButton": {
+          "label": "إنشاء المشروع"
+        },
+        "title": "إنشاء مشروع جديد"
+      },
+      "foldedPopover": {
+        "empty": {
+          "title": "لم يتم العثور على مشاريع"
+        },
+        "search": {
+          "placeholder": "البحث في المشاريع..."
+        }
+      },
+      "folder": {
+        "collapse": {
+          "ariaLabel": "طي المشروع"
+        },
+        "delete": {
+          "label": "حذف المشروع"
+        },
+        "deleteModal": {
+          "confirmButton": {
+            "label": "حذف"
+          },
+          "message": "هل أنت متأكد من رغبتك في حذف هذا المشروع؟ لا يمكن التراجع عن هذا الإجراء.",
+          "title": "حذف المشروع"
+        },
+        "expand": {
+          "ariaLabel": "توسيع المشروع"
+        },
+        "rename": {
+          "label": "إعادة تسمية المشروع"
+        }
+      },
+      "sessionList": {
+        "empty": {
+          "message": "لا توجد محادثات بعد."
+        },
+        "recentChats": {
+          "title": "المحادثات الأخيرة"
+        }
+      },
+      "uploads": {
+        "failed": {
+          "toast": "فشل رفع الملفات"
+        },
+        "oversized": {
+          "toast": "{count, plural, one {تم تخطي # ملف كبير الحجم} other {تم تخطي # ملفات كبيرة الحجم}} (>{max} ميغابايت): {names}"
+        },
+        "rejected": {
+          "toast": "لم يتم رفع بعض الملفات. {details}"
+        }
       }
     },
     "sharedChat": {
@@ -8518,6 +10479,1773 @@
       },
       "incognito": {
         "title": "أنت في وضع التخفي"
+      }
+    }
+  },
+  "common": {
+    "adminChrome": {
+      "openSidebar": {
+        "ariaLabel": "فتح الشريط الجانبي"
+      },
+      "paymentReminder": {
+        "billingButton": {
+          "label": "تحديث معلومات الفوترة"
+        },
+        "text": "**تحذير:** تنتهي فترتك التجريبية خلال أقل من 5 أيام ولم تتم إضافة أي طريقة دفع."
+      }
+    },
+    "agentAvatar": {
+      "image": {
+        "altFallback": "الصورة الرمزية للوكيل"
+      },
+      "logo": {
+        "alt": "الشعار"
+      }
+    },
+    "attachment": {
+      "document": {
+        "label": "مستند"
+      },
+      "expandButton": {
+        "ariaLabel": "توسيع المستند"
+      }
+    },
+    "backButton": {
+      "label": "رجوع"
+    },
+    "chatBackgrounds": {
+      "clouds": {
+        "label": "غيوم"
+      },
+      "hills": {
+        "label": "تلال"
+      },
+      "mountains": {
+        "label": "جبال"
+      },
+      "night": {
+        "label": "ليل"
+      },
+      "none": {
+        "label": "بدون"
+      },
+      "plant": {
+        "label": "نباتات"
+      }
+    },
+    "colorSwatch": {
+      "sample": {
+        "text": "اب"
+      }
+    },
+    "comboBox": {
+      "createOption": {
+        "ariaLabel": "{prefix} \"{value}\"",
+        "defaultPrefix": "إنشاء"
+      },
+      "dropdown": {
+        "closeAriaLabel": "إغلاق القائمة المنسدلة",
+        "openAriaLabel": "فتح القائمة المنسدلة"
+      },
+      "options": {
+        "empty": "لم يتم العثور على خيارات"
+      },
+      "separator": {
+        "label": "خيارات أخرى"
+      }
+    },
+    "commandMenu": {
+      "closeButton": {
+        "ariaLabel": "إغلاق القائمة"
+      },
+      "dialog": {
+        "title": "قائمة الأوامر"
+      },
+      "options": {
+        "ariaLabel": "خيارات قائمة الأوامر"
+      },
+      "search": {
+        "placeholder": "بحث..."
+      }
+    },
+    "connectorMultiSelect": {
+      "allSelected": {
+        "description": "تم تحديد جميع الموصّلات المتاحة. أزل موصّلات أدناه لإضافة موصّلات أخرى.",
+        "placeholder": "تم تحديد جميع الموصّلات"
+      },
+      "documentSetHint": {
+        "description": "جميع المستندات المفهرسة بواسطة الموصّلات المحددة ستكون جزءًا من مجموعة المستندات هذه."
+      },
+      "noMatches": {
+        "text": "لم يتم العثور على موصّلات مطابقة"
+      },
+      "noMoreConnectors": {
+        "text": "لا توجد موصّلات أخرى متاحة"
+      },
+      "noPrivateConnectors": {
+        "text": "لا توجد موصّلات خاصة متاحة. أنشئ موصّلًا خاصًا أولًا."
+      },
+      "noneSelected": {
+        "text": "لم يتم تحديد أي موصّلات. ابحث وحدد الموصّلات أعلاه."
+      },
+      "removeConnector": {
+        "tooltip": "إزالة الموصّل"
+      },
+      "search": {
+        "placeholder": "البحث عن الموصّلات..."
+      }
+    },
+    "datePicker": {
+      "selectDate": {
+        "label": "تحديد التاريخ"
+      },
+      "todayButton": {
+        "label": "اليوم"
+      }
+    },
+    "dateRange": {
+      "anyTime": {
+        "text": "أي وقت..."
+      },
+      "chooseCustom": {
+        "ariaLabel": "اختيار نطاق مخصص"
+      },
+      "clearButton": {
+        "ariaLabel": "مسح"
+      },
+      "custom": {
+        "label": "مخصص"
+      },
+      "customRange": {
+        "ariaLabel": "نطاق مخصص: من {from} إلى {to}"
+      },
+      "date": {
+        "label": "التاريخ"
+      },
+      "group": {
+        "ariaLabel": "النطاق الزمني"
+      },
+      "preset": {
+        "oneDay": "يوم",
+        "oneMonth": "شهر",
+        "sevenDays": "7 أيام",
+        "threeMonths": "3 أشهر"
+      }
+    },
+    "deleteButton": {
+      "button": {
+        "tooltip": "حذف"
+      }
+    },
+    "documentDisplay": {
+      "contextDocs": {
+        "text": "{count, plural, one {# مستند سياق} other {# مستندات سياق}}"
+      },
+      "openDocument": {
+        "ariaLabel": "فتح المستند: {title}"
+      },
+      "question": {
+        "title": "سؤال"
+      },
+      "subqueries": {
+        "text": "{count, plural, one {# استعلام فرعي} other {# استعلامات فرعية}}"
+      },
+      "updated": {
+        "text": "آخر تحديث {date}"
+      }
+    },
+    "dropdown": {
+      "default": {
+        "label": "افتراضي"
+      },
+      "selectOption": {
+        "placeholder": "اختر خيارًا..."
+      }
+    },
+    "editable": {
+      "edit": {
+        "ariaLabel": "تعديل"
+      },
+      "rename": {
+        "ariaLabel": "إعادة تسمية"
+      },
+      "save": {
+        "ariaLabel": "حفظ"
+      }
+    },
+    "errorPages": {
+      "accessRestricted": {
+        "billingAdminHint": {
+          "text": "إذا كنت المسؤول، فيرجى زيارة صفحة <billingLink>فوترة المسؤول</billingLink> من أجل {hadLicense, select, true {تجديد} other {تفعيل}} ترخيصك، أو التسجيل عبر Stripe، أو التواصل مع <supportLink>support@onyx.app</supportLink> للمساعدة في الفوترة."
+        },
+        "heading": {
+          "title": "الوصول مقيّد"
+        },
+        "licenseLapse": {
+          "description": "تم تعليق وصولك إلى Onyx مؤقتًا بسبب انقطاع ترخيصك."
+        },
+        "licenseRequired": {
+          "description": "يلزم وجود ترخيص لاستخدام Onyx. بياناتك محمية وستكون متاحة بمجرد تفعيل الترخيص."
+        },
+        "logoutButton": {
+          "label": "تسجيل الخروج"
+        },
+        "manageSubscription": {
+          "description": "إذا كنت مسؤولًا، فيمكنك إدارة اشتراكك بالنقر على الزر أدناه. أما المستخدمون الآخرون، فيرجى التواصل مع المسؤول لديكم لمعالجة هذا الأمر."
+        },
+        "obtainLicense": {
+          "description": "للبدء، يرجى التواصل مع مسؤول النظام للحصول على ترخيص."
+        },
+        "renewLicense": {
+          "description": "لاستعادة وصولك ومواصلة استخدام Onyx، يرجى التواصل مع مسؤول النظام لتجديد الترخيص."
+        },
+        "resubscribeButton": {
+          "label": "إعادة الاشتراك",
+          "loading": "جارٍ التحميل..."
+        },
+        "resubscribeError": {
+          "text": "حدث خطأ أثناء فتح صفحة إعادة الاشتراك. يرجى المحاولة مرة أخرى لاحقًا."
+        },
+        "seatLimit": {
+          "description": "تجاوزت مؤسستك عدد المقاعد المرخّصة. سيظل الوصول مقيّدًا حتى يتم تقليل عدد المستخدمين أو ترقية الترخيص."
+        },
+        "seatLimitAdminHint": {
+          "text": "إذا كنت مسؤولًا، فيمكنك إدارة المستخدمين من صفحة <userLink>إدارة المستخدمين</userLink> أو ترقية ترخيصك من صفحة <billingLink>فوترة المسؤول</billingLink>."
+        },
+        "seatLimitWithCounts": {
+          "description": "تجاوزت مؤسستك عدد المقاعد المرخّصة ({used} مستخدمين / {seats} مقاعد). سيظل الوصول مقيّدًا حتى يتم تقليل عدد المستخدمين أو ترقية الترخيص."
+        },
+        "subscriptionLapse": {
+          "description": "تم تعليق وصولك إلى Onyx مؤقتًا بسبب انقطاع اشتراكك."
+        },
+        "updatePayment": {
+          "description": "لاستعادة وصولك ومواصلة الاستفادة من ميزات Onyx القوية، يرجى تحديث معلومات الدفع الخاصة بك."
+        }
+      },
+      "configError": {
+        "adminHint": {
+          "text": "إذا كنت مسؤولًا، فيرجى مراجعة <docsLink>مستنداتنا</docsLink> لمعرفة خطوات الإعداد الصحيحة. إذا كنت مستخدمًا، فيرجى التواصل مع المسؤول لديك للمساعدة."
+        },
+        "heading": {
+          "description": "يبدو أنه حدثت مشكلة في تحميل إعدادات Onyx. قد يكون السبب مشكلة في الإعداد أو إعدادًا غير مكتمل.",
+          "title": "واجهنا مشكلة"
+        }
+      },
+      "maintenance": {
+        "apology": {
+          "description": "نعتذر عن أي إزعاج قد يسببه ذلك ونقدّر صبركم."
+        },
+        "checkBack": {
+          "description": "Onyx حاليًا في فترة صيانة. يرجى المحاولة مرة أخرى بعد بضع دقائق."
+        },
+        "heading": {
+          "title": "الصيانة جارية"
+        }
+      },
+      "needHelp": {
+        "text": "هل تحتاج إلى مساعدة؟ انضم إلى <discordLink>مجتمعنا على Discord</discordLink> للحصول على الدعم."
+      }
+    },
+    "errors": {
+      "unknown": {
+        "message": "خطأ غير معروف"
+      }
+    },
+    "expandableContent": {
+      "downloadButton": {
+        "tooltip": "تنزيل الملف"
+      },
+      "file": {
+        "untitledFallback": "بدون عنوان"
+      },
+      "fullScreenButton": {
+        "tooltip": "ملء الشاشة"
+      },
+      "hideButton": {
+        "tooltip": "إخفاء"
+      },
+      "minimizeButton": {
+        "tooltip": "تصغير"
+      }
+    },
+    "expandableText": {
+      "copyButton": {
+        "tooltip": "نسخ"
+      },
+      "downloadButton": {
+        "tooltip": "تنزيل"
+      },
+      "lineCount": {
+        "label": "{count, plural, one {سطر واحد} other {# أسطر}}"
+      },
+      "size": {
+        "bytes": "{count} بايت",
+        "kilobytes": "{size} كيلوبايت"
+      },
+      "viewFullButton": {
+        "tooltip": "عرض النص الكامل"
+      }
+    },
+    "federatedConnectorSelector": {
+      "allSelected": {
+        "placeholder": "تم تحديد جميع الموصّلات الموحّدة"
+      },
+      "entitiesConfigured": {
+        "tooltip": "تم إعداد الكيانات"
+      },
+      "noMatches": {
+        "text": "لم يتم العثور على موصّلات موحّدة مطابقة"
+      },
+      "noMoreConnectors": {
+        "text": "لا توجد موصّلات موحّدة أخرى متاحة"
+      },
+      "noneSelected": {
+        "text": "لم يتم تحديد أي موصّلات موحّدة. ابحث وحدد الموصّلات أعلاه."
+      },
+      "realtimeSearchHint": {
+        "description": "سيتم البحث في مستندات الموصّلات الموحّدة المحددة في الوقت الفعلي أثناء الاستعلامات."
+      },
+      "removeConnector": {
+        "tooltip": "إزالة الموصّل"
+      },
+      "search": {
+        "placeholder": "البحث عن الموصّلات الموحّدة..."
+      }
+    },
+    "field": {
+      "arrayField": {
+        "addButton": "إضافة جديد"
+      },
+      "booleanField": {
+        "optionalLabel": "{label} (اختياري)"
+      },
+      "fileValidation": {
+        "noTypeDefinition": "لم يتم العثور على تعريف نوع الملف للحقل: {name}",
+        "selectionError": "خطأ في تحديد الملف",
+        "unknownError": "خطأ غير معروف",
+        "validating": "جارٍ التحقق من الملف...",
+        "validationError": "خطأ في التحقق"
+      },
+      "markdown": {
+        "editorLabel": "Markdown",
+        "placeholder": "أدخل نص Markdown هنا...",
+        "previewTab": "معاينة",
+        "writeTab": "كتابة"
+      },
+      "optionalIndicator": {
+        "text": "(اختياري)"
+      },
+      "passwordToggle": {
+        "hideAriaLabel": "إخفاء كلمة المرور",
+        "showAriaLabel": "إظهار كلمة المرور"
+      },
+      "selector": {
+        "noneOption": "بلا",
+        "placeholder": "اختر..."
+      }
+    },
+    "filePicker": {
+      "allRecentFilesButton": {
+        "title": "جميع الملفات الأخيرة"
+      },
+      "recentFiles": {
+        "title": "الملفات الأخيرة"
+      },
+      "recentFilesModal": {
+        "description": "ارفع ملفات أو اختر من ملفاتك الأخيرة."
+      },
+      "toasts": {
+        "associatedAssistants": "لا يمكن حذف الملف. إنه مرتبط بالمساعدين التاليين: {assistants}",
+        "associatedBoth": "لا يمكن حذف الملف. إنه مرتبط بالمشاريع: {projects} والمساعدين: {assistants}",
+        "associatedProjects": "لا يمكن حذف الملف. إنه مرتبط بالمشاريع التالية: {projects}",
+        "deleteFailed": "فشل حذف الملف. يرجى المحاولة مرة أخرى.",
+        "deleteSuccess": "تم حذف الملف بنجاح"
+      },
+      "uploadFiles": {
+        "description": "ارفع ملفًا من جهازك",
+        "title": "رفع الملفات"
+      },
+      "viewFileButton": {
+        "tooltip": "عرض الملف"
+      }
+    },
+    "fileTile": {
+      "file": {
+        "fallback": "الملف"
+      },
+      "open": {
+        "ariaLabel": "فتح {title}"
+      },
+      "removeButton": {
+        "label": "إزالة"
+      }
+    },
+    "filters": {
+      "clearButton": {
+        "ariaLabel": "مسح"
+      }
+    },
+    "formField": {
+      "optional": {
+        "label": "(اختياري)"
+      },
+      "required": {
+        "label": "(مطلوب)"
+      }
+    },
+    "genericMultiSelect": {
+      "loadFailed": {
+        "text": "فشل تحميل {label}. يرجى المحاولة مرة أخرى."
+      },
+      "search": {
+        "placeholder": "بحث..."
+      }
+    },
+    "groupsMultiSelect": {
+      "noGroups": {
+        "emptyMessage": "لا توجد مجموعات مستخدمين متاحة. يرجى إنشاء مجموعة مستخدمين أولًا."
+      },
+      "userGroups": {
+        "label": "مجموعات المستخدمين",
+        "subtext": "حدد مجموعات المستخدمين التي يمكنها الوصول إلى هذا المورد"
+      }
+    },
+    "icons": {
+      "logo": {
+        "alt": "الشعار"
+      }
+    },
+    "initializingLoader": {
+      "initializing": {
+        "text": "جارٍ تهيئة {appName}"
+      }
+    },
+    "inputElement": {
+      "removeButton": {
+        "tooltip": "إزالة"
+      }
+    },
+    "inputFile": {
+      "attachButton": {
+        "ariaLabel": "إرفاق ملف"
+      },
+      "clearButton": {
+        "ariaLabel": "مسح الملف"
+      }
+    },
+    "inputImage": {
+      "dropRejected": {
+        "fallback": "تم رفض الملف"
+      },
+      "editButton": {
+        "ariaLabel": "تعديل الصورة"
+      },
+      "editOverlay": {
+        "label": "تعديل"
+      },
+      "image": {
+        "altFallback": "صورة"
+      },
+      "removeButton": {
+        "ariaLabel": "إزالة الصورة"
+      },
+      "uploadButton": {
+        "ariaLabel": "رفع صورة"
+      }
+    },
+    "inputSelect": {
+      "placeholder": {
+        "fallback": "حدد خيارًا"
+      }
+    },
+    "isPublicSelector": {
+      "assignGroups": {
+        "label": "إسناد وصول المجموعات إلى {objectName} هذا",
+        "scopedSubtext": "حدد مجموعة أو أكثر من المجموعات التي تديرها لمنح حق الوصول إلى {objectName} هذا",
+        "visibleSubtext": "سيكون {objectName} هذا مرئيًا ومتاحًا للمجموعات المحددة أدناه"
+      },
+      "loading": {
+        "text": "جارٍ التحميل..."
+      },
+      "makePublic": {
+        "label": "هل تريد جعل {objectName} هذا عامًا؟",
+        "subtext": "إذا تم التفعيل، فسيكون {objectName} هذا متاحًا لـ<b>جميع {publicToWhom}</b>. وإلا، فلن يتمكن من الوصول إليه سوى <b>المسؤولين</b> و<b>{publicToWhom}</b> الذين مُنحوا حق الوصول إلى {objectName} هذا صراحةً (مثلًا عبر مجموعة مستخدمين)."
+      },
+      "publicDisabled": {
+        "message": "{objectName} هذا عام ومتاح لجميع المستخدمين."
+      },
+      "usersFallback": {
+        "text": "المستخدمون"
+      }
+    },
+    "keyValue": {
+      "addButton": {
+        "ariaLabel": "إضافة زوج {keyTitle} و{valueTitle}",
+        "label": "إضافة سطر"
+      },
+      "empty": {
+        "title": "لم تتم إضافة أي عناصر بعد."
+      },
+      "error": {
+        "duplicateKey": "مفتاح مكرر",
+        "duplicateSummary": "{count, plural, one {تم العثور على مفتاح مكرر واحد} other {تم العثور على # من المفاتيح المكررة}}",
+        "emptyKey": "لا يمكن ترك المفتاح فارغًا",
+        "emptySummary": "{count, plural, one {تم العثور على مفتاح فارغ واحد} other {تم العثور على # من المفاتيح الفارغة}}",
+        "validationSummary": "{count, plural, one {تم العثور على خطأ تحقق واحد} other {تم العثور على # من أخطاء التحقق}}"
+      },
+      "group": {
+        "ariaLabel": "أزواج {keyTitle} و{valueTitle}"
+      },
+      "input": {
+        "ariaLabel": "{label} {index}"
+      },
+      "keyColumn": {
+        "title": "المفتاح"
+      },
+      "pair": {
+        "fallbackLabel": "مفتاح-قيمة"
+      },
+      "removeButton": {
+        "ariaLabel": "إزالة زوج {label} رقم {index}"
+      },
+      "valueColumn": {
+        "title": "القيمة"
+      }
+    },
+    "logo": {
+      "image": {
+        "alt": "الشعار"
+      },
+      "poweredBy": {
+        "label": "مدعوم من Onyx"
+      }
+    },
+    "nonSelectableConnectors": {
+      "unavailable": {
+        "label": "الموصّلات غير المتاحة:"
+      }
+    },
+    "oauthCallback": {
+      "authorizationFailed": {
+        "description": "تم إلغاء التفويض أو فشل. يرجى المحاولة مرة أخرى.",
+        "title": "فشل التفويض"
+      },
+      "backButton": {
+        "label": "العودة إلى الدردشة"
+      },
+      "completeFailed": {
+        "message": "فشل إكمال التفويض"
+      },
+      "genericError": {
+        "description": "حدث خطأ أثناء عملية OAuth. يرجى المحاولة مرة أخرى.",
+        "title": "حدث خطأ ما"
+      },
+      "invalidRequest": {
+        "description": "كان طلب التفويض غير مكتمل. يرجى المحاولة مرة أخرى.",
+        "title": "طلب غير صالح"
+      },
+      "loadingHint": {
+        "text": "قد يستغرق هذا بضع لحظات..."
+      },
+      "processing": {
+        "description": "يرجى الانتظار بينما نكمل الإعداد.",
+        "title": "جارٍ المعالجة..."
+      },
+      "redirecting": {
+        "text": "إعادة التوجيه خلال {count, plural, one {# ثانية} other {# ثوانٍ}}..."
+      },
+      "serviceFallback": {
+        "text": "الخدمة"
+      },
+      "success": {
+        "detailsTemplate": "اكتمل تفويض {serviceName} بنجاح.",
+        "title": "تم بنجاح!"
+      }
+    },
+    "spreadsheet": {
+      "error": {
+        "description": "قد يكون جدول البيانات تالفًا أو تعذر تحميله بشكل صحيح.",
+        "title": "خطأ في تحميل جدول البيانات"
+      },
+      "preview": {
+        "truncated": "المعاينة مقتطعة. نزّل الملف لرؤية جميع الصفوف.",
+        "unavailable": "يتعذر معاينة جدول البيانات هذا."
+      },
+      "sheet": {
+        "defaultName": "الورقة 1",
+        "empty": "هذه الورقة فارغة.",
+        "tooLarge": "هذه الورقة كبيرة جدًا بحيث يتعذر معاينتها. نزّل الملف لعرضها."
+      }
+    }
+  },
+  "craft": {
+    "agentSwitcher": {
+      "mainAgent": {
+        "label": "الوكيل الرئيسي"
+      },
+      "subagentFallback": {
+        "label": "وكيل فرعي"
+      },
+      "switch": {
+        "ariaLabel": "تبديل الوكيل"
+      }
+    },
+    "approvals": {
+      "approveOnce": {
+        "ariaLabel": "الموافقة على هذا الإجراء مرة واحدة",
+        "button": "الموافقة مرة واحدة"
+      },
+      "approveSession": {
+        "button": "الموافقة للجلسة",
+        "tooltip": "الموافقة على الإجراءات المطابقة لهذه الجلسة"
+      },
+      "details": {
+        "hideAriaLabel": "إخفاء التفاصيل",
+        "showAriaLabel": "عرض التفاصيل"
+      },
+      "header": {
+        "required": "الموافقة مطلوبة: {headline}"
+      },
+      "headline": {
+        "multiAction": "{count, plural, one {# إجراء} other {# إجراءات}} في {app}",
+        "singleAction": "{action} في {app}"
+      },
+      "payload": {
+        "empty": {
+          "label": "لا توجد بيانات."
+        },
+        "showLess": {
+          "button": "عرض أقل"
+        },
+        "showMore": {
+          "button": "عرض المزيد"
+        }
+      },
+      "reject": {
+        "ariaLabel": "رفض هذا الإجراء",
+        "button": "رفض"
+      },
+      "status": {
+        "approved": "تمت الموافقة",
+        "rejected": "مرفوض"
+      },
+      "submit": {
+        "errorFallback": "فشل إرسال القرار"
+      }
+    },
+    "apps": {
+      "addCatalog": {
+        "addButton": "إضافة",
+        "createButton": "إنشاء",
+        "customApp": {
+          "description": "بيانات الاعتماد والوصول إلى الشبكة لتكاملك الخاص.",
+          "title": "تطبيق مخصص"
+        },
+        "mcpHint": {
+          "label": "هل تحتاج إلى خادم MCP بدلًا من ذلك؟ قم بتوصيله في «الإجراءات»، ثم فعّله لـ Craft هنا.",
+          "openActionsButton": "فتح الإجراءات"
+        },
+        "modal": {
+          "description": "أتح تكاملًا لمؤسستك بأكملها. يأتي المزوّدون المدمجون بإجراءات تعلّم وكيل Craft كيفية استخدامها؛ ولا يتم إدراج المزوّدين الذين تم إعدادهم بالفعل.",
+          "title": "إضافة تطبيق"
+        }
+      },
+      "associatedSkills": {
+        "associateAriaLabel": "ربط {name}",
+        "associateButton": "ربط مهارة موجودة",
+        "create": {
+          "github": {
+            "description": "إذا كانت مهاراتك على GitHub، فاستوردها أولًا من صفحة المهارات، ثم اربطها بهذا التطبيق.",
+            "label": "استيراد من GitHub"
+          },
+          "scratch": {
+            "description": "اكتب التعليمات وأضف الملفات الداعمة.",
+            "label": "البدء من الصفر"
+          },
+          "upload": {
+            "description": "استورد ملف SKILL.md أو ملف ZIP أو مجلد مهارة.",
+            "label": "رفع مهارة"
+          }
+        },
+        "createSkillButton": "إنشاء مهارة",
+        "description": "تمنح المهارات Craft تعليمات لاستخدام هذا التطبيق. وهي على مستوى المؤسسة؛ قد يحتاج المستخدمون إلى تفعيلها جميعًا ليعمل التطبيق بشكل صحيح.",
+        "editButton": "تعديل",
+        "empty": {
+          "label": "لم يتم العثور على مهارات قابلة للتعديل."
+        },
+        "invalidTag": "غير صالحة",
+        "loading": {
+          "label": "جارٍ تحميل المهارات…"
+        },
+        "noneAssociated": {
+          "label": "لا توجد مهارات مرتبطة بعد. يمكن حفظ هذا التطبيق واستخدامه دون مهارة."
+        },
+        "promote": {
+          "cancelButton": "إلغاء",
+          "confirmButton": "إتاحتها على مستوى المؤسسة",
+          "description": "يجب أن تكون المهارات المرتبطة بالتطبيق متاحة للجميع. يُطبَّق هذا التغيير عند حفظ التطبيق.",
+          "title": "هل تريد جعل «{name}» متاحة على مستوى المؤسسة؟"
+        },
+        "search": {
+          "placeholder": "البحث في المهارات القابلة للتعديل..."
+        },
+        "title": "المهارات المرتبطة",
+        "unavailable": {
+          "duplicateName": "توجد مهارة باسم «{name}» مرتبطة بالفعل.",
+          "invalid": "مهارة غير صالحة: أصلحها قبل ربطها.",
+          "otherApp": "مرتبطة بالفعل بالتطبيق «{name}»."
+        },
+        "unlink": {
+          "button": "إلغاء الربط",
+          "cancelButton": "إلغاء",
+          "confirm": "هل تريد إلغاء ربط «{name}» بهذا التطبيق؟"
+        },
+        "unlinkAriaLabel": "إلغاء ربط {name}",
+        "viewButton": "عرض"
+      },
+      "configureProvider": {
+        "addButton": "إضافة",
+        "addTitle": "إضافة {name}",
+        "editTitle": "تعديل {name}",
+        "emptyPolicies": "لا توجد إجراءات لإعدادها لدى هذا المزوّد.",
+        "fields": {
+          "name": {
+            "description": "تسمية لهذا الاتصال. استخدم اسمًا مميزًا عند إضافة عدة نسخ من المزوّد نفسه (مثل \"{name} — الهندسة\").",
+            "label": "الاسم"
+          }
+        },
+        "managedDescription": "مقدَّم من Onyx: قم بإعداد ما يمكن للوكيل فعله.",
+        "managedNote": "هذا التطبيق مقدَّم من Onyx، وتُدار بيانات الاعتماد نيابةً عنك. اختر أدناه ما يمكن للوكيل فعله. يقوم المستخدمون بتوصيله من صفحة التطبيقات.",
+        "saveButton": "حفظ"
+      },
+      "customApp": {
+        "cancelButton": "إلغاء",
+        "createButton": "إنشاء",
+        "createDescription": "قم بإعداد كيفية وصول وكيل الخروج إلى هذا التطبيق ومصادقته. لا يُشترط وجود مهارة.",
+        "createTitle": "إنشاء تطبيق مخصص",
+        "creatingButton": "جارٍ الإنشاء…",
+        "disabled": {
+          "nameMissing": "أدخل اسمًا قبل إنشاء هذا التطبيق المخصص.",
+          "patternMissing": "أضف نمط URL واحدًا على الأقل. اكتب النمط واضغط Enter.",
+          "pristine": "قم بإجراء تغيير قبل الحفظ.",
+          "saving": "الحفظ قيد التنفيذ بالفعل."
+        },
+        "editDescription": "حدّث إعدادات البوابة وأدر المهارات المرتبطة.",
+        "editTitle": "تعديل {name}",
+        "errors": {
+          "saveFailedTitle": "تعذّر الحفظ"
+        },
+        "fields": {
+          "headers": {
+            "addButton": "إضافة ترويسة",
+            "description": "اختياري: ترويسات تُحقن في الطلبات الصادرة. استخدم '{placeholder}' للقيم التي يوفّرها المستخدم (أو المؤسسة أدناه)، مثل \"Bearer '{api_key}'\". اتركه فارغًا للسماح بأنماط الوجهة دون حقن بيانات اعتماد.",
+            "keyTitle": "الترويسة",
+            "label": "نمط بيانات الاعتماد في الترويسة",
+            "valueTitle": "القيمة"
+          },
+          "name": {
+            "label": "الاسم",
+            "placeholder": "تطبيقي المخصص"
+          },
+          "orgCredentials": {
+            "addButton": "إضافة بيانات اعتماد",
+            "description": "اختياري: قيم تملؤها مؤسستك مسبقًا لكل مستخدم. اتركه فارغًا للتطبيقات التي يقدّم فيها كل مستخدم بيانات اعتماده الخاصة.",
+            "keyTitle": "مفتاح بيانات الاعتماد",
+            "label": "بيانات اعتماد المؤسسة",
+            "valueTitle": "القيمة"
+          },
+          "upstreamPatterns": {
+            "description": "عناوين URL الصادرة التي يمكن للوكيل حقن بيانات الاعتماد فيها. استخدم * لمطابقة أي أحرف (مثل https://api.example.com/* لتغطية كل المسارات على ذلك المضيف). يجب أن يكون المضيف حرفيًا، دون أحرف بدل قبل الشرطة المائلة الأولى. اكتب النمط واضغط Enter.",
+            "label": "أنماط URL الخارجية"
+          }
+        },
+        "saveButton": "حفظ",
+        "savingButton": "جارٍ الحفظ…"
+      },
+      "errors": {
+        "duplicateSkillName": "التطبيق «{appName}» لديه بالفعل مهارة مرتبطة باسم «{skillName}». ارفع مهارة باسم مختلف."
+      },
+      "mcpPolicy": {
+        "description": "قم بإعداد ما يمكن لوكيل Craft فعله بأدوات خادم MCP هذا.",
+        "emptyPolicies": "لا توجد أدوات مفعّلة على هذا الخادم. فعّل الأدوات أولًا من صفحة إجراءات MCP.",
+        "saveButton": "حفظ",
+        "title": "تعديل {name}"
+      },
+      "oauthCallback": {
+        "backButton": "العودة إلى تطبيقاتي",
+        "description": "جارٍ إتمام مصافحة OAuth…",
+        "errors": {
+          "cancelled": "تم إلغاء OAuth أو رفضه: {reason}",
+          "failed": "فشل الاتصال.",
+          "missingParams": "الرمز (code) أو الحالة (state) مفقودان في عنوان URL للاستدعاء."
+        },
+        "exchanging": {
+          "label": "جارٍ تبادل رمز التفويض…"
+        },
+        "success": {
+          "label": "تم الاتصال. جارٍ إعادة التوجيه إلى تطبيقاتك…"
+        },
+        "title": "جارٍ توصيل تطبيقك"
+      },
+      "page": {
+        "connectButton": "اتصال",
+        "connectingButton": "جارٍ إعادة التوجيه…",
+        "disconnectButton": "قطع الاتصال",
+        "empty": {
+          "description": "لم يتم إعداد أي تطبيقات أو خوادم MCP لمؤسستك بعد.",
+          "title": "لا يوجد ما يمكن توصيله بعد"
+        },
+        "errors": {
+          "disconnectFailed": "فشل قطع الاتصال",
+          "startAuthFailed": "فشل بدء التفويض"
+        },
+        "header": {
+          "description": "قم بتوصيل الأدوات التي يمكن لـ Onyx Craft استخدامها كسياق أثناء عمله.",
+          "manageButton": "إدارة التطبيقات",
+          "searchPlaceholder": "البحث في التطبيقات...",
+          "title": "التطبيقات"
+        },
+        "kinds": {
+          "app": {
+            "blurb": "تكاملات تدعمها Onyx مباشرةً. يأتي كل منها بمهارات تعلّم Craft كيفية استخدامه، ابدأ من هنا.",
+            "empty": "لم يتم إعداد أي تطبيقات لمؤسستك بعد.",
+            "emptyTitle": "لا توجد تطبيقات بعد",
+            "tabLabel": "التطبيقات · {count}"
+          },
+          "mcp": {
+            "blurb": "خوادم أتاحها مسؤول لـ Craft. استخدمها عندما لا يكون التطبيق الذي تحتاجه مدرجًا ضمن التطبيقات، أو عندما تريد تحديدًا أدوات MCP الخاصة بخادم ما.",
+            "empty": "لم تتم إتاحة أي خوادم MCP لـ Craft.",
+            "emptyTitle": "لا توجد خوادم MCP بعد",
+            "tabLabel": "خوادم MCP · {count}"
+          }
+        },
+        "loading": {
+          "label": "جارٍ التحميل…"
+        },
+        "reviewSkillsButton": "مراجعة المهارات",
+        "search": {
+          "noMatchesDescription": "لا شيء هنا يطابق بحثك.",
+          "noMatchesTitle": "لا توجد نتائج مطابقة"
+        },
+        "status": {
+          "connected": "متصل",
+          "connectedNeedsSkills": "متصل · ليست كل المهارات المرتبطة مفعّلة",
+          "notAvailable": "غير متاح لحسابك، اسأل أحد المسؤولين",
+          "skillWarningAriaLabel": "مطلوب إعداد المهارات",
+          "skillWarningTooltip": "ليست كل المهارات المرتبطة مفعّلة. قد لا يعمل هذا التطبيق بشكل صحيح."
+        }
+      },
+      "policyEditor": {
+        "advanced": {
+          "description": "عيّن سياسة لكل إجراء على حدة.",
+          "title": "متقدم"
+        },
+        "cancelButton": "إلغاء",
+        "loading": {
+          "label": "جارٍ التحميل…"
+        },
+        "permissions": {
+          "askOption": "اسأل",
+          "autoApproveOption": "موافقة تلقائية",
+          "customOption": "مخصص",
+          "description": "اختر ما يمكن للوكيل فعله. «اسأل» يطلب موافقتك في الدردشة قبل تشغيل كل إجراء؛ و«الموافقة التلقائية» يشغّله دون سؤال. استخدم «متقدم» لتعيين سياسة لكل إجراء.",
+          "title": "الأذونات"
+        },
+        "savingButton": "جارٍ الحفظ…"
+      },
+      "skillsStep": {
+        "description": "اختياري: اربط مهارات موجودة أو أنشئ واحدة لهذا التطبيق.",
+        "errors": {
+          "saveFailedTitle": "تعذّر الحفظ"
+        },
+        "saveButton": "حفظ المهارات",
+        "savingButton": "جارٍ الحفظ…",
+        "skipButton": "التخطي الآن",
+        "title": "إضافة مهارات إلى {name}"
+      },
+      "userCredentials": {
+        "cancelButton": "إلغاء",
+        "connectButton": "اتصال",
+        "connectingButton": "جارٍ الاتصال…",
+        "description": "أدخل بيانات اعتمادك لتفويض هذا التطبيق لحسابك.",
+        "errors": {
+          "connectFailedTitle": "تعذّر الاتصال"
+        },
+        "title": "توصيل {name}"
+      }
+    },
+    "artifactsTab": {
+      "download": {
+        "button": "تنزيل"
+      },
+      "empty": {
+        "description": "ستظهر ملفات الإخراج وتطبيقات الويب هنا",
+        "title": "لا توجد مخرجات بعد"
+      },
+      "nextjsApp": {
+        "label": "تطبيق Next.js"
+      },
+      "openItem": {
+        "ariaLabel": "فتح {name}"
+      },
+      "toggleItem": {
+        "ariaLabel": "تبديل {name}"
+      }
+    },
+    "chatPanel": {
+      "input": {
+        "continuePlaceholder": "تابع المحادثة...",
+        "scheduledRunPlaceholder": "التشغيل المجدول قيد التقدم...",
+        "subagentPlaceholder": "بدّل إلى الوكيل الرئيسي لإرسال رسالة"
+      },
+      "openSidebar": {
+        "ariaLabel": "فتح الشريط الجانبي"
+      },
+      "outputPanel": {
+        "closeTooltip": "إغلاق لوحة الإخراج",
+        "openTooltip": "فتح لوحة الإخراج"
+      },
+      "responseStopped": {
+        "label": "تم إيقاف الاستجابة"
+      },
+      "scrollToBottom": {
+        "label": "الانتقال إلى الأسفل"
+      },
+      "toast": {
+        "operationWait": "يرجى الانتظار حتى تكتمل العملية الحالية.",
+        "sandboxWait": "يرجى الانتظار حتى تتم تهيئة بيئة الاختبار",
+        "scheduledRunWait": "يرجى الانتظار حتى ينتهي التشغيل المجدول."
+      }
+    },
+    "compaction": {
+      "marker": {
+        "label": "تم ضغط السياق لتوفير مساحة"
+      }
+    },
+    "connectDataBanner": {
+      "cta": {
+        "label": "اربط بياناتك"
+      }
+    },
+    "craftingLoader": {
+      "messages": {
+        "craftingWorkspace": "جارٍ صنع مساحة عملك...",
+        "enchanting": "جارٍ السحر بالتعويذات...",
+        "gamemode": "/gamemode 1",
+        "gatheringResources": "جارٍ جمع الموارد...",
+        "miningDependencies": "جارٍ التنقيب عن التبعيات...",
+        "placingBlocks": "جارٍ وضع المكعبات...",
+        "punchingWood": "جارٍ تكسير الخشب...",
+        "smeltingCode": "جارٍ صهر الشيفرة...",
+        "worldGenerated": "اكتمل إنشاء العالم..."
+      },
+      "tagline": {
+        "label": "جارٍ صنع فكرتك الرائعة التالية..."
+      }
+    },
+    "debugLogs": {
+      "clear": {
+        "tooltip": "مسح"
+      },
+      "copy": {
+        "doneTooltip": "تم النسخ",
+        "tooltip": "نسخ الظاهر"
+      },
+      "empty": {
+        "noLines": "لا توجد أسطر بعد.",
+        "noMatch": "لا توجد أسطر تطابق \"{filter}\"",
+        "waiting": "في انتظار أول سطر من السجل…"
+      },
+      "error": {
+        "endpointDisabled": "نقطة نهاية التصحيح معطلة (ENABLE_OPENCODE_DEBUGGING=false)",
+        "http": "HTTP {status}",
+        "noSandbox": "لا توجد بيئة اختبار قيد التشغيل لمتابعة سجلاتها"
+      },
+      "filter": {
+        "placeholder": "تصفية…"
+      },
+      "lines": {
+        "count": "{count, plural, one {# سطر} other {# أسطر}}",
+        "filteredCount": "{visible, number} / {total, number} سطر"
+      },
+      "modal": {
+        "description": "متابعة مباشرة لحاوية بيئة الاختبار — للتطوير/التصحيح فقط.",
+        "title": "سجلات حاوية Opencode"
+      },
+      "newSincePaused": {
+        "button": "+{count, number} جديد · انتقال"
+      },
+      "open": {
+        "button": "سجلات الحاوية"
+      },
+      "status": {
+        "closed": "مغلق",
+        "connecting": "جارٍ الاتصال",
+        "error": "خطأ",
+        "paused": "متوقف مؤقتًا",
+        "streaming": "بث مباشر"
+      }
+    },
+    "entryMenu": {
+      "addFiles": {
+        "label": "إضافة ملفات أو صور"
+      },
+      "apps": {
+        "label": "التطبيقات"
+      },
+      "browseSkills": {
+        "label": "تصفح المهارات"
+      },
+      "connect": {
+        "hint": "ربط"
+      },
+      "connectApp": {
+        "label": "ربط تطبيق"
+      },
+      "library": {
+        "label": "المكتبة"
+      },
+      "manageLibrary": {
+        "label": "إدارة المكتبة…"
+      },
+      "mcpServer": {
+        "description": "خادم MCP"
+      },
+      "skills": {
+        "label": "المهارات"
+      }
+    },
+    "filePreview": {
+      "cannotPreview": {
+        "title": "تعذّرت معاينة الملف"
+      },
+      "error": {
+        "inline": "خطأ: {message}",
+        "title": "خطأ في تحميل الملف"
+      },
+      "loading": {
+        "label": "جارٍ تحميل الملف..."
+      },
+      "noContent": {
+        "label": "لا يوجد محتوى"
+      }
+    },
+    "filesTab": {
+      "empty": {
+        "description": "ستظهر الملفات المُنشأة أثناء البناء هنا",
+        "title": "لا توجد ملفات بعد"
+      },
+      "emptyDirectory": {
+        "label": "لا توجد ملفات في هذا المجلد"
+      },
+      "error": {
+        "title": "خطأ في تحميل الملفات"
+      },
+      "loading": {
+        "label": "جارٍ تحميل الملفات..."
+      },
+      "loadingChildren": {
+        "label": "جارٍ التحميل..."
+      },
+      "preparing": {
+        "description": "جارٍ إعداد بيئة التطوير الخاصة بك",
+        "title": "جارٍ تجهيز بيئة الاختبار..."
+      }
+    },
+    "imagePreview": {
+      "error": {
+        "description": "تعذّر عرض الصورة",
+        "title": "فشل تحميل الصورة"
+      },
+      "loading": {
+        "label": "جارٍ تحميل الصورة..."
+      },
+      "preview": {
+        "ariaLabel": "معاينة {name}"
+      }
+    },
+    "inputBar": {
+      "entryInfo": {
+        "connected": "متصل",
+        "connectionRequired": "الاتصال مطلوب"
+      },
+      "plusMenu": {
+        "tooltip": "إضافة ملفات أو مهارات"
+      }
+    },
+    "interruptHint": {
+      "stopping": {
+        "label": "جارٍ الإيقاف…"
+      },
+      "toInterrupt": {
+        "label": "للمقاطعة"
+      }
+    },
+    "intro": {
+      "beta": {
+        "badge": "تجريبي"
+      },
+      "returnHome": {
+        "button": "العودة إلى الرئيسية"
+      },
+      "startCrafting": {
+        "button": "ابدأ الصنع"
+      },
+      "wordmark": {
+        "label": "Craft"
+      }
+    },
+    "llmPopover": {
+      "noModels": {
+        "label": "لم يتم العثور على نماذج"
+      },
+      "recommended": {
+        "label": "موصى به"
+      },
+      "recommendedOnly": {
+        "label": "النماذج الموصى بها فقط"
+      }
+    },
+    "onboarding": {
+      "livingMap": {
+        "examplePrompts": {
+          "flakyRetryTest": "«أصلح اختبار إعادة المحاولة غير المستقر وافتح طلب دمج (PR).»",
+          "launchDeck": "«أنشئ عرض إطلاق الربيع من الموجز الموجود على Drive.»",
+          "rfpSecurity": "«املأ طلب العروض (RFP) الموجود في بريدي بتفاصيل الأمان لدينا.»",
+          "slackToLinear": "«اختصر نقاشنا على Slack في تذاكر Linear.»",
+          "vendorSpend": "«لخّص إنفاقنا على المورّدين للربع الثاني في مستند على Drive.»"
+        },
+        "modal": {
+          "backButton": "رجوع",
+          "ctaButton": "ضع Craft في العمل",
+          "nextButton": "التالي",
+          "title": "تعرّف على Craft"
+        },
+        "outputs": {
+          "ariaLabel": "الناتج: {name}",
+          "githubPr": {
+            "caption": "مفتوح للمراجعة",
+            "label": "طلب دمج على GitHub"
+          },
+          "googleDoc": {
+            "caption": "محفوظ في Drive الخاص بك",
+            "label": "مستند Google"
+          },
+          "liveApp": {
+            "caption": "مستضاف، شاركه عبر رابط",
+            "label": "تطبيق مباشر"
+          }
+        },
+        "prompt": {
+          "label": "موجّهك"
+        },
+        "schedule": {
+          "ariaLabel": "مهمة مجدولة: تعيد تشغيل هذا الموجّه وفق مؤقّت",
+          "caption": "يعمل أثناء غيابك",
+          "label": "كل يوم اثنين، 8:00"
+        },
+        "sources": {
+          "connectedAriaLabel": "مصدر متصل: {name}",
+          "yourFiles": {
+            "ariaLabel": "ملفاتك المرفوعة",
+            "label": "ملفاتك"
+          }
+        },
+        "stages": {
+          "constellation": {
+            "caption": "انقر على أي جزء من الخريطة لإعادة زيارته.",
+            "title": "هذا هو Craft. حان دورك."
+          },
+          "machine": {
+            "caption": "يقرأ ما يمكنك رؤيته. وليس أسرارك أبدًا.",
+            "title": "يعمل على جهازه الخاص."
+          },
+          "output": {
+            "caption": "عند الطلب، أو وفق جدول أثناء غيابك.",
+            "title": "يخرج العمل مكتملًا."
+          },
+          "prompt": {
+            "caption": "صف النتيجة المطلوبة، وسيتولى Craft الباقي.",
+            "title": "أوكل إلى Craft عملًا حقيقيًا."
+          }
+        },
+        "team": {
+          "ariaLabel": "فريقك: رابط واحد يشارك عمل Craft",
+          "caption": "رابط واحد يكفي للمشاركة",
+          "label": "فريقك"
+        },
+        "workspace": {
+          "approvalPill": "في انتظار موافقتك",
+          "label": "مساحة عمل Craft",
+          "sandboxBadge": "بيئة معزولة (Sandbox)"
+        }
+      },
+      "llmLocked": {
+        "backToChatButton": "العودة إلى الدردشة",
+        "description": "يحتاج Onyx Craft إلى مزوّد نماذج، ولا يمكن إعداده إلا من قبل المسؤولين. اطلب من المسؤول توصيل Anthropic أو OpenAI أو OpenRouter.",
+        "title": "مطلوب مزوّد LLM"
+      },
+      "llmSetup": {
+        "description": "يحتاج وكلاء Craft إلى مزوّد نماذج للبناء.",
+        "title": "توصيل مزوّد نماذج"
+      },
+      "welcomeMock": {
+        "input": {
+          "placeholder": "حلّل بياناتي وأنشئ لوحة معلومات..."
+        },
+        "modelPill": {
+          "label": "Claude Opus 4.8"
+        },
+        "promptPills": {
+          "engineering": "الهندسة",
+          "marketing": "التسويق",
+          "product": "المنتج",
+          "sales": "المبيعات"
+        }
+      }
+    },
+    "outputPanel": {
+      "artifactsEmpty": {
+        "tooltip": "ابدأ ببناء شيء ما لرؤية المخرجات!"
+      },
+      "devServerStarting": {
+        "tooltip": "جارٍ تشغيل خادم التطوير..."
+      },
+      "noWebapp": {
+        "label": "لا يوجد تطبيق ويب في هذه الجلسة بعد"
+      }
+    },
+    "pdfPreview": {
+      "error": {
+        "description": "تعذّر تحميل ملف PDF.",
+        "title": "تعذّرت معاينة ملف PDF"
+      },
+      "frame": {
+        "title": "معاينة PDF"
+      },
+      "loading": {
+        "label": "جارٍ تحميل PDF..."
+      }
+    },
+    "pptxPreview": {
+      "converting": {
+        "label": "جارٍ تحويل العرض التقديمي..."
+      },
+      "empty": {
+        "label": "لا توجد شرائح في هذا العرض التقديمي"
+      },
+      "error": {
+        "title": "تعذّرت معاينة العرض التقديمي"
+      },
+      "loadingSlide": {
+        "label": "جارٍ تحميل الشريحة..."
+      },
+      "slide": {
+        "counter": "الشريحة {current} من {total}"
+      }
+    },
+    "previewTab": {
+      "empty": {
+        "description": "ستظهر معاينة مباشرة هنا بمجرد تشغيل تطبيق ويب."
+      },
+      "frame": {
+        "title": "معاينة تطبيق الويب"
+      },
+      "starting": {
+        "description": "جارٍ تثبيت التبعيات وبدء التشغيل.",
+        "title": "جارٍ تشغيل خادم التطوير..."
+      }
+    },
+    "redirect": {
+      "redirecting": {
+        "label": "جارٍ إعادة التوجيه..."
+      }
+    },
+    "sandboxAsleep": {
+      "dismiss": {
+        "button": "تجاهل"
+      },
+      "modal": {
+        "description": "دخلت في وضع السكون بعد فترة من عدم النشاط. عملك محفوظ. أيقظها للمتابعة.",
+        "title": "دخلت بيئة الاختبار في وضع السكون"
+      },
+      "wake": {
+        "button": "إيقاظ بيئة الاختبار"
+      }
+    },
+    "scheduledRun": {
+      "badge": {
+        "label": "مجدولة"
+      },
+      "startedAt": {
+        "label": "بدأت {time}"
+      },
+      "status": {
+        "awaitingApproval": "هذا التشغيل المجدول في انتظار الموافقة. ستُتاح رسائل المتابعة بعد استئنافه وانتهائه.",
+        "running": "لا يزال هذا التشغيل المجدول قيد التنفيذ. ستُتاح رسائل المتابعة عند انتهائه.",
+        "startedBy": "بدأت هذه الجلسة بواسطة المهمة المجدولة {task} في {time}."
+      },
+      "viewTask": {
+        "ariaLabel": "عرض المهمة المجدولة {task}. {status}",
+        "label": "عرض المهمة"
+      }
+    },
+    "setupCard": {
+      "appFallback": {
+        "label": "تطبيق خارجي {id}"
+      },
+      "connect": {
+        "title": "ربط {app}"
+      },
+      "connected": {
+        "title": "تم ربط {app}."
+      },
+      "error": {
+        "generic": "حدث خطأ ما. يرجى المحاولة مرة أخرى.",
+        "notConfigurable": "لا يمكن إعداد هذا التطبيق من هنا.",
+        "popupBlocked": "تعذّر فتح نافذة الإعداد. اسمح بالنوافذ المنبثقة وحاول مرة أخرى.",
+        "startFailed": "فشل بدء الإعداد"
+      },
+      "loading": {
+        "button": "جارٍ التحميل…"
+      },
+      "notNow": {
+        "button": "ليس الآن"
+      },
+      "reason": {
+        "fallback": "يحتاج الوكيل إلى {app} لمتابعة هذه المهمة."
+      },
+      "skipped": {
+        "title": "تم تخطي ربط {app}."
+      },
+      "waiting": {
+        "button": "في الانتظار…"
+      }
+    },
+    "share": {
+      "copyLink": {
+        "ariaLabel": "نسخ الرابط"
+      },
+      "organization": {
+        "description": "يمكن لأي شخص مسجّل الدخول إلى Onyx لديك عرض هذا التطبيق.",
+        "label": "المؤسسة"
+      },
+      "private": {
+        "description": "أنت وحدك من يمكنه عرض هذا التطبيق.",
+        "label": "خاص"
+      },
+      "share": {
+        "label": "مشاركة"
+      },
+      "shared": {
+        "label": "تمت المشاركة"
+      },
+      "trigger": {
+        "ariaLabel": "مشاركة تطبيق الويب"
+      }
+    },
+    "sideBar": {
+      "apps": {
+        "label": "التطبيقات"
+      },
+      "backToChat": {
+        "label": "العودة إلى الدردشة"
+      },
+      "delete": {
+        "label": "حذف"
+      },
+      "deleteModal": {
+        "body": "سيؤدي هذا إلى إزالة جلسة Craft وجميع بياناتها نهائيًا. لا يمكن التراجع عن هذا الإجراء.",
+        "confirm": "حذف",
+        "deleting": "جارٍ الحذف...",
+        "title": "هل تريد حذف \"{title}\"؟"
+      },
+      "newSession": {
+        "label": "ابدأ الصنع"
+      },
+      "rename": {
+        "label": "إعادة تسمية"
+      },
+      "scheduledTasks": {
+        "label": "المهام المجدولة"
+      },
+      "sessions": {
+        "empty": "ابدأ البناء! سيظهر سجل الجلسات هنا.",
+        "title": "الجلسات"
+      },
+      "skills": {
+        "label": "المهارات"
+      },
+      "toast": {
+        "deleteFailed": "فشل حذف الجلسة",
+        "deleted": "تم حذف \"{title}\"."
+      }
+    },
+    "skillsStale": {
+      "notice": {
+        "description": "أعد تحميل هذه الجلسة لتطبيق أحدث المهارات وصلاحيات التطبيقات.",
+        "title": "تغيّرت قدرات وكيلك"
+      },
+      "reload": {
+        "button": "إعادة تحميل",
+        "inProgress": "جارٍ إعادة التحميل…"
+      },
+      "toast": {
+        "reloadFailed": "فشل إعادة تحميل الجلسة"
+      }
+    },
+    "subagentView": {
+      "notFound": {
+        "label": "لم يتم العثور على الوكيل الفرعي."
+      }
+    },
+    "suggestedPrompts": {
+      "close": {
+        "ariaLabel": "إغلاق الاقتراحات"
+      }
+    },
+    "tasks": {
+      "detailPage": {
+        "confirmDelete": {
+          "deleteButton": "حذف",
+          "deletingButton": "جارٍ الحذف...",
+          "description": "سيوقف هذا عمليات التشغيل المستقبلية ويزيل المهمة. سيتم الاحتفاظ بسجل التشغيل السابق (والجلسات المرتبطة به) لأغراض التدقيق.",
+          "title": "هل تريد حذف «{name}»؟"
+        },
+        "deleteButton": "حذف",
+        "editButton": "تعديل",
+        "fallbackTitle": "المهمة المجدولة",
+        "loadFailed": "فشل تحميل المهمة المجدولة.",
+        "missingTaskId": "معرّف المهمة مفقود.",
+        "pauseButton": "إيقاف مؤقت",
+        "resumeButton": "استئناف",
+        "runNowButton": "التشغيل الآن",
+        "toasts": {
+          "deleteFailed": "فشل حذف المهمة",
+          "deleted": "تم حذف «{name}».",
+          "paused": "تم إيقاف المهمة مؤقتًا.",
+          "resumed": "تم استئناف المهمة.",
+          "runQueued": "تمت إضافة تشغيل «{name}» إلى قائمة الانتظار.",
+          "runStartFailed": "فشل بدء التشغيل",
+          "statusUpdateFailed": "فشل تحديث الحالة"
+        }
+      },
+      "editPage": {
+        "fallbackTitle": "تعديل المهمة المجدولة",
+        "loadFailed": "فشل تحميل المهمة المجدولة.",
+        "missingTaskId": "معرّف المهمة مفقود.",
+        "title": "تعديل «{name}»"
+      },
+      "form": {
+        "cancelButton": "إلغاء",
+        "errors": {
+          "nameRequired": "الاسم مطلوب.",
+          "promptRequired": "الموجّه مطلوب."
+        },
+        "fields": {
+          "name": {
+            "label": "الاسم",
+            "placeholder": "مثال: ملخص أسبوعي لتصعيدات العملاء"
+          },
+          "preApproval": {
+            "description": "يمكن لـ Craft استخدام التطبيقات وخوادم MCP المحددة دون توقف عندما تعمل هذه المهمة دون إشراف. طلبات الموافقة الأخرى توقف التشغيل مؤقتًا وقد تتسبب في فشله.",
+            "label": "التطبيقات وخوادم MCP الموافَق عليها مسبقًا"
+          },
+          "prompt": {
+            "description": "تُرسل هذه الرسالة إلى Craft في كل مرة تنطلق فيها المهمة.",
+            "label": "الموجّه",
+            "placeholder": "صف ما ينبغي أن يفعله Craft في كل تشغيل..."
+          },
+          "schedule": {
+            "label": "الجدولة"
+          }
+        },
+        "saveAndRunNowButton": "الحفظ والتشغيل الآن",
+        "saveButton": "حفظ",
+        "saveChangesButton": "حفظ التغييرات",
+        "savingLabel": "جارٍ الحفظ...",
+        "toasts": {
+          "created": "تم إنشاء المهمة المجدولة.",
+          "createdAndQueued": "تم إنشاء المهمة المجدولة ووضعها في قائمة الانتظار.",
+          "saveFailed": "فشل حفظ المهمة المجدولة",
+          "updated": "تم تحديث المهمة المجدولة."
+        }
+      },
+      "listPage": {
+        "columns": {
+          "lastRun": "آخر تشغيل",
+          "name": "الاسم",
+          "nextRun": "التشغيل التالي",
+          "schedule": "الجدولة",
+          "status": "الحالة"
+        },
+        "confirmDelete": {
+          "deleteButton": "حذف",
+          "deletingButton": "جارٍ الحذف...",
+          "description": "سيوقف هذا عمليات التشغيل المستقبلية ويزيل المهمة. سيتم الاحتفاظ بسجل التشغيل السابق (والجلسات المرتبطة به) لأغراض التدقيق.",
+          "title": "هل تريد حذف «{name}»؟"
+        },
+        "empty": {
+          "description": "لم يتم إنشاء أي مهام مجدولة بعد.",
+          "title": "لم يتم العثور على مهام مجدولة"
+        },
+        "errors": {
+          "loadFailed": "فشل تحميل المهام المجدولة.",
+          "tryAgainButton": "إعادة المحاولة"
+        },
+        "header": {
+          "description": "شغّل موجّهات Craft وفق مؤقّت. كل انطلاقة تنشئ جلسة جديدة تعمل في الخلفية.",
+          "title": "المهام المجدولة"
+        },
+        "newTaskButton": "مهمة مجدولة جديدة",
+        "rowActions": {
+          "deleteTooltip": "حذف"
+        },
+        "toasts": {
+          "deleteFailed": "فشل حذف المهمة",
+          "deleted": "تم حذف «{name}»."
+        }
+      },
+      "newPage": {
+        "description": "احفظ موجّهًا وجدولًا. سيشغّله Craft وفق مؤقّت.",
+        "title": "مهمة مجدولة جديدة"
+      },
+      "preApproval": {
+        "appFallbackName": "التطبيق رقم {id}",
+        "appsGroupTitle": "التطبيقات",
+        "empty": {
+          "label": "لا توجد تطبيقات أو خوادم MCP متاحة في Craft بعد."
+        },
+        "errors": {
+          "loadFailed": "تعذّر تحميل التطبيقات وخوادم MCP. حدّث الصفحة للمحاولة مرة أخرى.",
+          "partialLoadFailed": "تعذّر تحميل بعض خيارات الموافقة المسبقة. حدّث الصفحة للمحاولة مرة أخرى."
+        },
+        "loading": {
+          "label": "جارٍ تحميل التطبيقات وخوادم MCP…"
+        },
+        "mcpGroupTitle": "خوادم MCP",
+        "mcpServerFallbackName": "خادم MCP رقم {id}",
+        "status": {
+          "connected": "متصل",
+          "connectionRequired": "الاتصال مطلوب",
+          "unavailable": "لم يعد متاحًا"
+        },
+        "summary": {
+          "partialLoadFailed": "تعذّر تحميل بعض تفاصيل الموافقة المسبقة. حدّث الصفحة للمحاولة مرة أخرى.",
+          "title": "التطبيقات وخوادم MCP الموافَق عليها مسبقًا"
+        }
+      },
+      "runHistory": {
+        "columns": {
+          "duration": "المدة",
+          "started": "البدء",
+          "status": "الحالة",
+          "summary": "الملخص",
+          "trigger": "المشغّل"
+        },
+        "empty": {
+          "label": "لا توجد عمليات تشغيل بعد. ستنشئ المهمة واحدة في كل مرة تنطلق فيها، أو استخدم «التشغيل الآن» أعلاه."
+        },
+        "errors": {
+          "loadFailed": "فشل تحميل سجل التشغيل.",
+          "tryAgainButton": "إعادة المحاولة"
+        },
+        "loadMore": {
+          "button": "تحميل المزيد",
+          "loadingButton": "جارٍ التحميل..."
+        },
+        "nonClickable": {
+          "noSession": "لم ينشئ هذا التشغيل جلسة بعد.",
+          "queued": "لم يبدأ هذا التشغيل بعد، لذا لا توجد جلسة لفتحها.",
+          "skipped": "تم تخطي هذا التشغيل لأن تشغيلًا سابقًا كان لا يزال جاريًا، لذا لم تُنشأ جلسة."
+        },
+        "status": {
+          "notOpenableAriaLabel": "لا يمكن فتحه"
+        },
+        "trigger": {
+          "runNow": "التشغيل الآن",
+          "schedule": "الجدولة"
+        }
+      },
+      "scheduleEditor": {
+        "dailyWeekly": {
+          "atLabel": "في",
+          "daysLabel": "في هذه الأيام",
+          "runsEveryDay": "يعمل كل يوم",
+          "runsOn": "يعمل أيام {days}"
+        },
+        "interval": {
+          "everyLabel": "كل"
+        },
+        "intervalUnits": {
+          "days": "أيام",
+          "hours": "ساعات",
+          "minutes": "دقائق"
+        },
+        "tabs": {
+          "dailyWeekly": "يومي / أسبوعي",
+          "interval": "الفاصل الزمني"
+        },
+        "weekdays": {
+          "fri": "الجمعة",
+          "mon": "الاثنين",
+          "sat": "السبت",
+          "sun": "الأحد",
+          "thu": "الخميس",
+          "tue": "الثلاثاء",
+          "wed": "الأربعاء"
+        }
+      }
+    },
+    "todoList": {
+      "empty": {
+        "label": "لا توجد مهام"
+      },
+      "header": {
+        "title": "المهام"
+      },
+      "progress": {
+        "label": "اكتمل {completed}/{total}"
+      }
+    },
+    "toolCards": {
+      "bash": {
+        "noOutput": {
+          "label": "لا يوجد إخراج"
+        }
+      },
+      "diff": {
+        "unchangedLines": {
+          "label": "{count, plural, one {# سطر دون تغيير} other {# أسطر دون تغيير}}"
+        },
+        "viewToggle": {
+          "sideBySideTooltip": "التبديل إلى العرض جنبًا إلى جنب",
+          "unifiedTooltip": "التبديل إلى العرض الموحد"
+        }
+      },
+      "generic": {
+        "noOutput": {
+          "label": "لا توجد مخرجات بعد..."
+        }
+      },
+      "group": {
+        "calls": {
+          "tag": "{count, plural, one {# استدعاء} other {# استدعاءات}}"
+        },
+        "failed": {
+          "tag": "فشل {count}"
+        },
+        "working": {
+          "label": "قيد العمل"
+        }
+      },
+      "read": {
+        "emptyFile": {
+          "label": "(ملف فارغ)"
+        },
+        "moreLines": {
+          "label": "{count, plural, one {سطر إضافي واحد (#)} other {# أسطر إضافية}}"
+        },
+        "showAll": {
+          "button": "عرض الكل"
+        }
+      },
+      "search": {
+        "noMatches": {
+          "label": "لا توجد نتائج مطابقة"
+        }
+      }
+    },
+    "uploadFiles": {
+      "errors": {
+        "fileTooLarge": "الملف كبير جدًا ({size}). الحد الأقصى هو {max}.",
+        "network": "خطأ في الشبكة",
+        "notFound": "المورد غير موجود",
+        "server": "خطأ في الخادم",
+        "sessionExpired": "انتهت صلاحية الجلسة",
+        "tooManyFiles": "عدد الملفات كبير جدًا. الحد الأقصى هو {max} ملفًا لكل جلسة.",
+        "totalSizeExceeded": "الحجم الإجمالي يتجاوز الحد. الحد الأقصى هو {max} لكل جلسة.",
+        "uploadFailed": "فشل الرفع"
+      }
+    },
+    "urlBar": {
+      "back": {
+        "ariaLabel": "رجوع"
+      },
+      "copyUrl": {
+        "ariaLabel": "نسخ الرابط: {url}"
+      },
+      "downloadFile": {
+        "tooltip": "تنزيل الملف"
+      },
+      "export": {
+        "button": "تصدير إلى ‎.docx",
+        "inProgress": "جارٍ التصدير..."
+      },
+      "forward": {
+        "ariaLabel": "تقدّم"
+      },
+      "openInNewTab": {
+        "tooltip": "فتح في تبويب جديد"
+      },
+      "refresh": {
+        "ariaLabel": "تحديث"
+      }
+    },
+    "userLibrary": {
+      "delete": {
+        "action": "حذف",
+        "button": "حذف",
+        "entityTypeFile": "ملف",
+        "entityTypeFolder": "مجلد",
+        "fileDetails": "ستتم إزالة هذا الملف من مكتبتك.",
+        "folderDetails": "سيؤدي هذا إلى حذف المجلد وجميع محتوياته."
+      },
+      "dropzone": {
+        "formats": "Excel أو Word أو PowerPoint أو PDF أو ZIP",
+        "title": "اسحب الملفات إلى هنا أو انقر للرفع"
+      },
+      "errors": {
+        "createFolderFailed": "فشل إنشاء المجلد",
+        "deleteFailed": "فشل الحذف",
+        "loadFailed": "فشل تحميل الملفات",
+        "uploadFailed": "فشل الرفع"
+      },
+      "loading": {
+        "label": "جارٍ تحميل الملفات…"
+      },
+      "modal": {
+        "description": "الملفات التي يمكن لوكيلك قراءتها في كل جلسة.",
+        "doneButton": "تم",
+        "title": "المكتبة"
+      },
+      "newFolder": {
+        "cancelButton": "إلغاء",
+        "createButton": "إنشاء",
+        "label": "مجلد جديد",
+        "nameLabel": "اسم المجلد",
+        "namePlaceholder": "أدخل اسم المجلد"
+      },
+      "search": {
+        "noResults": "لا توجد ملفات مطابقة لبحثك",
+        "placeholder": "البحث في الملفات..."
+      },
+      "tree": {
+        "collapseTooltip": "طي",
+        "deleteTooltip": "حذف",
+        "expandTooltip": "توسيع",
+        "toggleAriaLabel": "تبديل {name}",
+        "uploadToFolderTooltip": "الرفع إلى هذا المجلد"
+      },
+      "upload": {
+        "button": "رفع",
+        "dropOverlay": "أفلت الملفات لرفعها",
+        "uploadingButton": "جارٍ الرفع…"
+      }
+    },
+    "welcome": {
+      "input": {
+        "placeholder": "حلّل بياناتي وأنشئ لوحة معلومات..."
       }
     }
   },
@@ -8825,6 +12553,13 @@
           "networkError": "حدث خطأ أثناء تغيير كلمة المرور",
           "updateFailed": "فشل تغيير كلمة المرور",
           "updated": "تم تحديث كلمة المرور بنجاح"
+        },
+        "validation": {
+          "confirmRequired": "يرجى تأكيد كلمة المرور الجديدة",
+          "currentRequired": "كلمة المرور الحالية مطلوبة",
+          "minLength": "يجب أن تتكون كلمة المرور من {min} أحرف على الأقل",
+          "mismatch": "كلمتا المرور غير متطابقتين",
+          "newRequired": "كلمة المرور الجديدة مطلوبة"
         }
       },
       "title": "الحسابات"
@@ -8866,6 +12601,7 @@
         "empty": "لم يتم إنشاء رموز وصول.",
         "expiresIn": "{count, plural, one {تنتهي الصلاحية خلال يوم واحد} other {تنتهي الصلاحية خلال # أيام}}",
         "loading": "جارٍ تحميل الرموز...",
+        "middleText": "{created} - {expiry} - {scope}",
         "neverExpires": "لا تنتهي صلاحيته أبدًا",
         "newTokenButton": "رمز وصول جديد",
         "noPermissionTooltip": "ليس لديك إذن لإنشاء رموز وصول",
@@ -9012,6 +12748,10 @@
       },
       "description": "اربط الأدوات الخارجية بالنماذج المتاحة لك في Onyx.",
       "guideButton": "الدليل",
+      "loadError": {
+        "description": "يرجى تحديث الصفحة والمحاولة مرة أخرى.",
+        "title": "تعذر تحميل بوابة LLM"
+      },
       "models": {
         "description": "{count, plural, one {# نموذج متاح لحسابك. افتح موفرًا لنسخ المعرّف.} other {# نماذج متاحة لحسابك. افتح موفرًا لنسخ المعرّف.}}",
         "title": "النماذج"
@@ -9064,14 +12804,37 @@
       }
     },
     "memory": {
+      "addLineButton": {
+        "label": "إضافة سطر",
+        "maxReached": "تم بلوغ الحد الأقصى البالغ {count} من الذكريات"
+      },
       "empty": {
-        "description": "أضف ملاحظة شخصية أو ذكرى يجب أن يتذكرها Onyx."
+        "description": "أضف ملاحظة شخصية أو ذكرى يجب أن يتذكرها Onyx.",
+        "getStarted": "لا توجد ذكريات بعد. انقر على \"إضافة سطر\" للبدء.",
+        "noMatches": "لا توجد ذكريات تطابق بحثك."
+      },
+      "item": {
+        "placeholder": "اكتب أو الصق ملاحظة شخصية أو ذكرى"
+      },
+      "lineCount": {
+        "label": "{count, plural, one {سطر} other {أسطر}}"
+      },
+      "modal": {
+        "description": "اسمح لـ Onyx بالرجوع إلى هذه الملاحظات والذكريات المحفوظة في المحادثات.",
+        "searchPlaceholder": "بحث..."
       },
       "referenceStoredMemories": {
         "description": "اسمح لـ Onyx بالرجوع إلى الذكريات المخزنة في المحادثات.",
         "title": "الرجوع إلى الذكريات المخزنة"
       },
+      "removeLineButton": {
+        "label": "إزالة السطر"
+      },
       "title": "الذاكرة",
+      "toasts": {
+        "saveFailed": "فشل حفظ التفضيلات",
+        "saved": "تم حفظ التفضيلات"
+      },
       "updateMemories": {
         "description": "اسمح لـ Onyx بتوليد الذكريات المخزنة وتحديثها.",
         "title": "تحديث الذكريات"
@@ -9491,6 +13254,158 @@
     }
   },
   "skills": {
+    "editor": {
+      "appConflict": {
+        "description": "التطبيق “{appName}” لديه بالفعل مهارة مرتبطة باسم “{skillName}”.",
+        "title": "اختر اسم مهارة مختلفًا"
+      },
+      "confirmUpload": {
+        "importBody": "يتضمن هذا الرفع ملف SKILL.md. ستؤدي المتابعة إلى استبدال الاسم والوصف والتعليمات والملفات الحالية بالحزمة المرفوعة.",
+        "importSubmit": {
+          "label": "استيراد المهارة"
+        },
+        "importTitle": "استيراد هذه المهارة؟",
+        "replaceBody": "يجب أن يستخدم هذا الرفع اسم المهارة نفسه. ستؤدي المتابعة إلى استبدال الوصف والتعليمات والملفات بالحزمة المرفوعة.",
+        "replaceSubmit": {
+          "label": "استبدال المحتوى"
+        },
+        "replaceTitle": "استبدال محتوى المهارة؟"
+      },
+      "delete": {
+        "button": {
+          "label": "حذف المهارة"
+        },
+        "description": "سيفقد كل من يستخدم هذه المهارة إمكانية الوصول إليها. لا يمكن التراجع عن الحذف.",
+        "title": "حذف هذه المهارة"
+      },
+      "deleteModal": {
+        "entityType": "مهارة",
+        "label": "حذف",
+        "pendingLabel": "جارٍ الحذف..."
+      },
+      "details": {
+        "description": "حدد متى وكيف ينبغي لـ Craft استخدام هذه المهارة.",
+        "descriptionField": {
+          "description": "صف متى ينبغي استخدام هذه المهارة.",
+          "placeholder": "بمَ تساعد هذه المهارة؟",
+          "title": "الوصف"
+        },
+        "name": {
+          "createDescription": "استخدم أحرفًا صغيرة وأرقامًا وشرطات مفردة.",
+          "lockedDescription": "لا يمكن تغيير أسماء المهارات بعد إنشائها.",
+          "placeholder": "سمِّ مهارتك",
+          "title": "الاسم"
+        },
+        "title": "التفاصيل"
+      },
+      "files": {
+        "busyLabel": "جارٍ الرفع...",
+        "description": "أضف مراجع أو نصوصًا برمجية أو أصولًا أو ملفات أخرى تستخدمها هذه المهارة. يتم فك ضغط ملفات ZIP تلقائيًا.",
+        "input": {
+          "ariaLabel": "إضافة ملفات داعمة"
+        },
+        "pendingUpload": {
+          "emptyMessage": "ستظهر ملفات هذا الرفع بعد إنشاء المهارة."
+        },
+        "title": "الملفات الداعمة"
+      },
+      "filesTooltip": {
+        "noPermission": "ليست لديك صلاحية تحديث ملفات هذه المهارة.",
+        "saveFirst": "احفظ تغييرات التفاصيل قبل تحديث ملفات المهارة.",
+        "updating": "جارٍ تحديث ملفات المهارة..."
+      },
+      "header": {
+        "appFallbackName": "تطبيق خارجي",
+        "cancel": {
+          "label": "إلغاء"
+        },
+        "createDescription": "أنشئ مهارة شخصية",
+        "createForAppDescription": "أضف مهارة مؤسسة إلى التطبيق “{appName}”",
+        "createTitle": "إنشاء مهارة",
+        "editDescription": "حدّث تفاصيل المهارة وملفاتها",
+        "editTitle": "تعديل المهارة",
+        "save": {
+          "label": "حفظ",
+          "pendingLabel": "جارٍ الحفظ..."
+        }
+      },
+      "import": {
+        "busyLabel": "جارٍ الاستيراد...",
+        "button": {
+          "label": "استيراد مهارة"
+        },
+        "description": "استورد ملف SKILL.md أو ملف ZIP أو مجلد مهارة لملء النموذج مسبقًا وتضمين ملفاته.",
+        "input": {
+          "ariaLabel": "استيراد مهارة موجودة"
+        },
+        "prompt": "اختر ملف SKILL.md أو ZIP، أو أسقط مجلد مهارة هنا.",
+        "title": "لديك مهارة موجودة بالفعل؟"
+      },
+      "instructions": {
+        "description": "اكتب السلوك وسير العمل الذي تضيفه هذه المهارة إلى Craft.",
+        "emptyFallback": "لا توجد تعليمات بعد.",
+        "placeholder": "اكتب تعليمات المهارة.",
+        "title": "التعليمات"
+      },
+      "loadError": {
+        "description": "قد لا تكون هذه المهارة موجودة، أو قد تكون مدمجة، أو قد لا يكون حسابك قادرًا على تعديلها.",
+        "title": "المهارة غير متاحة"
+      },
+      "management": {
+        "description": "تحكم في من يمكنه استخدام هذه المهارة.",
+        "externalApp": {
+          "manage": {
+            "label": "الإدارة في إعدادات التطبيق"
+          },
+          "readyDescription": "تستخدم هذه المهارة التطبيق “{appName}”.",
+          "title": "تطبيق خارجي"
+        },
+        "sharing": {
+          "edit": {
+            "label": "تعديل المشاركة"
+          },
+          "title": "المشاركة"
+        },
+        "title": "الإدارة"
+      },
+      "saveTooltip": {
+        "missingDescription": "أضف وصفًا قبل الحفظ.",
+        "missingInstructions": "أضف تعليمات قبل الحفظ.",
+        "missingName": "أضف اسمًا قبل الحفظ.",
+        "noChanges": "لم يتم إجراء أي تغييرات.",
+        "noPermission": "ليست لديك صلاحية تعديل تفاصيل هذه المهارة.",
+        "savingChanges": "جارٍ حفظ التغييرات...",
+        "savingSkill": "جارٍ حفظ المهارة..."
+      },
+      "sharing": {
+        "organization": {
+          "editorDescription": "يمكن لجميع أعضاء مؤسستك استخدام هذه المهارة وتعديلها.",
+          "title": "المؤسسة",
+          "viewerDescription": "يمكن لجميع أعضاء مؤسستك استخدام هذه المهارة."
+        },
+        "personal": {
+          "description": "أنت وحدك من يمكنه استخدام هذه المهارة.",
+          "title": "شخصي"
+        },
+        "shares": {
+          "description": "يمكن فقط للمستخدمين والمجموعات المحددة استخدام هذه المهارة.",
+          "title": "{count, plural, one {# مشاركة} other {# مشاركات}}"
+        }
+      },
+      "toasts": {
+        "created": "تم إنشاء \"{name}\"",
+        "deleteFailed": "فشل حذف المهارة",
+        "deleted": "تم حذف \"{name}\"",
+        "fileRemoveFailed": "فشلت إزالة ملف المهارة",
+        "fileRemoved": "تمت إزالة \"{path}\"",
+        "filesUpdateFailed": "فشل تحديث ملفات المهارة",
+        "filesUpdated": "تم تحديث ملفات \"{name}\"",
+        "importMissingSkillMd": "استورد ملف SKILL.md أو ملف ZIP أو مجلدًا يحتوي على SKILL.md.",
+        "inspectFailed": "فشل فحص حزمة المهارة",
+        "saveFailed": "فشل حفظ المهارة",
+        "saved": "تم حفظ \"{name}\""
+      }
+    },
     "modals": {
       "addInstruction": {
         "cancelButton": {
@@ -9691,6 +13606,76 @@
         "transferredToast": {
           "message": "تم نقل الملكية."
         }
+      }
+    },
+    "page": {
+      "browse": {
+        "title": "تصفح المهارات"
+      },
+      "countSeparator": {
+        "label": "{count, plural, one {مهارة} other {مهارات}}"
+      },
+      "createMenu": {
+        "github": {
+          "description": "استورد مهارة واحدة أو أكثر من مستودع.",
+          "title": "استيراد من GitHub"
+        },
+        "scratch": {
+          "description": "اكتب التعليمات وأضف الملفات الداعمة في Onyx.",
+          "title": "البدء من الصفر"
+        },
+        "trigger": {
+          "label": "إنشاء مهارة"
+        },
+        "upload": {
+          "description": "استورد ملف SKILL.md أو ملف ZIP أو مجلد مهارة.",
+          "title": "رفع مهارة"
+        }
+      },
+      "empty": {
+        "noMatches": {
+          "description": "جرّب بحثًا مختلفًا.",
+          "title": "لا توجد مهارات مطابقة"
+        },
+        "noSkills": {
+          "description": "لم تتم مشاركة أي مهارات مخصصة معك بعد، ولا توجد مهارات مدمجة مهيأة.",
+          "title": "لا توجد مهارات متاحة"
+        }
+      },
+      "focusedApp": {
+        "description": "فعّل كل المهارات المرتبطة بالتطبيق “{appName}”. قد لا يعمل التطبيق بشكل صحيح بدونها. إذا كانت مهارة أخرى بالاسم نفسه مفعّلة، فإن تفعيل مهارة التطبيق سيعطّل المهارة الأخرى لك.",
+        "showAll": {
+          "label": "عرض جميع المهارات"
+        },
+        "title": "مهارات التطبيق “{appName}”"
+      },
+      "header": {
+        "description": "حزم قدرات يمكن لوكيل Craft الخاص بك استخدامها. تعرض هذه الصفحة المهارات المدمجة والمهارات المشاركة معك ومهاراتك الشخصية.",
+        "title": "المهارات"
+      },
+      "loadError": {
+        "description": "راجع وحدة التحكم لمعرفة التفاصيل وحاول تحديث الصفحة.",
+        "title": "فشل تحميل المهارات"
+      },
+      "preview": {
+        "unavailableFallback": "هذه المهارة غير متاحة حاليًا."
+      },
+      "search": {
+        "placeholder": "البحث عن مهارات..."
+      },
+      "switchModal": {
+        "body": "ستؤدي المتابعة إلى تعطيل المهارة المفعّلة حاليًا وتفعيل هذه المهارة.",
+        "description": "يمكن تفعيل مهارة واحدة فقط باسم “{name}” في كل مرة.",
+        "submit": {
+          "label": "تبديل المهارة",
+          "pendingLabel": "جارٍ التبديل..."
+        },
+        "title": "التبديل إلى المهارة “{name}”؟"
+      },
+      "toasts": {
+        "disableFailed": "فشل تعطيل {name}",
+        "enableFailed": "فشل تفعيل {name}",
+        "refreshFailed": "تم تحديث {name}، لكن تعذّر تحديث قائمة المهارات."
       }
     },
     "sections": {

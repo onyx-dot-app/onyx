@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { SvgOnyxLogo } from "@opal/logos";
 import { useSettings } from "@/lib/settings/hooks";
 import { Text } from "@opal/components";
@@ -14,6 +15,7 @@ export default function AuthFlowContainer({
   authState?: "signup" | "login" | "join";
   footerContent?: React.ReactNode;
 }) {
+  const t = useTranslations("auth.flowContainer");
   const { appName, logoUrl } = useSettings();
   return (
     <div className="p-4 flex flex-col items-center justify-center min-h-screen bg-background">
@@ -27,7 +29,7 @@ export default function AuthFlowContainer({
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              alt="Logo"
+              alt={t("logo.alt")}
               src={logoUrl}
               className="object-cover object-center w-full h-full"
             />
@@ -42,13 +44,13 @@ export default function AuthFlowContainer({
           {footerContent ?? (
             <>
               <Text font="main-ui-body" color="text-03">
-                {`New to ${appName}?`}
+                {t("signupPrompt.text", { appName })}
               </Text>{" "}
               <Link
                 href="/auth/signup"
                 className="text-text-05 mainUiAction underline transition-colors duration-200"
               >
-                Create an Account
+                {t("createAccountLink.label")}
               </Link>
             </>
           )}
@@ -56,12 +58,12 @@ export default function AuthFlowContainer({
       )}
       {authState === "signup" && (
         <div className="text-sm mt-6 text-center w-full text-text-03 mainUiBody mx-auto">
-          Already have an account?{" "}
+          {t("signinPrompt.text")}{" "}
           <Link
             href="/auth/login?autoRedirectToSignup=false"
             className="text-text-05 mainUiAction underline transition-colors duration-200"
           >
-            Sign In
+            {t("signInLink.label")}
           </Link>
         </div>
       )}

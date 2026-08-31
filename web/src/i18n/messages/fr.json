@@ -60,6 +60,26 @@
         "ariaLabel": "Carte de l'action {title}"
       }
     },
+    "actionLineItem": {
+      "addConnectors": {
+        "label": "Ajouter des connecteurs"
+      },
+      "configure": {
+        "tooltip": "Configurer"
+      },
+      "configureConnectors": {
+        "label": "Configurer les connecteurs"
+      },
+      "disable": {
+        "label": "Désactiver"
+      },
+      "enable": {
+        "label": "Activer"
+      },
+      "projectSearch": {
+        "label": "Recherche du projet"
+      }
+    },
     "addMcpModal": {
       "addHeader": {
         "description": "Connectez un serveur MCP (Model Context Protocol) pour ajouter des actions personnalisées.",
@@ -355,6 +375,53 @@
         "tooltip": "Actualiser les outils"
       }
     },
+    "mcpOauthCallback": {
+      "autoRedirect": {
+        "text": "Redirection automatique en cours…"
+      },
+      "backToChatButton": {
+        "label": "Retour au chat"
+      },
+      "cancelled": {
+        "description": "L'autorisation a été annulée ou refusée, aucune connexion n'a donc été établie. Pour réessayer, relancez la connexion depuis les paramètres d'authentification du serveur MCP.",
+        "title": "Autorisation annulée"
+      },
+      "continueButton": {
+        "label": "Continuer"
+      },
+      "genericError": {
+        "fallbackDetail": "Impossible de terminer l'autorisation",
+        "title": "Une erreur s'est produite"
+      },
+      "invalidLink": {
+        "description": "Ce lien ne contient pas les paramètres d'autorisation requis. Relancez la connexion depuis les paramètres d'authentification du serveur MCP.",
+        "title": "Lien d'autorisation non valide"
+      },
+      "processing": {
+        "description": "Finalisation de la connexion à votre serveur MCP. Cela peut prendre quelques instants…",
+        "title": "Finalisation de l'autorisation"
+      },
+      "serverNotFound": {
+        "description": "Le serveur MCP auquel appartient cette autorisation n'existe plus ou n'est plus configuré. Recréez ou reconfigurez le serveur, puis reconnectez-vous.",
+        "title": "Serveur MCP introuvable"
+      },
+      "sessionExpired": {
+        "description": "Ce lien d'autorisation est non valide, a expiré ou a déjà été utilisé. Relancez la connexion depuis les paramètres d'authentification du serveur MCP.",
+        "title": "Session d'autorisation expirée"
+      },
+      "success": {
+        "description": "L'autorisation a été effectuée avec succès. Vous pouvez maintenant utiliser les outils de ce serveur dans le chat.",
+        "title": "Connecté à {serverName}"
+      },
+      "timedOut": {
+        "description": "Le serveur MCP n'a pas confirmé l'autorisation à temps. Réessayez de vous connecter. Si le problème persiste, vérifiez la configuration OAuth du serveur.",
+        "title": "Délai d'autorisation dépassé"
+      },
+      "tokenExchangeFailed": {
+        "description": "Le fournisseur a approuvé l'autorisation, mais aucun jeton d'accès valide n'a pu être obtenu. Vérifiez les identifiants et les points de terminaison du client OAuth du serveur, puis réessayez de vous connecter.",
+        "title": "Échec de l'échange de jetons"
+      }
+    },
     "mcpPage": {
       "addButton": {
         "label": "Ajouter un serveur MCP"
@@ -554,6 +621,20 @@
         "label": "Refuser"
       }
     },
+    "switchList": {
+      "back": {
+        "ariaLabel": "Retour"
+      },
+      "disableAll": {
+        "label": "Tout désactiver"
+      },
+      "enableAll": {
+        "label": "Tout activer"
+      },
+      "toggle": {
+        "ariaLabel": "Activer/désactiver {name}"
+      }
+    },
     "toolItem": {
       "unavailable": {
         "label": "Outil indisponible"
@@ -578,6 +659,81 @@
       "showEnabledButton": {
         "ariaLabel": "Afficher uniquement les outils activés",
         "tooltip": "Afficher uniquement les activés"
+      }
+    },
+    "toolsPopover": {
+      "configureLinks": {
+        "codeInterpreter": {
+          "tooltip": "Configurer l'interpréteur de code"
+        },
+        "imageGeneration": {
+          "tooltip": "Configurer la génération d'images"
+        },
+        "openapi": {
+          "tooltip": "Gérer les actions OpenAPI"
+        },
+        "webSearch": {
+          "tooltip": "Configurer la recherche web"
+        }
+      },
+      "disableAllSources": {
+        "label": "Désactiver toutes les sources"
+      },
+      "disableAllTools": {
+        "label": "Désactiver tous les outils"
+      },
+      "enableAllSources": {
+        "label": "Activer toutes les sources"
+      },
+      "enableAllTools": {
+        "label": "Activer tous les outils"
+      },
+      "manageActions": {
+        "tooltip": "Gérer les actions"
+      },
+      "mcpTools": {
+        "searchPlaceholder": "Rechercher les outils de {server}"
+      },
+      "moreActions": {
+        "label": "Plus d'actions"
+      },
+      "reauthenticate": {
+        "label": "Se réauthentifier"
+      },
+      "search": {
+        "placeholder": "Rechercher des actions..."
+      },
+      "serverFallback": {
+        "label": "serveur"
+      },
+      "sourceFilters": {
+        "searchPlaceholder": "Rechercher des filtres"
+      },
+      "tooltips": {
+        "askAdminSuffix": {
+          "text": "Demandez à un administrateur de le configurer."
+        },
+        "codingAgent": {
+          "description": "Explore un dépôt GitHub et répond aux questions sur son code."
+        },
+        "configureSuffix": {
+          "text": "Appuyez sur la roue dentée des réglages pour l'activer."
+        },
+        "default": {
+          "description": "Cette action n'est pas encore configurée."
+        },
+        "imageGeneration": {
+          "description": "Génère des images à partir d'une consigne."
+        },
+        "python": {
+          "description": "Exécute du code pour des analyses complexes."
+        },
+        "search": {
+          "description": "Recherche dans les connaissances connectées pour éclairer la réponse."
+        },
+        "webSearch": {
+          "description": "Recherche sur le web des informations à jour."
+        }
       }
     },
     "toolsSection": {
@@ -631,7 +787,39 @@
         }
       }
     },
+    "agentStats": {
+      "chart": {
+        "description": "Par jour pour la plage sélectionnée",
+        "title": "Messages et utilisateurs uniques"
+      },
+      "empty": {
+        "message": "Aucune donnée trouvée pour cet agent dans la plage de dates sélectionnée."
+      },
+      "fetchFailed": {
+        "message": "Échec de la récupération des statistiques de l'agent."
+      },
+      "permissionDenied": {
+        "message": "Vous n'avez pas la permission de voir ces statistiques."
+      },
+      "totalMessages": {
+        "label": "Messages au total"
+      },
+      "totalUniqueUsers": {
+        "label": "Utilisateurs uniques au total"
+      },
+      "unknownError": {
+        "message": "Une erreur inconnue est survenue"
+      }
+    },
     "agents": {
+      "collapsibleSection": {
+        "collapse": {
+          "ariaLabel": "Réduire la section"
+        },
+        "expand": {
+          "ariaLabel": "Développer la section"
+        }
+      },
       "deleteModal": {
         "confirmation": {
           "description": "Voulez-vous vraiment supprimer <emphasis>{name}</emphasis> ? Cette action est irréversible."
@@ -1003,6 +1191,47 @@
         },
         "viewPlans": {
           "title": "Voir les forfaits"
+        }
+      },
+      "info": {
+        "empty": {
+          "message": "Aucune information de facturation disponible."
+        },
+        "loadError": {
+          "message": "Erreur lors du chargement des informations de facturation. Veuillez réessayer plus tard."
+        },
+        "loading": {
+          "label": "Chargement..."
+        },
+        "manageSubscription": {
+          "description": "Consultez votre forfait, mettez à jour le paiement ou modifiez l'abonnement",
+          "title": "Gérer l'abonnement"
+        },
+        "page": {
+          "title": "Informations de facturation"
+        },
+        "portalError": {
+          "message": "Erreur lors de la création de la session du portail client"
+        },
+        "subscriptionDetails": {
+          "title": "Détails de l'abonnement"
+        },
+        "summary": {
+          "billingEnd": {
+            "label": "Fin de facturation"
+          },
+          "billingStart": {
+            "label": "Début de facturation"
+          },
+          "seats": {
+            "label": "Sièges"
+          },
+          "status": {
+            "label": "Statut de l'abonnement"
+          }
+        },
+        "updatedToast": {
+          "message": "Félicitations ! Votre abonnement a été mis à jour avec succès."
         }
       },
       "license": {
@@ -1517,6 +1746,25 @@
       }
     },
     "connector": {
+      "accessType": {
+        "autoSyncOption": {
+          "description": "Nous synchroniserons automatiquement les permissions depuis la source. Un document ne sera consultable dans Onyx que si l'utilisateur effectuant la recherche est autorisé à y accéder dans la source.",
+          "disabledReason": "La méthode d'authentification de l'identifiant actuel ne prend pas en charge la synchronisation automatique des permissions. Veuillez passer à une méthode d'authentification prise en charge.",
+          "name": "Synchronisation automatique des permissions"
+        },
+        "heading": {
+          "description": "Contrôlez qui a accès aux documents indexés par ce connecteur.",
+          "title": "Accès aux documents"
+        },
+        "privateOption": {
+          "description": "Seuls les utilisateurs ayant reçu un accès explicite à ce connecteur (via la page Groupes d'utilisateurs) peuvent accéder aux documents importés par ce connecteur",
+          "name": "Privé"
+        },
+        "publicOption": {
+          "description": "Toute personne disposant d'un compte Onyx peut accéder aux documents importés par ce connecteur",
+          "name": "Public"
+        }
+      },
       "advancedConfig": {
         "duration": {
           "days": "{count, plural, one {# jour} other {# jours}}",
@@ -1546,6 +1794,14 @@
           "label": "Afficher moins"
         }
       },
+      "credentialForm": {
+        "errorToast": "Erreur : {detail}",
+        "successToast": "Réussi !",
+        "updateButton": {
+          "ariaLabel": "Mettre à jour les identifiants",
+          "label": "Mettre à jour"
+        }
+      },
       "deleteModal": {
         "additionalDetails": "La suppression de ce connecteur planifie une tâche de suppression qui retire ses documents indexés et le supprime pour tous les utilisateurs.",
         "entityType": "le connecteur"
@@ -1568,6 +1824,11 @@
         },
         "errorModal": {
           "title": "Erreur de synchronisation des autorisations des documents"
+        }
+      },
+      "docsLink": {
+        "checkOutDocs": {
+          "text": "Consultez <link>notre documentation</link> pour plus d'informations sur la configuration de ce connecteur."
         }
       },
       "errorsModal": {
@@ -1649,6 +1910,14 @@
           "updateFailed": "Échec de la mise à jour des fichiers"
         }
       },
+      "fileUpload": {
+        "dropzone": {
+          "message": "Glissez-déposez {multiple, select, true {des fichiers} other {un fichier}} ici, ou cliquez pour sélectionner {multiple, select, true {des fichiers} other {un fichier}}"
+        },
+        "selectedFiles": {
+          "heading": "{multiple, select, true {Fichiers sélectionnés} other {Fichier sélectionné}}"
+        }
+      },
       "groupMembershipTable": {
         "columns": {
           "errorMessage": "Message d'erreur",
@@ -1664,6 +1933,23 @@
         },
         "errorModal": {
           "title": "Erreur de synchronisation de l'appartenance aux groupes"
+        }
+      },
+      "groupSelector": {
+        "assignGroupAccess": {
+          "title": "Attribuer l'accès des groupes à ce connecteur"
+        },
+        "assignToGroup": {
+          "title": "Attribuer ce connecteur à un groupe"
+        },
+        "scopedManagerGroups": {
+          "description": "Sélectionnez un ou plusieurs des groupes que vous gérez pour donner accès à ce connecteur"
+        },
+        "syncGroups": {
+          "description": "Les groupes ci-dessous contrôlent qui peut gérer ce connecteur. L'accès à ses documents est hérité des permissions de la source elle-même."
+        },
+        "visibleToGroups": {
+          "description": "Ce connecteur sera visible/accessible par les groupes sélectionnés ci-dessous"
         }
       },
       "indexAttemptsTable": {
@@ -2022,6 +2308,22 @@
         "targetedReindexSubmitted": "Réindexation ciblée envoyée pour {count, plural, one {# document} other {# documents}}. Les erreurs disparaîtront de la liste au fur et à mesure de la réindexation des documents."
       }
     },
+    "connectorTitle": {
+      "metadata": {
+        "channelRegexEnabled": "Regex de canaux activée",
+        "channels": "Canaux",
+        "enabledTrue": "Oui",
+        "excludeChannelRegexEnabled": "Regex d'exclusion de canaux activée",
+        "excludedChannels": "Canaux exclus",
+        "includeBotMessages": "Inclure les messages des bots",
+        "jiraProjectUrl": "URL du projet Jira",
+        "multipleRepos": "plusieurs dépôts",
+        "pageId": "ID de page",
+        "realm": "Realm",
+        "repo": "Dépôt",
+        "wikiUrl": "URL du wiki"
+      }
+    },
     "connectorsList": {
       "add": {
         "authorizeButton": {
@@ -2148,6 +2450,7 @@
           "description": "Saisissez l'e-mail d'un administrateur ou d'un propriétaire de l'organisation Google qui possède le ou les Google Drive que vous voulez indexer.",
           "invalidEmail": "Doit être un e-mail valide",
           "label": "E-mail de l'administrateur principal",
+          "placeholder": "admin@votreentreprise.com",
           "required": "Obligatoire"
         },
         "section": {
@@ -2205,6 +2508,7 @@
           "description": "Saisissez l'e-mail d'un administrateur ou d'un propriétaire de l'organisation Google qui possède le ou les comptes Gmail que vous voulez indexer.",
           "invalidEmail": "Doit être un e-mail valide",
           "label": "E-mail de l'administrateur principal",
+          "placeholder": "admin@votreentreprise.com",
           "required": "Obligatoire"
         },
         "section": {
@@ -2602,6 +2906,171 @@
       "unavailable": {
         "description": "Craft est activé déploiement par déploiement par Onyx. Contactez votre représentant Onyx pour y accéder.",
         "title": "Craft n'est pas disponible sur ce déploiement"
+      }
+    },
+    "credentials": {
+      "card": {
+        "createdOn": {
+          "label": "Créé le <i>{date}</i>"
+        },
+        "createdOnBy": {
+          "label": "Créé le <i>{date}</i> par <i>{email}</i>"
+        },
+        "unnamed": {
+          "label": "Identifiant n° {id}"
+        }
+      },
+      "create": {
+        "createButton": {
+          "label": "Créer"
+        },
+        "created": {
+          "toast": "Nouvel identifiant créé !"
+        },
+        "name": {
+          "label": "Nom :",
+          "placeholder": "(Facultatif) nom de l'identifiant..."
+        },
+        "submitError": {
+          "toast": "Erreur lors de l'envoi de l'identifiant"
+        }
+      },
+      "delete": {
+        "cancelButton": {
+          "label": "Annuler"
+        },
+        "confirmBody": {
+          "message": "Voulez-vous vraiment supprimer cet identifiant ? Vous ne pouvez pas supprimer des identifiants liés à des connecteurs actifs."
+        },
+        "confirmButton": {
+          "label": "Confirmer"
+        },
+        "confirmTitle": "Confirmer la suppression"
+      },
+      "edit": {
+        "name": {
+          "label": "Nom (facultatif) :"
+        },
+        "permissions": {
+          "note": "Assurez-vous de passer à un identifiant disposant des autorisations appropriées !"
+        },
+        "resetButton": {
+          "label": "Réinitialiser les modifications"
+        },
+        "updateButton": {
+          "label": "Mettre à jour"
+        },
+        "updateError": {
+          "toast": "Erreur lors de la mise à jour de l'identifiant"
+        }
+      },
+      "modal": {
+        "createTitle": "Créer un identifiant {source}",
+        "editTitle": "Modifier l'identifiant",
+        "updateTitle": "Mettre à jour les identifiants"
+      },
+      "modify": {
+        "createButton": {
+          "label": "Créer"
+        },
+        "instructions": {
+          "message": "Sélectionnez un identifiant selon vos besoins ! Assurez-vous d'avoir sélectionné un identifiant disposant des autorisations appropriées pour ce connecteur !"
+        },
+        "selectButton": {
+          "label": "Sélectionner"
+        }
+      },
+      "oauth": {
+        "connectButton": {
+          "label": "Connecter"
+        },
+        "connectError": {
+          "title": "Connexion impossible"
+        },
+        "redirectFailed": {
+          "message": "Nous n'avons pas pu vous rediriger pour vous connecter avec {source}. Veuillez réessayer."
+        },
+        "retryButton": {
+          "label": "Réessayer"
+        },
+        "startError": {
+          "message": "Impossible de démarrer OAuth"
+        }
+      },
+      "swap": {
+        "error": {
+          "toast": "Problème lors du remplacement de l'identifiant : {detail}"
+        },
+        "success": {
+          "toast": "Identifiant remplacé avec succès !"
+        }
+      },
+      "table": {
+        "actions": {
+          "label": "Actions"
+        },
+        "created": {
+          "header": "Créé"
+        },
+        "edit": {
+          "ariaLabel": "Modifier l'identifiant"
+        },
+        "empty": {
+          "message": "Aucun identifiant n'existe pour ce connecteur !"
+        },
+        "id": {
+          "header": "ID"
+        },
+        "lastUpdated": {
+          "header": "Dernière mise à jour"
+        },
+        "name": {
+          "header": "Nom"
+        },
+        "select": {
+          "label": "Sélectionner"
+        },
+        "selected": {
+          "badge": "sélectionné"
+        },
+        "untitled": {
+          "label": "Sans titre"
+        }
+      },
+      "update": {
+        "error": {
+          "toast": "Problème lors de la mise à jour de l'identifiant"
+        },
+        "success": {
+          "toast": "Identifiant mis à jour"
+        }
+      }
+    },
+    "customAnalytics": {
+      "intro": {
+        "description": "Cela vous permet d'utiliser votre propre outil d'analytique avec Onyx ! Copiez l'extrait Web de votre fournisseur d'analytique dans le champ ci-dessous, et nous commencerons à envoyer des événements d'utilisation."
+      },
+      "notEnabled": {
+        "description": "Pour configurer des scripts d'analytique personnalisés, adressez-vous à l'équipe qui a installé Onyx afin de définir la variable d'environnement <i>CUSTOM_ANALYTICS_SECRET_KEY</i>.",
+        "title": "L'analytique personnalisée n'est pas activée."
+      },
+      "script": {
+        "description": "Indiquez le Javascript à exécuter au chargement de la page pour initialiser votre suivi/analytique personnalisé.",
+        "instructions": "N'incluez pas les balises `<script></script>`. Si vous téléversez un script ci-dessous mais que vous ne recevez aucun événement dans votre plateforme d'analytique, essayez de supprimer tous les espaces superflus au début de chaque ligne de JavaScript.",
+        "label": "Script"
+      },
+      "secretKey": {
+        "description": "Pour des raisons de sécurité, vous devez fournir une clé secrète pour mettre à jour ce script. Il doit s'agir de la valeur de la variable d'environnement <i>CUSTOM_ANALYTICS_SECRET_KEY</i> définie lors de la configuration initiale d'Onyx.",
+        "label": "Clé secrète"
+      },
+      "updateButton": {
+        "label": "Mettre à jour"
+      },
+      "updateFailed": {
+        "message": "Échec de la mise à jour du script d'analytique personnalisé : \"{error}\""
+      },
+      "updateSuccess": {
+        "message": "Script d'analytique personnalisé mis à jour avec succès !"
       }
     },
     "discordBot": {
@@ -3059,6 +3528,83 @@
         }
       }
     },
+    "exportLogs": {
+      "button": {
+        "collecting": {
+          "label": "Collecte..."
+        },
+        "downloading": {
+          "label": "Téléchargement..."
+        },
+        "export": {
+          "label": "Exporter les journaux"
+        },
+        "starting": {
+          "label": "Démarrage..."
+        }
+      },
+      "downloadButton": {
+        "label": "Télécharger"
+      },
+      "exportCard": {
+        "description": "Rassemble les fichiers journaux du serveur d'API et des workers en arrière-plan dans une seule archive zip. Le téléchargement démarre automatiquement une fois la collecte terminée.",
+        "title": "Exporter les journaux"
+      },
+      "header": {
+        "description": "Téléchargez une archive zip des fichiers journaux du serveur à joindre à une demande de support Onyx."
+      },
+      "receipt": {
+        "duplicateHost": {
+          "label": "couvert par un autre worker sur le même hôte"
+        },
+        "failed": {
+          "label": "échec"
+        },
+        "failedWithError": {
+          "label": "échec : {error}"
+        },
+        "noLogs": {
+          "label": "aucun fichier journal trouvé"
+        },
+        "uploaded": {
+          "label": "{count, plural, one {# fichier téléversé} other {# fichiers téléversés}}"
+        }
+      },
+      "sensitiveWarning": {
+        "description": "Les fichiers journaux peuvent inclure des e-mails d'utilisateurs, des titres de documents, des requêtes de recherche et des détails d'erreurs. Vérifiez leur contenu avant de les partager en dehors de votre organisation.",
+        "title": "Les journaux peuvent contenir des données sensibles"
+      },
+      "status": {
+        "startingCollection": {
+          "label": "Démarrage de la collecte..."
+        }
+      },
+      "toasts": {
+        "alreadyRunning": {
+          "message": "Un export des journaux est déjà en cours. Réessayez dans un instant."
+        },
+        "downloadFailed": {
+          "message": "Échec du téléchargement de l'export des journaux."
+        },
+        "lostAccess": {
+          "message": "Accès à l'export en cours perdu. Lancez-en un nouveau."
+        },
+        "startFailed": {
+          "message": "Échec du démarrage de l'export des journaux."
+        },
+        "unreachable": {
+          "message": "Impossible de joindre le serveur pour vérifier la progression de l'export. Lancez un nouvel export dès qu'il sera de retour."
+        }
+      },
+      "worker": {
+        "collecting": {
+          "label": "collecte en cours..."
+        },
+        "missedDeadline": {
+          "label": "n'a pas répondu avant l'échéance"
+        }
+      }
+    },
     "externalApps": {
       "apps": {
         "empty": {
@@ -3165,9 +3711,137 @@
         "loadFailed": "Échec du chargement du connecteur : {details}",
         "title": "Erreur"
       },
+      "form": {
+        "channelInput": {
+          "placeholder": "Saisissez le nom du canal ou un motif regex, puis appuyez sur Entrée"
+        },
+        "channelsRequired": {
+          "error": "Au moins un canal est requis lorsque 'Rechercher dans tous les canaux' est désactivé"
+        },
+        "configSchemaLoadError": {
+          "message": "Impossible de charger le schéma de configuration : {error}"
+        },
+        "configTitle": {
+          "text": "Configuration du connecteur fédéré"
+        },
+        "configuration": {
+          "heading": "Configuration"
+        },
+        "create": {
+          "failed": "Impossible de créer le connecteur fédéré",
+          "success": "Connecteur fédéré créé avec succès !"
+        },
+        "credentialField": {
+          "keepCurrentPlaceholder": "••••••••  (laisser vide pour conserver la valeur actuelle)"
+        },
+        "credentialValidationFailed": {
+          "message": "Échec de la validation des identifiants : {message}"
+        },
+        "credentials": {
+          "description": "Saisissez les identifiants de ce connecteur.",
+          "heading": "Identifiants"
+        },
+        "delete": {
+          "failed": "Impossible de supprimer le connecteur fédéré",
+          "success": "Connecteur fédéré supprimé avec succès !"
+        },
+        "deleteConfirm": {
+          "message": "Voulez-vous vraiment supprimer ce connecteur fédéré ? Cette action est irréversible."
+        },
+        "deleteError": {
+          "toast": "Erreur lors de la suppression du connecteur : {error}"
+        },
+        "deleteItem": {
+          "deleting": "Suppression...",
+          "inProgressTooltip": "Suppression en cours",
+          "label": "Supprimer"
+        },
+        "federatedBadge": {
+          "label": "Fédéré"
+        },
+        "federatedTooltip": {
+          "default": "Ceci est un connecteur fédéré. Il entraînera une latence plus élevée et une qualité de recherche moindre par rapport aux connecteurs classiques."
+        },
+        "genericError": {
+          "text": "Erreur : {error}"
+        },
+        "listInput": {
+          "placeholder": "Saisissez du texte et appuyez sur Entrée pour ajouter un élément"
+        },
+        "loadingSchema": {
+          "description": "Récupération des champs requis pour ce type de connecteur",
+          "title": "Chargement du schéma des identifiants..."
+        },
+        "manageButton": {
+          "label": "Gérer"
+        },
+        "missingFields": {
+          "message": "Champs obligatoires manquants : {fields}"
+        },
+        "noConfigSchema": {
+          "message": "Aucune configuration de recherche disponible pour ce type de connecteur."
+        },
+        "noCredentialSchema": {
+          "message": "Aucun schéma d'identifiants disponible pour ce type de connecteur."
+        },
+        "schemaLoadError": {
+          "message": "Impossible de charger le schéma des identifiants : {error}"
+        },
+        "submitButton": {
+          "create": "Créer",
+          "creating": "Création...",
+          "update": "Mettre à jour",
+          "updating": "Mise à jour..."
+        },
+        "title": {
+          "edit": "Modifier {name}",
+          "setup": "Configurer {name}"
+        },
+        "update": {
+          "failed": "Impossible de mettre à jour le connecteur fédéré",
+          "success": "Connecteur fédéré mis à jour avec succès !"
+        },
+        "validateBeforeEdit": {
+          "message": "Saisissez de nouvelles valeurs d'identifiants avant de valider."
+        },
+        "validateButton": {
+          "label": "Valider",
+          "validating": "Validation..."
+        },
+        "validation": {
+          "error": "Erreur de validation : {error}",
+          "failedStatus": "Échec de la validation : {statusText}",
+          "invalid": "Les identifiants ne sont pas valides",
+          "valid": "Les identifiants sont valides"
+        }
+      },
       "loading": {
         "description": "Récupération des détails du connecteur et du schéma des identifiants",
         "title": "Chargement de la configuration du connecteur..."
+      }
+    },
+    "federatedCallback": {
+      "backButton": {
+        "label": "Retour au chat"
+      },
+      "error": {
+        "title": "Une erreur s'est produite"
+      },
+      "errors": {
+        "clientSecret": "Les identifiants d'authentification sont manquants ou non valides",
+        "oauth": "L'autorisation OAuth a échoué",
+        "validation": "Erreur de configuration - vérifiez les paramètres de votre connecteur"
+      },
+      "processing": {
+        "details": "Veuillez patienter pendant que nous terminons la configuration.",
+        "title": "Traitement en cours..."
+      },
+      "redirecting": {
+        "text": "Redirection vers le chat dans 2 secondes..."
+      },
+      "success": {
+        "detailsTemplate": "Votre autorisation {serviceName} s'est terminée avec succès. Vous pouvez maintenant utiliser ce connecteur pour la recherche.",
+        "title": "Réussi !"
       }
     },
     "groups": {
@@ -3430,6 +4104,265 @@
           "header": "Limite de jetons",
           "placeholder": "Limite de jetons (milliers)",
           "unit": "(milliers)"
+        }
+      }
+    },
+    "hooks": {
+      "card": {
+        "delete": {
+          "ariaLabel": "Supprimer le hook",
+          "tooltip": "Supprimer"
+        },
+        "disconnect": {
+          "ariaLabel": "Désactiver le hook",
+          "tooltip": "Déconnecter le hook"
+        },
+        "disconnectedSuffix": {
+          "label": "(Déconnecté)"
+        },
+        "hookPoint": {
+          "description": "Point d'ancrage : {name}"
+        },
+        "manage": {
+          "ariaLabel": "Configurer le hook",
+          "tooltip": "Gérer"
+        },
+        "reconnectButton": {
+          "label": "Reconnecter"
+        },
+        "test": {
+          "ariaLabel": "Revalider le hook",
+          "tooltip": "Tester la connexion"
+        }
+      },
+      "connectButton": {
+        "label": "Connecter"
+      },
+      "deleteModal": {
+        "body": {
+          "description": "Le hook ***{name}*** sera définitivement supprimé de ce point d'ancrage. Le point de terminaison externe peut conserver les données qui lui ont été envoyées."
+        },
+        "delete": {
+          "label": "Supprimer"
+        },
+        "header": {
+          "title": "Supprimer *{name}*"
+        },
+        "permanent": {
+          "description": "La suppression est irréversible."
+        }
+      },
+      "disconnectModal": {
+        "body": {
+          "description": "Onyx cessera d'appeler ce point de terminaison pour le hook ***{name}***. Les requêtes en cours continueront de s'exécuter. Le point de terminaison externe peut conserver les données qui lui ont été envoyées. Vous pourrez reconnecter ce hook plus tard si nécessaire."
+        },
+        "deleteNote": {
+          "description": "Vous pouvez également supprimer ce hook. La suppression est irréversible."
+        },
+        "disconnect": {
+          "label": "Déconnecter"
+        },
+        "disconnectAndDelete": {
+          "label": "Déconnecter et supprimer"
+        },
+        "header": {
+          "title": "Déconnecter *{name}*"
+        }
+      },
+      "docsLink": {
+        "label": "Documentation"
+      },
+      "form": {
+        "apiKey": {
+          "description": "Onyx utilisera cette clé pour s'authentifier auprès de votre point de terminaison d'API.",
+          "keepCurrent": {
+            "placeholder": "Laissez vide pour conserver la clé actuelle"
+          },
+          "title": "Clé API"
+        },
+        "connectionValid": {
+          "label": "Connexion valide."
+        },
+        "createHeader": {
+          "description": "Connectez un point de terminaison d'API externe pour étendre le point d'ancrage.",
+          "title": "Configurer l'extension de hook"
+        },
+        "editHeader": {
+          "title": "Gérer l'extension de hook"
+        },
+        "endpoint": {
+          "description": "Ne vous connectez qu'à des serveurs de confiance. Vous êtes responsable des actions effectuées et des données partagées via cette connexion.",
+          "title": "URL du point de terminaison d'API externe"
+        },
+        "errors": {
+          "connect": "Impossible de se connecter au point de terminaison.",
+          "generic": "Une erreur est survenue.",
+          "invalidApiKey": "Clé API non valide.",
+          "timeout": "La connexion a expiré. Essayez d'augmenter le délai d'attente."
+        },
+        "failStrategy": {
+          "default": {
+            "label": "(Par défaut)"
+          },
+          "hard": {
+            "label": "Bloquer le pipeline en cas d'échec"
+          },
+          "placeholder": "Sélectionnez une stratégie",
+          "soft": {
+            "label": "Journaliser l'erreur et continuer"
+          },
+          "title": "Stratégie d'échec"
+        },
+        "hookPoint": {
+          "label": "Point d'ancrage"
+        },
+        "name": {
+          "placeholder": "Nommez votre extension à ce point d'ancrage",
+          "title": "Nom d'affichage"
+        },
+        "save": {
+          "label": "Enregistrer les modifications"
+        },
+        "softStrategy": {
+          "description": "Si le point de terminaison renvoie une erreur, Onyx la journalise et poursuit le pipeline normalement, en ignorant le résultat du hook."
+        },
+        "timeout": {
+          "description": "Durée maximale pendant laquelle Onyx attend la réponse du point de terminaison avant d'appliquer la stratégie d'échec. Doit être supérieure à 0 et au plus {max} secondes.",
+          "revert": {
+            "tooltip": "Rétablir la valeur par défaut"
+          },
+          "suffix": "(secondes)",
+          "title": "Délai d'attente"
+        },
+        "toasts": {
+          "created": {
+            "message": "Hook créé."
+          },
+          "noHookPoint": {
+            "message": "Aucun point d'ancrage spécifié."
+          },
+          "updated": {
+            "message": "Hook mis à jour."
+          }
+        },
+        "validation": {
+          "apiKeyRequired": "La clé API ne peut pas être vide.",
+          "endpointRequired": "L'URL du point de terminaison ne peut pas être vide.",
+          "nameRequired": "Le nom d'affichage ne peut pas être vide.",
+          "timeoutRange": "Doit être supérieur à 0 et au plus {max} secondes.",
+          "timeoutRequired": "Le délai d'attente est requis."
+        },
+        "verifying": {
+          "label": "Vérification de la connexion…"
+        }
+      },
+      "logs": {
+        "copy": {
+          "tooltip": "Copier"
+        },
+        "download": {
+          "tooltip": "Télécharger"
+        },
+        "empty": {
+          "message": "Aucune erreur au cours des 30 derniers jours."
+        },
+        "header": {
+          "description": "Hook : {name} • Point d'ancrage : {point}",
+          "title": "Erreurs récentes"
+        },
+        "lineCount": {
+          "label": "{count, plural, one {# ligne} other {# lignes}}"
+        },
+        "loadFailed": {
+          "message": "Échec du chargement des journaux."
+        },
+        "older": {
+          "label": "Plus anciens"
+        },
+        "pastHour": {
+          "label": "Dernière heure"
+        },
+        "unknownError": {
+          "label": "Erreur inconnue"
+        }
+      },
+      "modals": {
+        "cancel": {
+          "label": "Annuler"
+        }
+      },
+      "page": {
+        "description": "Étendez les pipelines Onyx en enregistrant des points de terminaison d'API externes comme callbacks à des points d'ancrage prédéfinis.",
+        "empty": {
+          "title": "Aucun point d'ancrage disponible"
+        },
+        "emptySearch": {
+          "description": "Essayez un autre terme de recherche.",
+          "title": "Aucun résultat trouvé"
+        },
+        "enterpriseRequired": {
+          "message": "Les extensions de hooks nécessitent une licence Enterprise."
+        },
+        "loadHooksFailed": {
+          "message": "Échec du chargement des hooks. Veuillez actualiser la page."
+        },
+        "loadSpecsFailed": {
+          "message": "Échec du chargement des spécifications de hooks. Veuillez actualiser la page."
+        },
+        "notEnabled": {
+          "message": "Les extensions de hooks ne sont pas activées pour ce déploiement."
+        },
+        "search": {
+          "placeholder": "Rechercher des hooks..."
+        }
+      },
+      "status": {
+        "connected": {
+          "label": "Connecté"
+        },
+        "connectionLost": {
+          "label": "Connexion perdue"
+        },
+        "errorCount": {
+          "title": "{count, plural, one {# erreur} other {# erreurs}}"
+        },
+        "noError": {
+          "title": "Aucune erreur"
+        },
+        "pastHour": {
+          "description": "au cours de la dernière heure"
+        },
+        "recentErrors": {
+          "title": "Erreurs les plus récentes"
+        },
+        "viewMore": {
+          "label": "Voir plus de lignes"
+        },
+        "viewOlder": {
+          "label": "Voir les erreurs plus anciennes"
+        }
+      },
+      "toasts": {
+        "deactivateFailed": {
+          "message": "Échec de la désactivation du hook."
+        },
+        "deleteFailed": {
+          "message": "Échec de la suppression du hook."
+        },
+        "disconnectFailed": {
+          "message": "Échec de la déconnexion du hook."
+        },
+        "reconnectFailed": {
+          "message": "Échec de la reconnexion du hook."
+        },
+        "validateFailed": {
+          "message": "Échec de la validation du hook."
+        },
+        "validateSuccess": {
+          "message": "Hook validé avec succès."
+        },
+        "validationFailed": {
+          "message": "Échec de la validation : {status}"
         }
       }
     },
@@ -4309,6 +5242,9 @@
               "label": "Ajouter une ligne"
             },
             "description": "Ajoutez les propriétés supplémentaires exigées par le fournisseur de modèles. Elles sont transmises à l'appel `completion()` de LiteLLM comme [variables d'environnement](https://docs.litellm.ai/docs/set_keys#environment-variables). Consultez la [documentation](https://docs.onyx.app/admins/ai_models/custom_inference_provider) pour plus d'instructions.",
+            "keyInput": {
+              "placeholder": "par ex. OPENAI_ORGANIZATION"
+            },
             "title": "Variables d'environnement"
           },
           "modelRow": {
@@ -4820,6 +5756,132 @@
         "title": "Utilisateurs"
       }
     },
+    "queryHistory": {
+      "assistant": {
+        "unknown": {
+          "label": "Inconnu"
+        }
+      },
+      "detail": {
+        "ai": {
+          "label": "IA"
+        },
+        "errorTitle": {
+          "title": "Une erreur est survenue :("
+        },
+        "feedback": {
+          "title": "Retour"
+        },
+        "fetchFailed": {
+          "message": "Échec de la récupération de la session de chat - {error}"
+        },
+        "header": {
+          "title": "Détails de la session de chat"
+        },
+        "referenceDocuments": {
+          "title": "Documents de référence"
+        },
+        "user": {
+          "label": "Utilisateur"
+        }
+      },
+      "export": {
+        "cancel": {
+          "label": "Annuler"
+        },
+        "downloadFailed": {
+          "message": "Échec du téléchargement de l'historique des requêtes."
+        },
+        "generating": {
+          "message": "Génération du rapport CSV. Cliquez sur le bouton « {button} » pour voir toutes les tâches."
+        },
+        "kickoff": {
+          "label": "Lancer l'export"
+        }
+      },
+      "exportStatus": {
+        "failure": {
+          "label": "Échec"
+        },
+        "pending": {
+          "label": "En attente"
+        },
+        "success": {
+          "label": "Succès"
+        }
+      },
+      "exportsModal": {
+        "download": {
+          "header": "Télécharger"
+        },
+        "endRange": {
+          "header": "Fin de la plage"
+        },
+        "generatedAt": {
+          "header": "Généré le"
+        },
+        "header": {
+          "title": "Exports précédents de l'historique des requêtes"
+        },
+        "notReady": {
+          "tooltip": "L'export n'est pas encore prêt"
+        },
+        "startRange": {
+          "header": "Début de la plage"
+        },
+        "status": {
+          "header": "Statut"
+        }
+      },
+      "feedback": {
+        "dislike": {
+          "label": "Je n'aime pas"
+        },
+        "like": {
+          "label": "J'aime"
+        },
+        "mixed": {
+          "label": "Mitigé"
+        },
+        "na": {
+          "label": "N/A"
+        }
+      },
+      "filters": {
+        "any": {
+          "label": "Tous"
+        },
+        "feedbackType": {
+          "label": "Type de retour"
+        }
+      },
+      "previousExports": {
+        "label": "Voir les exports"
+      },
+      "table": {
+        "date": {
+          "header": "Date"
+        },
+        "feedback": {
+          "header": "Retour"
+        },
+        "fetchError": {
+          "title": "Erreur lors de la récupération de l'historique des requêtes"
+        },
+        "firstAiResponse": {
+          "header": "Première réponse de l'IA"
+        },
+        "firstUserMessage": {
+          "header": "Premier message de l'utilisateur"
+        },
+        "persona": {
+          "header": "Persona"
+        },
+        "user": {
+          "header": "Utilisateur"
+        }
+      }
+    },
     "scim": {
       "card": {
         "connected": {
@@ -4874,6 +5936,56 @@
         "generateFailed": "Échec de la génération du jeton : {detail}",
         "genericError": "Une erreur s'est produite. Veuillez réessayer.",
         "regenerated": "Jeton régénéré"
+      }
+    },
+    "search": {
+      "errors": {
+        "classificationFailed": {
+          "message": "La classification de la requête a échoué. Retour au chat."
+        },
+        "searchFailed": {
+          "message": "La recherche de documents a échoué. Veuillez réessayer."
+        }
+      },
+      "results": {
+        "count": {
+          "label": "{count, plural, one {# résultat} other {# résultats}}"
+        },
+        "empty": {
+          "description": "Vérifiez vos connecteurs/filtres ou essayez un autre terme de recherche.",
+          "title": "Aucun résultat trouvé"
+        },
+        "failed": {
+          "title": "Échec de la recherche"
+        }
+      },
+      "tagFilter": {
+        "count": {
+          "label": "{count, plural, one {# tag} other {# tags}}"
+        },
+        "empty": {
+          "label": "Tags"
+        },
+        "search": {
+          "placeholder": "Filtrer les tags..."
+        }
+      },
+      "timeFilter": {
+        "all": {
+          "label": "Toutes périodes"
+        },
+        "day": {
+          "label": "Dernières 24 heures"
+        },
+        "month": {
+          "label": "Mois dernier"
+        },
+        "week": {
+          "label": "Semaine dernière"
+        },
+        "year": {
+          "label": "Année dernière"
+        }
       }
     },
     "security": {
@@ -5765,6 +6877,163 @@
         "unexpectedError": "Une erreur inattendue est survenue."
       }
     },
+    "standardAnswers": {
+      "categoryBubble": {
+        "remove": {
+          "ariaLabel": "Supprimer la catégorie {name}"
+        },
+        "removeButton": {
+          "ariaLabel": "Supprimer la catégorie"
+        }
+      },
+      "categoryDropdown": {
+        "categories": {
+          "label": "Catégories de réponses standard"
+        },
+        "fetchError": {
+          "message": "Échec de la récupération des catégories de réponses standard - {message}",
+          "title": "Une erreur est survenue :("
+        },
+        "search": {
+          "placeholder": "Rechercher des catégories..."
+        }
+      },
+      "editPage": {
+        "title": "Modifier la réponse standard"
+      },
+      "errors": {
+        "fetchAnswersFailed": {
+          "message": "Échec de la récupération des réponses standard"
+        },
+        "fetchCategoriesFailed": {
+          "message": "Échec de la récupération des catégories de réponses standard"
+        },
+        "genericTitle": {
+          "title": "Une erreur est survenue :("
+        },
+        "loadAnswersFailed": {
+          "title": "Erreur lors du chargement des réponses standard"
+        },
+        "loadCategoriesFailed": {
+          "title": "Erreur lors du chargement des catégories de réponses standard"
+        },
+        "notFound": {
+          "message": "Aucune réponse standard trouvée avec l'ID : {id}"
+        }
+      },
+      "filter": {
+        "allCategories": {
+          "label": "Toutes les catégories"
+        }
+      },
+      "form": {
+        "allKeywords": {
+          "label": "Tous ces mots-clés, dans n'importe quel ordre, séparés par des espaces",
+          "placeholder": "ticket informatique"
+        },
+        "answer": {
+          "label": "Réponse",
+          "placeholder": "La réponse en Markdown. Exemple : si vous avez besoin d'aide de l'équipe informatique, écrivez à internalsupport@company.com"
+        },
+        "anyKeywords": {
+          "label": "N'importe lequel de ces mots-clés, séparés par des espaces",
+          "placeholder": "ticket problème incident"
+        },
+        "categories": {
+          "label": "Catégories :",
+          "placeholder": "Saisissez une catégorie et appuyez sur Entrée…"
+        },
+        "createButton": {
+          "label": "Créer !"
+        },
+        "keywords": {
+          "tooltip": "Une question doit correspondre à ces mots-clés pour déclencher la réponse."
+        },
+        "matchRegex": {
+          "description": "Faire correspondre un motif regex plutôt qu'un mot-clé exact",
+          "label": "Correspondance regex"
+        },
+        "regexPattern": {
+          "label": "Motif regex",
+          "tooltip": "Se déclenche si la question correspond à ce motif regex (via `re.search()` de Python)"
+        },
+        "strategy": {
+          "all": {
+            "label": "Tous les mots-clés"
+          },
+          "any": {
+            "label": "N'importe quel mot-clé"
+          },
+          "description": "Choisissez si la question de l'utilisateur doit contenir un ou tous les mots-clés ci-dessus pour afficher cette réponse.",
+          "label": "Stratégie de détection des mots-clés"
+        },
+        "toasts": {
+          "categoryCreateFailed": {
+            "message": "Erreur lors de la création de la catégorie « {name} » - {error}"
+          },
+          "createFailed": {
+            "message": "Erreur lors de la création de la réponse standard - {error}"
+          },
+          "updateFailed": {
+            "message": "Erreur lors de la mise à jour de la réponse standard - {error}"
+          }
+        },
+        "updateButton": {
+          "label": "Mettre à jour !"
+        },
+        "validation": {
+          "answerRequired": "La réponse est requise",
+          "categoryRequired": "Au moins une catégorie est requise",
+          "keywordRequired": "Des mots-clés ou un motif sont requis"
+        }
+      },
+      "intro": {
+        "addFirst": {
+          "message": "Ajoutez votre première réponse standard ci-dessous !"
+        },
+        "description": "Gérez les réponses standard pour des questions prédéfinies.\nRemarque : actuellement, seules les questions posées depuis Slack peuvent recevoir des réponses standard."
+      },
+      "newStandardAnswer": {
+        "label": "Nouvelle réponse standard"
+      },
+      "search": {
+        "placeholder": "Rechercher des réponses standard par mot-clé/phrase..."
+      },
+      "table": {
+        "answer": {
+          "header": "Réponse"
+        },
+        "categories": {
+          "header": "Catégories"
+        },
+        "empty": {
+          "message": "Aucune réponse standard correspondante trouvée..."
+        },
+        "keywords": {
+          "header": "Mots-clés/motif"
+        },
+        "matchRegex": {
+          "header": "Correspondance regex ?"
+        },
+        "matchRegexNo": {
+          "label": "Non"
+        },
+        "matchRegexYes": {
+          "label": "Oui"
+        },
+        "slackNote": {
+          "message": "Assurez-vous d'avoir ajouté la catégorie au [bot Slack](/admin/bots) concerné."
+        }
+      },
+      "toasts": {
+        "deleteFailed": {
+          "message": "Échec de la suppression de la réponse standard - {error}"
+        },
+        "deleted": {
+          "message": "Réponse standard {id} supprimée"
+        }
+      }
+    },
     "status": {
       "badges": {
         "canceled": "Annulé",
@@ -5795,6 +7064,142 @@
       },
       "webVersion": {
         "label": "Version web : "
+      }
+    },
+    "theme": {
+      "announcement": {
+        "description": "Affiche une annonce système persistante que les utilisateurs peuvent fermer.",
+        "header": {
+          "placeholder": "Ajoutez une annonce"
+        },
+        "label": "Annonce système"
+      },
+      "announcementPopup": {
+        "description": "Affichez également cet avis en pop-up plein écran lors de la première visite de tous les utilisateurs. À utiliser avec prudence.",
+        "label": "Avis contextuel lors de la première visite"
+      },
+      "appName": {
+        "description": "Ce nom apparaîtra dans toute l'application et remplacera \"Onyx\" dans l'interface.",
+        "label": "Nom d'affichage de l'application"
+      },
+      "branding": {
+        "description": "Supprimez « powered by Onyx » et les autres présences de la marque Onyx dans l'application.",
+        "enterpriseTooltip": "Masquer la marque Onyx est une fonctionnalité du forfait Enterprise.",
+        "label": "Masquer la marque Onyx"
+      },
+      "chatFooter": {
+        "description": "Ajoutez du contenu markdown pour des avertissements ou des informations supplémentaires.",
+        "label": "Texte du pied de page du chat"
+      },
+      "chatHeader": {
+        "label": "Texte de l'en-tête du chat"
+      },
+      "consent": {
+        "description": "Exige que l'utilisateur lise et accepte l'avis avant d'accéder à l'application.",
+        "label": "Exiger le consentement à l'avis"
+      },
+      "consentPrompt": {
+        "label": "Invite de consentement de l'avis"
+      },
+      "firstVisit": {
+        "description": "Affiche une fenêtre contextuelle unique pour les nouveaux utilisateurs lors de leur première visite.",
+        "label": "Afficher l'avis lors de la première visite"
+      },
+      "greeting": {
+        "description": "Ajoutez un court message à la page d'accueil.",
+        "label": "Message d'accueil"
+      },
+      "helpLink": {
+        "description": "Ajoutez un lien d'aide personnalisé dans le menu utilisateur en plus de la documentation Onyx.",
+        "enterpriseTooltip": "Le lien d'aide personnalisé est une fonctionnalité du forfait Enterprise.",
+        "label": "Lien d'aide personnalisé"
+      },
+      "helpLinkLabel": {
+        "label": "Libellé du lien d'aide personnalisé",
+        "placeholder": "Libellé du lien"
+      },
+      "loginSubtitle": {
+        "description": "Remplacez le slogan sous le titre de bienvenue sur la page de connexion.",
+        "label": "Sous-titre de la page de connexion"
+      },
+      "logo": {
+        "label": "Logo de l'application",
+        "updateButton": {
+          "label": "Mettre à jour"
+        }
+      },
+      "logoStyle": {
+        "both": {
+          "label": "Logo et nom",
+          "tooltip": "Affiche à la fois le logo et le nom de votre application."
+        },
+        "description": "Choisissez ce qui s'affiche en haut de la barre latérale. Les options deviennent disponibles dès que vous ajoutez un logo ou un nom d'application.",
+        "label": "Style d'affichage du logo",
+        "logoOnly": {
+          "disabledTooltip": "Téléversez un logo pour activer cette option.",
+          "label": "Logo uniquement",
+          "tooltip": "Affiche uniquement le logo de votre application."
+        },
+        "nameOnly": {
+          "disabledTooltip": "Saisissez un nom d'application pour activer cette option.",
+          "label": "Nom uniquement",
+          "tooltip": "Affiche uniquement le nom de votre application."
+        }
+      },
+      "markdownContent": {
+        "placeholder": "Ajoutez du contenu markdown"
+      },
+      "noticeContent": {
+        "label": "Contenu de l'avis"
+      },
+      "noticeHeader": {
+        "label": "En-tête de l'avis"
+      },
+      "page": {
+        "announcementClearFailed": {
+          "message": "Échec de la suppression de l'annonce."
+        },
+        "announcementSaveFailed": {
+          "message": "Échec de l'enregistrement de l'annonce."
+        },
+        "applyButton": {
+          "label": "Appliquer les modifications"
+        },
+        "applying": {
+          "label": "Application..."
+        },
+        "description": "Personnalisez l'apparence de l'application pour les utilisateurs de votre organisation.",
+        "logoUploadFailed": {
+          "message": "Échec du téléversement du logo. {error}"
+        },
+        "saveSuccess": {
+          "message": "Paramètres d'apparence enregistrés avec succès !"
+        },
+        "settingsSaveFailed": {
+          "message": "Échec de la mise à jour des paramètres. {error}"
+        },
+        "validation": {
+          "consentPromptRequired": "L'invite de consentement de l'avis est requise",
+          "invalidUrl": "Doit être une URL valide",
+          "maxChars": "Maximum {count} caractères",
+          "noticeContentRequired": "Le contenu de l'avis est requis",
+          "noticeHeaderRequired": "L'en-tête de l'avis est requis",
+          "urlRequiredWithLabel": "L'URL est requise lorsqu'un libellé est défini"
+        }
+      },
+      "preview": {
+        "chatFooter": {
+          "placeholder": "Contenu du pied de page du chat"
+        },
+        "chatHeader": {
+          "placeholder": "Contenu de l'en-tête du chat"
+        },
+        "greeting": {
+          "placeholder": "Bienvenue sur Acme Chat"
+        },
+        "logo": {
+          "alt": "Logo"
+        }
       }
     },
     "tokenRateLimits": {
@@ -6059,6 +7464,9 @@
             "label": "Dépenses"
           }
         }
+      },
+      "page": {
+        "description": "Suivez les dépenses de l'espace de travail et consultez l'utilisation par utilisateur."
       },
       "spendByUser": {
         "columns": {
@@ -6656,6 +8064,204 @@
         "tooltip": "Voir les statistiques de l'agent"
       }
     },
+    "editor": {
+      "actions": {
+        "codeInterpreter": {
+          "description": "Générez et exécutez du code.",
+          "title": "Interpréteur de code"
+        },
+        "codingAgent": {
+          "description": "Explorez un dépôt GitHub et répondez aux questions sur son code.",
+          "title": "Agent de codage"
+        },
+        "description": "Outils et capacités que cet agent peut utiliser.",
+        "imageGeneration": {
+          "description": "Générez et manipulez des images à l'aide d'outils basés sur l'IA.",
+          "title": "Génération d'images",
+          "unavailable": {
+            "tooltip": "La génération d'images nécessite un modèle configuré. Si vous y avez accès, configurez-en un dans Paramètres > Génération d'images, ou demandez à un administrateur."
+          }
+        },
+        "openUrl": {
+          "description": "Récupérez et lisez le contenu d'URL Web.",
+          "title": "Ouvrir une URL"
+        },
+        "title": "Actions",
+        "webSearch": {
+          "description": "Recherchez sur le Web des informations en temps réel et des résultats à jour.",
+          "title": "Recherche Web"
+        }
+      },
+      "advanced": {
+        "description": "Affinez les prompts et les connaissances de l'agent.",
+        "overwritePrompt": {
+          "suffix": "(Non recommandé)",
+          "title": "Remplacer le prompt système"
+        },
+        "reminders": {
+          "description": "Ajoutez un bref rappel aux messages du prompt. Utilisez-le pour rappeler à l'agent certaines instructions s'il a tendance à les oublier au fil de la discussion. Il doit rester bref et ne pas interférer avec les messages de l'utilisateur.",
+          "placeholder": "N'oubliez pas, je veux que vous formatiez toujours votre réponse sous forme de liste numérotée.",
+          "title": "Rappels"
+        },
+        "title": "Options avancées"
+      },
+      "avatar": {
+        "edit": {
+          "label": "Modifier"
+        },
+        "uploadImage": {
+          "label": "Téléverser une image"
+        }
+      },
+      "delete": {
+        "button": {
+          "label": "Supprimer l'agent"
+        },
+        "description": "Toute personne utilisant cet agent ne pourra plus y accéder.",
+        "title": "Supprimer cet agent"
+      },
+      "deleteModal": {
+        "body": {
+          "confirm": "Voulez-vous vraiment supprimer cet agent ?",
+          "warning": "Toute personne utilisant cet agent ne pourra plus y accéder. La suppression est irréversible."
+        },
+        "title": "Supprimer l'agent"
+      },
+      "filesModal": {
+        "description": "Tous les fichiers sélectionnés pour cet agent",
+        "placeholderName": "Fichier {id}",
+        "title": "Fichiers de l'utilisateur"
+      },
+      "general": {
+        "avatar": {
+          "title": "Avatar de l'agent"
+        },
+        "descriptionField": {
+          "placeholder": "Que fait cet agent ?",
+          "title": "Description"
+        },
+        "name": {
+          "placeholder": "Nommez votre agent",
+          "title": "Nom"
+        }
+      },
+      "header": {
+        "cancel": {
+          "label": "Annuler"
+        },
+        "create": {
+          "label": "Créer"
+        },
+        "createTitle": "Créer un agent",
+        "editTitle": "Modifier l'agent",
+        "save": {
+          "label": "Enregistrer"
+        }
+      },
+      "mcp": {
+        "noAccess": {
+          "tooltip": "Vous n'avez plus accès à ce serveur MCP. Ses outils existants seront conservés."
+        },
+        "searchTools": {
+          "placeholder": "Rechercher des outils..."
+        }
+      },
+      "page": {
+        "ariaLabel": "Page de l'éditeur d'agents"
+      },
+      "prompts": {
+        "instructions": {
+          "description": "Ajoutez des instructions pour adapter les réponses de cet agent.",
+          "placeholder": "Réfléchissez étape par étape et montrez le raisonnement pour les problèmes complexes. Utilisez des exemples précis. Mettez l'accent sur les actions à mener et laissez des blancs à compléter par l'humain en cas d'inconnu. Adoptez un ton poli et enthousiaste.",
+          "title": "Instructions"
+        },
+        "starters": {
+          "description": "Exemples de messages aidant les utilisateurs à comprendre ce que cet agent peut faire et comment interagir efficacement avec lui.",
+          "title": "Amorces de conversation"
+        }
+      },
+      "saveTooltip": {
+        "fixErrors": "Veuillez corriger les erreurs du formulaire avant d'enregistrer.",
+        "noChanges": "Aucune modification n'a été apportée.",
+        "saving": "Enregistrement des modifications...",
+        "uploading": "Veuillez attendre la fin du téléversement des fichiers."
+      },
+      "share": {
+        "feature": {
+          "description": "Affichez cet agent en haut de la liste d'exploration des agents et épinglez-le automatiquement dans la barre latérale pour les nouveaux utilisateurs y ayant accès.",
+          "privateNotice": {
+            "title": "Cet agent vous est privé et ne sera mis en avant que pour vous."
+          },
+          "title": "Mettre cet agent à la une",
+          "unlistedWarning": {
+            "title": "Cet agent est masqué et n'apparaîtra pas dans la liste à la une."
+          }
+        },
+        "labels": {
+          "description": "Ajoutez des étiquettes et des catégories pour aider les gens à mieux découvrir cet agent.",
+          "placeholder": "Ajouter des étiquettes..."
+        },
+        "share": {
+          "button": {
+            "label": "Partager"
+          },
+          "description": "avec d'autres utilisateurs, des groupes ou tous les membres de votre organisation.",
+          "title": "Partager cet agent"
+        },
+        "title": "Partager l'agent"
+      },
+      "starters": {
+        "examples": {
+          "engineeringGoals": "Établis la liste de nos objectifs d'ingénierie pour ce trimestre.",
+          "overview": "Donne-moi un aperçu de quelques documents.",
+          "salesReport": "Trouve le dernier rapport de ventes.",
+          "todayGoals": "Résume mes objectifs du jour."
+        },
+        "placeholder": "Saisissez une amorce de conversation..."
+      },
+      "suffix": {
+        "optional": "facultatif"
+      },
+      "toasts": {
+        "createFailed": "Échec de la création de l'agent - {detail}",
+        "created": "Agent « {name} » créé avec succès",
+        "deleteFailed": "Échec de la suppression de l'agent : {error}",
+        "deleted": "Agent supprimé avec succès",
+        "genericError": "Une erreur s'est produite : {error}",
+        "noResponse": "aucune réponse reçue",
+        "sharingFailed": "Agent créé, mais le partage a échoué : {error}",
+        "toggleListedFailed": "Échec du changement de visibilité",
+        "unknownDetail": "erreur inconnue",
+        "unknownError": "Erreur inconnue",
+        "updateFailed": "Échec de la mise à jour de l'agent - {detail}",
+        "updated": "Agent « {name} » mis à jour avec succès"
+      },
+      "validation": {
+        "cutoffInFuture": "La date limite des connaissances doit être aujourd'hui ou antérieure.",
+        "descriptionMax": "La description doit comporter au plus {max} caractères",
+        "nameRequired": "Le nom de l'agent est requis.",
+        "starterMax": "L'amorce de conversation doit comporter au plus {max} caractères"
+      },
+      "visibility": {
+        "relist": {
+          "button": {
+            "label": "Republier l'agent"
+          },
+          "description": "Les agents republiés apparaissent à nouveau dans la liste d'exploration des agents.",
+          "title": "Republier cet agent"
+        },
+        "unlist": {
+          "button": {
+            "label": "Masquer l'agent"
+          },
+          "description": "Les agents masqués n'apparaissent pas dans la liste d'exploration des agents mais restent accessibles.",
+          "title": "Masquer cet agent"
+        }
+      },
+      "warnings": {
+        "openUrl": "La recherche Web sans la possibilité d'ouvrir des URL peut donner des résultats Web nettement moins bons."
+      }
+    },
     "filters": {
       "actions": {
         "all": {
@@ -6838,6 +8444,47 @@
         }
       }
     },
+    "navigation": {
+      "countSeparator": {
+        "label": "{count, plural, one {Agent} other {Agents}}"
+      },
+      "empty": {
+        "description": "Aucun agent trouvé"
+      },
+      "header": {
+        "description": "Personnalisez le comportement et les connaissances de l'IA pour vos cas d'usage et ceux de votre équipe.",
+        "title": "Agents"
+      },
+      "newAgent": {
+        "label": "Nouvel agent",
+        "noPermission": {
+          "tooltip": "Vous n'avez pas l'autorisation de créer des agents. Contactez votre administrateur pour demander l'accès."
+        }
+      },
+      "page": {
+        "ariaLabel": "Page des agents"
+      },
+      "search": {
+        "placeholder": "Rechercher des agents..."
+      },
+      "sections": {
+        "all": {
+          "title": "Tous les agents"
+        },
+        "featured": {
+          "description": "Sélectionnés par votre équipe",
+          "title": "Agents à la une"
+        }
+      },
+      "tabs": {
+        "all": {
+          "label": "Tous les agents"
+        },
+        "your": {
+          "label": "Vos agents"
+        }
+      }
+    },
     "userVariables": {
       "insert": {
         "tooltip": "Insérer une variable utilisateur"
@@ -6845,6 +8492,12 @@
     }
   },
   "auth": {
+    "anonymous": {
+      "redirecting": {
+        "description": "Veuillez patienter pendant que nous configurons votre session anonyme.",
+        "title": "Redirection vers la page de chat..."
+      }
+    },
     "createAccount": {
       "createOrgButton": {
         "label": "Créer une nouvelle organisation"
@@ -6866,6 +8519,55 @@
       },
       "signInLink": {
         "label": "Se connecter"
+      }
+    },
+    "emailPasswordForm": {
+      "accountExists": {
+        "error": "Un compte existe déjà avec l'adresse e-mail indiquée."
+      },
+      "continueAsGuest": {
+        "label": "ou continuer en tant qu'invité"
+      },
+      "email": {
+        "label": "Adresse e-mail",
+        "placeholder": "email@votreentreprise.com"
+      },
+      "forgotPassword": {
+        "link": "[Mot de passe oublié ?]({url})"
+      },
+      "invalidCredentials": {
+        "error": "Adresse e-mail ou mot de passe non valide"
+      },
+      "noPassword": {
+        "error": "Créez un compte pour définir un mot de passe"
+      },
+      "password": {
+        "label": "Mot de passe",
+        "placeholder": "Mot de passe"
+      },
+      "passwordDigit": {
+        "error": "Le mot de passe doit contenir au moins un chiffre"
+      },
+      "passwordLength": {
+        "error": "Le mot de passe doit contenir entre {min} et {max} caractères"
+      },
+      "passwordLoginDisabled": {
+        "error": "La connexion par mot de passe est désactivée. Connectez-vous avec votre fournisseur d'identité."
+      },
+      "passwordLowercase": {
+        "error": "Le mot de passe doit contenir au moins une lettre minuscule"
+      },
+      "passwordRequirements": {
+        "label": "Exigences du mot de passe :"
+      },
+      "passwordSpecialChar": {
+        "error": "Le mot de passe doit contenir au moins un caractère spécial"
+      },
+      "passwordUppercase": {
+        "error": "Le mot de passe doit contenir au moins une lettre majuscule"
+      },
+      "tooManyRequests": {
+        "error": "Trop de requêtes. Veuillez réessayer plus tard."
       }
     },
     "error": {
@@ -6906,6 +8608,31 @@
         "description": "Perturbation temporaire du système d'authentification"
       }
     },
+    "errorDisplay": {
+      "anonymousDisabled": {
+        "toast": "Votre équipe n'a pas activé l'accès anonyme."
+      },
+      "generic": {
+        "toast": "Une erreur est survenue."
+      }
+    },
+    "flowContainer": {
+      "createAccountLink": {
+        "label": "Créer un compte"
+      },
+      "logo": {
+        "alt": "Logo"
+      },
+      "signInLink": {
+        "label": "Se connecter"
+      },
+      "signinPrompt": {
+        "text": "Vous avez déjà un compte ?"
+      },
+      "signupPrompt": {
+        "text": "Nouveau sur {appName} ?"
+      }
+    },
     "forgotPassword": {
       "backToLoginLink": {
         "label": "[Retour à la connexion](/auth/login)"
@@ -6938,7 +8665,8 @@
         "placeholder": "Saisissez la clé d'API"
       },
       "emailField": {
-        "label": "E-mail"
+        "label": "E-mail",
+        "placeholder": "email@votreentreprise.com"
       },
       "genericError": {
         "toast": "Impossible d'emprunter l'identité de l'utilisateur"
@@ -6999,6 +8727,23 @@
         "label": "E-mail professionnel"
       }
     },
+    "passwordRequirements": {
+      "digit": {
+        "label": "Contient un chiffre."
+      },
+      "length": {
+        "label": "{min}–{max} caractères"
+      },
+      "lowercase": {
+        "label": "Contient une lettre minuscule."
+      },
+      "specialChar": {
+        "label": "Contient un caractère spécial."
+      },
+      "uppercase": {
+        "label": "Contient une lettre majuscule."
+      }
+    },
     "resetPassword": {
       "backToLoginLink": {
         "label": "[Retour à la connexion](/auth/login)"
@@ -7040,6 +8785,31 @@
       },
       "unexpectedError": {
         "toast": "Une erreur inattendue est survenue. Veuillez réessayer."
+      }
+    },
+    "sessionEnd": {
+      "expired": {
+        "message": "Votre session a expiré. Veuillez vous reconnecter pour continuer."
+      },
+      "loginButton": {
+        "label": "Se connecter"
+      },
+      "modal": {
+        "title": "Vous avez été déconnecté"
+      },
+      "terminated": {
+        "message": "Cette session a été déconnectée. Veuillez vous reconnecter pour continuer."
+      },
+      "unrecognized": {
+        "message": "Vous avez été déconnecté de manière inattendue. Veuillez vous reconnecter pour continuer. Si cela se reproduit, contactez votre administrateur."
+      }
+    },
+    "signIn": {
+      "captchaTokenError": {
+        "toast": "grecaptcha.execute n'a renvoyé aucun jeton"
+      },
+      "google": {
+        "label": "Continuer avec Google"
       }
     },
     "signup": {
@@ -8471,6 +10241,75 @@
         "tooltip": "La modification de ce paramètre n'est pas prise en charge pour ce modèle."
       }
     },
+    "nrf": {
+      "page": {
+        "filesFailed": {
+          "toast": "{count, plural, one {Le fichier a échoué et a été supprimé : {names}} other {Les fichiers ont échoué et ont été supprimés : {names}}}"
+        },
+        "loginModal": {
+          "loginButton": {
+            "label": "Se connecter"
+          },
+          "title": "Bienvenue sur Onyx"
+        },
+        "noResubmitMessage": {
+          "toast": "Aucun message envoyé précédemment n'a été trouvé."
+        },
+        "settingsButton": {
+          "tooltip": "Ouvrir les paramètres"
+        },
+        "setupLlmButton": {
+          "label": "Configurez un LLM."
+        },
+        "turnOffModal": {
+          "cancelButton": {
+            "label": "Annuler"
+          },
+          "confirmButton": {
+            "label": "Désactiver"
+          },
+          "description": "Vous verrez la page de nouvel onglet par défaut de votre navigateur. Vous pouvez la réactiver à tout moment dans les paramètres d'Onyx.",
+          "title": "Désactiver Onyx comme page de nouvel onglet ?"
+        }
+      },
+      "settingsPanel": {
+        "backgroundNone": {
+          "label": "Aucun"
+        },
+        "backgroundOption": {
+          "ariaLabel": "Arrière-plan {label}"
+        },
+        "backgroundOptionSelected": {
+          "ariaLabel": "Arrière-plan {label} (sélectionné)"
+        },
+        "backgroundSection": {
+          "title": "Arrière-plan"
+        },
+        "closeButton": {
+          "tooltip": "Fermer les paramètres"
+        },
+        "generalSection": {
+          "title": "Général"
+        },
+        "header": {
+          "title": "Paramètres"
+        },
+        "newTabToggle": {
+          "label": "Utiliser Onyx comme page de nouvel onglet"
+        },
+        "themeToggle": {
+          "tooltip": "{mode, select, light {Passer au thème clair} other {Passer au thème sombre}}"
+        }
+      },
+      "sidePanelHeader": {
+        "newChatButton": {
+          "tooltip": "Nouveau chat"
+        },
+        "openInOnyxButton": {
+          "tooltip": "Ouvrir dans Onyx"
+        }
+      }
+    },
     "popup": {
       "consentCheckbox": {
         "label": "Case de consentement"
@@ -8486,6 +10325,128 @@
       },
       "startButton": {
         "label": "Commencer"
+      }
+    },
+    "projects": {
+      "chatItem": {
+        "lastMessage": {
+          "description": "Dernier message {time}"
+        },
+        "projectFallback": {
+          "label": "Projet"
+        }
+      },
+      "contextPanel": {
+        "addFilesButton": {
+          "label": "Ajouter des fichiers"
+        },
+        "contextExceeded": {
+          "message": "Ce projet dépasse les limites de contexte du modèle. Les sessions rechercheront automatiquement les fichiers pertinents avant de générer une réponse."
+        },
+        "dropFiles": {
+          "message": "Déposez des fichiers ici pour les ajouter à ce projet"
+        },
+        "emptyFiles": {
+          "message": "Ajoutez des documents, des textes ou des images à utiliser dans le projet. Le glisser-déposer est pris en charge."
+        },
+        "fileCount": {
+          "description": "{count, plural, one {# fichier} other {# fichiers}}"
+        },
+        "fileCountOverflow": {
+          "description": "Plus de 100 fichiers"
+        },
+        "files": {
+          "description": "Les conversations de ce projet peuvent accéder à ces fichiers.",
+          "title": "Fichiers"
+        },
+        "filesModal": {
+          "description": "Les sessions de ce projet peuvent accéder aux fichiers ici.",
+          "title": "Fichiers du projet"
+        },
+        "instructions": {
+          "emptyDescription": "Ajoutez des instructions pour adapter les réponses dans ce projet.",
+          "title": "Instructions"
+        },
+        "loadingProject": {
+          "label": "Chargement du projet..."
+        },
+        "setInstructionsButton": {
+          "label": "Définir les instructions"
+        },
+        "viewAll": {
+          "label": "Tout voir"
+        },
+        "viewFiles": {
+          "label": "Voir les fichiers"
+        }
+      },
+      "createModal": {
+        "cancelButton": {
+          "label": "Annuler"
+        },
+        "createError": {
+          "toast": "Échec de la création du projet {name}"
+        },
+        "description": "Utilisez les projets pour organiser vos fichiers et conversations en un seul endroit, et ajoutez des instructions personnalisées pour le travail en cours.",
+        "name": {
+          "label": "Nom du projet",
+          "placeholder": "Sur quoi travaillez-vous ?"
+        },
+        "nameRequired": {
+          "error": "Le nom du projet est requis"
+        },
+        "submitButton": {
+          "label": "Créer le projet"
+        },
+        "title": "Créer un nouveau projet"
+      },
+      "foldedPopover": {
+        "empty": {
+          "title": "Aucun projet trouvé"
+        },
+        "search": {
+          "placeholder": "Rechercher des projets..."
+        }
+      },
+      "folder": {
+        "collapse": {
+          "ariaLabel": "Réduire le projet"
+        },
+        "delete": {
+          "label": "Supprimer le projet"
+        },
+        "deleteModal": {
+          "confirmButton": {
+            "label": "Supprimer"
+          },
+          "message": "Voulez-vous vraiment supprimer ce projet ? Cette action est irréversible.",
+          "title": "Supprimer le projet"
+        },
+        "expand": {
+          "ariaLabel": "Développer le projet"
+        },
+        "rename": {
+          "label": "Renommer le projet"
+        }
+      },
+      "sessionList": {
+        "empty": {
+          "message": "Aucune conversation pour le moment."
+        },
+        "recentChats": {
+          "title": "Conversations récentes"
+        }
+      },
+      "uploads": {
+        "failed": {
+          "toast": "Échec du téléversement des fichiers"
+        },
+        "oversized": {
+          "toast": "{count, plural, one {# fichier trop volumineux ignoré} other {# fichiers trop volumineux ignorés}} (>{max} Mo) : {names}"
+        },
+        "rejected": {
+          "toast": "Certains fichiers n'ont pas été téléversés. {details}"
+        }
       }
     },
     "sharedChat": {
@@ -8518,6 +10479,1773 @@
       },
       "incognito": {
         "title": "Vous êtes en navigation privée"
+      }
+    }
+  },
+  "common": {
+    "adminChrome": {
+      "openSidebar": {
+        "ariaLabel": "Ouvrir la barre latérale"
+      },
+      "paymentReminder": {
+        "billingButton": {
+          "label": "Mettre à jour les informations de facturation"
+        },
+        "text": "**Attention :** votre période d'essai se termine dans moins de 5 jours et aucun moyen de paiement n'a été ajouté."
+      }
+    },
+    "agentAvatar": {
+      "image": {
+        "altFallback": "Avatar de l'agent"
+      },
+      "logo": {
+        "alt": "Logo"
+      }
+    },
+    "attachment": {
+      "document": {
+        "label": "Document"
+      },
+      "expandButton": {
+        "ariaLabel": "Agrandir le document"
+      }
+    },
+    "backButton": {
+      "label": "Retour"
+    },
+    "chatBackgrounds": {
+      "clouds": {
+        "label": "Nuages"
+      },
+      "hills": {
+        "label": "Collines"
+      },
+      "mountains": {
+        "label": "Montagnes"
+      },
+      "night": {
+        "label": "Nuit"
+      },
+      "none": {
+        "label": "Aucun"
+      },
+      "plant": {
+        "label": "Plantes"
+      }
+    },
+    "colorSwatch": {
+      "sample": {
+        "text": "Aa"
+      }
+    },
+    "comboBox": {
+      "createOption": {
+        "ariaLabel": "{prefix} « {value} »",
+        "defaultPrefix": "Créer"
+      },
+      "dropdown": {
+        "closeAriaLabel": "Fermer la liste déroulante",
+        "openAriaLabel": "Ouvrir la liste déroulante"
+      },
+      "options": {
+        "empty": "Aucune option trouvée"
+      },
+      "separator": {
+        "label": "Autres options"
+      }
+    },
+    "commandMenu": {
+      "closeButton": {
+        "ariaLabel": "Fermer le menu"
+      },
+      "dialog": {
+        "title": "Menu de commandes"
+      },
+      "options": {
+        "ariaLabel": "Options du menu de commandes"
+      },
+      "search": {
+        "placeholder": "Rechercher..."
+      }
+    },
+    "connectorMultiSelect": {
+      "allSelected": {
+        "description": "Tous les connecteurs disponibles ont été sélectionnés. Retirez des connecteurs ci-dessous pour en ajouter d'autres.",
+        "placeholder": "Tous les connecteurs sélectionnés"
+      },
+      "documentSetHint": {
+        "description": "Tous les documents indexés par les connecteurs sélectionnés feront partie de cet ensemble de documents."
+      },
+      "noMatches": {
+        "text": "Aucun connecteur correspondant trouvé"
+      },
+      "noMoreConnectors": {
+        "text": "Aucun autre connecteur disponible"
+      },
+      "noPrivateConnectors": {
+        "text": "Aucun connecteur privé disponible. Créez d'abord un connecteur privé."
+      },
+      "noneSelected": {
+        "text": "Aucun connecteur sélectionné. Recherchez et sélectionnez des connecteurs ci-dessus."
+      },
+      "removeConnector": {
+        "tooltip": "Retirer le connecteur"
+      },
+      "search": {
+        "placeholder": "Rechercher des connecteurs..."
+      }
+    },
+    "datePicker": {
+      "selectDate": {
+        "label": "Sélectionner une date"
+      },
+      "todayButton": {
+        "label": "Aujourd'hui"
+      }
+    },
+    "dateRange": {
+      "anyTime": {
+        "text": "N'importe quand..."
+      },
+      "chooseCustom": {
+        "ariaLabel": "Choisir une plage personnalisée"
+      },
+      "clearButton": {
+        "ariaLabel": "Effacer"
+      },
+      "custom": {
+        "label": "Personnalisé"
+      },
+      "customRange": {
+        "ariaLabel": "Plage personnalisée : {from} à {to}"
+      },
+      "date": {
+        "label": "Date"
+      },
+      "group": {
+        "ariaLabel": "Plage de dates"
+      },
+      "preset": {
+        "oneDay": "1J",
+        "oneMonth": "1M",
+        "sevenDays": "7J",
+        "threeMonths": "3M"
+      }
+    },
+    "deleteButton": {
+      "button": {
+        "tooltip": "Supprimer"
+      }
+    },
+    "documentDisplay": {
+      "contextDocs": {
+        "text": "{count, plural, one {# document de contexte} other {# documents de contexte}}"
+      },
+      "openDocument": {
+        "ariaLabel": "Ouvrir le document : {title}"
+      },
+      "question": {
+        "title": "Question"
+      },
+      "subqueries": {
+        "text": "{count, plural, one {# sous-requête} other {# sous-requêtes}}"
+      },
+      "updated": {
+        "text": "Mis à jour le {date}"
+      }
+    },
+    "dropdown": {
+      "default": {
+        "label": "Par défaut"
+      },
+      "selectOption": {
+        "placeholder": "Sélectionnez une option..."
+      }
+    },
+    "editable": {
+      "edit": {
+        "ariaLabel": "Modifier"
+      },
+      "rename": {
+        "ariaLabel": "Renommer"
+      },
+      "save": {
+        "ariaLabel": "Enregistrer"
+      }
+    },
+    "errorPages": {
+      "accessRestricted": {
+        "billingAdminHint": {
+          "text": "Si vous êtes l'administrateur, rendez-vous sur la page <billingLink>Facturation admin</billingLink> pour {hadLicense, select, true {renouveler} other {activer}} votre licence, inscrivez-vous via Stripe ou contactez <supportLink>support@onyx.app</supportLink> pour toute question de facturation."
+        },
+        "heading": {
+          "title": "Accès restreint"
+        },
+        "licenseLapse": {
+          "description": "Votre accès à Onyx a été temporairement suspendu en raison d'une interruption de votre licence."
+        },
+        "licenseRequired": {
+          "description": "Une licence est requise pour utiliser Onyx. Vos données sont protégées et seront disponibles dès qu'une licence sera activée."
+        },
+        "logoutButton": {
+          "label": "Se déconnecter"
+        },
+        "manageSubscription": {
+          "description": "Si vous êtes administrateur, vous pouvez gérer votre abonnement en cliquant sur le bouton ci-dessous. Les autres utilisateurs doivent contacter leur administrateur pour régler ce problème."
+        },
+        "obtainLicense": {
+          "description": "Pour commencer, veuillez contacter votre administrateur système afin d'obtenir une licence."
+        },
+        "renewLicense": {
+          "description": "Pour rétablir votre accès et continuer à utiliser Onyx, veuillez contacter votre administrateur système afin de renouveler votre licence."
+        },
+        "resubscribeButton": {
+          "label": "Se réabonner",
+          "loading": "Chargement..."
+        },
+        "resubscribeError": {
+          "text": "Erreur lors de l'ouverture de la page de réabonnement. Veuillez réessayer plus tard."
+        },
+        "seatLimit": {
+          "description": "Votre organisation a dépassé le nombre de sièges sous licence. L'accès est restreint jusqu'à ce que le nombre d'utilisateurs soit réduit ou que votre licence soit mise à niveau."
+        },
+        "seatLimitAdminHint": {
+          "text": "Si vous êtes administrateur, vous pouvez gérer les utilisateurs sur la page <userLink>Gestion des utilisateurs</userLink> ou mettre à niveau votre licence sur la page <billingLink>Facturation admin</billingLink>."
+        },
+        "seatLimitWithCounts": {
+          "description": "Votre organisation a dépassé le nombre de sièges sous licence ({used} utilisateurs / {seats} sièges). L'accès est restreint jusqu'à ce que le nombre d'utilisateurs soit réduit ou que votre licence soit mise à niveau."
+        },
+        "subscriptionLapse": {
+          "description": "Votre accès à Onyx a été temporairement suspendu en raison d'une interruption de votre abonnement."
+        },
+        "updatePayment": {
+          "description": "Pour rétablir votre accès et continuer à profiter des fonctionnalités puissantes d'Onyx, veuillez mettre à jour vos informations de paiement."
+        }
+      },
+      "configError": {
+        "adminHint": {
+          "text": "Si vous êtes administrateur, consultez notre <docsLink>documentation</docsLink> pour connaître les étapes de configuration. Si vous êtes utilisateur, contactez votre administrateur pour obtenir de l'aide."
+        },
+        "heading": {
+          "description": "Un problème est survenu lors du chargement de vos paramètres Onyx. Cela peut être dû à un problème de configuration ou à une installation incomplète.",
+          "title": "Nous avons rencontré un problème"
+        }
+      },
+      "maintenance": {
+        "apology": {
+          "description": "Nous nous excusons pour la gêne occasionnée et vous remercions de votre patience."
+        },
+        "checkBack": {
+          "description": "Onyx est actuellement en maintenance. Veuillez réessayer dans quelques minutes."
+        },
+        "heading": {
+          "title": "Maintenance en cours"
+        }
+      },
+      "needHelp": {
+        "text": "Besoin d'aide ? Rejoignez notre <discordLink>communauté Discord</discordLink> pour obtenir de l'assistance."
+      }
+    },
+    "errors": {
+      "unknown": {
+        "message": "Erreur inconnue"
+      }
+    },
+    "expandableContent": {
+      "downloadButton": {
+        "tooltip": "Télécharger le fichier"
+      },
+      "file": {
+        "untitledFallback": "Sans titre"
+      },
+      "fullScreenButton": {
+        "tooltip": "Plein écran"
+      },
+      "hideButton": {
+        "tooltip": "Masquer"
+      },
+      "minimizeButton": {
+        "tooltip": "Réduire"
+      }
+    },
+    "expandableText": {
+      "copyButton": {
+        "tooltip": "Copier"
+      },
+      "downloadButton": {
+        "tooltip": "Télécharger"
+      },
+      "lineCount": {
+        "label": "{count, plural, one {# ligne} other {# lignes}}"
+      },
+      "size": {
+        "bytes": "{count} octets",
+        "kilobytes": "{size} Ko"
+      },
+      "viewFullButton": {
+        "tooltip": "Voir le texte intégral"
+      }
+    },
+    "federatedConnectorSelector": {
+      "allSelected": {
+        "placeholder": "Tous les connecteurs fédérés sélectionnés"
+      },
+      "entitiesConfigured": {
+        "tooltip": "Entités configurées"
+      },
+      "noMatches": {
+        "text": "Aucun connecteur fédéré correspondant trouvé"
+      },
+      "noMoreConnectors": {
+        "text": "Aucun autre connecteur fédéré disponible"
+      },
+      "noneSelected": {
+        "text": "Aucun connecteur fédéré sélectionné. Recherchez et sélectionnez des connecteurs ci-dessus."
+      },
+      "realtimeSearchHint": {
+        "description": "Les documents des connecteurs fédérés sélectionnés seront recherchés en temps réel lors des requêtes."
+      },
+      "removeConnector": {
+        "tooltip": "Retirer le connecteur"
+      },
+      "search": {
+        "placeholder": "Rechercher des connecteurs fédérés..."
+      }
+    },
+    "field": {
+      "arrayField": {
+        "addButton": "Ajouter"
+      },
+      "booleanField": {
+        "optionalLabel": "{label} (facultatif)"
+      },
+      "fileValidation": {
+        "noTypeDefinition": "Aucune définition de type de fichier trouvée pour le champ : {name}",
+        "selectionError": "Erreur de sélection du fichier",
+        "unknownError": "Erreur inconnue",
+        "validating": "Validation du fichier...",
+        "validationError": "Erreur de validation"
+      },
+      "markdown": {
+        "editorLabel": "Markdown",
+        "placeholder": "Saisissez votre markdown ici...",
+        "previewTab": "Aperçu",
+        "writeTab": "Écrire"
+      },
+      "optionalIndicator": {
+        "text": "(facultatif)"
+      },
+      "passwordToggle": {
+        "hideAriaLabel": "Masquer le mot de passe",
+        "showAriaLabel": "Afficher le mot de passe"
+      },
+      "selector": {
+        "noneOption": "Aucun",
+        "placeholder": "Sélectionner..."
+      }
+    },
+    "filePicker": {
+      "allRecentFilesButton": {
+        "title": "Tous les fichiers récents"
+      },
+      "recentFiles": {
+        "title": "Fichiers récents"
+      },
+      "recentFilesModal": {
+        "description": "Téléversez des fichiers ou choisissez parmi vos fichiers récents."
+      },
+      "toasts": {
+        "associatedAssistants": "Impossible de supprimer le fichier. Il est associé aux assistants : {assistants}",
+        "associatedBoth": "Impossible de supprimer le fichier. Il est associé aux projets : {projects} et aux assistants : {assistants}",
+        "associatedProjects": "Impossible de supprimer le fichier. Il est associé aux projets : {projects}",
+        "deleteFailed": "Échec de la suppression du fichier. Veuillez réessayer.",
+        "deleteSuccess": "Fichier supprimé avec succès"
+      },
+      "uploadFiles": {
+        "description": "Téléversez un fichier depuis votre appareil",
+        "title": "Téléverser des fichiers"
+      },
+      "viewFileButton": {
+        "tooltip": "Voir le fichier"
+      }
+    },
+    "fileTile": {
+      "file": {
+        "fallback": "fichier"
+      },
+      "open": {
+        "ariaLabel": "Ouvrir {title}"
+      },
+      "removeButton": {
+        "label": "Supprimer"
+      }
+    },
+    "filters": {
+      "clearButton": {
+        "ariaLabel": "Effacer"
+      }
+    },
+    "formField": {
+      "optional": {
+        "label": "(Facultatif)"
+      },
+      "required": {
+        "label": "(Obligatoire)"
+      }
+    },
+    "genericMultiSelect": {
+      "loadFailed": {
+        "text": "Impossible de charger {label}. Veuillez réessayer."
+      },
+      "search": {
+        "placeholder": "Rechercher..."
+      }
+    },
+    "groupsMultiSelect": {
+      "noGroups": {
+        "emptyMessage": "Aucun groupe d'utilisateurs disponible. Veuillez d'abord créer un groupe d'utilisateurs."
+      },
+      "userGroups": {
+        "label": "Groupes d'utilisateurs",
+        "subtext": "Sélectionnez les groupes d'utilisateurs pouvant accéder à cette ressource"
+      }
+    },
+    "icons": {
+      "logo": {
+        "alt": "Logo"
+      }
+    },
+    "initializingLoader": {
+      "initializing": {
+        "text": "Initialisation de {appName}"
+      }
+    },
+    "inputElement": {
+      "removeButton": {
+        "tooltip": "Supprimer"
+      }
+    },
+    "inputFile": {
+      "attachButton": {
+        "ariaLabel": "Joindre un fichier"
+      },
+      "clearButton": {
+        "ariaLabel": "Effacer le fichier"
+      }
+    },
+    "inputImage": {
+      "dropRejected": {
+        "fallback": "Fichier refusé"
+      },
+      "editButton": {
+        "ariaLabel": "Modifier l'image"
+      },
+      "editOverlay": {
+        "label": "Modifier"
+      },
+      "image": {
+        "altFallback": "Image"
+      },
+      "removeButton": {
+        "ariaLabel": "Supprimer l'image"
+      },
+      "uploadButton": {
+        "ariaLabel": "Téléverser une image"
+      }
+    },
+    "inputSelect": {
+      "placeholder": {
+        "fallback": "Sélectionnez une option"
+      }
+    },
+    "isPublicSelector": {
+      "assignGroups": {
+        "label": "Attribuer l'accès des groupes à ce {objectName}",
+        "scopedSubtext": "Sélectionnez un ou plusieurs des groupes que vous gérez pour donner accès à ce {objectName}",
+        "visibleSubtext": "Ce {objectName} sera visible/accessible par les groupes sélectionnés ci-dessous"
+      },
+      "loading": {
+        "text": "Chargement..."
+      },
+      "makePublic": {
+        "label": "Rendre ce {objectName} public ?",
+        "subtext": "Si activé, ce {objectName} sera utilisable par <b>tous les {publicToWhom}</b>. Sinon, seuls les <b>administrateurs</b> et les <b>{publicToWhom}</b> ayant reçu un accès explicite à ce {objectName} (par ex. via un groupe d'utilisateurs) y auront accès."
+      },
+      "publicDisabled": {
+        "message": "Ce {objectName} est public et accessible à tous les utilisateurs."
+      },
+      "usersFallback": {
+        "text": "Utilisateurs"
+      }
+    },
+    "keyValue": {
+      "addButton": {
+        "ariaLabel": "Ajouter une paire {keyTitle} et {valueTitle}",
+        "label": "Ajouter une ligne"
+      },
+      "empty": {
+        "title": "Aucun élément ajouté pour le moment."
+      },
+      "error": {
+        "duplicateKey": "Clé en double",
+        "duplicateSummary": "{count, plural, one {# clé en double trouvée} other {# clés en double trouvées}}",
+        "emptyKey": "La clé ne peut pas être vide",
+        "emptySummary": "{count, plural, one {# clé vide trouvée} other {# clés vides trouvées}}",
+        "validationSummary": "{count, plural, one {# erreur de validation trouvée} other {# erreurs de validation trouvées}}"
+      },
+      "group": {
+        "ariaLabel": "Paires {keyTitle} et {valueTitle}"
+      },
+      "input": {
+        "ariaLabel": "{label} {index}"
+      },
+      "keyColumn": {
+        "title": "Clé"
+      },
+      "pair": {
+        "fallbackLabel": "clé-valeur"
+      },
+      "removeButton": {
+        "ariaLabel": "Supprimer la paire {label} {index}"
+      },
+      "valueColumn": {
+        "title": "Valeur"
+      }
+    },
+    "logo": {
+      "image": {
+        "alt": "Logo"
+      },
+      "poweredBy": {
+        "label": "Propulsé par Onyx"
+      }
+    },
+    "nonSelectableConnectors": {
+      "unavailable": {
+        "label": "Connecteurs indisponibles :"
+      }
+    },
+    "oauthCallback": {
+      "authorizationFailed": {
+        "description": "L'autorisation a été annulée ou a échoué. Veuillez réessayer.",
+        "title": "Échec de l'autorisation"
+      },
+      "backButton": {
+        "label": "Retour au chat"
+      },
+      "completeFailed": {
+        "message": "Impossible de finaliser l'autorisation"
+      },
+      "genericError": {
+        "description": "Une erreur est survenue pendant le processus OAuth. Veuillez réessayer.",
+        "title": "Une erreur est survenue"
+      },
+      "invalidRequest": {
+        "description": "La demande d'autorisation était incomplète. Veuillez réessayer.",
+        "title": "Requête non valide"
+      },
+      "loadingHint": {
+        "text": "Cela peut prendre quelques instants..."
+      },
+      "processing": {
+        "description": "Veuillez patienter pendant que nous terminons la configuration.",
+        "title": "Traitement..."
+      },
+      "redirecting": {
+        "text": "Redirection dans {count, plural, one {# seconde} other {# secondes}}..."
+      },
+      "serviceFallback": {
+        "text": "service"
+      },
+      "success": {
+        "detailsTemplate": "L'autorisation de {serviceName} a été effectuée avec succès.",
+        "title": "Réussi !"
+      }
+    },
+    "spreadsheet": {
+      "error": {
+        "description": "La feuille de calcul est peut-être endommagée ou n'a pas pu être chargée correctement.",
+        "title": "Erreur lors du chargement de la feuille de calcul"
+      },
+      "preview": {
+        "truncated": "Aperçu tronqué. Téléchargez le fichier pour voir toutes les lignes.",
+        "unavailable": "Impossible d'afficher l'aperçu de cette feuille de calcul."
+      },
+      "sheet": {
+        "defaultName": "Feuille 1",
+        "empty": "Cette feuille est vide.",
+        "tooLarge": "Cette feuille est trop volumineuse pour l'aperçu. Téléchargez le fichier pour la consulter."
+      }
+    }
+  },
+  "craft": {
+    "agentSwitcher": {
+      "mainAgent": {
+        "label": "Agent principal"
+      },
+      "subagentFallback": {
+        "label": "sous-agent"
+      },
+      "switch": {
+        "ariaLabel": "Changer d'agent"
+      }
+    },
+    "approvals": {
+      "approveOnce": {
+        "ariaLabel": "Approuver cette action une fois",
+        "button": "Approuver une fois"
+      },
+      "approveSession": {
+        "button": "Approuver pour la session",
+        "tooltip": "Approuver les actions correspondantes pour cette session"
+      },
+      "details": {
+        "hideAriaLabel": "Masquer les détails",
+        "showAriaLabel": "Afficher les détails"
+      },
+      "header": {
+        "required": "Approbation requise : {headline}"
+      },
+      "headline": {
+        "multiAction": "{count, plural, one {# action} other {# actions}} dans {app}",
+        "singleAction": "{action} dans {app}"
+      },
+      "payload": {
+        "empty": {
+          "label": "Aucune donnée."
+        },
+        "showLess": {
+          "button": "Afficher moins"
+        },
+        "showMore": {
+          "button": "Afficher plus"
+        }
+      },
+      "reject": {
+        "ariaLabel": "Rejeter cette action",
+        "button": "Rejeter"
+      },
+      "status": {
+        "approved": "Approuvé",
+        "rejected": "Rejeté"
+      },
+      "submit": {
+        "errorFallback": "Échec de l'envoi de la décision"
+      }
+    },
+    "apps": {
+      "addCatalog": {
+        "addButton": "Ajouter",
+        "createButton": "Créer",
+        "customApp": {
+          "description": "Identifiants et accès réseau pour votre propre intégration.",
+          "title": "App personnalisée"
+        },
+        "mcpHint": {
+          "label": "Besoin d'un serveur MCP à la place ? Connectez-le dans Actions, puis activez-le pour Craft ici.",
+          "openActionsButton": "Ouvrir Actions"
+        },
+        "modal": {
+          "description": "Rendez une intégration disponible pour toute votre organisation. Les fournisseurs intégrés incluent des actions qui apprennent à l'agent Craft à les utiliser ; les fournisseurs déjà configurés ne sont pas listés.",
+          "title": "Ajouter une app"
+        }
+      },
+      "associatedSkills": {
+        "associateAriaLabel": "Associer {name}",
+        "associateButton": "Associer une existante",
+        "create": {
+          "github": {
+            "description": "Si vos compétences sont sur GitHub, importez-les d'abord sur la page Compétences, puis associez-les à cette app.",
+            "label": "Importer depuis GitHub"
+          },
+          "scratch": {
+            "description": "Rédigez des instructions et ajoutez des fichiers annexes.",
+            "label": "Partir de zéro"
+          },
+          "upload": {
+            "description": "Importez un fichier SKILL.md, un fichier ZIP ou un dossier de compétence.",
+            "label": "Importer une compétence"
+          }
+        },
+        "createSkillButton": "Créer une compétence",
+        "description": "Les compétences donnent à Craft des instructions pour utiliser cette app. Elles s'appliquent à toute l'organisation ; les utilisateurs peuvent devoir toutes les activer pour que l'app fonctionne correctement.",
+        "editButton": "Modifier",
+        "empty": {
+          "label": "Aucune compétence modifiable trouvée."
+        },
+        "invalidTag": "Non valide",
+        "loading": {
+          "label": "Chargement des compétences…"
+        },
+        "noneAssociated": {
+          "label": "Aucune compétence associée pour le moment. Cette app peut quand même être enregistrée et utilisée sans."
+        },
+        "promote": {
+          "cancelButton": "Annuler",
+          "confirmButton": "Rendre disponible pour l'organisation",
+          "description": "Les compétences associées à une app doivent être disponibles pour tous. Ce changement est appliqué lorsque vous enregistrez l'app.",
+          "title": "Rendre « {name} » disponible pour toute l'organisation ?"
+        },
+        "search": {
+          "placeholder": "Rechercher des compétences modifiables..."
+        },
+        "title": "Compétences associées",
+        "unavailable": {
+          "duplicateName": "Une compétence nommée « {name} » est déjà associée.",
+          "invalid": "Compétence non valide : corrigez-la avant de l'associer.",
+          "otherApp": "Déjà associée à l'app « {name} »."
+        },
+        "unlink": {
+          "button": "Dissocier",
+          "cancelButton": "Annuler",
+          "confirm": "Dissocier « {name} » de cette app ?"
+        },
+        "unlinkAriaLabel": "Dissocier {name}",
+        "viewButton": "Afficher"
+      },
+      "configureProvider": {
+        "addButton": "Ajouter",
+        "addTitle": "Ajouter {name}",
+        "editTitle": "Modifier {name}",
+        "emptyPolicies": "Ce fournisseur n'a aucune action à configurer.",
+        "fields": {
+          "name": {
+            "description": "Un libellé pour cette connexion. Utilisez un nom distinct lorsque vous ajoutez plusieurs instances du même fournisseur (p. ex. « {name} — Ingénierie »).",
+            "label": "Nom"
+          }
+        },
+        "managedDescription": "Fourni par Onyx : configurez ce que l'agent peut faire.",
+        "managedNote": "Cette app est fournie par Onyx : les identifiants sont gérés pour vous. Choisissez ci-dessous ce que l'agent peut faire. Les utilisateurs la connectent depuis la page Apps.",
+        "saveButton": "Enregistrer"
+      },
+      "customApp": {
+        "cancelButton": "Annuler",
+        "createButton": "Créer",
+        "createDescription": "Configurez comment le proxy de sortie atteint et authentifie cette app. Une compétence n'est pas requise.",
+        "createTitle": "Créer une app personnalisée",
+        "creatingButton": "Création…",
+        "disabled": {
+          "nameMissing": "Saisissez un nom avant de créer cette app personnalisée.",
+          "patternMissing": "Ajoutez au moins un motif d'URL en amont. Saisissez un motif et appuyez sur Entrée.",
+          "pristine": "Effectuez une modification avant d'enregistrer.",
+          "saving": "Un enregistrement est déjà en cours."
+        },
+        "editDescription": "Mettez à jour les paramètres de la passerelle et gérez les compétences associées.",
+        "editTitle": "Modifier {name}",
+        "errors": {
+          "saveFailedTitle": "Impossible d'enregistrer"
+        },
+        "fields": {
+          "headers": {
+            "addButton": "Ajouter un en-tête",
+            "description": "Facultatif : en-têtes injectés dans les requêtes sortantes. Utilisez '{placeholder}' pour les valeurs fournies par l'utilisateur (ou l'organisation ci-dessous), p. ex. « Bearer '{api_key}' ». Laissez vide pour autoriser les motifs en amont sans injecter d'identifiants.",
+            "keyTitle": "En-tête",
+            "label": "Motif d'identifiants d'en-tête",
+            "valueTitle": "Valeur"
+          },
+          "name": {
+            "label": "Nom",
+            "placeholder": "Mon app personnalisée"
+          },
+          "orgCredentials": {
+            "addButton": "Ajouter un identifiant",
+            "description": "Facultatif : valeurs que votre organisation préremplit pour chaque utilisateur. Laissez vide pour les apps où chaque utilisateur fournit ses propres identifiants.",
+            "keyTitle": "Clé d'identifiant",
+            "label": "Identifiants de l'organisation",
+            "valueTitle": "Valeur"
+          },
+          "upstreamPatterns": {
+            "description": "URL sortantes dans lesquelles le proxy peut injecter des identifiants. Utilisez * pour correspondre à n'importe quels caractères (p. ex. https://api.example.com/* couvre tous les chemins de cet hôte). L'hôte doit être littéral, sans joker avant la première barre oblique. Saisissez un motif et appuyez sur Entrée.",
+            "label": "Motifs d'URL en amont"
+          }
+        },
+        "saveButton": "Enregistrer",
+        "savingButton": "Enregistrement…"
+      },
+      "errors": {
+        "duplicateSkillName": "L'app « {appName} » a déjà une compétence associée nommée « {skillName} ». Importez une compétence avec un autre nom."
+      },
+      "mcpPolicy": {
+        "description": "Configurez ce que l'agent Craft peut faire avec les outils de ce serveur MCP.",
+        "emptyPolicies": "Aucun outil activé sur ce serveur. Activez d'abord les outils sur la page des actions MCP.",
+        "saveButton": "Enregistrer",
+        "title": "Modifier {name}"
+      },
+      "oauthCallback": {
+        "backButton": "Retour à mes apps",
+        "description": "Finalisation de l'échange OAuth…",
+        "errors": {
+          "cancelled": "OAuth a été annulé ou refusé : {reason}",
+          "failed": "Échec de la connexion.",
+          "missingParams": "Code ou state manquant dans l'URL de rappel."
+        },
+        "exchanging": {
+          "label": "Échange du code d'autorisation…"
+        },
+        "success": {
+          "label": "Connecté. Redirection vers vos apps…"
+        },
+        "title": "Connexion de votre app"
+      },
+      "page": {
+        "connectButton": "Connecter",
+        "connectingButton": "Redirection…",
+        "disconnectButton": "Déconnecter",
+        "empty": {
+          "description": "Aucune app ni serveur MCP n'est encore configuré pour votre organisation.",
+          "title": "Rien à connecter pour le moment"
+        },
+        "errors": {
+          "disconnectFailed": "Échec de la déconnexion",
+          "startAuthFailed": "Échec du démarrage de l'autorisation"
+        },
+        "header": {
+          "description": "Connectez les outils qu'Onyx Craft peut utiliser comme contexte pendant son travail.",
+          "manageButton": "Gérer les apps",
+          "searchPlaceholder": "Rechercher des apps...",
+          "title": "Apps"
+        },
+        "kinds": {
+          "app": {
+            "blurb": "Intégrations prises en charge directement par Onyx. Chacune inclut des compétences qui apprennent à Craft à l'utiliser : commencez ici.",
+            "empty": "Aucune app n'est encore configurée pour votre organisation.",
+            "emptyTitle": "Aucune app pour le moment",
+            "tabLabel": "Apps · {count}"
+          },
+          "mcp": {
+            "blurb": "Serveurs qu'un administrateur a rendus disponibles pour Craft. Utilisez-les lorsque l'app dont vous avez besoin n'est pas listée sous Apps, ou lorsque vous voulez précisément les outils MCP propres à un serveur.",
+            "empty": "Aucun serveur MCP n'a été rendu disponible pour Craft.",
+            "emptyTitle": "Aucun serveur MCP pour le moment",
+            "tabLabel": "Serveurs MCP · {count}"
+          }
+        },
+        "loading": {
+          "label": "Chargement…"
+        },
+        "reviewSkillsButton": "Vérifier les compétences",
+        "search": {
+          "noMatchesDescription": "Rien ici ne correspond à votre recherche.",
+          "noMatchesTitle": "Aucun résultat"
+        },
+        "status": {
+          "connected": "Connectée",
+          "connectedNeedsSkills": "Connectée · toutes les compétences associées ne sont pas activées",
+          "notAvailable": "Indisponible pour votre compte : contactez un administrateur",
+          "skillWarningAriaLabel": "Configuration des compétences requise",
+          "skillWarningTooltip": "Toutes les compétences associées ne sont pas activées. Cette app peut ne pas fonctionner correctement."
+        }
+      },
+      "policyEditor": {
+        "advanced": {
+          "description": "Définissez une politique pour chaque action individuellement.",
+          "title": "Avancé"
+        },
+        "cancelButton": "Annuler",
+        "loading": {
+          "label": "Chargement…"
+        },
+        "permissions": {
+          "askOption": "Demander",
+          "autoApproveOption": "Approbation automatique",
+          "customOption": "Personnalisé",
+          "description": "Choisissez ce que l'agent peut faire. « Demander » vous sollicite dans le chat avant chaque action ; « Approbation automatique » l'exécute sans demander. Utilisez Avancé pour définir une politique par action.",
+          "title": "Autorisations"
+        },
+        "savingButton": "Enregistrement…"
+      },
+      "skillsStep": {
+        "description": "Facultatif : associez des compétences existantes ou créez-en une pour cette app.",
+        "errors": {
+          "saveFailedTitle": "Impossible d'enregistrer"
+        },
+        "saveButton": "Enregistrer les compétences",
+        "savingButton": "Enregistrement…",
+        "skipButton": "Ignorer pour l'instant",
+        "title": "Ajouter des compétences à {name}"
+      },
+      "userCredentials": {
+        "cancelButton": "Annuler",
+        "connectButton": "Connecter",
+        "connectingButton": "Connexion…",
+        "description": "Saisissez vos identifiants pour autoriser cette app sur votre compte.",
+        "errors": {
+          "connectFailedTitle": "Connexion impossible"
+        },
+        "title": "Connecter {name}"
+      }
+    },
+    "artifactsTab": {
+      "download": {
+        "button": "Télécharger"
+      },
+      "empty": {
+        "description": "Les fichiers de sortie et les applications web apparaîtront ici",
+        "title": "Aucun artefact pour l'instant"
+      },
+      "nextjsApp": {
+        "label": "Application Next.js"
+      },
+      "openItem": {
+        "ariaLabel": "Ouvrir {name}"
+      },
+      "toggleItem": {
+        "ariaLabel": "Basculer {name}"
+      }
+    },
+    "chatPanel": {
+      "input": {
+        "continuePlaceholder": "Poursuivez la conversation...",
+        "scheduledRunPlaceholder": "Exécution planifiée en cours...",
+        "subagentPlaceholder": "Passez à l'agent principal pour envoyer un message"
+      },
+      "openSidebar": {
+        "ariaLabel": "Ouvrir la barre latérale"
+      },
+      "outputPanel": {
+        "closeTooltip": "Fermer le panneau de sortie",
+        "openTooltip": "Ouvrir le panneau de sortie"
+      },
+      "responseStopped": {
+        "label": "Réponse arrêtée"
+      },
+      "scrollToBottom": {
+        "label": "Aller en bas"
+      },
+      "toast": {
+        "operationWait": "Veuillez attendre la fin de l'opération en cours.",
+        "sandboxWait": "Veuillez attendre l'initialisation du bac à sable",
+        "scheduledRunWait": "Veuillez attendre la fin de l'exécution planifiée."
+      }
+    },
+    "compaction": {
+      "marker": {
+        "label": "Contexte compacté pour libérer de l'espace"
+      }
+    },
+    "connectDataBanner": {
+      "cta": {
+        "label": "Connectez vos données"
+      }
+    },
+    "craftingLoader": {
+      "messages": {
+        "craftingWorkspace": "Fabrication de votre espace de travail...",
+        "enchanting": "Enchantement magique...",
+        "gamemode": "/gamemode 1",
+        "gatheringResources": "Collecte des ressources...",
+        "miningDependencies": "Minage des dépendances...",
+        "placingBlocks": "Pose des blocs...",
+        "punchingWood": "On frappe du bois...",
+        "smeltingCode": "Fonte du code...",
+        "worldGenerated": "Génération du monde terminée..."
+      },
+      "tagline": {
+        "label": "Fabrication de votre prochaine grande idée..."
+      }
+    },
+    "debugLogs": {
+      "clear": {
+        "tooltip": "Effacer"
+      },
+      "copy": {
+        "doneTooltip": "Copié",
+        "tooltip": "Copier le visible"
+      },
+      "empty": {
+        "noLines": "Aucune ligne pour l'instant.",
+        "noMatch": "Aucune ligne ne correspond à \"{filter}\"",
+        "waiting": "En attente de la première ligne de journal…"
+      },
+      "error": {
+        "endpointDisabled": "Point de terminaison de débogage désactivé (ENABLE_OPENCODE_DEBUGGING=false)",
+        "http": "HTTP {status}",
+        "noSandbox": "Aucun bac à sable en cours d'exécution pour suivre les journaux"
+      },
+      "filter": {
+        "placeholder": "Filtrer…"
+      },
+      "lines": {
+        "count": "{count, plural, one {# ligne} other {# lignes}}",
+        "filteredCount": "{visible, number} / {total, number} lignes"
+      },
+      "modal": {
+        "description": "Suivi en direct du conteneur bac à sable — dev/débogage uniquement.",
+        "title": "Journaux du pod Opencode"
+      },
+      "newSincePaused": {
+        "button": "+{count, number} nouvelles · aller"
+      },
+      "open": {
+        "button": "Journaux du pod"
+      },
+      "status": {
+        "closed": "Fermé",
+        "connecting": "Connexion",
+        "error": "Erreur",
+        "paused": "En pause",
+        "streaming": "Diffusion"
+      }
+    },
+    "entryMenu": {
+      "addFiles": {
+        "label": "Ajouter des fichiers ou des photos"
+      },
+      "apps": {
+        "label": "Applications"
+      },
+      "browseSkills": {
+        "label": "Parcourir les compétences"
+      },
+      "connect": {
+        "hint": "Connecter"
+      },
+      "connectApp": {
+        "label": "Connecter une application"
+      },
+      "library": {
+        "label": "Bibliothèque"
+      },
+      "manageLibrary": {
+        "label": "Gérer la bibliothèque…"
+      },
+      "mcpServer": {
+        "description": "Serveur MCP"
+      },
+      "skills": {
+        "label": "Compétences"
+      }
+    },
+    "filePreview": {
+      "cannotPreview": {
+        "title": "Impossible de prévisualiser le fichier"
+      },
+      "error": {
+        "inline": "Erreur : {message}",
+        "title": "Erreur de chargement du fichier"
+      },
+      "loading": {
+        "label": "Chargement du fichier..."
+      },
+      "noContent": {
+        "label": "Aucun contenu"
+      }
+    },
+    "filesTab": {
+      "empty": {
+        "description": "Les fichiers créés pendant la construction apparaîtront ici",
+        "title": "Aucun fichier pour l'instant"
+      },
+      "emptyDirectory": {
+        "label": "Aucun fichier dans ce répertoire"
+      },
+      "error": {
+        "title": "Erreur de chargement des fichiers"
+      },
+      "loading": {
+        "label": "Chargement des fichiers..."
+      },
+      "loadingChildren": {
+        "label": "Chargement..."
+      },
+      "preparing": {
+        "description": "Configuration de votre environnement de développement",
+        "title": "Préparation du bac à sable..."
+      }
+    },
+    "imagePreview": {
+      "error": {
+        "description": "L'image n'a pas pu être affichée",
+        "title": "Échec du chargement de l'image"
+      },
+      "loading": {
+        "label": "Chargement de l'image..."
+      },
+      "preview": {
+        "ariaLabel": "Aperçu de {name}"
+      }
+    },
+    "inputBar": {
+      "entryInfo": {
+        "connected": "Connecté",
+        "connectionRequired": "Connexion requise"
+      },
+      "plusMenu": {
+        "tooltip": "Ajouter des fichiers ou des compétences"
+      }
+    },
+    "interruptHint": {
+      "stopping": {
+        "label": "Arrêt en cours…"
+      },
+      "toInterrupt": {
+        "label": "pour interrompre"
+      }
+    },
+    "intro": {
+      "beta": {
+        "badge": "BÊTA"
+      },
+      "returnHome": {
+        "button": "Retour à l'accueil"
+      },
+      "startCrafting": {
+        "button": "Commencer à créer"
+      },
+      "wordmark": {
+        "label": "Craft"
+      }
+    },
+    "llmPopover": {
+      "noModels": {
+        "label": "Aucun modèle trouvé"
+      },
+      "recommended": {
+        "label": "Recommandé"
+      },
+      "recommendedOnly": {
+        "label": "Modèles recommandés uniquement"
+      }
+    },
+    "onboarding": {
+      "livingMap": {
+        "examplePrompts": {
+          "flakyRetryTest": "« Corrige le test de retry instable et ouvre une PR. »",
+          "launchDeck": "« Crée le deck du lancement de printemps à partir du brief sur Drive. »",
+          "rfpSecurity": "« Remplis l'appel d'offres reçu par e-mail avec nos informations de sécurité. »",
+          "slackToLinear": "« Condense notre discussion Slack en tickets Linear. »",
+          "vendorSpend": "« Résume nos dépenses fournisseurs du T2 dans un document sur Drive. »"
+        },
+        "modal": {
+          "backButton": "Retour",
+          "ctaButton": "Mettez Craft au travail",
+          "nextButton": "Suivant",
+          "title": "Découvrez Craft"
+        },
+        "outputs": {
+          "ariaLabel": "Résultat : {name}",
+          "githubPr": {
+            "caption": "Ouvert pour relecture",
+            "label": "PR GitHub"
+          },
+          "googleDoc": {
+            "caption": "Enregistré dans votre Drive",
+            "label": "Google Doc"
+          },
+          "liveApp": {
+            "caption": "Hébergée, partage par lien",
+            "label": "App en ligne"
+          }
+        },
+        "prompt": {
+          "label": "Votre prompt"
+        },
+        "schedule": {
+          "ariaLabel": "Tâche planifiée : relance ce prompt selon un minuteur",
+          "caption": "S'exécute pendant votre absence",
+          "label": "Tous les lundis à 8h00"
+        },
+        "sources": {
+          "connectedAriaLabel": "Source connectée : {name}",
+          "yourFiles": {
+            "ariaLabel": "Vos fichiers importés",
+            "label": "Vos fichiers"
+          }
+        },
+        "stages": {
+          "constellation": {
+            "caption": "Cliquez sur n'importe quelle partie de la carte pour la revoir.",
+            "title": "Voilà Craft. À vous de jouer."
+          },
+          "machine": {
+            "caption": "Il lit ce que vous pouvez voir. Jamais vos secrets.",
+            "title": "Il travaille sur sa propre machine."
+          },
+          "output": {
+            "caption": "À la demande, ou selon un calendrier pendant votre absence.",
+            "title": "Le travail ressort terminé."
+          },
+          "prompt": {
+            "caption": "Décrivez le résultat, Craft s'occupe du reste.",
+            "title": "Confiez à Craft un vrai travail."
+          }
+        },
+        "team": {
+          "ariaLabel": "Votre équipe : un seul lien partage le travail de Craft",
+          "caption": "Un lien suffit pour partager",
+          "label": "Votre équipe"
+        },
+        "workspace": {
+          "approvalPill": "En attente de votre approbation",
+          "label": "Espace de travail de Craft",
+          "sandboxBadge": "Sandbox isolé"
+        }
+      },
+      "llmLocked": {
+        "backToChatButton": "Retour au chat",
+        "description": "Onyx Craft a besoin d'un fournisseur de modèles, et seuls les administrateurs peuvent en configurer un. Demandez à votre administrateur de connecter Anthropic, OpenAI ou OpenRouter.",
+        "title": "Un fournisseur de LLM est requis"
+      },
+      "llmSetup": {
+        "description": "Les agents Craft ont besoin d'un fournisseur de modèles pour construire.",
+        "title": "Connectez un fournisseur de modèles"
+      },
+      "welcomeMock": {
+        "input": {
+          "placeholder": "Analyse mes données et crée un tableau de bord..."
+        },
+        "modelPill": {
+          "label": "Claude Opus 4.8"
+        },
+        "promptPills": {
+          "engineering": "Ingénierie",
+          "marketing": "Marketing",
+          "product": "Produit",
+          "sales": "Ventes"
+        }
+      }
+    },
+    "outputPanel": {
+      "artifactsEmpty": {
+        "tooltip": "Commencez à construire quelque chose pour voir des artefacts !"
+      },
+      "devServerStarting": {
+        "tooltip": "Démarrage du serveur de développement..."
+      },
+      "noWebapp": {
+        "label": "Pas encore d'application web dans cette session"
+      }
+    },
+    "pdfPreview": {
+      "error": {
+        "description": "Le fichier PDF n'a pas pu être chargé.",
+        "title": "Impossible de prévisualiser le PDF"
+      },
+      "frame": {
+        "title": "Aperçu PDF"
+      },
+      "loading": {
+        "label": "Chargement du PDF..."
+      }
+    },
+    "pptxPreview": {
+      "converting": {
+        "label": "Conversion de la présentation..."
+      },
+      "empty": {
+        "label": "Aucune diapositive dans cette présentation"
+      },
+      "error": {
+        "title": "Impossible de prévisualiser la présentation"
+      },
+      "loadingSlide": {
+        "label": "Chargement de la diapositive..."
+      },
+      "slide": {
+        "counter": "Diapositive {current} sur {total}"
+      }
+    },
+    "previewTab": {
+      "empty": {
+        "description": "Un aperçu en direct apparaîtra ici dès qu'une application web sera en cours d'exécution."
+      },
+      "frame": {
+        "title": "Aperçu de l'application web"
+      },
+      "starting": {
+        "description": "Installation des dépendances et démarrage.",
+        "title": "Démarrage du serveur de développement..."
+      }
+    },
+    "redirect": {
+      "redirecting": {
+        "label": "Redirection..."
+      }
+    },
+    "sandboxAsleep": {
+      "dismiss": {
+        "button": "Ignorer"
+      },
+      "modal": {
+        "description": "Il s'est endormi après une période d'inactivité. Votre travail est sauvegardé. Réveillez-le pour continuer.",
+        "title": "Votre bac à sable s'est endormi"
+      },
+      "wake": {
+        "button": "Réveiller le bac à sable"
+      }
+    },
+    "scheduledRun": {
+      "badge": {
+        "label": "Planifiée"
+      },
+      "startedAt": {
+        "label": "Démarrée {time}"
+      },
+      "status": {
+        "awaitingApproval": "Cette exécution planifiée attend une approbation. Les messages de suivi seront débloqués après sa reprise et sa fin.",
+        "running": "Cette exécution planifiée est toujours en cours. Les messages de suivi seront débloqués à la fin.",
+        "startedBy": "Cette session a été lancée par la tâche planifiée {task} à {time}."
+      },
+      "viewTask": {
+        "ariaLabel": "Voir la tâche planifiée {task}. {status}",
+        "label": "Voir la tâche"
+      }
+    },
+    "setupCard": {
+      "appFallback": {
+        "label": "Application externe {id}"
+      },
+      "connect": {
+        "title": "Connecter {app}"
+      },
+      "connected": {
+        "title": "{app} connecté."
+      },
+      "error": {
+        "generic": "Une erreur s'est produite. Veuillez réessayer.",
+        "notConfigurable": "Cette application ne peut pas être configurée d'ici.",
+        "popupBlocked": "Impossible d'ouvrir la fenêtre de configuration. Autorisez les fenêtres contextuelles et réessayez.",
+        "startFailed": "Échec du démarrage de la configuration"
+      },
+      "loading": {
+        "button": "Chargement…"
+      },
+      "notNow": {
+        "button": "Pas maintenant"
+      },
+      "reason": {
+        "fallback": "L'agent a besoin de {app} pour poursuivre cette tâche."
+      },
+      "skipped": {
+        "title": "Connexion de {app} ignorée."
+      },
+      "waiting": {
+        "button": "En attente…"
+      }
+    },
+    "share": {
+      "copyLink": {
+        "ariaLabel": "Copier le lien"
+      },
+      "organization": {
+        "description": "Toute personne connectée à votre Onyx peut voir cette application.",
+        "label": "Organisation"
+      },
+      "private": {
+        "description": "Vous seul pouvez voir cette application.",
+        "label": "Privé"
+      },
+      "share": {
+        "label": "Partager"
+      },
+      "shared": {
+        "label": "Partagé"
+      },
+      "trigger": {
+        "ariaLabel": "Partager l'application web"
+      }
+    },
+    "sideBar": {
+      "apps": {
+        "label": "Applications"
+      },
+      "backToChat": {
+        "label": "Retour au chat"
+      },
+      "delete": {
+        "label": "Supprimer"
+      },
+      "deleteModal": {
+        "body": "Cela supprime définitivement la session Craft et toutes ses données. Cette action est irréversible.",
+        "confirm": "Supprimer",
+        "deleting": "Suppression...",
+        "title": "Supprimer \"{title}\" ?"
+      },
+      "newSession": {
+        "label": "Commencer à créer"
+      },
+      "rename": {
+        "label": "Renommer"
+      },
+      "scheduledTasks": {
+        "label": "Tâches planifiées"
+      },
+      "sessions": {
+        "empty": "Commencez à construire ! L'historique des sessions apparaîtra ici.",
+        "title": "Sessions"
+      },
+      "skills": {
+        "label": "Compétences"
+      },
+      "toast": {
+        "deleteFailed": "Échec de la suppression de la session",
+        "deleted": "\"{title}\" supprimé."
+      }
+    },
+    "skillsStale": {
+      "notice": {
+        "description": "Rechargez cette session pour appliquer les dernières compétences et les derniers accès aux applications.",
+        "title": "Les capacités de votre agent ont changé"
+      },
+      "reload": {
+        "button": "Recharger",
+        "inProgress": "Rechargement…"
+      },
+      "toast": {
+        "reloadFailed": "Échec du rechargement de la session"
+      }
+    },
+    "subagentView": {
+      "notFound": {
+        "label": "Sous-agent introuvable."
+      }
+    },
+    "suggestedPrompts": {
+      "close": {
+        "ariaLabel": "Fermer les suggestions"
+      }
+    },
+    "tasks": {
+      "detailPage": {
+        "confirmDelete": {
+          "deleteButton": "Supprimer",
+          "deletingButton": "Suppression...",
+          "description": "Cela arrête les exécutions futures et supprime la tâche. L'historique des exécutions passées (et les sessions sous-jacentes) sera conservé pour audit.",
+          "title": "Supprimer « {name} » ?"
+        },
+        "deleteButton": "Supprimer",
+        "editButton": "Modifier",
+        "fallbackTitle": "Tâche planifiée",
+        "loadFailed": "Échec du chargement de la tâche planifiée.",
+        "missingTaskId": "Id de tâche manquant.",
+        "pauseButton": "Mettre en pause",
+        "resumeButton": "Reprendre",
+        "runNowButton": "Exécuter maintenant",
+        "toasts": {
+          "deleteFailed": "Échec de la suppression de la tâche",
+          "deleted": "« {name} » supprimée.",
+          "paused": "Tâche mise en pause.",
+          "resumed": "Tâche reprise.",
+          "runQueued": "Exécution de « {name} » mise en file d'attente.",
+          "runStartFailed": "Échec du démarrage de l'exécution",
+          "statusUpdateFailed": "Échec de la mise à jour du statut"
+        }
+      },
+      "editPage": {
+        "fallbackTitle": "Modifier la tâche planifiée",
+        "loadFailed": "Échec du chargement de la tâche planifiée.",
+        "missingTaskId": "Id de tâche manquant.",
+        "title": "Modifier « {name} »"
+      },
+      "form": {
+        "cancelButton": "Annuler",
+        "errors": {
+          "nameRequired": "Le nom est requis.",
+          "promptRequired": "Le prompt est requis."
+        },
+        "fields": {
+          "name": {
+            "label": "Nom",
+            "placeholder": "p. ex. Synthèse hebdomadaire des escalades clients"
+          },
+          "preApproval": {
+            "description": "Craft peut utiliser les apps et serveurs MCP sélectionnés sans pause lorsque cette tâche s'exécute sans surveillance. Les autres demandes d'approbation mettent l'exécution en pause et peuvent la faire échouer.",
+            "label": "Apps et serveurs MCP pré-approuvés"
+          },
+          "prompt": {
+            "description": "Ce message est envoyé à Craft à chaque déclenchement de la tâche.",
+            "label": "Prompt",
+            "placeholder": "Décrivez ce que Craft doit faire à chaque exécution..."
+          },
+          "schedule": {
+            "label": "Planification"
+          }
+        },
+        "saveAndRunNowButton": "Enregistrer et exécuter maintenant",
+        "saveButton": "Enregistrer",
+        "saveChangesButton": "Enregistrer les modifications",
+        "savingLabel": "Enregistrement...",
+        "toasts": {
+          "created": "Tâche planifiée créée.",
+          "createdAndQueued": "Tâche planifiée créée et mise en file d'attente.",
+          "saveFailed": "Échec de l'enregistrement de la tâche planifiée",
+          "updated": "Tâche planifiée mise à jour."
+        }
+      },
+      "listPage": {
+        "columns": {
+          "lastRun": "Dernière exécution",
+          "name": "Nom",
+          "nextRun": "Prochaine exécution",
+          "schedule": "Planification",
+          "status": "Statut"
+        },
+        "confirmDelete": {
+          "deleteButton": "Supprimer",
+          "deletingButton": "Suppression...",
+          "description": "Cela arrête les exécutions futures et supprime la tâche. L'historique des exécutions passées (et les sessions sous-jacentes) sera conservé pour audit.",
+          "title": "Supprimer « {name} » ?"
+        },
+        "empty": {
+          "description": "Aucune tâche planifiée n'a encore été créée.",
+          "title": "Aucune tâche planifiée trouvée"
+        },
+        "errors": {
+          "loadFailed": "Échec du chargement des tâches planifiées.",
+          "tryAgainButton": "Réessayer"
+        },
+        "header": {
+          "description": "Exécutez des prompts Craft selon un minuteur. Chaque déclenchement crée une nouvelle session qui s'exécute en arrière-plan.",
+          "title": "Tâches planifiées"
+        },
+        "newTaskButton": "Nouvelle tâche planifiée",
+        "rowActions": {
+          "deleteTooltip": "Supprimer"
+        },
+        "toasts": {
+          "deleteFailed": "Échec de la suppression de la tâche",
+          "deleted": "« {name} » supprimée."
+        }
+      },
+      "newPage": {
+        "description": "Enregistrez un prompt + une planification. Craft l'exécutera selon un minuteur.",
+        "title": "Nouvelle tâche planifiée"
+      },
+      "preApproval": {
+        "appFallbackName": "App nº {id}",
+        "appsGroupTitle": "Apps",
+        "empty": {
+          "label": "Aucune app ni serveur MCP n'est encore disponible dans Craft."
+        },
+        "errors": {
+          "loadFailed": "Impossible de charger les apps et les serveurs MCP. Actualisez pour réessayer.",
+          "partialLoadFailed": "Certaines options de pré-approbation n'ont pas pu être chargées. Actualisez pour réessayer."
+        },
+        "loading": {
+          "label": "Chargement des apps et des serveurs MCP…"
+        },
+        "mcpGroupTitle": "Serveurs MCP",
+        "mcpServerFallbackName": "Serveur MCP nº {id}",
+        "status": {
+          "connected": "Connecté",
+          "connectionRequired": "Connexion requise",
+          "unavailable": "N'est plus disponible"
+        },
+        "summary": {
+          "partialLoadFailed": "Certains détails de pré-approbation n'ont pas pu être chargés. Actualisez pour réessayer.",
+          "title": "Apps et serveurs MCP pré-approuvés"
+        }
+      },
+      "runHistory": {
+        "columns": {
+          "duration": "Durée",
+          "started": "Début",
+          "status": "Statut",
+          "summary": "Résumé",
+          "trigger": "Déclencheur"
+        },
+        "empty": {
+          "label": "Aucune exécution pour le moment. La tâche en créera une à chaque déclenchement, ou utilisez Exécuter maintenant ci-dessus."
+        },
+        "errors": {
+          "loadFailed": "Échec du chargement de l'historique des exécutions.",
+          "tryAgainButton": "Réessayer"
+        },
+        "loadMore": {
+          "button": "Charger plus",
+          "loadingButton": "Chargement..."
+        },
+        "nonClickable": {
+          "noSession": "Cette exécution n'a pas encore créé de session.",
+          "queued": "Cette exécution n'a pas encore commencé, il n'y a donc pas de session à ouvrir.",
+          "skipped": "Cette exécution a été ignorée car une précédente était encore en cours, aucune session n'a donc été créée."
+        },
+        "status": {
+          "notOpenableAriaLabel": "Impossible à ouvrir"
+        },
+        "trigger": {
+          "runNow": "Exécuter maintenant",
+          "schedule": "Planification"
+        }
+      },
+      "scheduleEditor": {
+        "dailyWeekly": {
+          "atLabel": "À",
+          "daysLabel": "Ces jours-là",
+          "runsEveryDay": "S'exécute tous les jours",
+          "runsOn": "S'exécute le {days}"
+        },
+        "interval": {
+          "everyLabel": "Toutes les"
+        },
+        "intervalUnits": {
+          "days": "jours",
+          "hours": "heures",
+          "minutes": "minutes"
+        },
+        "tabs": {
+          "dailyWeekly": "Quotidien / Hebdomadaire",
+          "interval": "Intervalle"
+        },
+        "weekdays": {
+          "fri": "Ven",
+          "mon": "Lun",
+          "sat": "Sam",
+          "sun": "Dim",
+          "thu": "Jeu",
+          "tue": "Mar",
+          "wed": "Mer"
+        }
+      }
+    },
+    "todoList": {
+      "empty": {
+        "label": "Aucune tâche"
+      },
+      "header": {
+        "title": "Tâches"
+      },
+      "progress": {
+        "label": "{completed}/{total} terminées"
+      }
+    },
+    "toolCards": {
+      "bash": {
+        "noOutput": {
+          "label": "Aucune sortie"
+        }
+      },
+      "diff": {
+        "unchangedLines": {
+          "label": "{count, plural, one {# ligne inchangée} other {# lignes inchangées}}"
+        },
+        "viewToggle": {
+          "sideBySideTooltip": "Passer en vue côte à côte",
+          "unifiedTooltip": "Passer en vue unifiée"
+        }
+      },
+      "generic": {
+        "noOutput": {
+          "label": "Pas encore de sortie..."
+        }
+      },
+      "group": {
+        "calls": {
+          "tag": "{count, plural, one {# appel} other {# appels}}"
+        },
+        "failed": {
+          "tag": "{count} en échec"
+        },
+        "working": {
+          "label": "En cours"
+        }
+      },
+      "read": {
+        "emptyFile": {
+          "label": "(fichier vide)"
+        },
+        "moreLines": {
+          "label": "{count, plural, one {# ligne de plus} other {# lignes de plus}}"
+        },
+        "showAll": {
+          "button": "Tout afficher"
+        }
+      },
+      "search": {
+        "noMatches": {
+          "label": "Aucun résultat"
+        }
+      }
+    },
+    "uploadFiles": {
+      "errors": {
+        "fileTooLarge": "Fichier trop volumineux ({size}). Le maximum est de {max}.",
+        "network": "Erreur réseau",
+        "notFound": "Ressource introuvable",
+        "server": "Erreur du serveur",
+        "sessionExpired": "Session expirée",
+        "tooManyFiles": "Trop de fichiers. Le maximum est de {max} fichiers par session.",
+        "totalSizeExceeded": "La taille totale dépasse la limite. Le maximum est de {max} par session.",
+        "uploadFailed": "Échec de l'importation"
+      }
+    },
+    "urlBar": {
+      "back": {
+        "ariaLabel": "Revenir en arrière"
+      },
+      "copyUrl": {
+        "ariaLabel": "Copier l'URL : {url}"
+      },
+      "downloadFile": {
+        "tooltip": "Télécharger le fichier"
+      },
+      "export": {
+        "button": "Exporter en .docx",
+        "inProgress": "Exportation..."
+      },
+      "forward": {
+        "ariaLabel": "Aller en avant"
+      },
+      "openInNewTab": {
+        "tooltip": "ouvrir dans un nouvel onglet"
+      },
+      "refresh": {
+        "ariaLabel": "Actualiser"
+      }
+    },
+    "userLibrary": {
+      "delete": {
+        "action": "supprimer",
+        "button": "Supprimer",
+        "entityTypeFile": "fichier",
+        "entityTypeFolder": "dossier",
+        "fileDetails": "Ce fichier sera retiré de votre bibliothèque.",
+        "folderDetails": "Cela supprimera le dossier et tout son contenu."
+      },
+      "dropzone": {
+        "formats": "Excel, Word, PowerPoint, PDF ou ZIP",
+        "title": "Glissez des fichiers ici ou cliquez pour importer"
+      },
+      "errors": {
+        "createFolderFailed": "Échec de la création du dossier",
+        "deleteFailed": "Échec de la suppression",
+        "loadFailed": "Échec du chargement des fichiers",
+        "uploadFailed": "Échec de l'importation"
+      },
+      "loading": {
+        "label": "Chargement des fichiers…"
+      },
+      "modal": {
+        "description": "Fichiers que votre agent peut lire à chaque session.",
+        "doneButton": "Terminé",
+        "title": "Bibliothèque"
+      },
+      "newFolder": {
+        "cancelButton": "Annuler",
+        "createButton": "Créer",
+        "label": "Nouveau dossier",
+        "nameLabel": "Nom du dossier",
+        "namePlaceholder": "Saisissez le nom du dossier"
+      },
+      "search": {
+        "noResults": "Aucun fichier ne correspond à votre recherche",
+        "placeholder": "Rechercher des fichiers..."
+      },
+      "tree": {
+        "collapseTooltip": "Réduire",
+        "deleteTooltip": "Supprimer",
+        "expandTooltip": "Développer",
+        "toggleAriaLabel": "Basculer {name}",
+        "uploadToFolderTooltip": "Importer dans ce dossier"
+      },
+      "upload": {
+        "button": "Importer",
+        "dropOverlay": "Déposez les fichiers pour les importer",
+        "uploadingButton": "Importation…"
+      }
+    },
+    "welcome": {
+      "input": {
+        "placeholder": "Analyse mes données et crée un tableau de bord..."
       }
     }
   },
@@ -8825,6 +12553,13 @@
           "networkError": "Une erreur s'est produite lors de la modification du mot de passe",
           "updateFailed": "Échec de la modification du mot de passe",
           "updated": "Mot de passe mis à jour avec succès"
+        },
+        "validation": {
+          "confirmRequired": "Veuillez confirmer votre nouveau mot de passe",
+          "currentRequired": "Le mot de passe actuel est requis",
+          "minLength": "Le mot de passe doit comporter au moins {min} caractères",
+          "mismatch": "Les mots de passe ne correspondent pas",
+          "newRequired": "Le nouveau mot de passe est requis"
         }
       },
       "title": "Comptes"
@@ -8866,6 +12601,7 @@
         "empty": "Aucun jeton d'accès créé.",
         "expiresIn": "{count, plural, one {Expire dans # jour} other {Expire dans # jours}}",
         "loading": "Chargement des jetons...",
+        "middleText": "{created} - {expiry} - {scope}",
         "neverExpires": "N'expire jamais",
         "newTokenButton": "Nouveau jeton d'accès",
         "noPermissionTooltip": "Vous n'avez pas l'autorisation de créer des jetons d'accès",
@@ -9012,6 +12748,10 @@
       },
       "description": "Connectez des outils externes aux modèles disponibles pour vous dans Onyx.",
       "guideButton": "Guide",
+      "loadError": {
+        "description": "Veuillez actualiser la page et réessayer.",
+        "title": "Impossible de charger LLM Gateway"
+      },
       "models": {
         "description": "{count, plural, one {# modèle est disponible pour votre compte. Ouvrez un fournisseur pour copier un ID.} other {# modèles sont disponibles pour votre compte. Ouvrez un fournisseur pour copier un ID.}}",
         "title": "Modèles"
@@ -9064,14 +12804,37 @@
       }
     },
     "memory": {
+      "addLineButton": {
+        "label": "Ajouter une ligne",
+        "maxReached": "Maximum de {count} souvenirs atteint"
+      },
       "empty": {
-        "description": "Ajoutez une note personnelle ou un souvenir que Onyx doit retenir."
+        "description": "Ajoutez une note personnelle ou un souvenir que Onyx doit retenir.",
+        "getStarted": "Aucun souvenir pour le moment. Cliquez sur « Ajouter une ligne » pour commencer.",
+        "noMatches": "Aucun souvenir ne correspond à votre recherche."
+      },
+      "item": {
+        "placeholder": "Saisissez ou collez une note ou un souvenir personnel"
+      },
+      "lineCount": {
+        "label": "{count, plural, one {Ligne} other {Lignes}}"
+      },
+      "modal": {
+        "description": "Autorisez Onyx à faire référence à ces notes et souvenirs enregistrés dans les chats.",
+        "searchPlaceholder": "Rechercher..."
       },
       "referenceStoredMemories": {
         "description": "Autorisez Onyx à faire référence aux souvenirs enregistrés dans les chats.",
         "title": "Référencer les souvenirs enregistrés"
       },
+      "removeLineButton": {
+        "label": "Supprimer la ligne"
+      },
       "title": "Mémoire",
+      "toasts": {
+        "saveFailed": "Échec de l'enregistrement des préférences",
+        "saved": "Préférences enregistrées"
+      },
       "updateMemories": {
         "description": "Autorisez Onyx à générer et mettre à jour les souvenirs enregistrés.",
         "title": "Mettre à jour les souvenirs"
@@ -9491,6 +13254,158 @@
     }
   },
   "skills": {
+    "editor": {
+      "appConflict": {
+        "description": "L'application « {appName} » a déjà une compétence associée nommée « {skillName} ».",
+        "title": "Choisissez un autre nom de compétence"
+      },
+      "confirmUpload": {
+        "importBody": "Ce téléversement inclut SKILL.md. Continuer remplacera le nom, la description, les instructions et les fichiers actuels par le paquet téléversé.",
+        "importSubmit": {
+          "label": "Importer la compétence"
+        },
+        "importTitle": "Importer cette compétence ?",
+        "replaceBody": "Ce téléversement doit utiliser le même nom de compétence. Continuer remplacera la description, les instructions et les fichiers par le paquet téléversé.",
+        "replaceSubmit": {
+          "label": "Remplacer le contenu"
+        },
+        "replaceTitle": "Remplacer le contenu de la compétence ?"
+      },
+      "delete": {
+        "button": {
+          "label": "Supprimer la compétence"
+        },
+        "description": "Toute personne utilisant cette compétence perdra l'accès. La suppression est irréversible.",
+        "title": "Supprimer cette compétence"
+      },
+      "deleteModal": {
+        "entityType": "compétence",
+        "label": "Supprimer",
+        "pendingLabel": "Suppression..."
+      },
+      "details": {
+        "description": "Définissez quand et comment Craft doit utiliser cette compétence.",
+        "descriptionField": {
+          "description": "Décrivez quand cette compétence doit être utilisée.",
+          "placeholder": "À quoi sert cette compétence ?",
+          "title": "Description"
+        },
+        "name": {
+          "createDescription": "Utilisez des lettres minuscules, des chiffres et des traits d'union simples.",
+          "lockedDescription": "Les noms de compétences ne peuvent pas être modifiés après la création.",
+          "placeholder": "Nommez votre compétence",
+          "title": "Nom"
+        },
+        "title": "Détails"
+      },
+      "files": {
+        "busyLabel": "Téléversement...",
+        "description": "Ajoutez des références, scripts, ressources ou autres fichiers utilisés par cette compétence. Les fichiers ZIP sont décompressés automatiquement.",
+        "input": {
+          "ariaLabel": "Ajouter des fichiers annexes"
+        },
+        "pendingUpload": {
+          "emptyMessage": "Les fichiers de ce téléversement apparaîtront après la création de la compétence."
+        },
+        "title": "Fichiers annexes"
+      },
+      "filesTooltip": {
+        "noPermission": "Vous n'avez pas l'autorisation de mettre à jour les fichiers de cette compétence.",
+        "saveFirst": "Enregistrez les modifications des détails avant de mettre à jour les fichiers de la compétence.",
+        "updating": "Mise à jour des fichiers de la compétence..."
+      },
+      "header": {
+        "appFallbackName": "Application externe",
+        "cancel": {
+          "label": "Annuler"
+        },
+        "createDescription": "Créez une compétence personnelle",
+        "createForAppDescription": "Ajouter une compétence d'organisation à l'application « {appName} »",
+        "createTitle": "Créer une compétence",
+        "editDescription": "Mettez à jour les détails et fichiers de la compétence",
+        "editTitle": "Modifier la compétence",
+        "save": {
+          "label": "Enregistrer",
+          "pendingLabel": "Enregistrement..."
+        }
+      },
+      "import": {
+        "busyLabel": "Importation...",
+        "button": {
+          "label": "Importer une compétence"
+        },
+        "description": "Importez un SKILL.md, un ZIP ou un dossier de compétence pour préremplir le formulaire et inclure ses fichiers.",
+        "input": {
+          "ariaLabel": "Importer une compétence existante"
+        },
+        "prompt": "Choisissez un SKILL.md ou un ZIP, ou déposez un dossier de compétence ici.",
+        "title": "Vous avez déjà une compétence ?"
+      },
+      "instructions": {
+        "description": "Décrivez le comportement et le flux de travail que cette compétence ajoute à Craft.",
+        "emptyFallback": "Pas encore d'instructions.",
+        "placeholder": "Rédigez les instructions de la compétence.",
+        "title": "Instructions"
+      },
+      "loadError": {
+        "description": "Cette compétence n'existe peut-être pas, est peut-être intégrée ou n'est peut-être pas modifiable avec votre compte.",
+        "title": "Compétence indisponible"
+      },
+      "management": {
+        "description": "Contrôlez qui peut utiliser cette compétence.",
+        "externalApp": {
+          "manage": {
+            "label": "Gérer dans les paramètres de l'application"
+          },
+          "readyDescription": "Cette compétence utilise l'application « {appName} ».",
+          "title": "Application externe"
+        },
+        "sharing": {
+          "edit": {
+            "label": "Modifier le partage"
+          },
+          "title": "Partage"
+        },
+        "title": "Gestion"
+      },
+      "saveTooltip": {
+        "missingDescription": "Ajoutez une description avant d'enregistrer.",
+        "missingInstructions": "Ajoutez des instructions avant d'enregistrer.",
+        "missingName": "Ajoutez un nom avant d'enregistrer.",
+        "noChanges": "Aucune modification n'a été apportée.",
+        "noPermission": "Vous n'avez pas l'autorisation de modifier les détails de cette compétence.",
+        "savingChanges": "Enregistrement des modifications...",
+        "savingSkill": "Enregistrement de la compétence..."
+      },
+      "sharing": {
+        "organization": {
+          "editorDescription": "Tous les membres de votre organisation peuvent utiliser et modifier cette compétence.",
+          "title": "Organisation",
+          "viewerDescription": "Tous les membres de votre organisation peuvent utiliser cette compétence."
+        },
+        "personal": {
+          "description": "Vous seul pouvez utiliser cette compétence.",
+          "title": "Personnel"
+        },
+        "shares": {
+          "description": "Seuls les utilisateurs et groupes sélectionnés peuvent utiliser cette compétence.",
+          "title": "{count, plural, one {# partage} other {# partages}}"
+        }
+      },
+      "toasts": {
+        "created": "« {name} » créée",
+        "deleteFailed": "Échec de la suppression de la compétence",
+        "deleted": "« {name} » supprimée",
+        "fileRemoveFailed": "Échec de la suppression du fichier de la compétence",
+        "fileRemoved": "« {path} » supprimé",
+        "filesUpdateFailed": "Échec de la mise à jour des fichiers de la compétence",
+        "filesUpdated": "Fichiers de « {name} » mis à jour",
+        "importMissingSkillMd": "Importez un SKILL.md, un ZIP ou un dossier contenant SKILL.md.",
+        "inspectFailed": "Échec de l'inspection du paquet de compétence",
+        "saveFailed": "Échec de l'enregistrement de la compétence",
+        "saved": "« {name} » enregistrée"
+      }
+    },
     "modals": {
       "addInstruction": {
         "cancelButton": {
@@ -9691,6 +13606,76 @@
         "transferredToast": {
           "message": "Propriété transférée."
         }
+      }
+    },
+    "page": {
+      "browse": {
+        "title": "Parcourir les compétences"
+      },
+      "countSeparator": {
+        "label": "{count, plural, one {Compétence} other {Compétences}}"
+      },
+      "createMenu": {
+        "github": {
+          "description": "Importez une ou plusieurs compétences depuis un dépôt.",
+          "title": "Importer depuis GitHub"
+        },
+        "scratch": {
+          "description": "Rédigez les instructions et ajoutez des fichiers annexes dans Onyx.",
+          "title": "Partir de zéro"
+        },
+        "trigger": {
+          "label": "Créer une compétence"
+        },
+        "upload": {
+          "description": "Importez un fichier SKILL.md, un fichier ZIP ou un dossier de compétence.",
+          "title": "Téléverser une compétence"
+        }
+      },
+      "empty": {
+        "noMatches": {
+          "description": "Essayez une autre recherche.",
+          "title": "Aucune compétence correspondante"
+        },
+        "noSkills": {
+          "description": "Aucune compétence personnalisée n'a encore été partagée avec vous et aucune compétence intégrée n'est configurée.",
+          "title": "Aucune compétence disponible"
+        }
+      },
+      "focusedApp": {
+        "description": "Activez toutes les compétences associées à l'application « {appName} ». L'application peut ne pas fonctionner correctement sans elles. Si une autre compétence du même nom est activée, activer la compétence associée à l'application désactive l'autre compétence pour vous.",
+        "showAll": {
+          "label": "Afficher toutes les compétences"
+        },
+        "title": "Compétences pour l'application « {appName} »"
+      },
+      "header": {
+        "description": "Ensembles de capacités que votre agent Craft peut mobiliser. Cette page présente les compétences intégrées, celles partagées avec vous et vos compétences personnelles.",
+        "title": "Compétences"
+      },
+      "loadError": {
+        "description": "Consultez la console pour plus de détails et essayez d'actualiser la page.",
+        "title": "Échec du chargement des compétences"
+      },
+      "preview": {
+        "unavailableFallback": "Cette compétence est actuellement indisponible."
+      },
+      "search": {
+        "placeholder": "Rechercher des compétences..."
+      },
+      "switchModal": {
+        "body": "Continuer désactivera la compétence actuellement activée et activera celle-ci.",
+        "description": "Une seule compétence nommée « {name} » peut être activée à la fois.",
+        "submit": {
+          "label": "Changer de compétence",
+          "pendingLabel": "Changement..."
+        },
+        "title": "Changer la compétence « {name} » ?"
+      },
+      "toasts": {
+        "disableFailed": "Échec de la désactivation de {name}",
+        "enableFailed": "Échec de l'activation de {name}",
+        "refreshFailed": "{name} a été mise à jour, mais la liste des compétences n'a pas pu être actualisée."
       }
     },
     "sections": {

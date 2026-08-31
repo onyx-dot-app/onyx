@@ -17,6 +17,7 @@ import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
 import { useSidebarState } from "@opal/layouts";
 import useScreenSize from "@/hooks/useScreenSize";
+import { useTranslations } from "next-intl";
 
 const footerMarkdownComponents = {
   p: ({ children }: { children?: React.ReactNode }) => (
@@ -57,6 +58,7 @@ const footerMarkdownComponents = {
  * extension doesn't need.
  */
 export default function NRFChrome() {
+  const t = useTranslations("chat");
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const { state, setAppMode } = useQueryController();
   const isSearchModeAvailable = useIsSearchModeAvailable();
@@ -89,7 +91,7 @@ export default function NRFChrome() {
             <Button
               prominence="internal"
               icon={SvgSidebar}
-              aria-label="Open Sidebar"
+              aria-label={t("appChrome.openSidebar.ariaLabel")}
               onClick={() => setFolded(false)}
             />
           )}
@@ -101,7 +103,9 @@ export default function NRFChrome() {
                     effectiveMode === "search" ? SvgSearchMenu : SvgBubbleText
                   }
                 >
-                  {effectiveMode === "search" ? "Search" : "Chat"}
+                  {effectiveMode === "search"
+                    ? t("appChrome.mode.search.label")
+                    : t("appChrome.mode.chat.label")}
                 </OpenButton>
               </Popover.Trigger>
               <Popover.Content align="start" width="lg">
@@ -111,24 +115,24 @@ export default function NRFChrome() {
                     rounding={2}
                     icon={SvgSearchMenu}
                     state={effectiveMode === "search" ? "selected" : "empty"}
-                    description="Quick search for documents"
+                    description={t("appChrome.mode.search.description")}
                     onClick={noProp(() => {
                       setAppMode("search");
                       setModePopoverOpen(false);
                     })}
-                    title="Search"
+                    title={t("appChrome.mode.search.label")}
                   />
                   <LineItemButton
                     sizePreset="main-ui"
                     rounding={2}
                     icon={SvgBubbleText}
                     state={effectiveMode === "chat" ? "selected" : "empty"}
-                    description="Conversation and research"
+                    description={t("appChrome.mode.chat.description")}
                     onClick={noProp(() => {
                       setAppMode("chat");
                       setModePopoverOpen(false);
                     })}
-                    title="Chat"
+                    title={t("appChrome.mode.chat.label")}
                   />
                 </Popover.Menu>
               </Popover.Content>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import { Tag, Text } from "@opal/components";
 import { cn } from "@opal/utils";
 import { SvgCheckAll, SvgChevronDown } from "@opal/icons";
@@ -53,6 +54,7 @@ export default function CraftToolGroup({
   autoCollapse = false,
   defaultOpen,
 }: CraftToolGroupProps) {
+  const t = useTranslations("craft.toolCards.group");
   const aggregate = aggregateStatus(toolCalls);
   // Open while the run is active so streaming calls stay visible and nothing
   // collapses as new calls append; settled groups start collapsed.
@@ -92,18 +94,18 @@ export default function CraftToolGroup({
               <div className="flex items-center gap-2 min-w-0 w-full">
                 {renderStatusIcon(toolCalls)}
                 <Text font="main-ui-muted" color="text-04" nowrap>
-                  Working
+                  {t("working.label")}
                 </Text>
                 <span className="ms-auto shrink-0 flex items-center gap-2">
                   {failedCount > 0 && (
                     <Tag
-                      title={`${failedCount} failed`}
+                      title={t("failed.tag", { count: failedCount })}
                       size="sm"
                       color="red"
                     />
                   )}
                   <Tag
-                    title={`${toolCalls.length} calls`}
+                    title={t("calls.tag", { count: toolCalls.length })}
                     size="sm"
                     color="gray"
                   />

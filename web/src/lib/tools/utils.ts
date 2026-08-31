@@ -109,39 +109,62 @@ export function extractMethodSpecsFromDefinition(
  * The tooltip for an action row: what the tool does, plus how to turn it on
  * when it is not configured yet.
  */
+export interface ToolTooltipMessages {
+  descriptions: Record<string, string>;
+  defaultDescription: string;
+  configure: string;
+  askAdmin: string;
+}
+
 export function buildTooltipMessage(
   actionDescription: string,
   isConfigured: boolean,
-  canManageAction: boolean
+  canManageAction: boolean,
+  messages: Pick<ToolTooltipMessages, "configure" | "askAdmin">
 ): string {
   if (isConfigured) return actionDescription;
   return canManageAction
-    ? `${actionDescription} ${CONFIGURE_MESSAGE}`
-    : `${actionDescription} ${USER_NOT_ADMIN_MESSAGE}`;
+    ? `${actionDescription} ${messages.configure}`
+    : `${actionDescription} ${messages.askAdmin}`;
 }
 
 /** {@link buildTooltipMessage}, with the description resolved from the tool. */
 export function getToolTooltip(
   tool: ToolSnapshot,
   isConfigured: boolean,
-  canManageAction: boolean
+  canManageAction: boolean,
+  messages: ToolTooltipMessages
 ): string {
   const description =
-    (tool.in_code_tool_id && TOOL_DESCRIPTIONS[tool.in_code_tool_id]) ||
+    (tool.in_code_tool_id && messages.descriptions[tool.in_code_tool_id]) ||
     tool.description ||
-    DEFAULT_TOOL_DESCRIPTION;
-  return buildTooltipMessage(description, isConfigured, canManageAction);
+    messages.defaultDescription;
+  return buildTooltipMessage(
+    description,
+    isConfigured,
+    canManageAction,
+    messages
+  );
 }
 
 /** Where an admin configures this tool, or null when there is nowhere to go. */
 export function getAdminConfigureInfo(
-  tool: ToolSnapshot
+  tool: ToolSnapshot,
+  configureTooltips: Record<string, string>
 ): { href: string; tooltip: string } | null {
   if (tool.in_code_tool_id && ADMIN_CONFIG_LINKS[tool.in_code_tool_id]) {
-    return ADMIN_CONFIG_LINKS[tool.in_code_tool_id] ?? null;
+    const link = ADMIN_CONFIG_LINKS[tool.in_code_tool_id];
+    if (!link) return null;
+    return {
+      href: link.href,
+      tooltip: configureTooltips[tool.in_code_tool_id] ?? link.tooltip,
+    };
   }
   if (!tool.in_code_tool_id && !tool.mcp_server_id) {
-    return OPENAPI_ADMIN_CONFIG;
+    return {
+      href: OPENAPI_ADMIN_CONFIG.href,
+      tooltip: configureTooltips.openapi ?? OPENAPI_ADMIN_CONFIG.tooltip,
+    };
   }
   return null;
 }
