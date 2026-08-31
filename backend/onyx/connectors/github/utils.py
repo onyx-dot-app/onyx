@@ -1,6 +1,6 @@
 from collections.abc import Callable
 from typing import cast
-from urllib.parse import urlparse
+from urllib.parse import ParseResult, urlparse
 
 from github import Github
 from github.Repository import Repository
@@ -31,19 +31,19 @@ def normalize_github_base_url(base_url: str | None) -> str | None:
     if base_url is None:
         return None
 
-    cleaned = base_url.strip()
+    cleaned: str = base_url.strip()
     if not cleaned:
         return None
 
     if "://" not in cleaned:
         cleaned = f"https://{cleaned}"
 
-    parsed = urlparse(cleaned)
+    parsed: ParseResult = urlparse(cleaned)
     if not parsed.hostname:
         raise ValueError(f"Invalid GitHub base URL: {base_url}")
 
     # An explicit path already points at an API root; leave it alone.
-    path = parsed.path.rstrip("/") or GHES_API_SUFFIX
+    path: str = parsed.path.rstrip("/") or GHES_API_SUFFIX
     return f"{parsed.scheme}://{parsed.netloc}{path}"
 
 

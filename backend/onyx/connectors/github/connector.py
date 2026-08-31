@@ -633,7 +633,7 @@ class GithubConnector(
         # Prefer the per-credential URL so one deployment can index github.com
         # and a GitHub Enterprise Server at once; the env var is the fallback.
         # Normalize each side so a blank credential cannot shadow the env var.
-        base_url = normalize_github_base_url(
+        base_url: str | None = normalize_github_base_url(
             credentials.get("github_base_url")
         ) or normalize_github_base_url(GITHUB_CONNECTOR_BASE_URL)
 
