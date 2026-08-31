@@ -458,6 +458,7 @@ export default function ToolsPopover({
             title="More Actions"
             sizePreset="main-ui"
             variant="section"
+            rounding={2}
           />
         ),
       ]}
