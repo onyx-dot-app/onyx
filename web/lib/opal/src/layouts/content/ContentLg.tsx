@@ -207,7 +207,7 @@ function ContentLg({
         >
           <Text
             font="secondary-body"
-            color="text-03"
+            color="inherit"
             as="p"
             maxLines={descriptionMaxLines}
           >

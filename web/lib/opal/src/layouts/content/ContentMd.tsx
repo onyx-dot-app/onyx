@@ -272,9 +272,11 @@ function ContentMd({
           )}
 
           {suffix && (
-            <Text font={config.optionalFont} color="text-03">
-              {suffix === "optional" ? "(Optional)" : suffix}
-            </Text>
+            <span className="opal-content-md-suffix">
+              <Text font={config.optionalFont} color="inherit">
+                {suffix === "optional" ? "(Optional)" : suffix}
+              </Text>
+            </span>
           )}
 
           {auxIcon &&
@@ -333,7 +335,7 @@ function ContentMd({
         >
           <Text
             font="secondary-body"
-            color="text-03"
+            color="inherit"
             as="p"
             maxLines={descriptionMaxLines}
           >
