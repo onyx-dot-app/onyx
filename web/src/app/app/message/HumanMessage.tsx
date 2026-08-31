@@ -232,7 +232,7 @@ const HumanMessage = React.memo(function HumanMessage({
             <div className="md:max-w-150">
               <div
                 className={
-                  "max-w-120 md:max-w-150 whitespace-break-spaces break-anywhere rounded-t-16 rounded-bl-16 bg-background-tint-02 py-2 px-3"
+                  "max-w-120 md:max-w-150 whitespace-break-spaces break-anywhere rounded-t-16 rounded-es-16 bg-background-tint-02 py-2 px-3"
                 }
                 onCopy={(e) => {
                   const selection = window.getSelection();

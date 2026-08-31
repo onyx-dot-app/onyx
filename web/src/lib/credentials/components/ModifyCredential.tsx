@@ -66,19 +66,19 @@ function CredentialSelectionTable({
       <table className="w-full text-sm border-collapse">
         <thead className="sticky top-0 w-full">
           <tr className="bg-neutral-100 dark:bg-neutral-900">
-            <th className="p-2 text-left font-medium text-neutral-600 dark:text-neutral-400">
+            <th className="p-2 text-start font-medium text-neutral-600 dark:text-neutral-400">
               <span className="sr-only">Select</span>
             </th>
-            <th className="p-2 text-left font-medium text-neutral-600 dark:text-neutral-400">
+            <th className="p-2 text-start font-medium text-neutral-600 dark:text-neutral-400">
               ID
             </th>
-            <th className="p-2 text-left font-medium text-neutral-600 dark:text-neutral-400">
+            <th className="p-2 text-start font-medium text-neutral-600 dark:text-neutral-400">
               Name
             </th>
-            <th className="p-2 text-left font-medium text-neutral-600 dark:text-neutral-400">
+            <th className="p-2 text-start font-medium text-neutral-600 dark:text-neutral-400">
               Created
             </th>
-            <th className="p-2 text-left font-medium text-neutral-600 dark:text-neutral-400">
+            <th className="p-2 text-start font-medium text-neutral-600 dark:text-neutral-400">
               Last Updated
             </th>
             <th>
@@ -109,7 +109,7 @@ function CredentialSelectionTable({
                         type="radio"
                         name="credentialSelection"
                         onChange={() => handleSelectCredential(credential.id)}
-                        className="form-radio ml-4 h-4 w-4 text-blue-600 transition duration-150 ease-in-out"
+                        className="form-radio ms-4 h-4 w-4 text-blue-600 transition duration-150 ease-in-out"
                       />
                     ) : (
                       <Badge>selected</Badge>

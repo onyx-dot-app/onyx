@@ -40,7 +40,7 @@ const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
         onKeyDown={clickOnKeyDown(toggleCollapse)}
         className={`
           cursor-pointer
-          ${isCollapsed ? "h-6" : "pl-6 border-l-2  border-border"}
+          ${isCollapsed ? "h-6" : "ps-6 border-s-2  border-border"}
         `}
         onClick={toggleCollapse}
       >

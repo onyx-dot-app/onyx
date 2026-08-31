@@ -266,7 +266,7 @@ export default function ProjectContextPanel({
           ) : (
             <div
               className={cn(
-                "h-12 rounded-xl border border-dashed flex items-center pl-2",
+                "h-12 rounded-xl border border-dashed flex items-center ps-2",
                 isDragActive
                   ? "bg-action-selection-01 border-action-selection-05 text-action-selection-05"
                   : "border-border-01 text-text-02"

@@ -357,7 +357,7 @@ function FormContent({
                 </Text>
               </Section>
               {authenticationDescription && (
-                <Text secondaryBody text03 className="pl-5">
+                <Text secondaryBody text03 className="ps-5">
                   {authenticationDescription}
                 </Text>
               )}

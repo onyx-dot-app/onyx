@@ -460,7 +460,7 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
   return (
     <div
       className={cn(
-        "absolute z-20 inset-y-0 right-0 w-1/2 flex flex-col border-l border-border-01 bg-background-neutral-00 overflow-hidden transition-transform duration-300 ease-in-out",
+        "absolute z-20 inset-y-0 right-0 w-1/2 flex flex-col border-s border-border-01 bg-background-neutral-00 overflow-hidden transition-transform duration-300 ease-in-out",
         isOpen ? "translate-x-0" : "translate-x-full pointer-events-none"
       )}
     >
@@ -469,7 +469,7 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
         {/* Tabs row */}
         <div className="flex items-end w-full pt-1 bg-background-tint-03">
           {/* Scrollable tabs container */}
-          <div className="flex items-end flex-1 pl-2 pr-2 overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+          <div className="flex items-end flex-1 ps-2 pe-2 overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
             {/* Pinned tabs */}
             {tabs.map((tab) => {
               const Icon = tab.icon;
@@ -578,7 +578,7 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
                       key={id}
                       onClick={() => handlePanelTabClick(id)}
                       className={cn(
-                        "group relative inline-flex items-center justify-center gap-1.5 px-3 pr-2 py-1.5 rounded-t-lg",
+                        "group relative inline-flex items-center justify-center gap-1.5 px-3 pe-2 py-1.5 rounded-t-lg",
                         "max-w-[150px] min-w-fit",
                         isActive
                           ? "bg-background-neutral-00 text-text-04 z-10"

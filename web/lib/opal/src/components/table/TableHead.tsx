@@ -59,9 +59,9 @@ function defaultSortIcon(sorted: SortDirection): IconFunctionComponent {
 }
 
 const alignmentThClass = {
-  left: "text-left",
+  left: "text-start",
   center: "text-center",
-  right: "text-right",
+  right: "text-end",
 } as const;
 
 export default function TableHead({

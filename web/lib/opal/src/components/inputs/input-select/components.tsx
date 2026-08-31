@@ -274,8 +274,8 @@ function InputSelectTrigger({
       data-variant={variant}
       {...props}
     >
-      {/* text-left counters the button element's centered default. */}
-      <div className="flex w-full flex-row items-center justify-between gap-1 p-0.5 text-left">
+      {/* text-start counters the button element's centered default. */}
+      <div className="flex w-full flex-row items-center justify-between gap-1 p-0.5 text-start">
         {children ?? displayContent}
 
         <div className="flex flex-row items-center gap-1">

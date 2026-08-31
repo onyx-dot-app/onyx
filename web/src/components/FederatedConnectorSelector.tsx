@@ -178,8 +178,8 @@ export const FederatedConnectorSelector = ({
                     className="w-full flex items-center justify-between py-2 px-3 cursor-pointer hover:bg-background-neutral-01 text-xs"
                     onClick={() => selectConnector(connector.id)}
                   >
-                    <div className="flex items-center truncate mr-2">
-                      <div className="mr-2">
+                    <div className="flex items-center truncate me-2">
+                      <div className="me-2">
                         <SourceIcon
                           sourceType={federatedSourceToRegularSource(
                             connector.source
@@ -213,7 +213,7 @@ export const FederatedConnectorSelector = ({
                   className="flex items-center bg-background-neutral-00 rounded-12 border border-border-02 transition-all px-2 py-1 max-w-full group text-xs"
                 >
                   <div className="flex items-center overflow-hidden">
-                    <div className="mr-1 shrink-0">
+                    <div className="me-1 shrink-0">
                       <SourceIcon
                         sourceType={federatedSourceToRegularSource(
                           connector.source
@@ -226,12 +226,12 @@ export const FederatedConnectorSelector = ({
                     </span>
                     {hasEntitiesConfigured && (
                       <div
-                        className="ml-1 w-2 h-2 bg-green-500 rounded-full shrink-0"
+                        className="ms-1 w-2 h-2 bg-green-500 rounded-full shrink-0"
                         title="Entities configured"
                       />
                     )}
                   </div>
-                  <div className="flex items-center ml-2 gap-1">
+                  <div className="flex items-center ms-2 gap-1">
                     <Button
                       prominence="tertiary"
                       size="sm"

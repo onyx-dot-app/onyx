@@ -664,11 +664,11 @@ export default function BuildChatPanel({
             {...getRootProps()}
             className={cn(
               "flex flex-col h-full transition-all duration-300 ease-in-out outline-hidden",
-              outputPanelOpen ? "w-1/2 pl-4" : "w-full"
+              outputPanelOpen ? "w-1/2 ps-4" : "w-full"
             )}
           >
             {/* Chat header */}
-            <div className="flex flex-row items-center justify-between pl-4 pr-4 py-3 relative overflow-visible">
+            <div className="flex flex-row items-center justify-between ps-4 pe-4 py-3 relative overflow-visible">
               <div className="flex min-w-0 flex-row items-center gap-2 max-w-[75%]">
                 {/* Mobile sidebar toggle - only show on mobile when sidebar is folded */}
                 {isMobile && leftSidebarFolded && (

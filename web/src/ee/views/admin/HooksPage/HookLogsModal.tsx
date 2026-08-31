@@ -35,7 +35,7 @@ function SectionHeader({ label }: { label: string }) {
       <Text font="secondary-body" color="text-03">
         {label}
       </Text>
-      <div className="flex-1 ml-2 border-t border-border-02" />
+      <div className="flex-1 ms-2 border-t border-border-02" />
     </Section>
   );
 }

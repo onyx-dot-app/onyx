@@ -269,7 +269,7 @@ function TokenBudgetField() {
       onBlur={() => void helpers.setTouched(true)}
       variant={meta.touched && meta.error ? "error" : "primary"}
       rightChildren={
-        <div className="pr-1">
+        <div className="pe-1">
           <Text font="secondary-action" color="text-03" nowrap>
             {t("modal.tokenBudget.unit")}
           </Text>
@@ -602,7 +602,7 @@ export default function CreateRateLimitModal({
                         prefixText="$"
                         placeholder={t("modal.costBudget.placeholder")}
                         rightChildren={
-                          <div className="pr-1">
+                          <div className="pe-1">
                             <Text
                               font="secondary-action"
                               color="text-03"
@@ -633,7 +633,7 @@ export default function CreateRateLimitModal({
                         inputMode="numeric"
                         pattern="[0-9]*"
                         rightChildren={
-                          <div className="pr-1">
+                          <div className="pe-1">
                             <Text
                               font="secondary-action"
                               color="text-03"

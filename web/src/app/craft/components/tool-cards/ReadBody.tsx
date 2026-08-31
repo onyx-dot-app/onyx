@@ -61,13 +61,13 @@ export default function ReadBody({ toolCall }: ToolCardBodyProps) {
               const html = highlight ? highlight(line, language) : null;
               return (
                 <tr key={idx} className="align-baseline">
-                  <td className="select-none pl-1 pr-1 py-0 text-right align-baseline w-6 border-r-[0.5px] border-border-01 bg-background-tint-01">
+                  <td className="select-none ps-1 pe-1 py-0 text-end align-baseline w-6 border-e-[0.5px] border-border-01 bg-background-tint-01">
                     <Text font="secondary-mono" color="text-02">
                       {String(idx + 1)}
                     </Text>
                   </td>
                   <td
-                    className="pl-2 pr-2 py-0 whitespace-pre-wrap wrap-break-word"
+                    className="ps-2 pe-2 py-0 whitespace-pre-wrap wrap-break-word"
                     style={MONO_STYLE}
                   >
                     {html !== null ? (

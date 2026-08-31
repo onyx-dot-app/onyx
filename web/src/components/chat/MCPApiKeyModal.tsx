@@ -224,7 +224,7 @@ export default function MCPApiKeyModal({
                         placeholder={t("credentialField.placeholder", {
                           field: field.replace(/_/g, " "),
                         })}
-                        className="pr-10"
+                        className="pe-10"
                         required
                       />
                       <button
@@ -260,7 +260,7 @@ export default function MCPApiKeyModal({
                     value={apiKey}
                     onChange={(e) => setApiKey(e.target.value)}
                     placeholder={t("apiKeyField.placeholder")}
-                    className="pr-10"
+                    className="pe-10"
                     required
                   />
                   <button

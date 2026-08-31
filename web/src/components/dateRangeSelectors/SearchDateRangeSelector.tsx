@@ -44,7 +44,7 @@ export function SearchDateRangeSelector({
             cursor-pointer
             hover:bg-accent-background-hovered`}
         >
-          <FiCalendar className="flex-none my-auto mr-2" />{" "}
+          <FiCalendar className="flex-none my-auto me-2" />{" "}
           <p className="line-clamp-1">
             {isHorizontal ? (
               "Date"
@@ -58,7 +58,7 @@ export function SearchDateRangeSelector({
             <button
               type="button"
               aria-label="Clear"
-              className="my-auto ml-auto p-0.5 rounded-full w-fit"
+              className="my-auto ms-auto p-0.5 rounded-full w-fit"
               onClick={(e) => {
                 onValueChange(null);
                 e.stopPropagation();
@@ -67,7 +67,7 @@ export function SearchDateRangeSelector({
               <FiXCircle />
             </button>
           ) : (
-            <FiChevronDown className="my-auto ml-auto" />
+            <FiChevronDown className="my-auto ms-auto" />
           )}
         </div>
       </CustomDropdown>

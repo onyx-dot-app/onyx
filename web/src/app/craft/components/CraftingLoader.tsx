@@ -99,7 +99,7 @@ export default function CraftingLoader() {
           <div className="w-3 h-3 rounded-none bg-red-500" />
           <div className="w-3 h-3 rounded-none bg-yellow-500" />
           <div className="w-3 h-3 rounded-none bg-green-500" />
-          <span className="ml-4 text-neutral-500 text-sm font-mono">
+          <span className="ms-4 text-neutral-500 text-sm font-mono">
             crafting_table
           </span>
         </div>
@@ -107,19 +107,19 @@ export default function CraftingLoader() {
         <div className="bg-neutral-900 p-6 min-h-[250px] font-mono text-sm">
           {lines.map((line, i) => (
             <div key={i} className="flex items-center text-neutral-300">
-              <span className="text-emerald-500 mr-2">/&gt;</span>
+              <span className="text-emerald-500 me-2">/&gt;</span>
               <span>{line}</span>
             </div>
           ))}
           {hasCurrentText ? (
             <div className="flex items-center text-neutral-300">
-              <span className="text-emerald-500 mr-2">/&gt;</span>
+              <span className="text-emerald-500 me-2">/&gt;</span>
               <span>{currentText}</span>
-              <span className="w-2 h-5 bg-emerald-500 animate-pulse ml-0.5" />
+              <span className="w-2 h-5 bg-emerald-500 animate-pulse ms-0.5" />
             </div>
           ) : (
             <div className="flex items-center text-neutral-300">
-              <span className="text-emerald-500 mr-2">/&gt;</span>
+              <span className="text-emerald-500 me-2">/&gt;</span>
               <span className="w-2 h-5 bg-emerald-500 animate-pulse" />
             </div>
           )}

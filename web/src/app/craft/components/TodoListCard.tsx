@@ -111,7 +111,7 @@ export default function TodoListCard({
           <button
             className={cn(
               "w-full flex items-center justify-between px-3 py-2",
-              "hover:bg-background-tint-02 transition-colors text-left"
+              "hover:bg-background-tint-02 transition-colors text-start"
             )}
           >
             <div className="flex items-center gap-2 min-w-0 flex-1">

@@ -192,7 +192,7 @@ function ScopeSelector({
             const lockReason = lockedBy.get(option.scope);
             const locked = lockReason !== undefined;
             return (
-              <div key={option.scope} className="flex items-start gap-2 pl-2">
+              <div key={option.scope} className="flex items-start gap-2 ps-2">
                 <Checkbox
                   checked={selectedScopes.includes(option.scope) || locked}
                   disabled={disabled || locked}

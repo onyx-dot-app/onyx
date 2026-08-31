@@ -602,7 +602,7 @@ function FileTreeNode({
               )}
 
               {/* Name */}
-              <span className="flex-1 text-left ml-1 min-w-0">
+              <span className="flex-1 text-start ms-1 min-w-0">
                 <Text font="secondary-body" color="text-04" maxLines={1}>
                   {entry.name}
                 </Text>
@@ -610,7 +610,7 @@ function FileTreeNode({
 
               {/* File size */}
               {!entry.is_directory && entry.size !== null && (
-                <span className="ml-2 mr-2 shrink-0">
+                <span className="ms-2 me-2 shrink-0">
                   <Text color="text-02">{formatFileSize(entry.size)}</Text>
                 </span>
               )}

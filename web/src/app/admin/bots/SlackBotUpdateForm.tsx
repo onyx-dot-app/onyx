@@ -30,7 +30,7 @@ function Checkbox({
         checked={checked}
         onChange={onChange}
         type="checkbox"
-        className="mr-2 w-3.5 h-3.5 my-auto"
+        className="me-2 w-3.5 h-3.5 my-auto"
       />
       <span className="block font-medium text-text-700 text-sm">{label}</span>
     </label>

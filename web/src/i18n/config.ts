@@ -44,3 +44,15 @@ export function isSupportedLocale(
   // `includes` signature; membership is still checked at runtime.
   return SUPPORTED_LOCALES.includes(value as Locale);
 }
+
+// Locales whose UI renders right-to-left. Drives <html dir> and the Radix
+// DirectionProvider in the root layout. Empty until the first RTL locale
+// (ar) ships, so adding one is a one-line change here.
+export const RTL_LOCALES: readonly Locale[] = [];
+
+export type HtmlDir = "ltr" | "rtl";
+
+export function htmlDirForLocale(locale: string): HtmlDir {
+  // SAFETY: cast only widens for the readonly-array `includes` signature.
+  return RTL_LOCALES.includes(locale as Locale) ? "rtl" : "ltr";
+}

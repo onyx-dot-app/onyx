@@ -109,7 +109,7 @@ export default function SuggestedPrompts({
                   type="button"
                   onClick={() => handlePromptClick(prompt.fullText)}
                   className={cn(
-                    "w-full rounded-12 px-3 py-2.5 text-left",
+                    "w-full rounded-12 px-3 py-2.5 text-start",
                     "hover:bg-background-tint-02",
                     "transition-colors cursor-pointer",
                     "focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-action-selection-01 focus-visible:ring-offset-2"

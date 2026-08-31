@@ -87,7 +87,7 @@ export function FilterDropdown({
                   {option.icon}
                   {option.display}
                   {isSelected && (
-                    <div className="ml-auto my-auto mr-1">
+                    <div className="ms-auto my-auto me-1">
                       <FiCheck />
                     </div>
                   )}
@@ -122,7 +122,7 @@ export function FilterDropdown({
             <button
               type="button"
               aria-label="Clear"
-              className="my-auto ml-auto p-0.5 rounded-full w-fit"
+              className="my-auto ms-auto p-0.5 rounded-full w-fit"
               onClick={(e) => {
                 resetValues();
                 e.stopPropagation();
@@ -131,7 +131,7 @@ export function FilterDropdown({
               <FiXCircle />
             </button>
           ) : (
-            <FiChevronDown className="my-auto ml-auto" />
+            <FiChevronDown className="my-auto ms-auto" />
           )}
         </div>
       </CustomDropdown>

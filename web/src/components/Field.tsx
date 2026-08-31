@@ -363,7 +363,7 @@ export function TextFormField({
             ${isCode ? "font-mono" : ""}
             ${className}
             bg-background-neutral-00
-            ${isPasswordField && showPasswordToggle ? "pr-10" : ""}
+            ${isPasswordField && showPasswordToggle ? "pe-10" : ""}
           `}
           disabled={disabled}
           placeholder={placeholder}
@@ -604,7 +604,7 @@ export function MultiSelectField({
               value={option.value}
               checked={selectedOptions.includes(option.value)}
               onChange={() => handleCheckboxChange(option.value)}
-              className="mr-2"
+              className="me-2"
             />
             {option.label}
           </label>
@@ -745,7 +745,7 @@ export const BooleanFormField = memo(function BooleanFormField({
                 <div
                   className={cn(
                     disabled && "opacity-50",
-                    removeIndent ? "mr-2" : "mx-3"
+                    removeIndent ? "me-2" : "mx-3"
                   )}
                 >
                   <Checkbox
@@ -846,7 +846,7 @@ export function TextArrayField<T extends Yup.AnyObject>({
                       w-full
                       py-2
                       px-3
-                      mr-4
+                      me-4
                       disabled:cursor-not-allowed
                       `}
                       // Disable autocomplete since the browser doesn't know how to handle an array of text fields

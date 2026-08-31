@@ -37,10 +37,10 @@ const INLINE_COMPONENTS = {
     <span className="block">{children}</span>
   ),
   ul: ({ children }: { children?: ReactNode }) => (
-    <ul className="list-disc pl-3 space-y-0">{children}</ul>
+    <ul className="list-disc ps-3 space-y-0">{children}</ul>
   ),
   ol: ({ children }: { children?: ReactNode }) => (
-    <ol className="list-decimal pl-3">{children}</ol>
+    <ol className="list-decimal ps-3">{children}</ol>
   ),
   li: ({ children }: { children?: ReactNode }) => <li>{children}</li>,
   a: ({ children, href }: { children?: ReactNode; href?: string }) => {

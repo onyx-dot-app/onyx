@@ -161,7 +161,7 @@ export function CompactDocumentCard({
             as="p"
             text03
             secondaryBody
-            className="line-clamp-2 text-left m-0!"
+            className="line-clamp-2 text-start m-0!"
           >
             {document.blurb}
           </Text>
@@ -173,7 +173,7 @@ export function CompactDocumentCard({
               as="p"
               text03
               figureSmallLabel
-              className="line-clamp-2 text-left m-0!"
+              className="line-clamp-2 text-start m-0!"
             >
               Updated {new Date(document.updated_at).toLocaleDateString()}
             </Text>

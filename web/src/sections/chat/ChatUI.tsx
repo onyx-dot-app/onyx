@@ -174,7 +174,7 @@ const ChatUI = React.memo(
         <div
           className={cn(
             "flex flex-col w-full h-full pt-4 pb-8 gap-12",
-            !fullWidthChat && "md:pr-1"
+            !fullWidthChat && "md:pe-1"
           )}
         >
           {messages.map((message, i) => {

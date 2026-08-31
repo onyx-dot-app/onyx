@@ -535,7 +535,7 @@ export function FederatedConnectorForm({
                   .replace(/_/g, " ")
                   .replace(/\b\w/g, (l) => l.toUpperCase())}
                 {fieldSpec.required && (
-                  <span className="text-red-500 ml-1">*</span>
+                  <span className="text-red-500 ms-1">*</span>
                 )}
               </Text>
               {fieldSpec.description && (
@@ -670,7 +670,7 @@ export function FederatedConnectorForm({
                           {(fieldSpec.required ||
                             (fieldKey === "channels" &&
                               isSlackChannelsRequired())) && (
-                            <span className="text-red-500 ml-1">*</span>
+                            <span className="text-red-500 ms-1">*</span>
                           )}
                         </Text>
                         <ListFieldInput
@@ -715,7 +715,7 @@ export function FederatedConnectorForm({
                               .replace(/_/g, " ")
                               .replace(/\b\w/g, (l) => l.toUpperCase())}
                             {fieldSpec.required && (
-                              <span className="text-red-500 ml-1">*</span>
+                              <span className="text-red-500 ms-1">*</span>
                             )}
                           </Text>
                           {fieldSpec.description && (
@@ -768,7 +768,7 @@ export function FederatedConnectorForm({
           <SourceIcon iconSize={32} sourceType={connector} />
         </div>
 
-        <div className="ml-2 overflow-hidden text-ellipsis whitespace-nowrap flex-1 mr-4">
+        <div className="ms-2 overflow-hidden text-ellipsis whitespace-nowrap flex-1 me-4">
           <div className="text-2xl font-bold text-text-default flex items-center gap-2">
             <span>
               {isEditMode ? "Edit" : "Setup"} {sourceMetadata.displayName}
@@ -789,7 +789,7 @@ export function FederatedConnectorForm({
         </div>
 
         {isEditMode && (
-          <div className="ml-auto flex gap-x-2">
+          <div className="ms-auto flex gap-x-2">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <div>
@@ -852,7 +852,7 @@ export function FederatedConnectorForm({
                 </div>
               )}
 
-              <div className="ml-auto">
+              <div className="ms-auto">
                 <Button
                   type="button"
                   prominence="secondary"

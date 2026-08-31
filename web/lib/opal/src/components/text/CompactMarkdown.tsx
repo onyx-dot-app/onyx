@@ -83,17 +83,17 @@ const DEFAULT_COMPONENTS = {
   ),
   ul: ({ node, ...props }) => (
     <ul
-      className="my-1 pl-5 list-disc text-sm leading-6 text-text-04"
+      className="my-1 ps-5 list-disc text-sm leading-6 text-text-04"
       {...props}
     />
   ),
   ol: ({ node, ...props }) => (
     <ol
-      className="my-1 pl-5 list-decimal text-sm leading-6 text-text-04"
+      className="my-1 ps-5 list-decimal text-sm leading-6 text-text-04"
       {...props}
     />
   ),
-  li: ({ node, ...props }) => <li className="my-0.5 pl-1" {...props} />,
+  li: ({ node, ...props }) => <li className="my-0.5 ps-1" {...props} />,
   strong: ({ node, ...props }) => (
     <strong className="font-semibold text-text-05" {...props} />
   ),
@@ -126,7 +126,7 @@ const DEFAULT_COMPONENTS = {
   },
   blockquote: ({ node, ...props }) => (
     <blockquote
-      className="my-2 border-l border-border-02 pl-3 text-sm text-text-03"
+      className="my-2 border-s border-border-02 ps-3 text-sm text-text-03"
       {...props}
     />
   ),
@@ -150,20 +150,20 @@ const DEFAULT_COMPONENTS = {
   table: ({ node, ...props }) => (
     <div className="my-2 overflow-hidden rounded-08 border border-border-01">
       <table
-        className="w-full table-fixed border-collapse text-left text-xs"
+        className="w-full table-fixed border-collapse text-start text-xs"
         {...props}
       />
     </div>
   ),
   th: ({ node, ...props }) => (
     <th
-      className="border-b border-r border-border-01 bg-background-tint-01 px-2 py-1.5 align-top font-semibold text-text-05 wrap-break-word last:border-r-0"
+      className="border-b border-e border-border-01 bg-background-tint-01 px-2 py-1.5 align-top font-semibold text-text-05 wrap-break-word last:border-e-0"
       {...props}
     />
   ),
   td: ({ node, ...props }) => (
     <td
-      className="border-b border-r border-border-01 px-2 py-1.5 align-top text-text-04 wrap-break-word last:border-r-0"
+      className="border-b border-e border-border-01 px-2 py-1.5 align-top text-text-04 wrap-break-word last:border-e-0"
       {...props}
     />
   ),

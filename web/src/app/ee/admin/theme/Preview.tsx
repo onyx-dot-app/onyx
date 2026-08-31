@@ -84,7 +84,7 @@ function PreviewLogo({
 
 function InputPreview() {
   return (
-    <div className="bg-background-neutral-00 border border-border-01 flex flex-col gap-1.5 items-end pb-1 pl-2.5 pr-1 pt-2.5 rounded-08 w-full h-14">
+    <div className="bg-background-neutral-00 border border-border-01 flex flex-col gap-1.5 items-end pb-1 ps-2.5 pe-1 pt-2.5 rounded-08 w-full h-14">
       <div className="h-5 w-5 bg-theme-primary-05 mt-auto rounded-sm"></div>
     </div>
   );
@@ -125,13 +125,13 @@ function PreviewChat({
       <div className="flex flex-1 flex-col gap-2 items-center justify-end max-w-[300px] w-full px-3 py-0 mx-auto">
         {/* User message bubble (right side) */}
         <div className="flex flex-col items-end w-full">
-          <div className="bg-background-tint-02 flex flex-col items-start px-2.5 py-2 rounded-bl-[10px] rounded-tl-[10px] rounded-tr-[10px]">
+          <div className="bg-background-tint-02 flex flex-col items-start px-2.5 py-2 rounded-es-[10px] rounded-ss-[10px] rounded-se-[10px]">
             <div className="bg-background-neutral-03 h-1.5 rounded-04 w-20" />
           </div>
         </div>
 
         {/* AI response bubble (left side) */}
-        <div className="flex flex-col gap-1.5 items-start pl-2 pr-16 py-2 w-full">
+        <div className="flex flex-col gap-1.5 items-start ps-2 pe-16 py-2 w-full">
           <div className="bg-background-neutral-03 h-1.5 rounded-04 w-full" />
           <div className="bg-background-neutral-03 h-1.5 rounded-04 w-full" />
           <div className="bg-background-neutral-03 h-1.5 rounded-04 w-12" />
@@ -184,7 +184,7 @@ function PreviewStart({
   return (
     <div className="flex h-60 rounded-12 shadow-box-00 bg-background-tint-01 relative">
       {/* Sidebar */}
-      <div className="flex w-24 h-full bg-background-tint-02 rounded-l-12 p-1 justify-start">
+      <div className="flex w-24 h-full bg-background-tint-02 rounded-s-12 p-1 justify-start">
         <div className="flex flex-col h-fit w-full justify-start">
           <div
             className={cn(

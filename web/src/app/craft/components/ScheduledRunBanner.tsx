@@ -118,12 +118,12 @@ export default function ScheduledRunBanner({
         </span>
         <div
           className={cn(
-            "ml-0 flex h-5 w-max max-w-0 translate-y-px items-center",
+            "ms-0 flex h-5 w-max max-w-0 translate-y-px items-center",
             "gap-1.5 overflow-hidden opacity-0",
             "transition-[max-width,opacity,margin-left]",
             "duration-[350ms] ease-out",
-            "group-hover:ml-1.5 group-hover:max-w-[23rem]",
-            "group-hover:opacity-100 group-focus-visible:ml-1.5",
+            "group-hover:ms-1.5 group-hover:max-w-[23rem]",
+            "group-hover:opacity-100 group-focus-visible:ms-1.5",
             "group-focus-visible:max-w-[23rem]",
             "group-focus-visible:opacity-100"
           )}

@@ -228,13 +228,13 @@ export default function UrlBar({
                 <button
                   type="button"
                   onClick={handleCopyUrl}
-                  className="block w-full min-w-0 cursor-pointer text-left focus:outline-hidden"
+                  className="block w-full min-w-0 cursor-pointer text-start focus:outline-hidden"
                   aria-label={`Copy URL: ${displayUrl}`}
                 >
                   {urlText}
                 </button>
               ) : (
-                <div className="block w-full min-w-0 text-left">{urlText}</div>
+                <div className="block w-full min-w-0 text-start">{urlText}</div>
               )}
             </Tooltip>
           </div>

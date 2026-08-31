@@ -90,7 +90,7 @@ export function IndexAttemptsTable({
               >
                 <span className="flex items-center">
                   {t("indexAttemptsTable.columns.totalDocs")}
-                  <SvgInfo className="ml-1 w-4 h-4" />
+                  <SvgInfo className="ms-1 w-4 h-4" />
                 </span>
               </Tooltip>
             </TableHead>
@@ -167,7 +167,7 @@ export function IndexAttemptsTable({
                 </TableCell>
                 <TableCell>
                   <div className="flex">
-                    <div className="text-right">
+                    <div className="text-end">
                       <div>{indexAttempt.new_docs_indexed}</div>
                       {indexAttempt.docs_removed_from_index > 0 && (
                         <div className="text-xs w-52 text-wrap flex italic overflow-hidden whitespace-normal px-1">
@@ -185,7 +185,7 @@ export function IndexAttemptsTable({
                     {indexAttempt.from_beginning && (
                       <Tooltip side="top" tooltip={reindexTooltip}>
                         <span className="cursor-help flex items-center">
-                          <SvgClock className="ml-2 h-3.5 w-3.5 stroke-current" />
+                          <SvgClock className="ms-2 h-3.5 w-3.5 stroke-current" />
                         </span>
                       </Tooltip>
                     )}

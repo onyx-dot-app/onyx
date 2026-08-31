@@ -148,7 +148,7 @@ export const SettingsPanel = ({
         className={cn(
           "fixed top-0 right-0 w-100 h-full z-50",
           "bg-linear-to-b from-background-tint-02 to-background-tint-01",
-          "backdrop-blur-xl border-l border-border-01 overflow-y-auto",
+          "backdrop-blur-xl border-s border-border-01 overflow-y-auto",
           "transition-transform duration-300 ease-out",
           settingsOpen ? "translate-x-0" : "translate-x-full"
         )}
