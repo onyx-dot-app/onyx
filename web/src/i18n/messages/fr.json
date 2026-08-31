@@ -2521,7 +2521,7 @@
         "description": "Échec du chargement des utilisateurs. Essayez d'actualiser la page."
       }
     },
-    "craftInstructions": {
+    "craftPreferences": {
       "baseInstructions": {
         "description": "Le prompt intégré auquel vos instructions sont ajoutées. Les sections dynamiques sont remplies à chaque session.",
         "loadError": {
@@ -2529,9 +2529,34 @@
         },
         "title": "Voir les instructions de base"
       },
+      "defaultModel": {
+        "clearButton": {
+          "label": "Effacer"
+        },
+        "help": {
+          "description": "Craft utilise ce modèle pour les nouvelles sessions et les tâches planifiées. S'il n'est pas défini, Craft utilise le modèle de chat par défaut de l'espace de travail."
+        },
+        "inheritedTag": {
+          "label": "Valeur par défaut de l’espace de travail"
+        },
+        "label": "Modèle par défaut",
+        "placeholder": "Sélectionner un modèle",
+        "resetError": {
+          "message": "Échec de l'effacement du modèle par défaut"
+        },
+        "resetSuccess": {
+          "message": "Modèle par défaut de Craft effacé"
+        },
+        "saveError": {
+          "message": "Échec de l'enregistrement du modèle par défaut"
+        },
+        "saveSuccess": {
+          "message": "Modèle par défaut de Craft enregistré"
+        }
+      },
       "header": {
-        "description": "Instructions valables dans tout l'espace de travail, que chaque agent Craft suit en plus de son comportement intégré.",
-        "title": "Instructions"
+        "description": "Le modèle par défaut et les instructions valables dans tout l'espace de travail, que chaque agent Craft suit en plus de son comportement intégré.",
+        "title": "Préférences"
       },
       "instructions": {
         "charCount": {
@@ -9019,8 +9044,8 @@
         "craftApps": {
           "label": "Applications"
         },
-        "craftInstructions": {
-          "label": "Instructions"
+        "craftPreferences": {
+          "label": "Préférences"
         },
         "customAnalytics": {
           "label": "Statistiques personnalisées"

@@ -2521,7 +2521,20 @@
         "description": "加载用户失败。请尝试刷新页面。"
       }
     },
-    "craftInstructions": {
+    "craftPreferences": {
+      "defaultModel": {
+        "clearButton": { "label": "清除" },
+        "help": {
+          "description": "Craft 将此模型用于新会话和计划任务。未设置时，Craft 将使用工作区默认聊天模型。"
+        },
+        "inheritedTag": { "label": "工作区默认值" },
+        "label": "默认模型",
+        "placeholder": "选择模型",
+        "resetError": { "message": "清除默认模型失败" },
+        "resetSuccess": { "message": "已清除 Craft 默认模型" },
+        "saveError": { "message": "保存默认模型失败" },
+        "saveSuccess": { "message": "已保存 Craft 默认模型" }
+      },
       "baseInstructions": {
         "description": "您的指令会追加到这段内置提示词之后。动态部分会在每个会话中分别填充。",
         "loadError": {
@@ -2530,8 +2543,8 @@
         "title": "查看基础指令"
       },
       "header": {
-        "description": "在 Craft 内置行为之上，每个 Craft 智能体都会遵循的工作区级指令。",
-        "title": "指令"
+        "description": "在 Craft 内置行为之上，每个 Craft 智能体都会遵循的默认模型和工作区级指令。",
+        "title": "偏好设置"
       },
       "instructions": {
         "charCount": {
@@ -9019,8 +9032,8 @@
         "craftApps": {
           "label": "应用"
         },
-        "craftInstructions": {
-          "label": "指令"
+        "craftPreferences": {
+          "label": "偏好设置"
         },
         "customAnalytics": {
           "label": "自定义分析"

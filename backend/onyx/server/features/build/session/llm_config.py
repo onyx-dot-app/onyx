@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from onyx.llm.well_known_providers.llm_provider_options import (
@@ -101,7 +102,7 @@ def _matching_visible_model(
 def _select_gateway_default(
     providers: list[LLMProviderView],
     selection: AgentSelection | None,
-    configured_default: GatewaySelection | None = None,
+    configured_defaults: Sequence[GatewaySelection] = (),
 ) -> tuple[int, str] | None:
     if selection is not None:
         resolved = _matching_visible_model(providers, selection)
@@ -112,9 +113,11 @@ def _select_gateway_default(
             "falling back"
         )
 
-    # The admin's configured default model (shared with chat) outranks the
-    # built-in recommendation.
-    if configured_default is not None:
+    # The admin's configured defaults (e.g. craft then chat) outrank the built-in
+    # recommendation, in the given priority order. A configured default that is
+    # not visible/accessible falls through to the next one rather than skipping
+    # straight to the recommendation.
+    for configured_default in configured_defaults:
         resolved = _matching_visible_model(providers, configured_default)
         if resolved is not None:
             return resolved
@@ -140,14 +143,14 @@ def _select_gateway_default(
 def build_onyx_gateway_config(
     gateway_providers: list[LLMProviderView],
     selection: AgentSelection | None = None,
-    configured_default: GatewaySelection | None = None,
+    configured_defaults: Sequence[GatewaySelection] = (),
 ) -> CraftLLMProviderConfig | None:
     if not ONYX_SERVER_URL:
         return None
 
     models = build_gateway_model_catalog(gateway_providers)
     default_selection = _select_gateway_default(
-        gateway_providers, selection, configured_default
+        gateway_providers, selection, configured_defaults
     )
     if not models or default_selection is None:
         return None

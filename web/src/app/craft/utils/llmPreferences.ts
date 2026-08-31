@@ -76,11 +76,11 @@ function getStoredLlmSelection(
 export function getPreferredLlmSelection(
   userId: string | undefined,
   llmProviders: MinimalLlmProvider[] | undefined,
-  configuredDefault?: DefaultModel | null
+  configuredDefaults: (DefaultModel | null | undefined)[] = []
 ): BuildLlmSelection | null {
   if (!llmProviders) return null;
   return (
     (userId ? getStoredLlmSelection(userId, llmProviders) : null) ??
-    getDefaultLlmSelection(llmProviders, configuredDefault)
+    getDefaultLlmSelection(llmProviders, configuredDefaults)
   );
 }

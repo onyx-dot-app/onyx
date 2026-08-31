@@ -2521,7 +2521,7 @@
         "description": "Falha ao carregar os usuários. Tente atualizar a página."
       }
     },
-    "craftInstructions": {
+    "craftPreferences": {
       "baseInstructions": {
         "description": "O prompt integrado ao qual suas instruções são anexadas. As seções dinâmicas são preenchidas em cada sessão.",
         "loadError": {
@@ -2529,9 +2529,34 @@
         },
         "title": "Ver instruções base"
       },
+      "defaultModel": {
+        "clearButton": {
+          "label": "Limpar"
+        },
+        "help": {
+          "description": "O Craft usa este modelo para novas sessões e tarefas agendadas. Quando não definido, o Craft recorre ao modelo de chat padrão do espaço de trabalho."
+        },
+        "inheritedTag": {
+          "label": "Padrão do espaço de trabalho"
+        },
+        "label": "Modelo padrão",
+        "placeholder": "Selecionar modelo",
+        "resetError": {
+          "message": "Falha ao limpar o modelo padrão"
+        },
+        "resetSuccess": {
+          "message": "Modelo padrão do Craft limpo"
+        },
+        "saveError": {
+          "message": "Falha ao salvar o modelo padrão"
+        },
+        "saveSuccess": {
+          "message": "Modelo padrão do Craft salvo"
+        }
+      },
       "header": {
-        "description": "Instruções para todo o espaço de trabalho que cada agente do Craft segue, além do comportamento integrado do Craft.",
-        "title": "Instruções"
+        "description": "O modelo padrão e as instruções para todo o espaço de trabalho que cada agente do Craft segue, além do comportamento integrado do Craft.",
+        "title": "Preferências"
       },
       "instructions": {
         "charCount": {
@@ -9019,8 +9044,8 @@
         "craftApps": {
           "label": "Aplicativos"
         },
-        "craftInstructions": {
-          "label": "Instruções"
+        "craftPreferences": {
+          "label": "Preferências"
         },
         "customAnalytics": {
           "label": "Análises personalizadas"

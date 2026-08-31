@@ -25,7 +25,7 @@ export type AdminNavItemId =
   | "chatPreferences"
   | "craftAccess"
   | "craftApps"
-  | "craftInstructions"
+  | "craftPreferences"
   | "customAnalytics"
   | "agents"
   | "mcpActions"
@@ -78,7 +78,7 @@ const NAV_ITEM_IDS: Record<keyof typeof ADMIN_ROUTES, AdminNavItemId | null> = {
   CHAT_PREFERENCES: "chatPreferences",
   CRAFT_ACCESS: "craftAccess",
   CRAFT_APPS: "craftApps",
-  CRAFT_INSTRUCTIONS: "craftInstructions",
+  CRAFT_PREFERENCES: "craftPreferences",
   CUSTOM_ANALYTICS: "customAnalytics",
   AGENTS: "agents",
   MCP_ACTIONS: "mcpActions",
