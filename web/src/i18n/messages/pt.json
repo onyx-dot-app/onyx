@@ -5765,6 +5765,27 @@
         "unexpectedError": "Ocorreu um erro inesperado."
       }
     },
+    "status": {
+      "badges": {
+        "canceled": "Cancelado",
+        "completedWithErrors": "Concluído com erros",
+        "deleting": "Excluindo",
+        "error": "Erro",
+        "failed": "Falhou",
+        "inProgress": "Em andamento",
+        "indexed": "Indexado",
+        "indexing": "Indexando",
+        "initialIndexing": "Indexação inicial",
+        "interrupted": "Interrompido",
+        "invalid": "Inválido",
+        "invalidConnectorTooltip": "O conector está em um estado inválido. Atualize as credenciais ou crie um novo conector.",
+        "none": "Nenhum",
+        "notStarted": "Não iniciado",
+        "paused": "Pausado",
+        "scheduled": "Agendado",
+        "succeeded": "Bem-sucedido"
+      }
+    },
     "systemInfo": {
       "backendVersion": {
         "label": "Versão do backend: "
@@ -7204,6 +7225,70 @@
       },
       "sourcesModal": {
         "title": "Fontes"
+      }
+    },
+    "appChrome": {
+      "delete": {
+        "label": "Excluir"
+      },
+      "deleteModal": {
+        "description": "Tem certeza de que deseja excluir este chat? Esta ação não pode ser desfeita.",
+        "submitButton": {
+          "label": "Excluir"
+        },
+        "title": "Excluir chat"
+      },
+      "exportAs": {
+        "label": "Exportar como…"
+      },
+      "exportFailed": {
+        "message": "Falha ao exportar o chat. Tente novamente."
+      },
+      "exportMarkdown": {
+        "label": "Markdown"
+      },
+      "exportPlaintext": {
+        "label": "Texto simples"
+      },
+      "fullWidth": {
+        "ariaLabel": "Alternar chat de largura total",
+        "fitTooltip": "Ajustar largura",
+        "fullTooltip": "Largura total"
+      },
+      "incognitoExit": {
+        "ariaLabel": "Sair do chat anônimo",
+        "tooltip": "Sair do chat anônimo"
+      },
+      "incognitoPill": {
+        "ariaLabel": "Chat anônimo",
+        "label": "Chat anônimo"
+      },
+      "incognitoStart": {
+        "ariaLabel": "Iniciar chat anônimo",
+        "lockedTooltip": "O modo anônimo só pode ser definido antes do início do chat",
+        "tooltip": "Chat anônimo"
+      },
+      "mode": {
+        "chat": {
+          "description": "Conversa e pesquisa",
+          "label": "Chat"
+        },
+        "search": {
+          "description": "Pesquisa rápida de documentos",
+          "label": "Pesquisa"
+        }
+      },
+      "modeButton": {
+        "ariaLabel": "Alterar modo do aplicativo"
+      },
+      "moveToProject": {
+        "label": "Mover para projeto"
+      },
+      "openSidebar": {
+        "ariaLabel": "Abrir barra lateral"
+      },
+      "share": {
+        "label": "Compartilhar"
       }
     },
     "banners": {
@@ -8950,6 +9035,34 @@
         "updateFailed": "Não foi possível atualizar a preferência de idioma"
       }
     },
+    "layout": {
+      "header": {
+        "title": "Configurações"
+      },
+      "sectionSelect": {
+        "placeholder": "Selecione uma seção"
+      },
+      "tabs": {
+        "accountsAccess": {
+          "label": "Contas e acesso"
+        },
+        "chatPreferences": {
+          "label": "Preferências de chat"
+        },
+        "connectors": {
+          "label": "Conectores"
+        },
+        "general": {
+          "label": "Geral"
+        },
+        "llmGateway": {
+          "label": "Gateway LLM"
+        },
+        "usage": {
+          "label": "Uso"
+        }
+      }
+    },
     "memory": {
       "empty": {
         "description": "Adicione uma nota pessoal ou memória que o Onyx deve lembrar."
@@ -9010,6 +9123,47 @@
       "toggle": {
         "description": "Ative os atalhos para inserir rapidamente prompts comuns.",
         "title": "Usar atalhos de prompt"
+      }
+    },
+    "usage": {
+      "budget": {
+        "limit": "Limite de {amount}",
+        "none": "Nenhum orçamento definido",
+        "remaining": "{amount} restante",
+        "resetsOn": "Redefine em {date}",
+        "title": "Orçamento"
+      },
+      "empty": {
+        "description": "O uso e os custos dos seus modelos aparecerão aqui quando você começar a conversar.",
+        "title": "Nenhum uso registrado ainda"
+      },
+      "header": {
+        "title": "Uso"
+      },
+      "loadError": {
+        "description": "Algo deu errado ao buscar seu uso. Tente novamente em instantes.",
+        "title": "Não foi possível carregar o uso"
+      },
+      "modelPrices": {
+        "description": "USD por 1M de tokens (entrada · saída · cache) para cada modelo disponível",
+        "title": "Preços dos modelos",
+        "unavailable": "Preços indisponíveis"
+      },
+      "showFewerModels": {
+        "ariaLabel": "Mostrar menos modelos"
+      },
+      "showLess": {
+        "label": "Mostrar menos"
+      },
+      "showMore": {
+        "label": "Mostrar mais {count}"
+      },
+      "showMoreModels": {
+        "ariaLabel": "Mostrar mais {count} modelos"
+      },
+      "usageThisPeriod": {
+        "description": "{amount} gasto",
+        "title": "Uso neste período"
       }
     },
     "voice": {

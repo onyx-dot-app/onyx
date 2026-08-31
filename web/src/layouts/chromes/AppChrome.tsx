@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import {
   useCallback,
   useEffect,
@@ -77,6 +78,7 @@ import { useIncognito } from "@/providers/IncognitoProvider";
 // ---------------------------------------------------------------------------
 
 function Header() {
+  const t = useTranslations("chat.appChrome");
   const appPosition = useAppPosition();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const { state, setAppMode } = useQueryController();
@@ -264,7 +266,7 @@ function Header() {
         );
       } catch (error) {
         console.error("Failed to export chat:", error);
-        showErrorNotification("Failed to export chat. Please try again.");
+        showErrorNotification(t("exportFailed.message"));
       }
     },
     [currentChatSession]
@@ -297,7 +299,7 @@ function Header() {
           sizePreset="main-ui"
           rounding={2}
           icon={SvgChevronLeft}
-          title="Export As…"
+          title={t("exportAs.label")}
           onClick={noProp(() => setShowExportOptions(false))}
         />,
         <Popover.Close asChild key="export-plaintext">
@@ -305,7 +307,7 @@ function Header() {
             sizePreset="main-ui"
             rounding={2}
             icon={SvgFileText}
-            title="Plaintext"
+            title={t("exportPlaintext.label")}
             onClick={noProp(() => handleExport("text"))}
           />
         </Popover.Close>,
@@ -314,7 +316,7 @@ function Header() {
             sizePreset="main-ui"
             rounding={2}
             icon={SvgHash}
-            title="Markdown"
+            title={t("exportMarkdown.label")}
             onClick={noProp(() => handleExport("markdown"))}
           />
         </Popover.Close>,
@@ -326,7 +328,7 @@ function Header() {
           sizePreset="main-ui"
           rounding={2}
           icon={SvgFolderIn}
-          title="Move to Project"
+          title={t("moveToProject.label")}
           onClick={noProp(() => setShowMoveOptions(true))}
         />,
         <LineItemButton
@@ -334,7 +336,7 @@ function Header() {
           sizePreset="main-ui"
           rounding={2}
           icon={SvgDownload}
-          title="Export As…"
+          title={t("exportAs.label")}
           onClick={noProp(() => setShowExportOptions(true))}
         />,
         null,
@@ -344,7 +346,7 @@ function Header() {
           rounding={2}
           color="danger"
           icon={SvgTrash}
-          title="Delete"
+          title={t("delete.label")}
           onClick={noProp(() => setDeleteConfirmationModalOpen(true))}
         />,
       ];
@@ -389,17 +391,16 @@ function Header() {
 
       {deleteModalOpen && (
         <ConfirmationModalLayout
-          title="Delete Chat"
+          title={t("deleteModal.title")}
           icon={SvgTrash}
           onClose={() => setDeleteModalOpen(false)}
           submit={
             <Button variant="danger" onClick={handleDeleteChat}>
-              Delete
+              {t("deleteModal.submitButton.label")}
             </Button>
           }
         >
-          Are you sure you want to delete this chat? This action cannot be
-          undone.
+          {t("deleteModal.description")}
         </ConfirmationModalLayout>
       )}
 
@@ -421,7 +422,7 @@ function Header() {
                   <Button
                     prominence="internal"
                     icon={SvgSidebar}
-                    aria-label="Open Sidebar"
+                    aria-label={t("openSidebar.ariaLabel")}
                     onClick={() => setFolded(false)}
                   />
                 )}
@@ -430,10 +431,10 @@ function Header() {
                     <OpenButton
                       disabled
                       icon={SvgEyeOff}
-                      aria-label="Incognito chat"
+                      aria-label={t("incognitoPill.ariaLabel")}
                       data-testid="incognito-chat-pill"
                     >
-                      Incognito Chat
+                      {t("incognitoPill.label")}
                     </OpenButton>
                   )}
                 {businessTier &&
@@ -447,14 +448,16 @@ function Header() {
                     >
                       <Popover.Trigger asChild>
                         <OpenButton
-                          aria-label="Change app mode"
+                          aria-label={t("modeButton.ariaLabel")}
                           icon={
                             effectiveMode === "search"
                               ? SvgSearchMenu
                               : SvgBubbleText
                           }
                         >
-                          {effectiveMode === "search" ? "Search" : "Chat"}
+                          {effectiveMode === "search"
+                            ? t("mode.search.label")
+                            : t("mode.chat.label")}
                         </OpenButton>
                       </Popover.Trigger>
                       <Popover.Content align="start" width="lg">
@@ -466,8 +469,8 @@ function Header() {
                             state={
                               effectiveMode === "search" ? "selected" : "empty"
                             }
-                            title="Search"
-                            description="Quick search for documents"
+                            title={t("mode.search.label")}
+                            description={t("mode.search.description")}
                             onClick={noProp(() => {
                               setAppMode("search");
                               setModePopoverOpen(false);
@@ -480,8 +483,8 @@ function Header() {
                             state={
                               effectiveMode === "chat" ? "selected" : "empty"
                             }
-                            title="Chat"
-                            description="Conversation and research"
+                            title={t("mode.chat.label")}
+                            description={t("mode.chat.description")}
                             onClick={noProp(() => {
                               setAppMode("chat");
                               setModePopoverOpen(false);
@@ -527,11 +530,11 @@ function Header() {
                         prominence="tertiary"
                         onClick={toggleIncognito}
                         disabled={incognitoLocked}
-                        aria-label="Start incognito chat"
+                        aria-label={t("incognitoStart.ariaLabel")}
                         tooltip={
                           incognitoLocked
-                            ? "Incognito can only be set before the chat starts"
-                            : "Incognito Chat"
+                            ? t("incognitoStart.lockedTooltip")
+                            : t("incognitoStart.tooltip")
                         }
                       />
                     )}
@@ -542,8 +545,12 @@ function Header() {
                         icon={fullWidthChat ? SvgFitWidth : SvgFullWidth}
                         prominence="tertiary"
                         onClick={toggleFullWidthChat}
-                        tooltip={fullWidthChat ? "Fit width" : "Full width"}
-                        aria-label="Toggle full width chat"
+                        tooltip={
+                          fullWidthChat
+                            ? t("fullWidth.fitTooltip")
+                            : t("fullWidth.fullTooltip")
+                        }
+                        aria-label={t("fullWidth.ariaLabel")}
                         aria-pressed={fullWidthChat}
                       />
                     )}
@@ -552,8 +559,8 @@ function Header() {
                         icon={SvgX}
                         prominence="tertiary"
                         onClick={() => void handleExitIncognito()}
-                        aria-label="Exit incognito chat"
-                        tooltip="Exit Incognito Chat"
+                        aria-label={t("incognitoExit.ariaLabel")}
+                        tooltip={t("incognitoExit.tooltip")}
                       />
                     )}
                   </FrostedDiv>
@@ -570,7 +577,7 @@ function Header() {
                         onClick={() => setShowShareModal(true)}
                         aria-label="share-chat-button"
                       >
-                        Share
+                        {t("share.label")}
                       </Button>
                       <SimplePopover
                         trigger={

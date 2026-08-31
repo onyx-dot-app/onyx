@@ -5765,6 +5765,27 @@
         "unexpectedError": "Unexpected error occurred."
       }
     },
+    "status": {
+      "badges": {
+        "canceled": "Canceled",
+        "completedWithErrors": "Completed with errors",
+        "deleting": "Deleting",
+        "error": "Error",
+        "failed": "Failed",
+        "inProgress": "In Progress",
+        "indexed": "Indexed",
+        "indexing": "Indexing",
+        "initialIndexing": "Initial Indexing",
+        "interrupted": "Interrupted",
+        "invalid": "Invalid",
+        "invalidConnectorTooltip": "Connector is in an invalid state. Please update the credentials or create a new connector.",
+        "none": "None",
+        "notStarted": "Not Started",
+        "paused": "Paused",
+        "scheduled": "Scheduled",
+        "succeeded": "Succeeded"
+      }
+    },
     "systemInfo": {
       "backendVersion": {
         "label": "Backend Version: "
@@ -7204,6 +7225,70 @@
       },
       "sourcesModal": {
         "title": "Sources"
+      }
+    },
+    "appChrome": {
+      "delete": {
+        "label": "Delete"
+      },
+      "deleteModal": {
+        "description": "Are you sure you want to delete this chat? This action cannot be undone.",
+        "submitButton": {
+          "label": "Delete"
+        },
+        "title": "Delete Chat"
+      },
+      "exportAs": {
+        "label": "Export As…"
+      },
+      "exportFailed": {
+        "message": "Failed to export chat. Please try again."
+      },
+      "exportMarkdown": {
+        "label": "Markdown"
+      },
+      "exportPlaintext": {
+        "label": "Plaintext"
+      },
+      "fullWidth": {
+        "ariaLabel": "Toggle full width chat",
+        "fitTooltip": "Fit width",
+        "fullTooltip": "Full width"
+      },
+      "incognitoExit": {
+        "ariaLabel": "Exit incognito chat",
+        "tooltip": "Exit Incognito Chat"
+      },
+      "incognitoPill": {
+        "ariaLabel": "Incognito chat",
+        "label": "Incognito Chat"
+      },
+      "incognitoStart": {
+        "ariaLabel": "Start incognito chat",
+        "lockedTooltip": "Incognito can only be set before the chat starts",
+        "tooltip": "Incognito Chat"
+      },
+      "mode": {
+        "chat": {
+          "description": "Conversation and research",
+          "label": "Chat"
+        },
+        "search": {
+          "description": "Quick search for documents",
+          "label": "Search"
+        }
+      },
+      "modeButton": {
+        "ariaLabel": "Change app mode"
+      },
+      "moveToProject": {
+        "label": "Move to Project"
+      },
+      "openSidebar": {
+        "ariaLabel": "Open Sidebar"
+      },
+      "share": {
+        "label": "Share"
       }
     },
     "banners": {
@@ -8950,6 +9035,34 @@
         "updateFailed": "Failed to update language preference"
       }
     },
+    "layout": {
+      "header": {
+        "title": "Settings"
+      },
+      "sectionSelect": {
+        "placeholder": "Select a section"
+      },
+      "tabs": {
+        "accountsAccess": {
+          "label": "Accounts & Access"
+        },
+        "chatPreferences": {
+          "label": "Chat Preferences"
+        },
+        "connectors": {
+          "label": "Connectors"
+        },
+        "general": {
+          "label": "General"
+        },
+        "llmGateway": {
+          "label": "LLM Gateway"
+        },
+        "usage": {
+          "label": "Usage"
+        }
+      }
+    },
     "memory": {
       "empty": {
         "description": "Add personal note or memory that Onyx should remember."
@@ -9010,6 +9123,47 @@
       "toggle": {
         "description": "Enable shortcuts to quickly insert common prompts.",
         "title": "Use Prompt Shortcuts"
+      }
+    },
+    "usage": {
+      "budget": {
+        "limit": "{amount} limit",
+        "none": "No budget set",
+        "remaining": "{amount} remaining",
+        "resetsOn": "Resets on {date}",
+        "title": "Budget"
+      },
+      "empty": {
+        "description": "Your model usage and costs will show up here once you start chatting.",
+        "title": "No usage recorded yet"
+      },
+      "header": {
+        "title": "Usage"
+      },
+      "loadError": {
+        "description": "Something went wrong fetching your usage. Try again in a moment.",
+        "title": "Couldn't load usage"
+      },
+      "modelPrices": {
+        "description": "USD per 1M tokens (input · output · cache) for every available model",
+        "title": "Model prices",
+        "unavailable": "Prices unavailable"
+      },
+      "showFewerModels": {
+        "ariaLabel": "Show fewer models"
+      },
+      "showLess": {
+        "label": "Show less"
+      },
+      "showMore": {
+        "label": "Show {count} more"
+      },
+      "showMoreModels": {
+        "ariaLabel": "Show {count} more models"
+      },
+      "usageThisPeriod": {
+        "description": "{amount} spent",
+        "title": "Usage this period"
       }
     },
     "voice": {

@@ -5753,6 +5753,27 @@
         "unexpectedError": "예기치 않은 오류가 발생했습니다."
       }
     },
+    "status": {
+      "badges": {
+        "canceled": "취소됨",
+        "completedWithErrors": "오류와 함께 완료됨",
+        "deleting": "삭제 중",
+        "error": "오류",
+        "failed": "실패",
+        "inProgress": "진행 중",
+        "indexed": "인덱싱됨",
+        "indexing": "인덱싱 중",
+        "initialIndexing": "초기 인덱싱",
+        "interrupted": "중단됨",
+        "invalid": "유효하지 않음",
+        "invalidConnectorTooltip": "커넥터가 유효하지 않은 상태입니다. 자격 증명을 업데이트하거나 새 커넥터를 만드세요.",
+        "none": "없음",
+        "notStarted": "시작되지 않음",
+        "paused": "일시 중지됨",
+        "scheduled": "예약됨",
+        "succeeded": "성공"
+      }
+    },
     "systemInfo": {
       "backendVersion": {
         "label": "백엔드 버전: "
@@ -7192,6 +7213,70 @@
       },
       "sourcesModal": {
         "title": "출처"
+      }
+    },
+    "appChrome": {
+      "delete": {
+        "label": "삭제"
+      },
+      "deleteModal": {
+        "description": "이 채팅을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.",
+        "submitButton": {
+          "label": "삭제"
+        },
+        "title": "채팅 삭제"
+      },
+      "exportAs": {
+        "label": "다른 형식으로 내보내기…"
+      },
+      "exportFailed": {
+        "message": "채팅 내보내기에 실패했습니다. 다시 시도해 주세요."
+      },
+      "exportMarkdown": {
+        "label": "Markdown"
+      },
+      "exportPlaintext": {
+        "label": "일반 텍스트"
+      },
+      "fullWidth": {
+        "ariaLabel": "전체 너비 채팅 전환",
+        "fitTooltip": "너비 맞춤",
+        "fullTooltip": "전체 너비"
+      },
+      "incognitoExit": {
+        "ariaLabel": "시크릿 채팅 종료",
+        "tooltip": "시크릿 채팅 종료"
+      },
+      "incognitoPill": {
+        "ariaLabel": "시크릿 채팅",
+        "label": "시크릿 채팅"
+      },
+      "incognitoStart": {
+        "ariaLabel": "시크릿 채팅 시작",
+        "lockedTooltip": "시크릿 모드는 채팅 시작 전에만 설정할 수 있습니다",
+        "tooltip": "시크릿 채팅"
+      },
+      "mode": {
+        "chat": {
+          "description": "대화 및 리서치",
+          "label": "채팅"
+        },
+        "search": {
+          "description": "문서 빠른 검색",
+          "label": "검색"
+        }
+      },
+      "modeButton": {
+        "ariaLabel": "앱 모드 변경"
+      },
+      "moveToProject": {
+        "label": "프로젝트로 이동"
+      },
+      "openSidebar": {
+        "ariaLabel": "사이드바 열기"
+      },
+      "share": {
+        "label": "공유"
       }
     },
     "banners": {
@@ -8938,6 +9023,34 @@
         "updateFailed": "언어 설정을 변경하지 못했습니다"
       }
     },
+    "layout": {
+      "header": {
+        "title": "설정"
+      },
+      "sectionSelect": {
+        "placeholder": "섹션 선택"
+      },
+      "tabs": {
+        "accountsAccess": {
+          "label": "계정 및 액세스"
+        },
+        "chatPreferences": {
+          "label": "채팅 환경설정"
+        },
+        "connectors": {
+          "label": "커넥터"
+        },
+        "general": {
+          "label": "일반"
+        },
+        "llmGateway": {
+          "label": "LLM 게이트웨이"
+        },
+        "usage": {
+          "label": "사용량"
+        }
+      }
+    },
     "memory": {
       "empty": {
         "description": "Onyx가 기억할 개인 메모나 메모리를 추가하세요."
@@ -8998,6 +9111,47 @@
       "toggle": {
         "description": "단축어를 활성화하면 자주 쓰는 프롬프트를 빠르게 넣을 수 있습니다.",
         "title": "프롬프트 단축어 사용"
+      }
+    },
+    "usage": {
+      "budget": {
+        "limit": "한도 {amount}",
+        "none": "설정된 예산 없음",
+        "remaining": "{amount} 남음",
+        "resetsOn": "{date}에 재설정",
+        "title": "예산"
+      },
+      "empty": {
+        "description": "채팅을 시작하면 모델 사용량과 비용이 여기에 표시됩니다.",
+        "title": "아직 기록된 사용량이 없습니다"
+      },
+      "header": {
+        "title": "사용량"
+      },
+      "loadError": {
+        "description": "사용량을 가져오는 중 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.",
+        "title": "사용량을 불러올 수 없습니다"
+      },
+      "modelPrices": {
+        "description": "사용 가능한 모든 모델의 100만 토큰당 USD(입력 · 출력 · 캐시)",
+        "title": "모델 가격",
+        "unavailable": "가격 정보 없음"
+      },
+      "showFewerModels": {
+        "ariaLabel": "모델 적게 표시"
+      },
+      "showLess": {
+        "label": "간략히 보기"
+      },
+      "showMore": {
+        "label": "{count}개 더 보기"
+      },
+      "showMoreModels": {
+        "ariaLabel": "모델 {count}개 더 보기"
+      },
+      "usageThisPeriod": {
+        "description": "{amount} 사용",
+        "title": "이 기간의 사용량"
       }
     },
     "voice": {

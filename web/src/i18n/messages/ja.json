@@ -5753,6 +5753,27 @@
         "unexpectedError": "予期しないエラーが発生しました。"
       }
     },
+    "status": {
+      "badges": {
+        "canceled": "キャンセル済み",
+        "completedWithErrors": "エラーありで完了",
+        "deleting": "削除中",
+        "error": "エラー",
+        "failed": "失敗",
+        "inProgress": "進行中",
+        "indexed": "インデックス済み",
+        "indexing": "インデックス作成中",
+        "initialIndexing": "初回インデックス作成",
+        "interrupted": "中断",
+        "invalid": "無効",
+        "invalidConnectorTooltip": "コネクタが無効な状態です。認証情報を更新するか、新しいコネクタを作成してください。",
+        "none": "なし",
+        "notStarted": "未開始",
+        "paused": "一時停止中",
+        "scheduled": "予定済み",
+        "succeeded": "成功"
+      }
+    },
     "systemInfo": {
       "backendVersion": {
         "label": "バックエンドバージョン: "
@@ -7192,6 +7213,70 @@
       },
       "sourcesModal": {
         "title": "ソース"
+      }
+    },
+    "appChrome": {
+      "delete": {
+        "label": "削除"
+      },
+      "deleteModal": {
+        "description": "このチャットを削除してもよろしいですか？この操作は元に戻せません。",
+        "submitButton": {
+          "label": "削除"
+        },
+        "title": "チャットを削除"
+      },
+      "exportAs": {
+        "label": "形式を指定してエクスポート…"
+      },
+      "exportFailed": {
+        "message": "チャットのエクスポートに失敗しました。もう一度お試しください。"
+      },
+      "exportMarkdown": {
+        "label": "Markdown"
+      },
+      "exportPlaintext": {
+        "label": "プレーンテキスト"
+      },
+      "fullWidth": {
+        "ariaLabel": "チャットの全幅表示を切り替え",
+        "fitTooltip": "幅を合わせる",
+        "fullTooltip": "全幅"
+      },
+      "incognitoExit": {
+        "ariaLabel": "シークレットチャットを終了",
+        "tooltip": "シークレットチャットを終了"
+      },
+      "incognitoPill": {
+        "ariaLabel": "シークレットチャット",
+        "label": "シークレットチャット"
+      },
+      "incognitoStart": {
+        "ariaLabel": "シークレットチャットを開始",
+        "lockedTooltip": "シークレットはチャット開始前にのみ設定できます",
+        "tooltip": "シークレットチャット"
+      },
+      "mode": {
+        "chat": {
+          "description": "会話とリサーチ",
+          "label": "チャット"
+        },
+        "search": {
+          "description": "ドキュメントのクイック検索",
+          "label": "検索"
+        }
+      },
+      "modeButton": {
+        "ariaLabel": "アプリモードを変更"
+      },
+      "moveToProject": {
+        "label": "プロジェクトに移動"
+      },
+      "openSidebar": {
+        "ariaLabel": "サイドバーを開く"
+      },
+      "share": {
+        "label": "共有"
       }
     },
     "banners": {
@@ -8938,6 +9023,34 @@
         "updateFailed": "言語設定を更新できませんでした"
       }
     },
+    "layout": {
+      "header": {
+        "title": "設定"
+      },
+      "sectionSelect": {
+        "placeholder": "セクションを選択"
+      },
+      "tabs": {
+        "accountsAccess": {
+          "label": "アカウントとアクセス"
+        },
+        "chatPreferences": {
+          "label": "チャット設定"
+        },
+        "connectors": {
+          "label": "コネクタ"
+        },
+        "general": {
+          "label": "一般"
+        },
+        "llmGateway": {
+          "label": "LLMゲートウェイ"
+        },
+        "usage": {
+          "label": "使用状況"
+        }
+      }
+    },
     "memory": {
       "empty": {
         "description": "Onyx に覚えておいてほしい個人的なメモやメモリを追加します。"
@@ -8998,6 +9111,47 @@
       "toggle": {
         "description": "ショートカットを有効にすると、よく使うプロンプトをすばやく挿入できます。",
         "title": "プロンプトショートカットを使用"
+      }
+    },
+    "usage": {
+      "budget": {
+        "limit": "上限 {amount}",
+        "none": "予算が設定されていません",
+        "remaining": "残り {amount}",
+        "resetsOn": "{date} にリセット",
+        "title": "予算"
+      },
+      "empty": {
+        "description": "チャットを始めると、モデルの使用状況とコストがここに表示されます。",
+        "title": "まだ使用記録がありません"
+      },
+      "header": {
+        "title": "使用状況"
+      },
+      "loadError": {
+        "description": "使用状況の取得中に問題が発生しました。しばらくしてからもう一度お試しください。",
+        "title": "使用状況を読み込めませんでした"
+      },
+      "modelPrices": {
+        "description": "利用可能な各モデルの100万トークンあたりの料金（入力 · 出力 · キャッシュ、米ドル）",
+        "title": "モデル料金",
+        "unavailable": "料金情報がありません"
+      },
+      "showFewerModels": {
+        "ariaLabel": "表示するモデルを減らす"
+      },
+      "showLess": {
+        "label": "表示を減らす"
+      },
+      "showMore": {
+        "label": "さらに{count}件を表示"
+      },
+      "showMoreModels": {
+        "ariaLabel": "さらに{count}件のモデルを表示"
+      },
+      "usageThisPeriod": {
+        "description": "{amount} 消費",
+        "title": "この期間の使用状況"
       }
     },
     "voice": {

@@ -5765,6 +5765,27 @@
         "unexpectedError": "Une erreur inattendue est survenue."
       }
     },
+    "status": {
+      "badges": {
+        "canceled": "Annulé",
+        "completedWithErrors": "Terminé avec des erreurs",
+        "deleting": "Suppression",
+        "error": "Erreur",
+        "failed": "Échec",
+        "inProgress": "En cours",
+        "indexed": "Indexé",
+        "indexing": "Indexation",
+        "initialIndexing": "Indexation initiale",
+        "interrupted": "Interrompu",
+        "invalid": "Non valide",
+        "invalidConnectorTooltip": "Le connecteur est dans un état non valide. Mettez à jour les identifiants ou créez un nouveau connecteur.",
+        "none": "Aucun",
+        "notStarted": "Non démarré",
+        "paused": "En pause",
+        "scheduled": "Planifié",
+        "succeeded": "Réussi"
+      }
+    },
     "systemInfo": {
       "backendVersion": {
         "label": "Version du backend : "
@@ -7204,6 +7225,70 @@
       },
       "sourcesModal": {
         "title": "Sources"
+      }
+    },
+    "appChrome": {
+      "delete": {
+        "label": "Supprimer"
+      },
+      "deleteModal": {
+        "description": "Voulez-vous vraiment supprimer ce chat ? Cette action est irréversible.",
+        "submitButton": {
+          "label": "Supprimer"
+        },
+        "title": "Supprimer le chat"
+      },
+      "exportAs": {
+        "label": "Exporter sous…"
+      },
+      "exportFailed": {
+        "message": "Échec de l'exportation du chat. Veuillez réessayer."
+      },
+      "exportMarkdown": {
+        "label": "Markdown"
+      },
+      "exportPlaintext": {
+        "label": "Texte brut"
+      },
+      "fullWidth": {
+        "ariaLabel": "Basculer le chat en pleine largeur",
+        "fitTooltip": "Largeur ajustée",
+        "fullTooltip": "Pleine largeur"
+      },
+      "incognitoExit": {
+        "ariaLabel": "Quitter le chat incognito",
+        "tooltip": "Quitter le chat incognito"
+      },
+      "incognitoPill": {
+        "ariaLabel": "Chat incognito",
+        "label": "Chat incognito"
+      },
+      "incognitoStart": {
+        "ariaLabel": "Démarrer un chat incognito",
+        "lockedTooltip": "Le mode incognito ne peut être activé qu'avant le début du chat",
+        "tooltip": "Chat incognito"
+      },
+      "mode": {
+        "chat": {
+          "description": "Conversation et recherche",
+          "label": "Chat"
+        },
+        "search": {
+          "description": "Recherche rapide de documents",
+          "label": "Recherche"
+        }
+      },
+      "modeButton": {
+        "ariaLabel": "Changer le mode de l'application"
+      },
+      "moveToProject": {
+        "label": "Déplacer vers un projet"
+      },
+      "openSidebar": {
+        "ariaLabel": "Ouvrir la barre latérale"
+      },
+      "share": {
+        "label": "Partager"
       }
     },
     "banners": {
@@ -8950,6 +9035,34 @@
         "updateFailed": "Impossible de mettre à jour la préférence de langue"
       }
     },
+    "layout": {
+      "header": {
+        "title": "Paramètres"
+      },
+      "sectionSelect": {
+        "placeholder": "Sélectionnez une section"
+      },
+      "tabs": {
+        "accountsAccess": {
+          "label": "Comptes et accès"
+        },
+        "chatPreferences": {
+          "label": "Préférences de chat"
+        },
+        "connectors": {
+          "label": "Connecteurs"
+        },
+        "general": {
+          "label": "Général"
+        },
+        "llmGateway": {
+          "label": "Passerelle LLM"
+        },
+        "usage": {
+          "label": "Utilisation"
+        }
+      }
+    },
     "memory": {
       "empty": {
         "description": "Ajoutez une note personnelle ou un souvenir que Onyx doit retenir."
@@ -9010,6 +9123,47 @@
       "toggle": {
         "description": "Activez les raccourcis pour insérer rapidement des invites courantes.",
         "title": "Utiliser les raccourcis d'invite"
+      }
+    },
+    "usage": {
+      "budget": {
+        "limit": "Limite de {amount}",
+        "none": "Aucun budget défini",
+        "remaining": "{amount} restant",
+        "resetsOn": "Réinitialisation le {date}",
+        "title": "Budget"
+      },
+      "empty": {
+        "description": "L'utilisation et les coûts de vos modèles apparaîtront ici dès que vous commencerez à discuter.",
+        "title": "Aucune utilisation enregistrée pour l'instant"
+      },
+      "header": {
+        "title": "Utilisation"
+      },
+      "loadError": {
+        "description": "Une erreur s'est produite lors de la récupération de votre utilisation. Réessayez dans un instant.",
+        "title": "Impossible de charger l'utilisation"
+      },
+      "modelPrices": {
+        "description": "USD par million de tokens (entrée · sortie · cache) pour chaque modèle disponible",
+        "title": "Prix des modèles",
+        "unavailable": "Prix indisponibles"
+      },
+      "showFewerModels": {
+        "ariaLabel": "Afficher moins de modèles"
+      },
+      "showLess": {
+        "label": "Afficher moins"
+      },
+      "showMore": {
+        "label": "Afficher {count} de plus"
+      },
+      "showMoreModels": {
+        "ariaLabel": "Afficher {count} modèles de plus"
+      },
+      "usageThisPeriod": {
+        "description": "{amount} dépensé",
+        "title": "Utilisation sur cette période"
       }
     },
     "voice": {

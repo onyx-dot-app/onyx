@@ -5765,6 +5765,27 @@
         "unexpectedError": "حدث خطأ غير متوقع."
       }
     },
+    "status": {
+      "badges": {
+        "canceled": "ملغاة",
+        "completedWithErrors": "اكتملت مع أخطاء",
+        "deleting": "جارٍ الحذف",
+        "error": "خطأ",
+        "failed": "فشلت",
+        "inProgress": "قيد التنفيذ",
+        "indexed": "مفهرس",
+        "indexing": "جارٍ الفهرسة",
+        "initialIndexing": "فهرسة أولية",
+        "interrupted": "متقطعة",
+        "invalid": "غير صالحة",
+        "invalidConnectorTooltip": "الموصل في حالة غير صالحة. يرجى تحديث بيانات الاعتماد أو إنشاء موصل جديد.",
+        "none": "بدون",
+        "notStarted": "لم تبدأ",
+        "paused": "موقوف مؤقتًا",
+        "scheduled": "مجدولة",
+        "succeeded": "نجحت"
+      }
+    },
     "systemInfo": {
       "backendVersion": {
         "label": "إصدار الخادم الخلفي: "
@@ -7204,6 +7225,70 @@
       },
       "sourcesModal": {
         "title": "المصادر"
+      }
+    },
+    "appChrome": {
+      "delete": {
+        "label": "حذف"
+      },
+      "deleteModal": {
+        "description": "هل أنت متأكد من رغبتك في حذف هذه المحادثة؟ لا يمكن التراجع عن هذا الإجراء.",
+        "submitButton": {
+          "label": "حذف"
+        },
+        "title": "حذف المحادثة"
+      },
+      "exportAs": {
+        "label": "تصدير باسم…"
+      },
+      "exportFailed": {
+        "message": "فشل تصدير المحادثة. يرجى المحاولة مرة أخرى."
+      },
+      "exportMarkdown": {
+        "label": "Markdown"
+      },
+      "exportPlaintext": {
+        "label": "نص عادي"
+      },
+      "fullWidth": {
+        "ariaLabel": "تبديل عرض المحادثة الكامل",
+        "fitTooltip": "ملاءمة العرض",
+        "fullTooltip": "عرض كامل"
+      },
+      "incognitoExit": {
+        "ariaLabel": "الخروج من محادثة التخفي",
+        "tooltip": "الخروج من محادثة التخفي"
+      },
+      "incognitoPill": {
+        "ariaLabel": "محادثة تخفٍ",
+        "label": "محادثة تخفٍ"
+      },
+      "incognitoStart": {
+        "ariaLabel": "بدء محادثة تخفٍ",
+        "lockedTooltip": "لا يمكن تفعيل التخفي إلا قبل بدء المحادثة",
+        "tooltip": "محادثة تخفٍ"
+      },
+      "mode": {
+        "chat": {
+          "description": "محادثة وبحث",
+          "label": "محادثة"
+        },
+        "search": {
+          "description": "بحث سريع في المستندات",
+          "label": "بحث"
+        }
+      },
+      "modeButton": {
+        "ariaLabel": "تغيير وضع التطبيق"
+      },
+      "moveToProject": {
+        "label": "نقل إلى مشروع"
+      },
+      "openSidebar": {
+        "ariaLabel": "فتح الشريط الجانبي"
+      },
+      "share": {
+        "label": "مشاركة"
       }
     },
     "banners": {
@@ -8950,6 +9035,34 @@
         "updateFailed": "فشل تحديث تفضيل اللغة"
       }
     },
+    "layout": {
+      "header": {
+        "title": "الإعدادات"
+      },
+      "sectionSelect": {
+        "placeholder": "اختر قسمًا"
+      },
+      "tabs": {
+        "accountsAccess": {
+          "label": "الحسابات والوصول"
+        },
+        "chatPreferences": {
+          "label": "تفضيلات المحادثة"
+        },
+        "connectors": {
+          "label": "الموصلات"
+        },
+        "general": {
+          "label": "عام"
+        },
+        "llmGateway": {
+          "label": "بوابة LLM"
+        },
+        "usage": {
+          "label": "الاستخدام"
+        }
+      }
+    },
     "memory": {
       "empty": {
         "description": "أضف ملاحظة شخصية أو ذكرى يجب أن يتذكرها Onyx."
@@ -9010,6 +9123,47 @@
       "toggle": {
         "description": "فعّل الاختصارات لإدراج المطالبات الشائعة بسرعة.",
         "title": "استخدام اختصارات المطالبات"
+      }
+    },
+    "usage": {
+      "budget": {
+        "limit": "الحد {amount}",
+        "none": "لا ميزانية معيّنة",
+        "remaining": "المتبقي {amount}",
+        "resetsOn": "يُعاد الضبط في {date}",
+        "title": "الميزانية"
+      },
+      "empty": {
+        "description": "سيظهر استخدامك للنماذج وتكاليفها هنا بمجرد بدء المحادثة.",
+        "title": "لم يُسجل استخدام بعد"
+      },
+      "header": {
+        "title": "الاستخدام"
+      },
+      "loadError": {
+        "description": "حدث خطأ أثناء جلب استخدامك. حاول مرة أخرى بعد قليل.",
+        "title": "تعذّر تحميل الاستخدام"
+      },
+      "modelPrices": {
+        "description": "دولار لكل مليون رمز (إدخال · إخراج · ذاكرة مؤقتة) لكل نموذج متاح",
+        "title": "أسعار النماذج",
+        "unavailable": "الأسعار غير متاحة"
+      },
+      "showFewerModels": {
+        "ariaLabel": "عرض نماذج أقل"
+      },
+      "showLess": {
+        "label": "عرض أقل"
+      },
+      "showMore": {
+        "label": "عرض {count} إضافية"
+      },
+      "showMoreModels": {
+        "ariaLabel": "عرض {count} نماذج إضافية"
+      },
+      "usageThisPeriod": {
+        "description": "أُنفق {amount}",
+        "title": "الاستخدام في هذه الفترة"
       }
     },
     "voice": {

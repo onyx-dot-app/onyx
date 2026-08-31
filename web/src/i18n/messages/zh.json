@@ -5753,6 +5753,27 @@
         "unexpectedError": "发生意外错误。"
       }
     },
+    "status": {
+      "badges": {
+        "canceled": "已取消",
+        "completedWithErrors": "已完成但有错误",
+        "deleting": "正在删除",
+        "error": "错误",
+        "failed": "失败",
+        "inProgress": "进行中",
+        "indexed": "已索引",
+        "indexing": "正在索引",
+        "initialIndexing": "初始索引",
+        "interrupted": "已中断",
+        "invalid": "无效",
+        "invalidConnectorTooltip": "连接器处于无效状态。请更新凭据或创建新的连接器。",
+        "none": "无",
+        "notStarted": "未开始",
+        "paused": "已暂停",
+        "scheduled": "已计划",
+        "succeeded": "成功"
+      }
+    },
     "systemInfo": {
       "backendVersion": {
         "label": "后端版本："
@@ -7192,6 +7213,70 @@
       },
       "sourcesModal": {
         "title": "来源"
+      }
+    },
+    "appChrome": {
+      "delete": {
+        "label": "删除"
+      },
+      "deleteModal": {
+        "description": "确定要删除此聊天吗？此操作无法撤销。",
+        "submitButton": {
+          "label": "删除"
+        },
+        "title": "删除聊天"
+      },
+      "exportAs": {
+        "label": "导出为…"
+      },
+      "exportFailed": {
+        "message": "导出聊天失败。请重试。"
+      },
+      "exportMarkdown": {
+        "label": "Markdown"
+      },
+      "exportPlaintext": {
+        "label": "纯文本"
+      },
+      "fullWidth": {
+        "ariaLabel": "切换全宽聊天",
+        "fitTooltip": "适应宽度",
+        "fullTooltip": "全宽"
+      },
+      "incognitoExit": {
+        "ariaLabel": "退出无痕聊天",
+        "tooltip": "退出无痕聊天"
+      },
+      "incognitoPill": {
+        "ariaLabel": "无痕聊天",
+        "label": "无痕聊天"
+      },
+      "incognitoStart": {
+        "ariaLabel": "开始无痕聊天",
+        "lockedTooltip": "只能在聊天开始前设置无痕模式",
+        "tooltip": "无痕聊天"
+      },
+      "mode": {
+        "chat": {
+          "description": "对话与研究",
+          "label": "聊天"
+        },
+        "search": {
+          "description": "快速搜索文档",
+          "label": "搜索"
+        }
+      },
+      "modeButton": {
+        "ariaLabel": "更改应用模式"
+      },
+      "moveToProject": {
+        "label": "移动到项目"
+      },
+      "openSidebar": {
+        "ariaLabel": "打开侧边栏"
+      },
+      "share": {
+        "label": "分享"
       }
     },
     "banners": {
@@ -8938,6 +9023,34 @@
         "updateFailed": "更新语言偏好设置失败"
       }
     },
+    "layout": {
+      "header": {
+        "title": "设置"
+      },
+      "sectionSelect": {
+        "placeholder": "选择一个部分"
+      },
+      "tabs": {
+        "accountsAccess": {
+          "label": "账户与访问"
+        },
+        "chatPreferences": {
+          "label": "聊天偏好设置"
+        },
+        "connectors": {
+          "label": "连接器"
+        },
+        "general": {
+          "label": "常规"
+        },
+        "llmGateway": {
+          "label": "LLM 网关"
+        },
+        "usage": {
+          "label": "使用情况"
+        }
+      }
+    },
     "memory": {
       "empty": {
         "description": "添加希望 Onyx 记住的个人笔记或记忆。"
@@ -8998,6 +9111,47 @@
       "toggle": {
         "description": "启用快捷方式以快速插入常用提示词。",
         "title": "使用提示词快捷方式"
+      }
+    },
+    "usage": {
+      "budget": {
+        "limit": "上限 {amount}",
+        "none": "未设置预算",
+        "remaining": "剩余 {amount}",
+        "resetsOn": "{date} 重置",
+        "title": "预算"
+      },
+      "empty": {
+        "description": "开始聊天后，您的模型使用情况和费用将显示在此处。",
+        "title": "尚未记录使用情况"
+      },
+      "header": {
+        "title": "使用情况"
+      },
+      "loadError": {
+        "description": "获取使用情况时出错。请稍后重试。",
+        "title": "无法加载使用情况"
+      },
+      "modelPrices": {
+        "description": "每个可用模型每百万 token 的美元价格（输入 · 输出 · 缓存）",
+        "title": "模型价格",
+        "unavailable": "价格不可用"
+      },
+      "showFewerModels": {
+        "ariaLabel": "显示更少模型"
+      },
+      "showLess": {
+        "label": "收起"
+      },
+      "showMore": {
+        "label": "再显示 {count} 个"
+      },
+      "showMoreModels": {
+        "ariaLabel": "再显示 {count} 个模型"
+      },
+      "usageThisPeriod": {
+        "description": "已花费 {amount}",
+        "title": "本期使用情况"
       }
     },
     "voice": {
