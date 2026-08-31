@@ -1,15 +1,12 @@
 """End-to-end integration tests for the reindex *port* flow.
 
-These exercise the whole live wiring that the unit / external-dependency-unit tests
-cannot: beat fires check_for_port -> the docprocessing worker consumes the `port`
-queue and re-embeds PRESENT->FUTURE -> the /reindex-progress HTTP surface reflects
-state -> the beat-driven index swap promotes FUTURE->PRESENT -> search hits the new
-index. Everything is driven through the real API with no mocking.
+Unlike the unit and external-dependency-unit suites, these drive the whole live wiring
+with no mocking: beat's check_for_port enqueues onto the `port` queue, docprocessing
+re-embeds PRESENT into FUTURE, and the beat-driven swap then promotes FUTURE to PRESENT.
 
-Docs are seeded into PRESENT via the ingestion API *before* the reindex starts, so the
-port copy (not a connector re-fetch) is the only thing that can populate the new index.
-Reindexing to the current embedding model creates a new ALT index, so the swap is
-observable as a change in the current index_name.
+Docs are seeded into PRESENT via the ingestion API before the reindex starts, so only the
+port copy -- not a connector re-fetch -- can land them in the new index. Reindexing to the
+current model always creates a new ALT index, so a changed index_name is proof the swap ran.
 """
 
 import os
@@ -68,7 +65,6 @@ def test_reindex_port_happy_path(
     for content in contents:
         DocumentManager.seed_doc_with_content(cc_pair, content, api_key)
 
-    # Baseline: the docs are searchable on the PRESENT index.
     for content in contents:
         assert _search_finds(content, admin_user)
 
@@ -81,8 +77,6 @@ def test_reindex_port_happy_path(
     new_settings = ReindexPortManager.wait_for_swap(original_index_name, admin_user)
     assert new_settings["index_name"] != original_index_name
 
-    # The port re-embedded PRESENT -> FUTURE and the swap promoted it: the docs are
-    # still searchable, now served entirely from the freshly built index.
     for content in contents:
         assert _search_finds(content, admin_user)
 
@@ -116,7 +110,6 @@ def test_reindex_port_preserves_acls(
     doc_content = f"restricted port acl doc {marker}"
     DocumentManager.seed_doc_with_content(restricted_cc_pair, doc_content, api_key)
 
-    # Baseline ACL: the group member sees it, an outsider does not.
     assert _search_finds(doc_content, privileged_user)
     assert not _search_finds(doc_content, blocked_user)
 
@@ -127,8 +120,6 @@ def test_reindex_port_preserves_acls(
     ReindexPortManager.wait_for_reindex_completion(admin_user)
     ReindexPortManager.wait_for_swap(original_index_name, admin_user)
 
-    # After the port copied chunks into the new index and it was promoted, the ACL is
-    # preserved: the member still sees it, the outsider still does not.
     assert _search_finds(doc_content, privileged_user)
     assert not _search_finds(doc_content, blocked_user)
 
@@ -157,7 +148,8 @@ def test_reindex_port_multiple_connectors(
     ]
     ReindexPortManager.start_reindex(admin_user)
 
-    # Progress scopes every portable cc_pair (our N + the default ingestion pair).
+    # The progress total counts every portable cc_pair, including the default
+    # ingestion pair alongside the N we just created.
     initial = ReindexPortManager.get_progress(admin_user)
     assert initial.total >= num_connectors
 
@@ -190,7 +182,7 @@ def test_cancel_reindex_during_port(
 
     ReindexPortManager.cancel_reindex(admin_user)
 
-    # The FUTURE is gone, so there is no active port target and no swap can happen.
+    # With the FUTURE gone there is no active port target left, so no swap can follow.
     assert ReindexPortManager.get_secondary_settings(admin_user) is None
     assert ReindexPortManager.get_progress(admin_user).total == 0
     assert (
@@ -198,8 +190,7 @@ def test_cancel_reindex_during_port(
         == original_index_name
     )
 
-    # PRESENT is untouched and there is no late swap: the doc stays searchable and the
-    # current index_name does not change.
+    # Sleep past the swap-check interval to rule out a swap that fires late after cancel.
     time.sleep(5)
     assert (
         ReindexPortManager.get_current_settings(admin_user)["index_name"]
@@ -239,14 +230,10 @@ def test_reindex_reclaims_the_index_name_of_a_retired_generation(
     ReindexPortManager.wait_for_reindex_completion(admin_user)
     ReindexPortManager.wait_for_swap(retired_index_name, admin_user)
 
-    # The retired index still holds the generation it just served, so taking its name
-    # now would let the new port inherit that stale data.
     refused = ReindexPortManager.start_reindex_response(admin_user)
     assert refused.status_code == 409
     assert ReindexPortManager.get_secondary_settings(admin_user) is None
 
-    # Being refused is what kicked off the occupant's reclamation. Once it drains the
-    # name is free and the same request goes through.
     ReindexPortManager.wait_for_reindex_accepted(admin_user)
     secondary = ReindexPortManager.get_secondary_settings(admin_user)
     assert secondary is not None
@@ -280,19 +267,17 @@ def test_connector_deletion_during_reindex(
     ]
     ReindexPortManager.start_reindex(admin_user)
 
-    # Delete one connector while the reindex is live. The port must ack the cancel so
-    # the deletion is not blocked waiting on it (request_port_cancel coordination).
+    # Deleting a connector triggers request_port_cancel on its running port attempt,
+    # so the deletion below is not left blocked waiting on it.
     CCPairManager.delete(delete_cc_pair, user_performing_action=admin_user)
     CCPairManager.wait_for_deletion_completion(
         user_performing_action=admin_user, cc_pair_id=delete_cc_pair.id
     )
 
-    # The reindex still completes for the surviving connector and swaps.
     ReindexPortManager.wait_for_reindex_completion(admin_user)
     ReindexPortManager.wait_for_swap(original_index_name, admin_user)
 
     assert _search_finds(keep_content, admin_user)
-    # The deleted connector's doc is absent from the promoted index.
     assert not _search_finds(delete_content, admin_user)
 
 
@@ -339,24 +324,21 @@ def test_reindex_port_instant_switchover(
         admin_user, switchover_type=SwitchoverType.INSTANT.value
     )
 
-    # INSTANT promotes the new (initially empty) index immediately, before the port runs.
     new_settings = ReindexPortManager.wait_for_swap(original_index_name, admin_user)
     assert new_settings["index_name"] != original_index_name
 
-    # The port then backfills the now-live index. INSTANT keeps reporting progress against
-    # the promoted PRESENT (it carries port_backfill_source_id), so this blocks while the
-    # backfill drains and fast-fails on a FAILED/PAUSED unit -- it is NOT a no-op here.
-    # _wait_for_backfill_unpin then waits out the final tick that clears the source pin.
+    # This call is not a no-op here: the promoted PRESENT carries port_backfill_source_id,
+    # so /reindex-progress keeps reporting the INSTANT backfill's progress, and this blocks
+    # until it drains (still failing fast on a FAILED/PAUSED unit). _wait_for_backfill_unpin
+    # then waits out the final tick that clears the source pin.
     ReindexPortManager.wait_for_reindex_completion(admin_user)
     _wait_for_backfill_unpin()
 
-    # Every doc is served from the backfilled live index.
     for content in contents:
         assert _search_finds(content, admin_user)
 
-    # INSTANT promoted the new model rather than staging it, so once the backfill has
-    # drained a revert has nothing left to roll back: it is a clean no-op that must not
-    # un-promote the index now serving search.
+    # Cancel is a no-op here: INSTANT already promoted the new model instead of staging
+    # it, so once the backfill drains there is nothing left to revert.
     ReindexPortManager.cancel_reindex(admin_user)
     assert (
         ReindexPortManager.get_current_settings(admin_user)["index_name"]

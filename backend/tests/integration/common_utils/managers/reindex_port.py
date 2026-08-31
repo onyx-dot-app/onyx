@@ -203,7 +203,6 @@ class ReindexPortManager:
                 raise AssertionError(
                     f"Reindex port has failed/paused units: {progress} errors={errors}"
                 )
-            # total==0 -> no active port target: the swap already promoted the FUTURE.
             all_done = (
                 progress.total > 0
                 and progress.completed == progress.total

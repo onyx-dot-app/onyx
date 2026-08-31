@@ -262,7 +262,6 @@ def test_new_reindex_refused_while_one_in_progress(
     )
     assert resp2.status_code == 409
 
-    # The in-progress re-index is untouched — still the first one (RAG off).
     secondary = _get_secondary_search_settings(admin_user)
     assert secondary is not None
     assert secondary["enable_contextual_rag"] is False
@@ -288,6 +287,6 @@ def test_concurrent_reindex_submissions_serialize(
 
     assert statuses == [200, 409]
 
-    # Exactly one re-index exists, and it is a normal cancelable one.
+    # The winning submission's FUTURE survived the race intact and cancels normally.
     assert _get_secondary_search_settings(admin_user) is not None
     _cancel_new_embedding(admin_user)
