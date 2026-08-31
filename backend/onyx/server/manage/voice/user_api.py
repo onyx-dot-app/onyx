@@ -27,11 +27,18 @@ from onyx.voice.factory import get_voice_provider
 logger = setup_logger()
 
 router = APIRouter(prefix="/voice")
+LOCAL_OPENAI_VOICE_PROVIDER_TYPE = "local_openai"
 
 # Max audio file size: 25MB (Whisper limit)
 MAX_AUDIO_SIZE = 25 * 1024 * 1024
 # Chunk size for streaming uploads (8KB)
 UPLOAD_READ_CHUNK_SIZE = 8192
+
+
+def _voice_provider_available(provider_type: str, api_key: object | None) -> bool:
+    return (
+        api_key is not None or provider_type.lower() == LOCAL_OPENAI_VOICE_PROVIDER_TYPE
+    )
 
 
 class VoiceStatusResponse(BaseModel):
@@ -48,8 +55,10 @@ def get_voice_status(
     stt_provider = fetch_default_stt_provider(db_session)
     tts_provider = fetch_default_tts_provider(db_session)
     return VoiceStatusResponse(
-        stt_enabled=stt_provider is not None and stt_provider.api_key is not None,
-        tts_enabled=tts_provider is not None and tts_provider.api_key is not None,
+        stt_enabled=stt_provider is not None
+        and _voice_provider_available(stt_provider.provider_type, stt_provider.api_key),
+        tts_enabled=tts_provider is not None
+        and _voice_provider_available(tts_provider.provider_type, tts_provider.api_key),
     )
 
 
@@ -67,7 +76,7 @@ async def transcribe_audio(
             "No speech-to-text provider configured. Please contact your administrator.",
         )
 
-    if not provider_db.api_key:
+    if not _voice_provider_available(provider_db.provider_type, provider_db.api_key):
         raise OnyxError(
             OnyxErrorCode.VALIDATION_ERROR,
             "Voice provider API key not configured.",
@@ -166,7 +175,9 @@ async def synthesize_speech(
                 "No text-to-speech provider configured. Please contact your administrator.",
             )
 
-        if not provider_db.api_key:
+        if not _voice_provider_available(
+            provider_db.provider_type, provider_db.api_key
+        ):
             logger.error("TTS provider has no API key")
             raise OnyxError(
                 OnyxErrorCode.VALIDATION_ERROR,

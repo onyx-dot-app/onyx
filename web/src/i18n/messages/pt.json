@@ -6396,6 +6396,12 @@
         "elevenlabsTts": {
           "subtitle": "API de conversão de texto em fala da ElevenLabs."
         },
+        "kokoroTts": {
+          "subtitle": "Texto em fala local do Kokoro por uma API compatível com OpenAI."
+        },
+        "localWhisper": {
+          "subtitle": "Reconhecimento de fala local do MLX Whisper por uma API compatível com OpenAI."
+        },
         "tts1": {
           "subtitle": "O modelo de conversão de texto em fala da OpenAI otimizado para velocidade."
         },
@@ -6410,6 +6416,8 @@
         "apiKey": {
           "description": "Cole sua [chave de API]({url}) do {provider} para acessar seus modelos.",
           "label": "Chave de API",
+          "optionalDescription": "Opcional. Deixe em branco se seu servidor local compatível com OpenAI não verificar tokens bearer.",
+          "optionalLabel": "Chave de API (opcional)",
           "placeholder": "Chave de API",
           "required": "A chave de API é obrigatória"
         },
@@ -6433,6 +6441,13 @@
         },
         "saveError": {
           "message": "Falha ao salvar o provedor"
+        },
+        "localApiBase": {
+          "required": "A URL base da API é obrigatória",
+          "sttDescription": "Use uma URL acessível pelo backend do Onyx. No Docker Compose no Mac, use host.docker.internal em vez de localhost.",
+          "sttLabel": "URL base da API STT",
+          "ttsDescription": "Use uma URL acessível pelo backend do Onyx. No Docker Compose no Mac, use host.docker.internal em vez de localhost.",
+          "ttsLabel": "URL base da API TTS"
         },
         "sttLanguages": {
           "azureCapExceeded": "O Azure oferece suporte a no máximo {cap} idiomas falados",

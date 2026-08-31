@@ -1,0 +1,20 @@
+[project]
+name = "local-tts-stt"
+version = "0.1.0"
+description = "Host-native OpenAI-compatible local voice servers for Onyx"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+  "fastapi>=0.115.0",
+  "uvicorn[standard]>=0.30.0",
+  "python-multipart>=0.0.9",
+  "mlx-whisper>=0.4.2",
+  "kokoro>=0.9.4",
+  "soundfile>=0.12.1",
+  "numpy>=1.26.0",
+]
+
+[project.scripts]
+local-voice-server = "local_tts_stt.server:main"
+
+[tool.uv]
+package = true

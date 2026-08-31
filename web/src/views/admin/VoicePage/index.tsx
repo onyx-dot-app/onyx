@@ -28,10 +28,12 @@ type ModelSubtitleKey =
   | "models.whisper.subtitle"
   | "models.azureSpeechStt.subtitle"
   | "models.elevenlabsStt.subtitle"
+  | "models.localWhisper.subtitle"
   | "models.tts1.subtitle"
   | "models.tts1Hd.subtitle"
   | "models.azureSpeechTts.subtitle"
-  | "models.elevenlabsTts.subtitle";
+  | "models.elevenlabsTts.subtitle"
+  | "models.kokoroTts.subtitle";
 
 interface ModelDetails {
   id: string;
@@ -67,6 +69,12 @@ const STT_MODELS: ModelDetails[] = [
     label: "ElevenAPI",
     subtitleKey: "models.elevenlabsStt.subtitle",
     providerType: "elevenlabs",
+  },
+  {
+    id: "mlx-whisper",
+    label: "MLX Whisper",
+    subtitleKey: "models.localWhisper.subtitle",
+    providerType: "local_openai",
   },
 ];
 
@@ -114,6 +122,18 @@ const TTS_PROVIDER_GROUPS: ProviderGroup[] = [
       },
     ],
   },
+  {
+    providerType: "local_openai",
+    providerLabel: "Local",
+    models: [
+      {
+        id: "kokoro",
+        label: "Kokoro",
+        subtitleKey: "models.kokoroTts.subtitle",
+        providerType: "local_openai",
+      },
+    ],
+  },
 ];
 
 const route = ADMIN_ROUTES.VOICE;
@@ -148,9 +168,7 @@ function ModelCard({
       <setupModal.Provider>
         <VoiceProviderSetupModal
           providerType={model.providerType}
-          existingProvider={
-            status !== "disconnected" ? (provider ?? null) : null
-          }
+          existingProvider={provider ?? null}
           mode={mode}
           defaultModelId={model.id}
           onSuccess={() => {
@@ -227,7 +245,16 @@ export default function VoicePage() {
     mode: ProviderMode
   ): "disconnected" | "connected" | "selected" => {
     const provider = providersByType.get(model.providerType);
-    if (!provider || !provider.api_key) return "disconnected";
+    const localBase =
+      mode === "stt"
+        ? provider?.custom_config?.stt_api_base
+        : provider?.custom_config?.tts_api_base;
+    if (
+      !provider ||
+      (!provider.api_key && provider.provider_type !== "local_openai") ||
+      (provider.provider_type === "local_openai" && !localBase)
+    )
+      return "disconnected";
 
     const isActive =
       mode === "stt"

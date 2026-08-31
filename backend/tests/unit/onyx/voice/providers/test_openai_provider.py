@@ -3,6 +3,7 @@ import struct
 import wave
 
 from onyx.voice.providers.openai import (
+    LocalOpenAIVoiceProvider,
     OpenAIRealtimeMessageType,
     OpenAIVoiceProvider,
     _create_wav_header,
@@ -96,3 +97,21 @@ def test_provider_get_available_voices_returns_copy() -> None:
     voices = provider.get_available_voices()
     voices.clear()
     assert len(provider.get_available_voices()) > 0
+
+
+def test_local_provider_uses_split_base_urls_and_dummy_key() -> None:
+    provider = LocalOpenAIVoiceProvider(
+        api_key=None,
+        custom_config={
+            "stt_api_base": "http://host.docker.internal:8001",
+            "tts_api_base": "http://host.docker.internal:8880",
+        },
+    )
+
+    assert provider.api_key == "dummy"
+    assert provider.stt_api_base == "http://host.docker.internal:8001"
+    assert provider.tts_api_base == "http://host.docker.internal:8880"
+    assert provider.stt_model == "mlx-whisper"
+    assert provider.tts_model == "kokoro"
+    assert provider.default_voice == "af_heart"
+    assert not provider.supports_streaming_stt()

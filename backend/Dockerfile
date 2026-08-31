@@ -144,8 +144,16 @@ RUN python -c "import nltk; \
 # nltk.download('wordnet', quiet=True); introduce this back if lemmatization is needed
 
 # Pre-downloading tiktoken for setups with limited egress
-RUN python -c "import tiktoken; \
-tiktoken.get_encoding('cl100k_base')"
+RUN python - <<'PY'
+import warnings
+
+import tiktoken
+
+try:
+    tiktoken.get_encoding("cl100k_base")
+except Exception as e:
+    warnings.warn(f"Could not pre-download tiktoken encoding: {e}")
+PY
 
 # Set up application files
 WORKDIR /app

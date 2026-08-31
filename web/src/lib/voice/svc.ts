@@ -31,6 +31,7 @@ export async function testVoiceProvider(request: {
   provider_type: string;
   api_key?: string;
   target_uri?: string;
+  custom_config?: Record<string, unknown>;
   use_stored_key?: boolean;
 }): Promise<Response> {
   return fetch(`${VOICE_PROVIDERS_URL}/test`, {

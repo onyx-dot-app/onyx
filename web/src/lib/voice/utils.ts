@@ -1,5 +1,5 @@
 import { SvgAzure, SvgElevenLabs, SvgOpenai } from "@opal/logos";
-import { SvgMicrophone } from "@opal/icons";
+import { SvgMicrophone, SvgServer } from "@opal/icons";
 import type { IconProps } from "@opal/types";
 
 /** Whether the provider is being configured for speech-to-text or text-to-speech. */
@@ -40,6 +40,8 @@ export interface VoiceProviderDetail {
   ttsModels?: Array<{ id: string; name: string }>;
   /** Set if the provider supports configurable STT languages; renders the Spoken Languages field. */
   sttLanguages?: { docsUrl: string };
+  /** Local OpenAI-compatible servers can use dummy or empty API keys. */
+  apiKeyOptional?: boolean;
 }
 
 /** Locale shape for STT languages; mirrors AZURE_LOCALE_PATTERN in backend/onyx/voice/providers/azure.py. */
@@ -135,6 +137,18 @@ export const VOICE_PROVIDER_DETAILS: Record<string, VoiceProviderDetail> = {
       url: "https://elevenlabs.io/docs/voices/premade-voices",
       label: "ElevenLabs",
     },
+  },
+  local_openai: {
+    label: "Local OpenAI-compatible",
+    icon: SvgServer,
+    docsUrl: "https://github.com/remsky/Kokoro-FastAPI",
+    voiceDocsUrl: {
+      url: "https://github.com/remsky/Kokoro-FastAPI",
+      label: "Kokoro",
+    },
+    sttModels: [{ id: "mlx-whisper", name: "MLX Whisper" }],
+    ttsModels: [{ id: "kokoro", name: "Kokoro" }],
+    apiKeyOptional: true,
   },
 };
 

@@ -6396,6 +6396,12 @@
         "elevenlabsTts": {
           "subtitle": "API de synthèse vocale ElevenLabs."
         },
+        "kokoroTts": {
+          "subtitle": "Synthèse vocale locale Kokoro via une API compatible OpenAI."
+        },
+        "localWhisper": {
+          "subtitle": "Reconnaissance vocale locale MLX Whisper via une API compatible OpenAI."
+        },
         "tts1": {
           "subtitle": "Modèle de synthèse vocale d'OpenAI optimisé pour la rapidité."
         },
@@ -6410,6 +6416,8 @@
         "apiKey": {
           "description": "Collez votre [clé d'API]({url}) de {provider} pour accéder à vos modèles.",
           "label": "Clé d'API",
+          "optionalDescription": "Facultatif. Laissez vide si votre serveur local compatible OpenAI ne vérifie pas les jetons bearer.",
+          "optionalLabel": "Clé d'API (facultative)",
           "placeholder": "Clé d'API",
           "required": "La clé d'API est obligatoire"
         },
@@ -6433,6 +6441,13 @@
         },
         "saveError": {
           "message": "Échec de l'enregistrement du fournisseur"
+        },
+        "localApiBase": {
+          "required": "L'URL de base de l'API est obligatoire",
+          "sttDescription": "Utilisez une URL accessible depuis le backend Onyx. Dans Docker Compose sur Mac, utilisez host.docker.internal au lieu de localhost.",
+          "sttLabel": "URL de base API STT",
+          "ttsDescription": "Utilisez une URL accessible depuis le backend Onyx. Dans Docker Compose sur Mac, utilisez host.docker.internal au lieu de localhost.",
+          "ttsLabel": "URL de base API TTS"
         },
         "sttLanguages": {
           "azureCapExceeded": "Azure prend en charge au maximum {cap} langues parlées",

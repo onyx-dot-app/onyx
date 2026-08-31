@@ -66,9 +66,14 @@ export function VoiceProviderSetupModal({
   const t = useTranslations("admin.voice");
   const onClose = useModalClose();
   const detail = getVoiceProviderDetail(providerType);
+  const isLocalOpenAI = providerType === "local_openai";
   const initialTtsModel = defaultModelId
     ? resolveModelId(defaultModelId)
     : (existingProvider?.tts_model ?? "tts-1");
+  const initialSttModel =
+    isLocalOpenAI && defaultModelId
+      ? resolveModelId(defaultModelId)
+      : (existingProvider?.stt_model ?? "whisper-1");
 
   const isEditing = !!existingProvider;
 
@@ -103,10 +108,20 @@ export function VoiceProviderSetupModal({
   }, [providerType]);
 
   const validationSchema = Yup.object().shape({
-    api_key: Yup.string().required(t("setupModal.apiKey.required")),
+    api_key: detail.apiKeyOptional
+      ? Yup.string()
+      : Yup.string().required(t("setupModal.apiKey.required")),
     target_uri:
       providerType === "azure"
         ? Yup.string().required(t("setupModal.targetUri.required"))
+        : Yup.string(),
+    stt_api_base:
+      isLocalOpenAI && mode === "stt"
+        ? Yup.string().required(t("setupModal.localApiBase.required"))
+        : Yup.string(),
+    tts_api_base:
+      isLocalOpenAI && mode === "tts"
+        ? Yup.string().required(t("setupModal.localApiBase.required"))
         : Yup.string(),
     stt_model: Yup.string(),
     tts_model: Yup.string(),
@@ -150,7 +165,15 @@ export function VoiceProviderSetupModal({
   const initialValues: VoiceFormValues = {
     api_key: existingProvider?.api_key ?? "",
     target_uri: existingProvider?.target_uri ?? "",
-    stt_model: existingProvider?.stt_model ?? "whisper-1",
+    stt_api_base:
+      typeof existingProvider?.custom_config?.stt_api_base === "string"
+        ? existingProvider.custom_config.stt_api_base
+        : "",
+    tts_api_base:
+      typeof existingProvider?.custom_config?.tts_api_base === "string"
+        ? existingProvider.custom_config.tts_api_base
+        : "",
+    stt_model: initialSttModel,
     tts_model: initialTtsModel,
     default_voice: initialDefaultVoice,
     stt_languages: sttLanguagesToInput(
@@ -166,11 +189,20 @@ export function VoiceProviderSetupModal({
     const shouldUseStoredKey = !apiKeyChanged && !!existingProvider?.api_key;
 
     try {
+      const customConfig: Record<string, unknown> = {
+        ...existingProvider?.custom_config,
+      };
+      if (isLocalOpenAI) {
+        customConfig.stt_api_base = values.stt_api_base || undefined;
+        customConfig.tts_api_base = values.tts_api_base || undefined;
+      }
+
       if (!shouldUseStoredKey) {
         const testResponse = await testVoiceProvider({
           provider_type: providerType,
           api_key: apiKeyChanged ? values.api_key : undefined,
           target_uri: values.target_uri || undefined,
+          custom_config: customConfig,
           use_stored_key: shouldUseStoredKey,
         });
 
@@ -187,9 +219,6 @@ export function VoiceProviderSetupModal({
       }
 
       // Preserve config keys the form doesn't own (e.g. speech_region).
-      const customConfig: Record<string, unknown> = {
-        ...existingProvider?.custom_config,
-      };
       if (mode === "stt" && detail.sttLanguages) {
         const languages = parseSttLanguages(values.stt_languages);
         if (languages.length > 0) {
@@ -283,13 +312,45 @@ export function VoiceProviderSetupModal({
                     </InputVertical>
                   )}
 
+                  {isLocalOpenAI && mode === "stt" && (
+                    <InputVertical
+                      title={t("setupModal.localApiBase.sttLabel")}
+                      subDescription={t("setupModal.localApiBase.sttDescription")}
+                      withLabel="stt_api_base"
+                    >
+                      <InputTypeInField
+                        name="stt_api_base"
+                        placeholder="http://host.docker.internal:8001"
+                      />
+                    </InputVertical>
+                  )}
+
+                  {isLocalOpenAI && mode === "tts" && (
+                    <InputVertical
+                      title={t("setupModal.localApiBase.ttsLabel")}
+                      subDescription={t("setupModal.localApiBase.ttsDescription")}
+                      withLabel="tts_api_base"
+                    >
+                      <InputTypeInField
+                        name="tts_api_base"
+                        placeholder="http://host.docker.internal:8880"
+                      />
+                    </InputVertical>
+                  )}
+
                   <InputVertical
-                    title={t("setupModal.apiKey.label")}
+                    title={
+                      detail.apiKeyOptional
+                        ? t("setupModal.apiKey.optionalLabel")
+                        : t("setupModal.apiKey.label")
+                    }
                     subDescription={markdown(
-                      t("setupModal.apiKey.description", {
-                        url: detail.apiKeyUrl ?? "",
-                        provider: detail.label,
-                      })
+                      detail.apiKeyOptional
+                        ? t("setupModal.apiKey.optionalDescription")
+                        : t("setupModal.apiKey.description", {
+                            url: detail.apiKeyUrl ?? "",
+                            provider: detail.label,
+                          })
                     )}
                     withLabel="api_key"
                   >

@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1.7
+
 # Registry prefix for the base images below. Defaults to Docker Hub; CI overrides it to the
 # ECR pull-through cache to dodge rate limits. It only applies to the default images -- the
 # DHI overrides below carry their own registry (dhi.io), which the cache does not serve.
@@ -32,7 +34,10 @@ COPY lib/opal/ ./lib/opal/
 COPY lib/shared/ ./lib/shared/
 
 # Install dependencies. opal's `prepare` script builds dist/ as part of install.
-RUN bun install --frozen-lockfile
+ARG BUN_CONFIG_REGISTRY
+RUN --mount=type=secret,id=npmrc,target=/root/.npmrc,required=false \
+    BUN_CONFIG_REGISTRY=${BUN_CONFIG_REGISTRY:-https://registry.npmjs.org/} \
+    bun install --frozen-lockfile
 
 # pull in remaining source code
 COPY . .

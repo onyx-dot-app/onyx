@@ -12,7 +12,6 @@ import {
   WebVitals,
 } from "@/lib/analytics/shared";
 import Script from "next/script";
-import { DM_Mono, Hanken_Grotesk } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import { TooltipProvider } from "@radix-ui/react-tooltip";
 import StatsOverlayLoader from "@/components/dev/StatsOverlayLoader";
@@ -24,29 +23,10 @@ import SWRConfigProvider from "@/providers/SWRConfigProvider";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages } from "next-intl/server";
 
-// No generic at the end of either fallback list: the generic comes last in
-// the composed --font-* variables on <html> below, after the per-locale CJK
-// tail (--font-cjk-sans, defined in globals.css). A generic here would sit
-// before the CJK fonts and swallow every CJK codepoint.
-const hankenGrotesk = Hanken_Grotesk({
-  subsets: ["latin"],
-  display: "swap",
-  fallback: ["-apple-system", "BlinkMacSystemFont", "Segoe UI", "Roboto"],
-});
-
-const dmMono = DM_Mono({
-  weight: "400",
-  subsets: ["latin"],
-  display: "swap",
-  fallback: [
-    "SF Mono",
-    "Monaco",
-    "Cascadia Code",
-    "Roboto Mono",
-    "Consolas",
-    "Courier New",
-  ],
-});
+const HANKEN_GROTESK_FONT_FAMILY =
+  '"Hanken Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto';
+const DM_MONO_FONT_FAMILY =
+  '"DM Mono", "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Consolas, "Courier New"';
 
 // force-dynamic prevents Next.js from statically prerendering pages at build
 // time — many child routes use cookies() which requires dynamic rendering.
@@ -78,8 +58,8 @@ export default async function Layout({ children }: LayoutProps) {
       // through these.
       style={
         {
-          "--font-hanken-grotesk": `${hankenGrotesk.style.fontFamily}, var(--font-cjk-sans), sans-serif`,
-          "--font-dm-mono": `${dmMono.style.fontFamily}, var(--font-cjk-sans), monospace`,
+          "--font-hanken-grotesk": `${HANKEN_GROTESK_FONT_FAMILY}, var(--font-cjk-sans), sans-serif`,
+          "--font-dm-mono": `${DM_MONO_FONT_FAMILY}, var(--font-cjk-sans), monospace`,
         } as React.CSSProperties
       }
       suppressHydrationWarning

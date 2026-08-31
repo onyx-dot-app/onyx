@@ -6396,6 +6396,12 @@
         "elevenlabsTts": {
           "subtitle": "ElevenLabs のテキスト読み上げ API。"
         },
+        "kokoroTts": {
+          "subtitle": "OpenAI 互換 API を介したローカル Kokoro テキスト読み上げ。"
+        },
+        "localWhisper": {
+          "subtitle": "OpenAI 互換 API を介したローカル MLX Whisper 音声認識。"
+        },
         "tts1": {
           "subtitle": "速度に最適化された OpenAI のテキスト読み上げモデル。"
         },
@@ -6410,6 +6416,8 @@
         "apiKey": {
           "description": "モデルにアクセスするには、{provider} の [API キー]({url}) を貼り付けてください。",
           "label": "API キー",
+          "optionalDescription": "任意です。ローカルの OpenAI 互換サーバーが bearer トークンを確認しない場合は空のままにします。",
+          "optionalLabel": "API キー（任意）",
           "placeholder": "API キー",
           "required": "API キーは必須です"
         },
@@ -6433,6 +6441,13 @@
         },
         "saveError": {
           "message": "プロバイダーの保存に失敗しました"
+        },
+        "localApiBase": {
+          "required": "API ベース URL は必須です",
+          "sttDescription": "Onyx バックエンドから到達できる URL を使用してください。Mac の Docker Compose では localhost ではなく host.docker.internal を使用します。",
+          "sttLabel": "STT API ベース URL",
+          "ttsDescription": "Onyx バックエンドから到達できる URL を使用してください。Mac の Docker Compose では localhost ではなく host.docker.internal を使用します。",
+          "ttsLabel": "TTS API ベース URL"
         },
         "sttLanguages": {
           "azureCapExceeded": "Azure は音声言語を最大 {cap} 個までサポートします",

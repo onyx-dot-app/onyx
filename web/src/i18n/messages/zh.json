@@ -6396,6 +6396,12 @@
         "elevenlabsTts": {
           "subtitle": "ElevenLabs 文字转语音 API。"
         },
+        "kokoroTts": {
+          "subtitle": "通过 OpenAI 兼容 API 运行本地 Kokoro 文字转语音。"
+        },
+        "localWhisper": {
+          "subtitle": "通过 OpenAI 兼容 API 运行本地 MLX Whisper 语音识别。"
+        },
         "tts1": {
           "subtitle": "OpenAI 针对速度优化的文字转语音模型。"
         },
@@ -6410,6 +6416,8 @@
         "apiKey": {
           "description": "粘贴来自 {provider} 的 [API 密钥]({url})，以访问您的模型。",
           "label": "API 密钥",
+          "optionalDescription": "可选。如果本地 OpenAI 兼容服务器不检查 bearer token，请留空。",
+          "optionalLabel": "API 密钥（可选）",
           "placeholder": "API 密钥",
           "required": "API 密钥为必填项"
         },
@@ -6433,6 +6441,13 @@
         },
         "saveError": {
           "message": "保存提供方失败"
+        },
+        "localApiBase": {
+          "required": "API 基础 URL 为必填项",
+          "sttDescription": "使用 Onyx 后端可访问的 URL。在 Mac 的 Docker Compose 中，请使用 host.docker.internal 而不是 localhost。",
+          "sttLabel": "STT API 基础 URL",
+          "ttsDescription": "使用 Onyx 后端可访问的 URL。在 Mac 的 Docker Compose 中，请使用 host.docker.internal 而不是 localhost。",
+          "ttsLabel": "TTS API 基础 URL"
         },
         "sttLanguages": {
           "azureCapExceeded": "Azure 最多支持 {cap} 种语音语言",

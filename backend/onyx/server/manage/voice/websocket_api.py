@@ -27,6 +27,7 @@ from onyx.voice.interface import (
 logger = setup_logger()
 
 router = APIRouter(prefix="/voice")
+LOCAL_OPENAI_VOICE_PROVIDER_TYPE = "local_openai"
 
 
 # Byte threshold for non-PCM formats, where the audio can't be analyzed server-side
@@ -142,6 +143,12 @@ WS_MAX_MESSAGE_SIZE = 64 * 1024  # 64KB per message (OWASP recommendation)
 WS_MAX_TOTAL_BYTES = 25 * 1024 * 1024  # 25MB total per connection (matches REST API)
 WS_MAX_TEXT_MESSAGE_SIZE = 16 * 1024  # 16KB for text/JSON messages
 WS_MAX_TTS_TEXT_LENGTH = 4096  # Max text length per synthesize call (matches REST API)
+
+
+def _voice_provider_available(provider_type: str, api_key: object | None) -> bool:
+    return (
+        api_key is not None or provider_type.lower() == LOCAL_OPENAI_VOICE_PROVIDER_TYPE
+    )
 
 
 class ChunkedTranscriber:
@@ -518,7 +525,9 @@ async def websocket_transcribe(
                 )
                 return
 
-            if not provider_db.api_key:
+            if not _voice_provider_available(
+                provider_db.provider_type, provider_db.api_key
+            ):
                 logger.warning("WebSocket transcribe: STT provider has no API key")
                 await websocket.send_json(
                     {
@@ -917,7 +926,9 @@ async def websocket_synthesize(
                 )
                 return
 
-            if not provider_db.api_key:
+            if not _voice_provider_available(
+                provider_db.provider_type, provider_db.api_key
+            ):
                 logger.warning("WebSocket synthesize: TTS provider has no API key")
                 await websocket.send_json(
                     {

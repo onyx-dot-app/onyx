@@ -8,7 +8,7 @@ class VoiceProviderView(BaseModel):
 
     id: int
     name: str
-    provider_type: str  # "openai", "azure", "elevenlabs"
+    provider_type: str  # "openai", "azure", "elevenlabs", "local_openai"
     is_default_stt: bool
     is_default_tts: bool
     stt_model: str | None
@@ -20,7 +20,7 @@ class VoiceProviderView(BaseModel):
     )
     target_uri: str | None = Field(
         default=None,
-        description="Target URI for Azure Speech Services.",
+        description="Target URI or API base for providers that use one.",
     )
     custom_config: dict[str, Any] | None = Field(
         default=None,
@@ -46,7 +46,7 @@ class VoiceProviderUpsertRequest(BaseModel):
 
     id: int | None = Field(default=None, description="Existing provider ID to update.")
     name: str
-    provider_type: str  # "openai", "azure", "elevenlabs"
+    provider_type: str  # "openai", "azure", "elevenlabs", "local_openai"
     api_key: str | None = Field(
         default=None,
         description="API key for the provider.",

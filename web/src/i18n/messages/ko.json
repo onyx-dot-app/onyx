@@ -6396,6 +6396,12 @@
         "elevenlabsTts": {
           "subtitle": "ElevenLabs 텍스트 음성 변환 API."
         },
+        "kokoroTts": {
+          "subtitle": "OpenAI 호환 API를 통한 로컬 Kokoro 텍스트 음성 변환."
+        },
+        "localWhisper": {
+          "subtitle": "OpenAI 호환 API를 통한 로컬 MLX Whisper 음성 인식."
+        },
         "tts1": {
           "subtitle": "속도에 최적화된 OpenAI의 텍스트 음성 변환 모델."
         },
@@ -6410,6 +6416,8 @@
         "apiKey": {
           "description": "모델을 사용하려면 {provider}의 [API 키]({url})를 붙여넣으세요.",
           "label": "API 키",
+          "optionalDescription": "선택 사항입니다. 로컬 OpenAI 호환 서버가 bearer 토큰을 확인하지 않으면 비워 두세요.",
+          "optionalLabel": "API 키(선택 사항)",
           "placeholder": "API 키",
           "required": "API 키가 필요합니다"
         },
@@ -6433,6 +6441,13 @@
         },
         "saveError": {
           "message": "제공자를 저장하지 못했습니다"
+        },
+        "localApiBase": {
+          "required": "API 기본 URL이 필요합니다",
+          "sttDescription": "Onyx 백엔드에서 접근할 수 있는 URL을 사용하세요. Mac의 Docker Compose에서는 localhost 대신 host.docker.internal을 사용하세요.",
+          "sttLabel": "STT API 기본 URL",
+          "ttsDescription": "Onyx 백엔드에서 접근할 수 있는 URL을 사용하세요. Mac의 Docker Compose에서는 localhost 대신 host.docker.internal을 사용하세요.",
+          "ttsLabel": "TTS API 기본 URL"
         },
         "sttLanguages": {
           "azureCapExceeded": "Azure는 음성 언어를 최대 {cap}개까지 지원합니다",

@@ -43,6 +43,18 @@ def get_voice_provider(provider: VoiceProvider) -> VoiceProviderInterface:
             default_voice=default_voice,
         )
 
+    elif provider_type == "local_openai":
+        from onyx.voice.providers.openai import LocalOpenAIVoiceProvider
+
+        return LocalOpenAIVoiceProvider(
+            api_key=api_key,
+            api_base=api_base,
+            custom_config=custom_config or {},
+            stt_model=stt_model,
+            tts_model=tts_model,
+            default_voice=default_voice,
+        )
+
     elif provider_type == "azure":
         from onyx.voice.providers.azure import AzureVoiceProvider
 

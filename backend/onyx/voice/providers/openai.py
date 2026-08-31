@@ -320,6 +320,16 @@ OPENAI_TTS_MODELS = [
     {"id": "tts-1-hd", "name": "TTS-1 HD (High Quality)"},
 ]
 
+LOCAL_OPENAI_STT_MODELS = [{"id": "mlx-whisper", "name": "MLX Whisper"}]
+LOCAL_OPENAI_TTS_MODELS = [{"id": "kokoro", "name": "Kokoro"}]
+LOCAL_OPENAI_VOICES = [
+    {"id": "af_heart", "name": "AF Heart"},
+    {"id": "af_bella", "name": "AF Bella"},
+    {"id": "af_nicole", "name": "AF Nicole"},
+    {"id": "am_adam", "name": "AM Adam"},
+    {"id": "am_michael", "name": "AM Michael"},
+]
+
 
 def _create_wav_header(
     data_length: int,
@@ -510,28 +520,37 @@ class OpenAIVoiceProvider(VoiceProviderInterface):
         stt_model: str | None = None,
         tts_model: str | None = None,
         default_voice: str | None = None,
+        stt_api_base: str | None = None,
+        tts_api_base: str | None = None,
+        trace_provider: str = "openai",
+        require_official_credentials: bool = True,
     ):
-        self.api_key = api_key
+        self.api_key = api_key or (None if require_official_credentials else "dummy")
         self.api_base = api_base
+        self.stt_api_base = stt_api_base or api_base
+        self.tts_api_base = tts_api_base or api_base
         self.stt_model = stt_model or "whisper-1"
         self.tts_model = tts_model or "tts-1"
         self.default_voice = default_voice or "alloy"
+        self.trace_provider = trace_provider
+        self.require_official_credentials = require_official_credentials
 
-        self._client: "AsyncOpenAI | None" = None
+        self._clients: dict[str, "AsyncOpenAI"] = {}
 
-    def _get_client(self) -> "AsyncOpenAI":
-        if self._client is None:
+    def _get_client(self, api_base: str | None = None) -> "AsyncOpenAI":
+        cache_key = api_base or ""
+        if cache_key not in self._clients:
             from openai import AsyncOpenAI
 
-            self._client = AsyncOpenAI(
+            self._clients[cache_key] = AsyncOpenAI(
                 api_key=self.api_key,
-                base_url=self.api_base,
+                base_url=api_base,
             )
-        return self._client
+        return self._clients[cache_key]
 
     async def transcribe(self, audio_data: bytes, audio_format: str) -> str:
         """Transcribe audio via `/v1/audio/transcriptions`."""
-        client = self._get_client()
+        client = self._get_client(self.stt_api_base)
 
         # /v1/audio/transcriptions doesn't accept raw PCM — wrap as WAV
         # (24kHz mono matches the browser capture format).
@@ -546,7 +565,7 @@ class OpenAIVoiceProvider(VoiceProviderInterface):
         with traced_llm_call(
             flow=LLMFlow.STT,
             model=self.stt_model,
-            provider="openai",
+            provider=self.trace_provider,
         ):
             response = await client.audio.transcriptions.create(
                 model=self.stt_model,
@@ -569,7 +588,7 @@ class OpenAIVoiceProvider(VoiceProviderInterface):
         Yields:
             Audio data chunks (mp3 format)
         """
-        client = self._get_client()
+        client = self._get_client(self.tts_api_base)
 
         # Clamp speed to valid range
         speed = max(0.25, min(4.0, speed))
@@ -580,7 +599,7 @@ class OpenAIVoiceProvider(VoiceProviderInterface):
         with traced_llm_call(
             flow=LLMFlow.TTS,
             model=self.tts_model,
-            provider="openai",
+            provider=self.trace_provider,
             input_messages=[{"role": "user", "content": text}],
         ):
             async with client.audio.speech.with_streaming_response.create(
@@ -597,7 +616,10 @@ class OpenAIVoiceProvider(VoiceProviderInterface):
         """Validate OpenAI API key by listing models."""
         from openai import AuthenticationError, PermissionDeniedError
 
-        client = self._get_client()
+        if not self.require_official_credentials:
+            return
+
+        client = self._get_client(self.api_base)
         try:
             await client.models.list()
         except AuthenticationError:
@@ -636,7 +658,7 @@ class OpenAIVoiceProvider(VoiceProviderInterface):
         transcriber = OpenAIStreamingTranscriber(
             api_key=self.api_key,
             model=OPENAI_REALTIME_STT_MODEL,
-            api_base=self.api_base,
+            api_base=self.stt_api_base,
         )
         await transcriber.connect()
         return transcriber
@@ -652,7 +674,68 @@ class OpenAIVoiceProvider(VoiceProviderInterface):
             voice=voice or self.default_voice or "alloy",
             model=self.tts_model or "tts-1",
             speed=speed,
-            api_base=self.api_base,
+            api_base=self.tts_api_base,
         )
         await synthesizer.connect()
         return synthesizer
+
+
+class LocalOpenAIVoiceProvider(OpenAIVoiceProvider):
+    """OpenAI-compatible local voice server for Whisper STT and Kokoro TTS."""
+
+    def __init__(
+        self,
+        api_key: str | None,
+        api_base: str | None = None,
+        custom_config: dict[str, Any] | None = None,
+        stt_model: str | None = None,
+        tts_model: str | None = None,
+        default_voice: str | None = None,
+    ):
+        config = custom_config or {}
+        stt_api_base = config.get("stt_api_base")
+        tts_api_base = config.get("tts_api_base")
+        super().__init__(
+            api_key=api_key,
+            api_base=api_base,
+            stt_api_base=stt_api_base if isinstance(stt_api_base, str) else None,
+            tts_api_base=tts_api_base if isinstance(tts_api_base, str) else None,
+            stt_model=stt_model or "mlx-whisper",
+            tts_model=tts_model or "kokoro",
+            default_voice=default_voice or "af_heart",
+            trace_provider="local_openai",
+            require_official_credentials=False,
+        )
+
+    async def validate_credentials(self) -> None:
+        if not (self.stt_api_base or self.tts_api_base or self.api_base):
+            raise RuntimeError("At least one local voice API base URL is required.")
+
+        urls = {
+            url for url in (self.stt_api_base, self.tts_api_base, self.api_base) if url
+        }
+        timeout = aiohttp.ClientTimeout(total=5)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            for url in urls:
+                try:
+                    async with session.get(f"{url.rstrip('/')}/health") as response:
+                        if response.status >= 500:
+                            raise RuntimeError(
+                                f"Local voice server at {url} is unhealthy: {response.status}"
+                            )
+                except aiohttp.ClientError as exc:
+                    raise RuntimeError(
+                        f"Cannot reach local voice server at {url}."
+                    ) from exc
+
+    def get_available_voices(self) -> list[dict[str, str]]:
+        return LOCAL_OPENAI_VOICES.copy()
+
+    def get_available_stt_models(self) -> list[dict[str, str]]:
+        return LOCAL_OPENAI_STT_MODELS.copy()
+
+    def get_available_tts_models(self) -> list[dict[str, str]]:
+        return LOCAL_OPENAI_TTS_MODELS.copy()
+
+    def supports_streaming_stt(self) -> bool:
+        return False
