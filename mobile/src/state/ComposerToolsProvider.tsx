@@ -15,8 +15,10 @@ import {
 
 import { useWorkspaceSettings } from "@/api/settings";
 import { useAvailableTools } from "@/api/tools";
+import { useLlmProviders } from "@/api/chat/llm";
 import type { ChatToolOptions } from "@/api/chat/stream";
 import { DEFAULT_AGENT_ID, type MinimalAgent } from "@/chat/agents";
+import { toLlmOverride, type ModelOption } from "@/chat/models";
 import {
   buildInternalSearchFilters,
   configuredSources,
@@ -33,6 +35,7 @@ import { useAgentPreferences } from "@/hooks/useAgentPreferences";
 import { useConnectorSources } from "@/hooks/useConnectorSources";
 import { useDeepResearchToggle } from "@/hooks/useDeepResearchToggle";
 import { useForcedTools } from "@/hooks/useForcedTools";
+import { useSelectedModel } from "@/hooks/useSelectedModel";
 import { useSourceSelection } from "@/hooks/useSourceSelection";
 
 const NO_TOOLS: ToolSnapshot[] = [];
@@ -51,6 +54,11 @@ export interface ComposerTools {
   toggleForcedTool: (toolId: number) => void;
   disabledToolIds: number[];
   toggleToolEnabled: (toolId: number) => void;
+  modelOptions: ModelOption[];
+  // The user's pick if there is one, else the agent's default. For display only — the send path
+  // reads the pick alone.
+  effectiveModel: ModelOption | null;
+  selectModel: (model: ModelOption) => void;
   sourceToolId: number | null;
   sourceOptions: DocumentSource[];
   enabledSourceCount: number;
@@ -163,6 +171,14 @@ export function useComposerToolsState({
       effectiveAgentId == null ? NO_IDS : disabledToolIdsFor(effectiveAgentId),
     [effectiveAgentId, disabledToolIdsFor],
   );
+
+  const { selectedModel, selectModel } = useSelectedModel({
+    chatSessionId,
+    agentId,
+  });
+  const { options: modelOptions, defaultOption: defaultModel } =
+    useLlmProviders(effectiveAgentId ?? null, selectedModel?.modelVersion);
+  const effectiveModel = selectedModel ?? defaultModel;
 
   // Inert in a project: a connector-type filter would exclude the project's own files.
   const sourcesManaged = !isProjectWorkflow;
@@ -378,6 +394,9 @@ export function useComposerToolsState({
       toggleForcedTool,
       disabledToolIds,
       toggleToolEnabled,
+      modelOptions,
+      effectiveModel,
+      selectModel,
       sourceToolId,
       sourceOptions,
       enabledSourceCount,
@@ -413,6 +432,10 @@ export function useComposerToolsState({
           internalSearchFilters: buildInternalSearchFilters(
             sourceOptions.filter(isSourceEnabled),
           ),
+          // Only an explicit pick is sent. Sending the resolved default instead would pin the
+          // conversation to whatever this client happened to read, rather than letting the
+          // backend apply its own.
+          llmOverride: selectedModel ? toLlmOverride(selectedModel) : null,
         };
       },
     }),
@@ -427,6 +450,10 @@ export function useComposerToolsState({
       toggleForcedTool,
       disabledToolIds,
       toggleToolEnabled,
+      modelOptions,
+      effectiveModel,
+      selectedModel,
+      selectModel,
       sourceToolId,
       sourceOptions,
       enabledSourceCount,

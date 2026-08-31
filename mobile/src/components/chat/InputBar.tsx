@@ -6,6 +6,7 @@ import { textPresets } from "@onyx-ai/shared/native";
 import { useRecentFiles } from "@/hooks/useRecentFiles";
 import { FileCard } from "@/components/chat/FileCard";
 import { FilePickerSheet } from "@/components/chat/FilePickerSheet";
+import { ModelSelector } from "@/components/chat/ModelSelector";
 import { ToolbarControls } from "@/components/chat/ToolbarControls";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
@@ -135,7 +136,8 @@ export function InputBar({
             <ToolbarControls />
           </View>
 
-          <View className="flex-row items-center gap-4">
+          <View className="min-w-0 flex-row items-center gap-4">
+            <ModelSelector />
             {isBusy ? (
               <Button
                 prominence="tertiary"

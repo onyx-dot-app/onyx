@@ -15,6 +15,9 @@ export function makeComposerTools(
     toggleForcedTool: jest.fn(),
     disabledToolIds: [],
     toggleToolEnabled: jest.fn(),
+    modelOptions: [],
+    effectiveModel: null,
+    selectModel: jest.fn(),
     sourceToolId: null,
     sourceOptions: [],
     enabledSourceCount: 0,
@@ -28,6 +31,7 @@ export function makeComposerTools(
       allowedToolIds: null,
       forcedToolId: null,
       internalSearchFilters: null,
+      llmOverride: null,
     }),
     ...overrides,
   };
