@@ -69,6 +69,12 @@ describe("rehypeDirection", () => {
     expect(dirOf(p)).toBe("ltr");
   });
 
+  it("honors an LRM before any letter", () => {
+    const p = el("p", [txt("\u200E\u0645\u0631\u062d\u0628\u0627")]);
+    run(p);
+    expect(dirOf(p)).toBe("ltr");
+  });
+
   it("leaves blocks without any letters unstamped", () => {
     const p = el("p", [txt("1234 :-)")]);
     run(p);
