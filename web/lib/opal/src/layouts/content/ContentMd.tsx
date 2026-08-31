@@ -88,6 +88,9 @@ interface ContentMdProps {
   /** Clamp the title to N lines with ellipsis. Omit to wrap freely. */
   titleMaxLines?: number;
 
+  /** Strike the title through, for a row whose option is switched off. */
+  strikethrough?: boolean;
+
   /** Size preset. Default: `"main-ui"`. */
   sizePreset?: ContentMdSizePreset;
 
@@ -158,6 +161,7 @@ function ContentMd({
   auxIcon,
   tag,
   titleMaxLines,
+  strikethrough,
   sizePreset = "main-ui",
   ref,
   editHandle,
@@ -259,6 +263,7 @@ function ContentMd({
               font={config.titleFont}
               color="inherit"
               maxLines={titleMaxLines}
+              strikethrough={strikethrough}
               title={toPlainString(title)}
               onClick={editable ? handleTitleClick : undefined}
             >
