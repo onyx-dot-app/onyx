@@ -48,9 +48,16 @@ export function ScrollableTable({
 
     const check = () => {
       const overflows = el.scrollWidth > el.clientWidth;
-      const atEnd = el.scrollLeft + el.clientWidth >= el.scrollWidth - 2;
+      // RTL scrollers run scrollLeft from 0 down to negative values, so
+      // normalize to distance from the physical left edge.
+      const maxScroll = el.scrollWidth - el.clientWidth;
+      const fromLeft =
+        getComputedStyle(el).direction === "rtl"
+          ? maxScroll + el.scrollLeft
+          : el.scrollLeft;
+      const atEnd = fromLeft >= maxScroll - 2;
       wrap.dataset.overflows = overflows && !atEnd ? "true" : "false";
-      el.dataset.scrolled = el.scrollLeft > 0 ? "true" : "false";
+      el.dataset.scrolled = fromLeft > 0 ? "true" : "false";
     };
 
     check();

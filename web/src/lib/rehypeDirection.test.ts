@@ -69,6 +69,12 @@ describe("rehypeDirection", () => {
     expect(dirOf(p)).toBe("ltr");
   });
 
+  it("detects less common RTL scripts by script property", () => {
+    const p = el("p", [txt("\u{10E88}\u{10E8A} note")]);
+    run(p);
+    expect(dirOf(p)).toBe("rtl");
+  });
+
   it("honors an LRM before any letter", () => {
     const p = el("p", [txt("\u200E\u0645\u0631\u062d\u0628\u0627")]);
     run(p);
