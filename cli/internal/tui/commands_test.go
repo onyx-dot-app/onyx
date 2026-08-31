@@ -266,6 +266,19 @@ func TestSelectAgentByNumericIDWhenNoNameMatch(t *testing.T) {
 	}
 }
 
+func TestSelectAgentFromPickerUsesIDWhenNameMatches(t *testing.T) {
+	m := NewModel(config.DefaultConfig(), nil)
+	m.agents = []models.AgentSummary{
+		{ID: 1, Name: "Support Agent"},
+		{ID: 100, Name: "1"},
+	}
+
+	m, _ = cmdSelectAgentByID(m, "1")
+	if m.agentID != 1 {
+		t.Errorf("agentID = %d, want 1", m.agentID)
+	}
+}
+
 func TestSelectModelInvalidIndex(t *testing.T) {
 	m := NewModel(config.DefaultConfig(), nil)
 	m, _ = cmdSelectModel(m, "5")

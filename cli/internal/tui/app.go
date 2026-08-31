@@ -301,7 +301,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				case pickerSession:
 					return cmdResume(m, item.id)
 				case pickerAgent:
-					return cmdSelectAgent(m, item.id)
+					return cmdSelectAgentByID(m, item.id)
 				case pickerModel:
 					return cmdSelectModel(m, item.id)
 				}

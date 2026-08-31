@@ -154,6 +154,23 @@ func cmdSelectAgent(m Model, idStr string) (Model, tea.Cmd) {
 	})
 }
 
+func cmdSelectAgentByID(m Model, idStr string) (Model, tea.Cmd) {
+	pid, err := strconv.Atoi(strings.TrimSpace(idStr))
+	if err != nil {
+		m.viewport.addWarning("Invalid agent ID. Use a number.")
+		return m, nil
+	}
+
+	return applyAgentSelection(m, func() (*models.AgentSummary, error) {
+		for i := range m.agents {
+			if m.agents[i].ID == pid {
+				return &m.agents[i], nil
+			}
+		}
+		return nil, fmt.Errorf("agent %d not found. Use /agent to see available agents", pid)
+	})
+}
+
 func applyAgentSelection(m Model, lookup func() (*models.AgentSummary, error)) (Model, tea.Cmd) {
 	target, err := lookup()
 	if err != nil {
