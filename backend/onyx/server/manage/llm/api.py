@@ -21,7 +21,6 @@ from onyx.db.llm import (
     fetch_default_chat_naming_model,
     fetch_default_craft_model,
     fetch_default_llm_model,
-    fetch_default_model,
     fetch_default_vision_model,
     fetch_existing_llm_provider_by_id,
     fetch_existing_llm_providers,
@@ -738,18 +737,17 @@ def delete_llm_provider(
     db_session: Session = Depends(get_session),
 ) -> None:
     if not force:
-        # Every flow with a default, not just chat: the vision, contextual-RAG,
-        # reasoning and chat-naming defaults were all deletable from under the
-        # deployment.
-        for flow_type in LLMModelFlowType:
-            model = fetch_default_model(db_session, flow_type)
-            if model and model.llm_provider_id == provider_id:
-                raise OnyxError(
-                    OnyxErrorCode.RESOURCE_IN_USE,
-                    f"Cannot delete this provider: it holds the deployment's "
-                    f"{flow_type.value} default model. Repoint that default "
-                    f"first, or pass force=true.",
-                )
+        # Only the chat default blocks a provider delete. Deleting a provider
+        # that holds another flow's default clears that default deliberately —
+        # see test_delete_default_vision_provider_clears_vision_default.
+        model = fetch_default_llm_model(db_session)
+
+        if model and model.llm_provider_id == provider_id:
+            raise OnyxError(
+                OnyxErrorCode.RESOURCE_IN_USE,
+                "Cannot delete this provider: it holds the deployment's chat "
+                "default model. Repoint that default first, or pass force=true.",
+            )
 
     try:
         remove_llm_provider(db_session, provider_id)

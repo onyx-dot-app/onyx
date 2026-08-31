@@ -568,7 +568,7 @@ def test_force_delete_default_llm_provider(
         f"{API_SERVER_URL}/admin/llm/provider/{created_provider['id']}",
         headers=admin_user.headers,
     )
-    assert delete_response.status_code == 400
+    assert delete_response.status_code == 409
 
     # Force delete — should succeed
     force_delete_response = client.delete(

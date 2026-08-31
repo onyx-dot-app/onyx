@@ -647,4 +647,3 @@ class TestCapabilityChangesCannotEraseADefault:
                 ),
                 db_session=db_session,
             )
-
