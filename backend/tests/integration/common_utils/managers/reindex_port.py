@@ -66,7 +66,7 @@ class ReindexPortManager:
     def start_reindex_response(
         user_performing_action: DATestUser,
         switchover_type: str = SwitchoverType.REINDEX.value,
-        enable_contextual_rag: bool = False,
+        enable_contextual_rag: bool | None = None,
         contextual_rag_model_configuration_id: int | None = None,
         acknowledged_wont_port_cc_pair_ids: list[int] | None = None,
     ) -> httpx.Response:
@@ -78,7 +78,11 @@ class ReindexPortManager:
 
         The server refuses the reindex unless every cc_pair that won't be ported is
         acknowledged for deletion. Callers that don't care consent to whatever the
-        connectors happen to be; pass an explicit list to drive the consent guard."""
+        connectors happen to be; pass an explicit list to drive the consent guard.
+
+        Leaving `enable_contextual_rag` / `contextual_rag_model_configuration_id` unset
+        preserves whatever the tenant already has, so a reindex that isn't testing
+        contextual RAG can't silently disable it. Pass either explicitly to change it."""
         if acknowledged_wont_port_cc_pair_ids is None:
             acknowledged_wont_port_cc_pair_ids = (
                 ReindexPortManager.wont_port_cc_pair_ids(
@@ -86,6 +90,12 @@ class ReindexPortManager:
                 )
             )
         current = ReindexPortManager.get_current_settings(user_performing_action)
+        if enable_contextual_rag is None:
+            enable_contextual_rag = current.get("enable_contextual_rag", False)
+        if contextual_rag_model_configuration_id is None:
+            contextual_rag_model_configuration_id = current.get(
+                "contextual_rag_model_configuration_id"
+            )
         payload = {
             "model_name": current["model_name"],
             "model_dim": current["model_dim"],
