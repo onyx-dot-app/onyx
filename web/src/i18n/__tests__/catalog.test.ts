@@ -13,6 +13,7 @@ import {
   type MessageFormatElement,
 } from "@formatjs/icu-messageformat-parser";
 
+import ar from "@/i18n/messages/ar.json";
 import de from "@/i18n/messages/de.json";
 import en from "@/i18n/messages/en.json";
 import es from "@/i18n/messages/es.json";
@@ -25,6 +26,7 @@ import zh from "@/i18n/messages/zh.json";
 type MessageTree = { [key: string]: string | MessageTree };
 
 const TARGET_LOCALES: Record<string, MessageTree> = {
+  ar,
   de,
   es,
   fr,

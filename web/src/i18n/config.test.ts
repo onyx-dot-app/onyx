@@ -14,6 +14,7 @@ describe("SUPPORTED_LOCALES", () => {
       "ja",
       "zh",
       "ko",
+      "ar",
     ]);
   });
 });
