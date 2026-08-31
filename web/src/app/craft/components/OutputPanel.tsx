@@ -460,8 +460,11 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
   return (
     <div
       className={cn(
-        "absolute z-20 inset-y-0 right-0 w-1/2 flex flex-col border-s border-border-01 bg-background-neutral-00 overflow-hidden transition-transform duration-300 ease-in-out",
-        isOpen ? "translate-x-0" : "translate-x-full pointer-events-none"
+        "absolute z-20 inset-y-0 end-0 w-1/2 flex flex-col border-s border-border-01 bg-background-neutral-00 overflow-hidden transition-transform duration-300 ease-in-out",
+        // rtl: the panel hides toward the inline end, so RTL negates.
+        isOpen
+          ? "translate-x-0"
+          : "translate-x-full rtl:-translate-x-full pointer-events-none"
       )}
     >
       {/* Tab List - Chrome-style tabs */}
@@ -505,7 +508,7 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
                   {/* Left curved joint — bleeds active tab into the row */}
                   {isActive && (
                     <div
-                      className="absolute -left-2 bottom-0 w-2 h-2 bg-background-neutral-00 pointer-events-none"
+                      className="absolute -start-2 bottom-0 w-2 h-2 bg-background-neutral-00 pointer-events-none"
                       style={{
                         maskImage:
                           "radial-gradient(circle at 0 0, transparent 8px, black 8px)",
@@ -541,7 +544,7 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
                   {/* Right curved joint */}
                   {isActive && (
                     <div
-                      className="absolute -right-2 bottom-0 w-2 h-2 bg-background-neutral-00 pointer-events-none"
+                      className="absolute -end-2 bottom-0 w-2 h-2 bg-background-neutral-00 pointer-events-none"
                       style={{
                         maskImage:
                           "radial-gradient(circle at 100% 0, transparent 8px, black 8px)",
@@ -587,7 +590,7 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
                     >
                       {isActive && (
                         <div
-                          className="absolute -left-2 bottom-0 w-2 h-2 bg-background-neutral-00 pointer-events-none"
+                          className="absolute -start-2 bottom-0 w-2 h-2 bg-background-neutral-00 pointer-events-none"
                           style={{
                             maskImage:
                               "radial-gradient(circle at 0 0, transparent 8px, black 8px)",
@@ -621,7 +624,7 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
                       </button>
                       {isActive && (
                         <div
-                          className="absolute -right-2 bottom-0 w-2 h-2 bg-background-neutral-00 pointer-events-none"
+                          className="absolute -end-2 bottom-0 w-2 h-2 bg-background-neutral-00 pointer-events-none"
                           style={{
                             maskImage:
                               "radial-gradient(circle at 100% 0, transparent 8px, black 8px)",

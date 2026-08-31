@@ -146,7 +146,7 @@ export default function BannerQueue() {
 
   return (
     <div
-      className="fixed bottom-2 left-2 z-toast w-[400px] max-w-[calc(100vw-1rem)]"
+      className="fixed bottom-2 start-2 z-toast w-[400px] max-w-[calc(100vw-1rem)]"
       style={
         contentLeft !== null
           ? { left: contentLeft + CONTENT_INSET_PX }

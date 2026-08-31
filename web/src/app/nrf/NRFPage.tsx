@@ -446,7 +446,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
       {/* Settings button */}
       {!isSidePanel && (
-        <div className="absolute top-0 right-0 p-4 z-10">
+        <div className="absolute top-0 end-0 p-4 z-10">
           <Button
             prominence="secondary"
             icon={SvgMenu}
@@ -583,7 +583,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       {/* Document sidebar - shown when sources are clicked */}
       <div
         className={cn(
-          "absolute right-0 top-0 h-full z-20 overflow-hidden transition-all duration-300",
+          "absolute end-0 top-0 h-full z-20 overflow-hidden transition-all duration-300",
           documentSidebarVisible ? "w-100" : "w-0"
         )}
       >

@@ -112,7 +112,7 @@ export const InMessageImage = memo(function InMessageImage({
           />
 
           {/* Download button - appears on hover */}
-          <div className="absolute bottom-2 right-2 z-10">
+          <div className="absolute bottom-2 end-2 z-10">
             <Hoverable.Item group="messageImage" variant="appear-on-hover">
               <Button
                 icon={SvgDownload}

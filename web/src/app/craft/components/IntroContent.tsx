@@ -53,7 +53,7 @@ export default function BuildModeIntroContent({
                   </RefreshText>
                 </span>
                 <span
-                  className="pointer-events-none absolute top-3 -right-14 text-[1em] uppercase tracking-[0.2em] text-white!"
+                  className="pointer-events-none absolute top-3 -end-14 text-[1em] uppercase tracking-[0.2em] text-white!"
                   style={{ fontFamily: "var(--font-kh-teka)", fontWeight: 500 }}
                 >
                   BETA

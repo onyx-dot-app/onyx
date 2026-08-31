@@ -108,7 +108,7 @@ function TruncatedDisplay({
         <div
           ref={hiddenRef}
           aria-hidden
-          className="pointer-events-none invisible absolute left-0 top-0 whitespace-nowrap"
+          className="pointer-events-none invisible absolute start-0 top-0 whitespace-nowrap"
         >
           {text}
         </div>

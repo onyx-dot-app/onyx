@@ -60,7 +60,8 @@ export default function AreaChart({
   stacked = false,
 }: AreaChartProps) {
   return (
-    <div className={cn("h-[350px] w-full", className)}>
+    // dir="ltr": charts keep LTR axes in RTL locales (Material guidance).
+    <div dir="ltr" className={cn("h-[350px] w-full", className)}>
       <ResponsiveContainer width="100%" height="100%">
         <ReChartsAreaChart
           data={data}

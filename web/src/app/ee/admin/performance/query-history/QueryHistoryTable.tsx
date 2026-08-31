@@ -86,7 +86,7 @@ function QueryHistoryTableRow({
           href={
             `/ee/admin/performance/query-history/${chatSessionMinimal.id}` as Route
           }
-          className="absolute w-full h-full left-0 top-0"
+          className="absolute w-full h-full start-0 top-0"
         ></Link>
       </td>
     </TableRow>

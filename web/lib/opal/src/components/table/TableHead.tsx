@@ -127,7 +127,7 @@ export default function TableHead({
           onMouseDown={onResizeStart}
           onTouchStart={onResizeStart}
           className={cn(
-            "absolute right-0 top-0 flex h-full items-center",
+            "absolute end-0 top-0 flex h-full items-center",
             "text-border-02",
             "opacity-0 group-hover:opacity-100 no-hover:opacity-100",
             "cursor-col-resize",

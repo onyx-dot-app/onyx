@@ -108,7 +108,7 @@ export default function Truncated({
       */}
       <div
         ref={hiddenRef}
-        className="fixed left-[-9999px] top-0 whitespace-nowrap pointer-events-none opacity-0"
+        className="fixed start-[-9999px] top-0 whitespace-nowrap pointer-events-none opacity-0"
         aria-hidden="true"
       >
         {text}

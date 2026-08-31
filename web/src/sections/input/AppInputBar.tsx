@@ -842,7 +842,7 @@ const AppInputBar = React.memo(
           >
             {/* Voice waveform overlay (positioned outside normal flow to avoid resizing input) */}
             {isTTSActuallySpeaking ? (
-              <div className="absolute bottom-full mb-1 left-1 z-10">
+              <div className="absolute bottom-full mb-1 start-1 z-10">
                 <Waveform
                   variant="speaking"
                   isActive={isTTSActuallySpeaking}
@@ -853,7 +853,7 @@ const AppInputBar = React.memo(
             ) : isRecording &&
               !isVoicePlaybackActive &&
               !shouldShowRecordingWaveformBelow ? (
-              <div className="absolute bottom-full mb-1 left-1 right-1 z-10">
+              <div className="absolute bottom-full mb-1 start-1 end-1 z-10">
                 <Waveform
                   variant="recording"
                   isActive={isRecording}
@@ -1061,7 +1061,7 @@ const AppInputBar = React.memo(
 
             {/* First recording cycle waveform below input */}
             {shouldShowRecordingWaveformBelow && (
-              <div className="absolute top-full mt-1 left-1 right-1 z-10">
+              <div className="absolute top-full mt-1 start-1 end-1 z-10">
                 <Waveform
                   variant="recording"
                   isActive={isRecording}

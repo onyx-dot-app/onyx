@@ -436,7 +436,7 @@ export default function FilesTab({
         className="flex-1 overflow-auto px-2 pb-2 relative"
       >
         {/* Background to prevent content showing through sticky gap */}
-        <div className="sticky top-0 left-0 right-0 h-2 bg-background-neutral-00 -mx-2 z-101" />
+        <div className="sticky top-0 start-0 end-0 h-2 bg-background-neutral-00 -mx-2 z-101" />
         {rootListing.entries.length === 0 ? (
           <Section
             height="full"

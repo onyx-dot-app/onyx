@@ -83,7 +83,7 @@ export default function SuggestedPrompts({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
             transition={{ duration: 0.15, ease: "easeOut" }}
-            className="absolute top-full left-0 right-0 z-20 mt-3 w-full p-2"
+            className="absolute top-full start-0 end-0 z-20 mt-3 w-full p-2"
           >
             <div className="flex items-center justify-between px-3 pt-2 pb-1">
               <div className="flex items-center gap-2">

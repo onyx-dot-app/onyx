@@ -207,7 +207,7 @@ export function IndexAttemptsTable({
                       onClick={() =>
                         setIndexAttemptTracePopupId(indexAttempt.id)
                       }
-                      className="absolute w-full h-full left-0 top-0"
+                      className="absolute w-full h-full start-0 top-0"
                     />
                   )}
                 </td>

@@ -9,7 +9,7 @@ import {
   Text,
 } from "@opal/components";
 import { Form } from "formik";
-import SvgArrowRightCircle from "@opal/icons/arrow-right-circle";
+import { SvgArrowRightCircle } from "@opal/icons/directional";
 import { Content } from "@opal/layouts";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { SvgSimpleLoader } from "@opal/icons";

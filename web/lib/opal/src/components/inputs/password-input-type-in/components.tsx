@@ -180,7 +180,7 @@ function PasswordInputTypeIn({
         // with the hidden input text. The right inset clears the toggle.
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-y-0 left-[6px] right-10 flex items-center overflow-hidden"
+          className="pointer-events-none absolute inset-y-0 start-[6px] end-10 flex items-center overflow-hidden"
         >
           <Text font="main-ui-body" color="text-04" nowrap>
             {"✱".repeat(realValue.length)}

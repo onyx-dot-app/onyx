@@ -79,7 +79,7 @@ const BackgroundThumbnail = ({
       )}
     />
     {isSelected && (
-      <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-theme-primary-05 flex items-center justify-center">
+      <div className="absolute top-2 end-2 w-5 h-5 rounded-full bg-theme-primary-05 flex items-center justify-center">
         <SvgCheck className="w-3 h-3 stroke-text-inverted-05" />
       </div>
     )}
@@ -146,11 +146,14 @@ export const SettingsPanel = ({
       {/* Settings panel */}
       <div
         className={cn(
-          "fixed top-0 right-0 w-100 h-full z-50",
+          "fixed top-0 end-0 w-100 h-full z-50",
           "bg-linear-to-b from-background-tint-02 to-background-tint-01",
           "backdrop-blur-xl border-s border-border-01 overflow-y-auto",
           "transition-transform duration-300 ease-out",
-          settingsOpen ? "translate-x-0" : "translate-x-full"
+          // rtl: the panel hides toward the inline end, so RTL negates.
+          settingsOpen
+            ? "translate-x-0"
+            : "translate-x-full rtl:-translate-x-full"
         )}
       >
         {/* Header */}

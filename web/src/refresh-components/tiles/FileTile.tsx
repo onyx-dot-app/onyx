@@ -35,7 +35,7 @@ function RemoveButton({ onRemove }: RemoveButtonProps) {
   return (
     <div
       className={cn(
-        "absolute -left-1 -top-1 z-10",
+        "absolute -start-1 -top-1 z-10",
         "pointer-events-none focus-within:pointer-events-auto"
       )}
     >

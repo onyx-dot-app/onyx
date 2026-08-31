@@ -712,7 +712,7 @@ export default function BuildChatPanel({
               </div>
               {/* Soft fade border at bottom */}
               {!videoBackgroundEnabled && (
-                <div className="absolute bottom-0 left-0 right-0 h-10 bg-linear-to-b from-background-neutral-01 to-transparent pointer-events-none translate-y-full z-10" />
+                <div className="absolute bottom-0 start-0 end-0 h-10 bg-linear-to-b from-background-neutral-01 to-transparent pointer-events-none translate-y-full z-10" />
               )}
             </div>
 
@@ -773,7 +773,7 @@ export default function BuildChatPanel({
               <div className="px-4 pb-8 pt-4 relative">
                 {/* Soft fade border at top */}
                 {!videoBackgroundEnabled && (
-                  <div className="absolute top-0 left-0 right-0 h-12 bg-linear-to-t from-background-neutral-01 to-transparent pointer-events-none -translate-y-full" />
+                  <div className="absolute top-0 start-0 end-0 h-12 bg-linear-to-t from-background-neutral-01 to-transparent pointer-events-none -translate-y-full" />
                 )}
                 <div
                   className="max-w-[720px] mx-auto"

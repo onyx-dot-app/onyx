@@ -121,13 +121,13 @@ const SelectItem = React.forwardRef<
     {...props}
   >
     {icon ? (
-      <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
+      <span className="absolute start-2 flex h-3.5 w-3.5 items-center justify-center">
         {typeof icon === "function" ? icon({ size: 16, className: "" }) : icon}
       </span>
     ) : (
       !hideCheck &&
       selected && (
-        <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
+        <span className="absolute start-2 flex h-3.5 w-3.5 items-center justify-center">
           <SelectPrimitive.ItemIndicator>
             <Check className="h-4 w-4" />
           </SelectPrimitive.ItemIndicator>

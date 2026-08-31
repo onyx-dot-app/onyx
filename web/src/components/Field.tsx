@@ -373,7 +373,7 @@ export function TextFormField({
           <button
             type="button"
             aria-label={isPasswordVisible ? "Hide password" : "Show password"}
-            className="absolute right-3 top-1/2 -translate-y-1/2 stroke-text-02 hover:stroke-text-03 mt-0.5"
+            className="absolute end-3 top-1/2 -translate-y-1/2 stroke-text-02 hover:stroke-text-03 mt-0.5"
             onClick={() => setIsPasswordVisible((v) => !v)}
             tabIndex={0}
           >

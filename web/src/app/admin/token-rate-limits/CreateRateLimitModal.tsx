@@ -72,12 +72,15 @@ function handleRadioOptionKeyDown(
     group?.querySelectorAll<HTMLElement>('[role="radio"]') ?? []
   );
   const currentIndex = options.indexOf(event.currentTarget);
+  // Horizontal arrows follow the reading direction, so RTL swaps them.
+  const isRtl = getComputedStyle(event.currentTarget).direction === "rtl";
+  const forwardKey = isRtl ? "ArrowLeft" : "ArrowRight";
   const nextIndex =
     event.key === "Home"
       ? 0
       : event.key === "End"
         ? options.length - 1
-        : event.key === "ArrowRight" || event.key === "ArrowDown"
+        : event.key === forwardKey || event.key === "ArrowDown"
           ? (currentIndex + 1) % options.length
           : (currentIndex - 1 + options.length) % options.length;
   options[nextIndex]?.focus();
