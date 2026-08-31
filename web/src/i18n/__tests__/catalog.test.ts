@@ -83,6 +83,56 @@ function sortedArguments(message: string): string[] {
   return Array.from(collectArguments(parse(message), new Set<string>())).sort();
 }
 
+// Structural ICU signature: each argument with its kind, select option keys,
+// and tag names. Plural categories stay locale-defined (CLDR), so plural
+// branches contribute their contents but not their category keys.
+function collectShape(
+  elements: MessageFormatElement[],
+  into: Set<string>
+): Set<string> {
+  for (const element of elements) {
+    switch (element.type) {
+      case TYPE.argument:
+        into.add(`arg:${element.value}`);
+        break;
+      case TYPE.number:
+        into.add(`number:${element.value}`);
+        break;
+      case TYPE.date:
+        into.add(`date:${element.value}`);
+        break;
+      case TYPE.time:
+        into.add(`time:${element.value}`);
+        break;
+      case TYPE.plural:
+        into.add(`plural:${element.value}`);
+        for (const option of Object.values(element.options)) {
+          collectShape(option.value, into);
+        }
+        break;
+      case TYPE.select:
+        into.add(
+          `select:${element.value}(${Object.keys(element.options).sort().join("|")})`
+        );
+        for (const option of Object.values(element.options)) {
+          collectShape(option.value, into);
+        }
+        break;
+      case TYPE.tag:
+        into.add(`tag:${element.value}`);
+        collectShape(element.children, into);
+        break;
+      default:
+        break;
+    }
+  }
+  return into;
+}
+
+function sortedShape(message: string): string[] {
+  return Array.from(collectShape(parse(message), new Set<string>())).sort();
+}
+
 const flatEnglish = flatten(en as MessageTree);
 
 describe("i18n message catalogs", () => {
@@ -104,6 +154,10 @@ describe("i18n message catalogs", () => {
         expect({ key, placeholders: sortedArguments(message) }).toEqual({
           key,
           placeholders: sortedArguments(englishMessage),
+        });
+        expect({ key, shape: sortedShape(message) }).toEqual({
+          key,
+          shape: sortedShape(englishMessage),
         });
       }
     });
