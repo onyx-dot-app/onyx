@@ -63,6 +63,12 @@ describe("rehypeDirection", () => {
     expect(dirOf(p)).toBe("rtl");
   });
 
+  it("treats Arabic-Indic digits as weak, deciding by the first letter", () => {
+    const p = el("p", [txt("\u0662\u0660\u0662\u0666 report")]);
+    run(p);
+    expect(dirOf(p)).toBe("ltr");
+  });
+
   it("leaves blocks without any letters unstamped", () => {
     const p = el("p", [txt("1234 :-)")]);
     run(p);

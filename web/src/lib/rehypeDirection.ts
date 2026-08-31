@@ -25,16 +25,20 @@ const OPAQUE_TAGS = new Set(["code", "pre"]);
 // Strong RTL letters from every right-to-left script, plus the RLM and ALM
 // marks. Script-based, so any RTL language matches. Digits and punctuation
 // are weak and skipped, mirroring browsers' first-strong dir="auto".
-const RTL_LETTER =
-  /[\u200F\u061C\p{Script=Arabic}\p{Script=Hebrew}\p{Script=Syriac}\p{Script=Thaana}\p{Script=Nko}\p{Script=Samaritan}\p{Script=Mandaic}\p{Script=Adlam}]/u;
+const RTL_MARK = /[\u200F\u061C]/u;
+const RTL_SCRIPT =
+  /[\p{Script=Arabic}\p{Script=Hebrew}\p{Script=Syriac}\p{Script=Thaana}\p{Script=Nko}\p{Script=Samaritan}\p{Script=Mandaic}\p{Script=Adlam}]/u;
 const ANY_LETTER = /\p{L}/u;
 
 function firstStrongDir(nodes: ElementContent[]): "ltr" | "rtl" | null {
   for (const node of nodes) {
     if (node.type === "text") {
       for (const char of node.value) {
-        if (RTL_LETTER.test(char)) return "rtl";
-        if (ANY_LETTER.test(char)) return "ltr";
+        if (RTL_MARK.test(char)) return "rtl";
+        // Only letters are strong. Arabic-Indic digits sit in Script=Arabic
+        // but are directionally weak, so they must not decide direction.
+        if (!ANY_LETTER.test(char)) continue;
+        return RTL_SCRIPT.test(char) ? "rtl" : "ltr";
       }
     } else if (node.type === "element" && !OPAQUE_TAGS.has(node.tagName)) {
       const dir = firstStrongDir(node.children);
