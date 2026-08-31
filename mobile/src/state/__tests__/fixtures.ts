@@ -10,6 +10,7 @@ export function makeComposerTools(
     deepResearchEnabled: false,
     toggleDeepResearch: jest.fn(),
     actionTools: [],
+    unavailableToolIds: [],
     forcedToolId: null,
     toggleForcedTool: jest.fn(),
     disabledToolIds: [],

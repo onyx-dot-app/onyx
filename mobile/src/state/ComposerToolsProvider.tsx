@@ -14,6 +14,7 @@ import {
 } from "react";
 
 import { useWorkspaceSettings } from "@/api/settings";
+import { useAvailableTools } from "@/api/tools";
 import type { ChatToolOptions } from "@/api/chat/stream";
 import { DEFAULT_AGENT_ID, type MinimalAgent } from "@/chat/agents";
 import {
@@ -43,6 +44,9 @@ export interface ComposerTools {
   deepResearchEnabled: boolean;
   toggleDeepResearch: () => void;
   actionTools: ToolSnapshot[];
+  // A row in actionTools whose backend integration isn't configured right now (e.g. no image
+  // provider set up) — still assigned to the agent, but not usable until an admin configures it.
+  unavailableToolIds: number[];
   forcedToolId: number | null;
   toggleForcedTool: (toolId: number) => void;
   disabledToolIds: number[];
@@ -79,6 +83,8 @@ export function useComposerToolsState({
   projectId,
 }: ComposerToolsInputs): ComposerTools {
   const { settings } = useWorkspaceSettings();
+  const { tools: globallyAvailableTools, isSuccess: availableToolsLoaded } =
+    useAvailableTools();
   const agentId = agent?.id;
 
   const { deepResearchEnabled, toggleDeepResearch } = useDeepResearchToggle({
@@ -140,6 +146,17 @@ export function useComposerToolsState({
     () => (effectiveAgent ? displayableTools(effectiveAgent.tools) : NO_TOOLS),
     [effectiveAgent],
   );
+
+  // The search tool's own availability is governed by connector state, not this generic check —
+  // matching web, which never marks it unavailable here. Before the fetch resolves, treat every
+  // tool as available rather than flashing them all as unavailable.
+  const unavailableToolIds = useMemo(() => {
+    if (!availableToolsLoaded) return NO_IDS;
+    const availableIds = new Set(globallyAvailableTools.map((t) => t.id));
+    return actionTools
+      .filter((tool) => !availableIds.has(tool.id) && !isSearchTool(tool))
+      .map((tool) => tool.id);
+  }, [actionTools, availableToolsLoaded, globallyAvailableTools]);
 
   const disabledToolIds = useMemo(
     () =>
@@ -352,6 +369,7 @@ export function useComposerToolsState({
       deepResearchEnabled,
       toggleDeepResearch,
       actionTools,
+      unavailableToolIds,
       forcedToolId,
       /*
        * Unwrapped: the effect already keeps "search on" and "some source on" equivalent. Web
@@ -404,6 +422,7 @@ export function useComposerToolsState({
       deepResearchEnabled,
       toggleDeepResearch,
       actionTools,
+      unavailableToolIds,
       forcedToolId,
       toggleForcedTool,
       disabledToolIds,

@@ -17,6 +17,7 @@ const MAX_LIST_HEIGHT = 420;
 export function ActionsMenu() {
   const {
     actionTools,
+    unavailableToolIds,
     forcedToolId,
     toggleForcedTool,
     disabledToolIds,
@@ -69,6 +70,7 @@ export function ActionsMenu() {
                 tool={tool}
                 isForced={forcedToolId === tool.id}
                 isDisabled={disabledToolIds.includes(tool.id)}
+                isUnavailable={unavailableToolIds.includes(tool.id)}
                 sourceCounts={
                   tool.id === sourceToolId && sourceOptions.length > 0
                     ? {
