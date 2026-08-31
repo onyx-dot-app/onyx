@@ -34,6 +34,7 @@ interface ScrollableTableProps extends React.TableHTMLAttributes<HTMLTableElemen
 export function ScrollableTable({
   className,
   children,
+  dir,
   ...props
 }: ScrollableTableProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -75,7 +76,9 @@ export function ScrollableTable({
   }, []);
 
   return (
-    <div ref={wrapRef} className="markdown-table-card">
+    // The stamped table dir lifts onto the scroller so scrollLeft semantics
+    // and the initial scroll edge follow the table's own direction.
+    <div ref={wrapRef} dir={dir} className="markdown-table-card">
       <div ref={scrollRef} className="markdown-table-breakout">
         <table
           ref={tableRef}

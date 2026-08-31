@@ -19,11 +19,15 @@ export const mutedTextMarkdownComponents = {
       {children}
     </Text>
   ),
-  ul: ({ children }: { children?: React.ReactNode }) => (
-    <ul className="pl-0! ml-0! my-0.5! list-inside">{children}</ul>
+  ul: ({ children, dir }: { children?: React.ReactNode; dir?: string }) => (
+    <ul dir={dir} className="ps-0! ms-0! my-0.5! list-inside">
+      {children}
+    </ul>
   ),
-  ol: ({ children }: { children?: React.ReactNode }) => (
-    <ol className="pl-0! ml-0! my-0.5! list-inside">{children}</ol>
+  ol: ({ children, dir }: { children?: React.ReactNode; dir?: string }) => (
+    <ol dir={dir} className="ps-0! ms-0! my-0.5! list-inside">
+      {children}
+    </ol>
   ),
   a: ({ children, href }: { children?: React.ReactNode; href?: string }) => (
     <a
@@ -56,12 +60,12 @@ export const collapsedMarkdownComponents = {
     </Text>
   ),
   ul: ({ children, dir }: { children?: React.ReactNode; dir?: string }) => (
-    <ul dir={dir} className="pl-0! ml-0! my-0! list-inside">
+    <ul dir={dir} className="ps-0! ms-0! my-0! list-inside">
       {children}
     </ul>
   ),
   ol: ({ children, dir }: { children?: React.ReactNode; dir?: string }) => (
-    <ol dir={dir} className="pl-0! ml-0! my-0! list-inside">
+    <ol dir={dir} className="ps-0! ms-0! my-0! list-inside">
       {children}
     </ol>
   ),

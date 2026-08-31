@@ -86,8 +86,17 @@ const thinkingOl = ({
     {children}
   </ol>
 );
-const thinkingBlockquote = ({ children }: { children?: ReactNode }) => (
-  <blockquote className="text-sm text-text-02 border-l-2 border-border-02 pl-2 my-1">
+const thinkingBlockquote = ({
+  children,
+  dir,
+}: {
+  children?: ReactNode;
+  dir?: string;
+}) => (
+  <blockquote
+    dir={dir}
+    className="text-sm text-text-02 border-s-2 border-border-02 ps-2 my-1"
+  >
     {children}
   </blockquote>
 );
