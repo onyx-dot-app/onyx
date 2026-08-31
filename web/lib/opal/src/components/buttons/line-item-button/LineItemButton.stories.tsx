@@ -100,3 +100,54 @@ export const DisabledOutranksColor: Story = {
     </div>
   ),
 };
+
+/**
+ * `color={undefined}` has to mean "no colour given", not `"default"`.
+ *
+ * `color={condition ? "muted" : undefined}` is the obvious way to colour a row
+ * conditionally, and the falsy arm has to leave the row on the `"interactive"`
+ * mode that lets the interactive colour variables through. The two rows below
+ * must be indistinguishable, in every state — if the explicit `undefined` ever
+ * pins the row to `"default"` again, it stops responding to selection and
+ * disablement and this story shows it.
+ */
+export const UndefinedColorIsNoColor: Story = {
+  render: () => (
+    <div className="flex w-96 flex-col gap-1">
+      <LineItemButton
+        icon={SvgSearch}
+        title="Colour omitted, selected"
+        description="Baseline"
+        state="selected"
+        sizePreset="main-ui"
+        variant="section"
+      />
+      <LineItemButton
+        icon={SvgSearch}
+        title="Colour undefined, selected"
+        description="Must match the row above"
+        color={undefined}
+        state="selected"
+        sizePreset="main-ui"
+        variant="section"
+      />
+      <LineItemButton
+        icon={SvgSearch}
+        title="Colour omitted, disabled"
+        description="Baseline"
+        disabled
+        sizePreset="main-ui"
+        variant="section"
+      />
+      <LineItemButton
+        icon={SvgSearch}
+        title="Colour undefined, disabled"
+        description="Must match the row above"
+        color={undefined}
+        disabled
+        sizePreset="main-ui"
+        variant="section"
+      />
+    </div>
+  ),
+};
