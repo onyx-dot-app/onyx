@@ -78,8 +78,10 @@ const DEFAULT_COMPONENTS = {
       {...props}
     />
   ),
+  // dir="auto" isolates each block's direction so LTR technical copy
+  // inside an RTL page keeps its own reading order (props can override).
   p: ({ node, ...props }) => (
-    <p className="my-1 text-sm leading-6 text-text-04" {...props} />
+    <p dir="auto" className="my-1 text-sm leading-6 text-text-04" {...props} />
   ),
   ul: ({ node, ...props }) => (
     <ul
@@ -93,7 +95,9 @@ const DEFAULT_COMPONENTS = {
       {...props}
     />
   ),
-  li: ({ node, ...props }) => <li className="my-0.5 ps-1" {...props} />,
+  li: ({ node, ...props }) => (
+    <li dir="auto" className="my-0.5 ps-1" {...props} />
+  ),
   strong: ({ node, ...props }) => (
     <strong className="font-semibold text-text-05" {...props} />
   ),
