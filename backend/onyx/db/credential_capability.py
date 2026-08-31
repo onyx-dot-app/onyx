@@ -13,10 +13,10 @@ through the ``unless_granular`` variant and never replaces a granular report.
 flags a run in flight while the last completed report stays readable.
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, TypedDict
 
-from sqlalchemy import ColumnElement, func, literal_column, or_, select, text
+from sqlalchemy import ColumnElement, func, literal_column, or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -184,12 +184,19 @@ def mark_capability_report_running(
     connector_id: int | None,
     source: DocumentSource,
     trigger: CapabilityCheckTrigger,
-) -> CredentialCapabilityReportRow:
-    """Flags the scope's row RUNNING with a fresh start time.
+    active_within: timedelta,
+) -> CredentialCapabilityReportRow | None:
+    """Flags the scope's row RUNNING unless an unexpired run already is.
 
     The previous COMPLETED ``report`` stays readable while the run is in flight.
+    The guard compiles into ``ON CONFLICT DO UPDATE ... WHERE``: a stored row
+    blocks the mark only while it is RUNNING with a start time newer than
+    ``active_within`` ago, evaluated atomically by Postgres so concurrent
+    triggers cannot double-mark. A RUNNING mark older than the bound is a
+    crashed or expired run and is replaced. Returns None when an active run
+    blocked the mark.
     """
-    row = _upsert_row(
+    return _upsert_row(
         db_session,
         credential_id=credential_id,
         connector_id=connector_id,
@@ -201,9 +208,50 @@ def mark_capability_report_running(
             # caller's transaction began.
             "run_started_at": func.statement_timestamp(),
         },
+        update_where=or_(
+            CredentialCapabilityReportRow.run_status
+            != CapabilityReportRunStatus.RUNNING,
+            # Defensive: no writer leaves RUNNING with a NULL start, but the
+            # schema can represent it and it must read as stale, not active.
+            CredentialCapabilityReportRow.run_started_at.is_(None),
+            CredentialCapabilityReportRow.run_started_at
+            < func.statement_timestamp() - active_within,
+        ),
     )
-    assert row is not None, "An unguarded upsert always returns the row."
-    return row
+
+
+def mark_capability_run_failed(
+    db_session: Session,
+    *,
+    credential_id: int,
+    connector_id: int | None,
+) -> None:
+    """Retires the scope's RUNNING mark to FAILED_TO_RUN; the report survives.
+
+    For runs that verifiably will not happen (the trigger endpoint's failed
+    enqueue): FAILED_TO_RUN is the truth pollers should read, and it does not
+    block re-marking, so the scope stays immediately re-triggerable. Guarded on
+    RUNNING so a completion that raced this write is never clobbered.
+    """
+    stmt = (
+        update(CredentialCapabilityReportRow)
+        .where(
+            CredentialCapabilityReportRow.credential_id == credential_id,
+            (
+                CredentialCapabilityReportRow.connector_id.is_(None)
+                if connector_id is None
+                else CredentialCapabilityReportRow.connector_id == connector_id
+            ),
+            CredentialCapabilityReportRow.run_status
+            == CapabilityReportRunStatus.RUNNING,
+        )
+        .values(
+            run_status=CapabilityReportRunStatus.FAILED_TO_RUN,
+            # Model ``onupdate`` does not apply to bulk updates.
+            time_updated=func.statement_timestamp(),
+        )
+    )
+    db_session.execute(stmt)
 
 
 def get_capability_report_row(

@@ -431,7 +431,7 @@ def monitor_document_set_taskset(
         has_connector_pairs = bool(document_set.connector_credential_pairs)
         # Federated connectors should keep a document set alive even without cc pairs.
         has_federated_connectors = bool(
-            getattr(document_set, "federated_connectors", [])
+            getattr(document_set, "federated_connectors", [])  # ods: ignore[getattr]
         )
 
         if not has_connector_pairs and not has_federated_connectors:

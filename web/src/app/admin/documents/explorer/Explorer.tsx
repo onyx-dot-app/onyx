@@ -1,6 +1,6 @@
 "use client";
 
-import { adminSearch } from "./lib";
+import { adminSearch } from "@/lib/searchFilters/svc";
 import { useState, useEffect, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { OnyxDocument } from "@/lib/search/interfaces";
@@ -11,8 +11,8 @@ import { toast } from "@opal/layouts";
 import { getErrorMsg } from "@/lib/fetchUtils";
 import { ScoreSection } from "../ScoreEditor";
 import { useRouter } from "next/navigation";
-import { useFilters } from "@/lib/hooks";
-import { buildFilters } from "@/lib/search/utils";
+import { useSearchFilters } from "@/lib/searchFilters/hooks";
+import { buildFilters } from "@/lib/searchFilters/utils";
 import { DocumentUpdatedAtBadge } from "@/components/search/DocumentUpdatedAtBadge";
 import { DocumentSetSummary } from "@/lib/types";
 import { SourceIcon } from "@/components/SourceIcon";
@@ -131,7 +131,7 @@ export function Explorer({
   const [results, setResults] = useState<OnyxDocument[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  const filterManager = useFilters();
+  const filterManager = useSearchFilters();
 
   const onSearch = useCallback(
     async (query: string) => {

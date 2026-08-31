@@ -1,6 +1,7 @@
 "use client";
 
 import { memo } from "react";
+import { useTranslations } from "next-intl";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import Text from "@/refresh-components/texts/Text";
@@ -32,6 +33,7 @@ export const KnowledgeAddView = memo(function KnowledgeAddView({
   sourceSelectionCounts,
   vectorDbEnabled,
 }: KnowledgeAddViewProps) {
+  const t = useTranslations("knowledge");
   return (
     <GeneralLayouts.Section
       gap={2}
@@ -60,13 +62,13 @@ export const KnowledgeAddView = memo(function KnowledgeAddView({
               ) : undefined
             }
           >
-            Document Sets
+            {t("addView.documentSets.label")}
           </LineItem>
         )}
 
         <LineItem
           icon={SvgFiles}
-          description="Recent or new uploads"
+          description={t("addView.yourFiles.description")}
           onClick={onNavigateToRecent}
           emphasized={selectedFileIds.length > 0}
           aria-label="knowledge-add-files"
@@ -78,14 +80,14 @@ export const KnowledgeAddView = memo(function KnowledgeAddView({
             ) : undefined
           }
         >
-          Your Files
+          {t("addView.yourFiles.label")}
         </LineItem>
       </GeneralLayouts.Section>
 
       {vectorDbEnabled && connectedSources.length > 0 && (
         <>
           <Text as="p" text03 secondaryBody>
-            Connected Sources
+            {t("addView.connectedSources.label")}
           </Text>
           {connectedSources.map((connectedSource) => {
             const sourceMetadata = getSourceMetadata(connectedSource.source);

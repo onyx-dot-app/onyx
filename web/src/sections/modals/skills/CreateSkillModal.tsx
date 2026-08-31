@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import { Button, Modal, Text } from "@opal/components";
 import { SvgUploadCloud } from "@opal/icons";
 import { inspectSkillBundle } from "@/lib/skills/api";
@@ -35,6 +36,7 @@ export function CreateSkillModalContent({
   preserveDraftOnContinue = false,
   validateDraft,
 }: CreateSkillModalContentProps) {
+  const t = useTranslations("skills.modals");
   const [bundle, setBundle] = useState<PreparedSkillBundle | null>(null);
   const [preparing, setPreparing] = useState(false);
   const [inspecting, setInspecting] = useState(false);
@@ -81,7 +83,7 @@ export function CreateSkillModalContent({
     } catch (error) {
       console.error("Failed to inspect skill bundle", error);
       setErrorMessage(
-        error instanceof Error ? error.message : "Failed to read skill"
+        error instanceof Error ? error.message : t("create.readError.message")
       );
     } finally {
       setInspecting(false);
@@ -94,8 +96,8 @@ export function CreateSkillModalContent({
     <>
       <Modal.Header
         icon={SvgUploadCloud}
-        title="Upload skill"
-        description="Upload a SKILL.md file, ZIP file, or skill folder. You can review and edit its details before saving."
+        title={t("create.header.title")}
+        description={t("create.header.description")}
         onClose={handleClose}
       />
       <Modal.Body>
@@ -116,18 +118,17 @@ export function CreateSkillModalContent({
         />
         <div className="mt-3">
           <Text as="p" font="main-ui-body" color="text-02">
-            File requirements
+            {t("create.requirements.title")}
           </Text>
           <ul className="mt-1 list-disc space-y-1 pl-5">
             <Text as="li" font="secondary-body" color="text-03">
-              SKILL.md must include valid frontmatter with a name and
-              description.
+              {t("create.requirements.frontmatter")}
             </Text>
             <Text as="li" font="secondary-body" color="text-03">
-              ZIP files must contain a SKILL.md file.
+              {t("create.requirements.zip")}
             </Text>
             <Text as="li" font="secondary-body" color="text-03">
-              Upload one skill at a time.
+              {t("create.requirements.singleSkill")}
             </Text>
           </ul>
         </div>
@@ -141,14 +142,16 @@ export function CreateSkillModalContent({
       </Modal.Body>
       <Modal.Footer>
         <Button prominence="secondary" disabled={busy} onClick={handleClose}>
-          Cancel
+          {t("create.cancelButton.label")}
         </Button>
         <Button
           disabled={busy || !bundle}
           onClick={() => void handleContinue()}
           icon={SvgUploadCloud}
         >
-          {inspecting ? "Opening…" : "Review skill"}
+          {inspecting
+            ? t("create.continueButton.loadingLabel")
+            : t("create.continueButton.label")}
         </Button>
       </Modal.Footer>
     </>

@@ -63,6 +63,46 @@
     flex-direction: column;
     align-items: start;
   }
+
+  /* CJK system-font tail for the app font variables (composed into
+     --font-hanken-grotesk / --font-dm-mono in src/app/layout.tsx). Font
+     selection is per-character and first-match-wins, and macOS/Windows
+     preinstall the fonts for every CJK language — so the active locale's
+     fonts must come first or shared Han codepoints render with another
+     language's glyph variants (e.g. Japanese forms on a Chinese UI). The
+     default order serves ja and non-CJK locales. */
+  :root {
+    --font-cjk-sans:
+      "Hiragino Sans", "Yu Gothic UI", "PingFang SC", "Microsoft YaHei",
+      "Apple SD Gothic Neo", "Malgun Gothic";
+  }
+
+  :root:lang(zh) {
+    --font-cjk-sans:
+      "PingFang SC", "Microsoft YaHei", "Hiragino Sans", "Yu Gothic UI",
+      "Apple SD Gothic Neo", "Malgun Gothic";
+  }
+
+  :root:lang(ko) {
+    --font-cjk-sans:
+      "Apple SD Gothic Neo", "Malgun Gothic", "PingFang SC", "Microsoft YaHei",
+      "Hiragino Sans", "Yu Gothic UI";
+  }
+
+  /* CJK line breaking. The server layout sets <html lang> per locale, so
+     :lang() matches the whole document in that UI language.
+     - ja/zh: no word spaces; `strict` applies full kinsoku rules (no line
+       starting with a small kana or closing bracket, etc.).
+     - ko: spaces separate words; `keep-all` breaks at spaces like Latin
+       instead of inside words. */
+  :lang(ja),
+  :lang(zh) {
+    line-break: strict;
+  }
+
+  :lang(ko) {
+    word-break: keep-all;
+  }
 }
 
 /* Markdown chat overrides — placed in `utilities` so they sit in the same

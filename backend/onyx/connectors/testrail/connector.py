@@ -161,7 +161,11 @@ class TestRailConnector(LoadConnector, PollConnector):
             )
             response.raise_for_status()
         except requests.exceptions.HTTPError as e:
-            status = e.response.status_code if getattr(e, "response", None) else None
+            status = (
+                e.response.status_code
+                if getattr(e, "response", None)  # ods: ignore[getattr]
+                else None
+            )
             if status == 401:
                 raise CredentialExpiredError(
                     "Invalid or expired TestRail credentials (HTTP 401)."

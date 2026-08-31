@@ -180,16 +180,20 @@ class HubSpotConnector(LoadConnector, PollConnector):
                 page_kwargs["after"] = after
 
             page = self._call_hubspot(fetch_page, **page_kwargs)
-            results = getattr(page, "results", [])
+            results = getattr(page, "results", [])  # ods: ignore[getattr]
             for result in results:
                 yield result
 
-            paging = getattr(page, "paging", None)
-            next_page = getattr(paging, "next", None) if paging else None
+            paging = getattr(page, "paging", None)  # ods: ignore[getattr]
+            next_page = (
+                getattr(paging, "next", None)  # ods: ignore[getattr]
+                if paging
+                else None
+            )
             if next_page is None:
                 break
 
-            after = getattr(next_page, "after", None)
+            after = getattr(next_page, "after", None)  # ods: ignore[getattr]
             if after is None:
                 break
 
@@ -235,15 +239,19 @@ class HubSpotConnector(LoadConnector, PollConnector):
                 sorts=sorts,
             )
             page = self._call_hubspot(search_fn, public_object_search_request=request)
-            results = getattr(page, "results", [])
+            results = getattr(page, "results", [])  # ods: ignore[getattr]
             for result in results:
                 yield result
 
-            paging = getattr(page, "paging", None)
-            next_page = getattr(paging, "next", None) if paging else None
+            paging = getattr(page, "paging", None)  # ods: ignore[getattr]
+            next_page = (
+                getattr(paging, "next", None)  # ods: ignore[getattr]
+                if paging
+                else None
+            )
             if next_page is None:
                 break
-            after = getattr(next_page, "after", None)
+            after = getattr(next_page, "after", None)  # ods: ignore[getattr]
             if after is None:
                 break
 
@@ -396,7 +404,7 @@ class HubSpotConnector(LoadConnector, PollConnector):
         caller falls back to a dedicated v4 associations API call instead.
         Returns [] when the type simply has no associations.
         """
-        associations = getattr(obj, "associations", None)
+        associations = getattr(obj, "associations", None)  # ods: ignore[getattr]
         if not isinstance(associations, dict):
             return None
         assoc_collection = associations.get(assoc_type)

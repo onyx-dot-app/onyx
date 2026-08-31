@@ -311,6 +311,9 @@ class SupportedLanguage(str, PyEnum):
     PT = "pt"
     FR = "fr"
     DE = "de"
+    JA = "ja"
+    ZH = "zh"
+    KO = "ko"
 
 
 class DefaultAppMode(str, PyEnum):
@@ -540,6 +543,25 @@ class ArtifactType(str, PyEnum):
     IMAGE = "image"
     MARKDOWN = "markdown"
     EXCEL = "excel"
+    PDF = "pdf"
+    CSV = "csv"
+    CODE = "code"
+    DIRECTORY = "directory"
+    AUDIO = "audio"
+    VIDEO = "video"
+    ARCHIVE = "archive"
+    # Generic file type used when no specific type applies.
+    FILE = "file"
+
+
+class ReceiptStatus(str, PyEnum):
+    """Lifecycle of an external-action receipt. The full contract lives on
+    ActionReceipt."""
+
+    PENDING = "pending"
+    CONFIRMED = "confirmed"
+    FAILED = "failed"
+    UNKNOWN = "unknown"
 
 
 class HierarchyNodeType(str, PyEnum):

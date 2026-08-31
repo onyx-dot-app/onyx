@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
+import { useTranslations } from "next-intl";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { KeyedMutator } from "swr";
 import MCPActionCard from "@/sections/actions/MCPActionCard";
@@ -31,6 +32,8 @@ import { useRouter } from "next/navigation";
 import { useAdminMcpServers } from "@/lib/tools/hooks";
 
 export default function MCPPageContent() {
+  const t = useTranslations("actions");
+
   // Data fetching
   const {
     mcpData,
@@ -62,6 +65,11 @@ export default function MCPPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
+  // Server whose `?trigger_fetch=true` was already handled. The effect below
+  // re-runs whenever a dependency changes identity, and the URL param is only
+  // cleared after async work, so this keeps the fetch one-shot.
+  const handledTriggerFetchServerIdRef = useRef<number | null>(null);
+
   useEffect(() => {
     const serverId = searchParams.get("server_id");
     const triggerFetch = searchParams.get("trigger_fetch");
@@ -70,9 +78,11 @@ export default function MCPPageContent() {
     if (
       serverId &&
       triggerFetch === "true" &&
+      handledTriggerFetchServerIdRef.current !== parseInt(serverId) &&
       !fetchingToolsServerIds.includes(parseInt(serverId))
     ) {
       const serverIdInt = parseInt(serverId);
+      handledTriggerFetchServerIdRef.current = serverIdInt;
 
       const handleFetchingTools = async () => {
         try {
@@ -90,15 +100,18 @@ export default function MCPPageContent() {
 
           await refreshMCPServerTools(serverIdInt);
 
-          toast.success("Successfully connected and fetched tools");
+          toast.success(t("mcpPage.toasts.toolsFetched"));
 
           await mutateMcpServers();
         } catch (error) {
           console.error("Failed to fetch tools:", error);
           toast.error(
-            `Failed to fetch tools: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`
+            t("mcpPage.toasts.fetchToolsFailed", {
+              error:
+                error instanceof Error
+                  ? error.message
+                  : t("mcpPage.errors.unknown"),
+            })
           );
           await mutateMcpServers();
         }
@@ -112,16 +125,22 @@ export default function MCPPageContent() {
     fetchingToolsServerIds,
     mutateMcpServers,
     setServerToExpand,
+    t,
   ]);
 
   // Track fetching tools server IDs
   useEffect(() => {
-    if (mcpServers) {
-      const fetchingIds = mcpServers
-        .filter((server) => server.status === MCPServerStatus.FETCHING_TOOLS)
-        .map((server) => server.id);
-      setFetchingToolsServerIds(fetchingIds);
-    }
+    const fetchingIds = mcpServers
+      .filter((server) => server.status === MCPServerStatus.FETCHING_TOOLS)
+      .map((server) => server.id);
+    // Keep the previous array when the ids are unchanged so effects that
+    // depend on it do not re-run for a new identity with the same contents.
+    setFetchingToolsServerIds((prev) =>
+      prev.length === fetchingIds.length &&
+      prev.every((id, index) => id === fetchingIds[index])
+        ? prev
+        : fetchingIds
+    );
   }, [mcpServers]);
 
   // Track if any modal is open to manage the shared overlay
@@ -171,7 +190,7 @@ export default function MCPPageContent() {
         MCPServerStatus.DISCONNECTED
       );
 
-      toast.success("MCP Server disconnected successfully");
+      toast.success(t("mcpPage.toasts.serverDisconnected"));
 
       await mutateMcpServers();
       disconnectModal.toggle(false);
@@ -181,12 +200,12 @@ export default function MCPPageContent() {
       toast.error(
         error instanceof Error
           ? error.message
-          : "Failed to disconnect MCP Server"
+          : t("mcpPage.toasts.disconnectFailed")
       );
     } finally {
       setIsDisconnecting(false);
     }
-  }, [activeServer, mutateMcpServers, disconnectModal]);
+  }, [activeServer, mutateMcpServers, disconnectModal, t]);
 
   const handleConfirmDisconnectAndDelete = useCallback(async () => {
     if (!activeServer) return;
@@ -195,7 +214,7 @@ export default function MCPPageContent() {
     try {
       await deleteMCPServer(activeServer.id);
 
-      toast.success("MCP Server deleted successfully");
+      toast.success(t("mcpPage.toasts.serverDeleted"));
 
       await mutateMcpServers();
       disconnectModal.toggle(false);
@@ -203,12 +222,14 @@ export default function MCPPageContent() {
     } catch (error) {
       console.error("Error deleting server:", error);
       toast.error(
-        error instanceof Error ? error.message : "Failed to delete MCP Server"
+        error instanceof Error
+          ? error.message
+          : t("mcpPage.toasts.deleteFailed")
       );
     } finally {
       setIsDisconnecting(false);
     }
-  }, [activeServer, mutateMcpServers, disconnectModal]);
+  }, [activeServer, mutateMcpServers, disconnectModal, t]);
 
   const openManageServerModal = useCallback(
     (serverId: number) => {
@@ -240,17 +261,19 @@ export default function MCPPageContent() {
       try {
         await deleteMCPServer(serverId);
 
-        toast.success("MCP Server deleted successfully");
+        toast.success(t("mcpPage.toasts.serverDeleted"));
 
         await mutateMcpServers();
       } catch (error) {
         console.error("Error deleting server:", error);
         toast.error(
-          error instanceof Error ? error.message : "Failed to delete MCP Server"
+          error instanceof Error
+            ? error.message
+            : t("mcpPage.toasts.deleteFailed")
         );
       }
     },
-    [mutateMcpServers]
+    [mutateMcpServers, t]
   );
 
   const handleAuthenticate = useCallback(
@@ -279,20 +302,23 @@ export default function MCPPageContent() {
 
         await refreshMCPServerTools(serverId);
 
-        toast.success("Successfully connected and fetched tools");
+        toast.success(t("mcpPage.toasts.toolsFetched"));
 
         await mutateMcpServers();
       } catch (error) {
         console.error("Failed to fetch tools:", error);
         toast.error(
-          `Failed to fetch tools: ${
-            error instanceof Error ? error.message : "Unknown error"
-          }`
+          t("mcpPage.toasts.fetchToolsFailed", {
+            error:
+              error instanceof Error
+                ? error.message
+                : t("mcpPage.errors.unknown"),
+          })
         );
         await mutateMcpServers();
       }
     },
-    [fetchingToolsServerIds, mutateMcpServers, setServerToExpand]
+    [fetchingToolsServerIds, mutateMcpServers, setServerToExpand, t]
   );
 
   const handleReconnect = useCallback(
@@ -300,7 +326,7 @@ export default function MCPPageContent() {
       try {
         await updateMCPServerStatus(serverId, MCPServerStatus.CONNECTED);
 
-        toast.success("MCP Server reconnected successfully");
+        toast.success(t("mcpPage.toasts.serverReconnected"));
 
         await mutateMcpServers();
       } catch (error) {
@@ -308,11 +334,11 @@ export default function MCPPageContent() {
         toast.error(
           error instanceof Error
             ? error.message
-            : "Failed to reconnect MCP Server"
+            : t("mcpPage.toasts.reconnectFailed")
         );
       }
     },
-    [mutateMcpServers]
+    [mutateMcpServers, t]
   );
 
   const handleToolToggle = useCallback(
@@ -339,7 +365,11 @@ export default function MCPPageContent() {
         // Revalidate to get fresh data from server
         await mutateServerTools();
 
-        toast.success(`Tool ${enabled ? "enabled" : "disabled"} successfully`);
+        toast.success(
+          enabled
+            ? t("mcpPage.toasts.toolEnabled")
+            : t("mcpPage.toasts.toolDisabled")
+        );
       } catch (error) {
         console.error("Error toggling tool:", error);
 
@@ -347,11 +377,13 @@ export default function MCPPageContent() {
         await mutateServerTools();
 
         toast.error(
-          error instanceof Error ? error.message : "Failed to update tool"
+          error instanceof Error
+            ? error.message
+            : t("mcpPage.toasts.toolUpdateFailed")
         );
       }
     },
-    []
+    [t]
   );
 
   const handleRefreshTools = useCallback(
@@ -369,15 +401,17 @@ export default function MCPPageContent() {
         // Also refresh the servers list to update tool counts
         await mutateMcpServers();
 
-        toast.success("Tools refreshed successfully");
+        toast.success(t("mcpPage.toasts.toolsRefreshed"));
       } catch (error) {
         console.error("Error refreshing tools:", error);
         toast.error(
-          error instanceof Error ? error.message : "Failed to refresh tools"
+          error instanceof Error
+            ? error.message
+            : t("mcpPage.toasts.refreshToolsFailed")
         );
       }
     },
-    [mutateMcpServers]
+    [mutateMcpServers, t]
   );
 
   const handleUpdateToolsStatus = useCallback(
@@ -389,7 +423,7 @@ export default function MCPPageContent() {
     ) => {
       try {
         if (toolIds.length === 0) {
-          toast.info("No tools to disable");
+          toast.info(t("mcpPage.toasts.noToolsToDisable"));
           return;
         }
 
@@ -410,9 +444,9 @@ export default function MCPPageContent() {
         await mutateServerTools();
 
         toast.success(
-          `${result.updated_count} tool${
-            result.updated_count !== 1 ? "s" : ""
-          } ${enabled ? "enabled" : "disabled"} successfully`
+          enabled
+            ? t("mcpPage.toasts.toolsEnabled", { count: result.updated_count })
+            : t("mcpPage.toasts.toolsDisabled", { count: result.updated_count })
         );
       } catch (error) {
         console.error(
@@ -426,11 +460,13 @@ export default function MCPPageContent() {
         toast.error(
           error instanceof Error
             ? error.message
-            : `Failed to ${enabled ? "enable" : "disable"} all tools`
+            : enabled
+              ? t("mcpPage.toasts.enableAllFailed")
+              : t("mcpPage.toasts.disableAllFailed")
         );
       }
     },
-    []
+    [t]
   );
 
   const onServerCreated = useCallback(
@@ -450,17 +486,19 @@ export default function MCPPageContent() {
     async (serverId: number, newName: string) => {
       try {
         await updateMCPServer(serverId, { name: newName });
-        toast.success("MCP Server renamed successfully");
+        toast.success(t("mcpPage.toasts.serverRenamed"));
         await mutateMcpServers();
       } catch (error) {
         console.error("Error renaming server:", error);
         toast.error(
-          error instanceof Error ? error.message : "Failed to rename MCP Server"
+          error instanceof Error
+            ? error.message
+            : t("mcpPage.toasts.renameFailed")
         );
         throw error; // Re-throw so ButtonRenaming can handle it
       }
     },
-    [mutateMcpServers]
+    [mutateMcpServers, t]
   );
 
   // Filter servers based on search query
@@ -493,8 +531,8 @@ export default function MCPPageContent() {
           searchQuery={searchQuery}
           onSearchQueryChange={setSearchQuery}
           onAction={handleAddServer}
-          actionLabel="Add MCP Server"
-          emptyStateText="Connect MCP server to add custom actions."
+          actionLabel={t("mcpPage.addButton.label")}
+          emptyStateText={t("mcpPage.empty.description")}
         />
       </div>
 

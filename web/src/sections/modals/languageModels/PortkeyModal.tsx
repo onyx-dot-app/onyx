@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useEffect, useRef } from "react";
 import { markdown } from "@opal/utils";
 import { useSWRConfig } from "swr";
@@ -51,23 +52,28 @@ function defaultBaseForMode(mode: PortkeyApiMode): string {
     : DEFAULT_API_BASE_OPENAI;
 }
 
-const API_MODE_TABS: {
-  value: PortkeyApiMode;
-  title: string;
-  subtitle: string;
-}[] = [
+/** Message keys under the `admin.languageModels.modals` namespace. */
+const API_MODE_TABS = [
   {
     value: "chat_completions",
-    title: "Chat Completions API",
-    subtitle: "OpenAI-compatible",
+    titleKey: "portkey.apiMode.chatCompletions.label",
+    subtitleKey: "portkey.apiMode.chatCompletions.caption",
   },
-  { value: "responses", title: "Responses API", subtitle: "OpenAI-compatible" },
+  {
+    value: "responses",
+    titleKey: "portkey.apiMode.responses.label",
+    subtitleKey: "portkey.apiMode.responses.caption",
+  },
   {
     value: "messages",
-    title: "Messages API",
-    subtitle: "Anthropic-compatible",
+    titleKey: "portkey.apiMode.messages.label",
+    subtitleKey: "portkey.apiMode.messages.caption",
   },
-];
+] as const satisfies readonly {
+  value: PortkeyApiMode;
+  titleKey: string;
+  subtitleKey: string;
+}[];
 
 interface PortkeyModalValues extends BaseLLMFormValues {
   api_key: string;
@@ -83,6 +89,7 @@ function PortkeyModalInternals({
   existingLlmProvider,
   isOnboarding,
 }: PortkeyModalInternalsProps) {
+  const t = useTranslations("admin.languageModels.modals");
   const formikProps = useFormikContext<PortkeyModalValues>();
   const { setFieldValue, setValues, values } = formikProps;
 
@@ -144,10 +151,10 @@ function PortkeyModalInternals({
             <Tabs.Trigger key={tab.value} value={tab.value}>
               <div className="flex flex-col items-start">
                 <Text font="main-ui-action" color="inherit">
-                  {tab.title}
+                  {t(tab.titleKey)}
                 </Text>
                 <Text font="secondary-body" color="text-03">
-                  {tab.subtitle}
+                  {t(tab.subtitleKey)}
                 </Text>
               </div>
             </Tabs.Trigger>
@@ -156,16 +163,16 @@ function PortkeyModalInternals({
       </Tabs>
 
       <APIBaseField
-        subDescription="Use Portkey's base URL or paste your self-hosted gateway base URL."
-        placeholder="Your Portkey gateway base URL"
+        subDescription={t("portkey.apiBaseField.description")}
+        placeholder={t("portkey.apiBaseField.placeholder")}
         rightChildren={
           isBaseDefault ? undefined : (
             <Button
               icon={SvgHistory}
               prominence="tertiary"
               size="xs"
-              tooltip="Restore Default"
-              aria-label="Restore default API base URL"
+              tooltip={t("portkey.restoreDefaultButton.tooltip")}
+              aria-label={t("portkey.restoreDefaultButton.ariaLabel")}
               onClick={() => setFieldValue("api_base", modeDefaultBase)}
             />
           )
@@ -173,9 +180,7 @@ function PortkeyModalInternals({
       />
 
       <APIKeyField
-        subDescription={markdown(
-          "Paste your API key from [Portkey](https://portkey.ai/) to access your models."
-        )}
+        subDescription={markdown(t("portkey.apiKeyField.description"))}
       />
 
       {!isOnboarding && (
@@ -189,7 +194,7 @@ function PortkeyModalInternals({
       <ModelSelectionField
         shouldShowAutoUpdateToggle={false}
         onRefetch={isFetchDisabled ? undefined : handleFetchModels}
-        emptyMessage="No models available. Provide a valid base URL and key."
+        emptyMessage={t("portkey.models.empty.title")}
       />
 
       {!isOnboarding && (
@@ -210,6 +215,7 @@ export default function PortkeyModal({
   onSuccess,
   analyticsSource,
 }: LLMProviderFormProps) {
+  const t = useTranslations("admin.languageModels.modals");
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
 
@@ -236,7 +242,7 @@ export default function PortkeyModal({
     initialValues.name = DEFAULT_DISPLAY_NAME;
   }
 
-  const validationSchema = buildValidationSchema(isOnboarding, {
+  const validationSchema = buildValidationSchema(t, isOnboarding, {
     apiBase: true,
     apiKey: true,
   });
@@ -246,11 +252,12 @@ export default function PortkeyModal({
       providerName={LLMProviderName.PORTKEY}
       llmProvider={existingLlmProvider}
       onClose={onClose}
-      description="Connect to your Portkey gateway and set up compatible models."
+      description={t("portkey.description")}
       initialValues={initialValues}
       validationSchema={validationSchema}
       onSubmit={async (values, { setSubmitting, setStatus }) => {
         await submitProvider({
+          t,
           analyticsSource:
             analyticsSource ??
             (isOnboarding
@@ -271,8 +278,8 @@ export default function PortkeyModal({
               await refreshLlmProviderCaches(mutate);
               toast.success(
                 existingLlmProvider
-                  ? "Provider updated successfully!"
-                  : "Provider enabled successfully!"
+                  ? t("toasts.providerUpdated")
+                  : t("toasts.providerEnabled")
               );
             }
           },

@@ -31,12 +31,14 @@ type embeddingProviderResource struct {
 }
 
 type embeddingProviderResourceModel struct {
-	ID             types.String `tfsdk:"id"`
-	ProviderType   types.String `tfsdk:"provider_type"`
-	APIKey         types.String `tfsdk:"api_key"`
-	APIURL         types.String `tfsdk:"api_url"`
-	APIVersion     types.String `tfsdk:"api_version"`
-	DeploymentName types.String `tfsdk:"deployment_name"`
+	ID              types.String `tfsdk:"id"`
+	ProviderType    types.String `tfsdk:"provider_type"`
+	APIKey          types.String `tfsdk:"api_key"`
+	APIKeyWO        types.String `tfsdk:"api_key_wo"`
+	APIKeyWOVersion types.Int64  `tfsdk:"api_key_wo_version"`
+	APIURL          types.String `tfsdk:"api_url"`
+	APIVersion      types.String `tfsdk:"api_version"`
+	DeploymentName  types.String `tfsdk:"deployment_name"`
 }
 
 func (r *embeddingProviderResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -72,8 +74,21 @@ func (r *embeddingProviderResource) Schema(_ context.Context, _ resource.SchemaR
 				Optional:  true,
 				Sensitive: true,
 				MarkdownDescription: "Provider API key. Keep this set in configuration: because the API " +
-					"has no keep-stored-key flag, an update applied without it clears the stored key.",
+					"has no keep-stored-key flag, an update applied without it clears the stored key." +
+					writeOnlyDescription("api_key"),
 			},
+			"api_key_wo": schema.StringAttribute{
+				Optional:  true,
+				Sensitive: true,
+				WriteOnly: true,
+				MarkdownDescription: "Provider API key, held only in configuration. Terraform sends it on " +
+					"every apply and stores nothing, so the key never reaches state. Pair it with " +
+					"`api_key_wo_version` to rotate it. Needs Terraform 1.11 or later.",
+				Validators: []validator.String{
+					stringvalidator.ConflictsWith(path.MatchRoot("api_key")),
+				},
+			},
+			"api_key_wo_version": writeOnlyVersionAttribute("api_key_wo"),
 			"api_url": schema.StringAttribute{
 				Optional:            true,
 				MarkdownDescription: "Custom API URL (LiteLLM proxy, Azure).",
@@ -96,10 +111,10 @@ func (r *embeddingProviderResource) Configure(_ context.Context, req resource.Co
 
 // upsertFromPlan builds the full-replace body from the plan only — a
 // GET-derived (masked) api_key written back would corrupt the stored key.
-func upsertFromPlan(plan embeddingProviderResourceModel) client.CloudEmbeddingProvider {
+func upsertFromPlan(plan embeddingProviderResourceModel, apiKey types.String) client.CloudEmbeddingProvider {
 	return client.CloudEmbeddingProvider{
 		ProviderType:   plan.ProviderType.ValueString(),
-		APIKey:         plan.APIKey.ValueStringPointer(),
+		APIKey:         apiKey.ValueStringPointer(),
 		APIURL:         plan.APIURL.ValueStringPointer(),
 		APIVersion:     plan.APIVersion.ValueStringPointer(),
 		DeploymentName: plan.DeploymentName.ValueStringPointer(),
@@ -113,7 +128,12 @@ func (r *embeddingProviderResource) Create(ctx context.Context, req resource.Cre
 		return
 	}
 
-	if _, err := r.client.UpsertEmbeddingProvider(ctx, upsertFromPlan(plan)); err != nil {
+	apiKey := resolveWriteOnly(ctx, req.Config, path.Root("api_key_wo"), plan.APIKey, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if _, err := r.client.UpsertEmbeddingProvider(ctx, upsertFromPlan(plan, apiKey)); err != nil {
 		resp.Diagnostics.AddError("Failed to create Onyx embedding provider", err.Error())
 		return
 	}
@@ -156,16 +176,22 @@ func (r *embeddingProviderResource) Update(ctx context.Context, req resource.Upd
 		return
 	}
 
-	if plan.APIKey.IsNull() && state.APIKey.IsNull() {
+	apiKey := resolveWriteOnly(ctx, req.Config, path.Root("api_key_wo"), plan.APIKey, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if apiKey.IsNull() && state.APIKey.IsNull() {
 		// The upsert below overwrites the stored key with null; warn first.
 		resp.Diagnostics.AddWarning(
 			"Stored embedding API key may be cleared",
-			"onyx_embedding_provider has no api_key in configuration, and the Onyx API replaces all "+
-				"fields on update — any key stored server-side is now cleared. Set api_key to manage it.",
+			"onyx_embedding_provider has no api_key or api_key_wo in configuration, and the Onyx API "+
+				"replaces all fields on update — any key stored server-side is now cleared. Set one of "+
+				"them to manage it.",
 		)
 	}
 
-	if _, err := r.client.UpsertEmbeddingProvider(ctx, upsertFromPlan(plan)); err != nil {
+	if _, err := r.client.UpsertEmbeddingProvider(ctx, upsertFromPlan(plan, apiKey)); err != nil {
 		resp.Diagnostics.AddError("Failed to update Onyx embedding provider", err.Error())
 		return
 	}

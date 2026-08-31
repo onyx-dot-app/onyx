@@ -64,11 +64,11 @@ import {
 } from "@opal/icons";
 import { useIsSearchModeAvailable, useSettings } from "@/lib/settings/hooks";
 import type { AppMode } from "@/providers/QueryControllerProvider";
-import useAppFocus from "@/hooks/useAppFocus";
+import { useAppDocumentTitle, useCustomFooterContent } from "@/lib/app/hooks";
+import { useAppPosition } from "@/lib/position/hooks";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
-import { useAppDocumentTitle, useCustomFooterContent } from "@/lib/app/hooks";
 import { useFullWidthChat } from "@/providers/FullWidthChatProvider";
 import { useIncognito } from "@/providers/IncognitoProvider";
 
@@ -77,7 +77,7 @@ import { useIncognito } from "@/providers/IncognitoProvider";
 // ---------------------------------------------------------------------------
 
 function Header() {
-  const appFocus = useAppFocus();
+  const appPosition = useAppPosition();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const { state, setAppMode } = useQueryController();
   const isSearchModeAvailable = useIsSearchModeAvailable();
@@ -122,10 +122,12 @@ function Header() {
 
   const customHeaderContent = settings.enterprise?.custom_header_content;
   const pageWithHeaderContent =
-    appFocus.isChat() || appFocus.isNewSession() || appFocus.isAgent();
+    appPosition.isChat() || appPosition.isNewSession() || appPosition.isAgent();
 
   const effectiveMode: AppMode =
-    appFocus.isNewSession() && state.phase === "idle" ? state.appMode : "chat";
+    appPosition.isNewSession() && state.phase === "idle"
+      ? state.appMode
+      : "chat";
 
   const availableProjects = useMemo(() => {
     if (!projects) return [];
@@ -401,12 +403,12 @@ function Header() {
         </ConfirmationModalLayout>
       )}
 
-      {(appFocus.isChat() ||
-        appFocus.isNewSession() ||
-        appFocus.isAgent() ||
-        appFocus.isProject() ||
+      {(appPosition.isChat() ||
+        appPosition.isNewSession() ||
+        appPosition.isAgent() ||
+        appPosition.isProject() ||
         isMobile) &&
-        !appFocus.isSharedChat() && (
+        !appPosition.isSharedChat() && (
           <RootLayout.Header>
             <div className="w-full h-full flex flex-row flex-wrap justify-center items-start p-2 sm:px-4">
               {/*
@@ -424,7 +426,7 @@ function Header() {
                   />
                 )}
                 {incognitoEnabled &&
-                  (appFocus.isChat() || appFocus.isNewSession()) && (
+                  (appPosition.isChat() || appPosition.isNewSession()) && (
                     <OpenButton
                       disabled
                       icon={SvgEyeOff}
@@ -437,7 +439,7 @@ function Header() {
                 {businessTier &&
                   isSearchModeAvailable &&
                   !incognitoEnabled &&
-                  appFocus.isNewSession() &&
+                  appPosition.isNewSession() &&
                   state.phase === "idle" && (
                     <Popover
                       open={modePopoverOpen}
@@ -517,7 +519,7 @@ function Header() {
           - more-options buttons
         */}
               <div className="flex flex-1 justify-end items-center">
-                {(appFocus.isChat() || appFocus.isNewSession()) && (
+                {(appPosition.isChat() || appPosition.isNewSession()) && (
                   <FrostedDiv className="flex shrink flex-row items-center">
                     {incognitoAvailable && !incognitoEnabled && (
                       <Button
@@ -556,7 +558,7 @@ function Header() {
                     )}
                   </FrostedDiv>
                 )}
-                {appFocus.isChat() &&
+                {appPosition.isChat() &&
                   currentChatSession &&
                   !incognitoEnabled && (
                     <FrostedDiv className="flex shrink flex-row items-center">
@@ -606,7 +608,7 @@ function Header() {
 // ---------------------------------------------------------------------------
 
 function Footer() {
-  const appFocus = useAppFocus();
+  const appPosition = useAppPosition();
   const customFooterContent = useCustomFooterContent();
 
   return (
@@ -624,11 +626,11 @@ function Footer() {
           // To fix this, `AppPage.tsx` uses animated spacer divs around `AppInputBar` to
           // give the shadow breathing room. However, that extra space adds visible gap
           // between the input and the Footer. To compensate, we remove the Footer's top
-          // padding when `appFocus.isChat()`.
+          // padding when `appPosition.isChat()`.
           //
           // There is a corresponding note inside `AppInputBar.tsx` and `AppPage.tsx`
           // explaining this. Please refer to those notes as well.
-          appFocus.isChat() ? "pb-2" : "py-2"
+          appPosition.isChat() ? "pb-2" : "py-2"
         )}
       >
         <Text font="secondary-action" color="text-03">
@@ -650,7 +652,7 @@ interface AppChromeProps {
 export default function AppChrome({ children }: AppChromeProps) {
   const [rightPanel, setRightPanel] = useState<ReactNode>(null);
 
-  const appFocus = useAppFocus();
+  const appPosition = useAppPosition();
   useAppDocumentTitle();
 
   const { hasBackground, appBackgroundUrl } = useAppBackground();
@@ -658,7 +660,7 @@ export default function AppChrome({ children }: AppChromeProps) {
   const { isSafari } = useBrowserInfo();
   const isLightMode = resolvedTheme === "light";
   const showBackground =
-    hasBackground && (appFocus.isChat() || appFocus.isNewSession());
+    hasBackground && (appPosition.isChat() || appPosition.isNewSession());
 
   const horizontalBlurMask = `linear-gradient(
     to right,
@@ -731,7 +733,7 @@ export default function AppChrome({ children }: AppChromeProps) {
               />
             )}
             {/* Effect 2 — Semi-transparent overlay for readability when background is set */}
-            {showBackground && appFocus.isChat() && (
+            {showBackground && appPosition.isChat() && (
               <>
                 <div className="absolute z-[-1] inset-0 backdrop-blur-[1px] pointer-events-none" />
                 {isSafari ? (

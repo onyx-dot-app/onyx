@@ -32,7 +32,7 @@ import { MinimalAgent } from "@/lib/agents/types";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { SEARCH_TOOL_ID } from "@/lib/tools/constants";
 import { OnyxDocument } from "@/lib/search/interfaces";
-import { FilterManager, LlmDescriptor, LlmManager } from "@/lib/hooks";
+import { LlmDescriptor, LlmManager } from "@/lib/hooks";
 import {
   BackendMessage,
   ChatFileType,
@@ -59,7 +59,7 @@ import {
   CurrentMessageFIFO,
   updateCurrentMessageFIFO,
 } from "@/app/app/services/currentMessageFIFO";
-import { buildFilters } from "@/lib/search/utils";
+import { buildFilters } from "@/lib/searchFilters/utils";
 import { toast } from "@opal/layouts";
 import {
   ReadonlyURLSearchParams,
@@ -79,12 +79,11 @@ import {
 } from "@/app/app/stores/useChatSessionStore";
 import { Packet, MessageStart } from "@/app/app/services/streamingModels";
 import { SelectedModel } from "@/sections/model-selector/MultiModelSelector";
-import { useAgentPreferences } from "@/lib/agents/hooks";
-import { useForcedTools } from "@/lib/hooks/useForcedTools";
+import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
 import { ProjectFile, useProjectsContext } from "@/lib/projects/providers";
 import { useIncognito } from "@/providers/IncognitoProvider";
-import { useAppParams } from "@/hooks/appNavigation";
 import { projectFilesToFileDescriptors } from "@/lib/projects/utils";
+import { useSharedSearchFilters } from "@/lib/searchFilters/providers";
 
 const SYSTEM_MESSAGE_ID = -3;
 
@@ -116,8 +115,9 @@ interface RegenerationRequest {
 }
 
 interface UseChatControllerProps {
-  filterManager: FilterManager;
   llmManager: LlmManager;
+  /** Owned by the surface, so the input bar and this read the same one. */
+  toolConfiguration: ToolConfigurationHandle;
   activeAgent: MinimalAgent | undefined;
   availableAgents: MinimalAgent[];
   existingChatSessionId: string | null;
@@ -140,22 +140,20 @@ async function stopChatSession(chatSessionId: string): Promise<void> {
 }
 
 export default function useChatController({
-  filterManager,
   llmManager,
+  toolConfiguration,
   availableAgents,
   activeAgent,
   existingChatSessionId,
   selectedDocuments,
   resetInputBar,
 }: UseChatControllerProps) {
+  const searchFilters = useSharedSearchFilters();
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const params = useAppParams();
   const { refreshChatSessions, addPendingChatSession } = useChatSessions();
   const { pinnedAgents, togglePinnedAgent } = usePinnedAgents();
-  const { agentPreferences } = useAgentPreferences();
-  const { forcedToolIds } = useForcedTools();
   const { fetchProjects, setCurrentMessageFiles, beginUpload } =
     useProjectsContext();
   const { incognitoEnabledRef, incognitoSessionId } = useIncognito();
@@ -398,7 +396,7 @@ export default function useChatController({
       const incognito = incognitoEnabledRef.current ?? false;
       const isMultiModel =
         !regenerationRequest && (selectedModels?.length ?? 0) >= 2;
-      const projectId = params(SEARCH_PARAM_NAMES.PROJECT_ID);
+      const projectId = searchParams.get(SEARCH_PARAM_NAMES.PROJECT_ID);
       {
         const params = new URLSearchParams(searchParams?.toString() || "");
         if (params.has(SEARCH_PARAM_NAMES.PROJECT_ID)) {
@@ -538,6 +536,10 @@ export default function useChatController({
           incognito,
           incognito ? incognitoSessionId : null
         );
+
+        // This send is what created the chat, so the configuration chosen for
+        // it moves onto the session before the id reaches the composer.
+        toolConfiguration.handOffTo(currChatSessionId);
 
         // Optimistically add the new chat session to the sidebar cache so
         // "New Chat" appears immediately. Incognito sessions are excluded: they
@@ -1018,22 +1020,27 @@ export default function useChatController({
         const lastSuccessfulMessageId = getLastSuccessfulMessageId(
           currentMessageTreeLocal
         );
-        const disabledToolIds = activeAgent
-          ? agentPreferences?.[activeAgent?.id]?.disabled_tool_ids
-          : undefined;
 
         // Find the search tool's numeric ID for forceSearch
         const searchToolNumericId = activeAgent?.tools.find(
           (tool) => tool.in_code_tool_id === SEARCH_TOOL_ID
         )?.id;
 
-        // Determine the forced tool ID:
-        // 1. If forceSearch is true, use the search tool's numeric ID
-        // 2. Otherwise, use the first forced tool ID from the forcedToolIds array
-        const effectiveForcedToolId = forceSearch
+        // The tool this message is made to use: the search tool when the
+        // caller asked for a search, otherwise whatever the chat has forced.
+        //
+        // Only if the agent still has it. A configuration outlives the agent
+        // being edited, and a chat can be handed one that named a tool this
+        // agent does not have; the backend raises on a forced tool it cannot
+        // find, so an id nobody can act on would fail the whole message rather
+        // than the model simply choosing for itself.
+        const requestedForcedToolId = forceSearch
           ? (searchToolNumericId ?? null)
-          : forcedToolIds.length > 0
-            ? forcedToolIds[0]
+          : toolConfiguration.forcedToolId;
+        const effectiveForcedToolId =
+          requestedForcedToolId !== null &&
+          activeAgent?.tools.some((tool) => tool.id === requestedForcedToolId)
+            ? requestedForcedToolId
             : null;
 
         // Determine origin for telemetry tracking (also used for frontend PostHog tracking below)
@@ -1057,10 +1064,10 @@ export default function useChatController({
           })(),
           chatSessionId: currChatSessionId,
           filters: buildFilters(
-            filterManager.selectedSources,
-            filterManager.selectedDocumentSets,
-            filterManager.timeRange,
-            filterManager.selectedTags
+            searchFilters.selectedSources,
+            searchFilters.selectedDocumentSets,
+            searchFilters.timeRange,
+            searchFilters.selectedTags
           ),
           modelProvider: isMultiModel
             ? undefined
@@ -1082,10 +1089,18 @@ export default function useChatController({
             ? llmManager.temperature
             : undefined,
           deepResearch,
+          // Only sent when something is actually disabled. To the backend an
+          // explicit list is a whitelist, and this one is built from the tools
+          // the frontend can see — which excludes those marked
+          // `expose_to_frontend=False`. Sending it always would quietly
+          // withhold tools nobody chose to disable.
           enabledToolIds:
-            disabledToolIds && activeAgent
+            activeAgent && toolConfiguration.disabledToolIds.length > 0
               ? activeAgent.tools
-                  .filter((tool) => !disabledToolIds?.includes(tool.id))
+                  .filter(
+                    (tool) =>
+                      !toolConfiguration.disabledToolIds.includes(tool.id)
+                  )
                   .map((tool) => tool.id)
               : undefined,
           forcedToolId: effectiveForcedToolId,
@@ -1468,10 +1483,10 @@ export default function useChatController({
     },
     [
       // Narrow to stable fields from managers to avoid re-creation
-      filterManager.selectedSources,
-      filterManager.selectedDocumentSets,
-      filterManager.selectedTags,
-      filterManager.timeRange,
+      searchFilters.selectedSources,
+      searchFilters.selectedDocumentSets,
+      searchFilters.selectedTags,
+      searchFilters.timeRange,
       llmManager.currentLlm,
       llmManager.temperature,
       llmManager.hasTemperatureOverride,
@@ -1485,10 +1500,9 @@ export default function useChatController({
       updateSelectedNodeForDocDisplay,
       currentMessageTree,
       currentChatState,
-      // Ensure latest forced tools are used when submitting
-      forcedToolIds,
+      // Ensure the configuration the chat was given is what gets sent
+      toolConfiguration,
       // Keep tool preference-derived values fresh
-      agentPreferences,
       fetchProjects,
       // For auto-pinning agents
       pinnedAgents,
@@ -1526,7 +1540,7 @@ export default function useChatController({
       setCurrentMessageFiles((prev) => [...prev, ...uploadedMessageFiles]);
       updateChatStateAction(getCurrentSessionId(), "input");
     },
-    [activeAgent, llmManager, forcedToolIds]
+    [activeAgent, llmManager, toolConfiguration]
   );
 
   useEffect(() => {

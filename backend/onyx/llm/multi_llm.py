@@ -1071,14 +1071,15 @@ class LitellmLLM(LLM):
     def _uses_isolated_client(self) -> bool:
         """Providers whose sync calls need a fresh per-call HTTPHandler instead of
         litellm's shared module_level_client (see threading notes in invoke())."""
-        return (
-            any(
-                is_true_openai_model(self.config.model_provider, name)
-                for name in resolve_model_identity_names(
-                    self.config.model_name, self.config.deployment_name
-                )
+        return any(
+            is_true_openai_model(self.config.model_provider, name)
+            for name in resolve_model_identity_names(
+                self.config.model_name, self.config.deployment_name
             )
-            or self.config.model_provider == LlmProviderNames.ANTHROPIC
+        ) or self.config.model_provider in (
+            LlmProviderNames.ANTHROPIC,
+            LlmProviderNames.BEDROCK,
+            LlmProviderNames.BEDROCK_CONVERSE,
         )
 
     def invoke(
@@ -1117,12 +1118,13 @@ class LitellmLLM(LLM):
         #      corrupt the pool state for other threads
         #    - Each request gets its own fresh httpx.Client via HTTPHandler
         #
-        # 3. WHY ANTHROPIC ALSO GETS AN ISOLATED CLIENT:
+        # 3. WHY ANTHROPIC AND BEDROCK ALSO GET AN ISOLATED CLIENT:
         #    - An abandoned sync stream is finalized by GC, which can fire on a thread
         #      already inside the shared pool's non-reentrant lock and deadlock it,
         #      wedging all later LLM calls (encode/httpcore#996; seen in prod).
-        #    - A per-call client keeps abandoned streams off the shared pool. litellm's
-        #      anthropic handler uses module_level_client only when client is None.
+        #    - A per-call client keeps abandoned streams off the shared pool. The
+        #      litellm anthropic and bedrock handlers both use module_level_client
+        #      only when client is None.
         #
         # 4. PITFALL - is_true_openai_model() CHECK:
         #    - Must use is_true_openai_model() NOT just check model_provider == "openai"

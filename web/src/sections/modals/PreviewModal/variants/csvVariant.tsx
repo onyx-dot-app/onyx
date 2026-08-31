@@ -36,7 +36,10 @@ export const csvVariant: PreviewVariant = {
   headerDescription: (ctx) => {
     if (!ctx.fileContent) return "";
     const { rows } = parseCsv(ctx.fileContent);
-    return `CSV - ${rows.length} rows • ${ctx.fileSize}`;
+    return ctx.t("csv.headerDescription", {
+      fileSize: ctx.fileSize,
+      rowCount: rows.length,
+    });
   },
 
   renderContent: (ctx) => {
@@ -82,8 +85,7 @@ export const csvVariant: PreviewVariant = {
           </TableBody>
         </Table>
         <TextSeparator
-          count={rows.length}
-          text={rows.length === 1 ? "row" : "rows"}
+          text={ctx.t("csv.rowSeparator", { count: rows.length })}
         />
       </Section>
     );
@@ -94,8 +96,10 @@ export const csvVariant: PreviewVariant = {
     const { headers, rows } = parseCsv(ctx.fileContent);
     return (
       <Text text03 mainUiBody className="select-none">
-        {headers.length} {headers.length === 1 ? "column" : "columns"} •{" "}
-        {rows.length} {rows.length === 1 ? "row" : "rows"}
+        {ctx.t("csv.footer", {
+          columnCount: headers.length,
+          rowCount: rows.length,
+        })}
       </Text>
     );
   },
@@ -103,7 +107,7 @@ export const csvVariant: PreviewVariant = {
     <Section flexDirection="row" width="fit">
       <CopyButton
         size="sm"
-        tooltip="Copy content"
+        tooltip={ctx.t("copyButton.tooltip")}
         getCopyText={() => ctx.fileContent}
       />
       <DownloadButton fileUrl={ctx.fileUrl} fileName={ctx.fileName} />

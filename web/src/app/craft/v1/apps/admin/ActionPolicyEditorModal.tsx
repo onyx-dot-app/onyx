@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import useFocusOnMount from "@opal/hooks/useFocusOnMount";
+import { useFocusOnMount } from "@opal/hooks";
 import isEqual from "lodash/isEqual";
 import {
   Button,

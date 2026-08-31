@@ -2,6 +2,7 @@
 
 import { ToolSnapshot } from "@/lib/tools/types";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import { useCreateModal } from "@opal/components";
 import OpenAPIAuthenticationModal, {
   AuthMethod,
@@ -19,6 +20,7 @@ import ActionCardSkeleton from "./skeleton/ActionCardSkeleton";
 import useOpenApiTools from "@/hooks/useOpenApiTools";
 
 export default function OpenApiPageContent() {
+  const t = useTranslations("actions");
   const {
     openApiTools,
     mutateOpenApiTools,
@@ -113,9 +115,9 @@ export default function OpenApiPageContent() {
           }
 
           toast.success(
-            `${selectedTool.name} authentication ${
-              selectedTool.oauth_config_id ? "updated" : "saved"
-            } successfully.`
+            selectedTool.oauth_config_id
+              ? t("openApiPage.toasts.authUpdated", { name: selectedTool.name })
+              : t("openApiPage.toasts.authSaved", { name: selectedTool.name })
           );
         } else if (values.authMethod === "custom-header") {
           const customHeaders = values.headers
@@ -136,7 +138,9 @@ export default function OpenApiPageContent() {
           }
 
           toast.success(
-            `${selectedTool.name} authentication headers saved successfully.`
+            t("openApiPage.toasts.authHeadersSaved", {
+              name: selectedTool.name,
+            })
           );
         } else if (values.authMethod === "pt-oauth") {
           const response = await updateCustomTool(selectedTool.id, {
@@ -148,7 +152,9 @@ export default function OpenApiPageContent() {
             throw new Error(response.error);
           }
           toast.success(
-            `${selectedTool.name} authentication passthrough saved successfully.`
+            t("openApiPage.toasts.authPassthroughSaved", {
+              name: selectedTool.name,
+            })
           );
         }
 
@@ -158,12 +164,12 @@ export default function OpenApiPageContent() {
         const message =
           error instanceof Error
             ? error.message
-            : "Failed to save authentication settings.";
+            : t("openApiPage.toasts.authSaveFailed");
         toast.error(message);
         throw error;
       }
     },
-    [selectedTool, mutateOpenApiTools]
+    [selectedTool, mutateOpenApiTools, t]
   );
 
   const handleManageTool = useCallback(
@@ -187,21 +193,21 @@ export default function OpenApiPageContent() {
       try {
         await updateToolStatus(tool.id, false);
 
-        toast.success(`${tool.name} has been disconnected.`);
+        toast.success(
+          t("openApiPage.toasts.toolDisconnected", { name: tool.name })
+        );
 
         await mutateOpenApiTools();
       } catch (error) {
         const message =
           error instanceof Error
             ? error.message
-            : "Failed to disconnect OpenAPI action.";
+            : t("openApiPage.toasts.disconnectFailed");
         toast.error(message);
-        throw error instanceof Error
-          ? error
-          : new Error("Failed to disconnect OpenAPI action.");
+        throw error instanceof Error ? error : new Error(message);
       }
     },
-    [mutateOpenApiTools]
+    [mutateOpenApiTools, t]
   );
 
   const handleOpenDisconnectModal = useCallback(
@@ -234,24 +240,28 @@ export default function OpenApiPageContent() {
         setIsDeleting(true);
         const response = await deleteCustomTool(tool.id);
         if (response.data) {
-          toast.success(`${tool.name} deleted successfully.`);
+          toast.success(
+            t("openApiPage.toasts.toolDeleted", { name: tool.name })
+          );
           await mutateOpenApiTools();
         } else {
-          throw new Error(response.error || "Failed to delete tool.");
+          throw new Error(
+            response.error || t("openApiPage.toasts.deleteFailed")
+          );
         }
       } catch (error) {
         console.error("Failed to delete OpenAPI tool", error);
         toast.error(
           error instanceof Error
             ? error.message
-            : "An unexpected error occurred while deleting the tool."
+            : t("openApiPage.toasts.deleteUnexpectedError")
         );
         throw error;
       } finally {
         setIsDeleting(false);
       }
     },
-    [mutateOpenApiTools]
+    [mutateOpenApiTools, t]
   );
 
   const handleDeleteToolFromModal = useCallback(async () => {
@@ -291,33 +301,34 @@ export default function OpenApiPageContent() {
         if (response.error) {
           throw new Error(response.error);
         }
-        toast.success("OpenAPI action renamed successfully");
+        toast.success(t("openApiPage.toasts.actionRenamed"));
         await mutateOpenApiTools();
       } catch (error) {
         console.error("Error renaming tool:", error);
         toast.error(
           error instanceof Error
             ? error.message
-            : "Failed to rename OpenAPI action"
+            : t("openApiPage.toasts.renameFailed")
         );
         throw error; // Re-throw so ButtonRenaming can handle it
       }
     },
-    [mutateOpenApiTools]
+    [mutateOpenApiTools, t]
   );
 
   const authenticationModalTitle = useMemo(() => {
     if (!selectedTool) {
-      return "Authenticate OpenAPI Action";
+      return t("openApiPage.authModal.defaultTitle");
     }
     const hasExistingAuth =
       Boolean(selectedTool.oauth_config_id) ||
       Boolean(selectedTool.custom_headers?.length);
-    const prefix = hasExistingAuth
-      ? "Update authentication for"
-      : "Authenticate";
-    return `${prefix} ${selectedTool.name}`;
-  }, [selectedTool]);
+    return hasExistingAuth
+      ? t("openApiPage.authModal.updateTitle", { name: selectedTool.name })
+      : t("openApiPage.authModal.authenticateTitle", {
+          name: selectedTool.name,
+        });
+  }, [selectedTool, t]);
 
   const authenticationDefaultMethod = useMemo<AuthMethod>(() => {
     if (!selectedTool) {
@@ -355,8 +366,8 @@ export default function OpenApiPageContent() {
           searchQuery={searchQuery}
           onSearchQueryChange={setSearchQuery}
           onAction={handleAddAction}
-          actionLabel="Add OpenAPI Action"
-          emptyStateText="Add custom actions from OpenAPI schemas."
+          actionLabel={t("openApiPage.addButton.label")}
+          emptyStateText={t("openApiPage.empty.description")}
         />
       </div>
 

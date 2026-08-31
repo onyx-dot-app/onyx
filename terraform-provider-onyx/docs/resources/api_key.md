@@ -31,8 +31,8 @@ resource "onyx_api_key" "ingest" {
 
 ### Optional
 
-- `name` (String) Display name for the key.
 - `group_ids` (Set of Number) Ids of the user groups the backing service account belongs to. The key resolves the union of those groups' permissions. Omit for a key with no group permissions. This replaces the whole group set on every apply.
+- `name` (String) Display name for the key.
 
 ### Read-Only
 

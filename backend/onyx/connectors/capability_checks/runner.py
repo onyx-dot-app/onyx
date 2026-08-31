@@ -46,6 +46,12 @@ logger = setup_logger()
 # ``CapabilityCheck.timeout_seconds``.
 CAPABILITY_CHECK_TIMEOUT_SECONDS = 600
 
+# Crude ceiling on one run's legitimate wall time: checks run sequentially and
+# no source registers more than a handful, so a RUNNING mark older than this is
+# a crashed or expired run and stops blocking re-triggers. Stuck-run recovery
+# will replace it with a per-scope ceiling derived from the actual checks.
+CAPABILITY_CHECK_RUN_STALENESS_SECONDS = 6 * CAPABILITY_CHECK_TIMEOUT_SECONDS
+
 _SKIP_NEEDS_INSTANCE_MESSAGE = (
     "Requires a connector instance -- will re-run automatically when the "
     "connector is instantiated."
