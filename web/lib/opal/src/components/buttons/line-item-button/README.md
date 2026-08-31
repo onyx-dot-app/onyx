@@ -39,6 +39,7 @@ row's label lines up with an adjacent button. A step outside that set is a type 
 | `target`        | `string`                           | —                | Anchor target (e.g. `"_blank"`)                   |
 | `group`         | `string`                           | —                | Interactive group key                             |
 | `ref`           | `React.Ref<HTMLElement>`           | —                | Forwarded ref                                     |
+| `disabled`      | `boolean`                          | `false`          | Disabled colors; suppresses the row's own click only — nested `rightChildren` stay clickable |
 
 ### Sizing
 

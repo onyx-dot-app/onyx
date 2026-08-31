@@ -19,7 +19,14 @@ type ContentPassthroughProps = DistributiveOmit<
 
 type LineItemButtonOwnProps = Pick<
   InteractiveStatefulProps,
-  "state" | "interaction" | "onClick" | "href" | "target" | "group" | "ref"
+  | "state"
+  | "interaction"
+  | "onClick"
+  | "href"
+  | "target"
+  | "group"
+  | "ref"
+  | "disabled"
 > & {
   /** Interactive select variant. @default "select-light" */
   selectVariant?: "select-light" | "select-heavy";
@@ -89,6 +96,7 @@ function LineItemButton({
   target,
   group,
   ref,
+  disabled,
 
   // Sizing
   rounding = 3,
@@ -122,6 +130,7 @@ function LineItemButton({
       target={target}
       group={group}
       ref={ref}
+      disabled={disabled}
     >
       <Interactive.Container
         width={width}
