@@ -1385,6 +1385,16 @@ GITLAB_CONNECTOR_INCLUDE_CODE_FILES = (
     os.environ.get("GITLAB_CONNECTOR_INCLUDE_CODE_FILES", "").lower() == "true"
 )
 
+# Comma-separated glob patterns appended to the built-in GitLab code-file
+# exclude list. Patterns without a "/" match against any path segment
+# (so "node_modules" excludes at any depth); patterns with a "/" match
+# against the full path via fnmatch.
+GITLAB_CONNECTOR_EXCLUDE_PATTERNS = [
+    pattern.strip()
+    for pattern in os.environ.get("GITLAB_CONNECTOR_EXCLUDE_PATTERNS", "").split(",")
+    if pattern.strip()
+]
+
 # Typically set to http://localhost:3000 for OAuth connector development
 CONNECTOR_LOCALHOST_OVERRIDE = os.getenv("CONNECTOR_LOCALHOST_OVERRIDE")
 

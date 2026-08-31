@@ -10,6 +10,7 @@ import pytz
 from gitlab.v4.objects import Project
 
 from onyx.configs.app_configs import (
+    GITLAB_CONNECTOR_EXCLUDE_PATTERNS,
     GITLAB_CONNECTOR_INCLUDE_CODE_FILES,
     INDEX_BATCH_SIZE,
 )
@@ -36,13 +37,102 @@ T = TypeVar("T")
 
 logger = setup_logger()
 
-# List of directories/Files to exclude
-exclude_patterns = [
+# Default set of files and directories to exclude when indexing GitLab code
+# files. These are near-universally either vendored third-party code, machine-
+# generated output, or minified/built artifacts that add cost and noise to
+# retrieval (and inflate contextual-RAG LLM spend) without adding real signal.
+#
+# Patterns are matched via fnmatch. Patterns without a "/" are matched against
+# every path segment, so a bare directory name like "node_modules" excludes at
+# any depth. Patterns containing "/" are matched against the full path.
+#
+# Operators can extend this list via the GITLAB_CONNECTOR_EXCLUDE_PATTERNS
+# environment variable (comma-separated).
+DEFAULT_EXCLUDE_PATTERNS: list[str] = [
+    # Historical entries.
     "logs",
     ".github/",
     ".gitlab/",
     ".pre-commit-config.yaml",
+    # Vendored / third-party dependencies.
+    "node_modules",
+    "vendor",
+    "bower_components",
+    "third_party",
+    "third-party",
+    ".bundle",
+    # Build / distribution output.
+    "dist",
+    "build",
+    "out",
+    "target",
+    "public/assets",
+    "public/packs",
+    ".next",
+    ".nuxt",
+    ".turbo",
+    ".cache",
+    # Test / coverage output.
+    "coverage",
+    ".nyc_output",
+    "htmlcov",
+    # Minified assets.
+    "*.min.js",
+    "*.min.css",
+    "*.min.map",
+    "*.map",
+    # Lockfiles (unhelpful for retrieval, large diffs on every bump).
+    "package-lock.json",
+    "yarn.lock",
+    "pnpm-lock.yaml",
+    "bun.lock",
+    "bun.lockb",
+    "Gemfile.lock",
+    "Cargo.lock",
+    "poetry.lock",
+    "uv.lock",
+    "composer.lock",
+    "Pipfile.lock",
+    # Machine-generated code (Protobuf, gRPC).
+    "*_pb.rb",
+    "*_pb2.py",
+    "*_pb2_grpc.py",
+    "*.pb.go",
+    "*_pb.js",
+    "*_pb.ts",
+    "*.pb.cc",
+    "*.pb.h",
+    # Binary / non-text assets that don't decode meaningfully.
+    "*.png",
+    "*.jpg",
+    "*.jpeg",
+    "*.gif",
+    "*.webp",
+    "*.ico",
+    "*.svg",
+    "*.pdf",
+    "*.zip",
+    "*.tar",
+    "*.tar.gz",
+    "*.tgz",
+    "*.7z",
+    "*.woff",
+    "*.woff2",
+    "*.ttf",
+    "*.eot",
+    "*.mp3",
+    "*.mp4",
+    "*.mov",
+    # Runtime state.
+    "tmp",
+    ".DS_Store",
 ]
+
+# The effective exclude list is the built-in defaults plus any operator
+# overrides supplied via GITLAB_CONNECTOR_EXCLUDE_PATTERNS.
+exclude_patterns: list[str] = DEFAULT_EXCLUDE_PATTERNS + list(
+    GITLAB_CONNECTOR_EXCLUDE_PATTERNS
+)
 
 
 def _batch_gitlab_objects(git_objs: Iterable[T], batch_size: int) -> Iterator[list[T]]:
@@ -111,9 +201,31 @@ def _convert_issue_to_document(issue: Any) -> Document:
     return doc
 
 
+def _looks_like_binary(data: bytes, sample_size: int = 8192) -> bool:
+    """Heuristic to detect binary content that shouldn't be indexed as text.
+
+    Checks a leading sample for:
+      - A NUL byte (definitive signal of binary content in text formats).
+      - A high proportion (>30%) of bytes outside the printable ASCII / common
+        whitespace range, which reliably flags encoded images, fonts, archives
+        etc. even when they lack NUL bytes.
+
+    UTF-8 encoded text of any language passes because valid multi-byte
+    sequences are still counted as "text-like" per byte on average.
+    """
+    if not data:
+        return False
+    sample = data[:sample_size]
+    if b"\x00" in sample:
+        return True
+    text_bytes = set(range(0x20, 0x7F)) | {0x09, 0x0A, 0x0D, 0x0C}
+    non_text = sum(1 for b in sample if b not in text_bytes and b < 0x80)
+    return (non_text / len(sample)) > 0.30
+
+
 def _convert_code_to_document(
     project: Project, file: Any, url: str, projectName: str, projectOwner: str
-) -> Document:
+) -> Document | None:
     # Dynamically get the default branch from the project object
     default_branch = project.default_branch
 
@@ -122,10 +234,22 @@ def _convert_code_to_document(
         file_path=file["path"],
         ref=default_branch,  # Use the default branch
     )
+    raw_bytes = file_content_obj.decode()
+    if _looks_like_binary(raw_bytes):
+        # Skip binary blobs (images, fonts, archives, compiled artifacts).
+        # The extension-based exclude list catches most of these up front,
+        # but this is the last line of defense against binaries slipping
+        # through with unrecognized extensions.
+        logger.debug(
+            "Skipping likely-binary GitLab file %s", file.get("path", "<unknown>")
+        )
+        return None
     try:
-        file_content = file_content_obj.decode().decode("utf-8")
+        file_content = raw_bytes.decode("utf-8")
     except UnicodeDecodeError:
-        file_content = file_content_obj.decode().decode("latin-1")
+        # Fall back to latin-1 for legitimately text-encoded files that use
+        # a legacy single-byte encoding. Guarded by the binary check above.
+        file_content = raw_bytes.decode("latin-1")
 
     # Construct the file URL dynamically using the default branch
     file_url = (
@@ -146,8 +270,31 @@ def _convert_code_to_document(
 
 
 def _should_exclude(path: str) -> bool:
-    """Check if a path matches any of the exclude patterns."""
-    return any(fnmatch.fnmatch(path, pattern) for pattern in exclude_patterns)
+    """Check if a path matches any of the exclude patterns.
+
+    Matching rules:
+      - Patterns containing "/" match against the full path via fnmatch, and
+        also against anything nested under it. Trailing-slash patterns like
+        ".github/" are normalized to ".github" and treated as directory-name
+        patterns.
+      - Patterns without "/" match against any path segment, so a bare
+        directory or file name (e.g. "node_modules", "*.min.js") excludes
+        at any depth in the tree.
+    """
+    segments = path.split("/")
+    for raw_pattern in exclude_patterns:
+        pattern = raw_pattern.rstrip("/")
+        if not pattern:
+            continue
+        if "/" in pattern:
+            # Match the directory entry itself and everything under it, so
+            # "public/assets" excludes "public/assets/main.css" too.
+            if fnmatch.fnmatch(path, pattern) or fnmatch.fnmatch(path, f"{pattern}/*"):
+                return True
+            continue
+        if any(fnmatch.fnmatch(segment, pattern) for segment in segments):
+            return True
+    return False
 
 
 class GitlabConnector(LoadConnector, PollConnector):
@@ -199,15 +346,15 @@ class GitlabConnector(LoadConnector, PollConnector):
                             continue
 
                         if file["type"] == "blob":
-                            code_doc_batch.append(
-                                _convert_code_to_document(
-                                    project,
-                                    file,
-                                    self.gitlab_client.url,
-                                    self.project_name,
-                                    self.project_owner,
-                                )
+                            code_doc = _convert_code_to_document(
+                                project,
+                                file,
+                                self.gitlab_client.url,
+                                self.project_name,
+                                self.project_owner,
                             )
+                            if code_doc is not None:
+                                code_doc_batch.append(code_doc)
                         elif file["type"] == "tree":
                             queue.append(file["path"])
 
