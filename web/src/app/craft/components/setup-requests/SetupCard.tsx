@@ -193,21 +193,21 @@ export default function SetupCard({
         <div
           data-testid="setup-card"
           className={cn(
-            "rounded-08 border bg-background-neutral-00 p-3 transition-colors",
+            "rounded-08 border-[0.5px] px-3 py-2 transition-colors",
             connected ? "border-status-success-03" : "border-status-error-03"
           )}
         >
-          <Content
-            sizePreset="secondary"
-            variant="body"
-            icon={Logo}
-            color={connected ? "muted" : "danger"}
-            title={
-              connected
+          <div className="flex min-w-0 items-center gap-1.5">
+            <Logo className="size-4 shrink-0" />
+            <Text
+              font="main-ui-action"
+              color={connected ? undefined : "text-03"}
+            >
+              {connected
                 ? `${appName} connected.`
-                : `Skipped connecting ${appName}.`
-            }
-          />
+                : `Skipped connecting ${appName}.`}
+            </Text>
+          </div>
         </div>
       </CometEdge>
     );
@@ -217,7 +217,7 @@ export default function SetupCard({
     <CometEdge active settled={false} tone="info" speedSeconds={3.6}>
       <div
         data-testid="setup-card"
-        className="rounded-08 border border-status-info-03 bg-background-neutral-00 p-3 flex flex-col gap-2"
+        className="rounded-08 border-[0.5px] border-status-info-03 px-3 py-2 flex flex-col gap-2"
       >
         <Content
           sizePreset="main-ui"
@@ -227,6 +227,7 @@ export default function SetupCard({
           description={
             reason ?? `The agent needs ${appName} to continue this task.`
           }
+          descriptionFont="main-ui-muted"
         />
         {error && (
           <Text font="secondary-body" color="text-03">
