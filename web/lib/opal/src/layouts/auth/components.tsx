@@ -9,10 +9,9 @@ import {
   Text,
 } from "@opal/components";
 import { Form } from "formik";
-import { SvgArrowRightCircle } from "@opal/icons/directional";
 import { Content } from "@opal/layouts";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
-import { SvgSimpleLoader } from "@opal/icons";
+import { SvgArrowRightCircle, SvgSimpleLoader } from "@opal/icons";
 
 const ICON_SIZE_PX = 44;
 

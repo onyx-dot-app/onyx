@@ -14,9 +14,11 @@ import SvgChevronRightRaw from "@opal/icons/chevron-right";
 // here so generated icon files stay untouched and every barrel consumer
 // inherits it. Media, clock, and refresh icons never mirror.
 function mirrored(Icon: IconFunctionComponent): IconFunctionComponent {
-  return function MirroredIcon({ className, ...props }: IconProps) {
+  function MirroredIcon({ className, ...props }: IconProps) {
     return <Icon className={cn("rtl:-scale-x-100", className)} {...props} />;
-  };
+  }
+  MirroredIcon.displayName = `Mirrored(${Icon.name})`;
+  return MirroredIcon;
 }
 
 export const SvgArrowLeft = mirrored(SvgArrowLeftRaw);

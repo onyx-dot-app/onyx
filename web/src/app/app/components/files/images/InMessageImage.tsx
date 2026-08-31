@@ -103,7 +103,7 @@ export const InMessageImage = memo(function InMessageImage({
               setImageLoaded(true);
             }}
             className={cn(
-              "object-contain object-left overflow-hidden rounded-lg w-full h-full transition-opacity duration-300 cursor-pointer",
+              "object-contain object-left rtl:object-right overflow-hidden rounded-lg w-full h-full transition-opacity duration-300 cursor-pointer",
               shapeImageClasses,
               imageLoaded ? "opacity-100" : "opacity-0"
             )}

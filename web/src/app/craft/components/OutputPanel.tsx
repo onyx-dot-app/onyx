@@ -505,7 +505,7 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
                         : "text-text-03 bg-transparent hover:bg-background-tint-02"
                   )}
                 >
-                  {/* Left curved joint — bleeds active tab into the row */}
+                  {/* Start curved joint, bleeds the active tab into the row */}
                   {isActive && (
                     <div
                       className="absolute -start-2 bottom-0 w-2 h-2 bg-background-neutral-00 pointer-events-none"
@@ -541,7 +541,7 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
                   <Text color={isDisabled ? "text-02" : "text-05"} maxLines={1}>
                     {tab.label}
                   </Text>
-                  {/* Right curved joint */}
+                  {/* End curved joint */}
                   {isActive && (
                     <div
                       className="absolute -end-2 bottom-0 w-2 h-2 bg-background-neutral-00 pointer-events-none"

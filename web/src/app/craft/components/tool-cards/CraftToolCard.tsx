@@ -212,7 +212,7 @@ export default function CraftToolCard({
     <div className="flex items-center gap-2 min-w-0 w-full">
       {renderStatusIcon(toolCall)}
       <span className="truncate min-w-0">{renderPrimary(toolCall)}</span>
-      {/* Pinned right so the skill badge aligns across rows. */}
+      {/* Pinned at the inline end so the skill badge aligns across rows. */}
       <span className="ms-auto flex items-center gap-2 shrink-0">
         {toolCall.skillName && toolCall.toolName !== "skill" && (
           <SkillBadge name={toolCall.skillName} />

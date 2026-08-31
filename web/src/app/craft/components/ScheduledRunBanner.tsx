@@ -120,7 +120,7 @@ export default function ScheduledRunBanner({
           className={cn(
             "ms-0 flex h-5 w-max max-w-0 translate-y-px items-center",
             "gap-1.5 overflow-hidden opacity-0",
-            "transition-[max-width,opacity,margin-left]",
+            "transition-[max-width,opacity,margin-inline-start]",
             "duration-[350ms] ease-out",
             "group-hover:ms-1.5 group-hover:max-w-[23rem]",
             "group-hover:opacity-100 group-focus-visible:ms-1.5",

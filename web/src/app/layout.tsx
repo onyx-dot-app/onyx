@@ -70,8 +70,8 @@ export default async function Layout({ children }: LayoutProps) {
   const messages = await getMessages();
 
   // Direction follows the locale the user picked in settings. The dev-only
-  // cookie override exists because no shipped locale is RTL yet: QA flips
-  // the app with document.cookie = "onyx-dir=rtl" and reloads.
+  // cookie override exists because no shipped locale is RTL yet: QA sets
+  // an "onyx-dir" cookie to "rtl" (with path=/) and reloads.
   let dir: HtmlDir = htmlDirForLocale(locale);
   if (process.env.NODE_ENV === "development") {
     const dirOverride = (await cookies()).get("onyx-dir")?.value;
