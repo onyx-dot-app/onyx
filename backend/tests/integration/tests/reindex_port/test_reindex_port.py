@@ -19,7 +19,7 @@ from uuid import uuid4
 import pytest
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import AccessType
+from onyx.db.enums import AccessType, SwitchoverType
 from onyx.db.search_settings import get_current_search_settings
 from tests.integration.common_utils.constants import API_SERVER_URL, MAX_DELAY
 from tests.integration.common_utils.http_client import client
@@ -207,6 +207,53 @@ def test_cancel_reindex_during_port(
     )
     assert _search_finds(content, admin_user)
 
+    # The canceled FUTURE's index held partial-port data. Cancel reclaims it, so a retry
+    # takes that name back instead of being refused forever by the name-reuse guard.
+    ReindexPortManager.wait_for_reindex_accepted(admin_user)
+    retried = ReindexPortManager.get_secondary_settings(admin_user)
+    assert retried is not None
+    assert retried["index_name"] != original_index_name
+
+    ReindexPortManager.cancel_reindex(admin_user)
+
+
+def test_reindex_reclaims_the_index_name_of_a_retired_generation(
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
+    llm_provider: DATestLLMProvider,  # noqa: ARG001
+    api_key: DATestAPIKey,
+) -> None:
+    """The ALT suffix alternates, so the reindex after a swap wants the name the retired
+    generation still occupies. The server refuses it, hands that index to the reclaim
+    loop, and accepts the reindex once it drains -- without which every later reindex of
+    this model would be blocked."""
+    cc_pair = CCPairManager.create_from_scratch(user_performing_action=admin_user)
+    marker = uuid4().hex[:8]
+    content = f"reused index name {marker}"
+    DocumentManager.seed_doc_with_content(cc_pair, content, api_key)
+
+    retired_index_name = ReindexPortManager.get_current_settings(admin_user)[
+        "index_name"
+    ]
+    ReindexPortManager.start_reindex(admin_user)
+    ReindexPortManager.wait_for_reindex_completion(admin_user)
+    ReindexPortManager.wait_for_swap(retired_index_name, admin_user)
+
+    # The retired index still holds the generation it just served, so taking its name
+    # now would let the new port inherit that stale data.
+    refused = ReindexPortManager.start_reindex_response(admin_user)
+    assert refused.status_code == 409
+    assert ReindexPortManager.get_secondary_settings(admin_user) is None
+
+    # Being refused is what kicked off the occupant's reclamation. Once it drains the
+    # name is free and the same request goes through.
+    ReindexPortManager.wait_for_reindex_accepted(admin_user)
+    secondary = ReindexPortManager.get_secondary_settings(admin_user)
+    assert secondary is not None
+    assert secondary["index_name"] == retired_index_name
+
+    ReindexPortManager.cancel_reindex(admin_user)
+
 
 def test_connector_deletion_during_reindex(
     reset: None,  # noqa: ARG001
@@ -288,7 +335,9 @@ def test_reindex_port_instant_switchover(
         "index_name"
     ]
 
-    ReindexPortManager.start_reindex(admin_user, switchover_type="instant")
+    ReindexPortManager.start_reindex(
+        admin_user, switchover_type=SwitchoverType.INSTANT.value
+    )
 
     # INSTANT promotes the new (initially empty) index immediately, before the port runs.
     new_settings = ReindexPortManager.wait_for_swap(original_index_name, admin_user)
@@ -304,3 +353,12 @@ def test_reindex_port_instant_switchover(
     # Every doc is served from the backfilled live index.
     for content in contents:
         assert _search_finds(content, admin_user)
+
+    # INSTANT promoted the new model rather than staging it, so once the backfill has
+    # drained a revert has nothing left to roll back: it is a clean no-op that must not
+    # un-promote the index now serving search.
+    ReindexPortManager.cancel_reindex(admin_user)
+    assert (
+        ReindexPortManager.get_current_settings(admin_user)["index_name"]
+        == new_settings["index_name"]
+    )

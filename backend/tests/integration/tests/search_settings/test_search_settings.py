@@ -1,3 +1,5 @@
+from concurrent.futures import ThreadPoolExecutor
+
 import httpx
 
 from tests.integration.common_utils.constants import API_SERVER_URL
@@ -265,4 +267,27 @@ def test_new_reindex_refused_while_one_in_progress(
     assert secondary is not None
     assert secondary["enable_contextual_rag"] is False
 
+    _cancel_new_embedding(admin_user)
+
+
+def test_concurrent_reindex_submissions_serialize(
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
+    llm_provider: DATestLLMProvider,  # noqa: ARG001
+) -> None:
+    """Two admins pressing Re-index at the same moment. A row lock on the current
+    settings serializes them, so the loser gets the same 409 a sequential caller sees
+    instead of a raw 500 from the unique index on the FUTURE row."""
+    current = _get_current_search_settings(admin_user)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        submissions = [
+            pool.submit(_set_new_search_settings, admin_user, current) for _ in range(2)
+        ]
+        statuses = sorted(submission.result().status_code for submission in submissions)
+
+    assert statuses == [200, 409]
+
+    # Exactly one re-index exists, and it is a normal cancelable one.
+    assert _get_secondary_search_settings(admin_user) is not None
     _cancel_new_embedding(admin_user)
