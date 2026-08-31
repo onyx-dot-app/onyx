@@ -65,6 +65,7 @@ Invalid combinations (e.g. `sizePreset="headline" + variant="body"`) are exclude
 | `moreIcon1` | `IconFunctionComponent` | — | Secondary icon in icon row (ContentXl only) |
 | `moreIcon2` | `IconFunctionComponent` | — | Tertiary icon in icon row (ContentXl only) |
 | `color` | `ColorTypes` | `"default"` | Icon and title color pair. `"muted-success"` / `"muted-warning"` color only the icon and leave the text at `text-03` |
+| `strikethrough` | `boolean` | `false` | Strike the title through, for a title whose option is switched off |
 
 ## Internal Layouts
 
