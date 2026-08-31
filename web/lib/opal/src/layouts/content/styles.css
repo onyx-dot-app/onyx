@@ -78,6 +78,30 @@
   --content-foreground-icon: var(--interactive-foreground-icon);
 }
 
+/* Disabled is a state, so it outranks whatever the content normally looks
+   like.
+
+   An interactive surface dims through the interactive colour variables rather
+   than the blanket `opacity-50` that `core/disabled` gives everything else, so
+   a `Content` inside one has to follow those variables. Only the `interactive`
+   mode does on its own — every other mode pins `color` and stops inheriting,
+   which is what left a disabled row still showing its resting colour.
+
+   Keyed off `.interactive[data-disabled]` rather than any one component, so it
+   holds for everything that puts a `Content` inside an interactive surface. */
+.interactive[data-disabled] [data-content-color] {
+  --content-foreground: var(--interactive-foreground);
+  --content-foreground-icon: var(--interactive-foreground-icon);
+  color: var(--content-foreground);
+}
+
+/* The description and the suffix carry an explicit `Text` colour utility, and
+   an inherited value cannot beat a declaration on the element itself. Icons
+   are left out so they keep reading `--content-foreground-icon` above. */
+.interactive[data-disabled] [data-content-color] :is(span, p, li) {
+  color: var(--interactive-foreground);
+}
+
 /* ===========================================================================
    Content — ContentXl
 
