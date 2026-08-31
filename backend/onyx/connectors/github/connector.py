@@ -31,6 +31,7 @@ from onyx.connectors.github.rate_limit_utils import sleep_after_rate_limit_excep
 from onyx.connectors.github.utils import (
     deserialize_repository,
     get_external_access_permission,
+    normalize_github_base_url,
 )
 from onyx.connectors.interfaces import (
     CheckpointedConnectorWithPermSync,
@@ -629,14 +630,21 @@ class GithubConnector(
         self.github_client: Github | None = None
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
+        # Prefer the per-credential URL so one deployment can index github.com
+        # and a GitHub Enterprise Server at once; the env var is the fallback.
+        # Normalize each side so a blank credential cannot shadow the env var.
+        base_url = normalize_github_base_url(
+            credentials.get("github_base_url")
+        ) or normalize_github_base_url(GITHUB_CONNECTOR_BASE_URL)
+
         # defaults to 30 items per page, can be set to as high as 100
         self.github_client = (
             Github(
                 credentials["github_access_token"],
-                base_url=GITHUB_CONNECTOR_BASE_URL,
+                base_url=base_url,
                 per_page=ITEMS_PER_PAGE,
             )
-            if GITHUB_CONNECTOR_BASE_URL
+            if base_url
             else Github(credentials["github_access_token"], per_page=ITEMS_PER_PAGE)
         )
         return None

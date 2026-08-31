@@ -1,5 +1,6 @@
 from collections.abc import Callable
 from typing import cast
+from urllib.parse import urlparse
 
 from github import Github
 from github.Repository import Repository
@@ -13,6 +14,37 @@ from onyx.utils.variable_functionality import (
 )
 
 logger = setup_logger()
+
+
+# GitHub Enterprise Server exposes its REST API under /api/v3, while github.com
+# uses api.github.com. PyGithub needs the full API root, not the web host.
+GHES_API_SUFFIX = "/api/v3"
+
+
+def normalize_github_base_url(base_url: str | None) -> str | None:
+    """Turn a user-supplied GitHub Enterprise Server URL into a PyGithub base URL.
+
+    Accepts the web host (``https://ghes.example.com``) or the API root
+    (``https://ghes.example.com/api/v3``) and always returns the API root.
+    Returns None for blank input so callers can fall back to github.com.
+    """
+    if base_url is None:
+        return None
+
+    cleaned = base_url.strip()
+    if not cleaned:
+        return None
+
+    if "://" not in cleaned:
+        cleaned = f"https://{cleaned}"
+
+    parsed = urlparse(cleaned)
+    if not parsed.hostname:
+        raise ValueError(f"Invalid GitHub base URL: {base_url}")
+
+    # An explicit path already points at an API root; leave it alone.
+    path = parsed.path.rstrip("/") or GHES_API_SUFFIX
+    return f"{parsed.scheme}://{parsed.netloc}{path}"
 
 
 def get_external_access_permission(
