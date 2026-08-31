@@ -44,36 +44,42 @@ const ALLOWED_ELEMENTS = [
 const DEFAULT_COMPONENTS = {
   h1: ({ node, ...props }) => (
     <p
+      dir="auto"
       className="mt-3 first:mt-0 mb-1 text-sm font-semibold text-text-05"
       {...props}
     />
   ),
   h2: ({ node, ...props }) => (
     <p
+      dir="auto"
       className="mt-3 first:mt-0 mb-1 text-sm font-semibold text-text-05"
       {...props}
     />
   ),
   h3: ({ node, ...props }) => (
     <p
+      dir="auto"
       className="mt-2 first:mt-0 mb-1 text-sm font-semibold text-text-05"
       {...props}
     />
   ),
   h4: ({ node, ...props }) => (
     <p
+      dir="auto"
       className="mt-2 first:mt-0 mb-1 text-sm font-medium text-text-05"
       {...props}
     />
   ),
   h5: ({ node, ...props }) => (
     <p
+      dir="auto"
       className="mt-2 first:mt-0 mb-1 text-sm font-medium text-text-05"
       {...props}
     />
   ),
   h6: ({ node, ...props }) => (
     <p
+      dir="auto"
       className="mt-2 first:mt-0 mb-1 text-sm font-medium text-text-05"
       {...props}
     />
