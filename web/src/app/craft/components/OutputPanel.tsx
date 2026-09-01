@@ -24,6 +24,7 @@ import {
 } from "@/app/craft/services/apiServices";
 import { getFileIcon } from "@/lib/utils";
 import { cn } from "@opal/utils";
+import { useDirection } from "@radix-ui/react-direction";
 import { Text, Tooltip } from "@opal/components";
 import { SvgGlobe, SvgHardDrive, SvgFiles, SvgX, SvgLoader } from "@opal/icons";
 import { IconProps } from "@opal/types";
@@ -84,7 +85,29 @@ interface BuildOutputPanelProps {
  * - File browser for exploring sandbox filesystem
  * - Artifact list with download/view options
  */
+
+// The joint masks carve the corner nearest the tab, so the carved side
+// follows the reading direction.
+function jointMask(gradient: string): React.CSSProperties {
+  return { maskImage: gradient, WebkitMaskImage: gradient };
+}
+function useJointMasks(): {
+  start: React.CSSProperties;
+  end: React.CSSProperties;
+} {
+  const rtl = useDirection() === "rtl";
+  return {
+    start: jointMask(
+      `radial-gradient(circle at ${rtl ? "100%" : "0"} 0, transparent 8px, black 8px)`
+    ),
+    end: jointMask(
+      `radial-gradient(circle at ${rtl ? "0" : "100%"} 0, transparent 8px, black 8px)`
+    ),
+  };
+}
+
 const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
+  const jointMasks = useJointMasks();
   const session = useSession();
   const preProvisionedSessionId = usePreProvisionedSessionId();
   const isPreProvisioning = useIsPreProvisioning();
@@ -509,12 +532,7 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
                   {isActive && (
                     <div
                       className="absolute -start-2 bottom-0 w-2 h-2 bg-background-neutral-00 pointer-events-none"
-                      style={{
-                        maskImage:
-                          "radial-gradient(circle at 0 0, transparent 8px, black 8px)",
-                        WebkitMaskImage:
-                          "radial-gradient(circle at 0 0, transparent 8px, black 8px)",
-                      }}
+                      style={jointMasks.start}
                     />
                   )}
                   {isStarting ? (
@@ -545,12 +563,7 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
                   {isActive && (
                     <div
                       className="absolute -end-2 bottom-0 w-2 h-2 bg-background-neutral-00 pointer-events-none"
-                      style={{
-                        maskImage:
-                          "radial-gradient(circle at 100% 0, transparent 8px, black 8px)",
-                        WebkitMaskImage:
-                          "radial-gradient(circle at 100% 0, transparent 8px, black 8px)",
-                      }}
+                      style={jointMasks.end}
                     />
                   )}
                 </button>
@@ -591,12 +604,7 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
                       {isActive && (
                         <div
                           className="absolute -start-2 bottom-0 w-2 h-2 bg-background-neutral-00 pointer-events-none"
-                          style={{
-                            maskImage:
-                              "radial-gradient(circle at 0 0, transparent 8px, black 8px)",
-                            WebkitMaskImage:
-                              "radial-gradient(circle at 0 0, transparent 8px, black 8px)",
-                          }}
+                          style={jointMasks.start}
                         />
                       )}
                       <TabIcon
@@ -625,12 +633,7 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
                       {isActive && (
                         <div
                           className="absolute -end-2 bottom-0 w-2 h-2 bg-background-neutral-00 pointer-events-none"
-                          style={{
-                            maskImage:
-                              "radial-gradient(circle at 100% 0, transparent 8px, black 8px)",
-                            WebkitMaskImage:
-                              "radial-gradient(circle at 100% 0, transparent 8px, black 8px)",
-                          }}
+                          style={jointMasks.end}
                         />
                       )}
                     </button>
