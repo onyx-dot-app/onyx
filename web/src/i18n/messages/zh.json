@@ -3980,13 +3980,13 @@
         "urlInvalid": "必须是有效的 URL"
       },
       "wontPortConsentModal": {
-        "title": "部分连接器不会被重新索引",
+        "title": "{count, plural, one {该连接器将被删除} other {这 # 个连接器将被删除}}",
         "submit": "删除并重新索引",
-        "description": "{count, plural, one {该连接器无法迁移到新索引。重新索引会将它以及它已索引的文档一并从 Onyx 中删除：} other {这 # 个连接器无法迁移到新索引。重新索引会将它们以及它们已索引的文档一并从 Onyx 中删除：}}",
+        "description": "{count, plural, one {重新索引会跳过已暂停和无效的连接器，因此该连接器不会迁移到新索引。Onyx 会将它以及它已索引的文档一并删除：} other {重新索引会跳过已暂停和无效的连接器，因此这 # 个不会迁移到新索引。Onyx 会将它们以及它们已索引的文档一并删除：}}",
         "connector": "{name} — {status}",
         "statusInvalid": "无效",
         "statusPaused": "已暂停",
-        "restoreHint": "如需再次搜索这些来源，请在重新索引完成后重新添加这些连接器。"
+        "restoreHint": "如需保留某个连接器，请在此取消，先恢复或修复它，然后重新索引，它就会被迁移过去。否则请在重新索引完成后重新添加。"
       }
     },
     "indexing": {

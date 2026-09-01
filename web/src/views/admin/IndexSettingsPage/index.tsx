@@ -1188,7 +1188,9 @@ export default function IndexSettingsPage() {
                   <wontPortConsentModal.Provider>
                     <ConfirmationModalLayout
                       icon={SvgTrash}
-                      title={t("wontPortConsentModal.title")}
+                      title={t("wontPortConsentModal.title", {
+                        count: frozenWontPortRef.current.length,
+                      })}
                       submit={
                         <Button
                           variant="danger"
@@ -1240,7 +1242,13 @@ export default function IndexSettingsPage() {
                           secondarySearchSettings?.model_name ??
                           searchSettings?.model_name
                         }
-                        onCancel={() => cancelReindexModal.toggle(true)}
+                        // No secondary => INSTANT backfill (new model already live):
+                        // not revertible, so show progress only (no Cancel button).
+                        onCancel={
+                          secondarySearchSettings
+                            ? () => cancelReindexModal.toggle(true)
+                            : undefined
+                        }
                       />
                     ) : (
                       // Non-port reindex has no PortAttempt progress → the original banner.

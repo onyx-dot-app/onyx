@@ -3992,13 +3992,13 @@
         "urlInvalid": "Muss eine gültige URL sein"
       },
       "wontPortConsentModal": {
-        "title": "Einige Konnektoren werden nicht neu indiziert",
+        "title": "{count, plural, one {Dieser Konnektor wird gelöscht} other {Diese # Konnektoren werden gelöscht}}",
         "submit": "Löschen & neu indizieren",
-        "description": "{count, plural, one {Dieser Konnektor kann nicht in den neuen Index übernommen werden. Beim Neuindizieren wird er zusammen mit den von ihm indizierten Dokumenten aus Onyx gelöscht:} other {Diese # Konnektoren können nicht in den neuen Index übernommen werden. Beim Neuindizieren werden sie zusammen mit den von ihnen indizierten Dokumenten aus Onyx gelöscht:}}",
+        "description": "{count, plural, one {Beim Neuindizieren werden pausierte und ungültige Konnektoren übersprungen. Dieser wird daher nicht in den neuen Index übernommen. Onyx löscht ihn zusammen mit den von ihm indizierten Dokumenten:} other {Beim Neuindizieren werden pausierte und ungültige Konnektoren übersprungen. Diese # werden daher nicht in den neuen Index übernommen. Onyx löscht sie zusammen mit den von ihnen indizierten Dokumenten:}}",
         "connector": "{name} — {status}",
         "statusInvalid": "ungültig",
         "statusPaused": "pausiert",
-        "restoreHint": "Um diese Quellen wieder zu durchsuchen, fügen Sie die Konnektoren nach Abschluss der Neuindizierung erneut hinzu."
+        "restoreHint": "Um einen Konnektor zu behalten, brechen Sie hier ab, setzen Sie ihn fort oder korrigieren Sie ihn und starten Sie die Neuindizierung erneut – dann wird er übernommen. Andernfalls fügen Sie ihn nach Abschluss der Neuindizierung erneut hinzu."
       }
     },
     "indexing": {
