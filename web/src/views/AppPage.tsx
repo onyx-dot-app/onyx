@@ -6,10 +6,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { Section } from "@/layouts/general-layouts";
 import { useFederatedConnectors, useLlmManager } from "@/lib/hooks";
-import { useSearchFilters, useTags } from "@/lib/searchFilters/hooks";
-import { useForcedTools } from "@/lib/hooks/useForcedTools";
+import { useSendChatMessageFromURL } from "@/lib/chat/hooks";
 import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
+import { useToolConfiguration } from "@/lib/tools/hooks";
 import { useSettings } from "@/lib/settings/hooks";
 import Dropzone from "react-dropzone";
 import AppInputBar, { AppInputBarHandle } from "@/sections/input/AppInputBar";
@@ -24,8 +24,6 @@ import { NoAgentModal } from "@/lib/agents/components";
 import PreviewModal from "@/sections/modals/PreviewModal";
 import { Modal } from "@opal/components";
 import { useSendMessageToParent } from "@/lib/extension/hooks";
-import { SUBMIT_MESSAGE_TYPES } from "@/lib/extension/constants";
-import { getSourceMetadata } from "@/lib/sources";
 import { SourceMetadata } from "@/lib/search/interfaces";
 import { FederatedConnectorDetail, ValidSources } from "@/lib/types";
 import DocumentsSidebar from "@/sections/document-sidebar/DocumentsSidebar";
@@ -74,7 +72,8 @@ import {
   useToastFromQuery,
 } from "@opal/layouts";
 import { SvgNotFound, SvgNoAccess } from "@opal/illustrations";
-import useAppFocus from "@/hooks/useAppFocus";
+import { useChatSessionSupportsRetrieval } from "@/lib/app/hooks";
+import { useAppPosition } from "@/lib/position/hooks";
 import useScreenSize from "@/hooks/useScreenSize";
 import { useSidebarState } from "@opal/layouts";
 import { useQueryController } from "@/providers/QueryControllerProvider";
@@ -85,7 +84,6 @@ import { paidTierGated } from "@/ce";
 import EESearchUI from "@/ee/sections/SearchUI";
 const SearchUI = paidTierGated(EESearchUI);
 import { motion, AnimatePresence } from "motion/react";
-import { useChatSessionSupportsRetrieval } from "@/lib/app/hooks";
 import { useTranslations } from "next-intl";
 
 interface FadeProps {
@@ -136,7 +134,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const t = useTranslations("chat.app");
   const router = useRouter();
-  const appFocus = useAppFocus();
+  const appPosition = useAppPosition();
   const { isMobile } = useScreenSize();
 
   useToastFromQuery({
@@ -157,9 +155,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   } = useChatSessions();
   const { vectorDbEnabled, disable_default_assistant } = useSettings();
 
-  const { ccPairs } = useCCPairs(vectorDbEnabled);
-  const { tags } = useTags();
-  const { documentSets } = useDocumentSets();
   const {
     currentMessageFiles,
     setCurrentMessageFiles,
@@ -169,18 +164,9 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     clearLastFailedFiles,
   } = useProjectsContext();
 
-  // When changing from project chat to main chat (or vice-versa), clear forced tools
-  const { setForcedToolIds } = useForcedTools();
-  useEffect(() => {
-    setForcedToolIds([]);
-  }, [currentProjectId, setForcedToolIds]);
-
   const isInitialLoad = useRef(true);
 
   const { agents, isLoading: isLoadingAgents } = useAgents();
-
-  // Also fetch federated connectors for the sources list
-  const { data: federatedConnectorsData } = useFederatedConnectors();
 
   const { user } = useUser();
   // `useUser()` reports null while loading, so gating on it would redirect during
@@ -188,31 +174,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   // resolved signed-out). This matters for anonymous users specifically: they're
   // kept on the login page, so unlike logged-in users they wouldn't bounce back.
   const { user: resolvedUser } = useCurrentUser();
-
-  function processSearchParamsAndSubmitMessage(searchParamsString: string) {
-    const newSearchParams = new URLSearchParams(searchParamsString);
-    const message = newSearchParams?.get("user-prompt");
-
-    filterManager.buildFiltersFromQueryString(
-      newSearchParams.toString(),
-      sources,
-      documentSets.map((ds) => ds.name),
-      tags
-    );
-
-    newSearchParams.delete(SEARCH_PARAM_NAMES.SEND_ON_LOAD);
-
-    router.replace(`?${newSearchParams.toString()}`, { scroll: false });
-
-    // If there's a message, submit it
-    if (message) {
-      onSubmit({
-        message,
-        currentMessageFiles,
-        deepResearch: deepResearchEnabledForCurrentWorkflow,
-      });
-    }
-  }
 
   const activeAgent = useActiveAgent();
 
@@ -229,6 +190,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       router.replace(`?${params.toString()}`, { scroll: false });
     }
   }, [searchParams, router]);
+
+  const toolConfiguration = useToolConfiguration();
 
   const { deepResearchEnabled, toggleDeepResearch } = useDeepResearchToggle({
     chatSessionId: currentChatSessionId,
@@ -278,35 +241,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     userId: user?.id,
   });
 
-  const availableSources: ValidSources[] = useMemo(() => {
-    return ccPairs.map((ccPair) => ccPair.source);
-  }, [ccPairs]);
-
-  const sources: SourceMetadata[] = useMemo(() => {
-    const uniqueSources = Array.from(new Set(availableSources));
-    const regularSources = uniqueSources.map((source) =>
-      getSourceMetadata(source)
-    );
-
-    // Add federated connectors as sources
-    const federatedSources =
-      federatedConnectorsData?.map((connector: FederatedConnectorDetail) => {
-        return getSourceMetadata(connector.source);
-      }) || [];
-
-    // Combine sources and deduplicate based on internalName
-    const allSources = [...regularSources, ...federatedSources];
-    const deduplicatedSources = allSources.reduce((acc, source) => {
-      const existing = acc.find((s) => s.internalName === source.internalName);
-      if (!existing) {
-        acc.push(source);
-      }
-      return acc;
-    }, [] as SourceMetadata[]);
-
-    return deduplicatedSources;
-  }, [availableSources, federatedConnectorsData]);
-
   // Show toast if any files failed in ProjectsContext reconciliation
   useEffect(() => {
     if (lastFailedFiles && lastFailedFiles.length > 0) {
@@ -319,8 +253,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   }, [lastFailedFiles, clearLastFailedFiles, t]);
 
   const chatInputBarRef = useRef<AppInputBarHandle>(null);
-
-  const filterManager = useSearchFilters();
 
   // An unresolved agent reads as plain chat, so a named-agent layout never
   // flashes for an agent that is not there yet.
@@ -347,32 +279,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   const chatSessionIdRef = useRef<string | null>(currentChatSessionId);
   const loadedIdSessionRef = useRef<string | null>(currentChatSessionId);
   const submitOnLoadPerformed = useRef<boolean>(false);
-
-  function loadNewPageLogic(event: MessageEvent) {
-    if (event.data.type === SUBMIT_MESSAGE_TYPES.PAGE_CHANGE) {
-      try {
-        const url = new URL(event.data.href);
-        processSearchParamsAndSubmitMessage(url.searchParams.toString());
-      } catch (error) {
-        console.error("Error parsing URL:", error);
-      }
-    }
-  }
-
-  // Equivalent to `loadNewPageLogic`
-  useEffect(() => {
-    if (searchParams?.get(SEARCH_PARAM_NAMES.SEND_ON_LOAD)) {
-      processSearchParamsAndSubmitMessage(searchParams.toString());
-    }
-  }, [searchParams, router]);
-
-  useEffect(() => {
-    window.addEventListener("message", loadNewPageLogic);
-
-    return () => {
-      window.removeEventListener("message", loadNewPageLogic);
-    };
-  }, []);
 
   const [selectedDocuments, setSelectedDocuments] = useState<OnyxDocument[]>(
     []
@@ -452,7 +358,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   // it widens the greeting row and the composer.
   const fullWidthActive =
     fullWidthChat &&
-    ((appFocus.isChat() && !!currentChatSessionId) || appFocus.isNewSession());
+    ((appPosition.isChat() && !!currentChatSessionId) ||
+      appPosition.isNewSession());
 
   // Auto-fold sidebar when a multi-model message is submitted.
   // Stays collapsed until the user exits multi-model mode (removes models).
@@ -511,8 +418,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     handleMessageSpecificFileUpload,
     availableContextTokens,
   } = useChatController({
-    filterManager,
     llmManager,
+    toolConfiguration,
     availableAgents: agents,
     activeAgent,
     existingChatSessionId: currentChatSessionId,
@@ -528,7 +435,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   } = useChatSessionController({
     existingChatSessionId: currentChatSessionId,
     searchParams,
-    filterManager,
     firstMessage,
     setSelectedDocuments,
     setCurrentMessageFiles,
@@ -539,6 +445,13 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     submitOnLoadPerformed,
     refreshChatSessions,
     onSubmit,
+  });
+
+  // A link can arrive carrying both a prompt and a search scope. Declared here
+  // because it submits, so it needs `onSubmit` above it.
+  useSendChatMessageFromURL({
+    onSubmit,
+    deepResearch: deepResearchEnabledForCurrentWorkflow,
   });
 
   useSendMessageToParent();
@@ -556,7 +469,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     if (retrievalEnabled === null) return;
 
     // Not reading a conversation, so there are no sources to show.
-    if (!appFocus.isChattable()) {
+    if (!appPosition.isChattable()) {
       updateCurrentDocumentSidebarVisible(false);
       return;
     }
@@ -570,7 +483,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     updateCurrentDocumentSidebarVisible(false);
   }, [
     documentSidebarVisible,
-    appFocus,
+    appPosition,
     retrievalEnabled,
     selectedDocuments,
     updateCurrentDocumentSidebarVisible,
@@ -647,7 +560,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     (user?.preferences?.default_app_mode?.toLowerCase() as "chat" | "search") ??
     "chat";
 
-  const isNewSession = appFocus.isNewSession();
+  const isNewSession = appPosition.isNewSession();
 
   const isSearch =
     state.phase === "searching" || state.phase === "search-results";
@@ -770,7 +683,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     (activeAgent?.starter_messages?.length ?? 0) > 0;
 
   const isWelcomeFocus =
-    (appFocus.isNewSession() || appFocus.isAgent()) &&
+    (appPosition.isNewSession() || appPosition.isAgent()) &&
     (state.phase === "idle" || state.phase === "classifying");
 
   const onboardingVisible =
@@ -790,9 +703,9 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       ? "minmax(min-content, 1fr) minmax(0, max-content) minmax(0, 1fr)"
       : isSearch
         ? "0fr auto 1fr"
-        : appFocus.isChat()
+        : appPosition.isChat()
           ? "1fr auto 0fr"
-          : appFocus.isProject()
+          : appPosition.isProject()
             ? "auto auto 1fr"
             : "1fr auto 1fr",
   };
@@ -881,7 +794,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                   {/* ChatUI */}
                   <Fade
                     show={
-                      appFocus.isChat() &&
+                      appPosition.isChat() &&
                       !!currentChatSessionId &&
                       !!activeAgent &&
                       !sessionFetchError
@@ -918,7 +831,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
                   {/* Session fetch error (404 / 403) */}
                   <Fade
-                    show={appFocus.isChat() && sessionFetchError !== null}
+                    show={appPosition.isChat() && sessionFetchError !== null}
                     className="h-full w-full flex flex-col items-center justify-center px-2 sm:px-4"
                   >
                     {sessionFetchError && (
@@ -956,7 +869,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                   </Fade>
 
                   {/* ProjectUI */}
-                  {appFocus.isProject() && (
+                  {appPosition.isProject() && (
                     <div className="w-full max-h-[50vh] overflow-y-auto overscroll-y-none px-2 sm:px-4">
                       <ProjectContextPanel
                         projectTokenCount={projectContextTokenCount}
@@ -1021,7 +934,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     )}
                   >
                     {/* Scroll to bottom button - positioned absolutely above AppInputBar */}
-                    {appFocus.isChat() && showScrollButton && (
+                    {appPosition.isChat() && showScrollButton && (
                       <div className="absolute -top-14 self-center">
                         <Button
                           icon={SvgChevronDown}
@@ -1070,7 +983,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                           isSearch ? "h-[14px]" : "h-0"
                         )}
                       />
-                      {appFocus.isChat() && activeAgent && (
+                      {appPosition.isChat() && activeAgent && (
                         <div className="pb-1">
                           <MultiModelSelector
                             selectedModels={multiModel.selectedModels}
@@ -1083,13 +996,13 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         </div>
                       )}
                       <AppInputBar
+                        toolConfiguration={toolConfiguration}
                         ref={chatInputBarRef}
                         deepResearchEnabled={
                           deepResearchEnabledForCurrentWorkflow
                         }
                         toggleDeepResearch={toggleDeepResearch}
                         isMultiModelActive={multiModel.isMultiModelActive}
-                        filterManager={filterManager}
                         llmManager={llmManager}
                         initialMessage={
                           searchParams?.get(SEARCH_PARAM_NAMES.USER_PROMPT) ||
@@ -1121,7 +1034,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       <div
                         className={cn(
                           "transition-all duration-150 ease-in-out overflow-hidden",
-                          appFocus.isChat() ? "h-[14px]" : "h-0"
+                          appPosition.isChat() ? "h-[14px]" : "h-0"
                         )}
                       />
                     </div>
@@ -1131,7 +1044,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                 {/* ── Bottom: SearchResults + SourceFilter / Suggestions / ProjectChatList ── */}
                 <div className="row-start-3 min-h-0 overflow-hidden flex flex-col items-center w-full px-2 sm:px-4">
                   {/* Agent description below input */}
-                  {(appFocus.isNewSession() || appFocus.isAgent()) &&
+                  {(appPosition.isNewSession() || appPosition.isAgent()) &&
                     !isPlainChat && (
                       <>
                         <Spacer rem={1} />
@@ -1140,7 +1053,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       </>
                     )}
                   {/* ProjectChatSessionList */}
-                  {appFocus.isProject() && (
+                  {appPosition.isProject() && (
                     <div className="w-full max-w-(--app-page-main-content-width) h-full overflow-y-auto overscroll-y-none mx-auto">
                       <ProjectChatSessionList />
                     </div>
@@ -1149,7 +1062,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                   {/* SuggestionsUI */}
                   <Fade
                     show={
-                      (appFocus.isNewSession() || appFocus.isAgent()) &&
+                      (appPosition.isNewSession() || appPosition.isAgent()) &&
                       hasAgentStarterMessages
                     }
                     className="h-full flex-1 w-full max-w-(--app-page-main-content-width)"

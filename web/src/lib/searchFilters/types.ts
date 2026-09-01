@@ -2,25 +2,22 @@ import type { Tag } from "@/lib/types";
 import type { SourceMetadata } from "@/lib/search/interfaces";
 import type { DateRangePickerValue } from "@/refresh-components/DateRangePicker";
 
-/** The live selection a user edits: which sources, sets, tags and dates to search. */
-export interface SearchFilters {
+/** What is selected, without the means to change it. */
+export interface SearchFiltersSelection {
   timeRange: DateRangePickerValue | null;
+  selectedSources: SourceMetadata[];
+  selectedDocumentSets: string[];
+  selectedTags: Tag[];
+}
+
+/** The live selection a user edits: which sources, sets, tags and dates to search. */
+export interface SearchFilters extends SearchFiltersSelection {
   setTimeRange: React.Dispatch<
     React.SetStateAction<DateRangePickerValue | null>
   >;
-  selectedSources: SourceMetadata[];
   setSelectedSources: React.Dispatch<React.SetStateAction<SourceMetadata[]>>;
-  selectedDocumentSets: string[];
   setSelectedDocumentSets: React.Dispatch<React.SetStateAction<string[]>>;
-  selectedTags: Tag[];
   setSelectedTags: React.Dispatch<React.SetStateAction<Tag[]>>;
-  getFilterString: () => string;
-  buildFiltersFromQueryString: (
-    filterString: string,
-    availableSources: SourceMetadata[],
-    availableDocumentSets: string[],
-    availableTags: Tag[]
-  ) => void;
   clearFilters: () => void;
 }
 

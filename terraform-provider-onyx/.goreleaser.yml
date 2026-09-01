@@ -1,0 +1,52 @@
+# Release build for the public Terraform Registry, which dictates the archive
+# format, the archive and binary names, and a detached signature over the
+# checksums. Only settings that differ from goreleaser's defaults are here.
+version: 2
+
+# Not a default: goreleaser derives this from the git remote, which is "onyx"
+# in this repository. The registry keys on the name, so state it.
+project_name: terraform-provider-onyx
+
+builds:
+  - env:
+      - CGO_ENABLED=0
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    flags:
+      - -trimpath
+    # The registry serves freebsd and arm; goreleaser does not build them by
+    # default. It drops darwin/386 and darwin/arm on its own.
+    goos: [darwin, freebsd, linux, windows]
+    goarch: ["386", amd64, arm, arm64]
+    binary: "{{ .ProjectName }}_v{{ .Version }}"
+
+archives:
+  # The default is a tarball, and appends the ARM and amd64 variant to the name.
+  - formats: [zip]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: "{{ .ProjectName }}_{{ .Version }}_SHA256SUMS"
+  extra_files:
+    - glob: terraform-registry-manifest.json
+      name_template: "{{ .ProjectName }}_{{ .Version }}_manifest.json"
+
+# The registry checks this against the public key registered with the provider,
+# and refuses a release without it.
+signs:
+  - artifacts: checksum
+    args:
+      - "--batch"
+      - "--local-user"
+      - "{{ .Env.GPG_FINGERPRINT }}"
+      - "--output"
+      - "${signature}"
+      - "--detach-sign"
+      - "${artifact}"
+
+release:
+  extra_files:
+    - glob: terraform-registry-manifest.json
+      name_template: "{{ .ProjectName }}_{{ .Version }}_manifest.json"
+
+changelog:
+  disable: true

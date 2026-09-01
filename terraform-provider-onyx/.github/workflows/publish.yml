@@ -1,0 +1,84 @@
+name: Publish
+
+# This file runs in the release mirror, onyx-dot-app/terraform-provider-onyx,
+# and not in the monorepo where it is edited. GitHub only reads workflows from
+# a repository's root, so it is inert in the monorepo and live in the mirror
+# once Release Terraform Provider has copied this directory across.
+#
+# That copy pushes a vX.Y.Z tag, which is what starts this.
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Build every archive without signing or publishing."
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Build, sign and publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      # goreleaser creates the GitHub release the registry ingests.
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
+        with:
+          # goreleaser takes the version from the tag, so it needs the tags.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # ratchet:actions/setup-go@v5 # zizmor: ignore[cache-poisoning]
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Import the signing key
+        id: gpg
+        if: ${{ !inputs.dry_run }}
+        uses: crazy-max/ghaction-import-gpg@2dc316deee8e90f13e1a351ab510b4d5bc0c82cd # ratchet:crazy-max/ghaction-import-gpg@v7.0.0
+        with:
+          gpg_private_key: ${{ secrets.TF_PROVIDER_GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.TF_PROVIDER_GPG_PASSPHRASE }}
+
+      - name: Build and publish the release
+        if: ${{ !inputs.dry_run }}
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # ratchet:goreleaser/goreleaser-action@v7.2.3
+        with:
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GPG_FINGERPRINT: ${{ steps.gpg.outputs.fingerprint }}
+
+      - name: Build the release without publishing it
+        if: ${{ inputs.dry_run }}
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # ratchet:goreleaser/goreleaser-action@v7.2.3
+        with:
+          version: "~> v2"
+          args: release --snapshot --clean --skip=sign,publish
+
+      - name: Report what was built
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          {
+            if [ "${DRY_RUN}" = "true" ]; then
+              echo "### Dry run — nothing was signed or published"
+            else
+              echo "### Published ${GITHUB_REF_NAME}"
+            fi
+            echo '```'
+            find dist -maxdepth 1 -name '*.zip' -exec basename {} \; | sort
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

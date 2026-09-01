@@ -1,7 +1,7 @@
 import type { Settings } from "@/lib/settings/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
-  EmbeddingModel,
+  EmbeddingModelSpec,
   EmbeddingProviderName,
   ReindexErrorRow,
   SavedSearchSettings,
@@ -175,7 +175,7 @@ export async function resumePausedPort(
 }
 
 interface SetNewSearchSettingsArgs {
-  model: EmbeddingModel;
+  model: EmbeddingModelSpec;
   providerName: EmbeddingProviderName;
   switchoverType: SwitchoverType;
   enableContextualRag: boolean;

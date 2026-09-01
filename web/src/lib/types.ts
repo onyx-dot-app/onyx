@@ -6,15 +6,6 @@ import { Connector } from "./connectors/connectors";
 import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/types";
 import type { PermissionsOf } from "@/lib/permissions/resource-actions";
 
-export interface UserSpecificAgentPreference {
-  disabled_tool_ids?: number[];
-}
-
-export type UserSpecificAgentPreferences = Record<
-  number,
-  UserSpecificAgentPreference
->;
-
 export enum ThemePreference {
   LIGHT = "light",
   DARK = "dark",

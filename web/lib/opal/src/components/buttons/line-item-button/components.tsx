@@ -19,7 +19,14 @@ type ContentPassthroughProps = DistributiveOmit<
 
 type LineItemButtonOwnProps = Pick<
   InteractiveStatefulProps,
-  "state" | "interaction" | "onClick" | "href" | "target" | "group" | "ref"
+  | "state"
+  | "interaction"
+  | "onClick"
+  | "href"
+  | "target"
+  | "group"
+  | "ref"
+  | "disabled"
 > & {
   /** Interactive select variant. @default "select-light" */
   selectVariant?: "select-light" | "select-heavy";
@@ -89,6 +96,7 @@ function LineItemButton({
   target,
   group,
   ref,
+  disabled,
 
   // Sizing
   rounding = 3,
@@ -96,6 +104,17 @@ function LineItemButton({
   padding = 0.5,
   tooltip,
   tooltipSide = "top",
+
+  /*
+   * Taken out of the pass-through and defaulted here rather than written
+   * before the spread. A spread copies a key even when its value is
+   * `undefined`, so `color={condition ? "muted" : undefined}` — the obvious
+   * way to colour a row conditionally — used to overwrite the default and drop
+   * the row to `"default"`, which pins its colours and stops it responding to
+   * hover, selection or disablement. A destructuring default treats `undefined`
+   * as absent, so that call now means what it looks like.
+   */
+  color = "interactive",
 
   // ContentAction pass-through
   ...contentActionProps
@@ -122,6 +141,7 @@ function LineItemButton({
       target={target}
       group={group}
       ref={ref}
+      disabled={disabled}
     >
       <Interactive.Container
         width={width}
@@ -131,7 +151,7 @@ function LineItemButton({
       >
         <div className="w-full p-1.5">
           <ContentAction
-            color="interactive"
+            color={color}
             {...(contentActionProps as ContentActionProps)}
             padding={padding}
           />

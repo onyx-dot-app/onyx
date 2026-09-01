@@ -154,9 +154,9 @@ def _summarize_image(
         if len(str_e) > 512:
             str_e = str_e[:512] + "... (truncated)"
         parts = [f"Summarization failed: {type(e).__name__}: {str_e}"]
-        status_code = getattr(e, "status_code", None)
-        llm_provider = getattr(e, "llm_provider", None)
-        model = getattr(e, "model", None)
+        status_code = getattr(e, "status_code", None)  # ods: ignore[getattr]
+        llm_provider = getattr(e, "llm_provider", None)  # ods: ignore[getattr]
+        model = getattr(e, "model", None)  # ods: ignore[getattr]
         if status_code is not None:
             parts.append(f"status_code={status_code}")
         if llm_provider is not None:

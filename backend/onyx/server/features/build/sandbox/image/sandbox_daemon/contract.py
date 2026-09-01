@@ -15,6 +15,7 @@ SIDECAR_READY_PATH = "/ready"
 SIDECAR_PUSH_PATH = "/push"
 PUSH_DAEMON_PORT = 8731
 SIDECAR_FILESYSTEM_LIST_PATH = "/filesystem/list"
+SIDECAR_OUTPUTS_MANIFEST_PATH = "/filesystem/outputs-manifest"
 SIDECAR_SNAPSHOT_CREATE_PATH = "/snapshot/create"
 SIDECAR_SNAPSHOT_RESTORE_PREFIX = "/snapshot/restore"
 SIDECAR_SNAPSHOT_RESTORE_ROUTE = f"{SIDECAR_SNAPSHOT_RESTORE_PREFIX}/{{session_id}}"
@@ -32,6 +33,9 @@ class SnapshotCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     session_id: UUID
+
+
+# Restore has no response body. Failures raise, success is the 204.
 
 
 class FilesystemListRequest(BaseModel):
@@ -57,4 +61,28 @@ class FilesystemListResponse(BaseModel):
     entries: list[SidecarFilesystemEntry]
 
 
-# Restore has no response body — failures raise, success is the 204.
+class OutputsManifestRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    session_id: UUID
+
+
+class OutputsManifestEntry(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    path: str
+    is_directory: bool
+    size: int | None = None
+    mtime_ns: int | None = None
+    # None for directories and for files past the hash ceilings.
+    sha256: str | None = None
+
+
+class OutputsManifestResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    entries: list[OutputsManifestEntry]
+    skipped_symlinks: int = 0
+    skipped_special: int = 0
+    skipped_unreadable: int = 0
+    truncated: bool = False

@@ -47,6 +47,7 @@ export interface Credential<T> extends CredentialBase<T> {
 }
 export interface GithubCredentialJson {
   github_access_token: string;
+  github_base_url: string | null;
 }
 
 export interface GitbookCredentialJson {
@@ -318,7 +319,10 @@ export interface TestRailCredentialJson {
 }
 
 export const credentialTemplates: Record<ValidSources, any> = {
-  github: { github_access_token: "" } as GithubCredentialJson,
+  github: {
+    github_access_token: "",
+    github_base_url: null,
+  } as GithubCredentialJson,
   gitlab: {
     gitlab_url: "",
     gitlab_access_token: "",
@@ -547,6 +551,8 @@ export const credentialTemplates: Record<ValidSources, any> = {
 export const credentialDisplayNames: Record<string, string> = {
   // Github
   github_access_token: "GitHub Access Token",
+  github_base_url:
+    "GitHub Enterprise Server URL (optional; set your server host like https://github.example.com, leave blank for github.com)",
 
   // LumApps
   lumapps_application_id: "LumApps Application ID",

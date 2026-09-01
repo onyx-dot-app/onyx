@@ -34,7 +34,6 @@ export const SWR_KEYS = {
   // ── Agents ────────────────────────────────────────────────────────────────
   agents: "/api/persona",
   agent: (agentId: number) => `/api/persona/${agentId}`,
-  agentPreferences: "/api/user/assistant/preferences",
   defaultAssistantConfig: "/api/admin/default-assistant/configuration",
   agentLabels: "/api/persona/labels",
   adminAgentLabel: (labelId: number) => `/api/admin/persona/label/${labelId}`,

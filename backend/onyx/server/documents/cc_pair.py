@@ -22,7 +22,6 @@ from onyx.connectors.exceptions import ValidationError
 from onyx.connectors.factory import identify_connector_class, validate_ccpair_for_user
 from onyx.connectors.interfaces import Resolver
 from onyx.connectors.models import InputType
-from onyx.db.connector import delete_connector
 from onyx.db.connector_credential_pair import (
     add_credential_to_connector,
     get_cc_pair_ids_for_connector,
@@ -595,7 +594,9 @@ def update_cc_pair_name(
         )
     except IntegrityError:
         db_session.rollback()
-        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Name must be unique")
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT, f"Could not rename cc-pair {cc_pair_id}."
+        )
 
 
 @router.put("/admin/cc-pair/{cc_pair_id}/property")
@@ -883,12 +884,19 @@ def associate_credential_to_connector(
             OnyxErrorCode.INVALID_INPUT,
             "Connector validation error: " + str(e),
         )
-    except IntegrityError as e:
-        logger.error("IntegrityError: %s", e)
-        delete_connector(db_session, connector_id)
-        db_session.commit()
+    except IntegrityError:
+        # The connector is a separately owned object the caller created before
+        # this call, so a failed association rolls back rather than deleting it.
+        # The unique name constraint this once reported was dropped in
+        # 76b60d407dfb, so a collision here is on (connector_id, credential_id).
+        logger.exception("IntegrityError associating credential to connector")
+        db_session.rollback()
 
-        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Name must be unique")
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            f"Connector {connector_id} is already associated with credential "
+            f"{credential_id}.",
+        )
 
     except Exception as e:
         logger.exception("Unexpected error: %s", e)

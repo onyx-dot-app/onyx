@@ -49,7 +49,7 @@ def _load_connector_class(source: DocumentSource) -> Type[BaseConnector]:
 
     try:
         module = importlib.import_module(mapping.module_path)
-        connector_class = getattr(module, mapping.class_name)
+        connector_class = getattr(module, mapping.class_name)  # ods: ignore[getattr]
         _connector_cache[source] = connector_class
         return connector_class
     except (ImportError, AttributeError) as e:

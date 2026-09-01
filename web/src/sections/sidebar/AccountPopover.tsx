@@ -26,7 +26,7 @@ import {
 } from "@opal/icons";
 import { Content, toast, useSidebarFolded } from "@opal/layouts";
 import { Section } from "@/layouts/general-layouts";
-import useAppFocus from "@/hooks/useAppFocus";
+import { useAppPosition } from "@/lib/position/hooks";
 import useScreenSize from "@/hooks/useScreenSize";
 import { useSettings } from "@/lib/settings/hooks";
 import UserAvatar from "@/refresh-components/avatars/UserAvatar";
@@ -209,7 +209,7 @@ export default function AccountPopover({ onShowBuildIntro }: SettingsProps) {
     "Settings" | "Notifications" | undefined
   >(undefined);
   const { user, userResolution } = useUser();
-  const appFocus = useAppFocus();
+  const appPosition = useAppPosition();
   const { isMobile } = useScreenSize();
   const { vectorDbEnabled } = useSettings();
   const { undismissedCount, refresh: refreshNotificationSummary } =
@@ -256,7 +256,7 @@ export default function AccountPopover({ onShowBuildIntro }: SettingsProps) {
               ) : undefined
             }
             type="button"
-            selected={!!popupState || appFocus.isUserSettings()}
+            selected={!!popupState || appPosition.isUserSettings()}
           >
             {userDisplayName}
           </SidebarTab>

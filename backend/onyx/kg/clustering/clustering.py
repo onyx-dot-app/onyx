@@ -186,9 +186,9 @@ def _cluster_one_grounded_entity(
                     # find entities of the same type with a similar name
                     *filtering,
                     KGEntity.entity_type_id_name == entity.entity_type_id_name,
-                    getattr(func, POSTGRES_DEFAULT_SCHEMA).similarity_op(
-                        KGEntity.name, entity_name
-                    ),
+                    getattr(  # ods: ignore[getattr]
+                        func, POSTGRES_DEFAULT_SCHEMA
+                    ).similarity_op(KGEntity.name, entity_name),
                 )
                 .all()
             )

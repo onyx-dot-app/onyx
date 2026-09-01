@@ -123,7 +123,7 @@ def _ip_is_internal(ip_str: str) -> bool:
         ip = ipaddress.ip_address(ip_str)
     except ValueError:
         return False
-    mapped = getattr(ip, "ipv4_mapped", None)
+    mapped = getattr(ip, "ipv4_mapped", None)  # ods: ignore[getattr]
     if mapped is not None:
         ip = mapped
     return not ip.is_global
@@ -287,7 +287,7 @@ class GateAddon:
             flow.response = http_403(SandboxProxyError.DESTINATION_BLOCKED)
             return
 
-        conn_id = getattr(flow.client_conn, "id", None)
+        conn_id = getattr(flow.client_conn, "id", None)  # ods: ignore[getattr]
         auth_header = flow.request.headers.get("Proxy-Authorization")
         tag = _parse_proxy_auth_username(auth_header)
 
@@ -307,7 +307,7 @@ class GateAddon:
 
     def client_disconnected(self, client: object) -> None:
         """Drops the connection's cached session tag to bound memory."""
-        conn_id = getattr(client, "id", None)
+        conn_id = getattr(client, "id", None)  # ods: ignore[getattr]
         if conn_id is not None:
             self._conn_session_tags.pop(conn_id, None)
 
@@ -1283,7 +1283,7 @@ class GateAddon:
         HTTPS: cached from the CONNECT in `http_connect`. HTTP: read off the
         request directly, since there's no CONNECT to carry the header.
         """
-        conn_id = getattr(flow.client_conn, "id", None)
+        conn_id = getattr(flow.client_conn, "id", None)  # ods: ignore[getattr]
         cached = self._conn_session_tags.get(conn_id) if conn_id else None
         direct_auth_header = flow.request.headers.get("Proxy-Authorization")
         direct = _parse_proxy_auth_username(direct_auth_header)

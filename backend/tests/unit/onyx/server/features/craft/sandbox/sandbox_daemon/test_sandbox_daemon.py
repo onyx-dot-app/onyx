@@ -77,6 +77,7 @@ def _load_sandbox_daemon_modules() -> tuple[ModuleType, ModuleType]:
         "snapshot",
         "opencode_history",
         "filesystem",
+        "manifest",
         "server",
     ):
         spec = importlib.util.spec_from_file_location(
