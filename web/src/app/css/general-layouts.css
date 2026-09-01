@@ -28,7 +28,7 @@
 }
 
 .line-item-layout-title {
-  @apply text-left;
+  @apply text-start;
 }
 
 .line-item-layout[data-strikethrough="true"] .line-item-layout-title {
