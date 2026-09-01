@@ -41,6 +41,7 @@ describe("nameInitials", () => {
   it("keeps one glyph per slot when uppercasing expands", () => {
     expect(nameInitials("\u00DFeta", 1)).toBe("S");
     expect(nameInitials("\u00DFeta stein", 2)).toBe("SS");
+    expect(nameInitials("\u0149elson", 1)).toBe("N");
   });
 
   it("returns null when no letter leads", () => {

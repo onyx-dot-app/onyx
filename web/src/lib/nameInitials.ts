@@ -71,9 +71,13 @@ export function nameInitials(name: string, maxLetters: number): string | null {
       ? words.slice(0, maxLetters).map(firstGrapheme)
       : graphemes(trimmed, maxLetters);
   if (!slots.every((grapheme) => LETTER.test(grapheme))) return null;
-  // One glyph per slot: uppercasing can expand (ß becomes SS), so each
-  // slot keeps only the first grapheme of its uppercased form.
-  return slots
-    .map((grapheme) => firstGrapheme(grapheme.toUpperCase()))
-    .join("");
+  return slots.map(slotGlyph).join("");
+}
+
+// One glyph per slot: uppercasing can expand (ß becomes SS, ŉ becomes
+// ʼN), so keep the expansion's first uppercase letter when it has one.
+function slotGlyph(grapheme: string): string {
+  const upper = grapheme.toUpperCase();
+  const parts = graphemes(upper, 4);
+  return parts.find((part) => /\p{Lu}/u.test(part)) ?? parts[0] ?? upper;
 }
