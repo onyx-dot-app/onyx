@@ -141,6 +141,30 @@ def test_pending_fires_deletions_and_advances_to_soaking(
         cleanup_cc_pair(db_session, invalid)
 
 
+def test_pending_with_no_deletions_reclaims_but_spares_connectors(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        reclaim_tasks, "is_active_port_backfill_source", lambda *_a, **_k: False
+    )
+    invalid = _cc_pair_with_status(db_session, ConnectorCredentialPairStatus.INVALID)
+    ss = _make_past_settings(db_session, IndexReclaimStatus.PENDING)
+    celery_app = MagicMock()
+    try:
+        reclaim_tasks.run_old_index_reclaim(db_session, celery_app, "tenant", ss)
+        db_session.refresh(ss)
+        db_session.refresh(invalid)
+
+        assert ss.reclaim_status == IndexReclaimStatus.SOAKING
+        assert invalid.status == ConnectorCredentialPairStatus.INVALID
+        celery_app.send_task.assert_not_called()
+    finally:
+        _delete_settings(db_session, ss)
+        cleanup_cc_pair(db_session, invalid)
+
+
 def test_pending_revalidation_spares_reactivated_connector(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001

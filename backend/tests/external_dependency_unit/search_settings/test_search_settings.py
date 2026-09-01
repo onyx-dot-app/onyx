@@ -87,6 +87,7 @@ def _create_llm_provider_and_model(
 def _make_creation_request(
     model_configuration_id: int | None = None,
     enable_contextual_rag: bool = True,
+    acknowledged_wont_port_cc_pair_ids: list[int] | None = None,
 ) -> SearchSettingsCreationRequest:
     return SearchSettingsCreationRequest(
         model_name="test-embedding-model",
@@ -101,6 +102,7 @@ def _make_creation_request(
         reduced_dimension=None,
         enable_contextual_rag=enable_contextual_rag,
         contextual_rag_model_configuration_id=model_configuration_id,
+        acknowledged_wont_port_cc_pair_ids=acknowledged_wont_port_cc_pair_ids,
     )
 
 
@@ -316,7 +318,10 @@ def test_port_seed_excludes_invalid_cc_pair(
     future_id: int | None = None
     try:
         future_id = set_new_search_settings(
-            search_settings_new=_make_creation_request(enable_contextual_rag=False),
+            search_settings_new=_make_creation_request(
+                enable_contextual_rag=False,
+                acknowledged_wont_port_cc_pair_ids=[invalid_pair.id],
+            ),
             _=MagicMock(),
             db_session=db_session,
         ).id
