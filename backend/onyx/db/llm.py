@@ -337,21 +337,35 @@ def upsert_llm_provider(
         mc.id for name, mc in existing_by_name.items() if name not in models_to_exist
     ]
 
-    default_model = fetch_default_llm_model(db_session)
+    # Every deployment default lives on a flow row pointing at a model, and
+    # _update_default_model__no_commit makes that model visible, so a model
+    # holding any default must stay present and visible. Checking only the chat
+    # default let an edit hide the model contextual RAG or Craft still resolves
+    # to, since neither resolver looks at is_visible.
+    #
+    # Only the visible-to-hidden transition is refused, not the steady state. A
+    # default can already sit on a hidden model — sync_auto_mode_models hides
+    # models dropped from the recommendations and re-points only the chat
+    # default — and both the admin form and the auto-mode transition re-send
+    # every model's stored visibility. Refusing the steady state would fail
+    # unrelated edits such as an API key rotation.
+    defaults_by_model_id = fetch_default_flows_by_model_id(db_session)
 
-    # Prevent removing and hiding the default model
-    if default_model:
-        for name, mc in existing_by_name.items():
-            if mc.id == default_model.id:
-                if default_model.id in removed_ids:
-                    raise ValueError(
-                        f"Cannot remove the default model '{name}'. Please change the default model before removing."
-                    )
-                if not requested_visibility.get(name, True):
-                    raise ValueError(
-                        f"Cannot hide the default model '{name}'. Please change the default model before hiding."
-                    )
-                break
+    for name, mc in existing_by_name.items():
+        held_flows = defaults_by_model_id.get(mc.id)
+        if not held_flows:
+            continue
+        held = ", ".join(sorted(flow.value for flow in held_flows))
+        if mc.id in removed_ids:
+            raise ValueError(
+                f"Cannot remove the default model '{name}'. It is the default for: "
+                f"{held}. Please change those defaults before removing."
+            )
+        if mc.is_visible and not requested_visibility.get(name, True):
+            raise ValueError(
+                f"Cannot hide the default model '{name}'. It is the default for: "
+                f"{held}. Please change those defaults before hiding."
+            )
 
     if removed_ids:
         db_session.query(ModelConfiguration).filter(
@@ -857,6 +871,27 @@ def fetch_default_craft_model(db_session: Session) -> ModelConfiguration | None:
     return fetch_default_model(db_session, LLMModelFlowType.CRAFT)
 
 
+def fetch_default_flows_by_model_id(
+    db_session: Session,
+) -> dict[int, set[LLMModelFlowType]]:
+    """Which deployment defaults each model configuration currently holds.
+
+    One model commonly holds several — the chat default is very often the vision
+    default too — so the value is a set rather than a single flow.
+    """
+    rows = db_session.execute(
+        select(
+            LLMModelFlow.model_configuration_id,
+            LLMModelFlow.llm_model_flow_type,
+        ).where(LLMModelFlow.is_default == True)  # noqa: E712
+    ).all()
+
+    defaults: dict[int, set[LLMModelFlowType]] = {}
+    for model_configuration_id, flow_type in rows:
+        defaults.setdefault(model_configuration_id, set()).add(flow_type)
+    return defaults
+
+
 def fetch_default_model(
     db_session: Session,
     flow_type: LLMModelFlowType,
@@ -1357,10 +1392,20 @@ def update_model_configuration__no_commit(
         for flow_type in supported_flows
         if flow_type not in model_configuration.llm_model_flow_types
     }
+    # Only the capability-derived flows are reconciled here. The pointer flows —
+    # CONTEXTUAL_RAG, CHAT_NAMING and CRAFT — are set by their own endpoints and
+    # are implied by no supports_* field, so they are never in supported_flows.
+    # Without this filter an ordinary provider update deletes them, and the
+    # deployment default each one carries goes with it.
+    reconciled_flows = {
+        LLMModelFlowType.CHAT,
+        LLMModelFlowType.VISION,
+        LLMModelFlowType.REASONING,
+    }
     removed_flows = {
         flow_type
         for flow_type in model_configuration.llm_model_flow_types
-        if flow_type not in supported_flows
+        if flow_type not in supported_flows and flow_type in reconciled_flows
     }
 
     for flow_type in new_flows:
