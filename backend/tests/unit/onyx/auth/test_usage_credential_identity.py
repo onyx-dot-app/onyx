@@ -58,7 +58,9 @@ async def test_unauthenticated_request_has_no_credential() -> None:
     request = _bare_request()
 
     assert await _resolve(request, None) is None
-    assert getattr(request.state, "usage_credential", None) is None
+    assert (
+        getattr(request.state, "usage_credential", None) is None  # ods: ignore[getattr]
+    )
 
 
 @pytest.mark.parametrize(

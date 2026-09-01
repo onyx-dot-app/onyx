@@ -34,7 +34,7 @@ import { Popover, PopoverMenu } from "@opal/components";
 import { InputTypeIn } from "@opal/components";
 import useFilter from "@/hooks/useFilter";
 import { useAdminMcpServers } from "@/lib/tools/hooks";
-import { useAvailableTools } from "@/hooks/useAvailableTools";
+import { useAvailableTools } from "@/lib/tools/hooks";
 import useUsers from "@/hooks/useUsers";
 import { useUser } from "@/providers/UserProvider";
 import type { MinimalAgent } from "@/lib/agents/types";

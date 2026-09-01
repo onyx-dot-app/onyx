@@ -12,6 +12,7 @@ import { PreviewVariant } from "@/sections/modals/PreviewModal/interfaces";
 import { CopyButton } from "@opal/components";
 import { DownloadButton } from "@/sections/modals/PreviewModal/variants/shared";
 import { sanitizeDocxHtml } from "@/sections/modals/PreviewModal/variants/sanitizeDocxHtml";
+import "@/sections/modals/PreviewModal/variants/docx-preview.css";
 
 const DOCX_MIMES = [
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -128,7 +129,7 @@ function DocxPreview({ fileUrl, onLoad }: DocxPreviewProps) {
       {/* Style container for docx-preview generated styles */}
       <div ref={styleRef} />
       {/* Body container where docx-preview renders the document */}
-      <div ref={bodyRef} className="docx-host px-32 pb-16" />
+      <div ref={bodyRef} className="docx-host px-32 py-16" />
     </ScrollIndicatorDiv>
   );
 }

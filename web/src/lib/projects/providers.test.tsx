@@ -13,8 +13,8 @@ jest.mock("next/navigation", () => ({
   }),
 }));
 
-jest.mock("@/hooks/appNavigation", () => ({
-  useAppRouter: () => jest.fn(),
+jest.mock("@/lib/position/hooks", () => ({
+  useAppPosition: () => ({ openNewSession: jest.fn() }),
 }));
 
 jest.mock("@/lib/projects/hooks", () => ({

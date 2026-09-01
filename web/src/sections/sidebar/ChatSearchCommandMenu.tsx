@@ -4,7 +4,7 @@ import React, { useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import type { Route } from "next";
-import { useAppRouter } from "@/hooks/appNavigation";
+import { useAppPosition } from "@/lib/position/hooks";
 import CommandMenu, {
   useCommandMenuContext,
 } from "@/refresh-components/commandmenu/CommandMenu";
@@ -77,8 +77,8 @@ export default function ChatSearchCommandMenu({
   const [initialProjectName, setInitialProjectName] = useState<
     string | undefined
   >();
+  const appPosition = useAppPosition();
   const router = useRouter();
-  const route = useAppRouter();
 
   // Data hooks
   const { projects } = useProjects();
@@ -163,18 +163,18 @@ export default function ChatSearchCommandMenu({
 
   const handleChatSelect = useCallback(
     (chatId: string) => {
-      route({ chatSessionId: chatId });
+      appPosition.openChat(chatId);
       setOpen(false);
     },
-    [route]
+    [appPosition]
   );
 
   const handleProjectSelect = useCallback(
     (projectId: number) => {
-      route({ projectId });
+      appPosition.openProject(projectId);
       setOpen(false);
     },
-    [route]
+    [appPosition]
   );
 
   const handleNewProject = useCallback(

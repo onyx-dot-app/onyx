@@ -38,6 +38,7 @@ from onyx.db.enums import (
 from onyx.db.gated_app import get_or_create_gated_app_id
 from onyx.db.models import (
     ActionApproval,
+    ActionReceipt,
     Connector,
     ConnectorCredentialPair,
     Credential,
@@ -66,6 +67,20 @@ def force_approval_created_at(
     db_session.execute(
         update(ActionApproval)
         .where(ActionApproval.approval_id == approval_id)
+        .values(created_at=when)
+    )
+    db_session.commit()
+
+
+def force_receipt_created_at(
+    db_session: Session,
+    receipt_id: UUID,
+    when: datetime,
+) -> None:
+    """Force an ``ActionReceipt`` row's ``created_at`` timestamp."""
+    db_session.execute(
+        update(ActionReceipt)
+        .where(ActionReceipt.id == receipt_id)
         .values(created_at=when)
     )
     db_session.commit()

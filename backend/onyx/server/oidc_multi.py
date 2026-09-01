@@ -195,7 +195,9 @@ def _drop_unadvertised_offline_access(client: BaseOAuth2[Any]) -> None:
     scopes they don't support, so the auto-added offline_access scope only
     survives when the discovery doc advertises it. A discovery doc without
     scopes_supported keeps the scope, since support can't be ruled out."""
-    discovery = getattr(client, "openid_configuration", None) or {}
+    discovery = (
+        getattr(client, "openid_configuration", None) or {}  # ods: ignore[getattr]
+    )
     supported = discovery.get("scopes_supported")
     if supported is None or "offline_access" in supported:
         return
@@ -227,7 +229,9 @@ def _build_client(provider: SSOProvider, config: dict[str, Any]) -> BaseOAuth2[A
         )
         # The document is attacker-chosen once its URL is, and the endpoints it
         # names are fetched next, so they get the same treatment as the URL.
-        validate_discovered_endpoints(getattr(client, "openid_configuration", None))
+        validate_discovered_endpoints(
+            getattr(client, "openid_configuration", None)  # ods: ignore[getattr]
+        )
         # Explicitly configured offline_access is always respected as-is.
         if offline_access_auto_added:
             _drop_unadvertised_offline_access(client)

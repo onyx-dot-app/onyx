@@ -35,7 +35,9 @@ def test_mcp_oauth_client_metadata_document_is_public_and_cacheable(
     }
 
     metadata_route = next(
-        route for route in app.routes if getattr(route, "path", "") == METADATA_ROUTE
+        route
+        for route in app.routes
+        if getattr(route, "path", "") == METADATA_ROUTE  # ods: ignore[getattr]
     )
     assert is_route_in_spec_list(metadata_route, PUBLIC_ENDPOINT_SPECS)
 

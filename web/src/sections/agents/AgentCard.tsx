@@ -5,8 +5,7 @@ import { useTranslations } from "next-intl";
 import { MinimalAgent } from "@/lib/agents/types";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { Button } from "@opal/components";
-import { useAppRouter } from "@/hooks/appNavigation";
-import { usePinnedAgents, useAgent } from "@/lib/agents/hooks";
+import { usePinnedAgents } from "@/lib/agents/hooks";
 import { noProp } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
@@ -24,8 +23,8 @@ import {
   SvgUser,
 } from "@opal/icons";
 import { useCreateModal } from "@opal/components";
+import { useAppPosition } from "@/lib/position/hooks";
 import { ShareAgentModal } from "@/lib/agents/components";
-import { AgentViewerModal } from "@/lib/agents/components";
 import { CardItemLayout } from "@/layouts/general-layouts";
 import { Content } from "@opal/layouts";
 import { Hoverable, Interactive } from "@opal/core";
@@ -33,11 +32,13 @@ import { Card } from "@/refresh-components/cards";
 
 export interface AgentCardProps {
   agent: MinimalAgent;
+  /** Opens this agent's viewer, which the listing renders. */
+  onView: () => void;
 }
 
-export default function AgentCard({ agent }: AgentCardProps) {
+export default function AgentCard({ agent, onView }: AgentCardProps) {
   const t = useTranslations("agents");
-  const route = useAppRouter();
+  const appPosition = useAppPosition();
   const router = useRouter();
   const { pinnedAgents, togglePinnedAgent } = usePinnedAgents();
   const pinned = useMemo(
@@ -46,18 +47,14 @@ export default function AgentCard({ agent }: AgentCardProps) {
   );
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const shareAgentModal = useCreateModal();
-  const agentViewerModal = useCreateModal();
-  // Affordances read the map the list endpoint stamped on `agent`, so icons render with
-  // the card instead of popping in after the per-card fullAgent fetch resolves.
-  const { agent: fullAgent } = useAgent(agent.id);
 
   // Start chat and auto-pin unpinned agents to the sidebar
   const handleStartChat = useCallback(() => {
     if (!pinned) {
       togglePinnedAgent(agent, true);
     }
-    route({ agentId: agent.id });
-  }, [pinned, togglePinnedAgent, agent, route]);
+    appPosition.openAgent(agent.id);
+  }, [pinned, togglePinnedAgent, agent, appPosition]);
 
   // Declared once because it renders both bare and wrapped, depending on `pinned`.
   const pinButton = (
@@ -76,14 +73,7 @@ export default function AgentCard({ agent }: AgentCardProps) {
         <ShareAgentModal agentId={agent.id} />
       </shareAgentModal.Provider>
 
-      <agentViewerModal.Provider>
-        {fullAgent && <AgentViewerModal agent={fullAgent} />}
-      </agentViewerModal.Provider>
-
-      <Interactive.Simple
-        onClick={() => agentViewerModal.toggle(true)}
-        group="group/AgentCard"
-      >
+      <Interactive.Simple onClick={onView} group="group/AgentCard">
         <Hoverable.Root group="AgentCard" height="full">
           <Card
             padding={0}

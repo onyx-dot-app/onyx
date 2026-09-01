@@ -107,7 +107,9 @@ def _patch_ollama_chunk_parser() -> None:
     reasoning content and content in streaming responses.
     """
     if (
-        getattr(OllamaChatCompletionResponseIterator.chunk_parser, "__name__", "")
+        getattr(  # ods: ignore[getattr]
+            OllamaChatCompletionResponseIterator.chunk_parser, "__name__", ""
+        )
         == "_patched_chunk_parser"
     ):
         return
@@ -165,7 +167,9 @@ def _patch_ollama_chunk_parser() -> None:
             if chunk["message"].get("content") is not None:
                 message_content = chunk["message"].get("content")
                 # Track whether we are inside <think>...</think> tagged content.
-                in_think_tag_block = bool(getattr(self, "_in_think_tag_block", False))
+                in_think_tag_block = bool(
+                    getattr(self, "_in_think_tag_block", False)  # ods: ignore[getattr]
+                )
                 if "<think>" in message_content:
                     message_content = message_content.replace("<think>", "")
                     self.started_reasoning_content = True
@@ -262,7 +266,7 @@ def _patch_responses_reasoning_summary_newlines() -> None:
     the summary_index changes, producing readable section breaks.
     """
     if (
-        getattr(
+        getattr(  # ods: ignore[getattr]
             OpenAiResponsesToChatCompletionStreamIterator.chunk_parser,
             "__name__",
             "",
@@ -294,7 +298,7 @@ def _patch_responses_reasoning_summary_newlines() -> None:
                 summary_index = parsed_chunk.get("summary_index", 0)
 
                 # Track the last summary index to insert newlines between parts
-                last_summary_index = getattr(
+                last_summary_index = getattr(  # ods: ignore[getattr]
                     self, "_last_reasoning_summary_index", None
                 )
                 if (
@@ -357,7 +361,7 @@ def _patch_openai_responses_transform_response() -> None:
     )
 
     if (
-        getattr(
+        getattr(  # ods: ignore[getattr]
             original_transform_response,
             "__name__",
             "",
@@ -407,7 +411,11 @@ def _patch_openai_responses_transform_response() -> None:
                 summary_texts = [
                     text
                     for summary_item in item.summary
-                    if (text := getattr(summary_item, "text", ""))
+                    if (
+                        text := getattr(  # ods: ignore[getattr]
+                            summary_item, "text", ""
+                        )
+                    )
                 ]
                 if len(summary_texts) > 1:
                     combined_text = "\n\n".join(summary_texts)
@@ -415,8 +423,10 @@ def _patch_openai_responses_transform_response() -> None:
 
         if combined_text and hasattr(result, "choices"):
             for choice in result.choices:
-                message = getattr(choice, "message", None)
-                if message is not None and getattr(message, "reasoning_content", None):
+                message = getattr(choice, "message", None)  # ods: ignore[getattr]
+                if message is not None and getattr(  # ods: ignore[getattr]
+                    message, "reasoning_content", None
+                ):
                     message.reasoning_content = combined_text
 
         return result
@@ -439,7 +449,9 @@ def _patch_openai_responses_should_fake_stream() -> None:
     from litellm.llms.openai.responses.transformation import OpenAIResponsesAPIConfig
 
     if (
-        getattr(OpenAIResponsesAPIConfig.should_fake_stream, "__name__", "")
+        getattr(  # ods: ignore[getattr]
+            OpenAIResponsesAPIConfig.should_fake_stream, "__name__", ""
+        )
         == "_patched_openai_should_fake_stream"
     ):
         return
@@ -491,7 +503,7 @@ def _patch_responses_api_usage_format() -> None:
 
     original_model_construct = ResponsesAPIResponse.model_construct
 
-    if getattr(original_model_construct, "_is_patched", False):
+    if getattr(original_model_construct, "_is_patched", False):  # ods: ignore[getattr]
         return
 
     @classmethod
@@ -566,7 +578,7 @@ def _patch_logging_assembled_streaming_response() -> None:
 
     original_method = LiteLLMLoggingObj._get_assembled_streaming_response
 
-    if getattr(original_method, "_is_patched", False):
+    if getattr(original_method, "_is_patched", False):  # ods: ignore[getattr]
         return
 
     def _patched_get_assembled_streaming_response(
@@ -662,7 +674,9 @@ def _patch_responses_api_bridge_check() -> None:
     import litellm.main as litellm_main
 
     if (
-        getattr(litellm_main.responses_api_bridge_check, "__name__", "")
+        getattr(  # ods: ignore[getattr]
+            litellm_main.responses_api_bridge_check, "__name__", ""
+        )
         == "_patched_responses_api_bridge_check"
     ):
         return

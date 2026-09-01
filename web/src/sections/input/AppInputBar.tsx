@@ -18,8 +18,8 @@ import { useAvailableSources } from "@/lib/connectors/hooks";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { ChatState, MAX_QUEUED_MESSAGES } from "@/app/app/interfaces";
 import { useQueuedMessageNavigation } from "@/hooks/useQueuedMessageNavigation";
-import { useForcedTools } from "@/lib/hooks/useForcedTools";
-import useAppFocus from "@/hooks/useAppFocus";
+import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
+import { useAppPosition } from "@/lib/position/hooks";
 import { useDraft, draftKey } from "@/hooks/useDraft";
 import { getPastedFilesIfNoText } from "@/lib/clipboard";
 import PasteTilePopover from "@/sections/input/PasteTilePopover";
@@ -71,7 +71,6 @@ import {
 } from "@/app/app/stores/useChatSessionStore";
 import QueuedMessageBar from "@/sections/input/QueuedMessageBar";
 import { handleInputNavKeys } from "@/sections/input/inputBarKeys";
-import type { SearchFilters } from "@/lib/searchFilters/types";
 
 export interface AppInputBarHandle {
   reset: () => void;
@@ -91,12 +90,16 @@ export interface AppInputBarProps {
   activeAgent: MinimalAgent | undefined;
 
   handleFileUpload: (files: File[]) => void;
-  filterManager: SearchFilters;
   deepResearchEnabled: boolean;
   setPresentingDocument?: (document: MinimalOnyxDocument) => void;
   toggleDeepResearch: () => void;
   isMultiModelActive?: boolean;
   disabled: boolean;
+  /**
+   * Owned by the surface rather than read here, because the send path reads
+   * the same one and two instances would drift.
+   */
+  toolConfiguration: ToolConfigurationHandle;
   ref?: React.Ref<AppInputBarHandle>;
   // Side panel tab reading
   tabReadingEnabled?: boolean;
@@ -106,7 +109,6 @@ export interface AppInputBarProps {
 
 const AppInputBar = React.memo(
   ({
-    filterManager,
     initialMessage = "",
     stopGenerating,
     onSubmit,
@@ -121,6 +123,7 @@ const AppInputBar = React.memo(
     isMultiModelActive,
     setPresentingDocument,
     disabled,
+    toolConfiguration,
     ref,
     tabReadingEnabled,
     currentTabUrl,
@@ -204,14 +207,14 @@ const AppInputBar = React.memo(
       isTTSPlaying || isTTSLoading || isAwaitingAutoPlaybackStart;
     const isVoicePlaybackControllable = isVoicePlaybackActive && !isRecording;
     const isTTSActuallySpeaking = isTTSPlaying || isManualTTSPlaying;
-    const appFocus = useAppFocus();
-    const isNewSession = appFocus.isNewSession();
+    const appPosition = useAppPosition();
+    const isNewSession = appPosition.isNewSession();
     const appMode = state.phase === "idle" ? state.appMode : undefined;
     const isSearchMode =
       (isNewSession && appMode === "search") || isSearchActive;
 
     // Keyed by chat session id, or "new" until the session is created.
-    const chatSessionId = appFocus.isChat() ? appFocus.getId() : null;
+    const chatSessionId = appPosition.chat();
     const chatDraftStorageKey = draftKey("chat", chatSessionId ?? "new");
     const {
       draft: chatDraft,
@@ -324,7 +327,7 @@ const AppInputBar = React.memo(
       }
     }, [isNewSession, initialMessage]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const { forcedToolIds, setForcedToolIds } = useForcedTools();
+    const { forcedToolId, clearForcedTool } = toolConfiguration;
     const { currentMessageFiles, setCurrentMessageFiles } =
       useProjectsContext();
     const { isLoading: isLoadingProjects } = useProjects();
@@ -654,7 +657,7 @@ const AppInputBar = React.memo(
               <ToolsPopover
                 key={activeAgent.id}
                 agent={activeAgent}
-                filterManager={filterManager}
+                toolConfiguration={toolConfiguration}
                 disabled={disabled}
               />
             )}
@@ -697,32 +700,25 @@ const AppInputBar = React.memo(
               )
             )}
 
-            {activeAgent &&
-              forcedToolIds.length > 0 &&
-              forcedToolIds.map((toolId) => {
-                const tool = activeAgent.tools.find(
-                  (tool) => tool.id === toolId
-                );
-                if (!tool) {
-                  return null;
-                }
-                return (
-                  <Disabled disabled={disabled} key={toolId}>
-                    <SelectButton
-                      variant="select-light"
-                      icon={getIconForAction(tool)}
-                      onClick={() => {
-                        setForcedToolIds(
-                          forcedToolIds.filter((id) => id !== toolId)
-                        );
-                      }}
-                      state="selected"
-                    >
-                      {tool.display_name}
-                    </SelectButton>
-                  </Disabled>
-                );
-              })}
+            {(() => {
+              if (!activeAgent || forcedToolId === null) return null;
+              const tool = activeAgent.tools.find(
+                (tool) => tool.id === forcedToolId
+              );
+              if (!tool) return null;
+              return (
+                <Disabled disabled={disabled}>
+                  <SelectButton
+                    variant="select-light"
+                    icon={getIconForAction(tool)}
+                    onClick={clearForcedTool}
+                    state="selected"
+                  >
+                    {tool.display_name}
+                  </SelectButton>
+                </Disabled>
+              );
+            })()}
           </div>
         </div>
 

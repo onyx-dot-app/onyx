@@ -110,6 +110,19 @@ class OnyxErrorCode(Enum):
         self.code = code
         self.status_code = status_code
 
+    @classmethod
+    def for_status(cls, status_code: int) -> "OnyxErrorCode":
+        """The code to report for an error raised without one.
+
+        A bare ``HTTPException`` or ``ValueError`` carries a status and a
+        sentence, so a machine client has nothing stable to match on. This
+        gives those responses the same code vocabulary as ``OnyxError``.
+        """
+        canonical = _CANONICAL_CODE_FOR_STATUS.get(status_code)
+        if canonical is not None:
+            return canonical
+        return cls.INTERNAL_ERROR if status_code >= 500 else cls.BAD_REQUEST
+
     def detail(self, message: str | None = None) -> dict[str, str]:
         """Build a structured error detail dict.
 
@@ -122,3 +135,22 @@ class OnyxErrorCode(Enum):
             "error_code": self.code,
             "detail": message or self.code,
         }
+
+
+# The code a status maps to when the raise site named none. Only statuses with
+# an unambiguous meaning are listed; anything else falls back by class.
+_CANONICAL_CODE_FOR_STATUS: dict[int, OnyxErrorCode] = {
+    400: OnyxErrorCode.BAD_REQUEST,
+    401: OnyxErrorCode.UNAUTHENTICATED,
+    403: OnyxErrorCode.UNAUTHORIZED,
+    404: OnyxErrorCode.NOT_FOUND,
+    409: OnyxErrorCode.CONFLICT,
+    413: OnyxErrorCode.PAYLOAD_TOO_LARGE,
+    422: OnyxErrorCode.VALIDATION_ERROR,
+    429: OnyxErrorCode.RATE_LIMITED,
+    500: OnyxErrorCode.INTERNAL_ERROR,
+    501: OnyxErrorCode.NOT_IMPLEMENTED,
+    502: OnyxErrorCode.BAD_GATEWAY,
+    503: OnyxErrorCode.SERVICE_UNAVAILABLE,
+    504: OnyxErrorCode.GATEWAY_TIMEOUT,
+}

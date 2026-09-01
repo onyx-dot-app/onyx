@@ -3,7 +3,9 @@
 /* ===========================================================================
    Content — Shared color properties
 
-   Two registered CSS custom properties drive all Content title + icon colors.
+   Three registered CSS custom properties drive every Content color. Nothing
+   inside a layout hardcodes one: a caller overriding the variables on the
+   wrapper reaches the title, the icon and the secondary text alike.
    The `data-content-color` attribute on the Content dispatcher's wrapper div
    selects the color mode. Since the properties use `inherits: true`, all
    descendant layout elements pick up the values automatically.
@@ -25,9 +27,22 @@
   initial-value: transparent;
 }
 
+/* Description and suffix — the muted text beside and below the title. */
+@property --content-foreground-secondary {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: transparent;
+}
+
 /* ---------------------------------------------------------------------------
    Color modes — driven by `data-content-color` on the dispatcher wrapper
    --------------------------------------------------------------------------- */
+
+/* Set once rather than per mode: the secondary text is `text-03` in all of
+   them. A mode that needs its own can still override below. */
+[data-content-color] {
+  --content-foreground-secondary: var(--text-03);
+}
 
 [data-content-color="default"] {
   --content-foreground: var(--text-04);
@@ -76,6 +91,24 @@
 [data-content-color="interactive"] {
   color: inherit;
   --content-foreground-icon: var(--interactive-foreground-icon);
+}
+
+/* Disabled is a state, so it outranks whatever the content normally looks
+   like.
+
+   An interactive surface dims through the interactive colour variables rather
+   than the blanket `opacity-50` that `core/disabled` gives everything else, so
+   a `Content` inside one has to follow those variables. Only the `interactive`
+   mode does on its own — every other mode pins `color` and stops inheriting,
+   which is what left a disabled row still showing its resting colour.
+
+   Keyed off `.interactive[data-disabled]` rather than any one component, so it
+   holds for everything that puts a `Content` inside an interactive surface. */
+.interactive[data-disabled] [data-content-color] {
+  --content-foreground: var(--interactive-foreground);
+  --content-foreground-icon: var(--interactive-foreground-icon);
+  --content-foreground-secondary: var(--interactive-foreground);
+  color: var(--content-foreground);
 }
 
 /* ===========================================================================
@@ -166,6 +199,13 @@
 /* ---------------------------------------------------------------------------
    Description
    --------------------------------------------------------------------------- */
+
+.opal-content-xl-description,
+.opal-content-lg-description,
+.opal-content-md-description,
+.opal-content-md-suffix {
+  color: var(--content-foreground-secondary);
+}
 
 .opal-content-xl-description {
   @apply text-left w-full;

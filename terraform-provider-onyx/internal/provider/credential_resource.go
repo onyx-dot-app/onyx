@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/hashicorp/terraform-plugin-framework-jsontypes/jsontypes"
+	"github.com/hashicorp/terraform-plugin-framework-validators/resourcevalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -19,9 +20,10 @@ import (
 )
 
 var (
-	_ resource.Resource                = (*credentialResource)(nil)
-	_ resource.ResourceWithConfigure   = (*credentialResource)(nil)
-	_ resource.ResourceWithImportState = (*credentialResource)(nil)
+	_ resource.Resource                     = (*credentialResource)(nil)
+	_ resource.ResourceWithConfigure        = (*credentialResource)(nil)
+	_ resource.ResourceWithImportState      = (*credentialResource)(nil)
+	_ resource.ResourceWithConfigValidators = (*credentialResource)(nil)
 )
 
 // NewCredentialResource returns the onyx_credential resource.
@@ -34,13 +36,15 @@ type credentialResource struct {
 }
 
 type credentialResourceModel struct {
-	ID             types.String         `tfsdk:"id"`
-	Source         types.String         `tfsdk:"source"`
-	Name           types.String         `tfsdk:"name"`
-	CredentialJSON jsontypes.Normalized `tfsdk:"credential_json"`
-	AdminPublic    types.Bool           `tfsdk:"admin_public"`
-	CuratorPublic  types.Bool           `tfsdk:"curator_public"`
-	Groups         types.List           `tfsdk:"groups"`
+	ID                      types.String         `tfsdk:"id"`
+	Source                  types.String         `tfsdk:"source"`
+	Name                    types.String         `tfsdk:"name"`
+	CredentialJSON          jsontypes.Normalized `tfsdk:"credential_json"`
+	CredentialJSONWO        jsontypes.Normalized `tfsdk:"credential_json_wo"`
+	CredentialJSONWOVersion types.Int64          `tfsdk:"credential_json_wo_version"`
+	AdminPublic             types.Bool           `tfsdk:"admin_public"`
+	CuratorPublic           types.Bool           `tfsdk:"curator_public"`
+	Groups                  types.List           `tfsdk:"groups"`
 }
 
 func (r *credentialResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -51,8 +55,9 @@ func (r *credentialResource) Schema(_ context.Context, _ resource.SchemaRequest,
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Connector credentials — the secret payload a connector authenticates with. " +
 			"Pair a credential with an `onyx_connector` to start indexing. The API always returns the " +
-			"payload masked, so `credential_json` is write-only: Terraform never refreshes it and cannot " +
-			"detect changes made outside Terraform.",
+			"payload masked, so the payload is never read back: Terraform cannot refresh it or detect " +
+			"changes made outside Terraform. Supply it as `credential_json_wo` to keep it out of " +
+			"Terraform state as well.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:            true,
@@ -79,13 +84,24 @@ func (r *credentialResource) Schema(_ context.Context, _ resource.SchemaRequest,
 				},
 			},
 			"credential_json": schema.StringAttribute{
-				Required:   true,
+				Optional:   true,
 				Sensitive:  true,
 				CustomType: jsontypes.NormalizedType{},
 				MarkdownDescription: "Secret payload as a JSON object, e.g. " +
 					"`jsonencode({ confluence_username = \"...\", confluence_access_token = \"...\" })`. " +
-					"The required keys depend on the source.",
+					"The required keys depend on the source. Set exactly one of this and " +
+					"`credential_json_wo`, which keeps the payload out of state entirely.",
 			},
+			"credential_json_wo": schema.StringAttribute{
+				Optional:   true,
+				Sensitive:  true,
+				WriteOnly:  true,
+				CustomType: jsontypes.NormalizedType{},
+				MarkdownDescription: "Secret payload as a JSON object, held only in configuration. " +
+					"Terraform stores nothing, so the payload never reaches state. Pair it with " +
+					"`credential_json_wo_version` to rotate it. Needs Terraform 1.11 or later.",
+			},
+			"credential_json_wo_version": writeOnlyVersionAttribute("credential_json_wo"),
 			"admin_public": schema.BoolAttribute{
 				Optional: true,
 				Computed: true,
@@ -124,10 +140,20 @@ func (r *credentialResource) Configure(_ context.Context, req resource.Configure
 	r.client = clientFromResourceConfigure(req, resp)
 }
 
-// upsertFromModel builds the create/replace body. credential_json is always
-// taken from configuration — the server copy is masked.
-func (r *credentialResource) upsertFromModel(ctx context.Context, model credentialResourceModel, diags *diag.Diagnostics) (client.CredentialUpsert, bool) {
-	payload, ok := jsonObjectFromNormalized(model.CredentialJSON, "credential_json", diags)
+// ConfigValidators keeps the payload mandatory now that it can arrive two ways.
+func (r *credentialResource) ConfigValidators(_ context.Context) []resource.ConfigValidator {
+	return []resource.ConfigValidator{
+		resourcevalidator.ExactlyOneOf(
+			path.MatchRoot("credential_json"),
+			path.MatchRoot("credential_json_wo"),
+		),
+	}
+}
+
+// upsertFromModel builds the create/replace body. The payload is always taken
+// from configuration — the server copy is masked.
+func (r *credentialResource) upsertFromModel(ctx context.Context, model credentialResourceModel, credentialJSON jsontypes.Normalized, diags *diag.Diagnostics) (client.CredentialUpsert, bool) {
+	payload, ok := jsonObjectFromNormalized(credentialJSON, "credential_json", diags)
 	if !ok {
 		return client.CredentialUpsert{}, false
 	}
@@ -156,7 +182,12 @@ func (r *credentialResource) Create(ctx context.Context, req resource.CreateRequ
 		plan.Name = types.StringNull()
 	}
 
-	upsert, ok := r.upsertFromModel(ctx, plan, &resp.Diagnostics)
+	credentialJSON := resolveWriteOnly(ctx, req.Config, path.Root("credential_json_wo"), plan.CredentialJSON, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	upsert, ok := r.upsertFromModel(ctx, plan, credentialJSON, &resp.Diagnostics)
 	if !ok {
 		return
 	}
@@ -214,15 +245,25 @@ func (r *credentialResource) Update(ctx context.Context, req resource.UpdateRequ
 	if !ok {
 		return
 	}
-	upsert, ok := r.upsertFromModel(ctx, plan, &resp.Diagnostics)
+	credentialJSON := resolveWriteOnly(ctx, req.Config, path.Root("credential_json_wo"), plan.CredentialJSON, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	upsert, ok := r.upsertFromModel(ctx, plan, credentialJSON, &resp.Diagnostics)
 	if !ok {
 		return
 	}
 
+	// A write-only payload is invisible to the diff, so its rotation counter is
+	// the only evidence that it changed.
+	payloadChanged := !plan.CredentialJSON.Equal(state.CredentialJSON) ||
+		writeOnlyVersionChanged(plan.CredentialJSONWOVersion, state.CredentialJSONWOVersion)
+
 	// Two endpoints split the work: PATCH replaces the payload but ignores the
 	// name, PUT sets the name but only merges the payload. Replace first so
 	// the merge that follows is a no-op.
-	if !plan.CredentialJSON.Equal(state.CredentialJSON) {
+	if payloadChanged {
 		if err := r.client.ReplaceCredentialJSON(ctx, id, upsert); err != nil {
 			resp.Diagnostics.AddError("Failed to update the Onyx credential payload", err.Error())
 			return
