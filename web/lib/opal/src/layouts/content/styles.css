@@ -361,7 +361,7 @@
   /* Keep the description aligned under the title (past the icon), matching the
      non-responsive desktop layout. */
   .opal-content-md[data-stacked] > .opal-content-md-description {
-    padding-left: var(--opal-content-md-desc-indent, 0);
+    padding-inline-start: var(--opal-content-md-desc-indent, 0);
   }
 }
 
