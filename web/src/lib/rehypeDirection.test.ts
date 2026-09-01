@@ -83,6 +83,9 @@ describe("rehypeDirection", () => {
     run(q);
     expect(dirOf(q)).toBe("rtl");
     const nko = el("p", [txt("\u07C1 x")]);
+    const garay = el("p", [txt("\u{10D41} x")]);
+    run(garay);
+    expect(dirOf(garay)).toBe("rtl");
     run(nko);
     expect(dirOf(nko)).toBe("rtl");
   });
