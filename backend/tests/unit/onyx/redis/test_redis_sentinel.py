@@ -66,6 +66,7 @@ def test_sentinel_tls_and_auth_apply_to_both_connection_sets() -> None:
         patch.object(redis_pool, "REDIS_SSL", True),
         patch.object(redis_pool, "REDIS_SSL_CERT_REQS", "required"),
         patch.object(redis_pool, "REDIS_SSL_CA_CERTS", "/ca.crt"),
+        patch.object(redis_pool, "REDIS_SSL_CHECK_HOSTNAME", True),
         patch.object(redis_pool, "REDIS_SSL_CERTFILE", "/c.crt"),
         patch.object(redis_pool, "REDIS_SSL_KEYFILE", "/c.key"),
         patch.object(redis_pool, "REDIS_PASSWORD", "datapw"),
@@ -76,11 +77,13 @@ def test_sentinel_tls_and_auth_apply_to_both_connection_sets() -> None:
         assert connection_kwargs["password"] == "datapw"
         assert connection_kwargs["ssl"] is True
         assert connection_kwargs["ssl_ca_certs"] == "/ca.crt"
+        assert connection_kwargs["ssl_check_hostname"] is True
         assert connection_kwargs["ssl_certfile"] == "/c.crt"
         # sentinel-node connections: sentinel auth + TLS
         assert sentinel_kwargs["password"] == "sentinelpw"
         assert sentinel_kwargs["ssl"] is True
         assert sentinel_kwargs["ssl_ca_certs"] == "/ca.crt"
+        assert sentinel_kwargs["ssl_check_hostname"] is True
 
 
 # --- Celery broker / result backend ---------------------------------------
@@ -277,16 +280,22 @@ def test_sentinel_with_iam_auth_raises() -> None:
 
 
 def test_celery_sentinel_kwargs_enable_ssl_under_tls() -> None:
-    env = {"REDIS_SENTINEL_HOSTS": "s1:26379", "REDIS_SSL": "true"}
+    env = {
+        "REDIS_SENTINEL_HOSTS": "s1:26379",
+        "REDIS_SSL": "true",
+        "REDIS_SSL_CHECK_HOSTNAME": "true",
+    }
     with _celery_config_env(env):
         import onyx.background.celery.configs.base as celery_base
 
         sk = cast(dict, celery_base.broker_transport_options["sentinel_kwargs"])
         # cert params are inert without the explicit ssl flag
         assert sk["ssl"] is True
+        assert sk["ssl_check_hostname"] is True
         # broker_use_ssl is a Celery setting; its presence enables TLS and it
         # must NOT carry the ssl key
         assert "ssl" not in celery_base.broker_use_ssl
+        assert celery_base.broker_use_ssl["ssl_check_hostname"] is True
 
 
 def test_out_of_range_sentinel_port_raises() -> None:

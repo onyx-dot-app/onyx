@@ -989,6 +989,9 @@ REDIS_POOL_MAX_CONNECTIONS = int(os.environ.get("REDIS_POOL_MAX_CONNECTIONS", 12
 # should be one of "required", "optional", or "none"
 REDIS_SSL_CERT_REQS = os.getenv("REDIS_SSL_CERT_REQS", "none")
 REDIS_SSL_CA_CERTS = os.getenv("REDIS_SSL_CA_CERTS", None)
+REDIS_SSL_CHECK_HOSTNAME = (
+    os.getenv("REDIS_SSL_CHECK_HOSTNAME", "false").lower() == "true"
+)
 # Client certificate + key for Redis mutual TLS (the server authenticating us).
 # Both must be set together and require REDIS_SSL=true. A managed Redis may hand
 # these out base64-encoded — decode them to files (e.g. a mounted secret) and

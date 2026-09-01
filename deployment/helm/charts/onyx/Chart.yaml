@@ -20,17 +20,17 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
-    - kind: changed
-      description: The api server `/health` endpoint is a plain liveness probe
-        again — 200 whenever the process runs — as it was before 0.8.18. The
-        readiness check that reports 503 on a saturated request threadpool moved
-        to the new `/health/ready` endpoint. Point `readinessProbe` at
-        `/health/ready`, and keep `livenessProbe` on `/health` — saturation is
-        load-induced and hits every replica at once, so restarting on it turns a
-        slowdown into an outage. `values.yaml` documents both under `api`.
-    - kind: removed
-      description: The api server `/health/live` endpoint added in 0.8.18 is gone.
-        Use `/health` for `livenessProbe` instead.
+    - kind: added
+      description: Optional verified TLS for an external Redis. Set
+        `redisTls.enabled=true` and supply the Redis server CA in a Secret
+        (`redisTls.caSecretName`) or a ConfigMap (`redisTls.caConfigMapName`).
+        The chart then mounts the CA read-only into every Redis client workload
+        and sets `REDIS_SSL`, `REDIS_SSL_CERT_REQS=required`,
+        `REDIS_SSL_CA_CERTS`, and `REDIS_SSL_CHECK_HOSTNAME`. Hostname
+        verification defaults to true; set `redisTls.checkHostname=false` only
+        for an endpoint whose certificate cannot match its host. Rendering fails
+        if `redis.enabled=true`, or if both CA sources are set, or if neither
+        is. Default deployments keep their current Redis configuration.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it
