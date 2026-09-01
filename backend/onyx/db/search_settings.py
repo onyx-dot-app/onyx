@@ -1,4 +1,4 @@
-from sqlalchemy import and_, delete, func, select
+from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.orm import Session
 
@@ -301,8 +301,13 @@ def set_reclaim_intent_on_current__no_commit(
     """Mark the current PRESENT index (the future PAST) for reclamation at reindex
     submit. Stores the consented not-ported cc_pairs. No-op if there is no PRESENT.
     Caller commits (atomically with FUTURE creation)."""
+    # Nothing enforces a single PRESENT row any more, so this has to order like
+    # get_current_search_settings or it stamps the consent set on a row that never
+    # becomes the old index.
     present = db_session.scalar(
-        select(SearchSettings).where(SearchSettings.status == IndexModelStatus.PRESENT)
+        select(SearchSettings)
+        .where(SearchSettings.status == IndexModelStatus.PRESENT)
+        .order_by(SearchSettings.id.desc())
     )
     if present is None:
         return
@@ -394,3 +399,23 @@ def record_failure__no_commit(
         search_settings.reclaim_status = IndexReclaimStatus.BLOCKED
         return True
     return False
+
+
+def find_unreclaimed_past_by_index_name(
+    db_session: Session, index_name: str
+) -> list[SearchSettings]:
+    """PAST rows whose index_name still holds data, so a new reindex must not take that
+    name. ALT_INDEX_SUFFIX alternation can hand a new FUTURE the same name as an old PAST,
+    and several generations can share one physical index.
+
+    A NULL reclaim_status counts too — those are rows from before reclamation existed,
+    whose index was never deleted. Only RECLAIMED means the data is confirmed gone."""
+    stmt = select(SearchSettings).where(
+        SearchSettings.status == IndexModelStatus.PAST,
+        SearchSettings.index_name == index_name,
+        or_(
+            SearchSettings.reclaim_status.is_(None),
+            SearchSettings.reclaim_status != IndexReclaimStatus.RECLAIMED,
+        ),
+    )
+    return list(db_session.scalars(stmt))
