@@ -10,7 +10,10 @@ import {
   type WithoutStyles,
 } from "@opal/types";
 import { spacingToRem } from "@opal/shared";
-import { SvgChevronLeft, SvgChevronRight } from "@opal/icons";
+// The scroll arrows are physical controls, so they use the raw chevrons
+// instead of the barrel's RTL-mirrored wrappers.
+import SvgChevronLeft from "@opal/icons/chevron-left";
+import SvgChevronRight from "@opal/icons/chevron-right";
 import { Tooltip, Text, Button } from "@opal/components";
 import {
   TabsContext,
@@ -179,7 +182,7 @@ function TabsList({
           {variant !== "underline" && (
             <div
               className="opal-tabs-pill-baseline"
-              style={{ right: rightOffset }}
+              style={{ insetInlineEnd: rightOffset }}
             />
           )}
           <div

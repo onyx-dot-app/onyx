@@ -18,5 +18,5 @@
 }
 
 .opal-code-copy {
-  @apply absolute top-2 right-2;
+  @apply absolute top-2 end-2;
 }
