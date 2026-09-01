@@ -1,4 +1,5 @@
 import { DateRangePickerValue } from "@/refresh-components/DateRangePicker";
+import { useTranslations } from "next-intl";
 import { FiCalendar, FiChevronDown, FiXCircle } from "react-icons/fi";
 import { CustomDropdown } from "../Dropdown";
 import { timeRangeValues } from "@/app/config/timeRange";
@@ -16,6 +17,7 @@ export function SearchDateRangeSelector({
   isHorizontal?: boolean;
   className?: string;
 }) {
+  const t = useTranslations("common.dateRange");
   return (
     <div>
       <CustomDropdown
@@ -47,17 +49,17 @@ export function SearchDateRangeSelector({
           <FiCalendar className="flex-none my-auto me-2" />{" "}
           <p className="line-clamp-1">
             {isHorizontal ? (
-              "Date"
+              t("date.label")
             ) : value?.selectValue ? (
               <div className="text-text-darker">{value.selectValue}</div>
             ) : (
-              "Any time..."
+              t("anyTime.text")
             )}
           </p>
           {value?.selectValue ? (
             <button
               type="button"
-              aria-label="Clear"
+              aria-label={t("clearButton.ariaLabel")}
               className="my-auto ms-auto p-0.5 rounded-full w-fit"
               onClick={(e) => {
                 onValueChange(null);

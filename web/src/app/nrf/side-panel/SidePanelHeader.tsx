@@ -3,6 +3,7 @@
 import { Logo } from "@/lib/app/components";
 import { Button } from "@opal/components";
 import { SvgEditBig, SvgExternalLink } from "@opal/icons";
+import { useTranslations } from "next-intl";
 
 interface SidePanelHeaderProps {
   onNewChat: () => void;
@@ -13,6 +14,7 @@ export default function SidePanelHeader({
   onNewChat,
   chatSessionId,
 }: SidePanelHeaderProps) {
+  const t = useTranslations("chat");
   const handleOpenInOnyx = () => {
     const path = chatSessionId ? `/app?chatId=${chatSessionId}` : "/app";
     window.open(`${window.location.origin}${path}`, "_blank");
@@ -26,13 +28,13 @@ export default function SidePanelHeader({
           prominence="tertiary"
           icon={SvgEditBig}
           onClick={onNewChat}
-          tooltip="New chat"
+          tooltip={t("nrf.sidePanelHeader.newChatButton.tooltip")}
         />
         <Button
           prominence="tertiary"
           icon={SvgExternalLink}
           onClick={handleOpenInOnyx}
-          tooltip="Open in Onyx"
+          tooltip={t("nrf.sidePanelHeader.openInOnyxButton.tooltip")}
         />
       </div>
     </header>

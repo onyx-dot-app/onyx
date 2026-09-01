@@ -1,5 +1,6 @@
 "use client";
 import { use } from "react";
+import { useTranslations } from "next-intl";
 
 import { Divider, Text } from "@opal/components";
 import Title from "@/components/ui/title";
@@ -17,15 +18,20 @@ import { PageLoader } from "@opal/layouts";
 import CardSection from "@/components/admin/CardSection";
 
 function MessageDisplay({ message }: { message: MessageSnapshot }) {
+  const t = useTranslations("admin.queryHistory");
   return (
     <div>
       <p className="text-xs font-bold mb-1">
-        {message.message_type === "user" ? "User" : "AI"}
+        {message.message_type === "user"
+          ? t("detail.user.label")
+          : t("detail.ai.label")}
       </p>
       <Text as="p">{message.message}</Text>
       {message.documents.length > 0 && (
         <div className="flex flex-col gap-y-2 mt-2">
-          <p className="font-bold text-xs">Reference Documents</p>
+          <p className="font-bold text-xs">
+            {t("detail.referenceDocuments.title")}
+          </p>
           {message.documents.slice(0, 5).map((document) => {
             return (
               <div className="text-sm flex" key={document.document_id}>
@@ -53,7 +59,7 @@ function MessageDisplay({ message }: { message: MessageSnapshot }) {
       )}
       {message.feedback_type && (
         <div className="mt-2">
-          <p className="font-bold text-xs">Feedback</p>
+          <p className="font-bold text-xs">{t("detail.feedback.title")}</p>
           {message.feedback_text && <Text as="p">{message.feedback_text}</Text>}
           <div className="mt-1">
             <FeedbackBadge feedback={message.feedback_type} />
@@ -66,6 +72,7 @@ function MessageDisplay({ message }: { message: MessageSnapshot }) {
 }
 
 export default function QueryPage(props: { params: Promise<{ id: string }> }) {
+  const t = useTranslations("admin.queryHistory");
   const params = use(props.params);
   const {
     data: chatSessionSnapshot,
@@ -83,8 +90,8 @@ export default function QueryPage(props: { params: Promise<{ id: string }> }) {
   if (!chatSessionSnapshot || error) {
     return (
       <ErrorCallout
-        errorTitle="Something went wrong :("
-        errorMsg={`Failed to fetch chat session - ${error}`}
+        errorTitle={t("detail.errorTitle.title")}
+        errorMsg={t("detail.fetchFailed.message", { error: String(error) })}
       />
     );
   }
@@ -94,7 +101,7 @@ export default function QueryPage(props: { params: Promise<{ id: string }> }) {
       <BackButton />
 
       <CardSection className="mt-4">
-        <Title>Chat Session Details</Title>
+        <Title>{t("detail.header.title")}</Title>
 
         <Spacer rem={0.25} />
         {chatSessionSnapshot.assistant_name && (

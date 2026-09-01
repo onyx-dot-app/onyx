@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { useTranslations } from "next-intl";
 import { SEARCH_TOOL_ID } from "@/lib/tools/constants";
 import { ToolSnapshot } from "@/lib/tools/types";
 import { getIconForAction } from "@/app/app/services/actionUtils";
@@ -51,7 +52,7 @@ export default function ActionLineItem({
   tooltip,
   showAdminConfigure = false,
   adminConfigureHref,
-  adminConfigureTooltip = "Configure",
+  adminConfigureTooltip,
   onToggle,
   onForceToggle,
   onSourceManagementOpen,
@@ -61,6 +62,7 @@ export default function ActionLineItem({
   onClose,
   sourceCounts,
 }: ActionItemProps) {
+  const t = useTranslations("actions");
   const router = useRouter();
   const { currentProjectId } = useProjectsContext();
 
@@ -69,7 +71,7 @@ export default function ActionLineItem({
 
   let label = tool ? tool.display_name || tool.name : providedLabel!;
   if (!!currentProjectId && tool?.in_code_tool_id === SEARCH_TOOL_ID) {
-    label = "Project Search";
+    label = t("actionLineItem.projectSearch.label");
   }
 
   const isSearchToolWithNoConnectors =
@@ -93,14 +95,17 @@ export default function ActionLineItem({
 
   // Declared once because it renders both bare and hover-revealed, depending
   // on whether the action is already disabled.
+  const toggleLabel = disabled
+    ? t("actionLineItem.enable.label")
+    : t("actionLineItem.disable.label");
   const toggleButton = (
     <Button
       icon={SvgSlash}
       onClick={noProp(onToggle)}
       prominence="internal"
       size="sm"
-      aria-label={disabled ? "Enable" : "Disable"}
-      tooltip={disabled ? "Enable" : "Disable"}
+      aria-label={toggleLabel}
+      tooltip={toggleLabel}
     />
   );
 
@@ -167,7 +172,10 @@ export default function ActionLineItem({
                   })}
                   prominence="tertiary"
                   size="sm"
-                  tooltip={adminConfigureTooltip}
+                  tooltip={
+                    adminConfigureTooltip ??
+                    t("actionLineItem.configure.tooltip")
+                  }
                 />
               )}
 
@@ -187,7 +195,7 @@ export default function ActionLineItem({
                       onClick={noProp(onToggle)}
                       prominence="tertiary"
                       size="sm"
-                      tooltip={disabled ? "Enable" : "Disable"}
+                      tooltip={toggleLabel}
                     />
                   </span>
                 </span>
@@ -197,8 +205,8 @@ export default function ActionLineItem({
                 <Button
                   aria-label={
                     isSearchToolWithNoConnectors
-                      ? "Add Connectors"
-                      : "Configure Connectors"
+                      ? t("actionLineItem.addConnectors.label")
+                      : t("actionLineItem.configureConnectors.label")
                   }
                   icon={
                     isSearchToolWithNoConnectors ? SvgSettings : SvgChevronRight
@@ -212,8 +220,8 @@ export default function ActionLineItem({
                   size="sm"
                   tooltip={
                     isSearchToolWithNoConnectors
-                      ? "Add Connectors"
-                      : "Configure Connectors"
+                      ? t("actionLineItem.addConnectors.label")
+                      : t("actionLineItem.configureConnectors.label")
                   }
                 />
               )}

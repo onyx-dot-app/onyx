@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { track, AnalyticsEvent } from "@/lib/analytics/utils";
 import {
   useSession,
@@ -94,6 +95,7 @@ function toMessageAttachments(files: BuildFile[]): BuildMessageAttachment[] {
 export default function BuildChatPanel({
   existingSessionId,
 }: BuildChatPanelProps) {
+  const t = useTranslations("craft.chatPanel");
   const router = useRouter();
   const outputPanelOpen = useOutputPanelOpen();
   const session = useSession();
@@ -455,7 +457,7 @@ export default function BuildChatPanel({
       modelOverride?: BuildLlmSelection | null
     ) => {
       if (scheduledRunInFlight) {
-        toast.error("Please wait for the scheduled run to finish.");
+        toast.error(t("toast.scheduledRunWait"));
         return;
       }
 
@@ -467,7 +469,7 @@ export default function BuildChatPanel({
         // Existing session flow
         // Check if response is still streaming - show toast like main chat does
         if (isRunning) {
-          toast.error("Please wait for the current operation to complete.");
+          toast.error(t("toast.operationWait"));
           return;
         }
 
@@ -488,7 +490,7 @@ export default function BuildChatPanel({
         if (!newSessionId) {
           // This should not happen if UI properly disables input until ready
           console.error("[ChatPanel] No pre-provisioned session available");
-          toast.error("Please wait for sandbox to initialize");
+          toast.error(t("toast.sandboxWait"));
           return;
         }
 
@@ -578,6 +580,7 @@ export default function BuildChatPanel({
       router,
       hasUploadingFiles,
       selectedModel,
+      t,
     ]
   );
 
@@ -674,7 +677,7 @@ export default function BuildChatPanel({
                 {isMobile && leftSidebarFolded && (
                   <OpalButton
                     icon={SvgSidebar}
-                    aria-label="Open Sidebar"
+                    aria-label={t("openSidebar.ariaLabel")}
                     onClick={() => setLeftSidebarFolded(false)}
                     prominence="tertiary"
                     size="sm"
@@ -698,7 +701,9 @@ export default function BuildChatPanel({
                   icon={SvgSidebar}
                   onClick={toggleOutputPanel}
                   tooltip={
-                    outputPanelOpen ? "Close output panel" : "Open output panel"
+                    outputPanelOpen
+                      ? t("outputPanel.closeTooltip")
+                      : t("outputPanel.openTooltip")
                   }
                   tertiary
                   className={cn(
@@ -754,7 +759,7 @@ export default function BuildChatPanel({
                           {wasInterrupted && !displayIsRunning && (
                             <div className="flex items-center gap-2 text-sm text-text-03">
                               <SvgStopCircle className="size-4 shrink-0 stroke-text-03" />
-                              <span>Response stopped</span>
+                              <span>{t("responseStopped.label")}</span>
                             </div>
                           )}
                           <LiveApprovalsRegion
@@ -783,7 +788,10 @@ export default function BuildChatPanel({
                   {/* Scroll to bottom button - shown when user has scrolled away */}
                   {showScrollButton && (
                     <div className="absolute -top-12 left-1/2 -translate-x-1/2 z-10">
-                      <Tooltip tooltip="Scroll to bottom" delayDuration={200}>
+                      <Tooltip
+                        tooltip={t("scrollToBottom.label")}
+                        delayDuration={200}
+                      >
                         <button
                           onClick={scrollToBottom}
                           className={cn(
@@ -794,7 +802,7 @@ export default function BuildChatPanel({
                             "transition-all duration-200",
                             "hover:bg-background-tint-inverted-01"
                           )}
-                          aria-label="Scroll to bottom"
+                          aria-label={t("scrollToBottom.label")}
                         >
                           <SvgChevronDown
                             size={20}
@@ -847,10 +855,10 @@ export default function BuildChatPanel({
                     }
                     placeholder={
                       isViewingSubagent
-                        ? "Switch to the main agent to send a message"
+                        ? t("input.subagentPlaceholder")
                         : scheduledRunInFlight
-                          ? "Scheduled run in progress..."
-                          : "Continue the conversation..."
+                          ? t("input.scheduledRunPlaceholder")
+                          : t("input.continuePlaceholder")
                     }
                     queuedMessages={queuedMessages}
                     onQueueMessage={handleQueueMessage}

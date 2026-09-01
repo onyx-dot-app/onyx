@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 import { Section } from "@/layouts/general-layouts";
 import { Content } from "@opal/layouts";
@@ -44,6 +45,7 @@ interface WindowCostSectionProps {
 const COLLAPSED_USAGE_ROW_COUNT = 3;
 
 function WindowCostSection({ windowCostCents, rows }: WindowCostSectionProps) {
+  const t = useTranslations("settings.usage");
   const [showAll, setShowAll] = useState(false);
   const hasCache = rows.some((row) => row.cache_read_tokens > 0);
   const hasCacheWrites = rows.some((row) => row.cache_creation_tokens > 0);
@@ -80,8 +82,10 @@ function WindowCostSection({ windowCostCents, rows }: WindowCostSectionProps) {
     <Section gap={0.75} justifyContent="start">
       <Content
         icon={SvgBarChart}
-        title="Usage this period"
-        description={`${formatDollars(windowCostCents)} spent`}
+        title={t("usageThisPeriod.title")}
+        description={t("usageThisPeriod.description", {
+          amount: formatDollars(windowCostCents),
+        })}
         sizePreset="main-content"
         variant="section"
         width="full"
@@ -90,8 +94,8 @@ function WindowCostSection({ windowCostCents, rows }: WindowCostSectionProps) {
       {rows.length === 0 ? (
         <EmptyMessageCard
           sizePreset="main-ui"
-          title="No usage recorded yet"
-          description="Your model usage and costs will show up here once you start chatting."
+          title={t("empty.title")}
+          description={t("empty.description")}
         />
       ) : (
         <Card>
@@ -145,19 +149,24 @@ function WindowCostSection({ windowCostCents, rows }: WindowCostSectionProps) {
                     color="text-03"
                     data-testid="usage-model-tokens"
                   >
-                    {`${formatTokens(row.input_tokens)} in · ${formatTokens(
-                      row.output_tokens
-                    )} out${
-                      hasCache
-                        ? ` · ${formatTokens(row.cache_read_tokens)} cache reads`
-                        : ""
-                    }${
-                      hasCacheWrites
-                        ? ` · ${formatTokens(
-                            row.cache_creation_tokens
-                          )} cache writes`
-                        : ""
-                    }`}
+                    {[
+                      t("modelUsage.tokensIn.label", {
+                        count: formatTokens(row.input_tokens),
+                      }),
+                      t("modelUsage.tokensOut.label", {
+                        count: formatTokens(row.output_tokens),
+                      }),
+                      hasCache &&
+                        t("modelUsage.cacheReads.label", {
+                          count: formatTokens(row.cache_read_tokens),
+                        }),
+                      hasCacheWrites &&
+                        t("modelUsage.cacheWrites.label", {
+                          count: formatTokens(row.cache_creation_tokens),
+                        }),
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
                   </Text>
                 </Section>
               </div>
@@ -178,12 +187,14 @@ function WindowCostSection({ windowCostCents, rows }: WindowCostSectionProps) {
                 aria-expanded={showAll}
                 aria-label={
                   showAll
-                    ? "Show fewer models"
-                    : `Show ${hiddenRowCount} more models`
+                    ? t("showFewerModels.ariaLabel")
+                    : t("showMoreModels.ariaLabel", { count: hiddenRowCount })
                 }
                 onClick={() => setShowAll((value) => !value)}
               >
-                {showAll ? "Show less" : `Show ${hiddenRowCount} more`}
+                {showAll
+                  ? t("showLess.label")
+                  : t("showMore.label", { count: hiddenRowCount })}
               </Button>
             </div>
           )}
@@ -217,10 +228,12 @@ function isSameModelPrice(
 // collapsible menu per provider — click a provider to expand its models. Mirrors
 // the chat model selector so users can compare costs, not just the default.
 function ModelPriceSection({ prices, defaultPrice }: ModelPriceSectionProps) {
+  const t = useTranslations("settings.usage");
   const groups = useMemo(() => {
+    // t is stable per locale, listed below to satisfy the deps lint.
     const byProvider = new Map<string, ModelPrice[]>();
     for (const price of prices) {
-      const key = price.provider ?? "Other";
+      const key = price.provider ?? t("modelPrices.otherProvider.label");
       const list = byProvider.get(key) ?? [];
       list.push(price);
       byProvider.set(key, list);
@@ -228,7 +241,7 @@ function ModelPriceSection({ prices, defaultPrice }: ModelPriceSectionProps) {
     return Array.from(byProvider.entries())
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([provider, models]) => ({ provider, models }));
-  }, [prices]);
+  }, [prices, t]);
 
   // Expand the provider that holds the default model (else the first).
   const defaultProvider = useMemo(
@@ -256,8 +269,8 @@ function ModelPriceSection({ prices, defaultPrice }: ModelPriceSectionProps) {
     <Section gap={0.75} justifyContent="start">
       <Content
         icon={SvgCreditCard}
-        title="Model prices"
-        description="USD per 1M tokens (input · output · cache) for every available model"
+        title={t("modelPrices.title")}
+        description={t("modelPrices.description")}
         sizePreset="main-content"
         variant="section"
         width="full"
@@ -265,7 +278,7 @@ function ModelPriceSection({ prices, defaultPrice }: ModelPriceSectionProps) {
       <Card>
         {groups.length === 0 ? (
           <Text font="main-ui-body" color="text-01">
-            Prices unavailable
+            {t("modelPrices.unavailable")}
           </Text>
         ) : (
           <Section gap={0.25} alignItems="stretch" justifyContent="start">
@@ -302,7 +315,9 @@ function ModelPriceSection({ prices, defaultPrice }: ModelPriceSectionProps) {
                         >
                           <Text font="secondary-body" color="text-05" nowrap>
                             {isSameModelPrice(price, defaultPrice)
-                              ? `${price.model} · default`
+                              ? t("modelPrices.defaultTag.label", {
+                                  model: price.model,
+                                })
                               : price.model}
                           </Text>
                           <Text font="secondary-body" color="text-03" nowrap>
@@ -332,30 +347,29 @@ interface BudgetSectionProps {
   budgetResetAt: string | null;
 }
 
-function formatBudgetReset(resetAt: string | null): string | null {
-  return resetAt
-    ? `Resets on ${formatCalendarDay(resetAt.slice(0, 10))}`
-    : null;
-}
-
 function BudgetSection({
   budgetCents,
   budgetRemainingCents,
   budgetResetAt,
 }: BudgetSectionProps) {
+  const t = useTranslations("settings.usage");
   // budget_* are null when the user has no cost limit; show a graceful empty state.
   const hasBudget = budgetCents !== null;
   const remaining = budgetRemainingCents ?? 0;
   const spent = hasBudget ? Math.max(0, budgetCents - remaining) : 0;
   const usedFraction =
     hasBudget && budgetCents > 0 ? Math.min(1, spent / budgetCents) : 0;
-  const budgetReset = formatBudgetReset(budgetResetAt);
+  const budgetReset = budgetResetAt
+    ? t("budget.resetsOn", {
+        date: formatCalendarDay(budgetResetAt.slice(0, 10)),
+      })
+    : null;
 
   return (
     <Section gap={0.75} justifyContent="start">
       <Content
         icon={SvgWallet}
-        title="Budget"
+        title={t("budget.title")}
         sizePreset="main-content"
         variant="section"
         width="full"
@@ -365,7 +379,7 @@ function BudgetSection({
           <Section gap={0.5} alignItems="start" justifyContent="start">
             <div className="flex w-full flex-wrap items-baseline gap-x-4 gap-y-1">
               <Text font="main-ui-body" color="text-03">
-                {`${formatDollars(remaining)} remaining`}
+                {t("budget.remaining", { amount: formatDollars(remaining) })}
               </Text>
             </div>
             <div className="h-1.5 w-full overflow-hidden rounded-full bg-background-neutral-03">
@@ -386,13 +400,13 @@ function BudgetSection({
                 </Text>
               )}
               <Text font="secondary-body" color="text-03">
-                {`${formatDollars(budgetCents)} limit`}
+                {t("budget.limit", { amount: formatDollars(budgetCents) })}
               </Text>
             </div>
           </Section>
         ) : (
           <Text font="main-ui-body" color="text-01">
-            No budget set
+            {t("budget.none")}
           </Text>
         )}
       </Card>
@@ -401,6 +415,7 @@ function BudgetSection({
 }
 
 export default function UsageSettings() {
+  const t = useTranslations("settings.usage");
   const [dateRange, setDateRange] = useState<DateRange>(
     rangeForInclusiveDays(30)
   );
@@ -414,7 +429,7 @@ export default function UsageSettings() {
     <Section gap={2}>
       <Section gap={0.75} justifyContent="start">
         <div className="flex w-full flex-wrap items-center justify-between gap-3">
-          <Text font="heading-h3">Usage</Text>
+          <Text font="heading-h3">{t("header.title")}</Text>
           <DateRangePicker
             value={dateRange}
             onValueChange={setDateRange}
@@ -436,8 +451,8 @@ export default function UsageSettings() {
         ) : error || !data ? (
           <EmptyMessageCard
             sizePreset="main-ui"
-            title="Couldn't load usage"
-            description="Something went wrong fetching your usage. Try again in a moment."
+            title={t("loadError.title")}
+            description={t("loadError.description")}
           />
         ) : (
           <Section gap={2}>

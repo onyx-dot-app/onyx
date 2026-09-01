@@ -1,6 +1,8 @@
 "use client";
 
+import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import useSWR from "swr";
 import { ContentAction, SettingsLayouts, toast } from "@opal/layouts";
 import { Button, Card, MessageCard, Text } from "@opal/components";
@@ -13,8 +15,6 @@ import { Section } from "@/layouts/general-layouts";
 
 const route = ADMIN_ROUTES.EXPORT_LOGS;
 
-const DESCRIPTION =
-  "Download a zip of server log files to attach to an Onyx support thread.";
 const EXPORT_URL = "/api/admin/log-export";
 const EXPORT_ID_QUERY_PARAM = "export";
 // Export ids are uuid4().hex values; anything else found in the URL is noise.
@@ -66,18 +66,25 @@ function writeExportIdToUrl(exportId: string | null): void {
   window.history.replaceState({}, "", url.toString());
 }
 
-function receiptLabel(receipt: LogExportReceipt): string {
+type ExportLogsTranslate = ReturnType<
+  typeof useTranslations<"admin.exportLogs">
+>;
+
+function receiptLabel(
+  receipt: LogExportReceipt,
+  t: ExportLogsTranslate
+): string {
   switch (receipt.status) {
     case "uploaded":
-      return `uploaded ${receipt.file_count} file${
-        receipt.file_count === 1 ? "" : "s"
-      }`;
+      return t("receipt.uploaded.label", { count: receipt.file_count });
     case "duplicate_host":
-      return "covered by another worker on the same host";
+      return t("receipt.duplicateHost.label");
     case "no_logs_found":
-      return "no log files found";
+      return t("receipt.noLogs.label");
     case "failed":
-      return receipt.error ? `failed: ${receipt.error}` : "failed";
+      return receipt.error
+        ? t("receipt.failedWithError.label", { error: receipt.error })
+        : t("receipt.failed.label");
     default: {
       const exhaustive: never = receipt.status;
       return exhaustive;
@@ -107,6 +114,8 @@ function WorkerStatusRow({
 }
 
 export default function ExportLogsPage() {
+  const t = useTranslations("admin.exportLogs");
+  const adminRouteTitle = useAdminRouteTitle();
   const [exportId, setExportId] = useState<string | null>(null);
   const [isStarting, setIsStarting] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -170,21 +179,19 @@ export default function ExportLogsPage() {
       // An id restored from the URL can be stale (export already swept, or
       // never real); it has no status yet, so scrub it without a toast.
       if (status !== undefined) {
-        toast.error("Lost access to the running export. Start a new one.");
+        toast.error(t("toasts.lostAccess.message"));
       }
     } else if (
       consecutivePollFailuresRef.current >= MAX_CONSECUTIVE_POLL_FAILURES
     ) {
-      toast.error(
-        "Cannot reach the server to check export progress. Start a new export once it is back."
-      );
+      toast.error(t("toasts.unreachable.message"));
     } else {
       return;
     }
     consecutivePollFailuresRef.current = 0;
     writeExportIdToUrl(null);
     setExportId(null);
-  }, [status, statusError]);
+  }, [status, statusError, t]);
 
   useEffect(() => {
     return () => {
@@ -196,46 +203,49 @@ export default function ExportLogsPage() {
     };
   }, []);
 
-  const downloadBundle = useCallback(async (id: string): Promise<void> => {
-    // Mark before any await: an attempt is in flight or succeeded, and only
-    // failure re-arms the auto-download below. Owning this here keeps every
-    // call site (auto-fire, manual retry) consistent.
-    downloadedExportIdRef.current = id;
-    setIsDownloading(true);
-    try {
-      const response = await fetch(`${EXPORT_URL}/${id}/download`);
-      if (!response.ok) {
-        throw new Error(
-          `Log export download failed with status ${response.status}`
-        );
+  const downloadBundle = useCallback(
+    async (id: string): Promise<void> => {
+      // Mark before any await: an attempt is in flight or succeeded, and only
+      // failure re-arms the auto-download below. Owning this here keeps every
+      // call site (auto-fire, manual retry) consistent.
+      downloadedExportIdRef.current = id;
+      setIsDownloading(true);
+      try {
+        const response = await fetch(`${EXPORT_URL}/${id}/download`);
+        if (!response.ok) {
+          throw new Error(
+            `Log export download failed with status ${response.status}`
+          );
+        }
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        downloadFile(extractFilename(response), { url });
+        // Deferred like downloadFile's content mode: the click's download
+        // dereferences the blob URL asynchronously.
+        if (pendingRevokeRef.current !== null) {
+          clearTimeout(pendingRevokeRef.current.timer);
+          URL.revokeObjectURL(pendingRevokeRef.current.url);
+        }
+        // Released on unmount and on replacement. The rule cannot trace the
+        // handle through the pendingRevokeRef object.
+        // oxlint-disable-next-line react-doctor/effect-needs-cleanup
+        const timer = setTimeout(() => {
+          URL.revokeObjectURL(url);
+          pendingRevokeRef.current = null;
+        }, 0);
+        pendingRevokeRef.current = { url, timer };
+      } catch (error) {
+        console.error("Error downloading log export:", error);
+        toast.error(t("toasts.downloadFailed.message"));
+        // Un-mark the export so the download can be retried. The bundle stays
+        // available in the file store until retention sweeps it.
+        downloadedExportIdRef.current = null;
+      } finally {
+        setIsDownloading(false);
       }
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      downloadFile(extractFilename(response), { url });
-      // Deferred like downloadFile's content mode: the click's download
-      // dereferences the blob URL asynchronously.
-      if (pendingRevokeRef.current !== null) {
-        clearTimeout(pendingRevokeRef.current.timer);
-        URL.revokeObjectURL(pendingRevokeRef.current.url);
-      }
-      // Released on unmount and on replacement. The rule cannot trace the
-      // handle through the pendingRevokeRef object.
-      // oxlint-disable-next-line react-doctor/effect-needs-cleanup
-      const timer = setTimeout(() => {
-        URL.revokeObjectURL(url);
-        pendingRevokeRef.current = null;
-      }, 0);
-      pendingRevokeRef.current = { url, timer };
-    } catch (error) {
-      console.error("Error downloading log export:", error);
-      toast.error("Failed to download the log export.");
-      // Un-mark the export so the download can be retried; the bundle stays
-      // available in the file store until retention sweeps it.
-      downloadedExportIdRef.current = null;
-    } finally {
-      setIsDownloading(false);
-    }
-  }, []);
+    },
+    [t]
+  );
 
   // Download exactly once per export, as soon as it is ready. Arming happens
   // while the export is still collecting (or at start, in handleExport), so
@@ -262,7 +272,7 @@ export default function ExportLogsPage() {
     try {
       const response = await fetch(EXPORT_URL, { method: "POST" });
       if (response.status === 429) {
-        toast.error("A log export is already in progress. Try again shortly.");
+        toast.error(t("toasts.alreadyRunning.message"));
         return;
       }
       if (!response.ok) {
@@ -276,7 +286,7 @@ export default function ExportLogsPage() {
       writeExportIdToUrl(body.export_id);
     } catch (error) {
       console.error("Error starting log export:", error);
-      toast.error("Failed to start the log export.");
+      toast.error(t("toasts.startFailed.message"));
     } finally {
       setIsStarting(false);
     }
@@ -290,7 +300,7 @@ export default function ExportLogsPage() {
       : [
           ...status.receipts.map((receipt) => ({
             workerName: receipt.worker_name,
-            label: receiptLabel(receipt),
+            label: receiptLabel(receipt, t),
             pending: false,
           })),
           ...status.pending_worker_names.map((workerName) => ({
@@ -299,33 +309,33 @@ export default function ExportLogsPage() {
             // worker's logs are not in the bundle.
             label:
               status.state === "ready"
-                ? "did not report before the deadline"
-                : "collecting...",
+                ? t("worker.missedDeadline.label")
+                : t("worker.collecting.label"),
             pending: true,
           })),
         ].sort((a, b) => a.workerName.localeCompare(b.workerName));
 
   const buttonLabel = isStarting
-    ? "Starting..."
+    ? t("button.starting.label")
     : isCollecting
-      ? "Collecting..."
+      ? t("button.collecting.label")
       : isDownloading
-        ? "Downloading..."
-        : "Export Logs";
+        ? t("button.downloading.label")
+        : t("button.export.label");
 
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={route.icon}
-        title={route.title}
-        description={DESCRIPTION}
+        title={adminRouteTitle(route)}
+        description={t("header.description")}
         divider
       />
       <SettingsLayouts.Body>
         <MessageCard
           variant="warning"
-          title="Logs may contain sensitive data"
-          description="Log files can include user emails, document titles, search queries, and error payloads. Review the contents before sharing them outside your organization."
+          title={t("sensitiveWarning.title")}
+          description={t("sensitiveWarning.description")}
         />
         <Card border="solid" rounding={4}>
           <Section alignItems="start" height="fit">
@@ -333,8 +343,8 @@ export default function ExportLogsPage() {
               sizePreset="main-ui"
               variant="section"
               icon={SvgDownload}
-              title="Export logs"
-              description="Collects log files from the API server and background workers into a single zip. The download starts automatically once collection finishes."
+              title={t("exportCard.title")}
+              description={t("exportCard.description")}
               rightChildren={
                 <Button
                   icon={SvgDownload}
@@ -352,7 +362,7 @@ export default function ExportLogsPage() {
             <Section alignItems="start" height="fit">
               {workerRows.length === 0 ? (
                 <Text font="main-ui-body" color="text-02">
-                  Starting collection...
+                  {t("status.startingCollection.label")}
                 </Text>
               ) : (
                 workerRows.map((row) => (
@@ -372,7 +382,7 @@ export default function ExportLogsPage() {
                     onClick={() => void downloadBundle(status.export_id)}
                     disabled={isDownloading}
                   >
-                    Download
+                    {t("downloadButton.label")}
                   </Button>
                 </Section>
               )}

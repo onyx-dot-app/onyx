@@ -12,6 +12,7 @@ import {
   APIMessageProps,
 } from "./types";
 import React, { useId, useMemo } from "react";
+import { useTranslations } from "next-intl";
 import { useFieldContext } from "./FieldContext";
 import { Slot } from "@radix-ui/react-slot";
 import Text from "../texts/Text";
@@ -64,6 +65,7 @@ export const FormFieldLabel: React.FC<LabelProps> = ({
   children,
   ...props
 }) => {
+  const t = useTranslations("common.formField");
   const { baseId } = useFieldContext();
   return (
     <label
@@ -79,11 +81,11 @@ export const FormFieldLabel: React.FC<LabelProps> = ({
       {children}
       {required ? (
         <Text as="p" text03 mainUiMuted className="mx-0.5">
-          {"(Required)"}
+          {t("required.label")}
         </Text>
       ) : optional ? (
         <Text as="p" text03 mainUiMuted className="mx-0.5">
-          {"(Optional)"}
+          {t("optional.label")}
         </Text>
       ) : null}
       {rightIcon && <span className="flex items-center">{rightIcon}</span>}

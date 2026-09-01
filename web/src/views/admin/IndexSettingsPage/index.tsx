@@ -1,5 +1,6 @@
 "use client";
 
+import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Formik } from "formik";
 import { markdown } from "@opal/utils";
@@ -618,6 +619,7 @@ function isContextualModelOnlyChange(
 
 export default function IndexSettingsPage() {
   const t = useTranslations("admin.indexSettings");
+  const adminRouteTitle = useAdminRouteTitle();
   const router = useRouter();
   const settings = useSettings();
   const editModal = useCreateModal();
@@ -927,7 +929,11 @@ export default function IndexSettingsPage() {
   ) {
     return (
       <SettingsLayouts.Root>
-        <SettingsLayouts.Header icon={route.icon} title={route.title} divider />
+        <SettingsLayouts.Header
+          icon={route.icon}
+          title={adminRouteTitle(route)}
+          divider
+        />
         <SettingsLayouts.Body>
           <PageLoader />
         </SettingsLayouts.Body>
@@ -972,7 +978,7 @@ export default function IndexSettingsPage() {
       <SettingsLayouts.Root>
         <SettingsLayouts.Header
           icon={route.icon}
-          title={route.title}
+          title={adminRouteTitle(route)}
           description={t("header.description")}
           divider
         />

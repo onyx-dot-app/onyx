@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen } from "@tests/setup/test-utils";
 import userEvent from "@testing-library/user-event";
 import { DateRangePicker } from "@/refresh-components/DateRangePicker";
 

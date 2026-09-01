@@ -1,4 +1,5 @@
 import { FormikProps, ErrorMessage } from "formik";
+import { useTranslations } from "next-intl";
 import Text from "@/refresh-components/texts/Text";
 import InputComboBox from "@/refresh-components/inputs/InputComboBox/InputComboBox";
 import { Tag } from "@opal/components";
@@ -43,6 +44,7 @@ export function GenericMultiSelect<
   disabled = false,
   disabledMessage,
 }: GenericMultiSelectProps<T, F>) {
+  const t = useTranslations("common.genericMultiSelect");
   if (isLoading) {
     return (
       <div className="flex flex-col gap-2 w-full">
@@ -61,7 +63,7 @@ export function GenericMultiSelect<
           {label}
         </Text>
         <Text as="p" text03 className="text-action-danger-05">
-          Failed to load {label.toLowerCase()}. Please try again.
+          {t("loadFailed.text", { label: label.toLowerCase() })}
         </Text>
       </div>
     );
@@ -115,7 +117,7 @@ export function GenericMultiSelect<
       <Disabled disabled={disabled}>
         <div>
           <InputComboBox
-            placeholder="Search..."
+            placeholder={t("search.placeholder")}
             value=""
             onChange={() => {}}
             onValueChange={(selectedValue) => {

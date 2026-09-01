@@ -6,6 +6,7 @@ import Calendar from "@/refresh-components/Calendar";
 import { Popover } from "@opal/components";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import { SvgCalendar } from "@opal/icons";
 import { Section } from "@/layouts/general-layouts";
 
@@ -38,6 +39,7 @@ export default function InputDatePicker({
   disabled = false,
   maxDate,
 }: InputDatePickerProps) {
+  const t = useTranslations("common.datePicker");
   const validStartYear = Math.max(startYear, 1970);
   const normalizedMaxDate = useMemo(
     () => (maxDate ? normalizeDate(maxDate) : undefined),
@@ -72,7 +74,9 @@ export default function InputDatePicker({
     <Popover open={open} onOpenChange={setOpen}>
       <Popover.Trigger asChild id={name} name={name}>
         <Button disabled={disabled} prominence="secondary" icon={SvgCalendar}>
-          {selectedDate ? selectedDate.toLocaleDateString() : "Select Date"}
+          {selectedDate
+            ? selectedDate.toLocaleDateString()
+            : t("selectDate.label")}
         </Button>
       </Popover.Trigger>
       <Popover.Content>
@@ -102,7 +106,7 @@ export default function InputDatePicker({
                 setOpen(false);
               }}
             >
-              Today
+              {t("todayButton.label")}
             </Button>
           </Section>
           <Calendar

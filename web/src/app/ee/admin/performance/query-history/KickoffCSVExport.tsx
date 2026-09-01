@@ -3,13 +3,13 @@
 import { toast } from "@opal/layouts";
 import { Button } from "@opal/components";
 import { useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import type { DateRange } from "@/refresh-components/DateRangePicker";
 import { withRequestId, withDateRange } from "./utils";
 import {
   CHECK_QUERY_HISTORY_EXPORT_STATUS_URL,
   DOWNLOAD_QUERY_HISTORY_URL,
   MAX_RETRIES,
-  PREVIOUS_CSV_TASK_BUTTON_NAME,
   RETRY_COOLDOWN_MILLISECONDS,
 } from "./constants";
 import {
@@ -24,6 +24,7 @@ export default function KickoffCSVExport({
 }: {
   dateRange: DateRange;
 }) {
+  const t = useTranslations("admin.queryHistory");
   const timerIdRef = useRef<null | number>(null);
   const retryCount = useRef<number>(0);
   const [, rerender] = useState<void>();
@@ -38,7 +39,7 @@ export default function KickoffCSVExport({
     retryCount.current = 0;
 
     if (failure) {
-      toast.error("Failed to download the query-history.");
+      toast.error(t("export.downloadFailed.message"));
     }
 
     rerender();
@@ -53,7 +54,9 @@ export default function KickoffCSVExport({
 
     setSpinnerStatus("spinning");
     toast.info(
-      `Generating CSV report. Click the '${PREVIOUS_CSV_TASK_BUTTON_NAME}' button to see all jobs.`
+      t("export.generating.message", {
+        button: t("previousExports.label"),
+      })
     );
     const response = await fetch(withDateRange(dateRange), {
       method: "POST",
@@ -121,7 +124,9 @@ export default function KickoffCSVExport({
           variant={spinnerStatus === "spinning" ? "danger" : "default"}
           icon={spinnerStatus === "spinning" ? SvgSimpleLoader : SvgPlayCircle}
         >
-          {spinnerStatus === "spinning" ? "Cancel" : "Kickoff Export"}
+          {spinnerStatus === "spinning"
+            ? t("export.cancel.label")
+            : t("export.kickoff.label")}
         </Button>
       </div>
     </div>

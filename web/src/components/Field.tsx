@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { FiInfo, FiX } from "react-icons/fi";
+import { useTranslations } from "next-intl";
 import ReactMarkdown from "react-markdown";
 import { FaMarkdown } from "react-icons/fa";
 import { useState, useEffect, memo, JSX } from "react";
@@ -175,37 +176,40 @@ export const FieldLabel = ({
   label: string;
   removeLabel?: boolean;
   vertical?: boolean;
-}) => (
-  <>
-    <div
-      className={`flex ${
-        vertical ? "flex-col" : "flex-row"
-      } gap-x-2 items-start`}
-    >
-      <div className="flex gap-x-2 items-center">
-        {!removeLabel && (
-          <Label small={false} htmlFor={name}>
-            {label}
-          </Label>
+}) => {
+  const t = useTranslations("common.field");
+  return (
+    <>
+      <div
+        className={`flex ${
+          vertical ? "flex-col" : "flex-row"
+        } gap-x-2 items-start`}
+      >
+        <div className="flex gap-x-2 items-center">
+          {!removeLabel && (
+            <Label small={false} htmlFor={name}>
+              {label}
+            </Label>
+          )}
+          {optional ? <span>{t("optionalIndicator.text")} </span> : ""}
+          {tooltip && <ToolTipDetails>{tooltip}</ToolTipDetails>}
+        </div>
+        {error ? (
+          <ManualErrorMessage>{error}</ManualErrorMessage>
+        ) : (
+          !hideError && (
+            <ErrorMessage
+              name={name}
+              component="div"
+              className="text-action-danger-05 my-auto text-sm"
+            />
+          )
         )}
-        {optional ? <span>(optional) </span> : ""}
-        {tooltip && <ToolTipDetails>{tooltip}</ToolTipDetails>}
       </div>
-      {error ? (
-        <ManualErrorMessage>{error}</ManualErrorMessage>
-      ) : (
-        !hideError && (
-          <ErrorMessage
-            name={name}
-            component="div"
-            className="text-action-danger-05 my-auto text-sm"
-          />
-        )
-      )}
-    </div>
-    {subtext && <SubLabel>{subtext}</SubLabel>}
-  </>
-);
+      {subtext && <SubLabel>{subtext}</SubLabel>}
+    </>
+  );
+};
 
 export function TextFormField({
   name,
@@ -264,6 +268,7 @@ export function TextFormField({
   className?: string;
   showPasswordToggle?: boolean;
 }) {
+  const t = useTranslations("common.field");
   let heightString = defaultHeight || "";
   if (isTextArea && !heightString) {
     heightString = "h-28";
@@ -372,7 +377,11 @@ export function TextFormField({
         {!isTextArea && isPasswordField && showPasswordToggle && (
           <button
             type="button"
-            aria-label={isPasswordVisible ? "Hide password" : "Show password"}
+            aria-label={
+              isPasswordVisible
+                ? t("passwordToggle.hideAriaLabel")
+                : t("passwordToggle.showAriaLabel")
+            }
             className="absolute end-3 top-1/2 -translate-y-1/2 stroke-text-02 hover:stroke-text-03 mt-0.5"
             onClick={() => setIsPasswordVisible((v) => !v)}
             tabIndex={0}
@@ -435,6 +444,7 @@ export function TypedFileUploadFormField({
   label: string;
   subtext?: string | JSX.Element;
 }) {
+  const t = useTranslations("common.field");
   const [field, , helpers] = useField<TypedFile | null>(name);
   const [customError, setCustomError] = useState<string>("");
   const [isValidating, setIsValidating] = useState(false);
@@ -463,12 +473,16 @@ export function TypedFileUploadFormField({
         if (validation?.isValid) {
           setCustomError("");
         } else {
-          setCustomError(validation?.errors.join(", ") || "Unknown error");
+          setCustomError(
+            validation?.errors.join(", ") || t("fileValidation.unknownError")
+          );
           helpers.setValue(null);
         }
       } catch (error) {
         setCustomError(
-          error instanceof Error ? error.message : "Validation error"
+          error instanceof Error
+            ? error.message
+            : t("fileValidation.validationError")
         );
         helpers.setValue(null);
       } finally {
@@ -477,7 +491,7 @@ export function TypedFileUploadFormField({
     };
 
     validateFile();
-  }, [field.value, helpers]);
+  }, [field.value, helpers, t]);
 
   const handleFileSelection = async (files: File[]) => {
     if (files.length === 0) {
@@ -488,14 +502,14 @@ export function TypedFileUploadFormField({
 
     const file = files[0];
     if (!file) {
-      setCustomError("File selection error");
+      setCustomError(t("fileValidation.selectionError"));
       return;
     }
 
     const typeDefinitionKey = getFileTypeDefinitionForField(name);
 
     if (!typeDefinitionKey) {
-      setCustomError(`No file type definition found for field: ${name}`);
+      setCustomError(t("fileValidation.noTypeDefinition", { name }));
       return;
     }
 
@@ -504,7 +518,11 @@ export function TypedFileUploadFormField({
       helpers.setValue(typedFile);
       setCustomError("");
     } catch (error) {
-      setCustomError(error instanceof Error ? error.message : "Unknown error");
+      setCustomError(
+        error instanceof Error
+          ? error.message
+          : t("fileValidation.unknownError")
+      );
       helpers.setValue(null);
     } finally {
       setIsValidating(false);
@@ -525,7 +543,7 @@ export function TypedFileUploadFormField({
       {/* Validation feedback */}
       {isValidating && (
         <div className="text-status-info-05 text-sm mt-1">
-          Validating file...
+          {t("fileValidation.validating")}
         </div>
       )}
 
@@ -624,8 +642,9 @@ export const MarkdownFormField = ({
   name,
   label,
   error,
-  placeholder = "Enter your markdown here...",
+  placeholder,
 }: MarkdownPreviewProps) => {
+  const t = useTranslations("common.field");
   const [field] = useField(name);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
@@ -640,14 +659,16 @@ export const MarkdownFormField = ({
         <div className="flex items-center justify-between px-4 py-2 bg-background-neutral-02 rounded-t-md">
           <div className="flex items-center space-x-2">
             <FaMarkdown className="text-text-03" />
-            <span className="text-sm font-semibold text-text-04">Markdown</span>
+            <span className="text-sm font-semibold text-text-04">
+              {t("markdown.editorLabel")}
+            </span>
           </div>
           <button
             type="button"
             onClick={togglePreview}
             className="text-sm font-semibold text-text-04 hover:text-text-05 focus:outline-hidden"
           >
-            {isPreviewOpen ? "Write" : "Preview"}
+            {isPreviewOpen ? t("markdown.writeTab") : t("markdown.previewTab")}
           </button>
         </div>
         {isPreviewOpen ? (
@@ -665,7 +686,7 @@ export const MarkdownFormField = ({
             <textarea
               {...field}
               rows={2}
-              placeholder={placeholder}
+              placeholder={placeholder ?? t("markdown.placeholder")}
               className={`w-full p-2 border border-border-02 rounded-md`}
             />
           </div>
@@ -713,6 +734,7 @@ export const BooleanFormField = memo(function BooleanFormField({
   disabledTooltipSide,
   onChange,
 }: BooleanFormFieldProps) {
+  const t = useTranslations("common.field");
   // Generate a stable, valid id from the field name for label association
   const checkboxId = `checkbox-${name.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
 
@@ -771,9 +793,11 @@ export const BooleanFormField = memo(function BooleanFormField({
                     onClick={toggle}
                   >
                     <div className="flex items-center gap-x-2">
-                      <Label small={small}>{`${label}${
-                        optional ? " (Optional)" : ""
-                      }`}</Label>
+                      <Label small={small}>
+                        {optional
+                          ? t("booleanField.optionalLabel", { label })
+                          : label}
+                      </Label>
                       {tooltip && <ToolTipDetails>{tooltip}</ToolTipDetails>}
                     </div>
                     {subtext && <SubLabel>{subtext}</SubLabel>}
@@ -817,6 +841,7 @@ export function TextArrayField<T extends Yup.AnyObject>({
   placeholder = "",
   disabled = false,
 }: TextArrayFieldProps<T>) {
+  const t = useTranslations("common.field");
   return (
     <div className="mb-4">
       <div className="flex gap-x-2 items-center">
@@ -888,7 +913,7 @@ export function TextArrayField<T extends Yup.AnyObject>({
               type="button"
               disabled={disabled}
             >
-              Add New
+              {t("arrayField.addButton")}
             </Button>
           </div>
         )}
@@ -946,6 +971,7 @@ export function SelectorFormField({
   small = false,
   disabled = false,
 }: SelectorFormFieldProps) {
+  const t = useTranslations("common.field");
   const [field] = useField<string>(name);
   const { setFieldValue } = useFormikContext();
   const [container, setContainer] = useState<HTMLDivElement | null>(null);
@@ -999,7 +1025,7 @@ export function SelectorFormField({
           disabled={disabled}
         >
           <SelectTrigger className={sizeClass.input} disabled={disabled}>
-            <SelectValue placeholder="Select...">
+            <SelectValue placeholder={t("selector.placeholder")}>
               {currentlySelected?.name || defaultValue || ""}
             </SelectValue>
           </SelectTrigger>
@@ -1015,7 +1041,9 @@ export function SelectorFormField({
               container={container}
             >
               {options.length === 0 ? (
-                <SelectItem value="default">Select...</SelectItem>
+                <SelectItem value="default">
+                  {t("selector.placeholder")}
+                </SelectItem>
               ) : (
                 options.map((option) => (
                   <SelectItem
@@ -1034,7 +1062,7 @@ export function SelectorFormField({
                   value={"__none__"}
                   onSelect={() => setFieldValue(name, null)}
                 >
-                  None
+                  {t("selector.noneOption")}
                 </SelectItem>
               )}
             </SelectContent>

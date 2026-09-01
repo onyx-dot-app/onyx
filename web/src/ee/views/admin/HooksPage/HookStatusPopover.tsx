@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import {
   Button,
   CopyButton,
@@ -37,6 +38,7 @@ function ErrorLogRow({
   log: { created_at: string; error_message: string | null };
   group: string;
 }) {
+  const t = useTranslations("admin.hooks");
   return (
     <Hoverable.Root group={group}>
       <Section
@@ -65,7 +67,7 @@ function ErrorLogRow({
         </Section>
         <span className="break-all">
           <Text font="secondary-mono" color="text-03">
-            {log.error_message ?? "Unknown error"}
+            {log.error_message ?? t("logs.unknownError.label")}
           </Text>
         </span>
       </Section>
@@ -84,6 +86,7 @@ export default function HookStatusPopover({
   spec,
   isBusy,
 }: HookStatusPopoverProps) {
+  const t = useTranslations("admin.hooks");
   const logsModal = useCreateModal();
   const [open, setOpen] = useState(false);
   // true = opened by click (stays until dismissed); false = opened by hover (closes after 1s)
@@ -201,7 +204,9 @@ export default function HookStatusPopover({
             onClick={noProp(handleTriggerClick)}
             disabled={isBusy}
           >
-            {hook.is_reachable === false ? "Connection Lost" : "Connected"}
+            {hook.is_reachable === false
+              ? t("status.connectionLost.label")
+              : t("status.connected.label")}
           </Button>
         </Popover.Anchor>
 
@@ -234,7 +239,7 @@ export default function HookStatusPopover({
               </Section>
             ) : error ? (
               <Text font="secondary-body" color="text-03">
-                Failed to load logs.
+                {t("logs.loadFailed.message")}
               </Text>
             ) : hook.is_reachable === false ? (
               <>
@@ -248,7 +253,7 @@ export default function HookStatusPopover({
                         className="text-status-error-05"
                       />
                     )}
-                    title="Most Recent Errors"
+                    title={t("status.recentErrors.title")}
                   />
                 </div>
 
@@ -286,7 +291,7 @@ export default function HookStatusPopover({
                     handleOpenChange(false);
                     logsModal.toggle(true);
                   })}
-                  title="View More Lines"
+                  title={t("status.viewMore.label")}
                 />
               </>
             ) : hasRecentErrors ? (
@@ -303,12 +308,12 @@ export default function HookStatusPopover({
                     )}
                     title={
                       recentErrors.length <= 3
-                        ? `${recentErrors.length} ${
-                            recentErrors.length === 1 ? "Error" : "Errors"
-                          }`
-                        : "Most Recent Errors"
+                        ? t("status.errorCount.title", {
+                            count: recentErrors.length,
+                          })
+                        : t("status.recentErrors.title")
                     }
-                    description="in the past hour"
+                    description={t("status.pastHour.description")}
                   />
                 </div>
 
@@ -342,7 +347,7 @@ export default function HookStatusPopover({
                     handleOpenChange(false);
                     logsModal.toggle(true);
                   })}
-                  title="View More Lines"
+                  title={t("status.viewMore.label")}
                 />
               </>
             ) : (
@@ -353,8 +358,8 @@ export default function HookStatusPopover({
                     sizePreset="secondary"
                     variant="section"
                     icon={SvgCheckCircle}
-                    title="No Error"
-                    description="in the past hour"
+                    title={t("status.noError.title")}
+                    description={t("status.pastHour.description")}
                   />
                 </div>
 
@@ -370,7 +375,7 @@ export default function HookStatusPopover({
                     handleOpenChange(false);
                     logsModal.toggle(true);
                   })}
-                  title="View Older Errors"
+                  title={t("status.viewOlder.label")}
                 />
               </>
             )}

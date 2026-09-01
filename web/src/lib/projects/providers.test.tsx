@@ -1,5 +1,7 @@
 import React, { PropsWithChildren } from "react";
 import { act, renderHook } from "@testing-library/react";
+import { NextIntlClientProvider } from "next-intl";
+import englishMessages from "@/i18n/messages/en.json";
 import { ProjectsProvider, useProjectsContext } from "@/lib/projects/providers";
 import type { ProjectFile } from "@/lib/projects/types";
 
@@ -66,7 +68,9 @@ jest.mock("@/lib/projects/svc", () => {
 });
 
 const wrapper = ({ children }: PropsWithChildren) => (
-  <ProjectsProvider>{children}</ProjectsProvider>
+  <NextIntlClientProvider locale="en" messages={englishMessages}>
+    <ProjectsProvider>{children}</ProjectsProvider>
+  </NextIntlClientProvider>
 );
 
 describe("ProjectsContext beginUpload size precheck", () => {

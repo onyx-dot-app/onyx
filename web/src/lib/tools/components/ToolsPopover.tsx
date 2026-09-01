@@ -1,7 +1,15 @@
 "use client";
 
-import { FILE_READER_TOOL_ID, SEARCH_TOOL_ID } from "@/lib/tools/constants";
+import {
+  CODING_AGENT_TOOL_ID,
+  FILE_READER_TOOL_ID,
+  IMAGE_GENERATION_TOOL_ID,
+  PYTHON_TOOL_ID,
+  SEARCH_TOOL_ID,
+  WEB_SEARCH_TOOL_ID,
+} from "@/lib/tools/constants";
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useTranslations } from "next-intl";
 import { useFocusOnMount } from "@opal/hooks";
 import { InputTypeIn, Button, Popover, PopoverMenu } from "@opal/components";
 import { SvgActions, SvgKey, SvgSliders, SvgSimpleLoader } from "@opal/icons";
@@ -67,6 +75,39 @@ export default function ToolsPopover({
   toolConfiguration,
   disabled = false,
 }: ToolsPopoverProps) {
+  const t = useTranslations("actions");
+  const tooltipMessages = useMemo(
+    () => ({
+      descriptions: {
+        [SEARCH_TOOL_ID]: t("toolsPopover.tooltips.search.description"),
+        [IMAGE_GENERATION_TOOL_ID]: t(
+          "toolsPopover.tooltips.imageGeneration.description"
+        ),
+        [WEB_SEARCH_TOOL_ID]: t("toolsPopover.tooltips.webSearch.description"),
+        [PYTHON_TOOL_ID]: t("toolsPopover.tooltips.python.description"),
+        [CODING_AGENT_TOOL_ID]: t(
+          "toolsPopover.tooltips.codingAgent.description"
+        ),
+      },
+      defaultDescription: t("toolsPopover.tooltips.default.description"),
+      configure: t("toolsPopover.tooltips.configureSuffix.text"),
+      askAdmin: t("toolsPopover.tooltips.askAdminSuffix.text"),
+    }),
+    [t]
+  );
+  const configureTooltips = useMemo(
+    () => ({
+      [IMAGE_GENERATION_TOOL_ID]: t(
+        "toolsPopover.configureLinks.imageGeneration.tooltip"
+      ),
+      [WEB_SEARCH_TOOL_ID]: t("toolsPopover.configureLinks.webSearch.tooltip"),
+      [PYTHON_TOOL_ID]: t(
+        "toolsPopover.configureLinks.codeInterpreter.tooltip"
+      ),
+      openapi: t("toolsPopover.configureLinks.openapi.tooltip"),
+    }),
+    [t]
+  );
   const { availableSources } = useAvailableSources();
   const [open, setOpen] = useState(false);
   const [secondaryView, setSecondaryView] = useState<SecondaryViewState | null>(
@@ -540,7 +581,7 @@ export default function ToolsPopover({
       onClick={handleFooterReauthClick}
       icon={selectedMcpServerData?.isLoading ? SvgSimpleLoader : SvgKey}
     >
-      Re-authenticate
+      {t("toolsPopover.reauthenticate.label")}
     </LineItem>
   ) : undefined;
 
@@ -639,7 +680,7 @@ export default function ToolsPopover({
       {[
         <InputTypeIn
           key="search"
-          placeholder="Search actions..."
+          placeholder={t("toolsPopover.search.placeholder")}
           searchIcon
           value={searchTerm}
           onChange={(event) => setSearchTerm(event.target.value)}
@@ -659,7 +700,7 @@ export default function ToolsPopover({
             );
             const adminConfigureInfo =
               isUnavailable && canAdminConfigure
-                ? getAdminConfigureInfo(tool)
+                ? getAdminConfigureInfo(tool, configureTooltips)
                 : null;
             return (
               <ActionLineItem
@@ -671,7 +712,8 @@ export default function ToolsPopover({
                 tooltip={getToolTooltip(
                   tool,
                   isToolAvailable,
-                  canAdminConfigure
+                  canAdminConfigure,
+                  tooltipMessages
                 )}
                 showAdminConfigure={!!adminConfigureInfo}
                 adminConfigureHref={adminConfigureInfo?.href}
@@ -742,7 +784,7 @@ export default function ToolsPopover({
             icon={SvgActions}
             key="more-actions"
           >
-            More Actions
+            {t("toolsPopover.moreActions.label")}
           </LineItem>
         ),
       ]}
@@ -752,12 +794,12 @@ export default function ToolsPopover({
   const toolsView = (
     <SwitchList
       items={sourceToggleItems}
-      searchPlaceholder="Search Filters"
+      searchPlaceholder={t("toolsPopover.sourceFilters.searchPlaceholder")}
       allDisabled={allSourcesDisabled}
       onDisableAll={handleDisableAllSources}
       onEnableAll={handleEnableAllSources}
-      disableAllLabel="Disable All Sources"
-      enableAllLabel="Enable All Sources"
+      disableAllLabel={t("toolsPopover.disableAllSources.label")}
+      enableAllLabel={t("toolsPopover.enableAllSources.label")}
       onBack={() => setSecondaryView(null)}
     />
   );
@@ -765,12 +807,15 @@ export default function ToolsPopover({
   const mcpView = (
     <SwitchList
       items={mcpToggleItems}
-      searchPlaceholder={`Search ${selectedMcpServer?.name ?? "server"} tools`}
+      searchPlaceholder={t("toolsPopover.mcpTools.searchPlaceholder", {
+        server:
+          selectedMcpServer?.name ?? t("toolsPopover.serverFallback.label"),
+      })}
       allDisabled={mcpAllDisabled}
       onDisableAll={() => setSelectedServerToolsDisabled(true)}
       onEnableAll={() => setSelectedServerToolsDisabled(false)}
-      disableAllLabel="Disable All Tools"
-      enableAllLabel="Enable All Tools"
+      disableAllLabel={t("toolsPopover.disableAllTools.label")}
+      enableAllLabel={t("toolsPopover.enableAllTools.label")}
       onBack={() => setSecondaryView(null)}
       footer={mcpFooter}
     />
@@ -789,7 +834,7 @@ export default function ToolsPopover({
               icon={SvgSliders}
               interaction={open ? "hover" : "rest"}
               prominence="tertiary"
-              tooltip="Manage Actions"
+              tooltip={t("toolsPopover.manageActions.tooltip")}
             />
           </div>
         </Popover.Trigger>

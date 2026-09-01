@@ -1,6 +1,7 @@
 "use client";
 
 import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import { useSearchParams } from "next/navigation";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -42,34 +43,12 @@ import { compareByName } from "@/lib/skills/picker";
 
 // Apps and MCP servers are connected, governed, and taught to the agent
 // differently, so each kind gets its own tab rather than one blended list.
-const KIND_COPY: Record<
-  ConnectableKind,
-  {
-    label: string;
-    blurb: string;
-    emptyTitle: string;
-    empty: string;
-  }
-> = {
-  app: {
-    label: "Apps",
-    blurb:
-      "Integrations Onyx supports directly. Each comes with skills that teach Craft how to use it — start here.",
-    emptyTitle: "No apps yet",
-    empty: "No apps are configured for your organization yet.",
-  },
-  mcp: {
-    label: "MCP servers",
-    blurb:
-      "Servers an admin made available to Craft. Use these when the app you need isn't listed under Apps, or when you specifically want a server's own MCP tools.",
-    emptyTitle: "No MCP servers yet",
-    empty: "No MCP servers have been made available to Craft.",
-  },
-};
+// Per-kind copy lives in the craft.apps.page.kinds message namespace.
 
 // The user's own app connections. Org-wide configuration lives in the admin
 // panel's Craft section; admins get a shortcut button to it here.
 export default function ExternalAppsPage() {
+  const t = useTranslations("craft.apps.page");
   const { isAdmin } = useUser();
   const [query, setQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -85,8 +64,8 @@ export default function ExternalAppsPage() {
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={SvgPlug}
-        title="Apps"
-        description="Connect the tools Onyx Craft can use as context while it works."
+        title={t("header.title")}
+        description={t("header.description")}
         rightChildren={
           isAdmin ? (
             <Button
@@ -94,14 +73,14 @@ export default function ExternalAppsPage() {
               prominence="secondary"
               icon={SvgSettings}
             >
-              Manage apps
+              {t("header.manageButton")}
             </Button>
           ) : undefined
         }
       >
         <InputTypeIn
           ref={searchInputRef}
-          placeholder="Search apps..."
+          placeholder={t("header.searchPlaceholder")}
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           searchIcon
@@ -119,6 +98,7 @@ interface AppConnectionsProps {
 }
 
 function AppConnections({ query }: AppConnectionsProps) {
+  const t = useTranslations("craft.apps.page");
   const { data: externalApps, mutate: mutateApps } = useSWR<
     ExternalAppUserResponse[]
   >(SWR_KEYS.buildExternalApps, errorHandlingFetcher, {
@@ -180,7 +160,7 @@ function AppConnections({ query }: AppConnectionsProps) {
   if (isLoading) {
     return (
       <Card background="none" border="dashed" rounding={4}>
-        <Text font="main-content-body">Loading…</Text>
+        <Text font="main-content-body">{t("loading.label")}</Text>
       </Card>
     );
   }
@@ -189,8 +169,8 @@ function AppConnections({ query }: AppConnectionsProps) {
     return (
       <IllustrationContent
         illustration={SvgUnPlugged}
-        title="Nothing to connect yet"
-        description="No apps or MCP servers are configured for your organization yet."
+        title={t("empty.title")}
+        description={t("empty.description")}
       />
     );
   }
@@ -204,16 +184,15 @@ function AppConnections({ query }: AppConnectionsProps) {
     >
       <Tabs.List>
         {KIND_ORDER.map((kind) => (
-          <Tabs.Trigger
-            key={kind}
-            value={kind}
-          >{`${KIND_COPY[kind].label} · ${byKind[kind].length}`}</Tabs.Trigger>
+          <Tabs.Trigger key={kind} value={kind}>
+            {t(`kinds.${kind}.tabLabel`, { count: byKind[kind].length })}
+          </Tabs.Trigger>
         ))}
       </Tabs.List>
       <KindSlot tab={tab}>
         {(kind) => (
           <Text font="secondary-body" color="text-03">
-            {KIND_COPY[kind].blurb}
+            {t(`kinds.${kind}.blurb`)}
           </Text>
         )}
       </KindSlot>
@@ -295,20 +274,20 @@ function ConnectableList({
   appsNeedingSkillSetup,
   onChange,
 }: ConnectableListProps) {
-  const copy = KIND_COPY[kind];
+  const t = useTranslations("craft.apps.page");
 
   if (items.length === 0) {
     return searching ? (
       <IllustrationContent
         illustration={SvgNoResult}
-        title="No matches"
-        description="Nothing here matches your search."
+        title={t("search.noMatchesTitle")}
+        description={t("search.noMatchesDescription")}
       />
     ) : (
       <IllustrationContent
         illustration={SvgUnPlugged}
-        title={copy.emptyTitle}
-        description={copy.empty}
+        title={t(`kinds.${kind}.emptyTitle`)}
+        description={t(`kinds.${kind}.empty`)}
       />
     );
   }
@@ -339,17 +318,21 @@ function ConnectableList({
  * The card's one-line status. Connecting swaps this and the action beside it;
  * clamped to a single line, it is also what holds every card to one height.
  */
-function statusLine(app: ConnectableApp, needsSkillSetup: boolean): string {
+function statusLine(
+  app: ConnectableApp,
+  needsSkillSetup: boolean,
+  t: ReturnType<typeof useTranslations<"craft.apps.page">>
+): string {
   if (app.authenticated) {
     return needsSkillSetup
-      ? "Connected · not all associated skills are enabled"
-      : "Connected";
+      ? t("status.connectedNeedsSkills")
+      : t("status.connected");
   }
   // Org-managed and not usable by this account (e.g. an admin config that
   // yields no credentials, or pass-through OAuth for a password-login user).
   // There is no user-side action.
   if (app.connectMode === null) {
-    return "Not available for your account — ask an admin";
+    return t("status.notAvailable");
   }
   return app.description;
 }
@@ -373,6 +356,7 @@ function ConnectableCard({
   needsSkillSetup = false,
   onChange,
 }: ConnectableCardProps) {
+  const t = useTranslations("craft.apps.page");
   const [isStarting, setIsStarting] = useState(false);
   const [credModalOpen, setCredModalOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -396,9 +380,7 @@ function ConnectableCard({
     try {
       window.location.href = await app.startOAuth();
     } catch (e) {
-      toast.error(
-        e instanceof Error ? e.message : "Failed to start authorization"
-      );
+      toast.error(e instanceof Error ? e.message : t("errors.startAuthFailed"));
       setIsStarting(false);
     }
   }
@@ -410,7 +392,9 @@ function ConnectableCard({
       await app.disconnect();
       onChange();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to disconnect");
+      toast.error(
+        e instanceof Error ? e.message : t("errors.disconnectFailed")
+      );
     } finally {
       setIsStarting(false);
     }
@@ -436,7 +420,7 @@ function ConnectableCard({
             icon={Logo}
             title={app.name}
             titleMaxLines={1}
-            description={statusLine(app, needsSkillSetup)}
+            description={statusLine(app, needsSkillSetup, t)}
             descriptionMaxLines={1}
             rightChildren={
               <Section flexDirection="row" width="fit" height="fit" gap={2}>
@@ -445,11 +429,11 @@ function ConnectableCard({
                     {/* Only the problem state gets a glyph — "Connected" in the
                         status line already says the happy path. */}
                     {needsSkillSetup && (
-                      <Tooltip tooltip="Not all associated skills are enabled. This app may not work correctly.">
+                      <Tooltip tooltip={t("status.skillWarningTooltip")}>
                         <SvgAlertCircle
                           size={16}
                           className="text-status-warning-05"
-                          aria-label="Skill setup required"
+                          aria-label={t("status.skillWarningAriaLabel")}
                         />
                       </Tooltip>
                     )}
@@ -458,7 +442,7 @@ function ConnectableCard({
                         prominence="secondary"
                         href={`/craft/v1/skills?externalAppId=${app.externalAppId}`}
                       >
-                        Review skills
+                        {t("reviewSkillsButton")}
                       </Button>
                     )}
                     {app.disconnect && (
@@ -467,14 +451,14 @@ function ConnectableCard({
                         disabled={isStarting}
                         onClick={disconnect}
                       >
-                        {isStarting ? "…" : "Disconnect"}
+                        {isStarting ? "…" : t("disconnectButton")}
                       </Button>
                     )}
                   </>
                 ) : (
                   app.connectMode !== null && (
                     <Button disabled={isStarting} onClick={connect}>
-                      {isStarting ? "Redirecting…" : "Connect"}
+                      {isStarting ? t("connectingButton") : t("connectButton")}
                     </Button>
                   )
                 )}

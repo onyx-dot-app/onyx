@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import { AnimatePresence, motion } from "motion/react";
 import { cn } from "@opal/utils";
 import { Text } from "@opal/components";
@@ -17,6 +18,7 @@ interface SuggestedPromptsProps {
 export default function SuggestedPrompts({
   onPromptClick,
 }: SuggestedPromptsProps) {
+  const t = useTranslations("craft.suggestedPrompts");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -95,7 +97,7 @@ export default function SuggestedPrompts({
               <button
                 type="button"
                 onClick={() => setExpandedId(null)}
-                aria-label="Close suggestions"
+                aria-label={t("close.ariaLabel")}
                 className="flex items-center justify-center cursor-pointer"
               >
                 <SvgX className="w-4 h-4 text-text-03" />

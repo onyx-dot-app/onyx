@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { memo, useState, useEffect, useCallback, useRef } from "react";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -32,7 +33,6 @@ import CraftingLoader from "@/app/craft/components/CraftingLoader";
 import {
   getWebappState,
   isWebappPreviewEnabled,
-  NO_WEBAPP_LABEL,
   type WebappState,
 } from "@/app/craft/components/output-panel/interfaces";
 
@@ -107,6 +107,7 @@ function useJointMasks(): {
 }
 
 const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
+  const t = useTranslations("craft.outputPanel");
   const jointMasks = useJointMasks();
   const session = useSession();
   const preProvisionedSessionId = usePreProvisionedSessionId();
@@ -507,10 +508,10 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
                 tab.value === "preview" && webappState === "starting";
               const tooltip = isDisabled
                 ? tab.value === "preview"
-                  ? NO_WEBAPP_LABEL
-                  : "Start building something to see artifacts!"
+                  ? t("noWebapp.label")
+                  : t("artifactsEmpty.tooltip")
                 : isStarting
-                  ? "Starting the dev server..."
+                  ? t("devServerStarting.tooltip")
                   : undefined;
 
               const tabButton = (

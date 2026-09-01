@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { cn } from "@opal/utils";
 import { Text } from "@opal/components";
 import {
@@ -31,6 +32,7 @@ function IconWrapper({ children }: { children: React.ReactNode }) {
 export default function ConnectDataBanner({
   className,
 }: ConnectDataBannerProps) {
+  const t = useTranslations("craft.connectDataBanner");
   const { permissions } = useUser();
   const canManageConnectors = hasPermission(
     permissions,
@@ -84,7 +86,7 @@ export default function ConnectDataBanner({
 
         <div className="flex items-center justify-center gap-1">
           <Text font="secondary-body" color="text-03">
-            Connect your data
+            {t("cta.label")}
           </Text>
           <SvgChevronRight className="h-4 w-4 text-text-03" />
         </div>

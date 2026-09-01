@@ -14,9 +14,12 @@ import {
 } from "@opal/illustrations";
 import type { IconFunctionComponent } from "@opal/types";
 import { completeMCPUserOAuth } from "@/lib/tools/svc";
+import { useTranslations } from "next-intl";
 
 const AUTO_REDIRECT_DELAY_MS = 2000;
 const DEFAULT_REDIRECT_PATH = "/app";
+
+type CallbackTranslate = ReturnType<typeof useTranslations<"actions">>;
 
 interface CallbackError {
   illustration: IconFunctionComponent;
@@ -29,47 +32,47 @@ type CallbackState =
   | { phase: "success"; serverName: string; redirectPath: string }
   | { phase: "error"; error: CallbackError };
 
-function cancelledError(errorDescription: string | null): CallbackError {
+function cancelledError(
+  t: CallbackTranslate,
+  errorDescription: string | null
+): CallbackError {
   return {
     illustration: SvgUnPlugged,
-    title: "Authorization cancelled",
+    title: t("mcpOauthCallback.cancelled.title"),
     description:
-      errorDescription ||
-      "The authorization was cancelled or denied, so no connection was made. " +
-        "To try again, restart the connection from the MCP server's authentication settings.",
+      errorDescription || t("mcpOauthCallback.cancelled.description"),
   };
 }
 
-const INVALID_LINK_ERROR: CallbackError = {
-  illustration: SvgBrokenKey,
-  title: "Invalid authorization link",
-  description:
-    "This link is missing the required authorization parameters. " +
-    "Restart the connection from the MCP server's authentication settings.",
-};
+function invalidLinkError(t: CallbackTranslate): CallbackError {
+  return {
+    illustration: SvgBrokenKey,
+    title: t("mcpOauthCallback.invalidLink.title"),
+    description: t("mcpOauthCallback.invalidLink.description"),
+  };
+}
 
 // Maps the backend's error `detail` strings to actionable guidance. Order
 // matters: "No tokens found" must match before the generic "token" and
 // "not found" checks.
-function classifyCallbackError(detail: string): CallbackError {
+function classifyCallbackError(
+  t: CallbackTranslate,
+  detail: string
+): CallbackError {
   const lowerDetail = detail.toLowerCase();
 
   if (lowerDetail.includes("state")) {
     return {
       illustration: SvgBrokenKey,
-      title: "Authorization session expired",
-      description:
-        "This authorization link is invalid, has expired, or was already used. " +
-        "Restart the connection from the MCP server's authentication settings.",
+      title: t("mcpOauthCallback.sessionExpired.title"),
+      description: t("mcpOauthCallback.sessionExpired.description"),
     };
   }
   if (lowerDetail.includes("no tokens found")) {
     return {
       illustration: SvgTimeout,
-      title: "Authorization timed out",
-      description:
-        "The MCP server didn't confirm the authorization in time. Try connecting " +
-        "again — if this keeps happening, verify the server's OAuth configuration.",
+      title: t("mcpOauthCallback.timedOut.title"),
+      description: t("mcpOauthCallback.timedOut.description"),
     };
   }
   if (
@@ -78,11 +81,8 @@ function classifyCallbackError(detail: string): CallbackError {
   ) {
     return {
       illustration: SvgPlugBroken,
-      title: "Token exchange failed",
-      description:
-        "The provider approved the authorization but a valid access token could " +
-        "not be obtained. Check the server's OAuth client credentials and " +
-        "endpoints, then try connecting again.",
+      title: t("mcpOauthCallback.tokenExchangeFailed.title"),
+      description: t("mcpOauthCallback.tokenExchangeFailed.description"),
     };
   }
   if (
@@ -91,15 +91,13 @@ function classifyCallbackError(detail: string): CallbackError {
   ) {
     return {
       illustration: SvgPlugBroken,
-      title: "MCP server not found",
-      description:
-        "The MCP server this authorization belongs to no longer exists or is no " +
-        "longer configured. Recreate or reconfigure the server, then connect again.",
+      title: t("mcpOauthCallback.serverNotFound.title"),
+      description: t("mcpOauthCallback.serverNotFound.description"),
     };
   }
   return {
     illustration: SvgPlugBroken,
-    title: "Something went wrong",
+    title: t("mcpOauthCallback.genericError.title"),
     description: detail,
   };
 }
@@ -117,6 +115,7 @@ function buildRedirectPath(rawPath: string): string {
 }
 
 export default function MCPOAuthCallbackPage() {
+  const t = useTranslations("actions");
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -146,12 +145,12 @@ export default function MCPOAuthCallbackPage() {
 
     // The provider redirected back with an error (e.g. the user cancelled)
     if (providerError) {
-      setState({ phase: "error", error: cancelledError(errorDescription) });
+      setState({ phase: "error", error: cancelledError(t, errorDescription) });
       return;
     }
 
     if (!code || !stateParam) {
-      setState({ phase: "error", error: INVALID_LINK_ERROR });
+      setState({ phase: "error", error: invalidLinkError(t) });
       return;
     }
 
@@ -169,9 +168,10 @@ export default function MCPOAuthCallbackPage() {
         setState({
           phase: "error",
           error: classifyCallbackError(
+            t,
             error instanceof Error
               ? error.message
-              : "Failed to complete authorization"
+              : t("mcpOauthCallback.genericError.fallbackDetail")
           ),
         });
       }
@@ -195,11 +195,10 @@ export default function MCPOAuthCallbackPage() {
                 </div>
                 <div className="flex flex-col items-center text-center">
                   <Text font="main-content-emphasis" color="text-04" as="p">
-                    Completing authorization
+                    {t("mcpOauthCallback.processing.title")}
                   </Text>
                   <Text font="secondary-body" color="text-03" as="p">
-                    Finishing the connection to your MCP server. This may take a
-                    few moments…
+                    {t("mcpOauthCallback.processing.description")}
                   </Text>
                 </div>
               </div>
@@ -209,18 +208,22 @@ export default function MCPOAuthCallbackPage() {
               <>
                 <IllustrationContent
                   illustration={SvgConnected}
-                  title={`Connected to ${state.serverName}`}
-                  description="Authorization completed successfully. You can now use this server's tools in chat."
+                  title={t("mcpOauthCallback.success.title", {
+                    // FSI/PDI isolate the name so a mixed-direction server
+                    // name cannot reorder the surrounding sentence.
+                    serverName: `\u2068${state.serverName}\u2069`,
+                  })}
+                  description={t("mcpOauthCallback.success.description")}
                 />
                 <Button
                   width="full"
                   onClick={() => router.push(state.redirectPath as Route)}
                 >
-                  Continue
+                  {t("mcpOauthCallback.continueButton.label")}
                 </Button>
                 <div className="flex justify-center">
                   <Text font="secondary-body" color="text-03" as="p">
-                    Taking you back automatically…
+                    {t("mcpOauthCallback.autoRedirect.text")}
                   </Text>
                 </div>
               </>
@@ -237,7 +240,7 @@ export default function MCPOAuthCallbackPage() {
                   width="full"
                   onClick={() => router.push(DEFAULT_REDIRECT_PATH as Route)}
                 >
-                  Back to Chat
+                  {t("mcpOauthCallback.backToChatButton.label")}
                 </Button>
               </>
             )}

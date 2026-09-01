@@ -14,6 +14,7 @@ import {
   ChatBackgroundOption,
 } from "@/lib/constants/chatBackgrounds";
 import { ThemePreference } from "@/lib/types";
+import { useTranslations } from "next-intl";
 
 interface SettingRowProps {
   label: string;
@@ -51,40 +52,48 @@ const BackgroundThumbnail = ({
   isNone = false,
   isSelected,
   onClick,
-}: BackgroundThumbnailProps) => (
-  <button
-    onClick={onClick}
-    className="relative overflow-hidden rounded-xl transition-all aspect-video cursor-pointer border-none p-0 bg-transparent group"
-    title={label}
-    aria-label={`${label} background${isSelected ? " (selected)" : ""}`}
-  >
-    {isNone ? (
-      <div className="absolute inset-0 bg-background flex items-center justify-center">
-        <Text secondaryBody text03>
-          None
-        </Text>
-      </div>
-    ) : (
-      <div
-        className="absolute inset-0 bg-cover bg-center transition-transform duration-300 group-hover:scale-105"
-        style={{ backgroundImage: `url(${thumbnailUrl})` }}
-      />
-    )}
-    <div
-      className={cn(
-        "absolute inset-0 transition-all rounded-xl",
+}: BackgroundThumbnailProps) => {
+  const t = useTranslations("chat");
+  return (
+    /* raw-ok: full-bleed image tile with selection ring, the opal Button has no image-fill variant */
+    <button
+      onClick={onClick}
+      className="relative overflow-hidden rounded-xl transition-all aspect-video cursor-pointer border-none p-0 bg-transparent group"
+      title={label}
+      aria-label={
         isSelected
-          ? "ring-2 ring-inset ring-theme-primary-05"
-          : "ring-1 ring-inset ring-border-02 group-hover:ring-border-03"
+          ? t("nrf.settingsPanel.backgroundOptionSelected.ariaLabel", { label })
+          : t("nrf.settingsPanel.backgroundOption.ariaLabel", { label })
+      }
+    >
+      {isNone ? (
+        <div className="absolute inset-0 bg-background flex items-center justify-center">
+          <Text secondaryBody text03>
+            {t("nrf.settingsPanel.backgroundNone.label")}
+          </Text>
+        </div>
+      ) : (
+        <div
+          className="absolute inset-0 bg-cover bg-center transition-transform duration-300 group-hover:scale-105"
+          style={{ backgroundImage: `url(${thumbnailUrl})` }}
+        />
       )}
-    />
-    {isSelected && (
-      <div className="absolute top-2 end-2 w-5 h-5 rounded-full bg-theme-primary-05 flex items-center justify-center">
-        <SvgCheck className="w-3 h-3 stroke-text-inverted-05" />
-      </div>
-    )}
-  </button>
-);
+      <div
+        className={cn(
+          "absolute inset-0 transition-all rounded-xl",
+          isSelected
+            ? "ring-2 ring-inset ring-theme-primary-05"
+            : "ring-1 ring-inset ring-border-02 group-hover:ring-border-03"
+        )}
+      />
+      {isSelected && (
+        <div className="absolute top-2 end-2 w-5 h-5 rounded-full bg-theme-primary-05 flex items-center justify-center">
+          <SvgCheck className="w-3 h-3 stroke-text-inverted-05" />
+        </div>
+      )}
+    </button>
+  );
+};
 
 export const SettingsPanel = ({
   settingsOpen,
@@ -95,6 +104,16 @@ export const SettingsPanel = ({
   toggleSettings: () => void;
   handleUseOnyxToggle: (checked: boolean) => void;
 }) => {
+  const tBg = useTranslations("common.chatBackgrounds");
+  const bgLabels: Record<string, string> = {
+    none: tBg("none.label"),
+    clouds: tBg("clouds.label"),
+    hills: tBg("hills.label"),
+    plant: tBg("plant.label"),
+    mountains: tBg("mountains.label"),
+    night: tBg("night.label"),
+  };
+  const t = useTranslations("chat");
   const { useOnyxAsNewTab } = useNRFPreferences();
   const { theme, setTheme } = useTheme();
   const { user, updateUserChatBackground, updateUserThemePreference } =
@@ -164,7 +183,7 @@ export const SettingsPanel = ({
                 <SvgSettings className="w-5 h-5 stroke-text-03" />
               </div>
               <Text headingH3 text04>
-                Settings
+                {t("nrf.settingsPanel.header.title")}
               </Text>
             </div>
             <div className="flex items-center gap-3">
@@ -173,13 +192,15 @@ export const SettingsPanel = ({
                 icon={isDark ? SvgMoon : SvgSun}
                 onClick={toggleTheme}
                 prominence="tertiary"
-                tooltip={`Switch to ${isDark ? "light" : "dark"} theme`}
+                tooltip={t("nrf.settingsPanel.themeToggle.tooltip", {
+                  mode: isDark ? "light" : "dark",
+                })}
               />
               <Button
                 icon={SvgX}
                 onClick={toggleSettings}
                 prominence="tertiary"
-                tooltip="Close settings"
+                tooltip={t("nrf.settingsPanel.closeButton.tooltip")}
               />
             </div>
           </div>
@@ -189,10 +210,10 @@ export const SettingsPanel = ({
           {/* General Section */}
           <section className="flex flex-col gap-3">
             <Text secondaryAction text03 className="uppercase tracking-wider">
-              General
+              {t("nrf.settingsPanel.generalSection.title")}
             </Text>
             <div className="flex flex-col gap-1 bg-background-tint-01 rounded-2xl px-4">
-              <SettingRow label="Use Onyx as new tab page">
+              <SettingRow label={t("nrf.settingsPanel.newTabToggle.label")}>
                 <Switch
                   checked={useOnyxAsNewTab}
                   onCheckedChange={handleUseOnyxToggle}
@@ -204,14 +225,14 @@ export const SettingsPanel = ({
           {/* Background Section */}
           <section className="flex flex-col gap-3">
             <Text secondaryAction text03 className="uppercase tracking-wider">
-              Background
+              {t("nrf.settingsPanel.backgroundSection.title")}
             </Text>
             <div className="grid grid-cols-3 gap-2">
               {CHAT_BACKGROUND_OPTIONS.map((bg) => (
                 <BackgroundThumbnail
                   key={bg.id}
                   thumbnailUrl={bg.thumbnail}
-                  label={bg.label}
+                  label={bgLabels[bg.id] ?? bg.label}
                   isNone={bg.src === CHAT_BACKGROUND_NONE}
                   isSelected={currentBackgroundId === bg.id}
                   onClick={() => handleBackgroundChange(bg)}

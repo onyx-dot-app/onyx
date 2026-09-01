@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { FiEdit2 } from "react-icons/fi";
 import { SvgCheck } from "@opal/icons";
 
@@ -15,6 +16,7 @@ export function EditableValue({
   emptyDisplay?: string;
   consistentWidth?: boolean;
 }) {
+  const t = useTranslations("common.editable");
   const [isOpen, setIsOpen] = useState(false);
   const [editedValue, setEditedValue] = useState(initialValue);
 
@@ -42,7 +44,7 @@ export function EditableValue({
         />
         <button
           type="button"
-          aria-label="Save"
+          aria-label={t("save.ariaLabel")}
           onClick={async () => {
             const success = await onSubmit(editedValue);
             if (success) {
@@ -61,7 +63,7 @@ export function EditableValue({
     <div className="h-full flex flex-col">
       <button
         type="button"
-        aria-label="Edit"
+        aria-label={t("edit.ariaLabel")}
         className="flex my-auto cursor-pointer hover:bg-accent-background-hovered rounded-sm"
         onClick={() => setIsOpen(true)}
       >

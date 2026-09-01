@@ -1,4 +1,5 @@
 import { JSX } from "react";
+import { useTranslations } from "next-intl";
 import { FiCheck, FiChevronDown, FiXCircle } from "react-icons/fi";
 import { CustomDropdown } from "../../Dropdown";
 
@@ -33,6 +34,7 @@ export function FilterDropdown({
   backgroundColor?: string;
   dropdownColor?: string;
 }) {
+  const t = useTranslations("common.filters");
   return (
     <div>
       <CustomDropdown
@@ -121,7 +123,7 @@ export function FilterDropdown({
           {resetValues && selected.length !== 0 ? (
             <button
               type="button"
-              aria-label="Clear"
+              aria-label={t("clearButton.ariaLabel")}
               className="my-auto ms-auto p-0.5 rounded-full w-fit"
               onClick={(e) => {
                 resetValues();

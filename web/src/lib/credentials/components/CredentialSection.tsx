@@ -1,6 +1,7 @@
 "use client";
 
 import { AccessType, ValidSources } from "@/lib/types";
+import { useTranslations } from "next-intl";
 import useSWR, { mutate } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { useState } from "react";
@@ -40,8 +41,6 @@ import {
 import EditCredential from "@/lib/credentials/components/EditCredential";
 import ModifyCredential from "@/lib/credentials/components/ModifyCredential";
 
-const OAUTH_REDIRECT_ERROR = "Unable to start OAuth";
-
 export interface CredentialSectionProps {
   ccPair: CCPairFullInfo;
   sourceType: ValidSources;
@@ -53,6 +52,8 @@ export default function CredentialSection({
   sourceType,
   refresh,
 }: CredentialSectionProps) {
+  const t = useTranslations("admin");
+  const tCommon = useTranslations("common");
   const { data: credentials } = useSWR<Credential<ConfluenceCredentialJson>[]>(
     buildSimilarCredentialInfoURL(sourceType),
     errorHandlingFetcher,
@@ -82,7 +83,9 @@ export default function CredentialSection({
         window.location.href = redirectUrl;
       } catch (error) {
         toast.error(
-          error instanceof Error ? error.message : OAUTH_REDIRECT_ERROR
+          error instanceof Error
+            ? error.message
+            : t("credentials.oauth.startError.message")
         );
       }
       return;
@@ -128,13 +131,16 @@ export default function CredentialSection({
       mutate(buildSimilarCredentialInfoURL(sourceType));
       refresh();
 
-      toast.success("Swapped credential successfully!");
+      toast.success(t("credentials.swap.success.toast"));
     } else {
       const errorData = await response.json();
       toast.error(
-        `Issue swapping credential: ${
-          errorData.detail || errorData.message || "Unknown error"
-        }`
+        t("credentials.swap.error.toast", {
+          detail:
+            errorData.detail ||
+            errorData.message ||
+            tCommon("errors.unknown.message"),
+        })
       );
     }
   };
@@ -162,10 +168,10 @@ export default function CredentialSection({
       response = await updateCredential(selectedCredential.id, details);
     }
     if (response.ok) {
-      toast.success("Updated credential");
+      toast.success(t("credentials.update.success.toast"));
       onSucces();
     } else {
-      toast.error("Issue updating credential");
+      toast.error(t("credentials.update.error.toast"));
     }
   };
 
@@ -231,10 +237,12 @@ export default function CredentialSection({
   const showCredentialModal =
     showModifyCredential || editingCredential != null || showCreateCredential;
   const credentialModalTitle = showCreateCredential
-    ? `Create ${getSourceDisplayName(sourceType)} Credential`
+    ? t("credentials.modal.createTitle", {
+        source: getSourceDisplayName(sourceType) ?? sourceType,
+      })
     : editingCredential
-      ? "Edit Credential"
-      : "Update Credentials";
+      ? t("credentials.modal.editTitle")
+      : t("credentials.modal.updateTitle");
   const closeCurrentCredentialView = showCreateCredential
     ? closeCreateCredential
     : editingCredential
@@ -262,24 +270,26 @@ export default function CredentialSection({
               <div>
                 <Text as="p">
                   {ccPair.credential.name ||
-                    `Credential #${ccPair.credential.id}`}
+                    t("credentials.card.unnamed.label", {
+                      id: ccPair.credential.id,
+                    })}
                 </Text>
                 <div className="text-xs text-muted-foreground/70">
-                  Created{" "}
-                  <i>
-                    {new Date(
-                      ccPair.credential.time_created
-                    ).toLocaleDateString(undefined, {
-                      year: "numeric",
-                      month: "short",
-                      day: "numeric",
-                    })}
-                  </i>
-                  {ccPair.credential.user_email && (
-                    <>
-                      {" "}
-                      by <i>{ccPair.credential.user_email}</i>
-                    </>
+                  {t.rich(
+                    ccPair.credential.user_email
+                      ? "credentials.card.createdOnBy.label"
+                      : "credentials.card.createdOn.label",
+                    {
+                      i: (chunks) => <i>{chunks}</i>,
+                      date: new Date(
+                        ccPair.credential.time_created
+                      ).toLocaleDateString(undefined, {
+                        year: "numeric",
+                        month: "short",
+                        day: "numeric",
+                      }),
+                      email: ccPair.credential.user_email ?? "",
+                    }
                   )}
                 </div>
               </div>
@@ -296,7 +306,9 @@ export default function CredentialSection({
                   transition-colors"
               >
                 <SvgEdit size={16} />
-                <span className="sr-only">Update Credentials</span>
+                <span className="sr-only">
+                  {t("credentials.modal.updateTitle")}
+                </span>
               </button>
             </div>
           </div>
@@ -335,9 +347,10 @@ export default function CredentialSection({
                   shouldRedirectToOAuth(oauthDetails) ? (
                     <Section alignItems="start">
                       <Text as="p" font="main-ui-body" color="text-03">
-                        {`We couldn't redirect you to sign in with ${getSourceDisplayName(
-                          sourceType
-                        )}. Please try again.`}
+                        {t("credentials.oauth.redirectFailed.message", {
+                          source:
+                            getSourceDisplayName(sourceType) ?? sourceType,
+                        })}
                       </Text>
                       <Button
                         onClick={() =>
@@ -346,7 +359,7 @@ export default function CredentialSection({
                           )
                         }
                       >
-                        Retry
+                        {t("credentials.oauth.retryButton.label")}
                       </Button>
                     </Section>
                   ) : (
