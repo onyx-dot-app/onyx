@@ -83,54 +83,52 @@ function sortedArguments(message: string): string[] {
   return Array.from(collectArguments(parse(message), new Set<string>())).sort();
 }
 
-// Structural ICU signature: each argument with its kind, select option keys,
-// and tag names. Plural categories stay locale-defined (CLDR), so plural
-// branches contribute their contents but not their category keys.
-function collectShape(
-  elements: MessageFormatElement[],
-  into: Set<string>
-): Set<string> {
+// Canonical structure: argument kinds, select branches with exact keys
+// and contents, tag names with contents. Siblings compare unordered
+// (word order is translation freedom), plural branches merge (CLDR).
+function canonicalShape(elements: MessageFormatElement[]): string {
+  const parts: string[] = [];
   for (const element of elements) {
     switch (element.type) {
       case TYPE.argument:
-        into.add(`arg:${element.value}`);
+        parts.push(`arg:${element.value}`);
         break;
       case TYPE.number:
-        into.add(`number:${element.value}`);
+        parts.push(`number:${element.value}`);
         break;
       case TYPE.date:
-        into.add(`date:${element.value}`);
+        parts.push(`date:${element.value}`);
         break;
       case TYPE.time:
-        into.add(`time:${element.value}`);
+        parts.push(`time:${element.value}`);
         break;
-      case TYPE.plural:
-        into.add(`plural:${element.value}`);
+      case TYPE.plural: {
+        const union = new Set<string>();
         for (const option of Object.values(element.options)) {
-          collectShape(option.value, into);
+          for (const part of canonicalShape(option.value).split("|")) {
+            if (part) union.add(part);
+          }
         }
-        break;
-      case TYPE.select:
-        into.add(
-          `select:${element.value}(${Object.keys(element.options).sort().join("|")})`
+        parts.push(
+          `plural:${element.value}{${Array.from(union).sort().join("|")}}`
         );
-        for (const option of Object.values(element.options)) {
-          collectShape(option.value, into);
-        }
         break;
+      }
+      case TYPE.select: {
+        const branches = Object.entries(element.options)
+          .map(([key, option]) => `${key}{${canonicalShape(option.value)}}`)
+          .sort();
+        parts.push(`select:${element.value}(${branches.join("|")})`);
+        break;
+      }
       case TYPE.tag:
-        into.add(`tag:${element.value}`);
-        collectShape(element.children, into);
+        parts.push(`tag:${element.value}{${canonicalShape(element.children)}}`);
         break;
       default:
         break;
     }
   }
-  return into;
-}
-
-function sortedShape(message: string): string[] {
-  return Array.from(collectShape(parse(message), new Set<string>())).sort();
+  return Array.from(new Set(parts)).sort().join("|");
 }
 
 const flatEnglish = flatten(en as MessageTree);
@@ -155,9 +153,9 @@ describe("i18n message catalogs", () => {
           key,
           placeholders: sortedArguments(englishMessage),
         });
-        expect({ key, shape: sortedShape(message) }).toEqual({
+        expect({ key, shape: canonicalShape(parse(message)) }).toEqual({
           key,
-          shape: sortedShape(englishMessage),
+          shape: canonicalShape(parse(englishMessage)),
         });
       }
     });
