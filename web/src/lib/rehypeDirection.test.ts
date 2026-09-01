@@ -83,9 +83,12 @@ describe("rehypeDirection", () => {
     run(q);
     expect(dirOf(q)).toBe("rtl");
     const nko = el("p", [txt("\u07C1 x")]);
-    const garay = el("p", [txt("\u{10D41} x")]);
+    const garay = el("p", [txt("\u{10D50} x")]);
     run(garay);
     expect(dirOf(garay)).toBe("rtl");
+    const garayDigits = el("p", [txt("\u{10D41}\u{10D42} report")]);
+    run(garayDigits);
+    expect(dirOf(garayDigits)).toBe("ltr");
     run(nko);
     expect(dirOf(nko)).toBe("rtl");
   });
