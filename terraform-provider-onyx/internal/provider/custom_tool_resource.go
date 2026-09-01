@@ -66,7 +66,9 @@ func (r *customToolResource) Schema(_ context.Context, _ resource.SchemaRequest,
 			"Terraform does not manage. Onyx does not refuse the delete or warn about it.\n\n" +
 			"~> **`custom_headers` holds secrets.** Onyx masks the values on reads, but they are " +
 			"stored in Terraform state in clear text. Supply them from a secret store rather than " +
-			"literals, or use `custom_headers_wo` to keep them out of state entirely.",
+			"literals, or use `custom_headers_wo` to keep them out of state entirely. Masked reads " +
+			"also mean a rotation made outside Terraform is only visible when its mask differs, so " +
+			"rotate values through Terraform, ideally `custom_headers_wo` with its version attribute.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:            true,
@@ -348,6 +350,9 @@ func maskHeaderValue(value string) string {
 //
 // Onyx masks values on reads: a mask matching the state value keeps the
 // known value, an unmatched mask stays in state and surfaces as drift.
+// Colliding masks (all short values share one) make an out-of-band
+// rotation invisible, which only a changed-flag in the API could fix;
+// rotate through custom_headers_wo and its version instead.
 func headersFromRemote(ctx context.Context, current types.Map, remote *client.CustomTool, diags *diag.Diagnostics) types.Map {
 	if len(remote.CustomHeaders) == 0 && current.IsNull() {
 		return types.MapNull(types.StringType)
