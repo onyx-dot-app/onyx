@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@tests/setup/test-utils";
 import { Formik } from "formik";
 import { AccessTypeForm } from "@/components/admin/connectors/AccessTypeForm";
 import { ConfigurableSources, ValidSources } from "@/lib/types";
