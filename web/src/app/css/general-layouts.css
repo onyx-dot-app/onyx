@@ -37,7 +37,7 @@
 
 /* LineItemLayout Description */
 .line-item-layout-description {
-  @apply leading-none text-left;
+  @apply leading-none text-start;
 }
 
 .line-item-layout[data-has-icon="true"] .line-item-layout-description {

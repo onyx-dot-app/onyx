@@ -136,6 +136,7 @@ const DEFAULT_COMPONENTS = {
   },
   blockquote: ({ node, ...props }) => (
     <blockquote
+      dir="auto"
       className="my-2 border-s border-border-02 ps-3 text-sm text-text-03"
       {...props}
     />
