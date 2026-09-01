@@ -28,9 +28,9 @@ const OPAQUE_TAGS = new Set(["code", "pre"]);
 const RTL_MARK = /[\u200F\u061C]/u;
 const LTR_MARK = /\u200E/u;
 // Strong R and AL code points that are not letters: Hebrew and Arabic
-// punctuation, Syriac punctuation, and NKo digits.
+// punctuation and signs, Syriac punctuation, NKo digits, the rial sign.
 const RTL_STRONG_PUNCT =
-  /[\u05BE\u05C0\u05C3\u05C6\u061B\u061E\u061F\u066D\u06D4\u0700-\u070D\u07C0-\u07C9\u085E]/u;
+  /[\u05BE\u05C0\u05C3\u05C6\u05F3\u05F4\u0608\u060B\u060D\u061B\u061E\u061F\u066D\u06D4\u0700-\u070D\u07C0-\u07C9\u085E\uFDFC]/u;
 const RTL_SCRIPT =
   /[\p{Script=Arabic}\p{Script=Hebrew}\p{Script=Syriac}\p{Script=Thaana}\p{Script=Nko}\p{Script=Samaritan}\p{Script=Mandaic}\p{Script=Adlam}\p{Script=Hanifi_Rohingya}\p{Script=Yezidi}\p{Script=Phoenician}\p{Script=Imperial_Aramaic}\p{Script=Old_South_Arabian}\p{Script=Old_North_Arabian}\p{Script=Avestan}\p{Script=Sogdian}\p{Script=Old_Sogdian}\p{Script=Manichaean}\p{Script=Psalter_Pahlavi}\p{Script=Inscriptional_Pahlavi}\p{Script=Inscriptional_Parthian}\p{Script=Nabataean}\p{Script=Palmyrene}\p{Script=Hatran}\p{Script=Elymaic}\p{Script=Lydian}\p{Script=Kharoshthi}\p{Script=Old_Hungarian}\p{Script=Old_Turkic}\p{Script=Cypriot}\p{Script=Mende_Kikakui}\p{Script=Meroitic_Cursive}\p{Script=Meroitic_Hieroglyphs}\p{Script=Chorasmian}\p{Script=Old_Uyghur}]/u;
 const ANY_LETTER = /\p{L}/u;

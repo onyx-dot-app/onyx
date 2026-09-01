@@ -77,6 +77,9 @@ describe("rehypeDirection", () => {
 
   it("treats strong RTL punctuation and NKo digits as strong", () => {
     const q = el("p", [txt("\u061F Error")]);
+    const afghani = el("p", [txt("\u060B 100 invoice")]);
+    run(afghani);
+    expect(dirOf(afghani)).toBe("rtl");
     run(q);
     expect(dirOf(q)).toBe("rtl");
     const nko = el("p", [txt("\u07C1 x")]);
