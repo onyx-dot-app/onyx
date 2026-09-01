@@ -3600,7 +3600,9 @@
           "label": "应用于新增和更新的文档"
         },
         "applyReindex": {
-          "label": "应用并重新索引"
+          "label": "应用并重新索引",
+          "statusesLoading": "正在加载连接器状态…",
+          "statusesFailed": "无法加载连接器状态 — 请在重新索引前重试。"
         },
         "rebuildAll": {
           "label": "重建所有现有文档"
@@ -3976,6 +3978,15 @@
         "serviceAccountJsonRequired": "服务账号 JSON 为必填项",
         "targetUrlRequired": "目标 URL 为必填项",
         "urlInvalid": "必须是有效的 URL"
+      },
+      "wontPortConsentModal": {
+        "title": "部分连接器不会被重新索引",
+        "submit": "删除并重新索引",
+        "description": "{count, plural, one {该连接器无法迁移到新索引。重新索引会将它以及它已索引的文档一并从 Onyx 中删除：} other {这 # 个连接器无法迁移到新索引。重新索引会将它们以及它们已索引的文档一并从 Onyx 中删除：}}",
+        "connector": "{name} — {status}",
+        "statusInvalid": "无效",
+        "statusPaused": "已暂停",
+        "restoreHint": "如需再次搜索这些来源，请在重新索引完成后重新添加这些连接器。"
       }
     },
     "indexing": {

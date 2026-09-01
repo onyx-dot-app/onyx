@@ -3612,7 +3612,9 @@
           "label": "Apply to new and updated documents"
         },
         "applyReindex": {
-          "label": "Apply & Re-index"
+          "label": "Apply & Re-index",
+          "statusesLoading": "Loading connector statuses…",
+          "statusesFailed": "Couldn't load connector statuses — retry before re-indexing."
         },
         "rebuildAll": {
           "label": "Rebuild all existing documents"
@@ -3988,6 +3990,15 @@
         "serviceAccountJsonRequired": "Service account JSON is required",
         "targetUrlRequired": "Target URL is required",
         "urlInvalid": "Must be a valid URL"
+      },
+      "wontPortConsentModal": {
+        "title": "Some connectors won't be re-indexed",
+        "submit": "Delete & Re-index",
+        "description": "{count, plural, one {This connector can't be carried into the new index. Re-indexing deletes it from Onyx, along with the documents it indexed:} other {These # connectors can't be carried into the new index. Re-indexing deletes them from Onyx, along with the documents they indexed:}}",
+        "connector": "{name} — {status}",
+        "statusInvalid": "invalid",
+        "statusPaused": "paused",
+        "restoreHint": "To search those sources again, add the connectors back after the re-index finishes."
       }
     },
     "indexing": {

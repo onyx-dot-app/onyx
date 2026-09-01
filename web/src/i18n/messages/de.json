@@ -3612,7 +3612,9 @@
           "label": "Auf neue und aktualisierte Dokumente anwenden"
         },
         "applyReindex": {
-          "label": "Anwenden & neu indizieren"
+          "label": "Anwenden & neu indizieren",
+          "statusesLoading": "Konnektor-Status wird geladen…",
+          "statusesFailed": "Konnektor-Status konnte nicht geladen werden — bitte vor dem Neuindizieren erneut versuchen."
         },
         "rebuildAll": {
           "label": "Alle vorhandenen Dokumente neu aufbauen"
@@ -3988,6 +3990,15 @@
         "serviceAccountJsonRequired": "Dienstkonto-JSON ist erforderlich",
         "targetUrlRequired": "Ziel-URL ist erforderlich",
         "urlInvalid": "Muss eine gültige URL sein"
+      },
+      "wontPortConsentModal": {
+        "title": "Einige Konnektoren werden nicht neu indiziert",
+        "submit": "Löschen & neu indizieren",
+        "description": "{count, plural, one {Dieser Konnektor kann nicht in den neuen Index übernommen werden. Beim Neuindizieren wird er zusammen mit den von ihm indizierten Dokumenten aus Onyx gelöscht:} other {Diese # Konnektoren können nicht in den neuen Index übernommen werden. Beim Neuindizieren werden sie zusammen mit den von ihnen indizierten Dokumenten aus Onyx gelöscht:}}",
+        "connector": "{name} — {status}",
+        "statusInvalid": "ungültig",
+        "statusPaused": "pausiert",
+        "restoreHint": "Um diese Quellen wieder zu durchsuchen, fügen Sie die Konnektoren nach Abschluss der Neuindizierung erneut hinzu."
       }
     },
     "indexing": {

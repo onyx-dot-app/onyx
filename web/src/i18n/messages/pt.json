@@ -3612,7 +3612,9 @@
           "label": "Aplicar a documentos novos e atualizados"
         },
         "applyReindex": {
-          "label": "Aplicar e reindexar"
+          "label": "Aplicar e reindexar",
+          "statusesLoading": "Carregando o estado dos conectores…",
+          "statusesFailed": "Não foi possível carregar o estado dos conectores — tente novamente antes de reindexar."
         },
         "rebuildAll": {
           "label": "Reconstruir todos os documentos existentes"
@@ -3988,6 +3990,15 @@
         "serviceAccountJsonRequired": "O JSON da conta de serviço é obrigatório",
         "targetUrlRequired": "A URL de destino é obrigatória",
         "urlInvalid": "Deve ser uma URL válida"
+      },
+      "wontPortConsentModal": {
+        "title": "Alguns conectores não serão reindexados",
+        "submit": "Excluir e reindexar",
+        "description": "{count, plural, one {Este conector não pode ser levado para o novo índice. A reindexação o exclui do Onyx, junto com os documentos que ele indexou:} other {Estes # conectores não podem ser levados para o novo índice. A reindexação os exclui do Onyx, junto com os documentos que eles indexaram:}}",
+        "connector": "{name} — {status}",
+        "statusInvalid": "inválido",
+        "statusPaused": "pausado",
+        "restoreHint": "Para pesquisar essas fontes novamente, adicione os conectores de volta depois que a reindexação terminar."
       }
     },
     "indexing": {

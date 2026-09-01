@@ -3600,7 +3600,9 @@
           "label": "새 문서와 업데이트된 문서에 적용"
         },
         "applyReindex": {
-          "label": "적용 및 재인덱싱"
+          "label": "적용 및 재인덱싱",
+          "statusesLoading": "커넥터 상태를 불러오는 중…",
+          "statusesFailed": "커넥터 상태를 불러오지 못했습니다. 재인덱싱하기 전에 다시 시도하세요."
         },
         "rebuildAll": {
           "label": "기존 문서 전체 다시 구축"
@@ -3976,6 +3978,15 @@
         "serviceAccountJsonRequired": "서비스 계정 JSON은 필수입니다",
         "targetUrlRequired": "대상 URL은 필수입니다",
         "urlInvalid": "유효한 URL이어야 합니다"
+      },
+      "wontPortConsentModal": {
+        "title": "일부 커넥터는 재인덱싱되지 않습니다",
+        "submit": "삭제 후 재인덱싱",
+        "description": "{count, plural, one {이 커넥터는 새 인덱스로 이전할 수 없습니다. 재인덱싱하면 이 커넥터와 이 커넥터가 인덱싱한 문서가 Onyx에서 삭제됩니다:} other {이 # 개의 커넥터는 새 인덱스로 이전할 수 없습니다. 재인덱싱하면 이 커넥터들과 이들이 인덱싱한 문서가 Onyx에서 삭제됩니다:}}",
+        "connector": "{name} — {status}",
+        "statusInvalid": "유효하지 않음",
+        "statusPaused": "일시 중지됨",
+        "restoreHint": "해당 소스를 다시 검색하려면 재인덱싱이 끝난 뒤 커넥터를 새로 추가하세요."
       }
     },
     "indexing": {
