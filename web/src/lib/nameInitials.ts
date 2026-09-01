@@ -55,12 +55,14 @@ export function nameInitials(name: string, maxLetters: number): string | null {
   // Every taken slot must be a letter, so callers can fall back to
   // their email or icon path instead of showing a partial glyph.
   const words = trimmed.split(/\s+/);
-  if (words.length >= 2 || maxLetters === 1) {
-    const letters = words.slice(0, maxLetters).map(firstGrapheme);
-    if (!letters.every((grapheme) => LETTER.test(grapheme))) return null;
-    return letters.join("").toUpperCase();
-  }
-  const chars = graphemes(trimmed, maxLetters);
-  if (!chars.every((char) => LETTER.test(char))) return null;
-  return chars.join("").toUpperCase();
+  const slots =
+    words.length >= 2 || maxLetters === 1
+      ? words.slice(0, maxLetters).map(firstGrapheme)
+      : graphemes(trimmed, maxLetters);
+  if (!slots.every((grapheme) => LETTER.test(grapheme))) return null;
+  // One glyph per slot: uppercasing can expand (ß becomes SS), so each
+  // slot keeps only the first grapheme of its uppercased form.
+  return slots
+    .map((grapheme) => firstGrapheme(grapheme.toUpperCase()))
+    .join("");
 }

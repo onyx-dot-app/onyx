@@ -38,6 +38,11 @@ describe("nameInitials", () => {
     expect(nameInitials("E\u0301lise", 2)).toBe("E\u0301L");
   });
 
+  it("keeps one glyph per slot when uppercasing expands", () => {
+    expect(nameInitials("\u00DFeta", 1)).toBe("S");
+    expect(nameInitials("\u00DFeta stein", 2)).toBe("SS");
+  });
+
   it("returns null when no letter leads", () => {
     expect(nameInitials("123", 2)).toBeNull();
     expect(nameInitials("  ", 2)).toBeNull();
