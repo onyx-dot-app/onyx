@@ -21,7 +21,7 @@ export { default as SvgArrowUpCircle } from "@opal/icons/arrow-up-circle";
 export { default as SvgArrowUp } from "@opal/icons/arrow-up";
 export { default as SvgArrowUpDown } from "@opal/icons/arrow-up-down";
 export { default as SvgArrowUpDot } from "@opal/icons/arrow-up-dot";
-export { default as SvgArrowUpRight } from "@opal/icons/arrow-up-right";
+export { SvgArrowUpRight } from "@opal/icons/directional";
 export { SvgArrowWallLeft } from "@opal/icons/directional";
 export { SvgArrowWallRight } from "@opal/icons/directional";
 export { default as SvgAudio } from "@opal/icons/audio";
