@@ -1208,7 +1208,9 @@ export default function IndexSettingsPage() {
                   <wontPortConsentModal.Provider>
                     <ConfirmationModalLayout
                       icon={SvgTrash}
-                      title={t("wontPortConsentModal.title")}
+                      title={t("wontPortConsentModal.title", {
+                        count: frozenWontPortRef.current.length,
+                      })}
                       submit={
                         <Button
                           variant="danger"

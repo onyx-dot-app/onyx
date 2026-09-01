@@ -3967,13 +3967,13 @@
         "urlInvalid": "Doit être une URL valide"
       },
       "wontPortConsentModal": {
-        "title": "Certains connecteurs ne seront pas réindexés",
+        "title": "{count, plural, one {Ce connecteur sera supprimé} other {Ces # connecteurs seront supprimés}}",
         "submit": "Supprimer et réindexer",
-        "description": "{count, plural, one {Ce connecteur ne peut pas être repris dans le nouvel index. La réindexation le supprime d'Onyx, ainsi que les documents qu'il a indexés :} other {Ces # connecteurs ne peuvent pas être repris dans le nouvel index. La réindexation les supprime d'Onyx, ainsi que les documents qu'ils ont indexés :}}",
+        "description": "{count, plural, one {La réindexation ignore les connecteurs en pause et non valides : celui-ci ne sera donc pas repris dans le nouvel index. Onyx le supprime, ainsi que les documents qu'il a indexés :} other {La réindexation ignore les connecteurs en pause et non valides : ces # ne seront donc pas repris dans le nouvel index. Onyx les supprime, ainsi que les documents qu'ils ont indexés :}}",
         "connector": "{name} — {status}",
         "statusInvalid": "non valide",
         "statusPaused": "en pause",
-        "restoreHint": "Pour rechercher à nouveau dans ces sources, rajoutez les connecteurs une fois la réindexation terminée."
+        "restoreHint": "Pour conserver un connecteur, annulez ici, reprenez-le ou corrigez-le, puis relancez la réindexation : il sera alors repris. Sinon, rajoutez-le une fois la réindexation terminée."
       }
     },
     "indexing": {
