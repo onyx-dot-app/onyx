@@ -368,6 +368,18 @@ def advance_to_deleting__no_commit(search_settings: SearchSettings) -> bool:
     return True
 
 
+def advance_to_reclaimed__no_commit(search_settings: SearchSettings) -> bool:
+    """DELETING -> RECLAIMED: the old index's data is gone. Terminal success — the PAST
+    row is KEPT as the durable record (we only delete the OpenSearch index, not the row).
+    No-op returning False unless currently DELETING. Caller commits."""
+    if search_settings.reclaim_status != IndexReclaimStatus.DELETING:
+        return False
+    search_settings.reclaim_status = IndexReclaimStatus.RECLAIMED
+    search_settings.reclaim_attempts = 0
+    search_settings.reclaim_last_error = None
+    return True
+
+
 def record_failure__no_commit(
     search_settings: SearchSettings,
     error: str,
