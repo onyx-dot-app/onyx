@@ -194,6 +194,7 @@ def test_mark_running_preserves_report_and_completion_keeps_start_time(
         source=DocumentSource.SLACK,
         trigger=CapabilityCheckTrigger.MANUAL,
         report=_report(credential_id, check_id="fresh"),
+        run_id=running.run_id,
     )
     assert completed is not None
     assert completed.run_status == CapabilityReportRunStatus.COMPLETED
@@ -326,7 +327,10 @@ def test_failed_run_mark_is_truthful_and_retriggerable(db_session: Session) -> N
 
     # Under test.
     mark_capability_run_failed(
-        db_session, credential_id=credential_id, connector_id=None
+        db_session,
+        credential_id=credential_id,
+        connector_id=None,
+        run_id=marked.run_id,
     )
 
     # Postcondition.
@@ -760,6 +764,75 @@ def test_fenced_terminal_writes_cannot_touch_a_successor_attempt(
     assert row.run_status == CapabilityReportRunStatus.RUNNING
     assert row.run_id == successor_run_id
     assert row.report is None
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_legacy_writes_match_only_unowned_rows(db_session: Session) -> None:
+    """
+    Verifies the transition fence: a pre-fence task (no ``run_id``) still lands
+    its terminal writes on its own pre-migration NULL mark, but cannot touch a
+    row claimed by a post-deploy attempt.
+    """
+    # Precondition.
+    # Two RUNNING marks; one crafted to look pre-migration.
+    legacy_pair = make_cc_pair(db_session, source=DocumentSource.GITLAB, commit=False)
+    claimed_pair = make_cc_pair(db_session, source=DocumentSource.GITLAB, commit=False)
+    for pair in (legacy_pair, claimed_pair):
+        marked = mark_capability_report_running(
+            db_session,
+            credential_id=pair.credential_id,
+            connector_id=None,
+            source=DocumentSource.GITLAB,
+            trigger=CapabilityCheckTrigger.MANUAL,
+            active_within=timedelta(hours=1),
+        )
+        assert marked is not None
+    legacy_row = get_capability_report_row(db_session, legacy_pair.credential_id, None)
+    assert legacy_row is not None
+    # Pre-migration marks carry no attempt id; craft one directly.
+    legacy_row.run_id = None
+    db_session.flush()
+
+    # Under test.
+    legacy_completion = upsert_completed_capability_report(
+        db_session,
+        credential_id=legacy_pair.credential_id,
+        connector_id=None,
+        source=DocumentSource.GITLAB,
+        trigger=CapabilityCheckTrigger.MANUAL,
+        report=_report(
+            legacy_pair.credential_id, check_id="legacy", source=DocumentSource.GITLAB
+        ),
+    )
+    crossing_completion = upsert_completed_capability_report(
+        db_session,
+        credential_id=claimed_pair.credential_id,
+        connector_id=None,
+        source=DocumentSource.GITLAB,
+        trigger=CapabilityCheckTrigger.MANUAL,
+        report=_report(
+            claimed_pair.credential_id,
+            check_id="crossing",
+            source=DocumentSource.GITLAB,
+        ),
+    )
+    mark_capability_run_failed(
+        db_session, credential_id=claimed_pair.credential_id, connector_id=None
+    )
+
+    # Postcondition.
+    # The legacy write lands on its own NULL mark; both legacy writes against
+    # the claimed row no-op.
+    assert legacy_completion is not None
+    assert legacy_completion.run_status == CapabilityReportRunStatus.COMPLETED
+    assert crossing_completion is None
+    db_session.expire_all()
+    claimed_row = get_capability_report_row(
+        db_session, claimed_pair.credential_id, None
+    )
+    assert claimed_row is not None
+    assert claimed_row.run_status == CapabilityReportRunStatus.RUNNING
+    assert claimed_row.report is None
 
 
 @pytest.mark.usefixtures("tenant_context")

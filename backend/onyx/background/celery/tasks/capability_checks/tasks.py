@@ -45,7 +45,7 @@ def run_capability_checks_task(
     connector_specific_config: dict[str, Any] | None,
     tenant_id: str | None,
     # Serialized UUID; None only for tasks enqueued before the fence deployed,
-    # which write unfenced (the legacy semantics they were enqueued under).
+    # whose terminal writes then match only their own pre-migration NULL marks.
     run_id: str | None = None,
 ) -> None:
     """Runs every capability check for the scope and stores the report.

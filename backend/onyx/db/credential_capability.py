@@ -168,21 +168,23 @@ def upsert_completed_capability_report(
     for a run that was merely slow). Returns None when the fence discarded the
     write.
 
-    Without ``run_id`` (tasks enqueued before the fence deployed) the write is
-    unfenced and always returns the row.
+    Without ``run_id`` (tasks enqueued before the fence deployed) the write
+    lands only on a row whose stored ``run_id`` is NULL: pre-migration marks are
+    all NULL, so a legacy task still completes normally, but a row reclaimed by
+    a post-deploy attempt is untouchable. The fence is therefore unconditional,
+    with no transition-window exception.
     """
     values = _completed_values(
         connector_id, source, trigger, report, connector_config_hash
     )
     if run_id is None:
-        row = _upsert_row(
+        return _upsert_row(
             db_session,
             credential_id=credential_id,
             connector_id=connector_id,
             values=values,
+            update_where=CredentialCapabilityReportRow.run_id.is_(None),
         )
-        assert row is not None, "An unguarded upsert always returns the row."
-        return row
     stamped: _CapabilityReportValues = {
         **values,
         # Mirrors ``_upsert_row``: model ``onupdate`` does not apply here.
@@ -305,16 +307,21 @@ def mark_capability_run_failed(
     enqueue) and for a failing task's own exit write: FAILED_TO_RUN is the truth
     pollers should read, and it does not block re-marking, so the scope stays
     immediately re-triggerable. Guarded on RUNNING so a completion that raced
-    this write is never clobbered; with ``run_id`` also fenced to the caller's
-    attempt, so a superseded attempt cannot fail-mark its successor.
+    this write is never clobbered, and fenced to the caller's attempt so a
+    superseded attempt cannot fail-mark its successor. ``run_id`` None is the
+    legacy-task fence: it matches only a stored NULL (a pre-migration mark),
+    mirroring the completion writer.
     """
     where = [
         CredentialCapabilityReportRow.credential_id == credential_id,
         _connector_scope_clause(connector_id),
         CredentialCapabilityReportRow.run_status == CapabilityReportRunStatus.RUNNING,
+        (
+            CredentialCapabilityReportRow.run_id.is_(None)
+            if run_id is None
+            else CredentialCapabilityReportRow.run_id == run_id
+        ),
     ]
-    if run_id is not None:
-        where.append(CredentialCapabilityReportRow.run_id == run_id)
     stmt = (
         update(CredentialCapabilityReportRow)
         .where(*where)
