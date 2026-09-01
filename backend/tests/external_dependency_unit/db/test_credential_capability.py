@@ -386,8 +386,9 @@ def test_sweep_retires_only_stale_running_rows(db_session: Session) -> None:
     GITLAB rather than SLACK: committed rows from other suites never use it, so
     the retired-row count is deterministic.
     """
-    # Precondition. Four scopes: a stale run over a previous report, a fresh
-    # run, a RUNNING mark with a NULL start, and a completed report.
+    # Precondition.
+    # Four scopes: a stale run over a previous report, a fresh run, a RUNNING
+    # mark with a NULL start, and a completed report.
     stale_pair = make_cc_pair(db_session, source=DocumentSource.GITLAB, commit=False)
     fresh_pair = make_cc_pair(db_session, source=DocumentSource.GITLAB, commit=False)
     null_start_pair = make_cc_pair(
@@ -444,7 +445,8 @@ def test_sweep_retires_only_stale_running_rows(db_session: Session) -> None:
         db_session, source=DocumentSource.GITLAB, stale_after=timedelta(hours=1)
     )
 
-    # Postcondition. The backdated mark and the NULL-start mark both retire.
+    # Postcondition.
+    # The backdated mark and the NULL-start mark both retire.
     assert retired == 2
     db_session.expire_all()
     retired_row = get_capability_report_row(db_session, stale_pair.credential_id, None)
@@ -484,7 +486,8 @@ def test_sources_with_running_runs_lists_each_source_once(
     db_session: Session,
 ) -> None:
     """Verifies the sweep's work list: distinct sources with a RUNNING row."""
-    # Precondition. Two GITHUB scopes RUNNING, one GITLAB scope COMPLETED.
+    # Precondition.
+    # Two GITHUB scopes RUNNING, one GITLAB scope COMPLETED.
     for pair in (
         make_cc_pair(db_session, source=DocumentSource.GITHUB, commit=False),
         make_cc_pair(db_session, source=DocumentSource.GITHUB, commit=False),
@@ -652,7 +655,8 @@ def test_fenced_completion_self_heals_a_retired_run(db_session: Session) -> None
     Verifies the fence preserves the self-heal: retirement keeps the attempt's
     ``run_id``, so a run that was merely slow still lands its completion.
     """
-    # Precondition. A RUNNING attempt, backdated and retired by the sweep.
+    # Precondition.
+    # A RUNNING attempt, backdated and retired by the sweep.
     cc_pair = make_cc_pair(db_session, source=DocumentSource.GITLAB, commit=False)
     credential_id = cc_pair.credential_id
     marked = mark_capability_report_running(
@@ -684,8 +688,9 @@ def test_fenced_completion_self_heals_a_retired_run(db_session: Session) -> None
         run_id=run_id,
     )
 
-    # Postcondition. The retired row still belonged to this attempt, so the
-    # fenced write lands and FAILED_TO_RUN heals to the real report.
+    # Postcondition.
+    # The retired row still belonged to this attempt, so the fenced write lands
+    # and FAILED_TO_RUN heals to the real report.
     assert completed is not None
     assert completed.run_status == CapabilityReportRunStatus.COMPLETED
     assert completed.report is not None
@@ -697,10 +702,11 @@ def test_fenced_terminal_writes_cannot_touch_a_successor_attempt(
     db_session: Session,
 ) -> None:
     """
-    Verifies the fence itself: once the scope is reclaimed by a new attempt,
-    the superseded attempt's completion and failure writes are discarded.
+    Verifies the fence itself: once the scope is reclaimed by a new attempt, the
+    superseded attempt's completion and failure writes are discarded.
     """
-    # Precondition. A stale RUNNING attempt reclaimed by a fresh one.
+    # Precondition.
+    # A stale RUNNING attempt reclaimed by a fresh one.
     cc_pair = make_cc_pair(db_session, source=DocumentSource.GITLAB, commit=False)
     credential_id = cc_pair.credential_id
     old = mark_capability_report_running(
@@ -744,8 +750,9 @@ def test_fenced_terminal_writes_cannot_touch_a_successor_attempt(
         run_id=old_run_id,
     )
 
-    # Postcondition. Both writes no-op: the successor still owns the row and
-    # still reads as an in-flight run with no report.
+    # Postcondition.
+    # Both writes no-op: the successor still owns the row and still reads as an
+    # in-flight run with no report.
     assert completed is None
     db_session.expire_all()
     row = get_capability_report_row(db_session, credential_id, None)
@@ -759,8 +766,8 @@ def test_fenced_terminal_writes_cannot_touch_a_successor_attempt(
 def test_unless_granular_preserves_a_running_row(db_session: Session) -> None:
     """
     Verifies the recorder guard: a blocking validation that lands mid-run must
-    not overwrite the RUNNING mark, or the attempt's fenced completion would
-    be stranded.
+    not overwrite the RUNNING mark, or the attempt's fenced completion would be
+    stranded.
     """
     # Precondition.
     cc_pair = make_cc_pair(db_session, source=DocumentSource.SLACK, commit=False)
@@ -802,8 +809,9 @@ def test_recorder_write_clears_the_attempt_id(db_session: Session) -> None:
     stored ``run_id`` is nulled, and NULL is fail-closed against the previous
     attempt's late fenced completion.
     """
-    # Precondition. A retired attempt whose report-less row the recorder may
-    # overwrite (not granular, not RUNNING).
+    # Precondition.
+    # A retired attempt whose report-less row the recorder may overwrite (not
+    # granular, not RUNNING).
     cc_pair = make_cc_pair(db_session, source=DocumentSource.SLACK, commit=False)
     credential_id = cc_pair.credential_id
     marked = mark_capability_report_running(

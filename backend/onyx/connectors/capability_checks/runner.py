@@ -188,10 +188,10 @@ def capability_check_run_ceiling_seconds(source: DocumentSource) -> int:
     """Upper bound on one run's legitimate execution time, in seconds.
 
     Checks run sequentially and mirrored checks (one check surfaced under
-    several capabilities) execute once, so the bound sums the distinct
-    per-check hang guards, plus the default guard connector instantiation runs
-    under (it can itself probe the source; ``generate_capability_report``
-    enforces that guard).
+    several capabilities) execute once, so the bound sums the distinct per-check
+    hang guards, plus the default guard connector instantiation runs under (it
+    can itself probe the source; ``generate_capability_report`` enforces that
+    guard).
     """
     timeout_by_check_id = {
         check.check_id: check.timeout_seconds or CAPABILITY_CHECK_TIMEOUT_SECONDS
@@ -323,8 +323,8 @@ def generate_capability_report(
     When a supplied config fails to instantiate, the failure is surfaced on
     instance-requiring checks instead (see ``_missing_instance_outcome``).
     Unlike ``validate_ccpair_for_user``, no source is exempted: MOCK_CONNECTOR
-    must run so integration tests can exercise the full pipeline.
-    ``credential`` may be a detached instance; only loaded columns are read.
+    must run so integration tests can exercise the full pipeline. ``credential``
+    may be a detached instance; only loaded columns are read.
     """
     source = credential.source
     checks = get_capability_checks(source)
@@ -387,8 +387,8 @@ def generate_capability_report(
             provider=str(source),
             row_id=credential.id,
         )
-    # The isolated instantiation reports the material as loaded after a
-    # possible token refresh; the caller's copy is the pre-refresh fallback.
+    # The isolated instantiation reports the material as loaded after a possible
+    # token refresh; the caller's copy is the pre-refresh fallback.
     credential_json = (
         fresh_credential_json
         if fresh_credential_json is not None

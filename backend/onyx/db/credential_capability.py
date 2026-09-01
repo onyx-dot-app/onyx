@@ -12,8 +12,8 @@ through the ``unless_granular`` variant and never replaces a granular report or
 disturbs a run in flight. ``mark_capability_report_running`` and
 ``mark_stale_capability_runs_failed`` belong to the check-runner lifecycle: the
 mark claims the row for a fresh run attempt (``run_id``) while the last
-completed report stays readable, and the sweep retires marks that outlived
-their run ceiling to FAILED_TO_RUN. The attempt's terminal writes are fenced on
+completed report stays readable, and the sweep retires marks that outlived their
+run ceiling to FAILED_TO_RUN. The attempt's terminal writes are fenced on
 ``run_id``, so a superseded attempt can never mislabel its successor's row; the
 sweep preserves ``run_id`` when retiring, so the same attempt's late completion
 still lands (the self-heal for a run that was merely slow).
@@ -164,9 +164,9 @@ def upsert_completed_capability_report(
     compiles to a conditional UPDATE (never an insert) and lands only while the
     stored ``run_id`` still matches, so a superseded attempt's completion is
     discarded instead of mislabeling its successor's row. Retirement preserves
-    ``run_id``, so the same attempt's late completion still lands (the
-    self-heal for a run that was merely slow). Returns None when the fence
-    discarded the write.
+    ``run_id``, so the same attempt's late completion still lands (the self-heal
+    for a run that was merely slow). Returns None when the fence discarded the
+    write.
 
     Without ``run_id`` (tasks enqueued before the fence deployed) the write is
     unfenced and always returns the row.
@@ -223,10 +223,9 @@ def upsert_completed_capability_report_unless_granular(
     read-then-decide here would race a concurrent granular write; Postgres
     evaluates the guard against the stored row atomically, so a granular report
     can never be replaced by this coarse write (the no-clobber rule). A row
-    marked RUNNING is likewise left alone: this coarse signal is a strict
-    subset of the granular run in flight, and overwriting the mark would strand
-    that attempt's fenced completion. Returns None when the stored row was
-    preserved.
+    marked RUNNING is likewise left alone: this coarse signal is a strict subset
+    of the granular run in flight, and overwriting the mark would strand that
+    attempt's fenced completion. Returns None when the stored row was preserved.
     """
     return _upsert_row(
         db_session,
@@ -303,11 +302,11 @@ def mark_capability_run_failed(
     """Retires the scope's RUNNING mark to FAILED_TO_RUN; the report survives.
 
     For runs that verifiably will not happen (the trigger endpoint's failed
-    enqueue) and for a failing task's own exit write: FAILED_TO_RUN is the
-    truth pollers should read, and it does not block re-marking, so the scope
-    stays immediately re-triggerable. Guarded on RUNNING so a completion that
-    raced this write is never clobbered; with ``run_id`` also fenced to the
-    caller's attempt, so a superseded attempt cannot fail-mark its successor.
+    enqueue) and for a failing task's own exit write: FAILED_TO_RUN is the truth
+    pollers should read, and it does not block re-marking, so the scope stays
+    immediately re-triggerable. Guarded on RUNNING so a completion that raced
+    this write is never clobbered; with ``run_id`` also fenced to the caller's
+    attempt, so a superseded attempt cannot fail-mark its successor.
     """
     where = [
         CredentialCapabilityReportRow.credential_id == credential_id,
@@ -352,12 +351,12 @@ def mark_stale_capability_runs_failed(
     """Retires dead runs: RUNNING rows older than ``stale_after`` turn
     FAILED_TO_RUN.
 
-    Only the lifecycle fields change; the stored report (the last completed
-    run) stays readable, and ``run_id`` is preserved so a retired attempt that
-    was merely slow can still land its fenced completion (the self-heal). The
-    cutoff is evaluated by Postgres against statement time, mirroring the
-    mark's guard, so a scope re-marked concurrently is never retired. Returns
-    the number of rows retired.
+    Only the lifecycle fields change; the stored report (the last completed run)
+    stays readable, and ``run_id`` is preserved so a retired attempt that was
+    merely slow can still land its fenced completion (the self-heal). The cutoff
+    is evaluated by Postgres against statement time, mirroring the mark's guard,
+    so a scope re-marked concurrently is never retired. Returns the number of
+    rows retired.
     """
     stmt = (
         update(CredentialCapabilityReportRow)

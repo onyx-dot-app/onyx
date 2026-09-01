@@ -21,8 +21,9 @@ class _StubCheck(CapabilityCheck):
 def test_ceiling_sums_distinct_guards_once_plus_instantiation_slack(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # Precondition. Two capabilities mirror one check (a single execution at
-    # run time), plus one check on the default hang guard.
+    # Precondition.
+    # Two capabilities mirror one check (a single execution at run time), plus
+    # one check on the default hang guard.
     checks = [
         _StubCheck(
             capability=CredentialCapability.DOC_PERMISSION_SYNC,
@@ -48,8 +49,8 @@ def test_ceiling_sums_distinct_guards_once_plus_instantiation_slack(
     ceiling = runner.capability_check_run_ceiling_seconds(DocumentSource.SLACK)
     stale_after = runner.capability_check_run_stale_after(DocumentSource.SLACK)
 
-    # Postcondition. One slack unit for instantiation, the mirrored guard
-    # counted once, and one default guard; staleness allows queue wait plus
-    # execution.
+    # Postcondition.
+    # One slack unit for instantiation, the mirrored guard counted once, and one
+    # default guard; staleness allows queue wait plus execution.
     assert ceiling == 2 * runner.CAPABILITY_CHECK_TIMEOUT_SECONDS + 100
     assert stale_after == timedelta(seconds=2 * ceiling)

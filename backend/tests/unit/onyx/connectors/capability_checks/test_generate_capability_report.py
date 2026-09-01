@@ -346,7 +346,8 @@ def test_hung_instantiation_is_bounded_and_surfaces_indeterminate(
     The run ceiling budgets one default guard for instantiation, and the
     stale-run sweep trusts that ceiling, so the guard must be enforced.
     """
-    # Precondition. Construction blocks far past the shrunken guard.
+    # Precondition.
+    # Construction blocks far past the shrunken guard.
     check = _CallableCheck(MagicMock(return_value=None), check_id="instance_check")
     instantiate = _patch_runner_environment(monkeypatch, [check])
     instantiate.side_effect = lambda **_kwargs: time.sleep(0.5)
@@ -357,8 +358,9 @@ def test_hung_instantiation_is_bounded_and_surfaces_indeterminate(
         _make_credential(), connector_specific_config={"repo": "onyx"}
     )
 
-    # Postcondition. The supplied-config timeout surfaces on the
-    # instance-requiring check as INDETERMINATE, per the check contract.
+    # Postcondition.
+    # The supplied-config timeout surfaces on the instance-requiring check as
+    # INDETERMINATE, per the check contract.
     (result,) = report.check_results
     assert result.status == CapabilityCheckStatus.INDETERMINATE
     assert result.error_type == "TimeoutError"

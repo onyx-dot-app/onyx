@@ -1,11 +1,11 @@
 """Celery tasks for the granular capability check runs.
 
-The run task is enqueued by the capability-check trigger endpoint after it
-marks the scope's row RUNNING, and writes through the unconditional upsert: a
-granular run is the freshest truth and replaces whatever is stored (see the
-accessors' writer model). A run that fails gracefully records FAILED_TO_RUN
-itself; only hard kills and expired tasks leave their row RUNNING for the beat
-sweep to retire once the mark outlives its source's run ceiling.
+The run task is enqueued by the capability-check trigger endpoint after it marks
+the scope's row RUNNING, and writes through the unconditional upsert: a granular
+run is the freshest truth and replaces whatever is stored (see the accessors'
+writer model). A run that fails gracefully records FAILED_TO_RUN itself; only
+hard kills and expired tasks leave their row RUNNING for the beat sweep to
+retire once the mark outlives its source's run ceiling.
 """
 
 from typing import Any
@@ -58,8 +58,8 @@ def run_capability_checks_task(
     try:
         # Setup reads use a short-lived session: the probes below can run for
         # hours, and an open transaction would hold its connection and read
-        # locks for the whole run. ``credential`` stays readable after the
-        # close because its columns are already loaded.
+        # locks for the whole run. ``credential`` stays readable after the close
+        # because its columns are already loaded.
         with get_session_with_current_tenant() as db_session:
             credential = fetch_credential_by_id(credential_id, db_session)
             if credential is None:
@@ -115,9 +115,9 @@ def run_capability_checks_task(
                 f"(run {run_id}, tenant {tenant_id})."
             )
     except Exception:
-        # The worker is alive, so record the failure now: without this the
-        # scope would read RUNNING until the sweep's staleness window expires.
-        # Hard kills still rely on the sweep.
+        # The worker is alive, so record the failure now: without this the scope
+        # would read RUNNING until the sweep's staleness window expires. Hard
+        # kills still rely on the sweep.
         with get_session_with_current_tenant() as db_session:
             mark_capability_run_failed(
                 db_session,
@@ -143,8 +143,8 @@ def check_for_stale_capability_runs(
     A sweep rather than lazy recovery at trigger time: a re-trigger immediately
     re-marks the scope RUNNING, so only a sweep can surface FAILED_TO_RUN to a
     polling client without user action. A run that is merely slow and completes
-    after being retired overwrites FAILED_TO_RUN with its report (the
-    completion write is unconditional), so mislabeling self-heals.
+    after being retired overwrites FAILED_TO_RUN with its report (the completion
+    write is unconditional), so mislabeling self-heals.
     """
     with get_session_with_current_tenant() as db_session:
         for source in get_sources_with_running_capability_runs(db_session):

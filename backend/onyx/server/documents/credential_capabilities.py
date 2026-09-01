@@ -53,8 +53,8 @@ from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
-# Lite (no vector DB) has no connectors, so there is nothing to probe or
-# report, and the celery machinery the trigger relies on is absent there.
+# Lite (no vector DB) has no connectors, so there is nothing to probe or report,
+# and the celery machinery the trigger relies on is absent there.
 router = APIRouter(prefix="/manage", dependencies=[Depends(require_vector_db)])
 
 
@@ -231,8 +231,8 @@ def trigger_capability_check(
             queue=OnyxCeleryQueues.CAPABILITY_CHECKS,
             priority=OnyxCeleryPriority.HIGH,
             # Queue wait is bounded by one execution ceiling; the staleness
-            # cutoff above allows for both, so an expired task never strands
-            # the scope.
+            # cutoff above allows for both, so an expired task never strands the
+            # scope.
             expires=capability_check_run_ceiling_seconds(credential.source),
         )
     except Exception:
