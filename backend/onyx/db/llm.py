@@ -342,6 +342,13 @@ def upsert_llm_provider(
     # holding any default must stay present and visible. Checking only the chat
     # default let an edit hide the model contextual RAG or Craft still resolves
     # to, since neither resolver looks at is_visible.
+    #
+    # Only the visible-to-hidden transition is refused, not the steady state. A
+    # default can already sit on a hidden model — sync_auto_mode_models hides
+    # models dropped from the recommendations and re-points only the chat
+    # default — and both the admin form and the auto-mode transition re-send
+    # every model's stored visibility. Refusing the steady state would fail
+    # unrelated edits such as an API key rotation.
     defaults_by_model_id = fetch_default_flows_by_model_id(db_session)
 
     for name, mc in existing_by_name.items():
@@ -354,7 +361,7 @@ def upsert_llm_provider(
                 f"Cannot remove the default model '{name}'. It is the default for: "
                 f"{held}. Please change those defaults before removing."
             )
-        if not requested_visibility.get(name, True):
+        if mc.is_visible and not requested_visibility.get(name, True):
             raise ValueError(
                 f"Cannot hide the default model '{name}'. It is the default for: "
                 f"{held}. Please change those defaults before hiding."

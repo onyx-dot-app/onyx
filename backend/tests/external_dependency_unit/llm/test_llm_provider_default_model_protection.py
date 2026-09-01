@@ -18,6 +18,7 @@ from onyx.db.llm import (
     fetch_default_chat_naming_model,
     fetch_default_contextual_rag_model,
     fetch_default_craft_model,
+    fetch_default_vision_model,
     fetch_existing_llm_provider,
     remove_llm_provider,
     update_default_contextual_model,
@@ -26,7 +27,7 @@ from onyx.db.llm import (
     update_default_vision_provider,
     upsert_llm_provider,
 )
-from onyx.db.models import LLMModelFlow
+from onyx.db.models import LLMModelFlow, ModelConfiguration
 from onyx.llm.constants import LlmProviderNames
 from onyx.server.manage.llm.models import (
     LLMProviderUpsertRequest,
@@ -392,3 +393,154 @@ class TestPointerFlowDefaultsSurviveAProviderUpdate:
         default_naming = fetch_default_chat_naming_model(db_session)
         assert default_naming is not None
         assert default_naming.name == "gpt-4o-mini"
+
+
+class TestEveryFlowDefaultIsGuarded:
+    """The guard covers every flow a model is the default for, and refuses only
+    the visible-to-hidden transition."""
+
+    def _upsert(
+        self,
+        db_session: Session,
+        provider_id: int,
+        name: str,
+        models: list[ModelConfigurationUpsertRequest],
+    ) -> LLMProviderView:
+        return upsert_llm_provider(
+            LLMProviderUpsertRequest(
+                id=provider_id,
+                name=name,
+                provider=LlmProviderNames.OPENAI,
+                api_key="sk-test-key-00000000000000000000000000000000000",
+                api_key_changed=True,
+                model_configurations=models,
+            ),
+            db_session=db_session,
+        )
+
+    def test_hiding_a_vision_only_default_is_refused(
+        self,
+        db_session: Session,
+        provider_name: str,
+    ) -> None:
+        """The existing vision test puts both defaults on one model, so the chat
+        check alone caught it. Here only the vision default is at stake."""
+        provider = _create_test_provider(db_session, provider_name)
+        update_default_provider(provider.id, "gpt-4o-mini", db_session)
+        update_default_vision_provider(provider.id, "gpt-4o", db_session)
+
+        with pytest.raises(ValueError, match="default for: vision"):
+            self._upsert(
+                db_session,
+                provider.id,
+                provider_name,
+                [
+                    ModelConfigurationUpsertRequest(
+                        name="gpt-4o", is_visible=False, supports_image_input=True
+                    ),
+                    ModelConfigurationUpsertRequest(
+                        name="gpt-4o-mini", is_visible=True, supports_image_input=False
+                    ),
+                ],
+            )
+
+    def test_removing_the_craft_default_is_refused(
+        self,
+        db_session: Session,
+        provider_name: str,
+    ) -> None:
+        provider = _create_test_provider(db_session, provider_name)
+        update_default_craft_provider(provider.id, "gpt-4o-mini", db_session)
+
+        with pytest.raises(ValueError, match="Cannot remove the default model"):
+            self._upsert(
+                db_session,
+                provider.id,
+                provider_name,
+                [
+                    ModelConfigurationUpsertRequest(
+                        name="gpt-4o", is_visible=True, supports_image_input=True
+                    )
+                ],
+            )
+
+    def test_already_hidden_default_does_not_block_an_edit(
+        self,
+        db_session: Session,
+        provider_name: str,
+    ) -> None:
+        """sync_auto_mode_models hides models dropped from the recommendations
+        and re-points only the chat default, so a vision default can already sit
+        on a hidden model. The form then re-sends that stored visibility, and an
+        unrelated edit — an API key rotation — must not be refused for it."""
+        provider = _create_test_provider(db_session, provider_name)
+        update_default_provider(provider.id, "gpt-4o-mini", db_session)
+        update_default_vision_provider(provider.id, "gpt-4o", db_session)
+
+        hidden = db_session.scalar(
+            select(ModelConfiguration).where(
+                ModelConfiguration.llm_provider_id == provider.id,
+                ModelConfiguration.name == "gpt-4o",
+            )
+        )
+        assert hidden is not None
+        hidden.is_visible = False
+        db_session.commit()
+
+        self._upsert(
+            db_session,
+            provider.id,
+            provider_name,
+            [
+                ModelConfigurationUpsertRequest(
+                    name="gpt-4o", is_visible=False, supports_image_input=True
+                ),
+                ModelConfigurationUpsertRequest(
+                    name="gpt-4o-mini", is_visible=True, supports_image_input=False
+                ),
+            ],
+        )
+
+        default_vision = fetch_default_vision_model(db_session)
+        assert default_vision is not None
+        assert default_vision.name == "gpt-4o"
+
+    def test_capability_change_still_removes_the_vision_flow(
+        self,
+        db_session: Session,
+        provider_name: str,
+    ) -> None:
+        """Dropping a capability must still reconcile its flow away; only the
+        pointer flows are exempt."""
+        provider = _create_test_provider(db_session, provider_name)
+        update_default_craft_provider(provider.id, "gpt-4o", db_session)
+
+        self._upsert(
+            db_session,
+            provider.id,
+            provider_name,
+            [
+                ModelConfigurationUpsertRequest(
+                    name="gpt-4o", is_visible=True, supports_image_input=False
+                ),
+                ModelConfigurationUpsertRequest(
+                    name="gpt-4o-mini", is_visible=True, supports_image_input=False
+                ),
+            ],
+        )
+
+        model_config = db_session.scalar(
+            select(ModelConfiguration).where(
+                ModelConfiguration.llm_provider_id == provider.id,
+                ModelConfiguration.name == "gpt-4o",
+            )
+        )
+        assert model_config is not None
+        db_session.refresh(model_config)
+        flows = set(model_config.llm_model_flow_types)
+        assert LLMModelFlowType.VISION not in flows
+        assert LLMModelFlowType.CRAFT in flows
+
+        default_craft = fetch_default_craft_model(db_session)
+        assert default_craft is not None
+        assert default_craft.name == "gpt-4o"
