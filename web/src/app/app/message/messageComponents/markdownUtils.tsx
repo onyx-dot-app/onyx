@@ -21,6 +21,7 @@ import {
 } from "@/app/app/message/codeUtils";
 import { CodeBlock } from "@/app/app/message/CodeBlock";
 import { transformLinkUri } from "@/lib/utils";
+import { rehypeDirection } from "@/lib/rehypeDirection";
 import { cn } from "@opal/utils";
 import { InMessageImage } from "@/app/app/components/files/images/InMessageImage";
 import { extractChatImageFileId } from "@/app/app/components/files/images/utils";
@@ -33,6 +34,7 @@ interface ScrollableTableProps extends React.TableHTMLAttributes<HTMLTableElemen
 export function ScrollableTable({
   className,
   children,
+  dir,
   ...props
 }: ScrollableTableProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -47,9 +49,16 @@ export function ScrollableTable({
 
     const check = () => {
       const overflows = el.scrollWidth > el.clientWidth;
-      const atEnd = el.scrollLeft + el.clientWidth >= el.scrollWidth - 2;
+      // Logical distance from the scroll start. RTL scrollLeft runs from
+      // 0 down to negative, and the CSS paints on inline edges to match.
+      const maxScroll = el.scrollWidth - el.clientWidth;
+      const fromStart =
+        getComputedStyle(el).direction === "rtl"
+          ? -el.scrollLeft
+          : el.scrollLeft;
+      const atEnd = fromStart >= maxScroll - 2;
       wrap.dataset.overflows = overflows && !atEnd ? "true" : "false";
-      el.dataset.scrolled = el.scrollLeft > 0 ? "true" : "false";
+      el.dataset.scrolled = fromStart > 0 ? "true" : "false";
     };
 
     check();
@@ -67,7 +76,9 @@ export function ScrollableTable({
   }, []);
 
   return (
-    <div ref={wrapRef} className="markdown-table-card">
+    // The stamped table dir lifts onto the scroller so scrollLeft semantics
+    // and the initial scroll edge follow the table's own direction.
+    <div ref={wrapRef} dir={dir} className="markdown-table-card">
       <div ref={scrollRef} className="markdown-table-breakout">
         <table
           ref={tableRef}
@@ -133,7 +144,7 @@ export const useMarkdownComponents = (
 ) => {
   const paragraphCallback = useCallback(
     (props: any) => (
-      <MemoizedParagraph className={className}>
+      <MemoizedParagraph dir={props.dir} className={className}>
         {props.children}
       </MemoizedParagraph>
     ),
@@ -249,8 +260,8 @@ export const renderMarkdown = (
         ]}
         rehypePlugins={
           languages
-            ? [[rehypeHighlight, { languages }], rehypeKatex]
-            : [rehypeKatex]
+            ? [[rehypeHighlight, { languages }], rehypeKatex, rehypeDirection]
+            : [rehypeKatex, rehypeDirection]
         }
         urlTransform={transformLinkUri}
       >

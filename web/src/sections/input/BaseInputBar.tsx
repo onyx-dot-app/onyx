@@ -16,6 +16,7 @@ import { getPastedFilesIfNoText } from "@/lib/clipboard";
 import { deleteTokenBeforeCursor, getTextContent } from "@/lib/contentEditable";
 import PasteTilePopover from "@/sections/input/PasteTilePopover";
 import { cn } from "@opal/utils";
+import { firstStrongTextDir } from "@/lib/rehypeDirection";
 import { Disabled } from "@opal/core";
 import IconButton from "@/refresh-components/buttons/IconButton";
 import { Button, Text } from "@opal/components";
@@ -295,6 +296,14 @@ const BaseInputBar = memo(
               <div
                 ref={inputRef}
                 contentEditable={!disabled}
+                // Direction follows what the user types. While empty it
+                // follows the placeholder so its punctuation sits on the
+                // correct side in every locale.
+                dir={
+                  message
+                    ? "auto"
+                    : (firstStrongTextDir(resolvedPlaceholder) ?? "auto")
+                }
                 suppressContentEditableWarning
                 onPaste={handlePaste}
                 onInput={handleInput}

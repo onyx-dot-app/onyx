@@ -68,7 +68,10 @@ export const CodeBlock = memo(function CodeBlock({
 
   if (typeof children === "string" && !language) {
     return (
+      // dir="ltr": code is always LTR, even inside RTL prose. The dir
+      // attribute also bidi-isolates the run from the surrounding text.
       <span
+        dir="ltr"
         data-testid="code-block"
         className={cn(
           "font-mono",
@@ -97,7 +100,10 @@ export const CodeBlock = memo(function CodeBlock({
   const CodeContent = () => {
     if (!language) {
       return (
+        // dir="ltr" on both pre branches: code is always LTR, even when
+        // the surrounding message resolved to RTL.
         <pre
+          dir="ltr"
           className={cn(
             "p-2! m-0 overflow-x-auto w-0 min-w-full hljs",
             innerRounding
@@ -116,6 +122,7 @@ export const CodeBlock = memo(function CodeBlock({
 
     return (
       <pre
+        dir="ltr"
         className={cn(
           "p-2! m-0 overflow-x-auto w-0 min-w-full hljs",
           innerRounding

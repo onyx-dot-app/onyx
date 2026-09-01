@@ -55,6 +55,7 @@ function MessageEditing({
       >
         <textarea
           ref={textareaRef}
+          dir="auto"
           className={cn(
             "w-full h-full resize-none outline-hidden bg-transparent overflow-y-scroll whitespace-normal break-word"
           )}
@@ -247,6 +248,7 @@ const HumanMessage = React.memo(function HumanMessage({
               >
                 <Text
                   as="p"
+                  dir="auto"
                   className="inline-block align-middle"
                   mainContentBody
                   text04
