@@ -5,7 +5,7 @@ import * as Yup from "yup";
 import { Button } from "@opal/components";
 import { useProjectsContext } from "@/lib/projects/providers";
 import { InputVertical, toast } from "@opal/layouts";
-import { useAppRouter } from "@/hooks/appNavigation";
+import { useAppPosition } from "@/lib/position/hooks";
 import { useModal } from "@opal/components";
 import { SvgFolderPlus } from "@opal/icons";
 import { Modal } from "@opal/components";
@@ -23,8 +23,8 @@ export default function CreateProjectModal({
   initialProjectName,
 }: CreateProjectModalProps) {
   const { createProject } = useProjectsContext();
+  const appPosition = useAppPosition();
   const modal = useModal();
-  const route = useAppRouter();
 
   return (
     <Modal open={modal.isOpen} onOpenChange={modal.toggle}>
@@ -44,7 +44,7 @@ export default function CreateProjectModal({
             const name = values.projectName.trim();
             try {
               const newProject = await createProject(name);
-              route({ projectId: newProject.id });
+              appPosition.openProject(newProject.id);
               modal.toggle(false);
             } catch {
               toast.error(`Failed to create the project ${name}`);

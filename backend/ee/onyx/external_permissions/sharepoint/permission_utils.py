@@ -227,7 +227,7 @@ def _get_group_guid_from_identifier(
 
 def _get_sharepoint_list_item_id(drive_item: DriveItem) -> str | None:
     try:
-        properties = getattr(drive_item, "properties", None)
+        properties = getattr(drive_item, "properties", None)  # ods: ignore[getattr]
         sharepoint_ids = properties.get(SHAREPOINT_IDS_PROPERTY) if properties else None
         if isinstance(sharepoint_ids, dict):
             if list_item_id := sharepoint_ids.get(LIST_ITEM_ID_PROPERTY):

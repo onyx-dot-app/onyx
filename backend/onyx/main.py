@@ -60,6 +60,7 @@ from onyx.db.engine.async_sql_engine import (
 from onyx.db.engine.connection_warmup import warm_up_connections
 from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
 from onyx.db.sso_provider import seed_saml_provider_from_conf_dir
+from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
 from onyx.file_store.file_store import get_default_file_store
 from onyx.hooks.registry import validate_registry
@@ -72,6 +73,9 @@ from onyx.server.auth_check import check_router_auth
 from onyx.server.documents.cc_pair import router as cc_pair_router
 from onyx.server.documents.connector import router as connector_router
 from onyx.server.documents.credential import router as credential_router
+from onyx.server.documents.credential_capabilities import (
+    router as credential_capabilities_router,
+)
 from onyx.server.documents.document import router as document_router
 from onyx.server.documents.standard_oauth import router as standard_oauth_router
 from onyx.server.documents.targeted_reindex import router as targeted_reindex_router
@@ -212,7 +216,14 @@ def validation_exception_handler(request: Request, exc: Exception) -> JSONRespon
 
     exc_str = f"{exc}".replace("\n", " ").replace("   ", " ")
     logger.exception("%s: %s", request, exc_str)
-    content = {"status_code": 422, "message": exc_str, "data": None}
+    # message/status_code/data are kept for existing clients; error_code and
+    # detail make the body match every other error the API returns.
+    content = {
+        "status_code": 422,
+        "message": exc_str,
+        "data": None,
+        **OnyxErrorCode.VALIDATION_ERROR.detail(exc_str),
+    }
     return JSONResponse(content=content, status_code=422)
 
 
@@ -226,9 +237,14 @@ def value_error_handler(_: Request, exc: Exception) -> JSONResponse:
     except Exception:
         # log stacktrace
         logger.exception("ValueError")
+    # "message" is what this handler has always returned; the code and detail
+    # are added so a bare ValueError reads like any other Onyx error.
     return JSONResponse(
         status_code=400,
-        content={"message": str(exc)},
+        content={
+            "message": str(exc),
+            **OnyxErrorCode.BAD_REQUEST.detail(str(exc)),
+        },
     )
 
 
@@ -469,7 +485,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
 
 
 def log_http_error(request: Request, exc: Exception) -> JSONResponse:
-    status_code = getattr(exc, "status_code", 500)
+    status_code = getattr(exc, "status_code", 500)  # ods: ignore[getattr]
 
     if isinstance(exc, BasicAuthenticationError):
         # For BasicAuthenticationError, just log a brief message without stack trace
@@ -486,9 +502,14 @@ def log_http_error(request: Request, exc: Exception) -> JSONResponse:
         logger.error(error_msg)
 
     detail = exc.detail if isinstance(exc, HTTPException) else str(exc)
+    # Routes that raise HTTPException name no error code, so derive the
+    # canonical one for the status. Clients reading "detail" are unaffected.
     return JSONResponse(
         status_code=status_code,
-        content={"detail": detail},
+        content={
+            "error_code": OnyxErrorCode.for_status(status_code).code,
+            "detail": detail,
+        },
     )
 
 
@@ -538,6 +559,9 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, admin_router)
     include_router_with_global_prefix_prepended(application, connector_router)
     include_router_with_global_prefix_prepended(application, credential_router)
+    include_router_with_global_prefix_prepended(
+        application, credential_capabilities_router
+    )
     include_router_with_global_prefix_prepended(application, input_prompt_router)
     include_router_with_global_prefix_prepended(application, admin_input_prompt_router)
     include_router_with_global_prefix_prepended(application, cc_pair_router)

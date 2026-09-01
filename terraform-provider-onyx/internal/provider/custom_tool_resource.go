@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework-jsontypes/jsontypes"
+	"github.com/hashicorp/terraform-plugin-framework-validators/mapvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -16,6 +17,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/onyx-dot-app/onyx/terraform-provider-onyx/internal/client"
 )
@@ -37,15 +39,17 @@ type customToolResource struct {
 }
 
 type customToolResourceModel struct {
-	ID              types.String         `tfsdk:"id"`
-	Name            types.String         `tfsdk:"name"`
-	Description     types.String         `tfsdk:"description"`
-	Definition      jsontypes.Normalized `tfsdk:"definition"`
-	CustomHeaders   types.Map            `tfsdk:"custom_headers"`
-	PassthroughAuth types.Bool           `tfsdk:"passthrough_auth"`
-	OAuthConfigID   types.String         `tfsdk:"oauth_config_id"`
-	Enabled         types.Bool           `tfsdk:"enabled"`
-	DisplayName     types.String         `tfsdk:"display_name"`
+	ID                     types.String         `tfsdk:"id"`
+	Name                   types.String         `tfsdk:"name"`
+	Description            types.String         `tfsdk:"description"`
+	Definition             jsontypes.Normalized `tfsdk:"definition"`
+	CustomHeaders          types.Map            `tfsdk:"custom_headers"`
+	CustomHeadersWO        types.Map            `tfsdk:"custom_headers_wo"`
+	CustomHeadersWOVersion types.Int64          `tfsdk:"custom_headers_wo_version"`
+	PassthroughAuth        types.Bool           `tfsdk:"passthrough_auth"`
+	OAuthConfigID          types.String         `tfsdk:"oauth_config_id"`
+	Enabled                types.Bool           `tfsdk:"enabled"`
+	DisplayName            types.String         `tfsdk:"display_name"`
 }
 
 func (r *customToolResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -92,8 +96,25 @@ func (r *customToolResource) Schema(_ context.Context, _ resource.SchemaRequest,
 				ElementType: types.StringType,
 				Sensitive:   true,
 				MarkdownDescription: "Headers sent with every call the action makes, such as an API key. " +
-					"Cannot carry an `Authorization` header while `passthrough_auth` is enabled.",
+					"Cannot carry an `Authorization` header while `passthrough_auth` is enabled. Onyx " +
+					"returns these values in full, so Terraform refreshes them and reports changes made " +
+					"elsewhere." + writeOnlyDescription("custom_headers"),
 			},
+			"custom_headers_wo": schema.MapAttribute{
+				Optional:    true,
+				ElementType: types.StringType,
+				Sensitive:   true,
+				WriteOnly:   true,
+				MarkdownDescription: "Headers sent with every call the action makes, held only in " +
+					"configuration. Terraform sends them on every apply and stores nothing, so they never " +
+					"reach state — and, unlike `custom_headers`, they are not refreshed from Onyx either, " +
+					"so a change made elsewhere goes unreported until the next apply overwrites it. Pair " +
+					"with `custom_headers_wo_version` to rotate them. Needs Terraform 1.11 or later.",
+				Validators: []validator.Map{
+					mapvalidator.ConflictsWith(path.MatchRoot("custom_headers")),
+				},
+			},
+			"custom_headers_wo_version": writeOnlyVersionAttribute("custom_headers_wo"),
 			"passthrough_auth": schema.BoolAttribute{
 				Optional: true,
 				Computed: true,
@@ -139,10 +160,16 @@ func (r *customToolResource) ValidateConfig(ctx context.Context, req resource.Va
 		return
 	}
 
-	if headerKey, found := authorizationHeaderKey(config.CustomHeaders); found &&
-		config.PassthroughAuth.ValueBool() {
+	headerPath := path.Root("custom_headers")
+	headerKey, found := authorizationHeaderKey(config.CustomHeaders)
+	if !found {
+		if writeOnlyKey, writeOnlyFound := authorizationHeaderKey(config.CustomHeadersWO); writeOnlyFound {
+			headerKey, found, headerPath = writeOnlyKey, true, path.Root("custom_headers_wo")
+		}
+	}
+	if found && config.PassthroughAuth.ValueBool() {
 		resp.Diagnostics.AddAttributeError(
-			path.Root("custom_headers"),
+			headerPath,
 			"Conflicting authentication settings",
 			fmt.Sprintf(
 				"passthrough_auth forwards the calling user's credentials, so Onyx rejects the "+
@@ -224,13 +251,14 @@ func headersFromModel(ctx context.Context, headers types.Map, diags *diag.Diagno
 func (r *customToolResource) writeFromModel(
 	ctx context.Context,
 	model customToolResourceModel,
+	customHeaders types.Map,
 	diags *diag.Diagnostics,
 ) (client.CustomToolWrite, bool) {
 	definition, ok := jsonObjectFromNormalized(model.Definition, "definition", diags)
 	if !ok {
 		return client.CustomToolWrite{}, false
 	}
-	headers, ok := headersFromModel(ctx, model.CustomHeaders, diags)
+	headers, ok := headersFromModel(ctx, customHeaders, diags)
 	if !ok {
 		return client.CustomToolWrite{}, false
 	}
@@ -254,19 +282,30 @@ func (r *customToolResource) writeFromModel(
 	}, true
 }
 
+// customToolHeadersWriteOnlyKey records, in private state, that custom_headers
+// came from the write-only twin. Read has no configuration to consult and Onyx
+// returns header values in full, so without this marker the refresh would write
+// the secret into state.
+const customToolHeadersWriteOnlyKey = "custom_headers_write_only"
+
 // applyRemoteCustomTool copies the server's view into the model.
 //
 // Headers are read back from the server like everything else. Onyx returns
 // their values in full, so a change made outside Terraform is visible rather
 // than silently kept.
-func applyRemoteCustomTool(ctx context.Context, model *customToolResourceModel, remote *client.CustomTool, diags *diag.Diagnostics) bool {
+func applyRemoteCustomTool(ctx context.Context, model *customToolResourceModel, remote *client.CustomTool, headersAreWriteOnly bool, diags *diag.Diagnostics) bool {
 	definition, ok := normalizedFromJSONObject(remote.Definition, "definition", diags)
 	if !ok {
 		return false
 	}
-	model.CustomHeaders = headersFromRemote(ctx, model.CustomHeaders, remote, diags)
-	if diags.HasError() {
-		return false
+	// Onyx returns header values in full. Refreshing them is what makes an
+	// out-of-band change visible, but for a write-only header map it would put
+	// the very secret Terraform was told not to keep back into state.
+	if !headersAreWriteOnly {
+		model.CustomHeaders = headersFromRemote(ctx, model.CustomHeaders, remote, diags)
+		if diags.HasError() {
+			return false
+		}
 	}
 
 	model.ID = types.StringValue(strconv.FormatInt(remote.ID, 10))
@@ -310,7 +349,18 @@ func (r *customToolResource) Create(ctx context.Context, req resource.CreateRequ
 		return
 	}
 
-	write, ok := r.writeFromModel(ctx, plan, &resp.Diagnostics)
+	customHeaders, headersAreWriteOnly := resolveWriteOnlySource(
+		ctx, req.Config, path.Root("custom_headers_wo"), plan.CustomHeaders, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	resp.Diagnostics.Append(markWriteOnlySource(
+		ctx, resp.Private, customToolHeadersWriteOnlyKey, headersAreWriteOnly)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	write, ok := r.writeFromModel(ctx, plan, customHeaders, &resp.Diagnostics)
 	if !ok {
 		return
 	}
@@ -325,7 +375,7 @@ func (r *customToolResource) Create(ctx context.Context, req resource.CreateRequ
 	// the state is written so a failure never loses track of the action.
 	if !plan.Enabled.ValueBool() {
 		if err := r.client.SetCustomToolEnabled(ctx, remote.ID, false); err != nil {
-			if !applyRemoteCustomTool(ctx, &plan, remote, &resp.Diagnostics) {
+			if !applyRemoteCustomTool(ctx, &plan, remote, headersAreWriteOnly, &resp.Diagnostics) {
 				return
 			}
 			resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
@@ -335,7 +385,7 @@ func (r *customToolResource) Create(ctx context.Context, req resource.CreateRequ
 		remote.Enabled = false
 	}
 
-	if !applyRemoteCustomTool(ctx, &plan, remote, &resp.Diagnostics) {
+	if !applyRemoteCustomTool(ctx, &plan, remote, headersAreWriteOnly, &resp.Diagnostics) {
 		return
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
@@ -376,7 +426,12 @@ func (r *customToolResource) Read(ctx context.Context, req resource.ReadRequest,
 		)
 		return
 	}
-	if !applyRemoteCustomTool(ctx, &state, remote, &resp.Diagnostics) {
+	headersAreWriteOnly := writeOnlySourceMarked(
+		ctx, req.Private, customToolHeadersWriteOnlyKey, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if !applyRemoteCustomTool(ctx, &state, remote, headersAreWriteOnly, &resp.Diagnostics) {
 		return
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
@@ -394,7 +449,18 @@ func (r *customToolResource) Update(ctx context.Context, req resource.UpdateRequ
 	if !ok {
 		return
 	}
-	write, ok := r.writeFromModel(ctx, plan, &resp.Diagnostics)
+	customHeaders, headersAreWriteOnly := resolveWriteOnlySource(
+		ctx, req.Config, path.Root("custom_headers_wo"), plan.CustomHeaders, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	resp.Diagnostics.Append(markWriteOnlySource(
+		ctx, resp.Private, customToolHeadersWriteOnlyKey, headersAreWriteOnly)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	write, ok := r.writeFromModel(ctx, plan, customHeaders, &resp.Diagnostics)
 	if !ok {
 		return
 	}
@@ -414,7 +480,7 @@ func (r *customToolResource) Update(ctx context.Context, req resource.UpdateRequ
 		remote.Enabled = plan.Enabled.ValueBool()
 	}
 
-	if !applyRemoteCustomTool(ctx, &plan, remote, &resp.Diagnostics) {
+	if !applyRemoteCustomTool(ctx, &plan, remote, headersAreWriteOnly, &resp.Diagnostics) {
 		return
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)

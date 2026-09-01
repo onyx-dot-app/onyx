@@ -29,6 +29,13 @@ interface TextProps extends WithoutStyles<
   maxLines?: number;
 
   /**
+   * Strike the text through. This is a presentational state (e.g. an option
+   * that is switched off), so it stays a prop rather than `~~` in the content:
+   * the caller keeps passing the plain string, and no escaping is needed.
+   */
+  strikethrough?: boolean;
+
+  /**
    * Plain string, `markdown()` for inline markdown, or `richNodes()` for
    * sentences that embed inline components (e.g. next-intl `t.rich` output).
    */
@@ -95,6 +102,7 @@ function Text({
   as: Tag = "span",
   nowrap,
   maxLines,
+  strikethrough,
   children,
   ...rest
 }: TextProps) {
@@ -104,7 +112,8 @@ function Text({
     COLOR_CONFIG[color],
     nowrap && "whitespace-nowrap",
     maxLines === 1 && "truncate",
-    maxLines && maxLines > 1 && "overflow-hidden"
+    maxLines && maxLines > 1 && "overflow-hidden",
+    strikethrough && "line-through"
   );
 
   const style =

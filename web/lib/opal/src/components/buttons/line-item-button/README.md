@@ -39,6 +39,7 @@ row's label lines up with an adjacent button. A step outside that set is a type 
 | `target`        | `string`                           | —                | Anchor target (e.g. `"_blank"`)                   |
 | `group`         | `string`                           | —                | Interactive group key                             |
 | `ref`           | `React.Ref<HTMLElement>`           | —                | Forwarded ref                                     |
+| `disabled`      | `boolean`                          | `false`          | Disabled colors; suppresses the row's own click only — nested `rightChildren` stay clickable |
 
 ### Sizing
 
@@ -60,6 +61,7 @@ row's label lines up with an adjacent button. A step outside that set is a type 
 | `sizePreset`    | `SizePreset`            | `"headline"`   | Content size preset                          |
 | `variant`       | `ContentVariant`        | `"heading"`    | Content layout variant                       |
 | `rightChildren` | `ReactNode`             | —              | Content after the label (e.g. action button) |
+| `color`         | `ColorTypes`            | `"interactive"` | Content colour mode. Defaults to `"interactive"`, which is what lets the row's hover / selected / disabled colours reach its title and icon — passing anything else opts out of that. `undefined` counts as not passing one. |
 
 All other `ContentAction` / `Content` props (`editable`, `onTitleChange`, `optional`, `auxIcon`, `tag`, etc.) are also passed through. Note: `withInteractive` is always `true` inside `LineItemButton` and cannot be overridden.
 

@@ -84,11 +84,3 @@ export const OPENAPI_ADMIN_CONFIG = {
   href: ADMIN_ROUTES.OPENAPI_ACTIONS.path,
   tooltip: "Manage OpenAPI Actions",
 };
-
-/**
- * Stands in for absent preferences.
- *
- * One frozen array rather than a fresh `[]` each render, so the callbacks that
- * depend on it keep their identity.
- */
-export const NO_DISABLED_TOOLS: number[] = [];

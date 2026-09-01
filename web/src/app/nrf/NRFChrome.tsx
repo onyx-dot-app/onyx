@@ -10,8 +10,8 @@ import { SvgBubbleText, SvgSearchMenu, SvgSidebar } from "@opal/icons";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 import { useIsSearchModeAvailable } from "@/lib/settings/hooks";
 import { useCustomFooterContent } from "@/lib/app/hooks";
+import { useAppPosition } from "@/lib/position/hooks";
 import type { AppMode } from "@/providers/QueryControllerProvider";
-import useAppFocus from "@/hooks/useAppFocus";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
@@ -62,18 +62,20 @@ export default function NRFChrome() {
   const isSearchModeAvailable = useIsSearchModeAvailable();
   const { isMobile } = useScreenSize();
   const { setFolded } = useSidebarState();
-  const appFocus = useAppFocus();
+  const appPosition = useAppPosition();
   const [modePopoverOpen, setModePopoverOpen] = useState(false);
 
   const effectiveMode: AppMode =
-    appFocus.isNewSession() && state.phase === "idle" ? state.appMode : "chat";
+    appPosition.isNewSession() && state.phase === "idle"
+      ? state.appMode
+      : "chat";
 
   const customFooterContent = useCustomFooterContent();
 
   const showModeToggle =
     businessTier &&
     isSearchModeAvailable &&
-    appFocus.isNewSession() &&
+    appPosition.isNewSession() &&
     state.phase === "idle";
 
   const showHeader = isMobile || showModeToggle;

@@ -1295,8 +1295,8 @@ def index_doc_batch(
     second element is the number of chunks."""
 
     # Log connector info for debugging OOM issues
-    connector_id = getattr(adapter, "connector_id", None)
-    credential_id = getattr(adapter, "credential_id", None)
+    connector_id = getattr(adapter, "connector_id", None)  # ods: ignore[getattr]
+    credential_id = getattr(adapter, "credential_id", None)  # ods: ignore[getattr]
     logger.debug(
         "Starting index_doc_batch: connector_id=%s, credential_id=%s, tenant_id=%s, num_docs=%s",
         connector_id,
@@ -1310,7 +1310,9 @@ def index_doc_batch(
     # mandate an ``index_attempt_metadata`` field, so non-attempt callers
     # (ingestion API, user file processing) get None and the
     # ``*_if_set`` helpers no-op.
-    _attempt_metadata = getattr(adapter, "index_attempt_metadata", None)
+    _attempt_metadata = getattr(  # ods: ignore[getattr]
+        adapter, "index_attempt_metadata", None
+    )
     attempt_id: int | None = (
         _attempt_metadata.attempt_id if _attempt_metadata is not None else None
     )

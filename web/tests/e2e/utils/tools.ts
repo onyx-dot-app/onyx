@@ -26,6 +26,10 @@ export async function waitForUnifiedGreeting(page: Page): Promise<string> {
 
 // Ensure the Action Management popover is open
 export async function openActionManagement(page: Page): Promise<void> {
+  // The toggle closes an open popover, so a caller that already has one would
+  // shut it by asking for it again.
+  if (await page.locator(TOOL_IDS.options).isVisible()) return;
+
   const actionToggle = page.locator(TOOL_IDS.actionToggle);
   await actionToggle.waitFor();
   await actionToggle.click();

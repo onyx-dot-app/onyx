@@ -2521,7 +2521,7 @@
         "description": "Die Benutzer konnten nicht geladen werden. Bitte laden Sie die Seite neu."
       }
     },
-    "craftInstructions": {
+    "craftPreferences": {
       "baseInstructions": {
         "description": "Der integrierte Prompt, an den Ihre Anweisungen angehängt werden. Dynamische Abschnitte werden pro Sitzung ausgefüllt.",
         "loadError": {
@@ -2529,9 +2529,34 @@
         },
         "title": "Basisanweisungen anzeigen"
       },
+      "defaultModel": {
+        "clearButton": {
+          "label": "Löschen"
+        },
+        "help": {
+          "description": "Craft verwendet dieses Modell für neue Sitzungen und geplante Aufgaben. Ohne Festlegung greift Craft auf das Standard-Chatmodell des Arbeitsbereichs zurück."
+        },
+        "inheritedTag": {
+          "label": "Arbeitsbereich-Standard"
+        },
+        "label": "Standardmodell",
+        "placeholder": "Modell auswählen",
+        "resetError": {
+          "message": "Das Standardmodell konnte nicht gelöscht werden"
+        },
+        "resetSuccess": {
+          "message": "Craft-Standardmodell gelöscht"
+        },
+        "saveError": {
+          "message": "Das Standardmodell konnte nicht gespeichert werden"
+        },
+        "saveSuccess": {
+          "message": "Craft-Standardmodell gespeichert"
+        }
+      },
       "header": {
-        "description": "Arbeitsbereichsweite Anweisungen, die jeder Craft-Agent zusätzlich zum integrierten Verhalten von Craft befolgt.",
-        "title": "Anweisungen"
+        "description": "Das Standardmodell und die arbeitsbereichsweiten Anweisungen, die jeder Craft-Agent zusätzlich zum integrierten Verhalten von Craft befolgt.",
+        "title": "Einstellungen"
       },
       "instructions": {
         "charCount": {
@@ -9019,8 +9044,8 @@
         "craftApps": {
           "label": "Apps"
         },
-        "craftInstructions": {
-          "label": "Anweisungen"
+        "craftPreferences": {
+          "label": "Einstellungen"
         },
         "customAnalytics": {
           "label": "Benutzerdefinierte Analysen"

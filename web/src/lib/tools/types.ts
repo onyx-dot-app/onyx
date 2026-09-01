@@ -224,3 +224,13 @@ export interface OAuthTokenStatus {
 export type SecondaryViewState =
   | { type: "sources" }
   | { type: "mcp"; serverId: number };
+
+/**
+ * What a chat has been told to do about one tool.
+ *
+ * Neutral is the absence of a state rather than a third name for one, so a
+ * tool nobody has said anything about is not recorded. A tool that appears
+ * after the choice was made is therefore already neutral, with nothing having
+ * to go and enrol it.
+ */
+export type ToolState = "forced" | "disabled";

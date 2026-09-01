@@ -2521,7 +2521,20 @@
         "description": "ユーザーの読み込みに失敗しました。ページを再読み込みしてください。"
       }
     },
-    "craftInstructions": {
+    "craftPreferences": {
+      "defaultModel": {
+        "clearButton": { "label": "クリア" },
+        "help": {
+          "description": "Craft は新しいセッションとスケジュール済みタスクにこのモデルを使います。未設定の場合、Craft はワークスペースの既定のチャットモデルに戻ります。"
+        },
+        "inheritedTag": { "label": "ワークスペースの既定値" },
+        "label": "既定のモデル",
+        "placeholder": "モデルを選択",
+        "resetError": { "message": "既定のモデルをクリアできませんでした" },
+        "resetSuccess": { "message": "Craft の既定のモデルをクリアしました" },
+        "saveError": { "message": "既定のモデルを保存できませんでした" },
+        "saveSuccess": { "message": "Craft の既定のモデルを保存しました" }
+      },
       "baseInstructions": {
         "description": "入力した指示が追加される、組み込みのプロンプトです。動的な部分はセッションごとに埋められます。",
         "loadError": {
@@ -2530,8 +2543,8 @@
         "title": "基本の指示を表示"
       },
       "header": {
-        "description": "Craft の組み込みの動作に加えて、すべての Craft エージェントが従うワークスペース全体の指示です。",
-        "title": "指示"
+        "description": "Craft の組み込み動作に加えて、すべての Craft エージェントが従う既定のモデルとワークスペース全体の指示です。",
+        "title": "設定"
       },
       "instructions": {
         "charCount": {
@@ -9019,8 +9032,8 @@
         "craftApps": {
           "label": "アプリ"
         },
-        "craftInstructions": {
-          "label": "指示"
+        "craftPreferences": {
+          "label": "設定"
         },
         "customAnalytics": {
           "label": "カスタム分析"

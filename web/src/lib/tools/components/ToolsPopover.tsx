@@ -11,21 +11,19 @@ import {
   MCPAuthenticationPerformer,
   SecondaryViewState,
 } from "@/lib/tools/types";
-import { useForcedTools } from "@/lib/hooks/useForcedTools";
-import { useAgentPreferences } from "@/lib/agents/hooks";
 import { MinimalAgent } from "@/lib/agents/types";
 import { useUser } from "@/providers/UserProvider";
 import { hasPermission } from "@/lib/permissions";
 import { useSourcePreferences } from "@/lib/searchFilters/hooks";
 import MCPApiKeyModal from "@/components/chat/MCPApiKeyModal";
 import { Permission, ValidSources } from "@/lib/types";
-import { NO_DISABLED_TOOLS } from "@/lib/tools/constants";
 import { getAdminConfigureInfo, getToolTooltip } from "@/lib/tools/utils";
 import { getConfiguredSources } from "@/lib/sources";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { SourceMetadata } from "@/lib/search/interfaces";
 import { SourceIcon } from "@/components/SourceIcon";
-import { useAvailableTools } from "@/hooks/useAvailableTools";
+import { useAvailableTools } from "@/lib/tools/hooks";
+import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
 import { useAvailableSources } from "@/lib/connectors/hooks";
 import useCCPairs from "@/hooks/useCCPairs";
 import { useLLMProviders } from "@/lib/languageModels/hooks";
@@ -41,7 +39,7 @@ import {
   saveMCPUserCredentials,
   startMCPUserOAuth,
 } from "@/lib/tools/svc";
-import type { SearchFilters } from "@/lib/searchFilters/types";
+import { useSharedSearchFilters } from "@/lib/searchFilters/providers";
 
 /**
  * The actions popover.
@@ -56,13 +54,17 @@ import type { SearchFilters } from "@/lib/searchFilters/types";
  */
 export interface ToolsPopoverProps {
   agent: MinimalAgent;
-  filterManager: SearchFilters;
+  /**
+   * Owned by the surface, because the send path reads the same one. The
+   * popover decides nothing about where it lives or how long it lasts.
+   */
+  toolConfiguration: ToolConfigurationHandle;
   disabled?: boolean;
 }
 
 export default function ToolsPopover({
   agent,
-  filterManager,
+  toolConfiguration,
   disabled = false,
 }: ToolsPopoverProps) {
   const { availableSources } = useAvailableSources();
@@ -74,7 +76,7 @@ export default function ToolsPopover({
   const focusOnMount = useFocusOnMount<HTMLInputElement>();
   // const [showFadeMask, setShowFadeMask] = useState(false);
   // const [showTopShadow, setShowTopShadow] = useState(false);
-  const { selectedSources, setSelectedSources } = filterManager;
+  const { selectedSources, setSelectedSources } = useSharedSearchFilters();
   const [mcpServers, setMcpServers] = useState<MCPServer[]>([]);
   const { llmProviders, isLoading: isLLMLoading } = useLLMProviders(agent.id);
   const hasAnyProvider = !isLLMLoading && (llmProviders?.length ?? 0) > 0;
@@ -154,17 +156,7 @@ export default function ToolsPopover({
     isAuthenticated: false,
   });
 
-  // Get the agent preference for this assistant
-  const { agentPreferences, setSpecificAgentPreferences } =
-    useAgentPreferences();
-  const { forcedToolIds, setForcedToolIds } = useForcedTools();
-
-  // Reset state when assistant changes
-  useEffect(() => {
-    setForcedToolIds([]);
-  }, [agent.id, setForcedToolIds]);
-
-  const { isAdmin, permissions } = useUser();
+  const { permissions } = useUser();
   const { vectorDbEnabled } = useSettings();
 
   const { tools: availableTools } = useAvailableTools();
@@ -174,45 +166,6 @@ export default function ToolsPopover({
 
   // Check if there are any connectors available
   const hasNoConnectors = ccPairs.length === 0;
-
-  const agentPreference = agentPreferences?.[agent.id];
-  const disabledToolIds =
-    agentPreference?.disabled_tool_ids || NO_DISABLED_TOOLS;
-  const toggleToolForCurrentAgent = useCallback(
-    (toolId: number) => {
-      const disabled = disabledToolIds.includes(toolId);
-      setSpecificAgentPreferences(agent.id, {
-        disabled_tool_ids: disabled
-          ? disabledToolIds.filter((id) => id !== toolId)
-          : [...disabledToolIds, toolId],
-      });
-
-      // If we're disabling a tool that is currently forced, remove it from forced tools
-      if (!disabled && forcedToolIds.includes(toolId)) {
-        setForcedToolIds(forcedToolIds.filter((id) => id !== toolId));
-      }
-    },
-    [
-      disabledToolIds,
-      agent.id,
-      setSpecificAgentPreferences,
-      forcedToolIds,
-      setForcedToolIds,
-    ]
-  );
-
-  const toggleForcedTool = useCallback(
-    (toolId: number) => {
-      if (forcedToolIds.includes(toolId)) {
-        // If clicking on already forced tool, unforce it
-        setForcedToolIds([]);
-      } else {
-        // If clicking on a new tool, replace any existing forced tools with just this one
-        setForcedToolIds([toolId]);
-      }
-    },
-    [forcedToolIds, setForcedToolIds]
-  );
 
   // Get internal search tool reference for auto-pin logic
   const internalSearchTool = useMemo(
@@ -233,10 +186,10 @@ export default function ToolsPopover({
       ) {
         setSelectedSources(getConfiguredSources(effectiveAvailableSources));
       }
-      toggleForcedTool(toolId);
+      toolConfiguration.toggleToolState(toolId, "forced");
     },
     [
-      toggleForcedTool,
+      toolConfiguration,
       internalSearchTool,
       effectiveAvailableSources,
       setSelectedSources,
@@ -246,29 +199,30 @@ export default function ToolsPopover({
   const enableAllSources = useCallback(() => {
     setSelectedSources(getConfiguredSources(effectiveAvailableSources));
 
-    if (internalSearchTool) {
-      setForcedToolIds([internalSearchTool.id]);
+    // Toggling an already-forced tool would unforce it, so only fire when it
+    // is not the forced one.
+    if (
+      internalSearchTool &&
+      toolConfiguration.forcedToolId !== internalSearchTool.id
+    ) {
+      toolConfiguration.toggleToolState(internalSearchTool.id, "forced");
     }
   }, [
     effectiveAvailableSources,
     setSelectedSources,
     internalSearchTool,
-    setForcedToolIds,
+    toolConfiguration,
   ]);
 
   const disableAllSources = useCallback(() => {
     baseDisableAllSources();
     const willUnpin =
-      internalSearchTool && forcedToolIds.includes(internalSearchTool.id);
+      internalSearchTool &&
+      toolConfiguration.forcedToolId === internalSearchTool.id;
     if (willUnpin) {
-      setForcedToolIds([]);
+      toolConfiguration.clearForcedTool();
     }
-  }, [
-    baseDisableAllSources,
-    internalSearchTool,
-    forcedToolIds,
-    setForcedToolIds,
-  ]);
+  }, [baseDisableAllSources, internalSearchTool, toolConfiguration]);
 
   const toggleSource = useCallback(
     (sourceUniqueKey: string) => {
@@ -277,7 +231,9 @@ export default function ToolsPopover({
 
       if (internalSearchTool) {
         if (!wasEnabled) {
-          setForcedToolIds([internalSearchTool.id]);
+          if (toolConfiguration.forcedToolId !== internalSearchTool.id) {
+            toolConfiguration.toggleToolState(internalSearchTool.id, "forced");
+          }
         } else {
           const allSources = getConfiguredSources(effectiveAvailableSources);
           const remainingEnabled = allSources.filter(
@@ -286,9 +242,9 @@ export default function ToolsPopover({
           );
           if (
             remainingEnabled.length === 0 &&
-            forcedToolIds.includes(internalSearchTool.id)
+            toolConfiguration.forcedToolId === internalSearchTool.id
           ) {
-            setForcedToolIds([]);
+            toolConfiguration.clearForcedTool();
           }
         }
       }
@@ -298,8 +254,7 @@ export default function ToolsPopover({
       internalSearchTool,
       isSourceEnabled,
       effectiveAvailableSources,
-      forcedToolIds,
-      setForcedToolIds,
+      toolConfiguration,
     ]
   );
 
@@ -545,32 +500,24 @@ export default function ToolsPopover({
     id: tool.id.toString(),
     label: tool.display_name || tool.name,
     description: tool.description,
-    isEnabled: !disabledToolIds.includes(tool.id),
-    onToggle: () => toggleToolForCurrentAgent(tool.id),
+    isEnabled: !toolConfiguration.disabledToolIds.includes(tool.id),
+    onToggle: () => toolConfiguration.toggleToolState(tool.id, "disabled"),
   }));
 
   const mcpAllDisabled = selectedMcpTools.every((tool) =>
-    disabledToolIds.includes(tool.id)
+    toolConfiguration.disabledToolIds.includes(tool.id)
   );
 
-  const disableAllToolsForSelectedServer = () => {
+  // One call per tool rather than a second setter taking many. React batches
+  // them, and each sees what the one before it left, so the rules hold across
+  // the run instead of the last write landing on a stale map.
+  const setSelectedServerToolsDisabled = (disabled: boolean) => {
     if (!selectedMcpServer) return;
-    const serverToolIds = selectedMcpTools.map((tool) => tool.id);
-    const merged = Array.from(new Set([...disabledToolIds, ...serverToolIds]));
-    setSpecificAgentPreferences(agent.id, {
-      disabled_tool_ids: merged,
-    });
-    setForcedToolIds(forcedToolIds.filter((id) => !serverToolIds.includes(id)));
-  };
-
-  const enableAllToolsForSelectedServer = () => {
-    if (!selectedMcpServer) return;
-    const serverToolIdSet = new Set(selectedMcpTools.map((tool) => tool.id));
-    setSpecificAgentPreferences(agent.id, {
-      disabled_tool_ids: disabledToolIds.filter(
-        (id) => !serverToolIdSet.has(id)
-      ),
-    });
+    for (const tool of selectedMcpTools) {
+      toolConfiguration.setToolState(tool.id, () =>
+        disabled ? "disabled" : null
+      );
+    }
   };
 
   const handleFooterReauthClick = () => {
@@ -603,38 +550,30 @@ export default function ToolsPopover({
     isSourceEnabled(source.uniqueKey)
   ).length;
   const searchToolDisabled =
-    searchToolId !== null && disabledToolIds.includes(searchToolId);
+    searchToolId !== null &&
+    toolConfiguration.disabledToolIds.includes(searchToolId);
 
-  // Sync search tool state with sources on mount/when states change
+  // Searching nothing returns nothing, so the search tool follows whether any
+  // source is selected.
+  const setSearchToolEnabled = useCallback(
+    (enabled: boolean) => {
+      if (searchToolId === null) return;
+      toolConfiguration.setToolState(searchToolId, () =>
+        enabled ? null : "disabled"
+      );
+    },
+    [searchToolId, toolConfiguration]
+  );
+
   useEffect(() => {
     if (searchToolId === null || !sourcesInitialized) return;
-
-    const hasEnabledSources = numSourcesEnabled > 0;
-    if (hasEnabledSources && searchToolDisabled) {
-      // Sources are enabled but search tool is disabled - enable it
-      toggleToolForCurrentAgent(searchToolId);
-    } else if (!hasEnabledSources && !searchToolDisabled) {
-      // No sources enabled but search tool is enabled - disable it
-      toggleToolForCurrentAgent(searchToolId);
-    }
+    setSearchToolEnabled(numSourcesEnabled > 0);
   }, [
     searchToolId,
     numSourcesEnabled,
-    searchToolDisabled,
     sourcesInitialized,
-    toggleToolForCurrentAgent,
+    setSearchToolEnabled,
   ]);
-
-  // Set search tool to a specific enabled/disabled state (only toggles if needed)
-  const setSearchToolEnabled = (enabled: boolean) => {
-    if (searchToolId === null) return;
-
-    if (enabled && searchToolDisabled) {
-      toggleToolForCurrentAgent(searchToolId);
-    } else if (!enabled && !searchToolDisabled) {
-      toggleToolForCurrentAgent(searchToolId);
-    }
-  };
 
   const handleSourceToggle = (sourceUniqueKey: string) => {
     const willEnable = !isSourceEnabled(sourceUniqueKey);
@@ -655,8 +594,8 @@ export default function ToolsPopover({
   };
 
   const handleToggleTool = (toolId: number) => {
-    const wasDisabled = disabledToolIds.includes(toolId);
-    toggleToolForCurrentAgent(toolId);
+    const wasDisabled = toolConfiguration.disabledToolIds.includes(toolId);
+    toolConfiguration.toggleToolState(toolId, "disabled");
 
     if (toolId === searchToolId) {
       if (wasDisabled) {
@@ -726,8 +665,8 @@ export default function ToolsPopover({
               <ActionLineItem
                 key={tool.id}
                 tool={tool}
-                disabled={disabledToolIds.includes(tool.id)}
-                isForced={forcedToolIds.includes(tool.id)}
+                disabled={toolConfiguration.disabledToolIds.includes(tool.id)}
+                isForced={toolConfiguration.forcedToolId === tool.id}
                 isUnavailable={isUnavailable}
                 tooltip={getToolTooltip(
                   tool,
@@ -741,7 +680,7 @@ export default function ToolsPopover({
                 onForceToggle={() =>
                   handleForceToggleWithTracking(
                     tool.id,
-                    forcedToolIds.includes(tool.id)
+                    toolConfiguration.forcedToolId === tool.id
                   )
                 }
                 onSourceManagementOpen={() =>
@@ -772,7 +711,7 @@ export default function ToolsPopover({
             (t) => t.mcp_server_id === Number(server.id)
           );
           const enabledTools = serverTools.filter(
-            (t) => !disabledToolIds.includes(t.id)
+            (t) => !toolConfiguration.disabledToolIds.includes(t.id)
           );
 
           return (
@@ -828,8 +767,8 @@ export default function ToolsPopover({
       items={mcpToggleItems}
       searchPlaceholder={`Search ${selectedMcpServer?.name ?? "server"} tools`}
       allDisabled={mcpAllDisabled}
-      onDisableAll={disableAllToolsForSelectedServer}
-      onEnableAll={enableAllToolsForSelectedServer}
+      onDisableAll={() => setSelectedServerToolsDisabled(true)}
+      onEnableAll={() => setSelectedServerToolsDisabled(false)}
       disableAllLabel="Disable All Tools"
       enableAllLabel="Enable All Tools"
       onBack={() => setSecondaryView(null)}

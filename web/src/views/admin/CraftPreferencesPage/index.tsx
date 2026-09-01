@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import useSWR, { mutate } from "swr";
-import { Button, Card, Text } from "@opal/components";
+import useSWR, { mutate, useSWRConfig } from "swr";
+import { Button, Card, Tag, Text } from "@opal/components";
 import {
   IllustrationContent,
   InputVertical,
@@ -24,11 +24,20 @@ import { toSettings } from "@/lib/settings/types";
 import { updateAdminSettings } from "@/lib/settings/svc";
 import useUnsavedChangesGuard from "@/hooks/useUnsavedChangesGuard";
 import UnsavedChangesModal from "@/sections/modals/UnsavedChangesModal";
+import { useAdminLLMProviders } from "@/lib/languageModels/hooks";
+import { DefaultModel } from "@/lib/languageModels/types";
+import {
+  deleteDefaultCraftModel,
+  setDefaultCraftModel,
+} from "@/lib/languageModels/svc";
+import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
+import { BuildLlmSelection } from "@/app/craft/onboarding/constants";
+import ModelPickerButton from "@/app/craft/components/ModelPickerButton";
 
 const MAX_INSTRUCTIONS_LENGTH = 4000;
 
 function BaseInstructionsPreview() {
-  const t = useTranslations("admin.craftInstructions");
+  const t = useTranslations("admin.craftPreferences");
   const { data, error } = useSWR<{ content: string }>(
     SWR_KEYS.buildBaseInstructions,
     errorHandlingFetcher
@@ -57,8 +66,8 @@ function BaseInstructionsPreview() {
   );
 }
 
-export default function CraftInstructionsPage() {
-  const t = useTranslations("admin.craftInstructions");
+export default function CraftPreferencesPage() {
+  const t = useTranslations("admin.craftPreferences");
   const settings = useSettings();
   const craftAvailable = settings?.onyx_craft_available === true;
   const savedInstructions = settings?.craft_instructions ?? "";
@@ -93,9 +102,88 @@ export default function CraftInstructionsPage() {
     }
   }
 
+  const { mutate: mutateScoped } = useSWRConfig();
+  const {
+    llmProviders,
+    defaultCraft,
+    defaultText,
+    isLoading: isLoadingModels,
+  } = useAdminLLMProviders();
+  const [isSavingModel, setIsSavingModel] = useState(false);
+
+  // Hidden models still resolve, so an admin can clear or replace a default
+  // that was later hidden.
+  const resolveSelection = useCallback(
+    (model: DefaultModel | null): BuildLlmSelection | null => {
+      if (!model || !llmProviders) return null;
+      const provider = llmProviders.find(
+        (candidate) => candidate.id === model.provider_id
+      );
+      const modelConfig = provider?.model_configurations.find(
+        (candidate) => candidate.name === model.model_name
+      );
+      if (!provider || !modelConfig) return null;
+      return {
+        providerId: provider.id,
+        providerName: provider.name ?? "",
+        provider: provider.provider,
+        modelName: model.model_name,
+      };
+    },
+    [llmProviders]
+  );
+
+  // The explicitly configured Craft default — what Clear clears.
+  const configuredSelection = useMemo(
+    () => resolveSelection(defaultCraft),
+    [resolveSelection, defaultCraft]
+  );
+
+  // What Craft actually runs today: the configured default, or the workspace
+  // chat default it falls back to. Resolved here rather than inside the picker
+  // so this admin's own remembered pick can't leak in as the workspace value.
+  const inheritedSelection = useMemo(
+    () => resolveSelection(defaultText),
+    [resolveSelection, defaultText]
+  );
+  const effectiveSelection = configuredSelection ?? inheritedSelection;
+  const isInherited = !configuredSelection && !!inheritedSelection;
+
+  async function saveDefaultModel(selection: BuildLlmSelection) {
+    setIsSavingModel(true);
+    try {
+      await setDefaultCraftModel(selection.providerId, selection.modelName);
+      await refreshLlmProviderCaches(mutateScoped);
+      toast.success(t("defaultModel.saveSuccess.message"));
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : t("defaultModel.saveError.message")
+      );
+    } finally {
+      setIsSavingModel(false);
+    }
+  }
+
+  async function resetDefaultModel() {
+    setIsSavingModel(true);
+    try {
+      await deleteDefaultCraftModel();
+      await refreshLlmProviderCaches(mutateScoped);
+      toast.success(t("defaultModel.resetSuccess.message"));
+    } catch (err) {
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : t("defaultModel.resetError.message")
+      );
+    } finally {
+      setIsSavingModel(false);
+    }
+  }
+
   const header = (
     <SettingsLayouts.Header
-      icon={ADMIN_ROUTES.CRAFT_INSTRUCTIONS.icon}
+      icon={ADMIN_ROUTES.CRAFT_PREFERENCES.icon}
       title={t("header.title")}
       description={t("header.description")}
       rightChildren={
@@ -160,6 +248,42 @@ export default function CraftInstructionsPage() {
       <SettingsLayouts.Body>
         <Card border="solid" rounding={4}>
           <Section alignItems="stretch" gap={1}>
+            <InputVertical title={t("defaultModel.label")} withLabel>
+              <div className="flex items-center gap-2">
+                <ModelPickerButton
+                  selection={effectiveSelection}
+                  onChange={saveDefaultModel}
+                  disabled={isSavingModel}
+                  fallbackToDefault={false}
+                  persistSelection={false}
+                  loading={isLoadingModels}
+                  placeholder={t("defaultModel.placeholder")}
+                />
+                {isInherited && (
+                  <Tag title={t("defaultModel.inheritedTag.label")} />
+                )}
+                {configuredSelection && (
+                  <Button
+                    icon={SvgRefreshCw}
+                    variant="danger"
+                    prominence="tertiary"
+                    size="sm"
+                    disabled={isSavingModel}
+                    onClick={resetDefaultModel}
+                  >
+                    {t("defaultModel.clearButton.label")}
+                  </Button>
+                )}
+              </div>
+              <Text font="secondary-body" color="text-03">
+                {t("defaultModel.help.description")}
+              </Text>
+            </InputVertical>
+          </Section>
+        </Card>
+
+        <Card border="solid" rounding={4}>
+          <Section alignItems="stretch" gap={1}>
             <InputVertical
               title={t("instructions.label")}
               topRight={t("instructions.charCount.label", {
@@ -211,7 +335,7 @@ export default function CraftInstructionsPage() {
 
       {resetConfirmOpen && (
         <ConfirmationModalLayout
-          icon={ADMIN_ROUTES.CRAFT_INSTRUCTIONS.icon}
+          icon={ADMIN_ROUTES.CRAFT_PREFERENCES.icon}
           title={t("resetModal.header.title")}
           onClose={isSaving ? undefined : () => setResetConfirmOpen(false)}
           submit={

@@ -5,7 +5,6 @@ import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { FullAgent } from "@/lib/agents/types";
-import { useModal } from "@opal/components";
 import { Modal } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { Content, ContentAction, InputHorizontal } from "@opal/layouts";
@@ -31,7 +30,8 @@ import { Button } from "@opal/components";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import AppInputBar from "@/sections/input/AppInputBar";
 import { useLlmManager } from "@/lib/hooks";
-import { useSearchFilters } from "@/lib/searchFilters/hooks";
+import { SearchFiltersProvider } from "@/lib/searchFilters/providers";
+import { useToolConfiguration } from "@/lib/tools/hooks";
 import { formatMmDdYyyy } from "@/lib/dateUtils";
 import { useProjectsContext } from "@/lib/projects/providers";
 import { FileCard } from "@/sections/cards/FileCard";
@@ -129,23 +129,40 @@ interface AgentChatInputProps {
 }
 function AgentChatInput({ agent, onSubmit }: AgentChatInputProps) {
   const llmManager = useLlmManager(undefined, agent);
-  const filterManager = useSearchFilters();
+  // Over the listing, so the URL says nothing about the chat this would
+  // start; the agent is named here instead.
+  const toolConfiguration = useToolConfiguration(agent.id);
+
+  // This send navigates in order to send, so the configuration is left where
+  // that page will find it rather than travelling with the call. Closing the
+  // viewer without sending leaves nothing behind.
+  const submit = useCallback(
+    (message: string) => {
+      toolConfiguration.handOffToNewChatWith(agent.id);
+      onSubmit(message);
+    },
+    [toolConfiguration, agent.id, onSubmit]
+  );
 
   return (
-    <AppInputBar
-      onSubmit={onSubmit}
-      llmManager={llmManager}
-      chatState="input"
-      filterManager={filterManager}
-      activeAgent={agent}
-      stopGenerating={() => {}}
-      handleFileUpload={() => {}}
-      currentSessionFileTokenCount={0}
-      availableContextTokens={Infinity}
-      deepResearchEnabled={false}
-      toggleDeepResearch={() => {}}
-      disabled={false}
-    />
+    // Its own instance, so source toggles made while previewing an agent do not
+    // reach the chat this modal opened over.
+    <SearchFiltersProvider>
+      <AppInputBar
+        toolConfiguration={toolConfiguration}
+        onSubmit={submit}
+        llmManager={llmManager}
+        chatState="input"
+        activeAgent={agent}
+        stopGenerating={() => {}}
+        handleFileUpload={() => {}}
+        currentSessionFileTokenCount={0}
+        availableContextTokens={Infinity}
+        deepResearchEnabled={false}
+        toggleDeepResearch={() => {}}
+        disabled={false}
+      />
+    </SearchFiltersProvider>
   );
 }
 
@@ -172,10 +189,11 @@ function AgentChatInput({ agent, onSubmit }: AgentChatInputProps) {
  */
 export interface AgentViewerModalProps {
   agent: FullAgent;
+  /** Removes this agent from the URL, which is what closes the modal. */
+  onClose: () => void;
 }
-export function AgentViewerModal({ agent }: AgentViewerModalProps) {
+export function AgentViewerModal({ agent, onClose }: AgentViewerModalProps) {
   const t = useTranslations("agents.modals");
-  const agentViewerModal = useModal();
   const router = useRouter();
   const { allRecentFiles } = useProjectsContext();
   const { llmProviders } = useLLMProviders(agent.id);
@@ -188,9 +206,8 @@ export function AgentViewerModal({ agent }: AgentViewerModalProps) {
         [SEARCH_PARAM_NAMES.SEND_ON_LOAD]: "true",
       });
       router.push(`/app?${params.toString()}` as Route);
-      agentViewerModal.toggle(false);
     },
-    [agent.id, router, agentViewerModal]
+    [agent.id, router]
   );
 
   const hasKnowledge =
@@ -237,8 +254,10 @@ export function AgentViewerModal({ agent }: AgentViewerModalProps) {
 
   return (
     <Modal
-      open={agentViewerModal.isOpen}
-      onOpenChange={agentViewerModal.toggle}
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
     >
       <Modal.Content
         width="lg"
@@ -248,7 +267,7 @@ export function AgentViewerModal({ agent }: AgentViewerModalProps) {
         <Modal.Header
           icon={(props) => <AgentAvatar agent={agent} {...props} size={24} />}
           title={agent.name}
-          onClose={() => agentViewerModal.toggle(false)}
+          onClose={onClose}
         />
 
         <Modal.Body>
