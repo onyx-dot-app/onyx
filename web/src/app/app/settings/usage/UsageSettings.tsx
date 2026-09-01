@@ -149,19 +149,24 @@ function WindowCostSection({ windowCostCents, rows }: WindowCostSectionProps) {
                     color="text-03"
                     data-testid="usage-model-tokens"
                   >
-                    {`${formatTokens(row.input_tokens)} in · ${formatTokens(
-                      row.output_tokens
-                    )} out${
-                      hasCache
-                        ? ` · ${formatTokens(row.cache_read_tokens)} cache reads`
-                        : ""
-                    }${
-                      hasCacheWrites
-                        ? ` · ${formatTokens(
-                            row.cache_creation_tokens
-                          )} cache writes`
-                        : ""
-                    }`}
+                    {[
+                      t("modelUsage.tokensIn.label", {
+                        count: formatTokens(row.input_tokens),
+                      }),
+                      t("modelUsage.tokensOut.label", {
+                        count: formatTokens(row.output_tokens),
+                      }),
+                      hasCache &&
+                        t("modelUsage.cacheReads.label", {
+                          count: formatTokens(row.cache_read_tokens),
+                        }),
+                      hasCacheWrites &&
+                        t("modelUsage.cacheWrites.label", {
+                          count: formatTokens(row.cache_creation_tokens),
+                        }),
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
                   </Text>
                 </Section>
               </div>
@@ -225,9 +230,10 @@ function isSameModelPrice(
 function ModelPriceSection({ prices, defaultPrice }: ModelPriceSectionProps) {
   const t = useTranslations("settings.usage");
   const groups = useMemo(() => {
+    // t is stable per locale, listed below to satisfy the deps lint.
     const byProvider = new Map<string, ModelPrice[]>();
     for (const price of prices) {
-      const key = price.provider ?? "Other";
+      const key = price.provider ?? t("modelPrices.otherProvider.label");
       const list = byProvider.get(key) ?? [];
       list.push(price);
       byProvider.set(key, list);
@@ -235,7 +241,7 @@ function ModelPriceSection({ prices, defaultPrice }: ModelPriceSectionProps) {
     return Array.from(byProvider.entries())
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([provider, models]) => ({ provider, models }));
-  }, [prices]);
+  }, [prices, t]);
 
   // Expand the provider that holds the default model (else the first).
   const defaultProvider = useMemo(
@@ -309,7 +315,9 @@ function ModelPriceSection({ prices, defaultPrice }: ModelPriceSectionProps) {
                         >
                           <Text font="secondary-body" color="text-05" nowrap>
                             {isSameModelPrice(price, defaultPrice)
-                              ? `${price.model} · default`
+                              ? t("modelPrices.defaultTag.label", {
+                                  model: price.model,
+                                })
                               : price.model}
                           </Text>
                           <Text font="secondary-body" color="text-03" nowrap>

@@ -12902,9 +12902,29 @@
         "title": "تعذّر تحميل الاستخدام"
       },
       "modelPrices": {
+        "defaultTag": {
+          "label": "{model} · افتراضي"
+        },
         "description": "دولار لكل مليون رمز (إدخال · إخراج · ذاكرة مؤقتة) لكل نموذج متاح",
+        "otherProvider": {
+          "label": "أخرى"
+        },
         "title": "أسعار النماذج",
         "unavailable": "الأسعار غير متاحة"
+      },
+      "modelUsage": {
+        "cacheReads": {
+          "label": "{count} قراءات من الذاكرة المؤقتة"
+        },
+        "cacheWrites": {
+          "label": "{count} كتابات في الذاكرة المؤقتة"
+        },
+        "tokensIn": {
+          "label": "{count} إدخال"
+        },
+        "tokensOut": {
+          "label": "{count} إخراج"
+        }
       },
       "showFewerModels": {
         "ariaLabel": "عرض نماذج أقل"

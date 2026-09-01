@@ -12902,9 +12902,29 @@
         "title": "Couldn't load usage"
       },
       "modelPrices": {
+        "defaultTag": {
+          "label": "{model} · default"
+        },
         "description": "USD per 1M tokens (input · output · cache) for every available model",
+        "otherProvider": {
+          "label": "Other"
+        },
         "title": "Model prices",
         "unavailable": "Prices unavailable"
+      },
+      "modelUsage": {
+        "cacheReads": {
+          "label": "{count} cache reads"
+        },
+        "cacheWrites": {
+          "label": "{count} cache writes"
+        },
+        "tokensIn": {
+          "label": "{count} in"
+        },
+        "tokensOut": {
+          "label": "{count} out"
+        }
       },
       "showFewerModels": {
         "ariaLabel": "Show fewer models"

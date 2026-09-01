@@ -507,7 +507,6 @@ function EmbeddingModelCard({
   onSelect,
 }: EmbeddingModelCardProps) {
   const t = useTranslations("admin.indexSettings");
-  const adminRouteTitle = useAdminRouteTitle();
   const topRightButton = (() => {
     switch (modelState) {
       case "unconnected":

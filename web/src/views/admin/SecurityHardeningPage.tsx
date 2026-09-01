@@ -92,7 +92,6 @@ function JwtTextRow({
   onCommit,
 }: JwtTextRowProps) {
   const t = useTranslations("admin.security");
-  const adminRouteTitle = useAdminRouteTitle();
   const [text, setText] = useState(value);
   // The revision bump resyncs after a commit settles even when `value` did not
   // move, e.g. a failed clear where the optimistic patch drops nulls. A focused

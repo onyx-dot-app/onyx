@@ -12902,9 +12902,29 @@
         "title": "No se pudo cargar el uso"
       },
       "modelPrices": {
+        "defaultTag": {
+          "label": "{model} · predeterminado"
+        },
         "description": "USD por 1M de tokens (entrada · salida · caché) para cada modelo disponible",
+        "otherProvider": {
+          "label": "Otros"
+        },
         "title": "Precios de los modelos",
         "unavailable": "Precios no disponibles"
+      },
+      "modelUsage": {
+        "cacheReads": {
+          "label": "{count} lecturas de caché"
+        },
+        "cacheWrites": {
+          "label": "{count} escrituras de caché"
+        },
+        "tokensIn": {
+          "label": "{count} de entrada"
+        },
+        "tokensOut": {
+          "label": "{count} de salida"
+        }
       },
       "showFewerModels": {
         "ariaLabel": "Mostrar menos modelos"

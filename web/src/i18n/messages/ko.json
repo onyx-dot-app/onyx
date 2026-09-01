@@ -2820,25 +2820,37 @@
       }
     },
     "craftPreferences": {
-      "defaultModel": {
-        "clearButton": { "label": "지우기" },
-        "help": {
-          "description": "Craft는 새 세션과 예약된 작업에 이 모델을 사용합니다. 설정하지 않으면 Craft는 워크스페이스 기본 채팅 모델을 사용합니다."
-        },
-        "inheritedTag": { "label": "워크스페이스 기본값" },
-        "label": "기본 모델",
-        "placeholder": "모델 선택",
-        "resetError": { "message": "기본 모델을 지우지 못했습니다" },
-        "resetSuccess": { "message": "Craft 기본 모델을 지웠습니다" },
-        "saveError": { "message": "기본 모델을 저장하지 못했습니다" },
-        "saveSuccess": { "message": "Craft 기본 모델을 저장했습니다" }
-      },
       "baseInstructions": {
         "description": "작성한 지침이 덧붙여지는 기본 프롬프트입니다. 동적 섹션은 세션마다 채워집니다.",
         "loadError": {
           "description": "기본 지침을 불러오지 못했습니다."
         },
         "title": "기본 지침 보기"
+      },
+      "defaultModel": {
+        "clearButton": {
+          "label": "지우기"
+        },
+        "help": {
+          "description": "Craft는 새 세션과 예약된 작업에 이 모델을 사용합니다. 설정하지 않으면 Craft는 워크스페이스 기본 채팅 모델을 사용합니다."
+        },
+        "inheritedTag": {
+          "label": "워크스페이스 기본값"
+        },
+        "label": "기본 모델",
+        "placeholder": "모델 선택",
+        "resetError": {
+          "message": "기본 모델을 지우지 못했습니다"
+        },
+        "resetSuccess": {
+          "message": "Craft 기본 모델을 지웠습니다"
+        },
+        "saveError": {
+          "message": "기본 모델을 저장하지 못했습니다"
+        },
+        "saveSuccess": {
+          "message": "Craft 기본 모델을 저장했습니다"
+        }
       },
       "header": {
         "description": "Craft의 기본 동작에 더해 모든 Craft 에이전트가 따르는 기본 모델과 워크스페이스 전체 지침입니다.",
@@ -12890,9 +12902,29 @@
         "title": "사용량을 불러올 수 없습니다"
       },
       "modelPrices": {
+        "defaultTag": {
+          "label": "{model} · 기본"
+        },
         "description": "사용 가능한 모든 모델의 100만 토큰당 USD(입력 · 출력 · 캐시)",
+        "otherProvider": {
+          "label": "기타"
+        },
         "title": "모델 가격",
         "unavailable": "가격 정보 없음"
+      },
+      "modelUsage": {
+        "cacheReads": {
+          "label": "캐시 읽기 {count}"
+        },
+        "cacheWrites": {
+          "label": "캐시 쓰기 {count}"
+        },
+        "tokensIn": {
+          "label": "입력 {count}"
+        },
+        "tokensOut": {
+          "label": "출력 {count}"
+        }
       },
       "showFewerModels": {
         "ariaLabel": "모델 적게 표시"

@@ -12902,9 +12902,29 @@
         "title": "Nutzung konnte nicht geladen werden"
       },
       "modelPrices": {
+        "defaultTag": {
+          "label": "{model} · Standard"
+        },
         "description": "USD pro 1 Mio. Tokens (Eingabe · Ausgabe · Cache) für jedes verfügbare Modell",
+        "otherProvider": {
+          "label": "Andere"
+        },
         "title": "Modellpreise",
         "unavailable": "Preise nicht verfügbar"
+      },
+      "modelUsage": {
+        "cacheReads": {
+          "label": "{count} Cache-Lesevorgänge"
+        },
+        "cacheWrites": {
+          "label": "{count} Cache-Schreibvorgänge"
+        },
+        "tokensIn": {
+          "label": "{count} Eingabe"
+        },
+        "tokensOut": {
+          "label": "{count} Ausgabe"
+        }
       },
       "showFewerModels": {
         "ariaLabel": "Weniger Modelle anzeigen"

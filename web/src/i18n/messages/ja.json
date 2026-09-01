@@ -2820,25 +2820,37 @@
       }
     },
     "craftPreferences": {
-      "defaultModel": {
-        "clearButton": { "label": "クリア" },
-        "help": {
-          "description": "Craft は新しいセッションとスケジュール済みタスクにこのモデルを使います。未設定の場合、Craft はワークスペースの既定のチャットモデルに戻ります。"
-        },
-        "inheritedTag": { "label": "ワークスペースの既定値" },
-        "label": "既定のモデル",
-        "placeholder": "モデルを選択",
-        "resetError": { "message": "既定のモデルをクリアできませんでした" },
-        "resetSuccess": { "message": "Craft の既定のモデルをクリアしました" },
-        "saveError": { "message": "既定のモデルを保存できませんでした" },
-        "saveSuccess": { "message": "Craft の既定のモデルを保存しました" }
-      },
       "baseInstructions": {
         "description": "入力した指示が追加される、組み込みのプロンプトです。動的な部分はセッションごとに埋められます。",
         "loadError": {
           "description": "基本の指示を読み込めませんでした。"
         },
         "title": "基本の指示を表示"
+      },
+      "defaultModel": {
+        "clearButton": {
+          "label": "クリア"
+        },
+        "help": {
+          "description": "Craft は新しいセッションとスケジュール済みタスクにこのモデルを使います。未設定の場合、Craft はワークスペースの既定のチャットモデルに戻ります。"
+        },
+        "inheritedTag": {
+          "label": "ワークスペースの既定値"
+        },
+        "label": "既定のモデル",
+        "placeholder": "モデルを選択",
+        "resetError": {
+          "message": "既定のモデルをクリアできませんでした"
+        },
+        "resetSuccess": {
+          "message": "Craft の既定のモデルをクリアしました"
+        },
+        "saveError": {
+          "message": "既定のモデルを保存できませんでした"
+        },
+        "saveSuccess": {
+          "message": "Craft の既定のモデルを保存しました"
+        }
       },
       "header": {
         "description": "Craft の組み込み動作に加えて、すべての Craft エージェントが従う既定のモデルとワークスペース全体の指示です。",
@@ -12890,9 +12902,29 @@
         "title": "使用状況を読み込めませんでした"
       },
       "modelPrices": {
+        "defaultTag": {
+          "label": "{model} · デフォルト"
+        },
         "description": "利用可能な各モデルの100万トークンあたりの料金（入力 · 出力 · キャッシュ、米ドル）",
+        "otherProvider": {
+          "label": "その他"
+        },
         "title": "モデル料金",
         "unavailable": "料金情報がありません"
+      },
+      "modelUsage": {
+        "cacheReads": {
+          "label": "キャッシュ読み取り {count}"
+        },
+        "cacheWrites": {
+          "label": "キャッシュ書き込み {count}"
+        },
+        "tokensIn": {
+          "label": "入力 {count}"
+        },
+        "tokensOut": {
+          "label": "出力 {count}"
+        }
       },
       "showFewerModels": {
         "ariaLabel": "表示するモデルを減らす"

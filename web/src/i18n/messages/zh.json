@@ -2820,25 +2820,37 @@
       }
     },
     "craftPreferences": {
-      "defaultModel": {
-        "clearButton": { "label": "清除" },
-        "help": {
-          "description": "Craft 将此模型用于新会话和计划任务。未设置时，Craft 将使用工作区默认聊天模型。"
-        },
-        "inheritedTag": { "label": "工作区默认值" },
-        "label": "默认模型",
-        "placeholder": "选择模型",
-        "resetError": { "message": "清除默认模型失败" },
-        "resetSuccess": { "message": "已清除 Craft 默认模型" },
-        "saveError": { "message": "保存默认模型失败" },
-        "saveSuccess": { "message": "已保存 Craft 默认模型" }
-      },
       "baseInstructions": {
         "description": "您的指令会追加到这段内置提示词之后。动态部分会在每个会话中分别填充。",
         "loadError": {
           "description": "加载基础指令失败。"
         },
         "title": "查看基础指令"
+      },
+      "defaultModel": {
+        "clearButton": {
+          "label": "清除"
+        },
+        "help": {
+          "description": "Craft 将此模型用于新会话和计划任务。未设置时，Craft 将使用工作区默认聊天模型。"
+        },
+        "inheritedTag": {
+          "label": "工作区默认值"
+        },
+        "label": "默认模型",
+        "placeholder": "选择模型",
+        "resetError": {
+          "message": "清除默认模型失败"
+        },
+        "resetSuccess": {
+          "message": "已清除 Craft 默认模型"
+        },
+        "saveError": {
+          "message": "保存默认模型失败"
+        },
+        "saveSuccess": {
+          "message": "已保存 Craft 默认模型"
+        }
       },
       "header": {
         "description": "在 Craft 内置行为之上，每个 Craft 智能体都会遵循的默认模型和工作区级指令。",
@@ -12890,9 +12902,29 @@
         "title": "无法加载使用情况"
       },
       "modelPrices": {
+        "defaultTag": {
+          "label": "{model} · 默认"
+        },
         "description": "每个可用模型每百万 token 的美元价格（输入 · 输出 · 缓存）",
+        "otherProvider": {
+          "label": "其他"
+        },
         "title": "模型价格",
         "unavailable": "价格不可用"
+      },
+      "modelUsage": {
+        "cacheReads": {
+          "label": "缓存读取 {count}"
+        },
+        "cacheWrites": {
+          "label": "缓存写入 {count}"
+        },
+        "tokensIn": {
+          "label": "输入 {count}"
+        },
+        "tokensOut": {
+          "label": "输出 {count}"
+        }
       },
       "showFewerModels": {
         "ariaLabel": "显示更少模型"
