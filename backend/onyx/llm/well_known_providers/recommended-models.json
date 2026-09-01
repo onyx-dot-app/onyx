@@ -1,6 +1,6 @@
 {
-  "version": "1.13",
-  "updated_at": "2026-08-24T00:00:00Z",
+  "version": "1.14",
+  "updated_at": "2026-09-01T00:00:00Z",
   "providers": {
     "openai": {
       "default_model": "gpt-5.6-sol",
@@ -27,8 +27,8 @@
           "display_name": "Claude Opus 5"
         },
         {
-          "name": "claude-fable-5",
-          "display_name": "Claude Fable 5"
+          "name": "claude-fable-5-1",
+          "display_name": "Claude Fable 5.1"
         },
         {
           "name": "claude-sonnet-5",
