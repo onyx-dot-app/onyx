@@ -212,8 +212,8 @@ export default function CraftToolCard({
     <div className="flex items-center gap-2 min-w-0 w-full">
       {renderStatusIcon(toolCall)}
       <span className="truncate min-w-0">{renderPrimary(toolCall)}</span>
-      {/* Pinned right so the skill badge aligns across rows. */}
-      <span className="ml-auto flex items-center gap-2 shrink-0">
+      {/* Pinned at the inline end so the skill badge aligns across rows. */}
+      <span className="ms-auto flex items-center gap-2 shrink-0">
         {toolCall.skillName && toolCall.toolName !== "skill" && (
           <SkillBadge name={toolCall.skillName} />
         )}
@@ -231,7 +231,7 @@ export default function CraftToolCard({
   );
 
   const triggerClass = cn(
-    "w-full text-left rounded-md",
+    "w-full text-start rounded-md",
     dense ? "px-3 py-1" : "px-3 py-2",
     expandable && "transition-colors hover:bg-background-tint-02"
   );

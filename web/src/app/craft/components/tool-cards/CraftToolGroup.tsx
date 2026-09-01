@@ -85,7 +85,7 @@ export default function CraftToolGroup({
           <CollapsibleTrigger asChild>
             <button
               className={cn(
-                "w-full text-left px-3 py-2 rounded-md",
+                "w-full text-start px-3 py-2 rounded-md",
                 "transition-colors hover:bg-background-tint-02"
               )}
             >
@@ -94,7 +94,7 @@ export default function CraftToolGroup({
                 <Text font="main-ui-muted" color="text-04" nowrap>
                   Working
                 </Text>
-                <span className="ml-auto shrink-0 flex items-center gap-2">
+                <span className="ms-auto shrink-0 flex items-center gap-2">
                   {failedCount > 0 && (
                     <Tag
                       title={`${failedCount} failed`}

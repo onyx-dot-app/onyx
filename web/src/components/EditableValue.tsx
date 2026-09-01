@@ -49,7 +49,7 @@ export function EditableValue({
               setIsOpen(false);
             }
           }}
-          className="cursor-pointer my-auto ml-2"
+          className="cursor-pointer my-auto ms-2"
         >
           <SvgCheck size={16} className="text-green-700" />
         </button>
@@ -66,9 +66,9 @@ export function EditableValue({
         onClick={() => setIsOpen(true)}
       >
         <div className={"flex " + (consistentWidth && " w-6")}>
-          <div className="ml-auto my-auto">{initialValue || emptyDisplay}</div>
+          <div className="ms-auto my-auto">{initialValue || emptyDisplay}</div>
         </div>
-        <div className="cursor-pointer ml-2 my-auto h-4">
+        <div className="cursor-pointer ms-2 my-auto h-4">
           <FiEdit2 size={16} />
         </div>
       </button>

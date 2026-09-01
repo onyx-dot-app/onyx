@@ -91,7 +91,7 @@ const ToolsList: React.FC<ToolsListProps> = ({
             {leftAction}
 
             {/* Right action area */}
-            <div className="flex items-center gap-1 ml-auto">
+            <div className="flex items-center gap-1 ms-auto">
               {enabledCount > 0 && (
                 <EnabledCount
                   enabledCount={enabledCount}

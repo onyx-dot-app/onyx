@@ -298,7 +298,7 @@ function ModelPriceSection({ prices, defaultPrice }: ModelPriceSectionProps) {
                       {models.map((price) => (
                         <div
                           key={`${provider}-${price.model}`}
-                          className="flex flex-row items-center justify-between gap-2 py-1 pl-3"
+                          className="flex flex-row items-center justify-between gap-2 py-1 ps-3"
                         >
                           <Text font="secondary-body" color="text-05" nowrap>
                             {isSameModelPrice(price, defaultPrice)

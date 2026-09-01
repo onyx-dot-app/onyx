@@ -112,7 +112,7 @@ export default function TokenRateLimitsPanel({
       ) : (
         <>
           <Text as="p">{t("panel.intro.description")}</Text>
-          <ul className="list-disc ml-4">
+          <ul className="list-disc ms-4">
             <li>
               <Text as="p">{t("panel.intro.workspaceLimit")}</Text>
             </li>

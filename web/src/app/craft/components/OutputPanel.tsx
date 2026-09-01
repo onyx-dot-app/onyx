@@ -24,6 +24,7 @@ import {
 } from "@/app/craft/services/apiServices";
 import { getFileIcon } from "@/lib/utils";
 import { cn } from "@opal/utils";
+import { useDirection } from "@radix-ui/react-direction";
 import { Text, Tooltip } from "@opal/components";
 import { SvgGlobe, SvgHardDrive, SvgFiles, SvgX, SvgLoader } from "@opal/icons";
 import { IconProps } from "@opal/types";
@@ -84,7 +85,29 @@ interface BuildOutputPanelProps {
  * - File browser for exploring sandbox filesystem
  * - Artifact list with download/view options
  */
+
+// The joint masks carve the corner nearest the tab, so the carved side
+// follows the reading direction.
+function jointMask(gradient: string): React.CSSProperties {
+  return { maskImage: gradient, WebkitMaskImage: gradient };
+}
+function useJointMasks(): {
+  start: React.CSSProperties;
+  end: React.CSSProperties;
+} {
+  const rtl = useDirection() === "rtl";
+  return {
+    start: jointMask(
+      `radial-gradient(circle at ${rtl ? "100%" : "0"} 0, transparent 8px, black 8px)`
+    ),
+    end: jointMask(
+      `radial-gradient(circle at ${rtl ? "0" : "100%"} 0, transparent 8px, black 8px)`
+    ),
+  };
+}
+
 const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
+  const jointMasks = useJointMasks();
   const session = useSession();
   const preProvisionedSessionId = usePreProvisionedSessionId();
   const isPreProvisioning = useIsPreProvisioning();
@@ -460,8 +483,11 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
   return (
     <div
       className={cn(
-        "absolute z-20 inset-y-0 right-0 w-1/2 flex flex-col border-l border-border-01 bg-background-neutral-00 overflow-hidden transition-transform duration-300 ease-in-out",
-        isOpen ? "translate-x-0" : "translate-x-full pointer-events-none"
+        "absolute z-20 inset-y-0 end-0 w-1/2 flex flex-col border-s border-border-01 bg-background-neutral-00 overflow-hidden transition-transform duration-300 ease-in-out",
+        // rtl: the panel hides toward the inline end, so RTL negates.
+        isOpen
+          ? "translate-x-0"
+          : "translate-x-full rtl:-translate-x-full pointer-events-none"
       )}
     >
       {/* Tab List - Chrome-style tabs */}
@@ -469,7 +495,7 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
         {/* Tabs row */}
         <div className="flex items-end w-full pt-1 bg-background-tint-03">
           {/* Scrollable tabs container */}
-          <div className="flex items-end flex-1 pl-2 pr-2 overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+          <div className="flex items-end flex-1 ps-2 pe-2 overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
             {/* Pinned tabs */}
             {tabs.map((tab) => {
               const Icon = tab.icon;
@@ -502,16 +528,11 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
                         : "text-text-03 bg-transparent hover:bg-background-tint-02"
                   )}
                 >
-                  {/* Left curved joint — bleeds active tab into the row */}
+                  {/* Start curved joint, bleeds the active tab into the row */}
                   {isActive && (
                     <div
-                      className="absolute -left-2 bottom-0 w-2 h-2 bg-background-neutral-00 pointer-events-none"
-                      style={{
-                        maskImage:
-                          "radial-gradient(circle at 0 0, transparent 8px, black 8px)",
-                        WebkitMaskImage:
-                          "radial-gradient(circle at 0 0, transparent 8px, black 8px)",
-                      }}
+                      className="absolute -start-2 bottom-0 w-2 h-2 bg-background-neutral-00 pointer-events-none"
+                      style={jointMasks.start}
                     />
                   )}
                   {isStarting ? (
@@ -538,16 +559,11 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
                   <Text color={isDisabled ? "text-02" : "text-05"} maxLines={1}>
                     {tab.label}
                   </Text>
-                  {/* Right curved joint */}
+                  {/* End curved joint */}
                   {isActive && (
                     <div
-                      className="absolute -right-2 bottom-0 w-2 h-2 bg-background-neutral-00 pointer-events-none"
-                      style={{
-                        maskImage:
-                          "radial-gradient(circle at 100% 0, transparent 8px, black 8px)",
-                        WebkitMaskImage:
-                          "radial-gradient(circle at 100% 0, transparent 8px, black 8px)",
-                      }}
+                      className="absolute -end-2 bottom-0 w-2 h-2 bg-background-neutral-00 pointer-events-none"
+                      style={jointMasks.end}
                     />
                   )}
                 </button>
@@ -578,7 +594,7 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
                       key={id}
                       onClick={() => handlePanelTabClick(id)}
                       className={cn(
-                        "group relative inline-flex items-center justify-center gap-1.5 px-3 pr-2 py-1.5 rounded-t-lg",
+                        "group relative inline-flex items-center justify-center gap-1.5 px-3 pe-2 py-1.5 rounded-t-lg",
                         "max-w-[150px] min-w-fit",
                         isActive
                           ? "bg-background-neutral-00 text-text-04 z-10"
@@ -587,13 +603,8 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
                     >
                       {isActive && (
                         <div
-                          className="absolute -left-2 bottom-0 w-2 h-2 bg-background-neutral-00 pointer-events-none"
-                          style={{
-                            maskImage:
-                              "radial-gradient(circle at 0 0, transparent 8px, black 8px)",
-                            WebkitMaskImage:
-                              "radial-gradient(circle at 0 0, transparent 8px, black 8px)",
-                          }}
+                          className="absolute -start-2 bottom-0 w-2 h-2 bg-background-neutral-00 pointer-events-none"
+                          style={jointMasks.start}
                         />
                       )}
                       <TabIcon
@@ -621,13 +632,8 @@ const BuildOutputPanel = memo(({ isOpen }: BuildOutputPanelProps) => {
                       </button>
                       {isActive && (
                         <div
-                          className="absolute -right-2 bottom-0 w-2 h-2 bg-background-neutral-00 pointer-events-none"
-                          style={{
-                            maskImage:
-                              "radial-gradient(circle at 100% 0, transparent 8px, black 8px)",
-                            WebkitMaskImage:
-                              "radial-gradient(circle at 100% 0, transparent 8px, black 8px)",
-                          }}
+                          className="absolute -end-2 bottom-0 w-2 h-2 bg-background-neutral-00 pointer-events-none"
+                          style={jointMasks.end}
                         />
                       )}
                     </button>

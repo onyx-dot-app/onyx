@@ -165,7 +165,7 @@ const DocumentsSidebar = memo(
     return (
       <div
         id="onyx-chat-sidebar"
-        className="bg-background-tint-01 overflow-y-scroll h-full w-full border-l"
+        className="bg-background-tint-01 overflow-y-scroll h-full w-full border-s"
       >
         <div className="flex flex-col px-3 gap-6">
           {hasCited && (

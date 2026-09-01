@@ -188,7 +188,7 @@ function UnconnectedHookCard({ spec, onConnect }: UnconnectedHookCardProps) {
           />
 
           {spec.docs_url && (
-            <div className="ml-6">
+            <div className="ms-6">
               <LinkButton href={spec.docs_url} target="_blank">
                 Documentation
               </LinkButton>
@@ -361,7 +361,7 @@ function ConnectedHookCard({
               />
 
               {spec?.docs_url && (
-                <div className="ml-6">
+                <div className="ms-6">
                   <LinkButton href={spec.docs_url} target="_blank">
                     Documentation
                   </LinkButton>

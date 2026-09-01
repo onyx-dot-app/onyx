@@ -70,12 +70,12 @@ export default function ConnectDataBanner({
               <SvgSlack size={16} />
             </IconWrapper>
           </div>
-          <div className="transition-transform duration-200 group-hover:translate-x-2">
+          <div className="transition-transform duration-200 group-hover:translate-x-2 rtl:group-hover:-translate-x-2">
             <IconWrapper>
               <SvgGoogleDrive size={16} />
             </IconWrapper>
           </div>
-          <div className="transition-transform duration-200 group-hover:translate-x-4">
+          <div className="transition-transform duration-200 group-hover:translate-x-4 rtl:group-hover:-translate-x-4">
             <IconWrapper>
               <SvgConfluence size={16} />
             </IconWrapper>
@@ -90,12 +90,12 @@ export default function ConnectDataBanner({
         </div>
 
         <div className="flex items-center -space-x-2">
-          <div className="transition-transform duration-200 group-hover:-translate-x-4">
+          <div className="transition-transform duration-200 group-hover:-translate-x-4 rtl:group-hover:translate-x-4">
             <IconWrapper>
               <SvgGithub size={16} />
             </IconWrapper>
           </div>
-          <div className="transition-transform duration-200 group-hover:-translate-x-2">
+          <div className="transition-transform duration-200 group-hover:-translate-x-2 rtl:group-hover:translate-x-2">
             <IconWrapper>
               <SvgNotion size={16} />
             </IconWrapper>

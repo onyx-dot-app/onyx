@@ -45,7 +45,7 @@ export const CodeBlock = memo(function CodeBlock({
   const CopyButton = () => (
     <button
       type="button"
-      className="ml-auto cursor-pointer select-none"
+      className="ms-auto cursor-pointer select-none"
       onClick={handleCopy}
     >
       {copied ? (

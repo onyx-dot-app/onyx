@@ -70,7 +70,7 @@ export const FormFieldLabel: React.FC<LabelProps> = ({
       id={`${baseId}-label`}
       htmlFor={`${baseId}-control`}
       className={cn(
-        "ml-0.5 text-text-04 font-main-ui-action flex flex-row items-center gap-1",
+        "ms-0.5 text-text-04 font-main-ui-action flex flex-row items-center gap-1",
         className
       )}
       {...props}
@@ -88,7 +88,7 @@ export const FormFieldLabel: React.FC<LabelProps> = ({
       ) : null}
       {rightIcon && <span className="flex items-center">{rightIcon}</span>}
       {rightAction && (
-        <span className="ml-auto flex items-center">{rightAction}</span>
+        <span className="ms-auto flex items-center">{rightAction}</span>
       )}
     </label>
   );
@@ -135,7 +135,7 @@ export const FormFieldDescription: React.FC<DescriptionProps> = ({
       id={`${baseId}-desc`}
       text03
       secondaryBody
-      className={cn("ml-0.5", className)}
+      className={cn("ms-0.5", className)}
       {...props}
     >
       {content}

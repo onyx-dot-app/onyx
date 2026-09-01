@@ -146,10 +146,16 @@ export function useHorizontalScroll(
     const container = containerRef.current;
     if (!container) return;
     const { scrollLeft, scrollWidth, clientWidth } = container;
-    setCanScrollLeft(scrollLeft > 0);
-    setCanScrollRight(
-      scrollLeft + clientWidth < scrollWidth - SCROLL_TOLERANCE_PX
-    );
+    // RTL scrollers run scrollLeft from 0 down to negative values, so
+    // normalize to distance from the physical left edge. The arrows and
+    // scrollBy already speak physical directions.
+    const maxScroll = scrollWidth - clientWidth;
+    const fromLeft =
+      getComputedStyle(container).direction === "rtl"
+        ? maxScroll + scrollLeft
+        : scrollLeft;
+    setCanScrollLeft(fromLeft > 0);
+    setCanScrollRight(fromLeft < maxScroll - SCROLL_TOLERANCE_PX);
   }, [containerRef]);
 
   useEffect(() => {

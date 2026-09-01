@@ -115,7 +115,7 @@ export default function KickoffCSVExport({
 
   return (
     <div className="flex flex-1 flex-col w-full justify-center">
-      <div className="ml-auto">
+      <div className="ms-auto">
         <Button
           onClick={startExport}
           variant={spinnerStatus === "spinning" ? "danger" : "default"}

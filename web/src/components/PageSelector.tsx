@@ -62,14 +62,14 @@ const PageLink = ({
     px-3
     py-1
     leading-5
-    -ml-px
+    -ms-px
     border-border
     ${unclickable ? "text-text-200" : ""}
     ${!unclickable ? "hover:bg-accent-background-hovered" : ""}
     ${!unclickable ? "cursor-pointer" : ""}
-    first:ml-0
-    first:rounded-l-md
-    last:rounded-r-md
+    first:ms-0
+    first:rounded-s-md
+    last:rounded-e-md
     ${active ? "bg-background-200" : ""}
   `}
     onClick={() => {

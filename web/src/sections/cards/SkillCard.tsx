@@ -189,7 +189,7 @@ export default function SkillCard({
                 color="muted"
               />
             </div>
-            <div className="p-0.5 pr-1.5 flex items-center gap-1">
+            <div className="p-0.5 pe-1.5 flex items-center gap-1">
               {item.can_toggle && (
                 <div
                   role="presentation"

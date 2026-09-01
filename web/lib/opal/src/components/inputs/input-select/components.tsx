@@ -108,7 +108,7 @@ function TruncatedDisplay({
         <div
           ref={hiddenRef}
           aria-hidden
-          className="pointer-events-none invisible absolute left-0 top-0 whitespace-nowrap"
+          className="pointer-events-none invisible absolute start-0 top-0 whitespace-nowrap"
         >
           {text}
         </div>
@@ -274,8 +274,8 @@ function InputSelectTrigger({
       data-variant={variant}
       {...props}
     >
-      {/* text-left counters the button element's centered default. */}
-      <div className="flex w-full flex-row items-center justify-between gap-1 p-0.5 text-left">
+      {/* text-start counters the button element's centered default. */}
+      <div className="flex w-full flex-row items-center justify-between gap-1 p-0.5 text-start">
         {children ?? displayContent}
 
         <div className="flex flex-row items-center gap-1">

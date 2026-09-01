@@ -16,7 +16,7 @@ const ToolItemSkeleton: React.FC<ToolItemSkeletonProps> = ({ className }) => {
       )}
     >
       {/* Left Section: Icon and Content */}
-      <div className="flex gap-1 items-start flex-1 min-w-0 pr-2">
+      <div className="flex gap-1 items-start flex-1 min-w-0 pe-2">
         {/* Icon Container Skeleton */}
         <div className="flex items-center justify-center shrink-0">
           <div className="h-5 w-5 rounded-sm bg-background-tint-02 animate-pulse" />

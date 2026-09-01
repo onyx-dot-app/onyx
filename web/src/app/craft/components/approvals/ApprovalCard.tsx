@@ -171,14 +171,14 @@ export default function ApprovalCard({
         <Collapsible open={isOpen} onOpenChange={setIsOpen}>
           <div
             className={cn(
-              "flex items-center gap-1 pr-2 transition-colors",
+              "flex items-center gap-1 pe-2 transition-colors",
               "has-[[data-approval-trigger]:hover]:bg-background-tint-02"
             )}
           >
             <CollapsibleTrigger asChild>
               <button
                 data-approval-trigger
-                className="flex items-center gap-2 min-w-0 flex-1 text-left px-3 py-2"
+                className="flex items-center gap-2 min-w-0 flex-1 text-start px-3 py-2"
               >
                 {decided ? (
                   approved ? (

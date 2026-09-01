@@ -114,7 +114,7 @@ export const ConnectorTitle = ({
   const mainDisplay = (
     <>
       {sourceMetadata.icon({ size: 16 })}
-      <div className="ml-1 my-auto text-xs font-medium truncate">
+      <div className="ms-1 my-auto text-xs font-medium truncate">
         {ccPairName || sourceMetadata.displayName}
       </div>
     </>

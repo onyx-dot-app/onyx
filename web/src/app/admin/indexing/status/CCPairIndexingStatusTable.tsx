@@ -403,8 +403,8 @@ export function CCPairIndexingStatusTable({
                             key={`dummy-${ccPairStatus.source}-${index}`}
                             className={
                               isLastDummyRow
-                                ? "border-l border-r border-b border-border dark:border-neutral-700"
-                                : "border-l border-r border-t-0 border-b-0 border-border dark:border-neutral-700"
+                                ? "border-s border-e border-b border-border dark:border-neutral-700"
+                                : "border-s border-e border-t-0 border-b-0 border-border dark:border-neutral-700"
                             }
                             style={
                               isLastDummyRow
@@ -423,7 +423,7 @@ export function CCPairIndexingStatusTable({
                                     ? NUMBER_OF_COLUMNS
                                     : NUMBER_OF_COLUMNS - 1
                                 }
-                                className="h-[56px] text-center text-sm text-gray-400 dark:text-gray-500 border-b border-r border-l border-border dark:border-neutral-700"
+                                className="h-[56px] text-center text-sm text-gray-400 dark:text-gray-500 border-b border-e border-s border-border dark:border-neutral-700"
                               >
                                 <span className="italic">
                                   {t("status.table.allCaughtUp.label")}
@@ -445,7 +445,7 @@ export function CCPairIndexingStatusTable({
                   </>
                 )}
                 {ccPairStatus.total_pages > 1 && (
-                  <TableRow className="border-l border-r border-b border-border dark:border-neutral-700">
+                  <TableRow className="border-s border-e border-b border-border dark:border-neutral-700">
                     <TableCell
                       colSpan={
                         businessTier ? NUMBER_OF_COLUMNS : NUMBER_OF_COLUMNS - 1

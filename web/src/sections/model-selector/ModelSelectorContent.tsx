@@ -331,11 +331,13 @@ function ModelDetailPane({ option, managers, onBack }: ModelDetailPaneProps) {
                   key={stop}
                   className={cn(
                     "absolute top-0",
+                    // rtl: the Radix slider mirrors, so labels position
+                    // from the inline start and negate their shift.
                     index === lastStop
-                      ? "-translate-x-full"
-                      : index > 0 && "-translate-x-1/2"
+                      ? "-translate-x-full rtl:translate-x-full"
+                      : index > 0 && "-translate-x-1/2 rtl:translate-x-1/2"
                   )}
-                  style={{ left: `${(index / lastStop) * 100}%` }}
+                  style={{ insetInlineStart: `${(index / lastStop) * 100}%` }}
                 >
                   <Disabled
                     disabled={reasoningEnabled && index > maxSupportedStop}
@@ -608,7 +610,7 @@ export default function ModelSelectorContent({
                               rounding={2}
                               width="full"
                             >
-                              <div className="pl-2 pr-1 py-1 w-full rounded-08 bg-background-tint-01">
+                              <div className="ps-2 pe-1 py-1 w-full rounded-08 bg-background-tint-01">
                                 <ContentAction
                                   sizePreset="secondary"
                                   variant="body"

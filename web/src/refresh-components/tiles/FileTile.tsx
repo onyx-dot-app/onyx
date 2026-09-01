@@ -35,7 +35,7 @@ function RemoveButton({ onRemove }: RemoveButtonProps) {
   return (
     <div
       className={cn(
-        "absolute -left-1 -top-1 z-10",
+        "absolute -start-1 -top-1 z-10",
         "pointer-events-none focus-within:pointer-events-auto"
       )}
     >
@@ -112,7 +112,7 @@ export default function FileTile({
       </div>
 
       {(title || description || onOpen) && (
-        <div className="min-w-0 flex pl-1 w-full justify-between h-full">
+        <div className="min-w-0 flex ps-1 w-full justify-between h-full">
           {isMuted ? (
             <div className="flex flex-col min-w-0">
               {title && (

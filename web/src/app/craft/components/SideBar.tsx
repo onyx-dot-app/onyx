@@ -235,7 +235,7 @@ function BuildSessionButton({
                 <RefreshText
                   as="p"
                   data-state={isActive ? "active" : "inactive"}
-                  className="line-clamp-1 break-all text-left"
+                  className="line-clamp-1 break-all text-start"
                   mainUiBody
                 >
                   <TypewriterText
@@ -356,7 +356,7 @@ const MemoizedBuildSidebarInner = memo(() => {
           <>
             <SidebarLayouts.Section title="Sessions" />
             {sessionHistory.length === 0 ? (
-              <div className="pl-2 pr-1.5 py-1">
+              <div className="ps-2 pe-1.5 py-1">
                 <Text color="text-01">
                   Start building! Session history will appear here.
                 </Text>

@@ -26,7 +26,7 @@ export default function SelectInput({
       >
         {label}
         {optional && (
-          <span className="text-text-500 ml-1">
+          <span className="text-text-500 ms-1">
             {t("field.optional.label")}
           </span>
         )}

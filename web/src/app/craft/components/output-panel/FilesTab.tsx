@@ -436,7 +436,7 @@ export default function FilesTab({
         className="flex-1 overflow-auto px-2 pb-2 relative"
       >
         {/* Background to prevent content showing through sticky gap */}
-        <div className="sticky top-0 left-0 right-0 h-2 bg-background-neutral-00 -mx-2 z-101" />
+        <div className="sticky top-0 start-0 end-0 h-2 bg-background-neutral-00 -mx-2 z-101" />
         {rootListing.entries.length === 0 ? (
           <Section
             height="full"
@@ -602,7 +602,7 @@ function FileTreeNode({
               )}
 
               {/* Name */}
-              <span className="flex-1 text-left ml-1 min-w-0">
+              <span className="flex-1 text-start ms-1 min-w-0">
                 <Text font="secondary-body" color="text-04" maxLines={1}>
                   {entry.name}
                 </Text>
@@ -610,7 +610,7 @@ function FileTreeNode({
 
               {/* File size */}
               {!entry.is_directory && entry.size !== null && (
-                <span className="ml-2 mr-2 shrink-0">
+                <span className="ms-2 me-2 shrink-0">
                   <Text color="text-02">{formatFileSize(entry.size)}</Text>
                 </span>
               )}

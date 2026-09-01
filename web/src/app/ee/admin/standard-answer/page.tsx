@@ -72,7 +72,7 @@ const CategoryBubble = ({
   onDelete?: () => void;
 }) => {
   const className = cn(
-    "inline-block px-2 py-1 mr-1 mb-1 text-xs font-semibold text-emphasis bg-accent-background-hovered rounded-full items-center w-fit",
+    "inline-block px-2 py-1 me-1 mb-1 text-xs font-semibold text-emphasis bg-accent-background-hovered rounded-full items-center w-fit",
     onDelete && "cursor-pointer"
   );
 
@@ -91,7 +91,7 @@ const CategoryBubble = ({
     >
       {name}
       <button
-        className="ml-1 text-subtle hover:text-emphasis"
+        className="ms-1 text-subtle hover:text-emphasis"
         aria-label="Remove category"
       >
         &times;
@@ -240,7 +240,7 @@ const StandardAnswersTable = ({
         <SvgSearch className="w-4 h-4" />
         <textarea
           ref={focusOnMount}
-          className="grow ml-2 h-6 bg-transparent outline-hidden placeholder-subtle overflow-hidden whitespace-normal resize-none"
+          className="grow ms-2 h-6 bg-transparent outline-hidden placeholder-subtle overflow-hidden whitespace-normal resize-none"
           placeholder="Find standard answers by keyword/phrase..."
           value={query}
           onChange={(event) => {
@@ -272,7 +272,7 @@ const StandardAnswersTable = ({
             );
           }}
           icon={
-            <div className="my-auto mr-2 w-[16px] h-[16px]">
+            <div className="my-auto me-2 w-[16px] h-[16px]">
               <FiTag size={16} />
             </div>
           }

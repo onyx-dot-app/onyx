@@ -68,9 +68,11 @@ export default function PptxPreview({
   // Keyboard navigation
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "ArrowLeft") {
+      // Horizontal arrows follow the reading direction, so RTL swaps them.
+      const isRtl = document.documentElement.dir === "rtl";
+      if (e.key === (isRtl ? "ArrowRight" : "ArrowLeft")) {
         goToPrev();
-      } else if (e.key === "ArrowRight") {
+      } else if (e.key === (isRtl ? "ArrowLeft" : "ArrowRight")) {
         goToNext();
       }
     }

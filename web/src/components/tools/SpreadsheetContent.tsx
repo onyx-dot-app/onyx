@@ -111,7 +111,7 @@ function SheetTable({ sheet }: SheetTableProps) {
             {headers.map((_, cellIndex) => (
               <TableCell
                 className={cn(
-                  cellIndex === 0 && "sticky left-0 bg-background-tint-01",
+                  cellIndex === 0 && "sticky start-0 bg-background-tint-01",
                   "py-0 px-4"
                 )}
                 key={cellIndex}

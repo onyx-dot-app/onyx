@@ -256,7 +256,7 @@ function FormContent({
           <Hoverable.Root group="definitionField" width="full">
             <div className="relative w-full">
               {values.definition.trim() && (
-                <div className="absolute z-100000 top-2 right-2 bg-background-tint-00">
+                <div className="absolute z-100000 top-2 end-2 bg-background-tint-00">
                   <Hoverable.Item
                     group="definitionField"
                     variant="appear-on-hover"
@@ -357,7 +357,7 @@ function FormContent({
                 </Text>
               </Section>
               {authenticationDescription && (
-                <Text secondaryBody text03 className="pl-5">
+                <Text secondaryBody text03 className="ps-5">
                   {authenticationDescription}
                 </Text>
               )}

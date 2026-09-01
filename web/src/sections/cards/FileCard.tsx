@@ -28,7 +28,7 @@ function Removable({ onRemove, children }: RemovableProps) {
       <div className="relative">
         <div
           className={cn(
-            "absolute -left-2 -top-2 z-10",
+            "absolute -start-2 -top-2 z-10",
             "pointer-events-none focus-within:pointer-events-auto"
           )}
         >

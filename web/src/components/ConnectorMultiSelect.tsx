@@ -171,7 +171,7 @@ export const ConnectorMultiSelect = ({
                     className="w-full flex items-center justify-between py-2 px-3 cursor-pointer hover:bg-background-neutral-01 text-xs"
                     onClick={() => selectConnector(connector.cc_pair_id)}
                   >
-                    <div className="flex items-center truncate mr-2">
+                    <div className="flex items-center truncate me-2">
                       <ConnectorTitle
                         connector={connector.connector}
                         ccPairId={connector.cc_pair_id}

@@ -457,11 +457,11 @@ const InputComboBox = ({
 
       {/* Error message - only show internal error messages when not using external isError */}
       {!isValid && errorMessage && externalIsError === undefined && (
-        <FieldMessage variant="error" className="ml-0.5 mt-1">
+        <FieldMessage variant="error" className="ms-0.5 mt-1">
           <FieldMessage.Content
             id={`${fieldId}-error`}
             role="alert"
-            className="ml-0.5"
+            className="ms-0.5"
           >
             {errorMessage}
           </FieldMessage.Content>

@@ -84,7 +84,7 @@ export default function NRFChrome() {
     <>
       {/* Header chrome — top-left, mirrors position of settings button at top-right */}
       {showHeader && (
-        <div className="absolute top-0 left-0 p-4 z-10 flex flex-row items-center gap-2">
+        <div className="absolute top-0 start-0 p-4 z-10 flex flex-row items-center gap-2">
           {isMobile && (
             <Button
               prominence="internal"
@@ -138,7 +138,7 @@ export default function NRFChrome() {
       )}
 
       {/* Footer — bottom-center, transparent background */}
-      <footer className="absolute bottom-0 left-0 w-full z-10 flex flex-row justify-center items-center gap-2 px-2 pb-2 pointer-events-auto">
+      <footer className="absolute bottom-0 start-0 w-full z-10 flex flex-row justify-center items-center gap-2 px-2 pb-2 pointer-events-auto">
         <MinimalMarkdown
           content={customFooterContent}
           className="max-w-full text-center"

@@ -75,7 +75,7 @@ export default function BillingInformationPage() {
       <Card className="shadow-md">
         <CardHeader>
           <CardTitle className="text-2xl font-bold flex items-center">
-            <SvgWallet className="mr-4 text-muted-foreground h-6 w-6" />
+            <SvgWallet className="me-4 text-muted-foreground h-6 w-6" />
             Subscription Details
           </CardTitle>
         </CardHeader>

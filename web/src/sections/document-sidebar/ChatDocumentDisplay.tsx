@@ -43,7 +43,7 @@ function DocumentMetadataBlock({
                 />
               ))}
             {metadataEntries.length > MAX_METADATA_ITEMS && (
-              <span className="ml-1 text-xs text-text-500">...</span>
+              <span className="ms-1 text-xs text-text-500">...</span>
             )}
           </div>
         </>
@@ -83,7 +83,7 @@ export default function ChatDocumentDisplay({
       type="button"
       onClick={() => openDocument(document, setPresentingDocument)}
       className={cn(
-        "flex w-full flex-col p-3 gap-2 rounded-12 hover:bg-background-tint-00 cursor-pointer text-left",
+        "flex w-full flex-col p-3 gap-2 rounded-12 hover:bg-background-tint-00 cursor-pointer text-start",
         isSelected && "bg-action-selection-02"
       )}
     >
@@ -102,7 +102,7 @@ export default function ChatDocumentDisplay({
         <DocumentMetadataBlock modal={modal} document={document} />
       )}
 
-      <Text as="p" className="line-clamp-2 text-left" secondaryBody text03>
+      <Text as="p" className="line-clamp-2 text-start" secondaryBody text03>
         {buildDocumentSummaryDisplay(document.match_highlights, document.blurb)}
       </Text>
     </button>

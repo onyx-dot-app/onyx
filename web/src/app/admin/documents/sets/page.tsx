@@ -59,10 +59,10 @@ const FederatedConnectorTitle = ({
   const mainDisplay = (
     <>
       <SourceIcon sourceType={sourceType as any} iconSize={16} />
-      <div className="ml-1 my-auto text-xs font-medium truncate">
+      <div className="ms-1 my-auto text-xs font-medium truncate">
         {federatedConnector.name}
       </div>
-      <Badge variant="outline" className="text-xs ml-2">
+      <Badge variant="outline" className="text-xs ms-2">
         {t("sets.federatedBadge.label")}
       </Badge>
     </>
@@ -142,7 +142,7 @@ const EditRow = ({
             router.push(`/admin/documents/sets/${documentSet.id}`);
           }}
         >
-          <FiEdit2 className="mr-2 shrink-0" />
+          <FiEdit2 className="me-2 shrink-0" />
           <span className="font-medium">{documentSet.name}</span>
         </button>
       </Tooltip>
@@ -216,7 +216,7 @@ const DocumentSetTable = ({
                                   sourceType={ccPairSummary.source}
                                   iconSize={16}
                                 />
-                                <div className="ml-1 my-auto text-xs font-medium truncate">
+                                <div className="ms-1 my-auto text-xs font-medium truncate">
                                   {ccPairSummary.name ||
                                     t("sets.connector.unnamed.label")}
                                 </div>

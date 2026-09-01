@@ -112,7 +112,7 @@ export function EditableStringFieldDisplay({
         ))}
       {isEditing && isEditable ? (
         <>
-          <div className={cn("flex", "flex-row", "gap-2", "pl-2")}>
+          <div className={cn("flex", "flex-row", "gap-2", "ps-2")}>
             <Button
               onClick={handleUpdate}
               prominence="internal"
@@ -136,7 +136,7 @@ export function EditableStringFieldDisplay({
             className="group flex cursor-pointer"
             style={{ fontSize: `${scale}rem` }}
           >
-            <SvgEdit className="visible ml-2" size={12 * scale} />
+            <SvgEdit className="visible ms-2" size={12 * scale} />
           </button>
         )
       )}

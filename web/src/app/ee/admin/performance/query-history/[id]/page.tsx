@@ -31,7 +31,7 @@ function MessageDisplay({ message }: { message: MessageSnapshot }) {
               <div className="text-sm flex" key={document.document_id}>
                 <FiBook
                   className={
-                    "my-auto mr-1" + (document.link ? " text-link" : " ")
+                    "my-auto me-1" + (document.link ? " text-link" : " ")
                   }
                 />
                 {document.link ? (
