@@ -113,7 +113,8 @@ export default function UrlBar({
   };
 
   const urlText = (
-    <Text as="p" font="secondary-body" color="text-03" maxLines={1}>
+    // dir="ltr": URL structure never reorders, even in an RTL locale.
+    <Text as="p" dir="ltr" font="secondary-body" color="text-03" maxLines={1}>
       {displayUrl}
     </Text>
   );
