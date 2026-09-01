@@ -12,8 +12,12 @@ import pytest
 from sqlalchemy.orm import Session
 
 from onyx.db.llm import (
+    fetch_default_contextual_rag_model,
+    fetch_default_craft_model,
     fetch_existing_llm_provider,
     remove_llm_provider,
+    update_default_contextual_model,
+    update_default_craft_provider,
     update_default_provider,
     update_default_vision_provider,
     upsert_llm_provider,
@@ -222,3 +226,72 @@ class TestDefaultModelProtection:
         }
         assert model_visibility["gpt-4o"] is True
         assert model_visibility["gpt-4o-mini"] is False
+
+
+class TestPointerFlowDefaultsSurviveAProviderUpdate:
+    """CONTEXTUAL_RAG, CHAT_NAMING and CRAFT are pointer flows: each is set by
+    its own endpoint and implied by no supports_* field, so none is ever in
+    supported_flows. Reconciling against that list deleted the row, and the
+    default it carries went with it.
+    """
+
+    def _update_provider(
+        self, db_session: Session, provider_id: int, name: str
+    ) -> None:
+        """An ordinary edit that names no pointer flow, as the admin UI sends."""
+        upsert_llm_provider(
+            LLMProviderUpsertRequest(
+                id=provider_id,
+                name=name,
+                provider=LlmProviderNames.OPENAI,
+                api_key="sk-test-key-00000000000000000000000000000000000",
+                api_key_changed=True,
+                model_configurations=[
+                    ModelConfigurationUpsertRequest(
+                        name="gpt-4o", is_visible=True, supports_image_input=True
+                    ),
+                    ModelConfigurationUpsertRequest(
+                        name="gpt-4o-mini", is_visible=True, supports_image_input=False
+                    ),
+                ],
+            ),
+            db_session=db_session,
+        )
+
+    def test_craft_default_survives(
+        self,
+        db_session: Session,
+        provider_name: str,
+    ) -> None:
+        provider = _create_test_provider(db_session, provider_name)
+        update_default_craft_provider(provider.id, "gpt-4o-mini", db_session)
+        assert fetch_default_craft_model(db_session) is not None
+
+        self._update_provider(db_session, provider.id, provider_name)
+
+        default_craft = fetch_default_craft_model(db_session)
+        assert default_craft is not None
+        assert default_craft.name == "gpt-4o-mini"
+
+    def test_contextual_rag_default_survives(
+        self,
+        db_session: Session,
+        provider_name: str,
+    ) -> None:
+        provider = _create_test_provider(db_session, provider_name)
+        model_config = next(
+            mc for mc in provider.model_configurations if mc.name == "gpt-4o-mini"
+        )
+        update_default_contextual_model(
+            db_session=db_session,
+            enable_contextual_rag=True,
+            model_configuration_id=model_config.id,
+        )
+        db_session.commit()
+        assert fetch_default_contextual_rag_model(db_session) is not None
+
+        self._update_provider(db_session, provider.id, provider_name)
+
+        default_contextual = fetch_default_contextual_rag_model(db_session)
+        assert default_contextual is not None
+        assert default_contextual.name == "gpt-4o-mini"
