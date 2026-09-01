@@ -37,6 +37,7 @@ from onyx.configs.app_configs import (
     REDIS_SSL_CA_CERTS,
     REDIS_SSL_CERT_REQS,
     REDIS_SSL_CERTFILE,
+    REDIS_SSL_CHECK_HOSTNAME,
     REDIS_SSL_KEYFILE,
     USE_REDIS_IAM_AUTH,
 )
@@ -82,7 +83,7 @@ def _redis_ssl_connect_kwargs() -> dict[str, Any]:
     kwargs: dict[str, Any] = {
         "ssl": True,
         "ssl_cert_reqs": REDIS_SSL_CERT_REQS,
-        "ssl_check_hostname": False,
+        "ssl_check_hostname": REDIS_SSL_CHECK_HOSTNAME,
     }
     if REDIS_SSL_CA_CERTS:
         kwargs["ssl_ca_certs"] = REDIS_SSL_CA_CERTS
@@ -170,6 +171,7 @@ class RedisPool:
         max_connections: int = REDIS_POOL_MAX_CONNECTIONS,
         ssl_ca_certs: str | None = REDIS_SSL_CA_CERTS,
         ssl_cert_reqs: str = REDIS_SSL_CERT_REQS,
+        ssl_check_hostname: bool = REDIS_SSL_CHECK_HOSTNAME,
         ssl_certfile: str | None = REDIS_SSL_CERTFILE,
         ssl_keyfile: str | None = REDIS_SSL_KEYFILE,
         ssl: bool = False,
@@ -233,6 +235,7 @@ class RedisPool:
                 connection_class=redis.SSLConnection,
                 ssl_ca_certs=ssl_ca_certs,
                 ssl_cert_reqs=ssl_cert_reqs,
+                ssl_check_hostname=ssl_check_hostname,
                 ssl_certfile=ssl_certfile,
                 ssl_keyfile=ssl_keyfile,
             )
@@ -430,7 +433,7 @@ def _build_async_redis_connection() -> aioredis.Redis:
         # but the CA / client cert are dropped). Hand it the native ssl_* params.
         connection_kwargs["ssl"] = True
         connection_kwargs["ssl_cert_reqs"] = REDIS_SSL_CERT_REQS
-        connection_kwargs["ssl_check_hostname"] = False
+        connection_kwargs["ssl_check_hostname"] = REDIS_SSL_CHECK_HOSTNAME
         if REDIS_SSL_CA_CERTS:
             connection_kwargs["ssl_ca_certs"] = REDIS_SSL_CA_CERTS
         # Client certificate for mutual TLS, if configured.

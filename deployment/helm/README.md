@@ -120,7 +120,13 @@ configMap:
   # labels and look identical to a hung service.
   REDIS_HOST: "<elasticache-primary-endpoint>"
   REDIS_PORT: "6379"
-  REDIS_SSL: "true"   # set to "true" if in-transit encryption is enabled
+
+# Enables verified TLS and mounts the Redis server CA into all Redis clients,
+# including the Craft sandbox proxy.
+redisTls:
+  enabled: true
+  caConfigMapName: "elasticache-ca"
+  caKey: ca.crt
 
 auth:
   redis:
