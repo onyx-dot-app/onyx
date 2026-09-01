@@ -65,7 +65,7 @@ import { SidebarTab } from "@opal/components";
 import { ChatSession } from "@/app/app/interfaces";
 import { useUser } from "@/providers/UserProvider";
 import { getFirstPermittedAdminRoute } from "@/lib/permissions";
-import useAppFocus from "@/hooks/useAppFocus";
+import { useAppPosition } from "@/lib/position/hooks";
 import { useCreateModal } from "@opal/components";
 import { useModalContext } from "@/components/context/ModalContext";
 import {
@@ -494,7 +494,7 @@ export default function AppSidebar() {
   );
 
   const { hasAdminAccess, adminCapabilities, user } = useUser();
-  const activeSidebarTab = useAppFocus();
+  const activeSidebarTab = useAppPosition();
   const createProjectModal = useCreateModal();
   const showLogoWhenFolded = useShowLogoWhenFolded();
   const defaultAppMode =

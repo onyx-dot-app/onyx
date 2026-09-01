@@ -6,7 +6,7 @@ import { DEFAULT_AGENT_ID } from "@/lib/constants";
  * `null` when the query is already fine.
  *
  * Bare `/app` is the only way into the Assistant. Naming it by id leaves the
- * sidebar with nothing selected: `useAppFocus` reads the id as an agent focus,
+ * sidebar with nothing selected: `useAppPosition` reads the id as an agent focus,
  * and no tab renders agent 0. Only that one param is dropped; the rest of the
  * query survives.
  */

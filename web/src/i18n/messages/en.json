@@ -2521,7 +2521,7 @@
         "description": "Failed to load users. Please try refreshing the page."
       }
     },
-    "craftInstructions": {
+    "craftPreferences": {
       "baseInstructions": {
         "description": "The built-in prompt your instructions are appended to. Dynamic sections are filled in per session.",
         "loadError": {
@@ -2529,9 +2529,34 @@
         },
         "title": "View base instructions"
       },
+      "defaultModel": {
+        "clearButton": {
+          "label": "Clear"
+        },
+        "help": {
+          "description": "Craft uses this model for new sessions and scheduled tasks. When unset, Craft falls back to the workspace default chat model."
+        },
+        "inheritedTag": {
+          "label": "Workspace default"
+        },
+        "label": "Default model",
+        "placeholder": "Select model",
+        "resetError": {
+          "message": "Failed to clear the default model"
+        },
+        "resetSuccess": {
+          "message": "Craft default model cleared"
+        },
+        "saveError": {
+          "message": "Failed to save the default model"
+        },
+        "saveSuccess": {
+          "message": "Craft default model saved"
+        }
+      },
       "header": {
-        "description": "Workspace-wide instructions every Craft agent follows, on top of Craft's built-in behavior.",
-        "title": "Instructions"
+        "description": "The default model and workspace-wide instructions every Craft agent follows, on top of Craft's built-in behavior.",
+        "title": "Preferences"
       },
       "instructions": {
         "charCount": {
@@ -9019,8 +9044,8 @@
         "craftApps": {
           "label": "Apps"
         },
-        "craftInstructions": {
-          "label": "Instructions"
+        "craftPreferences": {
+          "label": "Preferences"
         },
         "customAnalytics": {
           "label": "Custom Analytics"

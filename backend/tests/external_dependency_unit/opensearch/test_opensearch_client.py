@@ -1594,7 +1594,7 @@ class TestOpenSearchClient:
                     expected = docs[chunk.document_chunk.document_id]
                     assert chunk.document_chunk == DocumentChunkWithoutVectors(
                         **{
-                            k: getattr(expected, k)
+                            k: getattr(expected, k)  # ods: ignore[getattr]
                             for k in DocumentChunkWithoutVectors.model_fields
                         }
                     )
@@ -1758,7 +1758,7 @@ class TestOpenSearchClient:
         # Make sure the chunk contents are preserved.
         assert results[0].document_chunk == DocumentChunkWithoutVectors(
             **{
-                k: getattr(docs["public-doc"], k)
+                k: getattr(docs["public-doc"], k)  # ods: ignore[getattr]
                 for k in DocumentChunkWithoutVectors.model_fields
             }
         )
@@ -1771,7 +1771,7 @@ class TestOpenSearchClient:
         assert results[1].document_chunk.document_id == "private-doc-user-a"
         assert results[1].document_chunk == DocumentChunkWithoutVectors(
             **{
-                k: getattr(docs["private-doc-user-a"], k)
+                k: getattr(docs["private-doc-user-a"], k)  # ods: ignore[getattr]
                 for k in DocumentChunkWithoutVectors.model_fields
             }
         )
@@ -2593,7 +2593,7 @@ class TestOpenSearchClient:
             expected_result = doc1_chunks[result.document_chunk.chunk_index]
             assert result.document_chunk == DocumentChunkWithoutVectors(
                 **{
-                    k: getattr(expected_result, k)
+                    k: getattr(expected_result, k)  # ods: ignore[getattr]
                     for k in DocumentChunkWithoutVectors.model_fields
                 }
             )
@@ -2725,7 +2725,7 @@ class TestOpenSearchClient:
         # Make sure the chunk contents are preserved.
         assert results[0].document_chunk == DocumentChunkWithoutVectors(
             **{
-                k: getattr(docs["public-doc"], k)
+                k: getattr(docs["public-doc"], k)  # ods: ignore[getattr]
                 for k in DocumentChunkWithoutVectors.model_fields
             }
         )
@@ -2738,7 +2738,7 @@ class TestOpenSearchClient:
         assert results[1].document_chunk.document_id == "private-doc-user-a"
         assert results[1].document_chunk == DocumentChunkWithoutVectors(
             **{
-                k: getattr(docs["private-doc-user-a"], k)
+                k: getattr(docs["private-doc-user-a"], k)  # ods: ignore[getattr]
                 for k in DocumentChunkWithoutVectors.model_fields
             }
         )
@@ -2860,7 +2860,7 @@ class TestOpenSearchClient:
         # Make sure the chunk contents are preserved.
         assert results[0].document_chunk == DocumentChunkWithoutVectors(
             **{
-                k: getattr(docs["public-doc"], k)
+                k: getattr(docs["public-doc"], k)  # ods: ignore[getattr]
                 for k in DocumentChunkWithoutVectors.model_fields
             }
         )
@@ -2869,7 +2869,7 @@ class TestOpenSearchClient:
         assert results[1].document_chunk.document_id == "private-doc-user-a"
         assert results[1].document_chunk == DocumentChunkWithoutVectors(
             **{
-                k: getattr(docs["private-doc-user-a"], k)
+                k: getattr(docs["private-doc-user-a"], k)  # ods: ignore[getattr]
                 for k in DocumentChunkWithoutVectors.model_fields
             }
         )

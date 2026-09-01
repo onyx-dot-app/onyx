@@ -180,7 +180,7 @@ def _handle_jira_search_error(e: Exception, jql: str) -> None:
     # Try to get status code and error text from JIRAError or requests response
     if hasattr(e, "status_code"):
         status_code = e.status_code
-        raw_text = getattr(e, "text", "")
+        raw_text = getattr(e, "text", "")  # ods: ignore[getattr]
         if isinstance(raw_text, str):
             try:
                 error_text = _format_error_text(json.loads(raw_text))
@@ -600,7 +600,7 @@ class JiraConnector(
         than a full Issue, so we handle it separately.
         """
         parent_issuetype = (
-            getattr(parent.fields, "issuetype", None)
+            getattr(parent.fields, "issuetype", None)  # ods: ignore[getattr]
             if hasattr(parent, "fields")
             else None
         )
@@ -668,7 +668,7 @@ class JiraConnector(
 
         # Get summary if available
         parent_summary = (
-            getattr(parent.fields, "summary", None)
+            getattr(parent.fields, "summary", None)  # ods: ignore[getattr]
             if hasattr(parent, "fields")
             else None
         )
@@ -1061,7 +1061,7 @@ class JiraConnector(
             InsufficientPermissionsError: If the status code is 403
             ConnectorValidationError: For other HTTP errors with extracted error messages
         """
-        status_code = getattr(e, "status_code", None)
+        status_code = getattr(e, "status_code", None)  # ods: ignore[getattr]
         logger.error("Jira API error during validation: %s", e)
 
         # Handle specific status codes with appropriate exceptions
@@ -1079,7 +1079,7 @@ class JiraConnector(
             )
 
         # Try to extract original error message from the response
-        error_message = getattr(e, "text", None)
+        error_message = getattr(e, "text", None)  # ods: ignore[getattr]
         if error_message is None:
             raise UnexpectedValidationError(
                 f"Unexpected Jira error during validation: {e}"

@@ -131,6 +131,69 @@ describe("getDefaultLlmSelection", () => {
     expect(getDefaultLlmSelection(undefined)).toBeNull();
   });
 
+  it("prefers the configured default over the recommended model", () => {
+    const result = getDefaultLlmSelection(
+      [
+        provider(
+          "anthropic",
+          [model("claude-opus-5", { craft: true }), model("claude-haiku-4-5")],
+          3
+        ),
+      ],
+      [{ provider_id: 3, model_name: "claude-haiku-4-5" }]
+    );
+    expect(result).toEqual({
+      providerId: 3,
+      providerName: "anthropic",
+      provider: "anthropic",
+      modelName: "claude-haiku-4-5",
+    });
+  });
+
+  it("ignores a configured default that is not visible", () => {
+    const result = getDefaultLlmSelection(
+      [
+        provider(
+          "anthropic",
+          [
+            model("claude-opus-5", { craft: true }),
+            model("claude-haiku-4-5", { visible: false }),
+          ],
+          3
+        ),
+      ],
+      [{ provider_id: 3, model_name: "claude-haiku-4-5" }]
+    );
+    expect(result).toEqual({
+      providerId: 3,
+      providerName: "anthropic",
+      provider: "anthropic",
+      modelName: "claude-opus-5",
+    });
+  });
+
+  it("falls through to the next configured default when the first isn't visible or available", () => {
+    const result = getDefaultLlmSelection(
+      [
+        provider(
+          "anthropic",
+          [model("claude-opus-5", { craft: true }), model("claude-haiku-4-5")],
+          3
+        ),
+      ],
+      [
+        { provider_id: 99, model_name: "does-not-exist" },
+        { provider_id: 3, model_name: "claude-haiku-4-5" },
+      ]
+    );
+    expect(result).toEqual({
+      providerId: 3,
+      providerName: "anthropic",
+      provider: "anthropic",
+      modelName: "claude-haiku-4-5",
+    });
+  });
+
   it("orders providers by codepoint like the backend, not locale rules", () => {
     // localeCompare puts "aäb" before "azb"; codepoint order ("z" < "ä") —
     // what Python's sorted() uses in _gateway_provider_order — is the reverse.

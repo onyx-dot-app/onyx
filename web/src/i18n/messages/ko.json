@@ -2521,7 +2521,20 @@
         "description": "사용자를 불러오지 못했습니다. 페이지를 새로 고쳐 보세요."
       }
     },
-    "craftInstructions": {
+    "craftPreferences": {
+      "defaultModel": {
+        "clearButton": { "label": "지우기" },
+        "help": {
+          "description": "Craft는 새 세션과 예약된 작업에 이 모델을 사용합니다. 설정하지 않으면 Craft는 워크스페이스 기본 채팅 모델을 사용합니다."
+        },
+        "inheritedTag": { "label": "워크스페이스 기본값" },
+        "label": "기본 모델",
+        "placeholder": "모델 선택",
+        "resetError": { "message": "기본 모델을 지우지 못했습니다" },
+        "resetSuccess": { "message": "Craft 기본 모델을 지웠습니다" },
+        "saveError": { "message": "기본 모델을 저장하지 못했습니다" },
+        "saveSuccess": { "message": "Craft 기본 모델을 저장했습니다" }
+      },
       "baseInstructions": {
         "description": "작성한 지침이 덧붙여지는 기본 프롬프트입니다. 동적 섹션은 세션마다 채워집니다.",
         "loadError": {
@@ -2530,8 +2543,8 @@
         "title": "기본 지침 보기"
       },
       "header": {
-        "description": "Craft의 기본 동작에 더해 모든 Craft 에이전트가 따르는 워크스페이스 전체 지침입니다.",
-        "title": "지침"
+        "description": "Craft의 기본 동작에 더해 모든 Craft 에이전트가 따르는 기본 모델과 워크스페이스 전체 지침입니다.",
+        "title": "환경설정"
       },
       "instructions": {
         "charCount": {
@@ -9019,8 +9032,8 @@
         "craftApps": {
           "label": "앱"
         },
-        "craftInstructions": {
-          "label": "지침"
+        "craftPreferences": {
+          "label": "환경설정"
         },
         "customAnalytics": {
           "label": "사용자 지정 분석"

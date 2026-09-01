@@ -180,9 +180,9 @@ def test_app_configs_reexport_all_shared_connection_settings() -> None:
         module = importlib.import_module(module_name)
         for setting in _SHARED_CONNECTION_SETTINGS:
             assert hasattr(module, setting), f"{module_name} does not set {setting}"
-            assert getattr(module, setting) == getattr(celery_base, setting), (
-                f"{module_name} {setting} does not match base"
-            )
+            assert getattr(module, setting) == getattr(  # ods: ignore[getattr]
+                celery_base, setting
+            ), f"{module_name} {setting} does not match base"
 
 
 def test_every_app_resolves_sentinel_master_name_on_both_connections() -> None:

@@ -12,7 +12,7 @@ import useOnMount from "@/hooks/useOnMount";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { SvgX } from "@opal/icons";
 import { Hoverable } from "@opal/core";
-import useAppFocus from "@/hooks/useAppFocus";
+import { useAppPosition } from "@/lib/position/hooks";
 interface SortableItemProps {
   id: number;
   children?: React.ReactNode;
@@ -71,7 +71,7 @@ export function AgentButton({ agent }: AgentButtonProps) {
   const { pinnedAgents, togglePinnedAgent } = usePinnedAgents();
   const isActuallyPinned = pinnedAgents.some((a) => a.id === agent.id);
   const isCurrentAgent = activeAgent?.id === agent.id;
-  const appFocus = useAppFocus();
+  const appPosition = useAppPosition();
 
   async function handleClick() {
     if (isActuallyPinned) return;
@@ -86,7 +86,7 @@ export function AgentButton({ agent }: AgentButtonProps) {
           icon={() => <AgentAvatar agent={agent} />}
           href={`/app?agentId=${agent.id}`}
           onClick={handleClick}
-          selected={appFocus.isAgentTabHighlightable() && isCurrentAgent}
+          selected={appPosition.isAgentTabHighlightable() && isCurrentAgent}
           rightChildren={
             // Hide unpin button for current agent since auto-pin would immediately re-pin
             !isCurrentAgent && (

@@ -96,7 +96,7 @@ def build_delegates(config: EffectiveTracingConfig) -> list[TracingProcessor]:
 def _forward(delegates: list[TracingProcessor], method: str, *args: Any) -> None:
     for processor in delegates:
         try:
-            getattr(processor, method)(*args)
+            getattr(processor, method)(*args)  # ods: ignore[getattr]
         except Exception as e:
             logger.error(
                 "Error in trace processor %s during %s: %s", processor, method, e

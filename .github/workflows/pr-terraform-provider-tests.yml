@@ -110,6 +110,9 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # ratchet:hashicorp/setup-terraform@v4.0.1
         with:
+          # Write-only attributes need 1.11. Stating the floor keeps their
+          # tests from skipping themselves into a green run.
+          terraform_version: ">=1.11.0"
           terraform_wrapper: false
 
       - name: Regenerate docs

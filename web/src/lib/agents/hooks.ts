@@ -10,10 +10,6 @@ import {
   Agent,
   PaginatedAgentsResponse,
 } from "@/lib/agents/types";
-import {
-  UserSpecificAgentPreference,
-  UserSpecificAgentPreferences,
-} from "@/lib/types";
 import { toast } from "@opal/layouts";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { buildApiPath } from "@/lib/urlBuilder";
@@ -25,7 +21,6 @@ import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { DEFAULT_AGENT_ID } from "@/lib/constants";
 import { useSettings } from "@/lib/settings/hooks";
 import useChatSessions from "@/hooks/useChatSessions";
-import { buildUpdateAgentPreferenceUrl } from "./utils";
 
 // ── Data fetching ─────────────────────────────────────────────────────────────
 
@@ -307,55 +302,6 @@ export function useActiveAgent(): MinimalAgent | undefined {
     );
     return pinned ?? eligible[0];
   }, [agents, assistantDisabled, pinnedAgents, sessionAgentId, urlAgentIdRaw]);
-}
-
-// ── Agent preferences ─────────────────────────────────────────────────────────
-
-/**
- * Fetches and updates per-user preferences for each agent (e.g. temperature
- * overrides, custom instructions). Applies an optimistic local update before
- * the server confirms to keep the UI responsive.
- */
-export function useAgentPreferences() {
-  const { data, mutate } = useSWR<UserSpecificAgentPreferences>(
-    SWR_KEYS.agentPreferences,
-    errorHandlingFetcher,
-    {
-      revalidateOnFocus: false,
-      revalidateIfStale: false,
-      dedupingInterval: 60000,
-    }
-  );
-
-  const setSpecificAgentPreferences = useCallback(
-    async (
-      agentId: number,
-      newAgentPreference: UserSpecificAgentPreference
-    ) => {
-      mutate({ ...data, [agentId]: newAgentPreference }, false);
-      try {
-        const response = await fetch(buildUpdateAgentPreferenceUrl(agentId), {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(newAgentPreference),
-        });
-        if (!response.ok) {
-          console.error(
-            `Failed to update agent preferences: ${response.status}`
-          );
-        }
-      } catch (error) {
-        console.error("Error updating agent preferences:", error);
-      }
-      mutate();
-    },
-    [data, mutate]
-  );
-
-  return {
-    agentPreferences: data ?? null,
-    setSpecificAgentPreferences,
-  };
 }
 
 // ── Agent Labels ──────────────────────────────────────────────────────────────

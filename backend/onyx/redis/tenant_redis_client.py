@@ -723,7 +723,7 @@ class TenantRedisClient:
             prefixed_keys = _prefix_key(self._prefix, keys)
         else:
             prefixed_keys = [_prefix_key(self._prefix, k) for k in keys]
-        method = getattr(self._r, method_name)
+        method = getattr(self._r, method_name)  # ods: ignore[getattr]
         result = method(prefixed_keys, timeout=timeout)
         if result is None:
             return None

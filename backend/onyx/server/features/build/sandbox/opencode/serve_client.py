@@ -836,7 +836,7 @@ def _merge_field_meta(event: SandboxEvent, extra: dict[str, Any]) -> None:
 
     ``field_meta`` (aliased ``_meta``) already carries ``toolName`` for tool
     events; merge rather than overwrite so both survive ``model_dump``."""
-    existing = getattr(event, "field_meta", None)
+    existing = getattr(event, "field_meta", None)  # ods: ignore[getattr]
     merged: dict[str, Any] = dict(existing) if isinstance(existing, dict) else {}
     merged.update(extra)
     setattr(event, "field_meta", merged)  # noqa: B010

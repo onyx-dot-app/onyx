@@ -91,7 +91,7 @@ class ArtifactResponse(BaseModel):
             type=artifact.type,
             name=artifact.name,
             path=artifact.path,
-            preview_url=getattr(artifact, "preview_url", None),
+            preview_url=getattr(artifact, "preview_url", None),  # ods: ignore[getattr]
             created_at=artifact.created_at,
             updated_at=artifact.updated_at,
         )

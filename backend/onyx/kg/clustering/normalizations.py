@@ -95,7 +95,7 @@ def _normalize_one_entity(
 
         # generate trigrams of the queried entity Q
         query_trigrams = db_session.query(
-            getattr(func, POSTGRES_DEFAULT_SCHEMA)
+            getattr(func, POSTGRES_DEFAULT_SCHEMA)  # ods: ignore[getattr]
             .show_trgm(cleaned_entity)
             .cast(ARRAY(String(3)))
             .label("trigrams")
