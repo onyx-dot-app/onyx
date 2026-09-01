@@ -55,34 +55,35 @@ def run_capability_checks_task(
     instead of mislabeling the successor's row.
     """
     parsed_run_id = UUID(run_id) if run_id is not None else None
-    # Setup reads use a short-lived session: the probes below can run for
-    # hours, and an open transaction would hold its connection and read locks
-    # for the whole run. ``credential`` stays readable after the close because
-    # its columns are already loaded.
-    with get_session_with_current_tenant() as db_session:
-        credential = fetch_credential_by_id(credential_id, db_session)
-        if credential is None:
-            # Deleted since the trigger; its report rows cascaded with it.
-            task_logger.info(
-                f"Skipping capability checks for deleted credential "
-                f"{credential_id} (tenant {tenant_id})."
-            )
-            return
-        input_type: InputType | None = None
-        config = connector_specific_config
-        if connector_id is not None:
-            connector = fetch_connector_by_id(connector_id, db_session)
-            if connector is None:
-                # Deleted since the trigger; its report row cascaded with it.
+    try:
+        # Setup reads use a short-lived session: the probes below can run for
+        # hours, and an open transaction would hold its connection and read
+        # locks for the whole run. ``credential`` stays readable after the
+        # close because its columns are already loaded.
+        with get_session_with_current_tenant() as db_session:
+            credential = fetch_credential_by_id(credential_id, db_session)
+            if credential is None:
+                # Deleted since the trigger; its report rows cascaded with it.
                 task_logger.info(
-                    f"Skipping capability checks for deleted connector "
-                    f"{connector_id} (tenant {tenant_id})."
+                    f"Skipping capability checks for deleted credential "
+                    f"{credential_id} (tenant {tenant_id})."
                 )
                 return
-            input_type = connector.input_type
-            if config is None:
-                config = connector.connector_specific_config
-    try:
+            input_type: InputType | None = None
+            config = connector_specific_config
+            if connector_id is not None:
+                connector = fetch_connector_by_id(connector_id, db_session)
+                if connector is None:
+                    # Deleted since the trigger; its report row cascaded with
+                    # it.
+                    task_logger.info(
+                        f"Skipping capability checks for deleted connector "
+                        f"{connector_id} (tenant {tenant_id})."
+                    )
+                    return
+                input_type = connector.input_type
+                if config is None:
+                    config = connector.connector_specific_config
         report = generate_capability_report(
             credential,
             connector_specific_config=config,
