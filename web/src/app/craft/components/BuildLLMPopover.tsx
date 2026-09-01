@@ -35,6 +35,9 @@ interface BuildLLMPopoverProps {
   llmProviders: LLMProviderDescriptor[] | undefined;
   children: React.ReactNode;
   disabled?: boolean;
+  // Admin surfaces that edit a workspace-wide setting pass `false` so the
+  // admin's own remembered pick isn't overwritten by that edit.
+  persistSelection?: boolean;
 }
 
 interface ModelOption {
@@ -70,6 +73,7 @@ export function BuildLLMPopover({
   llmProviders,
   children,
   disabled = false,
+  persistSelection = true,
 }: BuildLLMPopoverProps) {
   const { user } = useUser();
   const userId = user?.id;
@@ -224,11 +228,11 @@ export function BuildLLMPopover({
         provider: option.providerKey,
         modelName: option.modelName,
       };
-      setStoredLlmSelection(userId, selection);
+      if (persistSelection) setStoredLlmSelection(userId, selection);
       onSelectionChange(selection);
       setIsOpen(false);
     },
-    [userId, onSelectionChange]
+    [userId, persistSelection, onSelectionChange]
   );
 
   const handlePopoverOpenChange = (open: boolean) => {

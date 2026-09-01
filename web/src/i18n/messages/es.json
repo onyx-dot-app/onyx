@@ -2521,7 +2521,7 @@
         "description": "No se pudieron cargar los usuarios. Prueba a actualizar la página."
       }
     },
-    "craftInstructions": {
+    "craftPreferences": {
       "baseInstructions": {
         "description": "El prompt integrado al que se añaden tus instrucciones. Las secciones dinámicas se rellenan en cada sesión.",
         "loadError": {
@@ -2529,9 +2529,34 @@
         },
         "title": "Ver las instrucciones base"
       },
+      "defaultModel": {
+        "clearButton": {
+          "label": "Borrar"
+        },
+        "help": {
+          "description": "Craft usa este modelo para las sesiones nuevas y las tareas programadas. Si no se define, Craft recurre al modelo de chat predeterminado del espacio de trabajo."
+        },
+        "inheritedTag": {
+          "label": "Predeterminado del espacio de trabajo"
+        },
+        "label": "Modelo predeterminado",
+        "placeholder": "Seleccionar modelo",
+        "resetError": {
+          "message": "No se pudo borrar el modelo predeterminado"
+        },
+        "resetSuccess": {
+          "message": "Modelo predeterminado de Craft borrado"
+        },
+        "saveError": {
+          "message": "No se pudo guardar el modelo predeterminado"
+        },
+        "saveSuccess": {
+          "message": "Modelo predeterminado de Craft guardado"
+        }
+      },
       "header": {
-        "description": "Instrucciones para todo el espacio de trabajo que sigue cada agente de Craft, además del comportamiento integrado de Craft.",
-        "title": "Instrucciones"
+        "description": "El modelo predeterminado y las instrucciones para todo el espacio de trabajo que sigue cada agente de Craft, además del comportamiento integrado de Craft.",
+        "title": "Preferencias"
       },
       "instructions": {
         "charCount": {
@@ -3967,13 +3992,13 @@
         "urlInvalid": "Debe ser una URL válida"
       },
       "wontPortConsentModal": {
-        "title": "Algunos conectores no se volverán a indexar",
+        "title": "{count, plural, one {Este conector se eliminará} other {Estos # conectores se eliminarán}}",
         "submit": "Eliminar y reindexar",
-        "description": "{count, plural, one {Este conector no se puede trasladar al nuevo índice. La reindexación lo elimina de Onyx, junto con los documentos que indexó:} other {Estos # conectores no se pueden trasladar al nuevo índice. La reindexación los elimina de Onyx, junto con los documentos que indexaron:}}",
+        "description": "{count, plural, one {La reindexación omite los conectores en pausa y no válidos, así que este no se trasladará al nuevo índice. Onyx lo elimina, junto con los documentos que indexó:} other {La reindexación omite los conectores en pausa y no válidos, así que estos # no se trasladarán al nuevo índice. Onyx los elimina, junto con los documentos que indexaron:}}",
         "connector": "{name} — {status}",
         "statusInvalid": "no válido",
         "statusPaused": "en pausa",
-        "restoreHint": "Para volver a buscar en esas fuentes, añade los conectores de nuevo cuando termine la reindexación."
+        "restoreHint": "Para conservar un conector, cancela aquí, reanúdalo o corrígelo y vuelve a reindexar: así se trasladará. Si no, añádelo de nuevo cuando termine la reindexación."
       }
     },
     "indexing": {
@@ -9030,8 +9055,8 @@
         "craftApps": {
           "label": "Apps"
         },
-        "craftInstructions": {
-          "label": "Instrucciones"
+        "craftPreferences": {
+          "label": "Preferencias"
         },
         "customAnalytics": {
           "label": "Analíticas personalizadas"

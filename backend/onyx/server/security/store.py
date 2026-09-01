@@ -187,7 +187,7 @@ def _apply_present_keys(
     """
     merged: dict[str, Any] = existing.model_dump()
     for name in present_keys:
-        merged[name] = getattr(patch, name, None)
+        merged[name] = getattr(patch, name, None)  # ods: ignore[getattr]
     return SecuritySettingsOverrides.model_validate(merged)
 
 

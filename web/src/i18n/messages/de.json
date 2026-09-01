@@ -2521,7 +2521,7 @@
         "description": "Die Benutzer konnten nicht geladen werden. Bitte laden Sie die Seite neu."
       }
     },
-    "craftInstructions": {
+    "craftPreferences": {
       "baseInstructions": {
         "description": "Der integrierte Prompt, an den Ihre Anweisungen angehängt werden. Dynamische Abschnitte werden pro Sitzung ausgefüllt.",
         "loadError": {
@@ -2529,9 +2529,34 @@
         },
         "title": "Basisanweisungen anzeigen"
       },
+      "defaultModel": {
+        "clearButton": {
+          "label": "Löschen"
+        },
+        "help": {
+          "description": "Craft verwendet dieses Modell für neue Sitzungen und geplante Aufgaben. Ohne Festlegung greift Craft auf das Standard-Chatmodell des Arbeitsbereichs zurück."
+        },
+        "inheritedTag": {
+          "label": "Arbeitsbereich-Standard"
+        },
+        "label": "Standardmodell",
+        "placeholder": "Modell auswählen",
+        "resetError": {
+          "message": "Das Standardmodell konnte nicht gelöscht werden"
+        },
+        "resetSuccess": {
+          "message": "Craft-Standardmodell gelöscht"
+        },
+        "saveError": {
+          "message": "Das Standardmodell konnte nicht gespeichert werden"
+        },
+        "saveSuccess": {
+          "message": "Craft-Standardmodell gespeichert"
+        }
+      },
       "header": {
-        "description": "Arbeitsbereichsweite Anweisungen, die jeder Craft-Agent zusätzlich zum integrierten Verhalten von Craft befolgt.",
-        "title": "Anweisungen"
+        "description": "Das Standardmodell und die arbeitsbereichsweiten Anweisungen, die jeder Craft-Agent zusätzlich zum integrierten Verhalten von Craft befolgt.",
+        "title": "Einstellungen"
       },
       "instructions": {
         "charCount": {
@@ -3967,13 +3992,13 @@
         "urlInvalid": "Muss eine gültige URL sein"
       },
       "wontPortConsentModal": {
-        "title": "Einige Konnektoren werden nicht neu indiziert",
+        "title": "{count, plural, one {Dieser Konnektor wird gelöscht} other {Diese # Konnektoren werden gelöscht}}",
         "submit": "Löschen & neu indizieren",
-        "description": "{count, plural, one {Dieser Konnektor kann nicht in den neuen Index übernommen werden. Beim Neuindizieren wird er zusammen mit den von ihm indizierten Dokumenten aus Onyx gelöscht:} other {Diese # Konnektoren können nicht in den neuen Index übernommen werden. Beim Neuindizieren werden sie zusammen mit den von ihnen indizierten Dokumenten aus Onyx gelöscht:}}",
+        "description": "{count, plural, one {Beim Neuindizieren werden pausierte und ungültige Konnektoren übersprungen. Dieser wird daher nicht in den neuen Index übernommen. Onyx löscht ihn zusammen mit den von ihm indizierten Dokumenten:} other {Beim Neuindizieren werden pausierte und ungültige Konnektoren übersprungen. Diese # werden daher nicht in den neuen Index übernommen. Onyx löscht sie zusammen mit den von ihnen indizierten Dokumenten:}}",
         "connector": "{name} — {status}",
         "statusInvalid": "ungültig",
         "statusPaused": "pausiert",
-        "restoreHint": "Um diese Quellen wieder zu durchsuchen, fügen Sie die Konnektoren nach Abschluss der Neuindizierung erneut hinzu."
+        "restoreHint": "Um einen Konnektor zu behalten, brechen Sie hier ab, setzen Sie ihn fort oder korrigieren Sie ihn und starten Sie die Neuindizierung erneut – dann wird er übernommen. Andernfalls fügen Sie ihn nach Abschluss der Neuindizierung erneut hinzu."
       }
     },
     "indexing": {
@@ -9030,8 +9055,8 @@
         "craftApps": {
           "label": "Apps"
         },
-        "craftInstructions": {
-          "label": "Anweisungen"
+        "craftPreferences": {
+          "label": "Einstellungen"
         },
         "customAnalytics": {
           "label": "Benutzerdefinierte Analysen"

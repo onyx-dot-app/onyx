@@ -8,7 +8,7 @@ import {
   SearchFullResponse,
 } from "@/lib/search/interfaces";
 import { classifyQuery, searchDocuments } from "@/ee/lib/search/svc";
-import useAppFocus from "@/hooks/useAppFocus";
+import { useAppPosition } from "@/lib/position/hooks";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
 import { useIsSearchModeAvailable } from "@/lib/settings/hooks";
@@ -27,7 +27,7 @@ interface QueryControllerProviderProps {
 export function QueryControllerProvider({
   children,
 }: QueryControllerProviderProps) {
-  const appFocus = useAppFocus();
+  const appPosition = useAppPosition();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const searchUiEnabled = useIsSearchModeAvailable();
   const { user } = useUser();
@@ -186,7 +186,7 @@ export function QueryControllerProvider({
       if (
         !businessTier ||
         !searchUiEnabled ||
-        !appFocus.isNewSession() ||
+        !appPosition.isNewSession() ||
         currentAppMode === "chat"
       ) {
         setState({ phase: "chat" });
@@ -237,7 +237,7 @@ export function QueryControllerProvider({
       }
     },
     [
-      appFocus,
+      appPosition,
       performClassification,
       performSearch,
       businessTier,
@@ -307,7 +307,7 @@ export function QueryControllerProvider({
   );
 
   // Sync state with navigation context
-  useEffect(reset, [appFocus, reset]);
+  useEffect(reset, [appPosition, reset]);
 
   return (
     <QueryControllerContext.Provider value={value}>

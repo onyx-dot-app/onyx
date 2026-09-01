@@ -45,7 +45,7 @@ import { useSettings } from "@/lib/settings/hooks";
 import useCCPairs from "@/hooks/useCCPairs";
 import { getSourceMetadata } from "@/lib/sources";
 import { QueryHistoryType, Settings, toSettings } from "@/lib/settings/types";
-import { useAvailableTools } from "@/hooks/useAvailableTools";
+import { useAvailableTools } from "@/lib/tools/hooks";
 import {
   SEARCH_TOOL_ID,
   IMAGE_GENERATION_TOOL_ID,

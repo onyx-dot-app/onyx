@@ -58,10 +58,10 @@ def tier_from_license_metadata(metadata: object | None) -> Tier:
     """
     if metadata is None:
         return Tier.COMMUNITY
-    status = getattr(metadata, "status", None)
+    status = getattr(metadata, "status", None)  # ods: ignore[getattr]
     if status == ApplicationStatus.GATED_ACCESS:
         return Tier.COMMUNITY
-    customer_tier = getattr(metadata, "customer_tier", None)
+    customer_tier = getattr(metadata, "customer_tier", None)  # ods: ignore[getattr]
     if not isinstance(customer_tier, CustomerTier):
         # None (legacy license) or unrecognized -> ENTERPRISE for back-compat.
         return Tier.ENTERPRISE
@@ -102,10 +102,10 @@ def _self_hosted_tier() -> Tier:
 def _extract_billing_state(
     billing: BillingInformation | SubscriptionStatusResponse,
 ) -> tuple[CustomerTier, datetime | None] | None:
-    customer_tier = getattr(billing, "customer_tier", None)
+    customer_tier = getattr(billing, "customer_tier", None)  # ods: ignore[getattr]
     if customer_tier is None:
         return None
-    trial_end = getattr(billing, "trial_end", None)
+    trial_end = getattr(billing, "trial_end", None)  # ods: ignore[getattr]
     if not isinstance(trial_end, datetime):
         trial_end = None
     elif trial_end.tzinfo is None or trial_end.tzinfo.utcoffset(trial_end) is None:

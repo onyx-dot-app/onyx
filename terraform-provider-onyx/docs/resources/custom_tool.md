@@ -91,7 +91,11 @@ resource "onyx_custom_tool" "legacy_lookup" {
 
 ### Optional
 
-- `custom_headers` (Map of String, Sensitive) Headers sent with every call the action makes, such as an API key. Cannot carry an `Authorization` header while `passthrough_auth` is enabled.
+> **NOTE**: [Write-only arguments](https://developer.hashicorp.com/terraform/language/resources/ephemeral#write-only-arguments) are supported in Terraform 1.11 and later.
+
+- `custom_headers` (Map of String, Sensitive) Headers sent with every call the action makes, such as an API key. Cannot carry an `Authorization` header while `passthrough_auth` is enabled. Onyx returns these values in full, so Terraform refreshes them and reports changes made elsewhere. Prefer `custom_headers_wo`, which keeps the value out of state entirely; the two cannot be set together.
+- `custom_headers_wo` (Map of String, Sensitive, [Write-only](https://developer.hashicorp.com/terraform/language/resources/ephemeral#write-only-arguments)) Headers sent with every call the action makes, held only in configuration. Terraform sends them on every apply and stores nothing, so they never reach state — and, unlike `custom_headers`, they are not refreshed from Onyx either, so a change made elsewhere goes unreported until the next apply overwrites it. Pair with `custom_headers_wo_version` to rotate them. Needs Terraform 1.11 or later.
+- `custom_headers_wo_version` (Number) Rotation counter for `custom_headers_wo`. Terraform never stores a write-only value and so cannot tell that the secret changed; raise this number to make the next apply send the current one. Do not derive it from the secret itself — unlike the secret, this number is kept in state.
 - `description` (String) What the action does.
 - `enabled` (Boolean) Whether assistants may call the action. A disabled action keeps its configuration but never runs.
 - `oauth_config_id` (String) Id of an OAuth configuration the action authenticates with. OAuth configurations are created in the admin panel; Terraform does not manage them yet.

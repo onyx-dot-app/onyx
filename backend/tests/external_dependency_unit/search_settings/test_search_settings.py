@@ -159,6 +159,15 @@ def baseline_search_settings(
 ) -> None:
     """Ensure a baseline PRESENT search settings row exists in the DB,
     which is required before set_new_search_settings can be called."""
+    # A freshly migrated database still holds the bootstrap FUTURE row, and
+    # set_new_search_settings refuses to re-index while any FUTURE row exists.
+    while (stale_future := get_secondary_search_settings(db_session)) is not None:
+        update_search_settings_status(
+            search_settings=stale_future,
+            new_status=IndexModelStatus.PAST,
+            db_session=db_session,
+        )
+
     baseline = _make_saved_search_settings(enable_contextual_rag=False)
     create_search_settings(
         search_settings=baseline,

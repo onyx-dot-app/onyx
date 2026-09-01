@@ -2521,7 +2521,20 @@
         "description": "加载用户失败。请尝试刷新页面。"
       }
     },
-    "craftInstructions": {
+    "craftPreferences": {
+      "defaultModel": {
+        "clearButton": { "label": "清除" },
+        "help": {
+          "description": "Craft 将此模型用于新会话和计划任务。未设置时，Craft 将使用工作区默认聊天模型。"
+        },
+        "inheritedTag": { "label": "工作区默认值" },
+        "label": "默认模型",
+        "placeholder": "选择模型",
+        "resetError": { "message": "清除默认模型失败" },
+        "resetSuccess": { "message": "已清除 Craft 默认模型" },
+        "saveError": { "message": "保存默认模型失败" },
+        "saveSuccess": { "message": "已保存 Craft 默认模型" }
+      },
       "baseInstructions": {
         "description": "您的指令会追加到这段内置提示词之后。动态部分会在每个会话中分别填充。",
         "loadError": {
@@ -2530,8 +2543,8 @@
         "title": "查看基础指令"
       },
       "header": {
-        "description": "在 Craft 内置行为之上，每个 Craft 智能体都会遵循的工作区级指令。",
-        "title": "指令"
+        "description": "在 Craft 内置行为之上，每个 Craft 智能体都会遵循的默认模型和工作区级指令。",
+        "title": "偏好设置"
       },
       "instructions": {
         "charCount": {
@@ -3967,13 +3980,13 @@
         "urlInvalid": "必须是有效的 URL"
       },
       "wontPortConsentModal": {
-        "title": "部分连接器不会被重新索引",
+        "title": "{count, plural, one {该连接器将被删除} other {这 # 个连接器将被删除}}",
         "submit": "删除并重新索引",
-        "description": "{count, plural, one {该连接器无法迁移到新索引。重新索引会将它以及它已索引的文档一并从 Onyx 中删除：} other {这 # 个连接器无法迁移到新索引。重新索引会将它们以及它们已索引的文档一并从 Onyx 中删除：}}",
+        "description": "{count, plural, one {重新索引会跳过已暂停和无效的连接器，因此该连接器不会迁移到新索引。Onyx 会将它以及它已索引的文档一并删除：} other {重新索引会跳过已暂停和无效的连接器，因此这 # 个不会迁移到新索引。Onyx 会将它们以及它们已索引的文档一并删除：}}",
         "connector": "{name} — {status}",
         "statusInvalid": "无效",
         "statusPaused": "已暂停",
-        "restoreHint": "如需再次搜索这些来源，请在重新索引完成后重新添加这些连接器。"
+        "restoreHint": "如需保留某个连接器，请在此取消，先恢复或修复它，然后重新索引，它就会被迁移过去。否则请在重新索引完成后重新添加。"
       }
     },
     "indexing": {
@@ -9030,8 +9043,8 @@
         "craftApps": {
           "label": "应用"
         },
-        "craftInstructions": {
-          "label": "指令"
+        "craftPreferences": {
+          "label": "偏好设置"
         },
         "customAnalytics": {
           "label": "自定义分析"

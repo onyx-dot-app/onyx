@@ -158,6 +158,13 @@ describe("Custom LLM Provider Configuration Workflow", () => {
       );
     });
 
+    // Custom providers must never be created in auto mode — auto mode would
+    // merge the recommended models for matching providers (e.g. "openai").
+    const createCall = fetchSpy.mock.calls.find(
+      ([url]) => url === "/api/admin/llm/provider?is_creation=true"
+    );
+    expect(JSON.parse(createCall![1].body as string).is_auto_mode).toBe(false);
+
     // Verify success toast
     await waitFor(() => {
       expect(toast.success).toHaveBeenCalledWith(
@@ -253,7 +260,9 @@ describe("Custom LLM Provider Configuration Workflow", () => {
       ],
       custom_config: {},
       is_public: true,
-      is_auto_mode: false,
+      // Simulates a provider saved before custom providers were excluded from
+      // auto mode; the next update must flip it back to false.
+      is_auto_mode: true,
       groups: [],
       personas: [],
       deployment_name: null,
@@ -289,6 +298,12 @@ describe("Custom LLM Provider Configuration Workflow", () => {
         })
       );
     });
+
+    // The update must force auto mode off, repairing the stored provider.
+    const updateCall = fetchSpy.mock.calls.find(
+      ([url]) => url === "/api/admin/llm/provider"
+    );
+    expect(JSON.parse(updateCall![1].body as string).is_auto_mode).toBe(false);
 
     // Credential test should NOT have been called when only model name changed
     expect(fetchSpy).not.toHaveBeenCalledWith(

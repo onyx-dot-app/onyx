@@ -1,7 +1,7 @@
 import json
 import os
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -12,26 +12,13 @@ from onyx.connectors.highspot.connector import HighspotConnector
 from onyx.connectors.models import Document, HierarchyNode
 from tests.utils.secret_names import TestSecret
 
-# Since 2026-08-10 the Highspot API answers 403 for valid credentials, so no test
-# here can pass. `-x` makes the failure abort the whole connector suite, so mark
-# them xfail until we know the cause. Remove the mark once the API works again.
-pytestmark = [
-    pytest.mark.secrets(
-        TestSecret.HIGHSPOT_KEY,
-        TestSecret.HIGHSPOT_SECRET,
-    ),
-    pytest.mark.xfail(
-        reason=(
-            "Highspot API returns 403 for valid credentials since 2026-08-10. "
-            "Case raised with Highspot to confirm the cause."
-        ),
-        strict=False,
-    ),
-]
+pytestmark = pytest.mark.secrets(
+    TestSecret.HIGHSPOT_KEY,
+    TestSecret.HIGHSPOT_SECRET,
+)
 
 
 def load_test_data(file_name: str = "test_highspot_data.json") -> dict:
-    """Load test data from JSON file."""
     current_dir = Path(__file__).parent
     with open(current_dir / file_name, "r") as f:
         return json.load(f)
@@ -41,10 +28,11 @@ def load_test_data(file_name: str = "test_highspot_data.json") -> dict:
 def highspot_connector(
     test_secrets: dict[TestSecret, str],
 ) -> HighspotConnector:
-    """Create a Highspot connector with credentials from environment variables."""
     connector = HighspotConnector(
-        spot_names=["Test content"],  # Use specific spot name instead of empty list
-        batch_size=10,  # Smaller batch size for testing
+        # This shared workspace has 16 spots; scoping to just this one keeps the
+        # test fast and deterministic instead of scanning everything live.
+        spot_names=["Test content"],
+        batch_size=10,
     )
     connector.load_credentials(
         {
@@ -66,13 +54,11 @@ def test_highspot_connector_basic(
     mock_get_api_key: MagicMock,  # noqa: ARG001
     highspot_connector: HighspotConnector,
 ) -> None:
-    """Test basic functionality of the Highspot connector."""
     all_docs: list[Document] = []
     test_data = load_test_data()
     target_test_doc_id = test_data.get("target_doc_id")
     target_test_doc: Document | None = None
 
-    # Test loading documents
     for doc_batch in highspot_connector.poll_source(0, time.time()):
         for doc in doc_batch:
             if isinstance(doc, HierarchyNode):
@@ -81,10 +67,8 @@ def test_highspot_connector_basic(
             if doc.id == f"HIGHSPOT_{target_test_doc_id}":
                 target_test_doc = doc
 
-    # Verify documents were loaded
     assert len(all_docs) > 0
 
-    # If we have a specific test document ID, validate it
     if target_test_doc_id and target_test_doc is not None:
         assert target_test_doc.semantic_identifier == test_data.get(
             "semantic_identifier"
@@ -95,7 +79,7 @@ def test_highspot_connector_basic(
         assert len(target_test_doc.sections) == 1
         section = target_test_doc.sections[0]
         assert section.link is not None
-        # Only check if content exists, as exact content might change
+        # Don't assert exact text: this is live content that can change independent of this test.
         assert section.text is not None
         assert len(section.text) > 0
 
@@ -108,32 +92,22 @@ def test_highspot_connector_slim(
     mock_get_api_key: MagicMock,  # noqa: ARG001
     highspot_connector: HighspotConnector,
 ) -> None:
-    """Test slim document retrieval."""
-    # Get all doc IDs from the full connector
     all_full_doc_ids = set()
     for doc_batch in highspot_connector.load_from_state():
         all_full_doc_ids.update(
             [doc.id for doc in doc_batch if not isinstance(doc, HierarchyNode)]
         )
 
-    # Get all doc IDs from the slim connector
     all_slim_doc_ids = set()
     for slim_doc_batch in highspot_connector.retrieve_all_slim_docs_perm_sync():
         all_slim_doc_ids.update(
             [doc.id for doc in slim_doc_batch if not isinstance(doc, HierarchyNode)]
         )
 
-    # The set of full doc IDs should be a subset of the slim doc IDs
     assert all_full_doc_ids.issubset(all_slim_doc_ids)
-    # Make sure we actually got some documents
     assert len(all_slim_doc_ids) > 0
 
 
-"""This test might fail because of how Highspot handles changes to the document's
-"updated at" property. It is marked as expected to fail until we can confirm the behavior."""
-
-
-@pytest.mark.xfail(reason="Highspot is not returning updated documents as expected.")
 @patch(
     "onyx.file_processing.extract_file_text.get_unstructured_api_key",
     return_value=None,
@@ -142,21 +116,21 @@ def test_highspot_connector_poll_source(
     mock_get_api_key: MagicMock,  # noqa: ARG001
     highspot_connector: HighspotConnector,
 ) -> None:
-    """Test poll_source functionality with date range filtering."""
-    # Define date range: April 3, 2025 to April 4, 2025
-    start_date = datetime(2025, 4, 3, 0, 0, 0)
-    end_date = datetime(2025, 4, 4, 23, 59, 59)
-
-    # Convert to seconds since Unix epoch
-    start_time = int(time.mktime(start_date.timetuple()))
-    end_time = int(time.mktime(end_date.timetuple()))
-
-    # Load test data for assertions
     test_data = load_test_data()
     poll_source_data = test_data.get("poll_source", {})
     target_doc_id = poll_source_data.get("target_doc_id")
 
-    # Call poll_source with date range
+    # Highspot bumps `date_updated` on this item independently of content edits
+    # (observed jumping from April 2025 to January 2026 with no changes made), so
+    # a fixed historical window eventually excludes it. Anchor the window to the
+    # item's current value instead.
+    target_item = highspot_connector.client.get_item(target_doc_id)
+    updated_at = datetime.fromisoformat(
+        target_item["date_updated"].replace("Z", "+00:00")
+    )
+    start_time = (updated_at - timedelta(days=1)).timestamp()
+    end_time = (updated_at + timedelta(days=1)).timestamp()
+
     all_docs: list[Document] = []
     target_doc: Document | None = None
 
@@ -168,19 +142,21 @@ def test_highspot_connector_poll_source(
             if doc.id == f"HIGHSPOT_{target_doc_id}":
                 target_doc = doc
 
-    # Verify documents were loaded
     assert len(all_docs) > 0
 
-    # Verify the specific test document was found and has correct properties
     assert target_doc is not None
     assert target_doc.semantic_identifier == poll_source_data.get("semantic_identifier")
     assert target_doc.source == DocumentSource.HIGHSPOT
     assert target_doc.metadata is not None
 
-    # Verify sections
     assert len(target_doc.sections) == 1
     section = target_doc.sections[0]
-    assert section.link == poll_source_data.get("link")
+    # Highspot's link domain is tenant-specific (this sandbox uses
+    # sandbox-onyx.highspot.com), so compare against the item's own `url` fetched
+    # above instead of a hardcoded domain that would go stale on its own.
+    assert section.link == target_item.get(
+        "url", f"https://www.highspot.com/items/{target_doc_id}"
+    )
     assert section.text is not None
     assert len(section.text) > 0
 
@@ -188,5 +164,4 @@ def test_highspot_connector_poll_source(
 def test_highspot_connector_validate_credentials(
     highspot_connector: HighspotConnector,
 ) -> None:
-    """Test credential validation."""
     assert highspot_connector.validate_credentials() is True
