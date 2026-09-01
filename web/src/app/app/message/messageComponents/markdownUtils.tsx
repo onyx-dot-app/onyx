@@ -49,16 +49,16 @@ export function ScrollableTable({
 
     const check = () => {
       const overflows = el.scrollWidth > el.clientWidth;
-      // RTL scrollers run scrollLeft from 0 down to negative values, so
-      // normalize to distance from the physical left edge.
+      // Logical distance from the scroll start. RTL scrollLeft runs from
+      // 0 down to negative, and the CSS paints on inline edges to match.
       const maxScroll = el.scrollWidth - el.clientWidth;
-      const fromLeft =
+      const fromStart =
         getComputedStyle(el).direction === "rtl"
-          ? maxScroll + el.scrollLeft
+          ? -el.scrollLeft
           : el.scrollLeft;
-      const atEnd = fromLeft >= maxScroll - 2;
+      const atEnd = fromStart >= maxScroll - 2;
       wrap.dataset.overflows = overflows && !atEnd ? "true" : "false";
-      el.dataset.scrolled = fromLeft > 0 ? "true" : "false";
+      el.dataset.scrolled = fromStart > 0 ? "true" : "false";
     };
 
     check();

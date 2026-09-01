@@ -31,17 +31,24 @@ const RTL_SCRIPT =
   /[\p{Script=Arabic}\p{Script=Hebrew}\p{Script=Syriac}\p{Script=Thaana}\p{Script=Nko}\p{Script=Samaritan}\p{Script=Mandaic}\p{Script=Adlam}\p{Script=Hanifi_Rohingya}\p{Script=Yezidi}\p{Script=Phoenician}\p{Script=Imperial_Aramaic}\p{Script=Old_South_Arabian}\p{Script=Old_North_Arabian}\p{Script=Avestan}\p{Script=Sogdian}\p{Script=Old_Sogdian}\p{Script=Manichaean}\p{Script=Psalter_Pahlavi}\p{Script=Inscriptional_Pahlavi}\p{Script=Inscriptional_Parthian}\p{Script=Nabataean}\p{Script=Palmyrene}\p{Script=Hatran}\p{Script=Elymaic}\p{Script=Lydian}\p{Script=Kharoshthi}\p{Script=Old_Hungarian}\p{Script=Old_Turkic}\p{Script=Cypriot}\p{Script=Mende_Kikakui}\p{Script=Meroitic_Cursive}\p{Script=Meroitic_Hieroglyphs}\p{Script=Chorasmian}\p{Script=Old_Uyghur}]/u;
 const ANY_LETTER = /\p{L}/u;
 
+/** First-strong direction of plain text, or null when no letter decides. */
+export function firstStrongTextDir(value: string): "ltr" | "rtl" | null {
+  for (const char of value) {
+    if (RTL_MARK.test(char)) return "rtl";
+    if (LTR_MARK.test(char)) return "ltr";
+    // Only letters are strong. Arabic-Indic digits sit in Script=Arabic
+    // but are directionally weak, so they must not decide direction.
+    if (!ANY_LETTER.test(char)) continue;
+    return RTL_SCRIPT.test(char) ? "rtl" : "ltr";
+  }
+  return null;
+}
+
 function firstStrongDir(nodes: ElementContent[]): "ltr" | "rtl" | null {
   for (const node of nodes) {
     if (node.type === "text") {
-      for (const char of node.value) {
-        if (RTL_MARK.test(char)) return "rtl";
-        if (LTR_MARK.test(char)) return "ltr";
-        // Only letters are strong. Arabic-Indic digits sit in Script=Arabic
-        // but are directionally weak, so they must not decide direction.
-        if (!ANY_LETTER.test(char)) continue;
-        return RTL_SCRIPT.test(char) ? "rtl" : "ltr";
-      }
+      const dir = firstStrongTextDir(node.value);
+      if (dir) return dir;
     } else if (node.type === "element" && !OPAQUE_TAGS.has(node.tagName)) {
       const dir = firstStrongDir(node.children);
       if (dir) return dir;
