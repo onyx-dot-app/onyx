@@ -269,7 +269,7 @@ function Header() {
         showErrorNotification(t("exportFailed.message"));
       }
     },
-    [currentChatSession]
+    [currentChatSession, t]
   );
 
   useEffect(() => {
