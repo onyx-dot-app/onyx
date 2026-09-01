@@ -818,7 +818,7 @@ def create_user(
         dal.update_user(
             existing_user,
             is_active=user_resource.active,
-            account_type=AccountType.STANDARD if promote else None,
+            promote_to_standard=promote,
             **({"personal_name": personal_name} if personal_name else {}),
         )
 
@@ -969,7 +969,7 @@ def replace_user(
         email=new_email,
         is_active=user_resource.active,
         personal_name=personal_name,
-        account_type=AccountType.STANDARD if promote else None,
+        promote_to_standard=promote,
     )
     if error:
         return error
@@ -1107,7 +1107,7 @@ def patch_user(
         email=new_email,
         is_active=patched.active if patched.active != user.is_active else None,
         personal_name=personal_name,
-        account_type=AccountType.STANDARD if promote else None,
+        promote_to_standard=promote,
     )
     if error:
         return error
