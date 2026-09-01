@@ -212,6 +212,8 @@ def trigger_capability_check(
             )
         return CapabilityReportSnapshot.from_row(standing)
     snapshot = CapabilityReportSnapshot.from_row(row)
+    run_id = row.run_id
+    assert run_id is not None, "The RUNNING mark always stamps a run_id."
     # Commit before enqueueing so the worker can only observe the RUNNING mark.
     db_session.commit()
     try:
@@ -222,6 +224,9 @@ def trigger_capability_check(
                 connector_id=request.connector_id,
                 connector_specific_config=request.connector_specific_config,
                 tenant_id=get_current_tenant_id(),
+                # The attempt's fence: the task's terminal writes land only
+                # while this id still owns the row.
+                run_id=str(run_id),
             ),
             queue=OnyxCeleryQueues.CAPABILITY_CHECKS,
             priority=OnyxCeleryPriority.HIGH,
@@ -244,6 +249,7 @@ def trigger_capability_check(
             db_session,
             credential_id=credential_id,
             connector_id=request.connector_id,
+            run_id=run_id,
         )
         db_session.commit()
         raise OnyxError(

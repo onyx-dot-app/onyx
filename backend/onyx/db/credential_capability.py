@@ -8,17 +8,31 @@ resolve to one row instead of racing an insert.
 Two writer classes share these rows, with fixed precedence: granular named-check
 runs write through ``upsert_completed_capability_report`` and replace whatever
 is stored (latest-only truth); the coarse blocking-validation recorder writes
-through the ``unless_granular`` variant and never replaces a granular report.
-``mark_capability_report_running`` and ``mark_stale_capability_runs_failed``
-belong to the check-runner lifecycle: the mark flags a run in flight while the
-last completed report stays readable, and the sweep retires marks that outlived
-their run ceiling to FAILED_TO_RUN.
+through the ``unless_granular`` variant and never replaces a granular report or
+disturbs a run in flight. ``mark_capability_report_running`` and
+``mark_stale_capability_runs_failed`` belong to the check-runner lifecycle: the
+mark claims the row for a fresh run attempt (``run_id``) while the last
+completed report stays readable, and the sweep retires marks that outlived
+their run ceiling to FAILED_TO_RUN. The attempt's terminal writes are fenced on
+``run_id``, so a superseded attempt can never mislabel its successor's row; the
+sweep preserves ``run_id`` when retiring, so the same attempt's late completion
+still lands (the self-heal for a run that was merely slow).
 """
 
 from datetime import datetime, timedelta
 from typing import Any, TypedDict
+from uuid import UUID, uuid4
 
-from sqlalchemy import ColumnElement, func, literal_column, or_, select, text, update
+from sqlalchemy import (
+    ColumnElement,
+    and_,
+    func,
+    literal_column,
+    or_,
+    select,
+    text,
+    update,
+)
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -47,7 +61,15 @@ class _CapabilityReportValues(TypedDict, total=False):
     connector_config_hash: str | None
     run_status: CapabilityReportRunStatus
     run_started_at: ColumnElement[datetime]
+    run_id: UUID | None
     time_updated: ColumnElement[datetime]
+
+
+def _connector_scope_clause(connector_id: int | None) -> ColumnElement[bool]:
+    """WHERE clause selecting the scope's row within one credential."""
+    if connector_id is None:
+        return CredentialCapabilityReportRow.connector_id.is_(None)
+    return CredentialCapabilityReportRow.connector_id == connector_id
 
 
 def _scope_conflict_kwargs(connector_id: int | None) -> dict[str, Any]:
@@ -134,18 +156,54 @@ def upsert_completed_capability_report(
     trigger: CapabilityCheckTrigger,
     report: CredentialCapabilityReport,
     connector_config_hash: str | None = None,
-) -> CredentialCapabilityReportRow:
-    """Writes a finished report onto the scope's row (latest-only replace)."""
-    row = _upsert_row(
-        db_session,
-        credential_id=credential_id,
-        connector_id=connector_id,
-        values=_completed_values(
-            connector_id, source, trigger, report, connector_config_hash
-        ),
+    run_id: UUID | None = None,
+) -> CredentialCapabilityReportRow | None:
+    """Writes a finished report onto the scope's row (latest-only replace).
+
+    With ``run_id`` the write is fenced to the attempt that claimed the row: it
+    compiles to a conditional UPDATE (never an insert) and lands only while the
+    stored ``run_id`` still matches, so a superseded attempt's completion is
+    discarded instead of mislabeling its successor's row. Retirement preserves
+    ``run_id``, so the same attempt's late completion still lands (the
+    self-heal for a run that was merely slow). Returns None when the fence
+    discarded the write.
+
+    Without ``run_id`` (tasks enqueued before the fence deployed) the write is
+    unfenced and always returns the row.
+    """
+    values = _completed_values(
+        connector_id, source, trigger, report, connector_config_hash
     )
-    assert row is not None, "An unguarded upsert always returns the row."
-    return row
+    if run_id is None:
+        row = _upsert_row(
+            db_session,
+            credential_id=credential_id,
+            connector_id=connector_id,
+            values=values,
+        )
+        assert row is not None, "An unguarded upsert always returns the row."
+        return row
+    stamped: _CapabilityReportValues = {
+        **values,
+        # Mirrors ``_upsert_row``: model ``onupdate`` does not apply here.
+        "time_updated": func.statement_timestamp(),
+    }
+    stmt = (
+        update(CredentialCapabilityReportRow)
+        .where(
+            CredentialCapabilityReportRow.credential_id == credential_id,
+            _connector_scope_clause(connector_id),
+            # The fence. A NULL stored ``run_id`` (recorder write, legacy row)
+            # never matches: an attempt that lost the row cannot write back.
+            CredentialCapabilityReportRow.run_id == run_id,
+        )
+        .values(**stamped)
+        .returning(CredentialCapabilityReportRow)
+    )
+    # ``populate_existing``: see ``_upsert_row``.
+    return db_session.scalars(
+        stmt, execution_options={"populate_existing": True}
+    ).one_or_none()
 
 
 def upsert_completed_capability_report_unless_granular(
@@ -164,18 +222,29 @@ def upsert_completed_capability_report_unless_granular(
     CONFLICT DO UPDATE ... WHERE <stored report is not granular>``. A
     read-then-decide here would race a concurrent granular write; Postgres
     evaluates the guard against the stored row atomically, so a granular report
-    can never be replaced by this coarse write (the no-clobber rule). Returns
-    None when the stored report was preserved.
+    can never be replaced by this coarse write (the no-clobber rule). A row
+    marked RUNNING is likewise left alone: this coarse signal is a strict
+    subset of the granular run in flight, and overwriting the mark would strand
+    that attempt's fenced completion. Returns None when the stored row was
+    preserved.
     """
     return _upsert_row(
         db_session,
         credential_id=credential_id,
         connector_id=connector_id,
-        values=_completed_values(
-            connector_id, source, trigger, report, connector_config_hash
-        ),
+        values={
+            **_completed_values(
+                connector_id, source, trigger, report, connector_config_hash
+            ),
+            # No run attempt owns a recorder write.
+            "run_id": None,
+        },
         # The "unless": evaluated by Postgres inside the upsert, not here.
-        update_where=_STORED_REPORT_IS_NOT_GRANULAR,
+        update_where=and_(
+            _STORED_REPORT_IS_NOT_GRANULAR,
+            CredentialCapabilityReportRow.run_status
+            != CapabilityReportRunStatus.RUNNING,
+        ),
     )
 
 
@@ -195,8 +264,9 @@ def mark_capability_report_running(
     blocks the mark only while it is RUNNING with a start time newer than
     ``active_within`` ago, evaluated atomically by Postgres so concurrent
     triggers cannot double-mark. A RUNNING mark older than the bound is a
-    crashed or expired run and is replaced. Returns None when an active run
-    blocked the mark.
+    crashed or expired run and is replaced. The mark stamps a fresh ``run_id``
+    claiming the row for this attempt; the attempt's terminal writes are fenced
+    on it. Returns None when an active run blocked the mark.
     """
     return _upsert_row(
         db_session,
@@ -209,6 +279,7 @@ def mark_capability_report_running(
             # Statement time, not ``now()``: the run starts now, not when the
             # caller's transaction began.
             "run_started_at": func.statement_timestamp(),
+            "run_id": uuid4(),
         },
         update_where=or_(
             CredentialCapabilityReportRow.run_status
@@ -227,26 +298,27 @@ def mark_capability_run_failed(
     *,
     credential_id: int,
     connector_id: int | None,
+    run_id: UUID | None = None,
 ) -> None:
     """Retires the scope's RUNNING mark to FAILED_TO_RUN; the report survives.
 
     For runs that verifiably will not happen (the trigger endpoint's failed
-    enqueue): FAILED_TO_RUN is the truth pollers should read, and it does not
-    block re-marking, so the scope stays immediately re-triggerable. Guarded on
-    RUNNING so a completion that raced this write is never clobbered.
+    enqueue) and for a failing task's own exit write: FAILED_TO_RUN is the
+    truth pollers should read, and it does not block re-marking, so the scope
+    stays immediately re-triggerable. Guarded on RUNNING so a completion that
+    raced this write is never clobbered; with ``run_id`` also fenced to the
+    caller's attempt, so a superseded attempt cannot fail-mark its successor.
     """
+    where = [
+        CredentialCapabilityReportRow.credential_id == credential_id,
+        _connector_scope_clause(connector_id),
+        CredentialCapabilityReportRow.run_status == CapabilityReportRunStatus.RUNNING,
+    ]
+    if run_id is not None:
+        where.append(CredentialCapabilityReportRow.run_id == run_id)
     stmt = (
         update(CredentialCapabilityReportRow)
-        .where(
-            CredentialCapabilityReportRow.credential_id == credential_id,
-            (
-                CredentialCapabilityReportRow.connector_id.is_(None)
-                if connector_id is None
-                else CredentialCapabilityReportRow.connector_id == connector_id
-            ),
-            CredentialCapabilityReportRow.run_status
-            == CapabilityReportRunStatus.RUNNING,
-        )
+        .where(*where)
         .values(
             run_status=CapabilityReportRunStatus.FAILED_TO_RUN,
             # Model ``onupdate`` does not apply to bulk updates.
@@ -281,9 +353,11 @@ def mark_stale_capability_runs_failed(
     FAILED_TO_RUN.
 
     Only the lifecycle fields change; the stored report (the last completed
-    run) stays readable. The cutoff is evaluated by Postgres against statement
-    time, mirroring the mark's guard, so a scope re-marked concurrently is
-    never retired. Returns the number of rows retired.
+    run) stays readable, and ``run_id`` is preserved so a retired attempt that
+    was merely slow can still land its fenced completion (the self-heal). The
+    cutoff is evaluated by Postgres against statement time, mirroring the
+    mark's guard, so a scope re-marked concurrently is never retired. Returns
+    the number of rows retired.
     """
     stmt = (
         update(CredentialCapabilityReportRow)

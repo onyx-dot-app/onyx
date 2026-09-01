@@ -9,6 +9,7 @@ sweep to retire once the mark outlives its source's run ceiling.
 """
 
 from typing import Any
+from uuid import UUID
 
 from celery import Task, shared_task
 
@@ -43,8 +44,17 @@ def run_capability_checks_task(
     connector_id: int | None,
     connector_specific_config: dict[str, Any] | None,
     tenant_id: str | None,
+    # Serialized UUID; None only for tasks enqueued before the fence deployed,
+    # which write unfenced (the legacy semantics they were enqueued under).
+    run_id: str | None = None,
 ) -> None:
-    """Runs every capability check for the scope and stores the report."""
+    """Runs every capability check for the scope and stores the report.
+
+    Terminal writes are fenced on ``run_id``: if this attempt was retired and
+    the scope re-triggered, both the completion and the failure write no-op
+    instead of mislabeling the successor's row.
+    """
+    parsed_run_id = UUID(run_id) if run_id is not None else None
     # Setup reads use a short-lived session: the probes below can run for
     # hours, and an open transaction would hold its connection and read locks
     # for the whole run. ``credential`` stays readable after the close because
@@ -81,7 +91,7 @@ def run_capability_checks_task(
             trigger=CapabilityCheckTrigger.MANUAL,
         )
         with get_session_with_current_tenant() as db_session:
-            upsert_completed_capability_report(
+            completed_row = upsert_completed_capability_report(
                 db_session,
                 credential_id=credential_id,
                 connector_id=connector_id,
@@ -93,9 +103,16 @@ def run_capability_checks_task(
                     if connector_id is not None
                     else None
                 ),
+                run_id=parsed_run_id,
             )
             # The accessors leave the transaction to the caller.
             db_session.commit()
+        if completed_row is None:
+            task_logger.info(
+                f"Discarded a superseded capability run's completion for "
+                f"credential {credential_id}, connector {connector_id} "
+                f"(run {run_id}, tenant {tenant_id})."
+            )
     except Exception:
         # The worker is alive, so record the failure now: without this the
         # scope would read RUNNING until the sweep's staleness window expires.
@@ -105,6 +122,7 @@ def run_capability_checks_task(
                 db_session,
                 credential_id=credential_id,
                 connector_id=connector_id,
+                run_id=parsed_run_id,
             )
             db_session.commit()
         raise
