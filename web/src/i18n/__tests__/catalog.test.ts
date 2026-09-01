@@ -128,7 +128,9 @@ function canonicalShape(elements: MessageFormatElement[]): string {
         break;
     }
   }
-  return Array.from(new Set(parts)).sort().join("|");
+  // Multiplicity matters: a repeated argument or tag must repeat in the
+  // translation too, so siblings sort without dedup.
+  return parts.sort().join("|");
 }
 
 const flatEnglish = flatten(en as MessageTree);
