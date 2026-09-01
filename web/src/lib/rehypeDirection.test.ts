@@ -75,6 +75,15 @@ describe("rehypeDirection", () => {
     expect(dirOf(p)).toBe("rtl");
   });
 
+  it("treats strong RTL punctuation and NKo digits as strong", () => {
+    const q = el("p", [txt("\u061F Error")]);
+    run(q);
+    expect(dirOf(q)).toBe("rtl");
+    const nko = el("p", [txt("\u07C1 x")]);
+    run(nko);
+    expect(dirOf(nko)).toBe("rtl");
+  });
+
   it("honors an LRM before any letter", () => {
     const p = el("p", [txt("\u200E\u0645\u0631\u062d\u0628\u0627")]);
     run(p);
