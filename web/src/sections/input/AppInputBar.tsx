@@ -24,6 +24,7 @@ import { useDraft, draftKey } from "@/hooks/useDraft";
 import { getPastedFilesIfNoText } from "@/lib/clipboard";
 import PasteTilePopover from "@/sections/input/PasteTilePopover";
 import { cn } from "@opal/utils";
+import { firstStrongTextDir } from "@/lib/rehypeDirection";
 import { Disabled } from "@opal/core";
 import { useUser } from "@/providers/UserProvider";
 import { useSettings } from "@/lib/settings/hooks";
@@ -212,6 +213,17 @@ const AppInputBar = React.memo(
     const appMode = state.phase === "idle" ? state.appMode : undefined;
     const isSearchMode =
       (isNewSession && appMode === "search") || isSearchActive;
+
+    const activePlaceholder =
+      queuedMessages.length > 0 && !message
+        ? t("appInputBar.input.queuedPlaceholder")
+        : isRecording
+          ? t("appInputBar.input.listeningPlaceholder")
+          : isVoicePlaybackActive
+            ? t("appInputBar.input.speakingPlaceholder")
+            : isSearchMode
+              ? t("appInputBar.input.searchPlaceholder")
+              : t("appInputBar.input.placeholder");
 
     // Keyed by chat session id, or "new" until the session is created.
     const chatSessionId = appPosition.chat();
@@ -895,6 +907,14 @@ const AppInputBar = React.memo(
                       role="textbox"
                       aria-label={t("appInputBar.input.ariaLabel")}
                       contentEditable={!disabled}
+                      // Direction follows what the user types. While empty
+                      // it follows the placeholder so its punctuation sits
+                      // on the correct side in every locale.
+                      dir={
+                        message
+                          ? "auto"
+                          : (firstStrongTextDir(activePlaceholder) ?? "auto")
+                      }
                       suppressContentEditableWarning
                       onPaste={handlePaste}
                       onCopy={handleCopy}
@@ -915,17 +935,7 @@ const AppInputBar = React.memo(
                       aria-multiline={true}
                       aria-disabled={disabled}
                       aria-placeholder={t("appInputBar.input.placeholder")}
-                      data-placeholder={
-                        queuedMessages.length > 0 && !message
-                          ? t("appInputBar.input.queuedPlaceholder")
-                          : isRecording
-                            ? t("appInputBar.input.listeningPlaceholder")
-                            : isVoicePlaybackActive
-                              ? t("appInputBar.input.speakingPlaceholder")
-                              : isSearchMode
-                                ? t("appInputBar.input.searchPlaceholder")
-                                : t("appInputBar.input.placeholder")
-                      }
+                      data-placeholder={activePlaceholder}
                       data-empty={!message ? "" : undefined}
                       onKeyDown={(event) => {
                         if (
