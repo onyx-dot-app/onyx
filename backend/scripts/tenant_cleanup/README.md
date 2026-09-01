@@ -1,62 +1,79 @@
 ## How to Tenant Cleanup
 
-Three main steps.
+Three steps. Every script talks to the databases through `kubectl exec` on running pods. There is
+no bastion host, so no SSH keys and no environment variables are necessary.
 
-### Build a list of tenants to cleanup
+Read [QUICK_START_NO_BASTION.md](./QUICK_START_NO_BASTION.md) before step 2 or step 3. It records
+the operational limits. The most important one: the database writer is the constraint, not the
+pods.
 
-Use the `analyze_current_tenants.py` script:
+### Before you start
 
-```
-PYTHONPATH=. \
-CONTROL_PLANE_RDS_HOST=<PROD_CONTROL_PLANE_RDS_HOST> \
-CONTROL_PLANE_RDS_PASSWORD=<PROD_CONTROL_PLANE_RDS_PASSWORD> \
-BASTION_HOST=<BASTION_IP_ADDRESS> \
-PEM_FILE_LOCATION=<PEM_FILE_LOCATION_WHICH_GIVES_ACCESS_TO_BASTION> \
-python scripts/tenant_cleanup/analyze_current_tenants.py
-```
-
-This will create a `.csv` called something like `gated_tenants_no_query_3mo_20251012_161102.csv` in the `backend` dir.
-Despite the legacy filename, tenants are eligible only when both their latest chat query and latest
-Craft session activity are at least three months old. Cached tenant data from before Craft activity
-was collected is ignored automatically.
-
-
-### Delete all documents within these tenants
-
-Use the `mark_connectors_for_deletion.py` script:
+Pod discovery runs `kubectl get po` without `-n`. Each context must therefore set the namespace
+that holds its pods. If the namespace is wrong, the script reports that it found no pod.
 
 ```
-PYTHONPATH=. \
-CONTROL_PLANE_RDS_HOST=<PROD_CONTROL_PLANE_RDS_HOST> \
-CONTROL_PLANE_RDS_PASSWORD=<PROD_CONTROL_PLANE_RDS_PASSWORD> \
-BASTION_HOST=<BASTION_IP_ADDRESS> \
-PEM_FILE_LOCATION=<PEM_FILE_LOCATION_WHICH_GIVES_ACCESS_TO_BASTION> \
-python scripts/tenant_cleanup/mark_connectors_for_deletion.py --csv gated_tenants_no_query_3mo_<your_datetime>.csv --force
+kubectl config set-context <data_plane_context> --namespace=<data_plane_namespace>
+kubectl config set-context <control_plane_context> --namespace=<control_plane_namespace>
 ```
 
-Replace `gated_tenants_no_query_3mo_<your_datetime>.csv` with the CSV name from step (1).
-
-This will update the data plane database to 1/ cancel all index attempts 2/ mark all connectors as up for deletion.
-We now need to wait for the deletion to run.
-
-It's done this way to re-use as much of the existing code + take advantage of existing infra for parallelized, long running jobs. These 
-deletion jobs can take a LONG time (>6hrs), so having it performed syncronously by a script is not really tenable.
-
-
-### Cleanup the tenants
-
-Use the `cleanup_tenants.py` script:
+### 1. Build a list of tenants to clean up
 
 ```
-PYTHONPATH=. \
-CONTROL_PLANE_RDS_HOST=<PROD_CONTROL_PLANE_RDS_HOST> \
-CONTROL_PLANE_RDS_PASSWORD=<PROD_CONTROL_PLANE_RDS_PASSWORD> \
-BASTION_HOST=<BASTION_IP_ADDRESS> \
-PEM_FILE_LOCATION=<PEM_FILE_LOCATION_WHICH_GIVES_ACCESS_TO_BASTION> \
-python scripts/tenant_cleanup/cleanup_tenants.py --csv gated_tenants_no_query_3mo_<your_datetime>.csv --force
+cd onyx/backend
+PYTHONPATH=. python scripts/tenant_cleanup/no_bastion_analyze_tenants.py \
+    --data-plane-context <data_plane_context> \
+    --control-plane-context <control_plane_context>
 ```
 
-This will drop the tenant schema from the data plane DB, cleanup the `user_tenant_mapping` table, and 
-clean up any control plane DB tables associated with each tenant.
+This writes `gated_tenants_inactive_60d_<datetime>.csv` to the current directory.
 
-NOTE: if the previous step has not completed, tenants with documents will throw an exception.
+A tenant is eligible only when both conditions hold:
+
+- the control plane gives it the status `GATED_ACCESS`, and
+- its last chat query and its last Craft session are both older than the cutoff.
+
+The cutoff is 60 days. Use `--inactive-days` to change it. The script ignores cached tenant data
+from before Craft activity was collected.
+
+The run also writes `tenant_data_<datetime>.json`. That file holds real user chat text. Keep it out
+of the repo and off shared storage.
+
+### 2. Delete all documents within these tenants
+
+```
+PYTHONPATH=. python scripts/tenant_cleanup/no_bastion_mark_connectors.py \
+    --csv gated_tenants_inactive_60d_<datetime>.csv \
+    --force
+```
+
+This cancels all index attempts and marks all connectors for deletion. Celery then deletes the
+documents in the background. Tenants with no documents drain in minutes. Tenants with many
+documents can take more than six hours.
+
+The work is handed to Celery because it reuses the existing deletion code and the existing
+infrastructure for long parallel jobs. A script cannot hold these jobs open.
+
+### 3. Clean up the tenants
+
+Wait for step 2 to finish. Then run:
+
+```
+PYTHONPATH=. python scripts/tenant_cleanup/no_bastion_cleanup_tenants.py \
+    --csv gated_tenants_inactive_60d_<datetime>.csv \
+    --force
+```
+
+This drops each tenant schema from the data plane, deletes the `public.user_tenant_mapping` rows,
+and deletes the control plane rows for the tenant.
+
+Tenants that still hold documents raise an exception. That means step 2 has not finished.
+
+Successful tenants are appended to `cleaned_tenants.csv`. Keep that file. It is the only record of
+what was deleted, and a later sweep of orphaned search-index chunks needs it.
+
+### Verify the result
+
+Check the databases, not the summary the scripts print. A tenant counted as successful can still
+leave rows behind if a later step failed. Reconcile three sources: `pg_namespace`,
+`public.user_tenant_mapping`, and the control plane `tenant` table.
