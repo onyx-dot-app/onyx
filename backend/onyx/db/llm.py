@@ -337,21 +337,28 @@ def upsert_llm_provider(
         mc.id for name, mc in existing_by_name.items() if name not in models_to_exist
     ]
 
-    default_model = fetch_default_llm_model(db_session)
+    # Every deployment default lives on a flow row pointing at a model, and
+    # _update_default_model__no_commit makes that model visible, so a model
+    # holding any default must stay present and visible. Checking only the chat
+    # default let an edit hide the model contextual RAG or Craft still resolves
+    # to, since neither resolver looks at is_visible.
+    defaults_by_model_id = fetch_default_flows_by_model_id(db_session)
 
-    # Prevent removing and hiding the default model
-    if default_model:
-        for name, mc in existing_by_name.items():
-            if mc.id == default_model.id:
-                if default_model.id in removed_ids:
-                    raise ValueError(
-                        f"Cannot remove the default model '{name}'. Please change the default model before removing."
-                    )
-                if not requested_visibility.get(name, True):
-                    raise ValueError(
-                        f"Cannot hide the default model '{name}'. Please change the default model before hiding."
-                    )
-                break
+    for name, mc in existing_by_name.items():
+        held_flows = defaults_by_model_id.get(mc.id)
+        if not held_flows:
+            continue
+        held = ", ".join(sorted(flow.value for flow in held_flows))
+        if mc.id in removed_ids:
+            raise ValueError(
+                f"Cannot remove the default model '{name}'. It is the default for: "
+                f"{held}. Please change those defaults before removing."
+            )
+        if not requested_visibility.get(name, True):
+            raise ValueError(
+                f"Cannot hide the default model '{name}'. It is the default for: "
+                f"{held}. Please change those defaults before hiding."
+            )
 
     if removed_ids:
         db_session.query(ModelConfiguration).filter(
@@ -855,6 +862,27 @@ def fetch_default_chat_naming_model(
 
 def fetch_default_craft_model(db_session: Session) -> ModelConfiguration | None:
     return fetch_default_model(db_session, LLMModelFlowType.CRAFT)
+
+
+def fetch_default_flows_by_model_id(
+    db_session: Session,
+) -> dict[int, set[LLMModelFlowType]]:
+    """Which deployment defaults each model configuration currently holds.
+
+    One model commonly holds several — the chat default is very often the vision
+    default too — so the value is a set rather than a single flow.
+    """
+    rows = db_session.execute(
+        select(
+            LLMModelFlow.model_configuration_id,
+            LLMModelFlow.llm_model_flow_type,
+        ).where(LLMModelFlow.is_default == True)  # noqa: E712
+    ).all()
+
+    defaults: dict[int, set[LLMModelFlowType]] = {}
+    for model_configuration_id, flow_type in rows:
+        defaults.setdefault(model_configuration_id, set()).add(flow_type)
+    return defaults
 
 
 def fetch_default_model(

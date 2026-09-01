@@ -295,3 +295,55 @@ class TestPointerFlowDefaultsSurviveAProviderUpdate:
         default_contextual = fetch_default_contextual_rag_model(db_session)
         assert default_contextual is not None
         assert default_contextual.name == "gpt-4o-mini"
+
+    def _hide_mini(self, db_session: Session, provider_id: int, name: str) -> None:
+        upsert_llm_provider(
+            LLMProviderUpsertRequest(
+                id=provider_id,
+                name=name,
+                provider=LlmProviderNames.OPENAI,
+                api_key="sk-test-key-00000000000000000000000000000000000",
+                api_key_changed=True,
+                model_configurations=[
+                    ModelConfigurationUpsertRequest(
+                        name="gpt-4o", is_visible=True, supports_image_input=True
+                    ),
+                    ModelConfigurationUpsertRequest(
+                        name="gpt-4o-mini", is_visible=False, supports_image_input=False
+                    ),
+                ],
+            ),
+            db_session=db_session,
+        )
+
+    def test_hiding_the_craft_default_is_refused(
+        self,
+        db_session: Session,
+        provider_name: str,
+    ) -> None:
+        """Keeping the row means the model under it must stay visible. Neither
+        resolver checks is_visible, so a hidden default would still be used."""
+        provider = _create_test_provider(db_session, provider_name)
+        update_default_craft_provider(provider.id, "gpt-4o-mini", db_session)
+
+        with pytest.raises(ValueError, match="Cannot hide the default model"):
+            self._hide_mini(db_session, provider.id, provider_name)
+
+    def test_hiding_the_contextual_rag_default_is_refused(
+        self,
+        db_session: Session,
+        provider_name: str,
+    ) -> None:
+        provider = _create_test_provider(db_session, provider_name)
+        model_config = next(
+            mc for mc in provider.model_configurations if mc.name == "gpt-4o-mini"
+        )
+        update_default_contextual_model(
+            db_session=db_session,
+            enable_contextual_rag=True,
+            model_configuration_id=model_config.id,
+        )
+        db_session.commit()
+
+        with pytest.raises(ValueError, match="Cannot hide the default model"):
+            self._hide_mini(db_session, provider.id, provider_name)
