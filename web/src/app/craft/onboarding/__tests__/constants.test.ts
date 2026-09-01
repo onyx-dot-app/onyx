@@ -140,7 +140,7 @@ describe("getDefaultLlmSelection", () => {
           3
         ),
       ],
-      { provider_id: 3, model_name: "claude-haiku-4-5" }
+      [{ provider_id: 3, model_name: "claude-haiku-4-5" }]
     );
     expect(result).toEqual({
       providerId: 3,
@@ -162,13 +162,35 @@ describe("getDefaultLlmSelection", () => {
           3
         ),
       ],
-      { provider_id: 3, model_name: "claude-haiku-4-5" }
+      [{ provider_id: 3, model_name: "claude-haiku-4-5" }]
     );
     expect(result).toEqual({
       providerId: 3,
       providerName: "anthropic",
       provider: "anthropic",
       modelName: "claude-opus-5",
+    });
+  });
+
+  it("falls through to the next configured default when the first isn't visible or available", () => {
+    const result = getDefaultLlmSelection(
+      [
+        provider(
+          "anthropic",
+          [model("claude-opus-5", { craft: true }), model("claude-haiku-4-5")],
+          3
+        ),
+      ],
+      [
+        { provider_id: 99, model_name: "does-not-exist" },
+        { provider_id: 3, model_name: "claude-haiku-4-5" },
+      ]
+    );
+    expect(result).toEqual({
+      providerId: 3,
+      providerName: "anthropic",
+      provider: "anthropic",
+      modelName: "claude-haiku-4-5",
     });
   });
 

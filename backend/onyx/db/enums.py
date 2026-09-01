@@ -606,6 +606,7 @@ class LLMModelFlowType(str, PyEnum):
     CONTEXTUAL_RAG = "contextual_rag"
     REASONING = "reasoning"
     CHAT_NAMING = "chat_naming"
+    CRAFT = "craft"
 
 
 class HookPoint(str, PyEnum):

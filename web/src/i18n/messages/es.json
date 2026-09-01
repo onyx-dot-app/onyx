@@ -2521,7 +2521,7 @@
         "description": "No se pudieron cargar los usuarios. Prueba a actualizar la página."
       }
     },
-    "craftInstructions": {
+    "craftPreferences": {
       "baseInstructions": {
         "description": "El prompt integrado al que se añaden tus instrucciones. Las secciones dinámicas se rellenan en cada sesión.",
         "loadError": {
@@ -2529,9 +2529,34 @@
         },
         "title": "Ver las instrucciones base"
       },
+      "defaultModel": {
+        "clearButton": {
+          "label": "Borrar"
+        },
+        "help": {
+          "description": "Craft usa este modelo para las sesiones nuevas y las tareas programadas. Si no se define, Craft recurre al modelo de chat predeterminado del espacio de trabajo."
+        },
+        "inheritedTag": {
+          "label": "Predeterminado del espacio de trabajo"
+        },
+        "label": "Modelo predeterminado",
+        "placeholder": "Seleccionar modelo",
+        "resetError": {
+          "message": "No se pudo borrar el modelo predeterminado"
+        },
+        "resetSuccess": {
+          "message": "Modelo predeterminado de Craft borrado"
+        },
+        "saveError": {
+          "message": "No se pudo guardar el modelo predeterminado"
+        },
+        "saveSuccess": {
+          "message": "Modelo predeterminado de Craft guardado"
+        }
+      },
       "header": {
-        "description": "Instrucciones para todo el espacio de trabajo que sigue cada agente de Craft, además del comportamiento integrado de Craft.",
-        "title": "Instrucciones"
+        "description": "El modelo predeterminado y las instrucciones para todo el espacio de trabajo que sigue cada agente de Craft, además del comportamiento integrado de Craft.",
+        "title": "Preferencias"
       },
       "instructions": {
         "charCount": {
@@ -9019,8 +9044,8 @@
         "craftApps": {
           "label": "Apps"
         },
-        "craftInstructions": {
-          "label": "Instrucciones"
+        "craftPreferences": {
+          "label": "Preferencias"
         },
         "customAnalytics": {
           "label": "Analíticas personalizadas"

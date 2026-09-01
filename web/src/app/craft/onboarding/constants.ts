@@ -89,13 +89,15 @@ export function hasSupportedCraftProvider(
 // Access control is enforced server-side at session create.
 export function getDefaultLlmSelection(
   llmProviders: MinimalLlmProvider[] | undefined,
-  configuredDefault?: DefaultModel | null
+  configuredDefaults: (DefaultModel | null | undefined)[] = []
 ): BuildLlmSelection | null {
   if (!llmProviders) return null;
 
-  // The admin's configured default model (shared with chat) outranks the
-  // built-in recommendation — mirrors the backend's _select_gateway_default.
-  if (configuredDefault) {
+  // Each configured default (e.g. Craft's own default, then the shared chat
+  // default) outranks the built-in recommendation, tried in order. Mirrors
+  // the backend's _select_gateway_default.
+  for (const configuredDefault of configuredDefaults) {
+    if (!configuredDefault) continue;
     const provider = llmProviders.find(
       (candidate) => candidate.id === configuredDefault.provider_id
     );
