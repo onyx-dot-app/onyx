@@ -8522,6 +8522,9 @@
       "continueAsGuest": {
         "label": "oder als Gast fortfahren"
       },
+      "createAccountButton": {
+        "label": "Konto erstellen"
+      },
       "email": {
         "label": "E-Mail-Adresse",
         "placeholder": "email@ihrunternehmen.de"
@@ -8531,6 +8534,9 @@
       },
       "invalidCredentials": {
         "error": "Ungültige E-Mail-Adresse oder ungültiges Passwort"
+      },
+      "joinButton": {
+        "label": "Beitreten"
       },
       "noPassword": {
         "error": "Erstellen Sie ein Konto, um ein Passwort festzulegen"
@@ -8559,6 +8565,9 @@
       },
       "passwordUppercase": {
         "error": "Das Passwort muss mindestens einen Großbuchstaben enthalten"
+      },
+      "signInButton": {
+        "label": "Anmelden"
       },
       "tooManyRequests": {
         "error": "Zu viele Anfragen. Bitte versuchen Sie es später erneut."
@@ -8687,11 +8696,17 @@
       }
     },
     "login": {
+      "continueButton": {
+        "label": "Weiter"
+      },
       "createAccountButton": {
         "label": "Konto erstellen"
       },
       "noSsoProviders": {
         "error": "Für diese Adresse ist keine SSO-Anmeldung eingerichtet. Versuchen Sie Google oder Ihr Passwort unten."
+      },
+      "orDivider": {
+        "text": "oder"
       },
       "resetPasswordButton": {
         "label": "Passwort zurücksetzen"
@@ -8716,6 +8731,12 @@
       },
       "verifiedMessage": {
         "title": "Ihre E-Mail-Adresse wurde bestätigt! Bitte melden Sie sich an, um fortzufahren."
+      },
+      "welcomeHeading": {
+        "title": "Willkommen bei {appName}"
+      },
+      "welcomeSubtitle": {
+        "text": "Ihre Open-Source-KI-Plattform für die Arbeit"
       },
       "workEmailField": {
         "label": "Geschäftliche E-Mail"

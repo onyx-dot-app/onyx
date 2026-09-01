@@ -8522,6 +8522,9 @@
       "continueAsGuest": {
         "label": "またはゲストとして続行"
       },
+      "createAccountButton": {
+        "label": "アカウントを作成"
+      },
       "email": {
         "label": "メールアドレス",
         "placeholder": "email@yourcompany.com"
@@ -8531,6 +8534,9 @@
       },
       "invalidCredentials": {
         "error": "メールアドレスまたはパスワードが無効です"
+      },
+      "joinButton": {
+        "label": "参加"
       },
       "noPassword": {
         "error": "パスワードを設定するにはアカウントを作成してください"
@@ -8559,6 +8565,9 @@
       },
       "passwordUppercase": {
         "error": "パスワードには大文字を少なくとも 1 文字含める必要があります"
+      },
+      "signInButton": {
+        "label": "サインイン"
       },
       "tooManyRequests": {
         "error": "リクエストが多すぎます。しばらくしてからもう一度お試しください。"
@@ -8687,11 +8696,17 @@
       }
     },
     "login": {
+      "continueButton": {
+        "label": "続行"
+      },
       "createAccountButton": {
         "label": "アカウントを作成"
       },
       "noSsoProviders": {
         "error": "そのメールアドレスには SSO サインインが設定されていません。下の Google またはパスワードをお試しください。"
+      },
+      "orDivider": {
+        "text": "または"
       },
       "resetPasswordButton": {
         "label": "パスワードをリセット"
@@ -8716,6 +8731,12 @@
       },
       "verifiedMessage": {
         "title": "メールアドレスを確認しました。続行するにはサインインしてください。"
+      },
+      "welcomeHeading": {
+        "title": "{appName} へようこそ"
+      },
+      "welcomeSubtitle": {
+        "text": "仕事のためのオープンソース AI プラットフォーム"
       },
       "workEmailField": {
         "label": "職場のメールアドレス"

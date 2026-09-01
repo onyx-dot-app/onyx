@@ -8522,6 +8522,9 @@
       "continueAsGuest": {
         "label": "أو تابع كضيف"
       },
+      "createAccountButton": {
+        "label": "إنشاء حساب"
+      },
       "email": {
         "label": "عنوان البريد الإلكتروني",
         "placeholder": "email@yourcompany.com"
@@ -8531,6 +8534,9 @@
       },
       "invalidCredentials": {
         "error": "البريد الإلكتروني أو كلمة المرور غير صالحة"
+      },
+      "joinButton": {
+        "label": "انضمام"
       },
       "noPassword": {
         "error": "أنشئ حسابًا لتعيين كلمة مرور"
@@ -8559,6 +8565,9 @@
       },
       "passwordUppercase": {
         "error": "يجب أن تحتوي كلمة المرور على حرف كبير واحد على الأقل"
+      },
+      "signInButton": {
+        "label": "تسجيل الدخول"
       },
       "tooManyRequests": {
         "error": "عدد كبير جدًا من الطلبات. يرجى المحاولة مرة أخرى لاحقًا."
@@ -8687,11 +8696,17 @@
       }
     },
     "login": {
+      "continueButton": {
+        "label": "متابعة"
+      },
       "createAccountButton": {
         "label": "إنشاء حساب"
       },
       "noSsoProviders": {
         "error": "لا يوجد تسجيل دخول SSO مهيأ لهذا العنوان. جرّب Google أو كلمة المرور أدناه."
+      },
+      "orDivider": {
+        "text": "أو"
       },
       "resetPasswordButton": {
         "label": "إعادة تعيين كلمة المرور"
@@ -8716,6 +8731,12 @@
       },
       "verifiedMessage": {
         "title": "تم التحقق من بريدك الإلكتروني! يرجى تسجيل الدخول للمتابعة."
+      },
+      "welcomeHeading": {
+        "title": "مرحبًا بك في {appName}"
+      },
+      "welcomeSubtitle": {
+        "text": "منصة الذكاء الاصطناعي مفتوحة المصدر لعملك"
       },
       "workEmailField": {
         "label": "البريد الإلكتروني للعمل"

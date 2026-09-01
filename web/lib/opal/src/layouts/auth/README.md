@@ -28,10 +28,12 @@ an optional bottom prompt rendered outside/below the card border.
 
 ### OrSeparator
 
-A centered "or" label flanked by two divider lines. Use between an SSO button and an
+A centered label flanked by two divider lines. Use between an SSO button and an
 email/password form.
 
-No props.
+| Prop | Type | Default | Description |
+|---|---|---|---|
+| `title` | `string \| RichStr` | **(required)** | Divider label (e.g. a translated "or") |
 
 ### Fields
 
@@ -47,7 +49,7 @@ Full-width submit button. Thin wrapper around `Button` with `type="submit"` and 
 
 | Prop | Type | Default | Description |
 |---|---|---|---|
-| `label` | `SubmitLabel` | **(required)** | Button label key (`"sign-in"`, `"sign-up"`, etc.) |
+| `children` | `string` | **(required)** | Translated button text |
 | `isSubmitting` | `boolean` | — | Disables + shows spinner while submitting |
 | `isValid` | `boolean` | — | When provided, disables if `false` |
 | `dirty` | `boolean` | — | When provided, disables if `false` |
@@ -57,7 +59,10 @@ Full-width submit button. Thin wrapper around `Button` with `type="submit"` and 
 ```tsx
 import { AuthLayouts } from "@opal/layouts";
 import { markdown } from "@opal/utils";
+import { useTranslations } from "next-intl";
 import { getAppLogo } from "@/lib/app/utils";
+
+const t = useTranslations("auth");
 
 <AuthLayouts.Root>
   <AuthLayouts.Card
@@ -67,7 +72,7 @@ import { getAppLogo } from "@/lib/app/utils";
     bottomPrompt={markdown("Don't have an account? [Create an Account](/auth/signup)")}
   >
     <SignInButton authorizeUrl={authUrl} authType={AuthType.CLOUD} />
-    <AuthLayouts.OrSeparator />
+    <AuthLayouts.OrSeparator title={t("login.orDivider.text")} />
     <Formik ...>
       {({ isSubmitting, isValid, dirty }) => (
         <Form className="flex flex-col gap-6">
@@ -75,7 +80,9 @@ import { getAppLogo } from "@/lib/app/utils";
             <TextFormField name="email" label="Email" type="email" />
             <TextFormField name="password" label="Password" type="password" />
           </AuthLayouts.Fields>
-          <AuthLayouts.Submit label="submit" isSubmitting={isSubmitting} isValid={isValid} dirty={dirty} />
+          <AuthLayouts.Submit isSubmitting={isSubmitting} isValid={isValid} dirty={dirty}>
+            {t("emailPasswordForm.signInButton.label")}
+          </AuthLayouts.Submit>
         </Form>
       )}
     </Formik>
