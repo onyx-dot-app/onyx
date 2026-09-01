@@ -95,6 +95,7 @@ function InputTextArea({
       {/* raw-ok: Opal ships no textarea element, this component IS the library's textarea */}
       <textarea
         ref={mergeRefs(internalRef, ref)}
+        dir="auto"
         disabled={disabled}
         readOnly={isReadOnly}
         className={cn(

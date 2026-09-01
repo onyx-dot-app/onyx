@@ -4,8 +4,10 @@
    Code — inline code block with optional hover-to-reveal copy button.
    --------------------------------------------------------------------------- */
 
+/* Code is always LTR, so the copy offset stays physical. */
 .opal-code-root {
   @apply relative w-full;
+  direction: ltr;
 }
 
 .opal-code {
