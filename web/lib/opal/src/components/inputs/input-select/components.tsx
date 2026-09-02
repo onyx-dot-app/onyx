@@ -297,6 +297,15 @@ function InputSelectTrigger({
 function InputSelectContent({
   children,
   ref,
+  /*
+   * Defaulted here rather than written before the spread below: a spread
+   * copies a key even when its value is `undefined`, so a caller writing
+   * `prop={condition ? x : undefined}` would replace the default rather than
+   * fall back to it.
+   */
+  sideOffset = 4,
+  position = "popper",
+  onMouseDown,
   ...props
 }: WithoutStyles<React.ComponentProps<typeof SelectPrimitive.Content>>) {
   return (
@@ -309,11 +318,17 @@ function InputSelectContent({
           "data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
           "data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95"
         )}
-        sideOffset={4}
-        position="popper"
+        sideOffset={sideOffset}
+        position={position}
+        /*
+         * Chained rather than overwritable: swallowing the press is what keeps
+         * a click inside the list from reaching whatever is behind it, so a
+         * caller adding a handler must not silently drop it.
+         */
         onMouseDown={(e) => {
           e.stopPropagation();
           e.preventDefault();
+          onMouseDown?.(e);
         }}
         {...props}
       >
