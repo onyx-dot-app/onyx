@@ -426,7 +426,9 @@ export interface LlmManager {
   hasBoundSession: boolean;
   /** Ensure the session row reflects the local override selections. No-op
    * when the session is bound and every selection is confirmed persisted.
-   * Throws when a write fails, leaving the overrides unconfirmed for retry. */
+   * Safe to call through a stale reference: reads the selections as last
+   * rendered. Throws when a write fails, leaving the overrides unconfirmed
+   * for retry. */
   persistOverrides: (sessionId: string) => Promise<void>;
   updateModelOverrideBasedOnChatSession: (chatSession?: ChatSession) => void;
   imageFilesPresent: boolean;
@@ -841,13 +843,18 @@ export function useLlmManager(
   // Serializes every override PUT so an older selection can never land on
   // the server after a newer one. persistOverrides joins the same chain.
   const overrideWriteChainRef = useRef<Promise<unknown>>(Promise.resolve());
-  const enqueueOverrideWrite = (
-    write: () => Promise<Response>
-  ): Promise<Response> => {
-    const next = overrideWriteChainRef.current.then(write, write);
-    overrideWriteChainRef.current = next.catch(() => undefined);
-    return next;
-  };
+  const enqueueOverrideWrite = useCallback(
+    (write: () => Promise<Response>): Promise<Response> => {
+      const next = overrideWriteChainRef.current.then(write, write);
+      overrideWriteChainRef.current = next.catch(() => undefined);
+      return next;
+    },
+    []
+  );
+
+  // Session persisted while unbound. Its placeholder snapshot has no
+  // overrides, so adopting it would wipe the selections just written to it.
+  const handedOffSessionIdRef = useRef<string | null>(null);
 
   // Adopt the stored reasoning override (and reset the explicit-temperature
   // flag) only when session identity changes. Keying on identity, not the
@@ -859,6 +866,11 @@ export function useLlmManager(
     const sessionId = currentChatSession?.id ?? null;
     if (prevSessionIdRef.current === sessionId) return;
     prevSessionIdRef.current = sessionId;
+    if (sessionId !== null && sessionId === handedOffSessionIdRef.current) {
+      // Consumed once: coming back to this session later reads its row.
+      handedOffSessionIdRef.current = null;
+      return;
+    }
     setTemperatureExplicitlySet(false);
     persistedGenRef.current = selectionGen;
     setReasoningEffort(
@@ -953,37 +965,69 @@ export function useLlmManager(
     }
   };
 
-  const persistOverrides = async (sessionId: string): Promise<void> => {
-    // selectionGen is render-captured with the values below, so this persist
-    // confirms exactly the generation whose values it writes.
-    if (chatSession != null && persistedGenRef.current >= selectionGen) {
-      return;
-    }
-    const writes: Promise<Response>[] = [];
-    if (reasoningEffort) {
-      writes.push(
-        enqueueOverrideWrite(() =>
-          updateReasoningEffortForChatSession(sessionId, reasoningEffort)
-        )
-      );
-    }
-    if (temperatureExplicitlySet) {
-      writes.push(
-        enqueueOverrideWrite(() =>
-          updateTemperatureOverrideForChatSession(sessionId, temperature)
-        )
-      );
-    }
-    if (writes.length === 0) return;
-    const responses = await Promise.all(writes);
-    const failed = responses.find((response) => !response.ok);
-    if (failed) {
-      throw new Error(
-        `Failed to persist chat session overrides: ${failed.status}`
-      );
-    }
-    persistedGenRef.current = Math.max(persistedGenRef.current, selectionGen);
+  // persistOverrides is identity-stable, so it reads selections through this
+  // ref instead of its closure.
+  const latestSelection = {
+    reasoningEffort,
+    temperature,
+    temperatureExplicitlySet,
+    selectionGen,
+    chatSessionId: chatSession?.id ?? null,
   };
+  const latestSelectionRef = useRef(latestSelection);
+  useLayoutEffect(() => {
+    latestSelectionRef.current = latestSelection;
+  });
+
+  const persistOverrides = useCallback(
+    async (sessionId: string): Promise<void> => {
+      // One snapshot: this persist confirms exactly the generation it writes.
+      const selection = latestSelectionRef.current;
+      if (
+        selection.chatSessionId != null &&
+        persistedGenRef.current >= selection.selectionGen
+      ) {
+        return;
+      }
+      const writes: Promise<Response>[] = [];
+      if (selection.reasoningEffort) {
+        writes.push(
+          enqueueOverrideWrite(() =>
+            updateReasoningEffortForChatSession(
+              sessionId,
+              selection.reasoningEffort
+            )
+          )
+        );
+      }
+      if (selection.temperatureExplicitlySet) {
+        writes.push(
+          enqueueOverrideWrite(() =>
+            updateTemperatureOverrideForChatSession(
+              sessionId,
+              selection.temperature
+            )
+          )
+        );
+      }
+      if (writes.length === 0) return;
+      if (selection.chatSessionId == null) {
+        handedOffSessionIdRef.current = sessionId;
+      }
+      const responses = await Promise.all(writes);
+      const failed = responses.find((response) => !response.ok);
+      if (failed) {
+        throw new Error(
+          `Failed to persist chat session overrides: ${failed.status}`
+        );
+      }
+      persistedGenRef.current = Math.max(
+        persistedGenRef.current,
+        selection.selectionGen
+      );
+    },
+    [enqueueOverrideWrite]
+  );
 
   // Track if any provider exists for the current persona context.
   // Uses the persona-aware list so chat input reflects actual access,

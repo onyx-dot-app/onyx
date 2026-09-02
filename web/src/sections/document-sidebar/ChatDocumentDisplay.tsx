@@ -1,6 +1,6 @@
 import { SourceIcon } from "@/components/SourceIcon";
 import { MinimalOnyxDocument, OnyxDocument } from "@/lib/search/interfaces";
-import { FiTag } from "react-icons/fi";
+import { SvgTag } from "@opal/icons";
 import { buildDocumentSummaryDisplay } from "@/components/search/DocumentDisplay";
 import { DocumentUpdatedAtBadge } from "@/components/search/DocumentUpdatedAtBadge";
 import { MetadataBadge } from "@/components/MetadataBadge";
@@ -38,7 +38,7 @@ function DocumentMetadataBlock({
               .map(([key, value], index) => (
                 <MetadataBadge
                   key={index}
-                  icon={FiTag}
+                  icon={SvgTag}
                   value={`${key}=${value}`}
                 />
               ))}
