@@ -19,47 +19,27 @@ import type {
   CredentialFieldValues,
 } from "@/lib/credentials/types";
 import { createValidationSchema } from "@/lib/credentials/utils";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/lib/settings/types";
-import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
-import {
-  IsPublicGroupSelectorFormType,
-  IsPublicGroupSelector,
-} from "@/components/IsPublicGroupSelector";
-import { useUser } from "@/providers/UserProvider";
 import CardSection from "@/components/admin/CardSection";
 import { CredentialFieldsRenderer } from "@/lib/credentials/components/CredentialFieldsRenderer";
 import { TypedFile } from "@/lib/connectors/fileTypes";
 import ConnectorDocsLink from "@/components/admin/connectors/ConnectorDocsLink";
-import { usePermissionAuthority } from "@/lib/permissions/hooks";
-import { Permission } from "@/lib/types";
 import { SvgPlusCircle } from "@opal/icons";
 const CreateButton = ({
   onClick,
   isSubmitting,
-  requiresGroup,
-  groups,
 }: {
   onClick: () => void;
   isSubmitting: boolean;
-  // Only a scoped manager must land the credential in a group — GATE 2 requires
-  // it of them and of nobody else.
-  requiresGroup: boolean;
-  groups: number[];
 }) => {
   const t = useTranslations("admin");
   return (
-    <OpalButton
-      disabled={isSubmitting || (requiresGroup && groups.length === 0)}
-      onClick={onClick}
-      icon={SvgPlusCircle}
-    >
+    <OpalButton disabled={isSubmitting} onClick={onClick} icon={SvgPlusCircle}>
       {t("credentials.create.createButton.label")}
     </OpalButton>
   );
 };
 
-type CreateCredentialFormValues = IsPublicGroupSelectorFormType & {
+type CreateCredentialFormValues = {
   name: string;
   [key: string]: unknown;
 };
@@ -101,13 +81,7 @@ export default function CreateCredential({
   refresh?: () => void;
 }) {
   const t = useTranslations("admin");
-  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
   const [authMethod, setAuthMethod] = useState<string>();
-  const businessTier = useTierAtLeast(Tier.BUSINESS);
-
-  const { isGlobalHolder, isScopedManager } = usePermissionAuthority(
-    Permission.MANAGE_CONNECTORS
-  );
 
   const handleSubmit = async (
     values: CreateCredentialFormValues,
@@ -125,7 +99,7 @@ export default function CreateCredential({
     setSubmitting(true);
     formikHelpers.setSubmitting(true);
 
-    const { name, is_public, groups, ...credentialValues } = values;
+    const { name, ...credentialValues } = values;
 
     let privateKey: TypedFile | null = null;
     const filteredCredentialValues = Object.fromEntries(
@@ -142,8 +116,6 @@ export default function CreateCredential({
       const response = await submitCredential({
         credential_json: filteredCredentialValues,
         admin_public: true,
-        curator_public: is_public,
-        groups: groups,
         name: name,
         source: sourceType,
         private_key: privateKey || undefined,
@@ -209,8 +181,6 @@ export default function CreateCredential({
       initialValues={
         {
           name: "",
-          is_public: isGlobalHolder || !businessTier,
-          groups: [],
           ...(initialAuthMethod && {
             authentication_method: initialAuthMethod,
           }),
@@ -244,26 +214,7 @@ export default function CreateCredential({
                 setAuthMethod={setAuthMethod}
               />
 
-              <div className="mt-4 flex w-full flex-col sm:flex-row justify-between items-end">
-                <div className="w-full sm:w-3/4 mb-4 sm:mb-0">
-                  {businessTier && (
-                    <div className="flex flex-col items-start">
-                      {isGlobalHolder && (
-                        <AdvancedOptionsToggle
-                          showAdvancedOptions={showAdvancedOptions}
-                          setShowAdvancedOptions={setShowAdvancedOptions}
-                        />
-                      )}
-                      {(showAdvancedOptions || !isGlobalHolder) && (
-                        <IsPublicGroupSelector
-                          formikProps={formikProps}
-                          objectName="credential"
-                          isGlobalHolder={isGlobalHolder}
-                        />
-                      )}
-                    </div>
-                  )}
-                </div>
+              <div className="mt-4 flex w-full justify-end">
                 <CreateButton
                   onClick={() =>
                     handleSubmit(
@@ -273,8 +224,6 @@ export default function CreateCredential({
                     )
                   }
                   isSubmitting={formikProps.isSubmitting}
-                  requiresGroup={isScopedManager}
-                  groups={formikProps.values.groups}
                 />
               </div>
             </CardSection>

@@ -89,8 +89,6 @@ export function CredentialForm<T extends Yup.AnyObject>({
             {
               credential_json: values,
               admin_public: true,
-              curator_public: false,
-              groups: [],
               source: source,
             },
             {
