@@ -6821,6 +6821,17 @@
         "label": "Anmelden"
       }
     },
+    "emailPasswordForm": {
+      "createAccountButton": {
+        "label": "Konto erstellen"
+      },
+      "joinButton": {
+        "label": "Beitreten"
+      },
+      "signInButton": {
+        "label": "Anmelden"
+      }
+    },
     "error": {
       "accessRestrictionIssue": {
         "description": "Zugriffsbeschränkungen oder Berechtigungen des Kontos"
@@ -6918,11 +6929,17 @@
       }
     },
     "login": {
+      "continueButton": {
+        "label": "Weiter"
+      },
       "createAccountButton": {
         "label": "Konto erstellen"
       },
       "noSsoProviders": {
         "error": "Für diese Adresse ist keine SSO-Anmeldung eingerichtet. Versuchen Sie Google oder Ihr Passwort unten."
+      },
+      "orDivider": {
+        "text": "oder"
       },
       "resetPasswordButton": {
         "label": "Passwort zurücksetzen"
@@ -6947,6 +6964,12 @@
       },
       "verifiedMessage": {
         "title": "Ihre E-Mail-Adresse wurde bestätigt! Bitte melden Sie sich an, um fortzufahren."
+      },
+      "welcomeHeading": {
+        "title": "Willkommen bei {appName}"
+      },
+      "welcomeSubtitle": {
+        "text": "Ihre Open-Source-KI-Plattform für die Arbeit"
       },
       "workEmailField": {
         "label": "Geschäftliche E-Mail"

@@ -6821,6 +6821,17 @@
         "label": "Sign in"
       }
     },
+    "emailPasswordForm": {
+      "createAccountButton": {
+        "label": "Create Account"
+      },
+      "joinButton": {
+        "label": "Join"
+      },
+      "signInButton": {
+        "label": "Sign In"
+      }
+    },
     "error": {
       "accessRestrictionIssue": {
         "description": "Account access restrictions or permissions"
@@ -6918,11 +6929,17 @@
       }
     },
     "login": {
+      "continueButton": {
+        "label": "Continue"
+      },
       "createAccountButton": {
         "label": "Create an account"
       },
       "noSsoProviders": {
         "error": "No SSO sign-in is set up for that address. Try Google or your password below."
+      },
+      "orDivider": {
+        "text": "or"
       },
       "resetPasswordButton": {
         "label": "Reset Password"
@@ -6947,6 +6964,12 @@
       },
       "verifiedMessage": {
         "title": "Your email has been verified! Please sign in to continue."
+      },
+      "welcomeHeading": {
+        "title": "Welcome to {appName}"
+      },
+      "welcomeSubtitle": {
+        "text": "Your open source AI platform for work"
       },
       "workEmailField": {
         "label": "Work Email"

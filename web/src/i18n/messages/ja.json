@@ -6821,6 +6821,17 @@
         "label": "サインイン"
       }
     },
+    "emailPasswordForm": {
+      "createAccountButton": {
+        "label": "アカウントを作成"
+      },
+      "joinButton": {
+        "label": "参加"
+      },
+      "signInButton": {
+        "label": "サインイン"
+      }
+    },
     "error": {
       "accessRestrictionIssue": {
         "description": "アカウントのアクセス制限または権限"
@@ -6918,11 +6929,17 @@
       }
     },
     "login": {
+      "continueButton": {
+        "label": "続行"
+      },
       "createAccountButton": {
         "label": "アカウントを作成"
       },
       "noSsoProviders": {
         "error": "そのメールアドレスには SSO サインインが設定されていません。下の Google またはパスワードをお試しください。"
+      },
+      "orDivider": {
+        "text": "または"
       },
       "resetPasswordButton": {
         "label": "パスワードをリセット"
@@ -6947,6 +6964,12 @@
       },
       "verifiedMessage": {
         "title": "メールアドレスを確認しました。続行するにはサインインしてください。"
+      },
+      "welcomeHeading": {
+        "title": "{appName} へようこそ"
+      },
+      "welcomeSubtitle": {
+        "text": "仕事のためのオープンソース AI プラットフォーム"
       },
       "workEmailField": {
         "label": "職場のメールアドレス"
