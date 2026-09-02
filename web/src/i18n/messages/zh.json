@@ -9317,6 +9317,9 @@
         "startRecording": {
           "ariaLabel": "开始录音"
         },
+        "startingRecording": {
+          "ariaLabel": "正在开始录音"
+        },
         "stopRecording": {
           "ariaLabel": "停止录音"
         }

@@ -6,6 +6,7 @@ import { INTERNAL_URL, IS_DEV } from "@/lib/constants";
 const TARGET_SAMPLE_RATE = 24000;
 const CHUNK_INTERVAL_MS = 250;
 const DUPLICATE_FINAL_TRANSCRIPT_WINDOW_MS = 1500;
+const VOICE_STARTUP_TIMEOUT_MS = 10000;
 // When VAD-based auto-stop is disabled, force-stop after this much silence as a fallback
 const SILENCE_FALLBACK_TIMEOUT_MS = 10000;
 
@@ -25,6 +26,7 @@ export interface UseVoiceRecorderOptions {
 
 export interface UseVoiceRecorderReturn {
   isRecording: boolean;
+  isStarting: boolean;
   isProcessing: boolean;
   isMuted: boolean;
   error: string | null;
@@ -54,6 +56,7 @@ class VoiceRecorderSession {
   private transcript = "";
   private stopResolver: ((text: string | null) => void) | null = null;
   private isActive = false;
+  private disposed = false;
   // Guard: true once onFinalTranscript has fired for the current utterance.
   // Prevents the same transcript from being delivered twice when VAD-triggered
   // stop causes the server to echo the final transcript a second time.
@@ -106,10 +109,10 @@ class VoiceRecorderSession {
     }
   }
 
-  async start(): Promise<void> {
+  async start(signal: AbortSignal): Promise<void> {
     if (this.isActive) return;
 
-    this.cleanup();
+    this.throwIfDisposed();
     this.transcript = "";
     this.audioBuffer = [];
     this.finalTranscriptDelivered = false;
@@ -117,7 +120,7 @@ class VoiceRecorderSession {
     this.lastDeliveredFinalAtMs = 0;
 
     // Get microphone
-    this.mediaStream = await navigator.mediaDevices.getUserMedia({
+    const mediaStream = await navigator.mediaDevices.getUserMedia({
       audio: {
         channelCount: 1,
         sampleRate: { ideal: TARGET_SAMPLE_RATE },
@@ -125,9 +128,15 @@ class VoiceRecorderSession {
         noiseSuppression: true,
       },
     });
+    if (this.disposed) {
+      mediaStream.getTracks().forEach((track) => track.stop());
+      this.throwIfDisposed();
+    }
+    this.mediaStream = mediaStream;
 
     // Get WS token and connect WebSocket
-    const wsUrl = await this.getWebSocketUrl();
+    const wsUrl = await this.getWebSocketUrl(signal);
+    this.throwIfDisposed();
     this.websocket = new WebSocket(wsUrl);
     this.websocket.onmessage = this.handleMessage;
     this.websocket.onerror = () => this.onError("Connection failed");
@@ -138,7 +147,8 @@ class VoiceRecorderSession {
       }
     };
 
-    await this.waitForConnection();
+    await this.waitForConnection(signal);
+    this.throwIfDisposed();
 
     // Restore error handler after connection (waitForConnection overwrites it)
     this.websocket.onerror = () => this.onError("Connection failed");
@@ -225,6 +235,7 @@ class VoiceRecorderSession {
   }
 
   cleanup(): void {
+    this.disposed = true;
     this.resetSilenceFallbackTimer();
     if (this.sendInterval) clearInterval(this.sendInterval);
     if (this.scriptNode) this.scriptNode.disconnect();
@@ -242,11 +253,18 @@ class VoiceRecorderSession {
     this.isActive = false;
   }
 
-  private async getWebSocketUrl(): Promise<string> {
+  private throwIfDisposed(): void {
+    if (this.disposed) {
+      throw new DOMException("Recording startup cancelled", "AbortError");
+    }
+  }
+
+  private async getWebSocketUrl(signal: AbortSignal): Promise<string> {
     // Fetch short-lived WS token
     const tokenResponse = await fetch("/api/voice/ws-token", {
       method: "POST",
       credentials: "include",
+      signal,
     });
     if (!tokenResponse.ok) {
       throw new Error("Failed to get WebSocket authentication token");
@@ -261,23 +279,45 @@ class VoiceRecorderSession {
     return `${protocol}//${host}${path}?token=${encodeURIComponent(token)}`;
   }
 
-  private waitForConnection(): Promise<void> {
+  private waitForConnection(signal: AbortSignal): Promise<void> {
     return new Promise((resolve, reject) => {
-      if (!this.websocket) return reject(new Error("No WebSocket"));
+      const websocket = this.websocket;
+      if (!websocket) return reject(new Error("No WebSocket"));
 
+      const cleanup = () => {
+        clearTimeout(timeout);
+        websocket.removeEventListener("open", handleOpen);
+        websocket.removeEventListener("error", handleError);
+        websocket.removeEventListener("close", handleClose);
+        signal.removeEventListener("abort", handleAbort);
+      };
+
+      const succeed = () => {
+        cleanup();
+        resolve();
+      };
+      const fail = (error: Error) => {
+        cleanup();
+        reject(error);
+      };
+
+      const handleOpen = () => succeed();
+      const handleError = () => fail(new Error("Connection failed"));
+      const handleClose = () => fail(new Error("Connection closed"));
+      const handleAbort = () =>
+        fail(new DOMException("Recording startup cancelled", "AbortError"));
       const timeout = setTimeout(
-        () => reject(new Error("Connection timeout")),
+        () => fail(new Error("Connection timeout")),
         5000
       );
 
-      this.websocket.onopen = () => {
-        clearTimeout(timeout);
-        resolve();
-      };
-      this.websocket.onerror = () => {
-        clearTimeout(timeout);
-        reject(new Error("Connection failed"));
-      };
+      websocket.addEventListener("open", handleOpen, { once: true });
+      websocket.addEventListener("error", handleError, { once: true });
+      websocket.addEventListener("close", handleClose, { once: true });
+      signal.addEventListener("abort", handleAbort, { once: true });
+      if (signal.aborted) {
+        handleAbort();
+      }
     });
   }
 
@@ -443,6 +483,7 @@ export function useVoiceRecorder(
   options?: UseVoiceRecorderOptions
 ): UseVoiceRecorderReturn {
   const [isRecording, setIsRecording] = useState(false);
+  const [isStarting, setIsStarting] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isMuted, setIsMutedState] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -450,6 +491,8 @@ export function useVoiceRecorder(
   const [audioLevel, setAudioLevel] = useState(0);
 
   const sessionRef = useRef<VoiceRecorderSession | null>(null);
+  const isStartingRef = useRef(false);
+  const isMountedRef = useRef(false);
   const onFinalTranscriptRef = useRef(options?.onFinalTranscript);
   const autoStopOnSilenceRef = useRef(options?.autoStopOnSilence ?? true); // Default to true
 
@@ -461,13 +504,21 @@ export function useVoiceRecorder(
 
   // Cleanup on unmount
   useEffect(() => {
+    isMountedRef.current = true;
     return () => {
-      sessionRef.current?.cleanup();
+      isMountedRef.current = false;
+      isStartingRef.current = false;
+      const session = sessionRef.current;
+      sessionRef.current = null;
+      session?.cleanup();
     };
   }, []);
 
   const startRecording = useCallback(async () => {
-    if (sessionRef.current?.recording) return;
+    if (isStartingRef.current || sessionRef.current?.recording) return;
+
+    isStartingRef.current = true;
+    setIsStarting(true);
 
     setError(null);
     setLiveTranscript("");
@@ -499,21 +550,47 @@ export function useVoiceRecorder(
       }
     );
     sessionRef.current = currentSession;
+    const abortController = new AbortController();
+    let startupTimeout: ReturnType<typeof setTimeout> | null = null;
 
     try {
-      await currentSession.start();
-      if (sessionRef.current === currentSession) {
+      const timeout = new Promise<never>((_resolve, reject) => {
+        startupTimeout = setTimeout(() => {
+          abortController.abort();
+          currentSession.cleanup();
+          reject(new Error("Microphone startup timed out"));
+        }, VOICE_STARTUP_TIMEOUT_MS);
+      });
+      await Promise.race([
+        currentSession.start(abortController.signal),
+        timeout,
+      ]);
+      if (sessionRef.current === currentSession && currentSession.recording) {
         setIsRecording(true);
+      } else {
+        currentSession.cleanup();
       }
     } catch (err) {
       currentSession.cleanup();
-      setError(
-        err instanceof Error ? err.message : "Failed to start recording"
-      );
       if (sessionRef.current === currentSession) {
         sessionRef.current = null;
       }
+      if (!isMountedRef.current) {
+        return;
+      }
+      setError(
+        err instanceof Error ? err.message : "Failed to start recording"
+      );
       throw err;
+    } finally {
+      abortController.abort();
+      if (startupTimeout) {
+        clearTimeout(startupTimeout);
+      }
+      isStartingRef.current = false;
+      if (isMountedRef.current) {
+        setIsStarting(false);
+      }
     }
   }, []);
 
@@ -544,6 +621,7 @@ export function useVoiceRecorder(
 
   return {
     isRecording,
+    isStarting,
     isProcessing,
     isMuted,
     error,
