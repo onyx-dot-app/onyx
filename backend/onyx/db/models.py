@@ -3796,6 +3796,9 @@ class VoiceProvider(Base):
     api_key: Mapped[SensitiveValue[str] | None] = mapped_column(
         EncryptedString(), nullable=True
     )
+    api_secret: Mapped[SensitiveValue[str] | None] = mapped_column(
+        EncryptedString(), nullable=True
+    )
     api_base: Mapped[str | None] = mapped_column(String, nullable=True)
     custom_config: Mapped[dict[str, Any] | None] = mapped_column(
         postgresql.JSONB(), nullable=True
