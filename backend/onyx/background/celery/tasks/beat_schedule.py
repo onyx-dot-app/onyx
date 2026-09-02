@@ -129,6 +129,18 @@ beat_task_templates: list[dict] = [
         },
     },
     {
+        "name": "check-for-stale-capability-runs",
+        "task": OnyxCeleryTask.CHECK_FOR_STALE_CAPABILITY_RUNS,
+        "schedule": timedelta(minutes=10),
+        "options": {
+            "priority": OnyxCeleryPriority.LOW,
+            "expires": BEAT_EXPIRES_DEFAULT,
+            # Gated tenants may still hold dead RUNNING marks to retire.
+            "skip_gated": False,
+            "work_gated": True,
+        },
+    },
+    {
         "name": "check-for-index-attempt-cleanup",
         "task": OnyxCeleryTask.CHECK_FOR_INDEX_ATTEMPT_CLEANUP,
         "schedule": timedelta(minutes=30),
