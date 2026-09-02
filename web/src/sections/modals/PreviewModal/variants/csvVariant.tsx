@@ -66,7 +66,7 @@ export const csvVariant: PreviewVariant = {
                   <TableCell
                     key={cIdx}
                     className={cn(
-                      cIdx === 0 && "sticky left-0 bg-background-tint-01",
+                      cIdx === 0 && "sticky start-0 bg-background-tint-01",
                       "py-4 px-4 whitespace-normal wrap-break-word"
                     )}
                   >

@@ -103,7 +103,7 @@ export const InMessageImage = memo(function InMessageImage({
               setImageLoaded(true);
             }}
             className={cn(
-              "object-contain object-left overflow-hidden rounded-lg w-full h-full transition-opacity duration-300 cursor-pointer",
+              "object-contain object-left rtl:object-right overflow-hidden rounded-lg w-full h-full transition-opacity duration-300 cursor-pointer",
               shapeImageClasses,
               imageLoaded ? "opacity-100" : "opacity-0"
             )}
@@ -112,7 +112,7 @@ export const InMessageImage = memo(function InMessageImage({
           />
 
           {/* Download button - appears on hover */}
-          <div className="absolute bottom-2 right-2 z-10">
+          <div className="absolute bottom-2 end-2 z-10">
             <Hoverable.Item group="messageImage" variant="appear-on-hover">
               <Button
                 icon={SvgDownload}

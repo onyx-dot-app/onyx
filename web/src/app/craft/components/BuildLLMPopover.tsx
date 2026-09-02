@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
+import { useTranslations } from "next-intl";
 import { SvgCheck, SvgChevronDown, SvgChevronRight } from "@opal/icons";
 import { Text, Popover, PopoverMenu, LineItemButton } from "@opal/components";
 import { Switch } from "@opal/components";
@@ -35,6 +36,9 @@ interface BuildLLMPopoverProps {
   llmProviders: LLMProviderDescriptor[] | undefined;
   children: React.ReactNode;
   disabled?: boolean;
+  // Admin surfaces that edit a workspace-wide setting pass `false` so the
+  // admin's own remembered pick isn't overwritten by that edit.
+  persistSelection?: boolean;
 }
 
 interface ModelOption {
@@ -70,7 +74,9 @@ export function BuildLLMPopover({
   llmProviders,
   children,
   disabled = false,
+  persistSelection = true,
 }: BuildLLMPopoverProps) {
+  const t = useTranslations("craft.llmPopover");
   const { user } = useUser();
   const userId = user?.id;
   // Storage is the source of truth for the toggle (the user id it's keyed by
@@ -224,11 +230,11 @@ export function BuildLLMPopover({
         provider: option.providerKey,
         modelName: option.modelName,
       };
-      setStoredLlmSelection(userId, selection);
+      if (persistSelection) setStoredLlmSelection(userId, selection);
       onSelectionChange(selection);
       setIsOpen(false);
     },
-    [userId, onSelectionChange]
+    [userId, persistSelection, onSelectionChange]
   );
 
   const handlePopoverOpenChange = (open: boolean) => {
@@ -245,7 +251,9 @@ export function BuildLLMPopover({
       currentSelection?.provider === option.providerKey;
 
     // Build description with recommendation badge
-    const description = option.isRecommended ? "Recommended" : undefined;
+    const description = option.isRecommended
+      ? t("recommended.label")
+      : undefined;
 
     const rowIcon = getModelIcon(option.providerKey, option.modelName);
     const groupIcon = getModelIcon(option.providerKey);
@@ -281,7 +289,7 @@ export function BuildLLMPopover({
           <Section gap={2}>
             <div className="flex items-center justify-between py-3 gap-3 border-b border-border-01 px-1">
               <Text font="secondary-body" color="text-03">
-                Recommended Models Only
+                {t("recommendedOnly.label")}
               </Text>
               <Switch
                 checked={showRecommendedOnly}
@@ -294,7 +302,7 @@ export function BuildLLMPopover({
                 ? [
                     <div key="empty" className="py-3 px-2">
                       <Text font="secondary-body" color="text-03">
-                        No models found
+                        {t("noModels.label")}
                       </Text>
                     </div>,
                   ]

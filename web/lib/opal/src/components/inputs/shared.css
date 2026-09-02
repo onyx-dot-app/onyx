@@ -103,7 +103,7 @@
 }
 
 .opal-input-segment:first-child {
-  @apply pl-0.5;
+  @apply ps-0.5;
 }
 
 .opal-input[data-variant="disabled"] .opal-input-segment {

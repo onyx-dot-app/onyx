@@ -471,7 +471,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
           <SourceIcon iconSize={32} sourceType={ccPair.connector.source} />
         </div>
 
-        <div className="ml-2 overflow-hidden text-ellipsis whitespace-nowrap flex-1 mr-4">
+        <div className="ms-2 overflow-hidden text-ellipsis whitespace-nowrap flex-1 me-4">
           <EditableStringFieldDisplay
             value={ccPair.name}
             isEditable={can(ccPair, "edit")}
@@ -480,7 +480,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
           />
         </div>
 
-        <div className="ml-auto flex gap-x-2">
+        <div className="ms-auto flex gap-x-2">
           {can(ccPair, "edit") && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -646,7 +646,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
                 ConnectorCredentialPairStatus.INITIAL_INDEXING &&
                 ccPair.overall_indexing_speed !== null &&
                 ccPair.num_docs_indexed > 0 && (
-                  <div className="ml-0.5 text-xs font-medium">
+                  <div className="ms-0.5 text-xs font-medium">
                     {t("statusCard.indexingSpeed", {
                       speed: ccPair.overall_indexing_speed.toFixed(1),
                     })}

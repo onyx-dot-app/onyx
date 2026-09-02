@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { toast } from "@opal/layouts";
 import { StandardAnswerCategory, StandardAnswer } from "@/lib/types";
 import CardSection from "@/components/admin/CardSection";
@@ -39,6 +40,7 @@ export const StandardAnswerCreationForm = ({
   standardAnswerCategories: StandardAnswerCategory[];
   existingStandardAnswer?: StandardAnswer;
 }) => {
+  const t = useTranslations("admin.standardAnswers");
   const isUpdate = existingStandardAnswer !== undefined;
   const router = useRouter();
   const [categoryInput, setCategoryInput] = useState("");
@@ -66,13 +68,15 @@ export const StandardAnswerCreationForm = ({
           }}
           validationSchema={Yup.object().shape({
             keyword: Yup.string()
-              .required("Keywords or pattern is required")
+              .required(t("form.validation.keywordRequired"))
               .max(255)
               .min(1),
-            answer: Yup.string().required("Answer is required").min(1),
+            answer: Yup.string()
+              .required(t("form.validation.answerRequired"))
+              .min(1),
             categories: Yup.array()
               .required()
-              .min(1, "At least one category is required"),
+              .min(1, t("form.validation.categoryRequired")),
           })}
           onSubmit={async (values, formikHelpers) => {
             formikHelpers.setSubmitting(true);
@@ -102,8 +106,8 @@ export const StandardAnswerCreationForm = ({
               const errorMsg = responseJson.detail || responseJson.message;
               toast.error(
                 isUpdate
-                  ? `Error updating Standard Answer - ${errorMsg}`
-                  : `Error creating Standard Answer - ${errorMsg}`
+                  ? t("form.toasts.updateFailed.message", { error: errorMsg })
+                  : t("form.toasts.createFailed.message", { error: errorMsg })
               );
             }
           }}
@@ -113,45 +117,45 @@ export const StandardAnswerCreationForm = ({
               {values.matchRegex ? (
                 <TextFormField
                   name="keyword"
-                  label="Regex pattern"
+                  label={t("form.regexPattern.label")}
                   isCode
-                  tooltip="Triggers if the question matches this regex pattern (using Python `re.search()`)"
+                  tooltip={t("form.regexPattern.tooltip")}
                   placeholder="(?:it|support)\s*ticket"
                 />
               ) : values.matchAnyKeywords == "any" ? (
                 <TextFormField
                   name="keyword"
-                  label="Any of these keywords, separated by spaces"
-                  tooltip="A question must match these keywords in order to trigger the answer."
-                  placeholder="ticket problem issue"
+                  label={t("form.anyKeywords.label")}
+                  tooltip={t("form.keywords.tooltip")}
+                  placeholder={t("form.anyKeywords.placeholder")}
                 />
               ) : (
                 <TextFormField
                   name="keyword"
-                  label="All of these keywords, in any order, separated by spaces"
-                  tooltip="A question must match these keywords in order to trigger the answer."
-                  placeholder="it ticket"
+                  label={t("form.allKeywords.label")}
+                  tooltip={t("form.keywords.tooltip")}
+                  placeholder={t("form.allKeywords.placeholder")}
                 />
               )}
               <BooleanFormField
-                subtext="Match a regex pattern instead of an exact keyword"
+                subtext={t("form.matchRegex.description")}
                 optional
-                label="Match regex"
+                label={t("form.matchRegex.label")}
                 name="matchRegex"
               />
               {values.matchRegex ? null : (
                 <SelectorFormField
                   defaultValue={`all`}
-                  label="Keyword detection strategy"
-                  subtext="Choose whether to require the user's question to contain any or all of the keywords above to show this answer."
+                  label={t("form.strategy.label")}
+                  subtext={t("form.strategy.description")}
                   name="matchAnyKeywords"
                   options={[
                     {
-                      name: "All keywords",
+                      name: t("form.strategy.all.label"),
                       value: "all",
                     },
                     {
-                      name: "Any keywords",
+                      name: t("form.strategy.any.label"),
                       value: "any",
                     },
                   ]}
@@ -163,14 +167,14 @@ export const StandardAnswerCreationForm = ({
               <div className="w-full">
                 <MarkdownFormField
                   name="answer"
-                  label="Answer"
-                  placeholder="The answer in Markdown. Example: If you need any help from the IT team, please email internalsupport@company.com"
+                  label={t("form.answer.label")}
+                  placeholder={t("form.answer.placeholder")}
                 />
               </div>
               <div className="w-4/12 flex flex-col gap-2">
-                <Label>Categories:</Label>
+                <Label>{t("form.categories.label")}</Label>
                 <InputChipField
-                  placeholder="Type a category and press Enter…"
+                  placeholder={t("form.categories.placeholder")}
                   value={categoryInput}
                   onChange={setCategoryInput}
                   chips={values.categories.map((category) => ({
@@ -220,7 +224,10 @@ export const StandardAnswerCreationForm = ({
                       const errorMsg =
                         responseJson.detail || responseJson.message;
                       toast.error(
-                        `Error creating category "${name}" - ${errorMsg}`
+                        t("form.toasts.categoryCreateFailed.message", {
+                          name,
+                          error: errorMsg,
+                        })
                       );
                       return;
                     }
@@ -243,7 +250,9 @@ export const StandardAnswerCreationForm = ({
               </div>
               <div className="py-4 mx-auto w-64">
                 <Button type="submit" disabled={isSubmitting} width="full">
-                  {isUpdate ? "Update!" : "Create!"}
+                  {isUpdate
+                    ? t("form.updateButton.label")
+                    : t("form.createButton.label")}
                 </Button>
               </div>
             </Form>

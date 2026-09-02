@@ -1,5 +1,6 @@
 "use client";
 
+import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useTranslations } from "next-intl";
 import { PageLoader } from "@opal/layouts";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -199,9 +200,14 @@ function Main() {
 }
 
 export default function Page() {
+  const adminRouteTitle = useAdminRouteTitle();
   return (
     <SettingsLayouts.Root>
-      <SettingsLayouts.Header icon={route.icon} title={route.title} divider />
+      <SettingsLayouts.Header
+        icon={route.icon}
+        title={adminRouteTitle(route)}
+        divider
+      />
       <SettingsLayouts.Body>
         <Main />
       </SettingsLayouts.Body>

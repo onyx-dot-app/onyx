@@ -6,6 +6,7 @@ import {
 } from "@/lib/projects/components/ProjectFolderButton";
 import CreateProjectModal from "@/lib/projects/components/CreateProjectModal";
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import {
   Button,
   EmptyMessageCard,
@@ -117,6 +118,8 @@ function FoldedProjectsPopoverContent({
   onNavigate,
   onNewProject,
 }: FoldedProjectsPopoverContentProps) {
+  const t = useTranslations("chat");
+  const tSidebar = useTranslations("sidebar");
   const [query, setQuery] = useState("");
   const matches = useProjectSearch(query);
   const focusOnMount = useFocusOnMount<HTMLInputElement>();
@@ -130,7 +133,7 @@ function FoldedProjectsPopoverContent({
           clearButton
           ref={focusOnMount}
           variant="internal"
-          placeholder="Search projects..."
+          placeholder={t("projects.foldedPopover.search.placeholder")}
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           rightChildren={
@@ -139,7 +142,7 @@ function FoldedProjectsPopoverContent({
               icon={SvgFolderPlus}
               prominence="internal"
               size="sm"
-              tooltip="New Project"
+              tooltip={tSidebar("appSidebar.newProject.tooltip")}
               onClick={noProp(onNewProject)}
             />
           }
@@ -151,7 +154,7 @@ function FoldedProjectsPopoverContent({
           ? [
               <EmptyMessageCard
                 key="empty"
-                title="No projects found"
+                title={t("projects.foldedPopover.empty.title")}
                 padding={2}
               />,
             ]
@@ -179,6 +182,7 @@ function FoldedProjectsPopoverContent({
  * search term inside it works the same way, one level down.
  */
 export function FoldedProjectsPopover() {
+  const tSidebar = useTranslations("sidebar");
   const appPosition = useAppPosition();
   const createProjectModal = useCreateModal();
   const [open, setOpen] = useState(false);
@@ -210,7 +214,7 @@ export function FoldedProjectsPopover() {
               folded
               selected={open || appPosition.isProject()}
             >
-              Projects
+              {tSidebar("appSidebar.projects.title")}
             </SidebarTab>
           </div>
         </Popover.Trigger>

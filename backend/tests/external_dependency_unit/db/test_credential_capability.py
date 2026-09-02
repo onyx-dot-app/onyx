@@ -22,8 +22,10 @@ from onyx.connectors.capability_checks.models import (
 from onyx.db.credential_capability import (
     get_capability_report_row,
     get_capability_report_rows_for_source,
+    get_sources_with_running_capability_runs,
     mark_capability_report_running,
     mark_capability_run_failed,
+    mark_stale_capability_runs_failed,
     upsert_completed_capability_report,
     upsert_completed_capability_report_unless_granular,
 )
@@ -37,10 +39,11 @@ def _report(
     connector_id: int | None = None,
     check_id: str = "slack_token_auth",
     is_fallback: bool = False,
+    source: DocumentSource = DocumentSource.SLACK,
 ) -> CredentialCapabilityReport:
     return CredentialCapabilityReport(
         credential_id=credential_id,
-        source=DocumentSource.SLACK,
+        source=source,
         connector_id=connector_id,
         checked_at=datetime.now(timezone.utc),
         trigger=CapabilityCheckTrigger.MANUAL,
@@ -88,6 +91,8 @@ def test_upsert_inserts_then_replaces(db_session: Session) -> None:
     )
 
     # Postcondition.
+    assert first is not None
+    assert second is not None
     assert second.id == first.id
     row = get_capability_report_row(db_session, credential_id, None)
     assert row is not None
@@ -128,6 +133,8 @@ def test_credential_and_connector_scopes_coexist(db_session: Session) -> None:
     )
 
     # Postcondition.
+    assert credential_scope is not None
+    assert connector_scope is not None
     assert credential_scope.id != connector_scope.id
     fetched_credential_scope = get_capability_report_row(
         db_session, credential_id, None
@@ -187,7 +194,9 @@ def test_mark_running_preserves_report_and_completion_keeps_start_time(
         source=DocumentSource.SLACK,
         trigger=CapabilityCheckTrigger.MANUAL,
         report=_report(credential_id, check_id="fresh"),
+        run_id=running.run_id,
     )
+    assert completed is not None
     assert completed.run_status == CapabilityReportRunStatus.COMPLETED
     assert completed.run_started_at == running.run_started_at
     assert completed.report is not None
@@ -267,6 +276,8 @@ def test_mark_running_replaces_a_stale_running_mark(db_session: Session) -> None
         active_within=timedelta(hours=1),
     )
     assert stale is not None
+    stale_run_id = stale.run_id
+    assert stale_run_id is not None
     stale_started_at = datetime.now(timezone.utc) - timedelta(hours=2)
     stale.run_started_at = stale_started_at
     db_session.flush()
@@ -281,10 +292,12 @@ def test_mark_running_replaces_a_stale_running_mark(db_session: Session) -> None
         active_within=timedelta(hours=1),
     )
 
-    # Postcondition.
+    # Postcondition. The replacement is a new attempt: fresh start, fresh id.
     assert remarked is not None
     assert remarked.run_started_at is not None
     assert remarked.run_started_at > stale_started_at
+    assert remarked.run_id is not None
+    assert remarked.run_id != stale_run_id
 
 
 @pytest.mark.usefixtures("tenant_context")
@@ -314,7 +327,10 @@ def test_failed_run_mark_is_truthful_and_retriggerable(db_session: Session) -> N
 
     # Under test.
     mark_capability_run_failed(
-        db_session, credential_id=credential_id, connector_id=None
+        db_session,
+        credential_id=credential_id,
+        connector_id=None,
+        run_id=marked.run_id,
     )
 
     # Postcondition.
@@ -363,6 +379,150 @@ def test_failed_run_mark_only_retires_running_rows(db_session: Session) -> None:
     row = get_capability_report_row(db_session, credential_id, None)
     assert row is not None
     assert row.run_status == CapabilityReportRunStatus.COMPLETED
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_sweep_retires_only_stale_running_rows(db_session: Session) -> None:
+    """
+    Verifies the FAILED_TO_RUN writer: only RUNNING rows past the cutoff turn,
+    the stored report survives, and fresh or completed rows are untouched.
+
+    GITLAB rather than SLACK: committed rows from other suites never use it, so
+    the retired-row count is deterministic.
+    """
+    # Precondition.
+    # Four scopes: a stale run over a previous report, a fresh run, a RUNNING
+    # mark with a NULL start, and a completed report.
+    stale_pair = make_cc_pair(db_session, source=DocumentSource.GITLAB, commit=False)
+    fresh_pair = make_cc_pair(db_session, source=DocumentSource.GITLAB, commit=False)
+    null_start_pair = make_cc_pair(
+        db_session, source=DocumentSource.GITLAB, commit=False
+    )
+    completed_pair = make_cc_pair(
+        db_session, source=DocumentSource.GITLAB, commit=False
+    )
+    upsert_completed_capability_report(
+        db_session,
+        credential_id=stale_pair.credential_id,
+        connector_id=None,
+        source=DocumentSource.GITLAB,
+        trigger=CapabilityCheckTrigger.MANUAL,
+        report=_report(
+            stale_pair.credential_id,
+            check_id="previous",
+            source=DocumentSource.GITLAB,
+        ),
+    )
+    for pair in (stale_pair, fresh_pair, null_start_pair):
+        marked = mark_capability_report_running(
+            db_session,
+            credential_id=pair.credential_id,
+            connector_id=None,
+            source=DocumentSource.GITLAB,
+            trigger=CapabilityCheckTrigger.MANUAL,
+            active_within=timedelta(hours=1),
+        )
+        assert marked is not None
+    stale_row = get_capability_report_row(db_session, stale_pair.credential_id, None)
+    assert stale_row is not None
+    stale_row.run_started_at = datetime.now(timezone.utc) - timedelta(hours=3)
+    db_session.flush()
+    # No writer leaves RUNNING with a NULL start, but the schema represents it
+    # and the sweep must retire it as stale; craft it directly.
+    null_start_row = get_capability_report_row(
+        db_session, null_start_pair.credential_id, None
+    )
+    assert null_start_row is not None
+    null_start_row.run_started_at = None
+    db_session.flush()
+    upsert_completed_capability_report(
+        db_session,
+        credential_id=completed_pair.credential_id,
+        connector_id=None,
+        source=DocumentSource.GITLAB,
+        trigger=CapabilityCheckTrigger.MANUAL,
+        report=_report(completed_pair.credential_id, source=DocumentSource.GITLAB),
+    )
+
+    # Under test.
+    retired = mark_stale_capability_runs_failed(
+        db_session, source=DocumentSource.GITLAB, stale_after=timedelta(hours=1)
+    )
+
+    # Postcondition.
+    # The backdated mark and the NULL-start mark both retire.
+    assert retired == 2
+    db_session.expire_all()
+    retired_row = get_capability_report_row(db_session, stale_pair.credential_id, None)
+    assert retired_row is not None
+    assert retired_row.run_status == CapabilityReportRunStatus.FAILED_TO_RUN
+    assert retired_row.report is not None
+    assert retired_row.report["check_results"][0]["check_id"] == "previous"
+    null_start_row = get_capability_report_row(
+        db_session, null_start_pair.credential_id, None
+    )
+    assert null_start_row is not None
+    assert null_start_row.run_status == CapabilityReportRunStatus.FAILED_TO_RUN
+    fresh_row = get_capability_report_row(db_session, fresh_pair.credential_id, None)
+    assert fresh_row is not None
+    assert fresh_row.run_status == CapabilityReportRunStatus.RUNNING
+    completed_row = get_capability_report_row(
+        db_session, completed_pair.credential_id, None
+    )
+    assert completed_row is not None
+    assert completed_row.run_status == CapabilityReportRunStatus.COMPLETED
+
+    # Under test and postcondition (a retired scope re-triggers immediately).
+    remarked = mark_capability_report_running(
+        db_session,
+        credential_id=stale_pair.credential_id,
+        connector_id=None,
+        source=DocumentSource.GITLAB,
+        trigger=CapabilityCheckTrigger.MANUAL,
+        active_within=timedelta(hours=1),
+    )
+    assert remarked is not None
+    assert remarked.run_status == CapabilityReportRunStatus.RUNNING
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_sources_with_running_runs_lists_each_source_once(
+    db_session: Session,
+) -> None:
+    """Verifies the sweep's work list: distinct sources with a RUNNING row."""
+    # Precondition.
+    # Two GITHUB scopes RUNNING, one GITLAB scope COMPLETED.
+    for pair in (
+        make_cc_pair(db_session, source=DocumentSource.GITHUB, commit=False),
+        make_cc_pair(db_session, source=DocumentSource.GITHUB, commit=False),
+    ):
+        marked = mark_capability_report_running(
+            db_session,
+            credential_id=pair.credential_id,
+            connector_id=None,
+            source=DocumentSource.GITHUB,
+            trigger=CapabilityCheckTrigger.MANUAL,
+            active_within=timedelta(hours=1),
+        )
+        assert marked is not None
+    completed_pair = make_cc_pair(
+        db_session, source=DocumentSource.GITLAB, commit=False
+    )
+    upsert_completed_capability_report(
+        db_session,
+        credential_id=completed_pair.credential_id,
+        connector_id=None,
+        source=DocumentSource.GITLAB,
+        trigger=CapabilityCheckTrigger.MANUAL,
+        report=_report(completed_pair.credential_id, source=DocumentSource.GITLAB),
+    )
+
+    # Under test.
+    sources = get_sources_with_running_capability_runs(db_session)
+
+    # Postcondition.
+    assert sources.count(DocumentSource.GITHUB) == 1
+    assert DocumentSource.GITLAB not in sources
 
 
 @pytest.mark.usefixtures("tenant_context")
@@ -491,6 +651,284 @@ def test_unless_granular_inserts_and_replaces_fallback_reports(
     assert replaced.trigger == CapabilityCheckTrigger.INDEXING_ATTEMPT
     assert replaced.report is not None
     assert replaced.report["check_results"][0]["check_id"] == "second"
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_fenced_completion_self_heals_a_retired_run(db_session: Session) -> None:
+    """
+    Verifies the fence preserves the self-heal: retirement keeps the attempt's
+    ``run_id``, so a run that was merely slow still lands its completion.
+    """
+    # Precondition.
+    # A RUNNING attempt, backdated and retired by the sweep.
+    cc_pair = make_cc_pair(db_session, source=DocumentSource.GITLAB, commit=False)
+    credential_id = cc_pair.credential_id
+    marked = mark_capability_report_running(
+        db_session,
+        credential_id=credential_id,
+        connector_id=None,
+        source=DocumentSource.GITLAB,
+        trigger=CapabilityCheckTrigger.MANUAL,
+        active_within=timedelta(hours=1),
+    )
+    assert marked is not None
+    run_id = marked.run_id
+    assert run_id is not None
+    marked.run_started_at = datetime.now(timezone.utc) - timedelta(hours=3)
+    db_session.flush()
+    retired = mark_stale_capability_runs_failed(
+        db_session, source=DocumentSource.GITLAB, stale_after=timedelta(hours=1)
+    )
+    assert retired == 1
+
+    # Under test.
+    completed = upsert_completed_capability_report(
+        db_session,
+        credential_id=credential_id,
+        connector_id=None,
+        source=DocumentSource.GITLAB,
+        trigger=CapabilityCheckTrigger.MANUAL,
+        report=_report(credential_id, check_id="slow", source=DocumentSource.GITLAB),
+        run_id=run_id,
+    )
+
+    # Postcondition.
+    # The retired row still belonged to this attempt, so the fenced write lands
+    # and FAILED_TO_RUN heals to the real report.
+    assert completed is not None
+    assert completed.run_status == CapabilityReportRunStatus.COMPLETED
+    assert completed.report is not None
+    assert completed.report["check_results"][0]["check_id"] == "slow"
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_fenced_terminal_writes_cannot_touch_a_successor_attempt(
+    db_session: Session,
+) -> None:
+    """
+    Verifies the fence itself: once the scope is reclaimed by a new attempt, the
+    superseded attempt's completion and failure writes are discarded.
+    """
+    # Precondition.
+    # A stale RUNNING attempt reclaimed by a fresh one.
+    cc_pair = make_cc_pair(db_session, source=DocumentSource.GITLAB, commit=False)
+    credential_id = cc_pair.credential_id
+    old = mark_capability_report_running(
+        db_session,
+        credential_id=credential_id,
+        connector_id=None,
+        source=DocumentSource.GITLAB,
+        trigger=CapabilityCheckTrigger.MANUAL,
+        active_within=timedelta(hours=1),
+    )
+    assert old is not None
+    old_run_id = old.run_id
+    assert old_run_id is not None
+    old.run_started_at = datetime.now(timezone.utc) - timedelta(hours=3)
+    db_session.flush()
+    successor = mark_capability_report_running(
+        db_session,
+        credential_id=credential_id,
+        connector_id=None,
+        source=DocumentSource.GITLAB,
+        trigger=CapabilityCheckTrigger.MANUAL,
+        active_within=timedelta(hours=1),
+    )
+    assert successor is not None
+    successor_run_id = successor.run_id
+
+    # Under test.
+    completed = upsert_completed_capability_report(
+        db_session,
+        credential_id=credential_id,
+        connector_id=None,
+        source=DocumentSource.GITLAB,
+        trigger=CapabilityCheckTrigger.MANUAL,
+        report=_report(credential_id, check_id="old", source=DocumentSource.GITLAB),
+        run_id=old_run_id,
+    )
+    mark_capability_run_failed(
+        db_session,
+        credential_id=credential_id,
+        connector_id=None,
+        run_id=old_run_id,
+    )
+
+    # Postcondition.
+    # Both writes no-op: the successor still owns the row and still reads as an
+    # in-flight run with no report.
+    assert completed is None
+    db_session.expire_all()
+    row = get_capability_report_row(db_session, credential_id, None)
+    assert row is not None
+    assert row.run_status == CapabilityReportRunStatus.RUNNING
+    assert row.run_id == successor_run_id
+    assert row.report is None
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_legacy_writes_match_only_unowned_rows(db_session: Session) -> None:
+    """
+    Verifies the transition fence: a pre-fence task (no ``run_id``) still lands
+    its terminal writes on its own pre-migration NULL mark, but cannot touch a
+    row claimed by a post-deploy attempt.
+    """
+    # Precondition.
+    # Two RUNNING marks; one crafted to look pre-migration.
+    legacy_pair = make_cc_pair(db_session, source=DocumentSource.GITLAB, commit=False)
+    claimed_pair = make_cc_pair(db_session, source=DocumentSource.GITLAB, commit=False)
+    for pair in (legacy_pair, claimed_pair):
+        marked = mark_capability_report_running(
+            db_session,
+            credential_id=pair.credential_id,
+            connector_id=None,
+            source=DocumentSource.GITLAB,
+            trigger=CapabilityCheckTrigger.MANUAL,
+            active_within=timedelta(hours=1),
+        )
+        assert marked is not None
+    legacy_row = get_capability_report_row(db_session, legacy_pair.credential_id, None)
+    assert legacy_row is not None
+    # Pre-migration marks carry no attempt id; craft one directly.
+    legacy_row.run_id = None
+    db_session.flush()
+
+    # Under test.
+    legacy_completion = upsert_completed_capability_report(
+        db_session,
+        credential_id=legacy_pair.credential_id,
+        connector_id=None,
+        source=DocumentSource.GITLAB,
+        trigger=CapabilityCheckTrigger.MANUAL,
+        report=_report(
+            legacy_pair.credential_id, check_id="legacy", source=DocumentSource.GITLAB
+        ),
+    )
+    crossing_completion = upsert_completed_capability_report(
+        db_session,
+        credential_id=claimed_pair.credential_id,
+        connector_id=None,
+        source=DocumentSource.GITLAB,
+        trigger=CapabilityCheckTrigger.MANUAL,
+        report=_report(
+            claimed_pair.credential_id,
+            check_id="crossing",
+            source=DocumentSource.GITLAB,
+        ),
+    )
+    mark_capability_run_failed(
+        db_session, credential_id=claimed_pair.credential_id, connector_id=None
+    )
+
+    # Postcondition.
+    # The legacy write lands on its own NULL mark; both legacy writes against
+    # the claimed row no-op.
+    assert legacy_completion is not None
+    assert legacy_completion.run_status == CapabilityReportRunStatus.COMPLETED
+    assert crossing_completion is None
+    db_session.expire_all()
+    claimed_row = get_capability_report_row(
+        db_session, claimed_pair.credential_id, None
+    )
+    assert claimed_row is not None
+    assert claimed_row.run_status == CapabilityReportRunStatus.RUNNING
+    assert claimed_row.report is None
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_unless_granular_preserves_a_running_row(db_session: Session) -> None:
+    """
+    Verifies the recorder guard: a blocking validation that lands mid-run must
+    not overwrite the RUNNING mark, or the attempt's fenced completion would be
+    stranded.
+    """
+    # Precondition.
+    cc_pair = make_cc_pair(db_session, source=DocumentSource.SLACK, commit=False)
+    credential_id = cc_pair.credential_id
+    marked = mark_capability_report_running(
+        db_session,
+        credential_id=credential_id,
+        connector_id=None,
+        source=DocumentSource.SLACK,
+        trigger=CapabilityCheckTrigger.MANUAL,
+        active_within=timedelta(hours=1),
+    )
+    assert marked is not None
+    run_id = marked.run_id
+
+    # Under test.
+    result = upsert_completed_capability_report_unless_granular(
+        db_session,
+        credential_id=credential_id,
+        connector_id=None,
+        source=DocumentSource.SLACK,
+        trigger=CapabilityCheckTrigger.CC_PAIR_VALIDATION,
+        report=_report(credential_id, check_id="fallback", is_fallback=True),
+    )
+
+    # Postcondition.
+    assert result is None
+    db_session.expire_all()
+    row = get_capability_report_row(db_session, credential_id, None)
+    assert row is not None
+    assert row.run_status == CapabilityReportRunStatus.RUNNING
+    assert row.run_id == run_id
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_recorder_write_clears_the_attempt_id(db_session: Session) -> None:
+    """
+    Verifies a landing recorder write leaves no attempt owning the row: the
+    stored ``run_id`` is nulled, and NULL is fail-closed against the previous
+    attempt's late fenced completion.
+    """
+    # Precondition.
+    # A retired attempt whose report-less row the recorder may overwrite (not
+    # granular, not RUNNING).
+    cc_pair = make_cc_pair(db_session, source=DocumentSource.SLACK, commit=False)
+    credential_id = cc_pair.credential_id
+    marked = mark_capability_report_running(
+        db_session,
+        credential_id=credential_id,
+        connector_id=None,
+        source=DocumentSource.SLACK,
+        trigger=CapabilityCheckTrigger.MANUAL,
+        active_within=timedelta(hours=1),
+    )
+    assert marked is not None
+    old_run_id = marked.run_id
+    assert old_run_id is not None
+    mark_capability_run_failed(
+        db_session, credential_id=credential_id, connector_id=None, run_id=old_run_id
+    )
+
+    # Under test.
+    recorded = upsert_completed_capability_report_unless_granular(
+        db_session,
+        credential_id=credential_id,
+        connector_id=None,
+        source=DocumentSource.SLACK,
+        trigger=CapabilityCheckTrigger.CC_PAIR_VALIDATION,
+        report=_report(credential_id, check_id="fallback", is_fallback=True),
+    )
+    late_completion = upsert_completed_capability_report(
+        db_session,
+        credential_id=credential_id,
+        connector_id=None,
+        source=DocumentSource.SLACK,
+        trigger=CapabilityCheckTrigger.MANUAL,
+        report=_report(credential_id, check_id="late"),
+        run_id=old_run_id,
+    )
+
+    # Postcondition.
+    assert recorded is not None
+    assert recorded.run_id is None
+    assert late_completion is None
+    row = get_capability_report_row(db_session, credential_id, None)
+    assert row is not None
+    assert row.report is not None
+    assert row.report["check_results"][0]["check_id"] == "fallback"
 
 
 @pytest.mark.usefixtures("tenant_context")

@@ -6,6 +6,7 @@
  * Endpoints:
  * - /api/admin/llm/test/default - Test the default LLM provider connection
  * - /api/admin/llm/default - Set the default LLM model
+ * - /api/admin/llm/default-craft - Set or clear Craft's default model
  * - /api/admin/llm/provider/{id} - Delete an LLM provider
  * - /api/admin/llm/{provider}/available-models - Fetch available models for a provider
  */
@@ -66,6 +67,45 @@ export async function setDefaultLlmModel(
       provider_id: providerId,
       model_name: modelName,
     }),
+  });
+
+  if (!response.ok) {
+    const errorMsg = (await response.json()).detail;
+    throw new Error(errorMsg);
+  }
+}
+
+/**
+ * Set Craft's default model, distinct from the workspace's default chat model.
+ * @throws Error with the detail message from the API on failure
+ */
+export async function setDefaultCraftModel(
+  providerId: number,
+  modelName: string
+): Promise<void> {
+  const response = await fetch("/api/admin/llm/default-craft", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      provider_id: providerId,
+      model_name: modelName,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorMsg = (await response.json()).detail;
+    throw new Error(errorMsg);
+  }
+}
+
+/**
+ * Clear Craft's default model. Craft then falls back to the workspace's
+ * default chat model.
+ * @throws Error with the detail message from the API on failure
+ */
+export async function deleteDefaultCraftModel(): Promise<void> {
+  const response = await fetch("/api/admin/llm/default-craft", {
+    method: "DELETE",
   });
 
   if (!response.ok) {

@@ -1,5 +1,6 @@
 "use client";
 
+import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useTranslations } from "next-intl";
 import { CCPairIndexingStatusTable } from "./CCPairIndexingStatusTable";
 import { SearchAndFilterControls } from "./SearchAndFilterControls";
@@ -207,6 +208,7 @@ function Main() {
 
 export default function Status() {
   const t = useTranslations("admin.indexing");
+  const adminRouteTitle = useAdminRouteTitle();
 
   useToastFromQuery({
     "connector-created": {
@@ -219,7 +221,7 @@ export default function Status() {
     <SettingsLayouts.Root width="full">
       <SettingsLayouts.Header
         icon={route.icon}
-        title={route.title}
+        title={adminRouteTitle(route)}
         rightChildren={
           <Button href="/admin/add-connector">
             {t("status.addConnectorButton.label")}

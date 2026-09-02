@@ -108,7 +108,7 @@ function TruncatedDisplay({
         <div
           ref={hiddenRef}
           aria-hidden
-          className="pointer-events-none invisible absolute left-0 top-0 whitespace-nowrap"
+          className="pointer-events-none invisible absolute start-0 top-0 whitespace-nowrap"
         >
           {text}
         </div>
@@ -274,8 +274,8 @@ function InputSelectTrigger({
       data-variant={variant}
       {...props}
     >
-      {/* text-left counters the button element's centered default. */}
-      <div className="flex w-full flex-row items-center justify-between gap-1 p-0.5 text-left">
+      {/* text-start counters the button element's centered default. */}
+      <div className="flex w-full flex-row items-center justify-between gap-1 p-0.5 text-start">
         {children ?? displayContent}
 
         <div className="flex flex-row items-center gap-1">
@@ -297,6 +297,15 @@ function InputSelectTrigger({
 function InputSelectContent({
   children,
   ref,
+  /*
+   * Defaulted here rather than written before the spread below: a spread
+   * copies a key even when its value is `undefined`, so a caller writing
+   * `prop={condition ? x : undefined}` would replace the default rather than
+   * fall back to it.
+   */
+  sideOffset = 4,
+  position = "popper",
+  onMouseDown,
   ...props
 }: WithoutStyles<React.ComponentProps<typeof SelectPrimitive.Content>>) {
   return (
@@ -309,11 +318,17 @@ function InputSelectContent({
           "data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
           "data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95"
         )}
-        sideOffset={4}
-        position="popper"
+        sideOffset={sideOffset}
+        position={position}
+        /*
+         * Chained rather than overwritable: swallowing the press is what keeps
+         * a click inside the list from reaching whatever is behind it, so a
+         * caller adding a handler must not silently drop it.
+         */
         onMouseDown={(e) => {
           e.stopPropagation();
           e.preventDefault();
+          onMouseDown?.(e);
         }}
         {...props}
       >

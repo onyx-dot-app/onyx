@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import {
   Button,
   LineItemButton,
@@ -45,6 +46,7 @@ function FileLineItem({
   onPickRecent,
   onFileClick,
 }: FileLineItemProps) {
+  const t = useTranslations("common.filePicker");
   const showLoader = useMemo(
     () =>
       String(projectFile.status) === UserFileStatus.PROCESSING ||
@@ -90,7 +92,7 @@ function FileLineItem({
               <Button
                 icon={SvgExternalLink}
                 onClick={noProp(() => onFileClick(projectFile))}
-                tooltip="View File"
+                tooltip={t("viewFileButton.tooltip")}
                 disabled={disableActionButton}
                 prominence="internal"
                 size="sm"
@@ -119,6 +121,7 @@ function FilePickerPopoverContents({
   triggerUploadPicker,
   openRecentFilesModal,
 }: FilePickerPopoverContentsProps) {
+  const t = useTranslations("common.filePicker");
   // These are the "quick" files that we show. Essentially "speed dial", but for files.
   // The rest of the files will be hidden behind the "All Recent Files" button, should there be more files left to show!
   const hasFiles = recentFiles.length > 0;
@@ -134,9 +137,9 @@ function FilePickerPopoverContents({
           rounding={2}
           key="upload-files"
           icon={SvgUploadSquare}
-          description="Upload a file from your device"
+          description={t("uploadFiles.description")}
           onClick={triggerUploadPicker}
-          title="Upload Files"
+          title={t("uploadFiles.title")}
         />,
 
         // Separator
@@ -146,7 +149,7 @@ function FilePickerPopoverContents({
         hasFiles && (
           <div key="recent-files" className="pt-1">
             <Text as="p" text02 secondaryBody className="py-1 px-3">
-              Recent Files
+              {t("recentFiles.title")}
             </Text>
           </div>
         ),
@@ -169,7 +172,7 @@ function FilePickerPopoverContents({
             key="more-files"
             icon={SvgMoreHorizontal}
             onClick={openRecentFilesModal}
-            title="All Recent Files"
+            title={t("allRecentFilesButton.title")}
           />
         ),
       ]}
@@ -194,6 +197,7 @@ export default function FilePickerPopover({
   trigger,
   selectedFileIds,
 }: FilePickerPopoverProps) {
+  const t = useTranslations("common.filePicker");
   const { allRecentFiles } = useProjectsContext();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const recentFilesModal = useCreateModal();
@@ -223,7 +227,7 @@ export default function FilePickerPopover({
     deleteUserFile(file.id)
       .then((result) => {
         if (!result.has_associations) {
-          toast.success("File deleted successfully");
+          toast.success(t("toasts.deleteSuccess"));
           setCurrentMessageFiles((prev) =>
             prev.filter((f) => f.id !== file.id)
           );
@@ -235,18 +239,14 @@ export default function FilePickerPopover({
               f.id === file.id ? { ...f, status: lastStatus } : f
             )
           );
-          let projects = result.project_names.join(", ");
-          let assistants = result.assistant_names.join(", ");
-          let message = "Cannot delete file. It is associated with";
-          if (projects) {
-            message += ` projects: ${projects}`;
-          }
-          if (projects && assistants) {
-            message += " and ";
-          }
-          if (assistants) {
-            message += `assistants: ${assistants}`;
-          }
+          const projects = result.project_names.join(", ");
+          const assistants = result.assistant_names.join(", ");
+          const message =
+            projects && assistants
+              ? t("toasts.associatedBoth", { projects, assistants })
+              : projects
+                ? t("toasts.associatedProjects", { projects })
+                : t("toasts.associatedAssistants", { assistants });
 
           toast.error(message);
         }
@@ -256,7 +256,7 @@ export default function FilePickerPopover({
         setRecentFilesSnapshot((prev) =>
           prev.map((f) => (f.id === file.id ? { ...f, status: lastStatus } : f))
         );
-        toast.error("Failed to delete file. Please try again.");
+        toast.error(t("toasts.deleteFailed"));
         // Useful for debugging; safe in client components
         console.error("Failed to delete file", error);
       });
@@ -275,8 +275,8 @@ export default function FilePickerPopover({
 
       <recentFilesModal.Provider>
         <UserFilesModal
-          title="Recent Files"
-          description="Upload files or pick from your recent files."
+          title={t("recentFiles.title")}
+          description={t("recentFilesModal.description")}
           recentFiles={recentFilesSnapshot}
           onPickRecent={(file) => {
             onPickRecent?.(file);

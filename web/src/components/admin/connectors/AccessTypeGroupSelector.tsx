@@ -1,6 +1,7 @@
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
 import React, { useEffect } from "react";
+import { useTranslations } from "next-intl";
 import { FieldArray, ArrayHelpers, ErrorMessage, useField } from "formik";
 import Text from "@/refresh-components/texts/Text";
 import { Button, Divider } from "@opal/components";
@@ -34,6 +35,7 @@ export function AccessTypeGroupSelector({
 }: {
   connector: ConfigurableSources;
 }) {
+  const t = useTranslations("admin.connector.groupSelector");
   const { data: userGroups, isLoading: userGroupsIsLoading } = useUserGroups();
   const { isScopedManager } = usePermissionAuthority(
     Permission.MANAGE_CONNECTORS
@@ -83,8 +85,8 @@ export function AccessTypeGroupSelector({
             <div className="flex flex-col gap-3 pt-4">
               <Text as="p" mainUiAction text05>
                 {access_type.value === "sync"
-                  ? "Assign this Connector to a group"
-                  : "Assign group access for this Connector"}
+                  ? t("assignToGroup.title")
+                  : t("assignGroupAccess.title")}
               </Text>
               {userGroupsIsLoading ? (
                 <div className="animate-pulse bg-background-200 h-8 w-32 rounded-sm" />
@@ -93,10 +95,10 @@ export function AccessTypeGroupSelector({
                   {access_type.value === "sync"
                     ? // Groups never widen or narrow a synced connector's document
                       // access — the source system's permissions decide that.
-                      "The groups below control who can manage this Connector. Access to its documents is inherited from the source's own permissions."
+                      t("syncGroups.description")
                     : isScopedManager
-                      ? "Select one or more of the groups you manage to give access to this Connector"
-                      : "This Connector will be visible/accessible by the groups selected below"}
+                      ? t("scopedManagerGroups.description")
+                      : t("visibleToGroups.description")}
                 </Text>
               )}
             </div>

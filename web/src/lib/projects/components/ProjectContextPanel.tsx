@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback } from "react";
+import { useTranslations } from "next-intl";
 import { useDropzone } from "react-dropzone";
 import { useProjectsContext } from "@/lib/projects/providers";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
@@ -33,6 +34,7 @@ export default function ProjectContextPanel({
   availableContextTokens = 128_000,
   setPresentingDocument,
 }: ProjectContextPanelProps) {
+  const t = useTranslations("chat");
   const addInstructionModal = useCreateModal();
   const projectFilesModal = useCreateModal();
   // Convert ProjectFile to MinimalOnyxDocument format for viewing
@@ -69,7 +71,12 @@ export default function ProjectContextPanel({
   );
 
   const totalFiles = allCurrentProjectFiles.length;
-  const displayFileCount = totalFiles > 100 ? "100+" : String(totalFiles);
+  const fileCountLabel =
+    totalFiles > 100
+      ? t("projects.contextPanel.fileCountOverflow.description")
+      : t("projects.contextPanel.fileCount.description", {
+          count: totalFiles,
+        });
 
   const handleUploadChange = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -93,7 +100,8 @@ export default function ProjectContextPanel({
   });
 
   const currentProject = projects.find((p) => p.id === currentProjectId);
-  const projectName = currentProject?.name || "Loading project...";
+  const projectName =
+    currentProject?.name || t("projects.contextPanel.loadingProject.label");
 
   if (!currentProjectId) return null; // no selection yet
 
@@ -110,8 +118,8 @@ export default function ProjectContextPanel({
 
       <projectFilesModal.Provider>
         <UserFilesModal
-          title="Project Files"
-          description="Sessions in this project can access the files here."
+          title={t("projects.contextPanel.filesModal.title")}
+          description={t("projects.contextPanel.filesModal.description")}
           recentFiles={[...allCurrentProjectFiles]}
           onView={handleOnView}
           handleUploadChange={handleUploadChange}
@@ -139,12 +147,12 @@ export default function ProjectContextPanel({
         <ContentAction
           sizePreset="main-ui"
           variant="section"
-          title="Instructions"
+          title={t("projects.contextPanel.instructions.title")}
           description={
             isLoadingProjectDetails && !currentProjectDetails
               ? undefined
               : currentProjectDetails?.project?.instructions ||
-                "Add instructions to tailor the response in this project."
+                t("projects.contextPanel.instructions.emptyDescription")
           }
           descriptionMaxLines={2}
           padding={0}
@@ -156,7 +164,7 @@ export default function ProjectContextPanel({
               onClick={() => addInstructionModal.toggle(true)}
               interaction={addInstructionModal.isOpen ? "active" : undefined}
             >
-              Set Instructions
+              {t("projects.contextPanel.setInstructionsButton.label")}
             </Button>
           }
         />
@@ -168,8 +176,8 @@ export default function ProjectContextPanel({
           <ContentAction
             sizePreset="main-ui"
             variant="section"
-            title="Files"
-            description="Chats in this project can access these files."
+            title={t("projects.contextPanel.files.title")}
+            description={t("projects.contextPanel.files.description")}
             padding={0}
             center
             rightChildren={
@@ -180,7 +188,7 @@ export default function ProjectContextPanel({
                     prominence="tertiary"
                     interaction={open ? "active" : undefined}
                   >
-                    Add Files
+                    {t("projects.contextPanel.addFilesButton.label")}
                   </Button>
                 )}
                 onFileClick={handleOnView}
@@ -215,8 +223,8 @@ export default function ProjectContextPanel({
                 <LineItemButton
                   sizePreset="main-ui"
                   variant="section"
-                  title="View files"
-                  description={`${displayFileCount} files`}
+                  title={t("projects.contextPanel.viewFiles.label")}
+                  description={fileCountLabel}
                   icon={SvgFiles}
                   width="full"
                   onClick={() => projectFilesModal.toggle(true)}
@@ -242,8 +250,8 @@ export default function ProjectContextPanel({
                   <LineItemButton
                     sizePreset="main-ui"
                     variant="section"
-                    title="View All"
-                    description={`${displayFileCount} files`}
+                    title={t("projects.contextPanel.viewAll.label")}
+                    description={fileCountLabel}
                     rightChildren={
                       <SvgFiles className="h-5 w-5 stroke-text-02" />
                     }
@@ -257,16 +265,14 @@ export default function ProjectContextPanel({
 
               {projectTokenCount > availableContextTokens && (
                 <Text as="p" font="secondary-body" color="text-02">
-                  This project exceeds the model&apos;s context limits. Sessions
-                  will automatically search for relevant files first before
-                  generating response.
+                  {t("projects.contextPanel.contextExceeded.message")}
                 </Text>
               )}
             </>
           ) : (
             <div
               className={cn(
-                "h-12 rounded-xl border border-dashed flex items-center pl-2",
+                "h-12 rounded-xl border border-dashed flex items-center ps-2",
                 isDragActive
                   ? "bg-action-selection-01 border-action-selection-05 text-action-selection-05"
                   : "border-border-01 text-text-02"
@@ -274,8 +280,8 @@ export default function ProjectContextPanel({
             >
               <Text as="p" font="secondary-body" color="inherit">
                 {isDragActive
-                  ? "Drop files here to add to this project"
-                  : "Add documents, texts, or images to use in the project. Drag & drop supported."}
+                  ? t("projects.contextPanel.dropFiles.message")
+                  : t("projects.contextPanel.emptyFiles.message")}
               </Text>
             </div>
           )}

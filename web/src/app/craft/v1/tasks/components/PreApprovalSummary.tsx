@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { Tag, Text } from "@opal/components";
 import useUserExternalApps from "@/hooks/useUserExternalApps";
 import { useCraftMcpServers } from "@/lib/tools/hooks";
@@ -15,6 +16,7 @@ export default function PreApprovalSummary({
   appIds,
   mcpServerIds,
 }: PreApprovalSummaryProps) {
+  const t = useTranslations("craft.tasks.preApproval");
   const hasAppIds = appIds.length > 0;
   const hasMcpServerIds = mcpServerIds.length > 0;
   const {
@@ -44,11 +46,11 @@ export default function PreApprovalSummary({
   return (
     <div className="flex flex-col gap-2">
       <Text font="main-ui-action" color="text-03">
-        Pre-approved apps and MCP servers
+        {t("summary.title")}
       </Text>
       {(appsFailed || mcpServersFailed) && (
         <Text font="secondary-body" color="status-error-05">
-          Some pre-approval details couldn’t load. Refresh to try again.
+          {t("summary.partialLoadFailed")}
         </Text>
       )}
       <div className="flex flex-wrap gap-2">
@@ -60,7 +62,7 @@ export default function PreApprovalSummary({
             <Tag
               key={`app-${id}`}
               icon={app ? getAppTypeLogo(app.app_type) : undefined}
-              title={app?.name ?? `App #${id}`}
+              title={app?.name ?? t("appFallbackName", { id })}
             />
           );
         })}
@@ -76,7 +78,7 @@ export default function PreApprovalSummary({
                   ? getActionIcon(server.server_url, server.name)
                   : undefined
               }
-              title={server?.name ?? `MCP server #${id}`}
+              title={server?.name ?? t("mcpServerFallbackName", { id })}
             />
           );
         })}

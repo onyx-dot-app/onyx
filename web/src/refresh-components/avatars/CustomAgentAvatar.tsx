@@ -4,6 +4,7 @@ import { cn } from "@opal/utils";
 import type { IconProps } from "@opal/types";
 import Text from "@/refresh-components/texts/Text";
 import Image from "next/image";
+import { useTranslations } from "next-intl";
 import { DEFAULT_AVATAR_SIZE_PX } from "@/lib/constants";
 import {
   SvgActivitySmall,
@@ -98,6 +99,7 @@ export default function CustomAgentAvatar({
 
   size = DEFAULT_AVATAR_SIZE_PX,
 }: CustomAgentAvatarProps) {
+  const t = useTranslations("common.agentAvatar");
   if (src) {
     return (
       <div
@@ -105,7 +107,7 @@ export default function CustomAgentAvatar({
         style={{ height: size, width: size }}
       >
         <Image
-          alt={name || "Agent avatar"}
+          alt={name || t("image.altFallback")}
           src={src}
           fill
           className="object-cover object-center"

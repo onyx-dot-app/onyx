@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useState } from "react";
+import { useTranslations } from "next-intl";
 
 import { Button, Text } from "@opal/components";
 import { cn } from "@opal/utils";
@@ -38,6 +39,7 @@ function InsetBlock({ children }: { children: React.ReactNode }) {
 }
 
 function StringValue({ text }: { text: string }) {
+  const t = useTranslations("craft.approvals.payload");
   const [expanded, setExpanded] = useState(false);
   const needsTruncation = text.length > STRING_TRUNCATE_AT && !expanded;
   const shown = needsTruncation
@@ -57,7 +59,7 @@ function StringValue({ text }: { text: string }) {
             size="sm"
             onClick={() => setExpanded((v) => !v)}
           >
-            {expanded ? "Show less" : "Show more"}
+            {expanded ? t("showLess.button") : t("showMore.button")}
           </Button>
         </div>
       )}
@@ -66,6 +68,7 @@ function StringValue({ text }: { text: string }) {
 }
 
 function NestedJsonValue({ value }: { value: unknown }) {
+  const t = useTranslations("craft.approvals.payload");
   const [expanded, setExpanded] = useState(false);
   const full = JSON.stringify(value, null, 2);
   const lines = full.split("\n");
@@ -90,7 +93,7 @@ function NestedJsonValue({ value }: { value: unknown }) {
             size="sm"
             onClick={() => setExpanded((v) => !v)}
           >
-            {expanded ? "Show less" : "Show more"}
+            {expanded ? t("showLess.button") : t("showMore.button")}
           </Button>
         </div>
       )}
@@ -153,6 +156,7 @@ function StructuredPayloadView({
 }: {
   payload: Record<string, unknown>;
 }) {
+  const t = useTranslations("craft.approvals.payload");
   const entries = Object.entries(payload).filter(
     ([, v]) => v !== null && v !== undefined
   );
@@ -160,7 +164,7 @@ function StructuredPayloadView({
     return (
       <InsetBlock>
         <Text font="secondary-body" color="text-03">
-          No payload.
+          {t("empty.label")}
         </Text>
       </InsetBlock>
     );

@@ -60,6 +60,26 @@
         "ariaLabel": "{title} action card"
       }
     },
+    "actionLineItem": {
+      "addConnectors": {
+        "label": "Add Connectors"
+      },
+      "configure": {
+        "tooltip": "Configure"
+      },
+      "configureConnectors": {
+        "label": "Configure Connectors"
+      },
+      "disable": {
+        "label": "Disable"
+      },
+      "enable": {
+        "label": "Enable"
+      },
+      "projectSearch": {
+        "label": "Project Search"
+      }
+    },
     "addMcpModal": {
       "addHeader": {
         "description": "Connect MCP (Model Context Protocol) server to add custom actions.",
@@ -355,6 +375,53 @@
         "tooltip": "Refresh tools"
       }
     },
+    "mcpOauthCallback": {
+      "autoRedirect": {
+        "text": "Taking you back automatically…"
+      },
+      "backToChatButton": {
+        "label": "Back to Chat"
+      },
+      "cancelled": {
+        "description": "The authorization was cancelled or denied, so no connection was made. To try again, restart the connection from the MCP server's authentication settings.",
+        "title": "Authorization cancelled"
+      },
+      "continueButton": {
+        "label": "Continue"
+      },
+      "genericError": {
+        "fallbackDetail": "Failed to complete authorization",
+        "title": "Something went wrong"
+      },
+      "invalidLink": {
+        "description": "This link is missing the required authorization parameters. Restart the connection from the MCP server's authentication settings.",
+        "title": "Invalid authorization link"
+      },
+      "processing": {
+        "description": "Finishing the connection to your MCP server. This may take a few moments…",
+        "title": "Completing authorization"
+      },
+      "serverNotFound": {
+        "description": "The MCP server this authorization belongs to no longer exists or is no longer configured. Recreate or reconfigure the server, then connect again.",
+        "title": "MCP server not found"
+      },
+      "sessionExpired": {
+        "description": "This authorization link is invalid, has expired, or was already used. Restart the connection from the MCP server's authentication settings.",
+        "title": "Authorization session expired"
+      },
+      "success": {
+        "description": "Authorization completed successfully. You can now use this server's tools in chat.",
+        "title": "Connected to {serverName}"
+      },
+      "timedOut": {
+        "description": "The MCP server didn't confirm the authorization in time. Try connecting again — if this keeps happening, verify the server's OAuth configuration.",
+        "title": "Authorization timed out"
+      },
+      "tokenExchangeFailed": {
+        "description": "The provider approved the authorization but a valid access token could not be obtained. Check the server's OAuth client credentials and endpoints, then try connecting again.",
+        "title": "Token exchange failed"
+      }
+    },
     "mcpPage": {
       "addButton": {
         "label": "Add MCP Server"
@@ -554,6 +621,14 @@
         "label": "Deny"
       }
     },
+    "switchList": {
+      "back": {
+        "ariaLabel": "Back"
+      },
+      "toggle": {
+        "ariaLabel": "Toggle {name}"
+      }
+    },
     "toolItem": {
       "unavailable": {
         "label": "Tool unavailable"
@@ -578,6 +653,81 @@
       "showEnabledButton": {
         "ariaLabel": "Show only enabled tools",
         "tooltip": "Show only enabled"
+      }
+    },
+    "toolsPopover": {
+      "configureLinks": {
+        "codeInterpreter": {
+          "tooltip": "Configure Code Interpreter"
+        },
+        "imageGeneration": {
+          "tooltip": "Configure Image Generation"
+        },
+        "openapi": {
+          "tooltip": "Manage OpenAPI Actions"
+        },
+        "webSearch": {
+          "tooltip": "Configure Web Search"
+        }
+      },
+      "disableAllSources": {
+        "label": "Disable All Sources"
+      },
+      "disableAllTools": {
+        "label": "Disable All Tools"
+      },
+      "enableAllSources": {
+        "label": "Enable All Sources"
+      },
+      "enableAllTools": {
+        "label": "Enable All Tools"
+      },
+      "manageActions": {
+        "tooltip": "Manage Actions"
+      },
+      "mcpTools": {
+        "searchPlaceholder": "Search {server} tools"
+      },
+      "moreActions": {
+        "label": "More Actions"
+      },
+      "reauthenticate": {
+        "label": "Re-authenticate"
+      },
+      "search": {
+        "placeholder": "Search actions..."
+      },
+      "serverFallback": {
+        "label": "server"
+      },
+      "sourceFilters": {
+        "searchPlaceholder": "Search Filters"
+      },
+      "tooltips": {
+        "askAdminSuffix": {
+          "text": "Ask an admin to configure."
+        },
+        "codingAgent": {
+          "description": "Investigate a GitHub repository and answer questions about its code."
+        },
+        "configureSuffix": {
+          "text": "Press the settings cog to enable."
+        },
+        "default": {
+          "description": "This action is not configured yet."
+        },
+        "imageGeneration": {
+          "description": "Generate images based on a prompt."
+        },
+        "python": {
+          "description": "Execute code for complex analysis."
+        },
+        "search": {
+          "description": "Search through connected knowledge to inform the answer."
+        },
+        "webSearch": {
+          "description": "Search the web for up-to-date information."
+        }
       }
     },
     "toolsSection": {
@@ -631,7 +781,39 @@
         }
       }
     },
+    "agentStats": {
+      "chart": {
+        "description": "Per day for the selected range",
+        "title": "Messages and unique users"
+      },
+      "empty": {
+        "message": "No data found for this agent in the selected date range."
+      },
+      "fetchFailed": {
+        "message": "Failed to fetch agent stats."
+      },
+      "permissionDenied": {
+        "message": "You don't have permission to view these stats."
+      },
+      "totalMessages": {
+        "label": "Total Messages"
+      },
+      "totalUniqueUsers": {
+        "label": "Total Unique Users"
+      },
+      "unknownError": {
+        "message": "An unknown error occurred"
+      }
+    },
     "agents": {
+      "collapsibleSection": {
+        "collapse": {
+          "ariaLabel": "Collapse section"
+        },
+        "expand": {
+          "ariaLabel": "Expand section"
+        }
+      },
       "deleteModal": {
         "confirmation": {
           "description": "Are you sure you want to delete <emphasis>{name}</emphasis>? This action cannot be undone."
@@ -1003,6 +1185,47 @@
         },
         "viewPlans": {
           "title": "View Plans"
+        }
+      },
+      "info": {
+        "empty": {
+          "message": "No billing information available."
+        },
+        "loadError": {
+          "message": "Error loading billing information. Please try again later."
+        },
+        "loading": {
+          "label": "Loading..."
+        },
+        "manageSubscription": {
+          "description": "View your plan, update payment, or change subscription",
+          "title": "Manage Subscription"
+        },
+        "page": {
+          "title": "Billing Information"
+        },
+        "portalError": {
+          "message": "Error creating customer portal session"
+        },
+        "subscriptionDetails": {
+          "title": "Subscription Details"
+        },
+        "summary": {
+          "billingEnd": {
+            "label": "Billing End"
+          },
+          "billingStart": {
+            "label": "Billing Start"
+          },
+          "seats": {
+            "label": "Seats"
+          },
+          "status": {
+            "label": "Subscription Status"
+          }
+        },
+        "updatedToast": {
+          "message": "Congratulations! Your subscription has been updated successfully."
         }
       },
       "license": {
@@ -1517,6 +1740,25 @@
       }
     },
     "connector": {
+      "accessType": {
+        "autoSyncOption": {
+          "description": "We will automatically sync permissions from the source. A document will be searchable in Onyx if and only if the user performing the search has permission to access the document in the source.",
+          "disabledReason": "Current credential auth method doesn't support Auto Sync Permissions. Please change the credential auth method to a supported one.",
+          "name": "Auto Sync Permissions"
+        },
+        "heading": {
+          "description": "Control who has access to the documents indexed by this connector.",
+          "title": "Document Access"
+        },
+        "privateOption": {
+          "description": "Only users who have explicitly been given access to this connector (through the User Groups page) can access the documents pulled in by this connector",
+          "name": "Private"
+        },
+        "publicOption": {
+          "description": "Everyone with an account on Onyx can access the documents pulled in by this connector",
+          "name": "Public"
+        }
+      },
       "advancedConfig": {
         "duration": {
           "days": "{count, plural, one {# day} other {# days}}",
@@ -1546,6 +1788,14 @@
           "label": "Show less"
         }
       },
+      "credentialForm": {
+        "errorToast": "Error: {detail}",
+        "successToast": "Success!",
+        "updateButton": {
+          "ariaLabel": "Update credentials",
+          "label": "Update"
+        }
+      },
       "deleteModal": {
         "additionalDetails": "Deleting this connector schedules a deletion job that removes its indexed documents and deletes it for every user.",
         "entityType": "connector"
@@ -1568,6 +1818,11 @@
         },
         "errorModal": {
           "title": "Document Permission Sync Error"
+        }
+      },
+      "docsLink": {
+        "checkOutDocs": {
+          "text": "Check out <link>our docs</link> for more info on configuring this connector."
         }
       },
       "errorsModal": {
@@ -1649,6 +1904,14 @@
           "updateFailed": "Failed to update files"
         }
       },
+      "fileUpload": {
+        "dropzone": {
+          "message": "Drag and drop {multiple, select, true {some files} other {a file}} here, or click to select {multiple, select, true {files} other {a file}}"
+        },
+        "selectedFiles": {
+          "heading": "{multiple, select, true {Selected Files} other {Selected File}}"
+        }
+      },
       "groupMembershipTable": {
         "columns": {
           "errorMessage": "Error Message",
@@ -1664,6 +1927,23 @@
         },
         "errorModal": {
           "title": "Group Membership Sync Error"
+        }
+      },
+      "groupSelector": {
+        "assignGroupAccess": {
+          "title": "Assign group access for this Connector"
+        },
+        "assignToGroup": {
+          "title": "Assign this Connector to a group"
+        },
+        "scopedManagerGroups": {
+          "description": "Select one or more of the groups you manage to give access to this Connector"
+        },
+        "syncGroups": {
+          "description": "The groups below control who can manage this Connector. Access to its documents is inherited from the source's own permissions."
+        },
+        "visibleToGroups": {
+          "description": "This Connector will be visible/accessible by the groups selected below"
         }
       },
       "indexAttemptsTable": {
@@ -2022,6 +2302,22 @@
         "targetedReindexSubmitted": "Targeted reindex submitted for {count, plural, one {# document} other {# documents}}. Errors will clear from the list as documents finish reindexing."
       }
     },
+    "connectorTitle": {
+      "metadata": {
+        "channelRegexEnabled": "Channel Regex Enabled",
+        "channels": "Channels",
+        "enabledTrue": "True",
+        "excludeChannelRegexEnabled": "Exclude Channel Regex Enabled",
+        "excludedChannels": "Excluded Channels",
+        "includeBotMessages": "Include Bot Messages",
+        "jiraProjectUrl": "Jira Project URL",
+        "multipleRepos": "multiple repos",
+        "pageId": "Page ID",
+        "realm": "Realm",
+        "repo": "Repo",
+        "wikiUrl": "Wiki URL"
+      }
+    },
     "connectorsList": {
       "add": {
         "authorizeButton": {
@@ -2148,6 +2444,7 @@
           "description": "Enter the email of an admin or owner of the Google Organization that owns the Google Drive(s) you want to index.",
           "invalidEmail": "Must be a valid email",
           "label": "Primary Admin Email",
+          "placeholder": "admin@yourcompany.com",
           "required": "Required"
         },
         "section": {
@@ -2205,6 +2502,7 @@
           "description": "Enter the email of an admin or owner of the Google Organization that owns the Gmail account(s) you want to index.",
           "invalidEmail": "Must be a valid email",
           "label": "Primary Admin Email",
+          "placeholder": "admin@yourcompany.com",
           "required": "Required"
         },
         "section": {
@@ -2521,7 +2819,7 @@
         "description": "Failed to load users. Please try refreshing the page."
       }
     },
-    "craftInstructions": {
+    "craftPreferences": {
       "baseInstructions": {
         "description": "The built-in prompt your instructions are appended to. Dynamic sections are filled in per session.",
         "loadError": {
@@ -2529,9 +2827,34 @@
         },
         "title": "View base instructions"
       },
+      "defaultModel": {
+        "clearButton": {
+          "label": "Clear"
+        },
+        "help": {
+          "description": "Craft uses this model for new sessions and scheduled tasks. When unset, Craft falls back to the workspace default chat model."
+        },
+        "inheritedTag": {
+          "label": "Workspace default"
+        },
+        "label": "Default model",
+        "placeholder": "Select model",
+        "resetError": {
+          "message": "Failed to clear the default model"
+        },
+        "resetSuccess": {
+          "message": "Craft default model cleared"
+        },
+        "saveError": {
+          "message": "Failed to save the default model"
+        },
+        "saveSuccess": {
+          "message": "Craft default model saved"
+        }
+      },
       "header": {
-        "description": "Workspace-wide instructions every Craft agent follows, on top of Craft's built-in behavior.",
-        "title": "Instructions"
+        "description": "The default model and workspace-wide instructions every Craft agent follows, on top of Craft's built-in behavior.",
+        "title": "Preferences"
       },
       "instructions": {
         "charCount": {
@@ -2577,6 +2900,171 @@
       "unavailable": {
         "description": "Craft is enabled per deployment by Onyx. Contact your Onyx representative to get access.",
         "title": "Craft isn't available on this deployment"
+      }
+    },
+    "credentials": {
+      "card": {
+        "createdOn": {
+          "label": "Created <i>{date}</i>"
+        },
+        "createdOnBy": {
+          "label": "Created <i>{date}</i> by <i>{email}</i>"
+        },
+        "unnamed": {
+          "label": "Credential #{id}"
+        }
+      },
+      "create": {
+        "createButton": {
+          "label": "Create"
+        },
+        "created": {
+          "toast": "Created new credential!"
+        },
+        "name": {
+          "label": "Name:",
+          "placeholder": "(Optional) credential name.."
+        },
+        "submitError": {
+          "toast": "Error submitting credential"
+        }
+      },
+      "delete": {
+        "cancelButton": {
+          "label": "Cancel"
+        },
+        "confirmBody": {
+          "message": "Are you sure you want to delete this credential? You cannot delete credentials that are linked to live connectors."
+        },
+        "confirmButton": {
+          "label": "Confirm"
+        },
+        "confirmTitle": "Confirm Deletion"
+      },
+      "edit": {
+        "name": {
+          "label": "Name (optional):"
+        },
+        "permissions": {
+          "note": "Ensure that you update to a credential with the proper permissions!"
+        },
+        "resetButton": {
+          "label": "Reset Changes"
+        },
+        "updateButton": {
+          "label": "Update"
+        },
+        "updateError": {
+          "toast": "Error updating credential"
+        }
+      },
+      "modal": {
+        "createTitle": "Create {source} Credential",
+        "editTitle": "Edit Credential",
+        "updateTitle": "Update Credentials"
+      },
+      "modify": {
+        "createButton": {
+          "label": "Create"
+        },
+        "instructions": {
+          "message": "Select a credential as needed! Ensure that you have selected a credential with the proper permissions for this connector!"
+        },
+        "selectButton": {
+          "label": "Select"
+        }
+      },
+      "oauth": {
+        "connectButton": {
+          "label": "Connect"
+        },
+        "connectError": {
+          "title": "Could not connect"
+        },
+        "redirectFailed": {
+          "message": "We couldn't redirect you to sign in with {source}. Please try again."
+        },
+        "retryButton": {
+          "label": "Retry"
+        },
+        "startError": {
+          "message": "Unable to start OAuth"
+        }
+      },
+      "swap": {
+        "error": {
+          "toast": "Issue swapping credential: {detail}"
+        },
+        "success": {
+          "toast": "Swapped credential successfully!"
+        }
+      },
+      "table": {
+        "actions": {
+          "label": "Actions"
+        },
+        "created": {
+          "header": "Created"
+        },
+        "edit": {
+          "ariaLabel": "Edit credential"
+        },
+        "empty": {
+          "message": "No credentials exist for this connector!"
+        },
+        "id": {
+          "header": "ID"
+        },
+        "lastUpdated": {
+          "header": "Last Updated"
+        },
+        "name": {
+          "header": "Name"
+        },
+        "select": {
+          "label": "Select"
+        },
+        "selected": {
+          "badge": "selected"
+        },
+        "untitled": {
+          "label": "Untitled"
+        }
+      },
+      "update": {
+        "error": {
+          "toast": "Issue updating credential"
+        },
+        "success": {
+          "toast": "Updated credential"
+        }
+      }
+    },
+    "customAnalytics": {
+      "intro": {
+        "description": "This allows you to bring your own analytics tool to Onyx! Copy the Web snippet from your analytics provider into the box below, and we'll start sending usage events."
+      },
+      "notEnabled": {
+        "description": "To set up custom analytics scripts, please work with the team who setup Onyx in your team to set the <i>CUSTOM_ANALYTICS_SECRET_KEY</i> environment variable.",
+        "title": "Custom Analytics is not enabled."
+      },
+      "script": {
+        "description": "Specify the Javascript that should run on page load in order to initialize your custom tracking/analytics.",
+        "instructions": "Do not include the `<script></script>` tags. If you upload a script below but you are not receiving any events in your analytics platform, try removing all extra whitespace before each line of JavaScript.",
+        "label": "Script"
+      },
+      "secretKey": {
+        "description": "For security reasons, you must provide a secret key to update this script. This should be the value of the <i>CUSTOM_ANALYTICS_SECRET_KEY</i> environment variable set when initially setting up Onyx.",
+        "label": "Secret Key"
+      },
+      "updateButton": {
+        "label": "Update"
+      },
+      "updateFailed": {
+        "message": "Failed to update custom analytics script: \"{error}\""
+      },
+      "updateSuccess": {
+        "message": "Custom analytics script updated successfully!"
       }
     },
     "discordBot": {
@@ -3034,6 +3522,83 @@
         }
       }
     },
+    "exportLogs": {
+      "button": {
+        "collecting": {
+          "label": "Collecting..."
+        },
+        "downloading": {
+          "label": "Downloading..."
+        },
+        "export": {
+          "label": "Export Logs"
+        },
+        "starting": {
+          "label": "Starting..."
+        }
+      },
+      "downloadButton": {
+        "label": "Download"
+      },
+      "exportCard": {
+        "description": "Collects log files from the API server and background workers into a single zip. The download starts automatically once collection finishes.",
+        "title": "Export logs"
+      },
+      "header": {
+        "description": "Download a zip of server log files to attach to an Onyx support thread."
+      },
+      "receipt": {
+        "duplicateHost": {
+          "label": "covered by another worker on the same host"
+        },
+        "failed": {
+          "label": "failed"
+        },
+        "failedWithError": {
+          "label": "failed: {error}"
+        },
+        "noLogs": {
+          "label": "no log files found"
+        },
+        "uploaded": {
+          "label": "{count, plural, one {uploaded # file} other {uploaded # files}}"
+        }
+      },
+      "sensitiveWarning": {
+        "description": "Log files can include user emails, document titles, search queries, and error payloads. Review the contents before sharing them outside your organization.",
+        "title": "Logs may contain sensitive data"
+      },
+      "status": {
+        "startingCollection": {
+          "label": "Starting collection..."
+        }
+      },
+      "toasts": {
+        "alreadyRunning": {
+          "message": "A log export is already in progress. Try again shortly."
+        },
+        "downloadFailed": {
+          "message": "Failed to download the log export."
+        },
+        "lostAccess": {
+          "message": "Lost access to the running export. Start a new one."
+        },
+        "startFailed": {
+          "message": "Failed to start the log export."
+        },
+        "unreachable": {
+          "message": "Cannot reach the server to check export progress. Start a new export once it is back."
+        }
+      },
+      "worker": {
+        "collecting": {
+          "label": "collecting..."
+        },
+        "missedDeadline": {
+          "label": "did not report before the deadline"
+        }
+      }
+    },
     "externalApps": {
       "apps": {
         "empty": {
@@ -3140,9 +3705,137 @@
         "loadFailed": "Failed to load connector: {details}",
         "title": "Error"
       },
+      "form": {
+        "channelInput": {
+          "placeholder": "Type channel name or regex pattern and press Enter"
+        },
+        "channelsRequired": {
+          "error": "At least one channel is required when 'Search All Channels' is disabled"
+        },
+        "configSchemaLoadError": {
+          "message": "Failed to load configuration schema: {error}"
+        },
+        "configTitle": {
+          "text": "Federated Connector Configuration"
+        },
+        "configuration": {
+          "heading": "Configuration"
+        },
+        "create": {
+          "failed": "Failed to create federated connector",
+          "success": "Federated connector created successfully!"
+        },
+        "credentialField": {
+          "keepCurrentPlaceholder": "••••••••  (leave blank to keep current value)"
+        },
+        "credentialValidationFailed": {
+          "message": "Credential validation failed: {message}"
+        },
+        "credentials": {
+          "description": "Enter the credentials for this connector.",
+          "heading": "Credentials"
+        },
+        "delete": {
+          "failed": "Failed to delete federated connector",
+          "success": "Federated connector deleted successfully!"
+        },
+        "deleteConfirm": {
+          "message": "Are you sure you want to delete this federated connector? This action cannot be undone."
+        },
+        "deleteError": {
+          "toast": "Error deleting connector: {error}"
+        },
+        "deleteItem": {
+          "deleting": "Deleting...",
+          "inProgressTooltip": "Deletion in progress",
+          "label": "Delete"
+        },
+        "federatedBadge": {
+          "label": "Federated"
+        },
+        "federatedTooltip": {
+          "default": "This is a federated connector. It will result in greater latency and lower search quality compared to regular connectors."
+        },
+        "genericError": {
+          "text": "Error: {error}"
+        },
+        "listInput": {
+          "placeholder": "Type and press Enter to add an item"
+        },
+        "loadingSchema": {
+          "description": "Retrieving required fields for this connector type",
+          "title": "Loading credential schema..."
+        },
+        "manageButton": {
+          "label": "Manage"
+        },
+        "missingFields": {
+          "message": "Missing required fields: {fields}"
+        },
+        "noConfigSchema": {
+          "message": "No search configuration available for this connector type."
+        },
+        "noCredentialSchema": {
+          "message": "No credential schema available for this connector type."
+        },
+        "schemaLoadError": {
+          "message": "Failed to load credential schema: {error}"
+        },
+        "submitButton": {
+          "create": "Create",
+          "creating": "Creating...",
+          "update": "Update",
+          "updating": "Updating..."
+        },
+        "title": {
+          "edit": "Edit {name}",
+          "setup": "Setup {name}"
+        },
+        "update": {
+          "failed": "Failed to update federated connector",
+          "success": "Federated connector updated successfully!"
+        },
+        "validateBeforeEdit": {
+          "message": "Enter new credential values before validating."
+        },
+        "validateButton": {
+          "label": "Validate",
+          "validating": "Validating..."
+        },
+        "validation": {
+          "error": "Validation error: {error}",
+          "failedStatus": "Validation failed: {statusText}",
+          "invalid": "Credentials are invalid",
+          "valid": "Credentials are valid"
+        }
+      },
       "loading": {
         "description": "Retrieving connector details and credential schema",
         "title": "Loading connector configuration..."
+      }
+    },
+    "federatedCallback": {
+      "backButton": {
+        "label": "Back to Chat"
+      },
+      "error": {
+        "title": "Something Went Wrong"
+      },
+      "errors": {
+        "clientSecret": "Authentication credentials are missing or invalid",
+        "oauth": "OAuth authorization failed",
+        "validation": "Configuration error - please check your connector settings"
+      },
+      "processing": {
+        "details": "Please wait while we complete the setup.",
+        "title": "Processing..."
+      },
+      "redirecting": {
+        "text": "Redirecting to chat in 2 seconds..."
+      },
+      "success": {
+        "detailsTemplate": "Your {serviceName} authorization completed successfully. You can now use this connector for search.",
+        "title": "Success!"
       }
     },
     "groups": {
@@ -3408,6 +4101,265 @@
         }
       }
     },
+    "hooks": {
+      "card": {
+        "delete": {
+          "ariaLabel": "Delete hook",
+          "tooltip": "Delete"
+        },
+        "disconnect": {
+          "ariaLabel": "Deactivate hook",
+          "tooltip": "Disconnect Hook"
+        },
+        "disconnectedSuffix": {
+          "label": "(Disconnected)"
+        },
+        "hookPoint": {
+          "description": "Hook Point: {name}"
+        },
+        "manage": {
+          "ariaLabel": "Configure hook",
+          "tooltip": "Manage"
+        },
+        "reconnectButton": {
+          "label": "Reconnect"
+        },
+        "test": {
+          "ariaLabel": "Re-validate hook",
+          "tooltip": "Test Connection"
+        }
+      },
+      "connectButton": {
+        "label": "Connect"
+      },
+      "deleteModal": {
+        "body": {
+          "description": "Hook ***{name}*** will be permanently removed from this hook point. The external endpoint may still retain data previously sent to it."
+        },
+        "delete": {
+          "label": "Delete"
+        },
+        "header": {
+          "title": "Delete *{name}*"
+        },
+        "permanent": {
+          "description": "Deletion cannot be undone."
+        }
+      },
+      "disconnectModal": {
+        "body": {
+          "description": "Onyx will stop calling this endpoint for hook ***{name}***. In-flight requests will continue to run. The external endpoint may still retain data previously sent to it. You can reconnect this hook later if needed."
+        },
+        "deleteNote": {
+          "description": "You can also delete this hook. Deletion cannot be undone."
+        },
+        "disconnect": {
+          "label": "Disconnect"
+        },
+        "disconnectAndDelete": {
+          "label": "Disconnect & Delete"
+        },
+        "header": {
+          "title": "Disconnect *{name}*"
+        }
+      },
+      "docsLink": {
+        "label": "Documentation"
+      },
+      "form": {
+        "apiKey": {
+          "description": "Onyx will use this key to authenticate with your API endpoint.",
+          "keepCurrent": {
+            "placeholder": "Leave blank to keep current key"
+          },
+          "title": "API Key"
+        },
+        "connectionValid": {
+          "label": "Connection valid."
+        },
+        "createHeader": {
+          "description": "Connect an external API endpoint to extend the hook point.",
+          "title": "Set Up Hook Extension"
+        },
+        "editHeader": {
+          "title": "Manage Hook Extension"
+        },
+        "endpoint": {
+          "description": "Only connect to servers you trust. You are responsible for actions taken and data shared with this connection.",
+          "title": "External API Endpoint URL"
+        },
+        "errors": {
+          "connect": "Could not connect to endpoint.",
+          "generic": "Something went wrong.",
+          "invalidApiKey": "Invalid API key.",
+          "timeout": "Connection timed out. Try increasing the timeout."
+        },
+        "failStrategy": {
+          "default": {
+            "label": "(Default)"
+          },
+          "hard": {
+            "label": "Block Pipeline on Failure"
+          },
+          "placeholder": "Select strategy",
+          "soft": {
+            "label": "Log Error and Continue"
+          },
+          "title": "Fail Strategy"
+        },
+        "hookPoint": {
+          "label": "Hook Point"
+        },
+        "name": {
+          "placeholder": "Name your extension at this hook point",
+          "title": "Display Name"
+        },
+        "save": {
+          "label": "Save Changes"
+        },
+        "softStrategy": {
+          "description": "If the endpoint returns an error, Onyx logs it and continues the pipeline as normal, ignoring the hook result."
+        },
+        "timeout": {
+          "description": "Maximum time Onyx will wait for the endpoint to respond before applying the fail strategy. Must be greater than 0 and at most {max} seconds.",
+          "revert": {
+            "tooltip": "Revert to Default"
+          },
+          "suffix": "(seconds)",
+          "title": "Timeout"
+        },
+        "toasts": {
+          "created": {
+            "message": "Hook created."
+          },
+          "noHookPoint": {
+            "message": "No hook point specified."
+          },
+          "updated": {
+            "message": "Hook updated."
+          }
+        },
+        "validation": {
+          "apiKeyRequired": "API key cannot be empty.",
+          "endpointRequired": "Endpoint URL cannot be empty.",
+          "nameRequired": "Display name cannot be empty.",
+          "timeoutRange": "Must be greater than 0 and at most {max} seconds.",
+          "timeoutRequired": "Timeout is required."
+        },
+        "verifying": {
+          "label": "Verifying connection…"
+        }
+      },
+      "logs": {
+        "copy": {
+          "tooltip": "Copy"
+        },
+        "download": {
+          "tooltip": "Download"
+        },
+        "empty": {
+          "message": "No errors in the past 30 days."
+        },
+        "header": {
+          "description": "Hook: {name} • Hook Point: {point}",
+          "title": "Recent Errors"
+        },
+        "lineCount": {
+          "label": "{count, plural, one {# line} other {# lines}}"
+        },
+        "loadFailed": {
+          "message": "Failed to load logs."
+        },
+        "older": {
+          "label": "Older"
+        },
+        "pastHour": {
+          "label": "Past Hour"
+        },
+        "unknownError": {
+          "label": "Unknown error"
+        }
+      },
+      "modals": {
+        "cancel": {
+          "label": "Cancel"
+        }
+      },
+      "page": {
+        "description": "Extend Onyx pipelines by registering external API endpoints as callbacks at predefined hook points.",
+        "empty": {
+          "title": "No hook points available"
+        },
+        "emptySearch": {
+          "description": "Try using a different search term.",
+          "title": "No results found"
+        },
+        "enterpriseRequired": {
+          "message": "Hook Extensions require an Enterprise license."
+        },
+        "loadHooksFailed": {
+          "message": "Failed to load hooks. Please refresh the page."
+        },
+        "loadSpecsFailed": {
+          "message": "Failed to load hook specifications. Please refresh the page."
+        },
+        "notEnabled": {
+          "message": "Hook Extensions are not enabled for this deployment."
+        },
+        "search": {
+          "placeholder": "Search hooks..."
+        }
+      },
+      "status": {
+        "connected": {
+          "label": "Connected"
+        },
+        "connectionLost": {
+          "label": "Connection Lost"
+        },
+        "errorCount": {
+          "title": "{count, plural, one {# Error} other {# Errors}}"
+        },
+        "noError": {
+          "title": "No Error"
+        },
+        "pastHour": {
+          "description": "in the past hour"
+        },
+        "recentErrors": {
+          "title": "Most Recent Errors"
+        },
+        "viewMore": {
+          "label": "View More Lines"
+        },
+        "viewOlder": {
+          "label": "View Older Errors"
+        }
+      },
+      "toasts": {
+        "deactivateFailed": {
+          "message": "Failed to deactivate hook."
+        },
+        "deleteFailed": {
+          "message": "Failed to delete hook."
+        },
+        "disconnectFailed": {
+          "message": "Failed to disconnect hook."
+        },
+        "reconnectFailed": {
+          "message": "Failed to reconnect hook."
+        },
+        "validateFailed": {
+          "message": "Failed to validate hook."
+        },
+        "validateSuccess": {
+          "message": "Hook validated successfully."
+        },
+        "validationFailed": {
+          "message": "Validation failed: {status}"
+        }
+      }
+    },
     "imageGeneration": {
       "configureSuccess": {
         "message": "Provider configured successfully"
@@ -3587,7 +4539,9 @@
           "label": "Apply to new and updated documents"
         },
         "applyReindex": {
-          "label": "Apply & Re-index"
+          "label": "Apply & Re-index",
+          "statusesLoading": "Loading connector statuses…",
+          "statusesFailed": "Couldn't load connector statuses — retry before re-indexing."
         },
         "rebuildAll": {
           "label": "Rebuild all existing documents"
@@ -3963,6 +4917,15 @@
         "serviceAccountJsonRequired": "Service account JSON is required",
         "targetUrlRequired": "Target URL is required",
         "urlInvalid": "Must be a valid URL"
+      },
+      "wontPortConsentModal": {
+        "title": "{count, plural, one {This connector will be deleted} other {These # connectors will be deleted}}",
+        "submit": "Delete & Re-index",
+        "description": "{count, plural, one {Re-indexing skips paused and invalid connectors, so this one won't be moved to the new index. Onyx deletes it, along with the documents it indexed:} other {Re-indexing skips paused and invalid connectors, so these # won't be moved to the new index. Onyx deletes them, along with the documents they indexed:}}",
+        "connector": "{name} — {status}",
+        "statusInvalid": "invalid",
+        "statusPaused": "paused",
+        "restoreHint": "To keep a connector, cancel here, resume or fix it, then re-index — it will be carried over. Otherwise, add it back once the re-index finishes."
       }
     },
     "indexing": {
@@ -4273,6 +5236,9 @@
               "label": "Add Line"
             },
             "description": "Add extra properties as needed by the model provider. These are passed to LiteLLM's `completion()` call as [environment variables](https://docs.litellm.ai/docs/set_keys#environment-variables). See [documentation](https://docs.onyx.app/admins/ai_models/custom_inference_provider) for more instructions.",
+            "keyInput": {
+              "placeholder": "e.g. OPENAI_ORGANIZATION"
+            },
             "title": "Environment Variables"
           },
           "modelRow": {
@@ -4784,6 +5750,132 @@
         "title": "Users"
       }
     },
+    "queryHistory": {
+      "assistant": {
+        "unknown": {
+          "label": "Unknown"
+        }
+      },
+      "detail": {
+        "ai": {
+          "label": "AI"
+        },
+        "errorTitle": {
+          "title": "Something went wrong :("
+        },
+        "feedback": {
+          "title": "Feedback"
+        },
+        "fetchFailed": {
+          "message": "Failed to fetch chat session - {error}"
+        },
+        "header": {
+          "title": "Chat Session Details"
+        },
+        "referenceDocuments": {
+          "title": "Reference Documents"
+        },
+        "user": {
+          "label": "User"
+        }
+      },
+      "export": {
+        "cancel": {
+          "label": "Cancel"
+        },
+        "downloadFailed": {
+          "message": "Failed to download the query-history."
+        },
+        "generating": {
+          "message": "Generating CSV report. Click the ''{button}'' button to see all jobs."
+        },
+        "kickoff": {
+          "label": "Kickoff Export"
+        }
+      },
+      "exportStatus": {
+        "failure": {
+          "label": "Failure"
+        },
+        "pending": {
+          "label": "Pending"
+        },
+        "success": {
+          "label": "Success"
+        }
+      },
+      "exportsModal": {
+        "download": {
+          "header": "Download"
+        },
+        "endRange": {
+          "header": "End Range"
+        },
+        "generatedAt": {
+          "header": "Generated At"
+        },
+        "header": {
+          "title": "Previous Query History Exports"
+        },
+        "notReady": {
+          "tooltip": "Export is not yet ready"
+        },
+        "startRange": {
+          "header": "Start Range"
+        },
+        "status": {
+          "header": "Status"
+        }
+      },
+      "feedback": {
+        "dislike": {
+          "label": "Dislike"
+        },
+        "like": {
+          "label": "Like"
+        },
+        "mixed": {
+          "label": "Mixed"
+        },
+        "na": {
+          "label": "N/A"
+        }
+      },
+      "filters": {
+        "any": {
+          "label": "Any"
+        },
+        "feedbackType": {
+          "label": "Feedback Type"
+        }
+      },
+      "previousExports": {
+        "label": "View Exports"
+      },
+      "table": {
+        "date": {
+          "header": "Date"
+        },
+        "feedback": {
+          "header": "Feedback"
+        },
+        "fetchError": {
+          "title": "Error fetching query history"
+        },
+        "firstAiResponse": {
+          "header": "First AI Response"
+        },
+        "firstUserMessage": {
+          "header": "First User Message"
+        },
+        "persona": {
+          "header": "Persona"
+        },
+        "user": {
+          "header": "User"
+        }
+      }
+    },
     "scim": {
       "card": {
         "connected": {
@@ -4838,6 +5930,56 @@
         "generateFailed": "Failed to generate token: {detail}",
         "genericError": "Something went wrong. Please try again.",
         "regenerated": "Token regenerated"
+      }
+    },
+    "search": {
+      "errors": {
+        "classificationFailed": {
+          "message": "Query classification failed. Falling back to chat."
+        },
+        "searchFailed": {
+          "message": "Document search failed. Please try again."
+        }
+      },
+      "results": {
+        "count": {
+          "label": "{count, plural, one {# Result} other {# Results}}"
+        },
+        "empty": {
+          "description": "Check your connectors/filters or try a different search term.",
+          "title": "No results found"
+        },
+        "failed": {
+          "title": "Search failed"
+        }
+      },
+      "tagFilter": {
+        "count": {
+          "label": "{count, plural, one {# Tag} other {# Tags}}"
+        },
+        "empty": {
+          "label": "Tags"
+        },
+        "search": {
+          "placeholder": "Filter tags..."
+        }
+      },
+      "timeFilter": {
+        "all": {
+          "label": "All Time"
+        },
+        "day": {
+          "label": "Past 24 hours"
+        },
+        "month": {
+          "label": "Past month"
+        },
+        "week": {
+          "label": "Past week"
+        },
+        "year": {
+          "label": "Past year"
+        }
       }
     },
     "security": {
@@ -5729,6 +6871,184 @@
         "unexpectedError": "Unexpected error occurred."
       }
     },
+    "standardAnswers": {
+      "categoryBubble": {
+        "remove": {
+          "ariaLabel": "Remove category {name}"
+        },
+        "removeButton": {
+          "ariaLabel": "Remove category"
+        }
+      },
+      "categoryDropdown": {
+        "categories": {
+          "label": "Standard Answer Categories"
+        },
+        "fetchError": {
+          "message": "Failed to fetch standard answer categories - {message}",
+          "title": "Something went wrong :("
+        },
+        "search": {
+          "placeholder": "Search categories..."
+        }
+      },
+      "editPage": {
+        "title": "Edit Standard Answer"
+      },
+      "errors": {
+        "fetchAnswersFailed": {
+          "message": "Failed to fetch standard answers"
+        },
+        "fetchCategoriesFailed": {
+          "message": "Failed to fetch standard answer categories"
+        },
+        "genericTitle": {
+          "title": "Something went wrong :("
+        },
+        "loadAnswersFailed": {
+          "title": "Error loading standard answers"
+        },
+        "loadCategoriesFailed": {
+          "title": "Error loading standard answer categories"
+        },
+        "notFound": {
+          "message": "Did not find standard answer with ID: {id}"
+        }
+      },
+      "filter": {
+        "allCategories": {
+          "label": "All Categories"
+        }
+      },
+      "form": {
+        "allKeywords": {
+          "label": "All of these keywords, in any order, separated by spaces",
+          "placeholder": "it ticket"
+        },
+        "answer": {
+          "label": "Answer",
+          "placeholder": "The answer in Markdown. Example: If you need any help from the IT team, please email internalsupport@company.com"
+        },
+        "anyKeywords": {
+          "label": "Any of these keywords, separated by spaces",
+          "placeholder": "ticket problem issue"
+        },
+        "categories": {
+          "label": "Categories:",
+          "placeholder": "Type a category and press Enter…"
+        },
+        "createButton": {
+          "label": "Create!"
+        },
+        "keywords": {
+          "tooltip": "A question must match these keywords in order to trigger the answer."
+        },
+        "matchRegex": {
+          "description": "Match a regex pattern instead of an exact keyword",
+          "label": "Match regex"
+        },
+        "regexPattern": {
+          "label": "Regex pattern",
+          "tooltip": "Triggers if the question matches this regex pattern (using Python `re.search()`)"
+        },
+        "strategy": {
+          "all": {
+            "label": "All keywords"
+          },
+          "any": {
+            "label": "Any keywords"
+          },
+          "description": "Choose whether to require the user's question to contain any or all of the keywords above to show this answer.",
+          "label": "Keyword detection strategy"
+        },
+        "toasts": {
+          "categoryCreateFailed": {
+            "message": "Error creating category \"{name}\" - {error}"
+          },
+          "createFailed": {
+            "message": "Error creating Standard Answer - {error}"
+          },
+          "updateFailed": {
+            "message": "Error updating Standard Answer - {error}"
+          }
+        },
+        "updateButton": {
+          "label": "Update!"
+        },
+        "validation": {
+          "answerRequired": "Answer is required",
+          "categoryRequired": "At least one category is required",
+          "keywordRequired": "Keywords or pattern is required"
+        }
+      },
+      "intro": {
+        "addFirst": {
+          "message": "Add your first standard answer below!"
+        },
+        "description": "Manage the standard answers for pre-defined questions.\nNote: Currently, only questions asked from Slack can receive standard answers."
+      },
+      "newStandardAnswer": {
+        "label": "New Standard Answer"
+      },
+      "search": {
+        "placeholder": "Find standard answers by keyword/phrase..."
+      },
+      "table": {
+        "answer": {
+          "header": "Answer"
+        },
+        "categories": {
+          "header": "Categories"
+        },
+        "empty": {
+          "message": "No matching standard answers found..."
+        },
+        "keywords": {
+          "header": "Keywords/Pattern"
+        },
+        "matchRegex": {
+          "header": "Match regex?"
+        },
+        "matchRegexNo": {
+          "label": "No"
+        },
+        "matchRegexYes": {
+          "label": "Yes"
+        },
+        "slackNote": {
+          "message": "Ensure that you have added the category to the relevant [Slack Bot](/admin/bots)."
+        }
+      },
+      "toasts": {
+        "deleteFailed": {
+          "message": "Failed to delete standard answer - {error}"
+        },
+        "deleted": {
+          "message": "Standard answer {id} deleted"
+        }
+      }
+    },
+    "status": {
+      "badges": {
+        "canceled": "Canceled",
+        "completedWithErrors": "Completed with errors",
+        "deleting": "Deleting",
+        "error": "Error",
+        "failed": "Failed",
+        "inProgress": "In Progress",
+        "indexed": "Indexed",
+        "indexing": "Indexing",
+        "initialIndexing": "Initial Indexing",
+        "interrupted": "Interrupted",
+        "invalid": "Invalid",
+        "invalidConnectorTooltip": "Connector is in an invalid state. Please update the credentials or create a new connector.",
+        "none": "None",
+        "notStarted": "Not Started",
+        "paused": "Paused",
+        "scheduled": "Scheduled",
+        "succeeded": "Succeeded"
+      }
+    },
     "systemInfo": {
       "backendVersion": {
         "label": "Backend Version: "
@@ -5738,6 +7058,142 @@
       },
       "webVersion": {
         "label": "Web Version: "
+      }
+    },
+    "theme": {
+      "announcement": {
+        "description": "Show a persistent system announcement that users can dismiss.",
+        "header": {
+          "placeholder": "Add an announcement"
+        },
+        "label": "System Announcement"
+      },
+      "announcementPopup": {
+        "description": "Also show this notice as a full-screen pop-up at first visit for all users. Use with caution.",
+        "label": "Pop-up Notice at First Visit"
+      },
+      "appName": {
+        "description": "This name will show across the app and replace \"Onyx\" in the UI.",
+        "label": "Application Display Name"
+      },
+      "branding": {
+        "description": "Remove “powered by Onyx” and other Onyx branding presence in the app.",
+        "enterpriseTooltip": "Hiding Onyx branding is an Enterprise Plan feature.",
+        "label": "Hide Onyx Branding"
+      },
+      "chatFooter": {
+        "description": "Add markdown content for disclaimers or additional information.",
+        "label": "Chat Footer Text"
+      },
+      "chatHeader": {
+        "label": "Chat Header Text"
+      },
+      "consent": {
+        "description": "Require the user to read and agree to the notice before accessing the application.",
+        "label": "Require Consent to Notice"
+      },
+      "consentPrompt": {
+        "label": "Notice Consent Prompt"
+      },
+      "firstVisit": {
+        "description": "Show a one-time pop-up for new users at their first visit.",
+        "label": "Show First Visit Notice"
+      },
+      "greeting": {
+        "description": "Add a short message to the home page.",
+        "label": "Greeting Message"
+      },
+      "helpLink": {
+        "description": "Add a custom help link in the user menu in addition to the Onyx documentation.",
+        "enterpriseTooltip": "Custom help link is an Enterprise Plan feature.",
+        "label": "Custom Help Link"
+      },
+      "helpLinkLabel": {
+        "label": "Custom Help Link Label",
+        "placeholder": "Link label"
+      },
+      "loginSubtitle": {
+        "description": "Replace the tagline under the welcome heading on the login page.",
+        "label": "Login Page Subtitle"
+      },
+      "logo": {
+        "label": "Application Logo",
+        "updateButton": {
+          "label": "Update"
+        }
+      },
+      "logoStyle": {
+        "both": {
+          "label": "Logo & Name",
+          "tooltip": "Show both your application logo and name."
+        },
+        "description": "Choose what to display at the top of the sidebar. Options become available once you add a logo or application name.",
+        "label": "Logo Display Style",
+        "logoOnly": {
+          "disabledTooltip": "Upload a logo to enable this option.",
+          "label": "Logo Only",
+          "tooltip": "Show only your application logo."
+        },
+        "nameOnly": {
+          "disabledTooltip": "Enter an application name to enable this option.",
+          "label": "Name Only",
+          "tooltip": "Show only your application name."
+        }
+      },
+      "markdownContent": {
+        "placeholder": "Add markdown content"
+      },
+      "noticeContent": {
+        "label": "Notice Content"
+      },
+      "noticeHeader": {
+        "label": "Notice Header"
+      },
+      "page": {
+        "announcementClearFailed": {
+          "message": "Failed to clear announcement."
+        },
+        "announcementSaveFailed": {
+          "message": "Failed to save announcement."
+        },
+        "applyButton": {
+          "label": "Apply Changes"
+        },
+        "applying": {
+          "label": "Applying..."
+        },
+        "description": "Customize how the application appears to users across your organization.",
+        "logoUploadFailed": {
+          "message": "Failed to upload logo. {error}"
+        },
+        "saveSuccess": {
+          "message": "Appearance settings saved successfully!"
+        },
+        "settingsSaveFailed": {
+          "message": "Failed to update settings. {error}"
+        },
+        "validation": {
+          "consentPromptRequired": "Notice Consent Prompt is required",
+          "invalidUrl": "Must be a valid URL",
+          "maxChars": "Maximum {count} characters",
+          "noticeContentRequired": "Notice Content is required",
+          "noticeHeaderRequired": "Notice Header is required",
+          "urlRequiredWithLabel": "URL is required when a label is set"
+        }
+      },
+      "preview": {
+        "chatFooter": {
+          "placeholder": "Chat Footer Content"
+        },
+        "chatHeader": {
+          "placeholder": "Chat Header Content"
+        },
+        "greeting": {
+          "placeholder": "Welcome to Acme Chat"
+        },
+        "logo": {
+          "alt": "Logo"
+        }
       }
     },
     "tokenRateLimits": {
@@ -6002,6 +7458,9 @@
             "label": "Spend"
           }
         }
+      },
+      "page": {
+        "description": "Monitor workspace spend and review usage by user."
       },
       "spendByUser": {
         "columns": {
@@ -6599,6 +8058,204 @@
         "tooltip": "View Agent Stats"
       }
     },
+    "editor": {
+      "actions": {
+        "codeInterpreter": {
+          "description": "Generate and run code.",
+          "title": "Code Interpreter"
+        },
+        "codingAgent": {
+          "description": "Investigate a GitHub repository and answer questions about its code.",
+          "title": "Coding Agent"
+        },
+        "description": "Tools and capabilities available for this agent to use.",
+        "imageGeneration": {
+          "description": "Generate and manipulate images using AI-powered tools.",
+          "title": "Image Generation",
+          "unavailable": {
+            "tooltip": "Image generation requires a configured model. If you have access, set one up under Settings > Image Generation, or ask an admin."
+          }
+        },
+        "openUrl": {
+          "description": "Fetch and read content from web URLs.",
+          "title": "Open URL"
+        },
+        "title": "Actions",
+        "webSearch": {
+          "description": "Search the web for real-time information and up-to-date results.",
+          "title": "Web Search"
+        }
+      },
+      "advanced": {
+        "description": "Fine-tune agent prompts and knowledge.",
+        "overwritePrompt": {
+          "suffix": "(Not Recommended)",
+          "title": "Overwrite System Prompt"
+        },
+        "reminders": {
+          "description": "Append a brief reminder to the prompt messages. Use this to remind the agent if you find that it tends to forget certain instructions as the chat progresses. This should be brief and not interfere with the user messages.",
+          "placeholder": "Remember, I want you to always format your response as a numbered list.",
+          "title": "Reminders"
+        },
+        "title": "Advanced Options"
+      },
+      "avatar": {
+        "edit": {
+          "label": "Edit"
+        },
+        "uploadImage": {
+          "label": "Upload Image"
+        }
+      },
+      "delete": {
+        "button": {
+          "label": "Delete Agent"
+        },
+        "description": "Anyone using this agent will no longer be able to access it.",
+        "title": "Delete This Agent"
+      },
+      "deleteModal": {
+        "body": {
+          "confirm": "Are you sure you want to delete this agent?",
+          "warning": "Anyone using this agent will no longer be able to access it. Deletion cannot be undone."
+        },
+        "title": "Delete Agent"
+      },
+      "filesModal": {
+        "description": "All files selected for this agent",
+        "placeholderName": "File {id}",
+        "title": "User Files"
+      },
+      "general": {
+        "avatar": {
+          "title": "Agent Avatar"
+        },
+        "descriptionField": {
+          "placeholder": "What does this agent do?",
+          "title": "Description"
+        },
+        "name": {
+          "placeholder": "Name your agent",
+          "title": "Name"
+        }
+      },
+      "header": {
+        "cancel": {
+          "label": "Cancel"
+        },
+        "create": {
+          "label": "Create"
+        },
+        "createTitle": "Create Agent",
+        "editTitle": "Edit Agent",
+        "save": {
+          "label": "Save"
+        }
+      },
+      "mcp": {
+        "noAccess": {
+          "tooltip": "You no longer have access to this MCP server. Its existing tools will be preserved."
+        },
+        "searchTools": {
+          "placeholder": "Search tools..."
+        }
+      },
+      "page": {
+        "ariaLabel": "Agents Editor Page"
+      },
+      "prompts": {
+        "instructions": {
+          "description": "Add instructions to tailor the response for this agent.",
+          "placeholder": "Think step by step and show reasoning for complex problems. Use specific examples. Emphasize action items, and leave blanks for the human to fill in when you have unknown. Use a polite enthusiastic tone.",
+          "title": "Instructions"
+        },
+        "starters": {
+          "description": "Example messages that help users understand what this agent can do and how to interact with it effectively.",
+          "title": "Conversation Starters"
+        }
+      },
+      "saveTooltip": {
+        "fixErrors": "Please fix the errors in the form before saving.",
+        "noChanges": "No changes have been made.",
+        "saving": "Saving changes...",
+        "uploading": "Please wait for files to finish uploading."
+      },
+      "share": {
+        "feature": {
+          "description": "Show this agent at the top of the explore agents list and automatically pin it to the sidebar for new users with access.",
+          "privateNotice": {
+            "title": "This agent is private to you and will only be featured for yourself."
+          },
+          "title": "Feature This Agent",
+          "unlistedWarning": {
+            "title": "This agent is unlisted and won't be shown in the featured list."
+          }
+        },
+        "labels": {
+          "description": "Add labels and categories to help people better discover this agent.",
+          "placeholder": "Add labels..."
+        },
+        "share": {
+          "button": {
+            "label": "Share"
+          },
+          "description": "with other users, groups, or everyone in your organization.",
+          "title": "Share This Agent"
+        },
+        "title": "Share Agent"
+      },
+      "starters": {
+        "examples": {
+          "engineeringGoals": "Compile a list of our engineering goals for this quarter.",
+          "overview": "Give me an overview of some documents.",
+          "salesReport": "Find the latest sales report.",
+          "todayGoals": "Summarize my goals for today."
+        },
+        "placeholder": "Enter a conversation starter..."
+      },
+      "suffix": {
+        "optional": "optional"
+      },
+      "toasts": {
+        "createFailed": "Failed to create agent - {detail}",
+        "created": "Agent \"{name}\" created successfully",
+        "deleteFailed": "Failed to delete agent: {error}",
+        "deleted": "Agent deleted successfully",
+        "genericError": "An error occurred: {error}",
+        "noResponse": "no response received",
+        "sharingFailed": "Agent created, but sharing failed: {error}",
+        "toggleListedFailed": "Failed to toggle visibility",
+        "unknownDetail": "unknown error",
+        "unknownError": "Unknown error",
+        "updateFailed": "Failed to update agent - {detail}",
+        "updated": "Agent \"{name}\" updated successfully"
+      },
+      "validation": {
+        "cutoffInFuture": "Knowledge cutoff date must be today or earlier.",
+        "descriptionMax": "Description must be {max} characters or less",
+        "nameRequired": "Agent name is required.",
+        "starterMax": "Conversation starter must be {max} characters or less"
+      },
+      "visibility": {
+        "relist": {
+          "button": {
+            "label": "Relist Agent"
+          },
+          "description": "Relisted agents appear in the explore agents list again.",
+          "title": "Relist This Agent"
+        },
+        "unlist": {
+          "button": {
+            "label": "Unlist Agent"
+          },
+          "description": "Unlisted agents don't appear in the explore agents list but remain accessible.",
+          "title": "Unlist This Agent"
+        }
+      },
+      "warnings": {
+        "openUrl": "Web Search without the ability to open URLs can lead to significantly worse web based results."
+      }
+    },
     "filters": {
       "actions": {
         "all": {
@@ -6781,6 +8438,47 @@
         }
       }
     },
+    "navigation": {
+      "countSeparator": {
+        "label": "{count, plural, one {Agent} other {Agents}}"
+      },
+      "empty": {
+        "description": "No Agents found"
+      },
+      "header": {
+        "description": "Customize AI behavior and knowledge for you and your team's use cases.",
+        "title": "Agents"
+      },
+      "newAgent": {
+        "label": "New Agent",
+        "noPermission": {
+          "tooltip": "You don't have permission to create agents. Contact your admin to request access."
+        }
+      },
+      "page": {
+        "ariaLabel": "Agents Page"
+      },
+      "search": {
+        "placeholder": "Search agents..."
+      },
+      "sections": {
+        "all": {
+          "title": "All Agents"
+        },
+        "featured": {
+          "description": "Curated by your team",
+          "title": "Featured Agents"
+        }
+      },
+      "tabs": {
+        "all": {
+          "label": "All Agents"
+        },
+        "your": {
+          "label": "Your Agents"
+        }
+      }
+    },
     "userVariables": {
       "insert": {
         "tooltip": "Insert user variable"
@@ -6788,6 +8486,12 @@
     }
   },
   "auth": {
+    "anonymous": {
+      "redirecting": {
+        "description": "Please wait while we set up your anonymous session.",
+        "title": "Redirecting you to the chat page..."
+      }
+    },
     "createAccount": {
       "createOrgButton": {
         "label": "Create New Organization"
@@ -6809,6 +8513,55 @@
       },
       "signInLink": {
         "label": "Sign in"
+      }
+    },
+    "emailPasswordForm": {
+      "accountExists": {
+        "error": "An account already exists with the specified email."
+      },
+      "continueAsGuest": {
+        "label": "or continue as guest"
+      },
+      "email": {
+        "label": "Email Address",
+        "placeholder": "email@yourcompany.com"
+      },
+      "forgotPassword": {
+        "link": "[Forgot password?]({url})"
+      },
+      "invalidCredentials": {
+        "error": "Invalid email or password"
+      },
+      "noPassword": {
+        "error": "Create an account to set a password"
+      },
+      "password": {
+        "label": "Password",
+        "placeholder": "Password"
+      },
+      "passwordDigit": {
+        "error": "Password must contain at least one number"
+      },
+      "passwordLength": {
+        "error": "Password must be between {min}–{max} characters"
+      },
+      "passwordLoginDisabled": {
+        "error": "Password login is turned off. Sign in with your identity provider."
+      },
+      "passwordLowercase": {
+        "error": "Password must contain at least one lowercase letter"
+      },
+      "passwordRequirements": {
+        "label": "Password requirements:"
+      },
+      "passwordSpecialChar": {
+        "error": "Password must contain at least one special character"
+      },
+      "passwordUppercase": {
+        "error": "Password must contain at least one uppercase letter"
+      },
+      "tooManyRequests": {
+        "error": "Too many requests. Please try again later."
       }
     },
     "error": {
@@ -6849,6 +8602,31 @@
         "description": "Temporary authentication system disruption"
       }
     },
+    "errorDisplay": {
+      "anonymousDisabled": {
+        "toast": "Your team does not have anonymous access enabled."
+      },
+      "generic": {
+        "toast": "An error occurred."
+      }
+    },
+    "flowContainer": {
+      "createAccountLink": {
+        "label": "Create an Account"
+      },
+      "logo": {
+        "alt": "Logo"
+      },
+      "signInLink": {
+        "label": "Sign In"
+      },
+      "signinPrompt": {
+        "text": "Already have an account?"
+      },
+      "signupPrompt": {
+        "text": "New to {appName}?"
+      }
+    },
     "forgotPassword": {
       "backToLoginLink": {
         "label": "[Back to Login](/auth/login)"
@@ -6881,7 +8659,8 @@
         "placeholder": "Enter API Key"
       },
       "emailField": {
-        "label": "Email"
+        "label": "Email",
+        "placeholder": "email@yourcompany.com"
       },
       "genericError": {
         "toast": "Failed to impersonate user"
@@ -6942,6 +8721,23 @@
         "label": "Work Email"
       }
     },
+    "passwordRequirements": {
+      "digit": {
+        "label": "Contains number."
+      },
+      "length": {
+        "label": "{min}–{max} characters"
+      },
+      "lowercase": {
+        "label": "Contains lowercase letter."
+      },
+      "specialChar": {
+        "label": "Contains special character."
+      },
+      "uppercase": {
+        "label": "Contains uppercase letter."
+      }
+    },
     "resetPassword": {
       "backToLoginLink": {
         "label": "[Back to Login](/auth/login)"
@@ -6983,6 +8779,31 @@
       },
       "unexpectedError": {
         "toast": "An unexpected error occurred. Please try again."
+      }
+    },
+    "sessionEnd": {
+      "expired": {
+        "message": "Your session has expired. Please log in again to continue."
+      },
+      "loginButton": {
+        "label": "Log In"
+      },
+      "modal": {
+        "title": "You Have Been Logged Out"
+      },
+      "terminated": {
+        "message": "This session was signed out. Please log in again to continue."
+      },
+      "unrecognized": {
+        "message": "You were signed out unexpectedly. Please log in again to continue. If this keeps happening, contact your administrator."
+      }
+    },
+    "signIn": {
+      "captchaTokenError": {
+        "toast": "grecaptcha.execute returned no token"
+      },
+      "google": {
+        "label": "Continue with Google"
       }
     },
     "signup": {
@@ -7168,6 +8989,70 @@
       },
       "sourcesModal": {
         "title": "Sources"
+      }
+    },
+    "appChrome": {
+      "delete": {
+        "label": "Delete"
+      },
+      "deleteModal": {
+        "description": "Are you sure you want to delete this chat? This action cannot be undone.",
+        "submitButton": {
+          "label": "Delete"
+        },
+        "title": "Delete Chat"
+      },
+      "exportAs": {
+        "label": "Export As…"
+      },
+      "exportFailed": {
+        "message": "Failed to export chat. Please try again."
+      },
+      "exportMarkdown": {
+        "label": "Markdown"
+      },
+      "exportPlaintext": {
+        "label": "Plaintext"
+      },
+      "fullWidth": {
+        "ariaLabel": "Toggle full width chat",
+        "fitTooltip": "Fit width",
+        "fullTooltip": "Full width"
+      },
+      "incognitoExit": {
+        "ariaLabel": "Exit incognito chat",
+        "tooltip": "Exit Incognito Chat"
+      },
+      "incognitoPill": {
+        "ariaLabel": "Incognito chat",
+        "label": "Incognito Chat"
+      },
+      "incognitoStart": {
+        "ariaLabel": "Start incognito chat",
+        "lockedTooltip": "Incognito can only be set before the chat starts",
+        "tooltip": "Incognito Chat"
+      },
+      "mode": {
+        "chat": {
+          "description": "Conversation and research",
+          "label": "Chat"
+        },
+        "search": {
+          "description": "Quick search for documents",
+          "label": "Search"
+        }
+      },
+      "modeButton": {
+        "ariaLabel": "Change app mode"
+      },
+      "moveToProject": {
+        "label": "Move to Project"
+      },
+      "openSidebar": {
+        "ariaLabel": "Open Sidebar"
+      },
+      "share": {
+        "label": "Share"
       }
     },
     "banners": {
@@ -8350,6 +10235,75 @@
         "tooltip": "Modifying this setting is not supported for this model."
       }
     },
+    "nrf": {
+      "page": {
+        "filesFailed": {
+          "toast": "{count, plural, one {File failed and was removed: {names}} other {Files failed and were removed: {names}}}"
+        },
+        "loginModal": {
+          "loginButton": {
+            "label": "Log in"
+          },
+          "title": "Welcome to Onyx"
+        },
+        "noResubmitMessage": {
+          "toast": "No previously-submitted user message found."
+        },
+        "settingsButton": {
+          "tooltip": "Open settings"
+        },
+        "setupLlmButton": {
+          "label": "Set up an LLM."
+        },
+        "turnOffModal": {
+          "cancelButton": {
+            "label": "Cancel"
+          },
+          "confirmButton": {
+            "label": "Turn off"
+          },
+          "description": "You'll see your browser's default new tab page instead. You can turn it back on anytime in your Onyx settings.",
+          "title": "Turn off Onyx new tab page?"
+        }
+      },
+      "settingsPanel": {
+        "backgroundNone": {
+          "label": "None"
+        },
+        "backgroundOption": {
+          "ariaLabel": "{label} background"
+        },
+        "backgroundOptionSelected": {
+          "ariaLabel": "{label} background (selected)"
+        },
+        "backgroundSection": {
+          "title": "Background"
+        },
+        "closeButton": {
+          "tooltip": "Close settings"
+        },
+        "generalSection": {
+          "title": "General"
+        },
+        "header": {
+          "title": "Settings"
+        },
+        "newTabToggle": {
+          "label": "Use Onyx as new tab page"
+        },
+        "themeToggle": {
+          "tooltip": "{mode, select, light {Switch to light theme} other {Switch to dark theme}}"
+        }
+      },
+      "sidePanelHeader": {
+        "newChatButton": {
+          "tooltip": "New chat"
+        },
+        "openInOnyxButton": {
+          "tooltip": "Open in Onyx"
+        }
+      }
+    },
     "popup": {
       "consentCheckbox": {
         "label": "Consent checkbox"
@@ -8365,6 +10319,128 @@
       },
       "startButton": {
         "label": "Start"
+      }
+    },
+    "projects": {
+      "chatItem": {
+        "lastMessage": {
+          "description": "Last message {time}"
+        },
+        "projectFallback": {
+          "label": "Project"
+        }
+      },
+      "contextPanel": {
+        "addFilesButton": {
+          "label": "Add Files"
+        },
+        "contextExceeded": {
+          "message": "This project exceeds the model's context limits. Sessions will automatically search for relevant files first before generating response."
+        },
+        "dropFiles": {
+          "message": "Drop files here to add to this project"
+        },
+        "emptyFiles": {
+          "message": "Add documents, texts, or images to use in the project. Drag & drop supported."
+        },
+        "fileCount": {
+          "description": "{count, plural, one {# file} other {# files}}"
+        },
+        "fileCountOverflow": {
+          "description": "100+ files"
+        },
+        "files": {
+          "description": "Chats in this project can access these files.",
+          "title": "Files"
+        },
+        "filesModal": {
+          "description": "Sessions in this project can access the files here.",
+          "title": "Project Files"
+        },
+        "instructions": {
+          "emptyDescription": "Add instructions to tailor the response in this project.",
+          "title": "Instructions"
+        },
+        "loadingProject": {
+          "label": "Loading project..."
+        },
+        "setInstructionsButton": {
+          "label": "Set Instructions"
+        },
+        "viewAll": {
+          "label": "View All"
+        },
+        "viewFiles": {
+          "label": "View files"
+        }
+      },
+      "createModal": {
+        "cancelButton": {
+          "label": "Cancel"
+        },
+        "createError": {
+          "toast": "Failed to create the project {name}"
+        },
+        "description": "Use projects to organize your files and chats in one place, and add custom instructions for ongoing work.",
+        "name": {
+          "label": "Project Name",
+          "placeholder": "What are you working on?"
+        },
+        "nameRequired": {
+          "error": "Project name is required"
+        },
+        "submitButton": {
+          "label": "Create Project"
+        },
+        "title": "Create New Project"
+      },
+      "foldedPopover": {
+        "empty": {
+          "title": "No projects found"
+        },
+        "search": {
+          "placeholder": "Search projects..."
+        }
+      },
+      "folder": {
+        "collapse": {
+          "ariaLabel": "Collapse project"
+        },
+        "delete": {
+          "label": "Delete Project"
+        },
+        "deleteModal": {
+          "confirmButton": {
+            "label": "Delete"
+          },
+          "message": "Are you sure you want to delete this project? This action cannot be undone.",
+          "title": "Delete Project"
+        },
+        "expand": {
+          "ariaLabel": "Expand project"
+        },
+        "rename": {
+          "label": "Rename Project"
+        }
+      },
+      "sessionList": {
+        "empty": {
+          "message": "No chats yet."
+        },
+        "recentChats": {
+          "title": "Recent Chats"
+        }
+      },
+      "uploads": {
+        "failed": {
+          "toast": "Failed to upload files"
+        },
+        "oversized": {
+          "toast": "{count, plural, one {Skipped # oversized file} other {Skipped # oversized files}} (>{max} MB): {names}"
+        },
+        "rejected": {
+          "toast": "Some files were not uploaded. {details}"
+        }
       }
     },
     "sharedChat": {
@@ -8397,6 +10473,1773 @@
       },
       "incognito": {
         "title": "You're incognito"
+      }
+    }
+  },
+  "common": {
+    "adminChrome": {
+      "openSidebar": {
+        "ariaLabel": "Open Sidebar"
+      },
+      "paymentReminder": {
+        "billingButton": {
+          "label": "Update Billing Information"
+        },
+        "text": "**Warning:** Your trial ends in less than 5 days and no payment method has been added."
+      }
+    },
+    "agentAvatar": {
+      "image": {
+        "altFallback": "Agent avatar"
+      },
+      "logo": {
+        "alt": "Logo"
+      }
+    },
+    "attachment": {
+      "document": {
+        "label": "Document"
+      },
+      "expandButton": {
+        "ariaLabel": "Expand document"
+      }
+    },
+    "backButton": {
+      "label": "Back"
+    },
+    "chatBackgrounds": {
+      "clouds": {
+        "label": "Clouds"
+      },
+      "hills": {
+        "label": "Hills"
+      },
+      "mountains": {
+        "label": "Mountains"
+      },
+      "night": {
+        "label": "Night"
+      },
+      "none": {
+        "label": "None"
+      },
+      "plant": {
+        "label": "Plants"
+      }
+    },
+    "colorSwatch": {
+      "sample": {
+        "text": "Aa"
+      }
+    },
+    "comboBox": {
+      "createOption": {
+        "ariaLabel": "{prefix} \"{value}\"",
+        "defaultPrefix": "Create"
+      },
+      "dropdown": {
+        "closeAriaLabel": "Close dropdown",
+        "openAriaLabel": "Open dropdown"
+      },
+      "options": {
+        "empty": "No options found"
+      },
+      "separator": {
+        "label": "Other options"
+      }
+    },
+    "commandMenu": {
+      "closeButton": {
+        "ariaLabel": "Close menu"
+      },
+      "dialog": {
+        "title": "Command Menu"
+      },
+      "options": {
+        "ariaLabel": "Command menu options"
+      },
+      "search": {
+        "placeholder": "Search..."
+      }
+    },
+    "connectorMultiSelect": {
+      "allSelected": {
+        "description": "All available connectors have been selected. Remove connectors below to add different ones.",
+        "placeholder": "All connectors selected"
+      },
+      "documentSetHint": {
+        "description": "All documents indexed by the selected connectors will be part of this document set."
+      },
+      "noMatches": {
+        "text": "No matching connectors found"
+      },
+      "noMoreConnectors": {
+        "text": "No more connectors available"
+      },
+      "noPrivateConnectors": {
+        "text": "No private connectors available. Create a private connector first."
+      },
+      "noneSelected": {
+        "text": "No connectors selected. Search and select connectors above."
+      },
+      "removeConnector": {
+        "tooltip": "Remove connector"
+      },
+      "search": {
+        "placeholder": "Search connectors..."
+      }
+    },
+    "datePicker": {
+      "selectDate": {
+        "label": "Select Date"
+      },
+      "todayButton": {
+        "label": "Today"
+      }
+    },
+    "dateRange": {
+      "anyTime": {
+        "text": "Any time..."
+      },
+      "chooseCustom": {
+        "ariaLabel": "Choose a custom range"
+      },
+      "clearButton": {
+        "ariaLabel": "Clear"
+      },
+      "custom": {
+        "label": "Custom"
+      },
+      "customRange": {
+        "ariaLabel": "Custom range: {from} to {to}"
+      },
+      "date": {
+        "label": "Date"
+      },
+      "group": {
+        "ariaLabel": "Date range"
+      },
+      "preset": {
+        "oneDay": "1D",
+        "oneMonth": "1M",
+        "sevenDays": "7D",
+        "threeMonths": "3M"
+      }
+    },
+    "deleteButton": {
+      "button": {
+        "tooltip": "Delete"
+      }
+    },
+    "documentDisplay": {
+      "contextDocs": {
+        "text": "{count, plural, one {# context doc} other {# context docs}}"
+      },
+      "openDocument": {
+        "ariaLabel": "Open document: {title}"
+      },
+      "question": {
+        "title": "Question"
+      },
+      "subqueries": {
+        "text": "{count, plural, one {# subquery} other {# subqueries}}"
+      },
+      "updated": {
+        "text": "Updated {date}"
+      }
+    },
+    "dropdown": {
+      "default": {
+        "label": "Default"
+      },
+      "selectOption": {
+        "placeholder": "Select an option..."
+      }
+    },
+    "editable": {
+      "edit": {
+        "ariaLabel": "Edit"
+      },
+      "rename": {
+        "ariaLabel": "Rename"
+      },
+      "save": {
+        "ariaLabel": "Save"
+      }
+    },
+    "errorPages": {
+      "accessRestricted": {
+        "billingAdminHint": {
+          "text": "If you are the administrator, please visit the <billingLink>Admin Billing</billingLink> page to {hadLicense, select, true {renew} other {activate}} your license, sign up through Stripe or reach out to <supportLink>support@onyx.app</supportLink> for billing assistance."
+        },
+        "heading": {
+          "title": "Access Restricted"
+        },
+        "licenseLapse": {
+          "description": "Your access to Onyx has been temporarily suspended due to a lapse in your license."
+        },
+        "licenseRequired": {
+          "description": "A license is required to use Onyx. Your data is protected and will be available once a license is activated."
+        },
+        "logoutButton": {
+          "label": "Log out"
+        },
+        "manageSubscription": {
+          "description": "If you're an admin, you can manage your subscription by clicking the button below. For other users, please reach out to your administrator to address this matter."
+        },
+        "obtainLicense": {
+          "description": "To get started, please contact your system administrator to obtain a license."
+        },
+        "renewLicense": {
+          "description": "To reinstate your access and continue using Onyx, please contact your system administrator to renew your license."
+        },
+        "resubscribeButton": {
+          "label": "Resubscribe",
+          "loading": "Loading..."
+        },
+        "resubscribeError": {
+          "text": "Error opening resubscription page. Please try again later."
+        },
+        "seatLimit": {
+          "description": "Your organization has exceeded its licensed seat count. Access is restricted until the number of users is reduced or your license is upgraded."
+        },
+        "seatLimitAdminHint": {
+          "text": "If you are an administrator, you can manage users on the <userLink>User Management</userLink> page or upgrade your license on the <billingLink>Admin Billing</billingLink> page."
+        },
+        "seatLimitWithCounts": {
+          "description": "Your organization has exceeded its licensed seat count ({used} users / {seats} seats). Access is restricted until the number of users is reduced or your license is upgraded."
+        },
+        "subscriptionLapse": {
+          "description": "Your access to Onyx has been temporarily suspended due to a lapse in your subscription."
+        },
+        "updatePayment": {
+          "description": "To reinstate your access and continue benefiting from Onyx's powerful features, please update your payment information."
+        }
+      },
+      "configError": {
+        "adminHint": {
+          "text": "If you're an admin, please review our <docsLink>documentation</docsLink> for proper configuration steps. If you're a user, please contact your admin for assistance."
+        },
+        "heading": {
+          "description": "It seems there was a problem loading your Onyx settings. This could be due to a configuration issue or incomplete setup.",
+          "title": "We encountered an issue"
+        }
+      },
+      "maintenance": {
+        "apology": {
+          "description": "We apologize for any inconvenience this may cause and appreciate your patience."
+        },
+        "checkBack": {
+          "description": "Onyx is currently in a maintenance window. Please check back in a couple of minutes."
+        },
+        "heading": {
+          "title": "Maintenance in Progress"
+        }
+      },
+      "needHelp": {
+        "text": "Need help? Join our <discordLink>Discord community</discordLink> for support."
+      }
+    },
+    "errors": {
+      "unknown": {
+        "message": "Unknown error"
+      }
+    },
+    "expandableContent": {
+      "downloadButton": {
+        "tooltip": "Download file"
+      },
+      "file": {
+        "untitledFallback": "Untitled"
+      },
+      "fullScreenButton": {
+        "tooltip": "Full screen"
+      },
+      "hideButton": {
+        "tooltip": "Hide"
+      },
+      "minimizeButton": {
+        "tooltip": "Minimize"
+      }
+    },
+    "expandableText": {
+      "copyButton": {
+        "tooltip": "Copy"
+      },
+      "downloadButton": {
+        "tooltip": "Download"
+      },
+      "lineCount": {
+        "label": "{count, plural, one {# line} other {# lines}}"
+      },
+      "size": {
+        "bytes": "{count} Bytes",
+        "kilobytes": "{size} KB"
+      },
+      "viewFullButton": {
+        "tooltip": "View Full Text"
+      }
+    },
+    "federatedConnectorSelector": {
+      "allSelected": {
+        "placeholder": "All federated connectors selected"
+      },
+      "entitiesConfigured": {
+        "tooltip": "Entities configured"
+      },
+      "noMatches": {
+        "text": "No matching federated connectors found"
+      },
+      "noMoreConnectors": {
+        "text": "No more federated connectors available"
+      },
+      "noneSelected": {
+        "text": "No federated connectors selected. Search and select connectors above."
+      },
+      "realtimeSearchHint": {
+        "description": "Documents from selected federated connectors will be searched in real-time during queries."
+      },
+      "removeConnector": {
+        "tooltip": "Remove connector"
+      },
+      "search": {
+        "placeholder": "Search federated connectors..."
+      }
+    },
+    "field": {
+      "arrayField": {
+        "addButton": "Add New"
+      },
+      "booleanField": {
+        "optionalLabel": "{label} (Optional)"
+      },
+      "fileValidation": {
+        "noTypeDefinition": "No file type definition found for field: {name}",
+        "selectionError": "File selection error",
+        "unknownError": "Unknown error",
+        "validating": "Validating file...",
+        "validationError": "Validation error"
+      },
+      "markdown": {
+        "editorLabel": "Markdown",
+        "placeholder": "Enter your markdown here...",
+        "previewTab": "Preview",
+        "writeTab": "Write"
+      },
+      "optionalIndicator": {
+        "text": "(optional)"
+      },
+      "passwordToggle": {
+        "hideAriaLabel": "Hide password",
+        "showAriaLabel": "Show password"
+      },
+      "selector": {
+        "noneOption": "None",
+        "placeholder": "Select..."
+      }
+    },
+    "filePicker": {
+      "allRecentFilesButton": {
+        "title": "All Recent Files"
+      },
+      "recentFiles": {
+        "title": "Recent Files"
+      },
+      "recentFilesModal": {
+        "description": "Upload files or pick from your recent files."
+      },
+      "toasts": {
+        "associatedAssistants": "Cannot delete file. It is associated with assistants: {assistants}",
+        "associatedBoth": "Cannot delete file. It is associated with projects: {projects} and assistants: {assistants}",
+        "associatedProjects": "Cannot delete file. It is associated with projects: {projects}",
+        "deleteFailed": "Failed to delete file. Please try again.",
+        "deleteSuccess": "File deleted successfully"
+      },
+      "uploadFiles": {
+        "description": "Upload a file from your device",
+        "title": "Upload Files"
+      },
+      "viewFileButton": {
+        "tooltip": "View File"
+      }
+    },
+    "fileTile": {
+      "file": {
+        "fallback": "file"
+      },
+      "open": {
+        "ariaLabel": "Open {title}"
+      },
+      "removeButton": {
+        "label": "Remove"
+      }
+    },
+    "filters": {
+      "clearButton": {
+        "ariaLabel": "Clear"
+      }
+    },
+    "formField": {
+      "optional": {
+        "label": "(Optional)"
+      },
+      "required": {
+        "label": "(Required)"
+      }
+    },
+    "genericMultiSelect": {
+      "loadFailed": {
+        "text": "Failed to load {label}. Please try again."
+      },
+      "search": {
+        "placeholder": "Search..."
+      }
+    },
+    "groupsMultiSelect": {
+      "noGroups": {
+        "emptyMessage": "No user groups available. Please create a user group first."
+      },
+      "userGroups": {
+        "label": "User Groups",
+        "subtext": "Select which user groups can access this resource"
+      }
+    },
+    "icons": {
+      "logo": {
+        "alt": "Logo"
+      }
+    },
+    "initializingLoader": {
+      "initializing": {
+        "text": "Initializing {appName}"
+      }
+    },
+    "inputElement": {
+      "removeButton": {
+        "tooltip": "Remove"
+      }
+    },
+    "inputFile": {
+      "attachButton": {
+        "ariaLabel": "Attach file"
+      },
+      "clearButton": {
+        "ariaLabel": "Clear file"
+      }
+    },
+    "inputImage": {
+      "dropRejected": {
+        "fallback": "File rejected"
+      },
+      "editButton": {
+        "ariaLabel": "Edit image"
+      },
+      "editOverlay": {
+        "label": "Edit"
+      },
+      "image": {
+        "altFallback": "Image"
+      },
+      "removeButton": {
+        "ariaLabel": "Remove image"
+      },
+      "uploadButton": {
+        "ariaLabel": "Upload image"
+      }
+    },
+    "inputSelect": {
+      "placeholder": {
+        "fallback": "Select an option"
+      }
+    },
+    "isPublicSelector": {
+      "assignGroups": {
+        "label": "Assign group access for this {objectName}",
+        "scopedSubtext": "Select one or more of the groups you manage to give access to this {objectName}",
+        "visibleSubtext": "This {objectName} will be visible/accessible by the groups selected below"
+      },
+      "loading": {
+        "text": "Loading..."
+      },
+      "makePublic": {
+        "label": "Make this {objectName} Public?",
+        "subtext": "If set, then this {objectName} will be usable by <b>All {publicToWhom}</b>. Otherwise, only <b>Admins</b> and <b>{publicToWhom}</b> who have explicitly been given access to this {objectName} (e.g. via a User Group) will have access."
+      },
+      "publicDisabled": {
+        "message": "This {objectName} is public and available to all users."
+      },
+      "usersFallback": {
+        "text": "Users"
+      }
+    },
+    "keyValue": {
+      "addButton": {
+        "ariaLabel": "Add {keyTitle} and {valueTitle} pair",
+        "label": "Add Line"
+      },
+      "empty": {
+        "title": "No items added yet."
+      },
+      "error": {
+        "duplicateKey": "Duplicate key",
+        "duplicateSummary": "{count, plural, one {# duplicate key found} other {# duplicate keys found}}",
+        "emptyKey": "Key cannot be empty",
+        "emptySummary": "{count, plural, one {# empty key found} other {# empty keys found}}",
+        "validationSummary": "{count, plural, one {# validation error found} other {# validation errors found}}"
+      },
+      "group": {
+        "ariaLabel": "{keyTitle} and {valueTitle} pairs"
+      },
+      "input": {
+        "ariaLabel": "{label} {index}"
+      },
+      "keyColumn": {
+        "title": "Key"
+      },
+      "pair": {
+        "fallbackLabel": "key-value"
+      },
+      "removeButton": {
+        "ariaLabel": "Remove {label} pair {index}"
+      },
+      "valueColumn": {
+        "title": "Value"
+      }
+    },
+    "logo": {
+      "image": {
+        "alt": "Logo"
+      },
+      "poweredBy": {
+        "label": "Powered by Onyx"
+      }
+    },
+    "nonSelectableConnectors": {
+      "unavailable": {
+        "label": "Unavailable connectors:"
+      }
+    },
+    "oauthCallback": {
+      "authorizationFailed": {
+        "description": "The authorization was cancelled or failed. Please try again.",
+        "title": "Authorization Failed"
+      },
+      "backButton": {
+        "label": "Back to Chat"
+      },
+      "completeFailed": {
+        "message": "Failed to complete authorization"
+      },
+      "genericError": {
+        "description": "An error occurred during the OAuth process. Please try again.",
+        "title": "Something Went Wrong"
+      },
+      "invalidRequest": {
+        "description": "The authorization request was incomplete. Please try again.",
+        "title": "Invalid Request"
+      },
+      "loadingHint": {
+        "text": "This may take a few moments..."
+      },
+      "processing": {
+        "description": "Please wait while we complete the setup.",
+        "title": "Processing..."
+      },
+      "redirecting": {
+        "text": "Redirecting in {count, plural, one {# second} other {# seconds}}..."
+      },
+      "serviceFallback": {
+        "text": "service"
+      },
+      "success": {
+        "detailsTemplate": "Your {serviceName} authorization completed successfully.",
+        "title": "Success!"
+      }
+    },
+    "spreadsheet": {
+      "error": {
+        "description": "The spreadsheet may be corrupted or couldn't be loaded properly.",
+        "title": "Error loading spreadsheet"
+      },
+      "preview": {
+        "truncated": "Preview truncated — download the file to see all rows.",
+        "unavailable": "Unable to preview this spreadsheet."
+      },
+      "sheet": {
+        "defaultName": "Sheet 1",
+        "empty": "This sheet is empty.",
+        "tooLarge": "This sheet is too large to preview — download the file to view it."
+      }
+    }
+  },
+  "craft": {
+    "agentSwitcher": {
+      "mainAgent": {
+        "label": "Main agent"
+      },
+      "subagentFallback": {
+        "label": "subagent"
+      },
+      "switch": {
+        "ariaLabel": "Switch agent"
+      }
+    },
+    "approvals": {
+      "approveOnce": {
+        "ariaLabel": "Approve this action once",
+        "button": "Approve once"
+      },
+      "approveSession": {
+        "button": "Approve for session",
+        "tooltip": "Approve matching actions for this session"
+      },
+      "details": {
+        "hideAriaLabel": "Hide details",
+        "showAriaLabel": "Show details"
+      },
+      "header": {
+        "required": "Approval required: {headline}"
+      },
+      "headline": {
+        "multiAction": "{count, plural, one {# action} other {# actions}} in {app}",
+        "singleAction": "{action} in {app}"
+      },
+      "payload": {
+        "empty": {
+          "label": "No payload."
+        },
+        "showLess": {
+          "button": "Show less"
+        },
+        "showMore": {
+          "button": "Show more"
+        }
+      },
+      "reject": {
+        "ariaLabel": "Reject this action",
+        "button": "Reject"
+      },
+      "status": {
+        "approved": "Approved",
+        "rejected": "Rejected"
+      },
+      "submit": {
+        "errorFallback": "Failed to submit decision"
+      }
+    },
+    "apps": {
+      "addCatalog": {
+        "addButton": "Add",
+        "createButton": "Create",
+        "customApp": {
+          "description": "Credentials and network access for your own integration.",
+          "title": "Custom app"
+        },
+        "mcpHint": {
+          "label": "Need an MCP server instead? Connect it in Actions, then enable it for Craft here.",
+          "openActionsButton": "Open Actions"
+        },
+        "modal": {
+          "description": "Make an integration available to your whole organization. Built-in providers come with actions that teach the Craft agent how to use them; already-configured providers are not listed.",
+          "title": "Add an app"
+        }
+      },
+      "associatedSkills": {
+        "associateAriaLabel": "Associate {name}",
+        "associateButton": "Associate existing",
+        "create": {
+          "github": {
+            "description": "If your skills are in GitHub, import them on the Skills page first, then associate them with this app.",
+            "label": "Import from GitHub"
+          },
+          "scratch": {
+            "description": "Write instructions and add supporting files.",
+            "label": "Start from scratch"
+          },
+          "upload": {
+            "description": "Import a SKILL.md file, ZIP file, or skill folder.",
+            "label": "Upload a skill"
+          }
+        },
+        "createSkillButton": "Create skill",
+        "description": "Skills give Craft instructions for using this app. They are organization-wide; users may need to enable all of them for the app to work correctly.",
+        "editButton": "Edit",
+        "empty": {
+          "label": "No editable skills found."
+        },
+        "invalidTag": "Invalid",
+        "loading": {
+          "label": "Loading skills…"
+        },
+        "noneAssociated": {
+          "label": "No skills are associated yet. This app can still be saved and used without one."
+        },
+        "promote": {
+          "cancelButton": "Cancel",
+          "confirmButton": "Make organization-wide",
+          "description": "App-associated skills must be available to everyone. This change is applied when you save the app.",
+          "title": "Make “{name}” organization-wide?"
+        },
+        "search": {
+          "placeholder": "Search editable skills..."
+        },
+        "title": "Associated skills",
+        "unavailable": {
+          "duplicateName": "A skill named “{name}” is already associated.",
+          "invalid": "Invalid skill — fix it before associating.",
+          "otherApp": "Already associated with app “{name}”."
+        },
+        "unlink": {
+          "button": "Unlink",
+          "cancelButton": "Cancel",
+          "confirm": "Unlink “{name}” from this app?"
+        },
+        "unlinkAriaLabel": "Unlink {name}",
+        "viewButton": "View"
+      },
+      "configureProvider": {
+        "addButton": "Add",
+        "addTitle": "Add {name}",
+        "editTitle": "Edit {name}",
+        "emptyPolicies": "This provider has no actions to configure.",
+        "fields": {
+          "name": {
+            "description": "A label for this connection. Use a distinct name when adding multiple instances of the same provider (e.g. \"{name} — Engineering\").",
+            "label": "Name"
+          }
+        },
+        "managedDescription": "Provided by Onyx — configure what the agent may do.",
+        "managedNote": "This app is provided by Onyx — credentials are managed for you. Choose what the agent may do below. Users connect it from the Apps page.",
+        "saveButton": "Save"
+      },
+      "customApp": {
+        "cancelButton": "Cancel",
+        "createButton": "Create",
+        "createDescription": "Configure how the egress proxy reaches and authenticates this app. A skill is not required.",
+        "createTitle": "Create custom app",
+        "creatingButton": "Creating…",
+        "disabled": {
+          "nameMissing": "Enter a name before creating this custom app.",
+          "patternMissing": "Add at least one upstream URL pattern. Type a pattern and press Enter.",
+          "pristine": "Make a change before saving.",
+          "saving": "Save is already in progress."
+        },
+        "editDescription": "Update gateway settings and manage associated skills.",
+        "editTitle": "Edit {name}",
+        "errors": {
+          "saveFailedTitle": "Couldn't save"
+        },
+        "fields": {
+          "headers": {
+            "addButton": "Add header",
+            "description": "Optional — headers injected into outbound requests. Use '{placeholder}' for values the user (or org below) supplies, e.g. \"Bearer '{api_key}'\". Leave empty to allowlist the upstream patterns without injecting credentials.",
+            "keyTitle": "Header",
+            "label": "Header credential pattern",
+            "valueTitle": "Value"
+          },
+          "name": {
+            "label": "Name",
+            "placeholder": "My Custom App"
+          },
+          "orgCredentials": {
+            "addButton": "Add credential",
+            "description": "Optional — values your org pre-fills for every user. Leave empty for apps where each user supplies their own credentials.",
+            "keyTitle": "Credential key",
+            "label": "Organization credentials",
+            "valueTitle": "Value"
+          },
+          "upstreamPatterns": {
+            "description": "Outbound URLs the proxy may inject credentials into. Use * to match any characters (e.g. https://api.example.com/* covers every path on that host). The host must be literal, with no wildcards before the first slash. Type a pattern and press Enter.",
+            "label": "Upstream URL patterns"
+          }
+        },
+        "saveButton": "Save",
+        "savingButton": "Saving…"
+      },
+      "errors": {
+        "duplicateSkillName": "App “{appName}” already has an associated skill named “{skillName}”. Upload a skill with a different name."
+      },
+      "mcpPolicy": {
+        "description": "Configure what the Craft agent may do with this MCP server's tools.",
+        "emptyPolicies": "No enabled tools on this server. Enable tools on the MCP actions page first.",
+        "saveButton": "Save",
+        "title": "Edit {name}"
+      },
+      "oauthCallback": {
+        "backButton": "Back to My Apps",
+        "description": "Finishing the OAuth handshake…",
+        "errors": {
+          "cancelled": "OAuth was cancelled or denied: {reason}",
+          "failed": "Connection failed.",
+          "missingParams": "Missing code or state in callback URL."
+        },
+        "exchanging": {
+          "label": "Exchanging authorization code…"
+        },
+        "success": {
+          "label": "Connected. Redirecting back to your apps…"
+        },
+        "title": "Connecting your app"
+      },
+      "page": {
+        "connectButton": "Connect",
+        "connectingButton": "Redirecting…",
+        "disconnectButton": "Disconnect",
+        "empty": {
+          "description": "No apps or MCP servers are configured for your organization yet.",
+          "title": "Nothing to connect yet"
+        },
+        "errors": {
+          "disconnectFailed": "Failed to disconnect",
+          "startAuthFailed": "Failed to start authorization"
+        },
+        "header": {
+          "description": "Connect the tools Onyx Craft can use as context while it works.",
+          "manageButton": "Manage apps",
+          "searchPlaceholder": "Search apps...",
+          "title": "Apps"
+        },
+        "kinds": {
+          "app": {
+            "blurb": "Integrations Onyx supports directly. Each comes with skills that teach Craft how to use it — start here.",
+            "empty": "No apps are configured for your organization yet.",
+            "emptyTitle": "No apps yet",
+            "tabLabel": "Apps · {count}"
+          },
+          "mcp": {
+            "blurb": "Servers an admin made available to Craft. Use these when the app you need isn't listed under Apps, or when you specifically want a server's own MCP tools.",
+            "empty": "No MCP servers have been made available to Craft.",
+            "emptyTitle": "No MCP servers yet",
+            "tabLabel": "MCP servers · {count}"
+          }
+        },
+        "loading": {
+          "label": "Loading…"
+        },
+        "reviewSkillsButton": "Review skills",
+        "search": {
+          "noMatchesDescription": "Nothing here matches your search.",
+          "noMatchesTitle": "No matches"
+        },
+        "status": {
+          "connected": "Connected",
+          "connectedNeedsSkills": "Connected · not all associated skills are enabled",
+          "notAvailable": "Not available for your account — ask an admin",
+          "skillWarningAriaLabel": "Skill setup required",
+          "skillWarningTooltip": "Not all associated skills are enabled. This app may not work correctly."
+        }
+      },
+      "policyEditor": {
+        "advanced": {
+          "description": "Set a policy for each action individually.",
+          "title": "Advanced"
+        },
+        "cancelButton": "Cancel",
+        "loading": {
+          "label": "Loading…"
+        },
+        "permissions": {
+          "askOption": "Ask",
+          "autoApproveOption": "Auto-approve",
+          "customOption": "Custom",
+          "description": "Choose what the agent may do. “Ask” prompts you in chat before each action runs; “Auto-approve” lets it run without prompting. Use Advanced to set a policy per action.",
+          "title": "Permissions"
+        },
+        "savingButton": "Saving…"
+      },
+      "skillsStep": {
+        "description": "Optional — associate existing skills or create one for this app.",
+        "errors": {
+          "saveFailedTitle": "Couldn't save"
+        },
+        "saveButton": "Save skills",
+        "savingButton": "Saving…",
+        "skipButton": "Skip for now",
+        "title": "Add skills to {name}"
+      },
+      "userCredentials": {
+        "cancelButton": "Cancel",
+        "connectButton": "Connect",
+        "connectingButton": "Connecting…",
+        "description": "Enter your credentials to authorize this app for your account.",
+        "errors": {
+          "connectFailedTitle": "Couldn't connect"
+        },
+        "title": "Connect {name}"
+      }
+    },
+    "artifactsTab": {
+      "download": {
+        "button": "Download"
+      },
+      "empty": {
+        "description": "Output files and web apps will appear here",
+        "title": "No artifacts yet"
+      },
+      "nextjsApp": {
+        "label": "Next.js Application"
+      },
+      "openItem": {
+        "ariaLabel": "Open {name}"
+      },
+      "toggleItem": {
+        "ariaLabel": "Toggle {name}"
+      }
+    },
+    "chatPanel": {
+      "input": {
+        "continuePlaceholder": "Continue the conversation...",
+        "scheduledRunPlaceholder": "Scheduled run in progress...",
+        "subagentPlaceholder": "Switch to the main agent to send a message"
+      },
+      "openSidebar": {
+        "ariaLabel": "Open Sidebar"
+      },
+      "outputPanel": {
+        "closeTooltip": "Close output panel",
+        "openTooltip": "Open output panel"
+      },
+      "responseStopped": {
+        "label": "Response stopped"
+      },
+      "scrollToBottom": {
+        "label": "Scroll to bottom"
+      },
+      "toast": {
+        "operationWait": "Please wait for the current operation to complete.",
+        "sandboxWait": "Please wait for sandbox to initialize",
+        "scheduledRunWait": "Please wait for the scheduled run to finish."
+      }
+    },
+    "compaction": {
+      "marker": {
+        "label": "Context compacted to free up space"
+      }
+    },
+    "connectDataBanner": {
+      "cta": {
+        "label": "Connect your data"
+      }
+    },
+    "craftingLoader": {
+      "messages": {
+        "craftingWorkspace": "Crafting your workspace...",
+        "enchanting": "Enchanting with magic...",
+        "gamemode": "/gamemode 1",
+        "gatheringResources": "Gathering resources...",
+        "miningDependencies": "Mining for dependencies...",
+        "placingBlocks": "Placing blocks...",
+        "punchingWood": "Punching wood...",
+        "smeltingCode": "Smelting the code...",
+        "worldGenerated": "World generation complete..."
+      },
+      "tagline": {
+        "label": "Crafting your next great idea..."
+      }
+    },
+    "debugLogs": {
+      "clear": {
+        "tooltip": "Clear"
+      },
+      "copy": {
+        "doneTooltip": "Copied",
+        "tooltip": "Copy visible"
+      },
+      "empty": {
+        "noLines": "No lines yet.",
+        "noMatch": "No lines match \"{filter}\"",
+        "waiting": "Waiting for the first log line…"
+      },
+      "error": {
+        "endpointDisabled": "Debug endpoint disabled (ENABLE_OPENCODE_DEBUGGING=false)",
+        "http": "HTTP {status}",
+        "noSandbox": "No running sandbox to tail logs from"
+      },
+      "filter": {
+        "placeholder": "Filter…"
+      },
+      "lines": {
+        "count": "{count, plural, one {# line} other {# lines}}",
+        "filteredCount": "{visible, number} / {total, number} lines"
+      },
+      "modal": {
+        "description": "Live tail of the sandbox container — dev/debug only.",
+        "title": "Opencode pod logs"
+      },
+      "newSincePaused": {
+        "button": "+{count, number} new · jump"
+      },
+      "open": {
+        "button": "Pod logs"
+      },
+      "status": {
+        "closed": "Closed",
+        "connecting": "Connecting",
+        "error": "Error",
+        "paused": "Paused",
+        "streaming": "Streaming"
+      }
+    },
+    "entryMenu": {
+      "addFiles": {
+        "label": "Add files or photos"
+      },
+      "apps": {
+        "label": "Apps"
+      },
+      "browseSkills": {
+        "label": "Browse skills"
+      },
+      "connect": {
+        "hint": "Connect"
+      },
+      "connectApp": {
+        "label": "Connect an app"
+      },
+      "library": {
+        "label": "Library"
+      },
+      "manageLibrary": {
+        "label": "Manage library…"
+      },
+      "mcpServer": {
+        "description": "MCP server"
+      },
+      "skills": {
+        "label": "Skills"
+      }
+    },
+    "filePreview": {
+      "cannotPreview": {
+        "title": "Cannot preview file"
+      },
+      "error": {
+        "inline": "Error: {message}",
+        "title": "Error loading file"
+      },
+      "loading": {
+        "label": "Loading file..."
+      },
+      "noContent": {
+        "label": "No content"
+      }
+    },
+    "filesTab": {
+      "empty": {
+        "description": "Files created during the build will appear here",
+        "title": "No files yet"
+      },
+      "emptyDirectory": {
+        "label": "No files in this directory"
+      },
+      "error": {
+        "title": "Error loading files"
+      },
+      "loading": {
+        "label": "Loading files..."
+      },
+      "loadingChildren": {
+        "label": "Loading..."
+      },
+      "preparing": {
+        "description": "Setting up your development environment",
+        "title": "Preparing sandbox..."
+      }
+    },
+    "imagePreview": {
+      "error": {
+        "description": "The image could not be displayed",
+        "title": "Failed to load image"
+      },
+      "loading": {
+        "label": "Loading image..."
+      },
+      "preview": {
+        "ariaLabel": "Preview of {name}"
+      }
+    },
+    "inputBar": {
+      "entryInfo": {
+        "connected": "Connected",
+        "connectionRequired": "Connection required"
+      },
+      "plusMenu": {
+        "tooltip": "Add files or skills"
+      }
+    },
+    "interruptHint": {
+      "stopping": {
+        "label": "Stopping…"
+      },
+      "toInterrupt": {
+        "label": "to interrupt"
+      }
+    },
+    "intro": {
+      "beta": {
+        "badge": "BETA"
+      },
+      "returnHome": {
+        "button": "Return Home"
+      },
+      "startCrafting": {
+        "button": "Start Crafting"
+      },
+      "wordmark": {
+        "label": "Craft"
+      }
+    },
+    "llmPopover": {
+      "noModels": {
+        "label": "No models found"
+      },
+      "recommended": {
+        "label": "Recommended"
+      },
+      "recommendedOnly": {
+        "label": "Recommended Models Only"
+      }
+    },
+    "onboarding": {
+      "livingMap": {
+        "examplePrompts": {
+          "flakyRetryTest": "“Fix the flaky retry test and open a PR.”",
+          "launchDeck": "“Build the spring launch deck from the brief in Drive.”",
+          "rfpSecurity": "“Fill out the RFP in my email with our security details.”",
+          "slackToLinear": "“Condense our Slack discussion into Linear tickets.”",
+          "vendorSpend": "“Summarize our Q2 vendor spend as a doc in Drive.”"
+        },
+        "modal": {
+          "backButton": "Back",
+          "ctaButton": "Put Craft to work",
+          "nextButton": "Next",
+          "title": "Meet Craft"
+        },
+        "outputs": {
+          "ariaLabel": "Output: {name}",
+          "githubPr": {
+            "caption": "Open for review",
+            "label": "GitHub PR"
+          },
+          "googleDoc": {
+            "caption": "Written to your Drive",
+            "label": "Google Doc"
+          },
+          "liveApp": {
+            "caption": "Hosted — share by link",
+            "label": "Live app"
+          }
+        },
+        "prompt": {
+          "label": "Your prompt"
+        },
+        "schedule": {
+          "ariaLabel": "Scheduled task — re-runs this prompt on a timer",
+          "caption": "Runs while you're away",
+          "label": "Every Monday, 8:00"
+        },
+        "sources": {
+          "connectedAriaLabel": "Connected source: {name}",
+          "yourFiles": {
+            "ariaLabel": "Your uploaded files",
+            "label": "Your files"
+          }
+        },
+        "stages": {
+          "constellation": {
+            "caption": "Click any part of the map to revisit it.",
+            "title": "That's Craft. Your turn."
+          },
+          "machine": {
+            "caption": "Reading what you can see. Never your secrets.",
+            "title": "It works on its own machine."
+          },
+          "output": {
+            "caption": "On demand — or on a schedule, while you're away.",
+            "title": "Finished work comes out."
+          },
+          "prompt": {
+            "caption": "Describe the outcome — Craft does the rest.",
+            "title": "Give Craft real work."
+          }
+        },
+        "team": {
+          "ariaLabel": "Your team — one link shares Craft's work",
+          "caption": "One link shares it",
+          "label": "Your team"
+        },
+        "workspace": {
+          "approvalPill": "Waiting for your approval",
+          "label": "Craft's workspace",
+          "sandboxBadge": "Isolated sandbox"
+        }
+      },
+      "llmLocked": {
+        "backToChatButton": "Back to Chat",
+        "description": "Onyx Craft needs a model provider, and only admins can set one up. Ask your admin to connect Anthropic, OpenAI, or OpenRouter.",
+        "title": "An LLM provider is required"
+      },
+      "llmSetup": {
+        "description": "Craft agents need a model provider to build.",
+        "title": "Connect a model provider"
+      },
+      "welcomeMock": {
+        "input": {
+          "placeholder": "Analyze my data and create a dashboard..."
+        },
+        "modelPill": {
+          "label": "Claude Opus 4.8"
+        },
+        "promptPills": {
+          "engineering": "Engineering",
+          "marketing": "Marketing",
+          "product": "Product",
+          "sales": "Sales"
+        }
+      }
+    },
+    "outputPanel": {
+      "artifactsEmpty": {
+        "tooltip": "Start building something to see artifacts!"
+      },
+      "devServerStarting": {
+        "tooltip": "Starting the dev server..."
+      },
+      "noWebapp": {
+        "label": "No web app in this session yet"
+      }
+    },
+    "pdfPreview": {
+      "error": {
+        "description": "The PDF file could not be loaded.",
+        "title": "Cannot preview PDF"
+      },
+      "frame": {
+        "title": "PDF Preview"
+      },
+      "loading": {
+        "label": "Loading PDF..."
+      }
+    },
+    "pptxPreview": {
+      "converting": {
+        "label": "Converting presentation..."
+      },
+      "empty": {
+        "label": "No slides in this presentation"
+      },
+      "error": {
+        "title": "Cannot preview presentation"
+      },
+      "loadingSlide": {
+        "label": "Loading slide..."
+      },
+      "slide": {
+        "counter": "Slide {current} of {total}"
+      }
+    },
+    "previewTab": {
+      "empty": {
+        "description": "A live preview appears here once a web app is running."
+      },
+      "frame": {
+        "title": "Web App Preview"
+      },
+      "starting": {
+        "description": "Installing dependencies and booting.",
+        "title": "Starting the dev server..."
+      }
+    },
+    "redirect": {
+      "redirecting": {
+        "label": "Redirecting..."
+      }
+    },
+    "sandboxAsleep": {
+      "dismiss": {
+        "button": "Dismiss"
+      },
+      "modal": {
+        "description": "It went to sleep after a period of inactivity — your work is saved. Wake it to keep going.",
+        "title": "Your sandbox fell asleep"
+      },
+      "wake": {
+        "button": "Wake sandbox"
+      }
+    },
+    "scheduledRun": {
+      "badge": {
+        "label": "Scheduled"
+      },
+      "startedAt": {
+        "label": "Started {time}"
+      },
+      "status": {
+        "awaitingApproval": "This scheduled run is awaiting approval. Follow-up messages unlock after it resumes and finishes.",
+        "running": "This scheduled run is still running. Follow-up messages unlock when it finishes.",
+        "startedBy": "This session was started by scheduled task {task} at {time}."
+      },
+      "viewTask": {
+        "ariaLabel": "View scheduled task {task}. {status}",
+        "label": "View task"
+      }
+    },
+    "setupCard": {
+      "appFallback": {
+        "label": "External app {id}"
+      },
+      "connect": {
+        "title": "Connect {app}"
+      },
+      "connected": {
+        "title": "{app} connected."
+      },
+      "error": {
+        "generic": "Something went wrong. Please try again.",
+        "notConfigurable": "This app can't be set up from here.",
+        "popupBlocked": "Couldn't open the setup window — allow popups and try again.",
+        "startFailed": "Failed to start setup"
+      },
+      "loading": {
+        "button": "Loading…"
+      },
+      "notNow": {
+        "button": "Not now"
+      },
+      "reason": {
+        "fallback": "The agent needs {app} to continue this task."
+      },
+      "skipped": {
+        "title": "Skipped connecting {app}."
+      },
+      "waiting": {
+        "button": "Waiting…"
+      }
+    },
+    "share": {
+      "copyLink": {
+        "ariaLabel": "Copy link"
+      },
+      "organization": {
+        "description": "Anyone logged into your Onyx can view this app.",
+        "label": "Organization"
+      },
+      "private": {
+        "description": "Only you can view this app.",
+        "label": "Private"
+      },
+      "share": {
+        "label": "Share"
+      },
+      "shared": {
+        "label": "Shared"
+      },
+      "trigger": {
+        "ariaLabel": "Share webapp"
+      }
+    },
+    "sideBar": {
+      "apps": {
+        "label": "Apps"
+      },
+      "backToChat": {
+        "label": "Back to Chat"
+      },
+      "delete": {
+        "label": "Delete"
+      },
+      "deleteModal": {
+        "body": "This permanently removes the Craft session and all of its data. This action cannot be undone.",
+        "confirm": "Delete",
+        "deleting": "Deleting...",
+        "title": "Delete \"{title}\"?"
+      },
+      "newSession": {
+        "label": "Start Crafting"
+      },
+      "rename": {
+        "label": "Rename"
+      },
+      "scheduledTasks": {
+        "label": "Scheduled Tasks"
+      },
+      "sessions": {
+        "empty": "Start building! Session history will appear here.",
+        "title": "Sessions"
+      },
+      "skills": {
+        "label": "Skills"
+      },
+      "toast": {
+        "deleteFailed": "Failed to delete session",
+        "deleted": "Deleted \"{title}\"."
+      }
+    },
+    "skillsStale": {
+      "notice": {
+        "description": "Reload this session to apply the latest skills and app access.",
+        "title": "Your agent’s capabilities have changed"
+      },
+      "reload": {
+        "button": "Reload",
+        "inProgress": "Reloading…"
+      },
+      "toast": {
+        "reloadFailed": "Failed to reload session"
+      }
+    },
+    "subagentView": {
+      "notFound": {
+        "label": "Subagent not found."
+      }
+    },
+    "suggestedPrompts": {
+      "close": {
+        "ariaLabel": "Close suggestions"
+      }
+    },
+    "tasks": {
+      "detailPage": {
+        "confirmDelete": {
+          "deleteButton": "Delete",
+          "deletingButton": "Deleting...",
+          "description": "This stops future runs and removes the task. Past run history (and the underlying sessions) will be preserved for audit.",
+          "title": "Delete \"{name}\"?"
+        },
+        "deleteButton": "Delete",
+        "editButton": "Edit",
+        "fallbackTitle": "Scheduled task",
+        "loadFailed": "Failed to load scheduled task.",
+        "missingTaskId": "Missing task id.",
+        "pauseButton": "Pause",
+        "resumeButton": "Resume",
+        "runNowButton": "Run now",
+        "toasts": {
+          "deleteFailed": "Failed to delete task",
+          "deleted": "Deleted \"{name}\".",
+          "paused": "Task paused.",
+          "resumed": "Task resumed.",
+          "runQueued": "Queued run for \"{name}\".",
+          "runStartFailed": "Failed to start run",
+          "statusUpdateFailed": "Failed to update status"
+        }
+      },
+      "editPage": {
+        "fallbackTitle": "Edit scheduled task",
+        "loadFailed": "Failed to load scheduled task.",
+        "missingTaskId": "Missing task id.",
+        "title": "Edit \"{name}\""
+      },
+      "form": {
+        "cancelButton": "Cancel",
+        "errors": {
+          "nameRequired": "Name is required.",
+          "promptRequired": "Prompt is required."
+        },
+        "fields": {
+          "name": {
+            "label": "Name",
+            "placeholder": "e.g. Weekly customer escalations digest"
+          },
+          "preApproval": {
+            "description": "Craft can use selected apps and MCP servers without pausing when this task runs unattended. Other approval requests pause the run and can cause it to fail.",
+            "label": "Pre-approved apps and MCP servers"
+          },
+          "prompt": {
+            "description": "This message is sent to Craft each time the task fires.",
+            "label": "Prompt",
+            "placeholder": "Describe what Craft should do on each run..."
+          },
+          "schedule": {
+            "label": "Schedule"
+          }
+        },
+        "saveAndRunNowButton": "Save and run now",
+        "saveButton": "Save",
+        "saveChangesButton": "Save changes",
+        "savingLabel": "Saving...",
+        "toasts": {
+          "created": "Scheduled task created.",
+          "createdAndQueued": "Scheduled task created and queued.",
+          "saveFailed": "Failed to save scheduled task",
+          "updated": "Scheduled task updated."
+        }
+      },
+      "listPage": {
+        "columns": {
+          "lastRun": "Last run",
+          "name": "Name",
+          "nextRun": "Next run",
+          "schedule": "Schedule",
+          "status": "Status"
+        },
+        "confirmDelete": {
+          "deleteButton": "Delete",
+          "deletingButton": "Deleting...",
+          "description": "This stops future runs and removes the task. Past run history (and the underlying sessions) will be preserved for audit.",
+          "title": "Delete \"{name}\"?"
+        },
+        "empty": {
+          "description": "No scheduled tasks have been created yet.",
+          "title": "No scheduled tasks found"
+        },
+        "errors": {
+          "loadFailed": "Failed to load scheduled tasks.",
+          "tryAgainButton": "Try again"
+        },
+        "header": {
+          "description": "Run Craft prompts on a timer. Each fire creates a fresh session that runs in the background.",
+          "title": "Scheduled Tasks"
+        },
+        "newTaskButton": "New Scheduled Task",
+        "rowActions": {
+          "deleteTooltip": "Delete"
+        },
+        "toasts": {
+          "deleteFailed": "Failed to delete task",
+          "deleted": "Deleted \"{name}\"."
+        }
+      },
+      "newPage": {
+        "description": "Save a prompt + schedule. Craft will run it on a timer.",
+        "title": "New Scheduled Task"
+      },
+      "preApproval": {
+        "appFallbackName": "App #{id}",
+        "appsGroupTitle": "Apps",
+        "empty": {
+          "label": "No apps or MCP servers are available in Craft yet."
+        },
+        "errors": {
+          "loadFailed": "Couldn’t load apps and MCP servers. Refresh to try again.",
+          "partialLoadFailed": "Some pre-approval options couldn’t load. Refresh to try again."
+        },
+        "loading": {
+          "label": "Loading apps and MCP servers…"
+        },
+        "mcpGroupTitle": "MCP servers",
+        "mcpServerFallbackName": "MCP server #{id}",
+        "status": {
+          "connected": "Connected",
+          "connectionRequired": "Connection required",
+          "unavailable": "No longer available"
+        },
+        "summary": {
+          "partialLoadFailed": "Some pre-approval details couldn’t load. Refresh to try again.",
+          "title": "Pre-approved apps and MCP servers"
+        }
+      },
+      "runHistory": {
+        "columns": {
+          "duration": "Duration",
+          "started": "Started",
+          "status": "Status",
+          "summary": "Summary",
+          "trigger": "Trigger"
+        },
+        "empty": {
+          "label": "No runs yet. The task will create one each time it fires, or use Run Now above."
+        },
+        "errors": {
+          "loadFailed": "Failed to load run history.",
+          "tryAgainButton": "Try again"
+        },
+        "loadMore": {
+          "button": "Load more",
+          "loadingButton": "Loading..."
+        },
+        "nonClickable": {
+          "noSession": "This run has not created a session yet.",
+          "queued": "This run hasn't started yet, so there is no session to open.",
+          "skipped": "This run was skipped because a prior run was still in flight, so no session was created."
+        },
+        "status": {
+          "notOpenableAriaLabel": "Not openable"
+        },
+        "trigger": {
+          "runNow": "Run Now",
+          "schedule": "Schedule"
+        }
+      },
+      "scheduleEditor": {
+        "dailyWeekly": {
+          "atLabel": "At",
+          "daysLabel": "On these days",
+          "runsEveryDay": "Runs every day",
+          "runsOn": "Runs on {days}"
+        },
+        "interval": {
+          "everyLabel": "Every"
+        },
+        "intervalUnits": {
+          "days": "days",
+          "hours": "hours",
+          "minutes": "minutes"
+        },
+        "tabs": {
+          "dailyWeekly": "Daily / Weekly",
+          "interval": "Interval"
+        },
+        "weekdays": {
+          "fri": "Fri",
+          "mon": "Mon",
+          "sat": "Sat",
+          "sun": "Sun",
+          "thu": "Thu",
+          "tue": "Tue",
+          "wed": "Wed"
+        }
+      }
+    },
+    "todoList": {
+      "empty": {
+        "label": "No tasks"
+      },
+      "header": {
+        "title": "Tasks"
+      },
+      "progress": {
+        "label": "{completed}/{total} completed"
+      }
+    },
+    "toolCards": {
+      "bash": {
+        "noOutput": {
+          "label": "No output"
+        }
+      },
+      "diff": {
+        "unchangedLines": {
+          "label": "{count, plural, one {# unchanged line} other {# unchanged lines}}"
+        },
+        "viewToggle": {
+          "sideBySideTooltip": "Switch to side-by-side",
+          "unifiedTooltip": "Switch to unified"
+        }
+      },
+      "generic": {
+        "noOutput": {
+          "label": "No output yet..."
+        }
+      },
+      "group": {
+        "calls": {
+          "tag": "{count, plural, one {# call} other {# calls}}"
+        },
+        "failed": {
+          "tag": "{count} failed"
+        },
+        "working": {
+          "label": "Working"
+        }
+      },
+      "read": {
+        "emptyFile": {
+          "label": "(empty file)"
+        },
+        "moreLines": {
+          "label": "{count, plural, one {# more line} other {# more lines}}"
+        },
+        "showAll": {
+          "button": "Show all"
+        }
+      },
+      "search": {
+        "noMatches": {
+          "label": "No matches"
+        }
+      }
+    },
+    "uploadFiles": {
+      "errors": {
+        "fileTooLarge": "File too large ({size}). Maximum is {max}.",
+        "network": "Network error",
+        "notFound": "Resource not found",
+        "server": "Server error",
+        "sessionExpired": "Session expired",
+        "tooManyFiles": "Too many files. Maximum is {max} files per session.",
+        "totalSizeExceeded": "Total size exceeds limit. Maximum is {max} per session.",
+        "uploadFailed": "Upload failed"
+      }
+    },
+    "urlBar": {
+      "back": {
+        "ariaLabel": "Go back"
+      },
+      "copyUrl": {
+        "ariaLabel": "Copy URL: {url}"
+      },
+      "downloadFile": {
+        "tooltip": "Download file"
+      },
+      "export": {
+        "button": "Export to .docx",
+        "inProgress": "Exporting..."
+      },
+      "forward": {
+        "ariaLabel": "Go forward"
+      },
+      "openInNewTab": {
+        "tooltip": "open in a new tab"
+      },
+      "refresh": {
+        "ariaLabel": "Refresh"
+      }
+    },
+    "userLibrary": {
+      "delete": {
+        "action": "delete",
+        "button": "Delete",
+        "entityTypeFile": "file",
+        "entityTypeFolder": "folder",
+        "fileDetails": "This file will be removed from your library.",
+        "folderDetails": "This will delete the folder and all its contents."
+      },
+      "dropzone": {
+        "formats": "Excel, Word, PowerPoint, PDF, or ZIP",
+        "title": "Drag files here or click to upload"
+      },
+      "errors": {
+        "createFolderFailed": "Failed to create folder",
+        "deleteFailed": "Failed to delete",
+        "loadFailed": "Failed to load files",
+        "uploadFailed": "Upload failed"
+      },
+      "loading": {
+        "label": "Loading files…"
+      },
+      "modal": {
+        "description": "Files your agent can read in every session.",
+        "doneButton": "Done",
+        "title": "Library"
+      },
+      "newFolder": {
+        "cancelButton": "Cancel",
+        "createButton": "Create",
+        "label": "New folder",
+        "nameLabel": "Folder name",
+        "namePlaceholder": "Enter folder name"
+      },
+      "search": {
+        "noResults": "No files match your search",
+        "placeholder": "Search files..."
+      },
+      "tree": {
+        "collapseTooltip": "Collapse",
+        "deleteTooltip": "Delete",
+        "expandTooltip": "Expand",
+        "toggleAriaLabel": "Toggle {name}",
+        "uploadToFolderTooltip": "Upload to this folder"
+      },
+      "upload": {
+        "button": "Upload",
+        "dropOverlay": "Drop files to upload",
+        "uploadingButton": "Uploading…"
+      }
+    },
+    "welcome": {
+      "input": {
+        "placeholder": "Analyze my data and create a dashboard..."
       }
     }
   },
@@ -8704,6 +12547,13 @@
           "networkError": "An error occurred while changing the password",
           "updateFailed": "Failed to change password",
           "updated": "Password updated successfully"
+        },
+        "validation": {
+          "confirmRequired": "Please confirm your new password",
+          "currentRequired": "Current password is required",
+          "minLength": "Password must be at least {min} characters",
+          "mismatch": "Passwords do not match",
+          "newRequired": "New password is required"
         }
       },
       "title": "Accounts"
@@ -8745,6 +12595,7 @@
         "empty": "No access tokens created.",
         "expiresIn": "{count, plural, one {Expires in # day} other {Expires in # days}}",
         "loading": "Loading tokens...",
+        "middleText": "{created} - {expiry} - {scope}",
         "neverExpires": "Never expires",
         "newTokenButton": "New Access Token",
         "noPermissionTooltip": "You don't have permission to create access tokens",
@@ -8891,6 +12742,10 @@
       },
       "description": "Connect external tools to the models available to you in Onyx.",
       "guideButton": "Guide",
+      "loadError": {
+        "description": "Please refresh the page and try again.",
+        "title": "Could not load LLM Gateway"
+      },
       "models": {
         "description": "{count, plural, one {# model is available to your account. Open a provider to copy an ID.} other {# models are available to your account. Open a provider to copy an ID.}}",
         "title": "Models"
@@ -8914,15 +12769,66 @@
         "updateFailed": "Failed to update language preference"
       }
     },
+    "layout": {
+      "header": {
+        "title": "Settings"
+      },
+      "sectionSelect": {
+        "placeholder": "Select a section"
+      },
+      "tabs": {
+        "accountsAccess": {
+          "label": "Accounts & Access"
+        },
+        "chatPreferences": {
+          "label": "Chat Preferences"
+        },
+        "connectors": {
+          "label": "Connectors"
+        },
+        "general": {
+          "label": "General"
+        },
+        "llmGateway": {
+          "label": "LLM Gateway"
+        },
+        "usage": {
+          "label": "Usage"
+        }
+      }
+    },
     "memory": {
+      "addLineButton": {
+        "label": "Add Line",
+        "maxReached": "Maximum of {count} memories reached"
+      },
       "empty": {
-        "description": "Add personal note or memory that Onyx should remember."
+        "description": "Add personal note or memory that Onyx should remember.",
+        "getStarted": "No memories yet. Click \"Add Line\" to get started.",
+        "noMatches": "No memories match your search."
+      },
+      "item": {
+        "placeholder": "Type or paste in a personal note or memory"
+      },
+      "lineCount": {
+        "label": "{count, plural, one {Line} other {Lines}}"
+      },
+      "modal": {
+        "description": "Let Onyx reference these stored notes and memories in chats.",
+        "searchPlaceholder": "Search..."
       },
       "referenceStoredMemories": {
         "description": "Let Onyx reference stored memories in chats.",
         "title": "Reference Stored Memories"
       },
+      "removeLineButton": {
+        "label": "Remove Line"
+      },
       "title": "Memory",
+      "toasts": {
+        "saveFailed": "Failed to save preferences",
+        "saved": "Preferences saved"
+      },
       "updateMemories": {
         "description": "Let Onyx generate and update stored memories.",
         "title": "Update Memories"
@@ -8976,6 +12882,67 @@
         "title": "Use Prompt Shortcuts"
       }
     },
+    "usage": {
+      "budget": {
+        "limit": "{amount} limit",
+        "none": "No budget set",
+        "remaining": "{amount} remaining",
+        "resetsOn": "Resets on {date}",
+        "title": "Budget"
+      },
+      "empty": {
+        "description": "Your model usage and costs will show up here once you start chatting.",
+        "title": "No usage recorded yet"
+      },
+      "header": {
+        "title": "Usage"
+      },
+      "loadError": {
+        "description": "Something went wrong fetching your usage. Try again in a moment.",
+        "title": "Couldn't load usage"
+      },
+      "modelPrices": {
+        "defaultTag": {
+          "label": "{model} · default"
+        },
+        "description": "USD per 1M tokens (input · output · cache) for every available model",
+        "otherProvider": {
+          "label": "Other"
+        },
+        "title": "Model prices",
+        "unavailable": "Prices unavailable"
+      },
+      "modelUsage": {
+        "cacheReads": {
+          "label": "{count} cache reads"
+        },
+        "cacheWrites": {
+          "label": "{count} cache writes"
+        },
+        "tokensIn": {
+          "label": "{count} in"
+        },
+        "tokensOut": {
+          "label": "{count} out"
+        }
+      },
+      "showFewerModels": {
+        "ariaLabel": "Show fewer models"
+      },
+      "showLess": {
+        "label": "Show less"
+      },
+      "showMore": {
+        "label": "Show {count} more"
+      },
+      "showMoreModels": {
+        "ariaLabel": "Show {count} more models"
+      },
+      "usageThisPeriod": {
+        "description": "{amount} spent",
+        "title": "Usage this period"
+      }
+    },
     "voice": {
       "autoPlayback": {
         "description": "Automatically play voice responses.",
@@ -8994,6 +12961,23 @@
   },
   "sidebar": {
     "adminNav": {
+      "hiddenRoutes": {
+        "documentExplorer": {
+          "title": "Document Explorer"
+        },
+        "documentFeedback": {
+          "title": "Document Feedback"
+        },
+        "documentProcessing": {
+          "title": "Document Processing"
+        },
+        "oauthTest": {
+          "title": "OAuth Test"
+        },
+        "standardAnswers": {
+          "title": "Standard Answers"
+        }
+      },
       "items": {
         "addConnector": {
           "label": "Add Connector"
@@ -9019,8 +13003,8 @@
         "craftApps": {
           "label": "Apps"
         },
-        "craftInstructions": {
-          "label": "Instructions"
+        "craftPreferences": {
+          "label": "Preferences"
         },
         "customAnalytics": {
           "label": "Custom Analytics"
@@ -9301,6 +13285,158 @@
     }
   },
   "skills": {
+    "editor": {
+      "appConflict": {
+        "description": "App “{appName}” already has an associated skill named “{skillName}”.",
+        "title": "Choose a different skill name"
+      },
+      "confirmUpload": {
+        "importBody": "This upload includes SKILL.md. Continuing will replace the current name, description, instructions, and files with the uploaded bundle.",
+        "importSubmit": {
+          "label": "Import skill"
+        },
+        "importTitle": "Import this skill?",
+        "replaceBody": "This upload must use the same skill name. Continuing will replace the description, instructions, and files with the uploaded bundle.",
+        "replaceSubmit": {
+          "label": "Replace content"
+        },
+        "replaceTitle": "Replace skill content?"
+      },
+      "delete": {
+        "button": {
+          "label": "Delete skill"
+        },
+        "description": "Anyone using this skill will lose access. Deletion cannot be undone.",
+        "title": "Delete this skill"
+      },
+      "deleteModal": {
+        "entityType": "skill",
+        "label": "Delete",
+        "pendingLabel": "Deleting..."
+      },
+      "details": {
+        "description": "Define when and how Craft should use this skill.",
+        "descriptionField": {
+          "description": "Describe when this skill should be used.",
+          "placeholder": "What does this skill help with?",
+          "title": "Description"
+        },
+        "name": {
+          "createDescription": "Use lowercase letters, numbers, and single hyphens.",
+          "lockedDescription": "Skill names cannot be changed after creation.",
+          "placeholder": "Name your skill",
+          "title": "Name"
+        },
+        "title": "Details"
+      },
+      "files": {
+        "busyLabel": "Uploading...",
+        "description": "Add references, scripts, assets, or other files used by this skill. ZIP files are unpacked automatically.",
+        "input": {
+          "ariaLabel": "Add supporting files"
+        },
+        "pendingUpload": {
+          "emptyMessage": "Files from this upload will appear after you create the skill."
+        },
+        "title": "Supporting files"
+      },
+      "filesTooltip": {
+        "noPermission": "You don't have permission to update this skill's files.",
+        "saveFirst": "Save detail changes before updating skill files.",
+        "updating": "Updating skill files..."
+      },
+      "header": {
+        "appFallbackName": "External app",
+        "cancel": {
+          "label": "Cancel"
+        },
+        "createDescription": "Build a personal skill",
+        "createForAppDescription": "Add an organization skill to app “{appName}”",
+        "createTitle": "Create skill",
+        "editDescription": "Update skill details and files",
+        "editTitle": "Edit skill",
+        "save": {
+          "label": "Save",
+          "pendingLabel": "Saving..."
+        }
+      },
+      "import": {
+        "busyLabel": "Importing...",
+        "button": {
+          "label": "Import skill"
+        },
+        "description": "Import a SKILL.md, ZIP, or skill folder to prefill the form and include its files.",
+        "input": {
+          "ariaLabel": "Import existing skill"
+        },
+        "prompt": "Choose a SKILL.md or ZIP, or drop a skill folder here.",
+        "title": "Have an existing skill?"
+      },
+      "instructions": {
+        "description": "Write the behavior and workflow this skill adds to Craft.",
+        "emptyFallback": "No instructions yet.",
+        "placeholder": "Write the skill instructions.",
+        "title": "Instructions"
+      },
+      "loadError": {
+        "description": "This skill may not exist, may be built-in, or may not be editable by your account.",
+        "title": "Skill unavailable"
+      },
+      "management": {
+        "description": "Control who can use this skill.",
+        "externalApp": {
+          "manage": {
+            "label": "Manage in app settings"
+          },
+          "readyDescription": "This skill uses app “{appName}”.",
+          "title": "External app"
+        },
+        "sharing": {
+          "edit": {
+            "label": "Edit sharing"
+          },
+          "title": "Sharing"
+        },
+        "title": "Management"
+      },
+      "saveTooltip": {
+        "missingDescription": "Add a description before saving.",
+        "missingInstructions": "Add instructions before saving.",
+        "missingName": "Add a name before saving.",
+        "noChanges": "No changes have been made.",
+        "noPermission": "You don't have permission to edit this skill's details.",
+        "savingChanges": "Saving changes...",
+        "savingSkill": "Saving skill..."
+      },
+      "sharing": {
+        "organization": {
+          "editorDescription": "Everyone in your organization can use and edit this skill.",
+          "title": "Organization",
+          "viewerDescription": "Everyone in your organization can use this skill."
+        },
+        "personal": {
+          "description": "Only you can use this skill.",
+          "title": "Personal"
+        },
+        "shares": {
+          "description": "Only selected users and groups can use this skill.",
+          "title": "{count, plural, one {# share} other {# shares}}"
+        }
+      },
+      "toasts": {
+        "created": "Created \"{name}\"",
+        "deleteFailed": "Failed to delete skill",
+        "deleted": "Deleted \"{name}\"",
+        "fileRemoveFailed": "Failed to remove skill file",
+        "fileRemoved": "Removed \"{path}\"",
+        "filesUpdateFailed": "Failed to update skill files",
+        "filesUpdated": "Updated files for \"{name}\"",
+        "importMissingSkillMd": "Import a SKILL.md, ZIP, or folder containing SKILL.md.",
+        "inspectFailed": "Failed to inspect skill bundle",
+        "saveFailed": "Failed to save skill",
+        "saved": "Saved \"{name}\""
+      }
+    },
     "modals": {
       "addInstruction": {
         "cancelButton": {
@@ -9501,6 +13637,76 @@
         "transferredToast": {
           "message": "Ownership transferred."
         }
+      }
+    },
+    "page": {
+      "browse": {
+        "title": "Browse skills"
+      },
+      "countSeparator": {
+        "label": "{count, plural, one {Skill} other {Skills}}"
+      },
+      "createMenu": {
+        "github": {
+          "description": "Import one or more skills from a repository.",
+          "title": "Import from GitHub"
+        },
+        "scratch": {
+          "description": "Write the instructions and add supporting files in Onyx.",
+          "title": "Start from scratch"
+        },
+        "trigger": {
+          "label": "Create skill"
+        },
+        "upload": {
+          "description": "Import a SKILL.md file, ZIP file, or skill folder.",
+          "title": "Upload a skill"
+        }
+      },
+      "empty": {
+        "noMatches": {
+          "description": "Try a different search.",
+          "title": "No matching skills"
+        },
+        "noSkills": {
+          "description": "No custom skills have been shared with you yet, and no built-ins are configured.",
+          "title": "No skills available"
+        }
+      },
+      "focusedApp": {
+        "description": "Enable every skill associated with app “{appName}”. The app may not work correctly without them. If another skill with the same name is enabled, enabling the app-associated skill disables the other skill for you.",
+        "showAll": {
+          "label": "Show all skills"
+        },
+        "title": "Skills for app “{appName}”"
+      },
+      "header": {
+        "description": "Capability bundles your Craft agent can reach for. This page shows built-in skills, skills shared with you, and your own personal skills.",
+        "title": "Skills"
+      },
+      "loadError": {
+        "description": "Check the console for details and try refreshing the page.",
+        "title": "Failed to load skills"
+      },
+      "preview": {
+        "unavailableFallback": "This skill is currently unavailable."
+      },
+      "search": {
+        "placeholder": "Search skills..."
+      },
+      "switchModal": {
+        "body": "Continuing will disable the currently enabled skill and enable this one.",
+        "description": "Only one skill named “{name}” can be enabled at a time.",
+        "submit": {
+          "label": "Switch skill",
+          "pendingLabel": "Switching..."
+        },
+        "title": "Switch “{name}” skill?"
+      },
+      "toasts": {
+        "disableFailed": "Failed to disable {name}",
+        "enableFailed": "Failed to enable {name}",
+        "refreshFailed": "{name} was updated, but the skill list could not be refreshed."
       }
     },
     "sections": {

@@ -44,10 +44,11 @@
 
 /* Mobile: full-height overlay that slides in/out */
 .opal-sidebar-root__overlay[data-variant="mobile"] {
-  @apply fixed inset-y-0 left-0 z-50 transition-transform duration-200;
+  @apply fixed inset-y-0 start-0 z-50 transition-transform duration-200;
 }
 .opal-sidebar-root__overlay[data-variant="mobile"][data-folded="true"] {
-  @apply -translate-x-full;
+  /* rtl: the overlay anchors at the inline start, so it hides the other way */
+  @apply -translate-x-full rtl:translate-x-full;
 }
 .opal-sidebar-root__overlay[data-variant="mobile"][data-folded="false"] {
   @apply translate-x-0;
@@ -55,7 +56,7 @@
 
 /* Small: fixed overlay (spacer holds width in the layout flow) */
 .opal-sidebar-root__overlay[data-variant="small"] {
-  @apply fixed inset-y-0 left-0 z-50;
+  @apply fixed inset-y-0 start-0 z-50;
 }
 
 /* Spacer that reserves the folded width in the flex row on small screens */
@@ -167,7 +168,7 @@
    --------------------------------------------------------------------------- */
 
 .opal-sidebar-section__header {
-  @apply pt-3 pl-2 pr-1 flex flex-row justify-between items-center;
+  @apply pt-3 ps-2 pe-1 flex flex-row justify-between items-center;
 }
 
 .opal-sidebar-section__title {

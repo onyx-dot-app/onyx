@@ -456,6 +456,9 @@ class OnyxCeleryQueues:
     LLM_MODEL_UPDATE = "llm_model_update"
     CHECKPOINT_CLEANUP = "checkpoint_cleanup"
     INDEX_ATTEMPT_CLEANUP = "index_attempt_cleanup"
+    # Post-reindex old-index deletion (bounded delete_by_query drains; kept off the
+    # shared cleanup lanes so a whale drain can't starve connector deletions)
+    INDEX_RECLAIM = "index_reclaim"
     # Heavy queue
     CONNECTOR_PRUNING = "connector_pruning"
     CONNECTOR_DOC_PERMISSIONS_SYNC = "connector_doc_permissions_sync"
@@ -655,6 +658,7 @@ class OnyxCeleryTask:
 
     # Old-index reclamation (post-reindex deletion of the now-PAST index)
     CHECK_FOR_OLD_INDEX_RECLAIM = "check_for_old_index_reclaim"
+    RUN_OLD_INDEX_RECLAIM = "run_old_index_reclaim"
 
     MONITOR_BACKGROUND_PROCESSES = "monitor_background_processes"
     MONITOR_CELERY_QUEUES = "monitor_celery_queues"
@@ -683,6 +687,7 @@ class OnyxCeleryTask:
 
     # Credential capability checks (granular runs of the registered checks)
     RUN_CAPABILITY_CHECKS = "run_capability_checks"
+    CHECK_FOR_STALE_CAPABILITY_RUNS = "check_for_stale_capability_runs"
 
     # chat retention
     CHECK_TTL_MANAGEMENT_TASK = "check_ttl_management_task"

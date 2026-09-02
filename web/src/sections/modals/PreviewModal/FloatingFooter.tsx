@@ -15,7 +15,7 @@ export default function FloatingFooter({
   return (
     <div
       className={cn(
-        "absolute bottom-0 left-0 right-0",
+        "absolute bottom-0 start-0 end-0",
         "flex items-center justify-between",
         "p-4 pointer-events-none w-full"
       )}

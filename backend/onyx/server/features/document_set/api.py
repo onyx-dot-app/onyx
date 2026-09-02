@@ -187,7 +187,8 @@ def delete_document_set(
     db_session: Session = Depends(get_session),
     tenant_id: str = Depends(get_current_tenant_id),
 ) -> None:
-    document_set = get_document_set_by_id(db_session, document_set_id)
+    # Serialize the delete marker with document-set and group-share updates.
+    document_set = get_document_set_by_id(db_session, document_set_id, for_update=True)
     if document_set is None:
         raise OnyxError(
             OnyxErrorCode.DOCUMENT_SET_NOT_FOUND,

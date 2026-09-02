@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import useSWR from "swr";
 import { Text } from "@opal/components";
 import { SvgClock, SvgExternalLink } from "@opal/icons";
@@ -44,6 +45,7 @@ export default function ScheduledRunBanner({
   sessionId,
   context,
 }: ScheduledRunBannerProps) {
+  const t = useTranslations("craft.scheduledRun");
   // 404 is the expected "this session isn't scheduled" signal — the standard
   // fetcher throws on it, which lands in `error` and falls through the
   // `if (!data)` guard below to render nothing. `shouldRetryOnError: false`
@@ -57,12 +59,13 @@ export default function ScheduledRunBanner({
 
   const statusText =
     data.status === "RUNNING"
-      ? "This scheduled run is still running. Follow-up messages unlock when it finishes."
+      ? t("status.running")
       : data.status === "AWAITING_APPROVAL"
-        ? "This scheduled run is awaiting approval. Follow-up messages unlock after it resumes and finishes."
-        : `This session was started by scheduled task ${data.task_name} at ${formatAbsolute(
-            data.started_at
-          )}.`;
+        ? t("status.awaitingApproval")
+        : t("status.startedBy", {
+            task: data.task_name,
+            time: formatAbsolute(data.started_at),
+          });
 
   return (
     <div
@@ -84,7 +87,10 @@ export default function ScheduledRunBanner({
         )}
         data-testid="back-to-task-button"
         title={statusText}
-        aria-label={`View scheduled task ${data.task_name}. ${statusText}`}
+        aria-label={t("viewTask.ariaLabel", {
+          task: data.task_name,
+          status: statusText,
+        })}
       >
         <span className="grid shrink-0 translate-y-px items-center">
           <span
@@ -97,7 +103,7 @@ export default function ScheduledRunBanner({
             <SvgClock size={14} className="shrink-0 text-text-03" />
             <span className="flex h-5 shrink-0 items-center">
               <Text font="figure-small-label" color="text-03" nowrap>
-                Scheduled
+                {t("badge.label")}
               </Text>
             </span>
           </span>
@@ -111,19 +117,19 @@ export default function ScheduledRunBanner({
             <SvgExternalLink size={14} className="shrink-0 text-text-03" />
             <span className="flex h-5 shrink-0 items-center">
               <Text font="figure-small-label" color="text-03" nowrap>
-                View task
+                {t("viewTask.label")}
               </Text>
             </span>
           </span>
         </span>
         <div
           className={cn(
-            "ml-0 flex h-5 w-max max-w-0 translate-y-px items-center",
+            "ms-0 flex h-5 w-max max-w-0 translate-y-px items-center",
             "gap-1.5 overflow-hidden opacity-0",
-            "transition-[max-width,opacity,margin-left]",
+            "transition-[max-width,opacity,margin-inline-start]",
             "duration-[350ms] ease-out",
-            "group-hover:ml-1.5 group-hover:max-w-[23rem]",
-            "group-hover:opacity-100 group-focus-visible:ml-1.5",
+            "group-hover:ms-1.5 group-hover:max-w-[23rem]",
+            "group-hover:opacity-100 group-focus-visible:ms-1.5",
             "group-focus-visible:max-w-[23rem]",
             "group-focus-visible:opacity-100"
           )}
@@ -136,7 +142,7 @@ export default function ScheduledRunBanner({
           </span>
           <span className="hidden h-5 shrink-0 items-center xl:flex">
             <Text font="secondary-body" color="text-03" nowrap>
-              {`Started ${formatAbsolute(data.started_at)}`}
+              {t("startedAt.label", { time: formatAbsolute(data.started_at) })}
             </Text>
           </span>
         </div>

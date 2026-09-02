@@ -88,6 +88,9 @@ interface ContentMdProps {
   /** Clamp the title to N lines with ellipsis. Omit to wrap freely. */
   titleMaxLines?: number;
 
+  /** Strike the title through, for a row whose option is switched off. */
+  strikethrough?: boolean;
+
   /** Size preset. Default: `"main-ui"`. */
   sizePreset?: ContentMdSizePreset;
 
@@ -158,6 +161,7 @@ function ContentMd({
   auxIcon,
   tag,
   titleMaxLines,
+  strikethrough,
   sizePreset = "main-ui",
   ref,
   editHandle,
@@ -259,6 +263,7 @@ function ContentMd({
               font={config.titleFont}
               color="inherit"
               maxLines={titleMaxLines}
+              strikethrough={strikethrough}
               title={toPlainString(title)}
               onClick={editable ? handleTitleClick : undefined}
             >
@@ -267,9 +272,11 @@ function ContentMd({
           )}
 
           {suffix && (
-            <Text font={config.optionalFont} color="text-03">
-              {suffix === "optional" ? "(Optional)" : suffix}
-            </Text>
+            <span className="opal-content-md-suffix">
+              <Text font={config.optionalFont} color="inherit">
+                {suffix === "optional" ? "(Optional)" : suffix}
+              </Text>
+            </span>
           )}
 
           {auxIcon &&
@@ -328,7 +335,7 @@ function ContentMd({
         >
           <Text
             font="secondary-body"
-            color="text-03"
+            color="inherit"
             as="p"
             maxLines={descriptionMaxLines}
           >

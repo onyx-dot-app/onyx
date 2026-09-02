@@ -60,6 +60,26 @@
         "ariaLabel": "{title} アクションカード"
       }
     },
+    "actionLineItem": {
+      "addConnectors": {
+        "label": "コネクタを追加"
+      },
+      "configure": {
+        "tooltip": "設定"
+      },
+      "configureConnectors": {
+        "label": "コネクタを設定"
+      },
+      "disable": {
+        "label": "無効にする"
+      },
+      "enable": {
+        "label": "有効にする"
+      },
+      "projectSearch": {
+        "label": "プロジェクト検索"
+      }
+    },
     "addMcpModal": {
       "addHeader": {
         "description": "MCP (Model Context Protocol) サーバーに接続して、カスタムアクションを追加します。",
@@ -355,6 +375,53 @@
         "tooltip": "ツールを更新"
       }
     },
+    "mcpOauthCallback": {
+      "autoRedirect": {
+        "text": "自動的に元のページに戻ります…"
+      },
+      "backToChatButton": {
+        "label": "チャットに戻る"
+      },
+      "cancelled": {
+        "description": "認可がキャンセルまたは拒否されたため、接続は確立されませんでした。再試行するには、MCP サーバーの認証設定から接続をやり直してください。",
+        "title": "認可がキャンセルされました"
+      },
+      "continueButton": {
+        "label": "続行"
+      },
+      "genericError": {
+        "fallbackDetail": "認可を完了できませんでした",
+        "title": "問題が発生しました"
+      },
+      "invalidLink": {
+        "description": "このリンクには必要な認可パラメータがありません。MCP サーバーの認証設定から接続をやり直してください。",
+        "title": "無効な認可リンク"
+      },
+      "processing": {
+        "description": "MCP サーバーへの接続を完了しています。しばらくお待ちください…",
+        "title": "認可を完了しています"
+      },
+      "serverNotFound": {
+        "description": "この認可が属する MCP サーバーは存在しないか、構成されていません。サーバーを再作成または再構成してから、もう一度接続してください。",
+        "title": "MCP サーバーが見つかりません"
+      },
+      "sessionExpired": {
+        "description": "この認可リンクは無効か、有効期限が切れているか、すでに使用されています。MCP サーバーの認証設定から接続をやり直してください。",
+        "title": "認可セッションの有効期限が切れました"
+      },
+      "success": {
+        "description": "認可が正常に完了しました。このサーバーのツールをチャットで使用できるようになりました。",
+        "title": "{serverName} に接続しました"
+      },
+      "timedOut": {
+        "description": "MCP サーバーが時間内に認可を確認しませんでした。もう一度接続してみてください。それでも解決しない場合は、サーバーの OAuth 設定を確認してください。",
+        "title": "認可がタイムアウトしました"
+      },
+      "tokenExchangeFailed": {
+        "description": "プロバイダーは認可を承認しましたが、有効なアクセストークンを取得できませんでした。サーバーの OAuth クライアント認証情報とエンドポイントを確認してから、もう一度接続してください。",
+        "title": "トークン交換に失敗しました"
+      }
+    },
     "mcpPage": {
       "addButton": {
         "label": "MCP サーバーを追加"
@@ -554,6 +621,14 @@
         "label": "拒否"
       }
     },
+    "switchList": {
+      "back": {
+        "ariaLabel": "戻る"
+      },
+      "toggle": {
+        "ariaLabel": "{name} を切り替える"
+      }
+    },
     "toolItem": {
       "unavailable": {
         "label": "ツールを利用できません"
@@ -578,6 +653,81 @@
       "showEnabledButton": {
         "ariaLabel": "有効なツールのみ表示",
         "tooltip": "有効なもののみ表示"
+      }
+    },
+    "toolsPopover": {
+      "configureLinks": {
+        "codeInterpreter": {
+          "tooltip": "コードインタープリターを設定"
+        },
+        "imageGeneration": {
+          "tooltip": "画像生成を設定"
+        },
+        "openapi": {
+          "tooltip": "OpenAPIアクションを管理"
+        },
+        "webSearch": {
+          "tooltip": "ウェブ検索を設定"
+        }
+      },
+      "disableAllSources": {
+        "label": "すべてのソースを無効にする"
+      },
+      "disableAllTools": {
+        "label": "すべてのツールを無効にする"
+      },
+      "enableAllSources": {
+        "label": "すべてのソースを有効にする"
+      },
+      "enableAllTools": {
+        "label": "すべてのツールを有効にする"
+      },
+      "manageActions": {
+        "tooltip": "アクションを管理"
+      },
+      "mcpTools": {
+        "searchPlaceholder": "{server} のツールを検索"
+      },
+      "moreActions": {
+        "label": "その他のアクション"
+      },
+      "reauthenticate": {
+        "label": "再認証"
+      },
+      "search": {
+        "placeholder": "アクションを検索..."
+      },
+      "serverFallback": {
+        "label": "サーバー"
+      },
+      "sourceFilters": {
+        "searchPlaceholder": "フィルターを検索"
+      },
+      "tooltips": {
+        "askAdminSuffix": {
+          "text": "管理者に設定を依頼してください。"
+        },
+        "codingAgent": {
+          "description": "GitHubリポジトリを調査し、そのコードに関する質問に答えます。"
+        },
+        "configureSuffix": {
+          "text": "有効にするには設定の歯車を押してください。"
+        },
+        "default": {
+          "description": "このアクションはまだ設定されていません。"
+        },
+        "imageGeneration": {
+          "description": "プロンプトに基づいて画像を生成します。"
+        },
+        "python": {
+          "description": "複雑な分析のためにコードを実行します。"
+        },
+        "search": {
+          "description": "接続されたナレッジを検索して回答に役立てます。"
+        },
+        "webSearch": {
+          "description": "最新情報をウェブで検索します。"
+        }
       }
     },
     "toolsSection": {
@@ -631,7 +781,39 @@
         }
       }
     },
+    "agentStats": {
+      "chart": {
+        "description": "選択した期間の日別",
+        "title": "メッセージとユニークユーザー"
+      },
+      "empty": {
+        "message": "選択した期間内にこのエージェントのデータは見つかりませんでした。"
+      },
+      "fetchFailed": {
+        "message": "エージェントの統計の取得に失敗しました。"
+      },
+      "permissionDenied": {
+        "message": "これらの統計を表示する権限がありません。"
+      },
+      "totalMessages": {
+        "label": "合計メッセージ数"
+      },
+      "totalUniqueUsers": {
+        "label": "合計ユニークユーザー数"
+      },
+      "unknownError": {
+        "message": "不明なエラーが発生しました"
+      }
+    },
     "agents": {
+      "collapsibleSection": {
+        "collapse": {
+          "ariaLabel": "セクションを折りたたむ"
+        },
+        "expand": {
+          "ariaLabel": "セクションを展開"
+        }
+      },
       "deleteModal": {
         "confirmation": {
           "description": "<emphasis>{name}</emphasis> を削除してもよろしいですか？この操作は取り消せません。"
@@ -1003,6 +1185,47 @@
         },
         "viewPlans": {
           "title": "プランを表示"
+        }
+      },
+      "info": {
+        "empty": {
+          "message": "請求情報はありません。"
+        },
+        "loadError": {
+          "message": "請求情報の読み込み中にエラーが発生しました。後でもう一度お試しください。"
+        },
+        "loading": {
+          "label": "読み込み中..."
+        },
+        "manageSubscription": {
+          "description": "プランの確認、支払いの更新、サブスクリプションの変更を行います",
+          "title": "サブスクリプションを管理"
+        },
+        "page": {
+          "title": "請求情報"
+        },
+        "portalError": {
+          "message": "カスタマーポータルセッションの作成中にエラーが発生しました"
+        },
+        "subscriptionDetails": {
+          "title": "サブスクリプションの詳細"
+        },
+        "summary": {
+          "billingEnd": {
+            "label": "請求終了日"
+          },
+          "billingStart": {
+            "label": "請求開始日"
+          },
+          "seats": {
+            "label": "シート数"
+          },
+          "status": {
+            "label": "サブスクリプションの状態"
+          }
+        },
+        "updatedToast": {
+          "message": "おめでとうございます!サブスクリプションが正常に更新されました。"
         }
       },
       "license": {
@@ -1517,6 +1740,25 @@
       }
     },
     "connector": {
+      "accessType": {
+        "autoSyncOption": {
+          "description": "ソースから権限を自動的に同期します。検索を行うユーザーがソースでそのドキュメントへのアクセス権限を持つ場合に限り、Onyxで検索可能になります。",
+          "disabledReason": "現在の認証情報の認証方式は権限の自動同期に対応していません。対応している認証方式に変更してください。",
+          "name": "権限の自動同期"
+        },
+        "heading": {
+          "description": "このコネクタでインデックスされたドキュメントへのアクセス権を管理します。",
+          "title": "ドキュメントアクセス"
+        },
+        "privateOption": {
+          "description": "（ユーザーグループページで）このコネクタへのアクセスを明示的に付与されたユーザーのみが、このコネクタで取り込まれたドキュメントにアクセスできます",
+          "name": "非公開"
+        },
+        "publicOption": {
+          "description": "Onyxのアカウントを持つすべてのユーザーが、このコネクタで取り込まれたドキュメントにアクセスできます",
+          "name": "公開"
+        }
+      },
       "advancedConfig": {
         "duration": {
           "days": "{count, plural, one {# 日} other {# 日}}",
@@ -1546,6 +1788,14 @@
           "label": "表示を減らす"
         }
       },
+      "credentialForm": {
+        "errorToast": "エラー: {detail}",
+        "successToast": "成功しました！",
+        "updateButton": {
+          "ariaLabel": "認証情報を更新",
+          "label": "更新"
+        }
+      },
       "deleteModal": {
         "additionalDetails": "このコネクターを削除すると削除ジョブがスケジュールされ、インデックス済みのドキュメントが削除されます。また、すべてのユーザーからこのコネクターが削除されます。",
         "entityType": "コネクター"
@@ -1568,6 +1818,11 @@
         },
         "errorModal": {
           "title": "ドキュメント権限の同期エラー"
+        }
+      },
+      "docsLink": {
+        "checkOutDocs": {
+          "text": "このコネクタの設定について詳しくは<link>ドキュメント</link>をご覧ください。"
         }
       },
       "errorsModal": {
@@ -1649,6 +1904,14 @@
           "updateFailed": "ファイルの更新に失敗しました"
         }
       },
+      "fileUpload": {
+        "dropzone": {
+          "message": "{multiple, select, true {ファイル} other {ファイル}}をここにドラッグ＆ドロップするか、クリックして{multiple, select, true {ファイル} other {ファイル}}を選択してください"
+        },
+        "selectedFiles": {
+          "heading": "{multiple, select, true {選択されたファイル} other {選択されたファイル}}"
+        }
+      },
       "groupMembershipTable": {
         "columns": {
           "errorMessage": "エラーメッセージ",
@@ -1664,6 +1927,23 @@
         },
         "errorModal": {
           "title": "グループメンバーシップの同期エラー"
+        }
+      },
+      "groupSelector": {
+        "assignGroupAccess": {
+          "title": "このコネクタへのグループアクセスを割り当てる"
+        },
+        "assignToGroup": {
+          "title": "このコネクタをグループに割り当てる"
+        },
+        "scopedManagerGroups": {
+          "description": "このコネクタへのアクセスを付与するには、管理しているグループを1つ以上選択してください"
+        },
+        "syncGroups": {
+          "description": "以下のグループは、このコネクタを管理できるユーザーを制御します。ドキュメントへのアクセスはソース自体の権限から継承されます。"
+        },
+        "visibleToGroups": {
+          "description": "このコネクタは、以下で選択したグループに表示・アクセス可能になります"
         }
       },
       "indexAttemptsTable": {
@@ -2022,6 +2302,22 @@
         "targetedReindexSubmitted": "{count, plural, one {# 件のドキュメント} other {# 件のドキュメント}}について、対象を指定した再インデックス作成を送信しました。再インデックス作成が完了したドキュメントから、エラーは一覧から消えます。"
       }
     },
+    "connectorTitle": {
+      "metadata": {
+        "channelRegexEnabled": "チャンネル正規表現が有効",
+        "channels": "チャンネル",
+        "enabledTrue": "有効",
+        "excludeChannelRegexEnabled": "除外チャンネル正規表現が有効",
+        "excludedChannels": "除外チャンネル",
+        "includeBotMessages": "ボットのメッセージを含む",
+        "jiraProjectUrl": "JiraプロジェクトURL",
+        "multipleRepos": "複数のリポジトリ",
+        "pageId": "ページID",
+        "realm": "レルム",
+        "repo": "リポジトリ",
+        "wikiUrl": "Wiki URL"
+      }
+    },
     "connectorsList": {
       "add": {
         "authorizeButton": {
@@ -2148,6 +2444,7 @@
           "description": "インデックスを作成する Google Drive を所有する Google 組織の、管理者またはオーナーのメールアドレスを入力してください。",
           "invalidEmail": "有効なメールアドレスを入力してください",
           "label": "主管理者のメールアドレス",
+          "placeholder": "admin@yourcompany.com",
           "required": "必須です"
         },
         "section": {
@@ -2205,6 +2502,7 @@
           "description": "インデックスを作成する Gmail アカウントを所有する Google 組織の、管理者またはオーナーのメールアドレスを入力してください。",
           "invalidEmail": "有効なメールアドレスを入力してください",
           "label": "主管理者のメールアドレス",
+          "placeholder": "admin@yourcompany.com",
           "required": "必須です"
         },
         "section": {
@@ -2521,7 +2819,7 @@
         "description": "ユーザーの読み込みに失敗しました。ページを再読み込みしてください。"
       }
     },
-    "craftInstructions": {
+    "craftPreferences": {
       "baseInstructions": {
         "description": "入力した指示が追加される、組み込みのプロンプトです。動的な部分はセッションごとに埋められます。",
         "loadError": {
@@ -2529,9 +2827,34 @@
         },
         "title": "基本の指示を表示"
       },
+      "defaultModel": {
+        "clearButton": {
+          "label": "クリア"
+        },
+        "help": {
+          "description": "Craft は新しいセッションとスケジュール済みタスクにこのモデルを使います。未設定の場合、Craft はワークスペースの既定のチャットモデルに戻ります。"
+        },
+        "inheritedTag": {
+          "label": "ワークスペースの既定値"
+        },
+        "label": "既定のモデル",
+        "placeholder": "モデルを選択",
+        "resetError": {
+          "message": "既定のモデルをクリアできませんでした"
+        },
+        "resetSuccess": {
+          "message": "Craft の既定のモデルをクリアしました"
+        },
+        "saveError": {
+          "message": "既定のモデルを保存できませんでした"
+        },
+        "saveSuccess": {
+          "message": "Craft の既定のモデルを保存しました"
+        }
+      },
       "header": {
-        "description": "Craft の組み込みの動作に加えて、すべての Craft エージェントが従うワークスペース全体の指示です。",
-        "title": "指示"
+        "description": "Craft の組み込み動作に加えて、すべての Craft エージェントが従う既定のモデルとワークスペース全体の指示です。",
+        "title": "設定"
       },
       "instructions": {
         "charCount": {
@@ -2577,6 +2900,171 @@
       "unavailable": {
         "description": "Craft はデプロイごとに Onyx が有効にします。利用するには、Onyx の担当者にお問い合わせください。",
         "title": "このデプロイでは Craft を利用できません"
+      }
+    },
+    "credentials": {
+      "card": {
+        "createdOn": {
+          "label": "<i>{date}</i> に作成"
+        },
+        "createdOnBy": {
+          "label": "<i>{date}</i> に <i>{email}</i> が作成"
+        },
+        "unnamed": {
+          "label": "認証情報 #{id}"
+        }
+      },
+      "create": {
+        "createButton": {
+          "label": "作成"
+        },
+        "created": {
+          "toast": "新しい認証情報を作成しました!"
+        },
+        "name": {
+          "label": "名前:",
+          "placeholder": "(任意) 認証情報の名前..."
+        },
+        "submitError": {
+          "toast": "認証情報の送信中にエラーが発生しました"
+        }
+      },
+      "delete": {
+        "cancelButton": {
+          "label": "キャンセル"
+        },
+        "confirmBody": {
+          "message": "この認証情報を削除してもよろしいですか?稼働中のコネクタに関連付けられた認証情報は削除できません。"
+        },
+        "confirmButton": {
+          "label": "確認"
+        },
+        "confirmTitle": "削除の確認"
+      },
+      "edit": {
+        "name": {
+          "label": "名前 (任意):"
+        },
+        "permissions": {
+          "note": "適切な権限を持つ認証情報に更新してください!"
+        },
+        "resetButton": {
+          "label": "変更をリセット"
+        },
+        "updateButton": {
+          "label": "更新"
+        },
+        "updateError": {
+          "toast": "認証情報の更新中にエラーが発生しました"
+        }
+      },
+      "modal": {
+        "createTitle": "{source} の認証情報を作成",
+        "editTitle": "認証情報を編集",
+        "updateTitle": "認証情報を更新"
+      },
+      "modify": {
+        "createButton": {
+          "label": "作成"
+        },
+        "instructions": {
+          "message": "必要に応じて認証情報を選択してください!このコネクタに適切な権限を持つ認証情報を選択したことを確認してください!"
+        },
+        "selectButton": {
+          "label": "選択"
+        }
+      },
+      "oauth": {
+        "connectButton": {
+          "label": "接続"
+        },
+        "connectError": {
+          "title": "接続できませんでした"
+        },
+        "redirectFailed": {
+          "message": "{source} でのサインインにリダイレクトできませんでした。もう一度お試しください。"
+        },
+        "retryButton": {
+          "label": "再試行"
+        },
+        "startError": {
+          "message": "OAuth を開始できません"
+        }
+      },
+      "swap": {
+        "error": {
+          "toast": "認証情報の切り替えに問題があります: {detail}"
+        },
+        "success": {
+          "toast": "認証情報を正常に切り替えました!"
+        }
+      },
+      "table": {
+        "actions": {
+          "label": "操作"
+        },
+        "created": {
+          "header": "作成日"
+        },
+        "edit": {
+          "ariaLabel": "認証情報を編集"
+        },
+        "empty": {
+          "message": "このコネクタには認証情報がありません!"
+        },
+        "id": {
+          "header": "ID"
+        },
+        "lastUpdated": {
+          "header": "最終更新"
+        },
+        "name": {
+          "header": "名前"
+        },
+        "select": {
+          "label": "選択"
+        },
+        "selected": {
+          "badge": "選択済み"
+        },
+        "untitled": {
+          "label": "無題"
+        }
+      },
+      "update": {
+        "error": {
+          "toast": "認証情報の更新に問題があります"
+        },
+        "success": {
+          "toast": "認証情報を更新しました"
+        }
+      }
+    },
+    "customAnalytics": {
+      "intro": {
+        "description": "これにより、独自の分析ツールをOnyxで利用できます!分析プロバイダーのWebスニペットを下のボックスにコピーすると、使用イベントの送信を開始します。"
+      },
+      "notEnabled": {
+        "description": "カスタム分析スクリプトを設定するには、チームでOnyxをセットアップした担当者と連携して、環境変数<i>CUSTOM_ANALYTICS_SECRET_KEY</i>を設定してください。",
+        "title": "カスタム分析は有効になっていません。"
+      },
+      "script": {
+        "description": "カスタムのトラッキング/分析を初期化するために、ページ読み込み時に実行するJavascriptを指定します。",
+        "instructions": "`<script></script>`タグは含めないでください。以下にスクリプトをアップロードしても分析プラットフォームでイベントを受信できない場合は、JavaScriptの各行の前にある余分な空白をすべて削除してみてください。",
+        "label": "スクリプト"
+      },
+      "secretKey": {
+        "description": "セキュリティ上の理由から、このスクリプトを更新するにはシークレットキーの入力が必要です。これは、Onyxの初期セットアップ時に設定された環境変数<i>CUSTOM_ANALYTICS_SECRET_KEY</i>の値です。",
+        "label": "シークレットキー"
+      },
+      "updateButton": {
+        "label": "更新"
+      },
+      "updateFailed": {
+        "message": "カスタム分析スクリプトの更新に失敗しました:「{error}」"
+      },
+      "updateSuccess": {
+        "message": "カスタム分析スクリプトが正常に更新されました!"
       }
     },
     "discordBot": {
@@ -3034,6 +3522,83 @@
         }
       }
     },
+    "exportLogs": {
+      "button": {
+        "collecting": {
+          "label": "収集中..."
+        },
+        "downloading": {
+          "label": "ダウンロード中..."
+        },
+        "export": {
+          "label": "ログをエクスポート"
+        },
+        "starting": {
+          "label": "開始中..."
+        }
+      },
+      "downloadButton": {
+        "label": "ダウンロード"
+      },
+      "exportCard": {
+        "description": "APIサーバーとバックグラウンドワーカーのログファイルを1つのzipにまとめます。収集が完了すると自動的にダウンロードが開始されます。",
+        "title": "ログをエクスポート"
+      },
+      "header": {
+        "description": "サーバーログファイルのzipをダウンロードして、Onyxサポートスレッドに添付できます。"
+      },
+      "receipt": {
+        "duplicateHost": {
+          "label": "同じホスト上の別のワーカーによって処理済み"
+        },
+        "failed": {
+          "label": "失敗"
+        },
+        "failedWithError": {
+          "label": "失敗: {error}"
+        },
+        "noLogs": {
+          "label": "ログファイルが見つかりません"
+        },
+        "uploaded": {
+          "label": "{count, plural, one {#件のファイルをアップロードしました} other {#件のファイルをアップロードしました}}"
+        }
+      },
+      "sensitiveWarning": {
+        "description": "ログファイルには、ユーザーのメールアドレス、ドキュメントのタイトル、検索クエリ、エラー内容が含まれる場合があります。組織外に共有する前に内容を確認してください。",
+        "title": "ログには機密データが含まれる場合があります"
+      },
+      "status": {
+        "startingCollection": {
+          "label": "収集を開始しています..."
+        }
+      },
+      "toasts": {
+        "alreadyRunning": {
+          "message": "ログエクスポートはすでに進行中です。しばらくしてからもう一度お試しください。"
+        },
+        "downloadFailed": {
+          "message": "ログエクスポートのダウンロードに失敗しました。"
+        },
+        "lostAccess": {
+          "message": "実行中のエクスポートへのアクセスが失われました。新しいエクスポートを開始してください。"
+        },
+        "startFailed": {
+          "message": "ログエクスポートの開始に失敗しました。"
+        },
+        "unreachable": {
+          "message": "サーバーに接続できないため、エクスポートの進行状況を確認できません。復旧後に新しいエクスポートを開始してください。"
+        }
+      },
+      "worker": {
+        "collecting": {
+          "label": "収集中..."
+        },
+        "missedDeadline": {
+          "label": "期限までに報告がありませんでした"
+        }
+      }
+    },
     "externalApps": {
       "apps": {
         "empty": {
@@ -3140,9 +3705,137 @@
         "loadFailed": "コネクターを読み込めませんでした: {details}",
         "title": "エラー"
       },
+      "form": {
+        "channelInput": {
+          "placeholder": "チャンネル名または正規表現パターンを入力してEnterキーを押してください"
+        },
+        "channelsRequired": {
+          "error": "「すべてのチャンネルを検索」が無効の場合、少なくとも1つのチャンネルが必要です"
+        },
+        "configSchemaLoadError": {
+          "message": "設定スキーマの読み込みに失敗しました: {error}"
+        },
+        "configTitle": {
+          "text": "フェデレーテッドコネクタの設定"
+        },
+        "configuration": {
+          "heading": "設定"
+        },
+        "create": {
+          "failed": "フェデレーテッドコネクタの作成に失敗しました",
+          "success": "フェデレーテッドコネクタが正常に作成されました！"
+        },
+        "credentialField": {
+          "keepCurrentPlaceholder": "••••••••  （現在の値を保持するには空欄のままにしてください）"
+        },
+        "credentialValidationFailed": {
+          "message": "認証情報の検証に失敗しました: {message}"
+        },
+        "credentials": {
+          "description": "このコネクタの認証情報を入力してください。",
+          "heading": "認証情報"
+        },
+        "delete": {
+          "failed": "フェデレーテッドコネクタの削除に失敗しました",
+          "success": "フェデレーテッドコネクタが正常に削除されました！"
+        },
+        "deleteConfirm": {
+          "message": "このフェデレーテッドコネクタを削除してもよろしいですか？この操作は元に戻せません。"
+        },
+        "deleteError": {
+          "toast": "コネクタの削除中にエラーが発生しました: {error}"
+        },
+        "deleteItem": {
+          "deleting": "削除中...",
+          "inProgressTooltip": "削除処理中",
+          "label": "削除"
+        },
+        "federatedBadge": {
+          "label": "フェデレーテッド"
+        },
+        "federatedTooltip": {
+          "default": "これはフェデレーテッドコネクタです。通常のコネクタに比べて遅延が大きく、検索品質が低くなります。"
+        },
+        "genericError": {
+          "text": "エラー: {error}"
+        },
+        "listInput": {
+          "placeholder": "入力してEnterキーを押すと項目を追加できます"
+        },
+        "loadingSchema": {
+          "description": "このコネクタタイプに必要なフィールドを取得しています",
+          "title": "認証情報スキーマを読み込み中..."
+        },
+        "manageButton": {
+          "label": "管理"
+        },
+        "missingFields": {
+          "message": "必須フィールドが不足しています: {fields}"
+        },
+        "noConfigSchema": {
+          "message": "このコネクタタイプで利用可能な検索設定はありません。"
+        },
+        "noCredentialSchema": {
+          "message": "このコネクタタイプで利用可能な認証情報スキーマはありません。"
+        },
+        "schemaLoadError": {
+          "message": "認証情報スキーマの読み込みに失敗しました: {error}"
+        },
+        "submitButton": {
+          "create": "作成",
+          "creating": "作成中...",
+          "update": "更新",
+          "updating": "更新中..."
+        },
+        "title": {
+          "edit": "{name}を編集",
+          "setup": "{name}をセットアップ"
+        },
+        "update": {
+          "failed": "フェデレーテッドコネクタの更新に失敗しました",
+          "success": "フェデレーテッドコネクタが正常に更新されました！"
+        },
+        "validateBeforeEdit": {
+          "message": "検証する前に新しい認証情報を入力してください。"
+        },
+        "validateButton": {
+          "label": "検証",
+          "validating": "検証中..."
+        },
+        "validation": {
+          "error": "検証エラー: {error}",
+          "failedStatus": "検証に失敗しました: {statusText}",
+          "invalid": "認証情報が無効です",
+          "valid": "認証情報は有効です"
+        }
+      },
       "loading": {
         "description": "コネクターの詳細と認証情報スキーマを取得しています",
         "title": "コネクター設定を読み込んでいます..."
+      }
+    },
+    "federatedCallback": {
+      "backButton": {
+        "label": "チャットに戻る"
+      },
+      "error": {
+        "title": "問題が発生しました"
+      },
+      "errors": {
+        "clientSecret": "認証情報がないか無効です",
+        "oauth": "OAuth認可に失敗しました",
+        "validation": "設定エラー - コネクタの設定を確認してください"
+      },
+      "processing": {
+        "details": "セットアップが完了するまでお待ちください。",
+        "title": "処理中..."
+      },
+      "redirecting": {
+        "text": "2秒後にチャットへ移動します..."
+      },
+      "success": {
+        "detailsTemplate": "{serviceName} の認可が正常に完了しました。このコネクタを検索に使用できます。",
+        "title": "成功しました！"
       }
     },
     "groups": {
@@ -3408,6 +4101,265 @@
         }
       }
     },
+    "hooks": {
+      "card": {
+        "delete": {
+          "ariaLabel": "フックを削除",
+          "tooltip": "削除"
+        },
+        "disconnect": {
+          "ariaLabel": "フックを無効化",
+          "tooltip": "フックを切断"
+        },
+        "disconnectedSuffix": {
+          "label": "(切断済み)"
+        },
+        "hookPoint": {
+          "description": "フックポイント: {name}"
+        },
+        "manage": {
+          "ariaLabel": "フックを設定",
+          "tooltip": "管理"
+        },
+        "reconnectButton": {
+          "label": "再接続"
+        },
+        "test": {
+          "ariaLabel": "フックを再検証",
+          "tooltip": "接続をテスト"
+        }
+      },
+      "connectButton": {
+        "label": "接続"
+      },
+      "deleteModal": {
+        "body": {
+          "description": "フック***{name}***は、このフックポイントから完全に削除されます。外部エンドポイントには、以前送信されたデータが残っている可能性があります。"
+        },
+        "delete": {
+          "label": "削除"
+        },
+        "header": {
+          "title": "*{name}*を削除"
+        },
+        "permanent": {
+          "description": "削除は元に戻せません。"
+        }
+      },
+      "disconnectModal": {
+        "body": {
+          "description": "Onyxはフック***{name}***に対するこのエンドポイントの呼び出しを停止します。実行中のリクエストは引き続き実行されます。外部エンドポイントには、以前送信されたデータが残っている可能性があります。必要に応じて、後でこのフックを再接続できます。"
+        },
+        "deleteNote": {
+          "description": "このフックを削除することもできます。削除は元に戻せません。"
+        },
+        "disconnect": {
+          "label": "切断"
+        },
+        "disconnectAndDelete": {
+          "label": "切断して削除"
+        },
+        "header": {
+          "title": "*{name}*を切断"
+        }
+      },
+      "docsLink": {
+        "label": "ドキュメント"
+      },
+      "form": {
+        "apiKey": {
+          "description": "Onyxはこのキーを使用してAPIエンドポイントで認証を行います。",
+          "keepCurrent": {
+            "placeholder": "現在のキーを保持するには空欄のままにしてください"
+          },
+          "title": "APIキー"
+        },
+        "connectionValid": {
+          "label": "接続は有効です。"
+        },
+        "createHeader": {
+          "description": "外部APIエンドポイントを接続してフックポイントを拡張します。",
+          "title": "フック拡張機能を設定"
+        },
+        "editHeader": {
+          "title": "フック拡張機能を管理"
+        },
+        "endpoint": {
+          "description": "信頼できるサーバーにのみ接続してください。この接続で行われる操作と共有されるデータについては、お客様の責任となります。",
+          "title": "外部APIエンドポイントURL"
+        },
+        "errors": {
+          "connect": "エンドポイントに接続できませんでした。",
+          "generic": "問題が発生しました。",
+          "invalidApiKey": "APIキーが無効です。",
+          "timeout": "接続がタイムアウトしました。タイムアウトを長くしてみてください。"
+        },
+        "failStrategy": {
+          "default": {
+            "label": "(デフォルト)"
+          },
+          "hard": {
+            "label": "失敗時にパイプラインをブロック"
+          },
+          "placeholder": "戦略を選択",
+          "soft": {
+            "label": "エラーを記録して続行"
+          },
+          "title": "フェイル戦略"
+        },
+        "hookPoint": {
+          "label": "フックポイント"
+        },
+        "name": {
+          "placeholder": "このフックポイントの拡張機能に名前を付けてください",
+          "title": "表示名"
+        },
+        "save": {
+          "label": "変更を保存"
+        },
+        "softStrategy": {
+          "description": "エンドポイントがエラーを返した場合、Onyxはそれをログに記録し、フックの結果を無視して通常どおりパイプラインを続行します。"
+        },
+        "timeout": {
+          "description": "フェイル戦略を適用する前に、Onyxがエンドポイントの応答を待つ最大時間です。0より大きく、最大{max}秒である必要があります。",
+          "revert": {
+            "tooltip": "デフォルトに戻す"
+          },
+          "suffix": "(秒)",
+          "title": "タイムアウト"
+        },
+        "toasts": {
+          "created": {
+            "message": "フックを作成しました。"
+          },
+          "noHookPoint": {
+            "message": "フックポイントが指定されていません。"
+          },
+          "updated": {
+            "message": "フックを更新しました。"
+          }
+        },
+        "validation": {
+          "apiKeyRequired": "APIキーは空にできません。",
+          "endpointRequired": "エンドポイントURLは空にできません。",
+          "nameRequired": "表示名は空にできません。",
+          "timeoutRange": "0より大きく、最大{max}秒である必要があります。",
+          "timeoutRequired": "タイムアウトは必須です。"
+        },
+        "verifying": {
+          "label": "接続を確認しています…"
+        }
+      },
+      "logs": {
+        "copy": {
+          "tooltip": "コピー"
+        },
+        "download": {
+          "tooltip": "ダウンロード"
+        },
+        "empty": {
+          "message": "過去30日間にエラーはありません。"
+        },
+        "header": {
+          "description": "フック: {name} • フックポイント: {point}",
+          "title": "最近のエラー"
+        },
+        "lineCount": {
+          "label": "{count, plural, one {#行} other {#行}}"
+        },
+        "loadFailed": {
+          "message": "ログの読み込みに失敗しました。"
+        },
+        "older": {
+          "label": "それ以前"
+        },
+        "pastHour": {
+          "label": "過去1時間"
+        },
+        "unknownError": {
+          "label": "不明なエラー"
+        }
+      },
+      "modals": {
+        "cancel": {
+          "label": "キャンセル"
+        }
+      },
+      "page": {
+        "description": "事前定義されたフックポイントで外部APIエンドポイントをコールバックとして登録し、Onyxのパイプラインを拡張します。",
+        "empty": {
+          "title": "利用可能なフックポイントがありません"
+        },
+        "emptySearch": {
+          "description": "別の検索語をお試しください。",
+          "title": "結果が見つかりません"
+        },
+        "enterpriseRequired": {
+          "message": "フック拡張機能にはEnterpriseライセンスが必要です。"
+        },
+        "loadHooksFailed": {
+          "message": "フックの読み込みに失敗しました。ページを更新してください。"
+        },
+        "loadSpecsFailed": {
+          "message": "フック仕様の読み込みに失敗しました。ページを更新してください。"
+        },
+        "notEnabled": {
+          "message": "この環境ではフック拡張機能が有効になっていません。"
+        },
+        "search": {
+          "placeholder": "フックを検索..."
+        }
+      },
+      "status": {
+        "connected": {
+          "label": "接続済み"
+        },
+        "connectionLost": {
+          "label": "接続が切断されました"
+        },
+        "errorCount": {
+          "title": "{count, plural, one {#件のエラー} other {#件のエラー}}"
+        },
+        "noError": {
+          "title": "エラーなし"
+        },
+        "pastHour": {
+          "description": "過去1時間以内"
+        },
+        "recentErrors": {
+          "title": "直近のエラー"
+        },
+        "viewMore": {
+          "label": "さらに表示"
+        },
+        "viewOlder": {
+          "label": "以前のエラーを表示"
+        }
+      },
+      "toasts": {
+        "deactivateFailed": {
+          "message": "フックの無効化に失敗しました。"
+        },
+        "deleteFailed": {
+          "message": "フックの削除に失敗しました。"
+        },
+        "disconnectFailed": {
+          "message": "フックの切断に失敗しました。"
+        },
+        "reconnectFailed": {
+          "message": "フックの再接続に失敗しました。"
+        },
+        "validateFailed": {
+          "message": "フックの検証に失敗しました。"
+        },
+        "validateSuccess": {
+          "message": "フックが正常に検証されました。"
+        },
+        "validationFailed": {
+          "message": "検証に失敗しました: {status}"
+        }
+      }
+    },
     "imageGeneration": {
       "configureSuccess": {
         "message": "プロバイダーを設定しました"
@@ -3587,7 +4539,9 @@
           "label": "新規および更新されたドキュメントに適用"
         },
         "applyReindex": {
-          "label": "適用して再インデックス"
+          "label": "適用して再インデックス",
+          "statusesLoading": "コネクタの状態を読み込んでいます…",
+          "statusesFailed": "コネクタの状態を読み込めませんでした。再インデックスの前にもう一度お試しください。"
         },
         "rebuildAll": {
           "label": "既存のすべてのドキュメントを再構築"
@@ -3963,6 +4917,15 @@
         "serviceAccountJsonRequired": "サービスアカウント JSON は必須です",
         "targetUrlRequired": "ターゲット URL は必須です",
         "urlInvalid": "有効な URL を入力してください"
+      },
+      "wontPortConsentModal": {
+        "title": "{count, plural, one {このコネクタは削除されます} other {これら # 個のコネクタは削除されます}}",
+        "submit": "削除して再インデックス",
+        "description": "{count, plural, one {再インデックスでは一時停止中および無効なコネクタはスキップされるため、このコネクタは新しいインデックスに移行されません。Onyx はこのコネクタと、それがインデックスしたドキュメントを削除します:} other {再インデックスでは一時停止中および無効なコネクタはスキップされるため、これら # 個は新しいインデックスに移行されません。Onyx はこれらのコネクタと、それらがインデックスしたドキュメントを削除します:}}",
+        "connector": "{name} — {status}",
+        "statusInvalid": "無効",
+        "statusPaused": "一時停止中",
+        "restoreHint": "コネクタを残したい場合は、ここでキャンセルし、再開または修正してから再インデックスを実行してください。そうすれば新しいインデックスに引き継がれます。そうしない場合は、再インデックスの完了後に追加し直してください。"
       }
     },
     "indexing": {
@@ -4273,6 +5236,9 @@
               "label": "行を追加"
             },
             "description": "モデルプロバイダーが必要とする追加のプロパティを指定します。これらは [環境変数](https://docs.litellm.ai/docs/set_keys#environment-variables) として LiteLLM の `completion()` 呼び出しに渡されます。詳しい手順は [ドキュメント](https://docs.onyx.app/admins/ai_models/custom_inference_provider) を参照してください。",
+            "keyInput": {
+              "placeholder": "例: OPENAI_ORGANIZATION"
+            },
             "title": "環境変数"
           },
           "modelRow": {
@@ -4784,6 +5750,132 @@
         "title": "ユーザー"
       }
     },
+    "queryHistory": {
+      "assistant": {
+        "unknown": {
+          "label": "不明"
+        }
+      },
+      "detail": {
+        "ai": {
+          "label": "AI"
+        },
+        "errorTitle": {
+          "title": "問題が発生しました :("
+        },
+        "feedback": {
+          "title": "フィードバック"
+        },
+        "fetchFailed": {
+          "message": "チャットセッションの取得に失敗しました - {error}"
+        },
+        "header": {
+          "title": "チャットセッションの詳細"
+        },
+        "referenceDocuments": {
+          "title": "参照ドキュメント"
+        },
+        "user": {
+          "label": "ユーザー"
+        }
+      },
+      "export": {
+        "cancel": {
+          "label": "キャンセル"
+        },
+        "downloadFailed": {
+          "message": "クエリ履歴のダウンロードに失敗しました。"
+        },
+        "generating": {
+          "message": "CSVレポートを生成しています。「{button}」ボタンをクリックするとすべてのジョブを確認できます。"
+        },
+        "kickoff": {
+          "label": "エクスポートを開始"
+        }
+      },
+      "exportStatus": {
+        "failure": {
+          "label": "失敗"
+        },
+        "pending": {
+          "label": "保留中"
+        },
+        "success": {
+          "label": "成功"
+        }
+      },
+      "exportsModal": {
+        "download": {
+          "header": "ダウンロード"
+        },
+        "endRange": {
+          "header": "終了範囲"
+        },
+        "generatedAt": {
+          "header": "生成日時"
+        },
+        "header": {
+          "title": "過去のクエリ履歴エクスポート"
+        },
+        "notReady": {
+          "tooltip": "エクスポートはまだ準備できていません"
+        },
+        "startRange": {
+          "header": "開始範囲"
+        },
+        "status": {
+          "header": "状態"
+        }
+      },
+      "feedback": {
+        "dislike": {
+          "label": "低評価"
+        },
+        "like": {
+          "label": "高評価"
+        },
+        "mixed": {
+          "label": "混合"
+        },
+        "na": {
+          "label": "N/A"
+        }
+      },
+      "filters": {
+        "any": {
+          "label": "すべて"
+        },
+        "feedbackType": {
+          "label": "フィードバックの種類"
+        }
+      },
+      "previousExports": {
+        "label": "エクスポートを表示"
+      },
+      "table": {
+        "date": {
+          "header": "日付"
+        },
+        "feedback": {
+          "header": "フィードバック"
+        },
+        "fetchError": {
+          "title": "クエリ履歴の取得中にエラーが発生しました"
+        },
+        "firstAiResponse": {
+          "header": "最初のAI応答"
+        },
+        "firstUserMessage": {
+          "header": "最初のユーザーメッセージ"
+        },
+        "persona": {
+          "header": "ペルソナ"
+        },
+        "user": {
+          "header": "ユーザー"
+        }
+      }
+    },
     "scim": {
       "card": {
         "connected": {
@@ -4838,6 +5930,56 @@
         "generateFailed": "token を生成できませんでした：{detail}",
         "genericError": "問題が発生しました。もう一度お試しください。",
         "regenerated": "token を再生成しました"
+      }
+    },
+    "search": {
+      "errors": {
+        "classificationFailed": {
+          "message": "クエリの分類に失敗しました。チャットにフォールバックします。"
+        },
+        "searchFailed": {
+          "message": "ドキュメント検索に失敗しました。もう一度お試しください。"
+        }
+      },
+      "results": {
+        "count": {
+          "label": "{count, plural, one {#件の結果} other {#件の結果}}"
+        },
+        "empty": {
+          "description": "コネクタやフィルターを確認するか、別の検索語をお試しください。",
+          "title": "結果が見つかりません"
+        },
+        "failed": {
+          "title": "検索に失敗しました"
+        }
+      },
+      "tagFilter": {
+        "count": {
+          "label": "{count, plural, one {#件のタグ} other {#件のタグ}}"
+        },
+        "empty": {
+          "label": "タグ"
+        },
+        "search": {
+          "placeholder": "タグを絞り込む..."
+        }
+      },
+      "timeFilter": {
+        "all": {
+          "label": "全期間"
+        },
+        "day": {
+          "label": "過去24時間"
+        },
+        "month": {
+          "label": "過去1か月"
+        },
+        "week": {
+          "label": "過去1週間"
+        },
+        "year": {
+          "label": "過去1年"
+        }
       }
     },
     "security": {
@@ -5729,6 +6871,184 @@
         "unexpectedError": "予期しないエラーが発生しました。"
       }
     },
+    "standardAnswers": {
+      "categoryBubble": {
+        "remove": {
+          "ariaLabel": "カテゴリ {name} を削除"
+        },
+        "removeButton": {
+          "ariaLabel": "カテゴリを削除"
+        }
+      },
+      "categoryDropdown": {
+        "categories": {
+          "label": "定型回答カテゴリ"
+        },
+        "fetchError": {
+          "message": "定型回答カテゴリの取得に失敗しました - {message}",
+          "title": "問題が発生しました :("
+        },
+        "search": {
+          "placeholder": "カテゴリを検索..."
+        }
+      },
+      "editPage": {
+        "title": "標準回答を編集"
+      },
+      "errors": {
+        "fetchAnswersFailed": {
+          "message": "標準回答の取得に失敗しました"
+        },
+        "fetchCategoriesFailed": {
+          "message": "標準回答カテゴリの取得に失敗しました"
+        },
+        "genericTitle": {
+          "title": "問題が発生しました :("
+        },
+        "loadAnswersFailed": {
+          "title": "標準回答の読み込み中にエラーが発生しました"
+        },
+        "loadCategoriesFailed": {
+          "title": "標準回答カテゴリの読み込み中にエラーが発生しました"
+        },
+        "notFound": {
+          "message": "ID: {id} の標準回答が見つかりませんでした"
+        }
+      },
+      "filter": {
+        "allCategories": {
+          "label": "すべてのカテゴリ"
+        }
+      },
+      "form": {
+        "allKeywords": {
+          "label": "これらのキーワードのすべて(順不同、スペース区切り)",
+          "placeholder": "IT チケット"
+        },
+        "answer": {
+          "label": "回答",
+          "placeholder": "Markdown形式の回答。例: ITチームのサポートが必要な場合は、internalsupport@company.com までメールでご連絡ください"
+        },
+        "anyKeywords": {
+          "label": "これらのキーワードのいずれか(スペース区切り)",
+          "placeholder": "チケット 問題 障害"
+        },
+        "categories": {
+          "label": "カテゴリ:",
+          "placeholder": "カテゴリを入力してEnterキーを押してください…"
+        },
+        "createButton": {
+          "label": "作成!"
+        },
+        "keywords": {
+          "tooltip": "回答をトリガーするには、質問がこれらのキーワードに一致する必要があります。"
+        },
+        "matchRegex": {
+          "description": "正確なキーワードの代わりに正規表現パターンで一致させます",
+          "label": "正規表現で一致"
+        },
+        "regexPattern": {
+          "label": "正規表現パターン",
+          "tooltip": "質問がこの正規表現パターンに一致した場合にトリガーされます(Pythonの`re.search()`を使用)"
+        },
+        "strategy": {
+          "all": {
+            "label": "すべてのキーワード"
+          },
+          "any": {
+            "label": "いずれかのキーワード"
+          },
+          "description": "この回答を表示するために、ユーザーの質問に上記のキーワードのいずれか、またはすべてが含まれる必要があるかを選択します。",
+          "label": "キーワード検出戦略"
+        },
+        "toasts": {
+          "categoryCreateFailed": {
+            "message": "カテゴリ「{name}」の作成中にエラーが発生しました - {error}"
+          },
+          "createFailed": {
+            "message": "標準回答の作成中にエラーが発生しました - {error}"
+          },
+          "updateFailed": {
+            "message": "標準回答の更新中にエラーが発生しました - {error}"
+          }
+        },
+        "updateButton": {
+          "label": "更新!"
+        },
+        "validation": {
+          "answerRequired": "回答は必須です",
+          "categoryRequired": "少なくとも1つのカテゴリが必要です",
+          "keywordRequired": "キーワードまたはパターンは必須です"
+        }
+      },
+      "intro": {
+        "addFirst": {
+          "message": "以下から最初の標準回答を追加しましょう!"
+        },
+        "description": "事前定義された質問に対する標準回答を管理します。\n注: 現在、Slackからの質問のみが標準回答を受け取れます。"
+      },
+      "newStandardAnswer": {
+        "label": "新しい標準回答"
+      },
+      "search": {
+        "placeholder": "キーワードやフレーズで標準回答を検索..."
+      },
+      "table": {
+        "answer": {
+          "header": "回答"
+        },
+        "categories": {
+          "header": "カテゴリ"
+        },
+        "empty": {
+          "message": "一致する標準回答が見つかりません..."
+        },
+        "keywords": {
+          "header": "キーワード/パターン"
+        },
+        "matchRegex": {
+          "header": "正規表現で一致?"
+        },
+        "matchRegexNo": {
+          "label": "いいえ"
+        },
+        "matchRegexYes": {
+          "label": "はい"
+        },
+        "slackNote": {
+          "message": "該当する[Slackボット](/admin/bots)にカテゴリを追加したことを確認してください。"
+        }
+      },
+      "toasts": {
+        "deleteFailed": {
+          "message": "標準回答の削除に失敗しました - {error}"
+        },
+        "deleted": {
+          "message": "標準回答 {id} を削除しました"
+        }
+      }
+    },
+    "status": {
+      "badges": {
+        "canceled": "キャンセル済み",
+        "completedWithErrors": "エラーありで完了",
+        "deleting": "削除中",
+        "error": "エラー",
+        "failed": "失敗",
+        "inProgress": "進行中",
+        "indexed": "インデックス済み",
+        "indexing": "インデックス作成中",
+        "initialIndexing": "初回インデックス作成",
+        "interrupted": "中断",
+        "invalid": "無効",
+        "invalidConnectorTooltip": "コネクタが無効な状態です。認証情報を更新するか、新しいコネクタを作成してください。",
+        "none": "なし",
+        "notStarted": "未開始",
+        "paused": "一時停止中",
+        "scheduled": "予定済み",
+        "succeeded": "成功"
+      }
+    },
     "systemInfo": {
       "backendVersion": {
         "label": "バックエンドバージョン: "
@@ -5738,6 +7058,142 @@
       },
       "webVersion": {
         "label": "Web バージョン: "
+      }
+    },
+    "theme": {
+      "announcement": {
+        "description": "ユーザーが閉じることのできる常設のシステムアナウンスを表示します。",
+        "header": {
+          "placeholder": "アナウンスを追加"
+        },
+        "label": "システムアナウンス"
+      },
+      "announcementPopup": {
+        "description": "この通知を、すべてのユーザーの初回訪問時に全画面ポップアップとしても表示します。慎重に使用してください。",
+        "label": "初回訪問時のポップアップ通知"
+      },
+      "appName": {
+        "description": "この名前はアプリ全体に表示され、UI内の「Onyx」を置き換えます。",
+        "label": "アプリケーションの表示名"
+      },
+      "branding": {
+        "description": "アプリ内の「powered by Onyx」やその他のOnyxブランディングを削除します。",
+        "enterpriseTooltip": "Onyxブランディングの非表示はEnterpriseプランの機能です。",
+        "label": "Onyxブランディングを非表示"
+      },
+      "chatFooter": {
+        "description": "免責事項や追加情報のためのマークダウンコンテンツを追加します。",
+        "label": "チャットフッターのテキスト"
+      },
+      "chatHeader": {
+        "label": "チャットヘッダーのテキスト"
+      },
+      "consent": {
+        "description": "アプリケーションにアクセスする前に、ユーザーに通知を読んで同意することを求めます。",
+        "label": "通知への同意を必須にする"
+      },
+      "consentPrompt": {
+        "label": "通知の同意プロンプト"
+      },
+      "firstVisit": {
+        "description": "新規ユーザーの初回訪問時に一度だけポップアップを表示します。",
+        "label": "初回訪問時の通知を表示"
+      },
+      "greeting": {
+        "description": "ホームページに短いメッセージを追加します。",
+        "label": "あいさつメッセージ"
+      },
+      "helpLink": {
+        "description": "Onyxのドキュメントに加えて、ユーザーメニューにカスタムヘルプリンクを追加します。",
+        "enterpriseTooltip": "カスタムヘルプリンクはEnterpriseプランの機能です。",
+        "label": "カスタムヘルプリンク"
+      },
+      "helpLinkLabel": {
+        "label": "カスタムヘルプリンクのラベル",
+        "placeholder": "リンクのラベル"
+      },
+      "loginSubtitle": {
+        "description": "ログインページのウェルカム見出しの下のキャッチフレーズを置き換えます。",
+        "label": "ログインページのサブタイトル"
+      },
+      "logo": {
+        "label": "アプリケーションのロゴ",
+        "updateButton": {
+          "label": "更新"
+        }
+      },
+      "logoStyle": {
+        "both": {
+          "label": "ロゴと名前",
+          "tooltip": "アプリケーションのロゴと名前の両方を表示します。"
+        },
+        "description": "サイドバーの上部に表示する内容を選択します。ロゴまたはアプリケーション名を追加するとオプションが利用可能になります。",
+        "label": "ロゴの表示スタイル",
+        "logoOnly": {
+          "disabledTooltip": "このオプションを有効にするにはロゴをアップロードしてください。",
+          "label": "ロゴのみ",
+          "tooltip": "アプリケーションのロゴのみを表示します。"
+        },
+        "nameOnly": {
+          "disabledTooltip": "このオプションを有効にするにはアプリケーション名を入力してください。",
+          "label": "名前のみ",
+          "tooltip": "アプリケーションの名前のみを表示します。"
+        }
+      },
+      "markdownContent": {
+        "placeholder": "マークダウンコンテンツを追加"
+      },
+      "noticeContent": {
+        "label": "通知の内容"
+      },
+      "noticeHeader": {
+        "label": "通知のヘッダー"
+      },
+      "page": {
+        "announcementClearFailed": {
+          "message": "アナウンスの削除に失敗しました。"
+        },
+        "announcementSaveFailed": {
+          "message": "アナウンスの保存に失敗しました。"
+        },
+        "applyButton": {
+          "label": "変更を適用"
+        },
+        "applying": {
+          "label": "適用中..."
+        },
+        "description": "組織内のユーザーに対するアプリケーションの表示をカスタマイズします。",
+        "logoUploadFailed": {
+          "message": "ロゴのアップロードに失敗しました。{error}"
+        },
+        "saveSuccess": {
+          "message": "外観設定が正常に保存されました!"
+        },
+        "settingsSaveFailed": {
+          "message": "設定の更新に失敗しました。{error}"
+        },
+        "validation": {
+          "consentPromptRequired": "通知の同意プロンプトは必須です",
+          "invalidUrl": "有効なURLである必要があります",
+          "maxChars": "最大{count}文字",
+          "noticeContentRequired": "通知の内容は必須です",
+          "noticeHeaderRequired": "通知のヘッダーは必須です",
+          "urlRequiredWithLabel": "ラベルを設定した場合はURLが必須です"
+        }
+      },
+      "preview": {
+        "chatFooter": {
+          "placeholder": "チャットフッターの内容"
+        },
+        "chatHeader": {
+          "placeholder": "チャットヘッダーの内容"
+        },
+        "greeting": {
+          "placeholder": "Acme Chatへようこそ"
+        },
+        "logo": {
+          "alt": "ロゴ"
+        }
       }
     },
     "tokenRateLimits": {
@@ -6002,6 +7458,9 @@
             "label": "支出"
           }
         }
+      },
+      "page": {
+        "description": "ワークスペースの支出を監視し、ユーザーごとの使用状況を確認します。"
       },
       "spendByUser": {
         "columns": {
@@ -6599,6 +8058,204 @@
         "tooltip": "エージェントの統計を表示"
       }
     },
+    "editor": {
+      "actions": {
+        "codeInterpreter": {
+          "description": "コードを生成して実行します。",
+          "title": "コードインタープリター"
+        },
+        "codingAgent": {
+          "description": "GitHubリポジトリを調査し、そのコードに関する質問に回答します。",
+          "title": "コーディングエージェント"
+        },
+        "description": "このエージェントが使用できるツールと機能です。",
+        "imageGeneration": {
+          "description": "AI搭載ツールで画像を生成・加工します。",
+          "title": "画像生成",
+          "unavailable": {
+            "tooltip": "画像生成には設定済みのモデルが必要です。アクセス権がある場合は、設定 > 画像生成でモデルを設定するか、管理者に依頼してください。"
+          }
+        },
+        "openUrl": {
+          "description": "ウェブURLからコンテンツを取得して読み取ります。",
+          "title": "URLを開く"
+        },
+        "title": "アクション",
+        "webSearch": {
+          "description": "リアルタイムの情報と最新の結果をウェブで検索します。",
+          "title": "ウェブ検索"
+        }
+      },
+      "advanced": {
+        "description": "エージェントのプロンプトと知識を微調整します。",
+        "overwritePrompt": {
+          "suffix": "（非推奨）",
+          "title": "システムプロンプトを上書き"
+        },
+        "reminders": {
+          "description": "プロンプトメッセージに短いリマインダーを追加します。チャットが進むにつれてエージェントが特定の指示を忘れがちな場合に使用してください。簡潔にし、ユーザーメッセージの妨げにならないようにしてください。",
+          "placeholder": "忘れないでください。回答は常に番号付きリストの形式にしてください。",
+          "title": "リマインダー"
+        },
+        "title": "詳細オプション"
+      },
+      "avatar": {
+        "edit": {
+          "label": "編集"
+        },
+        "uploadImage": {
+          "label": "画像をアップロード"
+        }
+      },
+      "delete": {
+        "button": {
+          "label": "エージェントを削除"
+        },
+        "description": "このエージェントを使用しているすべてのユーザーがアクセスできなくなります。",
+        "title": "このエージェントを削除"
+      },
+      "deleteModal": {
+        "body": {
+          "confirm": "このエージェントを削除してもよろしいですか？",
+          "warning": "このエージェントを使用しているすべてのユーザーがアクセスできなくなります。削除は元に戻せません。"
+        },
+        "title": "エージェントを削除"
+      },
+      "filesModal": {
+        "description": "このエージェント用に選択されたすべてのファイル",
+        "placeholderName": "ファイル {id}",
+        "title": "ユーザーファイル"
+      },
+      "general": {
+        "avatar": {
+          "title": "エージェントのアバター"
+        },
+        "descriptionField": {
+          "placeholder": "このエージェントは何をしますか？",
+          "title": "説明"
+        },
+        "name": {
+          "placeholder": "エージェントに名前を付ける",
+          "title": "名前"
+        }
+      },
+      "header": {
+        "cancel": {
+          "label": "キャンセル"
+        },
+        "create": {
+          "label": "作成"
+        },
+        "createTitle": "エージェントを作成",
+        "editTitle": "エージェントを編集",
+        "save": {
+          "label": "保存"
+        }
+      },
+      "mcp": {
+        "noAccess": {
+          "tooltip": "このMCPサーバーへのアクセス権がなくなりました。既存のツールは保持されます。"
+        },
+        "searchTools": {
+          "placeholder": "ツールを検索..."
+        }
+      },
+      "page": {
+        "ariaLabel": "エージェントエディターページ"
+      },
+      "prompts": {
+        "instructions": {
+          "description": "このエージェントの応答を調整するための指示を追加します。",
+          "placeholder": "複雑な問題では段階的に考え、推論を示してください。具体的な例を使用してください。アクション項目を強調し、不明な点は人間が記入できるよう空欄にしてください。丁寧で熱意のあるトーンを使用してください。",
+          "title": "指示"
+        },
+        "starters": {
+          "description": "このエージェントに何ができ、どのように効果的にやり取りできるかをユーザーが理解するのに役立つメッセージ例です。",
+          "title": "会話のきっかけ"
+        }
+      },
+      "saveTooltip": {
+        "fixErrors": "保存する前にフォームのエラーを修正してください。",
+        "noChanges": "変更はありません。",
+        "saving": "変更を保存中...",
+        "uploading": "ファイルのアップロードが完了するまでお待ちください。"
+      },
+      "share": {
+        "feature": {
+          "description": "このエージェントをエージェント一覧の上部に表示し、アクセス権のある新規ユーザーのサイドバーに自動的にピン留めします。",
+          "privateNotice": {
+            "title": "このエージェントはあなた専用のため、あなたにのみ注目として表示されます。"
+          },
+          "title": "このエージェントを注目に設定",
+          "unlistedWarning": {
+            "title": "このエージェントは非掲載のため、注目リストには表示されません。"
+          }
+        },
+        "labels": {
+          "description": "ラベルとカテゴリを追加して、このエージェントを見つけやすくします。",
+          "placeholder": "ラベルを追加..."
+        },
+        "share": {
+          "button": {
+            "label": "共有"
+          },
+          "description": "他のユーザー、グループ、または組織全体と共有できます。",
+          "title": "このエージェントを共有"
+        },
+        "title": "エージェントを共有"
+      },
+      "starters": {
+        "examples": {
+          "engineeringGoals": "今四半期のエンジニアリング目標のリストをまとめて。",
+          "overview": "いくつかのドキュメントの概要を教えて。",
+          "salesReport": "最新の売上レポートを探して。",
+          "todayGoals": "今日の目標をまとめて。"
+        },
+        "placeholder": "会話のきっかけを入力..."
+      },
+      "suffix": {
+        "optional": "任意"
+      },
+      "toasts": {
+        "createFailed": "エージェントの作成に失敗しました - {detail}",
+        "created": "エージェント「{name}」を作成しました",
+        "deleteFailed": "エージェントの削除に失敗しました：{error}",
+        "deleted": "エージェントを削除しました",
+        "genericError": "エラーが発生しました：{error}",
+        "noResponse": "応答がありません",
+        "sharingFailed": "エージェントは作成されましたが、共有に失敗しました：{error}",
+        "toggleListedFailed": "表示状態の切り替えに失敗しました",
+        "unknownDetail": "不明なエラー",
+        "unknownError": "不明なエラー",
+        "updateFailed": "エージェントの更新に失敗しました - {detail}",
+        "updated": "エージェント「{name}」を更新しました"
+      },
+      "validation": {
+        "cutoffInFuture": "知識のカットオフ日は今日以前である必要があります。",
+        "descriptionMax": "説明は{max}文字以内で入力してください",
+        "nameRequired": "エージェント名は必須です。",
+        "starterMax": "会話のきっかけは{max}文字以内で入力してください"
+      },
+      "visibility": {
+        "relist": {
+          "button": {
+            "label": "再掲載する"
+          },
+          "description": "再掲載されたエージェントは、エージェント一覧に再び表示されます。",
+          "title": "このエージェントを再掲載する"
+        },
+        "unlist": {
+          "button": {
+            "label": "非掲載にする"
+          },
+          "description": "非掲載のエージェントはエージェント一覧に表示されませんが、引き続きアクセスできます。",
+          "title": "このエージェントを非掲載にする"
+        }
+      },
+      "warnings": {
+        "openUrl": "URLを開く機能なしのウェブ検索では、ウェブベースの結果が大幅に悪化する可能性があります。"
+      }
+    },
     "filters": {
       "actions": {
         "all": {
@@ -6781,6 +8438,47 @@
         }
       }
     },
+    "navigation": {
+      "countSeparator": {
+        "label": "{count, plural, one {エージェント} other {エージェント}}"
+      },
+      "empty": {
+        "description": "エージェントが見つかりません"
+      },
+      "header": {
+        "description": "あなたとチームのユースケースに合わせてAIの動作と知識をカスタマイズします。",
+        "title": "エージェント"
+      },
+      "newAgent": {
+        "label": "新しいエージェント",
+        "noPermission": {
+          "tooltip": "エージェントを作成する権限がありません。アクセスをリクエストするには管理者に連絡してください。"
+        }
+      },
+      "page": {
+        "ariaLabel": "エージェントページ"
+      },
+      "search": {
+        "placeholder": "エージェントを検索..."
+      },
+      "sections": {
+        "all": {
+          "title": "すべてのエージェント"
+        },
+        "featured": {
+          "description": "チームが厳選",
+          "title": "注目のエージェント"
+        }
+      },
+      "tabs": {
+        "all": {
+          "label": "すべてのエージェント"
+        },
+        "your": {
+          "label": "あなたのエージェント"
+        }
+      }
+    },
     "userVariables": {
       "insert": {
         "tooltip": "ユーザー変数を挿入"
@@ -6788,6 +8486,12 @@
     }
   },
   "auth": {
+    "anonymous": {
+      "redirecting": {
+        "description": "匿名セッションを設定しています。しばらくお待ちください。",
+        "title": "チャットページにリダイレクトしています..."
+      }
+    },
     "createAccount": {
       "createOrgButton": {
         "label": "新しい組織を作成"
@@ -6809,6 +8513,55 @@
       },
       "signInLink": {
         "label": "サインイン"
+      }
+    },
+    "emailPasswordForm": {
+      "accountExists": {
+        "error": "指定されたメールアドレスのアカウントは既に存在します。"
+      },
+      "continueAsGuest": {
+        "label": "またはゲストとして続行"
+      },
+      "email": {
+        "label": "メールアドレス",
+        "placeholder": "email@yourcompany.com"
+      },
+      "forgotPassword": {
+        "link": "[パスワードをお忘れですか?]({url})"
+      },
+      "invalidCredentials": {
+        "error": "メールアドレスまたはパスワードが無効です"
+      },
+      "noPassword": {
+        "error": "パスワードを設定するにはアカウントを作成してください"
+      },
+      "password": {
+        "label": "パスワード",
+        "placeholder": "パスワード"
+      },
+      "passwordDigit": {
+        "error": "パスワードには数字を少なくとも 1 文字含める必要があります"
+      },
+      "passwordLength": {
+        "error": "パスワードは {min}~{max} 文字にする必要があります"
+      },
+      "passwordLoginDisabled": {
+        "error": "パスワードによるログインは無効になっています。ID プロバイダーでサインインしてください。"
+      },
+      "passwordLowercase": {
+        "error": "パスワードには小文字を少なくとも 1 文字含める必要があります"
+      },
+      "passwordRequirements": {
+        "label": "パスワードの要件:"
+      },
+      "passwordSpecialChar": {
+        "error": "パスワードには特殊文字を少なくとも 1 文字含める必要があります"
+      },
+      "passwordUppercase": {
+        "error": "パスワードには大文字を少なくとも 1 文字含める必要があります"
+      },
+      "tooManyRequests": {
+        "error": "リクエストが多すぎます。しばらくしてからもう一度お試しください。"
       }
     },
     "error": {
@@ -6849,6 +8602,31 @@
         "description": "認証システムの一時的な障害"
       }
     },
+    "errorDisplay": {
+      "anonymousDisabled": {
+        "toast": "あなたのチームでは匿名アクセスが有効になっていません。"
+      },
+      "generic": {
+        "toast": "エラーが発生しました。"
+      }
+    },
+    "flowContainer": {
+      "createAccountLink": {
+        "label": "アカウントを作成"
+      },
+      "logo": {
+        "alt": "ロゴ"
+      },
+      "signInLink": {
+        "label": "サインイン"
+      },
+      "signinPrompt": {
+        "text": "すでにアカウントをお持ちですか？"
+      },
+      "signupPrompt": {
+        "text": "{appName}は初めてですか？"
+      }
+    },
     "forgotPassword": {
       "backToLoginLink": {
         "label": "[ログインに戻る](/auth/login)"
@@ -6881,7 +8659,8 @@
         "placeholder": "API キーを入力"
       },
       "emailField": {
-        "label": "メールアドレス"
+        "label": "メールアドレス",
+        "placeholder": "email@yourcompany.com"
       },
       "genericError": {
         "toast": "ユーザーへのなりすましに失敗しました"
@@ -6942,6 +8721,23 @@
         "label": "職場のメールアドレス"
       }
     },
+    "passwordRequirements": {
+      "digit": {
+        "label": "数字を含む。"
+      },
+      "length": {
+        "label": "{min}~{max} 文字"
+      },
+      "lowercase": {
+        "label": "小文字を含む。"
+      },
+      "specialChar": {
+        "label": "特殊文字を含む。"
+      },
+      "uppercase": {
+        "label": "大文字を含む。"
+      }
+    },
     "resetPassword": {
       "backToLoginLink": {
         "label": "[ログインに戻る](/auth/login)"
@@ -6983,6 +8779,31 @@
       },
       "unexpectedError": {
         "toast": "予期しないエラーが発生しました。もう一度お試しください。"
+      }
+    },
+    "sessionEnd": {
+      "expired": {
+        "message": "セッションの有効期限が切れました。続行するには再度ログインしてください。"
+      },
+      "loginButton": {
+        "label": "ログイン"
+      },
+      "modal": {
+        "title": "ログアウトされました"
+      },
+      "terminated": {
+        "message": "このセッションはサインアウトされました。続行するには再度ログインしてください。"
+      },
+      "unrecognized": {
+        "message": "予期せずサインアウトされました。続行するには再度ログインしてください。この問題が続く場合は、管理者にお問い合わせください。"
+      }
+    },
+    "signIn": {
+      "captchaTokenError": {
+        "toast": "grecaptcha.execute がトークンを返しませんでした"
+      },
+      "google": {
+        "label": "Google で続行"
       }
     },
     "signup": {
@@ -7168,6 +8989,70 @@
       },
       "sourcesModal": {
         "title": "ソース"
+      }
+    },
+    "appChrome": {
+      "delete": {
+        "label": "削除"
+      },
+      "deleteModal": {
+        "description": "このチャットを削除してもよろしいですか？この操作は元に戻せません。",
+        "submitButton": {
+          "label": "削除"
+        },
+        "title": "チャットを削除"
+      },
+      "exportAs": {
+        "label": "形式を指定してエクスポート…"
+      },
+      "exportFailed": {
+        "message": "チャットのエクスポートに失敗しました。もう一度お試しください。"
+      },
+      "exportMarkdown": {
+        "label": "Markdown"
+      },
+      "exportPlaintext": {
+        "label": "プレーンテキスト"
+      },
+      "fullWidth": {
+        "ariaLabel": "チャットの全幅表示を切り替え",
+        "fitTooltip": "幅を合わせる",
+        "fullTooltip": "全幅"
+      },
+      "incognitoExit": {
+        "ariaLabel": "シークレットチャットを終了",
+        "tooltip": "シークレットチャットを終了"
+      },
+      "incognitoPill": {
+        "ariaLabel": "シークレットチャット",
+        "label": "シークレットチャット"
+      },
+      "incognitoStart": {
+        "ariaLabel": "シークレットチャットを開始",
+        "lockedTooltip": "シークレットはチャット開始前にのみ設定できます",
+        "tooltip": "シークレットチャット"
+      },
+      "mode": {
+        "chat": {
+          "description": "会話とリサーチ",
+          "label": "チャット"
+        },
+        "search": {
+          "description": "ドキュメントのクイック検索",
+          "label": "検索"
+        }
+      },
+      "modeButton": {
+        "ariaLabel": "アプリモードを変更"
+      },
+      "moveToProject": {
+        "label": "プロジェクトに移動"
+      },
+      "openSidebar": {
+        "ariaLabel": "サイドバーを開く"
+      },
+      "share": {
+        "label": "共有"
       }
     },
     "banners": {
@@ -8350,6 +10235,75 @@
         "tooltip": "このモデルでは、この設定の変更に対応していません。"
       }
     },
+    "nrf": {
+      "page": {
+        "filesFailed": {
+          "toast": "{count, plural, one {ファイルの処理に失敗したため削除されました: {names}} other {ファイルの処理に失敗したため削除されました: {names}}}"
+        },
+        "loginModal": {
+          "loginButton": {
+            "label": "ログイン"
+          },
+          "title": "Onyx へようこそ"
+        },
+        "noResubmitMessage": {
+          "toast": "以前に送信されたメッセージが見つかりません。"
+        },
+        "settingsButton": {
+          "tooltip": "設定を開く"
+        },
+        "setupLlmButton": {
+          "label": "LLM を設定してください。"
+        },
+        "turnOffModal": {
+          "cancelButton": {
+            "label": "キャンセル"
+          },
+          "confirmButton": {
+            "label": "オフにする"
+          },
+          "description": "代わりにブラウザのデフォルトの新しいタブページが表示されます。Onyx の設定からいつでも再度オンにできます。",
+          "title": "Onyx の新しいタブページをオフにしますか？"
+        }
+      },
+      "settingsPanel": {
+        "backgroundNone": {
+          "label": "なし"
+        },
+        "backgroundOption": {
+          "ariaLabel": "{label}の背景"
+        },
+        "backgroundOptionSelected": {
+          "ariaLabel": "{label}の背景（選択中）"
+        },
+        "backgroundSection": {
+          "title": "背景"
+        },
+        "closeButton": {
+          "tooltip": "設定を閉じる"
+        },
+        "generalSection": {
+          "title": "一般"
+        },
+        "header": {
+          "title": "設定"
+        },
+        "newTabToggle": {
+          "label": "Onyx を新しいタブページとして使用"
+        },
+        "themeToggle": {
+          "tooltip": "{mode, select, light {ライトテーマに切り替え} other {ダークテーマに切り替え}}"
+        }
+      },
+      "sidePanelHeader": {
+        "newChatButton": {
+          "tooltip": "新しいチャット"
+        },
+        "openInOnyxButton": {
+          "tooltip": "Onyx で開く"
+        }
+      }
+    },
     "popup": {
       "consentCheckbox": {
         "label": "同意チェックボックス"
@@ -8365,6 +10319,128 @@
       },
       "startButton": {
         "label": "開始"
+      }
+    },
+    "projects": {
+      "chatItem": {
+        "lastMessage": {
+          "description": "最後のメッセージ: {time}"
+        },
+        "projectFallback": {
+          "label": "プロジェクト"
+        }
+      },
+      "contextPanel": {
+        "addFilesButton": {
+          "label": "ファイルを追加"
+        },
+        "contextExceeded": {
+          "message": "このプロジェクトはモデルのコンテキスト制限を超えています。セッションは応答を生成する前に、関連するファイルを自動的に検索します。"
+        },
+        "dropFiles": {
+          "message": "ここにファイルをドロップしてこのプロジェクトに追加"
+        },
+        "emptyFiles": {
+          "message": "プロジェクトで使用するドキュメント、テキスト、画像を追加します。ドラッグ&ドロップに対応しています。"
+        },
+        "fileCount": {
+          "description": "{count, plural, one {# 件のファイル} other {# 件のファイル}}"
+        },
+        "fileCountOverflow": {
+          "description": "100 件以上のファイル"
+        },
+        "files": {
+          "description": "このプロジェクトのチャットはこれらのファイルにアクセスできます。",
+          "title": "ファイル"
+        },
+        "filesModal": {
+          "description": "このプロジェクトのセッションはここにあるファイルにアクセスできます。",
+          "title": "プロジェクトのファイル"
+        },
+        "instructions": {
+          "emptyDescription": "このプロジェクトでの応答を調整するための指示を追加します。",
+          "title": "指示"
+        },
+        "loadingProject": {
+          "label": "プロジェクトを読み込み中..."
+        },
+        "setInstructionsButton": {
+          "label": "指示を設定"
+        },
+        "viewAll": {
+          "label": "すべて表示"
+        },
+        "viewFiles": {
+          "label": "ファイルを表示"
+        }
+      },
+      "createModal": {
+        "cancelButton": {
+          "label": "キャンセル"
+        },
+        "createError": {
+          "toast": "プロジェクト {name} を作成できませんでした"
+        },
+        "description": "プロジェクトを使うと、ファイルとチャットを 1 か所にまとめて整理し、継続的な作業のためのカスタム指示を追加できます。",
+        "name": {
+          "label": "プロジェクト名",
+          "placeholder": "何に取り組んでいますか?"
+        },
+        "nameRequired": {
+          "error": "プロジェクト名は必須です"
+        },
+        "submitButton": {
+          "label": "プロジェクトを作成"
+        },
+        "title": "新しいプロジェクトを作成"
+      },
+      "foldedPopover": {
+        "empty": {
+          "title": "プロジェクトが見つかりません"
+        },
+        "search": {
+          "placeholder": "プロジェクトを検索..."
+        }
+      },
+      "folder": {
+        "collapse": {
+          "ariaLabel": "プロジェクトを折りたたむ"
+        },
+        "delete": {
+          "label": "プロジェクトを削除"
+        },
+        "deleteModal": {
+          "confirmButton": {
+            "label": "削除"
+          },
+          "message": "このプロジェクトを削除してもよろしいですか?この操作は元に戻せません。",
+          "title": "プロジェクトを削除"
+        },
+        "expand": {
+          "ariaLabel": "プロジェクトを展開する"
+        },
+        "rename": {
+          "label": "プロジェクト名を変更"
+        }
+      },
+      "sessionList": {
+        "empty": {
+          "message": "まだチャットはありません。"
+        },
+        "recentChats": {
+          "title": "最近のチャット"
+        }
+      },
+      "uploads": {
+        "failed": {
+          "toast": "ファイルをアップロードできませんでした"
+        },
+        "oversized": {
+          "toast": "{count, plural, one {サイズ超過のファイル # 件をスキップしました} other {サイズ超過のファイル # 件をスキップしました}} (>{max} MB): {names}"
+        },
+        "rejected": {
+          "toast": "一部のファイルはアップロードされませんでした。{details}"
+        }
       }
     },
     "sharedChat": {
@@ -8397,6 +10473,1773 @@
       },
       "incognito": {
         "title": "シークレットモードです"
+      }
+    }
+  },
+  "common": {
+    "adminChrome": {
+      "openSidebar": {
+        "ariaLabel": "サイドバーを開く"
+      },
+      "paymentReminder": {
+        "billingButton": {
+          "label": "請求情報を更新"
+        },
+        "text": "**警告:** トライアル期間の終了まで 5 日を切りましたが、支払い方法が追加されていません。"
+      }
+    },
+    "agentAvatar": {
+      "image": {
+        "altFallback": "エージェントのアバター"
+      },
+      "logo": {
+        "alt": "ロゴ"
+      }
+    },
+    "attachment": {
+      "document": {
+        "label": "ドキュメント"
+      },
+      "expandButton": {
+        "ariaLabel": "ドキュメントを拡大"
+      }
+    },
+    "backButton": {
+      "label": "戻る"
+    },
+    "chatBackgrounds": {
+      "clouds": {
+        "label": "雲"
+      },
+      "hills": {
+        "label": "丘"
+      },
+      "mountains": {
+        "label": "山"
+      },
+      "night": {
+        "label": "夜"
+      },
+      "none": {
+        "label": "なし"
+      },
+      "plant": {
+        "label": "植物"
+      }
+    },
+    "colorSwatch": {
+      "sample": {
+        "text": "あア"
+      }
+    },
+    "comboBox": {
+      "createOption": {
+        "ariaLabel": "{prefix}「{value}」",
+        "defaultPrefix": "作成"
+      },
+      "dropdown": {
+        "closeAriaLabel": "ドロップダウンを閉じる",
+        "openAriaLabel": "ドロップダウンを開く"
+      },
+      "options": {
+        "empty": "オプションが見つかりません"
+      },
+      "separator": {
+        "label": "その他のオプション"
+      }
+    },
+    "commandMenu": {
+      "closeButton": {
+        "ariaLabel": "メニューを閉じる"
+      },
+      "dialog": {
+        "title": "コマンドメニュー"
+      },
+      "options": {
+        "ariaLabel": "コマンドメニューのオプション"
+      },
+      "search": {
+        "placeholder": "検索..."
+      }
+    },
+    "connectorMultiSelect": {
+      "allSelected": {
+        "description": "利用可能なすべてのコネクタが選択されています。別のコネクタを追加するには、以下からコネクタを削除してください。",
+        "placeholder": "すべてのコネクタが選択されています"
+      },
+      "documentSetHint": {
+        "description": "選択したコネクタでインデックスされたすべてのドキュメントがこのドキュメントセットに含まれます。"
+      },
+      "noMatches": {
+        "text": "一致するコネクタが見つかりません"
+      },
+      "noMoreConnectors": {
+        "text": "利用可能なコネクタはこれ以上ありません"
+      },
+      "noPrivateConnectors": {
+        "text": "利用可能な非公開コネクタがありません。まず非公開コネクタを作成してください。"
+      },
+      "noneSelected": {
+        "text": "コネクタが選択されていません。上でコネクタを検索して選択してください。"
+      },
+      "removeConnector": {
+        "tooltip": "コネクタを削除"
+      },
+      "search": {
+        "placeholder": "コネクタを検索..."
+      }
+    },
+    "datePicker": {
+      "selectDate": {
+        "label": "日付を選択"
+      },
+      "todayButton": {
+        "label": "今日"
+      }
+    },
+    "dateRange": {
+      "anyTime": {
+        "text": "期間指定なし..."
+      },
+      "chooseCustom": {
+        "ariaLabel": "カスタム範囲を選択"
+      },
+      "clearButton": {
+        "ariaLabel": "クリア"
+      },
+      "custom": {
+        "label": "カスタム"
+      },
+      "customRange": {
+        "ariaLabel": "カスタム範囲: {from}〜{to}"
+      },
+      "date": {
+        "label": "日付"
+      },
+      "group": {
+        "ariaLabel": "日付範囲"
+      },
+      "preset": {
+        "oneDay": "1日",
+        "oneMonth": "1ヶ月",
+        "sevenDays": "7日",
+        "threeMonths": "3ヶ月"
+      }
+    },
+    "deleteButton": {
+      "button": {
+        "tooltip": "削除"
+      }
+    },
+    "documentDisplay": {
+      "contextDocs": {
+        "text": "{count, plural, one {#件のコンテキストドキュメント} other {#件のコンテキストドキュメント}}"
+      },
+      "openDocument": {
+        "ariaLabel": "ドキュメントを開く: {title}"
+      },
+      "question": {
+        "title": "質問"
+      },
+      "subqueries": {
+        "text": "{count, plural, one {#件のサブクエリ} other {#件のサブクエリ}}"
+      },
+      "updated": {
+        "text": "更新日: {date}"
+      }
+    },
+    "dropdown": {
+      "default": {
+        "label": "デフォルト"
+      },
+      "selectOption": {
+        "placeholder": "オプションを選択..."
+      }
+    },
+    "editable": {
+      "edit": {
+        "ariaLabel": "編集"
+      },
+      "rename": {
+        "ariaLabel": "名前を変更"
+      },
+      "save": {
+        "ariaLabel": "保存"
+      }
+    },
+    "errorPages": {
+      "accessRestricted": {
+        "billingAdminHint": {
+          "text": "管理者の場合は、<billingLink>管理者請求</billingLink>ページでライセンスを{hadLicense, select, true {更新} other {有効化}}するか、Stripe経由で登録するか、請求に関するサポートは<supportLink>support@onyx.app</supportLink>までお問い合わせください。"
+        },
+        "heading": {
+          "title": "アクセスが制限されています"
+        },
+        "licenseLapse": {
+          "description": "ライセンスの失効により、Onyxへのアクセスが一時的に停止されています。"
+        },
+        "licenseRequired": {
+          "description": "Onyxの使用にはライセンスが必要です。データは保護されており、ライセンスが有効化されると利用できるようになります。"
+        },
+        "logoutButton": {
+          "label": "ログアウト"
+        },
+        "manageSubscription": {
+          "description": "管理者の場合は、下のボタンをクリックしてサブスクリプションを管理できます。その他のユーザーは、管理者にお問い合わせください。"
+        },
+        "obtainLicense": {
+          "description": "はじめるには、システム管理者に連絡してライセンスを取得してください。"
+        },
+        "renewLicense": {
+          "description": "アクセスを回復してOnyxを引き続き使用するには、システム管理者に連絡してライセンスを更新してください。"
+        },
+        "resubscribeButton": {
+          "label": "再購読",
+          "loading": "読み込み中..."
+        },
+        "resubscribeError": {
+          "text": "再購読ページを開く際にエラーが発生しました。後でもう一度お試しください。"
+        },
+        "seatLimit": {
+          "description": "組織がライセンスされたシート数を超過しています。ユーザー数を減らすか、ライセンスをアップグレードするまでアクセスは制限されます。"
+        },
+        "seatLimitAdminHint": {
+          "text": "管理者の場合は、<userLink>ユーザー管理</userLink>ページでユーザーを管理するか、<billingLink>管理者請求</billingLink>ページでライセンスをアップグレードできます。"
+        },
+        "seatLimitWithCounts": {
+          "description": "組織がライセンスされたシート数を超過しています（{used}ユーザー / {seats}シート）。ユーザー数を減らすか、ライセンスをアップグレードするまでアクセスは制限されます。"
+        },
+        "subscriptionLapse": {
+          "description": "サブスクリプションの失効により、Onyxへのアクセスが一時的に停止されています。"
+        },
+        "updatePayment": {
+          "description": "アクセスを回復してOnyxの強力な機能を引き続きご利用いただくには、お支払い情報を更新してください。"
+        }
+      },
+      "configError": {
+        "adminHint": {
+          "text": "管理者の方は、正しい設定手順について<docsLink>ドキュメント</docsLink>をご確認ください。ユーザーの方は、管理者にお問い合わせください。"
+        },
+        "heading": {
+          "description": "Onyxの設定の読み込みに問題が発生したようです。設定の問題またはセットアップが未完了であることが原因の可能性があります。",
+          "title": "問題が発生しました"
+        }
+      },
+      "maintenance": {
+        "apology": {
+          "description": "ご不便をおかけして申し訳ありません。しばらくお待ちください。"
+        },
+        "checkBack": {
+          "description": "Onyxは現在メンテナンス中です。数分後にもう一度お試しください。"
+        },
+        "heading": {
+          "title": "メンテナンス中"
+        }
+      },
+      "needHelp": {
+        "text": "サポートが必要ですか？<discordLink>Discordコミュニティ</discordLink>にご参加ください。"
+      }
+    },
+    "errors": {
+      "unknown": {
+        "message": "不明なエラー"
+      }
+    },
+    "expandableContent": {
+      "downloadButton": {
+        "tooltip": "ファイルをダウンロード"
+      },
+      "file": {
+        "untitledFallback": "無題"
+      },
+      "fullScreenButton": {
+        "tooltip": "全画面表示"
+      },
+      "hideButton": {
+        "tooltip": "非表示"
+      },
+      "minimizeButton": {
+        "tooltip": "最小化"
+      }
+    },
+    "expandableText": {
+      "copyButton": {
+        "tooltip": "コピー"
+      },
+      "downloadButton": {
+        "tooltip": "ダウンロード"
+      },
+      "lineCount": {
+        "label": "{count, plural, one {#行} other {#行}}"
+      },
+      "size": {
+        "bytes": "{count}バイト",
+        "kilobytes": "{size} KB"
+      },
+      "viewFullButton": {
+        "tooltip": "全文を表示"
+      }
+    },
+    "federatedConnectorSelector": {
+      "allSelected": {
+        "placeholder": "すべてのフェデレーテッドコネクタが選択されています"
+      },
+      "entitiesConfigured": {
+        "tooltip": "エンティティが設定済み"
+      },
+      "noMatches": {
+        "text": "一致するフェデレーテッドコネクタが見つかりません"
+      },
+      "noMoreConnectors": {
+        "text": "利用可能なフェデレーテッドコネクタはこれ以上ありません"
+      },
+      "noneSelected": {
+        "text": "フェデレーテッドコネクタが選択されていません。上でコネクタを検索して選択してください。"
+      },
+      "realtimeSearchHint": {
+        "description": "選択したフェデレーテッドコネクタのドキュメントは、クエリ実行時にリアルタイムで検索されます。"
+      },
+      "removeConnector": {
+        "tooltip": "コネクタを削除"
+      },
+      "search": {
+        "placeholder": "フェデレーテッドコネクタを検索..."
+      }
+    },
+    "field": {
+      "arrayField": {
+        "addButton": "新規追加"
+      },
+      "booleanField": {
+        "optionalLabel": "{label}（任意）"
+      },
+      "fileValidation": {
+        "noTypeDefinition": "フィールドのファイルタイプ定義が見つかりません: {name}",
+        "selectionError": "ファイル選択エラー",
+        "unknownError": "不明なエラー",
+        "validating": "ファイルを検証中...",
+        "validationError": "検証エラー"
+      },
+      "markdown": {
+        "editorLabel": "Markdown",
+        "placeholder": "ここにMarkdownを入力してください...",
+        "previewTab": "プレビュー",
+        "writeTab": "書く"
+      },
+      "optionalIndicator": {
+        "text": "（任意）"
+      },
+      "passwordToggle": {
+        "hideAriaLabel": "パスワードを非表示",
+        "showAriaLabel": "パスワードを表示"
+      },
+      "selector": {
+        "noneOption": "なし",
+        "placeholder": "選択..."
+      }
+    },
+    "filePicker": {
+      "allRecentFilesButton": {
+        "title": "最近のファイルをすべて表示"
+      },
+      "recentFiles": {
+        "title": "最近のファイル"
+      },
+      "recentFilesModal": {
+        "description": "ファイルをアップロードするか、最近のファイルから選択してください。"
+      },
+      "toasts": {
+        "associatedAssistants": "ファイルを削除できません。次のアシスタントに関連付けられています: {assistants}",
+        "associatedBoth": "ファイルを削除できません。次のプロジェクト: {projects} とアシスタント: {assistants} に関連付けられています",
+        "associatedProjects": "ファイルを削除できません。次のプロジェクトに関連付けられています: {projects}",
+        "deleteFailed": "ファイルの削除に失敗しました。もう一度お試しください。",
+        "deleteSuccess": "ファイルを削除しました"
+      },
+      "uploadFiles": {
+        "description": "デバイスからファイルをアップロード",
+        "title": "ファイルをアップロード"
+      },
+      "viewFileButton": {
+        "tooltip": "ファイルを表示"
+      }
+    },
+    "fileTile": {
+      "file": {
+        "fallback": "ファイル"
+      },
+      "open": {
+        "ariaLabel": "{title}を開く"
+      },
+      "removeButton": {
+        "label": "削除"
+      }
+    },
+    "filters": {
+      "clearButton": {
+        "ariaLabel": "クリア"
+      }
+    },
+    "formField": {
+      "optional": {
+        "label": "（任意）"
+      },
+      "required": {
+        "label": "（必須）"
+      }
+    },
+    "genericMultiSelect": {
+      "loadFailed": {
+        "text": "{label}の読み込みに失敗しました。もう一度お試しください。"
+      },
+      "search": {
+        "placeholder": "検索..."
+      }
+    },
+    "groupsMultiSelect": {
+      "noGroups": {
+        "emptyMessage": "利用可能なユーザーグループがありません。まずユーザーグループを作成してください。"
+      },
+      "userGroups": {
+        "label": "ユーザーグループ",
+        "subtext": "このリソースにアクセスできるユーザーグループを選択してください"
+      }
+    },
+    "icons": {
+      "logo": {
+        "alt": "ロゴ"
+      }
+    },
+    "initializingLoader": {
+      "initializing": {
+        "text": "{appName}を初期化中"
+      }
+    },
+    "inputElement": {
+      "removeButton": {
+        "tooltip": "削除"
+      }
+    },
+    "inputFile": {
+      "attachButton": {
+        "ariaLabel": "ファイルを添付"
+      },
+      "clearButton": {
+        "ariaLabel": "ファイルをクリア"
+      }
+    },
+    "inputImage": {
+      "dropRejected": {
+        "fallback": "ファイルが拒否されました"
+      },
+      "editButton": {
+        "ariaLabel": "画像を編集"
+      },
+      "editOverlay": {
+        "label": "編集"
+      },
+      "image": {
+        "altFallback": "画像"
+      },
+      "removeButton": {
+        "ariaLabel": "画像を削除"
+      },
+      "uploadButton": {
+        "ariaLabel": "画像をアップロード"
+      }
+    },
+    "inputSelect": {
+      "placeholder": {
+        "fallback": "オプションを選択"
+      }
+    },
+    "isPublicSelector": {
+      "assignGroups": {
+        "label": "この{objectName}へのグループアクセスを割り当てる",
+        "scopedSubtext": "この{objectName}へのアクセスを付与するには、管理しているグループを1つ以上選択してください",
+        "visibleSubtext": "この{objectName}は、以下で選択したグループに表示・アクセス可能になります"
+      },
+      "loading": {
+        "text": "読み込み中..."
+      },
+      "makePublic": {
+        "label": "この{objectName}を公開しますか？",
+        "subtext": "設定すると、この{objectName}は<b>すべての{publicToWhom}</b>が利用できるようになります。設定しない場合、<b>管理者</b>と、（ユーザーグループなどを通じて）この{objectName}へのアクセスを明示的に付与された<b>{publicToWhom}</b>のみがアクセスできます。"
+      },
+      "publicDisabled": {
+        "message": "この{objectName}は公開されており、すべてのユーザーが利用できます。"
+      },
+      "usersFallback": {
+        "text": "ユーザー"
+      }
+    },
+    "keyValue": {
+      "addButton": {
+        "ariaLabel": "{keyTitle}と{valueTitle}のペアを追加",
+        "label": "行を追加"
+      },
+      "empty": {
+        "title": "まだ項目が追加されていません。"
+      },
+      "error": {
+        "duplicateKey": "キーが重複しています",
+        "duplicateSummary": "{count, plural, one {#件の重複キーが見つかりました} other {#件の重複キーが見つかりました}}",
+        "emptyKey": "キーを空にすることはできません",
+        "emptySummary": "{count, plural, one {#件の空のキーが見つかりました} other {#件の空のキーが見つかりました}}",
+        "validationSummary": "{count, plural, one {#件の検証エラーが見つかりました} other {#件の検証エラーが見つかりました}}"
+      },
+      "group": {
+        "ariaLabel": "{keyTitle}と{valueTitle}のペア"
+      },
+      "input": {
+        "ariaLabel": "{label} {index}"
+      },
+      "keyColumn": {
+        "title": "キー"
+      },
+      "pair": {
+        "fallbackLabel": "キーと値"
+      },
+      "removeButton": {
+        "ariaLabel": "{label}のペア{index}を削除"
+      },
+      "valueColumn": {
+        "title": "値"
+      }
+    },
+    "logo": {
+      "image": {
+        "alt": "ロゴ"
+      },
+      "poweredBy": {
+        "label": "Powered by Onyx"
+      }
+    },
+    "nonSelectableConnectors": {
+      "unavailable": {
+        "label": "利用できないコネクタ:"
+      }
+    },
+    "oauthCallback": {
+      "authorizationFailed": {
+        "description": "認可がキャンセルされたか失敗しました。もう一度お試しください。",
+        "title": "認可に失敗しました"
+      },
+      "backButton": {
+        "label": "チャットに戻る"
+      },
+      "completeFailed": {
+        "message": "認可を完了できませんでした"
+      },
+      "genericError": {
+        "description": "OAuth処理中にエラーが発生しました。もう一度お試しください。",
+        "title": "問題が発生しました"
+      },
+      "invalidRequest": {
+        "description": "認可リクエストが不完全でした。もう一度お試しください。",
+        "title": "無効なリクエスト"
+      },
+      "loadingHint": {
+        "text": "少々お待ちください..."
+      },
+      "processing": {
+        "description": "セットアップが完了するまでお待ちください。",
+        "title": "処理中..."
+      },
+      "redirecting": {
+        "text": "{count, plural, one {#秒} other {#秒}}後にリダイレクトします..."
+      },
+      "serviceFallback": {
+        "text": "サービス"
+      },
+      "success": {
+        "detailsTemplate": "{serviceName}の認可が正常に完了しました。",
+        "title": "成功しました！"
+      }
+    },
+    "spreadsheet": {
+      "error": {
+        "description": "スプレッドシートが破損しているか、正しく読み込めませんでした。",
+        "title": "スプレッドシートの読み込みエラー"
+      },
+      "preview": {
+        "truncated": "プレビューは省略されています。すべての行を見るにはファイルをダウンロードしてください。",
+        "unavailable": "このスプレッドシートをプレビューできません。"
+      },
+      "sheet": {
+        "defaultName": "シート1",
+        "empty": "このシートは空です。",
+        "tooLarge": "このシートは大きすぎてプレビューできません。ファイルをダウンロードして表示してください。"
+      }
+    }
+  },
+  "craft": {
+    "agentSwitcher": {
+      "mainAgent": {
+        "label": "メインエージェント"
+      },
+      "subagentFallback": {
+        "label": "サブエージェント"
+      },
+      "switch": {
+        "ariaLabel": "エージェントを切り替える"
+      }
+    },
+    "approvals": {
+      "approveOnce": {
+        "ariaLabel": "このアクションを1回だけ承認",
+        "button": "1回だけ承認"
+      },
+      "approveSession": {
+        "button": "セッション全体で承認",
+        "tooltip": "このセッションの一致するアクションを承認"
+      },
+      "details": {
+        "hideAriaLabel": "詳細を隠す",
+        "showAriaLabel": "詳細を表示"
+      },
+      "header": {
+        "required": "承認が必要です: {headline}"
+      },
+      "headline": {
+        "multiAction": "{app} での {count, plural, one {# 件のアクション} other {# 件のアクション}}",
+        "singleAction": "{app} での {action}"
+      },
+      "payload": {
+        "empty": {
+          "label": "ペイロードはありません。"
+        },
+        "showLess": {
+          "button": "表示を減らす"
+        },
+        "showMore": {
+          "button": "もっと見る"
+        }
+      },
+      "reject": {
+        "ariaLabel": "このアクションを却下",
+        "button": "却下"
+      },
+      "status": {
+        "approved": "承認済み",
+        "rejected": "却下済み"
+      },
+      "submit": {
+        "errorFallback": "決定を送信できませんでした"
+      }
+    },
+    "apps": {
+      "addCatalog": {
+        "addButton": "追加",
+        "createButton": "作成",
+        "customApp": {
+          "description": "独自のインテグレーション向けの認証情報とネットワークアクセス。",
+          "title": "カスタムアプリ"
+        },
+        "mcpHint": {
+          "label": "MCP サーバーが必要な場合は、まず「アクション」で接続してから、ここで Craft 向けに有効化してください。",
+          "openActionsButton": "アクションを開く"
+        },
+        "modal": {
+          "description": "組織全体で使えるインテグレーションを追加します。組み込みプロバイダーには Craft エージェントに使い方を教えるアクションが付属しています。設定済みのプロバイダーは表示されません。",
+          "title": "アプリを追加"
+        }
+      },
+      "associatedSkills": {
+        "associateAriaLabel": "{name} を関連付け",
+        "associateButton": "既存のスキルを関連付け",
+        "create": {
+          "github": {
+            "description": "スキルが GitHub にある場合は、まずスキルページでインポートしてから、このアプリに関連付けてください。",
+            "label": "GitHub からインポート"
+          },
+          "scratch": {
+            "description": "手順を書き、補助ファイルを追加します。",
+            "label": "最初から作成"
+          },
+          "upload": {
+            "description": "SKILL.md ファイル、ZIP ファイル、またはスキルフォルダをインポートします。",
+            "label": "スキルをアップロード"
+          }
+        },
+        "createSkillButton": "スキルを作成",
+        "description": "スキルは、このアプリの使い方を Craft に指示します。スキルは組織全体で共有され、アプリが正しく動作するにはユーザーがすべて有効にする必要がある場合があります。",
+        "editButton": "編集",
+        "empty": {
+          "label": "編集可能なスキルが見つかりません。"
+        },
+        "invalidTag": "無効",
+        "loading": {
+          "label": "スキルを読み込み中…"
+        },
+        "noneAssociated": {
+          "label": "まだスキルが関連付けられていません。スキルがなくてもこのアプリは保存して使用できます。"
+        },
+        "promote": {
+          "cancelButton": "キャンセル",
+          "confirmButton": "組織全体で利用可能にする",
+          "description": "アプリに関連付けられたスキルは全員が利用できる必要があります。この変更はアプリの保存時に適用されます。",
+          "title": "「{name}」を組織全体で利用可能にしますか？"
+        },
+        "search": {
+          "placeholder": "編集可能なスキルを検索..."
+        },
+        "title": "関連付けられたスキル",
+        "unavailable": {
+          "duplicateName": "「{name}」という名前のスキルはすでに関連付けられています。",
+          "invalid": "無効なスキルです。関連付ける前に修正してください。",
+          "otherApp": "すでにアプリ「{name}」に関連付けられています。"
+        },
+        "unlink": {
+          "button": "切り離す",
+          "cancelButton": "キャンセル",
+          "confirm": "「{name}」をこのアプリから切り離しますか？"
+        },
+        "unlinkAriaLabel": "{name} を切り離す",
+        "viewButton": "表示"
+      },
+      "configureProvider": {
+        "addButton": "追加",
+        "addTitle": "{name} を追加",
+        "editTitle": "{name} を編集",
+        "emptyPolicies": "このプロバイダーには設定できるアクションがありません。",
+        "fields": {
+          "name": {
+            "description": "この接続のラベルです。同じプロバイダーを複数追加する場合は、区別できる名前を付けてください（例:「{name} — エンジニアリング」）。",
+            "label": "名前"
+          }
+        },
+        "managedDescription": "Onyx が提供。エージェントに許可する操作を設定してください。",
+        "managedNote": "このアプリは Onyx が提供し、認証情報は自動的に管理されます。以下でエージェントに許可する操作を選択してください。ユーザーはアプリページから接続します。",
+        "saveButton": "保存"
+      },
+      "customApp": {
+        "cancelButton": "キャンセル",
+        "createButton": "作成",
+        "createDescription": "エグレスプロキシがこのアプリに到達し認証する方法を設定します。スキルは必須ではありません。",
+        "createTitle": "カスタムアプリを作成",
+        "creatingButton": "作成中…",
+        "disabled": {
+          "nameMissing": "このカスタムアプリを作成する前に名前を入力してください。",
+          "patternMissing": "アップストリーム URL パターンを 1 つ以上追加してください。パターンを入力して Enter を押します。",
+          "pristine": "保存する前に変更を加えてください。",
+          "saving": "保存処理がすでに進行中です。"
+        },
+        "editDescription": "ゲートウェイ設定を更新し、関連スキルを管理します。",
+        "editTitle": "{name} を編集",
+        "errors": {
+          "saveFailedTitle": "保存できませんでした"
+        },
+        "fields": {
+          "headers": {
+            "addButton": "ヘッダーを追加",
+            "description": "任意。送信リクエストに挿入されるヘッダーです。ユーザー（または下記の組織）が提供する値には '{placeholder}' を使います（例: \"Bearer '{api_key}'\"）。空のままにすると、認証情報を挿入せずにアップストリームパターンを許可します。",
+            "keyTitle": "ヘッダー",
+            "label": "ヘッダー認証情報パターン",
+            "valueTitle": "値"
+          },
+          "name": {
+            "label": "名前",
+            "placeholder": "マイカスタムアプリ"
+          },
+          "orgCredentials": {
+            "addButton": "認証情報を追加",
+            "description": "任意。組織が全ユーザー向けに事前入力する値です。各ユーザーが自分の認証情報を入力するアプリでは空のままにしてください。",
+            "keyTitle": "認証情報キー",
+            "label": "組織の認証情報",
+            "valueTitle": "値"
+          },
+          "upstreamPatterns": {
+            "description": "プロキシが認証情報を挿入できる送信先 URL です。* は任意の文字に一致します（例: https://api.example.com/* はそのホストのすべてのパスに一致）。ホストはリテラルで指定し、最初のスラッシュより前にワイルドカードは使えません。パターンを入力して Enter を押してください。",
+            "label": "アップストリーム URL パターン"
+          }
+        },
+        "saveButton": "保存",
+        "savingButton": "保存中…"
+      },
+      "errors": {
+        "duplicateSkillName": "アプリ「{appName}」には「{skillName}」という名前の関連スキルがすでにあります。別の名前のスキルをアップロードしてください。"
+      },
+      "mcpPolicy": {
+        "description": "この MCP サーバーのツールで Craft エージェントに許可する操作を設定します。",
+        "emptyPolicies": "このサーバーには有効なツールがありません。まず MCP アクションページでツールを有効にしてください。",
+        "saveButton": "保存",
+        "title": "{name} を編集"
+      },
+      "oauthCallback": {
+        "backButton": "マイアプリに戻る",
+        "description": "OAuth ハンドシェイクを完了しています…",
+        "errors": {
+          "cancelled": "OAuth がキャンセルまたは拒否されました: {reason}",
+          "failed": "接続に失敗しました。",
+          "missingParams": "コールバック URL に code または state がありません。"
+        },
+        "exchanging": {
+          "label": "認可コードを交換しています…"
+        },
+        "success": {
+          "label": "接続しました。アプリ一覧に戻ります…"
+        },
+        "title": "アプリを接続しています"
+      },
+      "page": {
+        "connectButton": "接続",
+        "connectingButton": "リダイレクト中…",
+        "disconnectButton": "接続を解除",
+        "empty": {
+          "description": "組織向けに設定されたアプリや MCP サーバーはまだありません。",
+          "title": "まだ接続できるものがありません"
+        },
+        "errors": {
+          "disconnectFailed": "接続を解除できませんでした",
+          "startAuthFailed": "認可を開始できませんでした"
+        },
+        "header": {
+          "description": "Onyx Craft が作業中にコンテキストとして使えるツールを接続します。",
+          "manageButton": "アプリを管理",
+          "searchPlaceholder": "アプリを検索...",
+          "title": "アプリ"
+        },
+        "kinds": {
+          "app": {
+            "blurb": "Onyx が直接サポートするインテグレーションです。それぞれに Craft へ使い方を教えるスキルが付属しています。まずはここから始めましょう。",
+            "empty": "組織向けに設定されたアプリはまだありません。",
+            "emptyTitle": "アプリはまだありません",
+            "tabLabel": "アプリ · {count}"
+          },
+          "mcp": {
+            "blurb": "管理者が Craft 向けに公開したサーバーです。必要なアプリが「アプリ」に見つからない場合や、サーバー独自の MCP ツールを使いたい場合に利用してください。",
+            "empty": "Craft 向けに公開された MCP サーバーはありません。",
+            "emptyTitle": "MCP サーバーはまだありません",
+            "tabLabel": "MCP サーバー · {count}"
+          }
+        },
+        "loading": {
+          "label": "読み込み中…"
+        },
+        "reviewSkillsButton": "スキルを確認",
+        "search": {
+          "noMatchesDescription": "検索に一致するものはありません。",
+          "noMatchesTitle": "一致なし"
+        },
+        "status": {
+          "connected": "接続済み",
+          "connectedNeedsSkills": "接続済み · 一部の関連スキルが無効です",
+          "notAvailable": "お使いのアカウントでは利用できません。管理者にお問い合わせください",
+          "skillWarningAriaLabel": "スキルの設定が必要です",
+          "skillWarningTooltip": "一部の関連スキルが無効です。このアプリは正しく動作しない可能性があります。"
+        }
+      },
+      "policyEditor": {
+        "advanced": {
+          "description": "アクションごとに個別のポリシーを設定します。",
+          "title": "詳細設定"
+        },
+        "cancelButton": "キャンセル",
+        "loading": {
+          "label": "読み込み中…"
+        },
+        "permissions": {
+          "askOption": "確認する",
+          "autoApproveOption": "自動承認",
+          "customOption": "カスタム",
+          "description": "エージェントに許可する操作を選択します。「確認する」は各アクションの実行前にチャットで確認し、「自動承認」は確認なしで実行します。アクションごとにポリシーを設定するには「詳細設定」を使用してください。",
+          "title": "権限"
+        },
+        "savingButton": "保存中…"
+      },
+      "skillsStep": {
+        "description": "任意。既存のスキルを関連付けるか、このアプリ用に新しく作成します。",
+        "errors": {
+          "saveFailedTitle": "保存できませんでした"
+        },
+        "saveButton": "スキルを保存",
+        "savingButton": "保存中…",
+        "skipButton": "今はスキップ",
+        "title": "{name} にスキルを追加"
+      },
+      "userCredentials": {
+        "cancelButton": "キャンセル",
+        "connectButton": "接続",
+        "connectingButton": "接続中…",
+        "description": "このアプリをアカウントで認可するには、認証情報を入力してください。",
+        "errors": {
+          "connectFailedTitle": "接続できませんでした"
+        },
+        "title": "{name} を接続"
+      }
+    },
+    "artifactsTab": {
+      "download": {
+        "button": "ダウンロード"
+      },
+      "empty": {
+        "description": "出力ファイルとウェブアプリがここに表示されます",
+        "title": "まだアーティファクトがありません"
+      },
+      "nextjsApp": {
+        "label": "Next.js アプリケーション"
+      },
+      "openItem": {
+        "ariaLabel": "{name} を開く"
+      },
+      "toggleItem": {
+        "ariaLabel": "{name} を開閉"
+      }
+    },
+    "chatPanel": {
+      "input": {
+        "continuePlaceholder": "会話を続ける...",
+        "scheduledRunPlaceholder": "スケジュール実行中...",
+        "subagentPlaceholder": "メッセージを送るにはメインエージェントに切り替えてください"
+      },
+      "openSidebar": {
+        "ariaLabel": "サイドバーを開く"
+      },
+      "outputPanel": {
+        "closeTooltip": "出力パネルを閉じる",
+        "openTooltip": "出力パネルを開く"
+      },
+      "responseStopped": {
+        "label": "応答を停止しました"
+      },
+      "scrollToBottom": {
+        "label": "一番下へ移動"
+      },
+      "toast": {
+        "operationWait": "現在の操作が完了するまでお待ちください。",
+        "sandboxWait": "サンドボックスの初期化をお待ちください",
+        "scheduledRunWait": "スケジュール実行が完了するまでお待ちください。"
+      }
+    },
+    "compaction": {
+      "marker": {
+        "label": "スペース確保のためコンテキストを圧縮しました"
+      }
+    },
+    "connectDataBanner": {
+      "cta": {
+        "label": "データを接続"
+      }
+    },
+    "craftingLoader": {
+      "messages": {
+        "craftingWorkspace": "ワークスペースをクラフトしています...",
+        "enchanting": "魔法でエンチャントしています...",
+        "gamemode": "/gamemode 1",
+        "gatheringResources": "資源を集めています...",
+        "miningDependencies": "依存関係を採掘しています...",
+        "placingBlocks": "ブロックを設置しています...",
+        "punchingWood": "木を殴っています...",
+        "smeltingCode": "コードを精錬しています...",
+        "worldGenerated": "ワールド生成が完了しました..."
+      },
+      "tagline": {
+        "label": "次の素晴らしいアイデアをクラフト中..."
+      }
+    },
+    "debugLogs": {
+      "clear": {
+        "tooltip": "クリア"
+      },
+      "copy": {
+        "doneTooltip": "コピーしました",
+        "tooltip": "表示中の行をコピー"
+      },
+      "empty": {
+        "noLines": "まだ行がありません。",
+        "noMatch": "\"{filter}\" に一致する行はありません",
+        "waiting": "最初のログ行を待っています…"
+      },
+      "error": {
+        "endpointDisabled": "デバッグエンドポイントが無効です (ENABLE_OPENCODE_DEBUGGING=false)",
+        "http": "HTTP {status}",
+        "noSandbox": "ログを取得できる実行中のサンドボックスがありません"
+      },
+      "filter": {
+        "placeholder": "フィルター…"
+      },
+      "lines": {
+        "count": "{count, plural, one {# 行} other {# 行}}",
+        "filteredCount": "{visible, number} / {total, number} 行"
+      },
+      "modal": {
+        "description": "サンドボックスコンテナのライブテール — 開発/デバッグ専用。",
+        "title": "Opencode Pod ログ"
+      },
+      "newSincePaused": {
+        "button": "+{count, number} 件の新着 · 移動"
+      },
+      "open": {
+        "button": "Pod ログ"
+      },
+      "status": {
+        "closed": "終了",
+        "connecting": "接続中",
+        "error": "エラー",
+        "paused": "一時停止中",
+        "streaming": "ストリーミング中"
+      }
+    },
+    "entryMenu": {
+      "addFiles": {
+        "label": "ファイルや写真を追加"
+      },
+      "apps": {
+        "label": "アプリ"
+      },
+      "browseSkills": {
+        "label": "スキルを見る"
+      },
+      "connect": {
+        "hint": "接続"
+      },
+      "connectApp": {
+        "label": "アプリを接続"
+      },
+      "library": {
+        "label": "ライブラリ"
+      },
+      "manageLibrary": {
+        "label": "ライブラリを管理…"
+      },
+      "mcpServer": {
+        "description": "MCP サーバー"
+      },
+      "skills": {
+        "label": "スキル"
+      }
+    },
+    "filePreview": {
+      "cannotPreview": {
+        "title": "ファイルをプレビューできません"
+      },
+      "error": {
+        "inline": "エラー: {message}",
+        "title": "ファイルの読み込みエラー"
+      },
+      "loading": {
+        "label": "ファイルを読み込んでいます..."
+      },
+      "noContent": {
+        "label": "コンテンツがありません"
+      }
+    },
+    "filesTab": {
+      "empty": {
+        "description": "ビルド中に作成されたファイルがここに表示されます",
+        "title": "まだファイルがありません"
+      },
+      "emptyDirectory": {
+        "label": "このディレクトリにはファイルがありません"
+      },
+      "error": {
+        "title": "ファイルの読み込みエラー"
+      },
+      "loading": {
+        "label": "ファイルを読み込んでいます..."
+      },
+      "loadingChildren": {
+        "label": "読み込み中..."
+      },
+      "preparing": {
+        "description": "開発環境をセットアップしています",
+        "title": "サンドボックスを準備しています..."
+      }
+    },
+    "imagePreview": {
+      "error": {
+        "description": "画像を表示できませんでした",
+        "title": "画像を読み込めませんでした"
+      },
+      "loading": {
+        "label": "画像を読み込んでいます..."
+      },
+      "preview": {
+        "ariaLabel": "{name} のプレビュー"
+      }
+    },
+    "inputBar": {
+      "entryInfo": {
+        "connected": "接続済み",
+        "connectionRequired": "接続が必要です"
+      },
+      "plusMenu": {
+        "tooltip": "ファイルやスキルを追加"
+      }
+    },
+    "interruptHint": {
+      "stopping": {
+        "label": "停止しています…"
+      },
+      "toInterrupt": {
+        "label": "で中断"
+      }
+    },
+    "intro": {
+      "beta": {
+        "badge": "BETA"
+      },
+      "returnHome": {
+        "button": "ホームに戻る"
+      },
+      "startCrafting": {
+        "button": "クラフトを始める"
+      },
+      "wordmark": {
+        "label": "Craft"
+      }
+    },
+    "llmPopover": {
+      "noModels": {
+        "label": "モデルが見つかりません"
+      },
+      "recommended": {
+        "label": "おすすめ"
+      },
+      "recommendedOnly": {
+        "label": "おすすめのモデルのみ"
+      }
+    },
+    "onboarding": {
+      "livingMap": {
+        "examplePrompts": {
+          "flakyRetryTest": "「不安定なリトライテストを直して PR を作成して。」",
+          "launchDeck": "「Drive のブリーフから春のローンチ資料を作って。」",
+          "rfpSecurity": "「メールにある RFP に当社のセキュリティ情報を記入して。」",
+          "slackToLinear": "「Slack での議論を Linear のチケットにまとめて。」",
+          "vendorSpend": "「第2四半期のベンダー支出を Drive のドキュメントにまとめて。」"
+        },
+        "modal": {
+          "backButton": "戻る",
+          "ctaButton": "Craft に仕事を任せる",
+          "nextButton": "次へ",
+          "title": "Craft の紹介"
+        },
+        "outputs": {
+          "ariaLabel": "成果物: {name}",
+          "githubPr": {
+            "caption": "レビュー待ち",
+            "label": "GitHub PR"
+          },
+          "googleDoc": {
+            "caption": "あなたの Drive に保存",
+            "label": "Google ドキュメント"
+          },
+          "liveApp": {
+            "caption": "ホスト済み、リンクで共有",
+            "label": "ライブアプリ"
+          }
+        },
+        "prompt": {
+          "label": "あなたのプロンプト"
+        },
+        "schedule": {
+          "ariaLabel": "スケジュール済みタスク: このプロンプトをタイマーで再実行します",
+          "caption": "不在の間も実行されます",
+          "label": "毎週月曜 8:00"
+        },
+        "sources": {
+          "connectedAriaLabel": "接続済みソース: {name}",
+          "yourFiles": {
+            "ariaLabel": "アップロードしたファイル",
+            "label": "あなたのファイル"
+          }
+        },
+        "stages": {
+          "constellation": {
+            "caption": "マップの任意の場所をクリックすると、もう一度見られます。",
+            "title": "これが Craft です。次はあなたの番です。"
+          },
+          "machine": {
+            "caption": "あなたが見えるものだけを読み取り、秘密には触れません。",
+            "title": "専用のマシンで動作します。"
+          },
+          "output": {
+            "caption": "オンデマンドでも、不在の間のスケジュール実行でも。",
+            "title": "完成した成果物が出てきます。"
+          },
+          "prompt": {
+            "caption": "結果を伝えるだけで、あとは Craft が引き受けます。",
+            "title": "Craft に実際の仕事を任せましょう。"
+          }
+        },
+        "team": {
+          "ariaLabel": "あなたのチーム: リンク 1 つで Craft の成果を共有",
+          "caption": "リンク 1 つで共有",
+          "label": "あなたのチーム"
+        },
+        "workspace": {
+          "approvalPill": "あなたの承認を待っています",
+          "label": "Craft のワークスペース",
+          "sandboxBadge": "隔離されたサンドボックス"
+        }
+      },
+      "llmLocked": {
+        "backToChatButton": "チャットに戻る",
+        "description": "Onyx Craft にはモデルプロバイダーが必要で、設定できるのは管理者のみです。管理者に Anthropic、OpenAI、または OpenRouter の接続を依頼してください。",
+        "title": "LLM プロバイダーが必要です"
+      },
+      "llmSetup": {
+        "description": "Craft エージェントがビルドするにはモデルプロバイダーが必要です。",
+        "title": "モデルプロバイダーを接続"
+      },
+      "welcomeMock": {
+        "input": {
+          "placeholder": "データを分析してダッシュボードを作成..."
+        },
+        "modelPill": {
+          "label": "Claude Opus 4.8"
+        },
+        "promptPills": {
+          "engineering": "エンジニアリング",
+          "marketing": "マーケティング",
+          "product": "プロダクト",
+          "sales": "営業"
+        }
+      }
+    },
+    "outputPanel": {
+      "artifactsEmpty": {
+        "tooltip": "何かを作り始めるとアーティファクトが表示されます！"
+      },
+      "devServerStarting": {
+        "tooltip": "開発サーバーを起動しています..."
+      },
+      "noWebapp": {
+        "label": "このセッションにはまだWebアプリがありません"
+      }
+    },
+    "pdfPreview": {
+      "error": {
+        "description": "PDF ファイルを読み込めませんでした。",
+        "title": "PDF をプレビューできません"
+      },
+      "frame": {
+        "title": "PDF プレビュー"
+      },
+      "loading": {
+        "label": "PDF を読み込んでいます..."
+      }
+    },
+    "pptxPreview": {
+      "converting": {
+        "label": "プレゼンテーションを変換しています..."
+      },
+      "empty": {
+        "label": "このプレゼンテーションにはスライドがありません"
+      },
+      "error": {
+        "title": "プレゼンテーションをプレビューできません"
+      },
+      "loadingSlide": {
+        "label": "スライドを読み込んでいます..."
+      },
+      "slide": {
+        "counter": "スライド {current} / {total}"
+      }
+    },
+    "previewTab": {
+      "empty": {
+        "description": "ウェブアプリが起動すると、ここにライブプレビューが表示されます。"
+      },
+      "frame": {
+        "title": "ウェブアプリのプレビュー"
+      },
+      "starting": {
+        "description": "依存関係をインストールして起動しています。",
+        "title": "開発サーバーを起動しています..."
+      }
+    },
+    "redirect": {
+      "redirecting": {
+        "label": "リダイレクト中..."
+      }
+    },
+    "sandboxAsleep": {
+      "dismiss": {
+        "button": "閉じる"
+      },
+      "modal": {
+        "description": "しばらく操作がなかったためスリープしました。作業内容は保存されています。再開するには起動してください。",
+        "title": "サンドボックスがスリープしました"
+      },
+      "wake": {
+        "button": "サンドボックスを起動"
+      }
+    },
+    "scheduledRun": {
+      "badge": {
+        "label": "スケジュール済み"
+      },
+      "startedAt": {
+        "label": "{time} に開始"
+      },
+      "status": {
+        "awaitingApproval": "このスケジュール実行は承認待ちです。再開して完了すると追加メッセージを送信できるようになります。",
+        "running": "このスケジュール実行はまだ進行中です。完了すると追加メッセージを送信できるようになります。",
+        "startedBy": "このセッションはスケジュールされたタスク {task} により {time} に開始されました。"
+      },
+      "viewTask": {
+        "ariaLabel": "スケジュールされたタスク {task} を表示。{status}",
+        "label": "タスクを表示"
+      }
+    },
+    "setupCard": {
+      "appFallback": {
+        "label": "外部アプリ {id}"
+      },
+      "connect": {
+        "title": "{app} を接続"
+      },
+      "connected": {
+        "title": "{app} を接続しました。"
+      },
+      "error": {
+        "generic": "問題が発生しました。もう一度お試しください。",
+        "notConfigurable": "このアプリはここからは設定できません。",
+        "popupBlocked": "設定ウィンドウを開けませんでした。ポップアップを許可してからもう一度お試しください。",
+        "startFailed": "設定を開始できませんでした"
+      },
+      "loading": {
+        "button": "読み込み中…"
+      },
+      "notNow": {
+        "button": "今はしない"
+      },
+      "reason": {
+        "fallback": "このタスクを続けるにはエージェントに {app} が必要です。"
+      },
+      "skipped": {
+        "title": "{app} の接続をスキップしました。"
+      },
+      "waiting": {
+        "button": "待機中…"
+      }
+    },
+    "share": {
+      "copyLink": {
+        "ariaLabel": "リンクをコピー"
+      },
+      "organization": {
+        "description": "あなたの Onyx にログインしている人は誰でもこのアプリを表示できます。",
+        "label": "組織"
+      },
+      "private": {
+        "description": "このアプリを表示できるのはあなただけです。",
+        "label": "非公開"
+      },
+      "share": {
+        "label": "共有"
+      },
+      "shared": {
+        "label": "共有中"
+      },
+      "trigger": {
+        "ariaLabel": "ウェブアプリを共有"
+      }
+    },
+    "sideBar": {
+      "apps": {
+        "label": "アプリ"
+      },
+      "backToChat": {
+        "label": "チャットに戻る"
+      },
+      "delete": {
+        "label": "削除"
+      },
+      "deleteModal": {
+        "body": "Craft セッションとそのすべてのデータが完全に削除されます。この操作は元に戻せません。",
+        "confirm": "削除",
+        "deleting": "削除しています...",
+        "title": "「{title}」を削除しますか？"
+      },
+      "newSession": {
+        "label": "クラフトを始める"
+      },
+      "rename": {
+        "label": "名前を変更"
+      },
+      "scheduledTasks": {
+        "label": "スケジュールされたタスク"
+      },
+      "sessions": {
+        "empty": "さあ、作り始めましょう！セッション履歴がここに表示されます。",
+        "title": "セッション"
+      },
+      "skills": {
+        "label": "スキル"
+      },
+      "toast": {
+        "deleteFailed": "セッションを削除できませんでした",
+        "deleted": "「{title}」を削除しました。"
+      }
+    },
+    "skillsStale": {
+      "notice": {
+        "description": "最新のスキルとアプリアクセスを適用するには、このセッションを再読み込みしてください。",
+        "title": "エージェントの機能が変更されました"
+      },
+      "reload": {
+        "button": "再読み込み",
+        "inProgress": "再読み込み中…"
+      },
+      "toast": {
+        "reloadFailed": "セッションを再読み込みできませんでした"
+      }
+    },
+    "subagentView": {
+      "notFound": {
+        "label": "サブエージェントが見つかりません。"
+      }
+    },
+    "suggestedPrompts": {
+      "close": {
+        "ariaLabel": "候補を閉じる"
+      }
+    },
+    "tasks": {
+      "detailPage": {
+        "confirmDelete": {
+          "deleteButton": "削除",
+          "deletingButton": "削除中...",
+          "description": "今後の実行を停止し、タスクを削除します。過去の実行履歴（および関連セッション）は監査のため保持されます。",
+          "title": "「{name}」を削除しますか？"
+        },
+        "deleteButton": "削除",
+        "editButton": "編集",
+        "fallbackTitle": "スケジュール済みタスク",
+        "loadFailed": "スケジュール済みタスクを読み込めませんでした。",
+        "missingTaskId": "タスク ID がありません。",
+        "pauseButton": "一時停止",
+        "resumeButton": "再開",
+        "runNowButton": "今すぐ実行",
+        "toasts": {
+          "deleteFailed": "タスクを削除できませんでした",
+          "deleted": "「{name}」を削除しました。",
+          "paused": "タスクを一時停止しました。",
+          "resumed": "タスクを再開しました。",
+          "runQueued": "「{name}」の実行をキューに追加しました。",
+          "runStartFailed": "実行を開始できませんでした",
+          "statusUpdateFailed": "ステータスを更新できませんでした"
+        }
+      },
+      "editPage": {
+        "fallbackTitle": "スケジュール済みタスクを編集",
+        "loadFailed": "スケジュール済みタスクを読み込めませんでした。",
+        "missingTaskId": "タスク ID がありません。",
+        "title": "「{name}」を編集"
+      },
+      "form": {
+        "cancelButton": "キャンセル",
+        "errors": {
+          "nameRequired": "名前は必須です。",
+          "promptRequired": "プロンプトは必須です。"
+        },
+        "fields": {
+          "name": {
+            "label": "名前",
+            "placeholder": "例: 週次の顧客エスカレーションまとめ"
+          },
+          "preApproval": {
+            "description": "このタスクが無人で実行される際、Craft は選択したアプリと MCP サーバーを一時停止せずに使用できます。それ以外の承認要求は実行を一時停止させ、失敗の原因になることがあります。",
+            "label": "事前承認済みのアプリと MCP サーバー"
+          },
+          "prompt": {
+            "description": "このメッセージはタスクが発火するたびに Craft に送信されます。",
+            "label": "プロンプト",
+            "placeholder": "各実行で Craft が行うべきことを記述..."
+          },
+          "schedule": {
+            "label": "スケジュール"
+          }
+        },
+        "saveAndRunNowButton": "保存して今すぐ実行",
+        "saveButton": "保存",
+        "saveChangesButton": "変更を保存",
+        "savingLabel": "保存中...",
+        "toasts": {
+          "created": "スケジュール済みタスクを作成しました。",
+          "createdAndQueued": "スケジュール済みタスクを作成し、キューに追加しました。",
+          "saveFailed": "スケジュール済みタスクを保存できませんでした",
+          "updated": "スケジュール済みタスクを更新しました。"
+        }
+      },
+      "listPage": {
+        "columns": {
+          "lastRun": "前回の実行",
+          "name": "名前",
+          "nextRun": "次回の実行",
+          "schedule": "スケジュール",
+          "status": "ステータス"
+        },
+        "confirmDelete": {
+          "deleteButton": "削除",
+          "deletingButton": "削除中...",
+          "description": "今後の実行を停止し、タスクを削除します。過去の実行履歴（および関連セッション）は監査のため保持されます。",
+          "title": "「{name}」を削除しますか？"
+        },
+        "empty": {
+          "description": "スケジュール済みタスクはまだ作成されていません。",
+          "title": "スケジュール済みタスクが見つかりません"
+        },
+        "errors": {
+          "loadFailed": "スケジュール済みタスクを読み込めませんでした。",
+          "tryAgainButton": "再試行"
+        },
+        "header": {
+          "description": "Craft のプロンプトをタイマーで実行します。発火するたびに新しいセッションが作成され、バックグラウンドで実行されます。",
+          "title": "スケジュール済みタスク"
+        },
+        "newTaskButton": "新しいスケジュール済みタスク",
+        "rowActions": {
+          "deleteTooltip": "削除"
+        },
+        "toasts": {
+          "deleteFailed": "タスクを削除できませんでした",
+          "deleted": "「{name}」を削除しました。"
+        }
+      },
+      "newPage": {
+        "description": "プロンプトとスケジュールを保存すると、Craft がタイマーで実行します。",
+        "title": "新しいスケジュール済みタスク"
+      },
+      "preApproval": {
+        "appFallbackName": "アプリ #{id}",
+        "appsGroupTitle": "アプリ",
+        "empty": {
+          "label": "Craft で利用できるアプリや MCP サーバーはまだありません。"
+        },
+        "errors": {
+          "loadFailed": "アプリと MCP サーバーを読み込めませんでした。更新して再試行してください。",
+          "partialLoadFailed": "一部の事前承認オプションを読み込めませんでした。更新して再試行してください。"
+        },
+        "loading": {
+          "label": "アプリと MCP サーバーを読み込み中…"
+        },
+        "mcpGroupTitle": "MCP サーバー",
+        "mcpServerFallbackName": "MCP サーバー #{id}",
+        "status": {
+          "connected": "接続済み",
+          "connectionRequired": "接続が必要です",
+          "unavailable": "利用できなくなりました"
+        },
+        "summary": {
+          "partialLoadFailed": "一部の事前承認の詳細を読み込めませんでした。更新して再試行してください。",
+          "title": "事前承認済みのアプリと MCP サーバー"
+        }
+      },
+      "runHistory": {
+        "columns": {
+          "duration": "所要時間",
+          "started": "開始",
+          "status": "ステータス",
+          "summary": "概要",
+          "trigger": "トリガー"
+        },
+        "empty": {
+          "label": "まだ実行はありません。タスクは発火のたびに実行を作成します。上の「今すぐ実行」も使えます。"
+        },
+        "errors": {
+          "loadFailed": "実行履歴を読み込めませんでした。",
+          "tryAgainButton": "再試行"
+        },
+        "loadMore": {
+          "button": "さらに読み込む",
+          "loadingButton": "読み込み中..."
+        },
+        "nonClickable": {
+          "noSession": "この実行はまだセッションを作成していません。",
+          "queued": "この実行はまだ開始されていないため、開くセッションがありません。",
+          "skipped": "前の実行がまだ進行中だったためこの実行はスキップされ、セッションは作成されませんでした。"
+        },
+        "status": {
+          "notOpenableAriaLabel": "開けません"
+        },
+        "trigger": {
+          "runNow": "今すぐ実行",
+          "schedule": "スケジュール"
+        }
+      },
+      "scheduleEditor": {
+        "dailyWeekly": {
+          "atLabel": "時刻:",
+          "daysLabel": "実行する曜日",
+          "runsEveryDay": "毎日実行されます",
+          "runsOn": "{days} に実行されます"
+        },
+        "interval": {
+          "everyLabel": "実行間隔:"
+        },
+        "intervalUnits": {
+          "days": "日",
+          "hours": "時間",
+          "minutes": "分"
+        },
+        "tabs": {
+          "dailyWeekly": "毎日 / 毎週",
+          "interval": "間隔"
+        },
+        "weekdays": {
+          "fri": "金",
+          "mon": "月",
+          "sat": "土",
+          "sun": "日",
+          "thu": "木",
+          "tue": "火",
+          "wed": "水"
+        }
+      }
+    },
+    "todoList": {
+      "empty": {
+        "label": "タスクはありません"
+      },
+      "header": {
+        "title": "タスク"
+      },
+      "progress": {
+        "label": "{completed}/{total} 完了"
+      }
+    },
+    "toolCards": {
+      "bash": {
+        "noOutput": {
+          "label": "出力はありません"
+        }
+      },
+      "diff": {
+        "unchangedLines": {
+          "label": "{count, plural, one {変更なしの行 #行} other {変更なしの行 #行}}"
+        },
+        "viewToggle": {
+          "sideBySideTooltip": "並列表示に切り替え",
+          "unifiedTooltip": "統合表示に切り替え"
+        }
+      },
+      "generic": {
+        "noOutput": {
+          "label": "まだ出力はありません..."
+        }
+      },
+      "group": {
+        "calls": {
+          "tag": "{count, plural, one {# 件の呼び出し} other {# 件の呼び出し}}"
+        },
+        "failed": {
+          "tag": "{count} 件失敗"
+        },
+        "working": {
+          "label": "作業中"
+        }
+      },
+      "read": {
+        "emptyFile": {
+          "label": "（空のファイル）"
+        },
+        "moreLines": {
+          "label": "{count, plural, one {残り #行} other {残り #行}}"
+        },
+        "showAll": {
+          "button": "すべて表示"
+        }
+      },
+      "search": {
+        "noMatches": {
+          "label": "一致なし"
+        }
+      }
+    },
+    "uploadFiles": {
+      "errors": {
+        "fileTooLarge": "ファイルが大きすぎます（{size}）。上限は {max} です。",
+        "network": "ネットワークエラー",
+        "notFound": "リソースが見つかりません",
+        "server": "サーバーエラー",
+        "sessionExpired": "セッションの有効期限が切れました",
+        "tooManyFiles": "ファイルが多すぎます。1 セッションあたり最大 {max} 件です。",
+        "totalSizeExceeded": "合計サイズが上限を超えています。1 セッションあたり最大 {max} です。",
+        "uploadFailed": "アップロードに失敗しました"
+      }
+    },
+    "urlBar": {
+      "back": {
+        "ariaLabel": "戻る"
+      },
+      "copyUrl": {
+        "ariaLabel": "URL をコピー: {url}"
+      },
+      "downloadFile": {
+        "tooltip": "ファイルをダウンロード"
+      },
+      "export": {
+        "button": ".docx にエクスポート",
+        "inProgress": "エクスポートしています..."
+      },
+      "forward": {
+        "ariaLabel": "進む"
+      },
+      "openInNewTab": {
+        "tooltip": "新しいタブで開く"
+      },
+      "refresh": {
+        "ariaLabel": "更新"
+      }
+    },
+    "userLibrary": {
+      "delete": {
+        "action": "削除",
+        "button": "削除",
+        "entityTypeFile": "ファイル",
+        "entityTypeFolder": "フォルダ",
+        "fileDetails": "このファイルはライブラリから削除されます。",
+        "folderDetails": "フォルダとその中身がすべて削除されます。"
+      },
+      "dropzone": {
+        "formats": "Excel、Word、PowerPoint、PDF、ZIP のいずれか",
+        "title": "ここにファイルをドラッグするか、クリックしてアップロード"
+      },
+      "errors": {
+        "createFolderFailed": "フォルダの作成に失敗しました",
+        "deleteFailed": "削除に失敗しました",
+        "loadFailed": "ファイルの読み込みに失敗しました",
+        "uploadFailed": "アップロードに失敗しました"
+      },
+      "loading": {
+        "label": "ファイルを読み込み中…"
+      },
+      "modal": {
+        "description": "エージェントがすべてのセッションで読み取れるファイルです。",
+        "doneButton": "完了",
+        "title": "ライブラリ"
+      },
+      "newFolder": {
+        "cancelButton": "キャンセル",
+        "createButton": "作成",
+        "label": "新しいフォルダ",
+        "nameLabel": "フォルダ名",
+        "namePlaceholder": "フォルダ名を入力"
+      },
+      "search": {
+        "noResults": "検索に一致するファイルがありません",
+        "placeholder": "ファイルを検索..."
+      },
+      "tree": {
+        "collapseTooltip": "折りたたむ",
+        "deleteTooltip": "削除",
+        "expandTooltip": "展開する",
+        "toggleAriaLabel": "{name} を開閉",
+        "uploadToFolderTooltip": "このフォルダにアップロード"
+      },
+      "upload": {
+        "button": "アップロード",
+        "dropOverlay": "ファイルをドロップしてアップロード",
+        "uploadingButton": "アップロード中…"
+      }
+    },
+    "welcome": {
+      "input": {
+        "placeholder": "データを分析してダッシュボードを作成..."
       }
     }
   },
@@ -8704,6 +12547,13 @@
           "networkError": "パスワードの変更中にエラーが発生しました",
           "updateFailed": "パスワードを変更できませんでした",
           "updated": "パスワードを更新しました"
+        },
+        "validation": {
+          "confirmRequired": "新しいパスワードを確認してください",
+          "currentRequired": "現在のパスワードは必須です",
+          "minLength": "パスワードは{min}文字以上である必要があります",
+          "mismatch": "パスワードが一致しません",
+          "newRequired": "新しいパスワードは必須です"
         }
       },
       "title": "アカウント"
@@ -8745,6 +12595,7 @@
         "empty": "作成されたアクセストークンはありません。",
         "expiresIn": "{count, plural, one {あと # 日で期限切れ} other {あと # 日で期限切れ}}",
         "loading": "トークンを読み込み中...",
+        "middleText": "{created} - {expiry} - {scope}",
         "neverExpires": "有効期限なし",
         "newTokenButton": "新しいアクセストークン",
         "noPermissionTooltip": "アクセストークンを作成する権限がありません",
@@ -8891,6 +12742,10 @@
       },
       "description": "Onyx で利用できるモデルに外部ツールを接続します。",
       "guideButton": "ガイド",
+      "loadError": {
+        "description": "ページを更新してからもう一度お試しください。",
+        "title": "LLM ゲートウェイを読み込めませんでした"
+      },
       "models": {
         "description": "{count, plural, one {お使いのアカウントで # 個のモデルを利用できます。プロバイダーを開いて ID をコピーしてください。} other {お使いのアカウントで # 個のモデルを利用できます。プロバイダーを開いて ID をコピーしてください。}}",
         "title": "モデル"
@@ -8914,15 +12769,66 @@
         "updateFailed": "言語設定を更新できませんでした"
       }
     },
+    "layout": {
+      "header": {
+        "title": "設定"
+      },
+      "sectionSelect": {
+        "placeholder": "セクションを選択"
+      },
+      "tabs": {
+        "accountsAccess": {
+          "label": "アカウントとアクセス"
+        },
+        "chatPreferences": {
+          "label": "チャット設定"
+        },
+        "connectors": {
+          "label": "コネクタ"
+        },
+        "general": {
+          "label": "一般"
+        },
+        "llmGateway": {
+          "label": "LLMゲートウェイ"
+        },
+        "usage": {
+          "label": "使用状況"
+        }
+      }
+    },
     "memory": {
+      "addLineButton": {
+        "label": "行を追加",
+        "maxReached": "メモリの上限（{count}件）に達しました"
+      },
       "empty": {
-        "description": "Onyx に覚えておいてほしい個人的なメモやメモリを追加します。"
+        "description": "Onyx に覚えておいてほしい個人的なメモやメモリを追加します。",
+        "getStarted": "まだメモリがありません。「行を追加」をクリックして始めてください。",
+        "noMatches": "検索に一致するメモリはありません。"
+      },
+      "item": {
+        "placeholder": "個人的なメモやメモリを入力または貼り付けてください"
+      },
+      "lineCount": {
+        "label": "{count, plural, one {行} other {行}}"
+      },
+      "modal": {
+        "description": "保存されたメモやメモリをチャットでOnyxに参照させます。",
+        "searchPlaceholder": "検索..."
       },
       "referenceStoredMemories": {
         "description": "チャットで保存済みのメモリを Onyx が参照できるようにします。",
         "title": "保存済みメモリを参照"
       },
+      "removeLineButton": {
+        "label": "行を削除"
+      },
       "title": "メモリ",
+      "toasts": {
+        "saveFailed": "設定の保存に失敗しました",
+        "saved": "設定を保存しました"
+      },
       "updateMemories": {
         "description": "Onyx が保存済みのメモリを生成・更新できるようにします。",
         "title": "メモリを更新"
@@ -8976,6 +12882,67 @@
         "title": "プロンプトショートカットを使用"
       }
     },
+    "usage": {
+      "budget": {
+        "limit": "上限 {amount}",
+        "none": "予算が設定されていません",
+        "remaining": "残り {amount}",
+        "resetsOn": "{date} にリセット",
+        "title": "予算"
+      },
+      "empty": {
+        "description": "チャットを始めると、モデルの使用状況とコストがここに表示されます。",
+        "title": "まだ使用記録がありません"
+      },
+      "header": {
+        "title": "使用状況"
+      },
+      "loadError": {
+        "description": "使用状況の取得中に問題が発生しました。しばらくしてからもう一度お試しください。",
+        "title": "使用状況を読み込めませんでした"
+      },
+      "modelPrices": {
+        "defaultTag": {
+          "label": "{model} · デフォルト"
+        },
+        "description": "利用可能な各モデルの100万トークンあたりの料金（入力 · 出力 · キャッシュ、米ドル）",
+        "otherProvider": {
+          "label": "その他"
+        },
+        "title": "モデル料金",
+        "unavailable": "料金情報がありません"
+      },
+      "modelUsage": {
+        "cacheReads": {
+          "label": "キャッシュ読み取り {count}"
+        },
+        "cacheWrites": {
+          "label": "キャッシュ書き込み {count}"
+        },
+        "tokensIn": {
+          "label": "入力 {count}"
+        },
+        "tokensOut": {
+          "label": "出力 {count}"
+        }
+      },
+      "showFewerModels": {
+        "ariaLabel": "表示するモデルを減らす"
+      },
+      "showLess": {
+        "label": "表示を減らす"
+      },
+      "showMore": {
+        "label": "さらに{count}件を表示"
+      },
+      "showMoreModels": {
+        "ariaLabel": "さらに{count}件のモデルを表示"
+      },
+      "usageThisPeriod": {
+        "description": "{amount} 消費",
+        "title": "この期間の使用状況"
+      }
+    },
     "voice": {
       "autoPlayback": {
         "description": "音声応答を自動で再生します。",
@@ -8994,6 +12961,23 @@
   },
   "sidebar": {
     "adminNav": {
+      "hiddenRoutes": {
+        "documentExplorer": {
+          "title": "ドキュメントエクスプローラー"
+        },
+        "documentFeedback": {
+          "title": "ドキュメントフィードバック"
+        },
+        "documentProcessing": {
+          "title": "ドキュメント処理"
+        },
+        "oauthTest": {
+          "title": "OAuth テスト"
+        },
+        "standardAnswers": {
+          "title": "標準回答"
+        }
+      },
       "items": {
         "addConnector": {
           "label": "コネクターを追加"
@@ -9019,8 +13003,8 @@
         "craftApps": {
           "label": "アプリ"
         },
-        "craftInstructions": {
-          "label": "指示"
+        "craftPreferences": {
+          "label": "設定"
         },
         "customAnalytics": {
           "label": "カスタム分析"
@@ -9301,6 +13285,158 @@
     }
   },
   "skills": {
+    "editor": {
+      "appConflict": {
+        "description": "アプリ「{appName}」には既に「{skillName}」という名前の関連スキルがあります。",
+        "title": "別のスキル名を選択してください"
+      },
+      "confirmUpload": {
+        "importBody": "このアップロードにはSKILL.mdが含まれています。続行すると、現在の名前、説明、指示、ファイルがアップロードされたバンドルに置き換えられます。",
+        "importSubmit": {
+          "label": "スキルをインポート"
+        },
+        "importTitle": "このスキルをインポートしますか？",
+        "replaceBody": "このアップロードは同じスキル名を使用する必要があります。続行すると、説明、指示、ファイルがアップロードされたバンドルに置き換えられます。",
+        "replaceSubmit": {
+          "label": "内容を置き換え"
+        },
+        "replaceTitle": "スキルの内容を置き換えますか？"
+      },
+      "delete": {
+        "button": {
+          "label": "スキルを削除"
+        },
+        "description": "このスキルを使用しているすべてのユーザーがアクセスできなくなります。削除は元に戻せません。",
+        "title": "このスキルを削除"
+      },
+      "deleteModal": {
+        "entityType": "スキル",
+        "label": "削除",
+        "pendingLabel": "削除中..."
+      },
+      "details": {
+        "description": "Craftがこのスキルをいつどのように使用するかを定義します。",
+        "descriptionField": {
+          "description": "このスキルをいつ使用すべきかを説明します。",
+          "placeholder": "このスキルは何に役立ちますか？",
+          "title": "説明"
+        },
+        "name": {
+          "createDescription": "小文字、数字、単一のハイフンを使用してください。",
+          "lockedDescription": "スキル名は作成後に変更できません。",
+          "placeholder": "スキルに名前を付ける",
+          "title": "名前"
+        },
+        "title": "詳細"
+      },
+      "files": {
+        "busyLabel": "アップロード中...",
+        "description": "このスキルで使用する参照、スクリプト、アセット、その他のファイルを追加します。ZIPファイルは自動的に展開されます。",
+        "input": {
+          "ariaLabel": "サポートファイルを追加"
+        },
+        "pendingUpload": {
+          "emptyMessage": "このアップロードのファイルは、スキルの作成後に表示されます。"
+        },
+        "title": "サポートファイル"
+      },
+      "filesTooltip": {
+        "noPermission": "このスキルのファイルを更新する権限がありません。",
+        "saveFirst": "スキルファイルを更新する前に詳細の変更を保存してください。",
+        "updating": "スキルファイルを更新中..."
+      },
+      "header": {
+        "appFallbackName": "外部アプリ",
+        "cancel": {
+          "label": "キャンセル"
+        },
+        "createDescription": "個人スキルを作成",
+        "createForAppDescription": "アプリ「{appName}」に組織スキルを追加",
+        "createTitle": "スキルを作成",
+        "editDescription": "スキルの詳細とファイルを更新",
+        "editTitle": "スキルを編集",
+        "save": {
+          "label": "保存",
+          "pendingLabel": "保存中..."
+        }
+      },
+      "import": {
+        "busyLabel": "インポート中...",
+        "button": {
+          "label": "スキルをインポート"
+        },
+        "description": "SKILL.md、ZIP、またはスキルフォルダをインポートすると、フォームが事前入力され、ファイルが含まれます。",
+        "input": {
+          "ariaLabel": "既存のスキルをインポート"
+        },
+        "prompt": "SKILL.mdまたはZIPを選択するか、スキルフォルダをここにドロップしてください。",
+        "title": "既存のスキルがありますか？"
+      },
+      "instructions": {
+        "description": "このスキルがCraftに追加する動作とワークフローを記述します。",
+        "emptyFallback": "まだ指示がありません。",
+        "placeholder": "スキルの指示を書いてください。",
+        "title": "指示"
+      },
+      "loadError": {
+        "description": "このスキルは存在しないか、組み込みであるか、またはお使いのアカウントでは編集できない可能性があります。",
+        "title": "スキルを利用できません"
+      },
+      "management": {
+        "description": "このスキルを使用できるユーザーを管理します。",
+        "externalApp": {
+          "manage": {
+            "label": "アプリ設定で管理"
+          },
+          "readyDescription": "このスキルはアプリ「{appName}」を使用します。",
+          "title": "外部アプリ"
+        },
+        "sharing": {
+          "edit": {
+            "label": "共有を編集"
+          },
+          "title": "共有"
+        },
+        "title": "管理"
+      },
+      "saveTooltip": {
+        "missingDescription": "保存する前に説明を追加してください。",
+        "missingInstructions": "保存する前に指示を追加してください。",
+        "missingName": "保存する前に名前を追加してください。",
+        "noChanges": "変更はありません。",
+        "noPermission": "このスキルの詳細を編集する権限がありません。",
+        "savingChanges": "変更を保存中...",
+        "savingSkill": "スキルを保存中..."
+      },
+      "sharing": {
+        "organization": {
+          "editorDescription": "組織内の全員がこのスキルを使用および編集できます。",
+          "title": "組織",
+          "viewerDescription": "組織内の全員がこのスキルを使用できます。"
+        },
+        "personal": {
+          "description": "このスキルを使用できるのはあなただけです。",
+          "title": "個人"
+        },
+        "shares": {
+          "description": "選択したユーザーとグループのみがこのスキルを使用できます。",
+          "title": "{count, plural, one {# 件の共有} other {# 件の共有}}"
+        }
+      },
+      "toasts": {
+        "created": "「{name}」を作成しました",
+        "deleteFailed": "スキルの削除に失敗しました",
+        "deleted": "「{name}」を削除しました",
+        "fileRemoveFailed": "スキルファイルの削除に失敗しました",
+        "fileRemoved": "「{path}」を削除しました",
+        "filesUpdateFailed": "スキルファイルの更新に失敗しました",
+        "filesUpdated": "「{name}」のファイルを更新しました",
+        "importMissingSkillMd": "SKILL.md、ZIP、またはSKILL.mdを含むフォルダをインポートしてください。",
+        "inspectFailed": "スキルバンドルの検査に失敗しました",
+        "saveFailed": "スキルの保存に失敗しました",
+        "saved": "「{name}」を保存しました"
+      }
+    },
     "modals": {
       "addInstruction": {
         "cancelButton": {
@@ -9501,6 +13637,76 @@
         "transferredToast": {
           "message": "所有権を譲渡しました。"
         }
+      }
+    },
+    "page": {
+      "browse": {
+        "title": "スキルを閲覧"
+      },
+      "countSeparator": {
+        "label": "{count, plural, one {スキル} other {スキル}}"
+      },
+      "createMenu": {
+        "github": {
+          "description": "リポジトリから1つ以上のスキルをインポートします。",
+          "title": "GitHubからインポート"
+        },
+        "scratch": {
+          "description": "Onyxで指示を書き、サポートファイルを追加します。",
+          "title": "最初から作成"
+        },
+        "trigger": {
+          "label": "スキルを作成"
+        },
+        "upload": {
+          "description": "SKILL.mdファイル、ZIPファイル、またはスキルフォルダをインポートします。",
+          "title": "スキルをアップロード"
+        }
+      },
+      "empty": {
+        "noMatches": {
+          "description": "別の検索をお試しください。",
+          "title": "一致するスキルがありません"
+        },
+        "noSkills": {
+          "description": "まだ共有されたカスタムスキルはなく、組み込みスキルも設定されていません。",
+          "title": "利用可能なスキルがありません"
+        }
+      },
+      "focusedApp": {
+        "description": "アプリ「{appName}」に関連付けられたすべてのスキルを有効にします。これらがないとアプリが正しく動作しない場合があります。同名の別のスキルが有効な場合、アプリ関連スキルを有効にするともう一方のスキルは無効になります。",
+        "showAll": {
+          "label": "すべてのスキルを表示"
+        },
+        "title": "アプリ「{appName}」のスキル"
+      },
+      "header": {
+        "description": "Craftエージェントが利用できる機能バンドルです。このページには、組み込みスキル、共有されたスキル、あなたの個人スキルが表示されます。",
+        "title": "スキル"
+      },
+      "loadError": {
+        "description": "詳細はコンソールを確認し、ページを再読み込みしてください。",
+        "title": "スキルの読み込みに失敗しました"
+      },
+      "preview": {
+        "unavailableFallback": "このスキルは現在利用できません。"
+      },
+      "search": {
+        "placeholder": "スキルを検索..."
+      },
+      "switchModal": {
+        "body": "続行すると、現在有効なスキルが無効になり、このスキルが有効になります。",
+        "description": "「{name}」という名前のスキルは一度に1つだけ有効にできます。",
+        "submit": {
+          "label": "スキルを切り替え",
+          "pendingLabel": "切り替え中..."
+        },
+        "title": "スキル「{name}」を切り替えますか？"
+      },
+      "toasts": {
+        "disableFailed": "{name}を無効にできませんでした",
+        "enableFailed": "{name}を有効にできませんでした",
+        "refreshFailed": "{name}は更新されましたが、スキル一覧を更新できませんでした。"
       }
     },
     "sections": {

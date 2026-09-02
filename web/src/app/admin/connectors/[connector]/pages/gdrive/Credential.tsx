@@ -209,7 +209,7 @@ export const DriveAuthSection = ({
                 </Text>
                 <InputTypeInField
                   name="google_primary_admin"
-                  placeholder="admin@yourcompany.com"
+                  placeholder={t("gdrive.primaryAdmin.placeholder")}
                 />
                 <Text font="secondary-body" color="text-03">
                   {t("gdrive.primaryAdmin.description")}

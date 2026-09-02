@@ -71,7 +71,7 @@ export default function SearchCard({
               <SourceIcon sourceType={document.source_type} iconSize={16} />
             )}
 
-            <Truncated mainUiAction className="text-left">
+            <Truncated mainUiAction className="text-start">
               {document.semantic_identifier}
             </Truncated>
           </Section>
@@ -99,7 +99,7 @@ export default function SearchCard({
 
               {/* Blurb */}
               {content && (
-                <Text secondaryBody text03 className="text-left">
+                <Text secondaryBody text03 className="text-start">
                   {content}
                 </Text>
               )}
