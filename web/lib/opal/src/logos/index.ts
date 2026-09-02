@@ -92,4 +92,5 @@ export { default as SvgWikipedia } from "@opal/logos/wikipedia";
 export { default as SvgXai } from "@opal/logos/xai";
 export { default as SvgXenforo } from "@opal/logos/xenforo";
 export { default as SvgZendesk } from "@opal/logos/zendesk";
+export { default as SvgZoom } from "@opal/logos/zoom";
 export { default as SvgZulip } from "@opal/logos/zulip";
