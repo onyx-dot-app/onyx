@@ -16,6 +16,7 @@ denied actions go through the shared ``_access_matrix`` helpers, which verify th
 
 import os
 from typing import Any, NamedTuple
+from uuid import uuid4
 
 import pytest
 
@@ -24,7 +25,7 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccessType
 from onyx.db.models import User__UserGroup, UserGroup__ConnectorCredentialPair
 from onyx.db.permissions import recompute_user_permissions__no_commit
-from tests.integration.common_utils.constants import API_SERVER_URL
+from tests.integration.common_utils.constants import ADMIN_USER_NAME, API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.user import UserManager
@@ -77,18 +78,19 @@ def _promote_to_manager(user_id: str, group_id: int) -> None:
         db_session.commit()
 
 
-@pytest.fixture
-def env(reset: None, admin_user: DATestUser) -> _ScopedEnv:  # noqa: ARG001
-    manager = UserManager.create(name="scoped_manager")
-    member = UserManager.create(name="plain_member")
-    outsider = UserManager.create(name="outsider")
+def _build_env(admin_user: DATestUser, tag: str) -> _ScopedEnv:
+    manager = UserManager.create(name=f"scoped_manager_{tag}")
+    member = UserManager.create(name=f"plain_member_{tag}")
+    outsider = UserManager.create(name=f"outsider_{tag}")
     managed_group = UserGroupManager.create(
-        name="managed",
+        name=f"managed-{tag}",
         user_ids=[manager.id, member.id],
         user_performing_action=admin_user,
     )
     other_group = UserGroupManager.create(
-        name="unmanaged", user_ids=[outsider.id], user_performing_action=admin_user
+        name=f"unmanaged-{tag}",
+        user_ids=[outsider.id],
+        user_performing_action=admin_user,
     )
     # Group creation kicks off a sync, and every edit route 409s/404s while one is in
     # flight — before GATE 2 runs, so an escalation test would "pass" without reaching it.
@@ -98,6 +100,29 @@ def env(reset: None, admin_user: DATestUser) -> _ScopedEnv:  # noqa: ARG001
     )
     _promote_to_manager(manager.id, managed_group.id)
     return _ScopedEnv(admin_user, manager, member, outsider, managed_group, other_group)
+
+
+@pytest.fixture(scope="module")
+def env(module_reset: None) -> _ScopedEnv:  # noqa: ARG001
+    """Shared by the tests that only read or expect a denial. A denied request
+    changes nothing, so those tests cannot see each other's effects, and sharing
+    saves each of them a ~12s alembic downgrade/upgrade.
+
+    A test that writes successfully to these users or groups must take
+    ``isolated_env``, or it will change the answer for every test after it.
+    """
+    return _build_env(UserManager.create(name=ADMIN_USER_NAME), "shared")
+
+
+@pytest.fixture
+def isolated_env(env: _ScopedEnv) -> _ScopedEnv:
+    """Fresh users and groups for tests that write successfully — promoting a
+    manager, editing membership, renaming the group, attaching a connector.
+
+    It builds new objects instead of calling ``reset_all()``: a reset would delete
+    the shared ``env`` that the other tests in this module are still holding.
+    """
+    return _build_env(env.admin, uuid4().hex[:8])
 
 
 def _manager_path(group_id: int) -> str:
@@ -167,33 +192,33 @@ def _insert_stale_cc_pair_junction(group_id: int, cc_pair_id: int) -> None:
 
 
 # Manager-assignment endpoint — GATE 2 = admin or manager-of-that-group.
-def test_admin_assigns_manager(env: _ScopedEnv) -> None:
-    path = _manager_path(env.managed_group.id)
+def test_admin_assigns_manager(isolated_env: _ScopedEnv) -> None:
+    path = _manager_path(isolated_env.managed_group.id)
     resp = call_endpoint(
         "PUT",
         path,
-        _set_manager_body(env.member.id, True),
-        env.admin.headers,
-        env.admin.cookies,
+        _set_manager_body(isolated_env.member.id, True),
+        isolated_env.admin.headers,
+        isolated_env.admin.cookies,
     )
     assert resp.status_code == 200, resp.text
-    perms = _me_permissions(env.member)
+    perms = _me_permissions(isolated_env.member)
     assert perms["is_manager"] is True
-    assert env.managed_group.id in perms["managed_group_ids"]
+    assert isolated_env.managed_group.id in perms["managed_group_ids"]
 
 
-def test_manager_delegates_within_managed_group(env: _ScopedEnv) -> None:
+def test_manager_delegates_within_managed_group(isolated_env: _ScopedEnv) -> None:
     # A manager may appoint a co-manager within a group they manage.
-    path = _manager_path(env.managed_group.id)
+    path = _manager_path(isolated_env.managed_group.id)
     resp = call_endpoint(
         "PUT",
         path,
-        _set_manager_body(env.member.id, True),
-        env.manager.headers,
-        env.manager.cookies,
+        _set_manager_body(isolated_env.member.id, True),
+        isolated_env.manager.headers,
+        isolated_env.manager.cookies,
     )
     assert resp.status_code == 200, resp.text
-    assert _me_permissions(env.member)["is_manager"] is True
+    assert _me_permissions(isolated_env.member)["is_manager"] is True
 
 
 def test_manager_cannot_assign_in_unmanaged_group(env: _ScopedEnv) -> None:
@@ -222,26 +247,26 @@ def test_assign_non_member_returns_400(env: _ScopedEnv) -> None:
     assert resp.status_code == 400, resp.text
 
 
-def test_revoke_manager_clears_flag(env: _ScopedEnv) -> None:
-    manager_path = _manager_path(env.managed_group.id)
+def test_revoke_manager_clears_flag(isolated_env: _ScopedEnv) -> None:
+    manager_path = _manager_path(isolated_env.managed_group.id)
     call_endpoint(
         "PUT",
         manager_path,
-        _set_manager_body(env.member.id, True),
-        env.admin.headers,
-        env.admin.cookies,
+        _set_manager_body(isolated_env.member.id, True),
+        isolated_env.admin.headers,
+        isolated_env.admin.cookies,
     )
     resp = call_endpoint(
         "PUT",
         manager_path,
-        _set_manager_body(env.member.id, False),
-        env.admin.headers,
-        env.admin.cookies,
+        _set_manager_body(isolated_env.member.id, False),
+        isolated_env.admin.headers,
+        isolated_env.admin.cookies,
     )
     assert resp.status_code == 200, resp.text
-    perms = _me_permissions(env.member)
+    perms = _me_permissions(isolated_env.member)
     assert perms["is_manager"] is False
-    assert env.managed_group.id not in perms["managed_group_ids"]
+    assert isolated_env.managed_group.id not in perms["managed_group_ids"]
 
 
 def test_plain_member_cannot_assign(env: _ScopedEnv) -> None:
@@ -257,9 +282,11 @@ def test_plain_member_cannot_assign(env: _ScopedEnv) -> None:
     assert_response(resp, "PUT", path, "member", "denied")
 
 
-def test_manager_adds_user_to_managed_group(env: _ScopedEnv) -> None:
+def test_manager_adds_user_to_managed_group(isolated_env: _ScopedEnv) -> None:
     UserGroupManager.add_users(
-        env.managed_group, [env.outsider.id], user_performing_action=env.manager
+        isolated_env.managed_group,
+        [isolated_env.outsider.id],
+        user_performing_action=isolated_env.manager,
     )
 
 
@@ -321,33 +348,36 @@ def test_global_holder_cannot_remove_self_from_their_granting_group(
     assert holder.id in _group_member_ids(group.id)
 
 
-def test_admin_may_remove_self_from_group(env: _ScopedEnv) -> None:
+def test_admin_may_remove_self_from_group(isolated_env: _ScopedEnv) -> None:
     """A global holder whose grant comes from elsewhere keeps authority regardless of
     this membership, so there is no lockout to prevent — the guard must not catch them."""
     UserGroupManager.add_users(
-        env.managed_group, [env.admin.id], user_performing_action=env.admin
+        isolated_env.managed_group,
+        [isolated_env.admin.id],
+        user_performing_action=isolated_env.admin,
     )
     UserGroupManager.wait_for_sync(
-        user_performing_action=env.admin, user_groups_to_check=[env.managed_group]
+        user_performing_action=isolated_env.admin,
+        user_groups_to_check=[isolated_env.managed_group],
     )
     resp = call_endpoint(
         "PATCH",
-        f"/manage/admin/user-group/{env.managed_group.id}",
-        _patch_group_body([env.manager.id, env.member.id], []),
-        env.admin.headers,
-        env.admin.cookies,
+        f"/manage/admin/user-group/{isolated_env.managed_group.id}",
+        _patch_group_body([isolated_env.manager.id, isolated_env.member.id], []),
+        isolated_env.admin.headers,
+        isolated_env.admin.cookies,
     )
     assert resp.status_code == 200, resp.text
-    assert env.admin.id not in _group_member_ids(env.managed_group.id)
+    assert isolated_env.admin.id not in _group_member_ids(isolated_env.managed_group.id)
 
 
-def test_manager_renames_managed_group(env: _ScopedEnv) -> None:
+def test_manager_renames_managed_group(isolated_env: _ScopedEnv) -> None:
     resp = call_endpoint(
         "PATCH",
         _RENAME_PATH,
-        {"id": env.managed_group.id, "name": "managed-renamed"},
-        env.manager.headers,
-        env.manager.cookies,
+        {"id": isolated_env.managed_group.id, "name": "managed-renamed"},
+        isolated_env.manager.headers,
+        isolated_env.manager.cookies,
     )
     assert resp.status_code == 200, resp.text
 
@@ -415,46 +445,56 @@ def test_manager_cannot_attach_unmanaged_cc_pair(env: _ScopedEnv) -> None:
     assert unmanaged_cc_pair.id not in before
 
 
-def test_manager_cannot_reattach_removed_public_cc_pair(env: _ScopedEnv) -> None:
+def test_manager_cannot_reattach_removed_public_cc_pair(
+    isolated_env: _ScopedEnv,
+) -> None:
     # A removed cc_pair leaves a stale is_current=False junction row until the sync
     # sweeps it; that stale row must not make a public connector look "already
     # attached" and slip past the re-attach gate.
     public_cc_pair = CCPairManager.create_from_scratch(
-        user_performing_action=env.admin, access_type=AccessType.PUBLIC, groups=[]
+        user_performing_action=isolated_env.admin,
+        access_type=AccessType.PUBLIC,
+        groups=[],
     )
-    before = _settled_cc_pair_ids(env)
-    _insert_stale_cc_pair_junction(env.managed_group.id, public_cc_pair.id)
-    path = f"/manage/admin/user-group/{env.managed_group.id}"
+    before = _settled_cc_pair_ids(isolated_env)
+    _insert_stale_cc_pair_junction(isolated_env.managed_group.id, public_cc_pair.id)
+    path = f"/manage/admin/user-group/{isolated_env.managed_group.id}"
     resp = call_endpoint(
         "PATCH",
         path,
-        _patch_group_body([env.manager.id, env.member.id], [public_cc_pair.id]),
-        env.manager.headers,
-        env.manager.cookies,
+        _patch_group_body(
+            [isolated_env.manager.id, isolated_env.member.id], [public_cc_pair.id]
+        ),
+        isolated_env.manager.headers,
+        isolated_env.manager.cookies,
     )
     assert_response(resp, "PATCH", path, "manager", "denied")
     # The stale row must stay stale — revival is the escalation this test guards.
-    assert _current_cc_pair_ids(env.managed_group.id) == before
+    assert _current_cc_pair_ids(isolated_env.managed_group.id) == before
     assert public_cc_pair.id not in before
 
 
-def test_manager_attaches_groupless_private_cc_pair(env: _ScopedEnv) -> None:
+def test_manager_attaches_groupless_private_cc_pair(isolated_env: _ScopedEnv) -> None:
     # A private cc_pair in no group lands only in managed scope when attached —
     # so the manager may pull it into their group.
     groupless_cc_pair = CCPairManager.create_from_scratch(
-        user_performing_action=env.admin, access_type=AccessType.PRIVATE, groups=[]
+        user_performing_action=isolated_env.admin,
+        access_type=AccessType.PRIVATE,
+        groups=[],
     )
-    _settled_cc_pair_ids(env)
-    path = f"/manage/admin/user-group/{env.managed_group.id}"
+    _settled_cc_pair_ids(isolated_env)
+    path = f"/manage/admin/user-group/{isolated_env.managed_group.id}"
     resp = call_endpoint(
         "PATCH",
         path,
-        _patch_group_body([env.manager.id, env.member.id], [groupless_cc_pair.id]),
-        env.manager.headers,
-        env.manager.cookies,
+        _patch_group_body(
+            [isolated_env.manager.id, isolated_env.member.id], [groupless_cc_pair.id]
+        ),
+        isolated_env.manager.headers,
+        isolated_env.manager.cookies,
     )
     assert resp.status_code == 200, resp.text
-    assert groupless_cc_pair.id in _current_cc_pair_ids(env.managed_group.id)
+    assert groupless_cc_pair.id in _current_cc_pair_ids(isolated_env.managed_group.id)
 
 
 def test_manager_group_list_only_managed(env: _ScopedEnv) -> None:
