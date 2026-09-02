@@ -40,6 +40,7 @@ def _make_voice_provider(
     provider.is_default_stt = is_default_stt
     provider.is_default_tts = is_default_tts
     provider.api_key = None
+    provider.api_secret = None
     provider.api_base = None
     provider.custom_config = None
     provider.stt_model = None
@@ -231,6 +232,72 @@ class TestUpsertVoiceProvider:
 
         # api_key should remain unchanged (same object reference)
         assert existing_provider.api_key is original_api_key
+
+    def test_updates_api_secret_when_changed(self, mock_db_session: MagicMock) -> None:
+        existing_provider = _make_voice_provider(id=1)
+        existing_provider.api_secret = "original-secret"  # ty: ignore[invalid-assignment]
+        mock_db_session.scalar.return_value = existing_provider
+        mock_db_session.flush.return_value = None
+        mock_db_session.refresh.return_value = None
+
+        upsert_voice_provider(
+            db_session=mock_db_session,
+            provider_id=1,
+            name="Test",
+            provider_type="zoom",
+            api_key=None,
+            api_key_changed=False,
+            api_secret="new-secret",
+            api_secret_changed=True,
+        )
+
+        assert existing_provider.api_secret is not None
+        assert existing_provider.api_secret.get_value(apply_mask=False) == "new-secret"
+
+    def test_preserves_api_secret_when_not_changed(
+        self, mock_db_session: MagicMock
+    ) -> None:
+        existing_provider = _make_voice_provider(id=1)
+        existing_provider.api_secret = "original-secret"  # ty: ignore[invalid-assignment]
+        original_api_secret = existing_provider.api_secret
+        mock_db_session.scalar.return_value = existing_provider
+        mock_db_session.flush.return_value = None
+        mock_db_session.refresh.return_value = None
+
+        upsert_voice_provider(
+            db_session=mock_db_session,
+            provider_id=1,
+            name="Test",
+            provider_type="zoom",
+            api_key=None,
+            api_key_changed=False,
+            api_secret="new-secret",
+            api_secret_changed=False,
+        )
+
+        assert existing_provider.api_secret is original_api_secret
+
+    def test_sets_api_secret_when_missing_even_if_not_changed(
+        self, mock_db_session: MagicMock
+    ) -> None:
+        existing_provider = _make_voice_provider(id=1)
+        mock_db_session.scalar.return_value = existing_provider
+        mock_db_session.flush.return_value = None
+        mock_db_session.refresh.return_value = None
+
+        upsert_voice_provider(
+            db_session=mock_db_session,
+            provider_id=1,
+            name="Test",
+            provider_type="zoom",
+            api_key=None,
+            api_key_changed=False,
+            api_secret="new-secret",
+            api_secret_changed=False,
+        )
+
+        assert existing_provider.api_secret is not None
+        assert existing_provider.api_secret.get_value(apply_mask=False) == "new-secret"
 
     def test_preserves_custom_config_when_omitted(
         self, mock_db_session: MagicMock

@@ -2141,10 +2141,6 @@ class CredentialCapabilityReportRow(Base):
     run_started_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    # The run attempt owning the lifecycle mark; the task's terminal writes are
-    # fenced on it. NULL: no attempt owns the row (recorder writes, legacy
-    # rows), which no fenced write can match. Never searched on, so no index.
-    run_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), nullable=True)
     time_created: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -3796,8 +3792,11 @@ class VoiceProvider(Base):
     name: Mapped[str] = mapped_column(String, unique=True)
     provider_type: Mapped[str] = mapped_column(
         String
-    )  # "openai", "azure", "elevenlabs"
+    )  # "openai", "azure", "elevenlabs", "zoom"
     api_key: Mapped[SensitiveValue[str] | None] = mapped_column(
+        EncryptedString(), nullable=True
+    )
+    api_secret: Mapped[SensitiveValue[str] | None] = mapped_column(
         EncryptedString(), nullable=True
     )
     api_base: Mapped[str | None] = mapped_column(String, nullable=True)

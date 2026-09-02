@@ -8,7 +8,7 @@ class VoiceProviderView(BaseModel):
 
     id: int
     name: str
-    provider_type: str  # "openai", "azure", "elevenlabs"
+    provider_type: str  # "openai", "azure", "elevenlabs", "zoom"
     is_default_stt: bool
     is_default_tts: bool
     stt_model: str | None
@@ -17,6 +17,10 @@ class VoiceProviderView(BaseModel):
     api_key: str | None = Field(
         default=None,
         description="Masked API key for display (e.g. 'sk-a...b1c2'). Non-null means a key is stored.",
+    )
+    api_secret: str | None = Field(
+        default=None,
+        description="Fixed placeholder for display. Non-null means a secret is stored.",
     )
     target_uri: str | None = Field(
         default=None,
@@ -46,7 +50,7 @@ class VoiceProviderUpsertRequest(BaseModel):
 
     id: int | None = Field(default=None, description="Existing provider ID to update.")
     name: str
-    provider_type: str  # "openai", "azure", "elevenlabs"
+    provider_type: str  # "openai", "azure", "elevenlabs", "zoom"
     api_key: str | None = Field(
         default=None,
         description="API key for the provider.",
@@ -54,6 +58,14 @@ class VoiceProviderUpsertRequest(BaseModel):
     api_key_changed: bool = Field(
         default=False,
         description="Set to true when providing a new API key for an existing provider.",
+    )
+    api_secret: str | None = Field(
+        default=None,
+        description="API secret for providers that require one.",
+    )
+    api_secret_changed: bool = Field(
+        default=False,
+        description="Set to true when providing a new API secret for an existing provider.",
     )
     llm_provider_id: int | None = Field(
         default=None,
@@ -93,6 +105,14 @@ class VoiceProviderTestRequest(BaseModel):
     use_stored_key: bool = Field(
         default=False,
         description="If true, use the stored API key for this provider type.",
+    )
+    api_secret: str | None = Field(
+        default=None,
+        description="API secret for testing providers that require one.",
+    )
+    use_stored_secret: bool = Field(
+        default=False,
+        description="If true, use the stored API secret for this provider type.",
     )
     api_base: str | None = None
     target_uri: str | None = Field(
