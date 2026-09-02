@@ -1093,6 +1093,13 @@ MAX_CONSECUTIVE_PORT_FAILURES_BEFORE_PAUSE = max(
     1, _non_negative_int_env("MAX_CONSECUTIVE_PORT_FAILURES_BEFORE_PAUSE", 5)
 )
 
+# Pre-swap spot check: how many ported documents to look up in the new index before
+# a port-flow swap. 0 disables the check, restoring the swap gate to port status alone
+# -- the kill switch if the check ever blocks a swap it shouldn't.
+PORT_SWAP_VERIFY_SAMPLE_SIZE = _non_negative_int_env(
+    "PORT_SWAP_VERIFY_SAMPLE_SIZE", 1000
+)
+
 # Old-index reclamation (post-reindex deletion of the now-PAST index).
 # Master switch: when False the reclaim beat task and every dispatched task no-op.
 # Set it to false to turn reclamation off; that takes effect once the workers restart.

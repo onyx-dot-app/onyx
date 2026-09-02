@@ -304,6 +304,59 @@ def get_document_ids_for_cc_pair_batch(
     return list(db_session.execute(stmt).scalars().all())
 
 
+def sample_ported_document_ids(
+    db_session: Session,
+    cc_pair_scopes: Sequence[tuple[int, int, str | None]],
+    limit: int,
+    seed: str,
+) -> list[str]:
+    """A stable sample of document ids that a finished port claims to have copied.
+
+    `cc_pair_scopes` holds (connector_id, credential_id, up_to_doc_id) per cc_pair.
+    The bound is the port's own snapshot upper bound, so the sample never includes a
+    document added after the port fixed its range — those belong to the FUTURE index
+    attempt, not the port, and are legitimately absent until it catches up.
+
+    Documents with no chunks are skipped. They have nothing in the source index
+    either, so finding nothing for them downstream isn't loss.
+
+    The sample is deterministic in `seed` rather than random, which matters for a
+    caller that re-checks on a schedule: a fresh random draw each time will
+    eventually come up clean against a partly-missing index and wave it through,
+    while a stable sample keeps failing until the data is really there.
+    """
+    if not cc_pair_scopes or limit <= 0:
+        return []
+
+    scope_clauses = [
+        and_(
+            DocumentByConnectorCredentialPair.connector_id == connector_id,
+            DocumentByConnectorCredentialPair.credential_id == credential_id,
+            *(
+                [DocumentByConnectorCredentialPair.id <= up_to_doc_id]
+                if up_to_doc_id is not None
+                else []
+            ),
+        )
+        for connector_id, credential_id, up_to_doc_id in cc_pair_scopes
+    ]
+    # Selected as well as ordered on: Postgres requires a DISTINCT query's ORDER BY
+    # expressions to appear in the select list.
+    sample_key = func.md5(
+        func.concat(DocumentByConnectorCredentialPair.id, seed)
+    ).label("sample_key")
+    stmt = (
+        select(DocumentByConnectorCredentialPair.id, sample_key)
+        .join(DbDocument, DbDocument.id == DocumentByConnectorCredentialPair.id)
+        .where(or_(*scope_clauses))
+        .where(DbDocument.chunk_count.is_not(None), DbDocument.chunk_count > 0)
+        .distinct()
+        .order_by(sample_key)
+        .limit(limit)
+    )
+    return [row[0] for row in db_session.execute(stmt)]
+
+
 def get_max_document_id_for_cc_pair(db_session: Session, cc_pair_id: int) -> str | None:
     """The lexicographically-max Document.id linked to this cc_pair, or None if it
     has none. The reindex port snapshots this at start as its upper bound so it

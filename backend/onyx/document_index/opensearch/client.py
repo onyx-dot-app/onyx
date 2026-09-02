@@ -166,6 +166,8 @@ _CLUSTER_BLOCK_ERROR_TYPE = "cluster_block_exception"
 # Chunks per PIT-scan page. A port doc-batch is small (INDEX_BATCH_SIZE docs), so
 # one page covers a batch; paging still protects against a pathological doc.
 _PIT_SCAN_PAGE_SIZE = 1000
+# Chunk ids per mget call, so a large sample can't exceed http.max_content_length.
+_MGET_BATCH_SIZE = 500
 
 
 def is_cluster_block_error(e: Exception) -> bool:
@@ -1965,6 +1967,35 @@ class OpenSearchIndexClient(OpenSearchClient):
         return _SEARCH_CONTEXT_MISSING_ERROR_TYPE in str(
             getattr(error, "info", "")  # ods: ignore[getattr]
         ) or _SEARCH_CONTEXT_MISSING_ERROR_TYPE in str(error)
+
+    def get_existing_chunk_ids(
+        self, chunk_ids: list[str], batch_size: int = _MGET_BATCH_SIZE
+    ) -> set[str]:
+        """Which of these chunk ids exist in the index, looked up by _id.
+
+        mget is realtime: it reads the translog, so a chunk written but not yet
+        refreshed is still found. A search would miss it and report a false
+        absence, which is why the pre-swap check uses this and not a query.
+
+        Batched so one call can't build a request larger than the cluster's
+        http.max_content_length. Raises on transport errors; the caller decides
+        whether an unreachable cluster should block whatever it gates.
+        """
+        if not chunk_ids:
+            return set()
+
+        found: set[str] = set()
+        for start in range(0, len(chunk_ids), batch_size):
+            batch = chunk_ids[start : start + batch_size]
+            response = self._client.mget(
+                index=self._index_name,
+                body={"ids": batch},
+                _source=False,
+            )
+            found.update(
+                doc["_id"] for doc in response.get("docs", []) if doc.get("found")
+            )
+        return found
 
     @log_function_time(print_only=True, debug_only=True)
     def refresh_index(self) -> None:

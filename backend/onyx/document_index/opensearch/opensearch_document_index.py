@@ -569,6 +569,36 @@ class OpenSearchDocumentIndex(DocumentIndex):
 
         return self._client.delete_by_query(query_body)
 
+    def get_documents_missing_chunks(self, document_ids: list[str]) -> list[str]:
+        """Which of these documents have no chunks in this index, order preserved.
+
+        Checks each document's first chunk by _id rather than counting all of its
+        chunks: chunk_count in Postgres tracks the live index, so a document
+        re-indexed mid-port disagrees with what the port copied, and comparing
+        counts would report a difference that isn't loss. Chunk 0 answers the
+        question that matters -- is the document here at all.
+
+        Raises on transport errors (see get_existing_chunk_ids).
+        """
+        unique_ids = list(dict.fromkeys(document_ids))
+        if not unique_ids:
+            return []
+        chunk_id_to_doc_id = {
+            get_opensearch_doc_chunk_id(
+                tenant_state=self._tenant_state,
+                document_id=document_id,
+                chunk_index=0,
+            ): document_id
+            for document_id in unique_ids
+        }
+        found = self._client.get_existing_chunk_ids(list(chunk_id_to_doc_id))
+        missing = {
+            doc_id
+            for chunk_id, doc_id in chunk_id_to_doc_id.items()
+            if chunk_id not in found
+        }
+        return [doc_id for doc_id in unique_ids if doc_id in missing]
+
     def delete_port_written_chunks(self, document_ids: list[str]) -> int:
         """Delete only port-written chunks (written_by_port=true) for the given docs.
 
