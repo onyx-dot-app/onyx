@@ -8525,6 +8525,9 @@
       "continueAsGuest": {
         "label": "o continúa como invitado"
       },
+      "createAccountButton": {
+        "label": "Crear una cuenta"
+      },
       "email": {
         "label": "Correo electrónico",
         "placeholder": "correo@tuempresa.com"
@@ -8534,6 +8537,9 @@
       },
       "invalidCredentials": {
         "error": "Correo electrónico o contraseña no válidos"
+      },
+      "joinButton": {
+        "label": "Unirse"
       },
       "noPassword": {
         "error": "Crea una cuenta para establecer una contraseña"
@@ -8562,6 +8568,9 @@
       },
       "passwordUppercase": {
         "error": "La contraseña debe contener al menos una letra mayúscula"
+      },
+      "signInButton": {
+        "label": "Iniciar sesión"
       },
       "tooManyRequests": {
         "error": "Demasiadas solicitudes. Inténtalo de nuevo más tarde."
@@ -8690,11 +8699,17 @@
       }
     },
     "login": {
+      "continueButton": {
+        "label": "Continuar"
+      },
       "createAccountButton": {
         "label": "Crear una cuenta"
       },
       "noSsoProviders": {
         "error": "No hay inicio de sesión SSO configurado para esa dirección. Prueba con Google o tu contraseña abajo."
+      },
+      "orDivider": {
+        "text": "o"
       },
       "resetPasswordButton": {
         "label": "Restablecer contraseña"
@@ -8719,6 +8734,12 @@
       },
       "verifiedMessage": {
         "title": "¡Tu correo ha sido verificado! Inicia sesión para continuar."
+      },
+      "welcomeHeading": {
+        "title": "Te damos la bienvenida a {appName}"
+      },
+      "welcomeSubtitle": {
+        "text": "Tu plataforma de IA de código abierto para el trabajo"
       },
       "workEmailField": {
         "label": "Correo de trabajo"

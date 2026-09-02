@@ -26,7 +26,6 @@ import {
 } from "react";
 import type { PreviewHighlightTarget } from "./Preview";
 import { SvgEdit } from "@opal/icons";
-import { DEFAULT_LOGIN_SUBTITLE } from "@/lib/auth/copies";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
 import { planTagProps } from "@/lib/tier-badge";
@@ -61,6 +60,7 @@ export const AppearanceThemeSettings = forwardRef<
   ref
 ) {
   const t = useTranslations("admin.theme");
+  const tAuth = useTranslations("auth");
   const { values, errors, setFieldValue } = useFormikContext<any>();
   const enterpriseTier = useTierAtLeast(Tier.ENTERPRISE);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -503,7 +503,7 @@ export const AppearanceThemeSettings = forwardRef<
             ref={loginSubtitleInputRef}
             data-label="login-subtitle-input"
             clearButton
-            placeholder={DEFAULT_LOGIN_SUBTITLE}
+            placeholder={tAuth("login.welcomeSubtitle.text")}
             variant={errors.custom_login_subtitle ? "error" : undefined}
             value={values.custom_login_subtitle}
             onChange={(e) =>

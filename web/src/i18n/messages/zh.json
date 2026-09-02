@@ -8525,6 +8525,9 @@
       "continueAsGuest": {
         "label": "或以访客身份继续"
       },
+      "createAccountButton": {
+        "label": "创建账户"
+      },
       "email": {
         "label": "电子邮件地址",
         "placeholder": "email@yourcompany.com"
@@ -8534,6 +8537,9 @@
       },
       "invalidCredentials": {
         "error": "电子邮件或密码无效"
+      },
+      "joinButton": {
+        "label": "加入"
       },
       "noPassword": {
         "error": "创建账户以设置密码"
@@ -8562,6 +8568,9 @@
       },
       "passwordUppercase": {
         "error": "密码必须至少包含一个大写字母"
+      },
+      "signInButton": {
+        "label": "登录"
       },
       "tooManyRequests": {
         "error": "请求过多。请稍后重试。"
@@ -8690,11 +8699,17 @@
       }
     },
     "login": {
+      "continueButton": {
+        "label": "继续"
+      },
       "createAccountButton": {
         "label": "创建账户"
       },
       "noSsoProviders": {
         "error": "该地址未设置 SSO 登录。请尝试使用 Google 或下方的密码登录。"
+      },
+      "orDivider": {
+        "text": "或"
       },
       "resetPasswordButton": {
         "label": "重置密码"
@@ -8719,6 +8734,12 @@
       },
       "verifiedMessage": {
         "title": "您的邮箱已验证！请登录以继续。"
+      },
+      "welcomeHeading": {
+        "title": "欢迎使用 {appName}"
+      },
+      "welcomeSubtitle": {
+        "text": "面向工作的开源 AI 平台"
       },
       "workEmailField": {
         "label": "工作邮箱"

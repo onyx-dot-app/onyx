@@ -5,7 +5,6 @@
 !/.vscode/.env.k8s.template
 !/.vscode/launch.json
 !/.vscode/tasks.json
-.zed
 .cursor/*
 !/.cursor/mcp.json
 !/.cursor/skills/

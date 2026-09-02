@@ -8525,6 +8525,9 @@
       "continueAsGuest": {
         "label": "ou continuer en tant qu'invité"
       },
+      "createAccountButton": {
+        "label": "Créer un compte"
+      },
       "email": {
         "label": "Adresse e-mail",
         "placeholder": "email@votreentreprise.com"
@@ -8534,6 +8537,9 @@
       },
       "invalidCredentials": {
         "error": "Adresse e-mail ou mot de passe non valide"
+      },
+      "joinButton": {
+        "label": "Rejoindre"
       },
       "noPassword": {
         "error": "Créez un compte pour définir un mot de passe"
@@ -8562,6 +8568,9 @@
       },
       "passwordUppercase": {
         "error": "Le mot de passe doit contenir au moins une lettre majuscule"
+      },
+      "signInButton": {
+        "label": "Se connecter"
       },
       "tooManyRequests": {
         "error": "Trop de requêtes. Veuillez réessayer plus tard."
@@ -8690,11 +8699,17 @@
       }
     },
     "login": {
+      "continueButton": {
+        "label": "Continuer"
+      },
       "createAccountButton": {
         "label": "Créer un compte"
       },
       "noSsoProviders": {
         "error": "Aucune connexion SSO n'est configurée pour cette adresse. Essayez Google ou votre mot de passe ci-dessous."
+      },
+      "orDivider": {
+        "text": "ou"
       },
       "resetPasswordButton": {
         "label": "Réinitialiser le mot de passe"
@@ -8719,6 +8734,12 @@
       },
       "verifiedMessage": {
         "title": "Votre e-mail a été vérifié ! Connectez-vous pour continuer."
+      },
+      "welcomeHeading": {
+        "title": "Bienvenue sur {appName}"
+      },
+      "welcomeSubtitle": {
+        "text": "Votre plateforme d'IA open source pour le travail"
       },
       "workEmailField": {
         "label": "E-mail professionnel"
