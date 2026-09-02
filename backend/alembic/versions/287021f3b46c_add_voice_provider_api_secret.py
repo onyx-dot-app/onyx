@@ -1,7 +1,7 @@
 """add voice provider api secret
 
 Revision ID: 287021f3b46c
-Revises: 77962d18fd41
+Revises: 947b94d2ebf1
 Create Date: 2026-08-27 10:38:32.439483
 
 """
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "287021f3b46c"
-down_revision = "77962d18fd41"
+down_revision = "947b94d2ebf1"
 branch_labels = None
 depends_on = None
 
