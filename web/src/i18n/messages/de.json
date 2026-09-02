@@ -9593,6 +9593,9 @@
         "startRecording": {
           "ariaLabel": "Aufnahme starten"
         },
+        "startingRecording": {
+          "ariaLabel": "Aufnahme wird gestartet"
+        },
         "stopRecording": {
           "ariaLabel": "Aufnahme stoppen"
         }

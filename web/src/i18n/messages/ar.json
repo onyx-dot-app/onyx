@@ -9593,6 +9593,9 @@
         "startRecording": {
           "ariaLabel": "بدء التسجيل"
         },
+        "startingRecording": {
+          "ariaLabel": "جارٍ بدء التسجيل"
+        },
         "stopRecording": {
           "ariaLabel": "إيقاف التسجيل"
         }
