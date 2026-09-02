@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { noProp } from "@/lib/utils";
 import { cn } from "@opal/utils";
 import { SvgPlus, SvgX } from "@opal/icons";
@@ -125,7 +126,7 @@ export interface InputImageProps {
 export default function InputImage({
   disabled = false,
   src,
-  alt = "Image",
+  alt,
   onEdit,
   onRemove,
   onDrop,
@@ -134,6 +135,7 @@ export default function InputImage({
   size = 120,
   className,
 }: InputImageProps) {
+  const t = useTranslations("common.inputImage");
   const isInteractive = !disabled && (onEdit || onDrop);
   const hasImage = !!src;
 
@@ -144,7 +146,8 @@ export default function InputImage({
       },
       onImageRejected: (rejections) => {
         const firstRejection = rejections[0];
-        const reason = firstRejection?.errors[0]?.message || "File rejected";
+        const reason =
+          firstRejection?.errors[0]?.message || t("dropRejected.fallback");
         onDropRejected?.(reason);
       },
       disabled: disabled || !onDrop,
@@ -197,8 +200,8 @@ export default function InputImage({
           aria-label={
             isInteractive
               ? hasImage
-                ? "Edit image"
-                : "Upload image"
+                ? t("editButton.ariaLabel")
+                : t("uploadButton.ariaLabel")
               : undefined
           }
         >
@@ -206,7 +209,7 @@ export default function InputImage({
           {hasImage ? (
             <img
               src={src}
-              alt={alt}
+              alt={alt ?? t("image.altFallback")}
               className="absolute inset-0 w-full h-full object-cover pointer-events-none"
             />
           ) : (
@@ -224,7 +227,7 @@ export default function InputImage({
 
           {/* Edit overlay - shows on hover/focus when image is uploaded */}
           {showEditOverlay && isInteractive && hasImage && !isDragActive && (
-            <div className="absolute bottom-0 left-0 right-0 pointer-events-none">
+            <div className="absolute bottom-0 start-0 end-0 pointer-events-none">
               <Hoverable.Item group="inputImage" variant="appear-on-hover">
                 <div
                   className={cn(
@@ -235,7 +238,7 @@ export default function InputImage({
                   )}
                 >
                   <div className="pointer-events-auto">
-                    <Tooltip tooltip="Edit" side="top">
+                    <Tooltip tooltip={t("editOverlay.label")} side="top">
                       <div
                         className={cn(
                           "flex items-center justify-center",
@@ -246,7 +249,7 @@ export default function InputImage({
                           className="text-text-03 font-secondary-action"
                           style={{ fontSize: "12px", lineHeight: "16px" }}
                         >
-                          Edit
+                          {t("editOverlay.label")}
                         </Text>
                       </div>
                     </Tooltip>
@@ -259,7 +262,7 @@ export default function InputImage({
 
         {/* Remove button - top left corner (only when image is uploaded) */}
         {isInteractive && hasImage && onRemove && (
-          <div className="absolute top-1 left-1">
+          <div className="absolute top-1 start-1">
             <Hoverable.Item group="inputImage" variant="appear-on-hover">
               {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
               <IconButton
@@ -268,7 +271,7 @@ export default function InputImage({
                 type="button"
                 primary
                 className="w-5! h-5! p-0.5! rounded-04!"
-                aria-label="Remove image"
+                aria-label={t("removeButton.ariaLabel")}
               />
             </Hoverable.Item>
           </div>

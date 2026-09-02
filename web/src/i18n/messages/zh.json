@@ -60,6 +60,29 @@
         "ariaLabel": "{title} 操作卡片"
       }
     },
+    "actionLineItem": {
+      "addConnectors": {
+        "label": "添加连接器"
+      },
+      "authenticate": {
+        "label": "身份验证"
+      },
+      "configure": {
+        "tooltip": "配置"
+      },
+      "configureConnectors": {
+        "label": "配置连接器"
+      },
+      "disable": {
+        "label": "禁用"
+      },
+      "enable": {
+        "label": "启用"
+      },
+      "projectSearch": {
+        "label": "项目搜索"
+      }
+    },
     "addMcpModal": {
       "addHeader": {
         "description": "连接 MCP（Model Context Protocol）服务器以添加自定义操作。",
@@ -355,6 +378,53 @@
         "tooltip": "刷新工具"
       }
     },
+    "mcpOauthCallback": {
+      "autoRedirect": {
+        "text": "正在自动返回…"
+      },
+      "backToChatButton": {
+        "label": "返回聊天"
+      },
+      "cancelled": {
+        "description": "授权已被取消或拒绝，因此未建立连接。要重试，请从 MCP 服务器的身份验证设置中重新发起连接。",
+        "title": "授权已取消"
+      },
+      "continueButton": {
+        "label": "继续"
+      },
+      "genericError": {
+        "fallbackDetail": "无法完成授权",
+        "title": "出了点问题"
+      },
+      "invalidLink": {
+        "description": "此链接缺少必需的授权参数。请从 MCP 服务器的身份验证设置中重新发起连接。",
+        "title": "授权链接无效"
+      },
+      "processing": {
+        "description": "正在完成与您的 MCP 服务器的连接。这可能需要片刻…",
+        "title": "正在完成授权"
+      },
+      "serverNotFound": {
+        "description": "此授权所属的 MCP 服务器已不存在或不再配置。请重新创建或重新配置该服务器，然后重新连接。",
+        "title": "未找到 MCP 服务器"
+      },
+      "sessionExpired": {
+        "description": "此授权链接无效、已过期或已被使用。请从 MCP 服务器的身份验证设置中重新发起连接。",
+        "title": "授权会话已过期"
+      },
+      "success": {
+        "description": "授权已成功完成。您现在可以在聊天中使用此服务器的工具。",
+        "title": "已连接到 {serverName}"
+      },
+      "timedOut": {
+        "description": "MCP 服务器未及时确认授权。请重新尝试连接。如果问题持续出现，请检查服务器的 OAuth 配置。",
+        "title": "授权超时"
+      },
+      "tokenExchangeFailed": {
+        "description": "提供方已批准授权，但未能获取有效的访问令牌。请检查服务器的 OAuth 客户端凭据和端点，然后重新尝试连接。",
+        "title": "令牌交换失败"
+      }
+    },
     "mcpPage": {
       "addButton": {
         "label": "添加 MCP 服务器"
@@ -554,6 +624,14 @@
         "label": "拒绝"
       }
     },
+    "switchList": {
+      "back": {
+        "ariaLabel": "返回"
+      },
+      "toggle": {
+        "ariaLabel": "切换 {name}"
+      }
+    },
     "toolItem": {
       "unavailable": {
         "label": "工具不可用"
@@ -578,6 +656,81 @@
       "showEnabledButton": {
         "ariaLabel": "仅显示已启用的工具",
         "tooltip": "仅显示已启用"
+      }
+    },
+    "toolsPopover": {
+      "configureLinks": {
+        "codeInterpreter": {
+          "tooltip": "配置代码解释器"
+        },
+        "imageGeneration": {
+          "tooltip": "配置图像生成"
+        },
+        "openapi": {
+          "tooltip": "管理 OpenAPI 操作"
+        },
+        "webSearch": {
+          "tooltip": "配置网络搜索"
+        }
+      },
+      "disableAllSources": {
+        "label": "禁用所有来源"
+      },
+      "disableAllTools": {
+        "label": "禁用所有工具"
+      },
+      "enableAllSources": {
+        "label": "启用所有来源"
+      },
+      "enableAllTools": {
+        "label": "启用所有工具"
+      },
+      "manageActions": {
+        "tooltip": "管理操作"
+      },
+      "mcpTools": {
+        "searchPlaceholder": "搜索 {server} 工具"
+      },
+      "moreActions": {
+        "label": "更多操作"
+      },
+      "reauthenticate": {
+        "label": "重新验证"
+      },
+      "search": {
+        "placeholder": "搜索操作..."
+      },
+      "serverFallback": {
+        "label": "服务器"
+      },
+      "sourceFilters": {
+        "searchPlaceholder": "搜索筛选器"
+      },
+      "tooltips": {
+        "askAdminSuffix": {
+          "text": "请管理员进行配置。"
+        },
+        "codingAgent": {
+          "description": "调查 GitHub 仓库并回答有关其代码的问题。"
+        },
+        "configureSuffix": {
+          "text": "按设置齿轮以启用。"
+        },
+        "default": {
+          "description": "此操作尚未配置。"
+        },
+        "imageGeneration": {
+          "description": "根据提示生成图像。"
+        },
+        "python": {
+          "description": "执行代码进行复杂分析。"
+        },
+        "search": {
+          "description": "搜索已连接的知识以支持回答。"
+        },
+        "webSearch": {
+          "description": "在网络上搜索最新信息。"
+        }
       }
     },
     "toolsSection": {
@@ -631,7 +784,39 @@
         }
       }
     },
+    "agentStats": {
+      "chart": {
+        "description": "所选范围内按天统计",
+        "title": "消息与独立用户"
+      },
+      "empty": {
+        "message": "在所选日期范围内未找到此智能体的数据。"
+      },
+      "fetchFailed": {
+        "message": "获取智能体统计数据失败。"
+      },
+      "permissionDenied": {
+        "message": "您没有权限查看这些统计数据。"
+      },
+      "totalMessages": {
+        "label": "消息总数"
+      },
+      "totalUniqueUsers": {
+        "label": "独立用户总数"
+      },
+      "unknownError": {
+        "message": "发生未知错误"
+      }
+    },
     "agents": {
+      "collapsibleSection": {
+        "collapse": {
+          "ariaLabel": "折叠此部分"
+        },
+        "expand": {
+          "ariaLabel": "展开此部分"
+        }
+      },
       "deleteModal": {
         "confirmation": {
           "description": "确定要删除 <emphasis>{name}</emphasis> 吗？此操作无法撤销。"
@@ -1003,6 +1188,47 @@
         },
         "viewPlans": {
           "title": "查看套餐"
+        }
+      },
+      "info": {
+        "empty": {
+          "message": "没有可用的账单信息。"
+        },
+        "loadError": {
+          "message": "加载账单信息时出错。请稍后重试。"
+        },
+        "loading": {
+          "label": "加载中..."
+        },
+        "manageSubscription": {
+          "description": "查看您的套餐、更新付款方式或更改订阅",
+          "title": "管理订阅"
+        },
+        "page": {
+          "title": "账单信息"
+        },
+        "portalError": {
+          "message": "创建客户门户会话时出错"
+        },
+        "subscriptionDetails": {
+          "title": "订阅详情"
+        },
+        "summary": {
+          "billingEnd": {
+            "label": "账单结束日期"
+          },
+          "billingStart": {
+            "label": "账单开始日期"
+          },
+          "seats": {
+            "label": "席位"
+          },
+          "status": {
+            "label": "订阅状态"
+          }
+        },
+        "updatedToast": {
+          "message": "恭喜!您的订阅已成功更新。"
         }
       },
       "license": {
@@ -1517,6 +1743,25 @@
       }
     },
     "connector": {
+      "accessType": {
+        "autoSyncOption": {
+          "description": "我们将自动从数据源同步权限。只有当执行搜索的用户在数据源中有权访问该文档时，该文档才能在 Onyx 中被搜索到。",
+          "disabledReason": "当前凭据的认证方式不支持自动同步权限。请将凭据的认证方式更改为受支持的方式。",
+          "name": "自动同步权限"
+        },
+        "heading": {
+          "description": "控制谁可以访问此连接器索引的文档。",
+          "title": "文档访问权限"
+        },
+        "privateOption": {
+          "description": "只有（通过用户组页面）被明确授予此连接器访问权限的用户才能访问此连接器导入的文档",
+          "name": "私有"
+        },
+        "publicOption": {
+          "description": "拥有 Onyx 账户的所有人都可以访问此连接器导入的文档",
+          "name": "公开"
+        }
+      },
       "advancedConfig": {
         "duration": {
           "days": "{count, plural, one {# 天} other {# 天}}",
@@ -1546,6 +1791,14 @@
           "label": "收起"
         }
       },
+      "credentialForm": {
+        "errorToast": "错误：{detail}",
+        "successToast": "成功！",
+        "updateButton": {
+          "ariaLabel": "更新凭据",
+          "label": "更新"
+        }
+      },
       "deleteModal": {
         "additionalDetails": "删除此连接器会安排一个删除任务，移除其已索引的文档，并对所有用户删除该连接器。",
         "entityType": "连接器"
@@ -1568,6 +1821,11 @@
         },
         "errorModal": {
           "title": "文档权限同步错误"
+        }
+      },
+      "docsLink": {
+        "checkOutDocs": {
+          "text": "有关配置此连接器的更多信息，请查看<link>我们的文档</link>。"
         }
       },
       "errorsModal": {
@@ -1649,6 +1907,14 @@
           "updateFailed": "更新文件失败"
         }
       },
+      "fileUpload": {
+        "dropzone": {
+          "message": "将{multiple, select, true {文件} other {文件}}拖放到此处，或点击选择{multiple, select, true {文件} other {文件}}"
+        },
+        "selectedFiles": {
+          "heading": "{multiple, select, true {已选择的文件} other {已选择的文件}}"
+        }
+      },
       "groupMembershipTable": {
         "columns": {
           "errorMessage": "错误信息",
@@ -1664,6 +1930,23 @@
         },
         "errorModal": {
           "title": "用户组成员同步错误"
+        }
+      },
+      "groupSelector": {
+        "assignGroupAccess": {
+          "title": "为此连接器分配组访问权限"
+        },
+        "assignToGroup": {
+          "title": "将此连接器分配给一个组"
+        },
+        "scopedManagerGroups": {
+          "description": "选择一个或多个您管理的组以授予对此连接器的访问权限"
+        },
+        "syncGroups": {
+          "description": "以下的组控制谁可以管理此连接器。其文档的访问权限继承自数据源本身的权限。"
+        },
+        "visibleToGroups": {
+          "description": "此连接器将对以下所选的组可见/可访问"
         }
       },
       "indexAttemptsTable": {
@@ -2022,6 +2305,22 @@
         "targetedReindexSubmitted": "已为 {count, plural, one {# 个文档} other {# 个文档}} 提交定向重新索引。文档重新索引完成后，相关错误会从列表中消失。"
       }
     },
+    "connectorTitle": {
+      "metadata": {
+        "channelRegexEnabled": "已启用频道正则表达式",
+        "channels": "频道",
+        "enabledTrue": "是",
+        "excludeChannelRegexEnabled": "已启用排除频道正则表达式",
+        "excludedChannels": "排除的频道",
+        "includeBotMessages": "包含机器人消息",
+        "jiraProjectUrl": "Jira 项目 URL",
+        "multipleRepos": "多个仓库",
+        "pageId": "页面 ID",
+        "realm": "领域",
+        "repo": "仓库",
+        "wikiUrl": "Wiki URL"
+      }
+    },
     "connectorsList": {
       "add": {
         "authorizeButton": {
@@ -2148,6 +2447,7 @@
           "description": "输入拥有目标 Google Drive 的 Google 组织的管理员或所有者邮箱。",
           "invalidEmail": "必须是有效的邮箱地址",
           "label": "主管理员邮箱",
+          "placeholder": "admin@yourcompany.com",
           "required": "必填"
         },
         "section": {
@@ -2205,6 +2505,7 @@
           "description": "输入拥有目标 Gmail 账号的 Google 组织的管理员或所有者邮箱。",
           "invalidEmail": "必须是有效的邮箱地址",
           "label": "主管理员邮箱",
+          "placeholder": "admin@yourcompany.com",
           "required": "必填"
         },
         "section": {
@@ -2521,7 +2822,7 @@
         "description": "加载用户失败。请尝试刷新页面。"
       }
     },
-    "craftInstructions": {
+    "craftPreferences": {
       "baseInstructions": {
         "description": "您的指令会追加到这段内置提示词之后。动态部分会在每个会话中分别填充。",
         "loadError": {
@@ -2529,9 +2830,34 @@
         },
         "title": "查看基础指令"
       },
+      "defaultModel": {
+        "clearButton": {
+          "label": "清除"
+        },
+        "help": {
+          "description": "Craft 将此模型用于新会话和计划任务。未设置时，Craft 将使用工作区默认聊天模型。"
+        },
+        "inheritedTag": {
+          "label": "工作区默认值"
+        },
+        "label": "默认模型",
+        "placeholder": "选择模型",
+        "resetError": {
+          "message": "清除默认模型失败"
+        },
+        "resetSuccess": {
+          "message": "已清除 Craft 默认模型"
+        },
+        "saveError": {
+          "message": "保存默认模型失败"
+        },
+        "saveSuccess": {
+          "message": "已保存 Craft 默认模型"
+        }
+      },
       "header": {
-        "description": "在 Craft 内置行为之上，每个 Craft 智能体都会遵循的工作区级指令。",
-        "title": "指令"
+        "description": "在 Craft 内置行为之上，每个 Craft 智能体都会遵循的默认模型和工作区级指令。",
+        "title": "偏好设置"
       },
       "instructions": {
         "charCount": {
@@ -2577,6 +2903,171 @@
       "unavailable": {
         "description": "Craft 由 Onyx 按部署逐一启用。请联系您的 Onyx 客户代表以获取访问权限。",
         "title": "此部署不提供 Craft"
+      }
+    },
+    "credentials": {
+      "card": {
+        "createdOn": {
+          "label": "创建于 <i>{date}</i>"
+        },
+        "createdOnBy": {
+          "label": "由 <i>{email}</i> 创建于 <i>{date}</i>"
+        },
+        "unnamed": {
+          "label": "凭据 #{id}"
+        }
+      },
+      "create": {
+        "createButton": {
+          "label": "创建"
+        },
+        "created": {
+          "toast": "已创建新凭据!"
+        },
+        "name": {
+          "label": "名称:",
+          "placeholder": "(可选) 凭据名称..."
+        },
+        "submitError": {
+          "toast": "提交凭据时出错"
+        }
+      },
+      "delete": {
+        "cancelButton": {
+          "label": "取消"
+        },
+        "confirmBody": {
+          "message": "确定要删除此凭据吗?无法删除与运行中的连接器关联的凭据。"
+        },
+        "confirmButton": {
+          "label": "确认"
+        },
+        "confirmTitle": "确认删除"
+      },
+      "edit": {
+        "name": {
+          "label": "名称(可选):"
+        },
+        "permissions": {
+          "note": "请确保更新为具有适当权限的凭据!"
+        },
+        "resetButton": {
+          "label": "重置更改"
+        },
+        "updateButton": {
+          "label": "更新"
+        },
+        "updateError": {
+          "toast": "更新凭据时出错"
+        }
+      },
+      "modal": {
+        "createTitle": "创建 {source} 凭据",
+        "editTitle": "编辑凭据",
+        "updateTitle": "更新凭据"
+      },
+      "modify": {
+        "createButton": {
+          "label": "创建"
+        },
+        "instructions": {
+          "message": "请根据需要选择凭据!请确保为此连接器选择了具有适当权限的凭据!"
+        },
+        "selectButton": {
+          "label": "选择"
+        }
+      },
+      "oauth": {
+        "connectButton": {
+          "label": "连接"
+        },
+        "connectError": {
+          "title": "无法连接"
+        },
+        "redirectFailed": {
+          "message": "无法重定向到 {source} 登录。请重试。"
+        },
+        "retryButton": {
+          "label": "重试"
+        },
+        "startError": {
+          "message": "无法启动 OAuth"
+        }
+      },
+      "swap": {
+        "error": {
+          "toast": "切换凭据时出现问题:{detail}"
+        },
+        "success": {
+          "toast": "已成功切换凭据!"
+        }
+      },
+      "table": {
+        "actions": {
+          "label": "操作"
+        },
+        "created": {
+          "header": "创建时间"
+        },
+        "edit": {
+          "ariaLabel": "编辑凭据"
+        },
+        "empty": {
+          "message": "此连接器不存在任何凭据!"
+        },
+        "id": {
+          "header": "ID"
+        },
+        "lastUpdated": {
+          "header": "最后更新"
+        },
+        "name": {
+          "header": "名称"
+        },
+        "select": {
+          "label": "选择"
+        },
+        "selected": {
+          "badge": "已选择"
+        },
+        "untitled": {
+          "label": "未命名"
+        }
+      },
+      "update": {
+        "error": {
+          "toast": "更新凭据时出现问题"
+        },
+        "success": {
+          "toast": "已更新凭据"
+        }
+      }
+    },
+    "customAnalytics": {
+      "intro": {
+        "description": "这允许您将自己的分析工具接入 Onyx!将分析提供商的 Web 代码片段复制到下面的输入框中,我们就会开始发送使用事件。"
+      },
+      "notEnabled": {
+        "description": "要设置自定义分析脚本,请与团队中负责部署 Onyx 的人员合作,设置环境变量 <i>CUSTOM_ANALYTICS_SECRET_KEY</i>。",
+        "title": "自定义分析未启用。"
+      },
+      "script": {
+        "description": "指定应在页面加载时运行的 Javascript,用于初始化您的自定义跟踪/分析。",
+        "instructions": "请勿包含 `<script></script>` 标签。如果您在下方上传了脚本但分析平台没有收到任何事件,请尝试删除每行 JavaScript 前多余的空白字符。",
+        "label": "脚本"
+      },
+      "secretKey": {
+        "description": "出于安全考虑,您必须提供密钥才能更新此脚本。该值应为初次设置 Onyx 时配置的环境变量 <i>CUSTOM_ANALYTICS_SECRET_KEY</i> 的值。",
+        "label": "密钥"
+      },
+      "updateButton": {
+        "label": "更新"
+      },
+      "updateFailed": {
+        "message": "更新自定义分析脚本失败:\"{error}\""
+      },
+      "updateSuccess": {
+        "message": "自定义分析脚本更新成功!"
       }
     },
     "discordBot": {
@@ -3034,6 +3525,83 @@
         }
       }
     },
+    "exportLogs": {
+      "button": {
+        "collecting": {
+          "label": "收集中..."
+        },
+        "downloading": {
+          "label": "下载中..."
+        },
+        "export": {
+          "label": "导出日志"
+        },
+        "starting": {
+          "label": "正在启动..."
+        }
+      },
+      "downloadButton": {
+        "label": "下载"
+      },
+      "exportCard": {
+        "description": "将 API 服务器和后台 worker 的日志文件收集到一个 zip 中。收集完成后将自动开始下载。",
+        "title": "导出日志"
+      },
+      "header": {
+        "description": "下载服务器日志文件的 zip 压缩包,以附加到 Onyx 支持工单中。"
+      },
+      "receipt": {
+        "duplicateHost": {
+          "label": "已由同一主机上的其他 worker 处理"
+        },
+        "failed": {
+          "label": "失败"
+        },
+        "failedWithError": {
+          "label": "失败:{error}"
+        },
+        "noLogs": {
+          "label": "未找到日志文件"
+        },
+        "uploaded": {
+          "label": "{count, plural, one {已上传 # 个文件} other {已上传 # 个文件}}"
+        }
+      },
+      "sensitiveWarning": {
+        "description": "日志文件可能包含用户邮箱、文档标题、搜索查询和错误内容。在组织外共享之前请先检查其内容。",
+        "title": "日志可能包含敏感数据"
+      },
+      "status": {
+        "startingCollection": {
+          "label": "正在开始收集..."
+        }
+      },
+      "toasts": {
+        "alreadyRunning": {
+          "message": "日志导出已在进行中。请稍后重试。"
+        },
+        "downloadFailed": {
+          "message": "下载日志导出失败。"
+        },
+        "lostAccess": {
+          "message": "无法访问正在运行的导出。请重新开始一个。"
+        },
+        "startFailed": {
+          "message": "启动日志导出失败。"
+        },
+        "unreachable": {
+          "message": "无法连接服务器以检查导出进度。待服务器恢复后请重新开始导出。"
+        }
+      },
+      "worker": {
+        "collecting": {
+          "label": "收集中..."
+        },
+        "missedDeadline": {
+          "label": "未在截止时间前报告"
+        }
+      }
+    },
     "externalApps": {
       "apps": {
         "empty": {
@@ -3140,9 +3708,137 @@
         "loadFailed": "加载连接器失败：{details}",
         "title": "错误"
       },
+      "form": {
+        "channelInput": {
+          "placeholder": "输入频道名称或正则表达式，然后按 Enter"
+        },
+        "channelsRequired": {
+          "error": "禁用「搜索所有频道」时，至少需要一个频道"
+        },
+        "configSchemaLoadError": {
+          "message": "加载配置架构失败：{error}"
+        },
+        "configTitle": {
+          "text": "联合连接器配置"
+        },
+        "configuration": {
+          "heading": "配置"
+        },
+        "create": {
+          "failed": "创建联合连接器失败",
+          "success": "联合连接器创建成功！"
+        },
+        "credentialField": {
+          "keepCurrentPlaceholder": "••••••••  （留空以保留当前值）"
+        },
+        "credentialValidationFailed": {
+          "message": "凭据验证失败：{message}"
+        },
+        "credentials": {
+          "description": "输入此连接器的凭据。",
+          "heading": "凭据"
+        },
+        "delete": {
+          "failed": "删除联合连接器失败",
+          "success": "联合连接器删除成功！"
+        },
+        "deleteConfirm": {
+          "message": "确定要删除此联合连接器吗？此操作无法撤消。"
+        },
+        "deleteError": {
+          "toast": "删除连接器时出错：{error}"
+        },
+        "deleteItem": {
+          "deleting": "正在删除...",
+          "inProgressTooltip": "正在删除",
+          "label": "删除"
+        },
+        "federatedBadge": {
+          "label": "联合"
+        },
+        "federatedTooltip": {
+          "default": "这是一个联合连接器。与常规连接器相比，它的延迟更高，搜索质量更低。"
+        },
+        "genericError": {
+          "text": "错误：{error}"
+        },
+        "listInput": {
+          "placeholder": "输入内容并按 Enter 添加条目"
+        },
+        "loadingSchema": {
+          "description": "正在获取此连接器类型所需的字段",
+          "title": "正在加载凭据架构..."
+        },
+        "manageButton": {
+          "label": "管理"
+        },
+        "missingFields": {
+          "message": "缺少必填字段：{fields}"
+        },
+        "noConfigSchema": {
+          "message": "此连接器类型没有可用的搜索配置。"
+        },
+        "noCredentialSchema": {
+          "message": "此连接器类型没有可用的凭据架构。"
+        },
+        "schemaLoadError": {
+          "message": "加载凭据架构失败：{error}"
+        },
+        "submitButton": {
+          "create": "创建",
+          "creating": "正在创建...",
+          "update": "更新",
+          "updating": "正在更新..."
+        },
+        "title": {
+          "edit": "编辑 {name}",
+          "setup": "设置 {name}"
+        },
+        "update": {
+          "failed": "更新联合连接器失败",
+          "success": "联合连接器更新成功！"
+        },
+        "validateBeforeEdit": {
+          "message": "请先输入新的凭据值再进行验证。"
+        },
+        "validateButton": {
+          "label": "验证",
+          "validating": "正在验证..."
+        },
+        "validation": {
+          "error": "验证错误：{error}",
+          "failedStatus": "验证失败：{statusText}",
+          "invalid": "凭据无效",
+          "valid": "凭据有效"
+        }
+      },
       "loading": {
         "description": "正在获取连接器详情和凭证结构",
         "title": "正在加载连接器配置..."
+      }
+    },
+    "federatedCallback": {
+      "backButton": {
+        "label": "返回聊天"
+      },
+      "error": {
+        "title": "出了点问题"
+      },
+      "errors": {
+        "clientSecret": "身份验证凭据缺失或无效",
+        "oauth": "OAuth 授权失败",
+        "validation": "配置错误 - 请检查您的连接器设置"
+      },
+      "processing": {
+        "details": "请稍候，我们正在完成设置。",
+        "title": "正在处理..."
+      },
+      "redirecting": {
+        "text": "2 秒后重定向到聊天..."
+      },
+      "success": {
+        "detailsTemplate": "您的 {serviceName} 授权已成功完成。现在可以使用此连接器进行搜索。",
+        "title": "成功！"
       }
     },
     "groups": {
@@ -3408,6 +4104,265 @@
         }
       }
     },
+    "hooks": {
+      "card": {
+        "delete": {
+          "ariaLabel": "删除钩子",
+          "tooltip": "删除"
+        },
+        "disconnect": {
+          "ariaLabel": "停用钩子",
+          "tooltip": "断开钩子"
+        },
+        "disconnectedSuffix": {
+          "label": "(已断开)"
+        },
+        "hookPoint": {
+          "description": "钩子点:{name}"
+        },
+        "manage": {
+          "ariaLabel": "配置钩子",
+          "tooltip": "管理"
+        },
+        "reconnectButton": {
+          "label": "重新连接"
+        },
+        "test": {
+          "ariaLabel": "重新验证钩子",
+          "tooltip": "测试连接"
+        }
+      },
+      "connectButton": {
+        "label": "连接"
+      },
+      "deleteModal": {
+        "body": {
+          "description": "钩子 ***{name}*** 将从此钩子点永久移除。外部端点可能仍保留之前发送给它的数据。"
+        },
+        "delete": {
+          "label": "删除"
+        },
+        "header": {
+          "title": "删除 *{name}*"
+        },
+        "permanent": {
+          "description": "删除后无法撤销。"
+        }
+      },
+      "disconnectModal": {
+        "body": {
+          "description": "Onyx 将停止为钩子 ***{name}*** 调用此端点。进行中的请求将继续运行。外部端点可能仍保留之前发送给它的数据。如有需要,您可以稍后重新连接此钩子。"
+        },
+        "deleteNote": {
+          "description": "您也可以删除此钩子。删除后无法撤销。"
+        },
+        "disconnect": {
+          "label": "断开"
+        },
+        "disconnectAndDelete": {
+          "label": "断开并删除"
+        },
+        "header": {
+          "title": "断开 *{name}*"
+        }
+      },
+      "docsLink": {
+        "label": "文档"
+      },
+      "form": {
+        "apiKey": {
+          "description": "Onyx 将使用此密钥向您的 API 端点进行身份验证。",
+          "keepCurrent": {
+            "placeholder": "留空以保留当前密钥"
+          },
+          "title": "API 密钥"
+        },
+        "connectionValid": {
+          "label": "连接有效。"
+        },
+        "createHeader": {
+          "description": "连接外部 API 端点以扩展此钩子点。",
+          "title": "设置钩子扩展"
+        },
+        "editHeader": {
+          "title": "管理钩子扩展"
+        },
+        "endpoint": {
+          "description": "只连接您信任的服务器。您需对通过此连接执行的操作和共享的数据负责。",
+          "title": "外部 API 端点 URL"
+        },
+        "errors": {
+          "connect": "无法连接到端点。",
+          "generic": "出错了。",
+          "invalidApiKey": "API 密钥无效。",
+          "timeout": "连接超时。请尝试增大超时时间。"
+        },
+        "failStrategy": {
+          "default": {
+            "label": "(默认)"
+          },
+          "hard": {
+            "label": "失败时阻止流水线"
+          },
+          "placeholder": "选择策略",
+          "soft": {
+            "label": "记录错误并继续"
+          },
+          "title": "失败策略"
+        },
+        "hookPoint": {
+          "label": "钩子点"
+        },
+        "name": {
+          "placeholder": "为此钩子点上的扩展命名",
+          "title": "显示名称"
+        },
+        "save": {
+          "label": "保存更改"
+        },
+        "softStrategy": {
+          "description": "如果端点返回错误,Onyx 会记录该错误并照常继续流水线,忽略钩子结果。"
+        },
+        "timeout": {
+          "description": "在应用失败策略之前,Onyx 等待端点响应的最长时间。必须大于 0 且最多 {max} 秒。",
+          "revert": {
+            "tooltip": "恢复默认值"
+          },
+          "suffix": "(秒)",
+          "title": "超时"
+        },
+        "toasts": {
+          "created": {
+            "message": "钩子已创建。"
+          },
+          "noHookPoint": {
+            "message": "未指定钩子点。"
+          },
+          "updated": {
+            "message": "钩子已更新。"
+          }
+        },
+        "validation": {
+          "apiKeyRequired": "API 密钥不能为空。",
+          "endpointRequired": "端点 URL 不能为空。",
+          "nameRequired": "显示名称不能为空。",
+          "timeoutRange": "必须大于 0 且最多 {max} 秒。",
+          "timeoutRequired": "必须填写超时时间。"
+        },
+        "verifying": {
+          "label": "正在验证连接…"
+        }
+      },
+      "logs": {
+        "copy": {
+          "tooltip": "复制"
+        },
+        "download": {
+          "tooltip": "下载"
+        },
+        "empty": {
+          "message": "过去 30 天内没有错误。"
+        },
+        "header": {
+          "description": "钩子:{name} • 钩子点:{point}",
+          "title": "最近的错误"
+        },
+        "lineCount": {
+          "label": "{count, plural, one {# 行} other {# 行}}"
+        },
+        "loadFailed": {
+          "message": "加载日志失败。"
+        },
+        "older": {
+          "label": "更早"
+        },
+        "pastHour": {
+          "label": "过去一小时"
+        },
+        "unknownError": {
+          "label": "未知错误"
+        }
+      },
+      "modals": {
+        "cancel": {
+          "label": "取消"
+        }
+      },
+      "page": {
+        "description": "通过在预定义的钩子点将外部 API 端点注册为回调,扩展 Onyx 流水线。",
+        "empty": {
+          "title": "没有可用的钩子点"
+        },
+        "emptySearch": {
+          "description": "请尝试其他搜索词。",
+          "title": "未找到结果"
+        },
+        "enterpriseRequired": {
+          "message": "钩子扩展需要企业版许可证。"
+        },
+        "loadHooksFailed": {
+          "message": "加载钩子失败。请刷新页面。"
+        },
+        "loadSpecsFailed": {
+          "message": "加载钩子规范失败。请刷新页面。"
+        },
+        "notEnabled": {
+          "message": "此部署未启用钩子扩展。"
+        },
+        "search": {
+          "placeholder": "搜索钩子..."
+        }
+      },
+      "status": {
+        "connected": {
+          "label": "已连接"
+        },
+        "connectionLost": {
+          "label": "连接已断开"
+        },
+        "errorCount": {
+          "title": "{count, plural, one {# 个错误} other {# 个错误}}"
+        },
+        "noError": {
+          "title": "无错误"
+        },
+        "pastHour": {
+          "description": "过去一小时内"
+        },
+        "recentErrors": {
+          "title": "最近的错误"
+        },
+        "viewMore": {
+          "label": "查看更多行"
+        },
+        "viewOlder": {
+          "label": "查看更早的错误"
+        }
+      },
+      "toasts": {
+        "deactivateFailed": {
+          "message": "停用钩子失败。"
+        },
+        "deleteFailed": {
+          "message": "删除钩子失败。"
+        },
+        "disconnectFailed": {
+          "message": "断开钩子失败。"
+        },
+        "reconnectFailed": {
+          "message": "重新连接钩子失败。"
+        },
+        "validateFailed": {
+          "message": "验证钩子失败。"
+        },
+        "validateSuccess": {
+          "message": "钩子验证成功。"
+        },
+        "validationFailed": {
+          "message": "验证失败:{status}"
+        }
+      }
+    },
     "imageGeneration": {
       "configureSuccess": {
         "message": "提供商配置成功"
@@ -3587,7 +4542,9 @@
           "label": "应用于新增和更新的文档"
         },
         "applyReindex": {
-          "label": "应用并重新索引"
+          "label": "应用并重新索引",
+          "statusesLoading": "正在加载连接器状态…",
+          "statusesFailed": "无法加载连接器状态 — 请在重新索引前重试。"
         },
         "rebuildAll": {
           "label": "重建所有现有文档"
@@ -3963,6 +4920,15 @@
         "serviceAccountJsonRequired": "服务账号 JSON 为必填项",
         "targetUrlRequired": "目标 URL 为必填项",
         "urlInvalid": "必须是有效的 URL"
+      },
+      "wontPortConsentModal": {
+        "title": "{count, plural, one {该连接器将被删除} other {这 # 个连接器将被删除}}",
+        "submit": "删除并重新索引",
+        "description": "{count, plural, one {重新索引会跳过已暂停和无效的连接器，因此该连接器不会迁移到新索引。Onyx 会将它以及它已索引的文档一并删除：} other {重新索引会跳过已暂停和无效的连接器，因此这 # 个不会迁移到新索引。Onyx 会将它们以及它们已索引的文档一并删除：}}",
+        "connector": "{name} — {status}",
+        "statusInvalid": "无效",
+        "statusPaused": "已暂停",
+        "restoreHint": "如需保留某个连接器，请在此取消，先恢复或修复它，然后重新索引，它就会被迁移过去。否则请在重新索引完成后重新添加。"
       }
     },
     "indexing": {
@@ -4273,6 +5239,9 @@
               "label": "添加行"
             },
             "description": "按模型提供商的要求添加额外属性。这些属性会作为[环境变量](https://docs.litellm.ai/docs/set_keys#environment-variables)传递给 LiteLLM 的 `completion()` 调用。更多说明请参见[文档](https://docs.onyx.app/admins/ai_models/custom_inference_provider)。",
+            "keyInput": {
+              "placeholder": "例如 OPENAI_ORGANIZATION"
+            },
             "title": "环境变量"
           },
           "modelRow": {
@@ -4784,6 +5753,132 @@
         "title": "用户"
       }
     },
+    "queryHistory": {
+      "assistant": {
+        "unknown": {
+          "label": "未知"
+        }
+      },
+      "detail": {
+        "ai": {
+          "label": "AI"
+        },
+        "errorTitle": {
+          "title": "出错了 :("
+        },
+        "feedback": {
+          "title": "反馈"
+        },
+        "fetchFailed": {
+          "message": "获取聊天会话失败 - {error}"
+        },
+        "header": {
+          "title": "聊天会话详情"
+        },
+        "referenceDocuments": {
+          "title": "参考文档"
+        },
+        "user": {
+          "label": "用户"
+        }
+      },
+      "export": {
+        "cancel": {
+          "label": "取消"
+        },
+        "downloadFailed": {
+          "message": "下载查询历史失败。"
+        },
+        "generating": {
+          "message": "正在生成 CSV 报告。点击\"{button}\"按钮查看所有任务。"
+        },
+        "kickoff": {
+          "label": "开始导出"
+        }
+      },
+      "exportStatus": {
+        "failure": {
+          "label": "失败"
+        },
+        "pending": {
+          "label": "等待中"
+        },
+        "success": {
+          "label": "成功"
+        }
+      },
+      "exportsModal": {
+        "download": {
+          "header": "下载"
+        },
+        "endRange": {
+          "header": "结束范围"
+        },
+        "generatedAt": {
+          "header": "生成时间"
+        },
+        "header": {
+          "title": "先前的查询历史导出"
+        },
+        "notReady": {
+          "tooltip": "导出尚未就绪"
+        },
+        "startRange": {
+          "header": "起始范围"
+        },
+        "status": {
+          "header": "状态"
+        }
+      },
+      "feedback": {
+        "dislike": {
+          "label": "踩"
+        },
+        "like": {
+          "label": "赞"
+        },
+        "mixed": {
+          "label": "混合"
+        },
+        "na": {
+          "label": "N/A"
+        }
+      },
+      "filters": {
+        "any": {
+          "label": "任意"
+        },
+        "feedbackType": {
+          "label": "反馈类型"
+        }
+      },
+      "previousExports": {
+        "label": "查看导出"
+      },
+      "table": {
+        "date": {
+          "header": "日期"
+        },
+        "feedback": {
+          "header": "反馈"
+        },
+        "fetchError": {
+          "title": "获取查询历史时出错"
+        },
+        "firstAiResponse": {
+          "header": "AI 的第一条回复"
+        },
+        "firstUserMessage": {
+          "header": "用户的第一条消息"
+        },
+        "persona": {
+          "header": "角色"
+        },
+        "user": {
+          "header": "用户"
+        }
+      }
+    },
     "scim": {
       "card": {
         "connected": {
@@ -4838,6 +5933,56 @@
         "generateFailed": "生成 token 失败：{detail}",
         "genericError": "出现问题。请重试。",
         "regenerated": "Token 已重新生成"
+      }
+    },
+    "search": {
+      "errors": {
+        "classificationFailed": {
+          "message": "查询分类失败。将回退到聊天。"
+        },
+        "searchFailed": {
+          "message": "文档搜索失败。请重试。"
+        }
+      },
+      "results": {
+        "count": {
+          "label": "{count, plural, one {# 条结果} other {# 条结果}}"
+        },
+        "empty": {
+          "description": "请检查您的连接器/筛选条件,或尝试其他搜索词。",
+          "title": "未找到结果"
+        },
+        "failed": {
+          "title": "搜索失败"
+        }
+      },
+      "tagFilter": {
+        "count": {
+          "label": "{count, plural, one {# 个标签} other {# 个标签}}"
+        },
+        "empty": {
+          "label": "标签"
+        },
+        "search": {
+          "placeholder": "筛选标签..."
+        }
+      },
+      "timeFilter": {
+        "all": {
+          "label": "全部时间"
+        },
+        "day": {
+          "label": "过去 24 小时"
+        },
+        "month": {
+          "label": "过去一个月"
+        },
+        "week": {
+          "label": "过去一周"
+        },
+        "year": {
+          "label": "过去一年"
+        }
       }
     },
     "security": {
@@ -5729,6 +6874,184 @@
         "unexpectedError": "发生意外错误。"
       }
     },
+    "standardAnswers": {
+      "categoryBubble": {
+        "remove": {
+          "ariaLabel": "移除类别 {name}"
+        },
+        "removeButton": {
+          "ariaLabel": "移除类别"
+        }
+      },
+      "categoryDropdown": {
+        "categories": {
+          "label": "标准回答类别"
+        },
+        "fetchError": {
+          "message": "获取标准回答类别失败 - {message}",
+          "title": "出错了 :("
+        },
+        "search": {
+          "placeholder": "搜索类别..."
+        }
+      },
+      "editPage": {
+        "title": "编辑标准答案"
+      },
+      "errors": {
+        "fetchAnswersFailed": {
+          "message": "获取标准答案失败"
+        },
+        "fetchCategoriesFailed": {
+          "message": "获取标准答案类别失败"
+        },
+        "genericTitle": {
+          "title": "出错了 :("
+        },
+        "loadAnswersFailed": {
+          "title": "加载标准答案时出错"
+        },
+        "loadCategoriesFailed": {
+          "title": "加载标准答案类别时出错"
+        },
+        "notFound": {
+          "message": "未找到 ID 为 {id} 的标准答案"
+        }
+      },
+      "filter": {
+        "allCategories": {
+          "label": "所有类别"
+        }
+      },
+      "form": {
+        "allKeywords": {
+          "label": "所有这些关键词,顺序不限,以空格分隔",
+          "placeholder": "IT 工单"
+        },
+        "answer": {
+          "label": "答案",
+          "placeholder": "使用 Markdown 编写的答案。示例:如需 IT 团队的帮助,请发送邮件至 internalsupport@company.com"
+        },
+        "anyKeywords": {
+          "label": "这些关键词中的任意一个,以空格分隔",
+          "placeholder": "工单 问题 故障"
+        },
+        "categories": {
+          "label": "类别:",
+          "placeholder": "输入类别并按 Enter…"
+        },
+        "createButton": {
+          "label": "创建!"
+        },
+        "keywords": {
+          "tooltip": "问题必须匹配这些关键词才能触发该答案。"
+        },
+        "matchRegex": {
+          "description": "使用正则表达式模式匹配,而不是精确关键词",
+          "label": "匹配正则表达式"
+        },
+        "regexPattern": {
+          "label": "正则表达式模式",
+          "tooltip": "当问题匹配此正则表达式模式时触发(使用 Python 的 `re.search()`)"
+        },
+        "strategy": {
+          "all": {
+            "label": "所有关键词"
+          },
+          "any": {
+            "label": "任意关键词"
+          },
+          "description": "选择用户的问题需要包含上述关键词中的任意一个还是全部,才会显示此答案。",
+          "label": "关键词检测策略"
+        },
+        "toasts": {
+          "categoryCreateFailed": {
+            "message": "创建类别\"{name}\"时出错 - {error}"
+          },
+          "createFailed": {
+            "message": "创建标准答案时出错 - {error}"
+          },
+          "updateFailed": {
+            "message": "更新标准答案时出错 - {error}"
+          }
+        },
+        "updateButton": {
+          "label": "更新!"
+        },
+        "validation": {
+          "answerRequired": "必须填写答案",
+          "categoryRequired": "至少需要一个类别",
+          "keywordRequired": "必须填写关键词或模式"
+        }
+      },
+      "intro": {
+        "addFirst": {
+          "message": "在下方添加您的第一个标准答案!"
+        },
+        "description": "管理预定义问题的标准答案。\n注意:目前只有通过 Slack 提出的问题才能收到标准答案。"
+      },
+      "newStandardAnswer": {
+        "label": "新建标准答案"
+      },
+      "search": {
+        "placeholder": "按关键词/短语查找标准答案..."
+      },
+      "table": {
+        "answer": {
+          "header": "答案"
+        },
+        "categories": {
+          "header": "类别"
+        },
+        "empty": {
+          "message": "未找到匹配的标准答案..."
+        },
+        "keywords": {
+          "header": "关键词/模式"
+        },
+        "matchRegex": {
+          "header": "正则匹配?"
+        },
+        "matchRegexNo": {
+          "label": "否"
+        },
+        "matchRegexYes": {
+          "label": "是"
+        },
+        "slackNote": {
+          "message": "请确保已将该类别添加到相应的 [Slack 机器人](/admin/bots)。"
+        }
+      },
+      "toasts": {
+        "deleteFailed": {
+          "message": "删除标准答案失败 - {error}"
+        },
+        "deleted": {
+          "message": "已删除标准答案 {id}"
+        }
+      }
+    },
+    "status": {
+      "badges": {
+        "canceled": "已取消",
+        "completedWithErrors": "已完成但有错误",
+        "deleting": "正在删除",
+        "error": "错误",
+        "failed": "失败",
+        "inProgress": "进行中",
+        "indexed": "已索引",
+        "indexing": "正在索引",
+        "initialIndexing": "初始索引",
+        "interrupted": "已中断",
+        "invalid": "无效",
+        "invalidConnectorTooltip": "连接器处于无效状态。请更新凭据或创建新的连接器。",
+        "none": "无",
+        "notStarted": "未开始",
+        "paused": "已暂停",
+        "scheduled": "已计划",
+        "succeeded": "成功"
+      }
+    },
     "systemInfo": {
       "backendVersion": {
         "label": "后端版本："
@@ -5738,6 +7061,142 @@
       },
       "webVersion": {
         "label": "Web 版本："
+      }
+    },
+    "theme": {
+      "announcement": {
+        "description": "显示用户可以关闭的持续性系统公告。",
+        "header": {
+          "placeholder": "添加公告"
+        },
+        "label": "系统公告"
+      },
+      "announcementPopup": {
+        "description": "还会在所有用户首次访问时以全屏弹窗形式显示此通知。请谨慎使用。",
+        "label": "首次访问弹窗通知"
+      },
+      "appName": {
+        "description": "此名称将在整个应用中显示,并替换界面中的\"Onyx\"。",
+        "label": "应用显示名称"
+      },
+      "branding": {
+        "description": "移除应用中的\"powered by Onyx\"及其他 Onyx 品牌标识。",
+        "enterpriseTooltip": "隐藏 Onyx 品牌标识是企业版套餐的功能。",
+        "label": "隐藏 Onyx 品牌标识"
+      },
+      "chatFooter": {
+        "description": "添加用于免责声明或附加信息的 markdown 内容。",
+        "label": "聊天页脚文本"
+      },
+      "chatHeader": {
+        "label": "聊天页眉文本"
+      },
+      "consent": {
+        "description": "要求用户在访问应用之前阅读并同意该通知。",
+        "label": "要求同意通知"
+      },
+      "consentPrompt": {
+        "label": "通知同意提示"
+      },
+      "firstVisit": {
+        "description": "在新用户首次访问时显示一次性弹窗。",
+        "label": "显示首次访问通知"
+      },
+      "greeting": {
+        "description": "在主页添加一条简短消息。",
+        "label": "问候语"
+      },
+      "helpLink": {
+        "description": "除 Onyx 文档外,在用户菜单中添加自定义帮助链接。",
+        "enterpriseTooltip": "自定义帮助链接是企业版套餐的功能。",
+        "label": "自定义帮助链接"
+      },
+      "helpLinkLabel": {
+        "label": "自定义帮助链接标签",
+        "placeholder": "链接标签"
+      },
+      "loginSubtitle": {
+        "description": "替换登录页欢迎标题下方的标语。",
+        "label": "登录页副标题"
+      },
+      "logo": {
+        "label": "应用 Logo",
+        "updateButton": {
+          "label": "更新"
+        }
+      },
+      "logoStyle": {
+        "both": {
+          "label": "Logo 和名称",
+          "tooltip": "同时显示您的应用 Logo 和名称。"
+        },
+        "description": "选择侧边栏顶部显示的内容。添加 Logo 或应用名称后,相应选项才可用。",
+        "label": "Logo 显示样式",
+        "logoOnly": {
+          "disabledTooltip": "上传 Logo 以启用此选项。",
+          "label": "仅 Logo",
+          "tooltip": "仅显示您的应用 Logo。"
+        },
+        "nameOnly": {
+          "disabledTooltip": "输入应用名称以启用此选项。",
+          "label": "仅名称",
+          "tooltip": "仅显示您的应用名称。"
+        }
+      },
+      "markdownContent": {
+        "placeholder": "添加 markdown 内容"
+      },
+      "noticeContent": {
+        "label": "通知内容"
+      },
+      "noticeHeader": {
+        "label": "通知标题"
+      },
+      "page": {
+        "announcementClearFailed": {
+          "message": "清除公告失败。"
+        },
+        "announcementSaveFailed": {
+          "message": "保存公告失败。"
+        },
+        "applyButton": {
+          "label": "应用更改"
+        },
+        "applying": {
+          "label": "正在应用..."
+        },
+        "description": "自定义应用在组织内用户面前的显示方式。",
+        "logoUploadFailed": {
+          "message": "上传 Logo 失败。{error}"
+        },
+        "saveSuccess": {
+          "message": "外观设置保存成功!"
+        },
+        "settingsSaveFailed": {
+          "message": "更新设置失败。{error}"
+        },
+        "validation": {
+          "consentPromptRequired": "必须填写通知同意提示",
+          "invalidUrl": "必须是有效的 URL",
+          "maxChars": "最多 {count} 个字符",
+          "noticeContentRequired": "必须填写通知内容",
+          "noticeHeaderRequired": "必须填写通知标题",
+          "urlRequiredWithLabel": "设置标签后必须填写 URL"
+        }
+      },
+      "preview": {
+        "chatFooter": {
+          "placeholder": "聊天页脚内容"
+        },
+        "chatHeader": {
+          "placeholder": "聊天页眉内容"
+        },
+        "greeting": {
+          "placeholder": "欢迎使用 Acme Chat"
+        },
+        "logo": {
+          "alt": "Logo"
+        }
       }
     },
     "tokenRateLimits": {
@@ -6002,6 +7461,9 @@
             "label": "支出"
           }
         }
+      },
+      "page": {
+        "description": "监控工作区支出并按用户查看使用情况。"
       },
       "spendByUser": {
         "columns": {
@@ -6599,6 +8061,204 @@
         "tooltip": "查看智能体统计"
       }
     },
+    "editor": {
+      "actions": {
+        "codeInterpreter": {
+          "description": "生成并运行代码。",
+          "title": "代码解释器"
+        },
+        "codingAgent": {
+          "description": "调查 GitHub 仓库并回答有关其代码的问题。",
+          "title": "编码智能体"
+        },
+        "description": "此智能体可使用的工具和能力。",
+        "imageGeneration": {
+          "description": "使用 AI 驱动的工具生成和处理图像。",
+          "title": "图像生成",
+          "unavailable": {
+            "tooltip": "图像生成需要已配置的模型。如果您有权限，请在设置 > 图像生成中配置一个，或联系管理员。"
+          }
+        },
+        "openUrl": {
+          "description": "从网络 URL 获取并读取内容。",
+          "title": "打开 URL"
+        },
+        "title": "操作",
+        "webSearch": {
+          "description": "在网络上搜索实时信息和最新结果。",
+          "title": "网络搜索"
+        }
+      },
+      "advanced": {
+        "description": "微调智能体的提示词和知识。",
+        "overwritePrompt": {
+          "suffix": "（不推荐）",
+          "title": "覆盖系统提示词"
+        },
+        "reminders": {
+          "description": "在提示消息后附加简短提醒。如果发现智能体在聊天过程中容易忘记某些指令，可用此功能提醒它。提醒应简短，且不干扰用户消息。",
+          "placeholder": "请记住，我希望您始终将回复格式化为编号列表。",
+          "title": "提醒"
+        },
+        "title": "高级选项"
+      },
+      "avatar": {
+        "edit": {
+          "label": "编辑"
+        },
+        "uploadImage": {
+          "label": "上传图片"
+        }
+      },
+      "delete": {
+        "button": {
+          "label": "删除智能体"
+        },
+        "description": "使用此智能体的所有人将无法再访问它。",
+        "title": "删除此智能体"
+      },
+      "deleteModal": {
+        "body": {
+          "confirm": "确定要删除此智能体吗？",
+          "warning": "使用此智能体的所有人将无法再访问它。删除后无法撤销。"
+        },
+        "title": "删除智能体"
+      },
+      "filesModal": {
+        "description": "为此智能体选择的所有文件",
+        "placeholderName": "文件 {id}",
+        "title": "用户文件"
+      },
+      "general": {
+        "avatar": {
+          "title": "智能体头像"
+        },
+        "descriptionField": {
+          "placeholder": "此智能体有什么用途？",
+          "title": "描述"
+        },
+        "name": {
+          "placeholder": "为您的智能体命名",
+          "title": "名称"
+        }
+      },
+      "header": {
+        "cancel": {
+          "label": "取消"
+        },
+        "create": {
+          "label": "创建"
+        },
+        "createTitle": "创建智能体",
+        "editTitle": "编辑智能体",
+        "save": {
+          "label": "保存"
+        }
+      },
+      "mcp": {
+        "noAccess": {
+          "tooltip": "您不再拥有此 MCP 服务器的访问权限。其现有工具将被保留。"
+        },
+        "searchTools": {
+          "placeholder": "搜索工具..."
+        }
+      },
+      "page": {
+        "ariaLabel": "智能体编辑器页面"
+      },
+      "prompts": {
+        "instructions": {
+          "description": "添加说明以定制此智能体的响应。",
+          "placeholder": "对复杂问题逐步思考并展示推理过程。使用具体示例。强调行动项，遇到未知内容时留空供人工填写。使用礼貌热情的语气。",
+          "title": "说明"
+        },
+        "starters": {
+          "description": "帮助用户了解此智能体的功能以及如何与其有效互动的示例消息。",
+          "title": "对话开场白"
+        }
+      },
+      "saveTooltip": {
+        "fixErrors": "保存前请修复表单中的错误。",
+        "noChanges": "尚未进行任何更改。",
+        "saving": "正在保存更改...",
+        "uploading": "请等待文件上传完成。"
+      },
+      "share": {
+        "feature": {
+          "description": "将此智能体显示在探索智能体列表顶部，并为有访问权限的新用户自动固定到侧边栏。",
+          "privateNotice": {
+            "title": "此智能体仅对您私有，只会为您自己精选显示。"
+          },
+          "title": "精选此智能体",
+          "unlistedWarning": {
+            "title": "此智能体已取消展示，不会显示在精选列表中。"
+          }
+        },
+        "labels": {
+          "description": "添加标签和类别，帮助他人更好地发现此智能体。",
+          "placeholder": "添加标签..."
+        },
+        "share": {
+          "button": {
+            "label": "共享"
+          },
+          "description": "与其他用户、群组或组织中的所有人共享。",
+          "title": "共享此智能体"
+        },
+        "title": "共享智能体"
+      },
+      "starters": {
+        "examples": {
+          "engineeringGoals": "整理一份我们本季度的工程目标清单。",
+          "overview": "给我一些文档的概览。",
+          "salesReport": "查找最新的销售报告。",
+          "todayGoals": "总结我今天的目标。"
+        },
+        "placeholder": "输入对话开场白..."
+      },
+      "suffix": {
+        "optional": "可选"
+      },
+      "toasts": {
+        "createFailed": "创建智能体失败 - {detail}",
+        "created": "智能体“{name}”创建成功",
+        "deleteFailed": "删除智能体失败：{error}",
+        "deleted": "智能体删除成功",
+        "genericError": "发生错误：{error}",
+        "noResponse": "未收到响应",
+        "sharingFailed": "智能体已创建，但共享失败：{error}",
+        "toggleListedFailed": "切换可见性失败",
+        "unknownDetail": "未知错误",
+        "unknownError": "未知错误",
+        "updateFailed": "更新智能体失败 - {detail}",
+        "updated": "智能体“{name}”更新成功"
+      },
+      "validation": {
+        "cutoffInFuture": "知识截止日期必须是今天或更早。",
+        "descriptionMax": "描述不得超过 {max} 个字符",
+        "nameRequired": "智能体名称为必填项。",
+        "starterMax": "对话开场白不得超过 {max} 个字符"
+      },
+      "visibility": {
+        "relist": {
+          "button": {
+            "label": "重新展示"
+          },
+          "description": "重新展示的智能体会再次出现在探索智能体列表中。",
+          "title": "重新展示此智能体"
+        },
+        "unlist": {
+          "button": {
+            "label": "取消展示"
+          },
+          "description": "取消展示的智能体不会出现在探索智能体列表中，但仍可访问。",
+          "title": "取消展示此智能体"
+        }
+      },
+      "warnings": {
+        "openUrl": "没有打开 URL 能力的网络搜索可能会导致网络结果明显变差。"
+      }
+    },
     "filters": {
       "actions": {
         "all": {
@@ -6781,6 +8441,47 @@
         }
       }
     },
+    "navigation": {
+      "countSeparator": {
+        "label": "{count, plural, one {智能体} other {智能体}}"
+      },
+      "empty": {
+        "description": "未找到智能体"
+      },
+      "header": {
+        "description": "为您和团队的使用场景定制 AI 的行为和知识。",
+        "title": "智能体"
+      },
+      "newAgent": {
+        "label": "新建智能体",
+        "noPermission": {
+          "tooltip": "您没有创建智能体的权限。请联系管理员申请访问权限。"
+        }
+      },
+      "page": {
+        "ariaLabel": "智能体页面"
+      },
+      "search": {
+        "placeholder": "搜索智能体..."
+      },
+      "sections": {
+        "all": {
+          "title": "全部智能体"
+        },
+        "featured": {
+          "description": "由您的团队精选",
+          "title": "精选智能体"
+        }
+      },
+      "tabs": {
+        "all": {
+          "label": "全部智能体"
+        },
+        "your": {
+          "label": "您的智能体"
+        }
+      }
+    },
     "userVariables": {
       "insert": {
         "tooltip": "插入用户变量"
@@ -6788,6 +8489,12 @@
     }
   },
   "auth": {
+    "anonymous": {
+      "redirecting": {
+        "description": "正在设置您的匿名会话，请稍候。",
+        "title": "正在跳转到聊天页面..."
+      }
+    },
     "createAccount": {
       "createOrgButton": {
         "label": "创建新组织"
@@ -6809,6 +8516,55 @@
       },
       "signInLink": {
         "label": "登录"
+      }
+    },
+    "emailPasswordForm": {
+      "accountExists": {
+        "error": "使用指定电子邮件的账户已存在。"
+      },
+      "continueAsGuest": {
+        "label": "或以访客身份继续"
+      },
+      "email": {
+        "label": "电子邮件地址",
+        "placeholder": "email@yourcompany.com"
+      },
+      "forgotPassword": {
+        "link": "[忘记密码?]({url})"
+      },
+      "invalidCredentials": {
+        "error": "电子邮件或密码无效"
+      },
+      "noPassword": {
+        "error": "创建账户以设置密码"
+      },
+      "password": {
+        "label": "密码",
+        "placeholder": "密码"
+      },
+      "passwordDigit": {
+        "error": "密码必须至少包含一个数字"
+      },
+      "passwordLength": {
+        "error": "密码长度必须为 {min}–{max} 个字符"
+      },
+      "passwordLoginDisabled": {
+        "error": "密码登录已关闭。请使用您的身份提供商登录。"
+      },
+      "passwordLowercase": {
+        "error": "密码必须至少包含一个小写字母"
+      },
+      "passwordRequirements": {
+        "label": "密码要求:"
+      },
+      "passwordSpecialChar": {
+        "error": "密码必须至少包含一个特殊字符"
+      },
+      "passwordUppercase": {
+        "error": "密码必须至少包含一个大写字母"
+      },
+      "tooManyRequests": {
+        "error": "请求过多。请稍后重试。"
       }
     },
     "error": {
@@ -6849,6 +8605,31 @@
         "description": "身份验证系统临时中断"
       }
     },
+    "errorDisplay": {
+      "anonymousDisabled": {
+        "toast": "您的团队未启用匿名访问。"
+      },
+      "generic": {
+        "toast": "发生错误。"
+      }
+    },
+    "flowContainer": {
+      "createAccountLink": {
+        "label": "创建账户"
+      },
+      "logo": {
+        "alt": "徽标"
+      },
+      "signInLink": {
+        "label": "登录"
+      },
+      "signinPrompt": {
+        "text": "已有账户？"
+      },
+      "signupPrompt": {
+        "text": "第一次使用 {appName}？"
+      }
+    },
     "forgotPassword": {
       "backToLoginLink": {
         "label": "[返回登录](/auth/login)"
@@ -6881,7 +8662,8 @@
         "placeholder": "输入 API 密钥"
       },
       "emailField": {
-        "label": "邮箱"
+        "label": "邮箱",
+        "placeholder": "email@yourcompany.com"
       },
       "genericError": {
         "toast": "模拟用户失败"
@@ -6942,6 +8724,23 @@
         "label": "工作邮箱"
       }
     },
+    "passwordRequirements": {
+      "digit": {
+        "label": "包含数字。"
+      },
+      "length": {
+        "label": "{min}–{max} 个字符"
+      },
+      "lowercase": {
+        "label": "包含小写字母。"
+      },
+      "specialChar": {
+        "label": "包含特殊字符。"
+      },
+      "uppercase": {
+        "label": "包含大写字母。"
+      }
+    },
     "resetPassword": {
       "backToLoginLink": {
         "label": "[返回登录](/auth/login)"
@@ -6983,6 +8782,31 @@
       },
       "unexpectedError": {
         "toast": "发生意外错误。请重试。"
+      }
+    },
+    "sessionEnd": {
+      "expired": {
+        "message": "您的会话已过期。请重新登录以继续。"
+      },
+      "loginButton": {
+        "label": "登录"
+      },
+      "modal": {
+        "title": "您已退出登录"
+      },
+      "terminated": {
+        "message": "此会话已退出登录。请重新登录以继续。"
+      },
+      "unrecognized": {
+        "message": "您已意外退出登录。请重新登录以继续。如果此问题持续出现,请联系您的管理员。"
+      }
+    },
+    "signIn": {
+      "captchaTokenError": {
+        "toast": "grecaptcha.execute 未返回令牌"
+      },
+      "google": {
+        "label": "使用 Google 继续"
       }
     },
     "signup": {
@@ -7168,6 +8992,70 @@
       },
       "sourcesModal": {
         "title": "来源"
+      }
+    },
+    "appChrome": {
+      "delete": {
+        "label": "删除"
+      },
+      "deleteModal": {
+        "description": "确定要删除此聊天吗？此操作无法撤销。",
+        "submitButton": {
+          "label": "删除"
+        },
+        "title": "删除聊天"
+      },
+      "exportAs": {
+        "label": "导出为…"
+      },
+      "exportFailed": {
+        "message": "导出聊天失败。请重试。"
+      },
+      "exportMarkdown": {
+        "label": "Markdown"
+      },
+      "exportPlaintext": {
+        "label": "纯文本"
+      },
+      "fullWidth": {
+        "ariaLabel": "切换全宽聊天",
+        "fitTooltip": "适应宽度",
+        "fullTooltip": "全宽"
+      },
+      "incognitoExit": {
+        "ariaLabel": "退出无痕聊天",
+        "tooltip": "退出无痕聊天"
+      },
+      "incognitoPill": {
+        "ariaLabel": "无痕聊天",
+        "label": "无痕聊天"
+      },
+      "incognitoStart": {
+        "ariaLabel": "开始无痕聊天",
+        "lockedTooltip": "只能在聊天开始前设置无痕模式",
+        "tooltip": "无痕聊天"
+      },
+      "mode": {
+        "chat": {
+          "description": "对话与研究",
+          "label": "聊天"
+        },
+        "search": {
+          "description": "快速搜索文档",
+          "label": "搜索"
+        }
+      },
+      "modeButton": {
+        "ariaLabel": "更改应用模式"
+      },
+      "moveToProject": {
+        "label": "移动到项目"
+      },
+      "openSidebar": {
+        "ariaLabel": "打开侧边栏"
+      },
+      "share": {
+        "label": "分享"
       }
     },
     "banners": {
@@ -8350,6 +10238,75 @@
         "tooltip": "此模型不支持修改该设置。"
       }
     },
+    "nrf": {
+      "page": {
+        "filesFailed": {
+          "toast": "{count, plural, one {文件处理失败并已移除：{names}} other {文件处理失败并已移除：{names}}}"
+        },
+        "loginModal": {
+          "loginButton": {
+            "label": "登录"
+          },
+          "title": "欢迎使用 Onyx"
+        },
+        "noResubmitMessage": {
+          "toast": "未找到之前发送的消息。"
+        },
+        "settingsButton": {
+          "tooltip": "打开设置"
+        },
+        "setupLlmButton": {
+          "label": "请设置 LLM。"
+        },
+        "turnOffModal": {
+          "cancelButton": {
+            "label": "取消"
+          },
+          "confirmButton": {
+            "label": "关闭"
+          },
+          "description": "您将看到浏览器默认的新标签页。您可以随时在 Onyx 设置中重新开启。",
+          "title": "关闭 Onyx 新标签页？"
+        }
+      },
+      "settingsPanel": {
+        "backgroundNone": {
+          "label": "无"
+        },
+        "backgroundOption": {
+          "ariaLabel": "{label}背景"
+        },
+        "backgroundOptionSelected": {
+          "ariaLabel": "{label}背景（已选择）"
+        },
+        "backgroundSection": {
+          "title": "背景"
+        },
+        "closeButton": {
+          "tooltip": "关闭设置"
+        },
+        "generalSection": {
+          "title": "常规"
+        },
+        "header": {
+          "title": "设置"
+        },
+        "newTabToggle": {
+          "label": "将 Onyx 用作新标签页"
+        },
+        "themeToggle": {
+          "tooltip": "{mode, select, light {切换为浅色主题} other {切换为深色主题}}"
+        }
+      },
+      "sidePanelHeader": {
+        "newChatButton": {
+          "tooltip": "新聊天"
+        },
+        "openInOnyxButton": {
+          "tooltip": "在 Onyx 中打开"
+        }
+      }
+    },
     "popup": {
       "consentCheckbox": {
         "label": "同意复选框"
@@ -8365,6 +10322,128 @@
       },
       "startButton": {
         "label": "开始"
+      }
+    },
+    "projects": {
+      "chatItem": {
+        "lastMessage": {
+          "description": "最后一条消息 {time}"
+        },
+        "projectFallback": {
+          "label": "项目"
+        }
+      },
+      "contextPanel": {
+        "addFilesButton": {
+          "label": "添加文件"
+        },
+        "contextExceeded": {
+          "message": "此项目超出了模型的上下文限制。会话在生成回复前会自动先搜索相关文件。"
+        },
+        "dropFiles": {
+          "message": "将文件拖放到此处以添加到此项目"
+        },
+        "emptyFiles": {
+          "message": "添加文档、文本或图像以在项目中使用。支持拖放。"
+        },
+        "fileCount": {
+          "description": "{count, plural, one {# 个文件} other {# 个文件}}"
+        },
+        "fileCountOverflow": {
+          "description": "100+ 个文件"
+        },
+        "files": {
+          "description": "此项目中的聊天可以访问这些文件。",
+          "title": "文件"
+        },
+        "filesModal": {
+          "description": "此项目中的会话可以访问这里的文件。",
+          "title": "项目文件"
+        },
+        "instructions": {
+          "emptyDescription": "添加指令以定制此项目中的回复。",
+          "title": "指令"
+        },
+        "loadingProject": {
+          "label": "正在加载项目..."
+        },
+        "setInstructionsButton": {
+          "label": "设置指令"
+        },
+        "viewAll": {
+          "label": "查看全部"
+        },
+        "viewFiles": {
+          "label": "查看文件"
+        }
+      },
+      "createModal": {
+        "cancelButton": {
+          "label": "取消"
+        },
+        "createError": {
+          "toast": "创建项目 {name} 失败"
+        },
+        "description": "使用项目将您的文件和聊天集中整理在一处,并为持续进行的工作添加自定义指令。",
+        "name": {
+          "label": "项目名称",
+          "placeholder": "您在做什么?"
+        },
+        "nameRequired": {
+          "error": "项目名称为必填项"
+        },
+        "submitButton": {
+          "label": "创建项目"
+        },
+        "title": "创建新项目"
+      },
+      "foldedPopover": {
+        "empty": {
+          "title": "未找到项目"
+        },
+        "search": {
+          "placeholder": "搜索项目..."
+        }
+      },
+      "folder": {
+        "collapse": {
+          "ariaLabel": "折叠项目"
+        },
+        "delete": {
+          "label": "删除项目"
+        },
+        "deleteModal": {
+          "confirmButton": {
+            "label": "删除"
+          },
+          "message": "确定要删除此项目吗?此操作无法撤销。",
+          "title": "删除项目"
+        },
+        "expand": {
+          "ariaLabel": "展开项目"
+        },
+        "rename": {
+          "label": "重命名项目"
+        }
+      },
+      "sessionList": {
+        "empty": {
+          "message": "暂无聊天。"
+        },
+        "recentChats": {
+          "title": "最近的聊天"
+        }
+      },
+      "uploads": {
+        "failed": {
+          "toast": "上传文件失败"
+        },
+        "oversized": {
+          "toast": "{count, plural, one {已跳过 # 个超大文件} other {已跳过 # 个超大文件}}(>{max} MB):{names}"
+        },
+        "rejected": {
+          "toast": "部分文件未上传。{details}"
+        }
       }
     },
     "sharedChat": {
@@ -8397,6 +10476,1773 @@
       },
       "incognito": {
         "title": "您处于无痕模式"
+      }
+    }
+  },
+  "common": {
+    "adminChrome": {
+      "openSidebar": {
+        "ariaLabel": "打开侧边栏"
+      },
+      "paymentReminder": {
+        "billingButton": {
+          "label": "更新账单信息"
+        },
+        "text": "**警告：**您的试用期将在不到 5 天后结束，且尚未添加付款方式。"
+      }
+    },
+    "agentAvatar": {
+      "image": {
+        "altFallback": "智能体头像"
+      },
+      "logo": {
+        "alt": "徽标"
+      }
+    },
+    "attachment": {
+      "document": {
+        "label": "文档"
+      },
+      "expandButton": {
+        "ariaLabel": "展开文档"
+      }
+    },
+    "backButton": {
+      "label": "返回"
+    },
+    "chatBackgrounds": {
+      "clouds": {
+        "label": "云"
+      },
+      "hills": {
+        "label": "丘陵"
+      },
+      "mountains": {
+        "label": "山脉"
+      },
+      "night": {
+        "label": "夜晚"
+      },
+      "none": {
+        "label": "无"
+      },
+      "plant": {
+        "label": "植物"
+      }
+    },
+    "colorSwatch": {
+      "sample": {
+        "text": "文"
+      }
+    },
+    "comboBox": {
+      "createOption": {
+        "ariaLabel": "{prefix}“{value}”",
+        "defaultPrefix": "创建"
+      },
+      "dropdown": {
+        "closeAriaLabel": "关闭下拉菜单",
+        "openAriaLabel": "打开下拉菜单"
+      },
+      "options": {
+        "empty": "未找到选项"
+      },
+      "separator": {
+        "label": "其他选项"
+      }
+    },
+    "commandMenu": {
+      "closeButton": {
+        "ariaLabel": "关闭菜单"
+      },
+      "dialog": {
+        "title": "命令菜单"
+      },
+      "options": {
+        "ariaLabel": "命令菜单选项"
+      },
+      "search": {
+        "placeholder": "搜索..."
+      }
+    },
+    "connectorMultiSelect": {
+      "allSelected": {
+        "description": "所有可用的连接器均已选择。请在下方移除连接器以添加其他连接器。",
+        "placeholder": "已选择所有连接器"
+      },
+      "documentSetHint": {
+        "description": "所选连接器索引的所有文档都将包含在此文档集中。"
+      },
+      "noMatches": {
+        "text": "未找到匹配的连接器"
+      },
+      "noMoreConnectors": {
+        "text": "没有更多可用的连接器"
+      },
+      "noPrivateConnectors": {
+        "text": "没有可用的私有连接器。请先创建一个私有连接器。"
+      },
+      "noneSelected": {
+        "text": "未选择连接器。请在上方搜索并选择连接器。"
+      },
+      "removeConnector": {
+        "tooltip": "移除连接器"
+      },
+      "search": {
+        "placeholder": "搜索连接器..."
+      }
+    },
+    "datePicker": {
+      "selectDate": {
+        "label": "选择日期"
+      },
+      "todayButton": {
+        "label": "今天"
+      }
+    },
+    "dateRange": {
+      "anyTime": {
+        "text": "任何时间..."
+      },
+      "chooseCustom": {
+        "ariaLabel": "选择自定义范围"
+      },
+      "clearButton": {
+        "ariaLabel": "清除"
+      },
+      "custom": {
+        "label": "自定义"
+      },
+      "customRange": {
+        "ariaLabel": "自定义范围：{from}至{to}"
+      },
+      "date": {
+        "label": "日期"
+      },
+      "group": {
+        "ariaLabel": "日期范围"
+      },
+      "preset": {
+        "oneDay": "1天",
+        "oneMonth": "1个月",
+        "sevenDays": "7天",
+        "threeMonths": "3个月"
+      }
+    },
+    "deleteButton": {
+      "button": {
+        "tooltip": "删除"
+      }
+    },
+    "documentDisplay": {
+      "contextDocs": {
+        "text": "{count, plural, one {# 个上下文文档} other {# 个上下文文档}}"
+      },
+      "openDocument": {
+        "ariaLabel": "打开文档：{title}"
+      },
+      "question": {
+        "title": "问题"
+      },
+      "subqueries": {
+        "text": "{count, plural, one {# 个子查询} other {# 个子查询}}"
+      },
+      "updated": {
+        "text": "更新于 {date}"
+      }
+    },
+    "dropdown": {
+      "default": {
+        "label": "默认"
+      },
+      "selectOption": {
+        "placeholder": "选择一个选项..."
+      }
+    },
+    "editable": {
+      "edit": {
+        "ariaLabel": "编辑"
+      },
+      "rename": {
+        "ariaLabel": "重命名"
+      },
+      "save": {
+        "ariaLabel": "保存"
+      }
+    },
+    "errorPages": {
+      "accessRestricted": {
+        "billingAdminHint": {
+          "text": "如果您是管理员，请访问<billingLink>管理员账单</billingLink>页面以{hadLicense, select, true {续订} other {激活}}您的许可证，通过 Stripe 注册，或联系 <supportLink>support@onyx.app</supportLink> 获取账单帮助。"
+        },
+        "heading": {
+          "title": "访问受限"
+        },
+        "licenseLapse": {
+          "description": "由于许可证失效，您对 Onyx 的访问已被暂时停用。"
+        },
+        "licenseRequired": {
+          "description": "使用 Onyx 需要许可证。您的数据受到保护，许可证激活后即可使用。"
+        },
+        "logoutButton": {
+          "label": "退出登录"
+        },
+        "manageSubscription": {
+          "description": "如果您是管理员，可以点击下方按钮管理您的订阅。其他用户请联系管理员处理此事。"
+        },
+        "obtainLicense": {
+          "description": "要开始使用，请联系系统管理员获取许可证。"
+        },
+        "renewLicense": {
+          "description": "要恢复访问权限并继续使用 Onyx，请联系系统管理员续订许可证。"
+        },
+        "resubscribeButton": {
+          "label": "重新订阅",
+          "loading": "正在加载..."
+        },
+        "resubscribeError": {
+          "text": "打开重新订阅页面时出错。请稍后再试。"
+        },
+        "seatLimit": {
+          "description": "您的组织已超出许可席位数。在减少用户数量或升级许可证之前，访问将受到限制。"
+        },
+        "seatLimitAdminHint": {
+          "text": "如果您是管理员，可以在<userLink>用户管理</userLink>页面管理用户，或在<billingLink>管理员账单</billingLink>页面升级许可证。"
+        },
+        "seatLimitWithCounts": {
+          "description": "您的组织已超出许可席位数（{used} 位用户 / {seats} 个席位）。在减少用户数量或升级许可证之前，访问将受到限制。"
+        },
+        "subscriptionLapse": {
+          "description": "由于订阅失效，您对 Onyx 的访问已被暂时停用。"
+        },
+        "updatePayment": {
+          "description": "要恢复访问权限并继续使用 Onyx 的强大功能，请更新您的付款信息。"
+        }
+      },
+      "configError": {
+        "adminHint": {
+          "text": "如果您是管理员，请查看我们的<docsLink>文档</docsLink>了解正确的配置步骤。如果您是普通用户，请联系管理员寻求帮助。"
+        },
+        "heading": {
+          "description": "加载您的 Onyx 设置时似乎出现了问题。这可能是由于配置问题或安装未完成造成的。",
+          "title": "我们遇到了问题"
+        }
+      },
+      "maintenance": {
+        "apology": {
+          "description": "对由此带来的不便我们深表歉意，感谢您的耐心等待。"
+        },
+        "checkBack": {
+          "description": "Onyx 目前处于维护窗口期。请几分钟后再试。"
+        },
+        "heading": {
+          "title": "维护进行中"
+        }
+      },
+      "needHelp": {
+        "text": "需要帮助？加入我们的 <discordLink>Discord 社区</discordLink>获取支持。"
+      }
+    },
+    "errors": {
+      "unknown": {
+        "message": "未知错误"
+      }
+    },
+    "expandableContent": {
+      "downloadButton": {
+        "tooltip": "下载文件"
+      },
+      "file": {
+        "untitledFallback": "无标题"
+      },
+      "fullScreenButton": {
+        "tooltip": "全屏"
+      },
+      "hideButton": {
+        "tooltip": "隐藏"
+      },
+      "minimizeButton": {
+        "tooltip": "最小化"
+      }
+    },
+    "expandableText": {
+      "copyButton": {
+        "tooltip": "复制"
+      },
+      "downloadButton": {
+        "tooltip": "下载"
+      },
+      "lineCount": {
+        "label": "{count, plural, one {# 行} other {# 行}}"
+      },
+      "size": {
+        "bytes": "{count} 字节",
+        "kilobytes": "{size} KB"
+      },
+      "viewFullButton": {
+        "tooltip": "查看全文"
+      }
+    },
+    "federatedConnectorSelector": {
+      "allSelected": {
+        "placeholder": "已选择所有联合连接器"
+      },
+      "entitiesConfigured": {
+        "tooltip": "已配置实体"
+      },
+      "noMatches": {
+        "text": "未找到匹配的联合连接器"
+      },
+      "noMoreConnectors": {
+        "text": "没有更多可用的联合连接器"
+      },
+      "noneSelected": {
+        "text": "未选择联合连接器。请在上方搜索并选择连接器。"
+      },
+      "realtimeSearchHint": {
+        "description": "查询时将实时搜索所选联合连接器中的文档。"
+      },
+      "removeConnector": {
+        "tooltip": "移除连接器"
+      },
+      "search": {
+        "placeholder": "搜索联合连接器..."
+      }
+    },
+    "field": {
+      "arrayField": {
+        "addButton": "新增"
+      },
+      "booleanField": {
+        "optionalLabel": "{label}（可选）"
+      },
+      "fileValidation": {
+        "noTypeDefinition": "未找到字段的文件类型定义：{name}",
+        "selectionError": "文件选择错误",
+        "unknownError": "未知错误",
+        "validating": "正在验证文件...",
+        "validationError": "验证错误"
+      },
+      "markdown": {
+        "editorLabel": "Markdown",
+        "placeholder": "在此输入 Markdown...",
+        "previewTab": "预览",
+        "writeTab": "编写"
+      },
+      "optionalIndicator": {
+        "text": "（可选）"
+      },
+      "passwordToggle": {
+        "hideAriaLabel": "隐藏密码",
+        "showAriaLabel": "显示密码"
+      },
+      "selector": {
+        "noneOption": "无",
+        "placeholder": "选择..."
+      }
+    },
+    "filePicker": {
+      "allRecentFilesButton": {
+        "title": "所有最近的文件"
+      },
+      "recentFiles": {
+        "title": "最近的文件"
+      },
+      "recentFilesModal": {
+        "description": "上传文件或从最近的文件中选择。"
+      },
+      "toasts": {
+        "associatedAssistants": "无法删除文件。它与以下助手关联：{assistants}",
+        "associatedBoth": "无法删除文件。它与以下项目：{projects} 和助手：{assistants} 关联",
+        "associatedProjects": "无法删除文件。它与以下项目关联：{projects}",
+        "deleteFailed": "删除文件失败。请重试。",
+        "deleteSuccess": "文件删除成功"
+      },
+      "uploadFiles": {
+        "description": "从您的设备上传文件",
+        "title": "上传文件"
+      },
+      "viewFileButton": {
+        "tooltip": "查看文件"
+      }
+    },
+    "fileTile": {
+      "file": {
+        "fallback": "文件"
+      },
+      "open": {
+        "ariaLabel": "打开{title}"
+      },
+      "removeButton": {
+        "label": "移除"
+      }
+    },
+    "filters": {
+      "clearButton": {
+        "ariaLabel": "清除"
+      }
+    },
+    "formField": {
+      "optional": {
+        "label": "（可选）"
+      },
+      "required": {
+        "label": "（必填）"
+      }
+    },
+    "genericMultiSelect": {
+      "loadFailed": {
+        "text": "加载{label}失败。请重试。"
+      },
+      "search": {
+        "placeholder": "搜索..."
+      }
+    },
+    "groupsMultiSelect": {
+      "noGroups": {
+        "emptyMessage": "没有可用的用户组。请先创建一个用户组。"
+      },
+      "userGroups": {
+        "label": "用户组",
+        "subtext": "选择哪些用户组可以访问此资源"
+      }
+    },
+    "icons": {
+      "logo": {
+        "alt": "徽标"
+      }
+    },
+    "initializingLoader": {
+      "initializing": {
+        "text": "正在初始化 {appName}"
+      }
+    },
+    "inputElement": {
+      "removeButton": {
+        "tooltip": "移除"
+      }
+    },
+    "inputFile": {
+      "attachButton": {
+        "ariaLabel": "附加文件"
+      },
+      "clearButton": {
+        "ariaLabel": "清除文件"
+      }
+    },
+    "inputImage": {
+      "dropRejected": {
+        "fallback": "文件被拒绝"
+      },
+      "editButton": {
+        "ariaLabel": "编辑图片"
+      },
+      "editOverlay": {
+        "label": "编辑"
+      },
+      "image": {
+        "altFallback": "图片"
+      },
+      "removeButton": {
+        "ariaLabel": "移除图片"
+      },
+      "uploadButton": {
+        "ariaLabel": "上传图片"
+      }
+    },
+    "inputSelect": {
+      "placeholder": {
+        "fallback": "选择一个选项"
+      }
+    },
+    "isPublicSelector": {
+      "assignGroups": {
+        "label": "为此{objectName}分配组访问权限",
+        "scopedSubtext": "选择一个或多个您管理的组以授予对此{objectName}的访问权限",
+        "visibleSubtext": "此{objectName}将对以下所选的组可见/可访问"
+      },
+      "loading": {
+        "text": "正在加载..."
+      },
+      "makePublic": {
+        "label": "将此{objectName}设为公开？",
+        "subtext": "如果启用，此{objectName}将可供<b>所有{publicToWhom}</b>使用。否则，只有<b>管理员</b>和（例如通过用户组）被明确授予此{objectName}访问权限的<b>{publicToWhom}</b>才能访问。"
+      },
+      "publicDisabled": {
+        "message": "此{objectName}是公开的，所有用户均可使用。"
+      },
+      "usersFallback": {
+        "text": "用户"
+      }
+    },
+    "keyValue": {
+      "addButton": {
+        "ariaLabel": "添加{keyTitle}与{valueTitle}对",
+        "label": "添加行"
+      },
+      "empty": {
+        "title": "尚未添加任何条目。"
+      },
+      "error": {
+        "duplicateKey": "键重复",
+        "duplicateSummary": "{count, plural, one {发现 # 个重复的键} other {发现 # 个重复的键}}",
+        "emptyKey": "键不能为空",
+        "emptySummary": "{count, plural, one {发现 # 个空键} other {发现 # 个空键}}",
+        "validationSummary": "{count, plural, one {发现 # 个验证错误} other {发现 # 个验证错误}}"
+      },
+      "group": {
+        "ariaLabel": "{keyTitle}与{valueTitle}对"
+      },
+      "input": {
+        "ariaLabel": "{label} {index}"
+      },
+      "keyColumn": {
+        "title": "键"
+      },
+      "pair": {
+        "fallbackLabel": "键值"
+      },
+      "removeButton": {
+        "ariaLabel": "移除{label}对 {index}"
+      },
+      "valueColumn": {
+        "title": "值"
+      }
+    },
+    "logo": {
+      "image": {
+        "alt": "徽标"
+      },
+      "poweredBy": {
+        "label": "由 Onyx 提供支持"
+      }
+    },
+    "nonSelectableConnectors": {
+      "unavailable": {
+        "label": "不可用的连接器："
+      }
+    },
+    "oauthCallback": {
+      "authorizationFailed": {
+        "description": "授权已取消或失败。请重试。",
+        "title": "授权失败"
+      },
+      "backButton": {
+        "label": "返回聊天"
+      },
+      "completeFailed": {
+        "message": "无法完成授权"
+      },
+      "genericError": {
+        "description": "OAuth 过程中发生错误。请重试。",
+        "title": "出了点问题"
+      },
+      "invalidRequest": {
+        "description": "授权请求不完整。请重试。",
+        "title": "无效请求"
+      },
+      "loadingHint": {
+        "text": "这可能需要一些时间..."
+      },
+      "processing": {
+        "description": "请稍候，我们正在完成设置。",
+        "title": "正在处理..."
+      },
+      "redirecting": {
+        "text": "将在 {count, plural, one {# 秒} other {# 秒}}后跳转..."
+      },
+      "serviceFallback": {
+        "text": "服务"
+      },
+      "success": {
+        "detailsTemplate": "您的 {serviceName} 授权已成功完成。",
+        "title": "成功！"
+      }
+    },
+    "spreadsheet": {
+      "error": {
+        "description": "电子表格可能已损坏或无法正常加载。",
+        "title": "加载电子表格出错"
+      },
+      "preview": {
+        "truncated": "预览已截断。请下载文件查看所有行。",
+        "unavailable": "无法预览此电子表格。"
+      },
+      "sheet": {
+        "defaultName": "工作表1",
+        "empty": "此工作表为空。",
+        "tooLarge": "此工作表过大，无法预览。请下载文件查看。"
+      }
+    }
+  },
+  "craft": {
+    "agentSwitcher": {
+      "mainAgent": {
+        "label": "主代理"
+      },
+      "subagentFallback": {
+        "label": "子代理"
+      },
+      "switch": {
+        "ariaLabel": "切换代理"
+      }
+    },
+    "approvals": {
+      "approveOnce": {
+        "ariaLabel": "仅批准此操作一次",
+        "button": "批准一次"
+      },
+      "approveSession": {
+        "button": "批准整个会话",
+        "tooltip": "批准此会话中的匹配操作"
+      },
+      "details": {
+        "hideAriaLabel": "隐藏详情",
+        "showAriaLabel": "显示详情"
+      },
+      "header": {
+        "required": "需要批准：{headline}"
+      },
+      "headline": {
+        "multiAction": "{app} 中的 {count, plural, one {# 个操作} other {# 个操作}}",
+        "singleAction": "{app} 中的 {action}"
+      },
+      "payload": {
+        "empty": {
+          "label": "无载荷。"
+        },
+        "showLess": {
+          "button": "收起"
+        },
+        "showMore": {
+          "button": "展开"
+        }
+      },
+      "reject": {
+        "ariaLabel": "拒绝此操作",
+        "button": "拒绝"
+      },
+      "status": {
+        "approved": "已批准",
+        "rejected": "已拒绝"
+      },
+      "submit": {
+        "errorFallback": "提交决定失败"
+      }
+    },
+    "apps": {
+      "addCatalog": {
+        "addButton": "添加",
+        "createButton": "创建",
+        "customApp": {
+          "description": "为您自己的集成提供凭据和网络访问。",
+          "title": "自定义应用"
+        },
+        "mcpHint": {
+          "label": "需要 MCP 服务器？请先在“操作”中连接它，然后在此处为 Craft 启用。",
+          "openActionsButton": "打开操作"
+        },
+        "modal": {
+          "description": "让整个组织都可以使用某个集成。内置提供商附带可教 Craft 智能体使用方法的操作；已配置的提供商不会列出。",
+          "title": "添加应用"
+        }
+      },
+      "associatedSkills": {
+        "associateAriaLabel": "关联 {name}",
+        "associateButton": "关联现有技能",
+        "create": {
+          "github": {
+            "description": "如果您的技能在 GitHub 中，请先在技能页面导入，然后再将其与此应用关联。",
+            "label": "从 GitHub 导入"
+          },
+          "scratch": {
+            "description": "编写说明并添加辅助文件。",
+            "label": "从头开始"
+          },
+          "upload": {
+            "description": "导入 SKILL.md 文件、ZIP 文件或技能文件夹。",
+            "label": "上传技能"
+          }
+        },
+        "createSkillButton": "创建技能",
+        "description": "技能为 Craft 提供使用此应用的说明。技能在整个组织范围内生效；用户可能需要全部启用才能让应用正常工作。",
+        "editButton": "编辑",
+        "empty": {
+          "label": "未找到可编辑的技能。"
+        },
+        "invalidTag": "无效",
+        "loading": {
+          "label": "正在加载技能…"
+        },
+        "noneAssociated": {
+          "label": "尚未关联任何技能。没有技能也可以保存并使用此应用。"
+        },
+        "promote": {
+          "cancelButton": "取消",
+          "confirmButton": "设为组织范围可用",
+          "description": "与应用关联的技能必须对所有人可用。此更改将在保存应用时生效。",
+          "title": "将“{name}”设为组织范围可用？"
+        },
+        "search": {
+          "placeholder": "搜索可编辑的技能..."
+        },
+        "title": "关联的技能",
+        "unavailable": {
+          "duplicateName": "名为“{name}”的技能已关联。",
+          "invalid": "技能无效，请先修复再关联。",
+          "otherApp": "已与应用“{name}”关联。"
+        },
+        "unlink": {
+          "button": "解除关联",
+          "cancelButton": "取消",
+          "confirm": "将“{name}”与此应用解除关联？"
+        },
+        "unlinkAriaLabel": "解除关联 {name}",
+        "viewButton": "查看"
+      },
+      "configureProvider": {
+        "addButton": "添加",
+        "addTitle": "添加 {name}",
+        "editTitle": "编辑 {name}",
+        "emptyPolicies": "此提供商没有可配置的操作。",
+        "fields": {
+          "name": {
+            "description": "此连接的标签。添加同一提供商的多个实例时，请使用不同的名称（例如“{name} — 工程部”）。",
+            "label": "名称"
+          }
+        },
+        "managedDescription": "由 Onyx 提供，请配置智能体可以执行的操作。",
+        "managedNote": "此应用由 Onyx 提供，凭据由系统代管。请在下方选择智能体可以执行的操作。用户可从“应用”页面连接它。",
+        "saveButton": "保存"
+      },
+      "customApp": {
+        "cancelButton": "取消",
+        "createButton": "创建",
+        "createDescription": "配置出站代理如何访问此应用并进行身份验证。技能不是必需的。",
+        "createTitle": "创建自定义应用",
+        "creatingButton": "正在创建…",
+        "disabled": {
+          "nameMissing": "创建此自定义应用前请输入名称。",
+          "patternMissing": "请至少添加一个上游 URL 模式。输入模式后按回车键。",
+          "pristine": "请先进行更改再保存。",
+          "saving": "保存已在进行中。"
+        },
+        "editDescription": "更新网关设置并管理关联的技能。",
+        "editTitle": "编辑 {name}",
+        "errors": {
+          "saveFailedTitle": "无法保存"
+        },
+        "fields": {
+          "headers": {
+            "addButton": "添加标头",
+            "description": "可选。注入到出站请求中的标头。使用 '{placeholder}' 表示由用户（或下方的组织）提供的值，例如 \"Bearer '{api_key}'\"。留空则仅将上游模式加入允许列表而不注入凭据。",
+            "keyTitle": "标头",
+            "label": "标头凭据模式",
+            "valueTitle": "值"
+          },
+          "name": {
+            "label": "名称",
+            "placeholder": "我的自定义应用"
+          },
+          "orgCredentials": {
+            "addButton": "添加凭据",
+            "description": "可选。组织为每个用户预填的值。若每个用户自行提供凭据，请留空。",
+            "keyTitle": "凭据键",
+            "label": "组织凭据",
+            "valueTitle": "值"
+          },
+          "upstreamPatterns": {
+            "description": "代理可注入凭据的出站 URL。使用 * 匹配任意字符（例如 https://api.example.com/* 覆盖该主机上的所有路径）。主机名必须是字面值，第一个斜杠之前不能使用通配符。输入模式后按回车键。",
+            "label": "上游 URL 模式"
+          }
+        },
+        "saveButton": "保存",
+        "savingButton": "正在保存…"
+      },
+      "errors": {
+        "duplicateSkillName": "应用“{appName}”已有名为“{skillName}”的关联技能。请上传其他名称的技能。"
+      },
+      "mcpPolicy": {
+        "description": "配置 Craft 智能体可以使用此 MCP 服务器的工具执行的操作。",
+        "emptyPolicies": "此服务器上没有已启用的工具。请先在 MCP 操作页面启用工具。",
+        "saveButton": "保存",
+        "title": "编辑 {name}"
+      },
+      "oauthCallback": {
+        "backButton": "返回我的应用",
+        "description": "正在完成 OAuth 握手…",
+        "errors": {
+          "cancelled": "OAuth 已被取消或拒绝：{reason}",
+          "failed": "连接失败。",
+          "missingParams": "回调 URL 中缺少 code 或 state。"
+        },
+        "exchanging": {
+          "label": "正在交换授权码…"
+        },
+        "success": {
+          "label": "已连接。正在返回您的应用…"
+        },
+        "title": "正在连接您的应用"
+      },
+      "page": {
+        "connectButton": "连接",
+        "connectingButton": "正在重定向…",
+        "disconnectButton": "断开连接",
+        "empty": {
+          "description": "您的组织尚未配置任何应用或 MCP 服务器。",
+          "title": "暂无可连接的内容"
+        },
+        "errors": {
+          "disconnectFailed": "断开连接失败",
+          "startAuthFailed": "无法启动授权"
+        },
+        "header": {
+          "description": "连接 Onyx Craft 在工作时可用作上下文的工具。",
+          "manageButton": "管理应用",
+          "searchPlaceholder": "搜索应用...",
+          "title": "应用"
+        },
+        "kinds": {
+          "app": {
+            "blurb": "Onyx 直接支持的集成。每个都附带教 Craft 如何使用它的技能，从这里开始。",
+            "empty": "您的组织尚未配置任何应用。",
+            "emptyTitle": "暂无应用",
+            "tabLabel": "应用 · {count}"
+          },
+          "mcp": {
+            "blurb": "管理员向 Craft 开放的服务器。当您需要的应用未在“应用”中列出，或您特别需要某个服务器自己的 MCP 工具时使用。",
+            "empty": "尚未向 Craft 开放任何 MCP 服务器。",
+            "emptyTitle": "暂无 MCP 服务器",
+            "tabLabel": "MCP 服务器 · {count}"
+          }
+        },
+        "loading": {
+          "label": "正在加载…"
+        },
+        "reviewSkillsButton": "查看技能",
+        "search": {
+          "noMatchesDescription": "这里没有与您的搜索匹配的内容。",
+          "noMatchesTitle": "无匹配项"
+        },
+        "status": {
+          "connected": "已连接",
+          "connectedNeedsSkills": "已连接 · 并非所有关联技能都已启用",
+          "notAvailable": "您的账户不可用，请咨询管理员",
+          "skillWarningAriaLabel": "需要设置技能",
+          "skillWarningTooltip": "并非所有关联技能都已启用。此应用可能无法正常工作。"
+        }
+      },
+      "policyEditor": {
+        "advanced": {
+          "description": "为每个操作单独设置策略。",
+          "title": "高级"
+        },
+        "cancelButton": "取消",
+        "loading": {
+          "label": "正在加载…"
+        },
+        "permissions": {
+          "askOption": "询问",
+          "autoApproveOption": "自动批准",
+          "customOption": "自定义",
+          "description": "选择智能体可以执行的操作。“询问”会在每个操作运行前在聊天中提示您；“自动批准”则无需提示即可运行。使用“高级”为每个操作单独设置策略。",
+          "title": "权限"
+        },
+        "savingButton": "正在保存…"
+      },
+      "skillsStep": {
+        "description": "可选。关联现有技能或为此应用创建一个技能。",
+        "errors": {
+          "saveFailedTitle": "无法保存"
+        },
+        "saveButton": "保存技能",
+        "savingButton": "正在保存…",
+        "skipButton": "暂时跳过",
+        "title": "为 {name} 添加技能"
+      },
+      "userCredentials": {
+        "cancelButton": "取消",
+        "connectButton": "连接",
+        "connectingButton": "正在连接…",
+        "description": "输入您的凭据，为您的账户授权此应用。",
+        "errors": {
+          "connectFailedTitle": "无法连接"
+        },
+        "title": "连接 {name}"
+      }
+    },
+    "artifactsTab": {
+      "download": {
+        "button": "下载"
+      },
+      "empty": {
+        "description": "输出文件和 Web 应用将显示在这里",
+        "title": "暂无产物"
+      },
+      "nextjsApp": {
+        "label": "Next.js 应用"
+      },
+      "openItem": {
+        "ariaLabel": "打开 {name}"
+      },
+      "toggleItem": {
+        "ariaLabel": "展开或折叠 {name}"
+      }
+    },
+    "chatPanel": {
+      "input": {
+        "continuePlaceholder": "继续对话...",
+        "scheduledRunPlaceholder": "计划运行进行中...",
+        "subagentPlaceholder": "切换到主代理以发送消息"
+      },
+      "openSidebar": {
+        "ariaLabel": "打开侧边栏"
+      },
+      "outputPanel": {
+        "closeTooltip": "关闭输出面板",
+        "openTooltip": "打开输出面板"
+      },
+      "responseStopped": {
+        "label": "响应已停止"
+      },
+      "scrollToBottom": {
+        "label": "滚动到底部"
+      },
+      "toast": {
+        "operationWait": "请等待当前操作完成。",
+        "sandboxWait": "请等待沙箱初始化",
+        "scheduledRunWait": "请等待计划运行结束。"
+      }
+    },
+    "compaction": {
+      "marker": {
+        "label": "已压缩上下文以释放空间"
+      }
+    },
+    "connectDataBanner": {
+      "cta": {
+        "label": "连接您的数据"
+      }
+    },
+    "craftingLoader": {
+      "messages": {
+        "craftingWorkspace": "正在打造您的工作区...",
+        "enchanting": "正在施加魔法附魔...",
+        "gamemode": "/gamemode 1",
+        "gatheringResources": "正在收集资源...",
+        "miningDependencies": "正在挖掘依赖项...",
+        "placingBlocks": "正在放置方块...",
+        "punchingWood": "正在撸树...",
+        "smeltingCode": "正在熔炼代码...",
+        "worldGenerated": "世界生成完成..."
+      },
+      "tagline": {
+        "label": "正在打造您的下一个好点子..."
+      }
+    },
+    "debugLogs": {
+      "clear": {
+        "tooltip": "清空"
+      },
+      "copy": {
+        "doneTooltip": "已复制",
+        "tooltip": "复制可见内容"
+      },
+      "empty": {
+        "noLines": "暂无日志行。",
+        "noMatch": "没有与 \"{filter}\" 匹配的行",
+        "waiting": "正在等待第一条日志…"
+      },
+      "error": {
+        "endpointDisabled": "调试端点已禁用 (ENABLE_OPENCODE_DEBUGGING=false)",
+        "http": "HTTP {status}",
+        "noSandbox": "没有正在运行的沙箱可读取日志"
+      },
+      "filter": {
+        "placeholder": "筛选…"
+      },
+      "lines": {
+        "count": "{count, plural, one {# 行} other {# 行}}",
+        "filteredCount": "{visible, number} / {total, number} 行"
+      },
+      "modal": {
+        "description": "沙箱容器的实时日志 — 仅限开发/调试。",
+        "title": "Opencode Pod 日志"
+      },
+      "newSincePaused": {
+        "button": "+{count, number} 条新日志 · 跳转"
+      },
+      "open": {
+        "button": "Pod 日志"
+      },
+      "status": {
+        "closed": "已关闭",
+        "connecting": "连接中",
+        "error": "错误",
+        "paused": "已暂停",
+        "streaming": "流式传输中"
+      }
+    },
+    "entryMenu": {
+      "addFiles": {
+        "label": "添加文件或照片"
+      },
+      "apps": {
+        "label": "应用"
+      },
+      "browseSkills": {
+        "label": "浏览技能"
+      },
+      "connect": {
+        "hint": "连接"
+      },
+      "connectApp": {
+        "label": "连接应用"
+      },
+      "library": {
+        "label": "库"
+      },
+      "manageLibrary": {
+        "label": "管理库…"
+      },
+      "mcpServer": {
+        "description": "MCP 服务器"
+      },
+      "skills": {
+        "label": "技能"
+      }
+    },
+    "filePreview": {
+      "cannotPreview": {
+        "title": "无法预览文件"
+      },
+      "error": {
+        "inline": "错误：{message}",
+        "title": "加载文件出错"
+      },
+      "loading": {
+        "label": "正在加载文件..."
+      },
+      "noContent": {
+        "label": "无内容"
+      }
+    },
+    "filesTab": {
+      "empty": {
+        "description": "构建过程中创建的文件将显示在这里",
+        "title": "暂无文件"
+      },
+      "emptyDirectory": {
+        "label": "此目录中没有文件"
+      },
+      "error": {
+        "title": "加载文件出错"
+      },
+      "loading": {
+        "label": "正在加载文件..."
+      },
+      "loadingChildren": {
+        "label": "加载中..."
+      },
+      "preparing": {
+        "description": "正在设置您的开发环境",
+        "title": "正在准备沙箱..."
+      }
+    },
+    "imagePreview": {
+      "error": {
+        "description": "无法显示该图片",
+        "title": "图片加载失败"
+      },
+      "loading": {
+        "label": "正在加载图片..."
+      },
+      "preview": {
+        "ariaLabel": "{name} 的预览"
+      }
+    },
+    "inputBar": {
+      "entryInfo": {
+        "connected": "已连接",
+        "connectionRequired": "需要连接"
+      },
+      "plusMenu": {
+        "tooltip": "添加文件或技能"
+      }
+    },
+    "interruptHint": {
+      "stopping": {
+        "label": "正在停止…"
+      },
+      "toInterrupt": {
+        "label": "以中断"
+      }
+    },
+    "intro": {
+      "beta": {
+        "badge": "BETA"
+      },
+      "returnHome": {
+        "button": "返回首页"
+      },
+      "startCrafting": {
+        "button": "开始创作"
+      },
+      "wordmark": {
+        "label": "Craft"
+      }
+    },
+    "llmPopover": {
+      "noModels": {
+        "label": "未找到模型"
+      },
+      "recommended": {
+        "label": "推荐"
+      },
+      "recommendedOnly": {
+        "label": "仅显示推荐模型"
+      }
+    },
+    "onboarding": {
+      "livingMap": {
+        "examplePrompts": {
+          "flakyRetryTest": "“修复不稳定的重试测试并提交 PR。”",
+          "launchDeck": "“根据 Drive 中的简报制作春季发布演示文稿。”",
+          "rfpSecurity": "“用我们的安全信息填写我邮件里的 RFP。”",
+          "slackToLinear": "“把我们的 Slack 讨论整理成 Linear 工单。”",
+          "vendorSpend": "“把我们第二季度的供应商支出总结成 Drive 中的文档。”"
+        },
+        "modal": {
+          "backButton": "返回",
+          "ctaButton": "让 Craft 开始工作",
+          "nextButton": "下一步",
+          "title": "认识 Craft"
+        },
+        "outputs": {
+          "ariaLabel": "产出：{name}",
+          "githubPr": {
+            "caption": "待审核",
+            "label": "GitHub PR"
+          },
+          "googleDoc": {
+            "caption": "已写入您的 Drive",
+            "label": "Google 文档"
+          },
+          "liveApp": {
+            "caption": "已托管，可通过链接分享",
+            "label": "在线应用"
+          }
+        },
+        "prompt": {
+          "label": "您的提示词"
+        },
+        "schedule": {
+          "ariaLabel": "计划任务：按定时器重新运行此提示词",
+          "caption": "在您离开时运行",
+          "label": "每周一 8:00"
+        },
+        "sources": {
+          "connectedAriaLabel": "已连接的来源：{name}",
+          "yourFiles": {
+            "ariaLabel": "您上传的文件",
+            "label": "您的文件"
+          }
+        },
+        "stages": {
+          "constellation": {
+            "caption": "点击地图的任意部分即可重新查看。",
+            "title": "这就是 Craft。轮到您了。"
+          },
+          "machine": {
+            "caption": "只读取您可见的内容，绝不读取您的机密。",
+            "title": "它在自己的机器上工作。"
+          },
+          "output": {
+            "caption": "既可按需运行，也可在您离开时按计划运行。",
+            "title": "产出的是完成的工作成果。"
+          },
+          "prompt": {
+            "caption": "描述您想要的结果，其余交给 Craft。",
+            "title": "把真正的工作交给 Craft。"
+          }
+        },
+        "team": {
+          "ariaLabel": "您的团队：一个链接即可分享 Craft 的工作成果",
+          "caption": "一个链接即可分享",
+          "label": "您的团队"
+        },
+        "workspace": {
+          "approvalPill": "等待您的批准",
+          "label": "Craft 的工作区",
+          "sandboxBadge": "隔离沙箱"
+        }
+      },
+      "llmLocked": {
+        "backToChatButton": "返回聊天",
+        "description": "Onyx Craft 需要模型提供商，且只有管理员可以设置。请让您的管理员连接 Anthropic、OpenAI 或 OpenRouter。",
+        "title": "需要 LLM 提供商"
+      },
+      "llmSetup": {
+        "description": "Craft 智能体需要模型提供商才能构建。",
+        "title": "连接模型提供商"
+      },
+      "welcomeMock": {
+        "input": {
+          "placeholder": "分析我的数据并创建仪表板..."
+        },
+        "modelPill": {
+          "label": "Claude Opus 4.8"
+        },
+        "promptPills": {
+          "engineering": "工程",
+          "marketing": "市场营销",
+          "product": "产品",
+          "sales": "销售"
+        }
+      }
+    },
+    "outputPanel": {
+      "artifactsEmpty": {
+        "tooltip": "开始构建内容即可查看产物！"
+      },
+      "devServerStarting": {
+        "tooltip": "正在启动开发服务器..."
+      },
+      "noWebapp": {
+        "label": "此会话中还没有 Web 应用"
+      }
+    },
+    "pdfPreview": {
+      "error": {
+        "description": "无法加载该 PDF 文件。",
+        "title": "无法预览 PDF"
+      },
+      "frame": {
+        "title": "PDF 预览"
+      },
+      "loading": {
+        "label": "正在加载 PDF..."
+      }
+    },
+    "pptxPreview": {
+      "converting": {
+        "label": "正在转换演示文稿..."
+      },
+      "empty": {
+        "label": "此演示文稿中没有幻灯片"
+      },
+      "error": {
+        "title": "无法预览演示文稿"
+      },
+      "loadingSlide": {
+        "label": "正在加载幻灯片..."
+      },
+      "slide": {
+        "counter": "幻灯片 {current} / {total}"
+      }
+    },
+    "previewTab": {
+      "empty": {
+        "description": "Web 应用运行后，实时预览将显示在这里。"
+      },
+      "frame": {
+        "title": "Web 应用预览"
+      },
+      "starting": {
+        "description": "正在安装依赖并启动。",
+        "title": "正在启动开发服务器..."
+      }
+    },
+    "redirect": {
+      "redirecting": {
+        "label": "正在重定向..."
+      }
+    },
+    "sandboxAsleep": {
+      "dismiss": {
+        "button": "关闭"
+      },
+      "modal": {
+        "description": "由于一段时间未活动，沙箱已休眠。您的工作已保存。唤醒它即可继续。",
+        "title": "您的沙箱已休眠"
+      },
+      "wake": {
+        "button": "唤醒沙箱"
+      }
+    },
+    "scheduledRun": {
+      "badge": {
+        "label": "已计划"
+      },
+      "startedAt": {
+        "label": "开始于 {time}"
+      },
+      "status": {
+        "awaitingApproval": "此计划运行正在等待批准。恢复并结束后即可发送后续消息。",
+        "running": "此计划运行仍在进行中。运行结束后即可发送后续消息。",
+        "startedBy": "此会话由计划任务 {task} 于 {time} 启动。"
+      },
+      "viewTask": {
+        "ariaLabel": "查看计划任务 {task}。{status}",
+        "label": "查看任务"
+      }
+    },
+    "setupCard": {
+      "appFallback": {
+        "label": "外部应用 {id}"
+      },
+      "connect": {
+        "title": "连接 {app}"
+      },
+      "connected": {
+        "title": "已连接 {app}。"
+      },
+      "error": {
+        "generic": "出了点问题。请重试。",
+        "notConfigurable": "无法从此处设置该应用。",
+        "popupBlocked": "无法打开设置窗口。请允许弹出窗口后重试。",
+        "startFailed": "无法开始设置"
+      },
+      "loading": {
+        "button": "加载中…"
+      },
+      "notNow": {
+        "button": "暂不"
+      },
+      "reason": {
+        "fallback": "代理需要 {app} 才能继续此任务。"
+      },
+      "skipped": {
+        "title": "已跳过连接 {app}。"
+      },
+      "waiting": {
+        "button": "等待中…"
+      }
+    },
+    "share": {
+      "copyLink": {
+        "ariaLabel": "复制链接"
+      },
+      "organization": {
+        "description": "登录您的 Onyx 的任何人都可以查看此应用。",
+        "label": "组织"
+      },
+      "private": {
+        "description": "只有您可以查看此应用。",
+        "label": "私密"
+      },
+      "share": {
+        "label": "分享"
+      },
+      "shared": {
+        "label": "已分享"
+      },
+      "trigger": {
+        "ariaLabel": "分享 Web 应用"
+      }
+    },
+    "sideBar": {
+      "apps": {
+        "label": "应用"
+      },
+      "backToChat": {
+        "label": "返回聊天"
+      },
+      "delete": {
+        "label": "删除"
+      },
+      "deleteModal": {
+        "body": "这将永久删除该 Craft 会话及其所有数据。此操作无法撤销。",
+        "confirm": "删除",
+        "deleting": "正在删除...",
+        "title": "删除\"{title}\"？"
+      },
+      "newSession": {
+        "label": "开始创作"
+      },
+      "rename": {
+        "label": "重命名"
+      },
+      "scheduledTasks": {
+        "label": "计划任务"
+      },
+      "sessions": {
+        "empty": "开始构建吧！会话历史将显示在这里。",
+        "title": "会话"
+      },
+      "skills": {
+        "label": "技能"
+      },
+      "toast": {
+        "deleteFailed": "删除会话失败",
+        "deleted": "已删除\"{title}\"。"
+      }
+    },
+    "skillsStale": {
+      "notice": {
+        "description": "重新加载此会话以应用最新的技能和应用访问权限。",
+        "title": "您的代理能力已发生变化"
+      },
+      "reload": {
+        "button": "重新加载",
+        "inProgress": "正在重新加载…"
+      },
+      "toast": {
+        "reloadFailed": "重新加载会话失败"
+      }
+    },
+    "subagentView": {
+      "notFound": {
+        "label": "未找到子代理。"
+      }
+    },
+    "suggestedPrompts": {
+      "close": {
+        "ariaLabel": "关闭建议"
+      }
+    },
+    "tasks": {
+      "detailPage": {
+        "confirmDelete": {
+          "deleteButton": "删除",
+          "deletingButton": "正在删除...",
+          "description": "这将停止未来的运行并删除该任务。过去的运行历史（及底层会话）将保留以供审计。",
+          "title": "删除“{name}”？"
+        },
+        "deleteButton": "删除",
+        "editButton": "编辑",
+        "fallbackTitle": "计划任务",
+        "loadFailed": "无法加载计划任务。",
+        "missingTaskId": "缺少任务 ID。",
+        "pauseButton": "暂停",
+        "resumeButton": "恢复",
+        "runNowButton": "立即运行",
+        "toasts": {
+          "deleteFailed": "删除任务失败",
+          "deleted": "已删除“{name}”。",
+          "paused": "任务已暂停。",
+          "resumed": "任务已恢复。",
+          "runQueued": "已将“{name}”的运行加入队列。",
+          "runStartFailed": "启动运行失败",
+          "statusUpdateFailed": "更新状态失败"
+        }
+      },
+      "editPage": {
+        "fallbackTitle": "编辑计划任务",
+        "loadFailed": "无法加载计划任务。",
+        "missingTaskId": "缺少任务 ID。",
+        "title": "编辑“{name}”"
+      },
+      "form": {
+        "cancelButton": "取消",
+        "errors": {
+          "nameRequired": "名称为必填项。",
+          "promptRequired": "提示词为必填项。"
+        },
+        "fields": {
+          "name": {
+            "label": "名称",
+            "placeholder": "例如：每周客户升级问题摘要"
+          },
+          "preApproval": {
+            "description": "当此任务在无人值守时运行，Craft 可以直接使用选定的应用和 MCP 服务器而不暂停。其他审批请求会暂停运行并可能导致失败。",
+            "label": "预批准的应用和 MCP 服务器"
+          },
+          "prompt": {
+            "description": "每次任务触发时，此消息都会发送给 Craft。",
+            "label": "提示词",
+            "placeholder": "描述 Craft 每次运行时应执行的操作..."
+          },
+          "schedule": {
+            "label": "计划"
+          }
+        },
+        "saveAndRunNowButton": "保存并立即运行",
+        "saveButton": "保存",
+        "saveChangesButton": "保存更改",
+        "savingLabel": "正在保存...",
+        "toasts": {
+          "created": "计划任务已创建。",
+          "createdAndQueued": "计划任务已创建并加入队列。",
+          "saveFailed": "保存计划任务失败",
+          "updated": "计划任务已更新。"
+        }
+      },
+      "listPage": {
+        "columns": {
+          "lastRun": "上次运行",
+          "name": "名称",
+          "nextRun": "下次运行",
+          "schedule": "计划",
+          "status": "状态"
+        },
+        "confirmDelete": {
+          "deleteButton": "删除",
+          "deletingButton": "正在删除...",
+          "description": "这将停止未来的运行并删除该任务。过去的运行历史（及底层会话）将保留以供审计。",
+          "title": "删除“{name}”？"
+        },
+        "empty": {
+          "description": "尚未创建任何计划任务。",
+          "title": "未找到计划任务"
+        },
+        "errors": {
+          "loadFailed": "无法加载计划任务。",
+          "tryAgainButton": "重试"
+        },
+        "header": {
+          "description": "按定时器运行 Craft 提示词。每次触发都会创建一个在后台运行的新会话。",
+          "title": "计划任务"
+        },
+        "newTaskButton": "新建计划任务",
+        "rowActions": {
+          "deleteTooltip": "删除"
+        },
+        "toasts": {
+          "deleteFailed": "删除任务失败",
+          "deleted": "已删除“{name}”。"
+        }
+      },
+      "newPage": {
+        "description": "保存提示词和计划。Craft 会按定时器运行它。",
+        "title": "新建计划任务"
+      },
+      "preApproval": {
+        "appFallbackName": "应用 #{id}",
+        "appsGroupTitle": "应用",
+        "empty": {
+          "label": "Craft 中尚无可用的应用或 MCP 服务器。"
+        },
+        "errors": {
+          "loadFailed": "无法加载应用和 MCP 服务器。请刷新重试。",
+          "partialLoadFailed": "部分预批准选项无法加载。请刷新重试。"
+        },
+        "loading": {
+          "label": "正在加载应用和 MCP 服务器…"
+        },
+        "mcpGroupTitle": "MCP 服务器",
+        "mcpServerFallbackName": "MCP 服务器 #{id}",
+        "status": {
+          "connected": "已连接",
+          "connectionRequired": "需要连接",
+          "unavailable": "已不可用"
+        },
+        "summary": {
+          "partialLoadFailed": "部分预批准详情无法加载。请刷新重试。",
+          "title": "预批准的应用和 MCP 服务器"
+        }
+      },
+      "runHistory": {
+        "columns": {
+          "duration": "时长",
+          "started": "开始时间",
+          "status": "状态",
+          "summary": "摘要",
+          "trigger": "触发方式"
+        },
+        "empty": {
+          "label": "尚无运行记录。任务每次触发都会创建一条，也可以使用上方的“立即运行”。"
+        },
+        "errors": {
+          "loadFailed": "无法加载运行历史。",
+          "tryAgainButton": "重试"
+        },
+        "loadMore": {
+          "button": "加载更多",
+          "loadingButton": "正在加载..."
+        },
+        "nonClickable": {
+          "noSession": "此运行尚未创建会话。",
+          "queued": "此运行尚未开始，因此没有可打开的会话。",
+          "skipped": "由于先前的运行仍在进行中，此运行被跳过，因此未创建会话。"
+        },
+        "status": {
+          "notOpenableAriaLabel": "无法打开"
+        },
+        "trigger": {
+          "runNow": "立即运行",
+          "schedule": "计划"
+        }
+      },
+      "scheduleEditor": {
+        "dailyWeekly": {
+          "atLabel": "时间",
+          "daysLabel": "在这些日子",
+          "runsEveryDay": "每天运行",
+          "runsOn": "在{days}运行"
+        },
+        "interval": {
+          "everyLabel": "每"
+        },
+        "intervalUnits": {
+          "days": "天",
+          "hours": "小时",
+          "minutes": "分钟"
+        },
+        "tabs": {
+          "dailyWeekly": "每日 / 每周",
+          "interval": "间隔"
+        },
+        "weekdays": {
+          "fri": "周五",
+          "mon": "周一",
+          "sat": "周六",
+          "sun": "周日",
+          "thu": "周四",
+          "tue": "周二",
+          "wed": "周三"
+        }
+      }
+    },
+    "todoList": {
+      "empty": {
+        "label": "无任务"
+      },
+      "header": {
+        "title": "任务"
+      },
+      "progress": {
+        "label": "已完成 {completed}/{total}"
+      }
+    },
+    "toolCards": {
+      "bash": {
+        "noOutput": {
+          "label": "无输出"
+        }
+      },
+      "diff": {
+        "unchangedLines": {
+          "label": "{count, plural, one {# 行未更改} other {# 行未更改}}"
+        },
+        "viewToggle": {
+          "sideBySideTooltip": "切换为并排视图",
+          "unifiedTooltip": "切换为统一视图"
+        }
+      },
+      "generic": {
+        "noOutput": {
+          "label": "暂无输出..."
+        }
+      },
+      "group": {
+        "calls": {
+          "tag": "{count, plural, one {# 次调用} other {# 次调用}}"
+        },
+        "failed": {
+          "tag": "{count} 个失败"
+        },
+        "working": {
+          "label": "处理中"
+        }
+      },
+      "read": {
+        "emptyFile": {
+          "label": "（空文件）"
+        },
+        "moreLines": {
+          "label": "{count, plural, one {还有 # 行} other {还有 # 行}}"
+        },
+        "showAll": {
+          "button": "显示全部"
+        }
+      },
+      "search": {
+        "noMatches": {
+          "label": "无匹配项"
+        }
+      }
+    },
+    "uploadFiles": {
+      "errors": {
+        "fileTooLarge": "文件过大（{size}）。上限为 {max}。",
+        "network": "网络错误",
+        "notFound": "未找到资源",
+        "server": "服务器错误",
+        "sessionExpired": "会话已过期",
+        "tooManyFiles": "文件过多。每个会话最多 {max} 个文件。",
+        "totalSizeExceeded": "总大小超出限制。每个会话最多 {max}。",
+        "uploadFailed": "上传失败"
+      }
+    },
+    "urlBar": {
+      "back": {
+        "ariaLabel": "后退"
+      },
+      "copyUrl": {
+        "ariaLabel": "复制 URL：{url}"
+      },
+      "downloadFile": {
+        "tooltip": "下载文件"
+      },
+      "export": {
+        "button": "导出为 .docx",
+        "inProgress": "正在导出..."
+      },
+      "forward": {
+        "ariaLabel": "前进"
+      },
+      "openInNewTab": {
+        "tooltip": "在新标签页中打开"
+      },
+      "refresh": {
+        "ariaLabel": "刷新"
+      }
+    },
+    "userLibrary": {
+      "delete": {
+        "action": "删除",
+        "button": "删除",
+        "entityTypeFile": "文件",
+        "entityTypeFolder": "文件夹",
+        "fileDetails": "此文件将从您的资料库中移除。",
+        "folderDetails": "这将删除该文件夹及其所有内容。"
+      },
+      "dropzone": {
+        "formats": "Excel、Word、PowerPoint、PDF 或 ZIP",
+        "title": "将文件拖到此处或点击上传"
+      },
+      "errors": {
+        "createFolderFailed": "创建文件夹失败",
+        "deleteFailed": "删除失败",
+        "loadFailed": "加载文件失败",
+        "uploadFailed": "上传失败"
+      },
+      "loading": {
+        "label": "正在加载文件…"
+      },
+      "modal": {
+        "description": "您的智能体在每个会话中都可以读取的文件。",
+        "doneButton": "完成",
+        "title": "资料库"
+      },
+      "newFolder": {
+        "cancelButton": "取消",
+        "createButton": "创建",
+        "label": "新建文件夹",
+        "nameLabel": "文件夹名称",
+        "namePlaceholder": "输入文件夹名称"
+      },
+      "search": {
+        "noResults": "没有与搜索匹配的文件",
+        "placeholder": "搜索文件..."
+      },
+      "tree": {
+        "collapseTooltip": "折叠",
+        "deleteTooltip": "删除",
+        "expandTooltip": "展开",
+        "toggleAriaLabel": "切换 {name}",
+        "uploadToFolderTooltip": "上传到此文件夹"
+      },
+      "upload": {
+        "button": "上传",
+        "dropOverlay": "拖放文件以上传",
+        "uploadingButton": "正在上传…"
+      }
+    },
+    "welcome": {
+      "input": {
+        "placeholder": "分析我的数据并创建仪表板..."
       }
     }
   },
@@ -8704,6 +12550,13 @@
           "networkError": "修改密码时发生错误",
           "updateFailed": "修改密码失败",
           "updated": "密码更新成功"
+        },
+        "validation": {
+          "confirmRequired": "请确认您的新密码",
+          "currentRequired": "当前密码为必填项",
+          "minLength": "密码必须至少包含 {min} 个字符",
+          "mismatch": "两次输入的密码不一致",
+          "newRequired": "新密码为必填项"
         }
       },
       "title": "账户"
@@ -8745,6 +12598,7 @@
         "empty": "尚未创建访问 token。",
         "expiresIn": "{count, plural, one {# 天后过期} other {# 天后过期}}",
         "loading": "正在加载 token…",
+        "middleText": "{created} - {expiry} - {scope}",
         "neverExpires": "永不过期",
         "newTokenButton": "新建访问 token",
         "noPermissionTooltip": "您没有创建访问 token 的权限",
@@ -8891,6 +12745,10 @@
       },
       "description": "将外部工具连接到您在 Onyx 中可用的模型。",
       "guideButton": "指南",
+      "loadError": {
+        "description": "请刷新页面后重试。",
+        "title": "无法加载 LLM 网关"
+      },
       "models": {
         "description": "{count, plural, one {您的账户可使用 # 个模型。打开某个提供商即可复制 ID。} other {您的账户可使用 # 个模型。打开某个提供商即可复制 ID。}}",
         "title": "模型"
@@ -8914,15 +12772,66 @@
         "updateFailed": "更新语言偏好设置失败"
       }
     },
+    "layout": {
+      "header": {
+        "title": "设置"
+      },
+      "sectionSelect": {
+        "placeholder": "选择一个部分"
+      },
+      "tabs": {
+        "accountsAccess": {
+          "label": "账户与访问"
+        },
+        "chatPreferences": {
+          "label": "聊天偏好设置"
+        },
+        "connectors": {
+          "label": "连接器"
+        },
+        "general": {
+          "label": "常规"
+        },
+        "llmGateway": {
+          "label": "LLM 网关"
+        },
+        "usage": {
+          "label": "使用情况"
+        }
+      }
+    },
     "memory": {
+      "addLineButton": {
+        "label": "添加行",
+        "maxReached": "已达到 {count} 条记忆的上限"
+      },
       "empty": {
-        "description": "添加希望 Onyx 记住的个人笔记或记忆。"
+        "description": "添加希望 Onyx 记住的个人笔记或记忆。",
+        "getStarted": "还没有记忆。点击“添加行”开始。",
+        "noMatches": "没有与搜索匹配的记忆。"
+      },
+      "item": {
+        "placeholder": "输入或粘贴个人笔记或记忆"
+      },
+      "lineCount": {
+        "label": "{count, plural, one {行} other {行}}"
+      },
+      "modal": {
+        "description": "让 Onyx 在聊天中引用这些存储的笔记和记忆。",
+        "searchPlaceholder": "搜索..."
       },
       "referenceStoredMemories": {
         "description": "允许 Onyx 在对话中引用已存储的记忆。",
         "title": "引用已存储的记忆"
       },
+      "removeLineButton": {
+        "label": "移除行"
+      },
       "title": "记忆",
+      "toasts": {
+        "saveFailed": "保存偏好设置失败",
+        "saved": "偏好设置已保存"
+      },
       "updateMemories": {
         "description": "允许 Onyx 生成并更新已存储的记忆。",
         "title": "更新记忆"
@@ -8976,6 +12885,67 @@
         "title": "使用提示词快捷方式"
       }
     },
+    "usage": {
+      "budget": {
+        "limit": "上限 {amount}",
+        "none": "未设置预算",
+        "remaining": "剩余 {amount}",
+        "resetsOn": "{date} 重置",
+        "title": "预算"
+      },
+      "empty": {
+        "description": "开始聊天后，您的模型使用情况和费用将显示在此处。",
+        "title": "尚未记录使用情况"
+      },
+      "header": {
+        "title": "使用情况"
+      },
+      "loadError": {
+        "description": "获取使用情况时出错。请稍后重试。",
+        "title": "无法加载使用情况"
+      },
+      "modelPrices": {
+        "defaultTag": {
+          "label": "{model} · 默认"
+        },
+        "description": "每个可用模型每百万 token 的美元价格（输入 · 输出 · 缓存）",
+        "otherProvider": {
+          "label": "其他"
+        },
+        "title": "模型价格",
+        "unavailable": "价格不可用"
+      },
+      "modelUsage": {
+        "cacheReads": {
+          "label": "缓存读取 {count}"
+        },
+        "cacheWrites": {
+          "label": "缓存写入 {count}"
+        },
+        "tokensIn": {
+          "label": "输入 {count}"
+        },
+        "tokensOut": {
+          "label": "输出 {count}"
+        }
+      },
+      "showFewerModels": {
+        "ariaLabel": "显示更少模型"
+      },
+      "showLess": {
+        "label": "收起"
+      },
+      "showMore": {
+        "label": "再显示 {count} 个"
+      },
+      "showMoreModels": {
+        "ariaLabel": "再显示 {count} 个模型"
+      },
+      "usageThisPeriod": {
+        "description": "已花费 {amount}",
+        "title": "本期使用情况"
+      }
+    },
     "voice": {
       "autoPlayback": {
         "description": "自动播放语音回复。",
@@ -8994,6 +12964,23 @@
   },
   "sidebar": {
     "adminNav": {
+      "hiddenRoutes": {
+        "documentExplorer": {
+          "title": "文档浏览器"
+        },
+        "documentFeedback": {
+          "title": "文档反馈"
+        },
+        "documentProcessing": {
+          "title": "文档处理"
+        },
+        "oauthTest": {
+          "title": "OAuth 测试"
+        },
+        "standardAnswers": {
+          "title": "标准回答"
+        }
+      },
       "items": {
         "addConnector": {
           "label": "添加连接器"
@@ -9019,8 +13006,8 @@
         "craftApps": {
           "label": "应用"
         },
-        "craftInstructions": {
-          "label": "指令"
+        "craftPreferences": {
+          "label": "偏好设置"
         },
         "customAnalytics": {
           "label": "自定义分析"
@@ -9301,6 +13288,158 @@
     }
   },
   "skills": {
+    "editor": {
+      "appConflict": {
+        "description": "应用“{appName}”已有名为“{skillName}”的关联技能。",
+        "title": "请选择其他技能名称"
+      },
+      "confirmUpload": {
+        "importBody": "此上传包含 SKILL.md。继续操作会用上传的包替换当前的名称、描述、说明和文件。",
+        "importSubmit": {
+          "label": "导入技能"
+        },
+        "importTitle": "导入此技能？",
+        "replaceBody": "此上传必须使用相同的技能名称。继续操作会用上传的包替换描述、说明和文件。",
+        "replaceSubmit": {
+          "label": "替换内容"
+        },
+        "replaceTitle": "替换技能内容？"
+      },
+      "delete": {
+        "button": {
+          "label": "删除技能"
+        },
+        "description": "使用此技能的所有人将失去访问权限。删除后无法撤销。",
+        "title": "删除此技能"
+      },
+      "deleteModal": {
+        "entityType": "技能",
+        "label": "删除",
+        "pendingLabel": "正在删除..."
+      },
+      "details": {
+        "description": "定义 Craft 应在何时以及如何使用此技能。",
+        "descriptionField": {
+          "description": "描述何时应使用此技能。",
+          "placeholder": "此技能有什么用途？",
+          "title": "描述"
+        },
+        "name": {
+          "createDescription": "使用小写字母、数字和单个连字符。",
+          "lockedDescription": "技能名称创建后无法更改。",
+          "placeholder": "为您的技能命名",
+          "title": "名称"
+        },
+        "title": "详情"
+      },
+      "files": {
+        "busyLabel": "正在上传...",
+        "description": "添加此技能使用的参考资料、脚本、资源或其他文件。ZIP 文件会自动解压。",
+        "input": {
+          "ariaLabel": "添加支持文件"
+        },
+        "pendingUpload": {
+          "emptyMessage": "此上传的文件将在您创建技能后显示。"
+        },
+        "title": "支持文件"
+      },
+      "filesTooltip": {
+        "noPermission": "您没有更新此技能文件的权限。",
+        "saveFirst": "更新技能文件前请先保存详情更改。",
+        "updating": "正在更新技能文件..."
+      },
+      "header": {
+        "appFallbackName": "外部应用",
+        "cancel": {
+          "label": "取消"
+        },
+        "createDescription": "构建个人技能",
+        "createForAppDescription": "为应用“{appName}”添加组织技能",
+        "createTitle": "创建技能",
+        "editDescription": "更新技能详情和文件",
+        "editTitle": "编辑技能",
+        "save": {
+          "label": "保存",
+          "pendingLabel": "正在保存..."
+        }
+      },
+      "import": {
+        "busyLabel": "正在导入...",
+        "button": {
+          "label": "导入技能"
+        },
+        "description": "导入 SKILL.md、ZIP 或技能文件夹以预填表单并包含其文件。",
+        "input": {
+          "ariaLabel": "导入现有技能"
+        },
+        "prompt": "选择 SKILL.md 或 ZIP，或将技能文件夹拖放到此处。",
+        "title": "已有技能？"
+      },
+      "instructions": {
+        "description": "编写此技能为 Craft 添加的行为和工作流程。",
+        "emptyFallback": "暂无说明。",
+        "placeholder": "编写技能说明。",
+        "title": "说明"
+      },
+      "loadError": {
+        "description": "此技能可能不存在、是内置技能，或您的账户无法编辑。",
+        "title": "技能不可用"
+      },
+      "management": {
+        "description": "控制谁可以使用此技能。",
+        "externalApp": {
+          "manage": {
+            "label": "在应用设置中管理"
+          },
+          "readyDescription": "此技能使用应用“{appName}”。",
+          "title": "外部应用"
+        },
+        "sharing": {
+          "edit": {
+            "label": "编辑共享"
+          },
+          "title": "共享"
+        },
+        "title": "管理"
+      },
+      "saveTooltip": {
+        "missingDescription": "保存前请添加描述。",
+        "missingInstructions": "保存前请添加说明。",
+        "missingName": "保存前请添加名称。",
+        "noChanges": "尚未进行任何更改。",
+        "noPermission": "您没有编辑此技能详情的权限。",
+        "savingChanges": "正在保存更改...",
+        "savingSkill": "正在保存技能..."
+      },
+      "sharing": {
+        "organization": {
+          "editorDescription": "组织中的所有人都可以使用和编辑此技能。",
+          "title": "组织",
+          "viewerDescription": "组织中的所有人都可以使用此技能。"
+        },
+        "personal": {
+          "description": "只有您可以使用此技能。",
+          "title": "个人"
+        },
+        "shares": {
+          "description": "只有选定的用户和群组可以使用此技能。",
+          "title": "{count, plural, one {# 个共享} other {# 个共享}}"
+        }
+      },
+      "toasts": {
+        "created": "已创建“{name}”",
+        "deleteFailed": "删除技能失败",
+        "deleted": "已删除“{name}”",
+        "fileRemoveFailed": "移除技能文件失败",
+        "fileRemoved": "已移除“{path}”",
+        "filesUpdateFailed": "更新技能文件失败",
+        "filesUpdated": "已更新“{name}”的文件",
+        "importMissingSkillMd": "请导入 SKILL.md、ZIP 或包含 SKILL.md 的文件夹。",
+        "inspectFailed": "检查技能包失败",
+        "saveFailed": "保存技能失败",
+        "saved": "已保存“{name}”"
+      }
+    },
     "modals": {
       "addInstruction": {
         "cancelButton": {
@@ -9501,6 +13640,76 @@
         "transferredToast": {
           "message": "所有权已转移。"
         }
+      }
+    },
+    "page": {
+      "browse": {
+        "title": "浏览技能"
+      },
+      "countSeparator": {
+        "label": "{count, plural, one {技能} other {技能}}"
+      },
+      "createMenu": {
+        "github": {
+          "description": "从仓库导入一个或多个技能。",
+          "title": "从 GitHub 导入"
+        },
+        "scratch": {
+          "description": "在 Onyx 中编写说明并添加支持文件。",
+          "title": "从头开始"
+        },
+        "trigger": {
+          "label": "创建技能"
+        },
+        "upload": {
+          "description": "导入 SKILL.md 文件、ZIP 文件或技能文件夹。",
+          "title": "上传技能"
+        }
+      },
+      "empty": {
+        "noMatches": {
+          "description": "请尝试其他搜索。",
+          "title": "没有匹配的技能"
+        },
+        "noSkills": {
+          "description": "尚无自定义技能与您共享，也未配置内置技能。",
+          "title": "没有可用的技能"
+        }
+      },
+      "focusedApp": {
+        "description": "启用与应用“{appName}”关联的所有技能。缺少这些技能时应用可能无法正常工作。如果已启用同名的其他技能，启用应用关联技能会为您停用另一个技能。",
+        "showAll": {
+          "label": "显示全部技能"
+        },
+        "title": "应用“{appName}”的技能"
+      },
+      "header": {
+        "description": "您的 Craft 智能体可调用的能力包。此页面显示内置技能、与您共享的技能以及您的个人技能。",
+        "title": "技能"
+      },
+      "loadError": {
+        "description": "请查看控制台了解详情，并尝试刷新页面。",
+        "title": "加载技能失败"
+      },
+      "preview": {
+        "unavailableFallback": "此技能当前不可用。"
+      },
+      "search": {
+        "placeholder": "搜索技能..."
+      },
+      "switchModal": {
+        "body": "继续操作将停用当前启用的技能并启用此技能。",
+        "description": "同名技能“{name}”一次只能启用一个。",
+        "submit": {
+          "label": "切换技能",
+          "pendingLabel": "正在切换..."
+        },
+        "title": "切换技能“{name}”？"
+      },
+      "toasts": {
+        "disableFailed": "停用 {name} 失败",
+        "enableFailed": "启用 {name} 失败",
+        "refreshFailed": "{name} 已更新，但技能列表无法刷新。"
       }
     },
     "sections": {

@@ -1,5 +1,6 @@
 "use client";
 
+import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import useSWR from "swr";
@@ -36,12 +37,13 @@ interface ShellProps {
 
 function Shell({ children, onAddProvider, addGated }: ShellProps) {
   const t = useTranslations("admin.ssoProviders");
+  const adminRouteTitle = useAdminRouteTitle();
 
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={route.icon}
-        title={route.title}
+        title={adminRouteTitle(route)}
         description={t("page.description")}
         divider
         rightChildren={

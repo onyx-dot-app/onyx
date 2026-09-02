@@ -60,6 +60,29 @@
         "ariaLabel": "Aktionskarte {title}"
       }
     },
+    "actionLineItem": {
+      "addConnectors": {
+        "label": "Konnektoren hinzufügen"
+      },
+      "authenticate": {
+        "label": "Authentifizieren"
+      },
+      "configure": {
+        "tooltip": "Konfigurieren"
+      },
+      "configureConnectors": {
+        "label": "Konnektoren konfigurieren"
+      },
+      "disable": {
+        "label": "Deaktivieren"
+      },
+      "enable": {
+        "label": "Aktivieren"
+      },
+      "projectSearch": {
+        "label": "Projektsuche"
+      }
+    },
     "addMcpModal": {
       "addHeader": {
         "description": "Verbinden Sie einen MCP-Server (Model Context Protocol), um benutzerdefinierte Aktionen hinzuzufügen.",
@@ -355,6 +378,53 @@
         "tooltip": "Tools aktualisieren"
       }
     },
+    "mcpOauthCallback": {
+      "autoRedirect": {
+        "text": "Sie werden automatisch zurückgeleitet …"
+      },
+      "backToChatButton": {
+        "label": "Zurück zum Chat"
+      },
+      "cancelled": {
+        "description": "Die Autorisierung wurde abgebrochen oder verweigert, daher wurde keine Verbindung hergestellt. Um es erneut zu versuchen, starten Sie die Verbindung über die Authentifizierungseinstellungen des MCP-Servers neu.",
+        "title": "Autorisierung abgebrochen"
+      },
+      "continueButton": {
+        "label": "Weiter"
+      },
+      "genericError": {
+        "fallbackDetail": "Autorisierung konnte nicht abgeschlossen werden",
+        "title": "Etwas ist schiefgelaufen"
+      },
+      "invalidLink": {
+        "description": "Diesem Link fehlen die erforderlichen Autorisierungsparameter. Starten Sie die Verbindung über die Authentifizierungseinstellungen des MCP-Servers neu.",
+        "title": "Ungültiger Autorisierungslink"
+      },
+      "processing": {
+        "description": "Die Verbindung zu Ihrem MCP-Server wird hergestellt. Dies kann einen Moment dauern …",
+        "title": "Autorisierung wird abgeschlossen"
+      },
+      "serverNotFound": {
+        "description": "Der MCP-Server, zu dem diese Autorisierung gehört, existiert nicht mehr oder ist nicht mehr konfiguriert. Erstellen oder konfigurieren Sie den Server neu und stellen Sie dann erneut eine Verbindung her.",
+        "title": "MCP-Server nicht gefunden"
+      },
+      "sessionExpired": {
+        "description": "Dieser Autorisierungslink ist ungültig, abgelaufen oder wurde bereits verwendet. Starten Sie die Verbindung über die Authentifizierungseinstellungen des MCP-Servers neu.",
+        "title": "Autorisierungssitzung abgelaufen"
+      },
+      "success": {
+        "description": "Die Autorisierung wurde erfolgreich abgeschlossen. Sie können die Tools dieses Servers jetzt im Chat verwenden.",
+        "title": "Mit {serverName} verbunden"
+      },
+      "timedOut": {
+        "description": "Der MCP-Server hat die Autorisierung nicht rechtzeitig bestätigt. Versuchen Sie erneut, eine Verbindung herzustellen. Falls das Problem weiterhin auftritt, überprüfen Sie die OAuth-Konfiguration des Servers.",
+        "title": "Zeitüberschreitung bei der Autorisierung"
+      },
+      "tokenExchangeFailed": {
+        "description": "Der Anbieter hat die Autorisierung genehmigt, aber es konnte kein gültiges Zugriffstoken abgerufen werden. Überprüfen Sie die OAuth-Client-Anmeldedaten und -Endpunkte des Servers und versuchen Sie dann erneut, eine Verbindung herzustellen.",
+        "title": "Token-Austausch fehlgeschlagen"
+      }
+    },
     "mcpPage": {
       "addButton": {
         "label": "MCP-Server hinzufügen"
@@ -554,6 +624,14 @@
         "label": "Ablehnen"
       }
     },
+    "switchList": {
+      "back": {
+        "ariaLabel": "Zurück"
+      },
+      "toggle": {
+        "ariaLabel": "{name} umschalten"
+      }
+    },
     "toolItem": {
       "unavailable": {
         "label": "Tool nicht verfügbar"
@@ -578,6 +656,81 @@
       "showEnabledButton": {
         "ariaLabel": "Nur aktivierte Tools anzeigen",
         "tooltip": "Nur aktivierte anzeigen"
+      }
+    },
+    "toolsPopover": {
+      "configureLinks": {
+        "codeInterpreter": {
+          "tooltip": "Code-Interpreter konfigurieren"
+        },
+        "imageGeneration": {
+          "tooltip": "Bilderzeugung konfigurieren"
+        },
+        "openapi": {
+          "tooltip": "OpenAPI-Aktionen verwalten"
+        },
+        "webSearch": {
+          "tooltip": "Websuche konfigurieren"
+        }
+      },
+      "disableAllSources": {
+        "label": "Alle Quellen deaktivieren"
+      },
+      "disableAllTools": {
+        "label": "Alle Tools deaktivieren"
+      },
+      "enableAllSources": {
+        "label": "Alle Quellen aktivieren"
+      },
+      "enableAllTools": {
+        "label": "Alle Tools aktivieren"
+      },
+      "manageActions": {
+        "tooltip": "Aktionen verwalten"
+      },
+      "mcpTools": {
+        "searchPlaceholder": "{server}-Tools durchsuchen"
+      },
+      "moreActions": {
+        "label": "Weitere Aktionen"
+      },
+      "reauthenticate": {
+        "label": "Erneut authentifizieren"
+      },
+      "search": {
+        "placeholder": "Aktionen durchsuchen..."
+      },
+      "serverFallback": {
+        "label": "Server"
+      },
+      "sourceFilters": {
+        "searchPlaceholder": "Filter durchsuchen"
+      },
+      "tooltips": {
+        "askAdminSuffix": {
+          "text": "Bitten Sie einen Admin um die Konfiguration."
+        },
+        "codingAgent": {
+          "description": "Untersucht ein GitHub-Repository und beantwortet Fragen zu dessen Code."
+        },
+        "configureSuffix": {
+          "text": "Zum Aktivieren auf das Zahnrad tippen."
+        },
+        "default": {
+          "description": "Diese Aktion ist noch nicht konfiguriert."
+        },
+        "imageGeneration": {
+          "description": "Erzeugt Bilder auf Basis eines Prompts."
+        },
+        "python": {
+          "description": "Führt Code für komplexe Analysen aus."
+        },
+        "search": {
+          "description": "Durchsucht das verbundene Wissen, um die Antwort zu stützen."
+        },
+        "webSearch": {
+          "description": "Durchsucht das Web nach aktuellen Informationen."
+        }
       }
     },
     "toolsSection": {
@@ -631,7 +784,39 @@
         }
       }
     },
+    "agentStats": {
+      "chart": {
+        "description": "Pro Tag für den ausgewählten Zeitraum",
+        "title": "Nachrichten und eindeutige Benutzer"
+      },
+      "empty": {
+        "message": "Keine Daten für diesen Agenten im ausgewählten Zeitraum gefunden."
+      },
+      "fetchFailed": {
+        "message": "Agentenstatistiken konnten nicht geladen werden."
+      },
+      "permissionDenied": {
+        "message": "Sie haben keine Berechtigung, diese Statistiken anzusehen."
+      },
+      "totalMessages": {
+        "label": "Nachrichten gesamt"
+      },
+      "totalUniqueUsers": {
+        "label": "Eindeutige Benutzer gesamt"
+      },
+      "unknownError": {
+        "message": "Ein unbekannter Fehler ist aufgetreten"
+      }
+    },
     "agents": {
+      "collapsibleSection": {
+        "collapse": {
+          "ariaLabel": "Abschnitt einklappen"
+        },
+        "expand": {
+          "ariaLabel": "Abschnitt ausklappen"
+        }
+      },
       "deleteModal": {
         "confirmation": {
           "description": "Möchten Sie <emphasis>{name}</emphasis> wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden."
@@ -1003,6 +1188,47 @@
         },
         "viewPlans": {
           "title": "Tarife anzeigen"
+        }
+      },
+      "info": {
+        "empty": {
+          "message": "Keine Abrechnungsinformationen verfügbar."
+        },
+        "loadError": {
+          "message": "Fehler beim Laden der Abrechnungsinformationen. Bitte versuchen Sie es später erneut."
+        },
+        "loading": {
+          "label": "Wird geladen..."
+        },
+        "manageSubscription": {
+          "description": "Plan ansehen, Zahlung aktualisieren oder Abonnement ändern",
+          "title": "Abonnement verwalten"
+        },
+        "page": {
+          "title": "Abrechnungsinformationen"
+        },
+        "portalError": {
+          "message": "Fehler beim Erstellen der Kundenportal-Sitzung"
+        },
+        "subscriptionDetails": {
+          "title": "Abonnementdetails"
+        },
+        "summary": {
+          "billingEnd": {
+            "label": "Abrechnungsende"
+          },
+          "billingStart": {
+            "label": "Abrechnungsbeginn"
+          },
+          "seats": {
+            "label": "Plätze"
+          },
+          "status": {
+            "label": "Abonnementstatus"
+          }
+        },
+        "updatedToast": {
+          "message": "Glückwunsch! Ihr Abonnement wurde erfolgreich aktualisiert."
         }
       },
       "license": {
@@ -1517,6 +1743,25 @@
       }
     },
     "connector": {
+      "accessType": {
+        "autoSyncOption": {
+          "description": "Wir synchronisieren Berechtigungen automatisch aus der Quelle. Ein Dokument ist in Onyx nur dann auffindbar, wenn der suchende Benutzer in der Quelle Zugriff auf das Dokument hat.",
+          "disabledReason": "Die aktuelle Authentifizierungsmethode der Zugangsdaten unterstützt keine automatische Berechtigungssynchronisierung. Bitte wechsle zu einer unterstützten Authentifizierungsmethode.",
+          "name": "Berechtigungen automatisch synchronisieren"
+        },
+        "heading": {
+          "description": "Lege fest, wer Zugriff auf die von diesem Konnektor indexierten Dokumente hat.",
+          "title": "Dokumentzugriff"
+        },
+        "privateOption": {
+          "description": "Nur Benutzer, denen explizit Zugriff auf diesen Konnektor gewährt wurde (über die Seite Benutzergruppen), können auf die von diesem Konnektor importierten Dokumente zugreifen",
+          "name": "Privat"
+        },
+        "publicOption": {
+          "description": "Jeder mit einem Onyx-Konto kann auf die von diesem Konnektor importierten Dokumente zugreifen",
+          "name": "Öffentlich"
+        }
+      },
       "advancedConfig": {
         "duration": {
           "days": "{count, plural, one {# Tag} other {# Tage}}",
@@ -1546,6 +1791,14 @@
           "label": "Weniger anzeigen"
         }
       },
+      "credentialForm": {
+        "errorToast": "Fehler: {detail}",
+        "successToast": "Erfolgreich!",
+        "updateButton": {
+          "ariaLabel": "Zugangsdaten aktualisieren",
+          "label": "Aktualisieren"
+        }
+      },
       "deleteModal": {
         "additionalDetails": "Beim Löschen dieses Konnektors wird ein Löschauftrag geplant, der seine indizierten Dokumente entfernt und ihn für alle Benutzer löscht.",
         "entityType": "Konnektor"
@@ -1568,6 +1821,11 @@
         },
         "errorModal": {
           "title": "Fehler bei der Synchronisierung der Dokumentberechtigungen"
+        }
+      },
+      "docsLink": {
+        "checkOutDocs": {
+          "text": "In <link>unserer Dokumentation</link> findest du weitere Informationen zur Konfiguration dieses Konnektors."
         }
       },
       "errorsModal": {
@@ -1649,6 +1907,14 @@
           "updateFailed": "Die Dateien konnten nicht aktualisiert werden"
         }
       },
+      "fileUpload": {
+        "dropzone": {
+          "message": "{multiple, select, true {Dateien} other {Eine Datei}} hierher ziehen oder klicken, um {multiple, select, true {Dateien} other {eine Datei}} auszuwählen"
+        },
+        "selectedFiles": {
+          "heading": "{multiple, select, true {Ausgewählte Dateien} other {Ausgewählte Datei}}"
+        }
+      },
       "groupMembershipTable": {
         "columns": {
           "errorMessage": "Fehlermeldung",
@@ -1664,6 +1930,23 @@
         },
         "errorModal": {
           "title": "Fehler bei der Synchronisierung der Gruppenmitgliedschaften"
+        }
+      },
+      "groupSelector": {
+        "assignGroupAccess": {
+          "title": "Gruppenzugriff für diesen Konnektor zuweisen"
+        },
+        "assignToGroup": {
+          "title": "Diesen Konnektor einer Gruppe zuweisen"
+        },
+        "scopedManagerGroups": {
+          "description": "Wähle eine oder mehrere der von dir verwalteten Gruppen aus, um Zugriff auf diesen Konnektor zu gewähren"
+        },
+        "syncGroups": {
+          "description": "Die folgenden Gruppen legen fest, wer diesen Konnektor verwalten kann. Der Zugriff auf seine Dokumente wird von den Berechtigungen der Quelle selbst übernommen."
+        },
+        "visibleToGroups": {
+          "description": "Dieser Konnektor ist für die unten ausgewählten Gruppen sichtbar/zugänglich"
         }
       },
       "indexAttemptsTable": {
@@ -2022,6 +2305,22 @@
         "targetedReindexSubmitted": "Gezielte Neuindizierung für {count, plural, one {# Dokument} other {# Dokumente}} übermittelt. Die Fehler verschwinden aus der Liste, sobald die Dokumente neu indiziert sind."
       }
     },
+    "connectorTitle": {
+      "metadata": {
+        "channelRegexEnabled": "Kanal-Regex aktiviert",
+        "channels": "Kanäle",
+        "enabledTrue": "Ja",
+        "excludeChannelRegexEnabled": "Kanal-Ausschluss-Regex aktiviert",
+        "excludedChannels": "Ausgeschlossene Kanäle",
+        "includeBotMessages": "Bot-Nachrichten einschließen",
+        "jiraProjectUrl": "Jira-Projekt-URL",
+        "multipleRepos": "mehrere Repositories",
+        "pageId": "Seiten-ID",
+        "realm": "Realm",
+        "repo": "Repository",
+        "wikiUrl": "Wiki-URL"
+      }
+    },
     "connectorsList": {
       "add": {
         "authorizeButton": {
@@ -2148,6 +2447,7 @@
           "description": "Geben Sie die E-Mail-Adresse eines Administrators oder Eigentümers der Google-Organisation ein, der die Google Drives gehören, die Sie indizieren möchten.",
           "invalidEmail": "Muss eine gültige E-Mail-Adresse sein",
           "label": "E-Mail-Adresse des Hauptadministrators",
+          "placeholder": "admin@ihrunternehmen.com",
           "required": "Erforderlich"
         },
         "section": {
@@ -2205,6 +2505,7 @@
           "description": "Geben Sie die E-Mail-Adresse eines Administrators oder Eigentümers der Google-Organisation ein, der die Gmail-Konten gehören, die Sie indizieren möchten.",
           "invalidEmail": "Muss eine gültige E-Mail-Adresse sein",
           "label": "E-Mail-Adresse des Hauptadministrators",
+          "placeholder": "admin@ihrunternehmen.com",
           "required": "Erforderlich"
         },
         "section": {
@@ -2521,7 +2822,7 @@
         "description": "Die Benutzer konnten nicht geladen werden. Bitte laden Sie die Seite neu."
       }
     },
-    "craftInstructions": {
+    "craftPreferences": {
       "baseInstructions": {
         "description": "Der integrierte Prompt, an den Ihre Anweisungen angehängt werden. Dynamische Abschnitte werden pro Sitzung ausgefüllt.",
         "loadError": {
@@ -2529,9 +2830,34 @@
         },
         "title": "Basisanweisungen anzeigen"
       },
+      "defaultModel": {
+        "clearButton": {
+          "label": "Löschen"
+        },
+        "help": {
+          "description": "Craft verwendet dieses Modell für neue Sitzungen und geplante Aufgaben. Ohne Festlegung greift Craft auf das Standard-Chatmodell des Arbeitsbereichs zurück."
+        },
+        "inheritedTag": {
+          "label": "Arbeitsbereich-Standard"
+        },
+        "label": "Standardmodell",
+        "placeholder": "Modell auswählen",
+        "resetError": {
+          "message": "Das Standardmodell konnte nicht gelöscht werden"
+        },
+        "resetSuccess": {
+          "message": "Craft-Standardmodell gelöscht"
+        },
+        "saveError": {
+          "message": "Das Standardmodell konnte nicht gespeichert werden"
+        },
+        "saveSuccess": {
+          "message": "Craft-Standardmodell gespeichert"
+        }
+      },
       "header": {
-        "description": "Arbeitsbereichsweite Anweisungen, die jeder Craft-Agent zusätzlich zum integrierten Verhalten von Craft befolgt.",
-        "title": "Anweisungen"
+        "description": "Das Standardmodell und die arbeitsbereichsweiten Anweisungen, die jeder Craft-Agent zusätzlich zum integrierten Verhalten von Craft befolgt.",
+        "title": "Einstellungen"
       },
       "instructions": {
         "charCount": {
@@ -2577,6 +2903,171 @@
       "unavailable": {
         "description": "Craft wird von Onyx pro Bereitstellung aktiviert. Wenden Sie sich an Ihren Onyx-Ansprechpartner, um Zugriff zu erhalten.",
         "title": "Craft ist in dieser Bereitstellung nicht verfügbar"
+      }
+    },
+    "credentials": {
+      "card": {
+        "createdOn": {
+          "label": "Erstellt am <i>{date}</i>"
+        },
+        "createdOnBy": {
+          "label": "Erstellt am <i>{date}</i> von <i>{email}</i>"
+        },
+        "unnamed": {
+          "label": "Anmeldedaten Nr. {id}"
+        }
+      },
+      "create": {
+        "createButton": {
+          "label": "Erstellen"
+        },
+        "created": {
+          "toast": "Neue Anmeldedaten erstellt!"
+        },
+        "name": {
+          "label": "Name:",
+          "placeholder": "(Optional) Name der Anmeldedaten..."
+        },
+        "submitError": {
+          "toast": "Fehler beim Übermitteln der Anmeldedaten"
+        }
+      },
+      "delete": {
+        "cancelButton": {
+          "label": "Abbrechen"
+        },
+        "confirmBody": {
+          "message": "Möchten Sie diese Anmeldedaten wirklich löschen? Anmeldedaten, die mit aktiven Konnektoren verknüpft sind, können nicht gelöscht werden."
+        },
+        "confirmButton": {
+          "label": "Bestätigen"
+        },
+        "confirmTitle": "Löschen bestätigen"
+      },
+      "edit": {
+        "name": {
+          "label": "Name (optional):"
+        },
+        "permissions": {
+          "note": "Stellen Sie sicher, dass Sie auf Anmeldedaten mit den richtigen Berechtigungen aktualisieren!"
+        },
+        "resetButton": {
+          "label": "Änderungen zurücksetzen"
+        },
+        "updateButton": {
+          "label": "Aktualisieren"
+        },
+        "updateError": {
+          "toast": "Fehler beim Aktualisieren der Anmeldedaten"
+        }
+      },
+      "modal": {
+        "createTitle": "{source}-Anmeldedaten erstellen",
+        "editTitle": "Anmeldedaten bearbeiten",
+        "updateTitle": "Anmeldedaten aktualisieren"
+      },
+      "modify": {
+        "createButton": {
+          "label": "Erstellen"
+        },
+        "instructions": {
+          "message": "Wählen Sie bei Bedarf Anmeldedaten aus! Stellen Sie sicher, dass Sie Anmeldedaten mit den richtigen Berechtigungen für diesen Konnektor ausgewählt haben!"
+        },
+        "selectButton": {
+          "label": "Auswählen"
+        }
+      },
+      "oauth": {
+        "connectButton": {
+          "label": "Verbinden"
+        },
+        "connectError": {
+          "title": "Verbindung nicht möglich"
+        },
+        "redirectFailed": {
+          "message": "Wir konnten Sie nicht zur Anmeldung mit {source} weiterleiten. Bitte versuchen Sie es erneut."
+        },
+        "retryButton": {
+          "label": "Erneut versuchen"
+        },
+        "startError": {
+          "message": "OAuth konnte nicht gestartet werden"
+        }
+      },
+      "swap": {
+        "error": {
+          "toast": "Problem beim Wechseln der Anmeldedaten: {detail}"
+        },
+        "success": {
+          "toast": "Anmeldedaten erfolgreich gewechselt!"
+        }
+      },
+      "table": {
+        "actions": {
+          "label": "Aktionen"
+        },
+        "created": {
+          "header": "Erstellt"
+        },
+        "edit": {
+          "ariaLabel": "Anmeldedaten bearbeiten"
+        },
+        "empty": {
+          "message": "Für diesen Konnektor sind keine Anmeldedaten vorhanden!"
+        },
+        "id": {
+          "header": "ID"
+        },
+        "lastUpdated": {
+          "header": "Zuletzt aktualisiert"
+        },
+        "name": {
+          "header": "Name"
+        },
+        "select": {
+          "label": "Auswählen"
+        },
+        "selected": {
+          "badge": "ausgewählt"
+        },
+        "untitled": {
+          "label": "Ohne Titel"
+        }
+      },
+      "update": {
+        "error": {
+          "toast": "Problem beim Aktualisieren der Anmeldedaten"
+        },
+        "success": {
+          "toast": "Anmeldedaten aktualisiert"
+        }
+      }
+    },
+    "customAnalytics": {
+      "intro": {
+        "description": "Damit können Sie Ihr eigenes Analytics-Tool mit Onyx nutzen! Kopieren Sie das Web-Snippet Ihres Analytics-Anbieters in das Feld unten, und wir beginnen, Nutzungsereignisse zu senden."
+      },
+      "notEnabled": {
+        "description": "Um benutzerdefinierte Analytics-Skripte einzurichten, wenden Sie sich an das Team, das Onyx eingerichtet hat, um die Umgebungsvariable <i>CUSTOM_ANALYTICS_SECRET_KEY</i> zu setzen.",
+        "title": "Benutzerdefinierte Analytics sind nicht aktiviert."
+      },
+      "script": {
+        "description": "Geben Sie das Javascript an, das beim Laden der Seite ausgeführt werden soll, um Ihr benutzerdefiniertes Tracking/Analytics zu initialisieren.",
+        "instructions": "Fügen Sie die `<script></script>`-Tags nicht ein. Wenn Sie unten ein Skript hochladen, aber keine Ereignisse in Ihrer Analytics-Plattform ankommen, entfernen Sie testweise alle zusätzlichen Leerzeichen vor jeder JavaScript-Zeile.",
+        "label": "Skript"
+      },
+      "secretKey": {
+        "description": "Aus Sicherheitsgründen müssen Sie einen geheimen Schlüssel angeben, um dieses Skript zu aktualisieren. Dies sollte der Wert der Umgebungsvariablen <i>CUSTOM_ANALYTICS_SECRET_KEY</i> sein, die bei der Ersteinrichtung von Onyx gesetzt wurde.",
+        "label": "Geheimer Schlüssel"
+      },
+      "updateButton": {
+        "label": "Aktualisieren"
+      },
+      "updateFailed": {
+        "message": "Benutzerdefiniertes Analytics-Skript konnte nicht aktualisiert werden: \"{error}\""
+      },
+      "updateSuccess": {
+        "message": "Benutzerdefiniertes Analytics-Skript erfolgreich aktualisiert!"
       }
     },
     "discordBot": {
@@ -3034,6 +3525,83 @@
         }
       }
     },
+    "exportLogs": {
+      "button": {
+        "collecting": {
+          "label": "Sammeln..."
+        },
+        "downloading": {
+          "label": "Wird heruntergeladen..."
+        },
+        "export": {
+          "label": "Logs exportieren"
+        },
+        "starting": {
+          "label": "Wird gestartet..."
+        }
+      },
+      "downloadButton": {
+        "label": "Herunterladen"
+      },
+      "exportCard": {
+        "description": "Sammelt Logdateien vom API-Server und den Hintergrund-Workern in einem einzigen Zip-Archiv. Der Download startet automatisch, sobald die Sammlung abgeschlossen ist.",
+        "title": "Logs exportieren"
+      },
+      "header": {
+        "description": "Laden Sie ein Zip-Archiv der Server-Logdateien herunter, um es an einen Onyx-Support-Thread anzuhängen."
+      },
+      "receipt": {
+        "duplicateHost": {
+          "label": "von einem anderen Worker auf demselben Host abgedeckt"
+        },
+        "failed": {
+          "label": "fehlgeschlagen"
+        },
+        "failedWithError": {
+          "label": "fehlgeschlagen: {error}"
+        },
+        "noLogs": {
+          "label": "keine Logdateien gefunden"
+        },
+        "uploaded": {
+          "label": "{count, plural, one {# Datei hochgeladen} other {# Dateien hochgeladen}}"
+        }
+      },
+      "sensitiveWarning": {
+        "description": "Logdateien können Benutzer-E-Mails, Dokumenttitel, Suchanfragen und Fehlerdaten enthalten. Prüfen Sie den Inhalt, bevor Sie sie außerhalb Ihrer Organisation weitergeben.",
+        "title": "Logs können sensible Daten enthalten"
+      },
+      "status": {
+        "startingCollection": {
+          "label": "Sammlung wird gestartet..."
+        }
+      },
+      "toasts": {
+        "alreadyRunning": {
+          "message": "Ein Log-Export läuft bereits. Versuchen Sie es in Kürze erneut."
+        },
+        "downloadFailed": {
+          "message": "Der Log-Export konnte nicht heruntergeladen werden."
+        },
+        "lostAccess": {
+          "message": "Zugriff auf den laufenden Export verloren. Starten Sie einen neuen."
+        },
+        "startFailed": {
+          "message": "Der Log-Export konnte nicht gestartet werden."
+        },
+        "unreachable": {
+          "message": "Der Server ist zur Prüfung des Exportfortschritts nicht erreichbar. Starten Sie einen neuen Export, sobald er wieder verfügbar ist."
+        }
+      },
+      "worker": {
+        "collecting": {
+          "label": "wird gesammelt..."
+        },
+        "missedDeadline": {
+          "label": "hat sich nicht vor Ablauf der Frist gemeldet"
+        }
+      }
+    },
     "externalApps": {
       "apps": {
         "empty": {
@@ -3140,9 +3708,137 @@
         "loadFailed": "Der Konnektor konnte nicht geladen werden: {details}",
         "title": "Fehler"
       },
+      "form": {
+        "channelInput": {
+          "placeholder": "Kanalnamen oder Regex-Muster eingeben und Enter drücken"
+        },
+        "channelsRequired": {
+          "error": "Mindestens ein Kanal ist erforderlich, wenn 'Alle Kanäle durchsuchen' deaktiviert ist"
+        },
+        "configSchemaLoadError": {
+          "message": "Konfigurationsschema konnte nicht geladen werden: {error}"
+        },
+        "configTitle": {
+          "text": "Konfiguration des föderierten Konnektors"
+        },
+        "configuration": {
+          "heading": "Konfiguration"
+        },
+        "create": {
+          "failed": "Föderierter Konnektor konnte nicht erstellt werden",
+          "success": "Föderierter Konnektor erfolgreich erstellt!"
+        },
+        "credentialField": {
+          "keepCurrentPlaceholder": "••••••••  (leer lassen, um den aktuellen Wert zu behalten)"
+        },
+        "credentialValidationFailed": {
+          "message": "Validierung der Zugangsdaten fehlgeschlagen: {message}"
+        },
+        "credentials": {
+          "description": "Gib die Zugangsdaten für diesen Konnektor ein.",
+          "heading": "Zugangsdaten"
+        },
+        "delete": {
+          "failed": "Föderierter Konnektor konnte nicht gelöscht werden",
+          "success": "Föderierter Konnektor erfolgreich gelöscht!"
+        },
+        "deleteConfirm": {
+          "message": "Möchtest du diesen föderierten Konnektor wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden."
+        },
+        "deleteError": {
+          "toast": "Fehler beim Löschen des Konnektors: {error}"
+        },
+        "deleteItem": {
+          "deleting": "Wird gelöscht...",
+          "inProgressTooltip": "Löschung läuft",
+          "label": "Löschen"
+        },
+        "federatedBadge": {
+          "label": "Föderiert"
+        },
+        "federatedTooltip": {
+          "default": "Dies ist ein föderierter Konnektor. Er führt zu höherer Latenz und geringerer Suchqualität als reguläre Konnektoren."
+        },
+        "genericError": {
+          "text": "Fehler: {error}"
+        },
+        "listInput": {
+          "placeholder": "Tippen und Enter drücken, um einen Eintrag hinzuzufügen"
+        },
+        "loadingSchema": {
+          "description": "Erforderliche Felder für diesen Konnektortyp werden abgerufen",
+          "title": "Zugangsdaten-Schema wird geladen..."
+        },
+        "manageButton": {
+          "label": "Verwalten"
+        },
+        "missingFields": {
+          "message": "Fehlende Pflichtfelder: {fields}"
+        },
+        "noConfigSchema": {
+          "message": "Für diesen Konnektortyp ist keine Suchkonfiguration verfügbar."
+        },
+        "noCredentialSchema": {
+          "message": "Für diesen Konnektortyp ist kein Zugangsdaten-Schema verfügbar."
+        },
+        "schemaLoadError": {
+          "message": "Zugangsdaten-Schema konnte nicht geladen werden: {error}"
+        },
+        "submitButton": {
+          "create": "Erstellen",
+          "creating": "Wird erstellt...",
+          "update": "Aktualisieren",
+          "updating": "Wird aktualisiert..."
+        },
+        "title": {
+          "edit": "{name} bearbeiten",
+          "setup": "{name} einrichten"
+        },
+        "update": {
+          "failed": "Föderierter Konnektor konnte nicht aktualisiert werden",
+          "success": "Föderierter Konnektor erfolgreich aktualisiert!"
+        },
+        "validateBeforeEdit": {
+          "message": "Gib vor der Validierung neue Zugangsdaten ein."
+        },
+        "validateButton": {
+          "label": "Validieren",
+          "validating": "Wird validiert..."
+        },
+        "validation": {
+          "error": "Validierungsfehler: {error}",
+          "failedStatus": "Validierung fehlgeschlagen: {statusText}",
+          "invalid": "Zugangsdaten sind ungültig",
+          "valid": "Zugangsdaten sind gültig"
+        }
+      },
       "loading": {
         "description": "Konnektordetails und Schema der Anmeldedaten werden abgerufen",
         "title": "Konnektorkonfiguration wird geladen..."
+      }
+    },
+    "federatedCallback": {
+      "backButton": {
+        "label": "Zurück zum Chat"
+      },
+      "error": {
+        "title": "Etwas ist schiefgelaufen"
+      },
+      "errors": {
+        "clientSecret": "Anmeldedaten fehlen oder sind ungültig",
+        "oauth": "OAuth-Autorisierung fehlgeschlagen",
+        "validation": "Konfigurationsfehler - bitte prüfen Sie Ihre Konnektor-Einstellungen"
+      },
+      "processing": {
+        "details": "Bitte warten Sie, während wir die Einrichtung abschließen.",
+        "title": "Wird verarbeitet..."
+      },
+      "redirecting": {
+        "text": "Weiterleitung zum Chat in 2 Sekunden..."
+      },
+      "success": {
+        "detailsTemplate": "Ihre {serviceName}-Autorisierung wurde erfolgreich abgeschlossen. Sie können diesen Konnektor jetzt für die Suche verwenden.",
+        "title": "Erfolg!"
       }
     },
     "groups": {
@@ -3408,6 +4104,265 @@
         }
       }
     },
+    "hooks": {
+      "card": {
+        "delete": {
+          "ariaLabel": "Hook löschen",
+          "tooltip": "Löschen"
+        },
+        "disconnect": {
+          "ariaLabel": "Hook deaktivieren",
+          "tooltip": "Hook trennen"
+        },
+        "disconnectedSuffix": {
+          "label": "(Getrennt)"
+        },
+        "hookPoint": {
+          "description": "Hook-Punkt: {name}"
+        },
+        "manage": {
+          "ariaLabel": "Hook konfigurieren",
+          "tooltip": "Verwalten"
+        },
+        "reconnectButton": {
+          "label": "Wieder verbinden"
+        },
+        "test": {
+          "ariaLabel": "Hook erneut validieren",
+          "tooltip": "Verbindung testen"
+        }
+      },
+      "connectButton": {
+        "label": "Verbinden"
+      },
+      "deleteModal": {
+        "body": {
+          "description": "Hook ***{name}*** wird dauerhaft von diesem Hook-Punkt entfernt. Der externe Endpunkt kann zuvor gesendete Daten weiterhin speichern."
+        },
+        "delete": {
+          "label": "Löschen"
+        },
+        "header": {
+          "title": "*{name}* löschen"
+        },
+        "permanent": {
+          "description": "Das Löschen kann nicht rückgängig gemacht werden."
+        }
+      },
+      "disconnectModal": {
+        "body": {
+          "description": "Onyx ruft diesen Endpunkt für Hook ***{name}*** nicht mehr auf. Laufende Anfragen werden weiter ausgeführt. Der externe Endpunkt kann zuvor gesendete Daten weiterhin speichern. Sie können diesen Hook bei Bedarf später wieder verbinden."
+        },
+        "deleteNote": {
+          "description": "Sie können diesen Hook auch löschen. Das Löschen kann nicht rückgängig gemacht werden."
+        },
+        "disconnect": {
+          "label": "Trennen"
+        },
+        "disconnectAndDelete": {
+          "label": "Trennen & löschen"
+        },
+        "header": {
+          "title": "*{name}* trennen"
+        }
+      },
+      "docsLink": {
+        "label": "Dokumentation"
+      },
+      "form": {
+        "apiKey": {
+          "description": "Onyx verwendet diesen Schlüssel zur Authentifizierung bei Ihrem API-Endpunkt.",
+          "keepCurrent": {
+            "placeholder": "Leer lassen, um den aktuellen Schlüssel zu behalten"
+          },
+          "title": "API-Schlüssel"
+        },
+        "connectionValid": {
+          "label": "Verbindung gültig."
+        },
+        "createHeader": {
+          "description": "Verbinden Sie einen externen API-Endpunkt, um den Hook-Punkt zu erweitern.",
+          "title": "Hook-Erweiterung einrichten"
+        },
+        "editHeader": {
+          "title": "Hook-Erweiterung verwalten"
+        },
+        "endpoint": {
+          "description": "Verbinden Sie sich nur mit Servern, denen Sie vertrauen. Sie sind für die durchgeführten Aktionen und die über diese Verbindung geteilten Daten verantwortlich.",
+          "title": "Externe API-Endpunkt-URL"
+        },
+        "errors": {
+          "connect": "Verbindung zum Endpunkt nicht möglich.",
+          "generic": "Etwas ist schiefgelaufen.",
+          "invalidApiKey": "Ungültiger API-Schlüssel.",
+          "timeout": "Zeitüberschreitung der Verbindung. Versuchen Sie, das Timeout zu erhöhen."
+        },
+        "failStrategy": {
+          "default": {
+            "label": "(Standard)"
+          },
+          "hard": {
+            "label": "Pipeline bei Fehler blockieren"
+          },
+          "placeholder": "Strategie auswählen",
+          "soft": {
+            "label": "Fehler protokollieren und fortfahren"
+          },
+          "title": "Fehlerstrategie"
+        },
+        "hookPoint": {
+          "label": "Hook-Punkt"
+        },
+        "name": {
+          "placeholder": "Benennen Sie Ihre Erweiterung an diesem Hook-Punkt",
+          "title": "Anzeigename"
+        },
+        "save": {
+          "label": "Änderungen speichern"
+        },
+        "softStrategy": {
+          "description": "Wenn der Endpunkt einen Fehler zurückgibt, protokolliert Onyx ihn und setzt die Pipeline normal fort, wobei das Hook-Ergebnis ignoriert wird."
+        },
+        "timeout": {
+          "description": "Maximale Zeit, die Onyx auf eine Antwort des Endpunkts wartet, bevor die Fehlerstrategie angewendet wird. Muss größer als 0 und höchstens {max} Sekunden sein.",
+          "revert": {
+            "tooltip": "Auf Standard zurücksetzen"
+          },
+          "suffix": "(Sekunden)",
+          "title": "Timeout"
+        },
+        "toasts": {
+          "created": {
+            "message": "Hook erstellt."
+          },
+          "noHookPoint": {
+            "message": "Kein Hook-Punkt angegeben."
+          },
+          "updated": {
+            "message": "Hook aktualisiert."
+          }
+        },
+        "validation": {
+          "apiKeyRequired": "Der API-Schlüssel darf nicht leer sein.",
+          "endpointRequired": "Die Endpunkt-URL darf nicht leer sein.",
+          "nameRequired": "Der Anzeigename darf nicht leer sein.",
+          "timeoutRange": "Muss größer als 0 und höchstens {max} Sekunden sein.",
+          "timeoutRequired": "Timeout ist erforderlich."
+        },
+        "verifying": {
+          "label": "Verbindung wird überprüft…"
+        }
+      },
+      "logs": {
+        "copy": {
+          "tooltip": "Kopieren"
+        },
+        "download": {
+          "tooltip": "Herunterladen"
+        },
+        "empty": {
+          "message": "Keine Fehler in den letzten 30 Tagen."
+        },
+        "header": {
+          "description": "Hook: {name} • Hook-Punkt: {point}",
+          "title": "Aktuelle Fehler"
+        },
+        "lineCount": {
+          "label": "{count, plural, one {# Zeile} other {# Zeilen}}"
+        },
+        "loadFailed": {
+          "message": "Logs konnten nicht geladen werden."
+        },
+        "older": {
+          "label": "Ältere"
+        },
+        "pastHour": {
+          "label": "Letzte Stunde"
+        },
+        "unknownError": {
+          "label": "Unbekannter Fehler"
+        }
+      },
+      "modals": {
+        "cancel": {
+          "label": "Abbrechen"
+        }
+      },
+      "page": {
+        "description": "Erweitern Sie Onyx-Pipelines, indem Sie externe API-Endpunkte als Callbacks an vordefinierten Hook-Punkten registrieren.",
+        "empty": {
+          "title": "Keine Hook-Punkte verfügbar"
+        },
+        "emptySearch": {
+          "description": "Versuchen Sie einen anderen Suchbegriff.",
+          "title": "Keine Ergebnisse gefunden"
+        },
+        "enterpriseRequired": {
+          "message": "Hook-Erweiterungen erfordern eine Enterprise-Lizenz."
+        },
+        "loadHooksFailed": {
+          "message": "Hooks konnten nicht geladen werden. Bitte aktualisieren Sie die Seite."
+        },
+        "loadSpecsFailed": {
+          "message": "Hook-Spezifikationen konnten nicht geladen werden. Bitte aktualisieren Sie die Seite."
+        },
+        "notEnabled": {
+          "message": "Hook-Erweiterungen sind für diese Bereitstellung nicht aktiviert."
+        },
+        "search": {
+          "placeholder": "Hooks suchen..."
+        }
+      },
+      "status": {
+        "connected": {
+          "label": "Verbunden"
+        },
+        "connectionLost": {
+          "label": "Verbindung verloren"
+        },
+        "errorCount": {
+          "title": "{count, plural, one {# Fehler} other {# Fehler}}"
+        },
+        "noError": {
+          "title": "Kein Fehler"
+        },
+        "pastHour": {
+          "description": "in der letzten Stunde"
+        },
+        "recentErrors": {
+          "title": "Neueste Fehler"
+        },
+        "viewMore": {
+          "label": "Mehr Zeilen anzeigen"
+        },
+        "viewOlder": {
+          "label": "Ältere Fehler anzeigen"
+        }
+      },
+      "toasts": {
+        "deactivateFailed": {
+          "message": "Hook konnte nicht deaktiviert werden."
+        },
+        "deleteFailed": {
+          "message": "Hook konnte nicht gelöscht werden."
+        },
+        "disconnectFailed": {
+          "message": "Hook konnte nicht getrennt werden."
+        },
+        "reconnectFailed": {
+          "message": "Hook konnte nicht wieder verbunden werden."
+        },
+        "validateFailed": {
+          "message": "Hook konnte nicht validiert werden."
+        },
+        "validateSuccess": {
+          "message": "Hook erfolgreich validiert."
+        },
+        "validationFailed": {
+          "message": "Validierung fehlgeschlagen: {status}"
+        }
+      }
+    },
     "imageGeneration": {
       "configureSuccess": {
         "message": "Anbieter erfolgreich konfiguriert"
@@ -3587,7 +4542,9 @@
           "label": "Auf neue und aktualisierte Dokumente anwenden"
         },
         "applyReindex": {
-          "label": "Anwenden & neu indizieren"
+          "label": "Anwenden & neu indizieren",
+          "statusesLoading": "Konnektor-Status wird geladen…",
+          "statusesFailed": "Konnektor-Status konnte nicht geladen werden — bitte vor dem Neuindizieren erneut versuchen."
         },
         "rebuildAll": {
           "label": "Alle vorhandenen Dokumente neu aufbauen"
@@ -3963,6 +4920,15 @@
         "serviceAccountJsonRequired": "Dienstkonto-JSON ist erforderlich",
         "targetUrlRequired": "Ziel-URL ist erforderlich",
         "urlInvalid": "Muss eine gültige URL sein"
+      },
+      "wontPortConsentModal": {
+        "title": "{count, plural, one {Dieser Konnektor wird gelöscht} other {Diese # Konnektoren werden gelöscht}}",
+        "submit": "Löschen & neu indizieren",
+        "description": "{count, plural, one {Beim Neuindizieren werden pausierte und ungültige Konnektoren übersprungen. Dieser wird daher nicht in den neuen Index übernommen. Onyx löscht ihn zusammen mit den von ihm indizierten Dokumenten:} other {Beim Neuindizieren werden pausierte und ungültige Konnektoren übersprungen. Diese # werden daher nicht in den neuen Index übernommen. Onyx löscht sie zusammen mit den von ihnen indizierten Dokumenten:}}",
+        "connector": "{name} — {status}",
+        "statusInvalid": "ungültig",
+        "statusPaused": "pausiert",
+        "restoreHint": "Um einen Konnektor zu behalten, brechen Sie hier ab, setzen Sie ihn fort oder korrigieren Sie ihn und starten Sie die Neuindizierung erneut – dann wird er übernommen. Andernfalls fügen Sie ihn nach Abschluss der Neuindizierung erneut hinzu."
       }
     },
     "indexing": {
@@ -4273,6 +5239,9 @@
               "label": "Zeile hinzufügen"
             },
             "description": "Fügen Sie weitere Eigenschaften hinzu, die der Modellanbieter benötigt. Diese werden dem `completion()`-Aufruf von LiteLLM als [Umgebungsvariablen](https://docs.litellm.ai/docs/set_keys#environment-variables) übergeben. Weitere Anweisungen finden Sie in der [Dokumentation](https://docs.onyx.app/admins/ai_models/custom_inference_provider).",
+            "keyInput": {
+              "placeholder": "z. B. OPENAI_ORGANIZATION"
+            },
             "title": "Umgebungsvariablen"
           },
           "modelRow": {
@@ -4784,6 +5753,132 @@
         "title": "Benutzer"
       }
     },
+    "queryHistory": {
+      "assistant": {
+        "unknown": {
+          "label": "Unbekannt"
+        }
+      },
+      "detail": {
+        "ai": {
+          "label": "KI"
+        },
+        "errorTitle": {
+          "title": "Etwas ist schiefgelaufen :("
+        },
+        "feedback": {
+          "title": "Feedback"
+        },
+        "fetchFailed": {
+          "message": "Chat-Sitzung konnte nicht geladen werden - {error}"
+        },
+        "header": {
+          "title": "Details der Chat-Sitzung"
+        },
+        "referenceDocuments": {
+          "title": "Referenzdokumente"
+        },
+        "user": {
+          "label": "Benutzer"
+        }
+      },
+      "export": {
+        "cancel": {
+          "label": "Abbrechen"
+        },
+        "downloadFailed": {
+          "message": "Der Abfrageverlauf konnte nicht heruntergeladen werden."
+        },
+        "generating": {
+          "message": "CSV-Bericht wird erstellt. Klicken Sie auf \"{button}\", um alle Aufträge zu sehen."
+        },
+        "kickoff": {
+          "label": "Export starten"
+        }
+      },
+      "exportStatus": {
+        "failure": {
+          "label": "Fehlgeschlagen"
+        },
+        "pending": {
+          "label": "Ausstehend"
+        },
+        "success": {
+          "label": "Erfolgreich"
+        }
+      },
+      "exportsModal": {
+        "download": {
+          "header": "Herunterladen"
+        },
+        "endRange": {
+          "header": "Ende des Zeitraums"
+        },
+        "generatedAt": {
+          "header": "Erstellt am"
+        },
+        "header": {
+          "title": "Frühere Exporte des Abfrageverlaufs"
+        },
+        "notReady": {
+          "tooltip": "Der Export ist noch nicht bereit"
+        },
+        "startRange": {
+          "header": "Beginn des Zeitraums"
+        },
+        "status": {
+          "header": "Status"
+        }
+      },
+      "feedback": {
+        "dislike": {
+          "label": "Gefällt mir nicht"
+        },
+        "like": {
+          "label": "Gefällt mir"
+        },
+        "mixed": {
+          "label": "Gemischt"
+        },
+        "na": {
+          "label": "N/A"
+        }
+      },
+      "filters": {
+        "any": {
+          "label": "Alle"
+        },
+        "feedbackType": {
+          "label": "Feedback-Typ"
+        }
+      },
+      "previousExports": {
+        "label": "Exporte anzeigen"
+      },
+      "table": {
+        "date": {
+          "header": "Datum"
+        },
+        "feedback": {
+          "header": "Feedback"
+        },
+        "fetchError": {
+          "title": "Fehler beim Laden des Abfrageverlaufs"
+        },
+        "firstAiResponse": {
+          "header": "Erste KI-Antwort"
+        },
+        "firstUserMessage": {
+          "header": "Erste Benutzernachricht"
+        },
+        "persona": {
+          "header": "Persona"
+        },
+        "user": {
+          "header": "Benutzer"
+        }
+      }
+    },
     "scim": {
       "card": {
         "connected": {
@@ -4838,6 +5933,56 @@
         "generateFailed": "Der Token konnte nicht erzeugt werden: {detail}",
         "genericError": "Etwas ist schiefgelaufen. Bitte versuchen Sie es erneut.",
         "regenerated": "Token neu erzeugt"
+      }
+    },
+    "search": {
+      "errors": {
+        "classificationFailed": {
+          "message": "Die Klassifizierung der Anfrage ist fehlgeschlagen. Es wird auf den Chat zurückgegriffen."
+        },
+        "searchFailed": {
+          "message": "Die Dokumentsuche ist fehlgeschlagen. Bitte versuchen Sie es erneut."
+        }
+      },
+      "results": {
+        "count": {
+          "label": "{count, plural, one {# Ergebnis} other {# Ergebnisse}}"
+        },
+        "empty": {
+          "description": "Prüfen Sie Ihre Konnektoren/Filter oder versuchen Sie einen anderen Suchbegriff.",
+          "title": "Keine Ergebnisse gefunden"
+        },
+        "failed": {
+          "title": "Suche fehlgeschlagen"
+        }
+      },
+      "tagFilter": {
+        "count": {
+          "label": "{count, plural, one {# Tag} other {# Tags}}"
+        },
+        "empty": {
+          "label": "Tags"
+        },
+        "search": {
+          "placeholder": "Tags filtern..."
+        }
+      },
+      "timeFilter": {
+        "all": {
+          "label": "Gesamter Zeitraum"
+        },
+        "day": {
+          "label": "Letzte 24 Stunden"
+        },
+        "month": {
+          "label": "Letzter Monat"
+        },
+        "week": {
+          "label": "Letzte Woche"
+        },
+        "year": {
+          "label": "Letztes Jahr"
+        }
       }
     },
     "security": {
@@ -5729,6 +6874,184 @@
         "unexpectedError": "Ein unerwarteter Fehler ist aufgetreten."
       }
     },
+    "standardAnswers": {
+      "categoryBubble": {
+        "remove": {
+          "ariaLabel": "Kategorie {name} entfernen"
+        },
+        "removeButton": {
+          "ariaLabel": "Kategorie entfernen"
+        }
+      },
+      "categoryDropdown": {
+        "categories": {
+          "label": "Kategorien für Standardantworten"
+        },
+        "fetchError": {
+          "message": "Kategorien für Standardantworten konnten nicht geladen werden - {message}",
+          "title": "Etwas ist schiefgelaufen :("
+        },
+        "search": {
+          "placeholder": "Kategorien suchen..."
+        }
+      },
+      "editPage": {
+        "title": "Standardantwort bearbeiten"
+      },
+      "errors": {
+        "fetchAnswersFailed": {
+          "message": "Standardantworten konnten nicht geladen werden"
+        },
+        "fetchCategoriesFailed": {
+          "message": "Kategorien der Standardantworten konnten nicht geladen werden"
+        },
+        "genericTitle": {
+          "title": "Etwas ist schiefgelaufen :("
+        },
+        "loadAnswersFailed": {
+          "title": "Fehler beim Laden der Standardantworten"
+        },
+        "loadCategoriesFailed": {
+          "title": "Fehler beim Laden der Kategorien der Standardantworten"
+        },
+        "notFound": {
+          "message": "Keine Standardantwort mit ID {id} gefunden"
+        }
+      },
+      "filter": {
+        "allCategories": {
+          "label": "Alle Kategorien"
+        }
+      },
+      "form": {
+        "allKeywords": {
+          "label": "Alle diese Schlüsselwörter, in beliebiger Reihenfolge, durch Leerzeichen getrennt",
+          "placeholder": "IT-Ticket"
+        },
+        "answer": {
+          "label": "Antwort",
+          "placeholder": "Die Antwort in Markdown. Beispiel: Wenn Sie Hilfe vom IT-Team benötigen, schreiben Sie an internalsupport@company.com"
+        },
+        "anyKeywords": {
+          "label": "Beliebige dieser Schlüsselwörter, durch Leerzeichen getrennt",
+          "placeholder": "Ticket Problem Störung"
+        },
+        "categories": {
+          "label": "Kategorien:",
+          "placeholder": "Kategorie eingeben und Enter drücken…"
+        },
+        "createButton": {
+          "label": "Erstellen!"
+        },
+        "keywords": {
+          "tooltip": "Eine Frage muss diesen Schlüsselwörtern entsprechen, um die Antwort auszulösen."
+        },
+        "matchRegex": {
+          "description": "Ein Regex-Muster statt eines exakten Schlüsselworts abgleichen",
+          "label": "Regex abgleichen"
+        },
+        "regexPattern": {
+          "label": "Regex-Muster",
+          "tooltip": "Wird ausgelöst, wenn die Frage diesem Regex-Muster entspricht (mit Pythons `re.search()`)"
+        },
+        "strategy": {
+          "all": {
+            "label": "Alle Schlüsselwörter"
+          },
+          "any": {
+            "label": "Beliebige Schlüsselwörter"
+          },
+          "description": "Wählen Sie, ob die Frage des Benutzers einige oder alle der obigen Schlüsselwörter enthalten muss, damit diese Antwort angezeigt wird.",
+          "label": "Strategie zur Schlüsselworterkennung"
+        },
+        "toasts": {
+          "categoryCreateFailed": {
+            "message": "Fehler beim Erstellen der Kategorie \"{name}\" - {error}"
+          },
+          "createFailed": {
+            "message": "Fehler beim Erstellen der Standardantwort - {error}"
+          },
+          "updateFailed": {
+            "message": "Fehler beim Aktualisieren der Standardantwort - {error}"
+          }
+        },
+        "updateButton": {
+          "label": "Aktualisieren!"
+        },
+        "validation": {
+          "answerRequired": "Antwort ist erforderlich",
+          "categoryRequired": "Mindestens eine Kategorie ist erforderlich",
+          "keywordRequired": "Schlüsselwörter oder Muster sind erforderlich"
+        }
+      },
+      "intro": {
+        "addFirst": {
+          "message": "Fügen Sie unten Ihre erste Standardantwort hinzu!"
+        },
+        "description": "Verwalten Sie die Standardantworten für vordefinierte Fragen.\nHinweis: Derzeit können nur über Slack gestellte Fragen Standardantworten erhalten."
+      },
+      "newStandardAnswer": {
+        "label": "Neue Standardantwort"
+      },
+      "search": {
+        "placeholder": "Standardantworten nach Schlüsselwort/Phrase suchen..."
+      },
+      "table": {
+        "answer": {
+          "header": "Antwort"
+        },
+        "categories": {
+          "header": "Kategorien"
+        },
+        "empty": {
+          "message": "Keine passenden Standardantworten gefunden..."
+        },
+        "keywords": {
+          "header": "Schlüsselwörter/Muster"
+        },
+        "matchRegex": {
+          "header": "Regex-Abgleich?"
+        },
+        "matchRegexNo": {
+          "label": "Nein"
+        },
+        "matchRegexYes": {
+          "label": "Ja"
+        },
+        "slackNote": {
+          "message": "Stellen Sie sicher, dass Sie die Kategorie dem entsprechenden [Slack-Bot](/admin/bots) hinzugefügt haben."
+        }
+      },
+      "toasts": {
+        "deleteFailed": {
+          "message": "Standardantwort konnte nicht gelöscht werden - {error}"
+        },
+        "deleted": {
+          "message": "Standardantwort {id} gelöscht"
+        }
+      }
+    },
+    "status": {
+      "badges": {
+        "canceled": "Abgebrochen",
+        "completedWithErrors": "Mit Fehlern abgeschlossen",
+        "deleting": "Wird gelöscht",
+        "error": "Fehler",
+        "failed": "Fehlgeschlagen",
+        "inProgress": "In Bearbeitung",
+        "indexed": "Indexiert",
+        "indexing": "Indexierung",
+        "initialIndexing": "Erstindexierung",
+        "interrupted": "Unterbrochen",
+        "invalid": "Ungültig",
+        "invalidConnectorTooltip": "Der Konnektor befindet sich in einem ungültigen Zustand. Aktualisieren Sie die Zugangsdaten oder erstellen Sie einen neuen Konnektor.",
+        "none": "Keine",
+        "notStarted": "Nicht gestartet",
+        "paused": "Pausiert",
+        "scheduled": "Geplant",
+        "succeeded": "Erfolgreich"
+      }
+    },
     "systemInfo": {
       "backendVersion": {
         "label": "Backend-Version: "
@@ -5738,6 +7061,142 @@
       },
       "webVersion": {
         "label": "Web-Version: "
+      }
+    },
+    "theme": {
+      "announcement": {
+        "description": "Zeigt eine dauerhafte Systemankündigung an, die Benutzer schließen können.",
+        "header": {
+          "placeholder": "Ankündigung hinzufügen"
+        },
+        "label": "Systemankündigung"
+      },
+      "announcementPopup": {
+        "description": "Diesen Hinweis beim ersten Besuch aller Benutzer zusätzlich als Vollbild-Pop-up anzeigen. Mit Vorsicht verwenden.",
+        "label": "Pop-up-Hinweis beim ersten Besuch"
+      },
+      "appName": {
+        "description": "Dieser Name wird in der gesamten App angezeigt und ersetzt \"Onyx\" in der Benutzeroberfläche.",
+        "label": "Anzeigename der Anwendung"
+      },
+      "branding": {
+        "description": "Entfernen Sie \"powered by Onyx\" und andere Onyx-Branding-Elemente in der App.",
+        "enterpriseTooltip": "Das Ausblenden des Onyx-Brandings ist eine Funktion des Enterprise-Plans.",
+        "label": "Onyx-Branding ausblenden"
+      },
+      "chatFooter": {
+        "description": "Fügen Sie Markdown-Inhalte für Haftungsausschlüsse oder zusätzliche Informationen hinzu.",
+        "label": "Text der Chat-Fußzeile"
+      },
+      "chatHeader": {
+        "label": "Text der Chat-Kopfzeile"
+      },
+      "consent": {
+        "description": "Verlangt, dass der Benutzer den Hinweis liest und ihm zustimmt, bevor er auf die Anwendung zugreift.",
+        "label": "Zustimmung zum Hinweis verlangen"
+      },
+      "consentPrompt": {
+        "label": "Zustimmungsaufforderung zum Hinweis"
+      },
+      "firstVisit": {
+        "description": "Zeigt neuen Benutzern beim ersten Besuch ein einmaliges Pop-up an.",
+        "label": "Hinweis beim ersten Besuch anzeigen"
+      },
+      "greeting": {
+        "description": "Fügen Sie der Startseite eine kurze Nachricht hinzu.",
+        "label": "Begrüßungsnachricht"
+      },
+      "helpLink": {
+        "description": "Fügen Sie im Benutzermenü zusätzlich zur Onyx-Dokumentation einen benutzerdefinierten Hilfelink hinzu.",
+        "enterpriseTooltip": "Der benutzerdefinierte Hilfelink ist eine Funktion des Enterprise-Plans.",
+        "label": "Benutzerdefinierter Hilfelink"
+      },
+      "helpLinkLabel": {
+        "label": "Beschriftung des benutzerdefinierten Hilfelinks",
+        "placeholder": "Link-Beschriftung"
+      },
+      "loginSubtitle": {
+        "description": "Ersetzen Sie den Untertitel unter der Willkommensüberschrift auf der Anmeldeseite.",
+        "label": "Untertitel der Anmeldeseite"
+      },
+      "logo": {
+        "label": "Anwendungslogo",
+        "updateButton": {
+          "label": "Aktualisieren"
+        }
+      },
+      "logoStyle": {
+        "both": {
+          "label": "Logo & Name",
+          "tooltip": "Zeigt sowohl das Logo als auch den Namen Ihrer Anwendung an."
+        },
+        "description": "Wählen Sie, was oben in der Seitenleiste angezeigt wird. Die Optionen werden verfügbar, sobald Sie ein Logo oder einen Anwendungsnamen hinzufügen.",
+        "label": "Anzeigestil des Logos",
+        "logoOnly": {
+          "disabledTooltip": "Laden Sie ein Logo hoch, um diese Option zu aktivieren.",
+          "label": "Nur Logo",
+          "tooltip": "Zeigt nur das Logo Ihrer Anwendung an."
+        },
+        "nameOnly": {
+          "disabledTooltip": "Geben Sie einen Anwendungsnamen ein, um diese Option zu aktivieren.",
+          "label": "Nur Name",
+          "tooltip": "Zeigt nur den Namen Ihrer Anwendung an."
+        }
+      },
+      "markdownContent": {
+        "placeholder": "Markdown-Inhalt hinzufügen"
+      },
+      "noticeContent": {
+        "label": "Hinweis-Inhalt"
+      },
+      "noticeHeader": {
+        "label": "Hinweis-Überschrift"
+      },
+      "page": {
+        "announcementClearFailed": {
+          "message": "Ankündigung konnte nicht entfernt werden."
+        },
+        "announcementSaveFailed": {
+          "message": "Ankündigung konnte nicht gespeichert werden."
+        },
+        "applyButton": {
+          "label": "Änderungen übernehmen"
+        },
+        "applying": {
+          "label": "Wird übernommen..."
+        },
+        "description": "Passen Sie an, wie die Anwendung für die Benutzer Ihrer Organisation aussieht.",
+        "logoUploadFailed": {
+          "message": "Logo konnte nicht hochgeladen werden. {error}"
+        },
+        "saveSuccess": {
+          "message": "Darstellungseinstellungen erfolgreich gespeichert!"
+        },
+        "settingsSaveFailed": {
+          "message": "Einstellungen konnten nicht aktualisiert werden. {error}"
+        },
+        "validation": {
+          "consentPromptRequired": "Zustimmungsaufforderung zum Hinweis ist erforderlich",
+          "invalidUrl": "Muss eine gültige URL sein",
+          "maxChars": "Maximal {count} Zeichen",
+          "noticeContentRequired": "Hinweis-Inhalt ist erforderlich",
+          "noticeHeaderRequired": "Hinweis-Überschrift ist erforderlich",
+          "urlRequiredWithLabel": "URL ist erforderlich, wenn eine Beschriftung gesetzt ist"
+        }
+      },
+      "preview": {
+        "chatFooter": {
+          "placeholder": "Inhalt der Chat-Fußzeile"
+        },
+        "chatHeader": {
+          "placeholder": "Inhalt der Chat-Kopfzeile"
+        },
+        "greeting": {
+          "placeholder": "Willkommen bei Acme Chat"
+        },
+        "logo": {
+          "alt": "Logo"
+        }
       }
     },
     "tokenRateLimits": {
@@ -6002,6 +7461,9 @@
             "label": "Ausgaben"
           }
         }
+      },
+      "page": {
+        "description": "Überwachen Sie die Ausgaben des Arbeitsbereichs und prüfen Sie die Nutzung pro Benutzer."
       },
       "spendByUser": {
         "columns": {
@@ -6599,6 +8061,204 @@
         "tooltip": "Agenten-Statistiken anzeigen"
       }
     },
+    "editor": {
+      "actions": {
+        "codeInterpreter": {
+          "description": "Generieren und führen Sie Code aus.",
+          "title": "Code-Interpreter"
+        },
+        "codingAgent": {
+          "description": "Untersuchen Sie ein GitHub-Repository und beantworten Sie Fragen zu dessen Code.",
+          "title": "Coding-Agent"
+        },
+        "description": "Tools und Fähigkeiten, die dieser Agent nutzen kann.",
+        "imageGeneration": {
+          "description": "Erstellen und bearbeiten Sie Bilder mit KI-gestützten Tools.",
+          "title": "Bildgenerierung",
+          "unavailable": {
+            "tooltip": "Die Bildgenerierung erfordert ein konfiguriertes Modell. Wenn Sie Zugriff haben, richten Sie eines unter Einstellungen > Bildgenerierung ein oder fragen Sie einen Administrator."
+          }
+        },
+        "openUrl": {
+          "description": "Rufen Sie Inhalte von Web-URLs ab und lesen Sie sie.",
+          "title": "URL öffnen"
+        },
+        "title": "Aktionen",
+        "webSearch": {
+          "description": "Durchsuchen Sie das Web nach Echtzeitinformationen und aktuellen Ergebnissen.",
+          "title": "Websuche"
+        }
+      },
+      "advanced": {
+        "description": "Feinabstimmung der Prompts und des Wissens des Agenten.",
+        "overwritePrompt": {
+          "suffix": "(Nicht empfohlen)",
+          "title": "System-Prompt überschreiben"
+        },
+        "reminders": {
+          "description": "Hängen Sie eine kurze Erinnerung an die Prompt-Nachrichten an. Verwenden Sie dies, um den Agenten zu erinnern, wenn er bestimmte Anweisungen im Laufe des Chats vergisst. Sie sollte kurz sein und die Benutzernachrichten nicht stören.",
+          "placeholder": "Denken Sie daran, ich möchte, dass Sie Ihre Antwort immer als nummerierte Liste formatieren.",
+          "title": "Erinnerungen"
+        },
+        "title": "Erweiterte Optionen"
+      },
+      "avatar": {
+        "edit": {
+          "label": "Bearbeiten"
+        },
+        "uploadImage": {
+          "label": "Bild hochladen"
+        }
+      },
+      "delete": {
+        "button": {
+          "label": "Agent löschen"
+        },
+        "description": "Jeder, der diesen Agenten verwendet, kann nicht mehr darauf zugreifen.",
+        "title": "Diesen Agenten löschen"
+      },
+      "deleteModal": {
+        "body": {
+          "confirm": "Möchten Sie diesen Agenten wirklich löschen?",
+          "warning": "Jeder, der diesen Agenten verwendet, kann nicht mehr darauf zugreifen. Das Löschen kann nicht rückgängig gemacht werden."
+        },
+        "title": "Agent löschen"
+      },
+      "filesModal": {
+        "description": "Alle für diesen Agenten ausgewählten Dateien",
+        "placeholderName": "Datei {id}",
+        "title": "Benutzerdateien"
+      },
+      "general": {
+        "avatar": {
+          "title": "Agenten-Avatar"
+        },
+        "descriptionField": {
+          "placeholder": "Was macht dieser Agent?",
+          "title": "Beschreibung"
+        },
+        "name": {
+          "placeholder": "Benennen Sie Ihren Agenten",
+          "title": "Name"
+        }
+      },
+      "header": {
+        "cancel": {
+          "label": "Abbrechen"
+        },
+        "create": {
+          "label": "Erstellen"
+        },
+        "createTitle": "Agent erstellen",
+        "editTitle": "Agent bearbeiten",
+        "save": {
+          "label": "Speichern"
+        }
+      },
+      "mcp": {
+        "noAccess": {
+          "tooltip": "Sie haben keinen Zugriff mehr auf diesen MCP-Server. Seine vorhandenen Tools bleiben erhalten."
+        },
+        "searchTools": {
+          "placeholder": "Tools suchen..."
+        }
+      },
+      "page": {
+        "ariaLabel": "Agenten-Editor-Seite"
+      },
+      "prompts": {
+        "instructions": {
+          "description": "Fügen Sie Anweisungen hinzu, um die Antworten dieses Agenten anzupassen.",
+          "placeholder": "Denken Sie Schritt für Schritt und zeigen Sie die Argumentation bei komplexen Problemen. Verwenden Sie konkrete Beispiele. Betonen Sie Aktionspunkte und lassen Sie Lücken, die der Mensch bei Unbekanntem ausfüllen kann. Verwenden Sie einen höflichen, begeisterten Ton.",
+          "title": "Anweisungen"
+        },
+        "starters": {
+          "description": "Beispielnachrichten, die Benutzern helfen zu verstehen, was dieser Agent kann und wie sie effektiv mit ihm interagieren.",
+          "title": "Gesprächseinstiege"
+        }
+      },
+      "saveTooltip": {
+        "fixErrors": "Bitte beheben Sie die Fehler im Formular, bevor Sie speichern.",
+        "noChanges": "Es wurden keine Änderungen vorgenommen.",
+        "saving": "Änderungen werden gespeichert...",
+        "uploading": "Bitte warten Sie, bis die Dateien fertig hochgeladen sind."
+      },
+      "share": {
+        "feature": {
+          "description": "Zeigen Sie diesen Agenten oben in der Agenten-Übersicht an und heften Sie ihn für neue Benutzer mit Zugriff automatisch an die Seitenleiste.",
+          "privateNotice": {
+            "title": "Dieser Agent ist privat und wird nur für Sie empfohlen."
+          },
+          "title": "Diesen Agenten empfehlen",
+          "unlistedWarning": {
+            "title": "Dieser Agent ist nicht gelistet und wird nicht in der Empfohlen-Liste angezeigt."
+          }
+        },
+        "labels": {
+          "description": "Fügen Sie Labels und Kategorien hinzu, damit dieser Agent besser gefunden wird.",
+          "placeholder": "Labels hinzufügen..."
+        },
+        "share": {
+          "button": {
+            "label": "Teilen"
+          },
+          "description": "mit anderen Benutzern, Gruppen oder allen in Ihrer Organisation.",
+          "title": "Diesen Agenten teilen"
+        },
+        "title": "Agent teilen"
+      },
+      "starters": {
+        "examples": {
+          "engineeringGoals": "Stelle eine Liste unserer Engineering-Ziele für dieses Quartal zusammen.",
+          "overview": "Gib mir einen Überblick über einige Dokumente.",
+          "salesReport": "Finde den neuesten Verkaufsbericht.",
+          "todayGoals": "Fasse meine heutigen Ziele zusammen."
+        },
+        "placeholder": "Geben Sie einen Gesprächseinstieg ein..."
+      },
+      "suffix": {
+        "optional": "optional"
+      },
+      "toasts": {
+        "createFailed": "Agent konnte nicht erstellt werden - {detail}",
+        "created": "Agent „{name}“ erfolgreich erstellt",
+        "deleteFailed": "Agent konnte nicht gelöscht werden: {error}",
+        "deleted": "Agent erfolgreich gelöscht",
+        "genericError": "Ein Fehler ist aufgetreten: {error}",
+        "noResponse": "keine Antwort erhalten",
+        "sharingFailed": "Agent erstellt, aber die Freigabe ist fehlgeschlagen: {error}",
+        "toggleListedFailed": "Sichtbarkeit konnte nicht umgeschaltet werden",
+        "unknownDetail": "unbekannter Fehler",
+        "unknownError": "Unbekannter Fehler",
+        "updateFailed": "Agent konnte nicht aktualisiert werden - {detail}",
+        "updated": "Agent „{name}“ erfolgreich aktualisiert"
+      },
+      "validation": {
+        "cutoffInFuture": "Das Wissensstichdatum muss heute oder früher sein.",
+        "descriptionMax": "Die Beschreibung darf höchstens {max} Zeichen lang sein",
+        "nameRequired": "Der Agentenname ist erforderlich.",
+        "starterMax": "Der Gesprächseinstieg darf höchstens {max} Zeichen lang sein"
+      },
+      "visibility": {
+        "relist": {
+          "button": {
+            "label": "Agent wieder listen"
+          },
+          "description": "Wieder gelistete Agenten erscheinen erneut in der Agenten-Übersicht.",
+          "title": "Diesen Agenten wieder listen"
+        },
+        "unlist": {
+          "button": {
+            "label": "Agent auslisten"
+          },
+          "description": "Ausgelistete Agenten erscheinen nicht in der Agenten-Übersicht, bleiben aber zugänglich.",
+          "title": "Diesen Agenten auslisten"
+        }
+      },
+      "warnings": {
+        "openUrl": "Websuche ohne die Möglichkeit, URLs zu öffnen, kann zu deutlich schlechteren webbasierten Ergebnissen führen."
+      }
+    },
     "filters": {
       "actions": {
         "all": {
@@ -6781,6 +8441,47 @@
         }
       }
     },
+    "navigation": {
+      "countSeparator": {
+        "label": "{count, plural, one {Agent} other {Agenten}}"
+      },
+      "empty": {
+        "description": "Keine Agenten gefunden"
+      },
+      "header": {
+        "description": "Passen Sie das Verhalten und Wissen der KI für Ihre Anwendungsfälle und die Ihres Teams an.",
+        "title": "Agenten"
+      },
+      "newAgent": {
+        "label": "Neuer Agent",
+        "noPermission": {
+          "tooltip": "Sie haben keine Berechtigung, Agenten zu erstellen. Wenden Sie sich an Ihren Administrator, um Zugriff anzufordern."
+        }
+      },
+      "page": {
+        "ariaLabel": "Agenten-Seite"
+      },
+      "search": {
+        "placeholder": "Agenten suchen..."
+      },
+      "sections": {
+        "all": {
+          "title": "Alle Agenten"
+        },
+        "featured": {
+          "description": "Von Ihrem Team ausgewählt",
+          "title": "Empfohlene Agenten"
+        }
+      },
+      "tabs": {
+        "all": {
+          "label": "Alle Agenten"
+        },
+        "your": {
+          "label": "Ihre Agenten"
+        }
+      }
+    },
     "userVariables": {
       "insert": {
         "tooltip": "Benutzervariable einfügen"
@@ -6788,6 +8489,12 @@
     }
   },
   "auth": {
+    "anonymous": {
+      "redirecting": {
+        "description": "Bitte warten Sie, während wir Ihre anonyme Sitzung einrichten.",
+        "title": "Sie werden zur Chat-Seite weitergeleitet ..."
+      }
+    },
     "createAccount": {
       "createOrgButton": {
         "label": "Neue Organisation erstellen"
@@ -6809,6 +8516,55 @@
       },
       "signInLink": {
         "label": "Anmelden"
+      }
+    },
+    "emailPasswordForm": {
+      "accountExists": {
+        "error": "Mit der angegebenen E-Mail-Adresse existiert bereits ein Konto."
+      },
+      "continueAsGuest": {
+        "label": "oder als Gast fortfahren"
+      },
+      "email": {
+        "label": "E-Mail-Adresse",
+        "placeholder": "email@ihrunternehmen.de"
+      },
+      "forgotPassword": {
+        "link": "[Passwort vergessen?]({url})"
+      },
+      "invalidCredentials": {
+        "error": "Ungültige E-Mail-Adresse oder ungültiges Passwort"
+      },
+      "noPassword": {
+        "error": "Erstellen Sie ein Konto, um ein Passwort festzulegen"
+      },
+      "password": {
+        "label": "Passwort",
+        "placeholder": "Passwort"
+      },
+      "passwordDigit": {
+        "error": "Das Passwort muss mindestens eine Zahl enthalten"
+      },
+      "passwordLength": {
+        "error": "Das Passwort muss zwischen {min} und {max} Zeichen lang sein"
+      },
+      "passwordLoginDisabled": {
+        "error": "Die Passwort-Anmeldung ist deaktiviert. Melden Sie sich über Ihren Identitätsanbieter an."
+      },
+      "passwordLowercase": {
+        "error": "Das Passwort muss mindestens einen Kleinbuchstaben enthalten"
+      },
+      "passwordRequirements": {
+        "label": "Passwortanforderungen:"
+      },
+      "passwordSpecialChar": {
+        "error": "Das Passwort muss mindestens ein Sonderzeichen enthalten"
+      },
+      "passwordUppercase": {
+        "error": "Das Passwort muss mindestens einen Großbuchstaben enthalten"
+      },
+      "tooManyRequests": {
+        "error": "Zu viele Anfragen. Bitte versuchen Sie es später erneut."
       }
     },
     "error": {
@@ -6849,6 +8605,31 @@
         "description": "Vorübergehende Störung des Authentifizierungssystems"
       }
     },
+    "errorDisplay": {
+      "anonymousDisabled": {
+        "toast": "Für dein Team ist der anonyme Zugriff nicht aktiviert."
+      },
+      "generic": {
+        "toast": "Ein Fehler ist aufgetreten."
+      }
+    },
+    "flowContainer": {
+      "createAccountLink": {
+        "label": "Konto erstellen"
+      },
+      "logo": {
+        "alt": "Logo"
+      },
+      "signInLink": {
+        "label": "Anmelden"
+      },
+      "signinPrompt": {
+        "text": "Hast du bereits ein Konto?"
+      },
+      "signupPrompt": {
+        "text": "Neu bei {appName}?"
+      }
+    },
     "forgotPassword": {
       "backToLoginLink": {
         "label": "[Zurück zur Anmeldung](/auth/login)"
@@ -6881,7 +8662,8 @@
         "placeholder": "API-Schlüssel eingeben"
       },
       "emailField": {
-        "label": "E-Mail"
+        "label": "E-Mail",
+        "placeholder": "email@ihrefirma.com"
       },
       "genericError": {
         "toast": "Benutzer konnte nicht übernommen werden"
@@ -6942,6 +8724,23 @@
         "label": "Geschäftliche E-Mail"
       }
     },
+    "passwordRequirements": {
+      "digit": {
+        "label": "Enthält eine Zahl."
+      },
+      "length": {
+        "label": "{min}–{max} Zeichen"
+      },
+      "lowercase": {
+        "label": "Enthält einen Kleinbuchstaben."
+      },
+      "specialChar": {
+        "label": "Enthält ein Sonderzeichen."
+      },
+      "uppercase": {
+        "label": "Enthält einen Großbuchstaben."
+      }
+    },
     "resetPassword": {
       "backToLoginLink": {
         "label": "[Zurück zur Anmeldung](/auth/login)"
@@ -6983,6 +8782,31 @@
       },
       "unexpectedError": {
         "toast": "Ein unerwarteter Fehler ist aufgetreten. Bitte versuchen Sie es erneut."
+      }
+    },
+    "sessionEnd": {
+      "expired": {
+        "message": "Ihre Sitzung ist abgelaufen. Bitte melden Sie sich erneut an, um fortzufahren."
+      },
+      "loginButton": {
+        "label": "Anmelden"
+      },
+      "modal": {
+        "title": "Sie wurden abgemeldet"
+      },
+      "terminated": {
+        "message": "Diese Sitzung wurde abgemeldet. Bitte melden Sie sich erneut an, um fortzufahren."
+      },
+      "unrecognized": {
+        "message": "Sie wurden unerwartet abgemeldet. Bitte melden Sie sich erneut an, um fortzufahren. Wenn dies weiterhin auftritt, wenden Sie sich an Ihren Administrator."
+      }
+    },
+    "signIn": {
+      "captchaTokenError": {
+        "toast": "grecaptcha.execute hat kein Token zurückgegeben"
+      },
+      "google": {
+        "label": "Mit Google fortfahren"
       }
     },
     "signup": {
@@ -7168,6 +8992,70 @@
       },
       "sourcesModal": {
         "title": "Quellen"
+      }
+    },
+    "appChrome": {
+      "delete": {
+        "label": "Löschen"
+      },
+      "deleteModal": {
+        "description": "Möchten Sie diesen Chat wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.",
+        "submitButton": {
+          "label": "Löschen"
+        },
+        "title": "Chat löschen"
+      },
+      "exportAs": {
+        "label": "Exportieren als…"
+      },
+      "exportFailed": {
+        "message": "Chat konnte nicht exportiert werden. Bitte erneut versuchen."
+      },
+      "exportMarkdown": {
+        "label": "Markdown"
+      },
+      "exportPlaintext": {
+        "label": "Nur Text"
+      },
+      "fullWidth": {
+        "ariaLabel": "Chat in voller Breite umschalten",
+        "fitTooltip": "Breite anpassen",
+        "fullTooltip": "Volle Breite"
+      },
+      "incognitoExit": {
+        "ariaLabel": "Inkognito-Chat verlassen",
+        "tooltip": "Inkognito-Chat verlassen"
+      },
+      "incognitoPill": {
+        "ariaLabel": "Inkognito-Chat",
+        "label": "Inkognito-Chat"
+      },
+      "incognitoStart": {
+        "ariaLabel": "Inkognito-Chat starten",
+        "lockedTooltip": "Inkognito kann nur vor Beginn des Chats aktiviert werden",
+        "tooltip": "Inkognito-Chat"
+      },
+      "mode": {
+        "chat": {
+          "description": "Unterhaltung und Recherche",
+          "label": "Chat"
+        },
+        "search": {
+          "description": "Schnellsuche nach Dokumenten",
+          "label": "Suche"
+        }
+      },
+      "modeButton": {
+        "ariaLabel": "App-Modus ändern"
+      },
+      "moveToProject": {
+        "label": "In Projekt verschieben"
+      },
+      "openSidebar": {
+        "ariaLabel": "Seitenleiste öffnen"
+      },
+      "share": {
+        "label": "Teilen"
       }
     },
     "banners": {
@@ -8350,6 +10238,75 @@
         "tooltip": "Das Ändern dieser Einstellung wird für dieses Modell nicht unterstützt."
       }
     },
+    "nrf": {
+      "page": {
+        "filesFailed": {
+          "toast": "{count, plural, one {Datei fehlgeschlagen und entfernt: {names}} other {Dateien fehlgeschlagen und entfernt: {names}}}"
+        },
+        "loginModal": {
+          "loginButton": {
+            "label": "Anmelden"
+          },
+          "title": "Willkommen bei Onyx"
+        },
+        "noResubmitMessage": {
+          "toast": "Keine zuvor gesendete Nachricht gefunden."
+        },
+        "settingsButton": {
+          "tooltip": "Einstellungen öffnen"
+        },
+        "setupLlmButton": {
+          "label": "Richten Sie ein LLM ein."
+        },
+        "turnOffModal": {
+          "cancelButton": {
+            "label": "Abbrechen"
+          },
+          "confirmButton": {
+            "label": "Deaktivieren"
+          },
+          "description": "Stattdessen sehen Sie die Standard-Neuer-Tab-Seite Ihres Browsers. Sie können sie jederzeit in Ihren Onyx-Einstellungen wieder aktivieren.",
+          "title": "Onyx als Neuer-Tab-Seite deaktivieren?"
+        }
+      },
+      "settingsPanel": {
+        "backgroundNone": {
+          "label": "Keiner"
+        },
+        "backgroundOption": {
+          "ariaLabel": "Hintergrund {label}"
+        },
+        "backgroundOptionSelected": {
+          "ariaLabel": "Hintergrund {label} (ausgewählt)"
+        },
+        "backgroundSection": {
+          "title": "Hintergrund"
+        },
+        "closeButton": {
+          "tooltip": "Einstellungen schließen"
+        },
+        "generalSection": {
+          "title": "Allgemein"
+        },
+        "header": {
+          "title": "Einstellungen"
+        },
+        "newTabToggle": {
+          "label": "Onyx als Neuer-Tab-Seite verwenden"
+        },
+        "themeToggle": {
+          "tooltip": "{mode, select, light {Zum hellen Design wechseln} other {Zum dunklen Design wechseln}}"
+        }
+      },
+      "sidePanelHeader": {
+        "newChatButton": {
+          "tooltip": "Neuer Chat"
+        },
+        "openInOnyxButton": {
+          "tooltip": "In Onyx öffnen"
+        }
+      }
+    },
     "popup": {
       "consentCheckbox": {
         "label": "Einwilligungs-Kontrollkästchen"
@@ -8365,6 +10322,128 @@
       },
       "startButton": {
         "label": "Starten"
+      }
+    },
+    "projects": {
+      "chatItem": {
+        "lastMessage": {
+          "description": "Letzte Nachricht {time}"
+        },
+        "projectFallback": {
+          "label": "Projekt"
+        }
+      },
+      "contextPanel": {
+        "addFilesButton": {
+          "label": "Dateien hinzufügen"
+        },
+        "contextExceeded": {
+          "message": "Dieses Projekt überschreitet die Kontextgrenzen des Modells. Sitzungen suchen automatisch zuerst nach relevanten Dateien, bevor eine Antwort generiert wird."
+        },
+        "dropFiles": {
+          "message": "Dateien hier ablegen, um sie diesem Projekt hinzuzufügen"
+        },
+        "emptyFiles": {
+          "message": "Fügen Sie Dokumente, Texte oder Bilder zur Verwendung im Projekt hinzu. Drag & Drop wird unterstützt."
+        },
+        "fileCount": {
+          "description": "{count, plural, one {# Datei} other {# Dateien}}"
+        },
+        "fileCountOverflow": {
+          "description": "Über 100 Dateien"
+        },
+        "files": {
+          "description": "Chats in diesem Projekt können auf diese Dateien zugreifen.",
+          "title": "Dateien"
+        },
+        "filesModal": {
+          "description": "Sitzungen in diesem Projekt können auf die Dateien hier zugreifen.",
+          "title": "Projektdateien"
+        },
+        "instructions": {
+          "emptyDescription": "Fügen Sie Anweisungen hinzu, um die Antworten in diesem Projekt anzupassen.",
+          "title": "Anweisungen"
+        },
+        "loadingProject": {
+          "label": "Projekt wird geladen..."
+        },
+        "setInstructionsButton": {
+          "label": "Anweisungen festlegen"
+        },
+        "viewAll": {
+          "label": "Alle anzeigen"
+        },
+        "viewFiles": {
+          "label": "Dateien anzeigen"
+        }
+      },
+      "createModal": {
+        "cancelButton": {
+          "label": "Abbrechen"
+        },
+        "createError": {
+          "toast": "Projekt {name} konnte nicht erstellt werden"
+        },
+        "description": "Verwenden Sie Projekte, um Ihre Dateien und Chats an einem Ort zu organisieren und benutzerdefinierte Anweisungen für laufende Arbeiten hinzuzufügen.",
+        "name": {
+          "label": "Projektname",
+          "placeholder": "Woran arbeiten Sie?"
+        },
+        "nameRequired": {
+          "error": "Projektname ist erforderlich"
+        },
+        "submitButton": {
+          "label": "Projekt erstellen"
+        },
+        "title": "Neues Projekt erstellen"
+      },
+      "foldedPopover": {
+        "empty": {
+          "title": "Keine Projekte gefunden"
+        },
+        "search": {
+          "placeholder": "Projekte durchsuchen..."
+        }
+      },
+      "folder": {
+        "collapse": {
+          "ariaLabel": "Projekt einklappen"
+        },
+        "delete": {
+          "label": "Projekt löschen"
+        },
+        "deleteModal": {
+          "confirmButton": {
+            "label": "Löschen"
+          },
+          "message": "Möchten Sie dieses Projekt wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.",
+          "title": "Projekt löschen"
+        },
+        "expand": {
+          "ariaLabel": "Projekt ausklappen"
+        },
+        "rename": {
+          "label": "Projekt umbenennen"
+        }
+      },
+      "sessionList": {
+        "empty": {
+          "message": "Noch keine Chats."
+        },
+        "recentChats": {
+          "title": "Letzte Chats"
+        }
+      },
+      "uploads": {
+        "failed": {
+          "toast": "Dateien konnten nicht hochgeladen werden"
+        },
+        "oversized": {
+          "toast": "{count, plural, one {# zu große Datei übersprungen} other {# zu große Dateien übersprungen}} (>{max} MB): {names}"
+        },
+        "rejected": {
+          "toast": "Einige Dateien wurden nicht hochgeladen. {details}"
+        }
       }
     },
     "sharedChat": {
@@ -8397,6 +10476,1773 @@
       },
       "incognito": {
         "title": "Sie sind inkognito"
+      }
+    }
+  },
+  "common": {
+    "adminChrome": {
+      "openSidebar": {
+        "ariaLabel": "Seitenleiste öffnen"
+      },
+      "paymentReminder": {
+        "billingButton": {
+          "label": "Zahlungsinformationen aktualisieren"
+        },
+        "text": "**Warnung:** Ihr Testzeitraum endet in weniger als 5 Tagen und es wurde keine Zahlungsmethode hinzugefügt."
+      }
+    },
+    "agentAvatar": {
+      "image": {
+        "altFallback": "Agent-Avatar"
+      },
+      "logo": {
+        "alt": "Logo"
+      }
+    },
+    "attachment": {
+      "document": {
+        "label": "Dokument"
+      },
+      "expandButton": {
+        "ariaLabel": "Dokument erweitern"
+      }
+    },
+    "backButton": {
+      "label": "Zurück"
+    },
+    "chatBackgrounds": {
+      "clouds": {
+        "label": "Wolken"
+      },
+      "hills": {
+        "label": "Hügel"
+      },
+      "mountains": {
+        "label": "Berge"
+      },
+      "night": {
+        "label": "Nacht"
+      },
+      "none": {
+        "label": "Keiner"
+      },
+      "plant": {
+        "label": "Pflanzen"
+      }
+    },
+    "colorSwatch": {
+      "sample": {
+        "text": "Aa"
+      }
+    },
+    "comboBox": {
+      "createOption": {
+        "ariaLabel": "{prefix} „{value}“",
+        "defaultPrefix": "Erstellen"
+      },
+      "dropdown": {
+        "closeAriaLabel": "Dropdown schließen",
+        "openAriaLabel": "Dropdown öffnen"
+      },
+      "options": {
+        "empty": "Keine Optionen gefunden"
+      },
+      "separator": {
+        "label": "Weitere Optionen"
+      }
+    },
+    "commandMenu": {
+      "closeButton": {
+        "ariaLabel": "Menü schließen"
+      },
+      "dialog": {
+        "title": "Befehlsmenü"
+      },
+      "options": {
+        "ariaLabel": "Optionen des Befehlsmenüs"
+      },
+      "search": {
+        "placeholder": "Suchen..."
+      }
+    },
+    "connectorMultiSelect": {
+      "allSelected": {
+        "description": "Alle verfügbaren Konnektoren wurden ausgewählt. Entferne unten Konnektoren, um andere hinzuzufügen.",
+        "placeholder": "Alle Konnektoren ausgewählt"
+      },
+      "documentSetHint": {
+        "description": "Alle von den ausgewählten Konnektoren indexierten Dokumente werden Teil dieses Dokumentensatzes."
+      },
+      "noMatches": {
+        "text": "Keine passenden Konnektoren gefunden"
+      },
+      "noMoreConnectors": {
+        "text": "Keine weiteren Konnektoren verfügbar"
+      },
+      "noPrivateConnectors": {
+        "text": "Keine privaten Konnektoren verfügbar. Erstelle zuerst einen privaten Konnektor."
+      },
+      "noneSelected": {
+        "text": "Keine Konnektoren ausgewählt. Suche und wähle oben Konnektoren aus."
+      },
+      "removeConnector": {
+        "tooltip": "Konnektor entfernen"
+      },
+      "search": {
+        "placeholder": "Konnektoren durchsuchen..."
+      }
+    },
+    "datePicker": {
+      "selectDate": {
+        "label": "Datum auswählen"
+      },
+      "todayButton": {
+        "label": "Heute"
+      }
+    },
+    "dateRange": {
+      "anyTime": {
+        "text": "Beliebiger Zeitraum..."
+      },
+      "chooseCustom": {
+        "ariaLabel": "Benutzerdefinierten Zeitraum wählen"
+      },
+      "clearButton": {
+        "ariaLabel": "Zurücksetzen"
+      },
+      "custom": {
+        "label": "Benutzerdefiniert"
+      },
+      "customRange": {
+        "ariaLabel": "Benutzerdefinierter Zeitraum: {from} bis {to}"
+      },
+      "date": {
+        "label": "Datum"
+      },
+      "group": {
+        "ariaLabel": "Datumsbereich"
+      },
+      "preset": {
+        "oneDay": "1T",
+        "oneMonth": "1M",
+        "sevenDays": "7T",
+        "threeMonths": "3M"
+      }
+    },
+    "deleteButton": {
+      "button": {
+        "tooltip": "Löschen"
+      }
+    },
+    "documentDisplay": {
+      "contextDocs": {
+        "text": "{count, plural, one {# Kontextdokument} other {# Kontextdokumente}}"
+      },
+      "openDocument": {
+        "ariaLabel": "Dokument öffnen: {title}"
+      },
+      "question": {
+        "title": "Frage"
+      },
+      "subqueries": {
+        "text": "{count, plural, one {# Teilabfrage} other {# Teilabfragen}}"
+      },
+      "updated": {
+        "text": "Aktualisiert am {date}"
+      }
+    },
+    "dropdown": {
+      "default": {
+        "label": "Standard"
+      },
+      "selectOption": {
+        "placeholder": "Option auswählen..."
+      }
+    },
+    "editable": {
+      "edit": {
+        "ariaLabel": "Bearbeiten"
+      },
+      "rename": {
+        "ariaLabel": "Umbenennen"
+      },
+      "save": {
+        "ariaLabel": "Speichern"
+      }
+    },
+    "errorPages": {
+      "accessRestricted": {
+        "billingAdminHint": {
+          "text": "Wenn du der Administrator bist, besuche bitte die Seite <billingLink>Admin-Abrechnung</billingLink>, um deine Lizenz zu {hadLicense, select, true {verlängern} other {aktivieren}}, registriere dich über Stripe oder wende dich an <supportLink>support@onyx.app</supportLink> für Unterstützung bei der Abrechnung."
+        },
+        "heading": {
+          "title": "Zugriff eingeschränkt"
+        },
+        "licenseLapse": {
+          "description": "Dein Zugriff auf Onyx wurde wegen einer abgelaufenen Lizenz vorübergehend ausgesetzt."
+        },
+        "licenseRequired": {
+          "description": "Für die Nutzung von Onyx ist eine Lizenz erforderlich. Deine Daten sind geschützt und stehen zur Verfügung, sobald eine Lizenz aktiviert ist."
+        },
+        "logoutButton": {
+          "label": "Abmelden"
+        },
+        "manageSubscription": {
+          "description": "Als Administrator kannst du dein Abonnement über die Schaltfläche unten verwalten. Alle anderen Benutzer wenden sich bitte an ihren Administrator."
+        },
+        "obtainLicense": {
+          "description": "Um loszulegen, wende dich bitte an deinen Systemadministrator, um eine Lizenz zu erhalten."
+        },
+        "renewLicense": {
+          "description": "Um deinen Zugriff wiederherzustellen und Onyx weiter zu nutzen, wende dich bitte an deinen Systemadministrator, um die Lizenz zu verlängern."
+        },
+        "resubscribeButton": {
+          "label": "Erneut abonnieren",
+          "loading": "Wird geladen..."
+        },
+        "resubscribeError": {
+          "text": "Fehler beim Öffnen der Seite zur erneuten Abonnierung. Bitte versuche es später erneut."
+        },
+        "seatLimit": {
+          "description": "Deine Organisation hat die lizenzierte Anzahl an Plätzen überschritten. Der Zugriff ist eingeschränkt, bis die Benutzerzahl reduziert oder die Lizenz erweitert wird."
+        },
+        "seatLimitAdminHint": {
+          "text": "Als Administrator kannst du Benutzer auf der Seite <userLink>Benutzerverwaltung</userLink> verwalten oder deine Lizenz auf der Seite <billingLink>Admin-Abrechnung</billingLink> erweitern."
+        },
+        "seatLimitWithCounts": {
+          "description": "Deine Organisation hat die lizenzierte Anzahl an Plätzen überschritten ({used} Benutzer / {seats} Plätze). Der Zugriff ist eingeschränkt, bis die Benutzerzahl reduziert oder die Lizenz erweitert wird."
+        },
+        "subscriptionLapse": {
+          "description": "Dein Zugriff auf Onyx wurde wegen eines abgelaufenen Abonnements vorübergehend ausgesetzt."
+        },
+        "updatePayment": {
+          "description": "Um deinen Zugriff wiederherzustellen und die leistungsstarken Funktionen von Onyx weiter zu nutzen, aktualisiere bitte deine Zahlungsinformationen."
+        }
+      },
+      "configError": {
+        "adminHint": {
+          "text": "Wenn du Administrator bist, findest du in unserer <docsLink>Dokumentation</docsLink> die richtigen Konfigurationsschritte. Wenn du Benutzer bist, wende dich bitte an deinen Administrator."
+        },
+        "heading": {
+          "description": "Beim Laden deiner Onyx-Einstellungen ist offenbar ein Problem aufgetreten. Das kann an einem Konfigurationsproblem oder einer unvollständigen Einrichtung liegen.",
+          "title": "Es ist ein Problem aufgetreten"
+        }
+      },
+      "maintenance": {
+        "apology": {
+          "description": "Wir entschuldigen uns für etwaige Unannehmlichkeiten und danken für deine Geduld."
+        },
+        "checkBack": {
+          "description": "Onyx befindet sich derzeit in einem Wartungsfenster. Bitte schau in ein paar Minuten wieder vorbei."
+        },
+        "heading": {
+          "title": "Wartung läuft"
+        }
+      },
+      "needHelp": {
+        "text": "Brauchst du Hilfe? Tritt unserer <discordLink>Discord-Community</discordLink> bei, um Unterstützung zu erhalten."
+      }
+    },
+    "errors": {
+      "unknown": {
+        "message": "Unbekannter Fehler"
+      }
+    },
+    "expandableContent": {
+      "downloadButton": {
+        "tooltip": "Datei herunterladen"
+      },
+      "file": {
+        "untitledFallback": "Ohne Titel"
+      },
+      "fullScreenButton": {
+        "tooltip": "Vollbild"
+      },
+      "hideButton": {
+        "tooltip": "Ausblenden"
+      },
+      "minimizeButton": {
+        "tooltip": "Minimieren"
+      }
+    },
+    "expandableText": {
+      "copyButton": {
+        "tooltip": "Kopieren"
+      },
+      "downloadButton": {
+        "tooltip": "Herunterladen"
+      },
+      "lineCount": {
+        "label": "{count, plural, one {# Zeile} other {# Zeilen}}"
+      },
+      "size": {
+        "bytes": "{count} Bytes",
+        "kilobytes": "{size} KB"
+      },
+      "viewFullButton": {
+        "tooltip": "Vollständigen Text anzeigen"
+      }
+    },
+    "federatedConnectorSelector": {
+      "allSelected": {
+        "placeholder": "Alle föderierten Konnektoren ausgewählt"
+      },
+      "entitiesConfigured": {
+        "tooltip": "Entitäten konfiguriert"
+      },
+      "noMatches": {
+        "text": "Keine passenden föderierten Konnektoren gefunden"
+      },
+      "noMoreConnectors": {
+        "text": "Keine weiteren föderierten Konnektoren verfügbar"
+      },
+      "noneSelected": {
+        "text": "Keine föderierten Konnektoren ausgewählt. Suche und wähle oben Konnektoren aus."
+      },
+      "realtimeSearchHint": {
+        "description": "Dokumente aus den ausgewählten föderierten Konnektoren werden bei Abfragen in Echtzeit durchsucht."
+      },
+      "removeConnector": {
+        "tooltip": "Konnektor entfernen"
+      },
+      "search": {
+        "placeholder": "Föderierte Konnektoren durchsuchen..."
+      }
+    },
+    "field": {
+      "arrayField": {
+        "addButton": "Neu hinzufügen"
+      },
+      "booleanField": {
+        "optionalLabel": "{label} (optional)"
+      },
+      "fileValidation": {
+        "noTypeDefinition": "Keine Dateityp-Definition für das Feld gefunden: {name}",
+        "selectionError": "Fehler bei der Dateiauswahl",
+        "unknownError": "Unbekannter Fehler",
+        "validating": "Datei wird validiert...",
+        "validationError": "Validierungsfehler"
+      },
+      "markdown": {
+        "editorLabel": "Markdown",
+        "placeholder": "Gib hier dein Markdown ein...",
+        "previewTab": "Vorschau",
+        "writeTab": "Schreiben"
+      },
+      "optionalIndicator": {
+        "text": "(optional)"
+      },
+      "passwordToggle": {
+        "hideAriaLabel": "Passwort verbergen",
+        "showAriaLabel": "Passwort anzeigen"
+      },
+      "selector": {
+        "noneOption": "Keine",
+        "placeholder": "Auswählen..."
+      }
+    },
+    "filePicker": {
+      "allRecentFilesButton": {
+        "title": "Alle zuletzt verwendeten Dateien"
+      },
+      "recentFiles": {
+        "title": "Zuletzt verwendete Dateien"
+      },
+      "recentFilesModal": {
+        "description": "Laden Sie Dateien hoch oder wählen Sie aus Ihren zuletzt verwendeten Dateien."
+      },
+      "toasts": {
+        "associatedAssistants": "Datei kann nicht gelöscht werden. Sie ist mit folgenden Assistenten verknüpft: {assistants}",
+        "associatedBoth": "Datei kann nicht gelöscht werden. Sie ist mit folgenden Projekten: {projects} und Assistenten: {assistants} verknüpft",
+        "associatedProjects": "Datei kann nicht gelöscht werden. Sie ist mit folgenden Projekten verknüpft: {projects}",
+        "deleteFailed": "Datei konnte nicht gelöscht werden. Bitte versuchen Sie es erneut.",
+        "deleteSuccess": "Datei erfolgreich gelöscht"
+      },
+      "uploadFiles": {
+        "description": "Laden Sie eine Datei von Ihrem Gerät hoch",
+        "title": "Dateien hochladen"
+      },
+      "viewFileButton": {
+        "tooltip": "Datei anzeigen"
+      }
+    },
+    "fileTile": {
+      "file": {
+        "fallback": "Datei"
+      },
+      "open": {
+        "ariaLabel": "{title} öffnen"
+      },
+      "removeButton": {
+        "label": "Entfernen"
+      }
+    },
+    "filters": {
+      "clearButton": {
+        "ariaLabel": "Zurücksetzen"
+      }
+    },
+    "formField": {
+      "optional": {
+        "label": "(Optional)"
+      },
+      "required": {
+        "label": "(Erforderlich)"
+      }
+    },
+    "genericMultiSelect": {
+      "loadFailed": {
+        "text": "{label} konnte nicht geladen werden. Bitte versuche es erneut."
+      },
+      "search": {
+        "placeholder": "Suchen..."
+      }
+    },
+    "groupsMultiSelect": {
+      "noGroups": {
+        "emptyMessage": "Keine Benutzergruppen verfügbar. Bitte erstelle zuerst eine Benutzergruppe."
+      },
+      "userGroups": {
+        "label": "Benutzergruppen",
+        "subtext": "Wähle aus, welche Benutzergruppen auf diese Ressource zugreifen können"
+      }
+    },
+    "icons": {
+      "logo": {
+        "alt": "Logo"
+      }
+    },
+    "initializingLoader": {
+      "initializing": {
+        "text": "{appName} wird initialisiert"
+      }
+    },
+    "inputElement": {
+      "removeButton": {
+        "tooltip": "Entfernen"
+      }
+    },
+    "inputFile": {
+      "attachButton": {
+        "ariaLabel": "Datei anhängen"
+      },
+      "clearButton": {
+        "ariaLabel": "Datei entfernen"
+      }
+    },
+    "inputImage": {
+      "dropRejected": {
+        "fallback": "Datei abgelehnt"
+      },
+      "editButton": {
+        "ariaLabel": "Bild bearbeiten"
+      },
+      "editOverlay": {
+        "label": "Bearbeiten"
+      },
+      "image": {
+        "altFallback": "Bild"
+      },
+      "removeButton": {
+        "ariaLabel": "Bild entfernen"
+      },
+      "uploadButton": {
+        "ariaLabel": "Bild hochladen"
+      }
+    },
+    "inputSelect": {
+      "placeholder": {
+        "fallback": "Option auswählen"
+      }
+    },
+    "isPublicSelector": {
+      "assignGroups": {
+        "label": "Gruppenzugriff für diesen {objectName} zuweisen",
+        "scopedSubtext": "Wähle eine oder mehrere der von dir verwalteten Gruppen aus, um Zugriff auf diesen {objectName} zu gewähren",
+        "visibleSubtext": "Dieser {objectName} ist für die unten ausgewählten Gruppen sichtbar/zugänglich"
+      },
+      "loading": {
+        "text": "Wird geladen..."
+      },
+      "makePublic": {
+        "label": "Diesen {objectName} öffentlich machen?",
+        "subtext": "Wenn aktiviert, kann dieser {objectName} von <b>allen {publicToWhom}</b> verwendet werden. Andernfalls haben nur <b>Administratoren</b> und <b>{publicToWhom}</b>, denen explizit Zugriff auf diesen {objectName} gewährt wurde (z. B. über eine Benutzergruppe), Zugriff."
+      },
+      "publicDisabled": {
+        "message": "Dieser {objectName} ist öffentlich und für alle Benutzer verfügbar."
+      },
+      "usersFallback": {
+        "text": "Benutzer"
+      }
+    },
+    "keyValue": {
+      "addButton": {
+        "ariaLabel": "Paar aus {keyTitle} und {valueTitle} hinzufügen",
+        "label": "Zeile hinzufügen"
+      },
+      "empty": {
+        "title": "Noch keine Einträge hinzugefügt."
+      },
+      "error": {
+        "duplicateKey": "Doppelter Schlüssel",
+        "duplicateSummary": "{count, plural, one {# doppelter Schlüssel gefunden} other {# doppelte Schlüssel gefunden}}",
+        "emptyKey": "Der Schlüssel darf nicht leer sein",
+        "emptySummary": "{count, plural, one {# leerer Schlüssel gefunden} other {# leere Schlüssel gefunden}}",
+        "validationSummary": "{count, plural, one {# Validierungsfehler gefunden} other {# Validierungsfehler gefunden}}"
+      },
+      "group": {
+        "ariaLabel": "Paare aus {keyTitle} und {valueTitle}"
+      },
+      "input": {
+        "ariaLabel": "{label} {index}"
+      },
+      "keyColumn": {
+        "title": "Schlüssel"
+      },
+      "pair": {
+        "fallbackLabel": "Schlüssel-Wert"
+      },
+      "removeButton": {
+        "ariaLabel": "{label}-Paar {index} entfernen"
+      },
+      "valueColumn": {
+        "title": "Wert"
+      }
+    },
+    "logo": {
+      "image": {
+        "alt": "Logo"
+      },
+      "poweredBy": {
+        "label": "Bereitgestellt von Onyx"
+      }
+    },
+    "nonSelectableConnectors": {
+      "unavailable": {
+        "label": "Nicht verfügbare Konnektoren:"
+      }
+    },
+    "oauthCallback": {
+      "authorizationFailed": {
+        "description": "Die Autorisierung wurde abgebrochen oder ist fehlgeschlagen. Bitte versuche es erneut.",
+        "title": "Autorisierung fehlgeschlagen"
+      },
+      "backButton": {
+        "label": "Zurück zum Chat"
+      },
+      "completeFailed": {
+        "message": "Autorisierung konnte nicht abgeschlossen werden"
+      },
+      "genericError": {
+        "description": "Während des OAuth-Vorgangs ist ein Fehler aufgetreten. Bitte versuche es erneut.",
+        "title": "Etwas ist schiefgelaufen"
+      },
+      "invalidRequest": {
+        "description": "Die Autorisierungsanfrage war unvollständig. Bitte versuche es erneut.",
+        "title": "Ungültige Anfrage"
+      },
+      "loadingHint": {
+        "text": "Das kann einen Moment dauern..."
+      },
+      "processing": {
+        "description": "Bitte warte, während wir die Einrichtung abschließen.",
+        "title": "Wird verarbeitet..."
+      },
+      "redirecting": {
+        "text": "Weiterleitung in {count, plural, one {# Sekunde} other {# Sekunden}}..."
+      },
+      "serviceFallback": {
+        "text": "Dienst"
+      },
+      "success": {
+        "detailsTemplate": "Deine {serviceName}-Autorisierung wurde erfolgreich abgeschlossen.",
+        "title": "Erfolgreich!"
+      }
+    },
+    "spreadsheet": {
+      "error": {
+        "description": "Die Tabelle ist möglicherweise beschädigt oder konnte nicht richtig geladen werden.",
+        "title": "Fehler beim Laden der Tabelle"
+      },
+      "preview": {
+        "truncated": "Vorschau gekürzt. Laden Sie die Datei herunter, um alle Zeilen zu sehen.",
+        "unavailable": "Diese Tabelle kann nicht in der Vorschau angezeigt werden."
+      },
+      "sheet": {
+        "defaultName": "Blatt 1",
+        "empty": "Dieses Blatt ist leer.",
+        "tooLarge": "Dieses Blatt ist zu groß für die Vorschau. Laden Sie die Datei herunter, um es anzusehen."
+      }
+    }
+  },
+  "craft": {
+    "agentSwitcher": {
+      "mainAgent": {
+        "label": "Hauptagent"
+      },
+      "subagentFallback": {
+        "label": "Subagent"
+      },
+      "switch": {
+        "ariaLabel": "Agent wechseln"
+      }
+    },
+    "approvals": {
+      "approveOnce": {
+        "ariaLabel": "Diese Aktion einmalig genehmigen",
+        "button": "Einmalig genehmigen"
+      },
+      "approveSession": {
+        "button": "Für Sitzung genehmigen",
+        "tooltip": "Übereinstimmende Aktionen für diese Sitzung genehmigen"
+      },
+      "details": {
+        "hideAriaLabel": "Details ausblenden",
+        "showAriaLabel": "Details anzeigen"
+      },
+      "header": {
+        "required": "Genehmigung erforderlich: {headline}"
+      },
+      "headline": {
+        "multiAction": "{count, plural, one {# Aktion} other {# Aktionen}} in {app}",
+        "singleAction": "{action} in {app}"
+      },
+      "payload": {
+        "empty": {
+          "label": "Keine Nutzdaten."
+        },
+        "showLess": {
+          "button": "Weniger anzeigen"
+        },
+        "showMore": {
+          "button": "Mehr anzeigen"
+        }
+      },
+      "reject": {
+        "ariaLabel": "Diese Aktion ablehnen",
+        "button": "Ablehnen"
+      },
+      "status": {
+        "approved": "Genehmigt",
+        "rejected": "Abgelehnt"
+      },
+      "submit": {
+        "errorFallback": "Entscheidung konnte nicht übermittelt werden"
+      }
+    },
+    "apps": {
+      "addCatalog": {
+        "addButton": "Hinzufügen",
+        "createButton": "Erstellen",
+        "customApp": {
+          "description": "Zugangsdaten und Netzwerkzugriff für deine eigene Integration.",
+          "title": "Benutzerdefinierte App"
+        },
+        "mcpHint": {
+          "label": "Brauchst du stattdessen einen MCP-Server? Verbinde ihn unter „Aktionen“ und aktiviere ihn hier für Craft.",
+          "openActionsButton": "Aktionen öffnen"
+        },
+        "modal": {
+          "description": "Stelle eine Integration deiner gesamten Organisation zur Verfügung. Integrierte Anbieter bringen Aktionen mit, die dem Craft-Agenten deren Nutzung beibringen; bereits konfigurierte Anbieter werden nicht aufgeführt.",
+          "title": "App hinzufügen"
+        }
+      },
+      "associatedSkills": {
+        "associateAriaLabel": "{name} verknüpfen",
+        "associateButton": "Vorhandenen verknüpfen",
+        "create": {
+          "github": {
+            "description": "Wenn deine Skills in GitHub liegen, importiere sie zuerst auf der Skills-Seite und verknüpfe sie dann mit dieser App.",
+            "label": "Aus GitHub importieren"
+          },
+          "scratch": {
+            "description": "Schreibe Anweisungen und füge unterstützende Dateien hinzu.",
+            "label": "Von Grund auf beginnen"
+          },
+          "upload": {
+            "description": "Importiere eine SKILL.md-Datei, eine ZIP-Datei oder einen Skill-Ordner.",
+            "label": "Skill hochladen"
+          }
+        },
+        "createSkillButton": "Skill erstellen",
+        "description": "Skills geben Craft Anweisungen zur Nutzung dieser App. Sie gelten organisationsweit; Nutzer müssen ggf. alle aktivieren, damit die App richtig funktioniert.",
+        "editButton": "Bearbeiten",
+        "empty": {
+          "label": "Keine bearbeitbaren Skills gefunden."
+        },
+        "invalidTag": "Ungültig",
+        "loading": {
+          "label": "Skills werden geladen…"
+        },
+        "noneAssociated": {
+          "label": "Noch keine Skills verknüpft. Die App kann auch ohne gespeichert und genutzt werden."
+        },
+        "promote": {
+          "cancelButton": "Abbrechen",
+          "confirmButton": "Organisationsweit verfügbar machen",
+          "description": "Mit Apps verknüpfte Skills müssen für alle verfügbar sein. Diese Änderung wird beim Speichern der App übernommen.",
+          "title": "„{name}“ organisationsweit verfügbar machen?"
+        },
+        "search": {
+          "placeholder": "Bearbeitbare Skills suchen..."
+        },
+        "title": "Verknüpfte Skills",
+        "unavailable": {
+          "duplicateName": "Ein Skill namens „{name}“ ist bereits verknüpft.",
+          "invalid": "Ungültiger Skill: Behebe das Problem, bevor du ihn verknüpfst.",
+          "otherApp": "Bereits mit der App „{name}“ verknüpft."
+        },
+        "unlink": {
+          "button": "Trennen",
+          "cancelButton": "Abbrechen",
+          "confirm": "„{name}“ von dieser App trennen?"
+        },
+        "unlinkAriaLabel": "{name} trennen",
+        "viewButton": "Ansehen"
+      },
+      "configureProvider": {
+        "addButton": "Hinzufügen",
+        "addTitle": "{name} hinzufügen",
+        "editTitle": "{name} bearbeiten",
+        "emptyPolicies": "Dieser Anbieter hat keine Aktionen zum Konfigurieren.",
+        "fields": {
+          "name": {
+            "description": "Eine Bezeichnung für diese Verbindung. Verwende einen eindeutigen Namen, wenn du mehrere Instanzen desselben Anbieters hinzufügst (z. B. \"{name} — Engineering\").",
+            "label": "Name"
+          }
+        },
+        "managedDescription": "Von Onyx bereitgestellt: Lege fest, was der Agent tun darf.",
+        "managedNote": "Diese App wird von Onyx bereitgestellt; die Zugangsdaten werden für dich verwaltet. Lege unten fest, was der Agent tun darf. Nutzer verbinden sie über die Apps-Seite.",
+        "saveButton": "Speichern"
+      },
+      "customApp": {
+        "cancelButton": "Abbrechen",
+        "createButton": "Erstellen",
+        "createDescription": "Konfiguriere, wie der Egress-Proxy diese App erreicht und sich authentifiziert. Ein Skill ist nicht erforderlich.",
+        "createTitle": "Benutzerdefinierte App erstellen",
+        "creatingButton": "Wird erstellt…",
+        "disabled": {
+          "nameMissing": "Gib einen Namen ein, bevor du diese benutzerdefinierte App erstellst.",
+          "patternMissing": "Füge mindestens ein Upstream-URL-Muster hinzu. Gib ein Muster ein und drücke die Eingabetaste.",
+          "pristine": "Nimm vor dem Speichern eine Änderung vor.",
+          "saving": "Ein Speichervorgang läuft bereits."
+        },
+        "editDescription": "Aktualisiere die Gateway-Einstellungen und verwalte verknüpfte Skills.",
+        "editTitle": "{name} bearbeiten",
+        "errors": {
+          "saveFailedTitle": "Speichern nicht möglich"
+        },
+        "fields": {
+          "headers": {
+            "addButton": "Header hinzufügen",
+            "description": "Optional: Header, die in ausgehende Anfragen eingefügt werden. Verwende '{placeholder}' für Werte, die der Nutzer (oder unten die Organisation) liefert, z. B. \"Bearer '{api_key}'\". Leer lassen, um die Upstream-Muster ohne Zugangsdaten freizugeben.",
+            "keyTitle": "Header",
+            "label": "Header-Zugangsdaten-Muster",
+            "valueTitle": "Wert"
+          },
+          "name": {
+            "label": "Name",
+            "placeholder": "Meine benutzerdefinierte App"
+          },
+          "orgCredentials": {
+            "addButton": "Zugangsdaten hinzufügen",
+            "description": "Optional: Werte, die deine Organisation für alle Nutzer vorausfüllt. Leer lassen, wenn jeder Nutzer eigene Zugangsdaten angibt.",
+            "keyTitle": "Zugangsdaten-Schlüssel",
+            "label": "Organisations-Zugangsdaten",
+            "valueTitle": "Wert"
+          },
+          "upstreamPatterns": {
+            "description": "Ausgehende URLs, in die der Proxy Zugangsdaten einfügen darf. Verwende * für beliebige Zeichen (z. B. deckt https://api.example.com/* jeden Pfad dieses Hosts ab). Der Host muss wörtlich angegeben sein, keine Platzhalter vor dem ersten Schrägstrich. Gib ein Muster ein und drücke die Eingabetaste.",
+            "label": "Upstream-URL-Muster"
+          }
+        },
+        "saveButton": "Speichern",
+        "savingButton": "Wird gespeichert…"
+      },
+      "errors": {
+        "duplicateSkillName": "Die App „{appName}“ hat bereits einen verknüpften Skill namens „{skillName}“. Lade einen Skill mit anderem Namen hoch."
+      },
+      "mcpPolicy": {
+        "description": "Lege fest, was der Craft-Agent mit den Tools dieses MCP-Servers tun darf.",
+        "emptyPolicies": "Keine aktivierten Tools auf diesem Server. Aktiviere Tools zuerst auf der MCP-Aktionsseite.",
+        "saveButton": "Speichern",
+        "title": "{name} bearbeiten"
+      },
+      "oauthCallback": {
+        "backButton": "Zurück zu meinen Apps",
+        "description": "OAuth-Handshake wird abgeschlossen…",
+        "errors": {
+          "cancelled": "OAuth wurde abgebrochen oder abgelehnt: {reason}",
+          "failed": "Verbindung fehlgeschlagen.",
+          "missingParams": "Code oder State fehlt in der Callback-URL."
+        },
+        "exchanging": {
+          "label": "Autorisierungscode wird eingetauscht…"
+        },
+        "success": {
+          "label": "Verbunden. Weiterleitung zurück zu deinen Apps…"
+        },
+        "title": "App wird verbunden"
+      },
+      "page": {
+        "connectButton": "Verbinden",
+        "connectingButton": "Weiterleitung…",
+        "disconnectButton": "Trennen",
+        "empty": {
+          "description": "Für deine Organisation sind noch keine Apps oder MCP-Server konfiguriert.",
+          "title": "Noch nichts zu verbinden"
+        },
+        "errors": {
+          "disconnectFailed": "Trennen fehlgeschlagen",
+          "startAuthFailed": "Autorisierung konnte nicht gestartet werden"
+        },
+        "header": {
+          "description": "Verbinde die Tools, die Onyx Craft während der Arbeit als Kontext nutzen kann.",
+          "manageButton": "Apps verwalten",
+          "searchPlaceholder": "Apps suchen...",
+          "title": "Apps"
+        },
+        "kinds": {
+          "app": {
+            "blurb": "Integrationen, die Onyx direkt unterstützt. Jede bringt Skills mit, die Craft die Nutzung beibringen: Starte hier.",
+            "empty": "Für deine Organisation sind noch keine Apps konfiguriert.",
+            "emptyTitle": "Noch keine Apps",
+            "tabLabel": "Apps · {count}"
+          },
+          "mcp": {
+            "blurb": "Server, die ein Admin für Craft verfügbar gemacht hat. Nutze sie, wenn die benötigte App nicht unter Apps aufgeführt ist oder du gezielt die eigenen MCP-Tools eines Servers willst.",
+            "empty": "Es wurden noch keine MCP-Server für Craft verfügbar gemacht.",
+            "emptyTitle": "Noch keine MCP-Server",
+            "tabLabel": "MCP-Server · {count}"
+          }
+        },
+        "loading": {
+          "label": "Wird geladen…"
+        },
+        "reviewSkillsButton": "Skills überprüfen",
+        "search": {
+          "noMatchesDescription": "Nichts hier entspricht deiner Suche.",
+          "noMatchesTitle": "Keine Treffer"
+        },
+        "status": {
+          "connected": "Verbunden",
+          "connectedNeedsSkills": "Verbunden · nicht alle verknüpften Skills sind aktiviert",
+          "notAvailable": "Für dein Konto nicht verfügbar: Frag einen Admin",
+          "skillWarningAriaLabel": "Skill-Einrichtung erforderlich",
+          "skillWarningTooltip": "Nicht alle verknüpften Skills sind aktiviert. Diese App funktioniert möglicherweise nicht richtig."
+        }
+      },
+      "policyEditor": {
+        "advanced": {
+          "description": "Lege für jede Aktion einzeln eine Richtlinie fest.",
+          "title": "Erweitert"
+        },
+        "cancelButton": "Abbrechen",
+        "loading": {
+          "label": "Wird geladen…"
+        },
+        "permissions": {
+          "askOption": "Nachfragen",
+          "autoApproveOption": "Automatisch genehmigen",
+          "customOption": "Benutzerdefiniert",
+          "description": "Lege fest, was der Agent tun darf. „Nachfragen“ fragt dich im Chat vor jeder Aktion; „Automatisch genehmigen“ führt sie ohne Rückfrage aus. Mit „Erweitert“ legst du eine Richtlinie pro Aktion fest.",
+          "title": "Berechtigungen"
+        },
+        "savingButton": "Wird gespeichert…"
+      },
+      "skillsStep": {
+        "description": "Optional: Verknüpfe vorhandene Skills oder erstelle einen für diese App.",
+        "errors": {
+          "saveFailedTitle": "Speichern nicht möglich"
+        },
+        "saveButton": "Skills speichern",
+        "savingButton": "Wird gespeichert…",
+        "skipButton": "Vorerst überspringen",
+        "title": "Skills zu {name} hinzufügen"
+      },
+      "userCredentials": {
+        "cancelButton": "Abbrechen",
+        "connectButton": "Verbinden",
+        "connectingButton": "Wird verbunden…",
+        "description": "Gib deine Zugangsdaten ein, um diese App für dein Konto zu autorisieren.",
+        "errors": {
+          "connectFailedTitle": "Verbindung nicht möglich"
+        },
+        "title": "{name} verbinden"
+      }
+    },
+    "artifactsTab": {
+      "download": {
+        "button": "Herunterladen"
+      },
+      "empty": {
+        "description": "Ausgabedateien und Web-Apps erscheinen hier",
+        "title": "Noch keine Artefakte"
+      },
+      "nextjsApp": {
+        "label": "Next.js-Anwendung"
+      },
+      "openItem": {
+        "ariaLabel": "{name} öffnen"
+      },
+      "toggleItem": {
+        "ariaLabel": "{name} umschalten"
+      }
+    },
+    "chatPanel": {
+      "input": {
+        "continuePlaceholder": "Setze das Gespräch fort...",
+        "scheduledRunPlaceholder": "Geplante Ausführung läuft...",
+        "subagentPlaceholder": "Wechsle zum Hauptagenten, um eine Nachricht zu senden"
+      },
+      "openSidebar": {
+        "ariaLabel": "Seitenleiste öffnen"
+      },
+      "outputPanel": {
+        "closeTooltip": "Ausgabebereich schließen",
+        "openTooltip": "Ausgabebereich öffnen"
+      },
+      "responseStopped": {
+        "label": "Antwort gestoppt"
+      },
+      "scrollToBottom": {
+        "label": "Nach unten scrollen"
+      },
+      "toast": {
+        "operationWait": "Bitte warte, bis der aktuelle Vorgang abgeschlossen ist.",
+        "sandboxWait": "Bitte warte, bis die Sandbox initialisiert ist",
+        "scheduledRunWait": "Bitte warte, bis die geplante Ausführung abgeschlossen ist."
+      }
+    },
+    "compaction": {
+      "marker": {
+        "label": "Kontext komprimiert, um Platz freizugeben"
+      }
+    },
+    "connectDataBanner": {
+      "cta": {
+        "label": "Verbinde deine Daten"
+      }
+    },
+    "craftingLoader": {
+      "messages": {
+        "craftingWorkspace": "Dein Arbeitsbereich wird gefertigt...",
+        "enchanting": "Mit Magie verzaubern...",
+        "gamemode": "/gamemode 1",
+        "gatheringResources": "Ressourcen sammeln...",
+        "miningDependencies": "Abhängigkeiten schürfen...",
+        "placingBlocks": "Blöcke platzieren...",
+        "punchingWood": "Holz hacken...",
+        "smeltingCode": "Code verhütten...",
+        "worldGenerated": "Weltgenerierung abgeschlossen..."
+      },
+      "tagline": {
+        "label": "Deine nächste große Idee wird gefertigt..."
+      }
+    },
+    "debugLogs": {
+      "clear": {
+        "tooltip": "Leeren"
+      },
+      "copy": {
+        "doneTooltip": "Kopiert",
+        "tooltip": "Sichtbares kopieren"
+      },
+      "empty": {
+        "noLines": "Noch keine Zeilen.",
+        "noMatch": "Keine Zeilen entsprechen \"{filter}\"",
+        "waiting": "Warten auf die erste Logzeile…"
+      },
+      "error": {
+        "endpointDisabled": "Debug-Endpunkt deaktiviert (ENABLE_OPENCODE_DEBUGGING=false)",
+        "http": "HTTP {status}",
+        "noSandbox": "Keine laufende Sandbox, deren Logs verfolgt werden können"
+      },
+      "filter": {
+        "placeholder": "Filtern…"
+      },
+      "lines": {
+        "count": "{count, plural, one {# Zeile} other {# Zeilen}}",
+        "filteredCount": "{visible, number} / {total, number} Zeilen"
+      },
+      "modal": {
+        "description": "Live-Verfolgung des Sandbox-Containers — nur für Dev/Debug.",
+        "title": "Opencode-Pod-Logs"
+      },
+      "newSincePaused": {
+        "button": "+{count, number} neu · springen"
+      },
+      "open": {
+        "button": "Pod-Logs"
+      },
+      "status": {
+        "closed": "Geschlossen",
+        "connecting": "Verbinden",
+        "error": "Fehler",
+        "paused": "Pausiert",
+        "streaming": "Streaming"
+      }
+    },
+    "entryMenu": {
+      "addFiles": {
+        "label": "Dateien oder Fotos hinzufügen"
+      },
+      "apps": {
+        "label": "Apps"
+      },
+      "browseSkills": {
+        "label": "Skills durchsuchen"
+      },
+      "connect": {
+        "hint": "Verbinden"
+      },
+      "connectApp": {
+        "label": "App verbinden"
+      },
+      "library": {
+        "label": "Bibliothek"
+      },
+      "manageLibrary": {
+        "label": "Bibliothek verwalten…"
+      },
+      "mcpServer": {
+        "description": "MCP-Server"
+      },
+      "skills": {
+        "label": "Skills"
+      }
+    },
+    "filePreview": {
+      "cannotPreview": {
+        "title": "Datei kann nicht in der Vorschau angezeigt werden"
+      },
+      "error": {
+        "inline": "Fehler: {message}",
+        "title": "Fehler beim Laden der Datei"
+      },
+      "loading": {
+        "label": "Datei wird geladen..."
+      },
+      "noContent": {
+        "label": "Kein Inhalt"
+      }
+    },
+    "filesTab": {
+      "empty": {
+        "description": "Während des Builds erstellte Dateien erscheinen hier",
+        "title": "Noch keine Dateien"
+      },
+      "emptyDirectory": {
+        "label": "Keine Dateien in diesem Verzeichnis"
+      },
+      "error": {
+        "title": "Fehler beim Laden der Dateien"
+      },
+      "loading": {
+        "label": "Dateien werden geladen..."
+      },
+      "loadingChildren": {
+        "label": "Wird geladen..."
+      },
+      "preparing": {
+        "description": "Deine Entwicklungsumgebung wird eingerichtet",
+        "title": "Sandbox wird vorbereitet..."
+      }
+    },
+    "imagePreview": {
+      "error": {
+        "description": "Das Bild konnte nicht angezeigt werden",
+        "title": "Bild konnte nicht geladen werden"
+      },
+      "loading": {
+        "label": "Bild wird geladen..."
+      },
+      "preview": {
+        "ariaLabel": "Vorschau von {name}"
+      }
+    },
+    "inputBar": {
+      "entryInfo": {
+        "connected": "Verbunden",
+        "connectionRequired": "Verbindung erforderlich"
+      },
+      "plusMenu": {
+        "tooltip": "Dateien oder Skills hinzufügen"
+      }
+    },
+    "interruptHint": {
+      "stopping": {
+        "label": "Wird gestoppt…"
+      },
+      "toInterrupt": {
+        "label": "zum Unterbrechen"
+      }
+    },
+    "intro": {
+      "beta": {
+        "badge": "BETA"
+      },
+      "returnHome": {
+        "button": "Zur Startseite"
+      },
+      "startCrafting": {
+        "button": "Loslegen"
+      },
+      "wordmark": {
+        "label": "Craft"
+      }
+    },
+    "llmPopover": {
+      "noModels": {
+        "label": "Keine Modelle gefunden"
+      },
+      "recommended": {
+        "label": "Empfohlen"
+      },
+      "recommendedOnly": {
+        "label": "Nur empfohlene Modelle"
+      }
+    },
+    "onboarding": {
+      "livingMap": {
+        "examplePrompts": {
+          "flakyRetryTest": "„Behebe den instabilen Retry-Test und öffne einen PR.“",
+          "launchDeck": "„Erstelle das Launch-Deck für den Frühling aus dem Briefing in Drive.“",
+          "rfpSecurity": "„Fülle die RFP in meiner E-Mail mit unseren Sicherheitsangaben aus.“",
+          "slackToLinear": "„Verdichte unsere Slack-Diskussion zu Linear-Tickets.“",
+          "vendorSpend": "„Fasse unsere Lieferantenausgaben für Q2 als Dokument in Drive zusammen.“"
+        },
+        "modal": {
+          "backButton": "Zurück",
+          "ctaButton": "Craft an die Arbeit schicken",
+          "nextButton": "Weiter",
+          "title": "Lerne Craft kennen"
+        },
+        "outputs": {
+          "ariaLabel": "Ergebnis: {name}",
+          "githubPr": {
+            "caption": "Offen zur Überprüfung",
+            "label": "GitHub-PR"
+          },
+          "googleDoc": {
+            "caption": "In deinem Drive gespeichert",
+            "label": "Google-Dokument"
+          },
+          "liveApp": {
+            "caption": "Gehostet, per Link teilbar",
+            "label": "Live-App"
+          }
+        },
+        "prompt": {
+          "label": "Dein Prompt"
+        },
+        "schedule": {
+          "ariaLabel": "Geplante Aufgabe: führt diesen Prompt nach Zeitplan erneut aus",
+          "caption": "Läuft, während du weg bist",
+          "label": "Jeden Montag, 8:00"
+        },
+        "sources": {
+          "connectedAriaLabel": "Verbundene Quelle: {name}",
+          "yourFiles": {
+            "ariaLabel": "Deine hochgeladenen Dateien",
+            "label": "Deine Dateien"
+          }
+        },
+        "stages": {
+          "constellation": {
+            "caption": "Klicke auf einen beliebigen Teil der Karte, um ihn erneut anzusehen.",
+            "title": "Das ist Craft. Du bist dran."
+          },
+          "machine": {
+            "caption": "Liest, was du sehen kannst. Nie deine Geheimnisse.",
+            "title": "Es arbeitet auf seiner eigenen Maschine."
+          },
+          "output": {
+            "caption": "Auf Abruf oder nach Zeitplan, während du weg bist.",
+            "title": "Fertige Arbeit kommt heraus."
+          },
+          "prompt": {
+            "caption": "Beschreibe das Ergebnis, Craft erledigt den Rest.",
+            "title": "Gib Craft echte Arbeit."
+          }
+        },
+        "team": {
+          "ariaLabel": "Dein Team: Ein Link teilt Crafts Arbeit",
+          "caption": "Ein Link teilt alles",
+          "label": "Dein Team"
+        },
+        "workspace": {
+          "approvalPill": "Wartet auf deine Freigabe",
+          "label": "Crafts Arbeitsbereich",
+          "sandboxBadge": "Isolierte Sandbox"
+        }
+      },
+      "llmLocked": {
+        "backToChatButton": "Zurück zum Chat",
+        "description": "Onyx Craft benötigt einen Modellanbieter, den nur Admins einrichten können. Bitte deinen Admin, Anthropic, OpenAI oder OpenRouter zu verbinden.",
+        "title": "Ein LLM-Anbieter ist erforderlich"
+      },
+      "llmSetup": {
+        "description": "Craft-Agenten benötigen zum Bauen einen Modellanbieter.",
+        "title": "Modellanbieter verbinden"
+      },
+      "welcomeMock": {
+        "input": {
+          "placeholder": "Analysiere meine Daten und erstelle ein Dashboard..."
+        },
+        "modelPill": {
+          "label": "Claude Opus 4.8"
+        },
+        "promptPills": {
+          "engineering": "Engineering",
+          "marketing": "Marketing",
+          "product": "Produkt",
+          "sales": "Vertrieb"
+        }
+      }
+    },
+    "outputPanel": {
+      "artifactsEmpty": {
+        "tooltip": "Beginnen Sie etwas zu bauen, um Artefakte zu sehen!"
+      },
+      "devServerStarting": {
+        "tooltip": "Entwicklungsserver wird gestartet..."
+      },
+      "noWebapp": {
+        "label": "Noch keine Web-App in dieser Sitzung"
+      }
+    },
+    "pdfPreview": {
+      "error": {
+        "description": "Die PDF-Datei konnte nicht geladen werden.",
+        "title": "PDF kann nicht in der Vorschau angezeigt werden"
+      },
+      "frame": {
+        "title": "PDF-Vorschau"
+      },
+      "loading": {
+        "label": "PDF wird geladen..."
+      }
+    },
+    "pptxPreview": {
+      "converting": {
+        "label": "Präsentation wird konvertiert..."
+      },
+      "empty": {
+        "label": "Keine Folien in dieser Präsentation"
+      },
+      "error": {
+        "title": "Präsentation kann nicht in der Vorschau angezeigt werden"
+      },
+      "loadingSlide": {
+        "label": "Folie wird geladen..."
+      },
+      "slide": {
+        "counter": "Folie {current} von {total}"
+      }
+    },
+    "previewTab": {
+      "empty": {
+        "description": "Hier erscheint eine Live-Vorschau, sobald eine Web-App läuft."
+      },
+      "frame": {
+        "title": "Web-App-Vorschau"
+      },
+      "starting": {
+        "description": "Abhängigkeiten werden installiert und gestartet.",
+        "title": "Dev-Server wird gestartet..."
+      }
+    },
+    "redirect": {
+      "redirecting": {
+        "label": "Weiterleitung..."
+      }
+    },
+    "sandboxAsleep": {
+      "dismiss": {
+        "button": "Schließen"
+      },
+      "modal": {
+        "description": "Sie ist nach einer Phase der Inaktivität eingeschlafen. Deine Arbeit ist gespeichert. Wecke sie, um weiterzumachen.",
+        "title": "Deine Sandbox ist eingeschlafen"
+      },
+      "wake": {
+        "button": "Sandbox aufwecken"
+      }
+    },
+    "scheduledRun": {
+      "badge": {
+        "label": "Geplant"
+      },
+      "startedAt": {
+        "label": "Gestartet {time}"
+      },
+      "status": {
+        "awaitingApproval": "Diese geplante Ausführung wartet auf Genehmigung. Folgemeldungen werden freigeschaltet, nachdem sie fortgesetzt und abgeschlossen wurde.",
+        "running": "Diese geplante Ausführung läuft noch. Folgemeldungen werden freigeschaltet, sobald sie abgeschlossen ist.",
+        "startedBy": "Diese Sitzung wurde von der geplanten Aufgabe {task} um {time} gestartet."
+      },
+      "viewTask": {
+        "ariaLabel": "Geplante Aufgabe {task} anzeigen. {status}",
+        "label": "Aufgabe anzeigen"
+      }
+    },
+    "setupCard": {
+      "appFallback": {
+        "label": "Externe App {id}"
+      },
+      "connect": {
+        "title": "{app} verbinden"
+      },
+      "connected": {
+        "title": "{app} verbunden."
+      },
+      "error": {
+        "generic": "Etwas ist schiefgelaufen. Bitte versuche es erneut.",
+        "notConfigurable": "Diese App kann von hier aus nicht eingerichtet werden.",
+        "popupBlocked": "Das Einrichtungsfenster konnte nicht geöffnet werden. Erlaube Pop-ups und versuche es erneut.",
+        "startFailed": "Einrichtung konnte nicht gestartet werden"
+      },
+      "loading": {
+        "button": "Wird geladen…"
+      },
+      "notNow": {
+        "button": "Nicht jetzt"
+      },
+      "reason": {
+        "fallback": "Der Agent benötigt {app}, um diese Aufgabe fortzusetzen."
+      },
+      "skipped": {
+        "title": "Verbindung von {app} übersprungen."
+      },
+      "waiting": {
+        "button": "Warten…"
+      }
+    },
+    "share": {
+      "copyLink": {
+        "ariaLabel": "Link kopieren"
+      },
+      "organization": {
+        "description": "Jeder, der in deinem Onyx angemeldet ist, kann diese App sehen.",
+        "label": "Organisation"
+      },
+      "private": {
+        "description": "Nur du kannst diese App sehen.",
+        "label": "Privat"
+      },
+      "share": {
+        "label": "Teilen"
+      },
+      "shared": {
+        "label": "Geteilt"
+      },
+      "trigger": {
+        "ariaLabel": "Web-App teilen"
+      }
+    },
+    "sideBar": {
+      "apps": {
+        "label": "Apps"
+      },
+      "backToChat": {
+        "label": "Zurück zum Chat"
+      },
+      "delete": {
+        "label": "Löschen"
+      },
+      "deleteModal": {
+        "body": "Dies entfernt die Craft-Sitzung und alle zugehörigen Daten dauerhaft. Diese Aktion kann nicht rückgängig gemacht werden.",
+        "confirm": "Löschen",
+        "deleting": "Wird gelöscht...",
+        "title": "\"{title}\" löschen?"
+      },
+      "newSession": {
+        "label": "Loslegen"
+      },
+      "rename": {
+        "label": "Umbenennen"
+      },
+      "scheduledTasks": {
+        "label": "Geplante Aufgaben"
+      },
+      "sessions": {
+        "empty": "Leg los! Der Sitzungsverlauf erscheint hier.",
+        "title": "Sitzungen"
+      },
+      "skills": {
+        "label": "Skills"
+      },
+      "toast": {
+        "deleteFailed": "Sitzung konnte nicht gelöscht werden",
+        "deleted": "\"{title}\" gelöscht."
+      }
+    },
+    "skillsStale": {
+      "notice": {
+        "description": "Lade diese Sitzung neu, um die neuesten Skills und App-Zugriffe zu übernehmen.",
+        "title": "Die Fähigkeiten deines Agenten haben sich geändert"
+      },
+      "reload": {
+        "button": "Neu laden",
+        "inProgress": "Wird neu geladen…"
+      },
+      "toast": {
+        "reloadFailed": "Sitzung konnte nicht neu geladen werden"
+      }
+    },
+    "subagentView": {
+      "notFound": {
+        "label": "Subagent nicht gefunden."
+      }
+    },
+    "suggestedPrompts": {
+      "close": {
+        "ariaLabel": "Vorschläge schließen"
+      }
+    },
+    "tasks": {
+      "detailPage": {
+        "confirmDelete": {
+          "deleteButton": "Löschen",
+          "deletingButton": "Wird gelöscht...",
+          "description": "Dies stoppt künftige Ausführungen und entfernt die Aufgabe. Der bisherige Ausführungsverlauf (und die zugehörigen Sitzungen) bleiben zu Prüfzwecken erhalten.",
+          "title": "„{name}“ löschen?"
+        },
+        "deleteButton": "Löschen",
+        "editButton": "Bearbeiten",
+        "fallbackTitle": "Geplante Aufgabe",
+        "loadFailed": "Geplante Aufgabe konnte nicht geladen werden.",
+        "missingTaskId": "Aufgaben-ID fehlt.",
+        "pauseButton": "Pausieren",
+        "resumeButton": "Fortsetzen",
+        "runNowButton": "Jetzt ausführen",
+        "toasts": {
+          "deleteFailed": "Aufgabe konnte nicht gelöscht werden",
+          "deleted": "„{name}“ gelöscht.",
+          "paused": "Aufgabe pausiert.",
+          "resumed": "Aufgabe fortgesetzt.",
+          "runQueued": "Ausführung für „{name}“ eingereiht.",
+          "runStartFailed": "Ausführung konnte nicht gestartet werden",
+          "statusUpdateFailed": "Status konnte nicht aktualisiert werden"
+        }
+      },
+      "editPage": {
+        "fallbackTitle": "Geplante Aufgabe bearbeiten",
+        "loadFailed": "Geplante Aufgabe konnte nicht geladen werden.",
+        "missingTaskId": "Aufgaben-ID fehlt.",
+        "title": "„{name}“ bearbeiten"
+      },
+      "form": {
+        "cancelButton": "Abbrechen",
+        "errors": {
+          "nameRequired": "Name ist erforderlich.",
+          "promptRequired": "Prompt ist erforderlich."
+        },
+        "fields": {
+          "name": {
+            "label": "Name",
+            "placeholder": "z. B. Wöchentliche Übersicht der Kunden-Eskalationen"
+          },
+          "preApproval": {
+            "description": "Craft kann ausgewählte Apps und MCP-Server ohne Unterbrechung nutzen, wenn diese Aufgabe unbeaufsichtigt läuft. Andere Genehmigungsanfragen pausieren die Ausführung und können sie fehlschlagen lassen.",
+            "label": "Vorab genehmigte Apps und MCP-Server"
+          },
+          "prompt": {
+            "description": "Diese Nachricht wird bei jedem Auslösen der Aufgabe an Craft gesendet.",
+            "label": "Prompt",
+            "placeholder": "Beschreibe, was Craft bei jeder Ausführung tun soll..."
+          },
+          "schedule": {
+            "label": "Zeitplan"
+          }
+        },
+        "saveAndRunNowButton": "Speichern und jetzt ausführen",
+        "saveButton": "Speichern",
+        "saveChangesButton": "Änderungen speichern",
+        "savingLabel": "Wird gespeichert...",
+        "toasts": {
+          "created": "Geplante Aufgabe erstellt.",
+          "createdAndQueued": "Geplante Aufgabe erstellt und eingereiht.",
+          "saveFailed": "Geplante Aufgabe konnte nicht gespeichert werden",
+          "updated": "Geplante Aufgabe aktualisiert."
+        }
+      },
+      "listPage": {
+        "columns": {
+          "lastRun": "Letzte Ausführung",
+          "name": "Name",
+          "nextRun": "Nächste Ausführung",
+          "schedule": "Zeitplan",
+          "status": "Status"
+        },
+        "confirmDelete": {
+          "deleteButton": "Löschen",
+          "deletingButton": "Wird gelöscht...",
+          "description": "Dies stoppt künftige Ausführungen und entfernt die Aufgabe. Der bisherige Ausführungsverlauf (und die zugehörigen Sitzungen) bleiben zu Prüfzwecken erhalten.",
+          "title": "„{name}“ löschen?"
+        },
+        "empty": {
+          "description": "Es wurden noch keine geplanten Aufgaben erstellt.",
+          "title": "Keine geplanten Aufgaben gefunden"
+        },
+        "errors": {
+          "loadFailed": "Geplante Aufgaben konnten nicht geladen werden.",
+          "tryAgainButton": "Erneut versuchen"
+        },
+        "header": {
+          "description": "Führe Craft-Prompts nach Timer aus. Jedes Auslösen erstellt eine neue Sitzung, die im Hintergrund läuft.",
+          "title": "Geplante Aufgaben"
+        },
+        "newTaskButton": "Neue geplante Aufgabe",
+        "rowActions": {
+          "deleteTooltip": "Löschen"
+        },
+        "toasts": {
+          "deleteFailed": "Aufgabe konnte nicht gelöscht werden",
+          "deleted": "„{name}“ gelöscht."
+        }
+      },
+      "newPage": {
+        "description": "Speichere Prompt und Zeitplan. Craft führt sie nach Timer aus.",
+        "title": "Neue geplante Aufgabe"
+      },
+      "preApproval": {
+        "appFallbackName": "App Nr. {id}",
+        "appsGroupTitle": "Apps",
+        "empty": {
+          "label": "In Craft sind noch keine Apps oder MCP-Server verfügbar."
+        },
+        "errors": {
+          "loadFailed": "Apps und MCP-Server konnten nicht geladen werden. Aktualisiere, um es erneut zu versuchen.",
+          "partialLoadFailed": "Einige Vorabgenehmigungs-Optionen konnten nicht geladen werden. Aktualisiere, um es erneut zu versuchen."
+        },
+        "loading": {
+          "label": "Apps und MCP-Server werden geladen…"
+        },
+        "mcpGroupTitle": "MCP-Server",
+        "mcpServerFallbackName": "MCP-Server Nr. {id}",
+        "status": {
+          "connected": "Verbunden",
+          "connectionRequired": "Verbindung erforderlich",
+          "unavailable": "Nicht mehr verfügbar"
+        },
+        "summary": {
+          "partialLoadFailed": "Einige Vorabgenehmigungs-Details konnten nicht geladen werden. Aktualisiere, um es erneut zu versuchen.",
+          "title": "Vorab genehmigte Apps und MCP-Server"
+        }
+      },
+      "runHistory": {
+        "columns": {
+          "duration": "Dauer",
+          "started": "Gestartet",
+          "status": "Status",
+          "summary": "Zusammenfassung",
+          "trigger": "Auslöser"
+        },
+        "empty": {
+          "label": "Noch keine Ausführungen. Die Aufgabe erstellt bei jedem Auslösen eine, oder nutze oben „Jetzt ausführen“."
+        },
+        "errors": {
+          "loadFailed": "Ausführungsverlauf konnte nicht geladen werden.",
+          "tryAgainButton": "Erneut versuchen"
+        },
+        "loadMore": {
+          "button": "Mehr laden",
+          "loadingButton": "Wird geladen..."
+        },
+        "nonClickable": {
+          "noSession": "Dieser Lauf hat noch keine Sitzung erstellt.",
+          "queued": "Dieser Lauf hat noch nicht begonnen, daher gibt es keine Sitzung zum Öffnen.",
+          "skipped": "Dieser Lauf wurde übersprungen, weil ein früherer noch lief, daher wurde keine Sitzung erstellt."
+        },
+        "status": {
+          "notOpenableAriaLabel": "Nicht öffenbar"
+        },
+        "trigger": {
+          "runNow": "Jetzt ausführen",
+          "schedule": "Zeitplan"
+        }
+      },
+      "scheduleEditor": {
+        "dailyWeekly": {
+          "atLabel": "Um",
+          "daysLabel": "An diesen Tagen",
+          "runsEveryDay": "Läuft jeden Tag",
+          "runsOn": "Läuft am {days}"
+        },
+        "interval": {
+          "everyLabel": "Alle"
+        },
+        "intervalUnits": {
+          "days": "Tage",
+          "hours": "Stunden",
+          "minutes": "Minuten"
+        },
+        "tabs": {
+          "dailyWeekly": "Täglich / Wöchentlich",
+          "interval": "Intervall"
+        },
+        "weekdays": {
+          "fri": "Fr",
+          "mon": "Mo",
+          "sat": "Sa",
+          "sun": "So",
+          "thu": "Do",
+          "tue": "Di",
+          "wed": "Mi"
+        }
+      }
+    },
+    "todoList": {
+      "empty": {
+        "label": "Keine Aufgaben"
+      },
+      "header": {
+        "title": "Aufgaben"
+      },
+      "progress": {
+        "label": "{completed}/{total} erledigt"
+      }
+    },
+    "toolCards": {
+      "bash": {
+        "noOutput": {
+          "label": "Keine Ausgabe"
+        }
+      },
+      "diff": {
+        "unchangedLines": {
+          "label": "{count, plural, one {# unveränderte Zeile} other {# unveränderte Zeilen}}"
+        },
+        "viewToggle": {
+          "sideBySideTooltip": "Zur nebeneinanderliegenden Ansicht wechseln",
+          "unifiedTooltip": "Zur einheitlichen Ansicht wechseln"
+        }
+      },
+      "generic": {
+        "noOutput": {
+          "label": "Noch keine Ausgabe..."
+        }
+      },
+      "group": {
+        "calls": {
+          "tag": "{count, plural, one {# Aufruf} other {# Aufrufe}}"
+        },
+        "failed": {
+          "tag": "{count} fehlgeschlagen"
+        },
+        "working": {
+          "label": "In Arbeit"
+        }
+      },
+      "read": {
+        "emptyFile": {
+          "label": "(leere Datei)"
+        },
+        "moreLines": {
+          "label": "{count, plural, one {# weitere Zeile} other {# weitere Zeilen}}"
+        },
+        "showAll": {
+          "button": "Alle anzeigen"
+        }
+      },
+      "search": {
+        "noMatches": {
+          "label": "Keine Treffer"
+        }
+      }
+    },
+    "uploadFiles": {
+      "errors": {
+        "fileTooLarge": "Datei zu groß ({size}). Das Maximum ist {max}.",
+        "network": "Netzwerkfehler",
+        "notFound": "Ressource nicht gefunden",
+        "server": "Serverfehler",
+        "sessionExpired": "Sitzung abgelaufen",
+        "tooManyFiles": "Zu viele Dateien. Das Maximum sind {max} Dateien pro Sitzung.",
+        "totalSizeExceeded": "Die Gesamtgröße überschreitet das Limit. Das Maximum ist {max} pro Sitzung.",
+        "uploadFailed": "Hochladen fehlgeschlagen"
+      }
+    },
+    "urlBar": {
+      "back": {
+        "ariaLabel": "Zurück"
+      },
+      "copyUrl": {
+        "ariaLabel": "URL kopieren: {url}"
+      },
+      "downloadFile": {
+        "tooltip": "Datei herunterladen"
+      },
+      "export": {
+        "button": "Als .docx exportieren",
+        "inProgress": "Wird exportiert..."
+      },
+      "forward": {
+        "ariaLabel": "Vorwärts"
+      },
+      "openInNewTab": {
+        "tooltip": "in neuem Tab öffnen"
+      },
+      "refresh": {
+        "ariaLabel": "Aktualisieren"
+      }
+    },
+    "userLibrary": {
+      "delete": {
+        "action": "löschen",
+        "button": "Löschen",
+        "entityTypeFile": "Datei",
+        "entityTypeFolder": "Ordner",
+        "fileDetails": "Diese Datei wird aus deiner Bibliothek entfernt.",
+        "folderDetails": "Dadurch werden der Ordner und sein gesamter Inhalt gelöscht."
+      },
+      "dropzone": {
+        "formats": "Excel, Word, PowerPoint, PDF oder ZIP",
+        "title": "Dateien hierher ziehen oder zum Hochladen klicken"
+      },
+      "errors": {
+        "createFolderFailed": "Ordner konnte nicht erstellt werden",
+        "deleteFailed": "Löschen fehlgeschlagen",
+        "loadFailed": "Dateien konnten nicht geladen werden",
+        "uploadFailed": "Hochladen fehlgeschlagen"
+      },
+      "loading": {
+        "label": "Dateien werden geladen…"
+      },
+      "modal": {
+        "description": "Dateien, die dein Agent in jeder Sitzung lesen kann.",
+        "doneButton": "Fertig",
+        "title": "Bibliothek"
+      },
+      "newFolder": {
+        "cancelButton": "Abbrechen",
+        "createButton": "Erstellen",
+        "label": "Neuer Ordner",
+        "nameLabel": "Ordnername",
+        "namePlaceholder": "Ordnernamen eingeben"
+      },
+      "search": {
+        "noResults": "Keine Dateien entsprechen deiner Suche",
+        "placeholder": "Dateien suchen..."
+      },
+      "tree": {
+        "collapseTooltip": "Einklappen",
+        "deleteTooltip": "Löschen",
+        "expandTooltip": "Ausklappen",
+        "toggleAriaLabel": "{name} umschalten",
+        "uploadToFolderTooltip": "In diesen Ordner hochladen"
+      },
+      "upload": {
+        "button": "Hochladen",
+        "dropOverlay": "Dateien zum Hochladen ablegen",
+        "uploadingButton": "Wird hochgeladen…"
+      }
+    },
+    "welcome": {
+      "input": {
+        "placeholder": "Analysiere meine Daten und erstelle ein Dashboard..."
       }
     }
   },
@@ -8704,6 +12550,13 @@
           "networkError": "Beim Ändern des Passworts ist ein Fehler aufgetreten",
           "updateFailed": "Passwort konnte nicht geändert werden",
           "updated": "Passwort erfolgreich aktualisiert"
+        },
+        "validation": {
+          "confirmRequired": "Bitte bestätigen Sie Ihr neues Passwort",
+          "currentRequired": "Aktuelles Passwort ist erforderlich",
+          "minLength": "Das Passwort muss mindestens {min} Zeichen lang sein",
+          "mismatch": "Die Passwörter stimmen nicht überein",
+          "newRequired": "Neues Passwort ist erforderlich"
         }
       },
       "title": "Konten"
@@ -8745,6 +12598,7 @@
         "empty": "Keine Zugriffstoken erstellt.",
         "expiresIn": "{count, plural, one {Läuft in # Tag ab} other {Läuft in # Tagen ab}}",
         "loading": "Token werden geladen...",
+        "middleText": "{created} - {expiry} - {scope}",
         "neverExpires": "Läuft nie ab",
         "newTokenButton": "Neues Zugriffstoken",
         "noPermissionTooltip": "Sie haben keine Berechtigung, Zugriffstoken zu erstellen",
@@ -8891,6 +12745,10 @@
       },
       "description": "Verbinden Sie externe Tools mit den Modellen, die Ihnen in Onyx zur Verfügung stehen.",
       "guideButton": "Anleitung",
+      "loadError": {
+        "description": "Bitte laden Sie die Seite neu und versuchen Sie es erneut.",
+        "title": "LLM Gateway konnte nicht geladen werden"
+      },
       "models": {
         "description": "{count, plural, one {# Modell ist für Ihr Konto verfügbar. Öffnen Sie einen Anbieter, um eine ID zu kopieren.} other {# Modelle sind für Ihr Konto verfügbar. Öffnen Sie einen Anbieter, um eine ID zu kopieren.}}",
         "title": "Modelle"
@@ -8914,15 +12772,66 @@
         "updateFailed": "Die Spracheinstellung konnte nicht aktualisiert werden"
       }
     },
+    "layout": {
+      "header": {
+        "title": "Einstellungen"
+      },
+      "sectionSelect": {
+        "placeholder": "Bereich auswählen"
+      },
+      "tabs": {
+        "accountsAccess": {
+          "label": "Konten & Zugriff"
+        },
+        "chatPreferences": {
+          "label": "Chat-Einstellungen"
+        },
+        "connectors": {
+          "label": "Konnektoren"
+        },
+        "general": {
+          "label": "Allgemein"
+        },
+        "llmGateway": {
+          "label": "LLM-Gateway"
+        },
+        "usage": {
+          "label": "Nutzung"
+        }
+      }
+    },
     "memory": {
+      "addLineButton": {
+        "label": "Zeile hinzufügen",
+        "maxReached": "Maximum von {count} Erinnerungen erreicht"
+      },
       "empty": {
-        "description": "Fügen Sie eine persönliche Notiz oder Erinnerung hinzu, die sich Onyx merken soll."
+        "description": "Fügen Sie eine persönliche Notiz oder Erinnerung hinzu, die sich Onyx merken soll.",
+        "getStarted": "Noch keine Erinnerungen. Klicken Sie auf „Zeile hinzufügen“, um zu beginnen.",
+        "noMatches": "Keine Erinnerungen entsprechen Ihrer Suche."
+      },
+      "item": {
+        "placeholder": "Geben Sie eine persönliche Notiz oder Erinnerung ein oder fügen Sie sie ein"
+      },
+      "lineCount": {
+        "label": "{count, plural, one {Zeile} other {Zeilen}}"
+      },
+      "modal": {
+        "description": "Lassen Sie Onyx diese gespeicherten Notizen und Erinnerungen in Chats verwenden.",
+        "searchPlaceholder": "Suchen..."
       },
       "referenceStoredMemories": {
         "description": "Lassen Sie Onyx gespeicherte Erinnerungen in Chats verwenden.",
         "title": "Gespeicherte Erinnerungen verwenden"
       },
+      "removeLineButton": {
+        "label": "Zeile entfernen"
+      },
       "title": "Erinnerungen",
+      "toasts": {
+        "saveFailed": "Einstellungen konnten nicht gespeichert werden",
+        "saved": "Einstellungen gespeichert"
+      },
       "updateMemories": {
         "description": "Lassen Sie Onyx gespeicherte Erinnerungen erstellen und aktualisieren.",
         "title": "Erinnerungen aktualisieren"
@@ -8976,6 +12885,67 @@
         "title": "Prompt-Shortcuts verwenden"
       }
     },
+    "usage": {
+      "budget": {
+        "limit": "Limit: {amount}",
+        "none": "Kein Budget festgelegt",
+        "remaining": "{amount} verbleibend",
+        "resetsOn": "Zurücksetzung am {date}",
+        "title": "Budget"
+      },
+      "empty": {
+        "description": "Ihre Modellnutzung und Kosten erscheinen hier, sobald Sie mit dem Chatten beginnen.",
+        "title": "Noch keine Nutzung erfasst"
+      },
+      "header": {
+        "title": "Nutzung"
+      },
+      "loadError": {
+        "description": "Beim Abrufen Ihrer Nutzung ist ein Fehler aufgetreten. Versuchen Sie es gleich erneut.",
+        "title": "Nutzung konnte nicht geladen werden"
+      },
+      "modelPrices": {
+        "defaultTag": {
+          "label": "{model} · Standard"
+        },
+        "description": "USD pro 1 Mio. Tokens (Eingabe · Ausgabe · Cache) für jedes verfügbare Modell",
+        "otherProvider": {
+          "label": "Andere"
+        },
+        "title": "Modellpreise",
+        "unavailable": "Preise nicht verfügbar"
+      },
+      "modelUsage": {
+        "cacheReads": {
+          "label": "{count} Cache-Lesevorgänge"
+        },
+        "cacheWrites": {
+          "label": "{count} Cache-Schreibvorgänge"
+        },
+        "tokensIn": {
+          "label": "{count} Eingabe"
+        },
+        "tokensOut": {
+          "label": "{count} Ausgabe"
+        }
+      },
+      "showFewerModels": {
+        "ariaLabel": "Weniger Modelle anzeigen"
+      },
+      "showLess": {
+        "label": "Weniger anzeigen"
+      },
+      "showMore": {
+        "label": "{count} weitere anzeigen"
+      },
+      "showMoreModels": {
+        "ariaLabel": "{count} weitere Modelle anzeigen"
+      },
+      "usageThisPeriod": {
+        "description": "{amount} ausgegeben",
+        "title": "Nutzung in diesem Zeitraum"
+      }
+    },
     "voice": {
       "autoPlayback": {
         "description": "Sprachantworten automatisch abspielen.",
@@ -8994,6 +12964,23 @@
   },
   "sidebar": {
     "adminNav": {
+      "hiddenRoutes": {
+        "documentExplorer": {
+          "title": "Dokument-Explorer"
+        },
+        "documentFeedback": {
+          "title": "Dokument-Feedback"
+        },
+        "documentProcessing": {
+          "title": "Dokumentverarbeitung"
+        },
+        "oauthTest": {
+          "title": "OAuth-Test"
+        },
+        "standardAnswers": {
+          "title": "Standardantworten"
+        }
+      },
       "items": {
         "addConnector": {
           "label": "Konnektor hinzufügen"
@@ -9019,8 +13006,8 @@
         "craftApps": {
           "label": "Apps"
         },
-        "craftInstructions": {
-          "label": "Anweisungen"
+        "craftPreferences": {
+          "label": "Einstellungen"
         },
         "customAnalytics": {
           "label": "Benutzerdefinierte Analysen"
@@ -9301,6 +13288,158 @@
     }
   },
   "skills": {
+    "editor": {
+      "appConflict": {
+        "description": "Die App „{appName}“ hat bereits einen zugehörigen Skill namens „{skillName}“.",
+        "title": "Wählen Sie einen anderen Skill-Namen"
+      },
+      "confirmUpload": {
+        "importBody": "Dieser Upload enthält SKILL.md. Wenn Sie fortfahren, werden der aktuelle Name, die Beschreibung, die Anweisungen und die Dateien durch das hochgeladene Paket ersetzt.",
+        "importSubmit": {
+          "label": "Skill importieren"
+        },
+        "importTitle": "Diesen Skill importieren?",
+        "replaceBody": "Dieser Upload muss denselben Skill-Namen verwenden. Wenn Sie fortfahren, werden die Beschreibung, die Anweisungen und die Dateien durch das hochgeladene Paket ersetzt.",
+        "replaceSubmit": {
+          "label": "Inhalt ersetzen"
+        },
+        "replaceTitle": "Skill-Inhalt ersetzen?"
+      },
+      "delete": {
+        "button": {
+          "label": "Skill löschen"
+        },
+        "description": "Jeder, der diesen Skill verwendet, verliert den Zugriff. Das Löschen kann nicht rückgängig gemacht werden.",
+        "title": "Diesen Skill löschen"
+      },
+      "deleteModal": {
+        "entityType": "Skill",
+        "label": "Löschen",
+        "pendingLabel": "Wird gelöscht..."
+      },
+      "details": {
+        "description": "Legen Sie fest, wann und wie Craft diesen Skill verwenden soll.",
+        "descriptionField": {
+          "description": "Beschreiben Sie, wann dieser Skill verwendet werden soll.",
+          "placeholder": "Wobei hilft dieser Skill?",
+          "title": "Beschreibung"
+        },
+        "name": {
+          "createDescription": "Verwenden Sie Kleinbuchstaben, Zahlen und einzelne Bindestriche.",
+          "lockedDescription": "Skill-Namen können nach der Erstellung nicht geändert werden.",
+          "placeholder": "Benennen Sie Ihren Skill",
+          "title": "Name"
+        },
+        "title": "Details"
+      },
+      "files": {
+        "busyLabel": "Wird hochgeladen...",
+        "description": "Fügen Sie Referenzen, Skripte, Assets oder andere von diesem Skill verwendete Dateien hinzu. ZIP-Dateien werden automatisch entpackt.",
+        "input": {
+          "ariaLabel": "Unterstützende Dateien hinzufügen"
+        },
+        "pendingUpload": {
+          "emptyMessage": "Dateien aus diesem Upload erscheinen, nachdem Sie den Skill erstellt haben."
+        },
+        "title": "Unterstützende Dateien"
+      },
+      "filesTooltip": {
+        "noPermission": "Sie haben keine Berechtigung, die Dateien dieses Skills zu aktualisieren.",
+        "saveFirst": "Speichern Sie die Detailänderungen, bevor Sie die Skill-Dateien aktualisieren.",
+        "updating": "Skill-Dateien werden aktualisiert..."
+      },
+      "header": {
+        "appFallbackName": "Externe App",
+        "cancel": {
+          "label": "Abbrechen"
+        },
+        "createDescription": "Erstellen Sie einen persönlichen Skill",
+        "createForAppDescription": "Fügen Sie der App „{appName}“ einen Organisations-Skill hinzu",
+        "createTitle": "Skill erstellen",
+        "editDescription": "Aktualisieren Sie Skill-Details und -Dateien",
+        "editTitle": "Skill bearbeiten",
+        "save": {
+          "label": "Speichern",
+          "pendingLabel": "Wird gespeichert..."
+        }
+      },
+      "import": {
+        "busyLabel": "Wird importiert...",
+        "button": {
+          "label": "Skill importieren"
+        },
+        "description": "Importieren Sie eine SKILL.md, eine ZIP-Datei oder einen Skill-Ordner, um das Formular vorauszufüllen und die Dateien einzubeziehen.",
+        "input": {
+          "ariaLabel": "Vorhandenen Skill importieren"
+        },
+        "prompt": "Wählen Sie eine SKILL.md oder ZIP-Datei oder ziehen Sie einen Skill-Ordner hierher.",
+        "title": "Haben Sie bereits einen Skill?"
+      },
+      "instructions": {
+        "description": "Beschreiben Sie das Verhalten und den Workflow, den dieser Skill zu Craft hinzufügt.",
+        "emptyFallback": "Noch keine Anweisungen.",
+        "placeholder": "Schreiben Sie die Skill-Anweisungen.",
+        "title": "Anweisungen"
+      },
+      "loadError": {
+        "description": "Dieser Skill existiert möglicherweise nicht, ist integriert oder kann mit Ihrem Konto nicht bearbeitet werden.",
+        "title": "Skill nicht verfügbar"
+      },
+      "management": {
+        "description": "Steuern Sie, wer diesen Skill verwenden kann.",
+        "externalApp": {
+          "manage": {
+            "label": "In App-Einstellungen verwalten"
+          },
+          "readyDescription": "Dieser Skill verwendet die App „{appName}“.",
+          "title": "Externe App"
+        },
+        "sharing": {
+          "edit": {
+            "label": "Freigabe bearbeiten"
+          },
+          "title": "Freigabe"
+        },
+        "title": "Verwaltung"
+      },
+      "saveTooltip": {
+        "missingDescription": "Fügen Sie vor dem Speichern eine Beschreibung hinzu.",
+        "missingInstructions": "Fügen Sie vor dem Speichern Anweisungen hinzu.",
+        "missingName": "Fügen Sie vor dem Speichern einen Namen hinzu.",
+        "noChanges": "Es wurden keine Änderungen vorgenommen.",
+        "noPermission": "Sie haben keine Berechtigung, die Details dieses Skills zu bearbeiten.",
+        "savingChanges": "Änderungen werden gespeichert...",
+        "savingSkill": "Skill wird gespeichert..."
+      },
+      "sharing": {
+        "organization": {
+          "editorDescription": "Jeder in Ihrer Organisation kann diesen Skill verwenden und bearbeiten.",
+          "title": "Organisation",
+          "viewerDescription": "Jeder in Ihrer Organisation kann diesen Skill verwenden."
+        },
+        "personal": {
+          "description": "Nur Sie können diesen Skill verwenden.",
+          "title": "Persönlich"
+        },
+        "shares": {
+          "description": "Nur ausgewählte Benutzer und Gruppen können diesen Skill verwenden.",
+          "title": "{count, plural, one {# Freigabe} other {# Freigaben}}"
+        }
+      },
+      "toasts": {
+        "created": "„{name}“ erstellt",
+        "deleteFailed": "Skill konnte nicht gelöscht werden",
+        "deleted": "„{name}“ gelöscht",
+        "fileRemoveFailed": "Skill-Datei konnte nicht entfernt werden",
+        "fileRemoved": "„{path}“ entfernt",
+        "filesUpdateFailed": "Skill-Dateien konnten nicht aktualisiert werden",
+        "filesUpdated": "Dateien für „{name}“ aktualisiert",
+        "importMissingSkillMd": "Importieren Sie eine SKILL.md, eine ZIP-Datei oder einen Ordner mit SKILL.md.",
+        "inspectFailed": "Skill-Paket konnte nicht geprüft werden",
+        "saveFailed": "Skill konnte nicht gespeichert werden",
+        "saved": "„{name}“ gespeichert"
+      }
+    },
     "modals": {
       "addInstruction": {
         "cancelButton": {
@@ -9501,6 +13640,76 @@
         "transferredToast": {
           "message": "Eigentum übertragen."
         }
+      }
+    },
+    "page": {
+      "browse": {
+        "title": "Skills durchsuchen"
+      },
+      "countSeparator": {
+        "label": "{count, plural, one {Skill} other {Skills}}"
+      },
+      "createMenu": {
+        "github": {
+          "description": "Importieren Sie einen oder mehrere Skills aus einem Repository.",
+          "title": "Aus GitHub importieren"
+        },
+        "scratch": {
+          "description": "Schreiben Sie die Anweisungen und fügen Sie unterstützende Dateien in Onyx hinzu.",
+          "title": "Von Grund auf neu beginnen"
+        },
+        "trigger": {
+          "label": "Skill erstellen"
+        },
+        "upload": {
+          "description": "Importieren Sie eine SKILL.md-Datei, eine ZIP-Datei oder einen Skill-Ordner.",
+          "title": "Skill hochladen"
+        }
+      },
+      "empty": {
+        "noMatches": {
+          "description": "Versuchen Sie eine andere Suche.",
+          "title": "Keine passenden Skills"
+        },
+        "noSkills": {
+          "description": "Es wurden noch keine benutzerdefinierten Skills mit Ihnen geteilt und es sind keine integrierten Skills konfiguriert.",
+          "title": "Keine Skills verfügbar"
+        }
+      },
+      "focusedApp": {
+        "description": "Aktivieren Sie alle Skills, die mit der App „{appName}“ verknüpft sind. Ohne sie funktioniert die App möglicherweise nicht richtig. Wenn ein anderer Skill mit demselben Namen aktiviert ist, wird dieser durch das Aktivieren des App-Skills für Sie deaktiviert.",
+        "showAll": {
+          "label": "Alle Skills anzeigen"
+        },
+        "title": "Skills für App „{appName}“"
+      },
+      "header": {
+        "description": "Fähigkeitspakete, auf die Ihr Craft-Agent zugreifen kann. Diese Seite zeigt integrierte Skills, mit Ihnen geteilte Skills und Ihre persönlichen Skills.",
+        "title": "Skills"
+      },
+      "loadError": {
+        "description": "Prüfen Sie die Konsole für Details und versuchen Sie, die Seite zu aktualisieren.",
+        "title": "Skills konnten nicht geladen werden"
+      },
+      "preview": {
+        "unavailableFallback": "Dieser Skill ist derzeit nicht verfügbar."
+      },
+      "search": {
+        "placeholder": "Skills suchen..."
+      },
+      "switchModal": {
+        "body": "Wenn Sie fortfahren, wird der derzeit aktivierte Skill deaktiviert und dieser aktiviert.",
+        "description": "Es kann jeweils nur ein Skill mit dem Namen „{name}“ aktiviert sein.",
+        "submit": {
+          "label": "Skill wechseln",
+          "pendingLabel": "Wird gewechselt..."
+        },
+        "title": "Skill „{name}“ wechseln?"
+      },
+      "toasts": {
+        "disableFailed": "{name} konnte nicht deaktiviert werden",
+        "enableFailed": "{name} konnte nicht aktiviert werden",
+        "refreshFailed": "{name} wurde aktualisiert, aber die Skill-Liste konnte nicht aktualisiert werden."
       }
     },
     "sections": {

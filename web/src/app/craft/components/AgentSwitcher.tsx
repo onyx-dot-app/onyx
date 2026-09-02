@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import { Popover, PopoverMenu, Text, LineItemButton } from "@opal/components";
 import {
   SvgChevronDown,
@@ -46,6 +47,7 @@ function SubagentStatus({ subagent }: { subagent: SubagentState }) {
  * the main agent — there is no separate back button.
  */
 export default function AgentSwitcher() {
+  const t = useTranslations("craft.agentSwitcher");
   const title = useCurrentSessionTitle();
   const subagents = useSubagents();
   const viewedSubagentSessionId = useViewedSubagentSessionId();
@@ -86,7 +88,9 @@ export default function AgentSwitcher() {
   // is being viewed, otherwise the session title (the main agent).
   const triggerLabel =
     isViewingSubagent && viewedSubagent
-      ? viewedSubagent.name || viewedSubagent.subagentType || "subagent"
+      ? viewedSubagent.name ||
+        viewedSubagent.subagentType ||
+        t("subagentFallback.label")
       : titleLabel;
 
   // Nothing to show (untitled session, not viewing a subagent) — render nothing.
@@ -115,7 +119,7 @@ export default function AgentSwitcher() {
       <Popover.Trigger asChild>
         <button
           type="button"
-          aria-label="Switch agent"
+          aria-label={t("switch.ariaLabel")}
           className={cn(
             "flex items-center gap-1 min-w-0 px-1.5 py-1 rounded-08",
             "transition-colors hover:bg-background-tint-01",
@@ -136,7 +140,7 @@ export default function AgentSwitcher() {
               icon={SvgSparkle}
               state={!isViewingSubagent ? "selected" : "empty"}
               onClick={selectMainAgent}
-              title={titleLabel ?? "Main agent"}
+              title={titleLabel ?? t("mainAgent.label")}
             />,
             ...sorted.map((s) => (
               <LineItemButton
@@ -149,7 +153,7 @@ export default function AgentSwitcher() {
                 }
                 onClick={() => selectSubagent(s.sessionId)}
                 rightChildren={<SubagentStatus subagent={s} />}
-                title={s.name || s.subagentType || "subagent"}
+                title={s.name || s.subagentType || t("subagentFallback.label")}
               />
             )),
           ]}

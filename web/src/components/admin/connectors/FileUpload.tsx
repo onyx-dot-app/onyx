@@ -2,6 +2,7 @@ import { useFormikContext } from "formik";
 import { FC, useState } from "react";
 import React from "react";
 import Dropzone from "react-dropzone";
+import { useTranslations } from "next-intl";
 
 interface FileUploadProps {
   selectedFiles: File[];
@@ -20,6 +21,7 @@ export const FileUpload: FC<FileUploadProps> = ({
   multiple = true,
   accept,
 }) => {
+  const t = useTranslations("admin.connector.fileUpload");
   const [dragActive, setDragActive] = useState(false);
   const { setFieldValue } = useFormikContext();
 
@@ -64,9 +66,9 @@ export const FileUpload: FC<FileUploadProps> = ({
               <input {...getInputProps()} />
               <b className="text-text-darker">
                 {message ||
-                  `Drag and drop ${
-                    multiple ? "some files" : "a file"
-                  } here, or click to select ${multiple ? "files" : "a file"}`}
+                  t("dropzone.message", {
+                    multiple: multiple ? "true" : "false",
+                  })}
               </b>
             </div>
           </section>
@@ -76,12 +78,14 @@ export const FileUpload: FC<FileUploadProps> = ({
       {selectedFiles.length > 0 && (
         <div className="mt-4">
           <h2 className="text-sm font-bold">
-            Selected File{multiple ? "s" : ""}
+            {t("selectedFiles.heading", {
+              multiple: multiple ? "true" : "false",
+            })}
           </h2>
           <ul>
             {selectedFiles.map((file) => (
               <div key={file.name} className="flex">
-                <p className="text-sm mr-2">{file.name}</p>
+                <p className="text-sm me-2">{file.name}</p>
               </div>
             ))}
           </ul>

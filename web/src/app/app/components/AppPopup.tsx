@@ -85,7 +85,7 @@ export function AppPopup() {
           title={popupTitle || t("header.title")}
         />
         <Modal.Body>
-          <div className="overflow-y-auto text-left">
+          <div className="overflow-y-auto text-start">
             <ReactMarkdown
               className="prose prose-neutral dark:prose-invert max-w-full"
               components={{

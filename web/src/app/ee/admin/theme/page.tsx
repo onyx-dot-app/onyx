@@ -1,5 +1,7 @@
 "use client";
 
+import { useAdminRouteTitle } from "@/lib/adminNavLabels";
+import { useTranslations } from "next-intl";
 import { SettingsLayouts, toast } from "@opal/layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { Button } from "@opal/components";
@@ -34,6 +36,8 @@ const CHAR_LIMITS = {
 };
 
 export default function ThemePage() {
+  const t = useTranslations("admin.theme");
+  const adminRouteTitle = useAdminRouteTitle();
   const settings = useSettings();
   const enterpriseSettings = settings.enterprise;
   const [selectedLogo, setSelectedLogo] = useState<File | null>(null);
@@ -68,7 +72,7 @@ export default function ThemePage() {
       return true;
     } else {
       const errorMsg = (await response.json()).detail;
-      alert(`Failed to update settings. ${errorMsg}`);
+      alert(t("page.settingsSaveFailed.message", { error: errorMsg }));
       return false;
     }
   }
@@ -90,12 +94,15 @@ export default function ThemePage() {
     return true;
   }
 
+  const maxCharsMessage = (count: number) =>
+    t("page.validation.maxChars", { count });
+
   const validationSchema = Yup.object().shape({
     application_name: Yup.string()
       .trim()
       .max(
         CHAR_LIMITS.application_name,
-        `Maximum ${CHAR_LIMITS.application_name} characters`
+        maxCharsMessage(CHAR_LIMITS.application_name)
       )
       .nullable(),
     logo_display_style: Yup.string()
@@ -105,57 +112,60 @@ export default function ThemePage() {
     custom_greeting_message: Yup.string()
       .max(
         CHAR_LIMITS.custom_greeting_message,
-        `Maximum ${CHAR_LIMITS.custom_greeting_message} characters`
+        maxCharsMessage(CHAR_LIMITS.custom_greeting_message)
       )
       .nullable(),
     custom_login_subtitle: Yup.string()
       .max(
         CHAR_LIMITS.custom_login_subtitle,
-        `Maximum ${CHAR_LIMITS.custom_login_subtitle} characters`
+        maxCharsMessage(CHAR_LIMITS.custom_login_subtitle)
       )
       .nullable(),
     custom_header_content: Yup.string()
       .max(
         CHAR_LIMITS.custom_header_content,
-        `Maximum ${CHAR_LIMITS.custom_header_content} characters`
+        maxCharsMessage(CHAR_LIMITS.custom_header_content)
       )
       .nullable(),
     custom_lower_disclaimer_content: Yup.string()
       .max(
         CHAR_LIMITS.custom_lower_disclaimer_content,
-        `Maximum ${CHAR_LIMITS.custom_lower_disclaimer_content} characters`
+        maxCharsMessage(CHAR_LIMITS.custom_lower_disclaimer_content)
       )
       .nullable(),
     show_first_visit_notice: Yup.boolean().nullable(),
     custom_popup_header: Yup.string()
       .max(
         CHAR_LIMITS.custom_popup_header,
-        `Maximum ${CHAR_LIMITS.custom_popup_header} characters`
+        maxCharsMessage(CHAR_LIMITS.custom_popup_header)
       )
       .when("show_first_visit_notice", {
         is: true,
-        then: (schema) => schema.required("Notice Header is required"),
+        then: (schema) =>
+          schema.required(t("page.validation.noticeHeaderRequired")),
         otherwise: (schema) => schema.nullable(),
       }),
     custom_popup_content: Yup.string()
       .max(
         CHAR_LIMITS.custom_popup_content,
-        `Maximum ${CHAR_LIMITS.custom_popup_content} characters`
+        maxCharsMessage(CHAR_LIMITS.custom_popup_content)
       )
       .when("show_first_visit_notice", {
         is: true,
-        then: (schema) => schema.required("Notice Content is required"),
+        then: (schema) =>
+          schema.required(t("page.validation.noticeContentRequired")),
         otherwise: (schema) => schema.nullable(),
       }),
     enable_consent_screen: Yup.boolean().nullable(),
     consent_screen_prompt: Yup.string()
       .max(
         CHAR_LIMITS.consent_screen_prompt,
-        `Maximum ${CHAR_LIMITS.consent_screen_prompt} characters`
+        maxCharsMessage(CHAR_LIMITS.consent_screen_prompt)
       )
       .when("enable_consent_screen", {
         is: true,
-        then: (schema) => schema.required("Notice Consent Prompt is required"),
+        then: (schema) =>
+          schema.required(t("page.validation.consentPromptRequired")),
         otherwise: (schema) => schema.nullable(),
       }),
     custom_help_link_label: Yup.string().nullable(),
@@ -166,12 +176,12 @@ export default function ThemePage() {
           typeof label === "string" && label.trim().length > 0,
         then: (schema) =>
           schema
-            .required("URL is required when a label is set")
-            .url("Must be a valid URL"),
+            .required(t("page.validation.urlRequiredWithLabel"))
+            .url(t("page.validation.invalidUrl")),
         otherwise: (schema) =>
           schema.test(
             "optional-url",
-            "Must be a valid URL",
+            t("page.validation.invalidUrl"),
             (value) =>
               value == null ||
               value === "" ||
@@ -184,22 +194,24 @@ export default function ThemePage() {
       .trim()
       .max(
         CHAR_LIMITS.system_announcement_header,
-        `Maximum ${CHAR_LIMITS.system_announcement_header} characters`
+        maxCharsMessage(CHAR_LIMITS.system_announcement_header)
       )
       .when("system_announcement_enabled", {
         is: true,
-        then: (schema) => schema.required("Notice Header is required"),
+        then: (schema) =>
+          schema.required(t("page.validation.noticeHeaderRequired")),
         otherwise: (schema) => schema.nullable(),
       }),
     system_announcement_content: Yup.string()
       .trim()
       .max(
         CHAR_LIMITS.system_announcement_content,
-        `Maximum ${CHAR_LIMITS.system_announcement_content} characters`
+        maxCharsMessage(CHAR_LIMITS.system_announcement_content)
       )
       .when("system_announcement_enabled", {
         is: true,
-        then: (schema) => schema.required("Notice Content is required"),
+        then: (schema) =>
+          schema.required(t("page.validation.noticeContentRequired")),
         otherwise: (schema) => schema.nullable(),
       }),
     system_announcement_show_as_popup: Yup.boolean().nullable(),
@@ -252,7 +264,7 @@ export default function ThemePage() {
           });
           if (!response.ok) {
             const errorMsg = (await response.json()).detail;
-            alert(`Failed to upload logo. ${errorMsg}`);
+            alert(t("page.logoUploadFailed.message", { error: errorMsg }));
             formikHelpers.setSubmitting(false);
             return;
           }
@@ -311,12 +323,12 @@ export default function ThemePage() {
                   show_as_popup: values.system_announcement_show_as_popup,
                 }),
               },
-              "Failed to save announcement."
+              t("page.announcementSaveFailed.message")
             );
           } else if (currentBanner) {
             bannerOk = await mutateAdminBanner(
               { method: "DELETE" },
-              "Failed to clear announcement."
+              t("page.announcementClearFailed.message")
             );
           }
         }
@@ -328,7 +340,7 @@ export default function ThemePage() {
           if (logoUploaded) {
             setLogoVersion((v) => v + 1);
           }
-          toast.success("Appearance settings saved successfully!");
+          toast.success(t("page.saveSuccess.message"));
         }
 
         formikHelpers.setSubmitting(false);
@@ -349,8 +361,8 @@ export default function ThemePage() {
           <Form className="w-full h-full">
             <SettingsLayouts.Root>
               <SettingsLayouts.Header
-                title={route.title}
-                description="Customize how the application appears to users across your organization."
+                title={adminRouteTitle(route)}
+                description={t("page.description")}
                 icon={route.icon}
                 rightChildren={
                   <Button
@@ -366,7 +378,9 @@ export default function ThemePage() {
                       await submitForm();
                     }}
                   >
-                    {isSubmitting ? "Applying..." : "Apply Changes"}
+                    {isSubmitting
+                      ? t("page.applying.label")
+                      : t("page.applyButton.label")}
                   </Button>
                 }
               />

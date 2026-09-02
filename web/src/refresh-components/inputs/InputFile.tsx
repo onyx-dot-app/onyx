@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import { InputTypeIn, type InputTypeInProps } from "@opal/components";
 import { Button } from "@opal/components";
 import { noProp } from "@/lib/utils";
@@ -42,6 +43,7 @@ export default function InputFile({
   placeholder,
   ...rest
 }: InputFileProps) {
+  const t = useTranslations("common.inputFile");
   const [displayValue, setDisplayValue] = useState<string>("");
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
   const [isFileMode, setIsFileMode] = useState<boolean>(false);
@@ -129,7 +131,7 @@ export default function InputFile({
       type="button"
       prominence="tertiary"
       size="sm"
-      aria-label="Clear file"
+      aria-label={t("clearButton.ariaLabel")}
     />
   ) : (
     <Button
@@ -139,7 +141,7 @@ export default function InputFile({
       type="button"
       prominence="tertiary"
       size="sm"
-      aria-label="Attach file"
+      aria-label={t("attachButton.ariaLabel")}
     />
   );
 

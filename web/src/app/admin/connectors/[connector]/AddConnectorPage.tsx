@@ -84,7 +84,11 @@ export async function submitConnector<T>(
   connector: ConnectorBase<T>,
   connectorId?: number,
   fakeCredential?: boolean
-): Promise<{ message: string; isSuccess: boolean; response?: Connector<T> }> {
+): Promise<{
+  errorDetail?: string;
+  isSuccess: boolean;
+  response?: Connector<T>;
+}> {
   const isUpdate = connectorId !== undefined;
   if (!connector.connector_specific_config) {
     connector.connector_specific_config = {} as T;
@@ -104,10 +108,10 @@ export async function submitConnector<T>(
       );
       if (response.ok) {
         const responseJson = await response.json();
-        return { message: "Success!", isSuccess: true, response: responseJson };
+        return { isSuccess: true, response: responseJson };
       } else {
         const errorData = await response.json();
-        return { message: `Error: ${errorData.detail}`, isSuccess: false };
+        return { errorDetail: String(errorData.detail), isSuccess: false };
       }
     } else {
       const response = await fetch(
@@ -123,14 +127,14 @@ export async function submitConnector<T>(
 
       if (response.ok) {
         const responseJson = await response.json();
-        return { message: "Success!", isSuccess: true, response: responseJson };
+        return { isSuccess: true, response: responseJson };
       } else {
         const errorData = await response.json();
-        return { message: `Error: ${errorData.detail}`, isSuccess: false };
+        return { errorDetail: String(errorData.detail), isSuccess: false };
       }
     }
   } catch (error) {
-    return { message: `Error: ${error}`, isSuccess: false };
+    return { errorDetail: String(error), isSuccess: false };
   }
 }
 
@@ -444,21 +448,22 @@ export default function AddConnector({
           );
 
           const connectorCreationPromise = (async () => {
-            const { message, isSuccess, response } = await submitConnector<any>(
-              {
-                connector_specific_config: transformedConnectorSpecificConfig,
-                input_type: isLoadState(connector) ? "load_state" : "poll", // single case
-                name: name,
-                source: connector,
-                access_type: access_type,
-                refresh_freq: advancedConfiguration.refreshFreq || null,
-                prune_freq: advancedConfiguration.pruneFreq || null,
-                indexing_start: advancedConfiguration.indexingStart || null,
-                groups: groups,
-              },
-              undefined,
-              credentialActivated ? false : true
-            );
+            const { errorDetail, isSuccess, response } =
+              await submitConnector<any>(
+                {
+                  connector_specific_config: transformedConnectorSpecificConfig,
+                  input_type: isLoadState(connector) ? "load_state" : "poll", // single case
+                  name: name,
+                  source: connector,
+                  access_type: access_type,
+                  refresh_freq: advancedConfiguration.refreshFreq || null,
+                  prune_freq: advancedConfiguration.pruneFreq || null,
+                  indexing_start: advancedConfiguration.indexingStart || null,
+                  groups: groups,
+                },
+                undefined,
+                credentialActivated ? false : true
+              );
 
             // Store the connector id immediately for potential timeout
             if (response?.id) {
@@ -469,7 +474,9 @@ export default function AddConnector({
               if (isSuccess) {
                 onSuccess();
               } else {
-                toast.error(message);
+                toast.error(
+                  t("add.error.toast", { detail: errorDetail ?? "" })
+                );
               }
               timeoutErrorHappenedRef.current = false;
               return;
@@ -502,7 +509,7 @@ export default function AddConnector({
             } else if (isSuccess) {
               onSuccess();
             } else {
-              toast.error(message);
+              toast.error(t("add.error.toast", { detail: errorDetail ?? "" }));
             }
 
             timeoutErrorHappenedRef.current = false;

@@ -151,7 +151,7 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
               emptyState={!stopPacketSeen ? <BlinkingBar /> : undefined}
             />
           ) : (
-            <div className="flex flex-wrap gap-x-2 gap-y-2 ml-1">
+            <div className="flex flex-wrap gap-x-2 gap-y-2 ms-1">
               {!stopPacketSeen && <BlinkingBar />}
             </div>
           )}

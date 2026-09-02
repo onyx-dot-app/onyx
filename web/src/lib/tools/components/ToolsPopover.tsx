@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useTranslations } from "next-intl";
 import { useFocusOnMount } from "@opal/hooks";
 import {
   InputTypeIn,
@@ -65,6 +66,7 @@ export default function ToolsPopover({
   toolConfiguration,
   disabled = false,
 }: ToolsPopoverProps) {
+  const t = useTranslations("actions");
   const [open, setOpen] = useState(false);
   const [secondaryView, setSecondaryView] = useState<SecondaryViewState | null>(
     null
@@ -389,7 +391,7 @@ export default function ToolsPopover({
       disabled={selectedMcpServerData?.isLoading}
       onClick={handleFooterReauthClick}
       icon={selectedMcpServerData?.isLoading ? SvgSimpleLoader : SvgKey}
-      title="Re-authenticate"
+      title={t("toolsPopover.reauthenticate.label")}
       sizePreset="main-ui"
       variant="section"
     />
@@ -400,7 +402,7 @@ export default function ToolsPopover({
       {[
         <InputTypeIn
           key="search"
-          placeholder="Search actions..."
+          placeholder={t("toolsPopover.search.placeholder")}
           searchIcon
           value={searchTerm}
           onChange={(event) => setSearchTerm(event.target.value)}
@@ -455,7 +457,7 @@ export default function ToolsPopover({
             key="more-actions"
             href={ADMIN_ROUTES.MCP_ACTIONS.path}
             icon={SvgActions}
-            title="More Actions"
+            title={t("toolsPopover.moreActions.label")}
             sizePreset="main-ui"
             variant="section"
             rounding={2}
@@ -468,12 +470,15 @@ export default function ToolsPopover({
   const mcpView = (
     <SwitchList
       items={mcpToggleItems}
-      searchPlaceholder={`Search ${selectedMcpServer?.name ?? "server"} tools`}
+      searchPlaceholder={t("toolsPopover.mcpTools.searchPlaceholder", {
+        server:
+          selectedMcpServer?.name ?? t("toolsPopover.serverFallback.label"),
+      })}
       allDisabled={mcpAllDisabled}
       onDisableAll={() => setSelectedServerToolsDisabled(true)}
       onEnableAll={() => setSelectedServerToolsDisabled(false)}
-      disableAllLabel="Disable All Tools"
-      enableAllLabel="Enable All Tools"
+      disableAllLabel={t("toolsPopover.disableAllTools.label")}
+      enableAllLabel={t("toolsPopover.enableAllTools.label")}
       onBack={() => setSecondaryView(null)}
       footer={mcpFooter}
     />
@@ -497,7 +502,7 @@ export default function ToolsPopover({
               icon={SvgSliders}
               interaction={open ? "hover" : "rest"}
               prominence="tertiary"
-              tooltip="Manage Actions"
+              tooltip={t("toolsPopover.manageActions.tooltip")}
             />
           </div>
         </Popover.Trigger>

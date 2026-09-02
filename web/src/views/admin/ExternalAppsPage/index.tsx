@@ -1,5 +1,6 @@
 "use client";
 
+import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -58,13 +59,14 @@ interface KindCopy {
 // for granting more.
 export default function ExternalAppsPage() {
   const t = useTranslations("admin.externalApps");
+  const adminRouteTitle = useAdminRouteTitle();
   const [catalogOpen, setCatalogOpen] = useState(false);
 
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={ADMIN_ROUTES.CRAFT_APPS.icon}
-        title={ADMIN_ROUTES.CRAFT_APPS.title}
+        title={adminRouteTitle(ADMIN_ROUTES.CRAFT_APPS)}
         description={t("page.description")}
         rightChildren={
           <div className="flex items-center gap-2">

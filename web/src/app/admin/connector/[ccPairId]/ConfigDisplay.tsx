@@ -85,13 +85,13 @@ function ConfigItem({ label, value, onEdit }: ConfigItemProps) {
       );
     } else if (typeof value === "boolean") {
       return (
-        <Text secondaryBody text03 className="text-right">
+        <Text secondaryBody text03 className="text-end">
           {value ? t("configItem.booleanTrue") : t("configItem.booleanFalse")}
         </Text>
       );
     }
     return (
-      <Truncated secondaryBody text03 className="text-right">
+      <Truncated secondaryBody text03 className="text-end">
         {convertObjectToString(value) || "-"}
       </Truncated>
     );

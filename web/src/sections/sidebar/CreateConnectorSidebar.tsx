@@ -141,7 +141,7 @@ export default function CreateConnectorSidebar() {
               {index !== 0 && (
                 <div
                   className={cn(
-                    "absolute left-2 w-0.5",
+                    "absolute start-2 w-0.5",
                     stepValue <= formStep
                       ? "bg-action-selection-05"
                       : "bg-background-tint-04"

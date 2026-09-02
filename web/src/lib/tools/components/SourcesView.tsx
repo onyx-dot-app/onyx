@@ -1,5 +1,7 @@
 "use client";
 
+import { useTranslations } from "next-intl";
+
 import { SourceIcon } from "@/components/SourceIcon";
 import SwitchList, { SwitchListItem } from "@/lib/tools/components/SwitchList";
 import { useToolsPopover } from "@/lib/tools/providers";
@@ -10,6 +12,7 @@ export interface SourcesViewProps {
 
 /** The popover's sources sub-view: one switch per source this agent can reach. */
 export default function SourcesView({ onBack }: SourcesViewProps) {
+  const t = useTranslations("actions");
   const {
     configuredSources,
     isSourceEnabled,
@@ -29,14 +32,14 @@ export default function SourcesView({ onBack }: SourcesViewProps) {
   return (
     <SwitchList
       items={items}
-      searchPlaceholder="Search Filters"
+      searchPlaceholder={t("toolsPopover.sourceFilters.searchPlaceholder")}
       allDisabled={configuredSources.every(
         (source) => !isSourceEnabled(source.uniqueKey)
       )}
       onDisableAll={disableAllSources}
       onEnableAll={enableAllSources}
-      disableAllLabel="Disable All Sources"
-      enableAllLabel="Enable All Sources"
+      disableAllLabel={t("toolsPopover.disableAllSources.label")}
+      enableAllLabel={t("toolsPopover.enableAllSources.label")}
       onBack={onBack}
     />
   );

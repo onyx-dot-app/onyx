@@ -80,7 +80,10 @@ const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
         <span
           className={cn(
             "pointer-events-none block h-3.5 w-3.5 rounded-full ring-0 transition-transform",
-            checked ? "translate-x-[15px]" : "translate-x-px",
+            // rtl: the knob travels toward the inline end, so RTL negates.
+            checked
+              ? "translate-x-[15px] rtl:-translate-x-[15px]"
+              : "translate-x-px rtl:-translate-x-px",
             disabled ? "switch-thumb-disabled" : "switch-thumb"
           )}
         />

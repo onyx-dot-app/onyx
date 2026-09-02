@@ -36,7 +36,7 @@ function StatCell({ value, label, onFilter }: StatCellProps) {
         {label}
       </Text>
       {onFilter && (
-        <div className="absolute right-1 top-1">
+        <div className="absolute end-1 top-1">
           <Hoverable.Item group="stat" variant="appear-on-hover">
             <Button
               prominence="tertiary"

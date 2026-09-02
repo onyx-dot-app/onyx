@@ -1,5 +1,6 @@
 // ExpandableContentWrapper
 import React, { useState } from "react";
+import { useTranslations } from "next-intl";
 import { SvgDownloadCloud, SvgFold, SvgMaximize2, SvgX } from "@opal/icons";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@opal/components";
@@ -25,6 +26,7 @@ export default function ExpandableContentWrapper({
   close,
   ContentComponent,
 }: ExpandableContentWrapperProps) {
+  const t = useTranslations("common.expandableContent");
   const [expanded, setExpanded] = useState(false);
 
   const toggleExpand = () => setExpanded((prev) => !prev);
@@ -44,7 +46,7 @@ export default function ExpandableContentWrapper({
       <CardHeader className="w-full bg-background-tint-02 top-0 p-3">
         <div className="flex justify-between items-center">
           <Text className="text-ellipsis line-clamp-1" text03 mainUiAction>
-            {fileDescriptor.name || "Untitled"}
+            {fileDescriptor.name || t("file.untitledFallback")}
           </Text>
           <div className="flex flex-row items-center justify-end gap-1">
             <Button
@@ -52,21 +54,25 @@ export default function ExpandableContentWrapper({
               size="sm"
               onClick={downloadFile}
               icon={SvgDownloadCloud}
-              tooltip="Download file"
+              tooltip={t("downloadButton.tooltip")}
             />
             <Button
               prominence="tertiary"
               size="sm"
               onClick={toggleExpand}
               icon={expanded ? SvgFold : SvgMaximize2}
-              tooltip={expanded ? "Minimize" : "Full screen"}
+              tooltip={
+                expanded
+                  ? t("minimizeButton.tooltip")
+                  : t("fullScreenButton.tooltip")
+              }
             />
             <Button
               prominence="tertiary"
               size="sm"
               onClick={close}
               icon={SvgX}
-              tooltip="Hide"
+              tooltip={t("hideButton.tooltip")}
             />
           </div>
         </div>

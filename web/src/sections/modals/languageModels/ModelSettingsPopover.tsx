@@ -129,7 +129,7 @@ function PolicySlider({
       width="auto"
       height="auto"
       gap={0}
-      className="ml-8 mr-2"
+      className="ms-8 me-2"
     >
       <Section alignItems="start" width="auto" height="auto" className="mx-0.5">
         <Text font="secondary-action" color="text-03" nowrap>

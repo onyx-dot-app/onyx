@@ -4,7 +4,7 @@ import useSWR from "swr";
 import { useMemo } from "react";
 import { usePathname } from "next/navigation";
 import useCCPairs from "@/hooks/useCCPairs";
-import { errorHandlingFetcher } from "@/lib/fetcher";
+import { errorHandlingFetcher, isNotFoundError } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { isAuthPath } from "@/lib/auth/paths";
 import {
@@ -33,6 +33,10 @@ const DEFAULT_SETTINGS: Settings = {
   reasoning_override_enabled: true,
   query_history_type: QueryHistoryType.NORMAL,
 };
+
+// A CE backend never registers the enterprise-settings route, so its 404
+// means no enterprise settings, not an outage: no error and no retry.
+const isEnterpriseSettingsMissing = isNotFoundError;
 
 /**
  * The single settings hook. Returns a fully-derived `AppSettings` object that
@@ -64,7 +68,7 @@ export function useSettings(): AppSettings {
 
   const core = rawSettings ?? DEFAULT_SETTINGS;
   // Auth pages need branding pre-sign-in but standard web images lack the EE
-  // flag, so probe the endpoint. A CE backend 404s once (no retry below).
+  // flag, so probe the endpoint.
   const shouldFetchEnterprise =
     EE_ENABLED ||
     onAuthPath ||
@@ -83,9 +87,7 @@ export function useSettings(): AppSettings {
       revalidateIfStale: false,
       dedupingInterval: 30_000,
       errorRetryInterval: SETTINGS_ERROR_RETRY_INTERVAL,
-      // No retry on auth pages: a CE backend 404s this endpoint and the login
-      // page should settle on default branding instead of re-fetching.
-      shouldRetryOnError: !onAuthPath,
+      shouldRetryOnError: (err) => !isEnterpriseSettingsMissing(err),
       // Referential equality — logo can change without JSON changing, so
       // mutate() must propagate a new reference for cache-busters.
       compare: (a, b) => a === b,
@@ -111,7 +113,11 @@ export function useSettings(): AppSettings {
       !settingsLoading && !settingsError && core.vector_db_enabled !== false,
     isLoading:
       settingsLoading || (shouldFetchEnterprise ? enterpriseLoading : false),
-    error: settingsError ?? enterpriseError,
+    error:
+      settingsError ??
+      (isEnterpriseSettingsMissing(enterpriseError)
+        ? undefined
+        : enterpriseError),
   };
 }
 

@@ -1,6 +1,8 @@
 "use client";
 
+import { useMemo } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import type { Route } from "next";
 import { Button, LineItemButton } from "@opal/components";
 import { Hoverable } from "@opal/core";
@@ -12,7 +14,13 @@ import { useToolOAuthStatus } from "@/lib/hooks/useToolOAuthStatus";
 import { hasPermission } from "@/lib/permissions";
 import { useProjectsContext } from "@/lib/projects/providers";
 import { useSettings } from "@/lib/settings/hooks";
-import { SEARCH_TOOL_ID } from "@/lib/tools/constants";
+import {
+  CODING_AGENT_TOOL_ID,
+  IMAGE_GENERATION_TOOL_ID,
+  PYTHON_TOOL_ID,
+  SEARCH_TOOL_ID,
+  WEB_SEARCH_TOOL_ID,
+} from "@/lib/tools/constants";
 import { useAvailableTools } from "@/lib/tools/hooks";
 import { useToolsPopover } from "@/lib/tools/providers";
 import { ToolSnapshot } from "@/lib/tools/types";
@@ -38,6 +46,7 @@ export interface ToolLineItemProps {
  * here. Nothing about a row is decided by its caller.
  */
 export default function ToolLineItem({ tool }: ToolLineItemProps) {
+  const t = useTranslations("actions");
   const router = useRouter();
   const {
     agent,
@@ -54,6 +63,39 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
   const { ccPairs } = useCCPairs(vectorDbEnabled);
   const { currentProjectId } = useProjectsContext();
   const { getToolAuthStatus, authenticateTool } = useToolOAuthStatus(agent.id);
+
+  const tooltipMessages = useMemo(
+    () => ({
+      descriptions: {
+        [SEARCH_TOOL_ID]: t("toolsPopover.tooltips.search.description"),
+        [IMAGE_GENERATION_TOOL_ID]: t(
+          "toolsPopover.tooltips.imageGeneration.description"
+        ),
+        [WEB_SEARCH_TOOL_ID]: t("toolsPopover.tooltips.webSearch.description"),
+        [PYTHON_TOOL_ID]: t("toolsPopover.tooltips.python.description"),
+        [CODING_AGENT_TOOL_ID]: t(
+          "toolsPopover.tooltips.codingAgent.description"
+        ),
+      },
+      defaultDescription: t("toolsPopover.tooltips.default.description"),
+      configure: t("toolsPopover.tooltips.configureSuffix.text"),
+      askAdmin: t("toolsPopover.tooltips.askAdminSuffix.text"),
+    }),
+    [t]
+  );
+  const configureTooltips = useMemo(
+    () => ({
+      [IMAGE_GENERATION_TOOL_ID]: t(
+        "toolsPopover.configureLinks.imageGeneration.tooltip"
+      ),
+      [WEB_SEARCH_TOOL_ID]: t("toolsPopover.configureLinks.webSearch.tooltip"),
+      [PYTHON_TOOL_ID]: t(
+        "toolsPopover.configureLinks.codeInterpreter.tooltip"
+      ),
+      openapi: t("toolsPopover.configureLinks.openapi.tooltip"),
+    }),
+    [t]
+  );
 
   const isForced = toolConfiguration.forcedToolId === tool.id;
   // Switched off for this chat. The row stays interactive: pressing it turns
@@ -76,11 +118,13 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
     Permission.MANAGE_ACTIONS
   );
   const adminConfigure =
-    isUnavailable && canManageActions ? getAdminConfigureInfo(tool) : null;
+    isUnavailable && canManageActions
+      ? getAdminConfigureInfo(tool, configureTooltips)
+      : null;
 
   const label =
     inProject && isSearchTool
-      ? "Project Search"
+      ? t("actionLineItem.projectSearch.label")
       : tool.display_name || tool.name;
 
   // Only worth saying when the pin is narrowed to some of the sources.
@@ -93,8 +137,8 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
 
   const authStatus = getToolAuthStatus(tool);
   const connectorsLabel = needsConnectors
-    ? "Add Connectors"
-    : "Configure Connectors";
+    ? t("actionLineItem.addConnectors.label")
+    : t("actionLineItem.configureConnectors.label");
 
   function handleClick() {
     if (isUnavailable) {
@@ -111,14 +155,17 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
 
   // Declared once because it renders both bare and hover-revealed, depending
   // on whether the action is already switched off.
+  const toggleLabel = isOff
+    ? t("actionLineItem.enable.label")
+    : t("actionLineItem.disable.label");
   const toggleButton = (
     <Button
       icon={SvgSlash}
       onClick={() => toggleEnabled(tool.id)}
       prominence="internal"
       size="sm"
-      aria-label={isOff ? "Enable" : "Disable"}
-      tooltip={isOff ? "Enable" : "Disable"}
+      aria-label={toggleLabel}
+      tooltip={toggleLabel}
     />
   );
 
@@ -133,7 +180,12 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
         strikethrough={isOff}
         color={isUnavailable && isForced ? "muted" : undefined}
         disabled={needsConnectors || (isUnavailable && !isForced)}
-        tooltip={getToolTooltip(tool, isConfigured, canManageActions)}
+        tooltip={getToolTooltip(
+          tool,
+          isConfigured,
+          canManageActions,
+          tooltipMessages
+        )}
         onClick={handleClick}
         rightChildren={
           <Section gap={1} flexDirection="row">
@@ -142,7 +194,7 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
                 icon={SvgKey}
                 prominence="secondary"
                 size="sm"
-                aria-label="Authenticate"
+                aria-label={t("actionLineItem.authenticate.label")}
                 onClick={() => {
                   if (!authStatus.hasToken || authStatus.isTokenExpired) {
                     void authenticateTool(tool);

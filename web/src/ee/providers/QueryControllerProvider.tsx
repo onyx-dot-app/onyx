@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useMemo } from "react";
+import { useTranslations } from "next-intl";
 import {
   BaseFilters,
   SearchDocWithContent,
@@ -27,6 +28,7 @@ interface QueryControllerProviderProps {
 export function QueryControllerProvider({
   children,
 }: QueryControllerProviderProps) {
+  const t = useTranslations("admin.search");
   const appPosition = useAppPosition();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const searchUiEnabled = useIsSearchModeAvailable();
@@ -124,12 +126,12 @@ export function QueryControllerProvider({
           throw err;
         }
 
-        setError("Document search failed. Please try again.");
+        setError(t("errors.searchFailed.message"));
         setSearchResults([]);
         setLlmSelectedDocIds(null);
       }
     },
-    []
+    [t]
   );
 
   /**
@@ -157,11 +159,11 @@ export function QueryControllerProvider({
           throw error;
         }
 
-        setError("Query classification failed. Falling back to chat.");
+        setError(t("errors.classificationFailed.message"));
         return "chat";
       }
     },
-    []
+    [t]
   );
 
   /**

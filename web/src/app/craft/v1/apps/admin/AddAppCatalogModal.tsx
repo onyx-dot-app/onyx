@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { Button, Card, Divider, Modal, Text } from "@opal/components";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
@@ -25,12 +26,13 @@ export default function AddAppCatalogModal({
   onPickProvider,
   onPickCustom,
 }: AddAppCatalogModalProps) {
+  const t = useTranslations("craft.apps.addCatalog");
   return (
     <Modal open onOpenChange={(open) => !open && onClose()}>
       <Modal.Content width="lg" height="fit">
         <Modal.Header
-          title="Add an app"
-          description="Make an integration available to your whole organization. Built-in providers come with actions that teach the Craft agent how to use them; already-configured providers are not listed."
+          title={t("modal.title")}
+          description={t("modal.description")}
         />
         <Modal.Body>
           <div className="flex flex-col gap-4">
@@ -40,30 +42,29 @@ export default function AddAppCatalogModal({
                   key={descriptor.app_type}
                   icon={getAppTypeLogo(descriptor.app_type)}
                   title={descriptor.name}
-                  actionLabel="Add"
+                  actionLabel={t("addButton")}
                   onClick={() => onPickProvider(descriptor)}
                 />
               ))}
               <CatalogCard
                 icon={SvgPlug}
-                title="Custom app"
-                description="Credentials and network access for your own integration."
-                actionLabel="Create"
+                title={t("customApp.title")}
+                description={t("customApp.description")}
+                actionLabel={t("createButton")}
                 onClick={onPickCustom}
               />
             </div>
             <Divider />
             <div className="flex items-center justify-between gap-2">
               <Text font="secondary-body" color="text-03">
-                Need an MCP server instead? Connect it in Actions, then enable
-                it for Craft here.
+                {t("mcpHint.label")}
               </Text>
               <Button
                 prominence="tertiary"
                 href={ADMIN_ROUTES.MCP_ACTIONS.path}
                 icon={SvgSettings}
               >
-                Open Actions
+                {t("mcpHint.openActionsButton")}
               </Button>
             </div>
           </div>

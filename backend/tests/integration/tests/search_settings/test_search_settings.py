@@ -1,3 +1,5 @@
+from concurrent.futures import ThreadPoolExecutor
+
 import httpx
 
 from tests.integration.common_utils.constants import API_SERVER_URL
@@ -234,40 +236,57 @@ def test_inference_update_rejects_active_reindex(
     _cancel_new_embedding(admin_user)
 
 
-def test_set_new_search_settings_replaces_previous_secondary(
+def test_new_reindex_refused_while_one_in_progress(
     reset: None,  # noqa: ARG001
     admin_user: DATestUser,
     llm_provider: DATestLLMProvider,
 ) -> None:
-    """Calling set-new-search-settings twice should retire the first secondary
-    and replace it with the second."""
+    """Only one re-index at a time: starting a second while the first is in progress is
+    refused (409), and the first is left untouched (not superseded). To change it, cancel
+    the in-progress re-index and start a new one."""
     mc_id = llm_provider.model_configuration_ids[0]
     current = _get_current_search_settings(admin_user)
 
-    # First: no contextual RAG
     resp1 = _set_new_search_settings(
         user=admin_user,
         current_settings=current,
         enable_contextual_rag=False,
     )
     resp1.raise_for_status()
-    first_id = resp1.json()["id"]
 
-    # Second: with contextual RAG
     resp2 = _set_new_search_settings(
         user=admin_user,
         current_settings=current,
         enable_contextual_rag=True,
         contextual_rag_model_configuration_id=mc_id,
     )
-    resp2.raise_for_status()
-    second_id = resp2.json()["id"]
-
-    assert second_id != first_id
+    assert resp2.status_code == 409
 
     secondary = _get_secondary_search_settings(admin_user)
     assert secondary is not None
-    assert secondary["enable_contextual_rag"] is True
-    assert secondary["contextual_rag_model_configuration_id"] == mc_id
+    assert secondary["enable_contextual_rag"] is False
 
+    _cancel_new_embedding(admin_user)
+
+
+def test_concurrent_reindex_submissions_serialize(
+    reset: None,  # noqa: ARG001
+    admin_user: DATestUser,
+    llm_provider: DATestLLMProvider,  # noqa: ARG001
+) -> None:
+    """Two admins pressing Re-index at the same moment. A row lock on the current
+    settings serializes them, so the loser gets the same 409 a sequential caller sees
+    instead of a raw 500 from the unique index on the FUTURE row."""
+    current = _get_current_search_settings(admin_user)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        submissions = [
+            pool.submit(_set_new_search_settings, admin_user, current) for _ in range(2)
+        ]
+        statuses = sorted(submission.result().status_code for submission in submissions)
+
+    assert statuses == [200, 409]
+
+    # The winning submission's FUTURE survived the race intact and cancels normally.
+    assert _get_secondary_search_settings(admin_user) is not None
     _cancel_new_embedding(admin_user)

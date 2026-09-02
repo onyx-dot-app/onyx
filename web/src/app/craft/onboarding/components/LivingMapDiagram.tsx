@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { KeyboardEvent, ReactNode } from "react";
+import { useTranslations } from "next-intl";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Text } from "@opal/components";
 import {
@@ -56,31 +57,15 @@ export type LivingMapStageId =
 
 export interface LivingMapStage {
   id: LivingMapStageId;
-  title: string;
-  caption: string;
 }
 
+// Stage title/caption copy lives in the craft.onboarding.livingMap.stages
+// message namespace, keyed by stage id.
 export const LIVING_MAP_STAGES: LivingMapStage[] = [
-  {
-    id: "prompt",
-    title: "Give Craft real work.",
-    caption: "Describe the outcome — Craft does the rest.",
-  },
-  {
-    id: "machine",
-    title: "It works on its own machine.",
-    caption: "Reading what you can see. Never your secrets.",
-  },
-  {
-    id: "output",
-    title: "Finished work comes out.",
-    caption: "On demand — or on a schedule, while you're away.",
-  },
-  {
-    id: "constellation",
-    title: "That's Craft. Your turn.",
-    caption: "Click any part of the map to revisit it.",
-  },
+  { id: "prompt" },
+  { id: "machine" },
+  { id: "output" },
+  { id: "constellation" },
 ];
 
 /** What the camera frames per stage: center + visible world width. */
@@ -214,13 +199,13 @@ const TERMINAL_LINES: string[] = [
 // Typed lines plus the trailing approval pill.
 const TERMINAL_STEPS = TERMINAL_LINES.length + 1;
 
-const EXAMPLE_PROMPTS: string[] = [
-  "“Summarize our Q2 vendor spend as a doc in Drive.”",
-  "“Condense our Slack discussion into Linear tickets.”",
-  "“Build the spring launch deck from the brief in Drive.”",
-  "“Fix the flaky retry test and open a PR.”",
-  "“Fill out the RFP in my email with our security details.”",
-];
+const EXAMPLE_PROMPT_KEYS = [
+  "vendorSpend",
+  "slackToLinear",
+  "launchDeck",
+  "flakyRetryTest",
+  "rfpSecurity",
+] as const;
 
 const PROMPT_ROTATION_MS = 3000;
 
@@ -249,22 +234,16 @@ interface OutputCardSpec {
   tint?: boolean;
 }
 
-const OUTPUT_CARDS: OutputCardSpec[] = [
-  {
-    y: 170,
-    label: "Google Doc",
-    caption: "Written to your Drive",
-    icon: SvgGoogleDocs,
-  },
-  {
-    y: 280,
-    label: "Live app",
-    caption: "Hosted — share by link",
-    icon: SvgDashboard,
-    tint: true,
-  },
-  { y: 390, label: "GitHub PR", caption: "Open for review", icon: SvgGithub },
-];
+const OUTPUT_CARD_KEYS = ["googleDoc", "liveApp", "githubPr"] as const;
+
+const OUTPUT_CARD_LAYOUT: Record<
+  (typeof OUTPUT_CARD_KEYS)[number],
+  Omit<OutputCardSpec, "label" | "caption">
+> = {
+  googleDoc: { y: 170, icon: SvgGoogleDocs },
+  liveApp: { y: 280, icon: SvgDashboard, tint: true },
+  githubPr: { y: 390, icon: SvgGithub },
+};
 
 // ---------------------------------------------------------------------------
 // Building blocks
@@ -394,6 +373,7 @@ export default function LivingMapDiagram({
   diving = false,
   onSelectStage,
 }: LivingMapDiagramProps) {
+  const t = useTranslations("craft.onboarding.livingMap");
   const reduceMotion = useReducedMotion() ?? false;
 
   const sharpGroups = STAGE_SHARP[stage];
@@ -431,7 +411,7 @@ export default function LivingMapDiagram({
   useEffect(() => {
     if (reduceMotion) return undefined;
     const timer = setInterval(() => {
-      setPromptIdx((i) => (i + 1) % EXAMPLE_PROMPTS.length);
+      setPromptIdx((i) => (i + 1) % EXAMPLE_PROMPT_KEYS.length);
     }, PROMPT_ROTATION_MS);
     return () => clearInterval(timer);
   }, [reduceMotion]);
@@ -444,7 +424,7 @@ export default function LivingMapDiagram({
     return () => onSelectStage(GROUP_STAGE[group]);
   }
 
-  const examplePrompt = EXAMPLE_PROMPTS[promptIdx]!;
+  const examplePrompt = t(`examplePrompts.${EXAMPLE_PROMPT_KEYS[promptIdx]!}`);
 
   return (
     <div
@@ -484,6 +464,10 @@ export default function LivingMapDiagram({
         {/* Connected sources + uploaded files */}
         {SOURCE_CHIPS.map((source) => {
           const SourceIcon = source.icon;
+          const isFilesChip = source.label === "Your files";
+          const displayLabel = isFilesChip
+            ? t("sources.yourFiles.label")
+            : source.label;
           return (
             <MapNode
               key={source.label}
@@ -491,9 +475,9 @@ export default function LivingMapDiagram({
               y={48}
               sharp={sharp("sources")}
               label={
-                source.label === "Your files"
-                  ? "Your uploaded files"
-                  : `Connected source: ${source.label}`
+                isFilesChip
+                  ? t("sources.yourFiles.ariaLabel")
+                  : t("sources.connectedAriaLabel", { name: source.label })
               }
               reduceMotion={reduceMotion}
               onSelect={select("sources")}
@@ -503,7 +487,7 @@ export default function LivingMapDiagram({
                   className={cn("h-3.5 w-3.5", source.tint && "stroke-text-04")}
                 />
                 <Text font="secondary-action" color="text-04" nowrap>
-                  {source.label}
+                  {displayLabel}
                 </Text>
               </div>
             </MapNode>
@@ -515,7 +499,7 @@ export default function LivingMapDiagram({
           x={130}
           y={280}
           sharp={sharp("prompt")}
-          label="Your prompt"
+          label={t("prompt.label")}
           reduceMotion={reduceMotion}
           onSelect={select("prompt")}
         >
@@ -523,7 +507,7 @@ export default function LivingMapDiagram({
             <div className="flex items-center gap-1.5">
               <SvgBubbleText className="h-3.5 w-3.5 stroke-text-04" />
               <Text font="secondary-action" color="text-04" nowrap>
-                Your prompt
+                {t("prompt.label")}
               </Text>
             </div>
             <div className="relative h-16 w-full">
@@ -564,7 +548,7 @@ export default function LivingMapDiagram({
           <motion.div
             role="button"
             tabIndex={0}
-            aria-label="Craft's workspace"
+            aria-label={t("workspace.label")}
             initial={false}
             animate={{
               filter: sharp("workspace") ? "blur(0px)" : "blur(5px)",
@@ -585,13 +569,13 @@ export default function LivingMapDiagram({
                 <div className="flex items-center gap-1.5">
                   <SvgCpu className="h-3.5 w-3.5 stroke-text-04" />
                   <Text font="secondary-action" color="text-04" nowrap>
-                    Craft&apos;s workspace
+                    {t("workspace.label")}
                   </Text>
                 </div>
                 <div className="flex items-center gap-1">
                   <SvgShield className="h-3 w-3 stroke-text-03" />
                   <Text font="figure-small-label" color="text-03" nowrap>
-                    Isolated sandbox
+                    {t("workspace.sandboxBadge")}
                   </Text>
                 </div>
               </div>
@@ -631,7 +615,7 @@ export default function LivingMapDiagram({
                 >
                   <SvgAlertCircle className="h-3 w-3 shrink-0 stroke-text-04" />
                   <Text font="figure-small-label" color="text-04" nowrap>
-                    Waiting for your approval
+                    {t("workspace.approvalPill")}
                   </Text>
                 </motion.div>
               </div>
@@ -640,15 +624,21 @@ export default function LivingMapDiagram({
         </div>
 
         {/* The outputs */}
-        {OUTPUT_CARDS.map((output) => {
-          const OutputIcon = output.icon;
+        {OUTPUT_CARD_KEYS.map((cardKey) => {
+          const layout = OUTPUT_CARD_LAYOUT[cardKey];
+          const OutputIcon = layout.icon;
+          const output = {
+            ...layout,
+            label: t(`outputs.${cardKey}.label`),
+            caption: t(`outputs.${cardKey}.caption`),
+          };
           return (
             <MapNode
-              key={output.label}
+              key={cardKey}
               x={740}
               y={output.y}
               sharp={sharp("outputs")}
-              label={`Output: ${output.label}`}
+              label={t("outputs.ariaLabel", { name: output.label })}
               reduceMotion={reduceMotion}
               onSelect={select("outputs")}
             >
@@ -677,7 +667,7 @@ export default function LivingMapDiagram({
           x={320}
           y={495}
           sharp={sharp("schedule")}
-          label="Scheduled task — re-runs this prompt on a timer"
+          label={t("schedule.ariaLabel")}
           reduceMotion={reduceMotion}
           onSelect={select("schedule")}
         >
@@ -685,11 +675,11 @@ export default function LivingMapDiagram({
             <div className="flex items-center gap-1.5">
               <SvgClock className="h-3.5 w-3.5 stroke-text-04" />
               <Text font="secondary-action" color="text-04" nowrap>
-                Every Monday, 8:00
+                {t("schedule.label")}
               </Text>
             </div>
             <Text font="figure-small-label" color="text-03" nowrap>
-              Runs while you&apos;re away
+              {t("schedule.caption")}
             </Text>
           </div>
         </MapNode>
@@ -699,7 +689,7 @@ export default function LivingMapDiagram({
           x={760}
           y={500}
           sharp={sharp("team")}
-          label="Your team — one link shares Craft's work"
+          label={t("team.ariaLabel")}
           reduceMotion={reduceMotion}
           onSelect={select("team")}
         >
@@ -707,11 +697,11 @@ export default function LivingMapDiagram({
             <div className="flex items-center gap-1.5">
               <SvgUsers className="h-3.5 w-3.5 stroke-text-04" />
               <Text font="secondary-action" color="text-04" nowrap>
-                Your team
+                {t("team.label")}
               </Text>
             </div>
             <Text font="figure-small-label" color="text-03" nowrap>
-              One link shares it
+              {t("team.caption")}
             </Text>
           </div>
         </MapNode>

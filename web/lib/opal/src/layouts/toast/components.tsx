@@ -86,7 +86,7 @@ function ToastContainer({ errorAppendix }: ToastContainerProps) {
   return (
     <div
       data-testid="toast-container"
-      className="fixed bottom-4 right-4 z-(--z-toast) flex w-full max-w-(--toast-width) flex-col items-end gap-2"
+      className="fixed bottom-4 end-4 z-(--z-toast) flex w-full max-w-(--toast-width) flex-col items-end gap-2"
     >
       {visible.map((t) => {
         const isTruncatable = t.message.length > MAX_TOAST_MESSAGE_LENGTH;

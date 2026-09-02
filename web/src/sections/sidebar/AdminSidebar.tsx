@@ -7,6 +7,7 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { useAdminNavLabels } from "@/lib/adminNavLabels";
 import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useSettings } from "@/lib/settings/hooks";
@@ -28,7 +29,6 @@ import { markdown } from "@opal/utils";
 import {
   buildItems,
   groupBySection,
-  type AdminNavItemId,
   type AdminNavSectionId,
   type FeatureFlags,
   type SidebarItemEntry,
@@ -85,45 +85,7 @@ export default function AdminSidebar() {
   const allItems = buildItems(adminCapabilities, flags, settings);
 
   // Built with literal keys so the message ids stay statically checkable.
-  const navLabels = useMemo<Record<AdminNavItemId, string>>(
-    () => ({
-      languageModels: t("adminNav.items.languageModels.label"),
-      webSearch: t("adminNav.items.webSearch.label"),
-      imageGeneration: t("adminNav.items.imageGeneration.label"),
-      voice: t("adminNav.items.voice.label"),
-      codeInterpreter: t("adminNav.items.codeInterpreter.label"),
-      chatPreferences: t("adminNav.items.chatPreferences.label"),
-      craftAccess: t("adminNav.items.craftAccess.label"),
-      craftApps: t("adminNav.items.craftApps.label"),
-      craftInstructions: t("adminNav.items.craftInstructions.label"),
-      customAnalytics: t("adminNav.items.customAnalytics.label"),
-      agents: t("adminNav.items.agents.label"),
-      mcpActions: t("adminNav.items.mcpActions.label"),
-      openapiActions: t("adminNav.items.openapiActions.label"),
-      existingConnectors: t("adminNav.items.existingConnectors.label"),
-      addConnector: t("adminNav.items.addConnector.label"),
-      documentSets: t("adminNav.items.documentSets.label"),
-      indexSettings: t("adminNav.items.indexSettings.label"),
-      serviceAccounts: t("adminNav.items.serviceAccounts.label"),
-      slackIntegration: t("adminNav.items.slackIntegration.label"),
-      discordIntegration: t("adminNav.items.discordIntegration.label"),
-      hookExtensions: t("adminNav.items.hookExtensions.label"),
-      users: t("adminNav.items.users.label"),
-      groups: t("adminNav.items.groups.label"),
-      scim: t("adminNav.items.scim.label"),
-      plansAndBilling: t("adminNav.items.plansAndBilling.label"),
-      appearanceAndTheming: t("adminNav.items.appearanceAndTheming.label"),
-      securityAndHardening: t("adminNav.items.securityAndHardening.label"),
-      ssoProviders: t("adminNav.items.ssoProviders.label"),
-      usage: t("adminNav.items.usage.label"),
-      analytics: t("adminNav.items.analytics.label"),
-      queryHistory: t("adminNav.items.queryHistory.label"),
-      tracing: t("adminNav.items.tracing.label"),
-      exportLogs: t("adminNav.items.exportLogs.label"),
-      upgradePlan: t("adminNav.items.upgradePlan.label"),
-    }),
-    [t]
-  );
+  const navLabels = useAdminNavLabels();
 
   const sectionLabels = useMemo<Record<AdminNavSectionId, string>>(
     () => ({
