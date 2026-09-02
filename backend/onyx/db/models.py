@@ -5158,7 +5158,7 @@ class DocumentSet__UserGroup(Base):
     __tablename__ = "document_set__user_group"
 
     document_set_id: Mapped[int] = mapped_column(
-        ForeignKey("document_set.id"), primary_key=True
+        ForeignKey("document_set.id", ondelete="CASCADE"), primary_key=True
     )
     user_group_id: Mapped[int] = mapped_column(
         ForeignKey("user_group.id"), primary_key=True
