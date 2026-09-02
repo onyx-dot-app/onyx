@@ -19,6 +19,13 @@ KEYWORD_QUERY_HYBRID_ALPHA = 0.2
 # Reciprocal Rank Fusion
 RRF_K_VALUE = 50
 
+# Token budget multiplier for the LLM section-selection step. RRF ranks by
+# fused rank votes without reading content, so relevant documents regularly
+# land at fused ranks 26-50; a 2x budget lets the selection LLM see and
+# rescue them. +1.6 to +6.2 combined score on EnterpriseRAG-Bench across
+# 8 paired 500-question runs (3 models/efforts), latency neutral.
+SELECTION_TOKEN_BUDGET_MULTIPLIER = 2
+
 # Context Expansion
 FULL_DOC_NUM_CHUNKS_AROUND = 5
 
