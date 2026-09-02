@@ -1361,6 +1361,7 @@ export default function useChatController({
       filterManager.timeRange,
       llmManager.currentLlm,
       llmManager.temperature,
+      llmManager.persistOverrides,
       // Others that affect logic
       liveAgent,
       availableAgents,
