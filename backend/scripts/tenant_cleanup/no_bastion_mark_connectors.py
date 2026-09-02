@@ -9,7 +9,12 @@ Usage:
         --data-plane-context <context> --control-plane-context <context> [--force]
 
     PYTHONPATH=. python scripts/tenant_cleanup/no_bastion_mark_connectors.py --csv <csv_file_path> \
-        --data-plane-context <context> --control-plane-context <context> [--force] [--concurrency N]
+        --data-plane-context <context> --control-plane-context <context> [--force] [--concurrency N] \
+        [--data-plane-pod <pod>] [--control-plane-pod <pod>]
+
+Pin the pods when running several batches at once. Each tenant costs a `kubectl exec`, and one
+worker saturates its CPU limit long before the database notices, so an unpinned second run usually
+lands on the same pod and adds nothing.
 """
 
 import json
@@ -413,15 +418,41 @@ def main() -> None:
         # Single tenant mode
         tenant_ids = [sys.argv[1]]
 
+    # Pin pods so parallel runs spread across replicas instead of all
+    # piling onto whichever one the random pick returns.
+    data_plane_pod_override = None
+    control_plane_pod_override = None
+    for flag, target in (
+        ("--data-plane-pod", "data"),
+        ("--control-plane-pod", "control"),
+    ):
+        if flag in sys.argv:
+            idx = sys.argv.index(flag)
+            if idx + 1 >= len(sys.argv):
+                print(f"Error: {flag} requires a pod name", file=sys.stderr)
+                sys.exit(1)
+            if target == "data":
+                data_plane_pod_override = sys.argv[idx + 1]
+            else:
+                control_plane_pod_override = sys.argv[idx + 1]
+
     # Find pods in both clusters before processing
     try:
-        print("Finding data plane worker pod...")
-        data_plane_pod: str = find_worker_pod(data_plane_context)
-        print(f"✓ Using data plane worker pod: {data_plane_pod}")
+        if data_plane_pod_override:
+            data_plane_pod: str = data_plane_pod_override
+            print(f"✓ Using pinned data plane worker pod: {data_plane_pod}")
+        else:
+            print("Finding data plane worker pod...")
+            data_plane_pod = find_worker_pod(data_plane_context)
+            print(f"✓ Using data plane worker pod: {data_plane_pod}")
 
-        print("Finding control plane pod...")
-        control_plane_pod: str = find_background_pod(control_plane_context)
-        print(f"✓ Using control plane pod: {control_plane_pod}")
+        if control_plane_pod_override:
+            control_plane_pod: str = control_plane_pod_override
+            print(f"✓ Using pinned control plane pod: {control_plane_pod}")
+        else:
+            print("Finding control plane pod...")
+            control_plane_pod = find_background_pod(control_plane_context)
+            print(f"✓ Using control plane pod: {control_plane_pod}")
     except Exception as e:
         print(f"✗ Failed to find required pods: {e}", file=sys.stderr)
         print("Cannot proceed with marking connectors for deletion")
