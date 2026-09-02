@@ -32,7 +32,6 @@ from onyx.utils.encryption import mask_string
 from onyx.utils.logger import setup_logger
 from onyx.utils.url import SSRFException, validate_outbound_http_url
 from onyx.voice.factory import get_voice_provider
-from onyx.voice.interface import VoiceProviderInterface
 
 logger = setup_logger()
 
@@ -92,26 +91,10 @@ def _custom_config_to_view(
     return cast(dict[str, Any], _sanitize_custom_config_for_response(custom_config))
 
 
-def _validate_tts_activation_supported(
-    voice_provider: VoiceProviderInterface,
-) -> None:
-    if not voice_provider.get_available_tts_models():
-        raise OnyxError(
-            OnyxErrorCode.VALIDATION_ERROR,
-            "Voice provider does not support text-to-speech.",
-        )
-
-
 def _validate_voice_api_base(provider_type: str, api_base: str | None) -> str | None:
     """Validate and normalize provider api_base / target URI."""
     if api_base is None:
         return None
-
-    if provider_type.lower() == "zoom":
-        raise OnyxError(
-            OnyxErrorCode.VALIDATION_ERROR,
-            "Zoom voice providers do not support a target URI.",
-        )
 
     allow_private_network = provider_type.lower() == "azure"
     try:
@@ -123,6 +106,30 @@ def _validate_voice_api_base(provider_type: str, api_base: str | None) -> str | 
             OnyxErrorCode.VALIDATION_ERROR,
             f"Invalid target URI: {str(e)}",
         ) from e
+
+
+def _fetch_provider_for_stored_secret(
+    db_session: Session,
+    provider_id: int | None,
+    provider_type: str,
+) -> VoiceProvider:
+    if provider_id is None:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "Provider id is required to use a stored API secret.",
+        )
+
+    provider = fetch_voice_provider_by_id(db_session, provider_id)
+    if provider is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Voice provider not found.")
+
+    if provider.provider_type != provider_type:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "Stored API secret provider does not match the requested provider type.",
+        )
+
+    return provider
 
 
 def _provider_to_view(provider: VoiceProvider) -> VoiceProviderView:
@@ -209,8 +216,6 @@ async def upsert_voice_provider_endpoint(
     # Validate credentials before committing - rollback on failure
     try:
         voice_provider = get_voice_provider(provider)
-        if request.activate_tts:
-            _validate_tts_activation_supported(voice_provider)
         await voice_provider.validate_credentials()
     except OnyxError:
         db_session.rollback()
@@ -278,19 +283,6 @@ def activate_tts_provider_endpoint(
     db_session: Session = Depends(get_session),
 ) -> VoiceProviderView:
     """Set a voice provider as the default TTS provider."""
-    provider_db = fetch_voice_provider_by_id(db_session, provider_id)
-    if provider_db is None:
-        raise OnyxError(
-            OnyxErrorCode.NOT_FOUND,
-            f"No voice provider with id {provider_id} exists.",
-        )
-
-    try:
-        voice_provider = get_voice_provider(provider_db)
-        _validate_tts_activation_supported(voice_provider)
-    except ValueError as exc:
-        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(exc)) from exc
-
     provider = set_default_tts_provider(
         db_session=db_session, provider_id=provider_id, tts_model=tts_model
     )
@@ -321,10 +313,16 @@ async def test_voice_provider(
     api_secret = request.api_secret
     existing_provider: VoiceProvider | None = None
 
-    if request.use_stored_key:
+    if request.use_stored_secret:
+        existing_provider = _fetch_provider_for_stored_secret(
+            db_session, request.id, request.provider_type
+        )
+    elif request.use_stored_key:
         existing_provider = fetch_voice_provider_by_type(
             db_session, request.provider_type
         )
+
+    if request.use_stored_key:
         if existing_provider is None or not existing_provider.api_key:
             raise OnyxError(
                 OnyxErrorCode.VALIDATION_ERROR,
@@ -333,10 +331,6 @@ async def test_voice_provider(
         api_key = existing_provider.api_key.get_value(apply_mask=False)
 
     if request.use_stored_secret:
-        if existing_provider is None:
-            existing_provider = fetch_voice_provider_by_type(
-                db_session, request.provider_type
-            )
         if existing_provider is None or not existing_provider.api_secret:
             raise OnyxError(
                 OnyxErrorCode.VALIDATION_ERROR,
