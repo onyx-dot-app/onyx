@@ -1,7 +1,7 @@
 """cascade document set group deletion
 
 Revision ID: 947b94d2ebf1
-Revises: 34fe28843029
+Revises: 77962d18fd41
 Create Date: 2026-09-01 16:51:10.561206
 
 """
@@ -11,7 +11,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "947b94d2ebf1"
-down_revision = "34fe28843029"
+down_revision = "77962d18fd41"
 branch_labels = None
 depends_on = None
 
