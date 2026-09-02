@@ -1,3 +1,5 @@
+from typing import Any, cast
+
 from fastapi import APIRouter, Depends, Response
 from sqlalchemy.orm import Session
 
@@ -36,8 +38,57 @@ logger = setup_logger()
 admin_router = APIRouter(prefix="/admin/voice")
 
 VOICE_PROVIDER_VALIDATION_FAILURE_MESSAGE = (
-    "Connection test failed. Please verify your API key and settings."
+    "Connection test failed. Please verify your credentials and settings."
 )
+STORED_API_SECRET_PLACEHOLDER = "********"
+_CUSTOM_CONFIG_CREDENTIAL_KEYS = {"api_key", "api_secret"}
+
+
+def _contains_custom_config_credential_key(value: object) -> bool:
+    if isinstance(value, dict):
+        for key, nested_value in value.items():
+            if isinstance(key, str) and key.lower() in _CUSTOM_CONFIG_CREDENTIAL_KEYS:
+                return True
+            if _contains_custom_config_credential_key(nested_value):
+                return True
+    if isinstance(value, list):
+        return any(_contains_custom_config_credential_key(item) for item in value)
+    return False
+
+
+def _reject_custom_config_credentials(
+    custom_config: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    if custom_config is not None and _contains_custom_config_credential_key(
+        custom_config
+    ):
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "Voice provider custom_config cannot contain API credentials.",
+        )
+    return custom_config
+
+
+def _sanitize_custom_config_for_response(value: object) -> object:
+    if isinstance(value, dict):
+        return {
+            key: _sanitize_custom_config_for_response(nested_value)
+            for key, nested_value in value.items()
+            if not (
+                isinstance(key, str) and key.lower() in _CUSTOM_CONFIG_CREDENTIAL_KEYS
+            )
+        }
+    if isinstance(value, list):
+        return [_sanitize_custom_config_for_response(item) for item in value]
+    return value
+
+
+def _custom_config_to_view(
+    custom_config: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    if custom_config is None:
+        return None
+    return cast(dict[str, Any], _sanitize_custom_config_for_response(custom_config))
 
 
 def _validate_voice_api_base(provider_type: str, api_base: str | None) -> str | None:
@@ -70,8 +121,9 @@ def _provider_to_view(provider: VoiceProvider) -> VoiceProviderView:
         tts_model=provider.tts_model,
         default_voice=provider.default_voice,
         api_key=mask_string(raw_key) if raw_key else None,
+        api_secret=STORED_API_SECRET_PLACEHOLDER if provider.api_secret else None,
         target_uri=provider.api_base,  # api_base stores the target URI for Azure
-        custom_config=provider.custom_config,
+        custom_config=_custom_config_to_view(provider.custom_config),
     )
 
 
@@ -94,6 +146,8 @@ async def upsert_voice_provider_endpoint(
     """Create or update a voice provider."""
     api_key = request.api_key
     api_key_changed = request.api_key_changed
+    api_secret = request.api_secret
+    api_secret_changed = request.api_secret_changed
 
     # If llm_provider_id is specified, copy the API key from that LLM provider
     if request.llm_provider_id is not None:
@@ -115,6 +169,7 @@ async def upsert_voice_provider_endpoint(
     api_base = _validate_voice_api_base(
         request.provider_type, request.target_uri or request.api_base
     )
+    custom_config = _reject_custom_config_credentials(request.custom_config)
 
     provider = upsert_voice_provider(
         db_session=db_session,
@@ -123,8 +178,10 @@ async def upsert_voice_provider_endpoint(
         provider_type=request.provider_type,
         api_key=api_key,
         api_key_changed=api_key_changed,
+        api_secret=api_secret,
+        api_secret_changed=api_secret_changed,
         api_base=api_base,
-        custom_config=request.custom_config,
+        custom_config=custom_config,
         stt_model=request.stt_model,
         tts_model=request.tts_model,
         default_voice=request.default_voice,
@@ -229,6 +286,8 @@ async def test_voice_provider(
 ) -> VoiceProviderUpdateSuccess:
     """Test a voice provider connection by making a real API call."""
     api_key = request.api_key
+    api_secret = request.api_secret
+    existing_provider: VoiceProvider | None = None
 
     if request.use_stored_key:
         existing_provider = fetch_voice_provider_by_type(
@@ -240,6 +299,18 @@ async def test_voice_provider(
                 "No stored API key found for this provider type.",
             )
         api_key = existing_provider.api_key.get_value(apply_mask=False)
+
+    if request.use_stored_secret:
+        if existing_provider is None:
+            existing_provider = fetch_voice_provider_by_type(
+                db_session, request.provider_type
+            )
+        if existing_provider is None or not existing_provider.api_secret:
+            raise OnyxError(
+                OnyxErrorCode.VALIDATION_ERROR,
+                "No stored API secret found for this provider type.",
+            )
+        api_secret = existing_provider.api_secret.get_value(apply_mask=False)
 
     if not api_key:
         raise OnyxError(
@@ -260,6 +331,7 @@ async def test_voice_provider(
         custom_config=request.custom_config or {},
     )
     temp_provider.api_key = api_key  # ty: ignore[invalid-assignment]
+    temp_provider.api_secret = api_secret  # ty: ignore[invalid-assignment]
 
     try:
         provider = get_voice_provider(temp_provider)

@@ -59,6 +59,8 @@ def upsert_voice_provider(
     provider_type: str,
     api_key: str | None,
     api_key_changed: bool,
+    api_secret: str | None = None,
+    api_secret_changed: bool = False,
     api_base: str | None = None,
     custom_config: dict[str, Any] | None = None,
     stt_model: str | None = None,
@@ -96,6 +98,9 @@ def upsert_voice_provider(
     # Only update API key if explicitly changed or if provider has no key
     if api_key_changed or provider.api_key is None:
         provider.api_key = api_key  # ty: ignore[invalid-assignment]
+
+    if api_secret_changed or provider.api_secret is None:
+        provider.api_secret = api_secret  # ty: ignore[invalid-assignment]
 
     db_session.flush()
 
