@@ -153,6 +153,7 @@ async def test_voice_provider_test_uses_stored_secret_independently(
 
     await voice_provider_test_endpoint(
         VoiceProviderTestRequest(
+            id=1,
             provider_type="openai",
             api_key="provided-key",
             use_stored_secret=True,
@@ -166,3 +167,39 @@ async def test_voice_provider_test_uses_stored_secret_independently(
     assert captured_provider.api_secret is not None
     assert captured_provider.api_key.get_value(apply_mask=False) == "provided-key"
     assert captured_provider.api_secret.get_value(apply_mask=False) == "stored-secret"
+
+
+@pytest.mark.asyncio
+async def test_voice_provider_test_requires_id_for_stored_secret() -> None:
+    with pytest.raises(OnyxError, match="Provider id is required"):
+        await voice_provider_test_endpoint(
+            VoiceProviderTestRequest(
+                provider_type="openai",
+                api_key="provided-key",
+                use_stored_secret=True,
+            ),
+            MagicMock(),
+            MagicMock(),
+        )
+
+
+@pytest.mark.asyncio
+async def test_voice_provider_test_rejects_stored_secret_type_mismatch() -> None:
+    stored_provider = _make_provider()
+    stored_provider.provider_type = "azure"
+    stored_provider.api_secret = "stored-secret"  # ty: ignore[invalid-assignment]
+
+    db_session = MagicMock()
+    db_session.scalar.return_value = stored_provider
+
+    with pytest.raises(OnyxError, match="does not match"):
+        await voice_provider_test_endpoint(
+            VoiceProviderTestRequest(
+                id=1,
+                provider_type="openai",
+                api_key="provided-key",
+                use_stored_secret=True,
+            ),
+            MagicMock(),
+            db_session,
+        )
