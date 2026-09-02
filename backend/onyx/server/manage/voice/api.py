@@ -1,4 +1,4 @@
-from typing import Any, cast
+from typing import Any
 
 from fastapi import APIRouter, Depends, Response
 from sqlalchemy.orm import Session
@@ -44,16 +44,22 @@ STORED_API_SECRET_PLACEHOLDER = "********"
 _CUSTOM_CONFIG_CREDENTIAL_KEYS = {"api_key", "api_secret"}
 
 
-def _contains_custom_config_credential_key(value: object) -> bool:
+def _contains_custom_config_credential_key(
+    value: dict[str, Any] | list[Any],
+) -> bool:
     if isinstance(value, dict):
         for key, nested_value in value.items():
-            if isinstance(key, str) and key.lower() in _CUSTOM_CONFIG_CREDENTIAL_KEYS:
+            if key.lower() in _CUSTOM_CONFIG_CREDENTIAL_KEYS:
                 return True
-            if _contains_custom_config_credential_key(nested_value):
+            if isinstance(
+                nested_value, (dict, list)
+            ) and _contains_custom_config_credential_key(nested_value):
                 return True
-    if isinstance(value, list):
-        return any(_contains_custom_config_credential_key(item) for item in value)
-    return False
+        return False
+    return any(
+        isinstance(item, (dict, list)) and _contains_custom_config_credential_key(item)
+        for item in value
+    )
 
 
 def _reject_custom_config_credentials(
@@ -69,18 +75,30 @@ def _reject_custom_config_credentials(
     return custom_config
 
 
-def _sanitize_custom_config_for_response(value: object) -> object:
-    if isinstance(value, dict):
-        return {
-            key: _sanitize_custom_config_for_response(nested_value)
-            for key, nested_value in value.items()
-            if not (
-                isinstance(key, str) and key.lower() in _CUSTOM_CONFIG_CREDENTIAL_KEYS
-            )
-        }
-    if isinstance(value, list):
-        return [_sanitize_custom_config_for_response(item) for item in value]
-    return value
+def _sanitize_custom_config_dict(value: dict[str, Any]) -> dict[str, Any]:
+    sanitized: dict[str, Any] = {}
+    for key, nested_value in value.items():
+        if key.lower() in _CUSTOM_CONFIG_CREDENTIAL_KEYS:
+            continue
+        if isinstance(nested_value, dict):
+            sanitized[key] = _sanitize_custom_config_dict(nested_value)
+        elif isinstance(nested_value, list):
+            sanitized[key] = _sanitize_custom_config_list(nested_value)
+        else:
+            sanitized[key] = nested_value
+    return sanitized
+
+
+def _sanitize_custom_config_list(value: list[Any]) -> list[Any]:
+    sanitized: list[Any] = []
+    for item in value:
+        if isinstance(item, dict):
+            sanitized.append(_sanitize_custom_config_dict(item))
+        elif isinstance(item, list):
+            sanitized.append(_sanitize_custom_config_list(item))
+        else:
+            sanitized.append(item)
+    return sanitized
 
 
 def _custom_config_to_view(
@@ -88,7 +106,7 @@ def _custom_config_to_view(
 ) -> dict[str, Any] | None:
     if custom_config is None:
         return None
-    return cast(dict[str, Any], _sanitize_custom_config_for_response(custom_config))
+    return _sanitize_custom_config_dict(custom_config)
 
 
 def _validate_voice_api_base(provider_type: str, api_base: str | None) -> str | None:
