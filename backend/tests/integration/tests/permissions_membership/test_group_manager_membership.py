@@ -109,7 +109,9 @@ def env(module_reset: None) -> _ScopedEnv:  # noqa: ARG001
     saves each of them a ~12s alembic downgrade/upgrade.
 
     A test that writes successfully to these users or groups must take
-    ``isolated_env``, or it will change the answer for every test after it.
+    ``isolated_env``, or it will change the answer for every test after it. That
+    includes writes a test only does to set itself up: a denial test whose setup
+    attaches a connector to one of these groups is still writing to shared state.
     """
     return _build_env(UserManager.create(name=ADMIN_USER_NAME), "shared")
 
@@ -424,24 +426,26 @@ def test_manager_cannot_attach_public_cc_pair(env: _ScopedEnv) -> None:
     assert public_cc_pair.id not in before
 
 
-def test_manager_cannot_attach_unmanaged_cc_pair(env: _ScopedEnv) -> None:
+def test_manager_cannot_attach_unmanaged_cc_pair(isolated_env: _ScopedEnv) -> None:
     # Admin owns a PRIVATE cc_pair in a group the manager does not manage.
     unmanaged_cc_pair = CCPairManager.create_from_scratch(
-        user_performing_action=env.admin,
+        user_performing_action=isolated_env.admin,
         access_type=AccessType.PRIVATE,
-        groups=[env.other_group.id],
+        groups=[isolated_env.other_group.id],
     )
-    before = _settled_cc_pair_ids(env)
-    path = f"/manage/admin/user-group/{env.managed_group.id}"
+    before = _settled_cc_pair_ids(isolated_env)
+    path = f"/manage/admin/user-group/{isolated_env.managed_group.id}"
     resp = call_endpoint(
         "PATCH",
         path,
-        _patch_group_body([env.manager.id, env.member.id], [unmanaged_cc_pair.id]),
-        env.manager.headers,
-        env.manager.cookies,
+        _patch_group_body(
+            [isolated_env.manager.id, isolated_env.member.id], [unmanaged_cc_pair.id]
+        ),
+        isolated_env.manager.headers,
+        isolated_env.manager.cookies,
     )
     assert_response(resp, "PATCH", path, "manager", "denied")
-    assert _current_cc_pair_ids(env.managed_group.id) == before
+    assert _current_cc_pair_ids(isolated_env.managed_group.id) == before
     assert unmanaged_cc_pair.id not in before
 
 
