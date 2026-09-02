@@ -49,7 +49,6 @@ export function ScrollableTable({
       const overflows = el.scrollWidth > el.clientWidth;
       const atEnd = el.scrollLeft + el.clientWidth >= el.scrollWidth - 2;
       wrap.dataset.overflows = overflows && !atEnd ? "true" : "false";
-      el.dataset.scrolled = el.scrollLeft > 0 ? "true" : "false";
     };
 
     check();
