@@ -97,6 +97,10 @@ class VoiceProviderUpsertRequest(BaseModel):
 class VoiceProviderTestRequest(BaseModel):
     """Request model for testing a voice provider connection."""
 
+    id: int | None = Field(
+        default=None,
+        description="Existing provider ID to use when testing stored credentials.",
+    )
     provider_type: str
     api_key: str | None = Field(
         default=None,

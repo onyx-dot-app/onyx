@@ -108,6 +108,30 @@ def _validate_voice_api_base(provider_type: str, api_base: str | None) -> str | 
         ) from e
 
 
+def _fetch_provider_for_stored_secret(
+    db_session: Session,
+    provider_id: int | None,
+    provider_type: str,
+) -> VoiceProvider:
+    if provider_id is None:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "Provider id is required to use a stored API secret.",
+        )
+
+    provider = fetch_voice_provider_by_id(db_session, provider_id)
+    if provider is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Voice provider not found.")
+
+    if provider.provider_type != provider_type:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "Stored API secret provider does not match the requested provider type.",
+        )
+
+    return provider
+
+
 def _provider_to_view(provider: VoiceProvider) -> VoiceProviderView:
     """Convert a VoiceProvider model to a VoiceProviderView."""
     raw_key = provider.api_key.get_value(apply_mask=False) if provider.api_key else None
@@ -289,10 +313,16 @@ async def test_voice_provider(
     api_secret = request.api_secret
     existing_provider: VoiceProvider | None = None
 
-    if request.use_stored_key:
+    if request.use_stored_secret:
+        existing_provider = _fetch_provider_for_stored_secret(
+            db_session, request.id, request.provider_type
+        )
+    elif request.use_stored_key:
         existing_provider = fetch_voice_provider_by_type(
             db_session, request.provider_type
         )
+
+    if request.use_stored_key:
         if existing_provider is None or not existing_provider.api_key:
             raise OnyxError(
                 OnyxErrorCode.VALIDATION_ERROR,
@@ -301,10 +331,6 @@ async def test_voice_provider(
         api_key = existing_provider.api_key.get_value(apply_mask=False)
 
     if request.use_stored_secret:
-        if existing_provider is None:
-            existing_provider = fetch_voice_provider_by_type(
-                db_session, request.provider_type
-            )
         if existing_provider is None or not existing_provider.api_secret:
             raise OnyxError(
                 OnyxErrorCode.VALIDATION_ERROR,
