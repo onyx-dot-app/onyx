@@ -1,3 +1,8 @@
+import type {
+  VoiceProviderCustomConfig,
+  VoiceProviderUpsertRequest,
+} from "@/lib/voice/types";
+
 const VOICE_PROVIDERS_URL = "/api/admin/voice/providers";
 
 /** Sets a provider as the active STT or TTS default. Optionally pins a specific TTS model. */
@@ -30,8 +35,11 @@ export async function deactivateVoiceProvider(
 export async function testVoiceProvider(request: {
   provider_type: string;
   api_key?: string;
+  api_secret?: string;
   target_uri?: string;
   use_stored_key?: boolean;
+  use_stored_secret?: boolean;
+  custom_config?: VoiceProviderCustomConfig;
 }): Promise<Response> {
   return fetch(`${VOICE_PROVIDERS_URL}/test`, {
     method: "POST",
@@ -42,7 +50,7 @@ export async function testVoiceProvider(request: {
 
 /** Creates or updates a voice provider configuration. */
 export async function upsertVoiceProvider(
-  request: Record<string, unknown>
+  request: VoiceProviderUpsertRequest
 ): Promise<Response> {
   return fetch(VOICE_PROVIDERS_URL, {
     method: "POST",

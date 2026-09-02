@@ -7855,6 +7855,9 @@
         "elevenlabsTts": {
           "subtitle": "API de texto a voz de ElevenLabs."
         },
+        "zoomScribe": {
+          "subtitle": "API de voz a texto en tiempo real de Zoom Scribe."
+        },
         "tts1": {
           "subtitle": "El modelo de texto a voz de OpenAI optimizado para la velocidad."
         },
@@ -7871,6 +7874,12 @@
           "label": "Clave de API",
           "placeholder": "Clave de API",
           "required": "La clave de API es obligatoria"
+        },
+        "apiSecret": {
+          "description": "Pega tu [secreto de API]({url}) de {provider} para acceder a Scribe.",
+          "label": "Secreto de API",
+          "placeholder": "Secreto de API",
+          "required": "El secreto de API es obligatorio"
         },
         "cancelButton": {
           "label": "Cancelar"
@@ -7899,6 +7908,12 @@
           "invalid": "Introduce configuraciones regionales separadas por comas, como en-US, fr-FR (una por idioma)",
           "label": "Idiomas hablados",
           "selfHostedCapExceeded": "Los endpoints autoalojados admiten como máximo {cap} idiomas hablados (detección al inicio)"
+        },
+        "sttLanguage": {
+          "description": "Selecciona la configuración regional que Zoom Scribe debe usar para la transcripción en vivo. Consulta las [configuraciones regionales admitidas]({docsUrl}).",
+          "invalid": "Selecciona un idioma hablado admitido",
+          "label": "Idioma hablado",
+          "required": "El idioma hablado es obligatorio"
         },
         "sttModel": {
           "label": "Modelo de STT"

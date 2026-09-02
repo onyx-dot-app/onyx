@@ -1,3 +1,18 @@
+/** Provider-specific voice settings that are safe to return to administrators. */
+export type VoiceProviderCustomConfigValue =
+  | string
+  | number
+  | boolean
+  | null
+  | VoiceProviderCustomConfigValue[]
+  | { [key: string]: VoiceProviderCustomConfigValue | undefined };
+
+export interface VoiceProviderCustomConfig {
+  [key: string]: VoiceProviderCustomConfigValue | undefined;
+  language?: string;
+  stt_languages?: string[];
+}
+
 /** Shape of a voice provider returned by the admin API. */
 export interface VoiceProviderView {
   id: number;
@@ -10,9 +25,11 @@ export interface VoiceProviderView {
   default_voice: string | null;
   /** Masked API key (e.g. `"sk-a...b1c2"`). Non-null means a key is stored. */
   api_key: string | null;
+  /** Masked API secret. Non-null means a secret is stored. */
+  api_secret: string | null;
   target_uri: string | null;
   /** Provider-specific config (e.g. Azure `speech_region` / `stt_languages`). */
-  custom_config: Record<string, unknown> | null;
+  custom_config: VoiceProviderCustomConfig | null;
 }
 
 /** A selectable voice option returned by a provider's voices endpoint. */
@@ -25,10 +42,31 @@ export interface VoiceOption {
 /** Formik form values for the voice provider setup modal. */
 export interface VoiceFormValues {
   api_key: string;
+  api_secret: string;
   target_uri: string;
-  stt_model: string;
-  tts_model: string;
+  stt_model: string | null;
+  tts_model: string | null;
   default_voice: string;
   /** Comma-separated STT locales (Azure only), e.g. "en-US, fr-FR". */
   stt_languages: string;
+  /** Single STT locale for providers that support one active language. */
+  stt_language: string;
+}
+
+/** Request body for creating or updating a voice provider configuration. */
+export interface VoiceProviderUpsertRequest {
+  id?: number;
+  name: string;
+  provider_type: string;
+  api_key?: string;
+  api_secret?: string;
+  api_key_changed: boolean;
+  api_secret_changed?: boolean;
+  target_uri?: string;
+  custom_config: VoiceProviderCustomConfig;
+  stt_model: string | null;
+  tts_model: string | null;
+  default_voice: string;
+  activate_stt: boolean;
+  activate_tts: boolean;
 }

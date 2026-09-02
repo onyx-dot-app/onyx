@@ -7855,6 +7855,9 @@
         "elevenlabsTts": {
           "subtitle": "ElevenLabs のテキスト読み上げ API。"
         },
+        "zoomScribe": {
+          "subtitle": "Zoom Scribe のリアルタイム音声テキスト変換 API。"
+        },
         "tts1": {
           "subtitle": "速度に最適化された OpenAI のテキスト読み上げモデル。"
         },
@@ -7871,6 +7874,12 @@
           "label": "API キー",
           "placeholder": "API キー",
           "required": "API キーは必須です"
+        },
+        "apiSecret": {
+          "description": "Scribe にアクセスするには、{provider} の [API シークレット]({url}) を貼り付けてください。",
+          "label": "API シークレット",
+          "placeholder": "API シークレット",
+          "required": "API シークレットは必須です"
         },
         "cancelButton": {
           "label": "キャンセル"
@@ -7899,6 +7908,12 @@
           "invalid": "en-US, fr-FR のようにロケールをカンマ区切りで入力してください（1 言語につき 1 つ）",
           "label": "音声言語",
           "selfHostedCapExceeded": "セルフホストのエンドポイントは音声言語を最大 {cap} 個までサポートします（開始時に検出）"
+        },
+        "sttLanguage": {
+          "description": "Zoom Scribe がリアルタイム文字起こしに使用するロケールを選択してください。[対応ロケール]({docsUrl}) を参照してください。",
+          "invalid": "対応している音声言語を選択してください",
+          "label": "音声言語",
+          "required": "音声言語は必須です"
         },
         "sttModel": {
           "label": "STT モデル"

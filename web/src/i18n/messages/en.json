@@ -7855,6 +7855,9 @@
         "elevenlabsTts": {
           "subtitle": "ElevenLabs Text to Speech API."
         },
+        "zoomScribe": {
+          "subtitle": "Zoom Scribe real-time speech-to-text API."
+        },
         "tts1": {
           "subtitle": "OpenAI's text-to-speech model optimized for speed."
         },
@@ -7871,6 +7874,12 @@
           "label": "API Key",
           "placeholder": "API key",
           "required": "API key is required"
+        },
+        "apiSecret": {
+          "description": "Paste your [API secret]({url}) from {provider} to access Scribe.",
+          "label": "API Secret",
+          "placeholder": "API secret",
+          "required": "API secret is required"
         },
         "cancelButton": {
           "label": "Cancel"
@@ -7899,6 +7908,12 @@
           "invalid": "Enter comma-separated locales like en-US, fr-FR (one per language)",
           "label": "Spoken Languages",
           "selfHostedCapExceeded": "Self-hosted endpoints support at most {cap} spoken languages (at-start detection)"
+        },
+        "sttLanguage": {
+          "description": "Select the locale Zoom Scribe should use for live transcription. See [supported locales]({docsUrl}).",
+          "invalid": "Select a supported spoken language",
+          "label": "Spoken Language",
+          "required": "Spoken language is required"
         },
         "sttModel": {
           "label": "STT Model"

@@ -7855,6 +7855,9 @@
         "elevenlabsTts": {
           "subtitle": "ElevenLabs 텍스트 음성 변환 API."
         },
+        "zoomScribe": {
+          "subtitle": "Zoom Scribe 실시간 음성 텍스트 변환 API."
+        },
         "tts1": {
           "subtitle": "속도에 최적화된 OpenAI의 텍스트 음성 변환 모델."
         },
@@ -7871,6 +7874,12 @@
           "label": "API 키",
           "placeholder": "API 키",
           "required": "API 키가 필요합니다"
+        },
+        "apiSecret": {
+          "description": "Scribe에 액세스하려면 {provider}의 [API 시크릿]({url})을 붙여넣으세요.",
+          "label": "API 시크릿",
+          "placeholder": "API 시크릿",
+          "required": "API 시크릿이 필요합니다"
         },
         "cancelButton": {
           "label": "취소"
@@ -7899,6 +7908,12 @@
           "invalid": "en-US, fr-FR처럼 쉼표로 구분한 로캘을 입력하세요(언어당 하나씩)",
           "label": "음성 언어",
           "selfHostedCapExceeded": "자체 호스팅 엔드포인트는 음성 언어를 최대 {cap}개까지 지원합니다(시작 시 감지)"
+        },
+        "sttLanguage": {
+          "description": "Zoom Scribe가 실시간 전사에 사용할 로캘을 선택하세요. [지원되는 로캘]({docsUrl})을 참조하세요.",
+          "invalid": "지원되는 음성 언어를 선택하세요",
+          "label": "음성 언어",
+          "required": "음성 언어가 필요합니다"
         },
         "sttModel": {
           "label": "STT 모델"
