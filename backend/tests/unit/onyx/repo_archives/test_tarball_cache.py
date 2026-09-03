@@ -181,8 +181,8 @@ def test_nested_owner_does_not_evict_the_other_repo(
     mock_file_store: MagicMock, mock_delete_files: MagicMock
 ) -> None:
     """`owner` is a namespace path, so repo(owner="group", name="sub") and
-    repo(owner="group/sub", name="x") share a key prefix. Caching one must
-    not evict the other."""
+    repo(owner="group/sub", name="x") would share a key prefix if the fields
+    were joined on "/". Caching one must not evict the other."""
     outer = RepoRef(provider="test", host="test.local", owner="group", name="sub")
     inner = RepoRef(provider="test", host="test.local", owner="group/sub", name="x")
     inner_record = _record(_file_id(revision("f" * 40, inner)))

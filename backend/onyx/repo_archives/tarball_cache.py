@@ -129,13 +129,13 @@ def _evict_other_revisions(revision: RepoRevision) -> None:
     on this hot path."""
     repo_prefix = f"{_FILE_ID_PREFIX}{revision.repo.key_prefix}"
     incoming = _file_id(revision)
+    # No repo's key_prefix can be a prefix of another's: the fields are
+    # ":"-separated and no field may contain a ":". So everything the listing
+    # returns is a revision of this repo.
     stale_ids = [
         record.file_id
         for record in get_default_file_store().list_files_by_prefix(repo_prefix)
-        # A revision id is the prefix plus one segment; requiring no "/" in
-        # the remainder stops owner="group"/name="sub" evicting the nested
-        # repo owner="group/sub"/name="x", whose ids share the prefix.
-        if record.file_id != incoming and "/" not in record.file_id[len(repo_prefix) :]
+        if record.file_id != incoming
     ]
     delete_files_best_effort(stale_ids, context="repo archive cache")
 
