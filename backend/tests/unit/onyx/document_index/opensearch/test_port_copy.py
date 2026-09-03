@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 
 from pydantic import BaseModel
 
+from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.port_copy import copy_present_chunks_to_future
 from onyx.indexing.port_reembed import ReembedStrategy
 
@@ -18,6 +19,9 @@ class _Chunk(BaseModel):
     model_config = {"frozen": True}
     document_id: str
     written_by_port: bool | None = None
+
+
+_PORT_TENANT_STATE = TenantState(tenant_id="public", multitenant=False)
 
 
 def _chunk(doc_id: str) -> _Chunk:
@@ -44,6 +48,7 @@ def test_copier_drops_docs_deleted_mid_batch(mock_reembed: MagicMock) -> None:
         doc_ids=["doc_a", "doc_b"],
         strategy=ReembedStrategy.MODEL_ONLY,
         embedder=MagicMock(),
+        tenant_state=_PORT_TENANT_STATE,
         present_tokenizer=MagicMock(),
         surviving_doc_ids=lambda: {"doc_a"},  # doc_b deleted mid-batch
     )
@@ -67,6 +72,7 @@ def test_copier_skips_write_when_whole_batch_deleted(mock_reembed: MagicMock) ->
         doc_ids=["doc_a"],
         strategy=ReembedStrategy.MODEL_ONLY,
         embedder=MagicMock(),
+        tenant_state=_PORT_TENANT_STATE,
         present_tokenizer=MagicMock(),
         surviving_doc_ids=lambda: set(),  # everything deleted
     )
@@ -98,6 +104,7 @@ def test_copier_rechecks_survival_before_each_sub_page(mock_reembed: MagicMock) 
         doc_ids=["doc_a"],
         strategy=ReembedStrategy.MODEL_ONLY,
         embedder=MagicMock(),
+        tenant_state=_PORT_TENANT_STATE,
         present_tokenizer=MagicMock(),
         surviving_doc_ids=surviving,
     )
@@ -130,6 +137,7 @@ def test_copier_aborts_write_when_cancelled_mid_batch(mock_reembed: MagicMock) -
         doc_ids=["doc_a", "doc_b"],
         strategy=ReembedStrategy.MODEL_ONLY,
         embedder=MagicMock(),
+        tenant_state=_PORT_TENANT_STATE,
         present_tokenizer=MagicMock(),
         should_abort=lambda: next(aborts),
     )
@@ -179,6 +187,7 @@ def test_rag_on_augmentation_reembeds_one_page_per_document(
         doc_ids=["doc_a", "doc_b"],
         strategy=ReembedStrategy.AUGMENTATION,
         embedder=MagicMock(),
+        tenant_state=_PORT_TENANT_STATE,
         present_tokenizer=MagicMock(),
         augmentation_ctx=_aug_ctx(rag_on=True),
         should_abort=_should_abort,
@@ -215,6 +224,7 @@ def test_rag_off_augmentation_streams_per_pit_page(mock_reembed: MagicMock) -> N
         doc_ids=["doc_a", "doc_b"],
         strategy=ReembedStrategy.AUGMENTATION,
         embedder=MagicMock(),
+        tenant_state=_PORT_TENANT_STATE,
         present_tokenizer=MagicMock(),
         augmentation_ctx=_aug_ctx(rag_on=False),
     )
@@ -242,6 +252,7 @@ def test_copier_writes_all_without_filter(mock_reembed: MagicMock) -> None:
         doc_ids=["doc_a", "doc_b"],
         strategy=ReembedStrategy.MODEL_ONLY,
         embedder=MagicMock(),
+        tenant_state=_PORT_TENANT_STATE,
         present_tokenizer=MagicMock(),
     )
 

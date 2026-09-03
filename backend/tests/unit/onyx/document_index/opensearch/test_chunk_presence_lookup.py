@@ -77,7 +77,7 @@ def test_any_chunk_lookup_sees_a_document_whose_first_chunk_is_gone() -> None:
 
     client = MagicMock()
     client.get_existing_chunk_ids.side_effect = lambda _ids: set()
-    client.iter_chunks_for_doc_ids.side_effect = lambda _ids: iter(
+    client.iter_chunks_for_doc_ids.side_effect = lambda *_: iter(
         [[SimpleNamespace(document_id="doc-a", chunk_index=3)]]
     )
     index._client = client
@@ -96,7 +96,7 @@ def test_any_chunk_lookup_refreshes_before_it_scans() -> None:
     calls: list[str] = []
     client = MagicMock()
     client.refresh_index.side_effect = lambda: calls.append("refresh")
-    client.iter_chunks_for_doc_ids.side_effect = lambda _ids: (
+    client.iter_chunks_for_doc_ids.side_effect = lambda *_: (
         calls.append("scan"),
         iter([]),
     )[1]

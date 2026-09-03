@@ -584,7 +584,9 @@ class OpenSearchDocumentIndex(DocumentIndex):
             return set()
         self._client.refresh_index()
         found: set[str] = set()
-        for page in self._client.iter_chunks_for_doc_ids(document_ids):
+        for page in self._client.iter_chunks_for_doc_ids(
+            document_ids, self._tenant_state
+        ):
             found.update(chunk.document_id for chunk in page)
         return found
 

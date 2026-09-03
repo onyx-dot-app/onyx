@@ -17,7 +17,11 @@ from collections import defaultdict
 from collections.abc import Callable, Iterable
 
 from onyx.db.models import SearchSettings
-from onyx.document_index.factory import build_opensearch_document_index
+from onyx.document_index.factory import (
+    build_opensearch_document_index,
+    build_tenant_state,
+)
+from onyx.document_index.interfaces_new import TenantState
 from onyx.document_index.opensearch.client import OpenSearchIndexClient
 from onyx.document_index.opensearch.opensearch_document_index import (
     OpenSearchDocumentIndex,
@@ -85,6 +89,7 @@ def copy_present_chunks_to_future(
     strategy: ReembedStrategy,
     embedder: IndexingEmbedder,
     present_tokenizer: BaseTokenizer,
+    tenant_state: TenantState,
     augmentation_ctx: AugmentationReembedContext | None = None,
     surviving_doc_ids: Callable[[], set[str]] | None = None,
     should_abort: Callable[[], bool] | None = None,
@@ -107,12 +112,12 @@ def copy_present_chunks_to_future(
     )
     if rag_on_augmentation:
         by_doc: dict[str, list[DocumentChunkWithoutVectors]] = defaultdict(list)
-        for page in present_client.iter_chunks_for_doc_ids(doc_ids):
+        for page in present_client.iter_chunks_for_doc_ids(doc_ids, tenant_state):
             for chunk in page:
                 by_doc[chunk.document_id].append(chunk)
         pages = list(by_doc.values())
     else:
-        pages = present_client.iter_chunks_for_doc_ids(doc_ids)
+        pages = present_client.iter_chunks_for_doc_ids(doc_ids, tenant_state)
 
     chunks_written = 0
     for page_chunks in pages:
@@ -197,6 +202,7 @@ class PortCopier:
         self._strategy = select_reembed_strategy(
             present_search_settings, future_search_settings
         )
+        self._tenant_state = build_tenant_state()
         self._present_client = OpenSearchIndexClient(
             index_name=present_search_settings.index_name
         )
@@ -233,6 +239,7 @@ class PortCopier:
             strategy=self._strategy,
             embedder=self._embedder,
             present_tokenizer=self._present_tokenizer,
+            tenant_state=self._tenant_state,
             augmentation_ctx=self._augmentation_ctx,
             surviving_doc_ids=surviving_doc_ids,
             should_abort=should_abort,

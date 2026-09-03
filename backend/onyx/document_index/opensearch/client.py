@@ -44,6 +44,7 @@ from onyx.document_index.opensearch.schema import (
     CONTENT_VECTOR_FIELD_NAME,
     DOCUMENT_ID_FIELD_NAME,
     MAX_CHUNK_SIZE_FIELD_NAME,
+    TENANT_ID_FIELD_NAME,
     TITLE_VECTOR_FIELD_NAME,
     DocumentChunk,
     DocumentChunkWithoutVectors,
@@ -1800,6 +1801,7 @@ class OpenSearchIndexClient(OpenSearchClient):
         self,
         pit_id: str,
         doc_ids: list[str],
+        tenant_state: TenantState,
         search_after: list[object] | None = None,
         page_size: int = _PIT_SCAN_PAGE_SIZE,
         keep_alive: str = PIT_KEEP_ALIVE,
@@ -1814,6 +1816,7 @@ class OpenSearchIndexClient(OpenSearchClient):
         Args:
             pit_id: The point-in-time id from open_pit.
             doc_ids: The document ids whose chunks to fetch.
+            tenant_state: Scopes the scan to this tenant.
             search_after: The sort cursor from the previous page; None for the
                 first page.
             page_size: Max chunks per page.
@@ -1838,7 +1841,7 @@ class OpenSearchIndexClient(OpenSearchClient):
         try:
             result = self._client.search(
                 body=self._pit_scan_body(
-                    pit_id, doc_ids, search_after, page_size, keep_alive
+                    pit_id, doc_ids, tenant_state, search_after, page_size, keep_alive
                 )
             )
         except NotFoundError as e:
@@ -1852,7 +1855,7 @@ class OpenSearchIndexClient(OpenSearchClient):
             pit_id = self.open_pit(keep_alive)
             result = self._client.search(
                 body=self._pit_scan_body(
-                    pit_id, doc_ids, search_after, page_size, keep_alive
+                    pit_id, doc_ids, tenant_state, search_after, page_size, keep_alive
                 )
             )
 
@@ -1883,6 +1886,7 @@ class OpenSearchIndexClient(OpenSearchClient):
     def iter_chunks_for_doc_ids(
         self,
         doc_ids: list[str],
+        tenant_state: TenantState,
         page_size: int = _PIT_SCAN_PAGE_SIZE,
         keep_alive: str = PIT_KEEP_ALIVE,
     ) -> Iterator[list[DocumentChunkWithoutVectors]]:
@@ -1894,6 +1898,7 @@ class OpenSearchIndexClient(OpenSearchClient):
 
         Args:
             doc_ids: The document ids whose chunks to scan.
+            tenant_state: Scopes the scan to this tenant.
             page_size: Max chunks per page.
             keep_alive: PIT lease extension applied on each search.
 
@@ -1909,6 +1914,7 @@ class OpenSearchIndexClient(OpenSearchClient):
                 chunks, search_after, pit_id = self.fetch_chunks_for_doc_ids(
                     pit_id,
                     doc_ids,
+                    tenant_state,
                     search_after=search_after,
                     page_size=page_size,
                     keep_alive=keep_alive,
@@ -1924,6 +1930,7 @@ class OpenSearchIndexClient(OpenSearchClient):
         self,
         pit_id: str,
         doc_ids: list[str],
+        tenant_state: TenantState,
         search_after: list[object] | None,
         page_size: int,
         keep_alive: str,
@@ -1933,22 +1940,26 @@ class OpenSearchIndexClient(OpenSearchClient):
         No index= is sent — the PIT pins the index; keep_alive in the pit block
         extends the lease on every page.
         """
+        filter_clauses: list[dict[str, Any]] = [
+            {"terms": {DOCUMENT_ID_FIELD_NAME: doc_ids}},
+            # OpenSearch holds no large/mini chunks today, so this matches everything;
+            # kept as a guard if that changes.
+            {"term": {MAX_CHUNK_SIZE_FIELD_NAME: DEFAULT_MAX_CHUNK_SIZE}},
+        ]
+        # The document_id field holds the raw Onyx id. Only the OpenSearch _id gets a
+        # tenant prefix, so a query matching on the field crosses tenants without this.
+        if tenant_state.multitenant:
+            filter_clauses.append(
+                {"term": {TENANT_ID_FIELD_NAME: {"value": tenant_state.tenant_id}}}
+            )
+
         body: dict[str, Any] = {
             "pit": {"id": pit_id, "keep_alive": keep_alive},
             "size": page_size,
             "_source": {
                 "excludes": [CONTENT_VECTOR_FIELD_NAME, TITLE_VECTOR_FIELD_NAME]
             },
-            "query": {
-                "bool": {
-                    "filter": [
-                        {"terms": {DOCUMENT_ID_FIELD_NAME: doc_ids}},
-                        # OpenSearch holds no large/mini chunks today, so this
-                        # matches everything; kept as a guard if that changes
-                        {"term": {MAX_CHUNK_SIZE_FIELD_NAME: DEFAULT_MAX_CHUNK_SIZE}},
-                    ]
-                }
-            },
+            "query": {"bool": {"filter": filter_clauses}},
             "sort": [
                 {DOCUMENT_ID_FIELD_NAME: "asc"},
                 {CHUNK_INDEX_FIELD_NAME: "asc"},
