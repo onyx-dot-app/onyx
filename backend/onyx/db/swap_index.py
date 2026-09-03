@@ -362,6 +362,8 @@ def _no_writer_left_in_flight(
 
     # The port itself is covered by get_active_port_attempt in the caller. This is the
     # separate writer: connector index attempts keep polling into FUTURE all reindex.
+    # A wedged attempt cannot stall the swap for good: the indexing watchdog fails any
+    # attempt that has not sent a heartbeat for thirty minutes.
     if any_running_index_attempt_for_cc_pairs(db_session, ss_id, cc_pair_ids):
         logger.info(
             "Port swap held: an index attempt is mid-run against search settings %s.",
