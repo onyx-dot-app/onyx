@@ -4,11 +4,15 @@ from typing import Protocol
 
 from pydantic import BaseModel
 
+# Client-facing text for a failed streaming session. Providers must not put
+# upstream error details in `TranscriptResult.error`.
+STREAM_FAILED_ERROR = "Streaming transcription failed"
+
 
 class TranscriptResult(BaseModel):
     """Result from streaming transcription."""
 
-    text: str
+    text: str = ""
     """The accumulated transcript text."""
 
     is_vad_end: bool = False

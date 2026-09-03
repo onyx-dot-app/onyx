@@ -22,8 +22,9 @@ import aiohttp
 
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.llm_utils import traced_llm_call
-from onyx.voice.audio_utils import resample_pcm16
+from onyx.voice.audio_utils import Pcm16Resampler
 from onyx.voice.interface import (
+    STREAM_FAILED_ERROR,
     StreamingSynthesizerProtocol,
     StreamingTranscriberProtocol,
     TranscriptResult,
@@ -123,10 +124,12 @@ class ElevenLabsStreamingTranscriber(StreamingTranscriberProtocol):
         self.api_base = api_base or DEFAULT_ELEVENLABS_API_BASE
         self._ws: aiohttp.ClientWebSocketResponse | None = None
         self._session: aiohttp.ClientSession | None = None
+        self._resampler = Pcm16Resampler(input_sample_rate, target_sample_rate)
         self._transcript_queue: asyncio.Queue[TranscriptResult | None] = asyncio.Queue()
         self._final_transcript = ""
         self._receive_task: asyncio.Task | None = None
         self._closed = False
+        self._stream_failed = False
 
     async def connect(self) -> None:
         """Establish WebSocket connection to ElevenLabs."""
@@ -232,6 +235,9 @@ class ElevenLabsStreamingTranscriber(StreamingTranscriberProtocol):
                         self._logger.error(
                             "ElevenLabsStreamingTranscriber: API error: %s", error_msg
                         )
+                        # The API keeps the socket open after an error, so the
+                        # failure is reported when the stream ends.
+                        self._stream_failed = True
                         continue
 
                     # Handle message types from ElevenLabs Scribe Realtime API.
@@ -308,6 +314,7 @@ class ElevenLabsStreamingTranscriber(StreamingTranscriberProtocol):
                         "ElevenLabsStreamingTranscriber: WebSocket error: %s",
                         self._ws.exception() if self._ws else "N/A",
                     )
+                    self._stream_failed = True
                     break
                 elif msg.type == aiohttp.WSMsgType.CLOSE:
                     self._logger.info(
@@ -317,6 +324,7 @@ class ElevenLabsStreamingTranscriber(StreamingTranscriberProtocol):
                     )
                     break
         except Exception as e:
+            self._stream_failed = True
             self._logger.error(
                 "ElevenLabsStreamingTranscriber: error in receive loop: %s",
                 e,
@@ -328,6 +336,10 @@ class ElevenLabsStreamingTranscriber(StreamingTranscriberProtocol):
                 "ElevenLabsStreamingTranscriber: receive loop ended, close_code=%s",
                 close_code,
             )
+            if self._stream_failed and not self._closed:
+                await self._transcript_queue.put(
+                    TranscriptResult(error=STREAM_FAILED_ERROR)
+                )
             await self._transcript_queue.put(None)  # Signal end
 
     async def send_audio(self, chunk: bytes) -> None:
@@ -346,9 +358,7 @@ class ElevenLabsStreamingTranscriber(StreamingTranscriberProtocol):
 
         try:
             # Resample from input rate (24kHz) to target rate (16kHz)
-            resampled = resample_pcm16(
-                chunk, self.input_sample_rate, self.target_sample_rate
-            )
+            resampled = self._resampler.resample(chunk)
             # ElevenLabs expects input_audio_chunk message format with audio_base_64
             audio_b64 = base64.b64encode(resampled).decode("utf-8")
             message = {

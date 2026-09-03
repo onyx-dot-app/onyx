@@ -19,6 +19,7 @@ from onyx.server.manage.voice.text_utils import strip_markdown_for_tts
 from onyx.utils.logger import setup_logger
 from onyx.voice.factory import get_voice_provider
 from onyx.voice.interface import (
+    STREAM_FAILED_ERROR,
     StreamingSynthesizerProtocol,
     StreamingTranscriberProtocol,
     TranscriptResult,
@@ -245,6 +246,7 @@ async def handle_streaming_transcription(
     chunk_count = 0
     total_bytes = 0
     receiver_failed = asyncio.Event()
+    transcriber_closed = False
 
     async def receive_transcripts() -> None:
         """Background task to receive and send transcripts."""
@@ -262,7 +264,7 @@ async def handle_streaming_transcription(
                     await websocket.send_json(
                         {
                             "type": "error",
-                            "message": "Streaming transcription failed",
+                            "message": STREAM_FAILED_ERROR,
                         }
                     )
                     await websocket.close(code=WS_SERVER_ERROR_CLOSE_CODE)
@@ -294,17 +296,16 @@ async def handle_streaming_transcription(
                 await websocket.send_json(
                     {
                         "type": "error",
-                        "message": "Streaming transcription failed",
+                        "message": STREAM_FAILED_ERROR,
                     }
                 )
                 await websocket.close(code=WS_SERVER_ERROR_CLOSE_CODE)
             except Exception:
                 pass
 
-    # Start receiving transcripts in background
-    receive_task = asyncio.create_task(receive_transcripts())
-
-    try:
+    async def receive_client_messages() -> None:
+        """Read audio and control messages from the client."""
+        nonlocal chunk_count, total_bytes, transcriber_closed
         while True:
             message = await websocket.receive()
             msg_type = message.get("type", "unknown")
@@ -315,7 +316,7 @@ async def handle_streaming_transcription(
                     chunk_count,
                     total_bytes,
                 )
-                break
+                return
 
             if "bytes" in message:
                 chunk_size = len(message["bytes"])
@@ -329,7 +330,7 @@ async def handle_streaming_transcription(
                     await websocket.send_json(
                         {"type": "error", "message": "Message too large"}
                     )
-                    break
+                    return
 
                 # Enforce total connection size limit
                 if total_bytes + chunk_size > WS_MAX_TOTAL_BYTES:
@@ -340,7 +341,7 @@ async def handle_streaming_transcription(
                     await websocket.send_json(
                         {"type": "error", "message": "Total size limit exceeded"}
                     )
-                    break
+                    return
 
                 chunk_count += 1
                 total_bytes += chunk_size
@@ -363,6 +364,7 @@ async def handle_streaming_transcription(
                             "Streaming transcription: end signal received, closing transcriber"
                         )
                         final_transcript = await transcriber.close()
+                        transcriber_closed = True
                         receive_task.cancel()
                         logger.info(
                             "Streaming transcription: final transcript: %s...",
@@ -375,7 +377,7 @@ async def handle_streaming_transcription(
                                 "is_final": True,
                             }
                         )
-                        break
+                        return
                     elif data.get("type") == "reset":
                         # Reset accumulated transcript after auto-send
                         logger.info(
@@ -387,17 +389,38 @@ async def handle_streaming_transcription(
                         "Streaming transcription: failed to parse JSON: %s",
                         message.get("text", "")[:100],
                     )
+
+    # The client loop blocks on websocket.receive(), so a provider failure has to
+    # unblock it. Otherwise a client that never disconnects keeps the handler and
+    # the provider session alive.
+    receive_task = asyncio.create_task(receive_transcripts())
+    client_task = asyncio.create_task(receive_client_messages())
+    failure_task = asyncio.create_task(receiver_failed.wait())
+
+    try:
+        await asyncio.wait(
+            {client_task, failure_task}, return_when=asyncio.FIRST_COMPLETED
+        )
+        if client_task.done() and not receiver_failed.is_set():
+            # Re-raise client-loop failures for the caller's fallback logic.
+            client_task.result()
     except Exception as e:
-        if receiver_failed.is_set():
-            return
         logger.error("Streaming transcription: error: %s", e, exc_info=True)
         raise
     finally:
-        receive_task.cancel()
-        try:
-            await receive_task
-        except asyncio.CancelledError:
-            pass
+        for task in (receive_task, client_task, failure_task):
+            task.cancel()
+        await asyncio.gather(
+            receive_task, client_task, failure_task, return_exceptions=True
+        )
+        if not transcriber_closed:
+            try:
+                await transcriber.close()
+            except Exception:
+                logger.error(
+                    "Streaming transcription: failed to close transcriber",
+                    exc_info=True,
+                )
         logger.info(
             "Streaming transcription: handler finished. Processed %s chunks, %s total bytes",
             chunk_count,

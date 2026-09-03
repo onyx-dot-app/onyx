@@ -28,7 +28,18 @@ class FakeWebSocket:
         self._closed.set()
 
 
+class NeverReceivingWebSocket(FakeWebSocket):
+    """Client that never sends a message and never disconnects."""
+
+    async def receive(self) -> dict[str, str]:
+        await asyncio.Event().wait()
+        raise AssertionError("unreachable")
+
+
 class ErrorResultTranscriber:
+    def __init__(self) -> None:
+        self.closed = False
+
     async def send_audio(self, chunk: bytes) -> None:
         _ = chunk
 
@@ -40,6 +51,7 @@ class ErrorResultTranscriber:
         )
 
     async def close(self) -> str:
+        self.closed = True
         return ""
 
     def reset_transcript(self) -> None:
@@ -59,3 +71,19 @@ async def test_streaming_handler_sends_sanitized_error_and_closes() -> None:
         {"type": "error", "message": "Streaming transcription failed"}
     ]
     assert websocket.close_code == WS_SERVER_ERROR_CLOSE_CODE
+
+
+@pytest.mark.asyncio
+async def test_streaming_handler_stops_when_client_stays_silent() -> None:
+    """A provider failure must end the handler even without client input."""
+    websocket = NeverReceivingWebSocket()
+    transcriber = ErrorResultTranscriber()
+
+    async with asyncio.timeout(5):
+        await handle_streaming_transcription(
+            cast(Any, websocket),
+            cast(Any, transcriber),
+        )
+
+    assert websocket.close_code == WS_SERVER_ERROR_CLOSE_CODE
+    assert transcriber.closed

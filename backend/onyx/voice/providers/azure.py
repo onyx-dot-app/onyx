@@ -35,8 +35,9 @@ import aiohttp
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.llm_utils import traced_llm_call
 from onyx.utils.logger import setup_logger
-from onyx.voice.audio_utils import resample_pcm16
+from onyx.voice.audio_utils import Pcm16Resampler
 from onyx.voice.interface import (
+    STREAM_FAILED_ERROR,
     StreamingSynthesizerProtocol,
     StreamingTranscriberProtocol,
     TranscriptResult,
@@ -144,6 +145,7 @@ class AzureStreamingTranscriber(StreamingTranscriberProtocol):
         self.input_sample_rate = input_sample_rate
         self.target_sample_rate = target_sample_rate
         self.languages = languages or [DEFAULT_LOCALE]
+        self._resampler = Pcm16Resampler(input_sample_rate, target_sample_rate)
         self._transcript_queue: asyncio.Queue[TranscriptResult | None] = asyncio.Queue()
         self._accumulated_transcript = ""
         self._recognizer: Any = None
@@ -261,10 +263,14 @@ class AzureStreamingTranscriber(StreamingTranscriberProtocol):
                 getattr(details, "code", None),  # ods: ignore[getattr]
                 getattr(details, "error_details", None),  # ods: ignore[getattr]
             )
-            # A cancel is terminal — no more transcripts will arrive. Signal
-            # end-of-stream so the consumer loop stops polling instead of
-            # spinning on empty results forever.
+            # A cancel is terminal — no more transcripts will arrive. Report the
+            # failure, then signal end-of-stream so the consumer loop stops
+            # polling instead of spinning on empty results forever.
             if transcriber._loop and not transcriber._closed:
+                transcriber._loop.call_soon_threadsafe(
+                    transcriber._transcript_queue.put_nowait,
+                    TranscriptResult(error=STREAM_FAILED_ERROR),
+                )
                 transcriber._loop.call_soon_threadsafe(
                     transcriber._transcript_queue.put_nowait, None
                 )
@@ -281,9 +287,7 @@ class AzureStreamingTranscriber(StreamingTranscriberProtocol):
     async def send_audio(self, chunk: bytes) -> None:
         """Send audio chunk to Azure."""
         if self._audio_stream and not self._closed:
-            self._audio_stream.write(
-                resample_pcm16(chunk, self.input_sample_rate, self.target_sample_rate)
-            )
+            self._audio_stream.write(self._resampler.resample(chunk))
 
     async def receive_transcript(self) -> TranscriptResult | None:
         """Receive next transcript."""
