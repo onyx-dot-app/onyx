@@ -2413,13 +2413,15 @@ async def current_user_from_websocket(
             detail="Authentication verification failed."
         ) from e
 
-    token_tenant_id = token_data.get("tenant_id")
-    if not isinstance(token_tenant_id, str):
-        if MULTI_TENANT:
+    if MULTI_TENANT:
+        token_tenant_id = token_data.get("tenant_id")
+        if not isinstance(token_tenant_id, str):
             logger.warning("WS auth: token missing tenant_id")
             raise BasicAuthenticationError(
                 detail="Access denied. Invalid authentication token."
             )
+    else:
+        # Single-tenant deployments always run on the default schema.
         token_tenant_id = POSTGRES_DEFAULT_SCHEMA
 
     tenant_context_token = CURRENT_TENANT_ID_CONTEXTVAR.set(token_tenant_id)

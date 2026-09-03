@@ -19,6 +19,7 @@ import aiohttp
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.llm_utils import traced_llm_call
 from onyx.voice.interface import (
+    STREAM_FAILED_ERROR,
     StreamingSynthesizerProtocol,
     StreamingTranscriberProtocol,
     TranscriptResult,
@@ -92,6 +93,7 @@ class OpenAIStreamingTranscriber(StreamingTranscriberProtocol):
         # OpenAI keeps the WS open on protocol errors, so we cache the last
         # error event for callers to fail fast on a poisoned session.
         self._last_error: dict[str, Any] | None = None
+        self._stream_failed = False
 
     async def connect(self) -> None:
         """Establish WebSocket connection to OpenAI Realtime API (GA shape)."""
@@ -152,6 +154,8 @@ class OpenAIStreamingTranscriber(StreamingTranscriberProtocol):
                     # WS stays open on protocol errors — cache for callers.
                     if msg_type == OpenAIRealtimeMessageType.ERROR:
                         error = data.get("error", {})
+                        # The socket stays open after an error, so the failure
+                        # is reported when the stream ends.
                         self._last_error = error
                         self._logger.error("OpenAI error: %s", error)
                         continue
@@ -217,13 +221,19 @@ class OpenAIStreamingTranscriber(StreamingTranscriberProtocol):
 
                 elif msg.type == aiohttp.WSMsgType.ERROR:
                     self._logger.error("WebSocket error: %s", self._ws.exception())
+                    self._stream_failed = True
                     break
                 elif msg.type == aiohttp.WSMsgType.CLOSED:
                     self._logger.info("WebSocket closed by server")
                     break
         except Exception as e:
+            self._stream_failed = True
             self._logger.error("Error in receive loop: %s", e)
         finally:
+            if (self._stream_failed or self._last_error) and not self._closed:
+                await self._transcript_queue.put(
+                    TranscriptResult(error=STREAM_FAILED_ERROR)
+                )
             await self._transcript_queue.put(None)
 
     async def send_audio(self, chunk: bytes) -> None:
