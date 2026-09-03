@@ -1,9 +1,15 @@
 import time
+from collections.abc import Sequence
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from onyx.configs.app_configs import DISABLE_VECTOR_DB, VESPA_NUM_ATTEMPTS_ON_STARTUP
+from onyx.configs.app_configs import (
+    DISABLE_VECTOR_DB,
+    PORT_SWAP_VERIFY_DOCS_PER_UNIT,
+    PORT_SWAP_VERIFY_RETRY_DELAY_S,
+    VESPA_NUM_ATTEMPTS_ON_STARTUP,
+)
 from onyx.configs.constants import KV_REINDEX_KEY
 from onyx.db.connector_credential_pair import (
     fetch_indexable_standard_connector_credential_pair_ids,
@@ -11,8 +17,11 @@ from onyx.db.connector_credential_pair import (
     resync_cc_pair,
 )
 from onyx.db.document import (
+    PortedScope,
     count_secondary_only_sync_pending_documents_for_cc_pairs,
     delete_all_documents_for_connector_credential_pair,
+    filter_existing_document_ids,
+    sample_ported_document_ids,
 )
 from onyx.db.enums import (
     ConnectorCredentialPairStatus,
@@ -34,6 +43,7 @@ from onyx.db.port_attempt import (
     cancel_active_port_attempts,
     get_active_port_attempt,
     get_latest_port_attempt,
+    latest_port_bounds_by_user,
 )
 from onyx.db.search_settings import (
     get_current_search_settings,
@@ -41,11 +51,18 @@ from onyx.db.search_settings import (
     update_search_settings_status,
 )
 from onyx.db.user_file import (
+    PortedUserScope,
     any_user_file_reconcile_pending_for_users,
     fetch_port_scope_user_ids,
+    filter_existing_user_file_ids_any_owner,
+    sample_ported_user_file_ids,
 )
 from onyx.document_index.factory import get_all_document_indices
+from onyx.document_index.opensearch.port_copy import (
+    find_documents_missing_from_target,
+)
 from onyx.key_value_store.factory import get_kv_store
+from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -213,6 +230,106 @@ def _required_users_for_switchover(db_session: Session) -> list[UUID]:
     return fetch_port_scope_user_ids(db_session)
 
 
+def _verification_backoff_key(search_settings_id: int) -> str:
+    return f"port_swap_verify_failed:{search_settings_id}"
+
+
+def _ported_documents_present_in_new_index(
+    db_session: Session,
+    new_search_settings: SearchSettings,
+    cc_pair_scopes: Sequence[PortedScope],
+    user_scopes: Sequence[PortedUserScope],
+) -> bool:
+    """Spot-check that documents the ports reported copying are really in the new index.
+
+    Every other condition in the swap gate reads the port's own record of itself. A port
+    is marked SUCCESS once its copy loop drains, which says the task finished, not that
+    chunks landed, so this is the only check that reads the destination.
+
+    It samples a few documents per port unit, covering both kinds of unit the port
+    works in: connector cc_pairs and users with files. That catches a unit whose copy
+    never landed, a wrong index name, or an emptied index. It will not notice a few
+    individually missing documents, and a passing check is not proof that nothing was
+    lost.
+
+    After a failure it waits PORT_SWAP_VERIFY_RETRY_DELAY_S before checking again, and
+    keeps holding the swap meanwhile. The swap gate runs every 15 seconds, so without
+    that pause a cluster that stays unreachable would re-run this forever.
+    """
+    if PORT_SWAP_VERIFY_DOCS_PER_UNIT == 0:
+        return True
+
+    redis_client = get_redis_client()
+    backoff_key = _verification_backoff_key(new_search_settings.id)
+    if redis_client.exists(backoff_key):
+        return False
+
+    connector_document_ids = sample_ported_document_ids(
+        db_session, cc_pair_scopes, per_scope_limit=PORT_SWAP_VERIFY_DOCS_PER_UNIT
+    )
+    user_file_ids = sample_ported_user_file_ids(
+        db_session, user_scopes, per_scope_limit=PORT_SWAP_VERIFY_DOCS_PER_UNIT
+    )
+    sampled_document_ids = connector_document_ids + user_file_ids
+    if not sampled_document_ids:
+        return True
+
+    def hold_and_back_off() -> bool:
+        # Redis rejects an expiry of 0, and a delay of 0 means the operator wants the
+        # next tick to retry immediately, so there is no key to write.
+        if PORT_SWAP_VERIFY_RETRY_DELAY_S > 0:
+            redis_client.set(backoff_key, "1", ex=PORT_SWAP_VERIFY_RETRY_DELAY_S)
+        return False
+
+    try:
+        missing_document_ids = find_documents_missing_from_target(
+            new_search_settings, sampled_document_ids
+        )
+    except Exception:
+        logger.exception(
+            "Pre-swap check could not reach the new index %s; holding the swap.",
+            new_search_settings.index_name,
+        )
+        return hold_and_back_off()
+
+    # A document deleted between the sample and the lookup is gone from the new index
+    # for good reason, so ask Postgres again before counting it as loss. Each id has to
+    # go to its own table: a user file is never in `document`, so checking it there
+    # would report every user-file miss as a deletion and forgive it.
+    if missing_document_ids:
+        sampled_user_file_ids = set(user_file_ids)
+        still_exist = filter_existing_document_ids(
+            db_session,
+            [i for i in missing_document_ids if i not in sampled_user_file_ids],
+        ) | filter_existing_user_file_ids_any_owner(
+            db_session,
+            [i for i in missing_document_ids if i in sampled_user_file_ids],
+        )
+        missing_document_ids = [
+            document_id
+            for document_id in missing_document_ids
+            if document_id in still_exist
+        ]
+
+    if missing_document_ids:
+        logger.error(
+            "Pre-swap check found %d of %d sampled documents missing from index %s; "
+            "holding the swap. Missing: %s",
+            len(missing_document_ids),
+            len(sampled_document_ids),
+            new_search_settings.index_name,
+            missing_document_ids[:20],
+        )
+        return hold_and_back_off()
+
+    logger.info(
+        "Pre-swap check passed: %d sampled documents present in index %s.",
+        len(sampled_document_ids),
+        new_search_settings.index_name,
+    )
+    return True
+
+
 def _port_swap_ready(
     db_session: Session,
     new_search_settings: SearchSettings,
@@ -220,11 +337,13 @@ def _port_swap_ready(
     required_user_ids: list[UUID],
 ) -> bool:
     """Port-flow swap gate: True once every required cc_pair's AND user's port is SUCCESS
-    (none active) and the connector deferred metadata-sync backlog has drained. The port
-    copy is the whole bar — no post-port connector index attempt. The drain is scoped to
+    (none active), the connector deferred metadata-sync backlog has drained, and a sample
+    of ported documents is actually present in the new index. The port copy is the whole
+    bar — no post-port connector index attempt. The drain is scoped to
     required_cc_pairs: a global count would deadlock on un-portable INVALID/DELETING docs
     that never reach FUTURE."""
     ss_id = new_search_settings.id
+    cc_pair_scopes: list[PortedScope] = []
     for cc_pair in required_cc_pairs:
         if get_active_port_attempt(db_session, cc_pair.id, ss_id) is not None:
             return False
@@ -234,9 +353,21 @@ def _port_swap_ready(
         latest_port = get_latest_port_attempt(db_session, cc_pair.id, ss_id)
         if latest_port is None or not latest_port.status.is_successful():
             return False
+        cc_pair_scopes.append(
+            PortedScope(
+                connector_id=cc_pair.connector_id,
+                credential_id=cc_pair.credential_id,
+                up_to_doc_id=latest_port.up_to_doc_id,
+            )
+        )
 
     if not all_user_scopes_ported(db_session, ss_id, required_user_ids):
         return False
+    user_bounds = latest_port_bounds_by_user(db_session, ss_id, required_user_ids)
+    user_scopes = [
+        PortedUserScope(user_id=user_id, up_to_doc_id=user_bounds.get(user_id))
+        for user_id in required_user_ids
+    ]
 
     # Hold the swap until every user file's FUTURE copy reconciles. Safe only because new files
     # dual-write to FUTURE and the reconciler supplies content on a 404, so every flag drains
@@ -244,11 +375,18 @@ def _port_swap_ready(
     if any_user_file_reconcile_pending_for_users(db_session, required_user_ids):
         return False
 
-    return (
+    if (
         count_secondary_only_sync_pending_documents_for_cc_pairs(
             db_session, [cc_pair.id for cc_pair in required_cc_pairs]
         )
-        == 0
+        != 0
+    ):
+        return False
+
+    # Keep this last. It is the only condition that makes a network call, so the
+    # cheaper Postgres gates above stop it running while the port is still going.
+    return _ported_documents_present_in_new_index(
+        db_session, new_search_settings, cc_pair_scopes, user_scopes
     )
 
 
