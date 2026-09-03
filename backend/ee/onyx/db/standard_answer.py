@@ -3,6 +3,7 @@ import string
 from collections.abc import Sequence
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from onyx.db.models import StandardAnswer, StandardAnswerCategory
@@ -147,7 +148,18 @@ def remove_standard_answer_category(
         )
 
     db_session.delete(category)
-    db_session.commit()
+    try:
+        db_session.commit()
+    except IntegrityError:
+        # A concurrent write can attach an answer or a Slack config between the
+        # check above and this commit. Both association tables carry a foreign
+        # key to the category, so the delete is refused rather than leaving the
+        # new row dangling. Report it the same way the check does.
+        db_session.rollback()
+        raise OnyxError(
+            OnyxErrorCode.RESOURCE_IN_USE,
+            "Cannot delete this category: it came into use while being deleted.",
+        )
 
 
 def update_standard_answer_category(

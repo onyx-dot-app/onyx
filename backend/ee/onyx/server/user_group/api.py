@@ -141,19 +141,10 @@ def get_user_group(
     ),
     db_session: Session = Depends(get_session),
 ) -> UserGroup:
-    """Read one group. The listing carries every group with its nested connector,
-    document-set and agent snapshots, so reading one used to cost all of them."""
+    """Read one group with its nested connector, document-set and agent snapshots."""
     # GATE 2 (read): mirrors list_user_groups — a scoped manager may only read a
     # group they manage, so they cannot enumerate the org one id at a time.
-    managed_group_ids = (
-        get_scoped_groups(user, db_session, Permission.MANAGE_USER_GROUPS)
-        if has_permission(user, Permission.MANAGE_USER_GROUPS)
-        is PermissionAuthority.SCOPED
-        else set[int]()
-    )
-    can_manage = manages_group(
-        user, db_session, group_id=user_group_id, managed_group_ids=managed_group_ids
-    )
+    can_manage = manages_group(user, db_session, group_id=user_group_id)
     if not has_global_permission(user, Permission.READ_USER_GROUPS) and not can_manage:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "User group not found")
 

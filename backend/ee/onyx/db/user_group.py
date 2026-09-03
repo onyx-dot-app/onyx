@@ -817,16 +817,17 @@ def update_user_group(
         if leave_cc_pairs_alone
         else set(user_group_update.cc_pair_ids or [])
     )
+    added_cc_pair_ids = requested_cc_pair_ids - current_cc_pair_ids
     _assert_default_group_update_allowed(
         user,
         db_user_group,
-        attaching_cc_pairs=not leave_cc_pairs_alone and bool(requested_cc_pair_ids),
+        attaching_cc_pairs=bool(added_cc_pair_ids),
     )
     _assert_group_update_within_scope(
         db_session,
         user,
         user_group_id,
-        added_cc_pair_ids=requested_cc_pair_ids - current_cc_pair_ids,
+        added_cc_pair_ids=added_cc_pair_ids,
     )
 
     current_user_ids = set([user.id for user in db_user_group.users])

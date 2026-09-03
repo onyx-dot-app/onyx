@@ -599,7 +599,11 @@ def delete_persona(
                 include_deleted=True,
             )
         except ValueError:
-            pass
+            logger.info(
+                "Agent %s is not readable by this caller even including tombstones; "
+                "reporting the failed delete as an authorization error",
+                persona_id,
+            )
         else:
             raise OnyxError(
                 OnyxErrorCode.PERSONA_NOT_FOUND,

@@ -1,3 +1,5 @@
+from enum import Enum, auto
+
 from sqlalchemy import delete, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, load_only, selectinload
@@ -203,10 +205,42 @@ def fetch_persona_with_groups(db_session: Session, persona_id: int) -> Persona |
     )
 
 
+class ApiKeyIntent(Enum):
+    """What a request states about the api_key it carries."""
+
+    # A new key, taken as given. The only way to rotate to a value equal to the
+    # stored key's mask, which UNSTATED reads as an unchanged echo.
+    ROTATED = auto()
+    # Keep the stored key and ignore whatever api_key holds. The admin UI sends
+    # this with no api_key at all when the key is left alone.
+    UNCHANGED = auto()
+    # The caller does not set the flag, so the mask-echo heuristic decides. This
+    # is what keeps callers predating the flag able to rotate a key.
+    UNSTATED = auto()
+
+    @classmethod
+    def from_request_flag(cls, api_key_changed: bool | None) -> "ApiKeyIntent":
+        if api_key_changed is None:
+            return cls.UNSTATED
+        return cls.ROTATED if api_key_changed else cls.UNCHANGED
+
+
 def _resolve_embedding_api_key(
     incoming: str | None,
     existing: SensitiveValue[str] | None,
-    changed: bool | None = None,
+    intent: ApiKeyIntent,
+) -> str | None:
+    """Pick the api_key to store for an embedding provider."""
+    if intent is ApiKeyIntent.ROTATED:
+        return incoming
+    if intent is ApiKeyIntent.UNCHANGED:
+        return existing.get_value(apply_mask=False) if existing is not None else None
+    return _restore_masked_embedding_api_key(incoming, existing)
+
+
+def _restore_masked_embedding_api_key(
+    incoming: str | None,
+    existing: SensitiveValue[str] | None,
 ) -> str | None:
     """Restore the stored key when the caller submits the masked placeholder.
 
@@ -214,19 +248,10 @@ def _resolve_embedding_api_key(
     mask itself as the real credential. Mirrors resolve_masked_credentials in
     onyx/db/external_app.py.
     """
-    stored = existing.get_value(apply_mask=False) if existing is not None else None
-
-    if changed is False:
-        # The caller states the key is unchanged, so nothing it sent is read.
-        return stored
-    if changed is True:
-        # The caller states this is a new key. Taken as given, which is the one
-        # case the heuristic below cannot get right: a rotation to a value that
-        # equals the stored key's mask reads as an unchanged echo.
-        return incoming
-
     if incoming is None:
         return incoming
+
+    stored = existing.get_value(apply_mask=False) if existing is not None else None
 
     if stored is not None:
         # Compare against this key's own mask rather than the general shape
@@ -236,8 +261,8 @@ def _resolve_embedding_api_key(
         # shape, so refusing it would break providers holding a valid one.
         #
         # A caller rotating to a key that equals this mask exactly is read as an
-        # unchanged echo, and keeps the old key. Only a changed-flag on the
-        # request can separate the two, as LLMProviderUpsertRequest does.
+        # unchanged echo, and keeps the old key. Only api_key_changed on the
+        # request separates the two.
         return stored if incoming == mask_string(stored) else incoming
 
     if is_masked_credential(incoming):
@@ -262,14 +287,18 @@ def upsert_cloud_embedding_provider(
         # straight onto the model.
         updates = provider.model_dump(exclude={"api_key_changed"})
         updates["api_key"] = _resolve_embedding_api_key(
-            provider.api_key, existing_provider.api_key, provider.api_key_changed
+            provider.api_key,
+            existing_provider.api_key,
+            ApiKeyIntent.from_request_flag(provider.api_key_changed),
         )
         for key, value in updates.items():
             setattr(existing_provider, key, value)
     else:
         creation = provider.model_dump(exclude={"api_key_changed"})
         creation["api_key"] = _resolve_embedding_api_key(
-            provider.api_key, None, provider.api_key_changed
+            provider.api_key,
+            None,
+            ApiKeyIntent.from_request_flag(provider.api_key_changed),
         )
         new_provider = CloudEmbeddingProviderModel(**creation)
 
