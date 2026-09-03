@@ -232,3 +232,54 @@ def test_commit_sha_only_stamped_on_snapshot_sourced_documents(
     # Fell back to the content API, so no revision may be claimed.
     assert "commit_sha" not in docs["README.md"].metadata
     mock_repo.get_contents.assert_called_once()
+
+
+def test_vanished_snapshot_is_dropped_rather_than_retried_per_file(
+    mock_github_client: MagicMock,
+) -> None:
+    """A pruned snapshot fails every later read the same way. The connector
+    decides once and serves the rest of the batch from the content API,
+    instead of trying the snapshot again for each file."""
+    from onyx.connectors.github.models import SerializedRepository
+
+    mock_repo = make_mock_repo(files=FILES)
+    mock_github_client.get_repo.return_value = mock_repo
+
+    connector = GithubConnector(
+        repo_owner="test-org",
+        repositories="test-repo",
+        include_prs=False,
+        include_issues=False,
+        include_files=True,
+        include_code_files=True,
+    )
+    connector.github_client = mock_github_client
+    provider = FakeArchiveProvider(
+        archives={SHA: make_repo_tarball(FILES)}, refs={"main": SHA}
+    )
+
+    reads: list[str] = []
+
+    def _read_file(_self: RepoSnapshot, rel_path: str, _max_size: int) -> bytes:
+        reads.append(rel_path)
+        raise RepoSnapshotError("pruned mid-batch")
+
+    with (
+        patch.object(SerializedRepository, "to_Repository", return_value=mock_repo),
+        _patch_provider(provider),
+        patch.object(RepoSnapshot, "read_file", _read_file),
+        patch.object(RepoSnapshot, "is_available", False),
+    ):
+        outputs = load_everything_from_checkpoint_connector(connector, 0, time.time())
+
+    docs = [
+        item
+        for output in outputs
+        for item in output.items
+        if isinstance(item, Document)
+    ]
+    # Both files are still indexed, via the content API...
+    assert len(docs) == len(FILES)
+    assert mock_repo.get_contents.call_count == len(FILES)
+    # ...but the snapshot was only consulted for the first of them.
+    assert len(reads) == 1

@@ -1122,12 +1122,24 @@ class GithubConnector(
                         raw = snapshot.read_file(path, GITHUB_MAX_FILE_SIZE_BYTES)
                         commit_sha = snapshot_commit_sha
                     except (RepoSnapshotError, OSError) as e:
-                        logger.warning(
-                            "Reading %s from snapshot failed (%s); "
-                            "falling back to the content API",
-                            path,
-                            e,
-                        )
+                        if snapshot.is_available:
+                            logger.warning(
+                                "Reading %s from snapshot failed (%s); "
+                                "falling back to the content API",
+                                path,
+                                e,
+                            )
+                        else:
+                            # The snapshot went away mid-batch, so every later
+                            # read fails the same way. Decide once and say so:
+                            # the rest of this batch costs an API call a file.
+                            logger.warning(
+                                "Snapshot of %s is gone (%s); the rest of this "
+                                "batch falls back to the content API",
+                                repo.full_name,
+                                e,
+                            )
+                            snapshot = None
                 if raw is None:
                     raw = self._fetch_file_content(repo, path)
                     commit_sha = None

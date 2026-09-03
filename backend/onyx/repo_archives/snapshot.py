@@ -80,6 +80,13 @@ class RepoSnapshot:
                 rel_path = os.path.relpath(full_path, root).replace(os.sep, "/")
                 yield rel_path, st.st_size
 
+    @property
+    def is_available(self) -> bool:
+        """False once the snapshot directory is gone — pruned by another
+        worker, or its disk lost. Tells a per-file read failure apart from
+        one that means every later read fails too."""
+        return self.root.is_dir()
+
     def read_file(self, rel_path: str, max_size_bytes: int) -> bytes:
         """Read a repo-relative file.
 
