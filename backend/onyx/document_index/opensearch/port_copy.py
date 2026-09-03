@@ -157,6 +157,20 @@ def copy_present_chunks_to_future(
     return chunks_written, False
 
 
+def find_documents_with_no_chunks(
+    search_settings: SearchSettings, document_ids: list[str]
+) -> list[str]:
+    """Which of these documents have nothing at all in the index these settings name.
+
+    Raises if the cluster is unreachable, so the caller decides what that means.
+    """
+    index = build_opensearch_document_index(search_settings)
+    with_chunks = index.get_documents_with_any_chunk(document_ids)
+    return [
+        document_id for document_id in document_ids if document_id not in with_chunks
+    ]
+
+
 def find_documents_missing_from_index(
     search_settings: SearchSettings, document_ids: list[str]
 ) -> list[str]:

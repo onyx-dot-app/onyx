@@ -563,9 +563,12 @@ def test_document_absent_from_both_indexes_does_not_hold_the_swap(
     )
     _clear_verification_backoff(future_id)
 
-    # Missing from the new index, and from the source index as well.
-    with patch.object(
-        swap_index, "find_documents_missing_from_index", return_value=seeded
+    # Missing from the new index, and holding no chunk in the source index either.
+    with (
+        patch.object(
+            swap_index, "find_documents_missing_from_index", return_value=seeded
+        ),
+        patch.object(swap_index, "find_documents_with_no_chunks", return_value=seeded),
     ):
         assert _port_swap_ready(db_session, future_ss, [cc_pair], []) is True
 
@@ -766,8 +769,11 @@ def test_pre_swap_check_gates_on_what_is_in_the_new_index(
     )
     _clear_verification_backoff(future_id)
 
-    with patch.object(
-        swap_index, "find_documents_missing_from_index", side_effect=[seeded, []]
+    with (
+        patch.object(
+            swap_index, "find_documents_missing_from_index", return_value=seeded
+        ),
+        patch.object(swap_index, "find_documents_with_no_chunks", return_value=[]),
     ):
         assert _port_swap_ready(db_session, future_ss, [cc_pair], []) is False
 
@@ -794,8 +800,11 @@ def test_failed_verification_backs_off_before_rechecking(
     )
     _clear_verification_backoff(future_id)
 
-    with patch.object(
-        swap_index, "find_documents_missing_from_index", side_effect=[seeded, []]
+    with (
+        patch.object(
+            swap_index, "find_documents_missing_from_index", return_value=seeded
+        ),
+        patch.object(swap_index, "find_documents_with_no_chunks", return_value=[]),
     ):
         assert _port_swap_ready(db_session, future_ss, [cc_pair], []) is False
 
@@ -824,8 +833,9 @@ def test_zero_retry_delay_writes_no_backoff_key(
         patch.object(
             swap_index,
             "find_documents_missing_from_index",
-            side_effect=[seeded, []],
+            return_value=seeded,
         ),
+        patch.object(swap_index, "find_documents_with_no_chunks", return_value=[]),
     ):
         assert _port_swap_ready(db_session, future_ss, [cc_pair], []) is False
     # No key parked, so the next tick re-checks instead of waiting.
@@ -900,11 +910,14 @@ def test_port_swap_blocks_when_a_ported_user_file_is_missing(
         db_session.expire_all()
         _clear_verification_backoff(future_id)
 
-        with patch.object(
-            swap_index,
-            "find_documents_missing_from_index",
-            side_effect=[[str(user_file_id)], []],
-        ) as lookup:
+        with (
+            patch.object(
+                swap_index,
+                "find_documents_missing_from_index",
+                return_value=[str(user_file_id)],
+            ) as lookup,
+            patch.object(swap_index, "find_documents_with_no_chunks", return_value=[]),
+        ):
             assert _port_swap_ready(db_session, future_ss, [], [user.id]) is False
         assert str(user_file_id) in lookup.call_args[0][1]
 

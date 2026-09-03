@@ -569,6 +569,20 @@ class OpenSearchDocumentIndex(DocumentIndex):
 
         return self._client.delete_by_query(query_body)
 
+    def get_documents_with_any_chunk(self, document_ids: list[str]) -> set[str]:
+        """Which of these documents have at least one chunk here, whatever its position.
+
+        Scans instead of probing chunk 0, so it can tell a document that is really
+        absent from one that only lost its first chunk. Excusing a document on the
+        cheaper answer would wave that second case through as never indexed.
+        """
+        if not document_ids:
+            return set()
+        found: set[str] = set()
+        for page in self._client.iter_chunks_for_doc_ids(document_ids):
+            found.update(chunk.document_id for chunk in page)
+        return found
+
     def get_documents_missing_chunks(self, document_ids: list[str]) -> list[str]:
         """Which of these documents have no chunks in this index, in the order given.
 
