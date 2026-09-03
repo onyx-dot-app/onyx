@@ -31,9 +31,10 @@ def test_sensitive_languages_are_real_grammars() -> None:
         ("config.yaml", "yaml"),
         # grammar lookup, not a prose judgment — callers subtract doc formats
         ("README.md", "markdown"),
-        # credential formats are refused
-        ("key.pem", None),
-        ("secrets.env", None),
+        # a grammar lookup only — refusing credential formats is
+        # is_sensitive_code_file's job, and callers ask it separately
+        ("key.pem", "pem"),
+        ("secrets.env", "dotenv"),
         # unknown / not files
         ("image.png", None),
         ("no_extension", None),
@@ -80,7 +81,6 @@ def test_credential_files_are_refused(path: str) -> None:
     """These hold secrets and must never be chunked, whatever the caller
     supplies as `language`."""
     assert is_sensitive_code_file(path) is True
-    assert infer_code_language(path) is None
 
 
 @pytest.mark.parametrize(

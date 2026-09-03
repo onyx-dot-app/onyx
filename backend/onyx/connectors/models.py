@@ -4,7 +4,7 @@ import sys
 from collections.abc import Sequence
 from datetime import datetime
 from enum import Enum
-from typing import Any, Literal, TypeGuard, cast
+from typing import Any, Literal, TypeAlias, TypeGuard, cast
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -115,6 +115,10 @@ class CodeSection(Section):
             + sys.getsizeof(self.file_path)
         )
 
+
+# Every section type a Document can carry. Named so the union has one
+# definition to extend when a new section type lands.
+DocumentSection: TypeAlias = TextSection | ImageSection | TabularSection | CodeSection
 
 TextBearingSection = TextSection | CodeSection
 
@@ -229,7 +233,7 @@ class DocumentBase(BaseModel):
     """Used for Onyx ingestion api, the ID is inferred before use if not provided"""
 
     id: str | None = None
-    sections: Sequence[TextSection | ImageSection | TabularSection | CodeSection]
+    sections: Sequence[DocumentSection]
     source: DocumentSource | None = None
     semantic_identifier: str  # displayed in the UI as the main identifier for the doc
     # TODO(andrei): Ideally we could improve this to where each value is just a

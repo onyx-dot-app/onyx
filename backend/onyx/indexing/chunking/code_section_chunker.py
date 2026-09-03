@@ -22,6 +22,15 @@ from onyx.utils.text_processing import clean_code_text
 logger = setup_logger()
 
 
+class _CodeSpan(NamedTuple):
+    """One syntax-bounded slice of a code section, and the 1-based line range
+    it occupies in that section."""
+
+    text: str
+    start_line: int
+    end_line: int
+
+
 class _CachedSplitter(NamedTuple):
     """A splitter and the token budget it was built for. The budget varies per
     document, so an entry built for a different one is rebuilt."""
@@ -136,13 +145,13 @@ class CodeChunker(SectionChunker):
             return code_payloads(section_text, section_link, is_continuation=False)
 
         payloads: list[ChunkPayload] = []
-        for i, (text, start_line, end_line) in enumerate(spans):
+        for i, span in enumerate(spans):
             # A single syntax node can exceed the budget; build_payloads
             # hard-splits it.
             payloads.extend(
                 code_payloads(
-                    text,
-                    _line_anchored_link(section_link, start_line, end_line),
+                    span.text,
+                    _line_anchored_link(section_link, span.start_line, span.end_line),
                     is_continuation=(i != 0),
                 )
             )
@@ -153,9 +162,9 @@ class CodeChunker(SectionChunker):
         section_text: str,
         language: str | None,
         content_token_limit: int,
-    ) -> list[tuple[str, int, int]] | None:
-        """Split at tree-sitter node boundaries. Returns (text, start_line,
-        end_line) per chunk, or None when no grammar is available."""
+    ) -> list[_CodeSpan] | None:
+        """Split at tree-sitter node boundaries, or None when no grammar is
+        available."""
         if language is None:
             return None
 
@@ -163,14 +172,18 @@ class CodeChunker(SectionChunker):
         if splitter is None:
             return None
 
+        # chunk() returns list[CodeChunk] | list[str] depending on the
+        # return_type passed to the constructor, which the signature cannot
+        # express. _get_splitter always builds with return_type="texts".
+        texts = cast(list[str], splitter.chunk(section_text))
+
         # chonkie's chunks reconstruct the input exactly, so a running counter
         # tracks lines. Its CodeChunk.start_line is never populated.
-        texts = cast(list[str], splitter.chunk(section_text))
-        spans: list[tuple[str, int, int]] = []
+        spans: list[_CodeSpan] = []
         line = 1
         for text in texts:
             if text.strip():
-                spans.append((text, *_line_range(text, line)))
+                spans.append(_CodeSpan(text, *_line_range(text, line)))
             line += text.count("\n")
         return spans
 

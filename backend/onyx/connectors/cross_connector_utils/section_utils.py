@@ -1,19 +1,21 @@
+from typing import TypeVar
+
 from onyx.configs.app_configs import CONNECTOR_MAX_EXTRACTED_TEXT_CHARS
-from onyx.connectors.models import (
-    CodeSection,
-    ImageSection,
-    TabularSection,
-    TextSection,
-)
+from onyx.connectors.models import ImageSection, Section
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+# Preserves the caller's section union: `list` is invariant, so a connector
+# that only builds text/image sections cannot pass a list typed for the full
+# document union.
+SectionT = TypeVar("SectionT", bound=Section)
+
 
 def cap_sections_text(
-    sections: list[TextSection | ImageSection | TabularSection | CodeSection],
+    sections: list[SectionT],
     file_name: str | None,
-) -> list[TextSection | ImageSection | TabularSection | CodeSection]:
+) -> list[SectionT]:
     """Bound the total text retained per file to bound connector worker memory.
     Needed when a source can't be size-checked before fetch (e.g. Google-native
     files report no `size` metadata). A non-positive cap disables."""
