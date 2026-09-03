@@ -147,9 +147,17 @@ module "eks" {
     }
   } : {}
 
-  eks_managed_node_group_defaults = {
-    ami_type = "AL2023_x86_64_STANDARD"
-  }
+  # Node groups follow the control-plane version unless node_group_version pins
+  # them. Upstream resolves each group as
+  # try(group.cluster_version, defaults.cluster_version, cluster version).
+  eks_managed_node_group_defaults = merge(
+    {
+      ami_type = "AL2023_x86_64_STANDARD"
+    },
+    var.node_group_version != null ? {
+      cluster_version = var.node_group_version
+    } : {}
+  )
 
   eks_managed_node_groups = {
     for k, v in merge(var.eks_managed_node_groups, local.gpu_node_groups, local.craft_sandbox_node_groups) : k => merge(v,

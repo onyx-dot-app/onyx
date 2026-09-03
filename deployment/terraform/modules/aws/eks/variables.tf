@@ -9,6 +9,12 @@ variable "cluster_version" {
   default     = "1.33"
 }
 
+variable "node_group_version" {
+  type        = string
+  description = "Kubernetes version for the managed node groups. null (default) makes them follow cluster_version, which is what upgrades and rolls every node. Pin this to the version the nodes already run to apply unrelated changes without a roll, then bump it in its own change window."
+  default     = null
+}
+
 variable "vpc_id" {
   type        = string
   description = "The ID of the VPC"
