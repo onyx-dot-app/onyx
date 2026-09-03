@@ -1094,7 +1094,7 @@ MAX_CONSECUTIVE_PORT_FAILURES_BEFORE_PAUSE = max(
 )
 
 # Documents sampled per port unit (each cc_pair, each user) by the pre-swap check.
-# Set this to 0 to turn the check off and gate the swap on port status alone.
+# Set this to 0 to skip that sample. Every other swap condition still applies.
 PORT_SWAP_VERIFY_DOCS_PER_UNIT = _non_negative_int_env(
     "PORT_SWAP_VERIFY_DOCS_PER_UNIT", 3
 )
