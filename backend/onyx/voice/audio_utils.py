@@ -38,11 +38,9 @@ class Pcm16Resampler:
         Raises `ValueError` for a partial trailing sample, which would otherwise
         shift every following chunk.
         """
+        _validate_pcm16(data)
         if self._passthrough:
             return data
-
-        if len(data) % 2:
-            raise ValueError("PCM16 data must contain complete samples")
 
         num_samples = len(data) // 2
         if num_samples == 0:
@@ -90,6 +88,11 @@ class Pcm16Resampler:
         return struct.pack(f"<{len(resampled)}h", *resampled)
 
 
+def _validate_pcm16(data: bytes) -> None:
+    if len(data) % 2:
+        raise ValueError("PCM16 data must contain complete samples")
+
+
 def _clamp_int16(value: float) -> int:
     return max(-32768, min(32767, int(round(value))))
 
@@ -103,7 +106,12 @@ def resample_pcm16(
 
 
 def pcm16_to_wav(pcm_data: bytes, sample_rate: int = 24000) -> bytes:
-    """Wrap raw PCM16 mono bytes in a WAV container."""
+    """Wrap raw PCM16 mono bytes in a WAV container.
+
+    Raises `ValueError` for a partial trailing sample, which would produce a WAV
+    file with a truncated final frame.
+    """
+    _validate_pcm16(pcm_data)
     buffer = io.BytesIO()
     with wave.open(buffer, "wb") as wav_file:
         wav_file.setnchannels(1)

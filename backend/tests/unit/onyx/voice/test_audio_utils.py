@@ -43,6 +43,16 @@ def test_resample_pcm16_rejects_partial_sample() -> None:
         resample_pcm16(b"\x00\x00\x01", 24000, 16000)
 
 
+def test_resample_pcm16_rejects_partial_sample_when_passthrough() -> None:
+    with pytest.raises(ValueError):
+        resample_pcm16(b"\x00\x00\x01", 16000, 16000)
+
+
+def test_pcm16_to_wav_rejects_partial_sample() -> None:
+    with pytest.raises(ValueError):
+        pcm16_to_wav(b"\x00\x00\x01")
+
+
 def test_resample_pcm16_empty_data() -> None:
     assert resample_pcm16(b"", 24000, 16000) == b""
 

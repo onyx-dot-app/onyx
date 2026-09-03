@@ -95,6 +95,7 @@ class OpenAIStreamingTranscriber(StreamingTranscriberProtocol):
         self._last_error: dict[str, Any] | None = None
         self._stream_failed = False
         self._cleanup_done = False
+        self._socket_closing = False
 
     async def connect(self) -> None:
         """Establish WebSocket connection to OpenAI Realtime API (GA shape)."""
@@ -232,8 +233,9 @@ class OpenAIStreamingTranscriber(StreamingTranscriberProtocol):
             self._logger.error("Error in receive loop: %s", e)
         finally:
             # The socket ends the message iterator on close, so a server close
-            # before the client ends the session is an unexpected end.
-            if not self._closed:
+            # before the client closes the socket is an unexpected end. This
+            # includes the window where `close()` awaits the final transcript.
+            if not self._socket_closing:
                 self._stream_failed = True
             if self._stream_failed or self._last_error:
                 await self._transcript_queue.put(
@@ -309,6 +311,7 @@ class OpenAIStreamingTranscriber(StreamingTranscriberProtocol):
                     self._logger.warning("Timed out waiting for transcription")
 
         # Cleanup repeats until it finishes, in case a call was cancelled midway.
+        self._socket_closing = True
         if self._ws:
             await self._ws.close()
         if self._receive_task:

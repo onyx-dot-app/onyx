@@ -184,7 +184,7 @@ async def test_streaming_error_event_ends_stream() -> None:
 
 @pytest.mark.asyncio
 async def test_streaming_clean_end_reports_no_error() -> None:
-    """The client ended the session, so the socket close is expected."""
+    """The client closed the socket, so the close is expected."""
     transcriber = OpenAIStreamingTranscriber(api_key="test")
     transcriber._ws = cast(
         Any,
@@ -192,7 +192,7 @@ async def test_streaming_clean_end_reports_no_error() -> None:
             [FakeMessage({"type": OpenAIRealtimeMessageType.SESSION_CREATED})]
         ),
     )
-    transcriber._closed = True
+    transcriber._socket_closing = True
 
     await transcriber._receive_loop()
 
@@ -201,9 +201,10 @@ async def test_streaming_clean_end_reports_no_error() -> None:
 
 @pytest.mark.asyncio
 async def test_streaming_unexpected_server_close_reports_error() -> None:
-    """A close before the client ends the session is a failure."""
+    """A close while `close()` awaits the final transcript is still a failure."""
     transcriber = OpenAIStreamingTranscriber(api_key="test")
     transcriber._ws = cast(Any, FakeWebSocket([]))
+    transcriber._closed = True
 
     await transcriber._receive_loop()
 
