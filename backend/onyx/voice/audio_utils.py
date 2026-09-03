@@ -33,9 +33,16 @@ class Pcm16Resampler:
         return index, remainder / self._target_sample_rate
 
     def resample(self, data: bytes) -> bytes:
-        """Resample one chunk. Output samples are clamped to the int16 range."""
+        """Resample one chunk. Output samples are clamped to the int16 range.
+
+        Raises `ValueError` for a partial trailing sample, which would otherwise
+        shift every following chunk.
+        """
         if self._passthrough:
             return data
+
+        if len(data) % 2:
+            raise ValueError("PCM16 data must contain complete samples")
 
         num_samples = len(data) // 2
         if num_samples == 0:

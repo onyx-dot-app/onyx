@@ -388,13 +388,14 @@ async def handle_streaming_transcription(
         await asyncio.wait(
             {client_task, failure_task}, return_when=asyncio.FIRST_COMPLETED
         )
-        if client_task.done():
-            # The client loop finished the session, so its outcome wins.
-            # A failure here re-raises for the caller's fallback logic.
-            client_task.result()
-        else:
-            # The socket stays open so the caller can apply its fallback policy.
+        if receiver_failed.is_set():
+            # A provider failure wins over a client result that arrives with it,
+            # so the caller always applies its fallback policy. The socket stays
+            # open for that decision.
             raise StreamingTranscriptionFailed(STREAM_FAILED_ERROR)
+        # The client loop finished the session, so its outcome wins.
+        # A failure here re-raises for the caller's fallback logic.
+        client_task.result()
     except Exception as e:
         logger.error("Streaming transcription: error: %s", e, exc_info=True)
         raise

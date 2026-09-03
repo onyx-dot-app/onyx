@@ -7,7 +7,7 @@ from onyx.server.manage.voice.websocket_api import (
     StreamingTranscriptionFailed,
     handle_streaming_transcription,
 )
-from onyx.voice.interface import TranscriptResult
+from onyx.voice.interface import STREAM_FAILED_ERROR, TranscriptResult
 
 
 class FakeWebSocket:
@@ -63,12 +63,13 @@ async def test_streaming_handler_raises_on_provider_failure() -> None:
     """The caller decides between fallback and an error, so the socket stays open."""
     websocket = FakeWebSocket()
 
-    with pytest.raises(StreamingTranscriptionFailed):
+    with pytest.raises(StreamingTranscriptionFailed) as failure:
         await handle_streaming_transcription(
             cast(Any, websocket),
             cast(Any, ErrorResultTranscriber()),
         )
 
+    assert str(failure.value) == STREAM_FAILED_ERROR
     assert websocket.sent_json == []
     assert websocket.close_code is None
 
@@ -80,10 +81,11 @@ async def test_streaming_handler_stops_when_client_stays_silent() -> None:
     transcriber = ErrorResultTranscriber()
 
     async with asyncio.timeout(5):
-        with pytest.raises(StreamingTranscriptionFailed):
+        with pytest.raises(StreamingTranscriptionFailed) as failure:
             await handle_streaming_transcription(
                 cast(Any, websocket),
                 cast(Any, transcriber),
             )
 
+    assert str(failure.value) == STREAM_FAILED_ERROR
     assert transcriber.closed

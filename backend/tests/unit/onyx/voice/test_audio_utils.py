@@ -5,7 +5,12 @@ import wave
 
 import pytest
 
-from onyx.voice.audio_utils import Pcm16Resampler, pcm16_to_wav, resample_pcm16
+from onyx.voice.audio_utils import (
+    Pcm16Resampler,
+    _clamp_int16,
+    pcm16_to_wav,
+    resample_pcm16,
+)
 
 
 def test_resample_pcm16_passthrough_when_same_rate() -> None:
@@ -21,17 +26,21 @@ def test_resample_pcm16_downsamples() -> None:
     result = resample_pcm16(data, 24000, 16000)
     output_samples = struct.unpack(f"<{len(result) // 2}h", result)
 
-    assert len(output_samples) == 4
+    # Output sample n reads input position 1.5n, interpolated linearly.
+    assert output_samples == (1000, 2500, 4000, 5500)
 
 
-def test_resample_pcm16_clamps_to_int16_range() -> None:
-    input_samples = [32767, -32768, 32767, -32768, 32767, -32768]
-    data = struct.pack(f"<{len(input_samples)}h", *input_samples)
+@pytest.mark.parametrize(
+    "value,expected",
+    [(40000.0, 32767), (-40000.0, -32768), (1000.4, 1000), (-1000.6, -1001)],
+)
+def test_clamp_int16(value: float, expected: int) -> None:
+    assert _clamp_int16(value) == expected
 
-    result = resample_pcm16(data, 24000, 16000)
-    output_samples = struct.unpack(f"<{len(result) // 2}h", result)
-    for s in output_samples:
-        assert -32768 <= s <= 32767
+
+def test_resample_pcm16_rejects_partial_sample() -> None:
+    with pytest.raises(ValueError):
+        resample_pcm16(b"\x00\x00\x01", 24000, 16000)
 
 
 def test_resample_pcm16_empty_data() -> None:
