@@ -27,7 +27,7 @@ test("shows system and unattributed spend by category", () => {
           },
           records: [
             {
-              attribution: "SYSTEM",
+              attribution: "ATTRIBUTED",
               model: "claude-sonnet",
               flow: "image_summarization",
               provider: "anthropic",

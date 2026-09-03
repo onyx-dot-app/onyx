@@ -7,7 +7,7 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import { buildApiPath } from "@/lib/urlBuilder";
 import type { UsageExportTotals } from "@/lib/usage/userUsage";
 
-export type SystemUsageAttribution = "SYSTEM" | "UNATTRIBUTED";
+export type SystemUsageAttribution = "ATTRIBUTED" | "UNATTRIBUTED";
 
 export interface SystemUsageRecord {
   attribution: SystemUsageAttribution;
