@@ -33,6 +33,7 @@ export async function deactivateVoiceProvider(
 
 /** Validates provider credentials with a live API call before saving. */
 export async function testVoiceProvider(request: {
+  id?: number;
   provider_type: string;
   api_key?: string;
   api_secret?: string;

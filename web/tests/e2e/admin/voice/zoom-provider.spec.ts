@@ -146,6 +146,7 @@ test.describe("Zoom Scribe voice provider", () => {
     await expect.poll(() => capturedUpserts.length).toBe(1);
 
     expect(capturedTests[0]).toMatchObject({
+      id: 7,
       provider_type: "zoom",
       use_stored_key: true,
       use_stored_secret: true,
