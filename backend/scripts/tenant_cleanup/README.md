@@ -43,6 +43,7 @@ of the repo and off shared storage.
 ### 2. Delete all documents within these tenants
 
 ```
+cd onyx/backend
 PYTHONPATH=. python scripts/tenant_cleanup/no_bastion_mark_connectors.py \
     --csv gated_tenants_inactive_<N>d_<datetime>.csv \
     --data-plane-context <data_plane_context> \
@@ -62,6 +63,7 @@ infrastructure for long parallel jobs. A script cannot hold these jobs open.
 Wait for step 2 to finish. Then run:
 
 ```
+cd onyx/backend
 PYTHONPATH=. python scripts/tenant_cleanup/no_bastion_cleanup_tenants.py \
     --csv gated_tenants_inactive_<N>d_<datetime>.csv \
     --inactive-days <N> \

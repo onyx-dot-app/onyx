@@ -8,7 +8,9 @@ cd onyx/backend
 
 # Step 1: Generate CSV of tenants to clean (5-10 min)
 # Cutoff defaults to 60 days of no chat and no Craft activity; --inactive-days changes it.
-PYTHONPATH=. python scripts/tenant_cleanup/no_bastion_analyze_tenants.py
+PYTHONPATH=. python scripts/tenant_cleanup/no_bastion_analyze_tenants.py \
+  --data-plane-context <data_plane_context> \
+  --control-plane-context <control_plane_context>
 
 # Step 2: Mark connectors for deletion (1-2 min)
 PYTHONPATH=. python scripts/tenant_cleanup/no_bastion_mark_connectors.py \

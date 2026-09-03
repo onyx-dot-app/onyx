@@ -25,6 +25,31 @@ _VALUE_FLAGS = frozenset(
 )
 
 
+def parse_pod_overrides(argv: list[str]) -> tuple[str | None, str | None]:
+    """Read --data-plane-pod / --control-plane-pod, rejecting empty values.
+
+    An empty value usually means an unset environment variable was expanded. Falling
+    back to a random pod there would silently ignore the requested pin.
+    """
+    overrides: dict[str, str | None] = {"data": None, "control": None}
+    for flag, target in (
+        ("--data-plane-pod", "data"),
+        ("--control-plane-pod", "control"),
+    ):
+        if flag not in argv:
+            continue
+        index = argv.index(flag)
+        if index + 1 >= len(argv):
+            print(f"Error: {flag} requires a pod name", file=sys.stderr)
+            sys.exit(1)
+        value = argv[index + 1]
+        if not value.strip():
+            print(f"Error: {flag} was given an empty value", file=sys.stderr)
+            sys.exit(1)
+        overrides[target] = value
+    return overrides["data"], overrides["control"]
+
+
 def positional_tenant_id(argv: list[str]) -> str | None:
     """First argument that is neither a flag nor the value of one."""
     index = 1

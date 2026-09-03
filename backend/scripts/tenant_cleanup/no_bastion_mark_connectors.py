@@ -32,6 +32,7 @@ from scripts.tenant_cleanup.no_bastion_cleanup_utils import (
     find_background_pod,
     find_worker_pod,
     get_tenant_status,
+    parse_pod_overrides,
     positional_tenant_id,
     read_tenant_ids_from_csv,
 )
@@ -425,25 +426,11 @@ def main() -> None:
 
     # Pin pods so parallel runs spread across replicas instead of all
     # piling onto whichever one the random pick returns.
-    data_plane_pod_override: str | None = None
-    control_plane_pod_override: str | None = None
-    for flag, target in (
-        ("--data-plane-pod", "data"),
-        ("--control-plane-pod", "control"),
-    ):
-        if flag in sys.argv:
-            idx = sys.argv.index(flag)
-            if idx + 1 >= len(sys.argv):
-                print(f"Error: {flag} requires a pod name", file=sys.stderr)
-                sys.exit(1)
-            if target == "data":
-                data_plane_pod_override = sys.argv[idx + 1]
-            else:
-                control_plane_pod_override = sys.argv[idx + 1]
+    data_plane_pod_override, control_plane_pod_override = parse_pod_overrides(sys.argv)
 
     # Find pods in both clusters before processing
     try:
-        if data_plane_pod_override:
+        if data_plane_pod_override is not None:
             data_plane_pod: str = data_plane_pod_override
             print(f"✓ Using pinned data plane worker pod: {data_plane_pod}")
         else:
@@ -451,7 +438,7 @@ def main() -> None:
             data_plane_pod = find_worker_pod(data_plane_context)
             print(f"✓ Using data plane worker pod: {data_plane_pod}")
 
-        if control_plane_pod_override:
+        if control_plane_pod_override is not None:
             control_plane_pod: str = control_plane_pod_override
             print(f"✓ Using pinned control plane pod: {control_plane_pod}")
         else:
