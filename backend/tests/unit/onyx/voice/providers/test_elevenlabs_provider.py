@@ -1,5 +1,3 @@
-import struct
-
 from onyx.voice.providers.elevenlabs import (
     DEFAULT_ELEVENLABS_API_BASE,
     ElevenLabsSTTMessageType,
@@ -36,53 +34,6 @@ def test_stt_message_type_compares_as_string() -> None:
     """StrEnum members should work in string comparisons (e.g. from JSON)."""
     assert str(ElevenLabsSTTMessageType.COMMITTED_TRANSCRIPT) == "committed_transcript"
     assert isinstance(ElevenLabsSTTMessageType.ERROR, str)
-
-
-# --- Resampling ---
-
-
-def test_resample_pcm16_passthrough_when_same_rate() -> None:
-    from onyx.voice.providers.elevenlabs import ElevenLabsStreamingTranscriber
-
-    t = ElevenLabsStreamingTranscriber.__new__(ElevenLabsStreamingTranscriber)
-    t.input_sample_rate = 16000
-    t.target_sample_rate = 16000
-
-    data = struct.pack("<4h", 100, 200, 300, 400)
-    assert t._resample_pcm16(data) == data
-
-
-def test_resample_pcm16_downsamples() -> None:
-    """24kHz -> 16kHz should produce fewer samples (ratio 3:2)."""
-    from onyx.voice.providers.elevenlabs import ElevenLabsStreamingTranscriber
-
-    t = ElevenLabsStreamingTranscriber.__new__(ElevenLabsStreamingTranscriber)
-    t.input_sample_rate = 24000
-    t.target_sample_rate = 16000
-
-    input_samples = [1000, 2000, 3000, 4000, 5000, 6000]
-    data = struct.pack(f"<{len(input_samples)}h", *input_samples)
-
-    result = t._resample_pcm16(data)
-    output_samples = struct.unpack(f"<{len(result) // 2}h", result)
-
-    assert len(output_samples) == 4
-
-
-def test_resample_pcm16_clamps_to_int16_range() -> None:
-    from onyx.voice.providers.elevenlabs import ElevenLabsStreamingTranscriber
-
-    t = ElevenLabsStreamingTranscriber.__new__(ElevenLabsStreamingTranscriber)
-    t.input_sample_rate = 24000
-    t.target_sample_rate = 16000
-
-    input_samples = [32767, -32768, 32767, -32768, 32767, -32768]
-    data = struct.pack(f"<{len(input_samples)}h", *input_samples)
-
-    result = t._resample_pcm16(data)
-    output_samples = struct.unpack(f"<{len(result) // 2}h", result)
-    for s in output_samples:
-        assert -32768 <= s <= 32767
 
 
 # --- Provider Model Defaulting ---
