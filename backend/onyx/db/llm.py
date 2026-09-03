@@ -1265,20 +1265,60 @@ def sync_auto_mode_models(
             )
             changes += 1
 
-    # Mark models that are no longer in GitHub config as not visible. A model
-    # still holding a deployment default keeps its visibility: only the chat
-    # default is re-pointed above, so hiding the rest would strand a default on
-    # a model the admin can no longer see or change. Every other write path
-    # keeps a default model visible.
+    # Reconcile the visibility of the models the config dropped. A model still
+    # holding a deployment default stays visible: only the chat default is
+    # re-pointed above, so hiding the rest would strand a default on a model the
+    # admin can no longer see or change. Every other write path keeps a default
+    # model visible.
+    #
+    # Both statements test the default in SQL rather than from a snapshot read
+    # here. A default assigned between the two would otherwise be missed, and
+    # the model hidden anyway.
     db_session.flush()
-    defaults_by_model_id = fetch_default_flows_by_model_id(db_session)
 
-    for model_name, model in existing_models.items():
-        if model_name in recommended_visible_model_names:
-            continue
-        if model.is_visible and not defaults_by_model_id.get(model.id):
-            model.is_visible = False
-            changes += 1
+    dropped_names = [
+        name for name in existing_models if name not in recommended_visible_model_names
+    ]
+    if dropped_names:
+        holds_a_default = (
+            select(LLMModelFlow.id)
+            .where(
+                LLMModelFlow.model_configuration_id == ModelConfiguration.id,
+                LLMModelFlow.is_default == True,  # noqa: E712
+            )
+            .exists()
+        )
+        dropped_models = (
+            ModelConfiguration.llm_provider_id == provider.id,
+            ModelConfiguration.name.in_(dropped_names),
+        )
+
+        hidden = db_session.execute(
+            update(ModelConfiguration)
+            .where(
+                *dropped_models,
+                ModelConfiguration.is_visible == True,  # noqa: E712
+                ~holds_a_default,
+            )
+            .values(is_visible=False)
+            .execution_options(synchronize_session=False)
+        )
+
+        # An earlier sync could have hidden a model that still holds a default,
+        # so restore those rather than leaving the default unreachable forever.
+        restored = db_session.execute(
+            update(ModelConfiguration)
+            .where(
+                *dropped_models,
+                ModelConfiguration.is_visible == False,  # noqa: E712
+                holds_a_default,
+            )
+            .values(is_visible=True)
+            .execution_options(synchronize_session=False)
+        )
+
+        changes += int(hidden.rowcount)  # ty: ignore[unresolved-attribute]
+        changes += int(restored.rowcount)  # ty: ignore[unresolved-attribute]
 
     db_session.commit()
     return changes

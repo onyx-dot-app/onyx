@@ -1509,3 +1509,98 @@ class TestAutoModeSyncKeepsDefaultModelsVisible:
         finally:
             db_session.rollback()
             _cleanup_provider(db_session, provider_name)
+
+    def test_sync_restores_a_hidden_model_that_still_holds_a_default(
+        self,
+        db_session: Session,
+        provider_name: str,
+    ) -> None:
+        """An earlier sync could already have hidden a model holding a default.
+        Sync repairs that instead of leaving the default unreachable.
+
+        Steps:
+        1. Create provider with config: default=gpt-4o, additional=[gpt-4o-mini].
+        2. Point the Craft default at gpt-4o-mini, then hide it by hand to
+           reproduce what the previous sync left behind.
+        3. Re-sync with config: default=gpt-4o (gpt-4o-mini removed).
+        4. Verify gpt-4o-mini is visible again and still holds Craft.
+        """
+        config_v1 = _create_mock_llm_recommendations(
+            provider=LlmProviderNames.OPENAI,
+            default_model_name="gpt-4o",
+            additional_models=["gpt-4o-mini"],
+        )
+        config_v2 = _create_mock_llm_recommendations(
+            provider=LlmProviderNames.OPENAI,
+            default_model_name="gpt-4o",
+            additional_models=[],
+        )
+
+        try:
+            with patch(
+                "onyx.server.manage.llm.api.fetch_llm_recommendations_from_github",
+                return_value=config_v1,
+            ):
+                put_llm_provider(
+                    llm_provider_upsert_request=LLMProviderUpsertRequest(
+                        name=provider_name,
+                        provider=LlmProviderNames.OPENAI,
+                        api_key="sk-test-key-00000000000000000000000000000000000",
+                        api_key_changed=True,
+                        is_auto_mode=True,
+                        model_configurations=[],
+                    ),
+                    is_creation=True,
+                    user=_create_mock_admin(),
+                    db_session=db_session,
+                )
+
+            db_session.expire_all()
+            provider = fetch_existing_llm_provider(
+                name=provider_name, db_session=db_session
+            )
+            assert provider is not None
+            update_default_craft_provider(provider.id, "gpt-4o-mini", db_session)
+
+            # Reproduce the state the old sync left: hidden, but still the default.
+            db_session.expire_all()
+            provider = fetch_existing_llm_provider(
+                name=provider_name, db_session=db_session
+            )
+            assert provider is not None
+            for mc in provider.model_configurations:
+                if mc.name == "gpt-4o-mini":
+                    mc.is_visible = False
+            db_session.commit()
+
+            db_session.expire_all()
+            provider = fetch_existing_llm_provider(
+                name=provider_name, db_session=db_session
+            )
+            assert provider is not None
+            sync_auto_mode_models(
+                db_session=db_session,
+                provider=provider,
+                llm_recommendations=config_v2,
+            )
+
+            db_session.expire_all()
+            provider = fetch_existing_llm_provider(
+                name=provider_name, db_session=db_session
+            )
+            assert provider is not None
+            visibility = {
+                mc.name: mc.is_visible for mc in provider.model_configurations
+            }
+            assert visibility["gpt-4o-mini"] is True, (
+                "Sync must restore a model that an earlier sync hid while it "
+                "still held a default"
+            )
+
+            craft_default = fetch_default_craft_model(db_session)
+            assert craft_default is not None
+            assert craft_default.name == "gpt-4o-mini"
+
+        finally:
+            db_session.rollback()
+            _cleanup_provider(db_session, provider_name)
