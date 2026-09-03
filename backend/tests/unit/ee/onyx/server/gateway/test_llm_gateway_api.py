@@ -275,7 +275,7 @@ def _gateway_stream(llm: LLM):
             "tool_choice": None,
             "structured_response_format": None,
             "max_tokens": None,
-            "reasoning_effort": ReasoningEffort.AUTO,
+            "reasoning_effort": None,
             "model": "1/test",
         },
     )
@@ -346,16 +346,16 @@ def test_stream_cleanup_failure_does_not_hang_response() -> None:
 @pytest.mark.parametrize(
     ("raw", "expected"),
     [
-        (None, ReasoningEffort.AUTO),
+        (None, None),
         ("low", ReasoningEffort.LOW),
         ("medium", ReasoningEffort.MEDIUM),
         ("high", ReasoningEffort.HIGH),
-        ("invalid", ReasoningEffort.AUTO),
+        ("invalid", None),
     ],
 )
-def test_reasoning_effort_defaults_to_auto(
+def test_reasoning_effort_is_unpinned_when_absent_or_invalid(
     raw: str | None,
-    expected: ReasoningEffort,
+    expected: ReasoningEffort | None,
 ) -> None:
     assert gateway_api._parse_reasoning_effort(raw) is expected
 
@@ -1452,7 +1452,7 @@ def _responses_stream_events(
                     "tools": tools,
                     "tool_choice": None,
                     "max_tokens": None,
-                    "reasoning_effort": ReasoningEffort.AUTO,
+                    "reasoning_effort": None,
                     "model": model,
                     "response_id": response_id,
                     "created_at": 100,
@@ -1734,7 +1734,7 @@ def test_responses_stream_disconnect_closes_upstream_and_omits_completed() -> No
                 "tools": None,
                 "tool_choice": None,
                 "max_tokens": None,
-                "reasoning_effort": ReasoningEffort.AUTO,
+                "reasoning_effort": None,
                 "model": "1/test",
                 "response_id": "resp_gone",
                 "created_at": 100,

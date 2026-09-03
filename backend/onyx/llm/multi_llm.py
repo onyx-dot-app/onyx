@@ -594,7 +594,7 @@ class LitellmLLM(LLM):
         tool_choice: ToolChoice | None,
         stream: bool,
         parallel_tool_calls: bool,
-        reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
+        reasoning_effort: ReasoningEffort | None = None,
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
@@ -740,7 +740,6 @@ class LitellmLLM(LLM):
         # of the major providers. Not setting it sets it to OFF.
         if (
             is_reasoning
-            # The default of this parameter not set is surprisingly not the equivalent of an Auto but is actually Off
             and reasoning_effort != ReasoningEffort.OFF
             and not any(
                 openai_model_rejects_reasoning_effort(name)
@@ -824,20 +823,14 @@ class LitellmLLM(LLM):
 
             else:
                 # Hope for the best from LiteLLM
-                if reasoning_effort in [
-                    ReasoningEffort.LOW,
-                    ReasoningEffort.MEDIUM,
-                    ReasoningEffort.HIGH,
-                ]:
-                    optional_kwargs["reasoning_effort"] = reasoning_effort.value
-                elif reasoning_effort is ReasoningEffort.XHIGH:
+                if reasoning_effort is ReasoningEffort.XHIGH:
                     # Provider mappings behind litellm's reasoning_effort are
                     # uneven (Gemini raises on xhigh), clamp to high. The model
                     # picker greys the level out for these models, so reaching
                     # here means a stored override outliving a model switch.
                     optional_kwargs["reasoning_effort"] = ReasoningEffort.HIGH.value
                 else:
-                    optional_kwargs["reasoning_effort"] = ReasoningEffort.MEDIUM.value
+                    optional_kwargs["reasoning_effort"] = reasoning_effort.value
 
         if tools:
             # OpenAI will error if parallel_tool_calls is True and tools are not specified
@@ -1090,7 +1083,7 @@ class LitellmLLM(LLM):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
-        reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
+        reasoning_effort: ReasoningEffort | None = None,
         user_identity: LLMUserIdentity | None = None,
         total_timeout_override: float | None = None,
     ) -> ModelResponse:
@@ -1200,7 +1193,7 @@ class LitellmLLM(LLM):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
-        reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
+        reasoning_effort: ReasoningEffort | None = None,
         user_identity: LLMUserIdentity | None = None,
     ) -> Iterator[ModelResponseStream]:
         from litellm import CustomStreamWrapper as LiteLLMCustomStreamWrapper

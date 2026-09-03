@@ -20,11 +20,7 @@ from onyx.llm.model_capabilities import (
 from onyx.llm.model_capabilities import (
     model_identity_names as resolve_model_identity_names,
 )
-from onyx.llm.models import (
-    ReasoningEffort,
-    parse_user_selectable_reasoning_effort,
-    reasoning_effort_exceeds,
-)
+from onyx.llm.models import ReasoningEffort, reasoning_effort_exceeds
 from onyx.server.manage.llm.utils import (
     extract_vendor_from_model_name,
     filter_model_configurations,
@@ -239,19 +235,6 @@ class ModelConfigurationUpsertRequest(BaseModel):
     reasoning_effort_max: ReasoningEffort | None = None
     reasoning_effort_default: ReasoningEffort | None = None
     temperature_default: float | None = None
-
-    @field_validator("reasoning_effort_max", "reasoning_effort_default", mode="before")
-    @classmethod
-    def _validate_reasoning_effort(cls, value: Any) -> Any:
-        # AUTO has no rank and an unset column already means it. Enums too.
-        if value is None:
-            return value
-        try:
-            return parse_user_selectable_reasoning_effort(
-                value.value if isinstance(value, ReasoningEffort) else value
-            )
-        except ValueError as e:
-            raise OnyxError(OnyxErrorCode.BAD_REQUEST, str(e))
 
     @field_validator("temperature_default")
     @classmethod

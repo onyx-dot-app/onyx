@@ -245,8 +245,8 @@ def test_anthropic_tool_choice_refuses_unsupported(raw: dict[str, Any]) -> None:
     assert exc_info.value.error_code is OnyxErrorCode.INVALID_INPUT
 
 
-def test_anthropic_reasoning_effort_defaults_to_auto_when_absent() -> None:
-    assert gateway_api._anthropic_reasoning_effort(None, None) is ReasoningEffort.AUTO
+def test_anthropic_reasoning_effort_is_unpinned_when_absent() -> None:
+    assert gateway_api._anthropic_reasoning_effort(None, None) is None
 
 
 def test_anthropic_reasoning_effort_disabled_maps_to_off() -> None:
@@ -290,11 +290,8 @@ def test_anthropic_reasoning_effort_adaptive_honors_output_config_effort(
     assert effort is expected
 
 
-def test_anthropic_reasoning_effort_adaptive_without_effort_stays_auto() -> None:
-    assert (
-        gateway_api._anthropic_reasoning_effort({"type": "adaptive"}, None)
-        is ReasoningEffort.AUTO
-    )
+def test_anthropic_reasoning_effort_adaptive_without_effort_stays_unpinned() -> None:
+    assert gateway_api._anthropic_reasoning_effort({"type": "adaptive"}, None) is None
 
 
 def test_anthropic_reasoning_effort_output_config_alone_is_honored() -> None:
@@ -552,7 +549,7 @@ def _anthropic_stream_events(
                     "tools": tools,
                     "tool_choice": None,
                     "max_tokens": 1024,
-                    "reasoning_effort": ReasoningEffort.AUTO,
+                    "reasoning_effort": None,
                     "model": model,
                     "message_id": message_id,
                 },
