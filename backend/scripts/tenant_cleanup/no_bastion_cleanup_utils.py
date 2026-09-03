@@ -10,6 +10,73 @@ import subprocess
 import sys
 from pathlib import Path
 
+# Flags that consume the argument after them. Needed to find the positional
+# tenant id, which can otherwise be shadowed by a flag value.
+_VALUE_FLAGS = frozenset(
+    {
+        "--csv",
+        "--concurrency",
+        "--inactive-days",
+        "--data-plane-context",
+        "--control-plane-context",
+        "--data-plane-pod",
+        "--control-plane-pod",
+    }
+)
+
+
+def parse_pod_overrides(argv: list[str]) -> tuple[str | None, str | None]:
+    """Read --data-plane-pod / --control-plane-pod, rejecting empty values.
+
+    An empty value usually means an unset environment variable was expanded. Falling
+    back to a random pod there would silently ignore the requested pin.
+    """
+    overrides: dict[str, str | None] = {"data": None, "control": None}
+    for flag, target in (
+        ("--data-plane-pod", "data"),
+        ("--control-plane-pod", "control"),
+    ):
+        if flag not in argv:
+            continue
+        index = argv.index(flag)
+        if index + 1 >= len(argv):
+            print(f"Error: {flag} requires a pod name", file=sys.stderr)
+            sys.exit(1)
+        value = argv[index + 1]
+        if not value.strip():
+            print(f"Error: {flag} was given an empty value", file=sys.stderr)
+            sys.exit(1)
+        # `--data-plane-pod $POD --force` with POD unset leaves the next flag as
+        # the value, which would otherwise pin to a pod named "--force".
+        if value.startswith("-"):
+            print(
+                f"Error: {flag} was given {value!r}, which looks like a flag. "
+                "Pass a pod name.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        overrides[target] = value
+    return overrides["data"], overrides["control"]
+
+
+def positional_tenant_id(argv: list[str]) -> str | None:
+    """First argument that is neither a flag nor the value of one."""
+    index = 1
+    while index < len(argv):
+        arg = argv[index]
+        if arg in _VALUE_FLAGS:
+            index += 2
+            continue
+        if arg.startswith("-"):
+            index += 1
+            continue
+        return arg
+    return None
+
+
+class TenantRecentlyActiveError(Exception):
+    """Raised when a tenant has activity inside the inactivity window."""
+
 
 class TenantNotFoundInControlPlaneError(Exception):
     """Exception raised when tenant/table is not found in control plane."""
