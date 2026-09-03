@@ -4147,6 +4147,10 @@
           "title": "Auto-hospedados e personalizados"
         }
       },
+      "hideProviderGrouping": {
+        "description": "Mostre todos os modelos em uma única lista ao escolher modelos no chat. Ideal para um conjunto pequeno de modelos.",
+        "title": "Ocultar agrupamento por provedor"
+      },
       "modals": {
         "access": {
           "admin": {
@@ -4605,6 +4609,8 @@
       "toasts": {
         "providerDeleteFailed": "Falha ao excluir o provedor: {message}",
         "providerDeleted": "Provedor excluído com sucesso!",
+        "settingsUpdateFailed": "Falha ao atualizar as configurações",
+        "settingsUpdated": "Configurações atualizadas",
         "unknownError": "Erro desconhecido"
       }
     },

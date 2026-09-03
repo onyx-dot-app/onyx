@@ -4147,6 +4147,10 @@
           "title": "Autoalojados y personalizados"
         }
       },
+      "hideProviderGrouping": {
+        "description": "Muestra todos los modelos en una sola lista al elegir modelos en el chat. Ideal para un conjunto pequeño de modelos.",
+        "title": "Ocultar agrupación por proveedor"
+      },
       "modals": {
         "access": {
           "admin": {
@@ -4605,6 +4609,8 @@
       "toasts": {
         "providerDeleteFailed": "No se pudo eliminar el proveedor: {message}",
         "providerDeleted": "¡Proveedor eliminado correctamente!",
+        "settingsUpdateFailed": "No se pudo actualizar la configuración",
+        "settingsUpdated": "Configuración actualizada",
         "unknownError": "Error desconocido"
       }
     },
