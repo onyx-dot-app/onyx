@@ -18,12 +18,25 @@ Output:
 import json
 import sys
 
+import psycopg2.errors
 from sqlalchemy import func, select
 from sqlalchemy.exc import ProgrammingError
 
 from onyx.configs.constants import MessageType
 from onyx.db.engine.sql_engine import SqlEngine, get_session_with_tenant
 from onyx.db.models import BuildSession, ChatMessage
+
+
+def _is_missing_object(error: ProgrammingError) -> bool:
+    """True only when the schema or table does not exist.
+
+    SQLAlchemy wraps psycopg2 errors, so any other query failure must not be
+    mistaken for a tenant that is already gone.
+    """
+    return isinstance(
+        error.orig,
+        (psycopg2.errors.UndefinedTable, psycopg2.errors.InvalidSchemaName),
+    )
 
 
 def check_tenant_activity(tenant_id: str) -> dict:
@@ -41,12 +54,15 @@ def check_tenant_activity(tenant_id: str) -> dict:
             )
         )
 
-        # build_session only exists once a tenant has used Craft.
+        # build_session only exists once a tenant has used Craft. Any other
+        # failure is a real error and must not read as "no Craft activity".
         try:
             last_craft_activity_time = db_session.scalar(
                 select(func.max(BuildSession.last_activity_at))
             )
-        except ProgrammingError:
+        except ProgrammingError as e:
+            if not _is_missing_object(e):
+                raise
             db_session.rollback()
             last_craft_activity_time = None
 
@@ -69,8 +85,12 @@ def main() -> None:
 
     try:
         print(json.dumps(check_tenant_activity(tenant_id)))
-    except ProgrammingError:
-        # No schema for this tenant on its shard.
+    except ProgrammingError as e:
+        # Only an absent schema is "not_found". Every other query failure has to
+        # surface, or the caller reads it as a tenant that no longer exists.
+        if not _is_missing_object(e):
+            print(f"Activity query failed for {tenant_id}: {e}", file=sys.stderr)
+            sys.exit(1)
         print(json.dumps({"status": "not_found"}))
     except Exception as e:
         print(f"Failed to check activity for {tenant_id}: {e}", file=sys.stderr)

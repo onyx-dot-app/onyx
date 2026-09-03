@@ -46,6 +46,15 @@ def parse_pod_overrides(argv: list[str]) -> tuple[str | None, str | None]:
         if not value.strip():
             print(f"Error: {flag} was given an empty value", file=sys.stderr)
             sys.exit(1)
+        # `--data-plane-pod $POD --force` with POD unset leaves the next flag as
+        # the value, which would otherwise pin to a pod named "--force".
+        if value.startswith("-"):
+            print(
+                f"Error: {flag} was given {value!r}, which looks like a flag. "
+                "Pass a pod name.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
         overrides[target] = value
     return overrides["data"], overrides["control"]
 
