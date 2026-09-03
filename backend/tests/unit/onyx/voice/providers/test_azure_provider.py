@@ -173,6 +173,36 @@ async def test_streaming_cancel_reports_sanitized_error() -> None:
     assert await transcriber.receive_transcript() is None
 
 
+@pytest.mark.asyncio
+async def test_streaming_close_keeps_transcripts_from_drained_audio() -> None:
+    """Recognition drains before close marks the session closed."""
+    with (
+        patch("azure.cognitiveservices.speech.SpeechConfig"),
+        patch("azure.cognitiveservices.speech.SpeechRecognizer") as recognizer,
+        patch(
+            "azure.cognitiveservices.speech.languageconfig.AutoDetectSourceLanguageConfig"
+        ),
+        patch("azure.cognitiveservices.speech.audio.AudioStreamFormat"),
+        patch("azure.cognitiveservices.speech.audio.PushAudioInputStream"),
+        patch("azure.cognitiveservices.speech.audio.AudioConfig"),
+    ):
+        transcriber = AzureStreamingTranscriber(
+            api_key="key", languages=["en-US"], region="eastus"
+        )
+        await transcriber.connect()
+        on_recognized = recognizer.return_value.recognized.connect.call_args[0][0]
+
+    # Azure emits the last segment while the stop call drains.
+    def drain() -> None:
+        event = MagicMock()
+        event.result.text = "tail words"
+        on_recognized(event)
+
+    recognizer.return_value.stop_continuous_recognition_async.return_value.get = drain
+
+    assert await transcriber.close() == "tail words"
+
+
 def test_streaming_multilingual_self_hosted_keeps_at_start_detection() -> None:
     mocks = _connect_transcriber(["en-US", "fr-FR"], endpoint="http://localhost:5000")
 
