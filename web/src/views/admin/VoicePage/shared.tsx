@@ -226,6 +226,7 @@ export function VoiceProviderSetupModal({
       }
 
       const testResponse = await testVoiceProvider({
+        id: existingProvider?.id,
         provider_type: providerType,
         api_key: apiKeyChanged ? values.api_key : undefined,
         api_secret: apiSecretChanged ? values.api_secret : undefined,
