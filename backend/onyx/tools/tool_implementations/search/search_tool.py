@@ -180,14 +180,22 @@ def _build_scope_note(
 
 def _build_repo_analysis_note(escalation_chunks: list[InferenceChunk]) -> str:
     """LLM-facing hint listing code files whose question likely needs
-    repository-wide analysis, with the repo pointer needed to escalate."""
+    repository-wide analysis, with the repo pointer needed to escalate.
 
-    any_github = any(
-        chunk.source_type == DocumentSource.GITHUB for chunk in escalation_chunks
-    )
+    Empty unless the escalation can actually happen: the coding agent
+    currently acts on GitHub repositories only, so with none listed the note
+    is tokens spent on advice the LLM cannot take.
+    """
+    github_chunks = [
+        chunk
+        for chunk in escalation_chunks
+        if chunk.source_type == DocumentSource.GITHUB
+    ]
+    if not github_chunks:
+        return ""
 
     lines: list[str] = []
-    for chunk in escalation_chunks:
+    for chunk in github_chunks:
         pointer = f"- file: {chunk.semantic_identifier}"
         pointer += f", platform: {chunk.source_type.value}"
         for key in (
@@ -200,21 +208,14 @@ def _build_repo_analysis_note(escalation_chunks: list[InferenceChunk]) -> str:
                 pointer += f", {key}: {values[0]}"
         lines.append(pointer)
 
-    # The coding agent currently supports GitHub repos only; suggest it only
-    # when it can actually act on one of the listed files.
-    escalation_advice = (
-        f"If a coding agent tool (e.g. `{CODING_AGENT_TOOL_NAME}`) is available, "
-        "consider calling it with the GitHub repository listed above and the "
-        "user's question. Otherwise answer from the retrieved code and say what "
-        "could not be verified."
-        if any_github
-        else "Answer from the retrieved code and say what could not be verified."
-    )
-
     return (
         "\n\nNOTE: These code files are relevant, but fully answering likely "
         "requires repository-wide analysis (callers, cross-file flow, "
-        "configuration):\n" + "\n".join(lines) + "\n" + escalation_advice
+        "configuration):\n"
+        + "\n".join(lines)
+        + f"\nConsider calling `{CODING_AGENT_TOOL_NAME}` with the repository "
+        "listed above and the user's question. Otherwise answer from the "
+        "retrieved code and say what could not be verified."
     )
 
 
@@ -347,6 +348,9 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # Whether to infer source and time filters from the
         # query. When False, only user/persona-selected filters are applied.
         auto_detect_filters: bool = True,
+        # Whether this persona also has the coding agent tool. Gates the
+        # repo-analysis escalation note, which is useless without it.
+        coding_agent_available: bool = False,
     ) -> None:
         super().__init__(emitter=emitter)
 
@@ -361,6 +365,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         self.slack_context = slack_context
         self.enable_slack_search = enable_slack_search
         self.auto_detect_filters = auto_detect_filters
+        self.coding_agent_available = coding_agent_available
 
         self._search_cycles: list[SearchCycle] = []
         self._cached_expansion: tuple[str | None, list[str]] | None = None
@@ -1279,8 +1284,12 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             if result.classification == ContextExpansionType.REPO_ANALYSIS
             and result.section.center_chunk.document_id in visible_document_ids
         ]
+        # Only worth its tokens when the coding agent is actually on this
+        # persona; without it the LLM cannot act on the escalation.
         combined_note = (scope_note or "") + (
-            _build_repo_analysis_note(escalation_chunks) if escalation_chunks else ""
+            _build_repo_analysis_note(escalation_chunks)
+            if escalation_chunks and self.coding_agent_available
+            else ""
         )
 
         docs_str, citation_mapping = convert_inference_sections_to_llm_string(

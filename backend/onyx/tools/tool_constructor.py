@@ -208,6 +208,30 @@ def _construct_tools_impl(
     # This flow is for search so we do not get all indices.
     document_index = get_default_document_index(search_settings, None, db_session)
 
+    def _coding_agent_is_attached() -> bool:
+        """Whether this persona also gets the coding agent. The search tool
+        only advertises escalation to it when it can actually be called."""
+        for db_tool_model in persona.tools:
+            if (
+                allowed_tool_ids is not None
+                and db_tool_model.id not in allowed_tool_ids
+            ):
+                continue
+            if not db_tool_model.in_code_tool_id:
+                continue
+            try:
+                if get_built_in_tool_by_id(db_tool_model.in_code_tool_id) is (
+                    CodingAgentTool
+                ):
+                    return CodingAgentTool.is_available(db_session)
+            except Exception:
+                logger.exception(
+                    "Could not resolve built-in tool %s", db_tool_model.in_code_tool_id
+                )
+        return False
+
+    coding_agent_available = _coding_agent_is_attached()
+
     def _build_search_tool(tool_id: int, config: SearchToolConfig) -> SearchTool:
         persona_search_info = PersonaSearchInfo(
             document_set_names=[ds.name for ds in persona.document_sets],
@@ -229,6 +253,7 @@ def _construct_tools_impl(
             slack_context=config.slack_context,
             enable_slack_search=config.enable_slack_search,
             auto_detect_filters=config.auto_detect_filters,
+            coding_agent_available=coding_agent_available,
         )
 
     open_url_web_fetch_disabled = should_disable_open_url_web_fetch(
