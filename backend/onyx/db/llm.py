@@ -1,3 +1,5 @@
+from enum import Enum, auto
+
 from sqlalchemy import delete, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, load_only, selectinload
@@ -203,8 +205,42 @@ def fetch_persona_with_groups(db_session: Session, persona_id: int) -> Persona |
     )
 
 
+class ApiKeyIntent(Enum):
+    """What a request states about the api_key it carries."""
+
+    # A new key, taken as given. The only way to rotate to a value equal to the
+    # stored key's mask, which UNSTATED reads as an unchanged echo.
+    ROTATED = auto()
+    # Keep the stored key and ignore whatever api_key holds. The admin UI sends
+    # this with no api_key at all when the key is left alone.
+    UNCHANGED = auto()
+    # The caller does not set the flag, so the mask-echo heuristic decides. This
+    # is what keeps callers predating the flag able to rotate a key.
+    UNSTATED = auto()
+
+    @classmethod
+    def from_request_flag(cls, api_key_changed: bool | None) -> "ApiKeyIntent":
+        if api_key_changed is None:
+            return cls.UNSTATED
+        return cls.ROTATED if api_key_changed else cls.UNCHANGED
+
+
 def _resolve_embedding_api_key(
-    incoming: str | None, existing: SensitiveValue[str] | None
+    incoming: str | None,
+    existing: SensitiveValue[str] | None,
+    intent: ApiKeyIntent,
+) -> str | None:
+    """Pick the api_key to store for an embedding provider."""
+    if intent is ApiKeyIntent.ROTATED:
+        return incoming
+    if intent is ApiKeyIntent.UNCHANGED:
+        return existing.get_value(apply_mask=False) if existing is not None else None
+    return _restore_masked_embedding_api_key(incoming, existing)
+
+
+def _restore_masked_embedding_api_key(
+    incoming: str | None,
+    existing: SensitiveValue[str] | None,
 ) -> str | None:
     """Restore the stored key when the caller submits the masked placeholder.
 
@@ -216,6 +252,7 @@ def _resolve_embedding_api_key(
         return incoming
 
     stored = existing.get_value(apply_mask=False) if existing is not None else None
+
     if stored is not None:
         # Compare against this key's own mask rather than the general shape
         # test, so a real key that happens to look like a placeholder is still
@@ -224,8 +261,8 @@ def _resolve_embedding_api_key(
         # shape, so refusing it would break providers holding a valid one.
         #
         # A caller rotating to a key that equals this mask exactly is read as an
-        # unchanged echo, and keeps the old key. Only a changed-flag on the
-        # request can separate the two, as LLMProviderUpsertRequest does.
+        # unchanged echo, and keeps the old key. Only api_key_changed on the
+        # request separates the two.
         return stored if incoming == mask_string(stored) else incoming
 
     if is_masked_credential(incoming):
@@ -246,15 +283,23 @@ def upsert_cloud_embedding_provider(
         .first()
     )
     if existing_provider:
-        updates = provider.model_dump()
+        # api_key_changed is a request-only flag; every remaining key is setattr'd
+        # straight onto the model.
+        updates = provider.model_dump(exclude={"api_key_changed"})
         updates["api_key"] = _resolve_embedding_api_key(
-            provider.api_key, existing_provider.api_key
+            provider.api_key,
+            existing_provider.api_key,
+            ApiKeyIntent.from_request_flag(provider.api_key_changed),
         )
         for key, value in updates.items():
             setattr(existing_provider, key, value)
     else:
-        creation = provider.model_dump()
-        creation["api_key"] = _resolve_embedding_api_key(provider.api_key, None)
+        creation = provider.model_dump(exclude={"api_key_changed"})
+        creation["api_key"] = _resolve_embedding_api_key(
+            provider.api_key,
+            None,
+            ApiKeyIntent.from_request_flag(provider.api_key_changed),
+        )
         new_provider = CloudEmbeddingProviderModel(**creation)
 
         db_session.add(new_provider)
@@ -332,10 +377,34 @@ def upsert_llm_provider(
         for mc in llm_provider_upsert_request.model_configurations
     }
 
-    # Delete removed models
-    removed_ids = [
-        mc.id for name, mc in existing_by_name.items() if name not in models_to_exist
-    ]
+    # supports_image_input and supports_reasoning are optional, so an omitted one
+    # used to read as false and drop the flow — taking any deployment default that
+    # flow carried with it. Merge them against what is stored, the same way the
+    # reasoning and temperature fields below are merged.
+    merged_capabilities: dict[str, set[LLMModelFlowType]] = {}
+    for mc_request in llm_provider_upsert_request.model_configurations:
+        existing_mc = existing_by_name.get(mc_request.name)
+        stored_flows = set(existing_mc.llm_model_flow_types) if existing_mc else set()
+        merged: set[LLMModelFlowType] = set()
+        for capability_flow, sent in (
+            (LLMModelFlowType.VISION, mc_request.supports_image_input),
+            (LLMModelFlowType.REASONING, mc_request.supports_reasoning),
+        ):
+            keeps = sent if sent is not None else capability_flow in stored_flows
+            if keeps:
+                merged.add(capability_flow)
+        merged_capabilities[mc_request.name] = merged
+
+    # Delete removed models, unless the caller asked to keep what it did not send
+    removed_ids = (
+        []
+        if llm_provider_upsert_request.keep_existing_models
+        else [
+            mc.id
+            for name, mc in existing_by_name.items()
+            if name not in models_to_exist
+        ]
+    )
 
     # Every deployment default lives on a flow row pointing at a model, and
     # _update_default_model__no_commit makes that model visible, so a model
@@ -366,6 +435,22 @@ def upsert_llm_provider(
                 f"Cannot hide the default model '{name}'. It is the default for: "
                 f"{held}. Please change those defaults before hiding."
             )
+        # Dropping a capability deletes the flow row that represents it, so a
+        # model holding that flow's default must keep it.
+        for capability_flow in (
+            LLMModelFlowType.VISION,
+            LLMModelFlowType.REASONING,
+        ):
+            if (
+                capability_flow in held_flows
+                and name in merged_capabilities
+                and capability_flow not in merged_capabilities[name]
+            ):
+                raise ValueError(
+                    f"Cannot disable {capability_flow.value} support on '{name}'. "
+                    f"It is the deployment's {capability_flow.value} default "
+                    "model. Please change that default first."
+                )
 
     if removed_ids:
         db_session.query(ModelConfiguration).filter(
@@ -375,10 +460,7 @@ def upsert_llm_provider(
 
     for model_config in llm_provider_upsert_request.model_configurations:
         supported_flows = [LLMModelFlowType.CHAT]
-        if model_config.supports_image_input:
-            supported_flows.append(LLMModelFlowType.VISION)
-        if model_config.supports_reasoning:
-            supported_flows.append(LLMModelFlowType.REASONING)
+        supported_flows.extend(merged_capabilities.get(model_config.name, set()))
 
         existing = existing_by_name.get(model_config.name)
         if existing:

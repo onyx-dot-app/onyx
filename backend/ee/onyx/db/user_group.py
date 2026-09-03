@@ -265,6 +265,17 @@ def _add_user_group_snapshot_eager_loads(
     )
 
 
+def fetch_user_group_for_snapshot(
+    db_session: Session, user_group_id: int
+) -> UserGroup | None:
+    """Eager-loaded for UserGroup.from_model, so reading one group costs one
+    query set instead of the whole tenant listing."""
+    stmt = _add_user_group_snapshot_eager_loads(
+        select(UserGroup).where(UserGroup.id == user_group_id)
+    )
+    return db_session.scalar(stmt)
+
+
 def fetch_user_groups(
     db_session: Session,
     only_up_to_date: bool = True,
@@ -450,8 +461,12 @@ def fetch_user_groups_for_documents(
 
 def _check_user_group_is_modifiable(user_group: UserGroup) -> None:
     if not user_group.is_up_to_date:
-        raise ValueError(
-            "Specified user group is currently syncing. Wait until the current sync has finished before editing."
+        # OnyxError, not ValueError: the routes map ValueError to NOT_FOUND, so a
+        # syncing group used to be indistinguishable from a deleted one.
+        raise OnyxError(
+            OnyxErrorCode.RESOURCE_SYNCING,
+            "Specified user group is currently syncing. Wait until the current "
+            "sync has finished before editing.",
         )
 
 
@@ -796,15 +811,23 @@ def update_user_group(
     _check_user_group_is_modifiable(db_user_group)
 
     current_cc_pair_ids = set(_current_cc_pair_ids(db_user_group))
-    requested_cc_pair_ids = set(user_group_update.cc_pair_ids)
+    leave_cc_pairs_alone = user_group_update.cc_pair_ids is None
+    requested_cc_pair_ids = (
+        current_cc_pair_ids
+        if leave_cc_pairs_alone
+        else set(user_group_update.cc_pair_ids or [])
+    )
+    added_cc_pair_ids = requested_cc_pair_ids - current_cc_pair_ids
     _assert_default_group_update_allowed(
-        user, db_user_group, attaching_cc_pairs=bool(requested_cc_pair_ids)
+        user,
+        db_user_group,
+        attaching_cc_pairs=bool(added_cc_pair_ids),
     )
     _assert_group_update_within_scope(
         db_session,
         user,
         user_group_id,
-        added_cc_pair_ids=requested_cc_pair_ids - current_cc_pair_ids,
+        added_cc_pair_ids=added_cc_pair_ids,
     )
 
     current_user_ids = set([user.id for user in db_user_group.users])
@@ -866,7 +889,7 @@ def update_user_group(
         _add_user_group__cc_pair_relationships__no_commit(
             db_session=db_session,
             user_group_id=db_user_group.id,
-            cc_pair_ids=user_group_update.cc_pair_ids,
+            cc_pair_ids=list(requested_cc_pair_ids),
         )
 
     if cc_pairs_updated and not DISABLE_VECTOR_DB:

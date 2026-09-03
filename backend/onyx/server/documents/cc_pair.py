@@ -24,6 +24,7 @@ from onyx.connectors.interfaces import Resolver
 from onyx.connectors.models import InputType
 from onyx.db.connector_credential_pair import (
     add_credential_to_connector,
+    get_cc_pair_groups_for_ids,
     get_cc_pair_ids_for_connector,
     get_connector_credential_pair_for_user,
     get_connector_credential_pair_from_id_for_user,
@@ -402,6 +403,10 @@ def get_cc_pair_full_info(
         mask_credential_prefix=get_security_settings().mask_credential_prefix,
         is_connectors_admin=has_global_permission(user, Permission.MANAGE_CONNECTORS),
         owns_groupless=user_owns_groupless_cc_pair(cc_pair, db_session, user),
+        groups=[
+            relationship.user_group_id
+            for relationship in get_cc_pair_groups_for_ids(db_session, [cc_pair_id])
+        ],
         number_of_index_attempts=count_index_attempts_for_cc_pair(
             db_session=db_session,
             cc_pair_id=cc_pair_id,
@@ -851,6 +856,12 @@ def associate_credential_to_connector(
             processing_mode=metadata.processing_mode,
         )
 
+        if not response.success:
+            # The pair already exists. This used to answer 200 with success in
+            # the body and the *connector* id in data, so a caller checking the
+            # status stored the wrong id and reported a no-op as a success.
+            raise OnyxError(OnyxErrorCode.CONFLICT, response.message)
+
         # Tenant-work-gating lifecycle hook: keep new-tenant latency to
         # seconds instead of one full-fanout interval.
         maybe_mark_tenant_active(tenant_id, caller="cc_pair_lifecycle")
@@ -867,17 +878,14 @@ def associate_credential_to_connector(
             response.data,
         )
 
-        # response.data is the cc_pair id only when the association was actually
-        # created; a no-op (credential already linked) returns success=False.
-        if response.success:
-            emit_audit_event(
-                AuditAction.CC_PAIR_CREATE,
-                AuditOutcome.SUCCESS,
-                actor=actor_from_user(user),
-                resource_type="cc_pair",
-                resource_id=response.data,
-                extra={"connector_id": connector_id, "credential_id": credential_id},
-            )
+        emit_audit_event(
+            AuditAction.CC_PAIR_CREATE,
+            AuditOutcome.SUCCESS,
+            actor=actor_from_user(user),
+            resource_type="cc_pair",
+            resource_id=response.data,
+            extra={"connector_id": connector_id, "credential_id": credential_id},
+        )
         return response
     except ValidationError as e:
         raise OnyxError(
@@ -898,6 +906,10 @@ def associate_credential_to_connector(
             f"{credential_id}.",
         )
 
+    except OnyxError:
+        # Deliberate, already-classified failures must not be re-rendered as 500
+        # by the catch-all below.
+        raise
     except Exception as e:
         logger.exception("Unexpected error: %s", e)
 

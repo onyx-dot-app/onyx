@@ -73,6 +73,12 @@ class OnyxErrorCode(Enum):
     CONFLICT = ("CONFLICT", 409)
     DUPLICATE_RESOURCE = ("DUPLICATE_RESOURCE", 409)
     SKILL_NAME_CONFLICT = ("SKILL_NAME_CONFLICT", 409)
+    # A delete refused because something still points at the resource. Distinct
+    # from a plain 400 so a client can tell "repoint it first" from "bad input".
+    RESOURCE_IN_USE = ("RESOURCE_IN_USE", 409)
+    # A write refused because a background sync is still applying the last one.
+    # Retryable, unlike NOT_FOUND, which these routes used to report instead.
+    RESOURCE_SYNCING = ("RESOURCE_SYNCING", 409)
 
     # --------------------------------------------------------------------------
     # Rate Limiting / Quotas (429 / 402)
