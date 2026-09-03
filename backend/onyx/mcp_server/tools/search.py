@@ -15,6 +15,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.mcp_server.api import mcp_server
 from onyx.mcp_server.utils import (
     AgentEntry,
+    DocumentSetEntry,
     get_accessible_agents,
     get_accessible_document_sets,
     get_http_client,
@@ -101,6 +102,17 @@ def _error_payload(error: str) -> dict[str, Any]:
     return {"error": error, "results": []}
 
 
+def _is_forbidden(err: Exception) -> bool:
+    """Whether the caller's token may not read an inventory endpoint.
+
+    The inventory endpoints require BASIC_ACCESS, which no PAT scope grants —
+    it is not in SELECTABLE_PAT_SCOPES — so every scoped token is refused.
+    Filter validation is a convenience and must never block a search the token
+    is otherwise allowed to run, so a 403 degrades to skipping validation.
+    """
+    return isinstance(err, httpx.HTTPStatusError) and err.response.status_code == 403
+
+
 _TIME_CUTOFF_ADAPTER: TypeAdapter[datetime | None] = TypeAdapter(datetime | None)
 
 # A full inventory duplicates the matching resource and costs tokens on every
@@ -147,6 +159,162 @@ def _unknown_value_error(
         f"{kind} '{supplied}' not found — it may have been renamed or removed. "
         f"{discover}"
     )
+
+
+class _FilterError(Exception):
+    """An unusable filter value. The message is returned to the caller."""
+
+
+class _NoIndexedSources(Exception):
+    """Nothing is indexed and no agent supplied knowledge of its own."""
+
+
+async def _resolve_agent(agent: str, access_token: AccessToken) -> int:
+    """Resolve an agent name to its persona id."""
+    try:
+        accessible_agents = await get_accessible_agents(access_token)
+    except Exception as err:
+        logger.error("Onyx MCP Server: Error fetching agents: %s", err, exc_info=True)
+        raise _FilterError(f"Failed to look up agents: {str(err)}") from err
+
+    matches = _match_agents(agent, accessible_agents)
+    if not matches:
+        raise _FilterError(
+            _unknown_value_error(
+                "Agent",
+                agent,
+                (entry.name for entry in accessible_agents),
+                "Read the `agents` resource for the current list.",
+            )
+        )
+    if len(matches) > 1:
+        raise _FilterError(
+            f"Agent name '{agent}' is ambiguous: {len(matches)} accessible "
+            "agents share it. Ask the user which one they mean."
+        )
+    return matches[0].id
+
+
+async def _load_indexed_sources(access_token: AccessToken) -> list[str] | None:
+    """The tenant's filterable sources, or None when the token may not list them."""
+    try:
+        return await get_indexed_sources(access_token)
+    except Exception as err:
+        if not _is_forbidden(err):
+            logger.error(
+                "Onyx MCP Server: Error checking indexed sources: %s",
+                err,
+                exc_info=True,
+            )
+            raise _FilterError(f"Failed to check indexed sources: {str(err)}") from err
+        logger.info(
+            "Onyx MCP Server: token may not list indexed sources; "
+            "searching without the source inventory"
+        )
+        return None
+
+
+def _resolve_source_types(
+    source_types: list[str], available: set[str] | None
+) -> list[DocumentSource]:
+    """Convert supplied source names, rejecting any this tenant cannot filter on."""
+    resolved: list[DocumentSource] = []
+    for source_str in source_types:
+        canonical = source_str.lower()
+        if available is not None and canonical not in available:
+            raise _FilterError(
+                _unknown_value_error(
+                    "Source type",
+                    source_str,
+                    available,
+                    "Read the `indexed_sources` resource for the current list.",
+                )
+            )
+        try:
+            resolved.append(DocumentSource(canonical))
+        except ValueError:
+            # Only reachable when the inventory was unavailable; an unparseable
+            # source would otherwise have been rejected above.
+            logger.warning(
+                "Onyx MCP Server: Invalid source type '%s' - skipping", source_str
+            )
+    return resolved
+
+
+async def _validate_document_sets(
+    document_set_names: list[str], access_token: AccessToken
+) -> None:
+    """Reject names the user cannot filter on, so the scope is never silently wider."""
+    accessible_sets: list[DocumentSetEntry] | None
+    try:
+        accessible_sets = await get_accessible_document_sets(access_token)
+    except Exception as err:
+        if not _is_forbidden(err):
+            logger.error(
+                "Onyx MCP Server: Error fetching document sets: %s", err, exc_info=True
+            )
+            raise _FilterError(f"Failed to look up document sets: {str(err)}") from err
+        logger.info(
+            "Onyx MCP Server: token may not list document sets; "
+            "passing the filter through unvalidated"
+        )
+        return
+
+    available_set_names: set[str] = {entry.name for entry in accessible_sets}
+    for set_name in document_set_names:
+        if set_name not in available_set_names:
+            raise _FilterError(
+                _unknown_value_error(
+                    "Document set",
+                    set_name,
+                    available_set_names,
+                    "Read the `document_sets` resource for the current list.",
+                )
+            )
+
+
+async def _resolve_filters(
+    access_token: AccessToken,
+    source_types: list[str] | None,
+    document_set_names: list[str] | None,
+    agent: str | None,
+) -> tuple[int | None, list[DocumentSource] | None]:
+    """Resolve every filter up front so an unusable value fails before searching.
+
+    A value that cannot be honoured raises rather than being dropped: a silently
+    widened search is indistinguishable from a correctly scoped one.
+    """
+    # _build_index_filters lets explicit document sets *replace* the agent's own
+    # sets rather than narrow them, so honouring both would silently search
+    # outside the agent's knowledge scope.
+    if agent is not None and document_set_names is not None:
+        raise _FilterError(
+            "Pass either `agent` or `document_set_names`, not both. Explicit "
+            "document sets replace an agent's knowledge scope instead of "
+            "narrowing it, so the results would not be scoped to the agent."
+        )
+
+    # Resolve the agent before the indexed-sources guard: a bad name deserves
+    # its own actionable error, and an agent can carry attached documents even
+    # when no connector has indexed anything.
+    persona_id = await _resolve_agent(agent, access_token) if agent else None
+
+    indexed_sources: list[str] | None = None
+    if agent is None or source_types is not None:
+        indexed_sources = await _load_indexed_sources(access_token)
+
+    if agent is None and indexed_sources is not None and not indexed_sources:
+        raise _NoIndexedSources()
+
+    source_type_enums: list[DocumentSource] | None = None
+    if source_types is not None:
+        available = set(indexed_sources) if indexed_sources is not None else None
+        source_type_enums = _resolve_source_types(source_types, available)
+
+    if document_set_names is not None:
+        await _validate_document_sets(document_set_names, access_token)
+
+    return persona_id, source_type_enums
 
 
 def _record_requested_sources(source_types: list[str] | None) -> None:
@@ -246,61 +414,16 @@ async def search_indexed_documents(
     result_count: int | None = None
 
     try:
-        # _build_index_filters lets explicit document sets *replace* the
-        # agent's own sets rather than narrow them, so honouring both would
-        # silently search outside the agent's knowledge scope.
-        if agent is not None and document_set_names is not None:
-            return _error_payload(
-                "Pass either `agent` or `document_set_names`, not both. Explicit "
-                "document sets replace an agent's knowledge scope instead of "
-                "narrowing it, so the results would not be scoped to the agent."
+        try:
+            persona_id, source_type_enums = await _resolve_filters(
+                access_token=access_token,
+                source_types=source_types,
+                document_set_names=document_set_names,
+                agent=agent,
             )
-
-        # Resolve the agent before the indexed-sources guard below: a bad name
-        # deserves its own actionable error, and an agent can carry attached
-        # documents even when no connector has indexed anything.
-        persona_id: int | None = None
-        if agent is not None:
-            try:
-                accessible_agents = await get_accessible_agents(access_token)
-            except Exception as err:
-                logger.error(
-                    "Onyx MCP Server: Error fetching agents: %s", err, exc_info=True
-                )
-                return _error_payload(f"Failed to look up agents: {str(err)}")
-
-            matches = _match_agents(agent, accessible_agents)
-            if not matches:
-                return _error_payload(
-                    _unknown_value_error(
-                        "Agent",
-                        agent,
-                        (entry.name for entry in accessible_agents),
-                        "Read the `agents` resource for the current list.",
-                    )
-                )
-            if len(matches) > 1:
-                return _error_payload(
-                    f"Agent name '{agent}' is ambiguous: {len(matches)} accessible "
-                    "agents share it. Ask the user which one they mean."
-                )
-            persona_id = matches[0].id
-
-        # Needed for the empty-tenant guard, and to validate a source_types
-        # filter against what this tenant actually has.
-        indexed_sources: list[str] = []
-        if agent is None or source_types is not None:
-            try:
-                indexed_sources = await get_indexed_sources(access_token)
-            except Exception as err:
-                logger.error(
-                    "Onyx MCP Server: Error checking indexed sources: %s",
-                    err,
-                    exc_info=True,
-                )
-                return _error_payload(f"Failed to check indexed sources: {str(err)}")
-
-        if agent is None and not indexed_sources:
+        except _FilterError as err:
+            return _error_payload(str(err))
+        except _NoIndexedSources:
             logger.info("Onyx MCP Server: No indexed sources available for tenant")
             outcome = MCPToolCallStatus.SUCCESS
             result_count = 0
@@ -308,48 +431,6 @@ async def search_indexed_documents(
                 "No document sources are indexed yet. Add connectors or upload data "
                 "through Onyx before calling search_indexed_documents."
             )
-
-        # An unusable filter value fails instead of being dropped: a silently
-        # widened search is indistinguishable from a correctly scoped one.
-        source_type_enums: list[DocumentSource] | None = None
-        if source_types is not None:
-            available_sources = set(indexed_sources)
-            source_type_enums = []
-            for source_str in source_types:
-                canonical = source_str.lower()
-                if canonical not in available_sources:
-                    return _error_payload(
-                        _unknown_value_error(
-                            "Source type",
-                            source_str,
-                            available_sources,
-                            "Read the `indexed_sources` resource for the current list.",
-                        )
-                    )
-                source_type_enums.append(DocumentSource(canonical))
-
-        if document_set_names is not None:
-            try:
-                accessible_sets = await get_accessible_document_sets(access_token)
-            except Exception as err:
-                logger.error(
-                    "Onyx MCP Server: Error fetching document sets: %s",
-                    err,
-                    exc_info=True,
-                )
-                return _error_payload(f"Failed to look up document sets: {str(err)}")
-
-            available_set_names = {entry.name for entry in accessible_sets}
-            for set_name in document_set_names:
-                if set_name not in available_set_names:
-                    return _error_payload(
-                        _unknown_value_error(
-                            "Document set",
-                            set_name,
-                            available_set_names,
-                            "Read the `document_sets` resource for the current list.",
-                        )
-                    )
 
         try:
             parsed_cutoff = _TIME_CUTOFF_ADAPTER.validate_python(time_cutoff)
