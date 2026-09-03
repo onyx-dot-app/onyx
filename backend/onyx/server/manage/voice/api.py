@@ -125,6 +125,12 @@ def _validate_voice_api_base(provider_type: str, api_base: str | None) -> str | 
     if api_base is None:
         return None
 
+    if provider_type.lower() == "zoom":
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "Zoom voice providers do not support a target URI.",
+        )
+
     allow_private_network = provider_type.lower() == "azure"
     try:
         return validate_outbound_http_url(
