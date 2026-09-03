@@ -231,8 +231,9 @@ class ElevenLabsStreamingTranscriber(StreamingTranscriberProtocol):
                         msg_type,
                         list(data.keys()),
                     )
-                    # Check for error in various formats
-                    if "error" in data or msg_type == ElevenLabsSTTMessageType.ERROR:
+                    # Check for error in various formats. An empty `error` value
+                    # accompanies normal packets, so it is not a failure.
+                    if data.get("error") or msg_type == ElevenLabsSTTMessageType.ERROR:
                         error_msg = data.get("error", data.get("message", data))
                         self._logger.error(
                             "ElevenLabsStreamingTranscriber: API error: %s", error_msg
@@ -311,8 +312,6 @@ class ElevenLabsStreamingTranscriber(StreamingTranscriberProtocol):
                         "ElevenLabsStreamingTranscriber: WebSocket closed by server, close_code=%s",
                         close_code,
                     )
-                    # Only an explicit session_ended packet is a clean end.
-                    self._stream_failed = not self._session_ended and not self._closed
                     break
                 elif msg.type == aiohttp.WSMsgType.ERROR:
                     self._logger.error(
@@ -327,8 +326,6 @@ class ElevenLabsStreamingTranscriber(StreamingTranscriberProtocol):
                         msg.data,
                         msg.extra,
                     )
-                    # Only an explicit session_ended packet is a clean end.
-                    self._stream_failed = not self._session_ended and not self._closed
                     break
         except Exception as e:
             self._stream_failed = True
@@ -343,6 +340,10 @@ class ElevenLabsStreamingTranscriber(StreamingTranscriberProtocol):
                 "ElevenLabsStreamingTranscriber: receive loop ended, close_code=%s",
                 close_code,
             )
+            # The socket ends the message iterator on close, so a server close
+            # without an explicit session_ended packet is an unexpected end.
+            if not self._session_ended and not self._closed:
+                self._stream_failed = True
             if self._stream_failed and not self._failure_reported:
                 self._failure_reported = True
                 await self._transcript_queue.put(
