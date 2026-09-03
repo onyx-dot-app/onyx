@@ -2,13 +2,16 @@ import contextlib
 import time
 from collections.abc import Generator, Iterable, Sequence
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, NamedTuple
 from uuid import UUID
 
 from sqlalchemy import (
     CompoundSelect,
+    Integer,
     Select,
+    String,
     and_,
+    column,
     delete,
     distinct,
     exists,
@@ -16,8 +19,10 @@ from sqlalchemy import (
     literal,
     or_,
     select,
+    true,
     tuple_,
     update,
+    values,
 )
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine.util import TransactionalContext
@@ -301,6 +306,69 @@ def get_document_ids_for_cc_pair_batch(
         stmt = stmt.where(DocumentByConnectorCredentialPair.id > after_doc_id)
     if up_to_doc_id is not None:
         stmt = stmt.where(DocumentByConnectorCredentialPair.id <= up_to_doc_id)
+    return list(db_session.execute(stmt).scalars().all())
+
+
+class PortedScope(NamedTuple):
+    connector_id: int
+    credential_id: int
+    up_to_doc_id: str | None
+
+
+def sample_ported_document_ids(
+    db_session: Session,
+    cc_pair_scopes: Sequence[PortedScope],
+    per_scope_limit: int,
+) -> list[str]:
+    """A few document ids per cc_pair that a finished port claims to have copied.
+
+    The LATERAL join keeps this to one query that seeks each cc_pair on its index and
+    stops at the limit. A loop would run one query per cc_pair, and ordering globally on
+    a hash would read and sort every document in the tenant to return a handful.
+
+    `up_to_doc_id` is the port's snapshot bound. A document added after the port fixed
+    its range belongs to the FUTURE index attempt, so the bound keeps it out.
+
+    Documents with no chunks are skipped, because they have nothing in the source index
+    either and finding nothing for them downstream is not loss.
+
+    The same scopes always return the same ids. A caller that re-checks on a schedule
+    needs that, because a fresh random draw will eventually come up clean against a
+    partly-missing index and wave it through.
+    """
+    if per_scope_limit <= 0 or not cc_pair_scopes:
+        return []
+
+    scopes = values(
+        column("connector_id", Integer),
+        column("credential_id", Integer),
+        column("up_to_id", String),
+        name="cc_pair_scope",
+    ).data(
+        [
+            (scope.connector_id, scope.credential_id, scope.up_to_doc_id)
+            for scope in cc_pair_scopes
+        ]
+    )
+
+    per_cc_pair = (
+        select(DocumentByConnectorCredentialPair.id)
+        .join(DbDocument, DbDocument.id == DocumentByConnectorCredentialPair.id)
+        .where(
+            DocumentByConnectorCredentialPair.connector_id == scopes.c.connector_id,
+            DocumentByConnectorCredentialPair.credential_id == scopes.c.credential_id,
+            DbDocument.chunk_count.is_not(None),
+            DbDocument.chunk_count > 0,
+            or_(
+                scopes.c.up_to_id.is_(None),
+                DocumentByConnectorCredentialPair.id <= scopes.c.up_to_id,
+            ),
+        )
+        .order_by(DocumentByConnectorCredentialPair.id)
+        .limit(per_scope_limit)
+        .lateral("sampled_document")
+    )
+    stmt = select(per_cc_pair.c.id).select_from(scopes.join(per_cc_pair, true()))
     return list(db_session.execute(stmt).scalars().all())
 
 

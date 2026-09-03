@@ -157,6 +157,17 @@ def copy_present_chunks_to_future(
     return chunks_written, False
 
 
+def find_documents_missing_from_target(
+    target_search_settings: SearchSettings, document_ids: list[str]
+) -> list[str]:
+    """Which of these documents have no chunks in the port's target index.
+
+    Raises if the cluster is unreachable, so the caller decides what that means.
+    """
+    target_index = build_opensearch_document_index(target_search_settings)
+    return target_index.get_documents_missing_chunks(document_ids)
+
+
 class PortCopier:
     """Resolves the OpenSearch handles, reembed strategy, and embedder once so
     copy_doc_batch runs with no DB session held. Build it while the search
