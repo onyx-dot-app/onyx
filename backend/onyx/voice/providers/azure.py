@@ -298,16 +298,19 @@ class AzureStreamingTranscriber(StreamingTranscriberProtocol):
         """Stop recognition and return final transcript. Safe to call more than once."""
         if self._closed:
             return self._accumulated_transcript
-        self._closed = True
         if self._audio_stream:
-            # Emit the resampled tail the last chunk held back.
+            # Emit the resampled tail the last chunk held back, then end the
+            # stream so Azure recognizes the audio it still holds.
             trailing_audio = self._resampler.flush()
             if trailing_audio:
                 self._audio_stream.write(trailing_audio)
-        if self._recognizer:
-            self._recognizer.stop_continuous_recognition_async()
-        if self._audio_stream:
             self._audio_stream.close()
+        if self._recognizer:
+            # Recognition drains before the session is marked closed, because the
+            # result callbacks drop events once it is.
+            stop_result = self._recognizer.stop_continuous_recognition_async()
+            await asyncio.to_thread(stop_result.get)
+        self._closed = True
         self._loop = None
         return self._accumulated_transcript
 
