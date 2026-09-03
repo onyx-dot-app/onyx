@@ -1,5 +1,15 @@
+from typing import Any
+
 from onyx.db.models import VoiceProvider
 from onyx.voice.interface import VoiceProviderInterface
+
+
+def _extract_sensitive_string(value: Any) -> str | None:
+    if value is None:
+        return None
+    if hasattr(value, "get_value"):
+        return value.get_value(apply_mask=False)
+    return value
 
 
 def get_voice_provider(provider: VoiceProvider) -> VoiceProviderInterface:
@@ -18,14 +28,8 @@ def get_voice_provider(provider: VoiceProvider) -> VoiceProviderInterface:
     provider_type = provider.provider_type.lower()
 
     # Handle both SensitiveValue (from DB) and plain string (from temp model)
-    if provider.api_key is None:
-        api_key = None
-    elif hasattr(provider.api_key, "get_value"):
-        # SensitiveValue from database
-        api_key = provider.api_key.get_value(apply_mask=False)
-    else:
-        # Plain string from temporary model
-        api_key = provider.api_key
+    api_key = _extract_sensitive_string(provider.api_key)
+    api_secret = _extract_sensitive_string(provider.api_secret)
     api_base = provider.api_base
     custom_config = provider.custom_config
     stt_model = provider.stt_model
@@ -64,6 +68,16 @@ def get_voice_provider(provider: VoiceProvider) -> VoiceProviderInterface:
             stt_model=stt_model,
             tts_model=tts_model,
             default_voice=default_voice,
+        )
+
+    elif provider_type == "zoom":
+        from onyx.voice.providers.zoom import ZoomVoiceProvider
+
+        return ZoomVoiceProvider(
+            api_key=api_key,
+            api_secret=api_secret,
+            custom_config=custom_config or {},
+            stt_model=stt_model,
         )
 
     else:
