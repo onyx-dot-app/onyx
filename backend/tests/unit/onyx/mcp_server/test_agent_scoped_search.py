@@ -258,6 +258,21 @@ async def test_search_survives_a_token_that_cannot_list_inventory(
 
 
 @pytest.mark.asyncio
+async def test_unknown_source_still_errors_without_the_inventory(stub: _Stub) -> None:
+    """Dropping it would leave an empty source list, and retrieval adds no
+    clause for that — the search would widen to every accessible source."""
+    stub.forbid_inventory = True
+
+    payload = await search_module.search_indexed_documents(
+        query="anything", source_types=["not-a-real-source"]
+    )
+
+    assert payload["results"] == []
+    assert "not-a-real-source" in payload["error"]
+    assert stub.search_requests == []
+
+
+@pytest.mark.asyncio
 async def test_inventory_failure_that_is_not_permissions_still_errors(
     stub: _Stub,
 ) -> None:
