@@ -163,7 +163,7 @@ def _seed_system_usage(db_session: Session) -> None:
             UserUsage(
                 user_id=None,
                 actor_kind=UsageActorKind.SYSTEM,
-                system_attribution=SystemUsageAttribution.SYSTEM,
+                system_attribution=SystemUsageAttribution.ATTRIBUTED,
                 window_start=_W1,
                 model="model-a",
                 flow="image_summarization",

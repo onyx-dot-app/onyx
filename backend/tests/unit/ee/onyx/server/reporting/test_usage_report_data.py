@@ -69,7 +69,7 @@ def _system_row(
     cost: float = 7.0,
 ) -> SystemUsageExportRow:
     return SystemUsageExportRow(
-        attribution=SystemUsageAttribution.SYSTEM,
+        attribution=SystemUsageAttribution.ATTRIBUTED,
         model="claude-sonnet",
         flow=flow,
         provider="anthropic",
