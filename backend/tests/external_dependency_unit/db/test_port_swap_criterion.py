@@ -39,10 +39,16 @@ from onyx.db.enums import (
     SwitchoverType,
     UserFileStatus,
 )
+from onyx.db.index_attempt import (
+    create_index_attempt,
+    mark_attempt_in_progress,
+    mark_attempt_succeeded,
+)
 from onyx.db.models import (
     ConnectorCredentialPair,
     Credential,
     DocumentByConnectorCredentialPair,
+    IndexAttempt,
     PortAttempt,
     SearchSettings,
     UserFile,
@@ -547,6 +553,50 @@ def test_sampler_respects_the_port_snapshot_bound(
     sampled = sample_ported_document_ids(db_session, [scope], 10)
     assert all(doc_id.startswith(f"{_VERIFY_DOC_PREFIX}a-") for doc_id in sampled)
     assert sampled
+
+
+def test_swap_holds_while_an_index_attempt_is_still_running(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    cc_pair, future_id = cc_pair_and_future
+    future_ss = db_session.get(SearchSettings, future_id)
+    assert future_ss is not None
+    _make_success_port(db_session, cc_pair.id, future_id)
+    seed_cc_pair_documents(
+        db_session, cc_pair, 1, prefix=_VERIFY_DOC_PREFIX, chunk_count=3
+    )
+    _clear_verification_backoff(future_id)
+
+    attempt_id = create_index_attempt(
+        connector_credential_pair_id=cc_pair.id,
+        search_settings_id=future_id,
+        db_session=db_session,
+    )
+    # create_index_attempt leaves the attempt queued, which must not hold the swap.
+    with patch.object(
+        swap_index, "find_documents_missing_from_target", return_value=[]
+    ):
+        assert _port_swap_ready(db_session, future_ss, [cc_pair], []) is True
+
+    _clear_verification_backoff(future_id)
+    attempt = db_session.get(IndexAttempt, attempt_id)
+    assert attempt is not None
+    mark_attempt_in_progress(attempt, db_session)
+    db_session.expire_all()
+    with patch.object(
+        swap_index, "find_documents_missing_from_target", return_value=[]
+    ) as lookup:
+        assert _port_swap_ready(db_session, future_ss, [cc_pair], []) is False
+    # Held before the sample, so the network call never happened.
+    lookup.assert_not_called()
+
+    mark_attempt_succeeded(attempt_id, db_session)
+    db_session.expire_all()
+    _clear_verification_backoff(future_id)
+    with patch.object(
+        swap_index, "find_documents_missing_from_target", return_value=[]
+    ):
+        assert _port_swap_ready(db_session, future_ss, [cc_pair], []) is True
 
 
 def test_sampler_skips_a_scope_with_no_snapshot_bound(
