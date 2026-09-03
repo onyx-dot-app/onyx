@@ -22,6 +22,7 @@ import aiohttp
 
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.llm_utils import traced_llm_call
+from onyx.voice.audio_utils import resample_pcm16
 from onyx.voice.interface import (
     StreamingSynthesizerProtocol,
     StreamingTranscriberProtocol,
@@ -329,35 +330,6 @@ class ElevenLabsStreamingTranscriber(StreamingTranscriberProtocol):
             )
             await self._transcript_queue.put(None)  # Signal end
 
-    def _resample_pcm16(self, data: bytes) -> bytes:
-        """Resample PCM16 audio from input_sample_rate to target_sample_rate."""
-        import struct
-
-        if self.input_sample_rate == self.target_sample_rate:
-            return data
-
-        # Parse int16 samples
-        num_samples = len(data) // 2
-        samples = list(struct.unpack(f"<{num_samples}h", data))
-
-        # Calculate resampling ratio
-        ratio = self.input_sample_rate / self.target_sample_rate
-        new_length = int(num_samples / ratio)
-
-        # Linear interpolation resampling
-        resampled = []
-        for i in range(new_length):
-            src_idx = i * ratio
-            idx_floor = int(src_idx)
-            idx_ceil = min(idx_floor + 1, num_samples - 1)
-            frac = src_idx - idx_floor
-            sample = int(samples[idx_floor] * (1 - frac) + samples[idx_ceil] * frac)
-            # Clamp to int16 range
-            sample = max(-32768, min(32767, sample))
-            resampled.append(sample)
-
-        return struct.pack(f"<{len(resampled)}h", *resampled)
-
     async def send_audio(self, chunk: bytes) -> None:
         """Send an audio chunk for transcription."""
         if not self._ws:
@@ -374,7 +346,9 @@ class ElevenLabsStreamingTranscriber(StreamingTranscriberProtocol):
 
         try:
             # Resample from input rate (24kHz) to target rate (16kHz)
-            resampled = self._resample_pcm16(chunk)
+            resampled = resample_pcm16(
+                chunk, self.input_sample_rate, self.target_sample_rate
+            )
             # ElevenLabs expects input_audio_chunk message format with audio_base_64
             audio_b64 = base64.b64encode(resampled).decode("utf-8")
             message = {

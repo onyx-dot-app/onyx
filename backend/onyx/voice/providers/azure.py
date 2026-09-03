@@ -24,7 +24,6 @@ for API reference.
 import asyncio
 import io
 import re
-import struct
 import wave
 from collections.abc import AsyncIterator
 from typing import Any
@@ -36,6 +35,7 @@ import aiohttp
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.llm_utils import traced_llm_call
 from onyx.utils.logger import setup_logger
+from onyx.voice.audio_utils import resample_pcm16
 from onyx.voice.interface import (
     StreamingSynthesizerProtocol,
     StreamingTranscriberProtocol,
@@ -281,32 +281,9 @@ class AzureStreamingTranscriber(StreamingTranscriberProtocol):
     async def send_audio(self, chunk: bytes) -> None:
         """Send audio chunk to Azure."""
         if self._audio_stream and not self._closed:
-            self._audio_stream.write(self._resample_pcm16(chunk))
-
-    def _resample_pcm16(self, data: bytes) -> bytes:
-        """Resample PCM16 audio from input_sample_rate to target_sample_rate."""
-        if self.input_sample_rate == self.target_sample_rate:
-            return data
-
-        num_samples = len(data) // 2
-        if num_samples == 0:
-            return b""
-
-        samples = list(struct.unpack(f"<{num_samples}h", data))
-        ratio = self.input_sample_rate / self.target_sample_rate
-        new_length = int(num_samples / ratio)
-
-        resampled: list[int] = []
-        for i in range(new_length):
-            src_idx = i * ratio
-            idx_floor = int(src_idx)
-            idx_ceil = min(idx_floor + 1, num_samples - 1)
-            frac = src_idx - idx_floor
-            sample = int(samples[idx_floor] * (1 - frac) + samples[idx_ceil] * frac)
-            sample = max(-32768, min(32767, sample))
-            resampled.append(sample)
-
-        return struct.pack(f"<{len(resampled)}h", *resampled)
+            self._audio_stream.write(
+                resample_pcm16(chunk, self.input_sample_rate, self.target_sample_rate)
+            )
 
     async def receive_transcript(self) -> TranscriptResult | None:
         """Receive next transcript."""

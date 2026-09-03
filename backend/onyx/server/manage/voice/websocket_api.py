@@ -142,6 +142,7 @@ WS_MAX_MESSAGE_SIZE = 64 * 1024  # 64KB per message (OWASP recommendation)
 WS_MAX_TOTAL_BYTES = 25 * 1024 * 1024  # 25MB total per connection (matches REST API)
 WS_MAX_TEXT_MESSAGE_SIZE = 16 * 1024  # 16KB for text/JSON messages
 WS_MAX_TTS_TEXT_LENGTH = 4096  # Max text length per synthesize call (matches REST API)
+WS_SERVER_ERROR_CLOSE_CODE = 1011
 
 
 class ChunkedTranscriber:
@@ -243,31 +244,62 @@ async def handle_streaming_transcription(
     last_transcript = ""
     chunk_count = 0
     total_bytes = 0
+    receiver_failed = asyncio.Event()
 
     async def receive_transcripts() -> None:
         """Background task to receive and send transcripts."""
         nonlocal last_transcript
         logger.info("Streaming transcription: starting transcript receiver")
-        while True:
-            result: TranscriptResult | None = await transcriber.receive_transcript()
-            if result is None:  # End of stream
-                logger.info("Streaming transcription: transcript stream ended")
-                break
-            # Send if text changed OR if VAD detected end of speech (for auto-send trigger)
-            if result.text and (result.text != last_transcript or result.is_vad_end):
-                last_transcript = result.text
-                logger.debug(
-                    "Streaming transcription: got transcript: %s... (is_vad_end=%s)",
-                    result.text[:50],
-                    result.is_vad_end,
-                )
+        try:
+            while True:
+                result: TranscriptResult | None = await transcriber.receive_transcript()
+                if result is None:
+                    logger.info("Streaming transcription: transcript stream ended")
+                    break
+                if result.error:
+                    receiver_failed.set()
+                    logger.error("Streaming transcription: provider stream failed")
+                    await websocket.send_json(
+                        {
+                            "type": "error",
+                            "message": "Streaming transcription failed",
+                        }
+                    )
+                    await websocket.close(code=WS_SERVER_ERROR_CLOSE_CODE)
+                    break
+                if result.text and (
+                    result.text != last_transcript or result.is_vad_end
+                ):
+                    last_transcript = result.text
+                    logger.debug(
+                        "Streaming transcription: got transcript: %s... (is_vad_end=%s)",
+                        result.text[:50],
+                        result.is_vad_end,
+                    )
+                    await websocket.send_json(
+                        {
+                            "type": "transcript",
+                            "text": result.text,
+                            "is_final": result.is_vad_end,
+                        }
+                    )
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            receiver_failed.set()
+            logger.error(
+                "Streaming transcription: transcript receiver failed", exc_info=True
+            )
+            try:
                 await websocket.send_json(
                     {
-                        "type": "transcript",
-                        "text": result.text,
-                        "is_final": result.is_vad_end,
+                        "type": "error",
+                        "message": "Streaming transcription failed",
                     }
                 )
+                await websocket.close(code=WS_SERVER_ERROR_CLOSE_CODE)
+            except Exception:
+                pass
 
     # Start receiving transcripts in background
     receive_task = asyncio.create_task(receive_transcripts())
@@ -356,6 +388,8 @@ async def handle_streaming_transcription(
                         message.get("text", "")[:100],
                     )
     except Exception as e:
+        if receiver_failed.is_set():
+            return
         logger.error("Streaming transcription: error: %s", e, exc_info=True)
         raise
     finally:
@@ -559,9 +593,12 @@ async def websocket_transcribe(
                 return
             except Exception as e:
                 logger.error("WebSocket transcribe: streaming STT failed: %s", e)
-                if VOICE_DISABLE_STREAMING_FALLBACK:
+                if (
+                    VOICE_DISABLE_STREAMING_FALLBACK
+                    or not provider.allows_streaming_stt_fallback()
+                ):
                     await websocket.send_json(
-                        {"type": "error", "message": f"Streaming STT failed: {e}"}
+                        {"type": "error", "message": "Streaming STT failed"}
                     )
                     return
                 logger.info("WebSocket transcribe: falling back to chunked STT")

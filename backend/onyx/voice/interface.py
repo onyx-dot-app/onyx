@@ -14,6 +14,9 @@ class TranscriptResult(BaseModel):
     is_vad_end: bool = False
     """True if VAD detected end of speech (silence). Use for auto-send."""
 
+    error: str | None = None
+    """Sanitized provider error, if the streaming session failed."""
+
 
 class StreamingTranscriberProtocol(Protocol):
     """Protocol for streaming transcription sessions."""
@@ -144,6 +147,10 @@ class VoiceProviderInterface(ABC):
     def supports_streaming_tts(self) -> bool:
         """Returns True if this provider supports real-time streaming TTS."""
         return False
+
+    def allows_streaming_stt_fallback(self) -> bool:
+        """Returns True when native streaming STT failures may fall back to REST."""
+        return True
 
     async def create_streaming_transcriber(
         self, audio_format: str = "webm"

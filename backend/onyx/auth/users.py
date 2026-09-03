@@ -2413,30 +2413,40 @@ async def current_user_from_websocket(
             detail="Authentication verification failed."
         ) from e
 
-    # Get user from token data
-    user = await _get_user_from_token_data(token_data)
-    if user is None:
-        logger.warning("WS auth: user not found for id=%s", token_data.get("sub"))
-        raise BasicAuthenticationError(
-            detail="Access denied. User not found or inactive."
-        )
+    token_tenant_id = token_data.get("tenant_id")
+    if not isinstance(token_tenant_id, str):
+        if MULTI_TENANT:
+            logger.warning("WS auth: token missing tenant_id")
+            raise BasicAuthenticationError(
+                detail="Access denied. Invalid authentication token."
+            )
+        token_tenant_id = POSTGRES_DEFAULT_SCHEMA
 
-    # Apply same checks as HTTP auth (verification, OIDC expiry, role)
-    user = await double_check_user(user)
-
-    # Block limited users (same as current_user)
-    if is_limited_user(user):
-        logger.warning("WS auth: user %s is limited", user.email)
-        raise BasicAuthenticationError(
-            detail="Access denied. User has limited permissions.",
-        )
-
-    logger.debug("WS auth: authenticated %s", user.email)
-    context_token = CURRENT_USER_ID_CONTEXTVAR.set(str(user.id))
+    tenant_context_token = CURRENT_TENANT_ID_CONTEXTVAR.set(token_tenant_id)
     try:
-        yield user
+        user = await _get_user_from_token_data(token_data)
+        if user is None:
+            logger.warning("WS auth: user not found for id=%s", token_data.get("sub"))
+            raise BasicAuthenticationError(
+                detail="Access denied. User not found or inactive."
+            )
+
+        user = await double_check_user(user)
+
+        if is_limited_user(user):
+            logger.warning("WS auth: user %s is limited", user.email)
+            raise BasicAuthenticationError(
+                detail="Access denied. User has limited permissions.",
+            )
+
+        logger.debug("WS auth: authenticated %s", user.email)
+        user_context_token = CURRENT_USER_ID_CONTEXTVAR.set(str(user.id))
+        try:
+            yield user
+        finally:
+            CURRENT_USER_ID_CONTEXTVAR.reset(user_context_token)
     finally:
-        CURRENT_USER_ID_CONTEXTVAR.reset(context_token)
+        CURRENT_TENANT_ID_CONTEXTVAR.reset(tenant_context_token)
 
 
 def get_default_admin_user_emails_() -> list[str]:
