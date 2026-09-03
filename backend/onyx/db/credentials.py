@@ -235,41 +235,62 @@ def fetch_github_repo_access(
         set() if manages_connectors else _group_shared_cc_pair_ids(db_session, user)
     )
 
-    # Newest pair first, so several connectors indexing the same repo resolve
-    # to the same credential every time and the audit trail reproduces.
-    for cc_pair in sorted(cc_pairs, key=lambda pair: pair.id, reverse=True):
+    def _ineligible_reason(cc_pair: ConnectorCredentialPair) -> str | None:
+        """Why this pair cannot lend its credential for the repo, or None.
+
+        Every rejection is logged: a user who expects repo access and does not
+        get it leaves no other trace, since the caller only sees None.
+        """
         if (
             not manages_connectors
             and cc_pair.access_type != AccessType.PUBLIC
             and cc_pair.id not in group_shared_ids
         ):
-            continue
+            return "not public and not shared with one of the user's groups"
         # Per-document ACLs cannot gate an all-or-nothing repo archive.
         if cc_pair.access_type == AccessType.SYNC:
-            continue
+            return "access is permission-synced, which a repo archive cannot honor"
         # Active pairs only: a paused or invalid pair must not keep granting
         # its PAT (and its index is going stale anyway).
         if not cc_pair.status.is_active():
-            continue
+            return f"status is {cc_pair.status.value}"
 
         config = cc_pair.connector.connector_specific_config or {}
         if not config.get("include_code_files"):
-            continue
+            return "connector does not index code files"
         if str(config.get("repo_owner", "")).lower() != owner_lower:
-            continue
+            return f"indexes owner {config.get('repo_owner')!r}"
 
         named_repos = {
             name.lower()
             for name in parse_repositories_config(config.get("repositories"))
         }
         if repo_lower not in named_repos:
+            return "repository is not one the connector indexes"
+        return None
+
+    # Newest pair first, so several connectors indexing the same repo resolve
+    # to the same credential every time and the audit trail reproduces.
+    for cc_pair in sorted(cc_pairs, key=lambda pair: pair.id, reverse=True):
+        reason = _ineligible_reason(cc_pair)
+        if reason is not None:
+            logger.debug(
+                "cc_pair %s cannot lend a credential for %s/%s: %s",
+                cc_pair.id,
+                repo_owner,
+                repo_name,
+                reason,
+            )
             continue
 
+        config = cc_pair.connector.connector_specific_config or {}
         credential = cc_pair.credential
-        if credential.credential_json is None:
-            continue
-        credential_dict = credential.credential_json.get_value(apply_mask=False)
-        token = credential_dict.get("github_access_token")
+        credential_json = credential.credential_json
+        token = (
+            credential_json.get_value(apply_mask=False).get("github_access_token")
+            if credential_json is not None
+            else None
+        )
         if token:
             emit_credential_access(
                 credential_type="connector",
@@ -280,7 +301,20 @@ def fetch_github_repo_access(
             )
             branch = str(config.get("branch") or "").strip()
             return ConnectorRepoAccess(token=token, branch=branch or None)
+        logger.debug(
+            "cc_pair %s cannot lend a credential for %s/%s: no GitHub access token",
+            cc_pair.id,
+            repo_owner,
+            repo_name,
+        )
 
+    logger.debug(
+        "No connector lends %s a credential for %s/%s (%s GitHub pairs considered)",
+        user.id,
+        repo_owner,
+        repo_name,
+        len(cc_pairs),
+    )
     return None
 
 
