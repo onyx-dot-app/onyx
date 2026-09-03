@@ -25,7 +25,7 @@ class CircuitBreaker:
         base_delay: float = 60.0,
         max_delay: float = 6 * 60 * 60,
     ) -> None:
-        self._failures_before_open = failures_before_open
+        self.failures_before_open = failures_before_open
         self._base_delay = base_delay
         self._max_delay = max_delay
         self._lock = threading.Lock()
@@ -36,7 +36,7 @@ class CircuitBreaker:
     def is_open(self) -> bool:
         """True while the caller should skip the call rather than retry it."""
         with self._lock:
-            if self._consecutive_failures < self._failures_before_open:
+            if self._consecutive_failures < self.failures_before_open:
                 return False
             return time.monotonic() - self._last_failure_at < self._delay()
 
@@ -53,5 +53,5 @@ class CircuitBreaker:
 
     def _delay(self) -> float:
         """Backoff for the current failure count. Caller holds the lock."""
-        doublings = self._consecutive_failures - self._failures_before_open
+        doublings = self._consecutive_failures - self.failures_before_open
         return min(self._base_delay * 2**doublings, self._max_delay)

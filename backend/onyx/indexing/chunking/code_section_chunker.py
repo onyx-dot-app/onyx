@@ -211,6 +211,11 @@ class CodeChunker(SectionChunker):
             return None
 
         if _GRAMMAR_LOADS.is_open:
+            logger.debug(
+                "Grammar loading is suppressed after repeated failures; "
+                "token splitting language=%s",
+                language,
+            )
             return None
 
         try:
@@ -224,7 +229,13 @@ class CodeChunker(SectionChunker):
             )
         except Exception:
             failures = _GRAMMAR_LOADS.record_failure()
-            log = logger.warning if failures == 1 else logger.debug
+            # Warn on the first failure and again when the breaker opens: an
+            # open breaker degrades every language to token splitting.
+            log = (
+                logger.warning
+                if failures in (1, _GRAMMAR_LOADS.failures_before_open)
+                else logger.debug
+            )
             log(
                 "Could not load the tree-sitter grammar for language=%s; falling "
                 "back to token splitting for now. Grammars "
