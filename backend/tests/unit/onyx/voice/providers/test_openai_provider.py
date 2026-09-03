@@ -151,6 +151,38 @@ async def test_streaming_error_event_reports_sanitized_error() -> None:
 
 
 @pytest.mark.asyncio
+async def test_streaming_error_event_ends_stream() -> None:
+    """The socket stays open after an error, so the loop must stop on its own."""
+    transcriber = OpenAIStreamingTranscriber(api_key="test")
+    transcriber._ws = cast(
+        Any,
+        FakeWebSocket(
+            [
+                FakeMessage(
+                    {
+                        "type": OpenAIRealtimeMessageType.ERROR,
+                        "error": {"message": "raw upstream details"},
+                    }
+                ),
+                FakeMessage(
+                    {
+                        "type": OpenAIRealtimeMessageType.TRANSCRIPTION_COMPLETED,
+                        "transcript": "late transcript",
+                    }
+                ),
+            ]
+        ),
+    )
+
+    await transcriber._receive_loop()
+
+    result = await transcriber.receive_transcript()
+    assert result is not None
+    assert result.error == STREAM_FAILED_ERROR
+    assert await transcriber.receive_transcript() is None
+
+
+@pytest.mark.asyncio
 async def test_streaming_clean_end_reports_no_error() -> None:
     transcriber = OpenAIStreamingTranscriber(api_key="test")
     transcriber._ws = cast(

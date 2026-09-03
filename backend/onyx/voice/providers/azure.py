@@ -22,9 +22,7 @@ for API reference.
 """
 
 import asyncio
-import io
 import re
-import wave
 from collections.abc import AsyncIterator
 from typing import Any
 from urllib.parse import urlparse
@@ -35,7 +33,7 @@ import aiohttp
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.llm_utils import traced_llm_call
 from onyx.utils.logger import setup_logger
-from onyx.voice.audio_utils import Pcm16Resampler
+from onyx.voice.audio_utils import Pcm16Resampler, pcm16_to_wav
 from onyx.voice.interface import (
     STREAM_FAILED_ERROR,
     StreamingSynthesizerProtocol,
@@ -297,8 +295,15 @@ class AzureStreamingTranscriber(StreamingTranscriberProtocol):
             return TranscriptResult(text="", is_vad_end=False)
 
     async def close(self) -> str:
-        """Stop recognition and return final transcript."""
+        """Stop recognition and return final transcript. Safe to call more than once."""
+        if self._closed:
+            return self._accumulated_transcript
         self._closed = True
+        if self._audio_stream:
+            # Emit the resampled tail the last chunk held back.
+            trailing_audio = self._resampler.flush()
+            if trailing_audio:
+                self._audio_stream.write(trailing_audio)
         if self._recognizer:
             self._recognizer.stop_continuous_recognition_async()
         if self._audio_stream:
@@ -545,13 +550,7 @@ class AzureVoiceProvider(VoiceProviderInterface):
     @staticmethod
     def _pcm16_to_wav(pcm_data: bytes, sample_rate: int = 24000) -> bytes:
         """Wrap raw PCM16 mono bytes into a WAV container."""
-        buffer = io.BytesIO()
-        with wave.open(buffer, "wb") as wav_file:
-            wav_file.setnchannels(1)
-            wav_file.setsampwidth(2)
-            wav_file.setframerate(sample_rate)
-            wav_file.writeframes(pcm_data)
-        return buffer.getvalue()
+        return pcm16_to_wav(pcm_data, sample_rate=sample_rate)
 
     async def transcribe(self, audio_data: bytes, audio_format: str) -> str:
         if not self.api_key:

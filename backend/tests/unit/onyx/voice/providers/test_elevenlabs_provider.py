@@ -1,5 +1,14 @@
+import json
+from collections.abc import AsyncIterator
+from typing import Any, cast
+
+import aiohttp
+import pytest
+
+from onyx.voice.interface import STREAM_FAILED_ERROR
 from onyx.voice.providers.elevenlabs import (
     DEFAULT_ELEVENLABS_API_BASE,
+    ElevenLabsStreamingTranscriber,
     ElevenLabsSTTMessageType,
     ElevenLabsVoiceProvider,
     _http_to_ws_url,
@@ -67,3 +76,82 @@ def test_provider_get_available_voices_returns_copy() -> None:
     voices = provider.get_available_voices()
     voices.clear()
     assert len(provider.get_available_voices()) > 0
+
+
+# --- Streaming error propagation ---
+
+
+class FakeTextMessage:
+    def __init__(self, payload: dict[str, Any]) -> None:
+        self.type = aiohttp.WSMsgType.TEXT
+        self.data = json.dumps(payload)
+
+
+class FakeCloseMessage:
+    def __init__(self) -> None:
+        self.type = aiohttp.WSMsgType.CLOSED
+
+
+class FakeWebSocket:
+    def __init__(self, messages: list[Any]) -> None:
+        self._messages = messages
+        self.close_code = 1000
+
+    async def __aiter__(self) -> AsyncIterator[Any]:
+        for message in self._messages:
+            yield message
+
+
+def _transcriber(messages: list[Any]) -> ElevenLabsStreamingTranscriber:
+    transcriber = ElevenLabsStreamingTranscriber(api_key="test")
+    transcriber._ws = cast(Any, FakeWebSocket(messages))
+    return transcriber
+
+
+@pytest.mark.asyncio
+async def test_streaming_api_error_reports_sanitized_error() -> None:
+    transcriber = _transcriber(
+        [
+            FakeTextMessage(
+                {
+                    "message_type": ElevenLabsSTTMessageType.ERROR,
+                    "error": "raw upstream details",
+                }
+            )
+        ]
+    )
+
+    await transcriber._receive_loop()
+
+    result = await transcriber.receive_transcript()
+    assert result is not None
+    assert result.error == STREAM_FAILED_ERROR
+    assert result.text == ""
+    assert await transcriber.receive_transcript() is None
+
+
+@pytest.mark.asyncio
+async def test_streaming_unexpected_server_close_reports_error() -> None:
+    """A close without session_ended is a failure, not a clean end."""
+    transcriber = _transcriber([FakeCloseMessage()])
+
+    await transcriber._receive_loop()
+
+    result = await transcriber.receive_transcript()
+    assert result is not None
+    assert result.error == STREAM_FAILED_ERROR
+    assert await transcriber.receive_transcript() is None
+
+
+@pytest.mark.asyncio
+async def test_streaming_session_ended_reports_no_error() -> None:
+    transcriber = _transcriber(
+        [
+            FakeTextMessage({"message_type": ElevenLabsSTTMessageType.SESSION_ENDED}),
+            FakeCloseMessage(),
+        ]
+    )
+
+    await transcriber._receive_loop()
+
+    assert await transcriber.receive_transcript() is None

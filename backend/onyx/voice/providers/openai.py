@@ -151,14 +151,14 @@ class OpenAIStreamingTranscriber(StreamingTranscriberProtocol):
                     msg_type = data.get("type", "")
                     self._logger.debug("Received message type: %s", msg_type)
 
-                    # WS stays open on protocol errors — cache for callers.
+                    # The socket stays open on protocol errors, so the stream
+                    # ends here to report the failure without further delay.
                     if msg_type == OpenAIRealtimeMessageType.ERROR:
                         error = data.get("error", {})
-                        # The socket stays open after an error, so the failure
-                        # is reported when the stream ends.
                         self._last_error = error
                         self._logger.error("OpenAI error: %s", error)
-                        continue
+                        self._stream_failed = True
+                        break
 
                     # speech_started/stopped are no-ops on gpt-realtime-whisper
                     # (no server VAD) but kept defensively. buffer_committed
@@ -230,7 +230,7 @@ class OpenAIStreamingTranscriber(StreamingTranscriberProtocol):
             self._stream_failed = True
             self._logger.error("Error in receive loop: %s", e)
         finally:
-            if (self._stream_failed or self._last_error) and not self._closed:
+            if self._stream_failed or self._last_error:
                 await self._transcript_queue.put(
                     TranscriptResult(error=STREAM_FAILED_ERROR)
                 )
@@ -269,30 +269,37 @@ class OpenAIStreamingTranscriber(StreamingTranscriberProtocol):
             return TranscriptResult(text="", is_vad_end=False)
 
     async def close(self) -> str:
-        """Close session and return final transcript."""
+        """Close session and return final transcript. Safe to call more than once."""
+        if self._closed:
+            return self._accumulated_transcript
         self._closed = True
+        stream_failed = self._stream_failed or self._last_error is not None
         if self._ws:
-            # Sole trigger for the final TRANSCRIPTION_COMPLETED event
-            # (gpt-realtime-whisper has no server VAD).
-            try:
-                await self._ws.send_str(
-                    json.dumps({"type": "input_audio_buffer.commit"})
-                )
-            except Exception as e:
-                self._logger.debug("Error sending commit (may be expected): %s", e)
-
-            # Wait for *new* transcription to arrive (up to 5 seconds)
-            self._logger.info("Waiting for transcription to complete...")
-            transcript_before_commit = self._accumulated_transcript
-            for _ in range(50):  # 50 * 100ms = 5 seconds max
-                await asyncio.sleep(0.1)
-                if self._accumulated_transcript != transcript_before_commit:
-                    self._logger.info(
-                        "Got final transcript: %s...", self._accumulated_transcript[:50]
+            # A failed stream produces no further transcription, so the commit
+            # and its wait are skipped.
+            if not stream_failed:
+                # Sole trigger for the final TRANSCRIPTION_COMPLETED event
+                # (gpt-realtime-whisper has no server VAD).
+                try:
+                    await self._ws.send_str(
+                        json.dumps({"type": "input_audio_buffer.commit"})
                     )
-                    break
-            else:
-                self._logger.warning("Timed out waiting for transcription")
+                except Exception as e:
+                    self._logger.debug("Error sending commit (may be expected): %s", e)
+
+                # Wait for *new* transcription to arrive (up to 5 seconds)
+                self._logger.info("Waiting for transcription to complete...")
+                transcript_before_commit = self._accumulated_transcript
+                for _ in range(50):  # 50 * 100ms = 5 seconds max
+                    await asyncio.sleep(0.1)
+                    if self._accumulated_transcript != transcript_before_commit:
+                        self._logger.info(
+                            "Got final transcript: %s...",
+                            self._accumulated_transcript[:50],
+                        )
+                        break
+                else:
+                    self._logger.warning("Timed out waiting for transcription")
 
             await self._ws.close()
         if self._receive_task:
