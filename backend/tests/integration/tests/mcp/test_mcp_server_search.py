@@ -295,6 +295,18 @@ def test_mcp_search_filters_by_document_set(
     assert any(in_set_content in content for content in filtered_contents)
     assert all(out_of_set_content not in content for content in filtered_contents)
 
+    # A name that does not resolve must fail with a usable hint rather than be
+    # dropped, which would return a wider result set that looks scoped.
+    unknown_payload = _extract_tool_payload(
+        _call_search_tool(
+            headers,
+            shared_phrase,
+            document_set_names=[f"{doc_set.name}-does-not-exist"],
+        )
+    )
+    assert unknown_payload["results"] == []
+    assert doc_set.name in unknown_payload["error"]
+
     # An empty document_set_names should behave like "no filter" (normalized
     # to None), not "match zero sets".
     empty_list_payload = _extract_tool_payload(

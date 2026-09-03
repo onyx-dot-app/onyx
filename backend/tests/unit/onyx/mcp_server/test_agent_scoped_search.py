@@ -1,8 +1,9 @@
-"""Agent scoping in the MCP document-search tool.
+"""Filter resolution in the MCP document-search tool.
 
-`agent` resolves a name to a persona id on the search call itself, so the
-happy path needs no discovery round trip. A name that does not resolve must
-fail rather than fall back to an unscoped search.
+`agent`, `source_types` and `document_set_names` all resolve on the search call
+itself, so the happy path needs no discovery round trip. A value that does not
+resolve must fail rather than be dropped, and the error teaches the caller
+without dumping the whole inventory.
 """
 
 import json
@@ -17,6 +18,7 @@ from fastmcp.server.auth.auth import AccessToken
 
 import onyx.mcp_server.tools.search as search_module
 import onyx.mcp_server.utils as utils_module
+from onyx.mcp_server.tools.search import _MAX_SUGGESTIONS
 
 _TOKEN = AccessToken(token="test-token", client_id="test", scopes=[])
 
@@ -28,6 +30,7 @@ class _Stub:
     search_requests: list[dict[str, Any]]
     agents: list[dict[str, Any]]
     sources: list[str]
+    document_sets: list[dict[str, Any]]
 
 
 async def _unreachable_indexed_sources(_access_token: AccessToken) -> list[str]:
@@ -44,12 +47,18 @@ async def stub(monkeypatch: pytest.MonkeyPatch) -> AsyncGenerator[_Stub, None]:
             {"id": 9, "name": "Engineering Wiki", "description": "Eng docs"},
         ],
         sources=["github"],
+        document_sets=[
+            {"name": "Engineering Wiki", "description": "eng"},
+            {"name": "Sales Playbook", "description": "sales"},
+        ],
     )
 
     def _handler(request: httpx.Request) -> httpx.Response:
         path = request.url.path
         if path.endswith("/manage/indexed-sources"):
             return httpx.Response(200, json={"sources": state.sources})
+        if path.endswith("/manage/document-set"):
+            return httpx.Response(200, json=state.document_sets)
         if path.endswith("/persona"):
             return httpx.Response(200, json=state.agents)
         if path.endswith("/search"):
@@ -90,18 +99,46 @@ async def test_search_without_agent_stays_unscoped(stub: _Stub) -> None:
 
 
 @pytest.mark.asyncio
-async def test_unknown_agent_errors_and_names_the_valid_ones(stub: _Stub) -> None:
+async def test_unknown_agent_errors_without_searching(stub: _Stub) -> None:
     payload = await search_module.search_indexed_documents(
         query="anything", agent="no-such-agent"
     )
 
     assert payload["results"] == []
     assert "no-such-agent" in payload["error"]
-    assert "Support" in payload["error"]
-    assert "Engineering Wiki" in payload["error"]
     # The wrong scope returned as if it were right is worse than an error, so
     # the tool must not fall back to an unscoped search.
     assert stub.search_requests == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("stub")
+async def test_near_miss_agent_name_is_suggested() -> None:
+    """A stale or colloquial name is the common failure, so suggest the fix."""
+    payload = await search_module.search_indexed_documents(
+        query="anything", agent="Enginering Wiki"
+    )
+
+    assert "Did you mean" in payload["error"]
+    assert "Engineering Wiki" in payload["error"]
+
+
+@pytest.mark.asyncio
+async def test_unknown_agent_error_stays_small_for_large_tenants(
+    stub: _Stub,
+) -> None:
+    """Listing every agent duplicates the resource and costs tokens per call."""
+    stub.agents = [
+        {"id": i, "name": f"Team {i} Knowledge", "description": "d"} for i in range(40)
+    ]
+
+    payload = await search_module.search_indexed_documents(
+        query="anything", agent="totally-unrelated"
+    )
+
+    assert "renamed or removed" in payload["error"]
+    assert "agents" in payload["error"]
+    assert payload["error"].count(",") <= _MAX_SUGGESTIONS
 
 
 @pytest.mark.asyncio
@@ -147,6 +184,46 @@ async def test_unknown_agent_error_survives_empty_source_list(stub: _Stub) -> No
 
     assert "no-such-agent" in payload["error"]
     assert "Support" in payload["error"]
+
+
+@pytest.mark.asyncio
+async def test_valid_filters_pass_through(stub: _Stub) -> None:
+    await search_module.search_indexed_documents(
+        query="anything",
+        source_types=["github"],
+        document_set_names=["Engineering Wiki"],
+    )
+
+    sent = stub.search_requests[0]
+    assert sent["sources"] == ["github"]
+    assert sent["document_sets"] == ["Engineering Wiki"]
+
+
+@pytest.mark.asyncio
+async def test_unindexed_source_type_errors_instead_of_being_dropped(
+    stub: _Stub,
+) -> None:
+    """Silently skipping the filter returns a wider result set as if scoped."""
+    payload = await search_module.search_indexed_documents(
+        query="anything", source_types=["confluence"]
+    )
+
+    assert payload["results"] == []
+    assert "confluence" in payload["error"]
+    assert "github" in payload["error"]
+    assert stub.search_requests == []
+
+
+@pytest.mark.asyncio
+async def test_unknown_document_set_errors_with_a_suggestion(stub: _Stub) -> None:
+    payload = await search_module.search_indexed_documents(
+        query="anything", document_set_names=["Enginering Wiki"]
+    )
+
+    assert payload["results"] == []
+    assert "Did you mean" in payload["error"]
+    assert "Engineering Wiki" in payload["error"]
+    assert stub.search_requests == []
 
 
 @pytest.mark.asyncio
