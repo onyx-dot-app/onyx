@@ -29,6 +29,7 @@ from onyx.db.enums import (
     SwitchoverType,
 )
 from onyx.db.index_attempt import (
+    any_running_index_attempt_for_cc_pairs,
     cancel_indexing_attempts_for_search_settings,
     count_unique_active_cc_pairs_with_successful_index_attempts,
     count_unique_cc_pairs_with_successful_index_attempts,
@@ -337,8 +338,9 @@ def _port_swap_ready(
     required_user_ids: list[UUID],
 ) -> bool:
     """Port-flow swap gate: True once every required cc_pair's AND user's port is SUCCESS
-    (none active), the connector deferred metadata-sync backlog has drained, and a sample
-    of ported documents is actually present in the new index. The port copy is the whole
+    (none active), nothing is still indexing into the new settings, the connector
+    deferred metadata-sync backlog has drained, and a sample of ported documents is
+    actually present in the new index. The port copy is the whole
     bar — no post-port connector index attempt. The drain is scoped to
     required_cc_pairs: a global count would deadlock on un-portable INVALID/DELETING docs
     that never reach FUTURE."""
@@ -360,6 +362,17 @@ def _port_swap_ready(
                 up_to_doc_id=latest_port.up_to_doc_id,
             )
         )
+
+    # get_active_port_attempt above covers the port itself. This covers the connector
+    # index attempts, which keep polling into FUTURE for the whole reindex.
+    if any_running_index_attempt_for_cc_pairs(
+        db_session, ss_id, [cc_pair.id for cc_pair in required_cc_pairs]
+    ):
+        logger.info(
+            "Port swap held: an index attempt is mid-run against search settings %s.",
+            ss_id,
+        )
+        return False
 
     if not all_user_scopes_ported(db_session, ss_id, required_user_ids):
         return False
