@@ -5110,6 +5110,10 @@
           "title": "Selbst gehostet & Benutzerdefiniert"
         }
       },
+      "hideProviderGrouping": {
+        "description": "Zeigen Sie alle Modelle als eine Liste an, wenn Sie im Chat Modelle auswählen. Ideal für eine kleine Modellauswahl.",
+        "title": "Anbietergruppierung ausblenden"
+      },
       "modals": {
         "access": {
           "admin": {
@@ -5571,6 +5575,8 @@
       "toasts": {
         "providerDeleteFailed": "Der Anbieter konnte nicht gelöscht werden: {message}",
         "providerDeleted": "Anbieter erfolgreich gelöscht!",
+        "settingsUpdateFailed": "Die Einstellungen konnten nicht aktualisiert werden",
+        "settingsUpdated": "Einstellungen aktualisiert",
         "unknownError": "Unbekannter Fehler"
       }
     },

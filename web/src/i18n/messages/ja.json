@@ -5110,6 +5110,10 @@
           "title": "セルフホストとカスタム"
         }
       },
+      "hideProviderGrouping": {
+        "description": "チャットでモデルを選ぶときに、すべてのモデルを1つのリストとして表示します。モデル数が少ない場合に最適です。",
+        "title": "プロバイダーのグループ化を非表示"
+      },
       "modals": {
         "access": {
           "admin": {
@@ -5571,6 +5575,8 @@
       "toasts": {
         "providerDeleteFailed": "プロバイダーを削除できませんでした：{message}",
         "providerDeleted": "プロバイダーを削除しました。",
+        "settingsUpdateFailed": "設定の更新に失敗しました",
+        "settingsUpdated": "設定を更新しました",
         "unknownError": "不明なエラー"
       }
     },
