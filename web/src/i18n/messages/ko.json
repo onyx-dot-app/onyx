@@ -4147,6 +4147,10 @@
           "title": "자체 호스팅 및 사용자 지정"
         }
       },
+      "hideProviderGrouping": {
+        "description": "채팅에서 모델을 선택할 때 모든 모델을 하나의 목록으로 표시합니다. 모델 수가 적을 때 적합합니다.",
+        "title": "제공업체 그룹화 숨기기"
+      },
       "modals": {
         "access": {
           "admin": {
@@ -4605,6 +4609,8 @@
       "toasts": {
         "providerDeleteFailed": "제공자를 삭제하지 못했습니다: {message}",
         "providerDeleted": "제공자를 삭제했습니다!",
+        "settingsUpdateFailed": "설정을 업데이트하지 못했습니다",
+        "settingsUpdated": "설정을 업데이트했습니다",
         "unknownError": "알 수 없는 오류"
       }
     },

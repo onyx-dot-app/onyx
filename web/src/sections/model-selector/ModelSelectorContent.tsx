@@ -407,6 +407,7 @@ export default function ModelSelectorContent({
   onDetailSelect,
 }: ModelSelectorContentProps) {
   const t = useTranslations("chat.modelSelector");
+  const { hide_provider_grouping: hideProviderGrouping } = useSettings();
   const [detailOption, setDetailOption] = useState<LLMOption | null>(null);
   const {
     llmProviders: currentAgentProviderOptions,
@@ -487,6 +488,9 @@ export default function ModelSelectorContent({
   };
 
   const isGroupOpen = (key: string) => isSearching || expandedGroups.has(key);
+
+  // A lone group needs no header, and an admin can drop them workspace-wide.
+  const showFlatList = hideProviderGrouping || groupedOptions.length === 1;
 
   const renderModelItem = (option: LLMOption) => {
     const selected = isSelected(option);
@@ -586,10 +590,12 @@ export default function ModelSelectorContent({
                     {t("list.empty.text")}
                   </Text>,
                 ]
-              : groupedOptions.length === 1
+              : showFlatList
                 ? [
-                    <Section key="single-provider" gap={1} alignItems="stretch">
-                      {groupedOptions[0]!.options.map(renderModelItem)}
+                    <Section key="flat" gap={1} alignItems="stretch">
+                      {groupedOptions
+                        .flatMap((group) => group.options)
+                        .map(renderModelItem)}
                     </Section>,
                   ]
                 : groupedOptions.flatMap((group, groupIndex) => {

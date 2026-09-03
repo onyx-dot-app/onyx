@@ -4147,6 +4147,10 @@
           "title": "自托管和自定义"
         }
       },
+      "hideProviderGrouping": {
+        "description": "在聊天中选择模型时，将所有模型显示为一个列表。适合模型数量较少的情况。",
+        "title": "隐藏提供商分组"
+      },
       "modals": {
         "access": {
           "admin": {
@@ -4605,6 +4609,8 @@
       "toasts": {
         "providerDeleteFailed": "删除提供商失败：{message}",
         "providerDeleted": "提供商已成功删除！",
+        "settingsUpdateFailed": "更新设置失败",
+        "settingsUpdated": "设置已更新",
         "unknownError": "未知错误"
       }
     },
