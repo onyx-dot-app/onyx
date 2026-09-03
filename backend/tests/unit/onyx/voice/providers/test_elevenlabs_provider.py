@@ -132,8 +132,11 @@ async def test_streaming_api_error_reports_sanitized_error() -> None:
 
 @pytest.mark.asyncio
 async def test_streaming_unexpected_server_close_reports_error() -> None:
-    """A close without session_ended is a failure, not a clean end."""
-    transcriber = _transcriber([FakeCloseMessage()])
+    """A close without session_ended is a failure, not a clean end.
+
+    aiohttp stops the message iterator on close, so no close message arrives.
+    """
+    transcriber = _transcriber([])
 
     await transcriber._receive_loop()
 
@@ -154,4 +157,20 @@ async def test_streaming_session_ended_reports_no_error() -> None:
 
     await transcriber._receive_loop()
 
+    assert await transcriber.receive_transcript() is None
+
+
+@pytest.mark.asyncio
+async def test_streaming_client_close_reports_no_error() -> None:
+    """The client ends the session, so the socket close is expected."""
+    transcriber = _transcriber(
+        [FakeTextMessage({"message_type": "partial_transcript", "text": "hi"})]
+    )
+    transcriber._closed = True
+
+    await transcriber._receive_loop()
+
+    result = await transcriber.receive_transcript()
+    assert result is not None
+    assert result.text == "hi"
     assert await transcriber.receive_transcript() is None
