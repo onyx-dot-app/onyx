@@ -21,3 +21,8 @@ def test_validate_voice_api_base_blocks_metadata_for_azure() -> None:
 
 def test_validate_voice_api_base_returns_none_for_none() -> None:
     assert _validate_voice_api_base("openai", None) is None
+
+
+def test_validate_voice_api_base_rejects_zoom_target_uri() -> None:
+    with pytest.raises(OnyxError, match="Zoom voice providers do not support"):
+        _validate_voice_api_base("zoom", "https://api.example.com")

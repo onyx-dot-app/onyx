@@ -8,7 +8,7 @@ class VoiceProviderView(BaseModel):
 
     id: int
     name: str
-    provider_type: str  # "openai", "azure", "elevenlabs"
+    provider_type: str  # "openai", "azure", "elevenlabs", "zoom"
     is_default_stt: bool
     is_default_tts: bool
     stt_model: str | None
@@ -50,7 +50,7 @@ class VoiceProviderUpsertRequest(BaseModel):
 
     id: int | None = Field(default=None, description="Existing provider ID to update.")
     name: str
-    provider_type: str  # "openai", "azure", "elevenlabs"
+    provider_type: str  # "openai", "azure", "elevenlabs", "zoom"
     api_key: str | None = Field(
         default=None,
         description="API key for the provider.",
