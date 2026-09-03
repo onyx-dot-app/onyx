@@ -4,6 +4,7 @@ The lookup goes through mget rather than a search so that a chunk written but no
 yet refreshed still counts as present.
 """
 
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -65,6 +66,24 @@ def test_duplicate_document_ids_are_looked_up_once() -> None:
     assert sorted(looked_up) == sorted(
         [_first_chunk_id("doc-a"), _first_chunk_id("doc-b")]
     )
+
+
+def test_any_chunk_lookup_sees_a_document_whose_first_chunk_is_gone() -> None:
+    """The two lookups have to disagree here, or excusing a document on the cheaper one
+    would wave a real loss through."""
+    index = OpenSearchDocumentIndex.__new__(OpenSearchDocumentIndex)
+    index._index_name = "test_index"
+    index._tenant_state = _TENANT_STATE
+
+    client = MagicMock()
+    client.get_existing_chunk_ids.side_effect = lambda _ids: set()
+    client.iter_chunks_for_doc_ids.side_effect = lambda _ids: iter(
+        [[SimpleNamespace(document_id="doc-a", chunk_index=3)]]
+    )
+    index._client = client
+
+    assert index.get_documents_missing_chunks(["doc-a"]) == ["doc-a"]
+    assert index.get_documents_with_any_chunk(["doc-a"]) == {"doc-a"}
 
 
 def _make_client_with_mget(present_ids: set[str]) -> Any:

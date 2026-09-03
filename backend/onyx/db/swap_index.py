@@ -61,6 +61,7 @@ from onyx.db.user_file import (
 from onyx.document_index.factory import get_all_document_indices
 from onyx.document_index.opensearch.port_copy import (
     find_documents_missing_from_index,
+    find_documents_with_no_chunks,
 )
 from onyx.key_value_store.factory import get_kv_store
 from onyx.redis.redis_pool import get_redis_client
@@ -318,7 +319,7 @@ def _ported_documents_present_in_new_index(
     if missing_document_ids:
         try:
             absent_from_source = set(
-                find_documents_missing_from_index(
+                find_documents_with_no_chunks(
                     get_current_search_settings(db_session), missing_document_ids
                 )
             )
