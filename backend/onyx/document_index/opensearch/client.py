@@ -1951,6 +1951,8 @@ class OpenSearchIndexClient(OpenSearchClient):
             # matches everything; kept as a guard if that changes
             {"term": {MAX_CHUNK_SIZE_FIELD_NAME: DEFAULT_MAX_CHUNK_SIZE}},
         ]
+        # The document_id field holds the raw Onyx id. Only the OpenSearch _id gets a
+        # tenant prefix, so a query matching on the field crosses tenants without this.
         if tenant_state.multitenant:
             filter_clauses.append(
                 {"term": {TENANT_ID_FIELD_NAME: {"value": tenant_state.tenant_id}}}
