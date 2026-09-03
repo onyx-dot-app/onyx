@@ -78,6 +78,10 @@ from tests.external_dependency_unit.indexing_helpers import (
 )
 
 _PENDING_DOC_PREFIX = "swapdoc-"
+_VERIFY_DOC_PREFIX = "swapdoc-verify-"
+# Bounds every seeded id sorts under, so a test scope carries a real snapshot.
+_ALL_DOCS_BOUND = "swapdoc-verify-zzzzzzzz"
+_ALL_FILES_BOUND = "ffffffff-ffff-ffff-ffff-ffffffffffff"
 
 
 @pytest.fixture
@@ -95,10 +99,18 @@ def cc_pair_and_future(
         )
 
 
-def _make_success_port(db_session: Session, cc_pair_id: int, ss_id: int) -> datetime:
+def _make_success_port(
+    db_session: Session,
+    cc_pair_id: int,
+    ss_id: int,
+    up_to_doc_id: str | None = _ALL_DOCS_BOUND,
+) -> datetime:
     """A SUCCESS port attempt; returns its (non-None) completion time so callers can
-    order index attempts relative to it."""
-    attempt = create_port_attempt(db_session, cc_pair_id, ss_id)
+    order index attempts relative to it. The snapshot bound defaults to one that covers
+    every seeded document, since the pre-swap sample only looks inside it."""
+    attempt = create_port_attempt(
+        db_session, cc_pair_id, ss_id, up_to_doc_id=up_to_doc_id
+    )
     mark_port_in_progress(db_session, attempt.id)
     mark_port_succeeded(db_session, attempt.id)
     db_session.expire_all()
@@ -482,9 +494,6 @@ def test_cancel_active_port_attempts_is_two_phase(
         db_session.commit()
 
 
-_VERIFY_DOC_PREFIX = "swapdoc-verify-"
-
-
 def _clear_verification_backoff(future_id: int) -> None:
     """A failed check parks a Redis key for minutes; drop it so each test starts clean."""
     get_redis_client().delete(_verification_backoff_key(future_id))
@@ -507,7 +516,7 @@ def test_sampler_returns_ported_documents_with_chunks(
     scope = PortedScope(
         connector_id=cc_pair.connector_id,
         credential_id=cc_pair.credential_id,
-        up_to_doc_id=None,
+        up_to_doc_id=_ALL_DOCS_BOUND,
     )
     assert sorted(sample_ported_document_ids(db_session, [scope], 10)) == sorted(kept)
     # Same scopes, same ids: a fresh draw each time would eventually pass against a
@@ -540,6 +549,44 @@ def test_sampler_respects_the_port_snapshot_bound(
     assert sampled
 
 
+def test_sampler_skips_a_scope_with_no_snapshot_bound(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """A port that found nothing when it started never claimed to copy anything. Its
+    files and documents completed later, and their FUTURE copy belongs to the dual-write
+    or the next index attempt, so sampling them would block a healthy swap."""
+    cc_pair, _ = cc_pair_and_future
+    seed_cc_pair_documents(
+        db_session, cc_pair, 2, prefix=f"{_VERIFY_DOC_PREFIX}late-", chunk_count=3
+    )
+    unbounded = PortedScope(
+        connector_id=cc_pair.connector_id,
+        credential_id=cc_pair.credential_id,
+        up_to_doc_id=None,
+    )
+    assert sample_ported_document_ids(db_session, [unbounded], 10) == []
+
+    user = create_test_user(db_session, "port_verify_unbounded")
+    try:
+        _add_user_file(db_session, user.id, 4, "completed-after-start.txt")
+        assert (
+            sample_ported_user_file_ids(
+                db_session,
+                [PortedUserScope(user_id=user.id, up_to_doc_id=None)],
+                per_scope_limit=10,
+            )
+            == []
+        )
+    finally:
+        db_session.rollback()
+        db_session.query(UserFile).filter(UserFile.user_id == user.id).delete(
+            synchronize_session="fetch"
+        )
+        db_session.commit()
+        delete_test_user(db_session, user)
+        db_session.commit()
+
+
 def test_sampler_keeps_connector_and_credential_apart(db_session: Session) -> None:
     """Both ids are ints, and the fixture's two sequences advance together so they
     usually match, which hides a mix-up. This pair is built with them deliberately
@@ -559,12 +606,12 @@ def test_sampler_keeps_connector_and_credential_apart(db_session: Session) -> No
         correct = PortedScope(
             connector_id=cc_pair.connector_id,
             credential_id=cc_pair.credential_id,
-            up_to_doc_id=None,
+            up_to_doc_id=_ALL_DOCS_BOUND,
         )
         swapped = PortedScope(
             connector_id=cc_pair.credential_id,
             credential_id=cc_pair.connector_id,
-            up_to_doc_id=None,
+            up_to_doc_id=_ALL_DOCS_BOUND,
         )
         assert sample_ported_document_ids(db_session, [correct], 5) == seeded
         assert sample_ported_document_ids(db_session, [swapped], 5) == []
@@ -684,7 +731,7 @@ def test_user_file_sampler_covers_the_second_port_scope(
 
         sampled = sample_ported_user_file_ids(
             db_session,
-            [PortedUserScope(user_id=user.id, up_to_doc_id=None)],
+            [PortedUserScope(user_id=user.id, up_to_doc_id=_ALL_FILES_BOUND)],
             per_scope_limit=10,
         )
         assert sampled == [str(with_chunks)]
@@ -709,7 +756,13 @@ def test_port_swap_blocks_when_a_ported_user_file_is_missing(
     user = create_test_user(db_session, "port_verify_userfile_gate")
     try:
         user_file_id = _add_user_file(db_session, user.id, 4, "ported.txt")
-        attempt = create_port_attempt(db_session, None, future_id, port_user_id=user.id)
+        attempt = create_port_attempt(
+            db_session,
+            None,
+            future_id,
+            port_user_id=user.id,
+            up_to_doc_id=_ALL_FILES_BOUND,
+        )
         mark_port_in_progress(db_session, attempt.id)
         mark_port_succeeded(db_session, attempt.id)
         db_session.expire_all()

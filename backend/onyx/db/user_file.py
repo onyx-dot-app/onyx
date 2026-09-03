@@ -3,7 +3,7 @@ from collections.abc import Sequence
 from typing import NamedTuple
 from uuid import UUID
 
-from sqlalchemy import cast, column, exists, func, or_, select, true, update, values
+from sqlalchemy import column, exists, func, select, true, update, values
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Session, joinedload, selectinload
 
@@ -204,16 +204,16 @@ def sample_ported_user_file_ids(
     Files with no chunks are skipped, because they have nothing in the source index
     either and finding nothing for them downstream is not loss.
     """
-    if per_scope_limit <= 0 or not user_scopes:
-        return []
-
+    # A port with no snapshot bound found no files when it started, so it never claimed
+    # to copy any. Sampling that user anyway would check files that completed during the
+    # port, whose FUTURE copy is the dual-write's job and may still be in flight.
     scope_rows = [
-        (
-            scope.user_id,
-            UUID(scope.up_to_doc_id) if scope.up_to_doc_id is not None else None,
-        )
+        (scope.user_id, UUID(scope.up_to_doc_id))
         for scope in user_scopes
+        if scope.up_to_doc_id is not None
     ]
+    if per_scope_limit <= 0 or not scope_rows:
+        return []
     scopes = values(
         column("user_id", PGUUID(as_uuid=True)),
         column("up_to_id", PGUUID(as_uuid=True)),
@@ -228,12 +228,7 @@ def sample_ported_user_file_ids(
             UserFile.incognito.is_(False),
             UserFile.chunk_count.is_not(None),
             UserFile.chunk_count > 0,
-            # Postgres types an all-NULL VALUES column as text, and there is no
-            # uuid <= text operator, so the cast has to be explicit.
-            or_(
-                scopes.c.up_to_id.is_(None),
-                UserFile.id <= cast(scopes.c.up_to_id, PGUUID(as_uuid=True)),
-            ),
+            UserFile.id <= scopes.c.up_to_id,
         )
         .order_by(UserFile.id)
         .limit(per_scope_limit)
