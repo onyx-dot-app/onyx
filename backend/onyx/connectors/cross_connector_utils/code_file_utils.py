@@ -41,6 +41,12 @@ SENSITIVE_FILE_PATTERNS = (
 
 # Machine-written files: build output and dependency lock files. They are
 # large, they dominate a repo's file count, and they are noise in retrieval.
+#
+# Hand-maintained because no authoritative list ships as a Python package.
+# GitHub's own answer is linguist (`vendor.yml` plus `generated.rb`), which is
+# Ruby, has no maintained port, and would have to be vendored and translated.
+# The naming conventions below have been stable for years, so the list is
+# short and rarely moves; extend it rather than reaching for a dependency.
 GENERATED_FILE_PATTERNS = (
     "*.min.*",
     "*.lock",
