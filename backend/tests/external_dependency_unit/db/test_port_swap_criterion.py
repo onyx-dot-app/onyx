@@ -637,18 +637,32 @@ def test_sampler_skips_a_scope_with_no_snapshot_bound(
         db_session.commit()
 
 
-def test_sampler_keeps_connector_and_credential_apart(db_session: Session) -> None:
-    """Both ids are ints, and the fixture's two sequences advance together so they
-    usually match, which hides a mix-up. This pair is built with them deliberately
-    different so swapping the two columns fails here."""
-    spare_credential = Credential(
-        source=DocumentSource.MOCK_CONNECTOR, credential_json={}
-    )
-    db_session.add(spare_credential)
+def _make_cc_pair_with_distinct_ids(
+    db_session: Session,
+) -> tuple[ConnectorCredentialPair, Credential | None]:
+    """A cc_pair whose connector_id and credential_id are different numbers.
+
+    make_cc_pair advances both id sequences together, so the gap between them never
+    changes and a pair often gets the same number for both. Only a lone insert moves
+    that gap, and one is enough because it happens only when the ids came out equal.
+    """
+    cc_pair = make_cc_pair(db_session)
+    if cc_pair.connector_id != cc_pair.credential_id:
+        return cc_pair, None
+
+    spare = Credential(source=DocumentSource.MOCK_CONNECTOR, credential_json={})
+    db_session.add(spare)
     db_session.commit()
+    cleanup_cc_pair(db_session, cc_pair)
 
     cc_pair = make_cc_pair(db_session)
     assert cc_pair.connector_id != cc_pair.credential_id
+    return cc_pair, spare
+
+
+def test_sampler_keeps_connector_and_credential_apart(db_session: Session) -> None:
+    """Both ids are ints, so nothing but a test catches the two columns being swapped."""
+    cc_pair, spare_credential = _make_cc_pair_with_distinct_ids(db_session)
     try:
         seeded = seed_cc_pair_documents(
             db_session, cc_pair, 1, prefix=f"{_VERIFY_DOC_PREFIX}pair-", chunk_count=2
@@ -668,7 +682,8 @@ def test_sampler_keeps_connector_and_credential_apart(db_session: Session) -> No
     finally:
         db_session.rollback()
         cleanup_cc_pair(db_session, cc_pair)
-        db_session.delete(spare_credential)
+        if spare_credential is not None:
+            db_session.delete(spare_credential)
         db_session.commit()
 
 
