@@ -94,6 +94,7 @@ class OpenAIStreamingTranscriber(StreamingTranscriberProtocol):
         # error event for callers to fail fast on a poisoned session.
         self._last_error: dict[str, Any] | None = None
         self._stream_failed = False
+        self._cleanup_done = False
 
     async def connect(self) -> None:
         """Establish WebSocket connection to OpenAI Realtime API (GA shape)."""
@@ -230,6 +231,10 @@ class OpenAIStreamingTranscriber(StreamingTranscriberProtocol):
             self._stream_failed = True
             self._logger.error("Error in receive loop: %s", e)
         finally:
+            # The socket ends the message iterator on close, so a server close
+            # before the client ends the session is an unexpected end.
+            if not self._closed:
+                self._stream_failed = True
             if self._stream_failed or self._last_error:
                 await self._transcript_queue.put(
                     TranscriptResult(error=STREAM_FAILED_ERROR)
@@ -270,14 +275,13 @@ class OpenAIStreamingTranscriber(StreamingTranscriberProtocol):
 
     async def close(self) -> str:
         """Close session and return final transcript. Safe to call more than once."""
-        if self._closed:
+        if self._cleanup_done:
             return self._accumulated_transcript
-        self._closed = True
-        stream_failed = self._stream_failed or self._last_error is not None
-        if self._ws:
+        if not self._closed:
+            self._closed = True
             # A failed stream produces no further transcription, so the commit
             # and its wait are skipped.
-            if not stream_failed:
+            if self._ws and not self._failed():
                 # Sole trigger for the final TRANSCRIPTION_COMPLETED event
                 # (gpt-realtime-whisper has no server VAD).
                 try:
@@ -292,6 +296,9 @@ class OpenAIStreamingTranscriber(StreamingTranscriberProtocol):
                 transcript_before_commit = self._accumulated_transcript
                 for _ in range(50):  # 50 * 100ms = 5 seconds max
                     await asyncio.sleep(0.1)
+                    if self._failed():
+                        self._logger.warning("Stream failed while awaiting transcript")
+                        break
                     if self._accumulated_transcript != transcript_before_commit:
                         self._logger.info(
                             "Got final transcript: %s...",
@@ -301,6 +308,8 @@ class OpenAIStreamingTranscriber(StreamingTranscriberProtocol):
                 else:
                     self._logger.warning("Timed out waiting for transcription")
 
+        # Cleanup repeats until it finishes, in case a call was cancelled midway.
+        if self._ws:
             await self._ws.close()
         if self._receive_task:
             self._receive_task.cancel()
@@ -310,7 +319,11 @@ class OpenAIStreamingTranscriber(StreamingTranscriberProtocol):
                 pass
         if self._session:
             await self._session.close()
+        self._cleanup_done = True
         return self._accumulated_transcript
+
+    def _failed(self) -> bool:
+        return self._stream_failed or self._last_error is not None
 
 
 # OpenAI available voices for TTS

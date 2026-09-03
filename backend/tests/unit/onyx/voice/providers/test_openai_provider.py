@@ -184,6 +184,7 @@ async def test_streaming_error_event_ends_stream() -> None:
 
 @pytest.mark.asyncio
 async def test_streaming_clean_end_reports_no_error() -> None:
+    """The client ended the session, so the socket close is expected."""
     transcriber = OpenAIStreamingTranscriber(api_key="test")
     transcriber._ws = cast(
         Any,
@@ -191,7 +192,46 @@ async def test_streaming_clean_end_reports_no_error() -> None:
             [FakeMessage({"type": OpenAIRealtimeMessageType.SESSION_CREATED})]
         ),
     )
+    transcriber._closed = True
 
     await transcriber._receive_loop()
 
     assert await transcriber.receive_transcript() is None
+
+
+@pytest.mark.asyncio
+async def test_streaming_unexpected_server_close_reports_error() -> None:
+    """A close before the client ends the session is a failure."""
+    transcriber = OpenAIStreamingTranscriber(api_key="test")
+    transcriber._ws = cast(Any, FakeWebSocket([]))
+
+    await transcriber._receive_loop()
+
+    result = await transcriber.receive_transcript()
+    assert result is not None
+    assert result.error == STREAM_FAILED_ERROR
+    assert await transcriber.receive_transcript() is None
+
+
+class FakeClosable:
+    def __init__(self) -> None:
+        self.closed = False
+
+    async def close(self) -> None:
+        self.closed = True
+
+
+@pytest.mark.asyncio
+async def test_close_after_cancelled_close_still_cleans_up() -> None:
+    """A cancelled close leaves `_closed` set, so cleanup must still run."""
+    transcriber = OpenAIStreamingTranscriber(api_key="test")
+    websocket = FakeClosable()
+    session = FakeClosable()
+    transcriber._ws = cast(Any, websocket)
+    transcriber._session = cast(Any, session)
+    transcriber._closed = True
+
+    await transcriber.close()
+
+    assert websocket.closed
+    assert session.closed
