@@ -131,6 +131,8 @@ class HubSpotConnector(LoadConnector, PollConnector):
         self._portal_id = value
 
     def _call_hubspot(self, func: Callable[..., T], *args: Any, **kwargs: Any) -> T:
+        # The SDK sends requests with no timeout unless one is passed per call.
+        kwargs.setdefault("_request_timeout", REQUEST_TIMEOUT_SECONDS)
         return self._rate_limiter.call(func, *args, **kwargs)
 
     def _batch_read(
