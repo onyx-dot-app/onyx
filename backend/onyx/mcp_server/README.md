@@ -4,8 +4,8 @@
 
 The Onyx MCP server allows LLMs to connect to your Onyx instance and access its knowledge base and search capabilities through the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/).
 
-With the Onyx MCP Server, you can search your knowledgebase,
-give your LLMs web search, and upload and manage documents in Onyx.
+With the Onyx MCP Server, you can search your knowledgebase and
+give your LLMs web search.
 
 All access controls are managed within the main Onyx application.
 
@@ -86,6 +86,8 @@ The server provides three tools for searching and retrieving information:
 1. `search_indexed_documents`
 Search the user's private knowledge base indexed in Onyx. Returns ranked documents with content snippets, scores, and metadata.
 
+Pass `agent` with an agent name to run the search as that Onyx agent. The search then applies the agent's knowledge scope (document sets, attached documents, start date) and its configured model. An unresolvable name returns an error listing the agents available to the user, so no lookup call is needed first.
+
 2. `search_web`
 Search the public internet for current events and general knowledge. Returns web search results with titles, URLs, and snippets.
 
@@ -96,6 +98,12 @@ Retrieve the complete text content from specific web URLs. Useful for fetching f
 
 1. `indexed_sources`
 Lists all document sources currently indexed in the tenant (e.g., `"confluence"`, `"github"`). Use these values to filter results when calling `search_indexed_documents`.
+
+2. `document_sets`
+Lists the Document Sets accessible to the user. Use the returned `name` values with the `document_set_names` filter of `search_indexed_documents`.
+
+3. `agents`
+Lists the Onyx agents accessible to the user (`id`, `name`, `description`). Use a returned `name` with the `agent` filter of `search_indexed_documents`.
 
 ## Local Development
 

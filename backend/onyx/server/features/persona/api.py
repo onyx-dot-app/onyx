@@ -20,7 +20,11 @@ from onyx.auth.permissions import (
     has_permission,
     require_permission,
 )
-from onyx.auth.users import current_chat_accessible_user, current_limited_user
+from onyx.auth.users import (
+    current_chat_accessible_user,
+    current_limited_user,
+    scope_exempt,
+)
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import PUBLIC_API_TAGS, FileOrigin, MilestoneRecordType
 from onyx.db.engine.sql_engine import get_session
@@ -596,7 +600,10 @@ def delete_persona(
         ) from e
 
 
-@basic_router.get("")
+# scope_exempt: the auth dependency below carries no require_permission marker,
+# so without this a scoped PAT is rejected fail-closed. MCP clients need this
+# route to resolve an agent name for a scoped search.
+@basic_router.get("", dependencies=[Depends(scope_exempt)])
 def list_personas(
     user: User = Depends(current_chat_accessible_user),
     db_session: Session = Depends(get_session),
