@@ -8522,6 +8522,9 @@
       "continueAsGuest": {
         "label": "또는 게스트로 계속하기"
       },
+      "createAccountButton": {
+        "label": "계정 만들기"
+      },
       "email": {
         "label": "이메일 주소",
         "placeholder": "email@yourcompany.com"
@@ -8531,6 +8534,9 @@
       },
       "invalidCredentials": {
         "error": "이메일 또는 비밀번호가 잘못되었습니다"
+      },
+      "joinButton": {
+        "label": "참여"
       },
       "noPassword": {
         "error": "비밀번호를 설정하려면 계정을 만드세요"
@@ -8559,6 +8565,9 @@
       },
       "passwordUppercase": {
         "error": "비밀번호에는 대문자가 하나 이상 포함되어야 합니다"
+      },
+      "signInButton": {
+        "label": "로그인"
       },
       "tooManyRequests": {
         "error": "요청이 너무 많습니다. 나중에 다시 시도해 주세요."
@@ -8687,11 +8696,17 @@
       }
     },
     "login": {
+      "continueButton": {
+        "label": "계속"
+      },
       "createAccountButton": {
         "label": "계정 만들기"
       },
       "noSsoProviders": {
         "error": "해당 주소로 설정된 SSO 로그인이 없습니다. 아래에서 Google 또는 비밀번호로 로그인해 보세요."
+      },
+      "orDivider": {
+        "text": "또는"
       },
       "resetPasswordButton": {
         "label": "비밀번호 재설정"
@@ -8716,6 +8731,12 @@
       },
       "verifiedMessage": {
         "title": "이메일이 인증되었습니다! 계속하려면 로그인하세요."
+      },
+      "welcomeHeading": {
+        "title": "{appName}에 오신 것을 환영합니다"
+      },
+      "welcomeSubtitle": {
+        "text": "업무를 위한 오픈 소스 AI 플랫폼"
       },
       "workEmailField": {
         "label": "회사 이메일"

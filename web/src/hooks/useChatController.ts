@@ -1490,6 +1490,7 @@ export default function useChatController({
       llmManager.currentLlm,
       llmManager.temperature,
       llmManager.hasTemperatureOverride,
+      llmManager.persistOverrides,
       // Others that affect logic
       activeAgent,
       availableAgents,
