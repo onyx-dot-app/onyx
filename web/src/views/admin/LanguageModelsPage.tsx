@@ -330,6 +330,11 @@ export default function LanguageModelsPage() {
   const adminRouteTitle = useAdminRouteTitle();
   const { mutate } = useSWRConfig();
   const settings = useSettings();
+  // Optimistic value while the save is in flight. It also locks the switch so
+  // a second click cannot resubmit the stale stored value.
+  const [pendingHideGrouping, setPendingHideGrouping] = useState<
+    boolean | null
+  >(null);
   const { llmProviders: existingLlmProviders, defaultText } =
     useAdminLLMProviders();
   const isConfigurationDisabled = usePHFeatureFlag(
@@ -433,6 +438,8 @@ export default function LanguageModelsPage() {
   }
 
   async function handleHideProviderGroupingChange(checked: boolean) {
+    if (pendingHideGrouping !== null) return;
+    setPendingHideGrouping(checked);
     try {
       await updateAdminSettings({ hide_provider_grouping: checked });
       await mutate(SWR_KEYS.settings);
@@ -441,6 +448,8 @@ export default function LanguageModelsPage() {
       toast.error(
         e instanceof Error ? e.message : t("toasts.settingsUpdateFailed")
       );
+    } finally {
+      setPendingHideGrouping(null);
     }
   }
 
@@ -486,7 +495,12 @@ export default function LanguageModelsPage() {
                   withLabel
                 >
                   <Switch
-                    checked={settings.hide_provider_grouping ?? false}
+                    checked={
+                      pendingHideGrouping ??
+                      settings.hide_provider_grouping ??
+                      false
+                    }
+                    disabled={pendingHideGrouping !== null}
                     onCheckedChange={(checked) => {
                       void handleHideProviderGroupingChange(checked);
                     }}
