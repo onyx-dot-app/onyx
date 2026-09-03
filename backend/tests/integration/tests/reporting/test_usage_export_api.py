@@ -290,6 +290,7 @@ class TestUsageExportAPI:
             assert "chat_messages.csv" in file_names
             assert "users.csv" in file_names
             assert "usage_by_user.csv" in file_names
+            assert "usage_by_system.csv" in file_names
             assert "usage_report.pdf" in file_names
 
             with zip_file.open("usage_report.pdf") as pdf_file:
@@ -320,6 +321,21 @@ class TestUsageExportAPI:
                 assert expected_columns == actual_columns, (
                     f"Expected columns {expected_columns}, but got {actual_columns}"
                 )
+
+            with zip_file.open("usage_by_system.csv") as csv_file:
+                csv_reader = csv.DictReader(StringIO(csv_file.read().decode("utf-8")))
+                assert set(csv_reader.fieldnames or []) == {
+                    "attribution",
+                    "day",
+                    "model",
+                    "flow",
+                    "provider",
+                    "input_tokens",
+                    "output_tokens",
+                    "cache_read_tokens",
+                    "cache_creation_tokens",
+                    "cost_cents",
+                }
 
             # Verify chat_messages.csv has the expected columns
             with zip_file.open("chat_messages.csv") as csv_file:
