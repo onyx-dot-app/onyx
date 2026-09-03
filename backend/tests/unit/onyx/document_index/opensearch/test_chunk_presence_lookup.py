@@ -86,6 +86,37 @@ def test_any_chunk_lookup_sees_a_document_whose_first_chunk_is_gone() -> None:
     assert index.get_documents_with_any_chunk(["doc-a"]) == {"doc-a"}
 
 
+def test_any_chunk_lookup_refreshes_before_it_scans() -> None:
+    """A search cannot see an unrefreshed write, and this answer is used to excuse a
+    document, so a stale absence would wave a real loss through."""
+    index = OpenSearchDocumentIndex.__new__(OpenSearchDocumentIndex)
+    index._index_name = "test_index"
+    index._tenant_state = _TENANT_STATE
+
+    calls: list[str] = []
+    client = MagicMock()
+    client.refresh_index.side_effect = lambda: calls.append("refresh")
+    client.iter_chunks_for_doc_ids.side_effect = lambda _ids: (
+        calls.append("scan"),
+        iter([]),
+    )[1]
+    index._client = client
+
+    index.get_documents_with_any_chunk(["doc-a"])
+    assert calls == ["refresh", "scan"]
+
+
+def test_any_chunk_lookup_skips_the_refresh_when_asked_nothing() -> None:
+    index = OpenSearchDocumentIndex.__new__(OpenSearchDocumentIndex)
+    index._index_name = "test_index"
+    index._tenant_state = _TENANT_STATE
+    client = MagicMock()
+    index._client = client
+
+    assert index.get_documents_with_any_chunk([]) == set()
+    client.refresh_index.assert_not_called()
+
+
 def _make_client_with_mget(present_ids: set[str]) -> Any:
     """A real client with only its transport stubbed, so the batching loop still runs."""
     from onyx.document_index.opensearch.client import OpenSearchIndexClient

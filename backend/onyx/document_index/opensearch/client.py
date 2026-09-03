@@ -166,7 +166,7 @@ _CLUSTER_BLOCK_ERROR_TYPE = "cluster_block_exception"
 # Chunks per PIT-scan page. A port doc-batch is small (INDEX_BATCH_SIZE docs), so
 # one page covers a batch; paging still protects against a pathological doc.
 _PIT_SCAN_PAGE_SIZE = 1000
-# Chunk ids per mget call, so a large sample can't exceed http.max_content_length.
+# Batched so one request cannot exceed the cluster's http.max_content_length.
 _MGET_BATCH_SIZE = 500
 
 
@@ -1971,8 +1971,9 @@ class OpenSearchIndexClient(OpenSearchClient):
     def get_existing_chunk_ids(self, chunk_ids: list[str]) -> set[str]:
         """Which of these chunk ids exist in the index, looked up by _id.
 
-        mget reads the translog, so it finds a chunk that was written but not yet
-        refreshed. A search would miss that chunk and report it as absent.
+        Looking chunks up by their exact id sees a write that a search has not caught up
+        with yet, so a chunk written moments ago still counts as present. A search would
+        report it absent until the index refreshes.
 
         Raises on transport errors instead of returning an empty set, so a caller
         cannot mistake an unreachable cluster for an index with nothing in it.
