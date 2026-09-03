@@ -40,6 +40,10 @@ def positional_tenant_id(argv: list[str]) -> str | None:
     return None
 
 
+class TenantRecentlyActiveError(Exception):
+    """Raised when a tenant has activity inside the inactivity window."""
+
+
 class TenantNotFoundInControlPlaneError(Exception):
     """Exception raised when tenant/table is not found in control plane."""
 

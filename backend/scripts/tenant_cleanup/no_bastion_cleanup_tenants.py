@@ -30,6 +30,7 @@ from scripts.tenant_cleanup.activity_utils import (
 )
 from scripts.tenant_cleanup.no_bastion_cleanup_utils import (
     TenantNotFoundInControlPlaneError,
+    TenantRecentlyActiveError,
     confirm_step,
     execute_control_plane_delete,
     find_background_pod,
@@ -274,7 +275,7 @@ def check_tenant_still_inactive(
 
     age_days = (datetime.now(timezone.utc) - last_activity).days
     if age_days < inactive_days:
-        raise RuntimeError(
+        raise TenantRecentlyActiveError(
             f"Tenant was active {age_days} days ago "
             f"({last_activity.isoformat()}), inside the {inactive_days} day window. "
             "The CSV is stale; re-run the analyze step."
@@ -569,16 +570,6 @@ def cleanup_tenant(
             print(f"⚠ Could not fetch tenant users: {e}")
         print(f"{'=' * 80}\n")
 
-    # The CSV may be days old, so confirm the tenant is still inactive before
-    # anything is dropped. Status alone would not catch renewed usage.
-    try:
-        check_tenant_still_inactive(
-            data_plane_pod, tenant_id, data_plane_context, inactive_days
-        )
-    except Exception as e:
-        print(f"✗ Skipping tenant {tenant_id}: {e}", file=sys.stderr)
-        return False
-
     # Step 1: Make sure all documents are deleted (data plane)
     print(f"\n{'=' * 80}")
     print("Step 1/3: Checking for remaining ConnectorCredentialPairs and Documents")
@@ -601,6 +592,17 @@ def cleanup_tenant(
         f"Step 2/3: Drop data plane schema '{tenant_id}' (CASCADE - will delete all tables, functions, etc.)",
         force,
     ):
+        # Re-read activity as late as possible. The CSV comes from an analyze pass
+        # that may be days old, and tenant status alone does not show renewed use.
+        # Infrastructure failures propagate; only a genuinely active tenant is a skip.
+        try:
+            check_tenant_still_inactive(
+                data_plane_pod, tenant_id, data_plane_context, inactive_days
+            )
+        except TenantRecentlyActiveError as e:
+            print(f"✗ Skipping tenant {tenant_id}: {e}", file=sys.stderr)
+            return False
+
         try:
             drop_data_plane_schema(data_plane_pod, tenant_id, data_plane_context)
         except Exception as e:

@@ -18,13 +18,13 @@ TENANT_ID_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 
 def main() -> None:
     if len(sys.argv) < 2:
-        print(json.dumps({"status": "error", "message": "tenant_id required"}))
-        return
+        print("tenant_id required", file=sys.stderr)
+        sys.exit(1)
 
     tenant_id = sys.argv[1]
     if not TENANT_ID_RE.match(tenant_id):
-        print(json.dumps({"status": "error", "message": "unsafe tenant id"}))
-        return
+        print(f"unsafe tenant id: {tenant_id!r}", file=sys.stderr)
+        sys.exit(1)
 
     SqlEngine.init_engine(pool_size=2, max_overflow=0)
     with get_session_with_shared_schema() as session:

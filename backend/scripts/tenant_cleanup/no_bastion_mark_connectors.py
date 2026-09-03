@@ -605,8 +605,10 @@ def main() -> None:
 
         print(f"{'=' * 80}")
 
-        if failed_tenants:
-            sys.exit(1)
+    # Non-zero for any failure, including single-tenant runs, so callers that
+    # chain steps together stop instead of continuing as though marking worked.
+    if failed_tenants:
+        sys.exit(1)
 
 
 if __name__ == "__main__":

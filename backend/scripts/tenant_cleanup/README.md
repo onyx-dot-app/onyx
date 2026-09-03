@@ -26,7 +26,8 @@ PYTHONPATH=. python scripts/tenant_cleanup/no_bastion_analyze_tenants.py \
     --control-plane-context <control_plane_context>
 ```
 
-This writes `gated_tenants_inactive_60d_<datetime>.csv` to the current directory.
+This writes `gated_tenants_inactive_<N>d_<datetime>.csv` to the current directory, where N is
+the cutoff that was applied.
 
 A tenant is eligible only when both conditions hold:
 
@@ -43,7 +44,7 @@ of the repo and off shared storage.
 
 ```
 PYTHONPATH=. python scripts/tenant_cleanup/no_bastion_mark_connectors.py \
-    --csv gated_tenants_inactive_60d_<datetime>.csv \
+    --csv gated_tenants_inactive_<N>d_<datetime>.csv \
     --data-plane-context <data_plane_context> \
     --control-plane-context <control_plane_context> \
     --force
@@ -62,11 +63,15 @@ Wait for step 2 to finish. Then run:
 
 ```
 PYTHONPATH=. python scripts/tenant_cleanup/no_bastion_cleanup_tenants.py \
-    --csv gated_tenants_inactive_60d_<datetime>.csv \
+    --csv gated_tenants_inactive_<N>d_<datetime>.csv \
+    --inactive-days <N> \
     --data-plane-context <data_plane_context> \
     --control-plane-context <control_plane_context> \
     --force
 ```
+
+Give `--inactive-days` the same N used in step 1. If the two disagree, the re-check uses a
+different window than the one that selected the tenants.
 
 Before it drops anything, this re-reads each tenant's chat and Craft activity and refuses any
 tenant that has become active since the CSV was made. The CSV can be days old, and the control

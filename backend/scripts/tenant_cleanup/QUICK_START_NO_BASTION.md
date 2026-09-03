@@ -12,15 +12,20 @@ PYTHONPATH=. python scripts/tenant_cleanup/no_bastion_analyze_tenants.py
 
 # Step 2: Mark connectors for deletion (1-2 min)
 PYTHONPATH=. python scripts/tenant_cleanup/no_bastion_mark_connectors.py \
-  --csv gated_tenants_inactive_60d_*.csv \
+  --csv gated_tenants_inactive_<N>d_*.csv \
+  --data-plane-context <data_plane_context> \
+  --control-plane-context <control_plane_context> \
   --force \
-  --concurrency 16
+  --concurrency 8
 
 # ⏰ WAIT 6+ hours for background deletion to complete
 
 # Step 3: Final cleanup (1-2 min)
 PYTHONPATH=. python scripts/tenant_cleanup/no_bastion_cleanup_tenants.py \
-  --csv gated_tenants_inactive_60d_*.csv \
+  --csv gated_tenants_inactive_<N>d_*.csv \
+  --inactive-days <N> \
+  --data-plane-context <data_plane_context> \
+  --control-plane-context <control_plane_context> \
   --force
 ```
 
