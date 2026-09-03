@@ -33,6 +33,8 @@ On first run, an interactive setup wizard will guide you through configuration.`
 				cfg.Features.StreamMarkdown = &v
 			}
 
+			var sessionAgentID int
+			sessionAgentSet := false
 			if cmd.Flags().Changed("agent-id") || cmd.Flags().Changed("agent-name") {
 				if !cfg.IsConfigured() {
 					return exitcodes.New(exitcodes.NotConfigured,
@@ -51,7 +53,8 @@ On first run, an interactive setup wizard will guide you through configuration.`
 				if err != nil {
 					return err
 				}
-				cfg.DefaultAgentID = agentID
+				sessionAgentID = agentID
+				sessionAgentSet = true
 			}
 
 			starprompt.MaybePrompt()
@@ -61,6 +64,10 @@ On first run, an interactive setup wizard will guide you through configuration.`
 				m = tui.NewFirstRunModel(cfg)
 			} else {
 				m = tui.NewModel(cfg, api.NewClient(cfg))
+				if sessionAgentSet {
+					// Session-only override; do not persist (unlike /agent in the TUI).
+					m = m.WithSessionAgent(sessionAgentID)
+				}
 			}
 
 			p := tea.NewProgram(m)
