@@ -145,6 +145,10 @@ def _touch(snapshot_root: Path) -> None:
 
 
 def _snapshot_bytes(entry: Path) -> int:
+    """Bytes a snapshot occupies. Neither the stdlib nor this repo has a
+    recursive directory size; `Path.rglob` would descend through symlinks a
+    repository controls, so walk without following them and `lstat` the link
+    itself rather than its target."""
     total = 0
     for dirpath, _dirnames, filenames in os.walk(entry, followlinks=False):
         for filename in filenames:

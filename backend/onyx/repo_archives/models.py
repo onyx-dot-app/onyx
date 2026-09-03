@@ -1,15 +1,27 @@
 """Provider-agnostic identity of a repository revision and of a local archive."""
 
 import hashlib
-import re
+import string
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, ValidationInfo, field_validator
 
-# What GitHub and GitLab allow in a namespace or repository name. Anything
-# else could alias another repo once `key_prefix` becomes a file-store id
-# prefix, or escape the key space entirely.
-_PATH_SEGMENT = re.compile(r"(?!\.+\Z)[A-Za-z0-9._-]+\Z")
+# What GitHub and GitLab allow in a namespace or repository name. Excludes
+# ":" and "/", the separators `key` is built from, so no two repositories can
+# produce the same cache key.
+_ALLOWED_SEGMENT_CHARS = frozenset(string.ascii_letters + string.digits + "._-")
+
+
+def _is_plain_name(segment: str) -> bool:
+    """A single path segment a hosting provider could actually issue.
+
+    Rejects the empty string and the traversal names ("." / ".."), which would
+    escape the key space, and any character outside the allowed set, which
+    could alias another repo once the key becomes a file-store id.
+    """
+    if not segment or not segment.strip("."):
+        return False
+    return _ALLOWED_SEGMENT_CHARS.issuperset(segment)
 
 
 class RepoRef(BaseModel):
@@ -22,19 +34,33 @@ class RepoRef(BaseModel):
     owner: str  # namespace path: "org" or "group/subgroup"
     name: str
 
-    @field_validator("owner", "name")
+    @field_validator("provider", "host", "name")
     @classmethod
-    def _validate_path_part(cls, value: str, info: ValidationInfo) -> str:
-        """`owner` and `name` become path segments of a cache key, so every
-        "/"-separated segment must be a plain name."""
-        if not all(_PATH_SEGMENT.match(segment) for segment in value.split("/")):
+    def _validate_segment(cls, value: str, info: ValidationInfo) -> str:
+        """These are single segments of a cache key. Raised as a pydantic
+        ValidationError; callers that build a RepoRef from user input convert
+        it to an OnyxError at their boundary."""
+        if not _is_plain_name(value):
             raise ValueError(f"Invalid repo {info.field_name}: {value!r}")
+        return value
+
+    @field_validator("owner")
+    @classmethod
+    def _validate_owner(cls, value: str) -> str:
+        """`owner` is the one field that may be a path — GitLab subgroups."""
+        if not all(_is_plain_name(segment) for segment in value.split("/")):
+            raise ValueError(f"Invalid repo owner: {value!r}")
         return value
 
     @property
     def key_prefix(self) -> str:
-        """Cache-key prefix shared by every revision of this repo."""
-        return f"{self.provider}/{self.host}/{self.owner}/{self.name}/"
+        """Cache-key prefix shared by every revision of this repo.
+
+        ":" separates the fields because no field may contain one, and `owner`
+        may contain "/". Joining on "/" alone would let owner="a/b" name="c"
+        and owner="a" name="b/c" share a key.
+        """
+        return f"{self.provider}:{self.host}:{self.owner}:{self.name}:"
 
     @property
     def display(self) -> str:
