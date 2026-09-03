@@ -64,10 +64,10 @@ On first run, an interactive setup wizard will guide you through configuration.`
 				m = tui.NewFirstRunModel(cfg)
 			} else {
 				m = tui.NewModel(cfg, api.NewClient(cfg))
-				if sessionAgentSet {
-					// Session-only override; do not persist (unlike /agent in the TUI).
-					m = m.WithSessionAgent(sessionAgentID)
-				}
+			}
+			if sessionAgentSet {
+				// Session-only override; do not persist (unlike /agent in the TUI).
+				m = m.WithSessionAgent(sessionAgentID)
 			}
 
 			p := tea.NewProgram(m)
