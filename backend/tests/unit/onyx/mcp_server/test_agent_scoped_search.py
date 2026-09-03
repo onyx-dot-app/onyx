@@ -23,10 +23,15 @@ _TOKEN = AccessToken(token="test-token", client_id="test", scopes=[])
 
 @dataclass
 class _Stub:
-    """Bodies the tool sent to /search, and the agents /persona returns."""
+    """Bodies the tool sent to /search, plus what the API server returns."""
 
     search_requests: list[dict[str, Any]]
     agents: list[dict[str, Any]]
+    sources: list[str]
+
+
+async def _unreachable_indexed_sources(_access_token: AccessToken) -> list[str]:
+    raise AssertionError("indexed-sources must not be consulted for an agent search")
 
 
 @pytest_asyncio.fixture
@@ -38,12 +43,13 @@ async def stub(monkeypatch: pytest.MonkeyPatch) -> AsyncGenerator[_Stub, None]:
             {"id": 7, "name": "Support", "description": "Customer support"},
             {"id": 9, "name": "Engineering Wiki", "description": "Eng docs"},
         ],
+        sources=["github"],
     )
 
     def _handler(request: httpx.Request) -> httpx.Response:
         path = request.url.path
         if path.endswith("/manage/indexed-sources"):
-            return httpx.Response(200, json={"sources": ["github"]})
+            return httpx.Response(200, json={"sources": state.sources})
         if path.endswith("/persona"):
             return httpx.Response(200, json=state.agents)
         if path.endswith("/search"):
@@ -96,6 +102,51 @@ async def test_unknown_agent_errors_and_names_the_valid_ones(stub: _Stub) -> Non
     # The wrong scope returned as if it were right is worse than an error, so
     # the tool must not fall back to an unscoped search.
     assert stub.search_requests == []
+
+
+@pytest.mark.asyncio
+async def test_agent_with_document_sets_is_rejected(stub: _Stub) -> None:
+    """Explicit sets replace an agent's scope downstream, so both is refused."""
+    payload = await search_module.search_indexed_documents(
+        query="anything", agent="Support", document_set_names=["Engineering Wiki"]
+    )
+
+    assert payload["results"] == []
+    assert "not both" in payload["error"]
+    assert stub.search_requests == []
+
+
+@pytest.mark.asyncio
+async def test_agent_search_runs_without_connector_sources(
+    stub: _Stub, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An agent can carry attached documents, so the no-sources guard, which
+    only counts connector sources, must not block an agent-scoped search."""
+    monkeypatch.setattr(
+        search_module,
+        "get_indexed_sources",
+        _unreachable_indexed_sources,
+    )
+
+    payload = await search_module.search_indexed_documents(
+        query="anything", agent="Support"
+    )
+
+    assert "error" not in payload
+    assert stub.search_requests[0]["persona_id"] == 7
+
+
+@pytest.mark.asyncio
+async def test_unknown_agent_error_survives_empty_source_list(stub: _Stub) -> None:
+    """The agent error is more actionable than the generic no-sources message."""
+    stub.sources = []
+
+    payload = await search_module.search_indexed_documents(
+        query="anything", agent="no-such-agent"
+    )
+
+    assert "no-such-agent" in payload["error"]
+    assert "Support" in payload["error"]
 
 
 @pytest.mark.asyncio

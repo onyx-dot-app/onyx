@@ -88,6 +88,8 @@ Search the user's private knowledge base indexed in Onyx. Returns ranked documen
 
 Pass `agent` with an agent name to run the search as that Onyx agent. The search then applies the agent's knowledge scope (document sets, attached documents, start date) and its configured model. An unresolvable name returns an error listing the agents available to the user, so no lookup call is needed first.
 
+`agent` and `document_set_names` are mutually exclusive. Explicit document sets replace an agent's knowledge scope rather than narrowing it, so passing both is rejected instead of silently returning out-of-scope results.
+
 2. `search_web`
 Search the public internet for current events and general knowledge. Returns web search results with titles, URLs, and snippets.
 

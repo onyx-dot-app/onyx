@@ -174,7 +174,9 @@ async def search_indexed_documents(
     its configured model. Pass the name the user gave you — no lookup call is
     needed first. If the name does not resolve, the error names the agents
     available to this user, so you can retry with a valid one. Use the `agents`
-    resource to browse them.
+    resource to browse them. `agent` and `document_set_names` are mutually
+    exclusive: explicit document sets replace an agent's knowledge scope rather
+    than narrowing it, so passing both is rejected.
 
     Returns ``{"results": [{title, url, source_type, content, updated_at},
     ...]}``. Results are ordered by LLM-judged relevance. ``content`` is the
@@ -189,6 +191,13 @@ async def search_indexed_documents(
         "source_types": ["jira", "google_drive", "github"],
         "document_set_names": ["Engineering Wiki"],
         "time_cutoff": "2025-11-24T00:00:00Z",
+    }
+    ```
+
+    Scoping the same question to an agent instead:
+    ```
+    {
+        "query": "What is the latest status of PROJ-1234?",
         "agent": "Engineering Support",
     }
     ```
@@ -218,24 +227,58 @@ async def search_indexed_documents(
     result_count: int | None = None
 
     try:
-        try:
-            sources = await get_indexed_sources(access_token)
-        except Exception as err:
-            logger.error(
-                "Onyx MCP Server: Error checking indexed sources: %s",
-                err,
-                exc_info=True,
-            )
-            return _error_payload(f"Failed to check indexed sources: {str(err)}")
-
-        if not sources:
-            logger.info("Onyx MCP Server: No indexed sources available for tenant")
-            outcome = MCPToolCallStatus.SUCCESS
-            result_count = 0
+        # _build_index_filters lets explicit document sets *replace* the
+        # agent's own sets rather than narrow them, so honouring both would
+        # silently search outside the agent's knowledge scope.
+        if agent is not None and document_set_names is not None:
             return _error_payload(
-                "No document sources are indexed yet. Add connectors or upload data "
-                "through Onyx before calling search_indexed_documents."
+                "Pass either `agent` or `document_set_names`, not both. Explicit "
+                "document sets replace an agent's knowledge scope instead of "
+                "narrowing it, so the results would not be scoped to the agent."
             )
+
+        # Resolve the agent before the indexed-sources guard below: a bad name
+        # deserves its own actionable error, and an agent can carry attached
+        # documents even when no connector has indexed anything.
+        persona_id: int | None = None
+        if agent is not None:
+            try:
+                accessible_agents = await get_accessible_agents(access_token)
+            except Exception as err:
+                logger.error(
+                    "Onyx MCP Server: Error fetching agents: %s", err, exc_info=True
+                )
+                return _error_payload(f"Failed to look up agents: {str(err)}")
+
+            matches = _match_agents(agent, accessible_agents)
+            if not matches:
+                return _error_payload(_unknown_agent_error(agent, accessible_agents))
+            if len(matches) > 1:
+                return _error_payload(
+                    f"Agent name '{agent}' is ambiguous: {len(matches)} accessible "
+                    "agents share it. Ask the user which one they mean."
+                )
+            persona_id = matches[0].id
+
+        if agent is None:
+            try:
+                sources = await get_indexed_sources(access_token)
+            except Exception as err:
+                logger.error(
+                    "Onyx MCP Server: Error checking indexed sources: %s",
+                    err,
+                    exc_info=True,
+                )
+                return _error_payload(f"Failed to check indexed sources: {str(err)}")
+
+            if not sources:
+                logger.info("Onyx MCP Server: No indexed sources available for tenant")
+                outcome = MCPToolCallStatus.SUCCESS
+                result_count = 0
+                return _error_payload(
+                    "No document sources are indexed yet. Add connectors or upload data "
+                    "through Onyx before calling search_indexed_documents."
+                )
 
         source_type_enums: list[DocumentSource] | None = None
         if source_types is not None:
@@ -258,26 +301,6 @@ async def search_indexed_documents(
                 err,
             )
             parsed_cutoff = None
-
-        persona_id: int | None = None
-        if agent is not None:
-            try:
-                accessible_agents = await get_accessible_agents(access_token)
-            except Exception as err:
-                logger.error(
-                    "Onyx MCP Server: Error fetching agents: %s", err, exc_info=True
-                )
-                return _error_payload(f"Failed to look up agents: {str(err)}")
-
-            matches = _match_agents(agent, accessible_agents)
-            if not matches:
-                return _error_payload(_unknown_agent_error(agent, accessible_agents))
-            if len(matches) > 1:
-                return _error_payload(
-                    f"Agent name '{agent}' is ambiguous: {len(matches)} accessible "
-                    "agents share it. Ask the user which one they mean."
-                )
-            persona_id = matches[0].id
 
         request = SearchRequest(
             query=query,
