@@ -8,7 +8,6 @@
 
 import asyncio
 import base64
-import io
 import json
 from collections.abc import AsyncIterator
 from enum import StrEnum
@@ -18,6 +17,7 @@ import aiohttp
 
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.llm_utils import traced_llm_call
+from onyx.voice.audio_utils import audio_bytes_to_file, create_wav_header
 from onyx.voice.interface import (
     StreamingSynthesizerProtocol,
     StreamingTranscriberProtocol,
@@ -327,30 +327,7 @@ def _create_wav_header(
     channels: int = 1,
     bits_per_sample: int = 16,
 ) -> bytes:
-    """Create a WAV file header for PCM audio data."""
-    import struct
-
-    byte_rate = sample_rate * channels * bits_per_sample // 8
-    block_align = channels * bits_per_sample // 8
-
-    # WAV header is 44 bytes
-    header = struct.pack(
-        "<4sI4s4sIHHIIHH4sI",
-        b"RIFF",  # ChunkID
-        36 + data_length,  # ChunkSize
-        b"WAVE",  # Format
-        b"fmt ",  # Subchunk1ID
-        16,  # Subchunk1Size (PCM)
-        1,  # AudioFormat (1 = PCM)
-        channels,  # NumChannels
-        sample_rate,  # SampleRate
-        byte_rate,  # ByteRate
-        block_align,  # BlockAlign
-        bits_per_sample,  # BitsPerSample
-        b"data",  # Subchunk2ID
-        data_length,  # Subchunk2Size
-    )
-    return header
+    return create_wav_header(data_length, sample_rate, channels, bits_per_sample)
 
 
 class OpenAIStreamingSynthesizer(StreamingSynthesizerProtocol):
@@ -532,16 +509,7 @@ class OpenAIVoiceProvider(VoiceProviderInterface):
     async def transcribe(self, audio_data: bytes, audio_format: str) -> str:
         """Transcribe audio via `/v1/audio/transcriptions`."""
         client = self._get_client()
-
-        # /v1/audio/transcriptions doesn't accept raw PCM — wrap as WAV
-        # (24kHz mono matches the browser capture format).
-        if audio_format == "pcm16":
-            audio_data = _create_wav_header(len(audio_data)) + audio_data
-            audio_format = "wav"
-
-        # Create a file-like object from the audio bytes
-        audio_file = io.BytesIO(audio_data)
-        audio_file.name = f"audio.{audio_format}"
+        audio_file = audio_bytes_to_file(audio_data, audio_format)
 
         with traced_llm_call(
             flow=LLMFlow.STT,

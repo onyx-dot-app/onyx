@@ -1,6 +1,9 @@
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+from typing_extensions import Self
+
+from onyx.voice.types import VoiceProviderType
 
 
 class VoiceProviderView(BaseModel):
@@ -8,7 +11,7 @@ class VoiceProviderView(BaseModel):
 
     id: int
     name: str
-    provider_type: str  # "openai", "azure", "elevenlabs"
+    provider_type: VoiceProviderType
     is_default_stt: bool
     is_default_tts: bool
     stt_model: str | None
@@ -46,7 +49,7 @@ class VoiceProviderUpsertRequest(BaseModel):
 
     id: int | None = Field(default=None, description="Existing provider ID to update.")
     name: str
-    provider_type: str  # "openai", "azure", "elevenlabs"
+    provider_type: VoiceProviderType
     api_key: str | None = Field(
         default=None,
         description="API key for the provider.",
@@ -81,14 +84,26 @@ class VoiceProviderUpsertRequest(BaseModel):
         description="If true, sets this provider as the default TTS provider after upsert.",
     )
 
+    @model_validator(mode="after")
+    def validate_openai_compatible_config(self) -> Self:
+        if self.provider_type != VoiceProviderType.OPENAI_COMPATIBLE:
+            return self
+        if not self.api_base:
+            raise ValueError("API base is required for OpenAI-compatible providers.")
+        if not self.stt_model:
+            raise ValueError("STT model is required for OpenAI-compatible providers.")
+        if self.activate_tts:
+            raise ValueError("OpenAI-compatible voice providers do not support TTS.")
+        return self
+
 
 class VoiceProviderTestRequest(BaseModel):
     """Request model for testing a voice provider connection."""
 
-    provider_type: str
+    provider_type: VoiceProviderType
     api_key: str | None = Field(
         default=None,
-        description="API key for testing. If not provided, use_stored_key must be true.",
+        description="Optional API key for testing the provider.",
     )
     use_stored_key: bool = Field(
         default=False,
@@ -100,3 +115,14 @@ class VoiceProviderTestRequest(BaseModel):
         description="Target URI for Azure Speech Services (maps to api_base).",
     )
     custom_config: dict[str, Any] | None = None
+    stt_model: str | None = None
+
+    @model_validator(mode="after")
+    def validate_openai_compatible_config(self) -> Self:
+        if self.provider_type != VoiceProviderType.OPENAI_COMPATIBLE:
+            return self
+        if not self.api_base:
+            raise ValueError("API base is required for OpenAI-compatible providers.")
+        if not self.stt_model:
+            raise ValueError("STT model is required for OpenAI-compatible providers.")
+        return self

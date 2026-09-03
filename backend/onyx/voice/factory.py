@@ -1,5 +1,6 @@
 from onyx.db.models import VoiceProvider
 from onyx.voice.interface import VoiceProviderInterface
+from onyx.voice.types import VoiceProviderType
 
 
 def get_voice_provider(provider: VoiceProvider) -> VoiceProviderInterface:
@@ -32,7 +33,7 @@ def get_voice_provider(provider: VoiceProvider) -> VoiceProviderInterface:
     tts_model = provider.tts_model
     default_voice = provider.default_voice
 
-    if provider_type == "openai":
+    if provider_type == VoiceProviderType.OPENAI:
         from onyx.voice.providers.openai import OpenAIVoiceProvider
 
         return OpenAIVoiceProvider(
@@ -43,7 +44,22 @@ def get_voice_provider(provider: VoiceProvider) -> VoiceProviderInterface:
             default_voice=default_voice,
         )
 
-    elif provider_type == "azure":
+    elif provider_type == VoiceProviderType.OPENAI_COMPATIBLE:
+        from onyx.voice.providers.openai_compatible import (
+            OpenAICompatibleVoiceProvider,
+        )
+
+        if not api_base or not stt_model:
+            raise ValueError(
+                "OpenAI-compatible providers require an API base and STT model."
+            )
+        return OpenAICompatibleVoiceProvider(
+            api_key=api_key,
+            api_base=api_base,
+            stt_model=stt_model,
+        )
+
+    elif provider_type == VoiceProviderType.AZURE:
         from onyx.voice.providers.azure import AzureVoiceProvider
 
         return AzureVoiceProvider(
@@ -55,7 +71,7 @@ def get_voice_provider(provider: VoiceProvider) -> VoiceProviderInterface:
             default_voice=default_voice,
         )
 
-    elif provider_type == "elevenlabs":
+    elif provider_type == VoiceProviderType.ELEVENLABS:
         from onyx.voice.providers.elevenlabs import ElevenLabsVoiceProvider
 
         return ElevenLabsVoiceProvider(

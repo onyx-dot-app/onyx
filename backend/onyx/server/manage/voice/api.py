@@ -26,10 +26,16 @@ from onyx.server.manage.voice.models import (
     VoiceProviderUpsertRequest,
     VoiceProviderView,
 )
+from onyx.server.security.models import outbound_ssrf_params
+from onyx.server.security.store import get_security_settings
 from onyx.utils.encryption import mask_string
 from onyx.utils.logger import setup_logger
 from onyx.utils.url import SSRFException, validate_outbound_http_url
 from onyx.voice.factory import get_voice_provider
+from onyx.voice.providers.openai_compatible import (
+    normalize_openai_compatible_api_base,
+)
+from onyx.voice.types import VoiceProviderType, voice_provider_requires_api_key
 
 logger = setup_logger()
 
@@ -38,23 +44,32 @@ admin_router = APIRouter(prefix="/admin/voice")
 VOICE_PROVIDER_VALIDATION_FAILURE_MESSAGE = (
     "Connection test failed. Please verify your API key and settings."
 )
+VOICE_PROVIDER_TEST_NAME = "__test__"
 
 
-def _validate_voice_api_base(provider_type: str, api_base: str | None) -> str | None:
+def _validate_voice_api_base(
+    provider_type: str | VoiceProviderType, api_base: str | None
+) -> str | None:
     """Validate and normalize provider api_base / target URI."""
     if api_base is None:
         return None
 
-    allow_private_network = provider_type.lower() == "azure"
+    params = outbound_ssrf_params(get_security_settings().ssrf_protection_level)
     try:
-        return validate_outbound_http_url(
-            api_base, allow_private_network=allow_private_network
+        validated = validate_outbound_http_url(
+            api_base,
+            allow_private_network=params.allow_private_network,
+            block_loopback_and_link_local=params.block_loopback_and_link_local,
+            block_link_local_only=params.block_link_local_only,
         )
     except (ValueError, SSRFException) as e:
         raise OnyxError(
             OnyxErrorCode.VALIDATION_ERROR,
             f"Invalid target URI: {str(e)}",
         ) from e
+    if provider_type == VoiceProviderType.OPENAI_COMPATIBLE:
+        return normalize_openai_compatible_api_base(validated)
+    return validated
 
 
 def _provider_to_view(provider: VoiceProvider) -> VoiceProviderView:
@@ -120,7 +135,7 @@ async def upsert_voice_provider_endpoint(
         db_session=db_session,
         provider_id=request.id,
         name=request.name,
-        provider_type=request.provider_type,
+        provider_type=request.provider_type.value,
         api_key=api_key,
         api_key_changed=api_key_changed,
         api_base=api_base,
@@ -131,6 +146,13 @@ async def upsert_voice_provider_endpoint(
         activate_stt=request.activate_stt,
         activate_tts=request.activate_tts,
     )
+    if (
+        request.provider_type == VoiceProviderType.OPENAI_COMPATIBLE
+        and provider.is_default_tts
+    ):
+        provider = deactivate_tts_provider(
+            db_session=db_session, provider_id=provider.id
+        )
 
     # Validate credentials before committing - rollback on failure
     try:
@@ -202,6 +224,15 @@ def activate_tts_provider_endpoint(
     db_session: Session = Depends(get_session),
 ) -> VoiceProviderView:
     """Set a voice provider as the default TTS provider."""
+    provider_db = fetch_voice_provider_by_id(db_session, provider_id)
+    if (
+        provider_db is not None
+        and provider_db.provider_type == VoiceProviderType.OPENAI_COMPATIBLE
+    ):
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "OpenAI-compatible voice providers do not support TTS.",
+        )
     provider = set_default_tts_provider(
         db_session=db_session, provider_id=provider_id, tts_model=tts_model
     )
@@ -232,16 +263,17 @@ async def test_voice_provider(
 
     if request.use_stored_key:
         existing_provider = fetch_voice_provider_by_type(
-            db_session, request.provider_type
+            db_session, request.provider_type.value
         )
-        if existing_provider is None or not existing_provider.api_key:
+        if existing_provider is not None and existing_provider.api_key:
+            api_key = existing_provider.api_key.get_value(apply_mask=False)
+        elif voice_provider_requires_api_key(request.provider_type):
             raise OnyxError(
                 OnyxErrorCode.VALIDATION_ERROR,
                 "No stored API key found for this provider type.",
             )
-        api_key = existing_provider.api_key.get_value(apply_mask=False)
 
-    if not api_key:
+    if not api_key and voice_provider_requires_api_key(request.provider_type):
         raise OnyxError(
             OnyxErrorCode.VALIDATION_ERROR,
             "API key is required. Either provide api_key or set use_stored_key to true.",
@@ -254,10 +286,11 @@ async def test_voice_provider(
 
     # Create a temporary VoiceProvider for testing (not saved to DB)
     temp_provider = VoiceProvider(
-        name="__test__",
-        provider_type=request.provider_type,
+        name=VOICE_PROVIDER_TEST_NAME,
+        provider_type=request.provider_type.value,
         api_base=api_base,
         custom_config=request.custom_config or {},
+        stt_model=request.stt_model,
     )
     temp_provider.api_key = api_key  # ty: ignore[invalid-assignment]
 
@@ -269,6 +302,8 @@ async def test_voice_provider(
     # Validate credentials with a real API call
     try:
         await provider.validate_credentials()
+    except ValueError as e:
+        raise OnyxError(OnyxErrorCode.VALIDATION_ERROR, str(e)) from e
     except OnyxError:
         raise
     except Exception as e:
