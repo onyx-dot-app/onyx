@@ -32,6 +32,7 @@ from scripts.tenant_cleanup.no_bastion_cleanup_utils import (
     find_background_pod,
     find_worker_pod,
     get_tenant_status,
+    positional_tenant_id,
     read_tenant_ids_from_csv,
 )
 
@@ -416,7 +417,11 @@ def main() -> None:
             sys.exit(1)
     else:
         # Single tenant mode
-        tenant_ids = [sys.argv[1]]
+        single_tenant_id = positional_tenant_id(sys.argv)
+        if not single_tenant_id:
+            print("Error: no tenant id given", file=sys.stderr)
+            sys.exit(1)
+        tenant_ids = [single_tenant_id]
 
     # Pin pods so parallel runs spread across replicas instead of all
     # piling onto whichever one the random pick returns.

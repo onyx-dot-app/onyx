@@ -68,8 +68,13 @@ PYTHONPATH=. python scripts/tenant_cleanup/no_bastion_cleanup_tenants.py \
     --force
 ```
 
-This drops each tenant schema from the data plane, deletes the `public.user_tenant_mapping` rows,
-and deletes the control plane rows for the tenant.
+Before it drops anything, this re-reads each tenant's chat and Craft activity and refuses any
+tenant that has become active since the CSV was made. The CSV can be days old, and the control
+plane status alone does not show renewed use. Use `--inactive-days` to match the value given to
+the analyze step; it defaults to 60.
+
+This then drops each tenant schema from the data plane, deletes the `public.user_tenant_mapping`
+rows, and deletes the control plane rows for the tenant.
 
 Tenants that still hold documents raise an exception. That means step 2 has not finished.
 

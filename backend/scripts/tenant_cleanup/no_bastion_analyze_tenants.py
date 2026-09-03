@@ -22,6 +22,7 @@ from typing import Any
 
 from scripts.tenant_cleanup.activity_utils import (
     ACTIVITY_CSV_FIELDNAMES,
+    DEFAULT_INACTIVE_DAYS,
     get_activity_csv_values,
     get_last_activity_time,
     tenant_data_includes_craft_activity,
@@ -30,9 +31,6 @@ from scripts.tenant_cleanup.no_bastion_cleanup_utils import (
     find_background_pod,
     find_worker_pod,
 )
-
-# A tenant is eligible for cleanup once it has been inactive this long.
-DEFAULT_INACTIVE_DAYS = 60
 
 # Splits the still-active tenants in the report. Never affects eligibility.
 RECENT_ACTIVITY_DAYS = 30

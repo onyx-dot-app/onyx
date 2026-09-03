@@ -10,6 +10,35 @@ import subprocess
 import sys
 from pathlib import Path
 
+# Flags that consume the argument after them. Needed to find the positional
+# tenant id, which can otherwise be shadowed by a flag value.
+_VALUE_FLAGS = frozenset(
+    {
+        "--csv",
+        "--concurrency",
+        "--inactive-days",
+        "--data-plane-context",
+        "--control-plane-context",
+        "--data-plane-pod",
+        "--control-plane-pod",
+    }
+)
+
+
+def positional_tenant_id(argv: list[str]) -> str | None:
+    """First argument that is neither a flag nor the value of one."""
+    index = 1
+    while index < len(argv):
+        arg = argv[index]
+        if arg in _VALUE_FLAGS:
+            index += 2
+            continue
+        if arg.startswith("-"):
+            index += 1
+            continue
+        return arg
+    return None
+
 
 class TenantNotFoundInControlPlaneError(Exception):
     """Exception raised when tenant/table is not found in control plane."""
