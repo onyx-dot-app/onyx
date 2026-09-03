@@ -12,6 +12,7 @@ import {
   Divider,
   MessageCard,
   SelectCard,
+  Switch,
   Text,
   Card,
 } from "@opal/components";
@@ -26,6 +27,10 @@ import {
   setDefaultLlmModelAndRefresh,
 } from "@/lib/languageModels/cache";
 import { deleteLlmProvider } from "@/lib/languageModels/svc";
+import { buildLlmOptions, groupLlmOptions } from "@/lib/languageModels/options";
+import { useSettings } from "@/lib/settings/hooks";
+import { updateAdminSettings } from "@/lib/settings/svc";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import ModelSelector from "@/sections/model-selector/ModelSelector";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import { useCreateModal } from "@opal/components";
@@ -324,10 +329,18 @@ export default function LanguageModelsPage() {
   const t = useTranslations("admin.languageModels");
   const adminRouteTitle = useAdminRouteTitle();
   const { mutate } = useSWRConfig();
+  const settings = useSettings();
   const { llmProviders: existingLlmProviders, defaultText } =
     useAdminLLMProviders();
   const isConfigurationDisabled = usePHFeatureFlag(
     PHFeatureFlag.LANGUAGE_MODEL_CONFIGURATION_DISABLED
+  );
+
+  // Hide the toggle unless the selector would group: several providers, or
+  // one aggregator provider whose models span several vendors.
+  const hasProviderGrouping = useMemo(
+    () => groupLlmOptions(buildLlmOptions(existingLlmProviders)).length > 1,
+    [existingLlmProviders]
   );
 
   // Resolve the current default to a model_configuration_id for ModelSelector
@@ -419,6 +432,18 @@ export default function LanguageModelsPage() {
     await setDefaultLlmModelAndRefresh(providerId, modelName, mutate);
   }
 
+  async function handleHideProviderGroupingChange(checked: boolean) {
+    try {
+      await updateAdminSettings({ hide_provider_grouping: checked });
+      await mutate(SWR_KEYS.settings);
+      toast.success(t("toasts.settingsUpdated"));
+    } catch (e) {
+      toast.error(
+        e instanceof Error ? e.message : t("toasts.settingsUpdateFailed")
+      );
+    }
+  }
+
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
@@ -430,29 +455,45 @@ export default function LanguageModelsPage() {
       <SettingsLayouts.Body>
         {hasProviders ? (
           <Card border="solid" rounding={4}>
-            <InputHorizontal
-              title={t("defaultModel.title")}
-              description={t("defaultModel.description")}
-              center
-              withLabel
-            >
-              <ModelSelector
-                value={defaultModelConfigId}
-                onChange={(opt) => {
-                  const provider = existingLlmProviders?.find(
-                    (p) =>
-                      p.provider === opt.provider &&
-                      (p.name === opt.name || (!p.name && !opt.name))
-                  );
-                  if (provider) {
-                    void handleDefaultModelChange(
-                      `${provider.id}:${opt.modelName}`
+            <Section alignItems="stretch">
+              <InputHorizontal
+                title={t("defaultModel.title")}
+                description={t("defaultModel.description")}
+                center
+                withLabel
+              >
+                <ModelSelector
+                  value={defaultModelConfigId}
+                  onChange={(opt) => {
+                    const provider = existingLlmProviders?.find(
+                      (p) =>
+                        p.provider === opt.provider &&
+                        (p.name === opt.name || (!p.name && !opt.name))
                     );
-                  }
-                }}
-                side="bottom"
-              />
-            </InputHorizontal>
+                    if (provider) {
+                      void handleDefaultModelChange(
+                        `${provider.id}:${opt.modelName}`
+                      );
+                    }
+                  }}
+                  side="bottom"
+                />
+              </InputHorizontal>
+              {hasProviderGrouping && (
+                <InputHorizontal
+                  title={t("hideProviderGrouping.title")}
+                  description={t("hideProviderGrouping.description")}
+                  withLabel
+                >
+                  <Switch
+                    checked={settings.hide_provider_grouping ?? false}
+                    onCheckedChange={(checked) => {
+                      void handleHideProviderGroupingChange(checked);
+                    }}
+                  />
+                </InputHorizontal>
+              )}
+            </Section>
           </Card>
         ) : (
           <MessageCard variant="info" title={t("noProviders.title")} />

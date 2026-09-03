@@ -33,6 +33,8 @@ export interface Settings {
   auto_scroll: boolean;
   temperature_override_enabled: boolean;
   reasoning_override_enabled?: boolean;
+  // Model selector shows one flat list instead of per-provider groups.
+  hide_provider_grouping?: boolean;
   query_history_type: QueryHistoryType;
 
   // Visibility-only: hides the sidebar page; query-history APIs + recording stay on.

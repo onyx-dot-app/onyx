@@ -5110,6 +5110,10 @@
           "title": "Self-hosted & Custom"
         }
       },
+      "hideProviderGrouping": {
+        "description": "Show all models as one list when choosing models in chat. Best with a small model set.",
+        "title": "Hide Provider Grouping"
+      },
       "modals": {
         "access": {
           "admin": {
@@ -5571,6 +5575,8 @@
       "toasts": {
         "providerDeleteFailed": "Failed to delete provider: {message}",
         "providerDeleted": "Provider deleted successfully!",
+        "settingsUpdateFailed": "Failed to update settings",
+        "settingsUpdated": "Settings updated",
         "unknownError": "Unknown error"
       }
     },
