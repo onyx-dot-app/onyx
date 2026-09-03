@@ -5715,6 +5715,49 @@
         "description": "Conecte servidores OpenAPI para adicionar ações e ferramentas personalizadas aos seus agentes."
       }
     },
+    "systemUsage": {
+      "categories": {
+        "contextualRagChunkContext": {
+          "label": "Contextual RAG chunk context"
+        },
+        "contextualRagDocumentSummary": {
+          "label": "Contextual RAG document summaries"
+        },
+        "imageSummarization": { "label": "Image summarization" },
+        "kgDeepExtraction": { "label": "Knowledge graph extraction" },
+        "kgDocumentClassification": {
+          "label": "Knowledge graph classification"
+        },
+        "unattributed": { "label": "Unattributed" }
+      },
+      "filters": {
+        "allModels": { "label": "All models" },
+        "allProviders": { "label": "All providers" }
+      },
+      "panel": {
+        "description": "{start} – {end} · Background text generation without a user.",
+        "emptyDescription": "Background text-generation spend for the selected period.",
+        "error": { "title": "Failed to load system usage for this period." },
+        "title": "System usage"
+      },
+      "summary": {
+        "spend": { "label": "System spend" },
+        "tokens": { "label": "Total tokens" },
+        "unattributed": { "label": "Unattributed spend" }
+      },
+      "table": {
+        "columns": {
+          "category": { "header": "Category" },
+          "input": { "header": "Input" },
+          "output": { "header": "Output" },
+          "spend": { "header": "Spend" },
+          "tokens": { "header": "Tokens" }
+        },
+        "empty": {
+          "description": "No system usage matches the current filters."
+        }
+      }
+    },
     "perUserUsage": {
       "panel": {
         "description": "{start} – {end} · Os custos são calculados a partir do uso registrado do modelo.",

@@ -54,6 +54,7 @@ export const SWR_KEYS = {
   userUsage: "/api/user/usage",
   costOverrides: "/api/admin/cost-overrides",
   adminUsageExport: "/api/admin/usage/export",
+  adminSystemUsage: "/api/admin/usage/system",
   adminUsageReset: "/api/admin/usage/reset",
 
   // ── Image Generation ──────────────────────────────────────────────────────
