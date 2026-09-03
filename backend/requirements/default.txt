@@ -3129,9 +3129,9 @@ uncalled-for==0.2.0 \
     --hash=sha256:2c0bd338faff5f930918f79e7eb9ff48290df2cb05fcc0b40a7f334e55d4d85f \
     --hash=sha256:b4f8fdbcec328c5a113807d653e041c5094473dd4afa7c34599ace69ccb7e69f
     # via fastmcp
-unstructured==0.18.27 \
-    --hash=sha256:be73b39fdd6ed89151849dd3588d20e44aede93c2ed008fb88291e9f7fcace4e \
-    --hash=sha256:fae7fbe5d664cd5ebc558a54ab12d2c924e19b85061a614f58fd0b1fdb8e1c2e
+unstructured==0.24.0 \
+    --hash=sha256:23824fc1628109aa8c3fd03ac1423c5056e1d80e8357bfd76c03aa5b5b614837 \
+    --hash=sha256:8f98b2f1be057acff67df7be3a8a2b69a3e09c4543beb923ffa42d15d057d1b0
 unstructured-client==0.42.6 \
     --hash=sha256:c93b1d9d1b9f63a8e961729d00224b3659ef9ef3e14996ea4e53ddc95df671a9 \
     --hash=sha256:ea54f2c4ca3e7a1330f9e77cbc96f88f829518beeec5e1b797b5352f4d76a73a
