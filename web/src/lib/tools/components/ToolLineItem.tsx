@@ -100,7 +100,7 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
   const isForced = toolConfiguration.forcedToolId === tool.id;
   // Switched off for this chat. The row stays interactive: pressing it turns
   // the tool back on and pins it in one gesture.
-  const isOff = toolConfiguration.disabledToolIds.includes(tool.id);
+  const isDisabled = toolConfiguration.disabledToolIds.includes(tool.id);
 
   const isSearchTool = tool.in_code_tool_id === SEARCH_TOOL_ID;
   const inProject = currentProjectId != null;
@@ -145,7 +145,7 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
       toggleForced(tool.id);
       return;
     }
-    if (isOff) toggleEnabled(tool.id);
+    if (isDisabled) toggleEnabled(tool.id);
     toggleForced(tool.id);
     // Pinning search is when its sources matter, so drill in rather than
     // dismissing. Releasing it just closes.
@@ -155,7 +155,7 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
 
   // Declared once because it renders both bare and hover-revealed, depending
   // on whether the action is already switched off.
-  const toggleLabel = isOff
+  const toggleLabel = isDisabled
     ? t("actionLineItem.enable.label")
     : t("actionLineItem.disable.label");
   const toggleButton = (
@@ -176,8 +176,9 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
         icon={getIconForAction(tool)}
         sizePreset="main-ui"
         variant="section"
+        rounding={2}
         state={isForced ? "selected" : "empty"}
-        strikethrough={isOff}
+        strikethrough={isDisabled}
         color={isUnavailable && isForced ? "muted" : undefined}
         disabled={needsConnectors || (isUnavailable && !isForced)}
         tooltip={getToolTooltip(
@@ -208,7 +209,7 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
               // The source count owns this slot when shown, and brings the
               // toggle with it.
               !showSourceCount &&
-              (isOff ? (
+              (isDisabled ? (
                 toggleButton
               ) : (
                 <Hoverable.Item group={HOVER_GROUP}>
