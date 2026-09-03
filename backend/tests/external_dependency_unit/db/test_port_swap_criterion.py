@@ -633,6 +633,39 @@ def test_swap_holds_while_an_index_attempt_is_still_running(
         assert _port_swap_ready(db_session, future_ss, [cc_pair], []) is True
 
 
+def test_writer_starting_during_the_sample_holds_the_swap(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    cc_pair, future_id = cc_pair_and_future
+    future_ss = db_session.get(SearchSettings, future_id)
+    assert future_ss is not None
+    _make_success_port(db_session, cc_pair.id, future_id)
+    seed_cc_pair_documents(
+        db_session, cc_pair, 1, prefix=_VERIFY_DOC_PREFIX, chunk_count=3
+    )
+    _clear_verification_backoff(future_id)
+
+    attempt_id = create_index_attempt(
+        connector_credential_pair_id=cc_pair.id,
+        search_settings_id=future_id,
+        db_session=db_session,
+    )
+
+    def _start_writing_mid_sample(*_args: object, **_kwargs: object) -> list[str]:
+        attempt = db_session.get(IndexAttempt, attempt_id)
+        assert attempt is not None
+        mark_attempt_in_progress(attempt, db_session)
+        db_session.expire_all()
+        return []
+
+    with patch.object(
+        swap_index,
+        "find_documents_missing_from_index",
+        side_effect=_start_writing_mid_sample,
+    ):
+        assert _port_swap_ready(db_session, future_ss, [cc_pair], []) is False
+
+
 def test_sampler_skips_a_scope_with_no_snapshot_bound(
     db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
 ) -> None:

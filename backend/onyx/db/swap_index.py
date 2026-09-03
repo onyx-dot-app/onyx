@@ -352,6 +352,37 @@ def _ported_documents_present_in_new_index(
     return True
 
 
+def _no_writer_left_in_flight(
+    db_session: Session,
+    ss_id: int,
+    required_cc_pairs: list[ConnectorCredentialPair],
+    required_user_ids: list[UUID],
+) -> bool:
+    cc_pair_ids = [cc_pair.id for cc_pair in required_cc_pairs]
+
+    # The port itself is covered by get_active_port_attempt in the caller. This is the
+    # separate writer: connector index attempts keep polling into FUTURE all reindex.
+    if any_running_index_attempt_for_cc_pairs(db_session, ss_id, cc_pair_ids):
+        logger.info(
+            "Port swap held: an index attempt is mid-run against search settings %s.",
+            ss_id,
+        )
+        return False
+
+    # Safe to wait on only because new files dual-write to FUTURE and the reconciler
+    # supplies content on a 404, so every flag drains. An update()-only drain would pin
+    # a never-copied file forever.
+    if any_user_file_reconcile_pending_for_users(db_session, required_user_ids):
+        return False
+
+    return (
+        count_secondary_only_sync_pending_documents_for_cc_pairs(
+            db_session, cc_pair_ids
+        )
+        == 0
+    )
+
+
 def _port_swap_ready(
     db_session: Session,
     new_search_settings: SearchSettings,
@@ -384,15 +415,9 @@ def _port_swap_ready(
             )
         )
 
-    # get_active_port_attempt above covers the port itself. This covers the connector
-    # index attempts, which keep polling into FUTURE for the whole reindex.
-    if any_running_index_attempt_for_cc_pairs(
-        db_session, ss_id, [cc_pair.id for cc_pair in required_cc_pairs]
+    if not _no_writer_left_in_flight(
+        db_session, ss_id, required_cc_pairs, required_user_ids
     ):
-        logger.info(
-            "Port swap held: an index attempt is mid-run against search settings %s.",
-            ss_id,
-        )
         return False
 
     if not all_user_scopes_ported(db_session, ss_id, required_user_ids):
@@ -403,24 +428,17 @@ def _port_swap_ready(
         for user_id in required_user_ids
     ]
 
-    # Hold the swap until every user file's FUTURE copy reconciles. Safe only because new files
-    # dual-write to FUTURE and the reconciler supplies content on a 404, so every flag drains
-    # (an update()-only drain would pin a never-copied file forever and deadlock).
-    if any_user_file_reconcile_pending_for_users(db_session, required_user_ids):
-        return False
-
-    if (
-        count_secondary_only_sync_pending_documents_for_cc_pairs(
-            db_session, [cc_pair.id for cc_pair in required_cc_pairs]
-        )
-        != 0
+    # Keep this after the Postgres conditions. It is the only one that makes a network
+    # call, so they stop it running while the port is still going.
+    if not _ported_documents_present_in_new_index(
+        db_session, new_search_settings, cc_pair_scopes, user_scopes
     ):
         return False
 
-    # Keep this last. It is the only condition that makes a network call, so the
-    # cheaper Postgres gates above stop it running while the port is still going.
-    return _ported_documents_present_in_new_index(
-        db_session, new_search_settings, cc_pair_scopes, user_scopes
+    # That sample took a network round trip, long enough for an index attempt to start
+    # or a file to finish. Ask again, so the swap acts on what is true now.
+    return _no_writer_left_in_flight(
+        db_session, ss_id, required_cc_pairs, required_user_ids
     )
 
 
