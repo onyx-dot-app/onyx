@@ -336,7 +336,14 @@ def sample_ported_document_ids(
     needs that, because a fresh random draw will eventually come up clean against a
     partly-missing index and wave it through.
     """
-    if per_scope_limit <= 0 or not cc_pair_scopes:
+    # A port with no snapshot bound found no documents when it started, so it never
+    # claimed to copy any and there is nothing to verify for that cc_pair.
+    scope_rows = [
+        (scope.connector_id, scope.credential_id, scope.up_to_doc_id)
+        for scope in cc_pair_scopes
+        if scope.up_to_doc_id is not None
+    ]
+    if per_scope_limit <= 0 or not scope_rows:
         return []
 
     scopes = values(
@@ -344,12 +351,7 @@ def sample_ported_document_ids(
         column("credential_id", Integer),
         column("up_to_id", String),
         name="cc_pair_scope",
-    ).data(
-        [
-            (scope.connector_id, scope.credential_id, scope.up_to_doc_id)
-            for scope in cc_pair_scopes
-        ]
-    )
+    ).data(scope_rows)
 
     per_cc_pair = (
         select(DocumentByConnectorCredentialPair.id)
@@ -359,10 +361,7 @@ def sample_ported_document_ids(
             DocumentByConnectorCredentialPair.credential_id == scopes.c.credential_id,
             DbDocument.chunk_count.is_not(None),
             DbDocument.chunk_count > 0,
-            or_(
-                scopes.c.up_to_id.is_(None),
-                DocumentByConnectorCredentialPair.id <= scopes.c.up_to_id,
-            ),
+            DocumentByConnectorCredentialPair.id <= scopes.c.up_to_id,
         )
         .order_by(DocumentByConnectorCredentialPair.id)
         .limit(per_scope_limit)
