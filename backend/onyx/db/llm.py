@@ -1273,7 +1273,9 @@ def sync_auto_mode_models(
     #
     # Both statements test the default in SQL rather than from a snapshot read
     # here. A default assigned between the two would otherwise be missed, and
-    # the model hidden anyway.
+    # the model hidden anyway. They synchronize the session because sessions are
+    # built with expire_on_commit=False, so a caller holding these rows — as
+    # put_llm_provider does — would otherwise serialize stale visibility.
     db_session.flush()
 
     dropped_names = [
@@ -1301,7 +1303,7 @@ def sync_auto_mode_models(
                 ~holds_a_default,
             )
             .values(is_visible=False)
-            .execution_options(synchronize_session=False)
+            .execution_options(synchronize_session="fetch")
         )
 
         # An earlier sync could have hidden a model that still holds a default,
@@ -1314,7 +1316,7 @@ def sync_auto_mode_models(
                 holds_a_default,
             )
             .values(is_visible=True)
-            .execution_options(synchronize_session=False)
+            .execution_options(synchronize_session="fetch")
         )
 
         changes += int(hidden.rowcount)  # ty: ignore[unresolved-attribute]
