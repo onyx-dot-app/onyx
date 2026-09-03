@@ -575,9 +575,14 @@ class OpenSearchDocumentIndex(DocumentIndex):
         Scans instead of probing chunk 0, so it can tell a document that is really
         absent from one that only lost its first chunk. Excusing a document on the
         cheaper answer would wave that second case through as never indexed.
+
+        Refreshes first, because the scan is a search and a search cannot see a write
+        that has not been refreshed yet. Reporting a just-written document as absent is
+        the one answer a caller must never get from this, since it excuses on absence.
         """
         if not document_ids:
             return set()
+        self._client.refresh_index()
         found: set[str] = set()
         for page in self._client.iter_chunks_for_doc_ids(document_ids):
             found.update(chunk.document_id for chunk in page)
