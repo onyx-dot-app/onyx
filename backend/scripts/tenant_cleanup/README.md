@@ -44,6 +44,8 @@ of the repo and off shared storage.
 ```
 PYTHONPATH=. python scripts/tenant_cleanup/no_bastion_mark_connectors.py \
     --csv gated_tenants_inactive_60d_<datetime>.csv \
+    --data-plane-context <data_plane_context> \
+    --control-plane-context <control_plane_context> \
     --force
 ```
 
@@ -61,6 +63,8 @@ Wait for step 2 to finish. Then run:
 ```
 PYTHONPATH=. python scripts/tenant_cleanup/no_bastion_cleanup_tenants.py \
     --csv gated_tenants_inactive_60d_<datetime>.csv \
+    --data-plane-context <data_plane_context> \
+    --control-plane-context <control_plane_context> \
     --force
 ```
 

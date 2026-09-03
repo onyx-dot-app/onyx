@@ -420,8 +420,8 @@ def main() -> None:
 
     # Pin pods so parallel runs spread across replicas instead of all
     # piling onto whichever one the random pick returns.
-    data_plane_pod_override = None
-    control_plane_pod_override = None
+    data_plane_pod_override: str | None = None
+    control_plane_pod_override: str | None = None
     for flag, target in (
         ("--data-plane-pod", "data"),
         ("--control-plane-pod", "control"),
