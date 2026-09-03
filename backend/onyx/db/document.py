@@ -329,8 +329,9 @@ def sample_ported_document_ids(
     `up_to_doc_id` is the port's snapshot bound. A document added after the port fixed
     its range belongs to the FUTURE index attempt, so the bound keeps it out.
 
-    Documents with no chunks are skipped, because they have nothing in the source index
-    either and finding nothing for them downstream is not loss.
+    Only a recorded count of zero is skipped. chunk_count was added without a backfill,
+    so a document indexed before that reads NULL and the port still copies it. Skipping
+    those would leave nothing to verify on a deployment where every document reads NULL.
 
     The same scopes always return the same ids. A caller that re-checks on a schedule
     needs that, because a fresh random draw will eventually come up clean against a
@@ -359,8 +360,7 @@ def sample_ported_document_ids(
         .where(
             DocumentByConnectorCredentialPair.connector_id == scopes.c.connector_id,
             DocumentByConnectorCredentialPair.credential_id == scopes.c.credential_id,
-            DbDocument.chunk_count.is_not(None),
-            DbDocument.chunk_count > 0,
+            or_(DbDocument.chunk_count.is_(None), DbDocument.chunk_count > 0),
             DocumentByConnectorCredentialPair.id <= scopes.c.up_to_id,
         )
         .order_by(DocumentByConnectorCredentialPair.id)

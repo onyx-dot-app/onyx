@@ -60,7 +60,7 @@ from onyx.db.user_file import (
 )
 from onyx.document_index.factory import get_all_document_indices
 from onyx.document_index.opensearch.port_copy import (
-    find_documents_missing_from_target,
+    find_documents_missing_from_index,
 )
 from onyx.key_value_store.factory import get_kv_store
 from onyx.redis.redis_pool import get_redis_client
@@ -283,7 +283,7 @@ def _ported_documents_present_in_new_index(
         return False
 
     try:
-        missing_document_ids = find_documents_missing_from_target(
+        missing_document_ids = find_documents_missing_from_index(
             new_search_settings, sampled_document_ids
         )
     except Exception:
@@ -310,6 +310,27 @@ def _ported_documents_present_in_new_index(
             document_id
             for document_id in missing_document_ids
             if document_id in still_exist
+        ]
+
+    # A document the source index does not hold either was never the port's to copy, so
+    # it is not loss. Without this, a row that was never indexed would hold the swap for
+    # good, because it can never appear.
+    if missing_document_ids:
+        try:
+            absent_from_source = set(
+                find_documents_missing_from_index(
+                    get_current_search_settings(db_session), missing_document_ids
+                )
+            )
+        except Exception:
+            logger.exception(
+                "Pre-swap check could not reach the source index; holding the swap."
+            )
+            return hold_and_back_off()
+        missing_document_ids = [
+            document_id
+            for document_id in missing_document_ids
+            if document_id not in absent_from_source
         ]
 
     if missing_document_ids:
