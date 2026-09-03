@@ -1211,13 +1211,6 @@ def sync_auto_mode_models(
         ).all()
     }
 
-    # Mark models that are no longer in GitHub config as not visible
-    for model_name, model in existing_models.items():
-        if model_name not in recommended_visible_model_names:
-            if model.is_visible:
-                model.is_visible = False
-                changes += 1
-
     # Add or update models from GitHub config
     for model_config in recommended_visible_models:
         if model_config.name in existing_models:
@@ -1248,6 +1241,8 @@ def sync_auto_mode_models(
             changes += 1
 
     # Update the default if this provider currently holds the global CHAT default.
+    # This runs before the models the config dropped are hidden, so a model that
+    # gives up the chat default here can still be hidden below.
     # We flush (but don't commit) so that _update_default_model can see the new
     # model rows, then commit everything atomically to avoid a window where the
     # old default is invisible but still pointed-to.
@@ -1268,6 +1263,21 @@ def sync_auto_mode_models(
                 model=recommended_default.name,
                 flow_type=LLMModelFlowType.CHAT,
             )
+            changes += 1
+
+    # Mark models that are no longer in GitHub config as not visible. A model
+    # still holding a deployment default keeps its visibility: only the chat
+    # default is re-pointed above, so hiding the rest would strand a default on
+    # a model the admin can no longer see or change. Every other write path
+    # keeps a default model visible.
+    db_session.flush()
+    defaults_by_model_id = fetch_default_flows_by_model_id(db_session)
+
+    for model_name, model in existing_models.items():
+        if model_name in recommended_visible_model_names:
+            continue
+        if model.is_visible and not defaults_by_model_id.get(model.id):
+            model.is_visible = False
             changes += 1
 
     db_session.commit()
