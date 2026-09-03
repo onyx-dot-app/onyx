@@ -232,12 +232,14 @@ def _resolve_source_types(
             )
         try:
             resolved.append(DocumentSource(canonical))
-        except ValueError:
-            # Only reachable when the inventory was unavailable; an unparseable
-            # source would otherwise have been rejected above.
-            logger.warning(
-                "Onyx MCP Server: Invalid source type '%s' - skipping", source_str
-            )
+        except ValueError as err:
+            # Only reachable when the inventory was unavailable. Dropping the
+            # value would leave an empty source list, and the retrieval layer
+            # adds no clause at all for that (`if source_types:`), so the
+            # search would silently widen to every accessible source.
+            raise _FilterError(
+                f"Source type '{source_str}' is not a known Onyx source."
+            ) from err
     return resolved
 
 
@@ -401,9 +403,9 @@ async def search_indexed_documents(
 
     _record_requested_sources(source_types)
 
-    # Normalize empty list inputs to None so downstream filter construction is
-    # consistent — BaseFilters treats [] as "match zero" which differs from
-    # "no filter" (None).
+    # Normalize empty inputs to None so "not supplied" is explicit at the
+    # boundary. Retrieval adds no clause for an empty list, so letting one
+    # through as a filter would read as a scoped search that is not scoped.
     source_types = source_types or None
     document_set_names = document_set_names or None
     agent = (agent or "").strip() or None
