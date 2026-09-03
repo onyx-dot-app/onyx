@@ -120,6 +120,7 @@ from onyx.tools.tool_implementations.search.constants import (
     LLM_SEMANTIC_QUERY_WEIGHT,
     MAX_CHUNKS_FOR_RELEVANCE,
     ORIGINAL_QUERY_WEIGHT,
+    SELECTION_TOKEN_BUDGET_MULTIPLIER,
 )
 from onyx.tools.tool_implementations.search.search_utils import (
     expand_section_with_context,
@@ -1086,8 +1087,10 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # Only consider MAX_CHUNKS_FOR_RELEVANCE chunks per section to avoid flooding from
         # documents with many matching sections
         max_tokens_for_selection = (
-            override_kwargs.max_llm_chunks or MAX_CHUNKS_FED_TO_CHAT
-        ) * DOC_EMBEDDING_CONTEXT_SIZE
+            (override_kwargs.max_llm_chunks or MAX_CHUNKS_FED_TO_CHAT)
+            * DOC_EMBEDDING_CONTEXT_SIZE
+            * SELECTION_TOKEN_BUDGET_MULTIPLIER
+        )
 
         # This is approximate since it doesn't build the exact string of the call below
         # Some things are estimated and may be under (like the metadata tokens)
