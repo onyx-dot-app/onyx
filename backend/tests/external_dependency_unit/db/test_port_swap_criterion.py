@@ -515,9 +515,6 @@ def test_sampler_returns_ported_documents_with_chunks(
     seed_cc_pair_documents(
         db_session, cc_pair, 1, prefix=f"{_VERIFY_DOC_PREFIX}nochunks-", chunk_count=0
     )
-    seed_cc_pair_documents(
-        db_session, cc_pair, 1, prefix=f"{_VERIFY_DOC_PREFIX}unknown-", chunk_count=None
-    )
 
     scope = PortedScope(
         connector_id=cc_pair.connector_id,
@@ -530,6 +527,47 @@ def test_sampler_returns_ported_documents_with_chunks(
     assert sample_ported_document_ids(db_session, [scope], 1) == (
         sample_ported_document_ids(db_session, [scope], 1)
     )
+
+
+def test_sampler_covers_documents_predating_the_chunk_count_column(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """On a deployment predating the column every document reads NULL, so skipping them
+    would leave the check passing without verifying anything at all."""
+    cc_pair, _ = cc_pair_and_future
+    legacy = seed_cc_pair_documents(
+        db_session, cc_pair, 2, prefix=f"{_VERIFY_DOC_PREFIX}legacy-", chunk_count=None
+    )
+    seed_cc_pair_documents(
+        db_session, cc_pair, 1, prefix=f"{_VERIFY_DOC_PREFIX}empty-", chunk_count=0
+    )
+    scope = PortedScope(
+        connector_id=cc_pair.connector_id,
+        credential_id=cc_pair.credential_id,
+        up_to_doc_id=_ALL_DOCS_BOUND,
+    )
+    assert sorted(sample_ported_document_ids(db_session, [scope], 10)) == sorted(legacy)
+
+
+def test_document_absent_from_both_indexes_does_not_hold_the_swap(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """Such a row can never appear in the new index, so treating it as loss would hold
+    the swap for good."""
+    cc_pair, future_id = cc_pair_and_future
+    future_ss = db_session.get(SearchSettings, future_id)
+    assert future_ss is not None
+    _make_success_port(db_session, cc_pair.id, future_id)
+    seeded = seed_cc_pair_documents(
+        db_session, cc_pair, 1, prefix=_VERIFY_DOC_PREFIX, chunk_count=None
+    )
+    _clear_verification_backoff(future_id)
+
+    # Missing from the new index, and from the source index as well.
+    with patch.object(
+        swap_index, "find_documents_missing_from_index", return_value=seeded
+    ):
+        assert _port_swap_ready(db_session, future_ss, [cc_pair], []) is True
 
 
 def test_sampler_respects_the_port_snapshot_bound(
@@ -573,9 +611,7 @@ def test_swap_holds_while_an_index_attempt_is_still_running(
         db_session=db_session,
     )
     # create_index_attempt leaves the attempt queued, which must not hold the swap.
-    with patch.object(
-        swap_index, "find_documents_missing_from_target", return_value=[]
-    ):
+    with patch.object(swap_index, "find_documents_missing_from_index", return_value=[]):
         assert _port_swap_ready(db_session, future_ss, [cc_pair], []) is True
 
     _clear_verification_backoff(future_id)
@@ -584,7 +620,7 @@ def test_swap_holds_while_an_index_attempt_is_still_running(
     mark_attempt_in_progress(attempt, db_session)
     db_session.expire_all()
     with patch.object(
-        swap_index, "find_documents_missing_from_target", return_value=[]
+        swap_index, "find_documents_missing_from_index", return_value=[]
     ) as lookup:
         assert _port_swap_ready(db_session, future_ss, [cc_pair], []) is False
     # Held before the sample, so the network call never happened.
@@ -593,9 +629,7 @@ def test_swap_holds_while_an_index_attempt_is_still_running(
     mark_attempt_succeeded(attempt_id, db_session)
     db_session.expire_all()
     _clear_verification_backoff(future_id)
-    with patch.object(
-        swap_index, "find_documents_missing_from_target", return_value=[]
-    ):
+    with patch.object(swap_index, "find_documents_missing_from_index", return_value=[]):
         assert _port_swap_ready(db_session, future_ss, [cc_pair], []) is True
 
 
@@ -700,13 +734,13 @@ def test_pre_swap_check_gates_on_what_is_in_the_new_index(
     _clear_verification_backoff(future_id)
 
     with patch.object(
-        swap_index, "find_documents_missing_from_target", return_value=seeded
+        swap_index, "find_documents_missing_from_index", side_effect=[seeded, []]
     ):
         assert _port_swap_ready(db_session, future_ss, [cc_pair], []) is False
 
     _clear_verification_backoff(future_id)
     with patch.object(
-        swap_index, "find_documents_missing_from_target", return_value=[]
+        swap_index, "find_documents_missing_from_index", return_value=[]
     ) as lookup:
         assert _port_swap_ready(db_session, future_ss, [cc_pair], []) is True
     # The real sampler fed the lookup, rather than handing over an empty list.
@@ -728,11 +762,11 @@ def test_failed_verification_backs_off_before_rechecking(
     _clear_verification_backoff(future_id)
 
     with patch.object(
-        swap_index, "find_documents_missing_from_target", return_value=seeded
+        swap_index, "find_documents_missing_from_index", side_effect=[seeded, []]
     ):
         assert _port_swap_ready(db_session, future_ss, [cc_pair], []) is False
 
-    with patch.object(swap_index, "find_documents_missing_from_target") as lookup:
+    with patch.object(swap_index, "find_documents_missing_from_index") as lookup:
         assert _port_swap_ready(db_session, future_ss, [cc_pair], []) is False
         lookup.assert_not_called()
     _clear_verification_backoff(future_id)
@@ -756,8 +790,8 @@ def test_zero_retry_delay_writes_no_backoff_key(
         patch.object(swap_index, "PORT_SWAP_VERIFY_RETRY_DELAY_S", 0),
         patch.object(
             swap_index,
-            "find_documents_missing_from_target",
-            return_value=seeded,
+            "find_documents_missing_from_index",
+            side_effect=[seeded, []],
         ),
     ):
         assert _port_swap_ready(db_session, future_ss, [cc_pair], []) is False
@@ -792,14 +826,14 @@ def test_user_file_sampler_covers_the_second_port_scope(
     try:
         with_chunks = _add_user_file(db_session, user.id, 4, "ported.txt")
         _add_user_file(db_session, user.id, 0, "no-chunks.txt")
-        _add_user_file(db_session, user.id, None, "unknown-chunks.txt")
+        unknown_chunks = _add_user_file(db_session, user.id, None, "legacy.txt")
 
         sampled = sample_ported_user_file_ids(
             db_session,
             [PortedUserScope(user_id=user.id, up_to_doc_id=_ALL_FILES_BOUND)],
             per_scope_limit=10,
         )
-        assert sampled == [str(with_chunks)]
+        assert sorted(sampled) == sorted([str(with_chunks), str(unknown_chunks)])
     finally:
         db_session.rollback()
         db_session.query(UserFile).filter(UserFile.user_id == user.id).delete(
@@ -835,15 +869,15 @@ def test_port_swap_blocks_when_a_ported_user_file_is_missing(
 
         with patch.object(
             swap_index,
-            "find_documents_missing_from_target",
-            return_value=[str(user_file_id)],
+            "find_documents_missing_from_index",
+            side_effect=[[str(user_file_id)], []],
         ) as lookup:
             assert _port_swap_ready(db_session, future_ss, [], [user.id]) is False
         assert str(user_file_id) in lookup.call_args[0][1]
 
         _clear_verification_backoff(future_id)
         with patch.object(
-            swap_index, "find_documents_missing_from_target", return_value=[]
+            swap_index, "find_documents_missing_from_index", return_value=[]
         ):
             assert _port_swap_ready(db_session, future_ss, [], [user.id]) is True
     finally:
