@@ -1,9 +1,11 @@
+import io
 import math
 import struct
+import wave
 
 import pytest
 
-from onyx.voice.audio_utils import Pcm16Resampler, resample_pcm16
+from onyx.voice.audio_utils import Pcm16Resampler, pcm16_to_wav, resample_pcm16
 
 
 def test_resample_pcm16_passthrough_when_same_rate() -> None:
@@ -66,17 +68,39 @@ def test_streaming_resampler_matches_single_buffer(
     # 17 samples per chunk, so no chunk aligns with an output sample.
     for offset in range(0, len(data), 34):
         streamed += resampler.resample(data[offset : offset + 34])
+    streamed += resampler.flush()
     streamed_samples = struct.unpack(f"<{len(streamed) // 2}h", streamed)
 
-    assert len(streamed_samples) == len(expected)
-    # Float position accumulation can differ by one quantization step.
-    for streamed_sample, expected_sample in zip(
-        streamed_samples, expected, strict=True
-    ):
-        assert abs(streamed_sample - expected_sample) <= 1
+    assert streamed_samples == expected
 
 
 def test_streaming_resampler_passthrough_when_same_rate() -> None:
     resampler = Pcm16Resampler(16000, 16000)
     data = struct.pack("<4h", 100, 200, 300, 400)
     assert resampler.resample(data) == data
+    assert resampler.flush() == b""
+
+
+def test_streaming_resampler_flush_emits_trailing_samples() -> None:
+    """Upsampling holds back samples that read past the last input sample."""
+    samples = [1000, 2000, 3000, 4000]
+    data = struct.pack(f"<{len(samples)}h", *samples)
+
+    resampler = Pcm16Resampler(16000, 24000)
+    streamed = resampler.resample(data)
+    trailing = resampler.flush()
+
+    assert trailing
+    assert len(streamed + trailing) // 2 == 6
+    assert resampler.flush() == b""
+
+
+def test_pcm16_to_wav_wraps_raw_audio() -> None:
+    pcm_data = struct.pack("<4h", 1, 2, 3, 4)
+    wav_bytes = pcm16_to_wav(pcm_data, sample_rate=16000)
+
+    with wave.open(io.BytesIO(wav_bytes), "rb") as wav_file:
+        assert wav_file.getnchannels() == 1
+        assert wav_file.getsampwidth() == 2
+        assert wav_file.getframerate() == 16000
+        assert wav_file.readframes(wav_file.getnframes()) == pcm_data

@@ -236,6 +236,10 @@ class ChunkedTranscriber:
         return " ".join(self.transcripts)
 
 
+class StreamingTranscriptionFailed(Exception):
+    """Native streaming failed. The caller picks fallback or an error response."""
+
+
 async def handle_streaming_transcription(
     websocket: WebSocket,
     transcriber: StreamingTranscriberProtocol,
@@ -259,15 +263,8 @@ async def handle_streaming_transcription(
                     logger.info("Streaming transcription: transcript stream ended")
                     break
                 if result.error:
-                    receiver_failed.set()
                     logger.error("Streaming transcription: provider stream failed")
-                    await websocket.send_json(
-                        {
-                            "type": "error",
-                            "message": STREAM_FAILED_ERROR,
-                        }
-                    )
-                    await websocket.close(code=WS_SERVER_ERROR_CLOSE_CODE)
+                    receiver_failed.set()
                     break
                 if result.text and (
                     result.text != last_transcript or result.is_vad_end
@@ -288,20 +285,10 @@ async def handle_streaming_transcription(
         except asyncio.CancelledError:
             raise
         except Exception:
-            receiver_failed.set()
             logger.error(
                 "Streaming transcription: transcript receiver failed", exc_info=True
             )
-            try:
-                await websocket.send_json(
-                    {
-                        "type": "error",
-                        "message": STREAM_FAILED_ERROR,
-                    }
-                )
-                await websocket.close(code=WS_SERVER_ERROR_CLOSE_CODE)
-            except Exception:
-                pass
+            receiver_failed.set()
 
     async def receive_client_messages() -> None:
         """Read audio and control messages from the client."""
@@ -401,9 +388,13 @@ async def handle_streaming_transcription(
         await asyncio.wait(
             {client_task, failure_task}, return_when=asyncio.FIRST_COMPLETED
         )
-        if client_task.done() and not receiver_failed.is_set():
-            # Re-raise client-loop failures for the caller's fallback logic.
+        if client_task.done():
+            # The client loop finished the session, so its outcome wins.
+            # A failure here re-raises for the caller's fallback logic.
             client_task.result()
+        else:
+            # The socket stays open so the caller can apply its fallback policy.
+            raise StreamingTranscriptionFailed(STREAM_FAILED_ERROR)
     except Exception as e:
         logger.error("Streaming transcription: error: %s", e, exc_info=True)
         raise
@@ -614,6 +605,8 @@ async def websocket_transcribe(
                 logger.info("WebSocket transcribe: streaming transcriber created")
                 await handle_streaming_transcription(websocket, streaming_transcriber)
                 return
+            except WebSocketDisconnect:
+                raise
             except Exception as e:
                 logger.error("WebSocket transcribe: streaming STT failed: %s", e)
                 if (
@@ -621,8 +614,9 @@ async def websocket_transcribe(
                     or not provider.allows_streaming_stt_fallback()
                 ):
                     await websocket.send_json(
-                        {"type": "error", "message": "Streaming STT failed"}
+                        {"type": "error", "message": STREAM_FAILED_ERROR}
                     )
+                    await websocket.close(code=WS_SERVER_ERROR_CLOSE_CODE)
                     return
                 logger.info("WebSocket transcribe: falling back to chunked STT")
         elif VOICE_DISABLE_STREAMING_FALLBACK and not VOICE_DISABLE_STREAMING_STT:
