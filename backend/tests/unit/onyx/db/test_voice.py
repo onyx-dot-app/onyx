@@ -232,6 +232,24 @@ class TestUpsertVoiceProvider:
         # api_key should remain unchanged (same object reference)
         assert existing_provider.api_key is original_api_key
 
+    def test_clears_api_key_when_changed_to_none(
+        self, mock_db_session: MagicMock
+    ) -> None:
+        existing_provider = _make_voice_provider(id=1)
+        existing_provider.api_key = "original-key"  # ty: ignore[invalid-assignment]
+        mock_db_session.scalar.return_value = existing_provider
+
+        upsert_voice_provider(
+            db_session=mock_db_session,
+            provider_id=1,
+            name="Test",
+            provider_type="openai_compatible",
+            api_key=None,
+            api_key_changed=True,
+        )
+
+        assert existing_provider.api_key is None
+
     def test_preserves_custom_config_when_omitted(
         self, mock_db_session: MagicMock
     ) -> None:

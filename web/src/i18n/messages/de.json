@@ -7855,6 +7855,9 @@
         "elevenlabsTts": {
           "subtitle": "ElevenLabs Text to Speech API."
         },
+        "openaiCompatibleStt": {
+          "subtitle": "Transkription über eine OpenAI-kompatible API."
+        },
         "tts1": {
           "subtitle": "Auf Geschwindigkeit optimiertes Text-zu-Sprache-Modell von OpenAI."
         },
@@ -7866,9 +7869,17 @@
         }
       },
       "setupModal": {
+        "apiBase": {
+          "description": "Geben Sie den Serverstamm oder eine API-Basis ein, die auf /v1 endet.",
+          "invalid": "Geben Sie eine gültige API-Basis-URL ein",
+          "label": "API-Basis-URL",
+          "placeholder": "http://host.docker.internal:8000/v1",
+          "required": "API-Basis-URL ist erforderlich"
+        },
         "apiKey": {
           "description": "Fügen Sie Ihren [API-Schlüssel]({url}) von {provider} ein, um auf Ihre Modelle zuzugreifen.",
           "label": "API-Schlüssel",
+          "optionalDescription": "Optional. Geben Sie nur dann einen Bearer-API-Schlüssel ein, wenn Ihr Server einen benötigt.",
           "placeholder": "API-Schlüssel",
           "required": "API-Schlüssel ist erforderlich"
         },
@@ -7877,6 +7888,10 @@
         },
         "connectButton": {
           "label": "Verbinden"
+        },
+        "compatibleInfo": {
+          "description": "Onyx sendet Audio in Abschnitten an `/v1/audio/transcriptions`. OpenAI Realtime wird nicht verwendet. Wenn Onyx in Docker und der Server auf Ihrem Host ausgeführt wird, verwenden Sie `host.docker.internal` anstelle von `127.0.0.1`.",
+          "title": "OpenAI-kompatible Transkription"
         },
         "connectionTestFailed": {
           "message": "Verbindungstest fehlgeschlagen"
@@ -7901,7 +7916,10 @@
           "selfHostedCapExceeded": "Selbst gehostete Endpunkte unterstützen höchstens {cap} gesprochene Sprachen (Erkennung zu Beginn)"
         },
         "sttModel": {
-          "label": "STT-Modell"
+          "description": "Geben Sie den Modellnamen ein, den der Transkriptionsserver bereitstellt.",
+          "label": "STT-Modell",
+          "placeholder": "whisper-1",
+          "required": "STT-Modell ist erforderlich"
         },
         "targetUri": {
           "description": "Fügen Sie den Endpunkt ein, der im [Azure Portal (Keys and Endpoint)]({portalUrl}) angezeigt wird. Onyx extrahiert die Sprachregion aus dieser URL. Beispiele: `https://westus.api.cognitive.microsoft.com/` oder `https://westus.tts.speech.microsoft.com/`.",

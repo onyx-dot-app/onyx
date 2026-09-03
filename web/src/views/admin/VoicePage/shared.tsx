@@ -6,7 +6,7 @@ import { useTranslations } from "next-intl";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import { SvgOnyxLogo } from "@opal/logos";
-import { Modal } from "@opal/components";
+import { MessageCard, Modal } from "@opal/components";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import InputComboBoxField from "@/refresh-components/form/InputComboBoxField";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
@@ -22,7 +22,9 @@ import type {
   VoiceProviderView,
   VoiceFormValues,
   VoiceOption,
+  VoiceProviderCustomConfig,
 } from "@/lib/voice/types";
+import { VoiceProviderType } from "@/lib/voice/types";
 import {
   testVoiceProvider,
   upsertVoiceProvider,
@@ -49,7 +51,7 @@ const AZURE_PORTAL_URL = "https://portal.azure.com/";
 // ---------------------------------------------------------------------------
 
 interface VoiceProviderSetupModalProps {
-  providerType: string;
+  providerType: VoiceProviderType;
   existingProvider: VoiceProviderView | null;
   mode: ProviderMode;
   defaultModelId?: string | null;
@@ -66,6 +68,8 @@ export function VoiceProviderSetupModal({
   const t = useTranslations("admin.voice");
   const onClose = useModalClose();
   const detail = getVoiceProviderDetail(providerType);
+  const isOpenAICompatible =
+    providerType === VoiceProviderType.OPENAI_COMPATIBLE;
   const initialTtsModel = defaultModelId
     ? resolveModelId(defaultModelId)
     : (existingProvider?.tts_model ?? "tts-1");
@@ -81,6 +85,8 @@ export function VoiceProviderSetupModal({
 
   // Fetch voices on mount
   useEffect(() => {
+    if (mode !== "tts") return;
+
     setIsLoadingVoices(true);
     fetchVoicesByType(providerType)
       .then((res) => res.json())
@@ -100,15 +106,24 @@ export function VoiceProviderSetupModal({
       })
       .catch(() => setVoiceOptions([]))
       .finally(() => setIsLoadingVoices(false));
-  }, [providerType]);
+  }, [mode, providerType]);
 
   const validationSchema = Yup.object().shape({
-    api_key: Yup.string().required(t("setupModal.apiKey.required")),
+    api_key: isOpenAICompatible
+      ? Yup.string()
+      : Yup.string().required(t("setupModal.apiKey.required")),
+    api_base: isOpenAICompatible
+      ? Yup.string()
+          .url(t("setupModal.apiBase.invalid"))
+          .required(t("setupModal.apiBase.required"))
+      : Yup.string(),
     target_uri:
-      providerType === "azure"
+      providerType === VoiceProviderType.AZURE
         ? Yup.string().required(t("setupModal.targetUri.required"))
         : Yup.string(),
-    stt_model: Yup.string(),
+    stt_model: isOpenAICompatible
+      ? Yup.string().required(t("setupModal.sttModel.required"))
+      : Yup.string(),
     tts_model: Yup.string(),
     default_voice: Yup.string(),
     stt_languages:
@@ -149,8 +164,10 @@ export function VoiceProviderSetupModal({
 
   const initialValues: VoiceFormValues = {
     api_key: existingProvider?.api_key ?? "",
-    target_uri: existingProvider?.target_uri ?? "",
-    stt_model: existingProvider?.stt_model ?? "whisper-1",
+    api_base: isOpenAICompatible ? (existingProvider?.target_uri ?? "") : "",
+    target_uri: isOpenAICompatible ? "" : (existingProvider?.target_uri ?? ""),
+    stt_model:
+      existingProvider?.stt_model ?? (isOpenAICompatible ? "" : "whisper-1"),
     tts_model: initialTtsModel,
     default_voice: initialDefaultVoice,
     stt_languages: sttLanguagesToInput(
@@ -164,14 +181,17 @@ export function VoiceProviderSetupModal({
   ) {
     const apiKeyChanged = values.api_key !== (existingProvider?.api_key ?? "");
     const shouldUseStoredKey = !apiKeyChanged && !!existingProvider?.api_key;
+    const changedApiKey = values.api_key || null;
 
     try {
-      if (!shouldUseStoredKey) {
+      if (isOpenAICompatible || !shouldUseStoredKey) {
         const testResponse = await testVoiceProvider({
           provider_type: providerType,
-          api_key: apiKeyChanged ? values.api_key : undefined,
+          api_key: apiKeyChanged ? changedApiKey : undefined,
+          api_base: values.api_base || undefined,
           target_uri: values.target_uri || undefined,
           use_stored_key: shouldUseStoredKey,
+          stt_model: values.stt_model,
         });
 
         if (!testResponse.ok) {
@@ -186,8 +206,7 @@ export function VoiceProviderSetupModal({
         }
       }
 
-      // Preserve config keys the form doesn't own (e.g. speech_region).
-      const customConfig: Record<string, unknown> = {
+      const customConfig: VoiceProviderCustomConfig = {
         ...existingProvider?.custom_config,
       };
       if (mode === "stt" && detail.sttLanguages) {
@@ -203,8 +222,9 @@ export function VoiceProviderSetupModal({
         id: existingProvider?.id,
         name: detail.label,
         provider_type: providerType,
-        api_key: apiKeyChanged ? values.api_key : undefined,
+        api_key: apiKeyChanged ? changedApiKey : undefined,
         api_key_changed: apiKeyChanged,
+        api_base: values.api_base || undefined,
         target_uri: values.target_uri || undefined,
         custom_config: customConfig,
         stt_model: values.stt_model,
@@ -266,7 +286,30 @@ export function VoiceProviderSetupModal({
               />
               <Modal.Body>
                 <Section gap={4} alignItems="stretch">
-                  {providerType === "azure" && (
+                  {isOpenAICompatible && (
+                    <>
+                      <MessageCard
+                        variant="info"
+                        title={t("setupModal.compatibleInfo.title")}
+                        description={markdown(
+                          t("setupModal.compatibleInfo.description")
+                        )}
+                      />
+                      <InputVertical
+                        title={t("setupModal.apiBase.label")}
+                        subDescription={t("setupModal.apiBase.description")}
+                        withLabel="api_base"
+                      >
+                        <InputTypeInField
+                          name="api_base"
+                          aria-label={t("setupModal.apiBase.label")}
+                          placeholder={t("setupModal.apiBase.placeholder")}
+                        />
+                      </InputVertical>
+                    </>
+                  )}
+
+                  {providerType === VoiceProviderType.AZURE && (
                     <InputVertical
                       title={t("setupModal.targetUri.label")}
                       subDescription={markdown(
@@ -285,16 +328,21 @@ export function VoiceProviderSetupModal({
 
                   <InputVertical
                     title={t("setupModal.apiKey.label")}
-                    subDescription={markdown(
-                      t("setupModal.apiKey.description", {
-                        url: detail.apiKeyUrl ?? "",
-                        provider: detail.label,
-                      })
-                    )}
+                    subDescription={
+                      isOpenAICompatible
+                        ? t("setupModal.apiKey.optionalDescription")
+                        : markdown(
+                            t("setupModal.apiKey.description", {
+                              url: detail.apiKeyUrl ?? "",
+                              provider: detail.label,
+                            })
+                          )
+                    }
                     withLabel="api_key"
                   >
                     <PasswordInputTypeInField
                       name="api_key"
+                      aria-label={t("setupModal.apiKey.label")}
                       placeholder={t("setupModal.apiKey.placeholder")}
                     />
                   </InputVertical>
@@ -313,6 +361,20 @@ export function VoiceProviderSetupModal({
                         name="stt_languages"
                         // oxlint-disable-next-line i18n/no-raw-jsx-text -- locale-code example, not copy
                         placeholder="en-US, fr-FR"
+                      />
+                    </InputVertical>
+                  )}
+
+                  {mode === "stt" && isOpenAICompatible && (
+                    <InputVertical
+                      title={t("setupModal.sttModel.label")}
+                      subDescription={t("setupModal.sttModel.description")}
+                      withLabel="stt_model"
+                    >
+                      <InputTypeInField
+                        name="stt_model"
+                        aria-label={t("setupModal.sttModel.label")}
+                        placeholder={t("setupModal.sttModel.placeholder")}
                       />
                     </InputVertical>
                   )}

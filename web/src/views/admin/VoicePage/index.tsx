@@ -20,14 +20,19 @@ import {
   VoiceDisconnectModal,
   type ProviderMode,
 } from "@/views/admin/VoicePage/shared";
-import { getVoiceProviderDetail } from "@/lib/voice/utils";
-import { VoiceProviderView } from "@/lib/voice/types";
+import {
+  getVoiceProviderDetail,
+  hasVoiceProviderAlternative,
+  isVoiceProviderConfigured,
+} from "@/lib/voice/utils";
+import { VoiceProviderType, type VoiceProviderView } from "@/lib/voice/types";
 
 // Message keys, not copy — the literal union keeps `t()` statically checked.
 type ModelSubtitleKey =
   | "models.whisper.subtitle"
   | "models.azureSpeechStt.subtitle"
   | "models.elevenlabsStt.subtitle"
+  | "models.openaiCompatibleStt.subtitle"
   | "models.tts1.subtitle"
   | "models.tts1Hd.subtitle"
   | "models.azureSpeechTts.subtitle"
@@ -38,11 +43,11 @@ interface ModelDetails {
   // Model name — a proper noun, so it is not translated.
   label: string;
   subtitleKey: ModelSubtitleKey;
-  providerType: string;
+  providerType: VoiceProviderType;
 }
 
 interface ProviderGroup {
-  providerType: string;
+  providerType: VoiceProviderType;
   // Vendor name — a proper noun, so it is not translated.
   providerLabel: string;
   models: ModelDetails[];
@@ -54,63 +59,69 @@ const STT_MODELS: ModelDetails[] = [
     id: "whisper",
     label: "Whisper",
     subtitleKey: "models.whisper.subtitle",
-    providerType: "openai",
+    providerType: VoiceProviderType.OPENAI,
   },
   {
     id: "azure-speech-stt",
     label: "Azure Speech",
     subtitleKey: "models.azureSpeechStt.subtitle",
-    providerType: "azure",
+    providerType: VoiceProviderType.AZURE,
   },
   {
     id: "elevenlabs-stt",
     label: "ElevenAPI",
     subtitleKey: "models.elevenlabsStt.subtitle",
-    providerType: "elevenlabs",
+    providerType: VoiceProviderType.ELEVENLABS,
+  },
+  {
+    id: "openai-compatible-stt",
+    label: "OpenAI-Compatible",
+    subtitleKey: "models.openaiCompatibleStt.subtitle",
+    providerType: VoiceProviderType.OPENAI_COMPATIBLE,
   },
 ];
 
 // TTS Models - grouped by provider
 const TTS_PROVIDER_GROUPS: ProviderGroup[] = [
   {
-    providerType: "openai",
+    providerType: VoiceProviderType.OPENAI,
     providerLabel: "OpenAI",
     models: [
       {
         id: "tts-1",
         label: "TTS-1",
         subtitleKey: "models.tts1.subtitle",
-        providerType: "openai",
+        providerType: VoiceProviderType.OPENAI,
       },
       {
         id: "tts-1-hd",
         label: "TTS-1 HD",
         subtitleKey: "models.tts1Hd.subtitle",
-        providerType: "openai",
+        providerType: VoiceProviderType.OPENAI,
       },
     ],
   },
   {
-    providerType: "azure",
+    providerType: VoiceProviderType.AZURE,
     providerLabel: "Azure",
     models: [
       {
         id: "azure-speech-tts",
         label: "Azure Speech",
         subtitleKey: "models.azureSpeechTts.subtitle",
-        providerType: "azure",
+        providerType: VoiceProviderType.AZURE,
       },
     ],
   },
   {
-    providerType: "elevenlabs",
+    providerType: VoiceProviderType.ELEVENLABS,
     providerLabel: "ElevenLabs",
     models: [
       {
         id: "elevenlabs-tts",
         label: "ElevenAPI",
         subtitleKey: "models.elevenlabsTts.subtitle",
-        providerType: "elevenlabs",
+        providerType: VoiceProviderType.ELEVENLABS,
       },
     ],
   },
@@ -227,7 +238,8 @@ export default function VoicePage() {
     mode: ProviderMode
   ): "disconnected" | "connected" | "selected" => {
     const provider = providersByType.get(model.providerType);
-    if (!provider || !provider.api_key) return "disconnected";
+    if (!provider || !isVoiceProviderConfigured(provider))
+      return "disconnected";
 
     const isActive =
       mode === "stt"
@@ -271,12 +283,11 @@ export default function VoicePage() {
                   mode="stt"
                   provider={providersByType.get(model.providerType)}
                   status={getModelStatus(model, "stt")}
-                  hasAlternatives={
-                    (providers ?? []).filter(
-                      (p) =>
-                        p.provider_type !== model.providerType && !!p.api_key
-                    ).length > 0
-                  }
+                  hasAlternatives={hasVoiceProviderAlternative(
+                    providers ?? [],
+                    model.providerType,
+                    "stt"
+                  )}
                   onSelect={() => {
                     const p = providersByType.get(model.providerType);
                     if (p?.id)
@@ -312,9 +323,12 @@ export default function VoicePage() {
 
             <Section gap={4}>
               {TTS_PROVIDER_GROUPS.map((group) => (
-                <div
+                <Section
                   key={group.providerType}
-                  className="flex w-full flex-col gap-2"
+                  gap={2}
+                  alignItems="stretch"
+                  height="auto"
+                  justifyContent="start"
                 >
                   <Text font="secondary-body" color="text-03">
                     {group.providerLabel}
@@ -326,13 +340,11 @@ export default function VoicePage() {
                       mode="tts"
                       provider={providersByType.get(model.providerType)}
                       status={getModelStatus(model, "tts")}
-                      hasAlternatives={
-                        (providers ?? []).filter(
-                          (p) =>
-                            p.provider_type !== model.providerType &&
-                            !!p.api_key
-                        ).length > 0
-                      }
+                      hasAlternatives={hasVoiceProviderAlternative(
+                        providers ?? [],
+                        model.providerType,
+                        "tts"
+                      )}
                       onSelect={() => {
                         const p = providersByType.get(model.providerType);
                         if (p?.id)
@@ -350,7 +362,7 @@ export default function VoicePage() {
                       onMutate={() => mutate()}
                     />
                   ))}
-                </div>
+                </Section>
               ))}
             </Section>
           </Section>

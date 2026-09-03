@@ -1,9 +1,35 @@
 import { SvgAzure, SvgElevenLabs, SvgOpenai } from "@opal/logos";
-import { SvgMicrophone } from "@opal/icons";
+import { SvgServer } from "@opal/icons";
 import type { IconProps } from "@opal/types";
+import { VoiceProviderType, type VoiceProviderView } from "@/lib/voice/types";
 
 /** Whether the provider is being configured for speech-to-text or text-to-speech. */
 export type ProviderMode = "stt" | "tts";
+
+export function isVoiceProviderConfigured(
+  provider: VoiceProviderView
+): boolean {
+  if (provider.provider_type === VoiceProviderType.OPENAI_COMPATIBLE) {
+    return !!provider.target_uri && !!provider.stt_model;
+  }
+  return !!provider.api_key;
+}
+
+export function hasVoiceProviderAlternative(
+  providers: VoiceProviderView[],
+  currentProviderType: VoiceProviderType,
+  mode: ProviderMode
+): boolean {
+  return providers.some(
+    (provider) =>
+      provider.provider_type !== currentProviderType &&
+      isVoiceProviderConfigured(provider) &&
+      !(
+        mode === "tts" &&
+        provider.provider_type === VoiceProviderType.OPENAI_COMPATIBLE
+      )
+  );
+}
 
 /**
  * Strip markdown formatting so TTS engines don't read syntax (e.g. "#", "*")
@@ -89,14 +115,9 @@ export function sttLanguagesToInput(raw: unknown): string {
     : "";
 }
 
-const DEFAULT_VOICE_PROVIDER_DETAIL: VoiceProviderDetail = {
-  label: "",
-  icon: SvgMicrophone,
-};
-
 /** Per-provider static details, keyed by provider_type. */
-export const VOICE_PROVIDER_DETAILS: Record<string, VoiceProviderDetail> = {
-  openai: {
+export const VOICE_PROVIDER_DETAILS = {
+  [VoiceProviderType.OPENAI]: {
     label: "OpenAI",
     icon: SvgOpenai,
     apiKeyUrl: "https://platform.openai.com/api-keys",
@@ -111,7 +132,7 @@ export const VOICE_PROVIDER_DETAILS: Record<string, VoiceProviderDetail> = {
       { id: "tts-1-hd", name: "TTS-1 HD" },
     ],
   },
-  azure: {
+  [VoiceProviderType.AZURE]: {
     label: "Azure Speech Services",
     icon: SvgAzure,
     apiKeyUrl: "https://portal.azure.com/",
@@ -126,7 +147,7 @@ export const VOICE_PROVIDER_DETAILS: Record<string, VoiceProviderDetail> = {
         "https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support?tabs=stt",
     },
   },
-  elevenlabs: {
+  [VoiceProviderType.ELEVENLABS]: {
     label: "ElevenLabs",
     icon: SvgElevenLabs,
     apiKeyUrl: "https://elevenlabs.io/app/settings/api-keys",
@@ -136,18 +157,16 @@ export const VOICE_PROVIDER_DETAILS: Record<string, VoiceProviderDetail> = {
       label: "ElevenLabs",
     },
   },
-};
+  [VoiceProviderType.OPENAI_COMPATIBLE]: {
+    label: "OpenAI-Compatible",
+    icon: SvgServer,
+  },
+} satisfies Record<VoiceProviderType, VoiceProviderDetail>;
 
-/** Returns the detail entry for a provider type, falling back to a generic entry for unknown types. */
 export function getVoiceProviderDetail(
-  providerType: string
+  providerType: VoiceProviderType
 ): VoiceProviderDetail {
-  return (
-    VOICE_PROVIDER_DETAILS[providerType] ?? {
-      ...DEFAULT_VOICE_PROVIDER_DETAIL,
-      label: providerType,
-    }
-  );
+  return VOICE_PROVIDER_DETAILS[providerType];
 }
 
 /** Maps card-level model IDs to actual API model IDs. IDs absent from this map are used as-is. */
