@@ -97,7 +97,8 @@ def _build_env_defaults() -> SecuritySettings:
     return SecuritySettings(
         user_directory_admin_only=_cfg.USER_DIRECTORY_ADMIN_ONLY,
         track_external_idp_expiry=_cfg.TRACK_EXTERNAL_IDP_EXPIRY,
-        allow_same_provider_subject_relink=_cfg.ALLOW_SAME_PROVIDER_SUBJECT_RELINK,
+        # No env knob on purpose: the relink window is off until an admin opens it.
+        allow_same_provider_subject_relink=False,
         # No env knob on purpose: incognito is off until an admin enables it.
         incognito_availability=IncognitoAvailability.OFF,
         incognito_record_mode=IncognitoRecordMode.USAGE_ONLY,
