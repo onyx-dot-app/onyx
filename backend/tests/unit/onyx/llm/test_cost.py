@@ -565,6 +565,30 @@ class TestLitellmFallback:
         )
         assert result == (0.0, 0.0)
 
+    def test_image_rate_differences_do_not_block_token_pricing(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import litellm
+
+        monkeypatch.setitem(
+            litellm.model_cost,
+            "xai/onyx-test-mixed-model",
+            {**_chat_entry("xai", 1e-6, 2e-6), "output_cost_per_image": 0.01},
+        )
+        monkeypatch.setitem(
+            litellm.model_cost,
+            "deepseek/onyx-test-mixed-model",
+            {**_chat_entry("deepseek", 1e-6, 2e-6), "output_cost_per_image": 0.05},
+        )
+        in_cents, out_cents = compute_cost_cents(
+            model="onyx-test-mixed-model",
+            provider="openai_compatible",
+            prompt_tokens=1000,
+            completion_tokens=1000,
+        )
+        assert in_cents == pytest.approx(0.1)
+        assert out_cents == pytest.approx(0.2)
+
     def test_refresh_prices_model_released_after_startup(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

@@ -22,9 +22,9 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 # (model, custom_llm_provider) litellm prices a model under when the pair Onyx
-# passes does not resolve on its own.
+# passes does not resolve on its own, per (model, provider, pricing path).
 _LitellmTarget = tuple[str, str | None]
-_fallback_targets: dict[tuple[str, str | None], _LitellmTarget] = {}
+_fallback_targets: dict[tuple[str, str | None, str], _LitellmTarget] = {}
 _refresh_lock = threading.Lock()
 _last_refresh_attempt = float("-inf")
 
@@ -85,60 +85,66 @@ def _refresh_litellm_model_cost() -> bool:
         return True
 
 
-def _cost_fields(entry: Mapping[str, Any]) -> str:
-    """Every rate cost_per_token may read (base, cache, tiered), canonicalised
-    so candidates can be compared as a whole."""
-    return json.dumps(
-        {field: value for field, value in entry.items() if "cost" in field},
-        sort_keys=True,
-        default=str,
-    )
+def _rate_fields(entry: Mapping[str, Any], path: str) -> str:
+    """The rates one pricing path reads ("token": base, cache and tiered
+    token rates; "image": per-image rates), canonicalised for comparison."""
+    fields = {
+        field: value
+        for field, value in entry.items()
+        if ("cost" in field and path in field) or field == "tiered_pricing"
+    }
+    return json.dumps(fields, sort_keys=True, default=str)
 
 
-def _vendor_prefixed_target(model: str) -> _LitellmTarget | None:
+def _vendor_prefixed_target(model: str, path: str) -> _LitellmTarget | None:
     """Provider names litellm doesn't know (e.g. openai_compatible) hide models
     it prices under a vendor prefix such as "xai/grok-4". Accept that key only
-    when unambiguous: a single match, or several with identical rates."""
+    when unambiguous for this pricing path: a single match, or several whose
+    rates for the path are identical."""
     import litellm
 
     suffix = "/" + model
     # Under the refresh lock: an in-place map update would break this scan.
     with _refresh_lock:
         candidates = [key for key in litellm.model_cost if key.endswith(suffix)]
-        rates = {_cost_fields(litellm.model_cost[key]) for key in candidates}
+        rates = {_rate_fields(litellm.model_cost[key], path) for key in candidates}
     if not candidates or len(rates) != 1:
         return None
     return candidates[0], None
 
 
-def _fallback_target(model: str, provider: str | None) -> _LitellmTarget | None:
+def _fallback_target(
+    model: str, provider: str | None, path: str
+) -> _LitellmTarget | None:
     """Where litellm prices a model whose (model, provider) pair failed to
     resolve, refreshing the price map when nothing matches."""
     import litellm
 
-    key = (model, provider)
+    key = (model, provider, path)
     cached = _fallback_targets.get(key)
     if cached is not None:
         return cached
-    target = _vendor_prefixed_target(model)
+    target = _vendor_prefixed_target(model, path)
     if target is None and _refresh_litellm_model_cost():
         try:
             litellm.get_model_info(model=model, custom_llm_provider=provider)
             target = (model, provider)
         except Exception:
-            target = _vendor_prefixed_target(model)
+            target = _vendor_prefixed_target(model, path)
     if target is not None:
         _fallback_targets[key] = target
     return target
 
 
-def _litellm_model_info(model: str, provider: str | None) -> Mapping[str, Any]:
+def _litellm_model_info(
+    model: str, provider: str | None, path: str = "token"
+) -> Mapping[str, Any]:
     import litellm
 
     try:
         return litellm.get_model_info(model=model, custom_llm_provider=provider)
     except Exception:
-        target = _fallback_target(model, provider)
+        target = _fallback_target(model, provider, path)
         if target is None:
             raise
         return litellm.get_model_info(model=target[0], custom_llm_provider=target[1])
@@ -154,7 +160,7 @@ def _litellm_cost_per_token(
             model=model, custom_llm_provider=provider, **usage
         )
     except Exception:
-        target = _fallback_target(model, provider)
+        target = _fallback_target(model, provider, "token")
         if target is None:
             raise
         return litellm.cost_per_token(
@@ -220,7 +226,7 @@ def _image_cost_cents(model: str, provider: str | None) -> float:
         import litellm
 
         try:
-            entry = _litellm_model_info(model, provider)
+            entry = _litellm_model_info(model, provider, "image")
         except Exception:
             entry = litellm.model_cost.get(model) or {}
         # litellm prices images per-image under either of these keys. Use an
