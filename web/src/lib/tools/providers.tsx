@@ -8,11 +8,15 @@ import { isAssistant } from "@/lib/agents/utils";
 import { useAvailableSources } from "@/lib/connectors/hooks";
 import { SourceMetadata } from "@/lib/search/interfaces";
 import { getConfiguredSources } from "@/lib/sources";
+import { useProjectsContext } from "@/lib/projects/providers";
 import { useSourcePreferences } from "@/lib/searchFilters/hooks";
 import { useSharedSearchFilters } from "@/lib/searchFilters/providers";
 import { SEARCH_TOOL_ID } from "@/lib/tools/constants";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
 import { ValidSources } from "@/lib/types";
+
+/** Stable empty list, so gating on it does not retrigger the memo each render. */
+const EMPTY_SOURCES: ValidSources[] = [];
 
 /** A source the picker can show: {@link getConfiguredSources} guarantees a key. */
 type ConfiguredSource = ReturnType<typeof getConfiguredSources>[number];
@@ -75,8 +79,20 @@ function useToolsPopoverState({
   openSources,
   close,
 }: ToolsPopoverInputs): ToolsPopoverValue {
-  const { availableSources } = useAvailableSources();
+  const {
+    availableSources,
+    isLoading: sourcesLoading,
+    error: sourcesError,
+  } = useAvailableSources();
   const { selectedSources, setSelectedSources } = useSharedSearchFilters();
+  const { currentProjectId } = useProjectsContext();
+  const inProject = currentProjectId != null;
+
+  // A partial list reads as the complete set, which would initialise
+  // preferences against a subset and persist that. Hold off until the fetch
+  // settles. Agent-declared sources need no fetch, so they are unaffected.
+  const fetchedSources =
+    sourcesLoading || sourcesError ? EMPTY_SOURCES : availableSources;
 
   const hasSearchTool = agent.tools.some(
     (tool) => tool.in_code_tool_id === SEARCH_TOOL_ID
@@ -85,11 +101,11 @@ function useToolsPopoverState({
   // `knowledge_sources` is the complete set this agent can search over. Empty
   // on a searching agent means "everything accessible", not "nothing".
   const effectiveAvailableSources = useMemo<ValidSources[]>(() => {
-    if (isAssistant(agent)) return availableSources;
+    if (isAssistant(agent)) return fetchedSources;
     const declared = agent.knowledge_sources ?? [];
-    if (declared.length === 0 && hasSearchTool) return availableSources;
+    if (declared.length === 0 && hasSearchTool) return fetchedSources;
     return declared as ValidSources[];
-  }, [agent, availableSources, hasSearchTool]);
+  }, [agent, fetchedSources, hasSearchTool]);
 
   const {
     sourcesInitialized,
@@ -132,12 +148,16 @@ function useToolsPopoverState({
   // source is selected.
   useEffect(() => {
     if (searchToolId === null || !sourcesInitialized) return;
+    // Inside a project the tool searches that project's files, so the
+    // connector sources say nothing about whether it should be on.
+    if (inProject) return;
     setSearchToolEnabled(enabledSourceCount > 0);
   }, [
     searchToolId,
     enabledSourceCount,
     sourcesInitialized,
     setSearchToolEnabled,
+    inProject,
   ]);
 
   const toggleForced = useCallback(
@@ -202,10 +222,12 @@ function useToolsPopoverState({
   }, [searchToolId, toolConfiguration]);
 
   const enableAllSources = useCallback(() => {
-    setSelectedSources(configuredSources);
+    // Through the preferences hook, so the choice persists the way
+    // disabling all already does.
+    baseEnableAllSources();
     setSearchToolEnabled(true);
     pinSearch();
-  }, [configuredSources, pinSearch, setSearchToolEnabled, setSelectedSources]);
+  }, [baseEnableAllSources, pinSearch, setSearchToolEnabled]);
 
   const disableAllSources = useCallback(() => {
     baseDisableAllSources();
