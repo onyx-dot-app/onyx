@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from onyx.voice.interface import STREAM_FAILED_ERROR
 from onyx.voice.providers.azure import AzureStreamingTranscriber, AzureVoiceProvider
 
 
@@ -141,6 +142,65 @@ def test_streaming_single_language_cloud_pins_recognition_language() -> None:
         mocks["recognizer"].call_args.kwargs["auto_detect_source_language_config"]
         is None
     )
+
+
+@pytest.mark.asyncio
+async def test_streaming_cancel_reports_sanitized_error() -> None:
+    with (
+        patch("azure.cognitiveservices.speech.SpeechConfig"),
+        patch("azure.cognitiveservices.speech.SpeechRecognizer") as recognizer,
+        patch(
+            "azure.cognitiveservices.speech.languageconfig.AutoDetectSourceLanguageConfig"
+        ),
+        patch("azure.cognitiveservices.speech.audio.AudioStreamFormat"),
+        patch("azure.cognitiveservices.speech.audio.PushAudioInputStream"),
+        patch("azure.cognitiveservices.speech.audio.AudioConfig"),
+    ):
+        transcriber = AzureStreamingTranscriber(
+            api_key="key", languages=["en-US"], region="eastus"
+        )
+        await transcriber.connect()
+        on_canceled = recognizer.return_value.canceled.connect.call_args[0][0]
+
+    on_canceled(MagicMock())
+    # call_soon_threadsafe callbacks run on the next loop iteration.
+    await asyncio.sleep(0)
+
+    result = await transcriber.receive_transcript()
+    assert result is not None
+    assert result.error == STREAM_FAILED_ERROR
+    assert result.text == ""
+    assert await transcriber.receive_transcript() is None
+
+
+@pytest.mark.asyncio
+async def test_streaming_close_keeps_transcripts_from_drained_audio() -> None:
+    """Recognition drains before close marks the session closed."""
+    with (
+        patch("azure.cognitiveservices.speech.SpeechConfig"),
+        patch("azure.cognitiveservices.speech.SpeechRecognizer") as recognizer,
+        patch(
+            "azure.cognitiveservices.speech.languageconfig.AutoDetectSourceLanguageConfig"
+        ),
+        patch("azure.cognitiveservices.speech.audio.AudioStreamFormat"),
+        patch("azure.cognitiveservices.speech.audio.PushAudioInputStream"),
+        patch("azure.cognitiveservices.speech.audio.AudioConfig"),
+    ):
+        transcriber = AzureStreamingTranscriber(
+            api_key="key", languages=["en-US"], region="eastus"
+        )
+        await transcriber.connect()
+        on_recognized = recognizer.return_value.recognized.connect.call_args[0][0]
+
+    # Azure emits the last segment while the stop call drains.
+    def drain() -> None:
+        event = MagicMock()
+        event.result.text = "tail words"
+        on_recognized(event)
+
+    recognizer.return_value.stop_continuous_recognition_async.return_value.get = drain
+
+    assert await transcriber.close() == "tail words"
 
 
 def test_streaming_multilingual_self_hosted_keeps_at_start_detection() -> None:
