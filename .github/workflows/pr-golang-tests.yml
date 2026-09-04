@@ -156,7 +156,8 @@ jobs:
             head -1 "${dir}report.md" | grep -qx '<!-- ods-coverage: changed -->' || continue
             NAME=$(basename "${dir}")
             PAGE_URL="https://${REPORTS_S3_BUCKET}.s3.us-east-2.amazonaws.com/reports/pr-${PR_NUMBER}/${RUN_ID}/${NAME}/coverage.html"
-            BODY+=$'\n'"$(cat "${dir}report.md")"$'\n'
+            # The blank line keeps the link out of the table above it.
+            BODY+=$'\n'"$(cat "${dir}report.md")"$'\n\n'
             BODY+="[Browse the uncovered lines](${PAGE_URL})"$'\n'
           done
 
