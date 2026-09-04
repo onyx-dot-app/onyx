@@ -87,7 +87,13 @@ function useToolsPopoverState({
 
   // A partial list must not become the user's persisted choice, but it is
   // still worth showing. Only initialisation waits for the fetch to settle.
-  const sourcesReady = !sourcesLoading && !sourcesError;
+  //
+  // An agent that declares its own knowledge_sources never reads the fetch,
+  // so waiting on it would leave those sources unselected for as long as the
+  // connector request is in flight, or forever if it fails.
+  const declaresOwnSources =
+    !isAssistant(agent) && (agent.knowledge_sources?.length ?? 0) > 0;
+  const sourcesReady = declaresOwnSources || (!sourcesLoading && !sourcesError);
 
   const hasSearchTool = agent.tools.some(
     (tool) => tool.in_code_tool_id === SEARCH_TOOL_ID

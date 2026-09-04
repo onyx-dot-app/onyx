@@ -160,7 +160,10 @@ export class ToolsPopover {
   // ---------------------------------------------------------------------------
 
   serverRow(serverName: string): Locator {
-    return this.row(new RegExp(escapeRegex(serverName)));
+    // Anchored: a server row is named exactly for its server, while a tool row
+    // above it can merely contain that name (a "GitHub" server whose tools are
+    // titled "GitHub issues"), and `.first()` would take the tool row.
+    return this.row(new RegExp(`^${escapeRegex(serverName)}$`));
   }
 
   async expectServerVisible(serverName: string): Promise<void> {
