@@ -590,6 +590,7 @@ export interface SecuritySettings {
   incognito_availability: IncognitoAvailability;
   incognito_record_mode: IncognitoRecordMode;
   track_external_idp_expiry: boolean;
+  allow_same_provider_subject_relink: boolean;
   ssrf_protection_level: SSRFProtectionLevel;
   mask_credential_prefix: boolean;
   llm_custom_config_env_injection: boolean;

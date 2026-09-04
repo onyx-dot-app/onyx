@@ -4928,6 +4928,10 @@
         },
         "section": {
           "title": "Authentification"
+        },
+        "subjectRelink": {
+          "description": "Permet aux utilisateurs dont le fournisseur a émis un nouvel identifiant de sujet de se reconnecter au compte lié à leur e-mail. À activer uniquement pendant un changement de client OIDC ou d'inscription d'application.",
+          "title": "Relier à nouveau les comptes après un changement de client OIDC"
         }
       },
       "jwt": {
