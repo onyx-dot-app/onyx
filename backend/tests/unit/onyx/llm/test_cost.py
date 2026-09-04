@@ -578,6 +578,7 @@ class TestLitellmFallback:
             return {"gemini/onyx-test-new-model": _chat_entry("gemini", 1e-6, 2e-6)}
 
         monkeypatch.setattr(cost_mod, "_fetch_litellm_model_cost", _fetch)
+        monkeypatch.setattr(cost_mod, "LITELLM_MODEL_COST_REFRESH_SECONDS", 3600)
         try:
             in_cents, out_cents = compute_cost_cents(
                 model="onyx-test-new-model",

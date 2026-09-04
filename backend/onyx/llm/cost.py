@@ -1,5 +1,6 @@
 """LLM cost calculation utilities."""
 
+import json
 import threading
 import time
 from collections.abc import Mapping
@@ -67,9 +68,12 @@ def _refresh_litellm_model_cost() -> bool:
         try:
             fetched = _fetch_litellm_model_cost()
         except Exception:
-            logger.debug("litellm model cost map refresh failed", exc_info=True)
+            logger.warning("litellm model cost map refresh failed", exc_info=True)
             return False
         if not fetched:
+            logger.warning(
+                "litellm model cost map refresh skipped: remote map unavailable"
+            )
             return False
         import litellm
 
@@ -81,24 +85,28 @@ def _refresh_litellm_model_cost() -> bool:
         return True
 
 
+def _cost_fields(entry: Mapping[str, Any]) -> str:
+    """Every rate cost_per_token may read (base, cache, tiered), canonicalised
+    so candidates can be compared as a whole."""
+    return json.dumps(
+        {field: value for field, value in entry.items() if "cost" in field},
+        sort_keys=True,
+        default=str,
+    )
+
+
 def _vendor_prefixed_target(model: str) -> _LitellmTarget | None:
     """Provider names litellm doesn't know (e.g. openai_compatible) hide models
     it prices under a vendor prefix such as "xai/grok-4". Accept that key only
-    when unambiguous: a single match, or several that agree on token prices."""
+    when unambiguous: a single match, or several with identical rates."""
     import litellm
 
     suffix = "/" + model
-    candidates = [key for key in litellm.model_cost if key.endswith(suffix)]
-    if not candidates:
-        return None
-    prices = {
-        (
-            litellm.model_cost[key].get("input_cost_per_token"),
-            litellm.model_cost[key].get("output_cost_per_token"),
-        )
-        for key in candidates
-    }
-    if len(prices) != 1:
+    # Under the refresh lock: an in-place map update would break this scan.
+    with _refresh_lock:
+        candidates = [key for key in litellm.model_cost if key.endswith(suffix)]
+        rates = {_cost_fields(litellm.model_cost[key]) for key in candidates}
+    if not candidates or len(rates) != 1:
         return None
     return candidates[0], None
 
