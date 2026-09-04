@@ -13,7 +13,7 @@ inline markdown rendering via `RichStr` — pass `markdown("*bold* text")` as ch
 | `color`    | `TextColor`                                     | `"text-04"`      | Text color                                                                                     |
 | `as`       | `"p" \| "span" \| "li" \| "h1" \| "h2" \| "h3"` | `"span"`         | HTML tag to render                                                                             |
 | `wordWrap` | `"whitespace-nowrap" \| "wrap-normal" \| "wrap-break-word" \| "wrap-anywhere" \| "break-all" \| "break-keep"` | — | How a run of characters with nowhere to wrap behaves; unset leaves normal CSS wrapping |
-| `textPosition` | `"text-start" \| "text-center" \| "text-end" \| "text-justify"` | — | How the text sits within its own box; logical, so it follows reading direction |
+| `textPosition` | `"text-start" \| "text-center" \| "text-end" \| "text-justify"` | — | How the text sits within its own box; logical, so it follows reading direction. Only offered when `as` is a block tag |
 | `maxLines` | `number`                                        | —                | Truncate to N lines with an ellipsis (`1` = single-line truncate; `2+` = `-webkit-line-clamp`) |
 | `children` | `string \| RichStr \| RichNodes`                | —                | Plain string, `markdown()` for inline markdown, or `richNodes()` for inline React nodes        |
 

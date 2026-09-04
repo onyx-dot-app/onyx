@@ -10,7 +10,14 @@ import { resolveStr } from "@opal/components/text/InlineMarkdown";
 // Types
 // ---------------------------------------------------------------------------
 
-interface TextProps extends WithoutStyles<
+/**
+ * Tags that establish a block box, so `text-align` has something to align
+ * within. `span` is deliberately absent: it is inline, and aligning an inline
+ * element is the parent's job, not its own.
+ */
+type BlockTag = "p" | "li" | "h1" | "h2" | "h3";
+
+interface TextBaseProps extends WithoutStyles<
   Omit<HTMLAttributes<HTMLElement>, "color" | "children">
 > {
   /** Font preset. Default: `"main-ui-body"`. */
@@ -18,9 +25,6 @@ interface TextProps extends WithoutStyles<
 
   /** Color variant. Default: `"text-04"`. */
   color?: TextColor;
-
-  /** HTML tag to render. Default: `"span"`. */
-  as?: "p" | "span" | "li" | "h1" | "h2" | "h3";
 
   /**
    * How this text wraps. Ordinary wrapping only breaks at whitespace, so a
@@ -46,17 +50,6 @@ interface TextProps extends WithoutStyles<
     | "break-all"
     | "break-keep";
 
-  /**
-   * How the text sits within its own box. Logical values, so they follow the
-   * reading direction rather than the screen: `"text-start"` is left in an
-   * LTR locale and right in an RTL one.
-   *
-   * This aligns the text inside the element `Text` renders. Positioning that
-   * element within its parent is the parent's business — see the note on
-   * layout below.
-   */
-  textPosition?: "text-start" | "text-center" | "text-end" | "text-justify";
-
   /** Truncate text to N lines with ellipsis. `1` uses simple truncation; `2+` uses `-webkit-line-clamp`. */
   maxLines?: number;
 
@@ -73,6 +66,30 @@ interface TextProps extends WithoutStyles<
    */
   children?: string | RichStr | RichNodes;
 }
+
+/**
+ * `textPosition` is only offered on a tag that makes a block box. On an inline
+ * `span` the property has nothing to align against — `text-align` positions a
+ * block's inline content, not the element itself — so allowing it there would
+ * be a prop that silently does nothing.
+ */
+type TextProps =
+  | (TextBaseProps & {
+      /** HTML tag to render. Default: `"span"`. */
+      as?: "span";
+      textPosition?: never;
+    })
+  | (TextBaseProps & {
+      /** HTML tag to render. */
+      as: BlockTag;
+
+      /**
+       * How the text sits within this element's box. Logical values, so they
+       * follow the reading direction rather than the screen: `"text-start"` is
+       * left in an LTR locale and right in an RTL one.
+       */
+      textPosition?: "text-start" | "text-center" | "text-end" | "text-justify";
+    });
 
 // ---------------------------------------------------------------------------
 // Config
