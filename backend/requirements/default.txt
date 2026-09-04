@@ -554,6 +554,7 @@ click==8.4.2 \
     #   huggingface-hub
     #   litellm
     #   magika
+    #   nltk
     #   typer
     #   uvicorn
     #   zulip
@@ -681,6 +682,7 @@ defusedxml==0.7.1 \
     # via
     #   jira
     #   markitdown
+    #   nltk
 deprecated==1.3.1 \
     --hash=sha256:597bfef186b6f60181535a29fbe44865ce137a5079f295b479886c82729d5f3f \
     --hash=sha256:b1b50e0ff0c1fddaa5708a2c6b0a6588bb09b892825ab2b214ac9ea9d92a5223
@@ -1273,6 +1275,10 @@ jmespath==1.0.1 \
     #   atlassian-python-api
     #   boto3
     #   botocore
+joblib==1.5.2 \
+    --hash=sha256:3faa5c39054b2f03ca547da9b2f52fde67c06240c31853f306aea97f13647b55 \
+    --hash=sha256:4e1f0bdbb987e6d843c70cf43714cb276623def372df3c22fe5266b2670bc241
+    # via nltk
 jsonpatch==1.33 \
     --hash=sha256:0ae28c0cd062bbd8b8ecc26d7d164fbbea9652a1a3693f3b956c1eae5145dade \
     --hash=sha256:9fcd4009c41e6d12348b4a0ff2563ba56a2923a7dfee731d004e212e1ee5030c
@@ -1695,6 +1701,9 @@ mwparserfromhell==0.7.2 \
 nest-asyncio==1.6.0 \
     --hash=sha256:6f172d5449aca15afd6c646851f4e31e02c598d553a667e38cafa997cfec55fe \
     --hash=sha256:87af6efd6b5e897c81050477ef65c62e2b2f35d51703cae01aff2905b1852e1c
+nltk==3.10.3 \
+    --hash=sha256:bb9327a461c3811c2fa4900e03840401f2126adfb30c0072827c433bd2444ea4 \
+    --hash=sha256:ff9598a8e20518ee0d557745890cc4435b9578489e2dcbc69c4f81fa060caf7c
 numpy==2.4.1 \
     --hash=sha256:178de8f87948163d98a4c9ab5bee4ce6519ca918926ec8df195af582de28544d \
     --hash=sha256:20d4649c773f66cc2fc36f663e091f57c3b7655f936a4c681b4250855d1da8f5 \
@@ -2611,6 +2620,7 @@ regex==2025.11.3 \
     --hash=sha256:ffcca5b9efe948ba0661e9df0fa50d2bc4b097c70b9810212d6b62f05d83b2dd
     # via
     #   dateparser
+    #   nltk
     #   tiktoken
 reportlab==5.0.0 \
     --hash=sha256:9d5a3affa84919e1111ede580031266a570e93b1ce388219621347965ff1d93c \
@@ -2976,6 +2986,7 @@ tqdm==4.70.0 \
     #   braintrust
     #   chonkie
     #   huggingface-hub
+    #   nltk
     #   openai
 trafilatura==1.12.2 \
     --hash=sha256:4c9cb1434f7e13ef0b16cb44ee1d44e84523ec7268940b9559c374e7effc9a96 \
