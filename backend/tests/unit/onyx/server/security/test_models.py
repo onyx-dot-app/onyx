@@ -22,6 +22,7 @@ from onyx.server.security.models import (
 _VALID_EFFECTIVE_KWARGS: dict[str, Any] = {
     "user_directory_admin_only": False,
     "track_external_idp_expiry": False,
+    "allow_same_provider_subject_relink": False,
     "incognito_availability": IncognitoAvailability.OFF,
     "incognito_record_mode": IncognitoRecordMode.USAGE_ONLY,
     "ssrf_protection_level": SSRFProtectionLevel.VALIDATE_LLM,

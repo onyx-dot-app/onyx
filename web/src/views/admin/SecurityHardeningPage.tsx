@@ -217,6 +217,17 @@ export default function SecurityHardeningPage() {
                 }
               />
 
+              <ToggleRow
+                title="Relink Accounts After an OIDC Client Change"
+                description="Let users whose provider issued them a new subject ID sign back in to the account linked to their email. Turn on only while changing the OIDC client or app registration."
+                checked={draft.allow_same_provider_subject_relink}
+                onCheckedChange={(checked) =>
+                  void saveSettings({
+                    allow_same_provider_subject_relink: checked,
+                  })
+                }
+              />
+
               {!isMultiTenant && (
                 <>
                   <ToggleRow
