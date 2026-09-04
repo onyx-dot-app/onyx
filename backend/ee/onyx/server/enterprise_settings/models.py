@@ -29,12 +29,33 @@ class LogoDisplayStyle(str, Enum):
     NAME_ONLY = "name_only"
 
 
+# Length caps for the admin-authored appearance strings.
+#
+# Enforced here rather than only in the form, because the form is the client
+# and a client cannot be trusted to bound what it sends. Everything below is
+# stored in one KV blob and served without auth, so an unbounded field is
+# served to every anonymous caller.
+#
+# The theme page keeps its own copy for its character counters. Keep the two in
+# step; `test_appearance_char_limits.py` fails when they drift.
+MAX_APPLICATION_NAME_LEN = 50
+MAX_GREETING_MESSAGE_LEN = 50
+MAX_LOGIN_SUBTITLE_LEN = 100
+MAX_HEADER_CONTENT_LEN = 100
+MAX_LOWER_DISCLAIMER_CONTENT_LEN = 500
+MAX_POPUP_HEADER_LEN = 100
+MAX_POPUP_CONTENT_LEN = 500
+MAX_CONSENT_SCREEN_PROMPT_LEN = 200
+
+
 class EnterpriseSettings(BaseModel):
     """General settings that only apply to the Enterprise Edition of Onyx
 
     NOTE: don't put anything sensitive in here, as this is accessible without auth."""
 
-    application_name: str | None = None
+    application_name: str | None = Field(
+        default=None, max_length=MAX_APPLICATION_NAME_LEN
+    )
     use_custom_logo: bool = False
     use_custom_logotype: bool = False
     logo_display_style: LogoDisplayStyle | None = None
@@ -44,17 +65,31 @@ class EnterpriseSettings(BaseModel):
 
     # custom Chat components
     two_lines_for_chat_header: bool | None = None
-    custom_lower_disclaimer_content: str | None = None
-    custom_header_content: str | None = None
-    custom_popup_header: str | None = None
-    custom_popup_content: str | None = None
+    custom_lower_disclaimer_content: str | None = Field(
+        default=None, max_length=MAX_LOWER_DISCLAIMER_CONTENT_LEN
+    )
+    custom_header_content: str | None = Field(
+        default=None, max_length=MAX_HEADER_CONTENT_LEN
+    )
+    custom_popup_header: str | None = Field(
+        default=None, max_length=MAX_POPUP_HEADER_LEN
+    )
+    custom_popup_content: str | None = Field(
+        default=None, max_length=MAX_POPUP_CONTENT_LEN
+    )
     enable_consent_screen: bool | None = None
-    consent_screen_prompt: str | None = None
+    consent_screen_prompt: str | None = Field(
+        default=None, max_length=MAX_CONSENT_SCREEN_PROMPT_LEN
+    )
     show_first_visit_notice: bool | None = None
-    custom_greeting_message: str | None = None
+    custom_greeting_message: str | None = Field(
+        default=None, max_length=MAX_GREETING_MESSAGE_LEN
+    )
     # login page subtitle under the "Welcome to <app name>" heading. Blank
     # falls back to the default Onyx tagline.
-    custom_login_subtitle: str | None = None
+    custom_login_subtitle: str | None = Field(
+        default=None, max_length=MAX_LOGIN_SUBTITLE_LEN
+    )
 
     # custom help link surfaced in the profile dropdown alongside the
     # built-in "Help & FAQ" item
