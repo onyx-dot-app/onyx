@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { Fragment, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import type { Route } from "next";
@@ -10,7 +10,10 @@ import { SvgChevronRight, SvgKey, SvgSettings, SvgSlash } from "@opal/icons";
 import { getIconForAction } from "@/app/app/services/actionUtils";
 import useCCPairs from "@/hooks/useCCPairs";
 import { Section } from "@/layouts/general-layouts";
-import { useToolOAuthStatus } from "@/lib/hooks/useToolOAuthStatus";
+import {
+  useToolOAuthStatus,
+  type ToolAuthStatus,
+} from "@/lib/hooks/useToolOAuthStatus";
 import { hasPermission } from "@/lib/permissions";
 import { useProjectsContext } from "@/lib/projects/providers";
 import { useSettings } from "@/lib/settings/hooks";
@@ -31,6 +34,13 @@ import { useUser } from "@/providers/UserProvider";
 
 // Names the hover group that swaps the source count for the disable button.
 const HOVER_GROUP = "ToolLineItem";
+
+/** A button the row can offer on its right. At most one of each renders. */
+type ToolAction =
+  | { kind: "authenticate"; authStatus: ToolAuthStatus }
+  | { kind: "toggle"; count: { enabled: number; total: number } | null }
+  | { kind: "configure"; href: string; tooltip: string }
+  | { kind: "selectSources" };
 
 export interface ToolLineItemProps {
   tool: ToolSnapshot;
@@ -128,7 +138,7 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
       : tool.display_name || tool.name;
 
   // Only worth saying when the pin is narrowed to some of the sources.
-  const showSourceCount =
+  const sourcesNarrowed =
     ownsSources &&
     !needsConnectors &&
     isForced &&
@@ -169,6 +179,95 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
     />
   );
 
+  // At most three: an authentication prompt, the enable/disable toggle, and
+  // one of configure / select-sources. Declared in the order they render.
+  const rightActions: ToolAction[] = [];
+  if (!isUnavailable && tool.oauth_config_id && authStatus) {
+    rightActions.push({ kind: "authenticate", authStatus });
+  }
+  if (!isUnavailable && !needsConnectors) {
+    rightActions.push({
+      kind: "toggle",
+      count: sourcesNarrowed ? sourceCounts : null,
+    });
+  }
+  // Exclusive by construction: an admin link needs a tool that is not search,
+  // and sources belong to search. The `else` states what was only implied.
+  if (adminConfigure) {
+    rightActions.push({ kind: "configure", ...adminConfigure });
+  } else if (ownsSources) {
+    rightActions.push({ kind: "selectSources" });
+  }
+
+  function renderRightAction(action: ToolAction) {
+    switch (action.kind) {
+      case "authenticate":
+        return (
+          <Button
+            icon={SvgKey}
+            prominence="secondary"
+            size="sm"
+            aria-label={t("actionLineItem.authenticate.label")}
+            onClick={() => {
+              const { hasToken, isTokenExpired } = action.authStatus;
+              if (!hasToken || isTokenExpired) void authenticateTool(tool);
+            }}
+          />
+        );
+      case "toggle":
+        // The count takes the slot and reveals the toggle on hover. Without
+        // it the toggle is bare once switched off, hover-revealed otherwise.
+        if (action.count) {
+          return (
+            <Hoverable.Item
+              group={HOVER_GROUP}
+              variant="replace-on-hover"
+              resting={
+                <EnabledCount
+                  enabledCount={action.count.enabled}
+                  totalCount={action.count.total}
+                />
+              }
+            >
+              {toggleButton}
+            </Hoverable.Item>
+          );
+        }
+        return isDisabled ? (
+          toggleButton
+        ) : (
+          <Hoverable.Item group={HOVER_GROUP}>{toggleButton}</Hoverable.Item>
+        );
+      case "configure":
+        return (
+          <Button
+            icon={SvgSettings}
+            prominence="tertiary"
+            size="sm"
+            tooltip={action.tooltip}
+            onClick={() => {
+              router.push(action.href as Route);
+              close();
+            }}
+          />
+        );
+      case "selectSources":
+        return (
+          <Button
+            icon={needsConnectors ? SvgSettings : SvgChevronRight}
+            prominence="tertiary"
+            size="sm"
+            aria-label={connectorsLabel}
+            tooltip={connectorsLabel}
+            onClick={() => {
+              if (needsConnectors) router.push("/admin/add-connector");
+              else openSources();
+            }}
+          />
+        );
+    }
+  }
+
   return (
     <Hoverable.Root group={HOVER_GROUP}>
       <LineItemButton
@@ -190,74 +289,9 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
         onClick={handleClick}
         rightChildren={
           <Section gap={1} flexDirection="row">
-            {!isUnavailable && tool.oauth_config_id && authStatus && (
-              <Button
-                icon={SvgKey}
-                prominence="secondary"
-                size="sm"
-                aria-label={t("actionLineItem.authenticate.label")}
-                onClick={() => {
-                  if (!authStatus.hasToken || authStatus.isTokenExpired) {
-                    void authenticateTool(tool);
-                  }
-                }}
-              />
-            )}
-
-            {!needsConnectors &&
-              !isUnavailable &&
-              // The source count owns this slot when shown, and brings the
-              // toggle with it.
-              !showSourceCount &&
-              (isDisabled ? (
-                toggleButton
-              ) : (
-                <Hoverable.Item group={HOVER_GROUP}>
-                  {toggleButton}
-                </Hoverable.Item>
-              ))}
-
-            {adminConfigure && (
-              <Button
-                icon={SvgSettings}
-                prominence="tertiary"
-                size="sm"
-                tooltip={adminConfigure.tooltip}
-                onClick={() => {
-                  router.push(adminConfigure.href as Route);
-                  close();
-                }}
-              />
-            )}
-
-            {showSourceCount && (
-              <Hoverable.Item
-                group={HOVER_GROUP}
-                variant="replace-on-hover"
-                resting={
-                  <EnabledCount
-                    enabledCount={sourceCounts.enabled}
-                    totalCount={sourceCounts.total}
-                  />
-                }
-              >
-                {toggleButton}
-              </Hoverable.Item>
-            )}
-
-            {ownsSources && (
-              <Button
-                icon={needsConnectors ? SvgSettings : SvgChevronRight}
-                prominence="tertiary"
-                size="sm"
-                aria-label={connectorsLabel}
-                tooltip={connectorsLabel}
-                onClick={() => {
-                  if (needsConnectors) router.push("/admin/add-connector");
-                  else openSources();
-                }}
-              />
-            )}
+            {rightActions.map((action) => (
+              <Fragment key={action.kind}>{renderRightAction(action)}</Fragment>
+            ))}
           </Section>
         }
       />
