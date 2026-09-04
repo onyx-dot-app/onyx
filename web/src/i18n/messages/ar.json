@@ -10726,6 +10726,10 @@
         "ariaLabel": "حفظ"
       }
     },
+    "enabledCount": {
+      "label": "<value>{enabled}</value> من {total}",
+      "tools": "{total, plural, one {<value>{enabled}</value> من {total} أداة} other {<value>{enabled}</value> من {total} أدوات}}"
+    },
     "errorPages": {
       "accessRestricted": {
         "billingAdminHint": {

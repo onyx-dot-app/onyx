@@ -10726,6 +10726,10 @@
         "ariaLabel": "Enregistrer"
       }
     },
+    "enabledCount": {
+      "label": "<value>{enabled}</value> sur {total}",
+      "tools": "{total, plural, one {<value>{enabled}</value> sur {total} outil} other {<value>{enabled}</value> sur {total} outils}}"
+    },
     "errorPages": {
       "accessRestricted": {
         "billingAdminHint": {

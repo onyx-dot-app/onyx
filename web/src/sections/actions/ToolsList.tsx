@@ -96,7 +96,7 @@ const ToolsList: React.FC<ToolsListProps> = ({
                 <EnabledCount
                   enabledCount={enabledCount}
                   totalCount={totalCount}
-                  name="tool"
+                  noun="tool"
                 />
               )}
               {onToggleShowOnlyEnabled && enabledCount > 0 && (

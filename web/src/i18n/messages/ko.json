@@ -10726,6 +10726,10 @@
         "ariaLabel": "저장"
       }
     },
+    "enabledCount": {
+      "label": "{total}개 중 <value>{enabled}</value>개",
+      "tools": "{total, plural, one {{total}개 도구 중 <value>{enabled}</value>개} other {{total}개 도구 중 <value>{enabled}</value>개}}"
+    },
     "errorPages": {
       "accessRestricted": {
         "billingAdminHint": {

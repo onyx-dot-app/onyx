@@ -20,9 +20,9 @@ export const Default: Story = {
   },
 };
 
-export const WithName: Story = {
+export const WithNoun: Story = {
   args: {
-    name: "connector",
+    noun: "tool",
     enabledCount: 3,
     totalCount: 10,
   },
@@ -30,7 +30,7 @@ export const WithName: Story = {
 
 export const AllEnabled: Story = {
   args: {
-    name: "source",
+    noun: "tool",
     enabledCount: 8,
     totalCount: 8,
   },
@@ -38,15 +38,16 @@ export const AllEnabled: Story = {
 
 export const NoneEnabled: Story = {
   args: {
-    name: "item",
+    noun: "tool",
     enabledCount: 0,
     totalCount: 15,
   },
 };
 
+/** The singular branch of the plural: "1 of 1 tool", not "tools". */
 export const SingleItem: Story = {
   args: {
-    name: "document",
+    noun: "tool",
     enabledCount: 1,
     totalCount: 1,
   },

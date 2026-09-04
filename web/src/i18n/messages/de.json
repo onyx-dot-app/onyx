@@ -10726,6 +10726,10 @@
         "ariaLabel": "Speichern"
       }
     },
+    "enabledCount": {
+      "label": "<value>{enabled}</value> von {total}",
+      "tools": "{total, plural, one {<value>{enabled}</value> von {total} Tool} other {<value>{enabled}</value> von {total} Tools}}"
+    },
     "errorPages": {
       "accessRestricted": {
         "billingAdminHint": {
