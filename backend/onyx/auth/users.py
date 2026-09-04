@@ -1020,6 +1020,18 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     user = await self.user_db.get_by_email(account_email)
                     if user is None:
                         raise exceptions.UserNotExists()
+                    # No link matched this subject, so a link this provider already
+                    # holds on the row is stale: the IdP re-issued its subjects (a
+                    # new Entra app registration does this).
+                    stale_link = next(
+                        (
+                            link
+                            for link in user.oauth_accounts
+                            if link.oauth_name == oauth_name
+                        ),
+                        None,
+                    )
+
                     # Placeholders (EXT_PERM_USER, bots) carry no credentials or
                     # sessions, so neither check applies and the upgrade claims them.
                     if user.account_type.is_web_login():
@@ -1030,15 +1042,27 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
                         # An owned row must not take a second provider, and a
                         # rename stops the address identifying the row. All else
-                        # is claimable, password signups included.
+                        # is claimable, password signups included. A provider
+                        # already on the row is not a second one.
                         if not associate_by_email and (
-                            user.oauth_accounts or user.prior_emails
+                            user.prior_emails
+                            or (user.oauth_accounts and stale_link is None)
                         ):
                             raise exceptions.UserAlreadyExists()
 
-                    user = await self.user_db.add_oauth_account(
-                        user, oauth_account_dict
-                    )
+                    # Rewrite the stale link: passthrough reads oauth_accounts[0],
+                    # so a second link for this provider could hand it the dead
+                    # token.
+                    if stale_link is None:
+                        user = await self.user_db.add_oauth_account(
+                            user, oauth_account_dict
+                        )
+                    else:
+                        user = await self.user_db.update_oauth_account(
+                            user,
+                            stale_link,  # ty: ignore[invalid-argument-type]
+                            oauth_account_dict,
+                        )
 
                 except exceptions.UserNotExists:
                     # OAuth-created accounts are not subject to the dotted-Gmail

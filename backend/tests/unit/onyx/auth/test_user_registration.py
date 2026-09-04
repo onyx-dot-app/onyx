@@ -689,6 +689,7 @@ class TestOAuthNoAutoLinkExemptions:
         mock_user_db.get_by_email = AsyncMock(return_value=existing_user)
         mock_user_db.get = AsyncMock(return_value=existing_user)
         mock_user_db.add_oauth_account = AsyncMock(return_value=existing_user)
+        mock_user_db.update_oauth_account = AsyncMock(return_value=existing_user)
         mock_user_db.update = AsyncMock(return_value=existing_user)
         mock_user_db.session = MagicMock()
         user_manager.user_db = mock_user_db
@@ -816,10 +817,21 @@ class TestOAuthNoAutoLinkExemptions:
         "overrides",
         [
             # A second provider must not attach to a row an IdP already owns.
-            pytest.param({"oauth_accounts": [MagicMock()]}, id="already-linked"),
+            pytest.param(
+                {"oauth_accounts": [MagicMock(oauth_name="okta")]},
+                id="linked-to-other-provider",
+            ),
             # A rename moved this row onto the address, so the address no longer
             # proves whose row it is.
             pytest.param({"prior_emails": ["old@corp.com"]}, id="renamed"),
+            # The same-provider exemption does not reach past a rename.
+            pytest.param(
+                {
+                    "prior_emails": ["old@corp.com"],
+                    "oauth_accounts": [MagicMock(oauth_name="entra")],
+                },
+                id="renamed-and-linked-to-same-provider",
+            ),
         ],
     )
     @patch("onyx.auth.users.MULTI_TENANT", False)
@@ -899,6 +911,69 @@ class TestOAuthNoAutoLinkExemptions:
         cast(AsyncMock, user_manager.user_db.add_oauth_account).assert_not_awaited()
         assert result is deactivated
         assert result.is_active is False
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "other_links",
+        [
+            pytest.param([], id="only-this-provider"),
+            # A link under another provider does not turn a rotation into a
+            # second IdP: this provider already holds a link on the row.
+            pytest.param([MagicMock(oauth_name="okta")], id="also-other-provider"),
+        ],
+    )
+    # The rewrite is not gated on auto-link, so the legacy auto-link callers
+    # get one live link per provider too.
+    @pytest.mark.parametrize(
+        "associate_by_email", [False, True], ids=["no-auto-link", "auto-link"]
+    )
+    @patch("onyx.auth.users.MULTI_TENANT", False)
+    @patch("onyx.auth.users.verify_email_in_whitelist")
+    @patch("onyx.auth.users.verify_email_domain")
+    @patch("onyx.auth.users.fetch_ee_implementation_or_noop")
+    @patch("onyx.auth.users.get_async_session_context_manager")
+    @patch("onyx.auth.users.remove_user_from_invited_users")
+    @patch("onyx.auth.users.SQLAlchemyUserDatabase")
+    async def test_same_provider_new_subject_rewrites_stale_link(
+        self,
+        mock_user_db_cls: MagicMock,
+        mock_remove_invited: MagicMock,  # noqa: ARG002
+        mock_session_manager: MagicMock,
+        mock_fetch_ee: MagicMock,
+        mock_verify_domain: MagicMock,  # noqa: ARG002
+        mock_verify_whitelist: MagicMock,  # noqa: ARG002
+        other_links: list[MagicMock],
+        associate_by_email: bool,
+        mock_async_session: MagicMock,
+    ) -> None:
+        """The IdP behind one provider re-issued its subjects (a new Entra app
+        registration). That provider already links the row, so the login is a
+        rotation and the stale link is rewritten rather than duplicated."""
+        mock_session_manager.return_value = _AsyncSessionContextManager(
+            mock_async_session
+        )
+        mock_fetch_ee.return_value = AsyncMock(return_value="test_tenant")
+
+        stale_link = MagicMock(oauth_name="entra", account_id="old-sub")
+        linked = self._unclaimed(oauth_accounts=[*other_links, stale_link])
+        user_manager = self._manager_with_existing(linked, mock_user_db_cls)
+
+        result = await user_manager.oauth_callback(
+            oauth_name="entra",
+            access_token="token",
+            account_id="new-sub",
+            account_email="provisioned@corp.com",
+            associate_by_email=associate_by_email,
+        )
+
+        update_link = cast(AsyncMock, user_manager.user_db.update_oauth_account)
+        update_link.assert_awaited_once()
+        assert update_link.await_args is not None
+        _, rewritten_link, update_dict = update_link.await_args.args
+        assert rewritten_link is stale_link
+        assert update_dict["account_id"] == "new-sub"
+        cast(AsyncMock, user_manager.user_db.add_oauth_account).assert_not_awaited()
+        assert result is linked
 
 
 class TestPasswordAuthKillSwitch:
