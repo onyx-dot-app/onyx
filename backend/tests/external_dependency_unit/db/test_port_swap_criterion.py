@@ -21,23 +21,37 @@ port outright, `mark_port_in_progress` starts only NOT_STARTED (no double writer
 from collections.abc import Generator
 from datetime import datetime
 from unittest.mock import patch
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
 from onyx.db import swap_index
-from onyx.db.document import mark_document_synced_secondary_pending
+from onyx.db.document import (
+    PortedScope,
+    mark_document_synced_secondary_pending,
+    sample_ported_document_ids,
+)
 from onyx.db.enums import (
     ConnectorCredentialPairStatus,
     PortAttemptStatus,
     SwitchoverType,
+    UserFileStatus,
+)
+from onyx.db.index_attempt import (
+    create_index_attempt,
+    mark_attempt_in_progress,
+    mark_attempt_succeeded,
 )
 from onyx.db.models import (
     ConnectorCredentialPair,
+    Credential,
     DocumentByConnectorCredentialPair,
+    IndexAttempt,
     PortAttempt,
     SearchSettings,
+    UserFile,
 )
 from onyx.db.models import Document as DbDocument
 from onyx.db.port_attempt import (
@@ -54,18 +68,26 @@ from onyx.db.port_attempt import (
 from onyx.db.swap_index import (
     _port_swap_ready,
     _required_cc_pairs_for_switchover,
+    _verification_backoff_key,
     check_and_perform_index_swap,
 )
+from onyx.db.user_file import PortedUserScope, sample_ported_user_file_ids
 from onyx.kg.models import KGStage
+from onyx.redis.redis_pool import get_redis_client
 from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
 from tests.external_dependency_unit.indexing_helpers import (
     cleanup_cc_pair,
     cleanup_cc_pair_and_future,
     make_cc_pair,
     make_future_search_settings,
+    seed_cc_pair_documents,
 )
 
 _PENDING_DOC_PREFIX = "swapdoc-"
+_VERIFY_DOC_PREFIX = "swapdoc-verify-"
+# Bounds every seeded id sorts under, so a test scope carries a real snapshot.
+_ALL_DOCS_BOUND = "swapdoc-verify-zzzzzzzz"
+_ALL_FILES_BOUND = "ffffffff-ffff-ffff-ffff-ffffffffffff"
 
 
 @pytest.fixture
@@ -83,10 +105,18 @@ def cc_pair_and_future(
         )
 
 
-def _make_success_port(db_session: Session, cc_pair_id: int, ss_id: int) -> datetime:
+def _make_success_port(
+    db_session: Session,
+    cc_pair_id: int,
+    ss_id: int,
+    up_to_doc_id: str | None = _ALL_DOCS_BOUND,
+) -> datetime:
     """A SUCCESS port attempt; returns its (non-None) completion time so callers can
-    order index attempts relative to it."""
-    attempt = create_port_attempt(db_session, cc_pair_id, ss_id)
+    order index attempts relative to it. The snapshot bound defaults to one that covers
+    every seeded document, since the pre-swap sample only looks inside it."""
+    attempt = create_port_attempt(
+        db_session, cc_pair_id, ss_id, up_to_doc_id=up_to_doc_id
+    )
     mark_port_in_progress(db_session, attempt.id)
     mark_port_succeeded(db_session, attempt.id)
     db_session.expire_all()
@@ -468,3 +498,443 @@ def test_cancel_active_port_attempts_is_two_phase(
             PortAttempt.search_settings_id == future_id
         ).delete(synchronize_session="fetch")
         db_session.commit()
+
+
+def _clear_verification_backoff(future_id: int) -> None:
+    """A failed check parks a Redis key for minutes; drop it so each test starts clean."""
+    get_redis_client().delete(_verification_backoff_key(future_id))
+
+
+def test_sampler_returns_ported_documents_with_chunks(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    cc_pair, _ = cc_pair_and_future
+    kept = seed_cc_pair_documents(
+        db_session, cc_pair, 2, prefix=f"{_VERIFY_DOC_PREFIX}keep-", chunk_count=3
+    )
+    seed_cc_pair_documents(
+        db_session, cc_pair, 1, prefix=f"{_VERIFY_DOC_PREFIX}nochunks-", chunk_count=0
+    )
+
+    scope = PortedScope(
+        connector_id=cc_pair.connector_id,
+        credential_id=cc_pair.credential_id,
+        up_to_doc_id=_ALL_DOCS_BOUND,
+    )
+    assert sorted(sample_ported_document_ids(db_session, [scope], 10)) == sorted(kept)
+    # Same scopes, same ids: a fresh draw each time would eventually pass against a
+    # partly-missing index.
+    assert sample_ported_document_ids(db_session, [scope], 1) == (
+        sample_ported_document_ids(db_session, [scope], 1)
+    )
+
+
+def test_sampler_covers_documents_predating_the_chunk_count_column(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """On a deployment predating the column every document reads NULL, so skipping them
+    would leave the check passing without verifying anything at all."""
+    cc_pair, _ = cc_pair_and_future
+    legacy = seed_cc_pair_documents(
+        db_session, cc_pair, 2, prefix=f"{_VERIFY_DOC_PREFIX}legacy-", chunk_count=None
+    )
+    seed_cc_pair_documents(
+        db_session, cc_pair, 1, prefix=f"{_VERIFY_DOC_PREFIX}empty-", chunk_count=0
+    )
+    scope = PortedScope(
+        connector_id=cc_pair.connector_id,
+        credential_id=cc_pair.credential_id,
+        up_to_doc_id=_ALL_DOCS_BOUND,
+    )
+    assert sorted(sample_ported_document_ids(db_session, [scope], 10)) == sorted(legacy)
+
+
+def test_document_absent_from_both_indexes_does_not_hold_the_swap(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """Such a row can never appear in the new index, so treating it as loss would hold
+    the swap for good."""
+    cc_pair, future_id = cc_pair_and_future
+    future_ss = db_session.get(SearchSettings, future_id)
+    assert future_ss is not None
+    _make_success_port(db_session, cc_pair.id, future_id)
+    seeded = seed_cc_pair_documents(
+        db_session, cc_pair, 1, prefix=_VERIFY_DOC_PREFIX, chunk_count=None
+    )
+    _clear_verification_backoff(future_id)
+
+    # Missing from the new index, and holding no chunk in the source index either.
+    with (
+        patch.object(
+            swap_index, "find_documents_missing_from_index", return_value=seeded
+        ),
+        patch.object(swap_index, "find_documents_with_no_chunks", return_value=seeded),
+    ):
+        assert _port_swap_ready(db_session, future_ss, [cc_pair], []) is True
+
+
+def test_sampler_respects_the_port_snapshot_bound(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """A document added after the port fixed its range is the FUTURE index attempt's
+    job, so the bound has to keep it out of the sample."""
+    cc_pair, _ = cc_pair_and_future
+    seed_cc_pair_documents(
+        db_session, cc_pair, 1, prefix=f"{_VERIFY_DOC_PREFIX}a-", chunk_count=2
+    )
+    seed_cc_pair_documents(
+        db_session, cc_pair, 1, prefix=f"{_VERIFY_DOC_PREFIX}z-", chunk_count=2
+    )
+
+    scope = PortedScope(
+        connector_id=cc_pair.connector_id,
+        credential_id=cc_pair.credential_id,
+        up_to_doc_id=f"{_VERIFY_DOC_PREFIX}m",
+    )
+    sampled = sample_ported_document_ids(db_session, [scope], 10)
+    assert all(doc_id.startswith(f"{_VERIFY_DOC_PREFIX}a-") for doc_id in sampled)
+    assert sampled
+
+
+def test_swap_holds_while_an_index_attempt_is_still_running(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    cc_pair, future_id = cc_pair_and_future
+    future_ss = db_session.get(SearchSettings, future_id)
+    assert future_ss is not None
+    _make_success_port(db_session, cc_pair.id, future_id)
+    seed_cc_pair_documents(
+        db_session, cc_pair, 1, prefix=_VERIFY_DOC_PREFIX, chunk_count=3
+    )
+    _clear_verification_backoff(future_id)
+
+    attempt_id = create_index_attempt(
+        connector_credential_pair_id=cc_pair.id,
+        search_settings_id=future_id,
+        db_session=db_session,
+    )
+    # create_index_attempt leaves the attempt queued, which must not hold the swap.
+    with patch.object(swap_index, "find_documents_missing_from_index", return_value=[]):
+        assert _port_swap_ready(db_session, future_ss, [cc_pair], []) is True
+
+    _clear_verification_backoff(future_id)
+    attempt = db_session.get(IndexAttempt, attempt_id)
+    assert attempt is not None
+    mark_attempt_in_progress(attempt, db_session)
+    db_session.expire_all()
+    with patch.object(
+        swap_index, "find_documents_missing_from_index", return_value=[]
+    ) as lookup:
+        assert _port_swap_ready(db_session, future_ss, [cc_pair], []) is False
+    # Held before the sample, so the network call never happened.
+    lookup.assert_not_called()
+
+    mark_attempt_succeeded(attempt_id, db_session)
+    db_session.expire_all()
+    _clear_verification_backoff(future_id)
+    with patch.object(swap_index, "find_documents_missing_from_index", return_value=[]):
+        assert _port_swap_ready(db_session, future_ss, [cc_pair], []) is True
+
+
+def test_writer_starting_during_the_sample_holds_the_swap(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    cc_pair, future_id = cc_pair_and_future
+    future_ss = db_session.get(SearchSettings, future_id)
+    assert future_ss is not None
+    _make_success_port(db_session, cc_pair.id, future_id)
+    seed_cc_pair_documents(
+        db_session, cc_pair, 1, prefix=_VERIFY_DOC_PREFIX, chunk_count=3
+    )
+    _clear_verification_backoff(future_id)
+
+    attempt_id = create_index_attempt(
+        connector_credential_pair_id=cc_pair.id,
+        search_settings_id=future_id,
+        db_session=db_session,
+    )
+
+    def _start_writing_mid_sample(*_args: object, **_kwargs: object) -> list[str]:
+        attempt = db_session.get(IndexAttempt, attempt_id)
+        assert attempt is not None
+        mark_attempt_in_progress(attempt, db_session)
+        db_session.expire_all()
+        return []
+
+    with patch.object(
+        swap_index,
+        "find_documents_missing_from_index",
+        side_effect=_start_writing_mid_sample,
+    ):
+        assert _port_swap_ready(db_session, future_ss, [cc_pair], []) is False
+
+
+def test_sampler_skips_a_scope_with_no_snapshot_bound(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """A port that found nothing when it started never claimed to copy anything. Its
+    files and documents completed later, and their FUTURE copy belongs to the dual-write
+    or the next index attempt, so sampling them would block a healthy swap."""
+    cc_pair, _ = cc_pair_and_future
+    seed_cc_pair_documents(
+        db_session, cc_pair, 2, prefix=f"{_VERIFY_DOC_PREFIX}late-", chunk_count=3
+    )
+    unbounded = PortedScope(
+        connector_id=cc_pair.connector_id,
+        credential_id=cc_pair.credential_id,
+        up_to_doc_id=None,
+    )
+    assert sample_ported_document_ids(db_session, [unbounded], 10) == []
+
+    user = create_test_user(db_session, "port_verify_unbounded")
+    try:
+        _add_user_file(db_session, user.id, 4, "completed-after-start.txt")
+        assert (
+            sample_ported_user_file_ids(
+                db_session,
+                [PortedUserScope(user_id=user.id, up_to_doc_id=None)],
+                per_scope_limit=10,
+            )
+            == []
+        )
+    finally:
+        db_session.rollback()
+        db_session.query(UserFile).filter(UserFile.user_id == user.id).delete(
+            synchronize_session="fetch"
+        )
+        db_session.commit()
+        delete_test_user(db_session, user)
+        db_session.commit()
+
+
+def _make_cc_pair_with_distinct_ids(
+    db_session: Session,
+) -> tuple[ConnectorCredentialPair, Credential | None]:
+    """A cc_pair whose connector_id and credential_id are different numbers.
+
+    make_cc_pair advances both id sequences together, so the gap between them never
+    changes and a pair often gets the same number for both. Only a lone insert moves
+    that gap, and one is enough because it happens only when the ids came out equal.
+    """
+    cc_pair = make_cc_pair(db_session)
+    if cc_pair.connector_id != cc_pair.credential_id:
+        return cc_pair, None
+
+    spare = Credential(source=DocumentSource.MOCK_CONNECTOR, credential_json={})
+    db_session.add(spare)
+    db_session.commit()
+    cleanup_cc_pair(db_session, cc_pair)
+
+    cc_pair = make_cc_pair(db_session)
+    assert cc_pair.connector_id != cc_pair.credential_id
+    return cc_pair, spare
+
+
+def test_sampler_keeps_connector_and_credential_apart(db_session: Session) -> None:
+    """Both ids are ints, so nothing but a test catches the two columns being swapped."""
+    cc_pair, spare_credential = _make_cc_pair_with_distinct_ids(db_session)
+    try:
+        seeded = seed_cc_pair_documents(
+            db_session, cc_pair, 1, prefix=f"{_VERIFY_DOC_PREFIX}pair-", chunk_count=2
+        )
+        correct = PortedScope(
+            connector_id=cc_pair.connector_id,
+            credential_id=cc_pair.credential_id,
+            up_to_doc_id=_ALL_DOCS_BOUND,
+        )
+        swapped = PortedScope(
+            connector_id=cc_pair.credential_id,
+            credential_id=cc_pair.connector_id,
+            up_to_doc_id=_ALL_DOCS_BOUND,
+        )
+        assert sample_ported_document_ids(db_session, [correct], 5) == seeded
+        assert sample_ported_document_ids(db_session, [swapped], 5) == []
+    finally:
+        db_session.rollback()
+        cleanup_cc_pair(db_session, cc_pair)
+        if spare_credential is not None:
+            db_session.delete(spare_credential)
+        db_session.commit()
+
+
+def test_pre_swap_check_gates_on_what_is_in_the_new_index(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    cc_pair, future_id = cc_pair_and_future
+    future_ss = db_session.get(SearchSettings, future_id)
+    assert future_ss is not None
+    _make_success_port(db_session, cc_pair.id, future_id)
+    seeded = seed_cc_pair_documents(
+        db_session, cc_pair, 1, prefix=_VERIFY_DOC_PREFIX, chunk_count=3
+    )
+    _clear_verification_backoff(future_id)
+
+    with (
+        patch.object(
+            swap_index, "find_documents_missing_from_index", return_value=seeded
+        ),
+        patch.object(swap_index, "find_documents_with_no_chunks", return_value=[]),
+    ):
+        assert _port_swap_ready(db_session, future_ss, [cc_pair], []) is False
+
+    _clear_verification_backoff(future_id)
+    with patch.object(
+        swap_index, "find_documents_missing_from_index", return_value=[]
+    ) as lookup:
+        assert _port_swap_ready(db_session, future_ss, [cc_pair], []) is True
+    # The real sampler fed the lookup, rather than handing over an empty list.
+    assert seeded[0] in lookup.call_args[0][1]
+
+
+def test_failed_verification_backs_off_before_rechecking(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """The gate ticks every 15 seconds, so after a failure the next tick has to hold
+    without repeating the sample and the lookup."""
+    cc_pair, future_id = cc_pair_and_future
+    future_ss = db_session.get(SearchSettings, future_id)
+    assert future_ss is not None
+    _make_success_port(db_session, cc_pair.id, future_id)
+    seeded = seed_cc_pair_documents(
+        db_session, cc_pair, 1, prefix=_VERIFY_DOC_PREFIX, chunk_count=3
+    )
+    _clear_verification_backoff(future_id)
+
+    with (
+        patch.object(
+            swap_index, "find_documents_missing_from_index", return_value=seeded
+        ),
+        patch.object(swap_index, "find_documents_with_no_chunks", return_value=[]),
+    ):
+        assert _port_swap_ready(db_session, future_ss, [cc_pair], []) is False
+
+    with patch.object(swap_index, "find_documents_missing_from_index") as lookup:
+        assert _port_swap_ready(db_session, future_ss, [cc_pair], []) is False
+        lookup.assert_not_called()
+    _clear_verification_backoff(future_id)
+
+
+def test_zero_retry_delay_writes_no_backoff_key(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """Redis rejects an expiry of 0, so a delay of 0 has to skip the key rather than
+    raise out of the swap gate on every failed check."""
+    cc_pair, future_id = cc_pair_and_future
+    future_ss = db_session.get(SearchSettings, future_id)
+    assert future_ss is not None
+    _make_success_port(db_session, cc_pair.id, future_id)
+    seeded = seed_cc_pair_documents(
+        db_session, cc_pair, 1, prefix=_VERIFY_DOC_PREFIX, chunk_count=3
+    )
+    _clear_verification_backoff(future_id)
+
+    with (
+        patch.object(swap_index, "PORT_SWAP_VERIFY_RETRY_DELAY_S", 0),
+        patch.object(
+            swap_index,
+            "find_documents_missing_from_index",
+            return_value=seeded,
+        ),
+        patch.object(swap_index, "find_documents_with_no_chunks", return_value=[]),
+    ):
+        assert _port_swap_ready(db_session, future_ss, [cc_pair], []) is False
+    # No key parked, so the next tick re-checks instead of waiting.
+    assert not get_redis_client().exists(_verification_backoff_key(future_id))
+
+
+def _add_user_file(
+    db_session: Session, user_id: UUID, chunk_count: int | None, name: str
+) -> UUID:
+    user_file = UserFile(
+        id=uuid4(),
+        user_id=user_id,
+        file_id=f"file-{uuid4().hex[:8]}",
+        name=name,
+        file_type="text/plain",
+        status=UserFileStatus.COMPLETED,
+        chunk_count=chunk_count,
+    )
+    db_session.add(user_file)
+    db_session.commit()
+    return user_file.id
+
+
+def test_user_file_sampler_covers_the_second_port_scope(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """User files live in their own table with no cc_pair, so the connector sampler
+    cannot reach them however it is written."""
+    _cc_pair, _future_id = cc_pair_and_future
+    user = create_test_user(db_session, "port_verify_userfile")
+    try:
+        with_chunks = _add_user_file(db_session, user.id, 4, "ported.txt")
+        _add_user_file(db_session, user.id, 0, "no-chunks.txt")
+        unknown_chunks = _add_user_file(db_session, user.id, None, "legacy.txt")
+
+        sampled = sample_ported_user_file_ids(
+            db_session,
+            [PortedUserScope(user_id=user.id, up_to_doc_id=_ALL_FILES_BOUND)],
+            per_scope_limit=10,
+        )
+        assert sorted(sampled) == sorted([str(with_chunks), str(unknown_chunks)])
+    finally:
+        db_session.rollback()
+        db_session.query(UserFile).filter(UserFile.user_id == user.id).delete(
+            synchronize_session="fetch"
+        )
+        db_session.commit()
+        delete_test_user(db_session, user)
+        db_session.commit()
+
+
+def test_port_swap_blocks_when_a_ported_user_file_is_missing(
+    db_session: Session, cc_pair_and_future: tuple[ConnectorCredentialPair, int]
+) -> None:
+    """Without the user-file sampler this passes while the user's files are absent
+    from the new index."""
+    _cc_pair, future_id = cc_pair_and_future
+    future_ss = db_session.get(SearchSettings, future_id)
+    assert future_ss is not None
+    user = create_test_user(db_session, "port_verify_userfile_gate")
+    try:
+        user_file_id = _add_user_file(db_session, user.id, 4, "ported.txt")
+        attempt = create_port_attempt(
+            db_session,
+            None,
+            future_id,
+            port_user_id=user.id,
+            up_to_doc_id=_ALL_FILES_BOUND,
+        )
+        mark_port_in_progress(db_session, attempt.id)
+        mark_port_succeeded(db_session, attempt.id)
+        db_session.expire_all()
+        _clear_verification_backoff(future_id)
+
+        with (
+            patch.object(
+                swap_index,
+                "find_documents_missing_from_index",
+                return_value=[str(user_file_id)],
+            ) as lookup,
+            patch.object(swap_index, "find_documents_with_no_chunks", return_value=[]),
+        ):
+            assert _port_swap_ready(db_session, future_ss, [], [user.id]) is False
+        assert str(user_file_id) in lookup.call_args[0][1]
+
+        _clear_verification_backoff(future_id)
+        with patch.object(
+            swap_index, "find_documents_missing_from_index", return_value=[]
+        ):
+            assert _port_swap_ready(db_session, future_ss, [], [user.id]) is True
+    finally:
+        db_session.rollback()
+        db_session.query(PortAttempt).filter(
+            PortAttempt.port_user_id == user.id
+        ).delete(synchronize_session="fetch")
+        db_session.query(UserFile).filter(UserFile.user_id == user.id).delete(
+            synchronize_session="fetch"
+        )
+        db_session.commit()
+        delete_test_user(db_session, user)
+        db_session.commit()
+        _clear_verification_backoff(future_id)

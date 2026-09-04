@@ -44,6 +44,7 @@ from onyx.document_index.opensearch.schema import (
     CONTENT_VECTOR_FIELD_NAME,
     DOCUMENT_ID_FIELD_NAME,
     MAX_CHUNK_SIZE_FIELD_NAME,
+    TENANT_ID_FIELD_NAME,
     TITLE_VECTOR_FIELD_NAME,
     DocumentChunk,
     DocumentChunkWithoutVectors,
@@ -166,6 +167,8 @@ _CLUSTER_BLOCK_ERROR_TYPE = "cluster_block_exception"
 # Chunks per PIT-scan page. A port doc-batch is small (INDEX_BATCH_SIZE docs), so
 # one page covers a batch; paging still protects against a pathological doc.
 _PIT_SCAN_PAGE_SIZE = 1000
+# Batched so one request cannot exceed the cluster's http.max_content_length.
+_MGET_BATCH_SIZE = 500
 
 
 def is_cluster_block_error(e: Exception) -> bool:
@@ -1798,6 +1801,7 @@ class OpenSearchIndexClient(OpenSearchClient):
         self,
         pit_id: str,
         doc_ids: list[str],
+        tenant_state: TenantState,
         search_after: list[object] | None = None,
         page_size: int = _PIT_SCAN_PAGE_SIZE,
         keep_alive: str = PIT_KEEP_ALIVE,
@@ -1812,6 +1816,7 @@ class OpenSearchIndexClient(OpenSearchClient):
         Args:
             pit_id: The point-in-time id from open_pit.
             doc_ids: The document ids whose chunks to fetch.
+            tenant_state: Scopes the scan to this tenant.
             search_after: The sort cursor from the previous page; None for the
                 first page.
             page_size: Max chunks per page.
@@ -1836,7 +1841,7 @@ class OpenSearchIndexClient(OpenSearchClient):
         try:
             result = self._client.search(
                 body=self._pit_scan_body(
-                    pit_id, doc_ids, search_after, page_size, keep_alive
+                    pit_id, doc_ids, tenant_state, search_after, page_size, keep_alive
                 )
             )
         except NotFoundError as e:
@@ -1850,7 +1855,7 @@ class OpenSearchIndexClient(OpenSearchClient):
             pit_id = self.open_pit(keep_alive)
             result = self._client.search(
                 body=self._pit_scan_body(
-                    pit_id, doc_ids, search_after, page_size, keep_alive
+                    pit_id, doc_ids, tenant_state, search_after, page_size, keep_alive
                 )
             )
 
@@ -1881,6 +1886,7 @@ class OpenSearchIndexClient(OpenSearchClient):
     def iter_chunks_for_doc_ids(
         self,
         doc_ids: list[str],
+        tenant_state: TenantState,
         page_size: int = _PIT_SCAN_PAGE_SIZE,
         keep_alive: str = PIT_KEEP_ALIVE,
     ) -> Iterator[list[DocumentChunkWithoutVectors]]:
@@ -1892,6 +1898,7 @@ class OpenSearchIndexClient(OpenSearchClient):
 
         Args:
             doc_ids: The document ids whose chunks to scan.
+            tenant_state: Scopes the scan to this tenant.
             page_size: Max chunks per page.
             keep_alive: PIT lease extension applied on each search.
 
@@ -1907,6 +1914,7 @@ class OpenSearchIndexClient(OpenSearchClient):
                 chunks, search_after, pit_id = self.fetch_chunks_for_doc_ids(
                     pit_id,
                     doc_ids,
+                    tenant_state,
                     search_after=search_after,
                     page_size=page_size,
                     keep_alive=keep_alive,
@@ -1922,6 +1930,7 @@ class OpenSearchIndexClient(OpenSearchClient):
         self,
         pit_id: str,
         doc_ids: list[str],
+        tenant_state: TenantState,
         search_after: list[object] | None,
         page_size: int,
         keep_alive: str,
@@ -1931,22 +1940,26 @@ class OpenSearchIndexClient(OpenSearchClient):
         No index= is sent — the PIT pins the index; keep_alive in the pit block
         extends the lease on every page.
         """
+        filter_clauses: list[dict[str, Any]] = [
+            {"terms": {DOCUMENT_ID_FIELD_NAME: doc_ids}},
+            # OpenSearch holds no large/mini chunks today, so this matches everything;
+            # kept as a guard if that changes.
+            {"term": {MAX_CHUNK_SIZE_FIELD_NAME: DEFAULT_MAX_CHUNK_SIZE}},
+        ]
+        # The document_id field holds the raw Onyx id. Only the OpenSearch _id gets a
+        # tenant prefix, so a query matching on the field crosses tenants without this.
+        if tenant_state.multitenant:
+            filter_clauses.append(
+                {"term": {TENANT_ID_FIELD_NAME: {"value": tenant_state.tenant_id}}}
+            )
+
         body: dict[str, Any] = {
             "pit": {"id": pit_id, "keep_alive": keep_alive},
             "size": page_size,
             "_source": {
                 "excludes": [CONTENT_VECTOR_FIELD_NAME, TITLE_VECTOR_FIELD_NAME]
             },
-            "query": {
-                "bool": {
-                    "filter": [
-                        {"terms": {DOCUMENT_ID_FIELD_NAME: doc_ids}},
-                        # OpenSearch holds no large/mini chunks today, so this
-                        # matches everything; kept as a guard if that changes
-                        {"term": {MAX_CHUNK_SIZE_FIELD_NAME: DEFAULT_MAX_CHUNK_SIZE}},
-                    ]
-                }
-            },
+            "query": {"bool": {"filter": filter_clauses}},
             "sort": [
                 {DOCUMENT_ID_FIELD_NAME: "asc"},
                 {CHUNK_INDEX_FIELD_NAME: "asc"},
@@ -1965,6 +1978,32 @@ class OpenSearchIndexClient(OpenSearchClient):
         return _SEARCH_CONTEXT_MISSING_ERROR_TYPE in str(
             getattr(error, "info", "")  # ods: ignore[getattr]
         ) or _SEARCH_CONTEXT_MISSING_ERROR_TYPE in str(error)
+
+    def get_existing_chunk_ids(self, chunk_ids: list[str]) -> set[str]:
+        """Which of these chunk ids exist in the index, looked up by _id.
+
+        Looking chunks up by their exact id sees a write that a search has not caught up
+        with yet, so a chunk written moments ago still counts as present. A search would
+        report it absent until the index refreshes.
+
+        Raises on transport errors instead of returning an empty set, so a caller
+        cannot mistake an unreachable cluster for an index with nothing in it.
+        """
+        if not chunk_ids:
+            return set()
+
+        found: set[str] = set()
+        for start in range(0, len(chunk_ids), _MGET_BATCH_SIZE):
+            batch = chunk_ids[start : start + _MGET_BATCH_SIZE]
+            response = self._client.mget(
+                index=self._index_name,
+                body={"ids": batch},
+                _source=False,
+            )
+            found.update(
+                doc["_id"] for doc in response.get("docs", []) if doc.get("found")
+            )
+        return found
 
     @log_function_time(print_only=True, debug_only=True)
     def refresh_index(self) -> None:
