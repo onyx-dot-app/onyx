@@ -26,8 +26,14 @@ on:
 permissions:
   contents: read
 
-# One group per version, so the same release cannot run twice at once — a tag
-# push and a manual dispatch for it share a group.
+# Keyed on the raw trigger, so re-pushing a tag or re-dispatching a version
+# does not run it twice over. A tag push and a dispatch of the same version do
+# NOT share a group: the values differ (tf-provider/v1.2.3 against 1.2.3) and
+# expressions have no string replace to normalise them. Matching them would
+# need the resolved version, which only exists after a step runs, so it would
+# cost a separate job on every release. The duplicate-tag check below already
+# refuses that second run before it pushes anything, so this group is only
+# saving a wasted runner.
 #
 # Deliberately NOT one group for every release. A group holds one running and
 # one pending run, and a third cancels the pending one even with
