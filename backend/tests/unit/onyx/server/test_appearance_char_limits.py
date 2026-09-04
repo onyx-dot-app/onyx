@@ -10,9 +10,11 @@ face.
 import re
 from pathlib import Path
 
+import pydantic
 import pytest
 
 from ee.onyx.server.enterprise_settings.models import (
+    APPEARANCE_FIELD_MAX_LENGTHS,
     MAX_APPLICATION_NAME_LEN,
     MAX_CONSENT_SCREEN_PROMPT_LEN,
     MAX_GREETING_MESSAGE_LEN,
@@ -21,7 +23,9 @@ from ee.onyx.server.enterprise_settings.models import (
     MAX_LOWER_DISCLAIMER_CONTENT_LEN,
     MAX_POPUP_CONTENT_LEN,
     MAX_POPUP_HEADER_LEN,
+    EnterpriseSettings,
 )
+from ee.onyx.server.enterprise_settings.store import _clamp_appearance_fields
 from onyx.server.features.admin_banner.api import MAX_CONTENT_LEN, MAX_TITLE_LEN
 
 THEME_PAGE = (
@@ -77,3 +81,45 @@ def test_frontend_limit_matches_backend(field: str) -> None:
         f"{field}: the theme page says {_frontend_limits()[field]}, the API "
         f"enforces {BACKEND_LIMITS[field]}. Update whichever is stale."
     )
+
+
+# The comparison above only proves the two sets of numbers agree. It would keep
+# passing with every `max_length=` deleted, so the enforcement those numbers are
+# supposed to describe needs its own coverage.
+# `model_validate` rather than kwargs, and `model_dump` rather than `getattr`:
+# the field name is a parameter here, and both keep that dynamic access
+# something the type checker can still follow.
+@pytest.mark.parametrize("field,limit", sorted(APPEARANCE_FIELD_MAX_LENGTHS.items()))
+def test_field_accepts_its_limit(field: str, limit: int) -> None:
+    settings = EnterpriseSettings.model_validate({field: "x" * limit})
+    assert settings.model_dump()[field] == "x" * limit
+
+
+@pytest.mark.parametrize("field,limit", sorted(APPEARANCE_FIELD_MAX_LENGTHS.items()))
+def test_field_rejects_one_over(field: str, limit: int) -> None:
+    with pytest.raises(pydantic.ValidationError) as caught:
+        EnterpriseSettings.model_validate({field: "x" * (limit + 1)})
+    assert any(e["type"] == "string_too_long" for e in caught.value.errors())
+
+
+# A cap validates on the way out as well as in, so a blob stored before the cap
+# existed would make the settings endpoint unreadable. It is unauthenticated,
+# so that is a 500 for every caller and an admin page that cannot open to fix
+# the value.
+def test_oversized_stored_value_is_trimmed_rather_than_fatal() -> None:
+    field = "custom_lower_disclaimer_content"
+    limit = APPEARANCE_FIELD_MAX_LENGTHS[field]
+    stored = {field: "x" * (limit + 250), "application_name": "Onyx"}
+
+    settings = EnterpriseSettings.model_validate(_clamp_appearance_fields(stored))
+
+    assert settings.custom_lower_disclaimer_content is not None
+    assert len(settings.custom_lower_disclaimer_content) == limit
+    # Trimming one field must not discard the rest of the configuration.
+    assert settings.application_name == "Onyx"
+
+
+def test_clamping_leaves_a_value_within_its_limit_alone() -> None:
+    field = "custom_popup_header"
+    value = "x" * APPEARANCE_FIELD_MAX_LENGTHS[field]
+    assert _clamp_appearance_fields({field: value})[field] == value

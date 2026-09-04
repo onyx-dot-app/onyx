@@ -5,6 +5,7 @@ from typing import IO, Any, cast
 from fastapi import HTTPException, UploadFile
 
 from ee.onyx.server.enterprise_settings.models import (
+    APPEARANCE_FIELD_MAX_LENGTHS,
     AnalyticsScriptUpload,
     EnterpriseSettings,
 )
@@ -25,6 +26,32 @@ _LOGO_FILENAME = "__logo__"
 _LOGOTYPE_FILENAME = "__logotype__"
 
 
+def _clamp_appearance_fields(stored: dict[str, Any]) -> dict[str, Any]:
+    """Trims stored appearance strings to their caps.
+
+    The caps are `max_length` on the model, so they validate on the way in as
+    well as on the way out. A blob written before a cap existed, or under a
+    larger one, would otherwise raise on load — and `ee_fetch_settings` is
+    unauthenticated, so that is a 500 to every caller and an admin page that
+    cannot open to repair the value. Trimming keeps the settings readable and
+    leaves the admin looking at what is now stored, rather than at nothing.
+    """
+    clamped = dict(stored)
+    for field, limit in APPEARANCE_FIELD_MAX_LENGTHS.items():
+        value = clamped.get(field)
+        if isinstance(value, str) and len(value) > limit:
+            logger.warning(
+                "Enterprise setting %s was %d characters, over its %d limit; "
+                "trimming it to load. Re-save the theme settings to keep the "
+                "shortened value.",
+                field,
+                len(value),
+                limit,
+            )
+            clamped[field] = value[:limit]
+    return clamped
+
+
 def load_settings() -> EnterpriseSettings:
     """Loads settings data directly from DB. This should be used primarily
     for checking what is actually in the DB, aka for editing and saving back settings.
@@ -36,7 +63,9 @@ def load_settings() -> EnterpriseSettings:
     dynamic_config_store = get_kv_store()
     try:
         settings = EnterpriseSettings(
-            **cast(dict, dynamic_config_store.load(KV_ENTERPRISE_SETTINGS_KEY))
+            **_clamp_appearance_fields(
+                cast(dict, dynamic_config_store.load(KV_ENTERPRISE_SETTINGS_KEY))
+            )
         )
     except KvKeyNotFoundError:
         settings = EnterpriseSettings()

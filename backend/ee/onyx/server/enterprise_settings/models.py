@@ -38,14 +38,29 @@ class LogoDisplayStyle(str, Enum):
 #
 # The theme page keeps its own copy for its character counters. Keep the two in
 # step; `test_appearance_char_limits.py` fails when they drift.
-MAX_APPLICATION_NAME_LEN = 50
-MAX_GREETING_MESSAGE_LEN = 50
-MAX_LOGIN_SUBTITLE_LEN = 100
-MAX_HEADER_CONTENT_LEN = 100
-MAX_LOWER_DISCLAIMER_CONTENT_LEN = 500
-MAX_POPUP_HEADER_LEN = 100
-MAX_POPUP_CONTENT_LEN = 500
-MAX_CONSENT_SCREEN_PROMPT_LEN = 200
+MAX_APPLICATION_NAME_LEN: int = 50
+MAX_GREETING_MESSAGE_LEN: int = 50
+MAX_LOGIN_SUBTITLE_LEN: int = 100
+MAX_HEADER_CONTENT_LEN: int = 100
+MAX_LOWER_DISCLAIMER_CONTENT_LEN: int = 500
+MAX_POPUP_HEADER_LEN: int = 100
+MAX_POPUP_CONTENT_LEN: int = 500
+MAX_CONSENT_SCREEN_PROMPT_LEN: int = 200
+
+# Field name to cap, for callers that have to reconcile a stored value against
+# these limits rather than reject it. `load_settings` is the one that does:
+# the caps validate on deserialisation too, so a blob written before they
+# existed would otherwise make the settings endpoint unreadable.
+APPEARANCE_FIELD_MAX_LENGTHS: dict[str, int] = {
+    "application_name": MAX_APPLICATION_NAME_LEN,
+    "custom_greeting_message": MAX_GREETING_MESSAGE_LEN,
+    "custom_login_subtitle": MAX_LOGIN_SUBTITLE_LEN,
+    "custom_header_content": MAX_HEADER_CONTENT_LEN,
+    "custom_lower_disclaimer_content": MAX_LOWER_DISCLAIMER_CONTENT_LEN,
+    "custom_popup_header": MAX_POPUP_HEADER_LEN,
+    "custom_popup_content": MAX_POPUP_CONTENT_LEN,
+    "consent_screen_prompt": MAX_CONSENT_SCREEN_PROMPT_LEN,
+}
 
 
 class EnterpriseSettings(BaseModel):
