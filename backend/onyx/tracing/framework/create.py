@@ -12,7 +12,7 @@ from shared_configs.contextvars import get_current_tenant_id
 from .setup import get_trace_provider
 from .span_data import AgentSpanData, FunctionSpanData, GenerationSpanData
 from .spans import Span
-from .traces import Trace
+from .traces import Trace, TraceContentMode
 
 if TYPE_CHECKING:
     pass
@@ -31,6 +31,7 @@ def trace(
     trace_id: str | None = None,
     group_id: str | None = None,
     metadata: dict[str, Any] | None = None,
+    content_mode: TraceContentMode = TraceContentMode.FULL,
     disabled: bool = False,
 ) -> Trace:
     """
@@ -67,6 +68,7 @@ def trace(
         trace_id=trace_id,
         group_id=group_id,
         metadata=metadata,
+        content_mode=content_mode,
         disabled=disabled,
     )
 
@@ -77,6 +79,7 @@ def ensure_trace(
     trace_id: str | None = None,
     group_id: str | None = None,
     metadata: dict[str, Any] | None = None,
+    content_mode: TraceContentMode = TraceContentMode.FULL,
     disabled: bool = False,
 ) -> Iterator[Trace | None]:
     """
@@ -93,6 +96,7 @@ def ensure_trace(
         trace_id=trace_id,
         group_id=group_id,
         metadata=metadata,
+        content_mode=content_mode,
         disabled=disabled,
     ) as created_trace:
         yield created_trace
@@ -190,6 +194,7 @@ def generation_span(
     tools: Sequence[Mapping[str, Any]] | None = None,
     span_id: str | None = None,
     parent: Trace | Span[Any] | None = None,
+    content_mode: TraceContentMode | None = None,
     disabled: bool = False,
 ) -> Span[GenerationSpanData]:
     """Create a new generation span. The span will not be started automatically, you should either
@@ -234,5 +239,6 @@ def generation_span(
         ),
         span_id=span_id,
         parent=parent,
+        content_mode=content_mode,
         disabled=disabled,
     )

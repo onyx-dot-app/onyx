@@ -11,6 +11,7 @@ from . import util
 from .processor_interface import TracingProcessor
 from .scope import Scope
 from .span_data import SpanData
+from .traces import TraceContentMode
 
 TSpanData = TypeVar("TSpanData", bound=SpanData)
 
@@ -92,6 +93,11 @@ class Span(abc.ABC, Generic[TSpanData]):
         Returns:
             TSpanData: Data specific to this type of span (e.g., LLM generation data).
         """
+
+    @property
+    @abc.abstractmethod
+    def content_mode(self) -> TraceContentMode:
+        """Control whether processors can include operation content."""
 
     @abc.abstractmethod
     def start(self, mark_as_current: bool = False) -> None:
@@ -178,9 +184,14 @@ class NoOpSpan(Span[TSpanData]):
         span_data: The operation-specific data for this span.
     """
 
-    __slots__ = ("_span_data", "_prev_span_token")
+    __slots__ = ("_content_mode", "_span_data", "_prev_span_token")
 
-    def __init__(self, span_data: TSpanData):
+    def __init__(
+        self,
+        span_data: TSpanData,
+        content_mode: TraceContentMode = TraceContentMode.FULL,
+    ):
+        self._content_mode = content_mode
         self._span_data = span_data
         self._prev_span_token: contextvars.Token[Span[TSpanData] | None] | None = None
 
@@ -195,6 +206,10 @@ class NoOpSpan(Span[TSpanData]):
     @property
     def span_data(self) -> TSpanData:
         return self._span_data
+
+    @property
+    def content_mode(self) -> TraceContentMode:
+        return self._content_mode
 
     @property
     def parent_id(self) -> str | None:
@@ -249,6 +264,7 @@ class SpanImpl(Span[TSpanData]):
         "_trace_id",
         "_span_id",
         "_parent_id",
+        "_content_mode",
         "_started_at",
         "_ended_at",
         "_error",
@@ -264,10 +280,12 @@ class SpanImpl(Span[TSpanData]):
         parent_id: str | None,
         processor: TracingProcessor,
         span_data: TSpanData,
+        content_mode: TraceContentMode = TraceContentMode.FULL,
     ):
         self._trace_id = trace_id
         self._span_id = span_id or util.gen_span_id()
         self._parent_id = parent_id
+        self._content_mode = content_mode
         self._started_at: str | None = None
         self._ended_at: str | None = None
         self._processor = processor
@@ -286,6 +304,10 @@ class SpanImpl(Span[TSpanData]):
     @property
     def span_data(self) -> TSpanData:
         return self._span_data
+
+    @property
+    def content_mode(self) -> TraceContentMode:
+        return self._content_mode
 
     @property
     def parent_id(self) -> str | None:

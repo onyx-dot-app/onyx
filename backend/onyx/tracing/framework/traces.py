@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import abc
 import contextvars
+from enum import StrEnum
 from types import TracebackType
 from typing import TYPE_CHECKING, Any
 
@@ -12,12 +13,13 @@ if TYPE_CHECKING:
     from .processor_interface import TracingProcessor
 
 
-class Trace(abc.ABC):
-    """A complete end-to-end workflow containing related spans and metadata.
+class TraceContentMode(StrEnum):
+    FULL = "full"
+    METADATA_ONLY = "metadata_only"
 
-    A trace represents a logical workflow or operation (e.g., "Customer Service Query"
-    or "Code Generation") and contains all the spans (individual operations) that occur
-    during that workflow.
+
+class Trace(abc.ABC):
+    """A workflow lifecycle and correlation root for independently processed spans.
 
     Example:
         ```python
@@ -81,7 +83,6 @@ class Trace(abc.ABC):
 
         Notes:
             - Must be called to complete the trace
-            - Finalizes all open spans
             - Thread-safe when using reset_current
         """
 
@@ -113,6 +114,11 @@ class Trace(abc.ABC):
             - Helps identify the purpose of the trace
         """
 
+    @property
+    @abc.abstractmethod
+    def content_mode(self) -> TraceContentMode:
+        """Control whether child spans can capture operation content."""
+
     @abc.abstractmethod
     def export(self) -> dict[str, Any] | None:
         """Export the trace data as a serializable dictionary.
@@ -121,7 +127,6 @@ class Trace(abc.ABC):
             dict | None: Dictionary containing trace data, or None if tracing is disabled.
 
         Notes:
-            - Includes all spans and their data
             - Used for sending traces to backends
             - May include metadata and group ID
         """
@@ -142,8 +147,9 @@ class NoOpTrace(Trace):
         ```
     """
 
-    def __init__(self) -> None:
+    def __init__(self, content_mode: TraceContentMode = TraceContentMode.FULL) -> None:
         self._started = False
+        self._content_mode = content_mode
         self._prev_context_token: contextvars.Token[Trace | None] | None = None
 
     def __enter__(self) -> Trace:
@@ -190,6 +196,10 @@ class NoOpTrace(Trace):
         """
         return "no-op"
 
+    @property
+    def content_mode(self) -> TraceContentMode:
+        return self._content_mode
+
     def export(self) -> dict[str, Any] | None:
         """Export the trace data as a dictionary.
 
@@ -210,6 +220,7 @@ class TraceImpl(Trace):
     __slots__ = (
         "_name",
         "_trace_id",
+        "_content_mode",
         "group_id",
         "metadata",
         "_prev_context_token",
@@ -224,9 +235,11 @@ class TraceImpl(Trace):
         group_id: str | None,
         metadata: dict[str, Any] | None,
         processor: TracingProcessor,
+        content_mode: TraceContentMode = TraceContentMode.FULL,
     ):
         self._name = name
         self._trace_id = trace_id or util.gen_trace_id()
+        self._content_mode = content_mode
         self.group_id = group_id
         self.metadata = metadata
         self._prev_context_token: contextvars.Token[Trace | None] | None = None
@@ -240,6 +253,10 @@ class TraceImpl(Trace):
     @property
     def name(self) -> str:
         return self._name
+
+    @property
+    def content_mode(self) -> TraceContentMode:
+        return self._content_mode
 
     def start(self, mark_as_current: bool = False) -> None:
         if self._started:

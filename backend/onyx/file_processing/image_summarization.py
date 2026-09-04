@@ -21,6 +21,7 @@ from onyx.llm.models import (
 from onyx.llm.utils import llm_response_to_string
 from onyx.server.metrics.image_processing import track_image_summarization
 from onyx.tracing.flows import LLMFlow
+from onyx.tracing.framework.traces import TraceContentMode
 from onyx.tracing.llm_utils import llm_generation_span, record_llm_response
 from onyx.utils.b64 import get_image_type_from_bytes
 from onyx.utils.logger import setup_logger
@@ -136,8 +137,8 @@ def _summarize_image(
             llm=llm,
             flow=LLMFlow.IMAGE_SUMMARIZATION,
             input_messages=[{"type": "image_summarization_request"}],
+            content_mode=TraceContentMode.METADATA_ONLY,
         ) as span_generation:
-            # Note: We don't include the actual image in the span input to avoid bloating traces
             response = llm.invoke(
                 messages, total_timeout_override=IMAGE_SUMMARIZATION_TIMEOUT
             )
