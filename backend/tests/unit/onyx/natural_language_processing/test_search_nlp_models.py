@@ -3,6 +3,7 @@ from threading import Lock
 from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 from httpx import AsyncClient
 from litellm.exceptions import RateLimitError
@@ -10,6 +11,7 @@ from tenacity import wait_none
 
 from onyx.llm.constants import LlmProviderNames
 from onyx.natural_language_processing.search_nlp_models import (
+    AuthenticationError,
     CloudEmbedding,
     EmbeddingModel,
     clean_model_name,
@@ -146,6 +148,47 @@ async def test_openai_compatible_embedding_omits_dimensions_when_not_reduced(
 
         create_kwargs = mock_client.embeddings.create.call_args.kwargs
         assert create_kwargs["dimensions"] is openai.omit
+
+
+@pytest.mark.asyncio
+async def test_authentication_error_names_the_provider_by_value(
+    mock_http_client: AsyncMock,  # noqa: ARG001
+) -> None:
+    """`str()` on a `str, Enum` member yields `EmbeddingProvider.OPENAI_COMPATIBLE`,
+    so the message must use `.value` to stay readable."""
+    import openai
+
+    with patch("openai.AsyncOpenAI") as mock_openai:
+        mock_client = AsyncMock()
+        mock_openai.return_value = mock_client
+        mock_client.embeddings.create = AsyncMock(
+            side_effect=openai.AuthenticationError(
+                message="bad key",
+                response=httpx.Response(
+                    status_code=401, request=httpx.Request("POST", "https://host/v1")
+                ),
+                body=None,
+            )
+        )
+
+        embedding = CloudEmbedding(
+            "fake-key",
+            EmbeddingProvider.OPENAI_COMPATIBLE,
+            api_url="https://host/v1",
+        )
+
+        with patch.object(cast(Any, CloudEmbedding.embed).retry, "wait", wait_none()):
+            with pytest.raises(AuthenticationError) as caught:
+                await embedding.embed(
+                    texts=["test1"],
+                    text_type=EmbedTextType.PASSAGE,
+                    model_name="Qwen3-Embedding-8B",
+                )
+
+        assert caught.value.provider == "openai_compatible"
+        assert "EmbeddingProvider." not in str(caught.value)
+
+    await embedding.aclose()
 
 
 @pytest.mark.asyncio

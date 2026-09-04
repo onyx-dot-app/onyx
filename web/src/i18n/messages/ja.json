@@ -4928,6 +4928,7 @@
         "modelDimPositive": "正の整数を入力してください",
         "modelDimRequired": "モデルの次元数は必須です",
         "modelNameRequired": "モデル名は必須です",
+        "reducedDimensionAboveModelDim": "モデルの次元数より大きくすることはできません",
         "serviceAccountJsonInvalid": "有効な Google サービスアカウントの JSON ファイルを指定してください",
         "serviceAccountJsonRequired": "サービスアカウント JSON は必須です",
         "targetUrlRequired": "ターゲット URL は必須です",

@@ -4928,6 +4928,7 @@
         "modelDimPositive": "양의 정수여야 합니다",
         "modelDimRequired": "모델 차원은 필수입니다",
         "modelNameRequired": "모델 이름은 필수입니다",
+        "reducedDimensionAboveModelDim": "모델 차원보다 클 수 없습니다",
         "serviceAccountJsonInvalid": "유효한 Google 서비스 계정 JSON 파일이어야 합니다",
         "serviceAccountJsonRequired": "서비스 계정 JSON은 필수입니다",
         "targetUrlRequired": "대상 URL은 필수입니다",

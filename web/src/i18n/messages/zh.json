@@ -4928,6 +4928,7 @@
         "modelDimPositive": "必须是正整数",
         "modelDimRequired": "模型维度为必填项",
         "modelNameRequired": "模型名称为必填项",
+        "reducedDimensionAboveModelDim": "不能大于模型维度",
         "serviceAccountJsonInvalid": "必须是有效的 Google 服务账号 JSON 文件",
         "serviceAccountJsonRequired": "服务账号 JSON 为必填项",
         "targetUrlRequired": "目标 URL 为必填项",

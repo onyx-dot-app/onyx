@@ -151,6 +151,13 @@ export class IndexSettingsPage {
       .fill(String(spec.modelDim));
   }
 
+  /** Asserts the open setup modal rejects its current values. */
+  async expectProviderSetupBlocked(): Promise<void> {
+    await expect(
+      this.activeSetupModal.getByRole("button", { name: /connect/i })
+    ).toBeDisabled({ timeout: 5000 });
+  }
+
   /** Submit the open setup modal ("Connect") and wait for it to close. */
   async submitProviderSetup(): Promise<void> {
     const connectButton = this.activeSetupModal.getByRole("button", {

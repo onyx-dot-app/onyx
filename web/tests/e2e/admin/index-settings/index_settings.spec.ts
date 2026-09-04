@@ -627,6 +627,10 @@ test.describe("Index Settings — empty-registry providers @exclusive", () => {
         modelDim: 1024,
       });
       if (reducedDimension !== undefined) {
+        // Truncation can only shorten a vector, so a trim wider than the
+        // model's native width must block submission.
+        await indexSettings.fillReducedDimension(2048);
+        await indexSettings.expectProviderSetupBlocked();
         await indexSettings.fillReducedDimension(reducedDimension);
       }
       await indexSettings.submitProviderSetup();

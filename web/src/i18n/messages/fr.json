@@ -4928,6 +4928,7 @@
         "modelDimPositive": "Doit être un entier positif",
         "modelDimRequired": "La dimension du modèle est obligatoire",
         "modelNameRequired": "Le nom du modèle est obligatoire",
+        "reducedDimensionAboveModelDim": "Ne doit pas être supérieur à la dimension du modèle",
         "serviceAccountJsonInvalid": "Doit être un fichier JSON de compte de service Google valide",
         "serviceAccountJsonRequired": "Le JSON du compte de service est obligatoire",
         "targetUrlRequired": "L'URL cible est obligatoire",

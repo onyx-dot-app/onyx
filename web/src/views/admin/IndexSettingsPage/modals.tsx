@@ -516,6 +516,18 @@ function OpenAICompatibleProviderModal({
           const parsed = Number(value);
           return Number.isInteger(parsed) && parsed > 0 && parsed <= 10000;
         }
+      )
+      // Truncation can only shorten a vector. A larger value would size the
+      // index above what the model returns, which breaks indexing.
+      .test(
+        "not-above-model-dim",
+        t("validation.reducedDimensionAboveModelDim"),
+        function (value) {
+          if (!value?.trim()) return true;
+          const modelDim = Number(this.parent.modelDim);
+          if (!Number.isInteger(modelDim) || modelDim <= 0) return true;
+          return Number(value) <= modelDim;
+        }
       ),
     ...modelSpecSchemaShape(t),
   });
