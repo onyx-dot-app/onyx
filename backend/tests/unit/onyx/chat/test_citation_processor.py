@@ -139,7 +139,7 @@ def test_default_initialization() -> None:
     assert processor.curr_segment == ""
     assert processor.hold == ""
     assert processor.cited_documents_in_order == []
-    assert processor.cited_document_ids == set()
+    assert processor.document_id_to_citation_number == {}
     assert processor.recent_cited_documents == set()
     assert processor.non_citation_count == 0
 
@@ -497,6 +497,109 @@ def test_citation_info_order_matches_first_citation(
     assert citations[0].citation_number == 3
     assert citations[1].citation_number == 1
     assert citations[2].citation_number == 2
+
+
+@pytest.mark.parametrize("first_number, alias_number", [(4, 8), (8, 4)])
+@pytest.mark.parametrize("split_tokens", [False, True])
+def test_citation_alias_uses_first_cited_number(
+    first_number: int, alias_number: int, split_tokens: bool
+) -> None:
+    document = create_test_search_doc()
+    other_chunk = create_test_search_doc(chunk_ind=1)
+    other_document = create_test_search_doc(
+        document_id="other-doc", link="https://example.com/other"
+    )
+    processor = DynamicCitationProcessor()
+    processor.update_citation_mapping({4: document, 8: other_chunk, 2: other_document})
+    text = f"First [{first_number}]. Again [{alias_number}]. Other [2]."
+    tokens: list[str | None] = list(text) if split_tokens else [text]
+
+    output, citations = process_tokens(processor, tokens)
+
+    assert output == (
+        f"First [[{first_number}]](https://example.com/doc1). "
+        f"Again [[{first_number}]](https://example.com/doc1). "
+        "Other [[2]](https://example.com/other)."
+    )
+    assert citations == [
+        CitationInfo(citation_number=first_number, document_id=document.document_id),
+        CitationInfo(citation_number=2, document_id=other_document.document_id),
+    ]
+    assert processor.get_seen_citations() == {
+        4: document,
+        8: other_chunk,
+        2: other_document,
+    }
+    assert processor.get_cited_document_ids() == [
+        document.document_id,
+        other_document.document_id,
+    ]
+    assert processor.num_cited_documents == 2
+
+
+@pytest.mark.parametrize("markers", ["[4, 8]", "[[4]][[8]]", "【4】［8］"])
+def test_adjacent_citation_aliases_use_first_cited_number(markers: str) -> None:
+    document = create_test_search_doc()
+    processor = DynamicCitationProcessor()
+    processor.update_citation_mapping({4: document, 8: document})
+
+    output, citations = process_tokens(processor, [markers])
+
+    assert output.count("[[4]](https://example.com/doc1)") == 2
+    assert "[[8]]" not in output
+    assert citations == [
+        CitationInfo(citation_number=4, document_id=document.document_id)
+    ]
+    assert processor.get_seen_citations() == {4: document, 8: document}
+
+
+def test_citation_alias_added_after_first_citation() -> None:
+    document = create_test_search_doc()
+    processor = DynamicCitationProcessor()
+    processor.update_citation_mapping({8: document})
+    _, first_citations = process_tokens(processor, ["First [8]."])
+
+    processor.update_citation_mapping(
+        {
+            4: create_test_search_doc(
+                chunk_ind=1, link="https://example.com/doc1#section"
+            )
+        }
+    )
+    processor.reset_recent_citations()
+    output, later_citations = process_tokens(processor, [" Again [", "4", "]."])
+
+    assert output == " Again [[8]](https://example.com/doc1#section)."
+    assert first_citations == [
+        CitationInfo(citation_number=8, document_id=document.document_id)
+    ]
+    assert later_citations == []
+    assert set(processor.get_seen_citations()) == {4, 8}
+    assert processor.get_next_citation_number() == 9
+    assert processor.get_cited_documents() == [document]
+
+
+@pytest.mark.parametrize(
+    "mode, expected",
+    [
+        (CitationMode.KEEP_MARKERS, "First [4]. Again [8]."),
+        (CitationMode.REMOVE, "First. Again."),
+    ],
+)
+def test_citation_aliases_preserve_non_hyperlink_modes(
+    mode: CitationMode, expected: str
+) -> None:
+    document = create_test_search_doc()
+    processor = DynamicCitationProcessor(citation_mode=mode)
+    processor.update_citation_mapping({4: document, 8: document})
+
+    output, citations = process_tokens(processor, ["First [4]. Again [8]."])
+
+    assert output == expected
+    assert citations == []
+    assert processor.get_seen_citations() == {4: document, 8: document}
+    assert processor.get_cited_documents() == []
+    assert processor.num_cited_documents == 0
 
 
 # ============================================================================
