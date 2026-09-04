@@ -406,6 +406,9 @@ def get_cc_pair_full_info(
         groups=[
             relationship.user_group_id
             for relationship in get_cc_pair_groups_for_ids(db_session, [cc_pair_id])
+            # A group update tombstones the old row until the sync clears it, so
+            # an unfiltered read reports groups the pair has already left.
+            if relationship.is_current
         ],
         number_of_index_attempts=count_index_attempts_for_cc_pair(
             db_session=db_session,

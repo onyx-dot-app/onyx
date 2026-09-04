@@ -233,8 +233,10 @@ def _resolve_embedding_api_key(
     """Pick the api_key to store for an embedding provider."""
     if intent is ApiKeyIntent.ROTATED:
         return incoming
-    if intent is ApiKeyIntent.UNCHANGED:
-        return existing.get_value(apply_mask=False) if existing is not None else None
+    if intent is ApiKeyIntent.UNCHANGED and existing is not None:
+        return existing.get_value(apply_mask=False)
+    # UNCHANGED with nothing stored says to keep a key that does not exist, so
+    # read the request instead of creating a provider with no key at all.
     return _restore_masked_embedding_api_key(incoming, existing)
 
 
