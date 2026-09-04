@@ -15,9 +15,6 @@ import { SEARCH_TOOL_ID } from "@/lib/tools/constants";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
 import { ValidSources } from "@/lib/types";
 
-/** Stable empty list, so gating on it does not retrigger the memo each render. */
-const EMPTY_SOURCES: ValidSources[] = [];
-
 /** A source the picker can show: {@link getConfiguredSources} guarantees a key. */
 type ConfiguredSource = ReturnType<typeof getConfiguredSources>[number];
 
@@ -88,11 +85,9 @@ function useToolsPopoverState({
   const { currentProjectId } = useProjectsContext();
   const inProject = currentProjectId != null;
 
-  // A partial list reads as the complete set, which would initialise
-  // preferences against a subset and persist that. Hold off until the fetch
-  // settles. Agent-declared sources need no fetch, so they are unaffected.
-  const fetchedSources =
-    sourcesLoading || sourcesError ? EMPTY_SOURCES : availableSources;
+  // A partial list must not become the user's persisted choice, but it is
+  // still worth showing. Only initialisation waits for the fetch to settle.
+  const sourcesReady = !sourcesLoading && !sourcesError;
 
   const hasSearchTool = agent.tools.some(
     (tool) => tool.in_code_tool_id === SEARCH_TOOL_ID
@@ -101,11 +96,11 @@ function useToolsPopoverState({
   // `knowledge_sources` is the complete set this agent can search over. Empty
   // on a searching agent means "everything accessible", not "nothing".
   const effectiveAvailableSources = useMemo<ValidSources[]>(() => {
-    if (isAssistant(agent)) return fetchedSources;
+    if (isAssistant(agent)) return availableSources;
     const declared = agent.knowledge_sources ?? [];
-    if (declared.length === 0 && hasSearchTool) return fetchedSources;
+    if (declared.length === 0 && hasSearchTool) return availableSources;
     return declared as ValidSources[];
-  }, [agent, fetchedSources, hasSearchTool]);
+  }, [agent, availableSources, hasSearchTool]);
 
   const {
     sourcesInitialized,
@@ -118,6 +113,7 @@ function useToolsPopoverState({
     availableSources: effectiveAvailableSources,
     selectedSources,
     setSelectedSources,
+    ready: sourcesReady,
   });
 
   const configuredSources = useMemo(
