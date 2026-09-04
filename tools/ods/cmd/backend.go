@@ -13,6 +13,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/childproc"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/portutil"
 )
@@ -138,20 +139,8 @@ func runBackendService(name, module, port string, opts *BackendOptions) {
 
 	svcCmd := exec.Command("uv", uvicornArgs...)
 	svcCmd.Dir = backendDir
-	svcCmd.Stdout = os.Stdout
-	svcCmd.Stderr = os.Stderr
-	svcCmd.Stdin = os.Stdin
 	svcCmd.Env = mergedEnv
-
-	if err := svcCmd.Run(); err != nil {
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			if code := exitErr.ExitCode(); code != -1 {
-				os.Exit(code)
-			}
-		}
-		log.Fatalf("Failed to run %s: %v", name, err)
-	}
+	childproc.Run(svcCmd, name)
 }
 
 // eeEnvDefaults returns env entries for EE and license enforcement settings.

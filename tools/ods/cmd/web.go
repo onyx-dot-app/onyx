@@ -19,6 +19,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/childproc"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
 )
 
@@ -48,7 +49,9 @@ func NewWebCommand() *cobra.Command {
 	return cmd
 }
 
-func runWebScript(args []string) {
+// prepareWebDir returns the web directory once its dependencies and workspace
+// library builds are current.
+func prepareWebDir() string {
 	webDir, err := webDir()
 	if err != nil {
 		log.Fatalf("Failed to find web directory: %v", err)
@@ -58,16 +61,17 @@ func runWebScript(args []string) {
 		log.Infof("%s, running bun install --frozen-lockfile...", reason)
 		installCmd := exec.Command("bun", "install", "--frozen-lockfile")
 		installCmd.Dir = webDir
-		installCmd.Stdout = os.Stdout
-		installCmd.Stderr = os.Stderr
-		installCmd.Stdin = os.Stdin
-		if err := installCmd.Run(); err != nil {
-			log.Fatalf("Failed to run bun install: %v", err)
-		}
+		childproc.Run(installCmd, "bun install")
 		writeLockStamp(webDir)
 	}
 
 	ensureWorkspaceLibsBuilt(webDir)
+
+	return webDir
+}
+
+func runWebScript(args []string) {
+	webDir := prepareWebDir()
 
 	scriptName := args[0]
 	scriptArgs := args[1:]
@@ -85,21 +89,7 @@ func runWebScript(args []string) {
 
 	webCmd := exec.Command("bun", bunArgs...)
 	webCmd.Dir = webDir
-	webCmd.Stdout = os.Stdout
-	webCmd.Stderr = os.Stderr
-	webCmd.Stdin = os.Stdin
-
-	if err := webCmd.Run(); err != nil {
-		// For wrapped commands, preserve the child process's exit code and
-		// avoid duplicating already-printed stderr output.
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			if code := exitErr.ExitCode(); code != -1 {
-				os.Exit(code)
-			}
-		}
-		log.Fatalf("Failed to run bun: %v", err)
-	}
+	childproc.Run(webCmd, "bun")
 }
 
 // lockStampName is the file inside node_modules recording the sha256 of the
