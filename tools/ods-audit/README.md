@@ -1,6 +1,6 @@
 # Onyx Devtools Audit
 
-`ods-audit` is the vulnerability auditor of [`ods`](../ods/README.md), the
+`ods-audit` is the vulnerability auditor of [`ods`](https://github.com/onyx-dot-app/onyx/blob/main/tools/ods/README.md), the
 [onyx.app](https://github.com/onyx-dot-app/onyx) devtools utility script.
 
 It scans lockfiles, container images, open Dependabot alerts, and the GitHub
@@ -16,5 +16,5 @@ uv tool install 'onyx-devtools[audit]'
 
 Then run it as `ods audit`, which forwards to `ods-audit`, or call `ods-audit`
 directly. Both take the same arguments. See the
-[`ods audit` documentation](../ods/README.md#audit---audit-dependencies-for-vulnerabilities)
+[`ods audit` documentation](https://github.com/onyx-dot-app/onyx/blob/main/tools/ods/README.md#audit---audit-dependencies-for-vulnerabilities)
 for the full reference.

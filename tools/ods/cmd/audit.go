@@ -57,13 +57,18 @@ func runAudit(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
+	// Flag parsing is off, so args still holds every root flag, such as --debug.
 	c := exec.Command(bin, args...)
 	c.Stdin, c.Stdout, c.Stderr = os.Stdin, os.Stdout, os.Stderr
 	if err := c.Run(); err != nil {
 		// Pass the exit code through: `ods audit` gates deploys on it.
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
-			os.Exit(exitErr.ExitCode())
+			// A signal kill has no exit code, and ExitCode() reports -1 for it.
+			if code := exitErr.ExitCode(); code >= 0 {
+				os.Exit(code)
+			}
+			log.Fatalf("%s was terminated: %v", auditBinary, exitErr)
 		}
 		log.Fatalf("Failed to run %s: %v", bin, err)
 	}

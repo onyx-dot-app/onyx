@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
+	"strings"
 	"testing"
 )
 
@@ -57,6 +59,47 @@ func TestLookupAuditBinary(t *testing.T) {
 			t.Fatalf("expected an error, got %q", got)
 		}
 	})
+}
+
+// TestAuditForwardsArgs checks that every argument, root flags included, reaches
+// the auditor unchanged.
+func TestAuditForwardsArgs(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the fake auditor is a shell script")
+	}
+	cases := []struct {
+		name string
+		argv []string
+		want []string
+	}{
+		{"root flags", []string{"--debug", "audit", "--python"}, []string{"--debug", "--python"}},
+		{"subcommand only", []string{"audit", "--python"}, []string{"--python"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			dir := t.TempDir()
+			record := filepath.Join(dir, "args")
+			script := "#!/bin/sh\nprintf '%s\\n' \"$@\" > " + record + "\n"
+			if err := os.WriteFile(filepath.Join(dir, auditBinary), []byte(script), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("PATH", dir)
+
+			root := NewRootCommand()
+			root.SetArgs(c.argv)
+			if err := root.Execute(); err != nil {
+				t.Fatalf("Execute: %v", err)
+			}
+
+			data, err := os.ReadFile(record)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := strings.Fields(string(data)); !slices.Equal(got, c.want) {
+				t.Fatalf("got %q, want %q", got, c.want)
+			}
+		})
+	}
 }
 
 func TestWantsHelp(t *testing.T) {
