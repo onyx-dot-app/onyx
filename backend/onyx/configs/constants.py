@@ -17,6 +17,16 @@ MASK_CREDENTIAL_CHAR = "\u2022"
 MASK_CREDENTIAL_LONG_RE = re.compile(r"^.{4}\.{3}.{4}$")
 
 SOURCE_TYPE = "source_type"
+
+# Document-metadata contract for source-code files. Here rather than under
+# `connectors/` so retrieval can read it without importing across layers.
+CODE_FILE_METADATA_TYPE = "CodeFile"
+CODE_FILE_TYPE_KEY = "type"
+CODE_FILE_LANGUAGE_KEY = "language"
+CODE_FILE_REPO_KEY = "repo"
+CODE_FILE_PATH_KEY = "path"
+CODE_FILE_BRANCH_KEY = "branch"
+CODE_FILE_COMMIT_SHA_KEY = "commit_sha"
 # stored in the `metadata` of a chunk. Used to signify that this chunk should
 # not be used for QA. For example, Google Drive file types which can't be parsed
 # are still useful as a search result but not for QA.
@@ -420,6 +430,7 @@ class FileOrigin(str, Enum):
     PLAINTEXT_CACHE = "plaintext_cache"
     OTHER = "other"
     QUERY_HISTORY_CSV = "query_history_csv"
+    REPO_ARCHIVE_CACHE = "repo_archive_cache"
     SANDBOX_SNAPSHOT = "sandbox_snapshot"
     SKILL_BUNDLE = "skill_bundle"
     USER_FILE = "user_file"

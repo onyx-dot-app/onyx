@@ -6,15 +6,11 @@ from onyx.configs.constants import SECTION_SEPARATOR
 from onyx.connectors.models import Section
 from onyx.indexing.chunking.section_chunker import (
     AccumulatorState,
-    ChunkPayload,
     SectionChunker,
     SectionChunkerOutput,
+    build_payloads,
 )
-from onyx.natural_language_processing.utils import (
-    BaseTokenizer,
-    count_tokens,
-    split_text_by_tokens,
-)
+from onyx.natural_language_processing.utils import BaseTokenizer, count_tokens
 from onyx.utils.text_processing import clean_text, shared_precompare_cleanup
 from shared_configs.configs import STRICT_CHUNK_TOKEN_LIMIT
 
@@ -90,29 +86,17 @@ class TextChunker(SectionChunker):
 
         split_texts = cast(list[str], self.chunk_splitter.chunk(section_text))
         for i, split_text in enumerate(split_texts):
-            if (
-                STRICT_CHUNK_TOKEN_LIMIT
-                and count_tokens(split_text, self.tokenizer) > content_token_limit
-            ):
-                smaller_chunks = split_text_by_tokens(
-                    split_text, self.tokenizer, content_token_limit
+            payloads.extend(
+                build_payloads(
+                    text=split_text,
+                    link=section_link,
+                    tokenizer=self.tokenizer,
+                    content_token_limit=content_token_limit,
+                    is_continuation=(i != 0),
+                    enforce_token_limit=STRICT_CHUNK_TOKEN_LIMIT,
+                    reset_continuation_on_split=True,
                 )
-                for j, small_chunk in enumerate(smaller_chunks):
-                    payloads.append(
-                        ChunkPayload(
-                            text=small_chunk,
-                            links={0: section_link},
-                            is_continuation=(j != 0),
-                        )
-                    )
-            else:
-                payloads.append(
-                    ChunkPayload(
-                        text=split_text,
-                        links={0: section_link},
-                        is_continuation=(i != 0),
-                    )
-                )
+            )
 
         return SectionChunkerOutput(
             payloads=payloads,

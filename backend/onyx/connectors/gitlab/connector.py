@@ -13,7 +13,11 @@ from onyx.configs.app_configs import (
     GITLAB_CONNECTOR_INCLUDE_CODE_FILES,
     INDEX_BATCH_SIZE,
 )
-from onyx.configs.constants import DocumentSource
+from onyx.configs.constants import (
+    CODE_FILE_METADATA_TYPE,
+    CODE_FILE_TYPE_KEY,
+    DocumentSource,
+)
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
 from onyx.connectors.interfaces import (
     GenerateDocumentsOutput,
@@ -140,7 +144,7 @@ def _convert_code_to_document(
         semantic_identifier=file["name"],
         doc_updated_at=datetime.now().replace(tzinfo=timezone.utc),
         primary_owners=[],  # Add owners if needed
-        metadata={"type": "CodeFile"},
+        metadata={CODE_FILE_TYPE_KEY: CODE_FILE_METADATA_TYPE},
     )
     return doc
 

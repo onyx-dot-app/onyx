@@ -47,7 +47,7 @@ from onyx.connectors.models import (
     ConnectorStopSignal,
     Document,
     HierarchyNode,
-    TextSection,
+    is_text_bearing,
 )
 from onyx.db.connector import mark_ccpair_with_indexing_trigger
 from onyx.db.connector_alerts import notify_admins_of_connector_alert
@@ -796,10 +796,7 @@ def connector_document_extraction(
 
                     doc_size = 0
                     for section in doc.sections:
-                        if (
-                            isinstance(section, TextSection)
-                            and section.text is not None
-                        ):
+                        if is_text_bearing(section) and section.text is not None:
                             doc_size += len(section.text)
 
                     if doc_size > INDEXING_SIZE_WARNING_THRESHOLD:

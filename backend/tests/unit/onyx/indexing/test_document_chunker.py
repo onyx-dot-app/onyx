@@ -1,76 +1,19 @@
 import io
 
 import pytest
-from chonkie import SentenceChunker
 
-from onyx.configs.constants import SECTION_SEPARATOR, DocumentSource
+from onyx.configs.constants import SECTION_SEPARATOR
 from onyx.connectors.models import (
-    IndexingDocument,
     Section,
     SectionType,
     TabularSection,
 )
-from onyx.indexing.chunking import DocumentChunker
 from onyx.indexing.chunking import text_section_chunker as text_chunker_module
-from onyx.natural_language_processing.utils import BaseTokenizer
-
-
-class CharTokenizer(BaseTokenizer):
-    """1 character == 1 token. Deterministic & trivial to reason about."""
-
-    def encode(self, string: str) -> list[int]:
-        return [ord(c) for c in string]
-
-    def tokenize(self, string: str) -> list[str]:
-        return list(string)
-
-    def decode(self, tokens: list[int]) -> str:
-        return "".join(chr(t) for t in tokens)
-
-
-# With a char-level tokenizer, each char is a token. 200 is comfortably
-# above BLURB_SIZE (128) so the blurb splitter won't get weird on small text.
-CHUNK_LIMIT = 200
-
-
-def _make_document_chunker(
-    chunk_token_limit: int = CHUNK_LIMIT,
-) -> DocumentChunker:
-    def token_counter(text: str) -> int:
-        return len(text)
-
-    return DocumentChunker(
-        tokenizer=CharTokenizer(),
-        blurb_splitter=SentenceChunker(
-            tokenizer_or_token_counter=token_counter,
-            chunk_size=128,
-            chunk_overlap=0,
-            return_type="texts",
-        ),
-        chunk_splitter=SentenceChunker(
-            tokenizer_or_token_counter=token_counter,
-            chunk_size=chunk_token_limit,
-            chunk_overlap=0,
-            return_type="texts",
-        ),
-    )
-
-
-def _make_doc(
-    sections: list[Section],
-    title: str | None = "Test Doc",
-    doc_id: str = "doc1",
-) -> IndexingDocument:
-    return IndexingDocument(
-        id=doc_id,
-        source=DocumentSource.WEB,
-        semantic_identifier=doc_id,
-        title=title,
-        metadata={},
-        sections=[],  # real sections unused — method reads processed_sections
-        processed_sections=sections,
-    )
-
+from tests.unit.onyx.indexing.conftest import CHUNK_LIMIT
+from tests.unit.onyx.indexing.conftest import make_doc as _make_doc
+from tests.unit.onyx.indexing.conftest import (
+    make_document_chunker as _make_document_chunker,
+)
 
 # --- Empty / degenerate input -------------------------------------------------
 

@@ -22,6 +22,7 @@ from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_experts_stores_representations,
 )
 from onyx.connectors.models import (
+    CodeSection,
     ConnectorFailure,
     ConnectorStopSignal,
     Document,
@@ -32,6 +33,7 @@ from onyx.connectors.models import (
     Section,
     SectionType,
     TextSection,
+    is_text_bearing,
 )
 from onyx.db.connector_credential_pair import get_connector_credential_pair
 from onyx.db.document import (
@@ -625,7 +627,7 @@ def filter_documents(
 
     for document in document_batch:
         empty_contents = not any(
-            isinstance(section, TextSection)
+            is_text_bearing(section)
             and section.text is not None
             and section.text.strip()
             for section in document.sections
@@ -656,7 +658,7 @@ def filter_documents(
         section_chars = sum(
             (
                 len(section.text)
-                if isinstance(section, TextSection) and section.text is not None
+                if is_text_bearing(section) and section.text is not None
                 else 0
             )
             for section in document.sections
@@ -1079,7 +1081,7 @@ def _apply_document_ingestion_hook(
             source=doc.source.value if doc.source is not None else "",
             sections=[
                 DocumentIngestionSection(
-                    text=s.text if isinstance(s, TextSection) else None,
+                    text=s.text if is_text_bearing(s) else None,
                     link=s.link,
                     image_file_id=(
                         s.image_file_id if isinstance(s, ImageSection) else None
@@ -1130,19 +1132,47 @@ def _apply_document_ingestion_hook(
                 "Document ingestion hook dropped document doc_id=%r: %s", doc.id, reason
             )
             return None
-        new_sections: list[TextSection | ImageSection] = []
-        for s in hook_result.sections:
+        # The hook's sections carry no type. Returned as prose, a code
+        # section loses syntax chunking and file_path — the signal the chunker
+        # uses to refuse a credential file. Recover it by the link the hook
+        # kept, else by position when the section count is unchanged.
+        # TabularSection cannot be: its content lives in csv_file_id, which
+        # the hook never sees.
+        originals = list(doc.sections)
+        aligned = len(hook_result.sections) == len(originals)
+        code_by_link = {
+            s.link: s for s in originals if isinstance(s, CodeSection) and s.link
+        }
+
+        new_sections: list[TextSection | ImageSection | CodeSection] = []
+        for index, s in enumerate(hook_result.sections):
             if s.image_file_id is not None:
                 new_sections.append(
                     ImageSection(image_file_id=s.image_file_id, link=s.link)
                 )
             elif s.text is not None:
-                new_sections.append(TextSection(text=s.text, link=s.link))
+                origin = (
+                    code_by_link.get(s.link)
+                    if s.link
+                    else (originals[index] if aligned else None)
+                )
+                if isinstance(origin, CodeSection):
+                    new_sections.append(
+                        CodeSection(
+                            text=s.text,
+                            link=s.link,
+                            language=origin.language,
+                            file_path=origin.file_path,
+                        )
+                    )
+                else:
+                    new_sections.append(TextSection(text=s.text, link=s.link))
             else:
                 logger.warning(
                     "Document ingestion hook returned a section with neither text nor image_file_id for doc_id=%r — skipping section.",
                     doc.id,
                 )
+
         if not new_sections:
             logger.info(
                 "Document ingestion hook produced no valid sections for doc_id=%r — dropping document.",
@@ -1232,22 +1262,14 @@ def _maybe_push_documents(
             doc = doc_map.get(doc_id)
             if doc is None:
                 continue
-            content = " ".join(
-                s.text for s in doc.sections if isinstance(s, TextSection) and s.text
-            )
+            text_sections = [s for s in doc.sections if is_text_bearing(s)]
+            content = " ".join(s.text for s in text_sections if s.text)
             payload = DocumentPushPayload(
                 document_id=doc_id,
                 title=doc.title or doc.semantic_identifier,
                 content=content,
                 source=str(doc.source.value) if doc.source else "unknown",
-                url=next(
-                    (
-                        s.link
-                        for s in doc.sections
-                        if isinstance(s, TextSection) and s.link
-                    ),
-                    None,
-                ),
+                url=next((s.link for s in text_sections if s.link), None),
                 doc_updated_at=(
                     doc.doc_updated_at.isoformat() if doc.doc_updated_at else None
                 ),
