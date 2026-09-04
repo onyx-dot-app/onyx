@@ -295,6 +295,18 @@ def test_mcp_search_filters_by_document_set(
     assert any(in_set_content in content for content in filtered_contents)
     assert all(out_of_set_content not in content for content in filtered_contents)
 
+    # A name that does not resolve must fail with a usable hint rather than be
+    # dropped, which would return a wider result set that looks scoped.
+    unknown_payload = _extract_tool_payload(
+        _call_search_tool(
+            headers,
+            shared_phrase,
+            document_set_names=[f"{doc_set.name}-does-not-exist"],
+        )
+    )
+    assert unknown_payload["results"] == []
+    assert doc_set.name in unknown_payload["error"]
+
     # An empty document_set_names should behave like "no filter" (normalized
     # to None), not "match zero sets".
     empty_list_payload = _extract_tool_payload(
@@ -393,13 +405,14 @@ def test_mcp_search_scopes_to_agent(
     assert "no-such-agent" in unknown_payload["error"]
     assert persona.name in unknown_payload["error"]
 
-    # A scoped PAT must still resolve the agent name: /persona carries no
-    # require_permission marker, so it needs the scope_exempt marker to be
-    # reachable at all.
+    # A scoped PAT must still resolve the agent name and search. READ_SEARCH is
+    # the whole token: BASIC_ACCESS is not in SELECTABLE_PAT_SCOPES and
+    # READ_SEARCH does not imply it, so the inventory endpoints refuse this
+    # token and the tool has to degrade rather than fail the search.
     scoped_pat_headers = _auth_headers(
         admin_user,
         name="mcp-agent-scope-scoped-pat",
-        scopes=[Permission.BASIC_ACCESS, Permission.READ_SEARCH],
+        scopes=[Permission.READ_SEARCH],
     )
     scoped_pat_payload = _extract_tool_payload(
         _call_search_tool(scoped_pat_headers, shared_phrase, agent=persona.name)

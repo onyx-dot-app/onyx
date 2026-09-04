@@ -1,8 +1,9 @@
-"""Agent scoping in the MCP document-search tool.
+"""Filter resolution in the MCP document-search tool.
 
-`agent` resolves a name to a persona id on the search call itself, so the
-happy path needs no discovery round trip. A name that does not resolve must
-fail rather than fall back to an unscoped search.
+`agent`, `source_types` and `document_set_names` all resolve on the search call
+itself, so the happy path needs no discovery round trip. A value that does not
+resolve must fail rather than be dropped, and the error teaches the caller
+without dumping the whole inventory.
 """
 
 import json
@@ -17,6 +18,7 @@ from fastmcp.server.auth.auth import AccessToken
 
 import onyx.mcp_server.tools.search as search_module
 import onyx.mcp_server.utils as utils_module
+from onyx.mcp_server.tools.search import _MAX_SUGGESTIONS
 
 _TOKEN = AccessToken(token="test-token", client_id="test", scopes=[])
 
@@ -28,6 +30,10 @@ class _Stub:
     search_requests: list[dict[str, Any]]
     agents: list[dict[str, Any]]
     sources: list[str]
+    document_sets: list[dict[str, Any]]
+    # Stands in for a scoped PAT, which cannot hold BASIC_ACCESS.
+    forbid_inventory: bool = False
+    inventory_status: int | None = None
 
 
 async def _unreachable_indexed_sources(_access_token: AccessToken) -> list[str]:
@@ -44,12 +50,25 @@ async def stub(monkeypatch: pytest.MonkeyPatch) -> AsyncGenerator[_Stub, None]:
             {"id": 9, "name": "Engineering Wiki", "description": "Eng docs"},
         ],
         sources=["github"],
+        document_sets=[
+            {"name": "Engineering Wiki", "description": "eng"},
+            {"name": "Sales Playbook", "description": "sales"},
+        ],
     )
 
     def _handler(request: httpx.Request) -> httpx.Response:
         path = request.url.path
+        is_inventory = path.endswith("/manage/indexed-sources") or path.endswith(
+            "/manage/document-set"
+        )
+        if is_inventory and state.inventory_status is not None:
+            return httpx.Response(state.inventory_status, json={"detail": "boom"})
+        if is_inventory and state.forbid_inventory:
+            return httpx.Response(403, json={"detail": "insufficient permissions"})
         if path.endswith("/manage/indexed-sources"):
             return httpx.Response(200, json={"sources": state.sources})
+        if path.endswith("/manage/document-set"):
+            return httpx.Response(200, json=state.document_sets)
         if path.endswith("/persona"):
             return httpx.Response(200, json=state.agents)
         if path.endswith("/search"):
@@ -90,18 +109,46 @@ async def test_search_without_agent_stays_unscoped(stub: _Stub) -> None:
 
 
 @pytest.mark.asyncio
-async def test_unknown_agent_errors_and_names_the_valid_ones(stub: _Stub) -> None:
+async def test_unknown_agent_errors_without_searching(stub: _Stub) -> None:
     payload = await search_module.search_indexed_documents(
         query="anything", agent="no-such-agent"
     )
 
     assert payload["results"] == []
     assert "no-such-agent" in payload["error"]
-    assert "Support" in payload["error"]
-    assert "Engineering Wiki" in payload["error"]
     # The wrong scope returned as if it were right is worse than an error, so
     # the tool must not fall back to an unscoped search.
     assert stub.search_requests == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.usefixtures("stub")
+async def test_near_miss_agent_name_is_suggested() -> None:
+    """A stale or colloquial name is the common failure, so suggest the fix."""
+    payload = await search_module.search_indexed_documents(
+        query="anything", agent="Enginering Wiki"
+    )
+
+    assert "Did you mean" in payload["error"]
+    assert "Engineering Wiki" in payload["error"]
+
+
+@pytest.mark.asyncio
+async def test_unknown_agent_error_stays_small_for_large_tenants(
+    stub: _Stub,
+) -> None:
+    """Listing every agent duplicates the resource and costs tokens per call."""
+    stub.agents = [
+        {"id": i, "name": f"Team {i} Knowledge", "description": "d"} for i in range(40)
+    ]
+
+    payload = await search_module.search_indexed_documents(
+        query="anything", agent="totally-unrelated"
+    )
+
+    assert "renamed or removed" in payload["error"]
+    assert "agents" in payload["error"]
+    assert payload["error"].count(",") <= _MAX_SUGGESTIONS
 
 
 @pytest.mark.asyncio
@@ -147,6 +194,98 @@ async def test_unknown_agent_error_survives_empty_source_list(stub: _Stub) -> No
 
     assert "no-such-agent" in payload["error"]
     assert "Support" in payload["error"]
+
+
+@pytest.mark.asyncio
+async def test_valid_filters_pass_through(stub: _Stub) -> None:
+    await search_module.search_indexed_documents(
+        query="anything",
+        source_types=["github"],
+        document_set_names=["Engineering Wiki"],
+    )
+
+    sent = stub.search_requests[0]
+    assert sent["sources"] == ["github"]
+    assert sent["document_sets"] == ["Engineering Wiki"]
+
+
+@pytest.mark.asyncio
+async def test_unindexed_source_type_errors_instead_of_being_dropped(
+    stub: _Stub,
+) -> None:
+    """Silently skipping the filter returns a wider result set as if scoped."""
+    payload = await search_module.search_indexed_documents(
+        query="anything", source_types=["confluence"]
+    )
+
+    assert payload["results"] == []
+    assert "confluence" in payload["error"]
+    assert "github" in payload["error"]
+    assert stub.search_requests == []
+
+
+@pytest.mark.asyncio
+async def test_unknown_document_set_errors_with_a_suggestion(stub: _Stub) -> None:
+    payload = await search_module.search_indexed_documents(
+        query="anything", document_set_names=["Enginering Wiki"]
+    )
+
+    assert payload["results"] == []
+    assert "Did you mean" in payload["error"]
+    assert "Engineering Wiki" in payload["error"]
+    assert stub.search_requests == []
+
+
+@pytest.mark.asyncio
+async def test_search_survives_a_token_that_cannot_list_inventory(
+    stub: _Stub,
+) -> None:
+    """No PAT scope grants BASIC_ACCESS, so the inventory endpoints 403 for
+    every scoped token. Validation is a convenience and must not block a search
+    the token is allowed to run."""
+    stub.forbid_inventory = True
+
+    payload = await search_module.search_indexed_documents(
+        query="anything",
+        source_types=["github"],
+        document_set_names=["Engineering Wiki"],
+    )
+
+    assert "error" not in payload
+    sent = stub.search_requests[0]
+    assert sent["sources"] == ["github"]
+    assert sent["document_sets"] == ["Engineering Wiki"]
+
+
+@pytest.mark.asyncio
+async def test_unknown_source_still_errors_without_the_inventory(stub: _Stub) -> None:
+    """Dropping it would leave an empty source list, and retrieval adds no
+    clause for that — the search would widen to every accessible source."""
+    stub.forbid_inventory = True
+
+    payload = await search_module.search_indexed_documents(
+        query="anything", source_types=["not-a-real-source"]
+    )
+
+    assert payload["results"] == []
+    assert "not-a-real-source" in payload["error"]
+    assert stub.search_requests == []
+
+
+@pytest.mark.asyncio
+async def test_inventory_failure_that_is_not_permissions_still_errors(
+    stub: _Stub,
+) -> None:
+    """A 500 is real trouble, not a scope limitation — keep failing loudly."""
+    stub.inventory_status = 500
+
+    payload = await search_module.search_indexed_documents(
+        query="anything", source_types=["github"]
+    )
+
+    assert payload["results"] == []
+    assert "Failed to check indexed sources" in payload["error"]
+    assert stub.search_requests == []
 
 
 @pytest.mark.asyncio
