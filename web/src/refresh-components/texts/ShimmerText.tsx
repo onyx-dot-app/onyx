@@ -1,7 +1,8 @@
 import { Text } from "@opal/components";
+import type { RichStr } from "@opal/types";
 
 interface ShimmerTextProps {
-  children: string;
+  children: string | RichStr;
 }
 
 /**
