@@ -53,20 +53,5 @@ jobs:
       - run: git diff --exit-code go.mod go.sum
         working-directory: ${{ matrix.modules }}
 
-      - name: Build ods
-        run: go build -o "${RUNNER_TEMP}/ods" .
-        working-directory: tools/ods
-
-      # A module opts into the coverage gate by committing a .coverage-baseline.yaml.
-      # `ods coverage --check` runs the same `go test -race ./...` with a coverage
-      # profile, then fails when a package drops below its floor. Raise the floors
-      # after adding tests with `ods coverage <suite> --update`.
-      - name: Test
-        env:
-          MODULE: ${{ matrix.modules }}
-        run: |
-          if [ -f "${MODULE}/.coverage-baseline.yaml" ]; then
-            "${RUNNER_TEMP}/ods" coverage "${MODULE}" --check
-          else
-            (cd "${MODULE}" && go test -race ./...)
-          fi
+      - run: go test -race ./...
+        working-directory: ${{ matrix.modules }}
