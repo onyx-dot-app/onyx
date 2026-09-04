@@ -36,6 +36,24 @@ func TestWriteReport_showsEachStatus(t *testing.T) {
 	}
 }
 
+// The total is not gated, so a drop there reads as a delta, not a regression.
+func TestWriteReport_totalDropIsNotLabelledARegression(t *testing.T) {
+	profile := profileOf(map[string][2]int{"cmd": {1, 2}, "internal/new": {0, 10}})
+	baseline := &Baseline{Total: 50, Packages: map[string]float64{"cmd": 50}}
+
+	var out strings.Builder
+	if err := WriteReport(&out, Compare(profile, baseline, DefaultTolerance)); err != nil {
+		t.Fatalf("failed to write the report: %v", err)
+	}
+
+	if strings.Contains(out.String(), "REGRESSED") {
+		t.Fatalf("expected no regression label:\n%s", out.String())
+	}
+	if !strings.Contains(out.String(), "-41.7") {
+		t.Fatalf("expected the total's delta:\n%s", out.String())
+	}
+}
+
 // A package with no floor must not show a 0.0% floor, which would read as a
 // real threshold rather than an absent one.
 func TestWriteReport_newPackageHasNoFloorValue(t *testing.T) {

@@ -52,7 +52,32 @@ func LoadBaseline(path string) (*Baseline, error) {
 	if baseline.Packages == nil {
 		baseline.Packages = map[string]float64{}
 	}
+	if err := baseline.validate(); err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
 	return &baseline, nil
+}
+
+// validate rejects floors that cannot be a percentage. A NaN or negative floor
+// passes every comparison, so a hand-edited baseline must fail loudly rather
+// than silently turn the gate off.
+func (b *Baseline) validate() error {
+	if err := validateFloor("total", b.Total); err != nil {
+		return err
+	}
+	for name, floor := range b.Packages {
+		if err := validateFloor(name, floor); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateFloor(name string, floor float64) error {
+	if math.IsNaN(floor) || floor < 0 || floor > 100 {
+		return fmt.Errorf("floor for %s must be between 0 and 100, got %v", name, floor)
+	}
+	return nil
 }
 
 // NewBaseline builds a baseline from a measured profile. Every percentage is

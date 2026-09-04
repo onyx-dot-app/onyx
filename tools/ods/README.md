@@ -344,6 +344,10 @@ Floors are rounded down to one decimal, and a package may sit `--tolerance`
 below its floor without failing. That absorbs the jitter from suites that depend
 on ports or timing; a real regression is far larger.
 
+The package floors are the gate. The module total is reported with its delta
+but never fails the check: a package added without tests, or a well-covered
+package deleted, moves the total without any package regressing.
+
 ### `dev` - Devcontainer Management
 
 Manage the Onyx devcontainer. Also available as `ods dc`.

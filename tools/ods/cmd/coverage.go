@@ -40,7 +40,9 @@ func NewCoverageCommand() *cobra.Command {
 			return testsuite.Names(), cobra.ShellCompDirectiveNoFileComp
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			runCoverage(args[0], opts)
+			if code := runCoverage(args[0], opts); code != 0 {
+				os.Exit(code)
+			}
 		},
 	}
 
@@ -53,9 +55,14 @@ func NewCoverageCommand() *cobra.Command {
 	return cmd
 }
 
-func runCoverage(target string, opts *CoverageOptions) {
+// runCoverage returns the process exit code rather than exiting, so the
+// temporary profile directory is always removed on the way out.
+func runCoverage(target string, opts *CoverageOptions) int {
 	if opts.Check && opts.Update {
 		log.Fatal("--check and --update do the opposite of each other; pass only one")
+	}
+	if err := coverage.ValidateTolerance(opts.Tolerance); err != nil {
+		log.Fatalf("Invalid --tolerance: %v", err)
 	}
 
 	root, err := paths.GitRoot()
@@ -85,36 +92,39 @@ func runCoverage(target string, opts *CoverageOptions) {
 	if errors.As(err, &exitErr) {
 		// The tests failed, and their output is already on the terminal.
 		// Coverage from a failed run is not worth reporting.
-		os.Exit(exitErr.Code)
+		return exitErr.Code
 	}
 	if err != nil {
-		log.Fatalf("Failed to measure coverage: %v", err)
+		log.Errorf("Failed to measure coverage: %v", err)
+		return 1
 	}
 
 	baselinePath := coverage.BaselinePath(moduleDir)
 
 	if opts.Update {
-		writeBaseline(baselinePath, profile)
-		return
+		return writeBaseline(baselinePath, profile)
 	}
 
 	baseline, err := coverage.LoadBaseline(baselinePath)
 	if errors.Is(err, os.ErrNotExist) {
 		if opts.Check {
-			log.Fatalf("No baseline at %s. Create one with: ods coverage %s --update", baselinePath, suite.Name)
+			log.Errorf("No baseline at %s. Create one with: ods coverage %s --update", baselinePath, suite.Name)
+			return 1
 		}
 		log.Warnf("No baseline at %s; create one with: ods coverage %s --update", baselinePath, suite.Name)
 		baseline = nil
 	} else if err != nil {
-		log.Fatalf("Failed to read the baseline: %v", err)
+		log.Errorf("Failed to read the baseline: %v", err)
+		return 1
 	}
 
 	report := coverage.Compare(profile, baseline, opts.Tolerance)
 	if err := coverage.WriteReport(os.Stdout, report); err != nil {
-		log.Fatalf("Failed to write the report: %v", err)
+		log.Errorf("Failed to write the report: %v", err)
+		return 1
 	}
 
-	if profilePath == opts.Profile {
+	if opts.Profile != "" {
 		log.Infof("Coverage profile written to %s", profilePath)
 		log.Infof("Browse it with: go tool cover -html=%s", profilePath)
 	}
@@ -125,36 +135,45 @@ func runCoverage(target string, opts *CoverageOptions) {
 	}
 
 	if !opts.Check {
-		return
+		return 0
 	}
 	regressions := report.Regressions()
 	if len(regressions) == 0 {
 		log.Infof("Coverage holds at or above the baseline in %s", baselinePath)
-		return
+		return 0
 	}
 	for _, regression := range regressions {
 		log.Errorf("%s fell to %.1f%%, below its %.1f%% floor", regression.Package, regression.Percent, regression.Floor)
 	}
-	log.Fatalf("Coverage regressed in %d package(s). Add tests, or justify the drop and run: ods coverage %s --update",
+	log.Errorf("Coverage regressed in %d package(s). Add tests, or justify the drop and run: ods coverage %s --update",
 		len(regressions), suite.Name)
+	return 1
 }
 
-func writeBaseline(baselinePath string, profile *coverage.Profile) {
+func writeBaseline(baselinePath string, profile *coverage.Profile) int {
 	baseline := coverage.NewBaseline(profile)
 	if err := baseline.Save(baselinePath); err != nil {
-		log.Fatalf("Failed to write the baseline: %v", err)
+		log.Errorf("Failed to write the baseline: %v", err)
+		return 1
 	}
 	// Report the floor that was recorded, not the raw measurement, so the
 	// number here matches the file.
 	log.Infof("Wrote %s with a %.1f%% total coverage floor across %d packages",
 		baselinePath, baseline.Total, len(baseline.Packages))
+	return 0
 }
 
 // profileTarget resolves where the coverage profile is written. Without an
-// explicit path it goes to a temporary file that is removed afterwards.
+// explicit path it goes to a temporary file that is removed afterwards. A
+// requested path is made absolute, since go test writes it relative to the
+// module directory while we read it relative to the caller's.
 func profileTarget(requested string) (string, func()) {
 	if requested != "" {
-		return requested, func() {}
+		absolute, err := filepath.Abs(requested)
+		if err != nil {
+			log.Fatalf("Failed to resolve the profile path %q: %v", requested, err)
+		}
+		return absolute, func() {}
 	}
 	dir, err := os.MkdirTemp("", "ods-coverage")
 	if err != nil {

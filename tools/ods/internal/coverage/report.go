@@ -23,7 +23,7 @@ func WriteReport(w io.Writer, report *Report) error {
 	if _, err := fmt.Fprint(tw, strings.Repeat("-", 8)+"\t"+strings.Repeat("-", 8)+"\t"+strings.Repeat("-", 8)+"\t\n"); err != nil {
 		return err
 	}
-	if err := writeRow(tw, report.Total); err != nil {
+	if err := writeTotalRow(tw, report.Total); err != nil {
 		return err
 	}
 
@@ -49,5 +49,17 @@ func writeRow(w io.Writer, result Result) error {
 	}
 
 	_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", result.Package, percent, floor, note)
+	return err
+}
+
+// writeTotalRow renders the module total. The total is not gated, so a drop
+// is shown as a signed delta rather than a regression.
+func writeTotalRow(w io.Writer, result Result) error {
+	if result.Status == StatusNew {
+		_, err := fmt.Fprintf(w, "%s\t%.1f%%\t-\t\n", result.Package, result.Percent)
+		return err
+	}
+	_, err := fmt.Fprintf(w, "%s\t%.1f%%\t%.1f%%\t%+.1f\n",
+		result.Package, result.Percent, result.Floor, result.Percent-result.Floor)
 	return err
 }

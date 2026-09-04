@@ -1,6 +1,10 @@
 package coverage
 
-import "sort"
+import (
+	"fmt"
+	"math"
+	"sort"
+)
 
 // DefaultTolerance is how far below its floor a package may sit without failing
 // the check, in percentage points. Statement coverage is deterministic for
@@ -39,7 +43,9 @@ type Result struct {
 
 // Report is the outcome of comparing a profile against a baseline.
 type Report struct {
-	// Total compares the module as a whole.
+	// Total compares the module as a whole. It is reported but never gated:
+	// the package floors are the gate, and a package added or deleted moves
+	// the total without any package regressing.
 	Total Result
 	// Packages compares each package, sorted by package path.
 	Packages []Result
@@ -102,13 +108,10 @@ func compareOne(name string, percent, floor float64, hasFloor bool, tolerance fl
 	return result
 }
 
-// Regressions returns the packages that fell below their floor, plus the module
-// total when it regressed. An empty result means the check passes.
+// Regressions returns the packages that fell below their floor. An empty
+// result means the check passes. The module total is not included: see Report.
 func (r *Report) Regressions() []Result {
 	var out []Result
-	if r.Total.Status == StatusRegressed {
-		out = append(out, r.Total)
-	}
 	for _, pkg := range r.Packages {
 		if pkg.Status == StatusRegressed {
 			out = append(out, pkg)
@@ -117,17 +120,24 @@ func (r *Report) Regressions() []Result {
 	return out
 }
 
-// Improvements returns the packages that rose above their floor, plus the
-// module total when it improved. These are what `--update` would record.
+// Improvements returns the packages that rose above their floor. These are
+// what `--update` would record.
 func (r *Report) Improvements() []Result {
 	var out []Result
-	if r.Total.Status == StatusImproved {
-		out = append(out, r.Total)
-	}
 	for _, pkg := range r.Packages {
 		if pkg.Status == StatusImproved {
 			out = append(out, pkg)
 		}
 	}
 	return out
+}
+
+// ValidateTolerance rejects a tolerance that would make the comparison
+// meaningless. NaN and +Inf make every comparison pass, and a negative value
+// fails a package that holds exactly at its floor.
+func ValidateTolerance(tolerance float64) error {
+	if math.IsNaN(tolerance) || math.IsInf(tolerance, 0) || tolerance < 0 {
+		return fmt.Errorf("tolerance must be a finite number of at least 0, got %v", tolerance)
+	}
+	return nil
 }

@@ -101,6 +101,25 @@ func TestLoadBaseline_rejectsMalformedYAML(t *testing.T) {
 	}
 }
 
+// A floor that is not a percentage passes every comparison, which would turn
+// the gate off without anyone noticing.
+func TestLoadBaseline_rejectsInvalidFloors(t *testing.T) {
+	for _, contents := range []string{
+		"total: .nan\npackages: {}\n",
+		"total: -1\npackages: {}\n",
+		"total: 0\npackages:\n  cmd: 101\n",
+		"total: 0\npackages:\n  cmd: .inf\n",
+	} {
+		path := filepath.Join(t.TempDir(), BaselineFile)
+		if err := os.WriteFile(path, []byte(contents), 0644); err != nil {
+			t.Fatalf("failed to write the fixture: %v", err)
+		}
+		if _, err := LoadBaseline(path); err == nil {
+			t.Fatalf("expected an error for:\n%s", contents)
+		}
+	}
+}
+
 func readFile(t *testing.T, path string) string {
 	t.Helper()
 	data, err := os.ReadFile(path)

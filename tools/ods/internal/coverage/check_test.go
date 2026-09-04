@@ -1,6 +1,9 @@
 package coverage
 
-import "testing"
+import (
+	"math"
+	"testing"
+)
 
 func profileOf(percents map[string][2]int) *Profile {
 	profile := &Profile{}
@@ -34,8 +37,8 @@ func TestCompare_regressionBelowFloor(t *testing.T) {
 	if got := statusOf(t, report, "cmd"); got != StatusRegressed {
 		t.Fatalf("expected a regression, got %q", got)
 	}
-	if got := len(report.Regressions()); got != 2 {
-		t.Fatalf("expected the package and the total to regress, got %d", got)
+	if got := len(report.Regressions()); got != 1 {
+		t.Fatalf("expected one regression, got %d", got)
 	}
 }
 
@@ -75,8 +78,8 @@ func TestCompare_improvementIsReported(t *testing.T) {
 	if got := statusOf(t, report, "cmd"); got != StatusImproved {
 		t.Fatalf("expected an improvement, got %q", got)
 	}
-	if got := len(report.Improvements()); got != 2 {
-		t.Fatalf("expected the package and the total to improve, got %d", got)
+	if got := len(report.Improvements()); got != 1 {
+		t.Fatalf("expected one improvement, got %d", got)
 	}
 	if got := len(report.Regressions()); got != 0 {
 		t.Fatalf("an improvement must not fail the check, got %d regressions", got)
@@ -96,6 +99,35 @@ func TestCompare_newPackageDoesNotFail(t *testing.T) {
 	}
 	if got := len(report.Regressions()); got != 0 {
 		t.Fatalf("expected no regressions, got %d", got)
+	}
+}
+
+// A new package with no tests lowers the module total. The total is reported
+// but not gated, so that cannot fail a check the package was never measured for.
+func TestCompare_newPackageLoweringTotalDoesNotFail(t *testing.T) {
+	profile := profileOf(map[string][2]int{"cmd": {1, 2}, "internal/new": {0, 10}})
+	baseline := &Baseline{Total: 50, Packages: map[string]float64{"cmd": 50}}
+
+	report := Compare(profile, baseline, DefaultTolerance)
+
+	if report.Total.Status != StatusRegressed {
+		t.Fatalf("expected the total reported as regressed, got %q", report.Total.Status)
+	}
+	if got := len(report.Regressions()); got != 0 {
+		t.Fatalf("expected no regressions, got %d", got)
+	}
+}
+
+func TestValidateTolerance(t *testing.T) {
+	for _, valid := range []float64{0, 0.1, 5} {
+		if err := ValidateTolerance(valid); err != nil {
+			t.Fatalf("expected %v accepted: %v", valid, err)
+		}
+	}
+	for _, invalid := range []float64{-0.1, math.NaN(), math.Inf(1)} {
+		if err := ValidateTolerance(invalid); err == nil {
+			t.Fatalf("expected %v rejected", invalid)
+		}
 	}
 }
 
