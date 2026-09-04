@@ -13,11 +13,12 @@ inline markdown rendering via `RichStr` — pass `markdown("*bold* text")` as ch
 | `color`    | `TextColor`                                     | `"text-04"`      | Text color                                                                                     |
 | `as`       | `"p" \| "span" \| "li" \| "h1" \| "h2" \| "h3"` | `"span"`         | HTML tag to render                                                                             |
 | `nowrap`   | `boolean`                                       | `false`          | Prevent text wrapping                                                                          |
+| `wordWrap` | `"wrap-normal" \| "wrap-break-word" \| "wrap-anywhere" \| "break-all" \| "break-keep"` | — | How a run of characters with nowhere to wrap behaves; unset leaves normal CSS wrapping |
 | `maxLines` | `number`                                        | —                | Truncate to N lines with an ellipsis (`1` = single-line truncate; `2+` = `-webkit-line-clamp`) |
 | `children` | `string \| RichStr \| RichNodes`                | —                | Plain string, `markdown()` for inline markdown, or `richNodes()` for inline React nodes        |
 
 > **No `className` or `style`.** `Text` strips both (its props extend `WithoutStyles`); every
-> aspect of its appearance is driven by `font`, `color`, `nowrap`, and `maxLines`. For layout
+> aspect of its appearance is driven by `font`, `color`, `nowrap`, `wordWrap`, and `maxLines`. For layout
 > concerns (margin, flex, width, alignment) wrap `Text` in a container or move the utility class
 > to the parent — don't reach for `className`. All other HTML attributes (`id`, `onClick`,
 > `title`, `aria-*`, `data-*`) pass straight through to the rendered element.
