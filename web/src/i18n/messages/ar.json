@@ -4649,6 +4649,7 @@
       "fields": {
         "apiKey": {
           "description": "الصق [مفتاح API]({link}) من {provider} للوصول إلى نماذجك.",
+          "descriptionNoLink": "الصق مفتاح API لنقطة نهاية {provider} للوصول إلى نماذجك.",
           "title": "مفتاح API"
         },
         "googleCredentials": {
@@ -4796,6 +4797,20 @@
         },
         "title": "الفهرسة متعددة التمريرات"
       },
+      "openaiCompatible": {
+        "apiUrl": {
+          "description": "عنوان URL الأساسي لنقطة النهاية المتوافقة مع OpenAI، على سبيل المثال http://localhost:8000/v1. يضيف Onyx المسار /embeddings.",
+          "title": "عنوان URL الأساسي لواجهة API"
+        },
+        "modelName": {
+          "description": "سيتصل Onyx بهذا النموذج على نقطة النهاية المتوافقة مع OpenAI."
+        },
+        "reducedDimension": {
+          "description": "اطلب متجهات أقصر من النموذج. يعمل هذا فقط مع النماذج التي تدعم تعلّم تمثيل ماتريوشكا. تحتاج المتجهات الأقصر إلى مساحة تخزين أقل وتبحث بسرعة أكبر. اتركه فارغًا لاستخدام الحجم الكامل للنموذج.",
+          "placeholder": "مثل 1024",
+          "title": "أبعاد التضمين"
+        }
+      },
       "progressBanner": {
         "attentionButton": {
           "label": "عرض الوحدات التي تحتاج اهتمامًا"
@@ -4913,6 +4928,7 @@
         "modelDimPositive": "يجب أن يكون عددًا صحيحًا موجبًا",
         "modelDimRequired": "أبعاد النموذج مطلوبة",
         "modelNameRequired": "اسم النموذج مطلوب",
+        "reducedDimensionAboveModelDim": "يجب ألا يكون أكبر من أبعاد النموذج",
         "serviceAccountJsonInvalid": "يجب أن يكون ملف JSON صالحًا لحساب خدمة Google",
         "serviceAccountJsonRequired": "JSON حساب الخدمة مطلوب",
         "targetUrlRequired": "عنوان URL الهدف مطلوب",
