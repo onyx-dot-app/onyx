@@ -12,7 +12,12 @@
 import { type Page, type Locator, expect } from "@playwright/test";
 
 const POPOVER = '[data-testid="tool-options"]';
-const LINE_ITEM = ".group\\/LineItem";
+/**
+ * Rows render as `role="button"`, so they are reachable by accessible name
+ * rather than by a styling class. The previous `.group/LineItem` selector was
+ * a Tailwind group name that only `refresh-components/LineItem` emitted, and
+ * it matched nothing once the popover moved to Opal's `LineItemButton`.
+ */
 
 function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -142,14 +147,20 @@ export class ToolsPopover {
   }
 
   // ---------------------------------------------------------------------------
+  // Rows
+  // ---------------------------------------------------------------------------
+
+  /** A popover row, found by the accessible name its contents give it. */
+  private row(name: RegExp): Locator {
+    return this.popover.getByRole("button", { name }).first();
+  }
+
+  // ---------------------------------------------------------------------------
   // Server rows
   // ---------------------------------------------------------------------------
 
   serverRow(serverName: string): Locator {
-    return this.popover
-      .locator(LINE_ITEM)
-      .filter({ hasText: new RegExp(escapeRegex(serverName)) })
-      .first();
+    return this.row(new RegExp(escapeRegex(serverName)));
   }
 
   async expectServerVisible(serverName: string): Promise<void> {
@@ -251,10 +262,7 @@ export class ToolsPopover {
   }
 
   toolRow(toolName: string): Locator {
-    return this.popover
-      .locator(LINE_ITEM)
-      .filter({ hasText: new RegExp(`^${escapeRegex(toolName)}`) })
-      .first();
+    return this.row(new RegExp(`^${escapeRegex(toolName)}`));
   }
 
   private async isToolChecked(toolName: string): Promise<boolean> {
@@ -320,10 +328,7 @@ export class ToolsPopover {
   // ---------------------------------------------------------------------------
 
   reauthRow(): Locator {
-    return this.popover
-      .locator(LINE_ITEM)
-      .filter({ hasText: /Re-Authenticate/i })
-      .first();
+    return this.row(/Re-Authenticate/i);
   }
 
   async clickReauthRow(): Promise<void> {
