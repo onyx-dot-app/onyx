@@ -1597,6 +1597,9 @@ configMap:
   # Fallback USD per million tokens when litellm can't price a model (default 0 = free).
   DEFAULT_LLM_INPUT_COST_PER_MTOK: ""
   DEFAULT_LLM_OUTPUT_COST_PER_MTOK: ""
+  # Re-download litellm's price map at most this often when a model is missing
+  # from the copy loaded at startup (default 3600; 0 disables).
+  LITELLM_MODEL_COST_REFRESH_SECONDS: ""
   # Query Options
   DOC_TIME_DECAY: ""
   HYBRID_ALPHA: ""

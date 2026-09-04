@@ -1,5 +1,11 @@
 """LLM cost calculation utilities."""
 
+import json
+import threading
+import time
+from collections.abc import Mapping
+from typing import Any
+
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -7,12 +13,20 @@ from onyx.configs.app_configs import (
     DEFAULT_IMAGE_COST_CENTS,
     DEFAULT_LLM_INPUT_COST_PER_MTOK,
     DEFAULT_LLM_OUTPUT_COST_PER_MTOK,
+    LITELLM_MODEL_COST_REFRESH_SECONDS,
 )
 from onyx.llm import cost_overrides
 from onyx.tracing.flows import IMAGE_FLOWS, LLMFlow
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+# (model, custom_llm_provider) litellm prices a model under when the pair Onyx
+# passes does not resolve on its own, per (model, provider, pricing path).
+_LitellmTarget = tuple[str, str | None]
+_fallback_targets: dict[tuple[str, str | None, str], _LitellmTarget] = {}
+_refresh_lock = threading.Lock()
+_last_refresh_attempt = float("-inf")
 
 
 class ModelPrice(BaseModel):
@@ -21,6 +35,138 @@ class ModelPrice(BaseModel):
     input_per_mtok: float | None
     output_per_mtok: float | None
     cache_per_mtok: float | None
+
+
+def _fetch_litellm_model_cost() -> dict[str, Any] | None:
+    """litellm's current remote price map; None when only the bundled copy
+    could be loaded (a stale bundle must not overwrite fresher entries)."""
+    import litellm
+    from litellm.litellm_core_utils.get_model_cost_map import (
+        get_model_cost_map,
+        get_model_cost_map_source_info,
+    )
+
+    fetched = get_model_cost_map(url=litellm.model_cost_map_url)
+    if get_model_cost_map_source_info().get("source") != "remote":
+        return None
+    return fetched if isinstance(fetched, dict) else None
+
+
+def _refresh_litellm_model_cost() -> bool:
+    """Re-download litellm's price map, at most once per
+    LITELLM_MODEL_COST_REFRESH_SECONDS. litellm loads the map once at import,
+    so models released after process start would otherwise bill $0 until a
+    restart."""
+    global _last_refresh_attempt
+    if LITELLM_MODEL_COST_REFRESH_SECONDS <= 0:
+        return False
+    with _refresh_lock:
+        now = time.monotonic()
+        if now - _last_refresh_attempt < LITELLM_MODEL_COST_REFRESH_SECONDS:
+            return False
+        _last_refresh_attempt = now
+        try:
+            fetched = _fetch_litellm_model_cost()
+        except Exception:
+            logger.warning("litellm model cost map refresh failed", exc_info=True)
+            return False
+        if not fetched:
+            logger.warning(
+                "litellm model cost map refresh skipped: remote map unavailable"
+            )
+            return False
+        import litellm
+
+        # In place: litellm keeps references to this dict.
+        added = sum(1 for key in fetched if key not in litellm.model_cost)
+        litellm.model_cost.update(fetched)
+        _fallback_targets.clear()
+        logger.info("Refreshed litellm model cost map (%d new models)", added)
+        return True
+
+
+def _rate_fields(entry: Mapping[str, Any], path: str) -> str:
+    """The rates one pricing path reads ("token": base, cache and tiered
+    token rates; "image": per-image rates), canonicalised for comparison."""
+    fields = {
+        field: value
+        for field, value in entry.items()
+        if ("cost" in field and path in field)
+        or (path == "token" and field == "tiered_pricing")
+    }
+    return json.dumps(fields, sort_keys=True, default=str)
+
+
+def _vendor_prefixed_target(model: str, path: str) -> _LitellmTarget | None:
+    """Provider names litellm doesn't know (e.g. openai_compatible) hide models
+    it prices under a vendor prefix such as "xai/grok-4". Accept that key only
+    when unambiguous for this pricing path: a single match, or several whose
+    rates for the path are identical."""
+    import litellm
+
+    suffix = "/" + model
+    # Under the refresh lock: an in-place map update would break this scan.
+    with _refresh_lock:
+        candidates = [key for key in litellm.model_cost if key.endswith(suffix)]
+        rates = {_rate_fields(litellm.model_cost[key], path) for key in candidates}
+    if not candidates or len(rates) != 1:
+        return None
+    return candidates[0], None
+
+
+def _fallback_target(
+    model: str, provider: str | None, path: str
+) -> _LitellmTarget | None:
+    """Where litellm prices a model whose (model, provider) pair failed to
+    resolve, refreshing the price map when nothing matches."""
+    import litellm
+
+    key = (model, provider, path)
+    cached = _fallback_targets.get(key)
+    if cached is not None:
+        return cached
+    target = _vendor_prefixed_target(model, path)
+    if target is None and _refresh_litellm_model_cost():
+        try:
+            litellm.get_model_info(model=model, custom_llm_provider=provider)
+            target = (model, provider)
+        except Exception:
+            target = _vendor_prefixed_target(model, path)
+    if target is not None:
+        _fallback_targets[key] = target
+    return target
+
+
+def _litellm_model_info(
+    model: str, provider: str | None, path: str = "token"
+) -> Mapping[str, Any]:
+    import litellm
+
+    try:
+        return litellm.get_model_info(model=model, custom_llm_provider=provider)
+    except Exception:
+        target = _fallback_target(model, provider, path)
+        if target is None:
+            raise
+        return litellm.get_model_info(model=target[0], custom_llm_provider=target[1])
+
+
+def _litellm_cost_per_token(
+    model: str, provider: str | None, **usage: int
+) -> tuple[float, float]:
+    import litellm
+
+    try:
+        return litellm.cost_per_token(
+            model=model, custom_llm_provider=provider, **usage
+        )
+    except Exception:
+        target = _fallback_target(model, provider, "token")
+        if target is None:
+            raise
+        return litellm.cost_per_token(
+            model=target[0], custom_llm_provider=target[1], **usage
+        )
 
 
 def get_model_price_per_million(
@@ -45,9 +191,7 @@ def get_model_price_per_million(
             )
 
     try:
-        import litellm
-
-        entry = litellm.get_model_info(model=model, custom_llm_provider=provider)
+        entry = _litellm_model_info(model, provider)
         input_per_tok = entry.get("input_cost_per_token")
         output_per_tok = entry.get("output_cost_per_token")
         cache_per_tok = entry.get("cache_read_input_token_cost")
@@ -83,7 +227,7 @@ def _image_cost_cents(model: str, provider: str | None) -> float:
         import litellm
 
         try:
-            entry = litellm.get_model_info(model=model, custom_llm_provider=provider)
+            entry = _litellm_model_info(model, provider, "image")
         except Exception:
             entry = litellm.model_cost.get(model) or {}
         # litellm prices images per-image under either of these keys. Use an
@@ -172,16 +316,14 @@ def compute_cost_cents(
             )
 
     try:
-        import litellm
-
         # custom_llm_provider is required for non-self-identifying model names
         # (bedrock/vertex/anthropic-plain) — without it litellm raises and we'd
         # record $0 for entire provider classes.
         # litellm re-prices the cache subsets of prompt_tokens at the model's own
         # cache rates (reads discounted, writes at a premium), never as output.
-        prompt_cost_usd, completion_cost_usd = litellm.cost_per_token(
-            model=model,
-            custom_llm_provider=provider,
+        prompt_cost_usd, completion_cost_usd = _litellm_cost_per_token(
+            model,
+            provider,
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
             cache_read_input_tokens=cache_read_tokens,
