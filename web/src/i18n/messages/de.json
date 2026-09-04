@@ -64,6 +64,9 @@
       "addConnectors": {
         "label": "Konnektoren hinzufügen"
       },
+      "authenticate": {
+        "label": "Authentifizieren"
+      },
       "configure": {
         "tooltip": "Konfigurieren"
       },

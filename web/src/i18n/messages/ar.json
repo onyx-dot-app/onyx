@@ -64,6 +64,9 @@
       "addConnectors": {
         "label": "إضافة موصّلات"
       },
+      "authenticate": {
+        "label": "مصادقة"
+      },
       "configure": {
         "tooltip": "تكوين"
       },

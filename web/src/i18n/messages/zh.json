@@ -64,6 +64,9 @@
       "addConnectors": {
         "label": "添加连接器"
       },
+      "authenticate": {
+        "label": "身份验证"
+      },
       "configure": {
         "tooltip": "配置"
       },

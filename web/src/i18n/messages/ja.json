@@ -64,6 +64,9 @@
       "addConnectors": {
         "label": "コネクタを追加"
       },
+      "authenticate": {
+        "label": "認証"
+      },
       "configure": {
         "tooltip": "設定"
       },

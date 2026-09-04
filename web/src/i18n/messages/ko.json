@@ -64,6 +64,9 @@
       "addConnectors": {
         "label": "커넥터 추가"
       },
+      "authenticate": {
+        "label": "인증"
+      },
       "configure": {
         "tooltip": "구성"
       },
