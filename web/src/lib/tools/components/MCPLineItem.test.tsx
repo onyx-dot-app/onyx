@@ -4,7 +4,7 @@ import {
   MCPAuthenticationType,
   ToolSnapshot,
 } from "@/lib/tools/types";
-import MCPItem, { MCPServer } from "@/lib/tools/components/MCPItem";
+import MCPLineItem, { MCPServer } from "@/lib/tools/components/MCPLineItem";
 
 const oauthServer: MCPServer = {
   id: 1,
@@ -31,20 +31,20 @@ const tool: ToolSnapshot = {
   default_enabled: true,
 };
 
-interface RenderMCPItemOptions {
+interface RenderMCPLineItemOptions {
   isAuthenticated?: boolean;
   tools?: ToolSnapshot[];
 }
 
-function renderMCPItem({
+function renderMCPLineItem({
   isAuthenticated = false,
   tools = [],
-}: RenderMCPItemOptions = {}) {
+}: RenderMCPLineItemOptions = {}) {
   const onAuthenticate = jest.fn();
   const onSelect = jest.fn();
 
   render(
-    <MCPItem
+    <MCPLineItem
       server={oauthServer}
       isActive={false}
       onSelect={onSelect}
@@ -66,10 +66,10 @@ function getTrailingIndicator(row: HTMLElement): HTMLElement {
   return indicator;
 }
 
-describe("MCPItem", () => {
+describe("MCPLineItem", () => {
   it("authenticates once from either the row or key area", async () => {
     const user = setupUser();
-    const { onAuthenticate, onSelect } = renderMCPItem();
+    const { onAuthenticate, onSelect } = renderMCPLineItem();
     const row = screen.getByRole("button", { name: oauthServer.name });
 
     expect(screen.getAllByRole("button")).toHaveLength(1);
@@ -87,7 +87,7 @@ describe("MCPItem", () => {
 
   it("authenticates once per keyboard activation", async () => {
     const user = setupUser();
-    const { onAuthenticate, onSelect } = renderMCPItem();
+    const { onAuthenticate, onSelect } = renderMCPLineItem();
     const row = screen.getByRole("button", { name: oauthServer.name });
 
     row.focus();
@@ -104,7 +104,7 @@ describe("MCPItem", () => {
 
   it("selects once when the chevron area is clicked", async () => {
     const user = setupUser();
-    const { onAuthenticate, onSelect } = renderMCPItem({
+    const { onAuthenticate, onSelect } = renderMCPLineItem({
       isAuthenticated: true,
       tools: [tool],
     });

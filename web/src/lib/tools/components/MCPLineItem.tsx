@@ -33,7 +33,7 @@ export interface MCPServer {
   user_credentials?: Record<string, string>;
 }
 
-export interface MCPItemProps {
+export interface MCPLineItemProps {
   server: MCPServer;
   isActive: boolean;
   onSelect: () => void;
@@ -44,7 +44,7 @@ export interface MCPItemProps {
   isLoading: boolean;
 }
 
-export default function MCPItem({
+export default function MCPLineItem({
   server,
   isActive,
   onSelect,
@@ -53,7 +53,7 @@ export default function MCPItem({
   enabledTools,
   isAuthenticated,
   isLoading,
-}: MCPItemProps) {
+}: MCPLineItemProps) {
   const showAuthTrigger =
     server.auth_performer === MCPAuthenticationPerformer.PER_USER &&
     server.auth_type !== MCPAuthenticationType.NONE;

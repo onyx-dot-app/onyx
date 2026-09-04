@@ -23,7 +23,7 @@ import { useSettings } from "@/lib/settings/hooks";
 import { FILE_READER_TOOL_ID, SEARCH_TOOL_ID } from "@/lib/tools/constants";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
 import { ToolsPopoverProvider } from "@/lib/tools/providers";
-import MCPItem, { MCPServer } from "@/lib/tools/components/MCPItem";
+import MCPLineItem, { MCPServer } from "@/lib/tools/components/MCPLineItem";
 import SourcesView from "@/lib/tools/components/SourcesView";
 import SwitchList, { SwitchListItem } from "@/lib/tools/components/SwitchList";
 import ToolLineItem from "@/lib/tools/components/ToolLineItem";
@@ -431,7 +431,7 @@ export default function ToolsPopover({
           );
 
           return (
-            <MCPItem
+            <MCPLineItem
               key={server.id}
               server={server}
               isActive={selectedMcpServerId === server.id}
