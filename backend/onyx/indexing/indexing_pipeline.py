@@ -1,7 +1,7 @@
 import time
 from collections import defaultdict
 from collections.abc import Callable, Generator, Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from typing import NamedTuple, Protocol
 
 import sentry_sdk
@@ -104,6 +104,8 @@ from onyx.prompts.contextual_retrieval import (
     DOCUMENT_SUMMARY_PROMPT,
 )
 from onyx.tracing.flows import LLMFlow
+from onyx.tracing.framework.create import ensure_trace
+from onyx.tracing.framework.traces import TraceContentMode
 from onyx.tracing.llm_utils import llm_generation_span, record_llm_response
 from onyx.utils.batching import batch_generator
 from onyx.utils.logger import setup_logger
@@ -116,6 +118,7 @@ logger = setup_logger()
 
 MAX_CONTEXTUAL_RAG_WORKERS = 128  # Assume 8mb of memory per worker
 MAX_IMAGE_WORKERS = 16
+INDEXING_PIPELINE_TRACE_NAME = "indexing_pipeline"
 
 # Contextual-RAG doc/chunk summaries are a short, non-reasoning task. On a reasoning
 # model the hidden reasoning tokens consume the small MAX_CONTEXT_TOKENS budget and the
@@ -884,6 +887,7 @@ def add_document_summaries(
         llm=llm,
         flow=LLMFlow.CONTEXTUAL_RAG_DOC_SUMMARY,
         input_messages=[prompt_msg],
+        content_mode=TraceContentMode.METADATA_ONLY,
     ) as span_generation:
         response = llm.invoke(
             prompt_msg,
@@ -938,6 +942,7 @@ def add_chunk_summaries(
             llm=llm,
             flow=LLMFlow.CONTEXTUAL_RAG_DOC_SUMMARY,
             input_messages=[fallback_prompt],
+            content_mode=TraceContentMode.METADATA_ONLY,
         ) as span_generation:
             response = llm.invoke(
                 fallback_prompt,
@@ -968,6 +973,7 @@ def add_chunk_summaries(
                 llm=llm,
                 flow=LLMFlow.CONTEXTUAL_RAG_CHUNK_CONTEXT,
                 input_messages=[processed_prompt],
+                content_mode=TraceContentMode.METADATA_ONLY,
             ) as span_generation:
                 response = llm.invoke(
                     processed_prompt,
@@ -1568,6 +1574,9 @@ def run_indexing_pipeline(
     enable_contextual_rag = (
         search_settings.enable_contextual_rag or ENABLE_CONTEXTUAL_RAG
     )
+    llm_enrichment_configured = (
+        enable_contextual_rag or get_image_extraction_and_analysis_enabled()
+    )
     llm = None
     if enable_contextual_rag:
         llm = get_contextual_rag_llm_for_search_settings(search_settings)
@@ -1580,17 +1589,26 @@ def run_indexing_pipeline(
         # after every doc, update status in case there are a bunch of really long docs
     )
 
-    return index_doc_batch_with_handler(
-        chunker=chunker,
-        embedder=embedder,
-        document_indices=document_indices,
-        document_batch=document_batch,
-        request_id=request_id,
-        tenant_id=tenant_id,
-        adapter=adapter,
-        enable_contextual_rag=enable_contextual_rag,
-        llm=llm,
-        ignore_time_skip=ignore_time_skip,
-        index_to_secondary=index_to_secondary,
-        from_beginning=from_beginning,
+    trace_context = (
+        ensure_trace(
+            INDEXING_PIPELINE_TRACE_NAME,
+            content_mode=TraceContentMode.METADATA_ONLY,
+        )
+        if llm_enrichment_configured
+        else nullcontext()
     )
+    with trace_context:
+        return index_doc_batch_with_handler(
+            chunker=chunker,
+            embedder=embedder,
+            document_indices=document_indices,
+            document_batch=document_batch,
+            request_id=request_id,
+            tenant_id=tenant_id,
+            adapter=adapter,
+            enable_contextual_rag=enable_contextual_rag,
+            llm=llm,
+            ignore_time_skip=ignore_time_skip,
+            index_to_secondary=index_to_secondary,
+            from_beginning=from_beginning,
+        )

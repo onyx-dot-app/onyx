@@ -1,7 +1,9 @@
 import random
 import threading
 import time
+from contextlib import nullcontext
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from typing import Any, List, cast
 from unittest.mock import MagicMock, Mock, patch
 
@@ -22,15 +24,18 @@ from onyx.hooks.points.document_ingestion import (
 from onyx.indexing.chunker import Chunker
 from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.indexing_pipeline import (
+    INDEXING_PIPELINE_TRACE_NAME,
     _apply_document_ingestion_hook,
     add_contextual_summaries,
     filter_documents,
     get_docs_to_update,
     process_image_sections,
+    run_indexing_pipeline,
 )
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.model_capabilities import get_max_input_tokens
 from onyx.llm.model_response import Choice, Message, ModelResponse
+from onyx.tracing.framework.traces import TraceContentMode
 
 
 def create_test_document(
@@ -654,6 +659,45 @@ def test_document_ingestion_hook_mixed_batch() -> None:
 # ---------------------------------------------------------------------------
 
 _PATCH_PREFIX = "onyx.indexing.indexing_pipeline"
+
+
+def test_run_pipeline_owns_llm_enrichment_trace() -> None:
+    search_settings = SimpleNamespace(enable_contextual_rag=False)
+    all_search_settings = SimpleNamespace(primary=search_settings, secondary=None)
+    expected_result = MagicMock()
+
+    with (
+        patch(
+            f"{_PATCH_PREFIX}.get_active_search_settings",
+            return_value=all_search_settings,
+        ),
+        patch(f"{_PATCH_PREFIX}.get_multipass_config"),
+        patch(
+            f"{_PATCH_PREFIX}.get_image_extraction_and_analysis_enabled",
+            return_value=True,
+        ),
+        patch(
+            f"{_PATCH_PREFIX}.index_doc_batch_with_handler",
+            return_value=expected_result,
+        ),
+        patch(f"{_PATCH_PREFIX}.ensure_trace", return_value=nullcontext()) as ensure,
+    ):
+        result = run_indexing_pipeline(
+            document_batch=[],
+            request_id=None,
+            embedder=MagicMock(),
+            document_indices=[],
+            db_session=MagicMock(),
+            tenant_id="tenant",
+            adapter=MagicMock(),
+            chunker=MagicMock(),
+        )
+
+    assert result is expected_result
+    ensure.assert_called_once_with(
+        INDEXING_PIPELINE_TRACE_NAME,
+        content_mode=TraceContentMode.METADATA_ONLY,
+    )
 
 
 def _mock_file_store(image_map: dict[str, bytes]) -> MagicMock:
