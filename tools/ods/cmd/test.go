@@ -11,6 +11,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/backendenv"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/childproc"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/testsuite"
@@ -116,10 +117,17 @@ func runPytestSuite(root string, suite *testsuite.Suite, suiteArgs []string, opt
 	}
 	pytestArgs = append(pytestArgs, suiteArgs...)
 
-	envVars := eeEnvDefaults(opts.NoEE)
+	envVars := backendenv.EEDefaults(opts.NoEE)
 	if suite.NeedsBackendEnv {
-		envFile := ensureBackendEnvFile(root)
-		envVars = append(loadBackendEnvFile(envFile), envVars...)
+		envFile, err := backendenv.EnsureFile(root)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fileVars, err := backendenv.Load(envFile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		envVars = append(fileVars, envVars...)
 		log.Debugf("Applied %d env vars from %s (shell takes precedence)", len(envVars), envFile)
 	}
 
@@ -132,7 +140,7 @@ func runPytestSuite(root string, suite *testsuite.Suite, suiteArgs []string, opt
 
 	pytestCmd := exec.Command("uv", pytestArgs...)
 	pytestCmd.Dir = suiteDir
-	pytestCmd.Env = mergeEnv(os.Environ(), envVars)
+	pytestCmd.Env = backendenv.Merge(os.Environ(), envVars)
 	childproc.Run(pytestCmd, "pytest")
 }
 

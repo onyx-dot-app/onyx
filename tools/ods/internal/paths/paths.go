@@ -104,6 +104,15 @@ func BackendDir() (string, error) {
 	return filepath.Join(root, "backend"), nil
 }
 
+// WebDir returns the web directory relative to the git root.
+func WebDir() (string, error) {
+	root, err := GitRoot()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(root, "web"), nil
+}
+
 // ResolveInBackend resolves one provided path to an absolute path inside the
 // backend directory, or fails loudly. Relative paths are tried against the
 // working directory, the backend directory, and the repository root, so the
