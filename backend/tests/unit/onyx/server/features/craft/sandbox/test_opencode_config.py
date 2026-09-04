@@ -201,6 +201,20 @@ def test_base_config_keeps_sandbox_permissions_and_plugins() -> None:
     "config",
     [build_opencode_base_config(), build_provider_opencode_config(_gateway())],
 )
+def test_proposal_tool_is_allowed_not_asked(config: dict[str, Any]) -> None:
+    """The proposal tool must not be permission-gated.
+
+    Gating it "ask" like connect_app would park the turn on the user's review,
+    which caps it at the 180s approval timeout. Approval happens on the card
+    instead, so the tool itself just runs.
+    """
+    assert config["permission"]["propose_scheduled_task"] == "allow"
+
+
+@pytest.mark.parametrize(
+    "config",
+    [build_opencode_base_config(), build_provider_opencode_config(_gateway())],
+)
 def test_start_webapp_script_is_write_protected(config: dict[str, Any]) -> None:
     permissions = config["permission"]
     assert isinstance(permissions, dict)
