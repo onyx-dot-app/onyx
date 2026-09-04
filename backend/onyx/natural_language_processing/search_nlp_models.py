@@ -287,7 +287,7 @@ def format_embedding_error(
     return (
         f"{'HTTP error' if status_code else 'Exception'} embedding text with {service_name} - {detail}: "
         f"Model: {model} "
-        f"Provider: {provider} "
+        f"Provider: {provider.value} "
         f"API Key: {sanitized_api_key} "
         f"Exception: {error}"
     )
@@ -640,7 +640,7 @@ class CloudEmbedding:
 
             error_string = format_embedding_error(
                 e,
-                str(self.provider),
+                self.provider.value,
                 model_name or deployment_name,
                 self.provider,
                 sanitized_api_key=self.sanitized_api_key,
@@ -661,7 +661,7 @@ class CloudEmbedding:
 
             error_string = format_embedding_error(
                 e,
-                str(self.provider),
+                self.provider.value,
                 model_name or deployment_name,
                 self.provider,
                 sanitized_api_key=self.sanitized_api_key,

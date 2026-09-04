@@ -15,6 +15,7 @@ from onyx.natural_language_processing.search_nlp_models import (
     CloudEmbedding,
     EmbeddingModel,
     clean_model_name,
+    format_embedding_error,
 )
 from shared_configs.enums import EmbeddingProvider, EmbedTextType
 from shared_configs.model_server_models import EmbedRequest, EmbedResponse
@@ -189,6 +190,20 @@ async def test_authentication_error_names_the_provider_by_value(
         assert "EmbeddingProvider." not in str(caught.value)
 
     await embedding.aclose()
+
+
+def test_format_embedding_error_names_the_provider_by_value() -> None:
+    """This string reaches the admin as an index-attempt failure message, so it
+    must not leak the enum repr."""
+    message = format_embedding_error(
+        ValueError("boom"),
+        EmbeddingProvider.OPENAI_COMPATIBLE.value,
+        "Qwen3-Embedding-8B",
+        EmbeddingProvider.OPENAI_COMPATIBLE,
+    )
+
+    assert "EmbeddingProvider." not in message
+    assert "Provider: openai_compatible" in message
 
 
 @pytest.mark.asyncio
