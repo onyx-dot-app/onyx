@@ -422,21 +422,30 @@ run, which builds every archive and publishes none of them.
 
 ### One-time setup
 
-None of this is done yet, and each step needs org permissions:
+`v0.1.0` is published, so everything the registry needs is in place:
 
-- [ ] Create the public repo `onyx-dot-app/terraform-provider-onyx`. Leave it empty or
-      initialise it — the workflow handles both.
-- [ ] Decide what `LICENSE` the mirror carries. The provider is MIT under this repo's
-      terms, but the monorepo `LICENSE` names `ee` directories that the mirror has none of.
-      goreleaser puts the file in every archive once it exists.
-- [ ] Create the release GPG key and register its public half with the Terraform Registry
-      under the `onyx-dot-app` namespace.
-- [ ] Install a GitHub App with `contents: write` on the mirror, and fill in the monorepo's
-      `release-terraform-provider` environment: the variable `TF_PROVIDER_RELEASE_APP_ID`
-      and the secret `TF_PROVIDER_RELEASE_APP_PRIVATE_KEY`.
-- [ ] Add the secrets `TF_PROVIDER_GPG_PRIVATE_KEY` and `TF_PROVIDER_GPG_PASSPHRASE` **to
-      the mirror**, which is where the signing happens. The monorepo never holds the key.
-- [ ] Link the mirror on registry.terraform.io as the `onyx-dot-app` organisation.
+- [x] The public repo `onyx-dot-app/terraform-provider-onyx` exists.
+- [x] The mirror carries its own `LICENSE`.
+- [x] The release GPG key exists and its public half is registered under the
+      `onyx-dot-app` namespace.
+- [x] The mirror holds `TF_PROVIDER_GPG_PRIVATE_KEY` and `TF_PROVIDER_GPG_PASSPHRASE`,
+      which is where the signing happens. The monorepo never holds the key.
+- [x] The mirror is linked on registry.terraform.io as the `onyx-dot-app` organisation.
 
-Until then, install the provider with `dev_overrides` (above), or from a private registry
-or filesystem mirror.
+One step is left, and it is the only reason a release is still cut by hand:
+
+- [ ] Give this repo a credential that can push to the mirror, and put it in a
+      `release-terraform-provider` environment. That environment does not exist yet, so
+      `release-terraform-provider.yml` cannot run. It currently expects a GitHub App:
+      the variable `TF_PROVIDER_RELEASE_APP_ID` and the secret
+      `TF_PROVIDER_RELEASE_APP_PRIVATE_KEY`.
+
+Until that exists, a release is the workflow's own commands run locally against the
+mirror, followed by the tag — about a minute. That is how `v0.1.0` shipped.
+
+## Licence
+
+MIT, the same terms the Onyx monorepo applies to content outside its `ee` directories.
+The provider contains no Enterprise-licensed code. `LICENSE` holds the plain MIT text
+with nothing added, so licence scanners and GitHub detect it as MIT rather than
+reporting `NOASSERTION`.

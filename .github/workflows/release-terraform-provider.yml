@@ -26,8 +26,12 @@ on:
 permissions:
   contents: read
 
+# One group for every release, not one per tag. Each run reads the mirror's
+# current main and pushes one commit onto it, so two releases running together
+# read the same parent and the second atomic push is refused. Serialising them
+# costs nothing — a release is a minute — and removes that failure.
 concurrency:
-  group: Release-Terraform-Provider-${{ github.ref_name }}
+  group: Release-Terraform-Provider
   cancel-in-progress: false
 
 env:
