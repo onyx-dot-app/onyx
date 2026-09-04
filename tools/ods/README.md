@@ -246,26 +246,26 @@ ods web test --watch
 
 ### `test` - Run Tests
 
-Run the repo's Go test suites without changing directories or remembering
-which module owns a file.
+Run the repo's test suites without changing directories or remembering which
+suite owns a file.
 
 ```shell
 ods test <suite|path> [args...]
 ```
 
-The first argument is a suite name or a path inside a module. A path selects
-the suite that covers it, so you can pass a file straight from your editor. All
-later arguments go to `go test`.
+The first argument is a suite name or a path inside a suite. A path selects the
+suite that covers it, so you can pass a file straight from your editor. All
+later arguments go to the suite's test runner.
 
-| Suite | Aliases | Module |
-| --- | --- | --- |
-| `ods` | | `tools/ods` |
-| `cli` | | `cli` |
-| `terraform` | `tf` | `terraform-provider-onyx` |
+| Suite | Aliases | Directory | Runner |
+| --- | --- | --- | --- |
+| `ods` | | `tools/ods` | `go test` |
+| `cli` | | `cli` | `go test` |
+| `terraform` | `tf` | `terraform-provider-onyx` | `go test` |
 
-The suites run with `-race`, the same as `pr-golang-tests.yml`. `go test` takes
-packages rather than files, so a file argument runs the package that holds it,
-and `<file>::<TestName>` becomes a `-run` filter.
+The Go suites run with `-race`, the same as `pr-golang-tests.yml`. A runner that
+takes packages rather than files, such as `go test`, runs the package that holds
+a file argument. `<file>::<TestName>` runs one test.
 
 **Examples:**
 

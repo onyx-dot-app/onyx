@@ -16,11 +16,11 @@ import (
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/testsuite"
 )
 
-// NewTestCommand creates a command that runs the repo's Go test suites.
+// NewTestCommand creates a command that runs the repo's test suites.
 func NewTestCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "test [suite|path] [args...]",
-		Short: "Run tests for the repo's Go modules",
+		Short: "Run the repo's test suites",
 		Long:  testHelpDescription(),
 		Args:  cobra.ArbitraryArgs,
 		ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
@@ -31,8 +31,8 @@ func NewTestCommand() *cobra.Command {
 		},
 		Run: runTest,
 	}
-	// Stop parsing at the first positional so flags meant for go test reach
-	// it instead of cobra.
+	// Stop parsing at the first positional so flags meant for the test runner
+	// reach it instead of cobra.
 	cmd.Flags().SetInterspersed(false)
 
 	return cmd
@@ -95,14 +95,14 @@ func runGoSuite(root string, suite *testsuite.Suite, suiteArgs []string) {
 }
 
 func testHelpDescription() string {
-	description := `Run tests for the repo's Go modules.
+	description := `Run the repo's test suites.
 
-The first argument is a suite name or a path inside a module. A path picks the
+The first argument is a suite name or a path inside a suite. A path picks the
 suite that covers it, so you can pass a file straight from an editor. Every
-later argument goes to go test.
+later argument goes to the suite's test runner.
 
-go test takes packages rather than files, so a file argument runs the package
-that holds it, and "<file>::<TestName>" becomes a -run filter.
+A runner that takes packages rather than files, such as go test, runs the
+package that holds a file argument. "<file>::<TestName>" runs one test.
 
 Examples:
   ods test ods

@@ -1,7 +1,7 @@
-// Package testsuite maps a suite name or a file path onto the Go module that
-// owns it. The repo has three Go modules with different working directories;
-// this package holds the routing table and the pure logic that picks an entry
-// from it.
+// Package testsuite maps a suite name or a file path onto the test suite that
+// owns it. The repo holds several suites, each with its own working directory
+// and test runner; this package holds the routing table and the pure logic
+// that picks an entry from it.
 package testsuite
 
 import (
@@ -22,11 +22,11 @@ type Suite struct {
 	Name string
 	// Aliases are alternate names accepted on the command line.
 	Aliases []string
-	// Dir is the module directory, relative to the git root. It is the
-	// working directory for go test and the prefix used to infer the suite
-	// from a path.
+	// Dir is the suite's directory, relative to the git root. It is the
+	// working directory for the test runner and the prefix used to infer the
+	// suite from a path.
 	Dir string
-	// DefaultArgs are passed to go test before any user arguments, so a
+	// DefaultArgs are passed to the runner before any user arguments, so a
 	// user argument for the same option still wins.
 	DefaultArgs []string
 	// Short is the one-line description shown in help output.
@@ -40,20 +40,20 @@ var suites = []Suite{
 		Dir:  "tools/ods",
 		// -race matches pr-golang-tests.yml, which runs every Go module.
 		DefaultArgs: []string{"-race"},
-		Short:       "Tests for this tool (go)",
+		Short:       "Tests for this tool",
 	},
 	{
 		Name:        "cli",
 		Dir:         "cli",
 		DefaultArgs: []string{"-race"},
-		Short:       "Onyx CLI tests (go)",
+		Short:       "Onyx CLI tests",
 	},
 	{
 		Name:        "terraform",
 		Aliases:     []string{"tf"},
 		Dir:         "terraform-provider-onyx",
 		DefaultArgs: []string{"-race"},
-		Short:       "Terraform provider tests (go)",
+		Short:       "Terraform provider tests",
 	},
 }
 
@@ -129,9 +129,10 @@ func Resolve(root, cwd string, args []string) (*Suite, []string, error) {
 	return suite, append(runnerTarget(root, suite, path(target)), rest...), nil
 }
 
-// runnerTarget shapes a suite-relative path into what go test accepts. go test
-// takes packages rather than files, so a file becomes the directory that holds
-// it, and a "<file>::<TestName>" node id becomes a -run filter.
+// runnerTarget shapes a suite-relative path into what the suite's runner
+// accepts. go test takes packages rather than files, so a file becomes the
+// directory that holds it, and a "<file>::<TestName>" node id becomes a -run
+// filter.
 func runnerTarget(root string, suite *Suite, rel string) []string {
 	file := stripNodeID(rel)
 	pkg := goPackage(root, suite, file)
@@ -158,9 +159,9 @@ func goPackage(root string, suite *Suite, rel string) string {
 // suite-relative arguments returned by Resolve, where a target always carries a
 // path separator or a node id.
 //
-// Callers need this because go test with no packages tests only the module
-// root, so a bare run needs "./..." to cover the whole module — but only when
-// the caller has not already picked a target.
+// Callers need this because a runner given no target may cover less than the
+// whole suite, so a bare run needs the suite's catch-all target — but only
+// when the caller has not already picked one.
 func HasTarget(args []string) bool {
 	for _, arg := range args {
 		if looksLikePath(arg) {
