@@ -7,6 +7,15 @@ import (
 	"path/filepath"
 )
 
+// ScreenshotSummary describes a single screenshot that differs from the
+// baseline. Unchanged screenshots are omitted, so consumers can iterate the
+// list directly without filtering.
+type ScreenshotSummary struct {
+	Name        string  `json:"name"`
+	Status      string  `json:"status"`
+	DiffPercent float64 `json:"diff_percent"`
+}
+
 // Summary holds aggregate comparison results in a JSON-friendly format.
 // It is written alongside the HTML report so that CI pipelines can read it
 // without parsing HTML.
@@ -18,11 +27,17 @@ type Summary struct {
 	Unchanged      int    `json:"unchanged"`
 	Total          int    `json:"total"`
 	HasDifferences bool   `json:"has_differences"`
+
+	// Screenshots lists the differing screenshots in the order produced by
+	// CompareDirectories: changed first (by diff percent descending), then
+	// added, then removed. The PR comment relies on this order to show the
+	// most significant changes when it caps the number of rows.
+	Screenshots []ScreenshotSummary `json:"screenshots"`
 }
 
 // BuildSummary computes a Summary from a slice of comparison results.
 func BuildSummary(project string, results []Result) Summary {
-	s := Summary{Project: project}
+	s := Summary{Project: project, Screenshots: []ScreenshotSummary{}}
 	for _, r := range results {
 		switch r.Status {
 		case StatusChanged:
@@ -33,6 +48,14 @@ func BuildSummary(project string, results []Result) Summary {
 			s.Removed++
 		case StatusUnchanged:
 			s.Unchanged++
+		}
+
+		if r.Status != StatusUnchanged {
+			s.Screenshots = append(s.Screenshots, ScreenshotSummary{
+				Name:        r.Name,
+				Status:      r.Status.String(),
+				DiffPercent: r.DiffPercent,
+			})
 		}
 	}
 	s.Total = len(results)

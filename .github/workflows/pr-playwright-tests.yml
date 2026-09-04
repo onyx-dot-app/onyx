@@ -955,6 +955,8 @@ jobs:
       - runner=2cpu-linux-arm64
       - "run-id=${{ github.run_id }}-visual-regression-${{ matrix.project }}"
     timeout-minutes: 5
+    env:
+      GO_VERSION: "1.26.5"
     strategy:
       fail-fast: false
       matrix:
@@ -1000,11 +1002,20 @@ jobs:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
 
-      - name: Install the latest version of uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # ratchet:astral-sh/setup-uv@v10.0.1
+      # Build `ods` from this checkout rather than installing the published
+      # onyx-devtools wheel. The screenshot-diff output this job depends on
+      # (summary.json, images/) changes with tools/ods, so a source build keeps
+      # CI in step with the PR instead of waiting for the next release.
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # ratchet:actions/setup-go@v5 # zizmor: ignore[cache-poisoning]
         with:
-          enable-cache: false
-          version: "0.11.25"
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: tools/ods/go.sum
+
+      - name: Build ods
+        run: |
+          go build -o "${RUNNER_TEMP}/bin/ods" .
+          echo "${RUNNER_TEMP}/bin" >> "${GITHUB_PATH}"
+        working-directory: tools/ods
 
       - name: Determine baseline revision
         id: baseline-rev
@@ -1036,7 +1047,7 @@ jobs:
           PLAYWRIGHT_S3_BUCKET: ${{ env.PLAYWRIGHT_S3_BUCKET }}
           BASELINE_REV: ${{ steps.baseline-rev.outputs.rev }}
         run: |
-          uv run --no-sync --with onyx-devtools ods screenshot-diff compare \
+          ods screenshot-diff compare \
             --project "${PROJECT}" \
             --rev "${BASELINE_REV}"
 
@@ -1065,12 +1076,18 @@ jobs:
           aws s3 sync "web/output/screenshot-diff/${PROJECT}/" \
             "s3://${PLAYWRIGHT_S3_BUCKET}/reports/pr-${PR_NUMBER}/${RUN_ID}/${PROJECT}/"
 
-      - name: Upload visual diff summary
+      # Feeds the visual-regression-comment job: the counts it renders plus the
+      # per-screenshot PNGs it attaches to the comment. Deliberately excludes
+      # index.html, which base64-inlines every image and dwarfs everything else
+      # here — the full report is published separately below.
+      - name: Upload visual diff summary and images
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
-          name: screenshot-diff-summary-${{ matrix.project }}
-          path: ./web/output/screenshot-diff/${{ matrix.project }}/summary.json
+          name: screenshot-diff-comment-${{ matrix.project }}
+          path: |
+            ./web/output/screenshot-diff/${{ matrix.project }}/summary.json
+            ./web/output/screenshot-diff/${{ matrix.project }}/images/
           if-no-files-found: ignore
           retention-days: 5
 
@@ -1107,7 +1124,7 @@ jobs:
           BASELINE_REV: ${{ steps.baseline-rev.outputs.rev }}
         run: |
           if [ -d "web/output/screenshots/" ] && [ "$(ls -A web/output/screenshots/)" ]; then
-            uv run --no-sync --with onyx-devtools ods screenshot-diff upload-baselines \
+            ods screenshot-diff upload-baselines \
               --project "${PROJECT}" \
               --rev "${BASELINE_REV}" \
               --delete
@@ -1127,30 +1144,73 @@ jobs:
     timeout-minutes: 5
     permissions:
       pull-requests: write
+    env:
+      # `gh ... --attach` (which uploads the before/after/diff images) landed in
+      # 2.99.0. The runner image does not pin a version, so check and install.
+      GH_MIN_VERSION: "2.99.0"
+      # Cap on delta table rows across ALL projects. Each row uploads three
+      # images, so this bounds both comment length and upload time.
+      MAX_DIFF_ROWS: "6"
     steps:
-      - name: Download visual diff summaries
+      - name: Download visual diff summaries and images
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
-          pattern: screenshot-diff-summary-*
+          pattern: screenshot-diff-comment-*
           path: summaries/
+
+      - name: Ensure gh supports attachments
+        run: |
+          CURRENT=$(gh --version 2>/dev/null | head -1 | awk '{print $3}')
+          echo "Runner gh version: ${CURRENT:-none}"
+          OLDEST=$(printf '%s\n%s\n' "${GH_MIN_VERSION}" "${CURRENT:-0.0.0}" | sort -V | head -1)
+          if [ "${OLDEST}" = "${GH_MIN_VERSION}" ] && [ -n "${CURRENT}" ]; then
+            echo "gh is new enough."
+            exit 0
+          fi
+          echo "Installing gh ${GH_MIN_VERSION}..."
+          TARBALL="gh_${GH_MIN_VERSION}_linux_amd64"
+          curl -fsSL \
+            "https://github.com/cli/cli/releases/download/v${GH_MIN_VERSION}/${TARBALL}.tar.gz" \
+            -o "${RUNNER_TEMP}/gh.tar.gz"
+          tar -xzf "${RUNNER_TEMP}/gh.tar.gz" -C "${RUNNER_TEMP}"
+          echo "${RUNNER_TEMP}/${TARBALL}/bin" >> "${GITHUB_PATH}"
 
       - name: Post combined PR comment
         env:
           GH_TOKEN: ${{ github.token }}
+          # The asset upload endpoint behind `--attach` rejects the Actions
+          # installation token (ghs_*); it accepts OAuth tokens and classic
+          # PATs. Without this secret — notably on fork PRs, which get no
+          # secrets — the comment degrades to counts only.
+          ATTACH_PAT: ${{ secrets.VISUAL_REGRESSION_ATTACH_PAT }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           RUN_ID: ${{ github.run_id }}
           REPO: ${{ github.repository }}
           S3_BUCKET: ${{ env.PLAYWRIGHT_S3_BUCKET }}
         run: |
           MARKER="<!-- visual-regression-report -->"
+          BODY_PLAIN="${RUNNER_TEMP}/body-plain.md"
+          BODY_RICH="${RUNNER_TEMP}/body-rich.md"
+          ROWS_FILE="${RUNNER_TEMP}/delta-rows.md"
 
-          # Build the markdown table from all summary files
-          TABLE_HEADER="| Project | Changed | Added | Removed | Unchanged | Report |"
-          TABLE_DIVIDER="|---------|---------|-------|---------|-----------|--------|"
-          TABLE_ROWS=""
+          # GitHub rejects attachments over 10 MB.
+          MAX_IMAGE_BYTES=10485760
+
           HAS_ANY_SUMMARY=false
+          TOTAL_CHANGED=0
+          ROWS=0
+          ATTACH_ARGS=()
 
-          for SUMMARY_DIR in summaries/screenshot-diff-summary-*/; do
+          {
+            echo "${MARKER}"
+            echo "### 🖼️ Visual Regression Report"
+            echo ""
+            echo "| Project | Changed | Added | Removed | Unchanged | Report |"
+            echo "|---------|---------|-------|---------|-----------|--------|"
+          } > "${BODY_PLAIN}"
+          : > "${ROWS_FILE}"
+
+          for SUMMARY_DIR in summaries/screenshot-diff-comment-*/; do
             SUMMARY_FILE="${SUMMARY_DIR}summary.json"
             if [ ! -f "${SUMMARY_FILE}" ]; then
               continue
@@ -1174,7 +1234,51 @@ jobs:
               REPORT_LINK="✅ No changes"
             fi
 
-            TABLE_ROWS="${TABLE_ROWS}| \`${PROJECT}\` | ${CHANGED} | ${ADDED} | ${REMOVED} | ${UNCHANGED} | ${REPORT_LINK} |\n"
+            printf '| `%s` | %s | %s | %s | %s | %s |\n' \
+              "${PROJECT}" "${CHANGED}" "${ADDED}" "${REMOVED}" "${UNCHANGED}" "${REPORT_LINK}" \
+              >> "${BODY_PLAIN}"
+
+            TOTAL_CHANGED=$((TOTAL_CHANGED + CHANGED))
+
+            # `screenshots` is ordered by diff percent descending, so taking the
+            # first MAX_DIFF_ROWS shows the most significant changes.
+            while IFS=$'\t' read -r NAME PERCENT; do
+              if [ -z "${NAME}" ]; then
+                continue
+              fi
+              if [ "${ROWS}" -ge "${MAX_DIFF_ROWS}" ]; then
+                break
+              fi
+
+              BEFORE="${SUMMARY_DIR}images/baseline/${NAME}"
+              AFTER="${SUMMARY_DIR}images/current/${NAME}"
+              DIFF="${SUMMARY_DIR}images/diff/${NAME}"
+
+              SKIP=false
+              for IMG in "${BEFORE}" "${AFTER}" "${DIFF}"; do
+                if [ ! -f "${IMG}" ]; then
+                  echo "::warning::${IMG} is missing — skipping this row."
+                  SKIP=true
+                elif [ "$(stat -c%s "${IMG}")" -gt "${MAX_IMAGE_BYTES}" ]; then
+                  echo "::warning::${IMG} exceeds the 10 MB attachment limit — skipping this row."
+                  SKIP=true
+                fi
+              done
+              if [ "${SKIP}" = "true" ]; then
+                continue
+              fi
+
+              printf '| `%s` / `%s` (%.2f%%) | ![before](%s) | ![after](%s) | ![diff](%s) |\n' \
+                "${PROJECT}" "${NAME}" "${PERCENT}" "${BEFORE}" "${AFTER}" "${DIFF}" \
+                >> "${ROWS_FILE}"
+              ATTACH_ARGS+=(--attach "${BEFORE}" --attach "${AFTER}" --attach "${DIFF}")
+              ROWS=$((ROWS + 1))
+            done < <(jq -r '
+              .screenshots // []
+              | map(select(.status == "changed"))
+              | .[]
+              | "\(.name)\t\(.diff_percent)"
+            ' "${SUMMARY_FILE}")
           done
 
           if [ "${HAS_ANY_SUMMARY}" = "false" ]; then
@@ -1182,31 +1286,58 @@ jobs:
             exit 0
           fi
 
-          BODY=$(printf '%s\n' \
-            "${MARKER}" \
-            "### 🖼️ Visual Regression Report" \
-            "" \
-            "${TABLE_HEADER}" \
-            "${TABLE_DIVIDER}" \
-            "$(printf '%b' "${TABLE_ROWS}")")
+          # The rich body adds the delta table; the plain one is the fallback if
+          # the upload fails or no PAT is available.
+          cp "${BODY_PLAIN}" "${BODY_RICH}"
+          if [ "${ROWS}" -gt 0 ]; then
+            {
+              echo ""
+              echo "#### Changed screenshots"
+              echo ""
+              echo "| Screenshot | Before | After | Diff |"
+              echo "|------------|--------|-------|------|"
+              cat "${ROWS_FILE}"
+            } >> "${BODY_RICH}"
 
-          # Upsert: find existing comment with the marker, or create a new one
-          EXISTING_COMMENT_ID=$(gh api \
-            "repos/${REPO}/issues/${PR_NUMBER}/comments" \
-            --jq ".[] | select(.body | startswith(\"${MARKER}\")) | .id" \
-            2>/dev/null | head -1)
-
-          if [ -n "${EXISTING_COMMENT_ID}" ]; then
-            gh api \
-              --method PATCH \
-              "repos/${REPO}/issues/comments/${EXISTING_COMMENT_ID}" \
-              -f body="${BODY}"
-          else
-            gh api \
-              --method POST \
-              "repos/${REPO}/issues/${PR_NUMBER}/comments" \
-              -f body="${BODY}"
+            REMAINING=$((TOTAL_CHANGED - ROWS))
+            if [ "${REMAINING}" -gt 0 ]; then
+              printf '\n_%s more changed screenshot(s) — see the full report._\n' \
+                "${REMAINING}" >> "${BODY_RICH}"
+            fi
           fi
+
+          # Capture the comments to clean up BEFORE posting, so the new comment
+          # is never a deletion candidate.
+          STALE_IDS=$(gh api --paginate "repos/${REPO}/issues/${PR_NUMBER}/comments" \
+            --jq ".[] | select(.body | startswith(\"${MARKER}\")) | .id" 2>/dev/null || true)
+
+          POSTED=false
+          if [ "${ROWS}" -gt 0 ] && [ -n "${ATTACH_PAT}" ]; then
+            # gh rewrites the local image paths in the body to the uploaded
+            # asset URLs.
+            if GH_TOKEN="${ATTACH_PAT}" gh pr comment "${PR_NUMBER}" \
+                 --repo "${REPO}" --body-file "${BODY_RICH}" "${ATTACH_ARGS[@]}"; then
+              POSTED=true
+            else
+              echo "::warning::Uploading the delta images failed — posting counts only."
+            fi
+          elif [ "${ROWS}" -gt 0 ]; then
+            echo "::warning::VISUAL_REGRESSION_ATTACH_PAT is not set — posting counts only."
+          fi
+
+          if [ "${POSTED}" = "false" ]; then
+            gh pr comment "${PR_NUMBER}" --repo "${REPO}" --body-file "${BODY_PLAIN}"
+          fi
+
+          # `--attach` only exists on `gh pr comment`, which cannot edit a
+          # specific comment, so each run posts fresh and removes its
+          # predecessors.
+          while read -r ID; do
+            if [ -n "${ID}" ]; then
+              echo "Deleting superseded comment ${ID}"
+              gh api --method DELETE "repos/${REPO}/issues/comments/${ID}" || true
+            fi
+          done <<< "${STALE_IDS}"
 
   playwright-required:
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.

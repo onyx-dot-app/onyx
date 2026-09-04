@@ -387,7 +387,7 @@ func runCompare(opts *ScreenshotDiffCompareOptions) {
 		log.Warnf("Current screenshots directory does not exist: %s", currentDir)
 		log.Warn("No screenshots captured for this project — writing empty summary.")
 
-		summary := imgdiff.Summary{Project: project}
+		summary := imgdiff.BuildSummary(project, nil)
 		if err := imgdiff.WriteSummary(summary, summaryPath); err != nil {
 			log.Fatalf("Failed to write summary: %v", err)
 		}
@@ -417,11 +417,20 @@ func runCompare(opts *ScreenshotDiffCompareOptions) {
 
 	// Generate HTML report only if there are differences
 	if summary.HasDifferences {
+		reportDir := filepath.Dir(outputPath)
+
 		log.Infof("Generating report: %s", outputPath)
 		if err := imgdiff.GenerateReport(results, outputPath); err != nil {
 			log.Fatalf("Failed to generate report: %v", err)
 		}
 		log.Infof("Report generated successfully: %s", outputPath)
+
+		// The report inlines its images as data URIs. Write them as real files
+		// too so CI can attach them to the PR comment.
+		if err := imgdiff.WriteImages(results, reportDir); err != nil {
+			log.Fatalf("Failed to write diff images: %v", err)
+		}
+		log.Infof("Diff images written to: %s", filepath.Join(reportDir, imgdiff.ImagesDirName))
 	} else {
 		log.Infof("No visual differences detected — skipping report generation.")
 	}
