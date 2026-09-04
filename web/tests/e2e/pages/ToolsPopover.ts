@@ -160,6 +160,10 @@ export class ToolsPopover {
   // ---------------------------------------------------------------------------
 
   serverRow(serverName: string): Locator {
+    // Deliberately unanchored. A server row's accessible name is not just its
+    // name: an authenticated server with some of its tools enabled renders a
+    // visible count beside it, which the name picks up. Anchoring the end
+    // would drop exactly those rows.
     return this.row(new RegExp(escapeRegex(serverName)));
   }
 
