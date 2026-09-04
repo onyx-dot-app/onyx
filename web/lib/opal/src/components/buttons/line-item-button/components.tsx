@@ -42,7 +42,18 @@ type LineItemButtonOwnProps = Pick<
 
   /** Which side the tooltip appears on. @default "top" */
   tooltipSide?: TooltipSide;
-};
+} & Pick<
+    React.HTMLAttributes<HTMLDivElement>,
+    | "aria-label"
+    | "aria-describedby"
+    | "aria-labelledby"
+    | "onMouseEnter"
+    | "onMouseLeave"
+    | "onMouseMove"
+    | "onMouseDown"
+    | "onPointerEnter"
+    | "onPointerLeave"
+  >;
 
 type LineItemButtonProps = ContentPassthroughProps & LineItemButtonOwnProps;
 
@@ -116,6 +127,24 @@ function LineItemButton({
    */
   color = "interactive",
 
+  /*
+   * Named individually so they reach the row element rather than the content
+   * inside it. Everything not destructured here goes to `ContentAction`, which
+   * does not spread onto a DOM node — so a label or a pointer handler left in
+   * that bag is silently dropped. Not a blanket `HTMLAttributes` extend either:
+   * `title` means the row's label to `ContentAction` and a native tooltip to
+   * the DOM, and the two would collide.
+   */
+  "aria-label": ariaLabel,
+  "aria-describedby": ariaDescribedBy,
+  "aria-labelledby": ariaLabelledBy,
+  onMouseEnter,
+  onMouseLeave,
+  onMouseMove,
+  onMouseDown,
+  onPointerEnter,
+  onPointerLeave,
+
   // ContentAction pass-through
   ...contentActionProps
 }: LineItemButtonProps) {
@@ -147,6 +176,15 @@ function LineItemButton({
         width={width}
         size="fit"
         rounding={rounding}
+        aria-label={ariaLabel}
+        aria-describedby={ariaDescribedBy}
+        aria-labelledby={ariaLabelledBy}
+        onMouseEnter={onMouseEnter}
+        onMouseLeave={onMouseLeave}
+        onMouseMove={onMouseMove}
+        onMouseDown={onMouseDown}
+        onPointerEnter={onPointerEnter}
+        onPointerLeave={onPointerLeave}
         {...rowButtonProps}
       >
         <div className="w-full p-1.5">
