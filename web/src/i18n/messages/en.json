@@ -6089,7 +6089,7 @@
           "title": "Restrict Email Domains"
         },
         "idpExpiry": {
-          "description": "Log users out when the upstream OAuth/OIDC provider session expires.",
+          "description": "Log users out when the upstream OAuth/OIDC provider session expires. An OIDC or Google provider can override this in its own settings.",
           "title": "Sync Session Expiry with Identity Provider"
         },
         "openSignUp": {

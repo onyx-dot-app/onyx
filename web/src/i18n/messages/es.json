@@ -6089,7 +6089,7 @@
           "title": "Restringir los dominios de correo"
         },
         "idpExpiry": {
-          "description": "Cierra la sesión de los usuarios cuando caduca la sesión del proveedor OAuth/OIDC de origen.",
+          "description": "Cierra la sesión de los usuarios cuando caduca la sesión del proveedor OAuth/OIDC de origen. Un proveedor OIDC o de Google puede anular esto en su propia configuración.",
           "title": "Sincronizar la caducidad de la sesión con el proveedor de identidad"
         },
         "openSignUp": {

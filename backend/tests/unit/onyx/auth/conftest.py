@@ -11,6 +11,7 @@ def mock_user() -> MagicMock:
     user = MagicMock(spec=User)
     user.email = "test@example.com"
     user.id = "test-user-id"
+    user.oidc_expiry = None
     return user
 
 

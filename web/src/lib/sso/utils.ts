@@ -53,6 +53,8 @@ export interface SSOConfigField {
   description: string;
   optional?: boolean;
   placeholder?: string;
+  // Shown only when editing, so a new row inherits the backend default.
+  editOnly?: boolean;
 }
 
 const CLIENT_ID_FIELD: SSOConfigField = {
@@ -77,6 +79,16 @@ const PKCE_FIELD: SSOConfigField = {
     "Send a PKCE code challenge with this provider's login flow. " +
     "A deployment-wide setting may force this on.",
 };
+const IDP_EXPIRY_FIELD: SSOConfigField = {
+  name: "track_external_idp_expiry",
+  label: "Sync Session Expiry with Identity Provider",
+  kind: "switch",
+  editOnly: true,
+  description:
+    "Log users out when this provider's token expires. Overrides the " +
+    "deployment-wide setting on the Security page for accounts that sign " +
+    "in through this provider.",
+};
 const SCOPES_FIELD: SSOConfigField = {
   name: "scopes",
   label: "Scopes",
@@ -94,6 +106,7 @@ export const CONFIG_FIELDS_BY_TYPE: Record<SSOProviderType, SSOConfigField[]> =
       CLIENT_ID_FIELD,
       CLIENT_SECRET_FIELD,
       PKCE_FIELD,
+      IDP_EXPIRY_FIELD,
       SCOPES_FIELD,
     ],
     OIDC: [
@@ -116,6 +129,7 @@ export const CONFIG_FIELDS_BY_TYPE: Record<SSOProviderType, SSOConfigField[]> =
           "Microsoft Entra ID.",
       },
       PKCE_FIELD,
+      IDP_EXPIRY_FIELD,
       SCOPES_FIELD,
     ],
     SAML: [

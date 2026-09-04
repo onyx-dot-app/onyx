@@ -68,6 +68,7 @@ def test_resolve_oidc_returns_config(monkeypatch: pytest.MonkeyPatch) -> None:
         "require_verified_email": False,
         "pkce_enabled": False,
         "scopes": [],
+        "track_external_idp_expiry": None,
     }
 
 
@@ -86,6 +87,7 @@ def test_resolve_google_returns_config(monkeypatch: pytest.MonkeyPatch) -> None:
         "legacy_callback": False,
         "pkce_enabled": False,
         "scopes": [],
+        "track_external_idp_expiry": None,
     }
 
 

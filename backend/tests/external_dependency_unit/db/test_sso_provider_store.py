@@ -70,6 +70,7 @@ def test_create_and_fetch_roundtrip(db_session: Session, provider_name: str) -> 
         "legacy_callback": False,
         "pkce_enabled": False,
         "scopes": [],
+        "track_external_idp_expiry": None,
     }
     assert fetched.config.get_value(apply_mask=True)["client_secret"] != "super-secret"
 
@@ -183,6 +184,7 @@ def test_partial_update_preserves_config(
         "legacy_callback": False,
         "pkce_enabled": False,
         "scopes": [],
+        "track_external_idp_expiry": None,
     }
 
 

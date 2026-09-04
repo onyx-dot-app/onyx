@@ -6089,7 +6089,7 @@
           "title": "이메일 도메인 제한"
         },
         "idpExpiry": {
-          "description": "상위 OAuth/OIDC 제공자의 세션이 만료되면 사용자를 로그아웃합니다.",
+          "description": "상위 OAuth/OIDC 제공자의 세션이 만료되면 사용자를 로그아웃합니다. OIDC 또는 Google 제공자는 자체 설정에서 이를 재정의할 수 있습니다.",
           "title": "ID 제공자와 세션 만료 동기화"
         },
         "openSignUp": {

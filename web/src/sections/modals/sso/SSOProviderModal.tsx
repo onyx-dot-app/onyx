@@ -130,10 +130,14 @@ function buildValidationSchema(t: SSOTranslate) {
 // off must send an explicit false.
 function buildConfig(
   providerType: SSOProviderType,
-  values: SSOProviderFormValues
+  values: SSOProviderFormValues,
+  isEditing: boolean
 ): Record<string, string | boolean | string[]> {
   const config: Record<string, string | boolean | string[]> = {};
   for (const field of CONFIG_FIELDS_BY_TYPE[providerType]) {
+    if (field.editOnly && !isEditing) {
+      continue;
+    }
     if (field.kind === "switch") {
       config[field.name] = Boolean(values.config[field.name]);
       continue;
@@ -265,7 +269,7 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
     { setSubmitting }: { setSubmitting: (isSubmitting: boolean) => void }
   ) {
     const providerType = values.provider_type;
-    const config = buildConfig(providerType, values);
+    const config = buildConfig(providerType, values, isEditing);
     try {
       if (!isEditing) {
         const request: SSOProviderCreateRequest = {
@@ -322,6 +326,9 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
           }) => {
             const providerType = values.provider_type;
             const providerTypeIcon = SSO_PROVIDER_DETAILS[providerType].icon;
+            const configFields = CONFIG_FIELDS_BY_TYPE[providerType].filter(
+              (field) => isEditing || !field.editOnly
+            );
 
             return (
               // flex-col fills the fixed-height Content so Modal.Body scrolls
@@ -413,7 +420,7 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
                     />
                   </InputVertical>
 
-                  {CONFIG_FIELDS_BY_TYPE[providerType].map((field) => (
+                  {configFields.map((field) => (
                     <InputVertical
                       key={field.name}
                       title={

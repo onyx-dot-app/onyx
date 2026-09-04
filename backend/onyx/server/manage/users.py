@@ -1073,11 +1073,9 @@ def verify_user_logged_in(
         )
 
     token_expires_at = _get_token_expires_at(user, request, db_session)
-    track_oidc = get_security_settings().track_external_idp_expiry
-    # When OIDC tracking is enabled, cap expiry at the IdP token's lifetime.
-    # Guard against stale oidc_expiry from a previous OIDC session (same comment
-    # as the old track_external_idp_expiry guard in UserInfo.from_model).
-    oidc_expiry = user.oidc_expiry if track_oidc else None
+    # A stale oidc_expiry is cleared on the request path before this runs, so
+    # a present one is the IdP token's cap on the session.
+    oidc_expiry = user.oidc_expiry
     if oidc_expiry is not None:
         token_expires_at = (
             min(token_expires_at, oidc_expiry)

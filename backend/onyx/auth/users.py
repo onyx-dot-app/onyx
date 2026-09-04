@@ -68,6 +68,10 @@ from onyx.auth.email_utils import (
     send_forgot_password_email,
     send_user_verification_email,
 )
+from onyx.auth.idp_expiry import (
+    linked_idp_expiry_switches,
+    session_follows_idp_expiry,
+)
 from onyx.auth.invited_users import get_invited_users, remove_user_from_invited_users
 from onyx.auth.jwt import verify_jwt_token
 from onyx.auth.login_claims_capture import capture_oauth_login_claims
@@ -1169,10 +1173,8 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
             # NOTE: Most IdPs have very short expiry times, and we don't want to force the user to
             # re-authenticate that frequently, so by default this is disabled
-            track_external_idp_expiry = (
-                oauth_security_settings.track_external_idp_expiry
-            )
-            if expires_at and track_external_idp_expiry:
+            idp_expiry_switches = await linked_idp_expiry_switches(db_session, user)
+            if expires_at and idp_expiry_switches.get(oauth_name):
                 oidc_expiry = datetime.fromtimestamp(expires_at, tz=timezone.utc)
                 await self.user_db.update(
                     user, update_dict={"oidc_expiry": oidc_expiry}
@@ -1222,10 +1224,11 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 user = await self.user_db.get(refreshed_user_id)
                 assert user is not None
 
-            # this is needed if an organization toggles track_external_idp_expiry from
-            # true to false; otherwise the oidc expiry will always be old and the user
-            # will never be able to login.
-            if user.oidc_expiry is not None and not track_external_idp_expiry:
+            # An expiry left by an earlier tracked login would block this login
+            # once it passes. Another linked provider may still track it.
+            if user.oidc_expiry is not None and not session_follows_idp_expiry(
+                idp_expiry_switches
+            ):
                 await self.user_db.update(user, {"oidc_expiry": None})
                 user.oidc_expiry = None  # ty: ignore[invalid-assignment]
             remove_user_from_invited_users_after_login(user.email, user.id, tenant_id)

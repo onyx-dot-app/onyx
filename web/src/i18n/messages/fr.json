@@ -6089,7 +6089,7 @@
           "title": "Restreindre les domaines de messagerie"
         },
         "idpExpiry": {
-          "description": "Déconnectez les utilisateurs quand la session du fournisseur OAuth/OIDC en amont expire.",
+          "description": "Déconnectez les utilisateurs quand la session du fournisseur OAuth/OIDC en amont expire. Un fournisseur OIDC ou Google peut remplacer ce réglage dans ses propres paramètres.",
           "title": "Synchroniser l'expiration de session avec le fournisseur d'identité"
         },
         "openSignUp": {

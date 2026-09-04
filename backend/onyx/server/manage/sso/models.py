@@ -4,6 +4,10 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from onyx.auth.idp_expiry import (
+    TRACK_EXTERNAL_IDP_EXPIRY_CONFIG_KEY,
+    tracks_external_idp_expiry,
+)
 from onyx.db.enums import SSOProviderType
 from onyx.db.models import SSOProvider
 from onyx.db.sso_provider import mask_secret_config_values, sso_login_callback_uri
@@ -71,6 +75,12 @@ class SSOProviderResponse(BaseModel):
             if provider.config
             else {}
         )
+        if provider.provider_type is not SSOProviderType.SAML:
+            # Admins edit the effective value. An unset switch follows the
+            # global setting, and that is what the form has to show.
+            config[TRACK_EXTERNAL_IDP_EXPIRY_CONFIG_KEY] = tracks_external_idp_expiry(
+                config
+            )
         redirect_uri = sso_login_callback_uri(provider, config, web_domain)
 
         return cls(

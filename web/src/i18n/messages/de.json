@@ -6089,7 +6089,7 @@
           "title": "E-Mail-Domains beschränken"
         },
         "idpExpiry": {
-          "description": "Benutzer abmelden, wenn die Sitzung beim vorgelagerten OAuth-/OIDC-Anbieter abläuft.",
+          "description": "Benutzer abmelden, wenn die Sitzung beim vorgelagerten OAuth-/OIDC-Anbieter abläuft. Ein OIDC- oder Google-Anbieter kann dies in seinen eigenen Einstellungen überschreiben.",
           "title": "Sitzungsablauf mit dem Identitätsanbieter synchronisieren"
         },
         "openSignUp": {
