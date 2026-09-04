@@ -21,7 +21,10 @@ import { hasPermission } from "@/lib/permissions";
 import { useProjectsContext } from "@/lib/projects/providers";
 import { useSettings } from "@/lib/settings/hooks";
 import { FILE_READER_TOOL_ID, SEARCH_TOOL_ID } from "@/lib/tools/constants";
-import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
+import {
+  useBuiltInToolNames,
+  type ToolConfigurationHandle,
+} from "@/lib/tools/hooks";
 import { ToolsPopoverProvider } from "@/lib/tools/providers";
 import MCPLineItem, { MCPServer } from "@/lib/tools/components/MCPLineItem";
 import SourcesView from "@/lib/tools/components/SourcesView";
@@ -67,6 +70,7 @@ export default function ToolsPopover({
   disabled = false,
 }: ToolsPopoverProps) {
   const t = useTranslations("actions");
+  const builtInToolNames = useBuiltInToolNames();
   const [open, setOpen] = useState(false);
   const [secondaryView, setSecondaryView] = useState<SecondaryViewState | null>(
     null
@@ -310,7 +314,12 @@ export default function ToolsPopover({
   const filteredTools = displayTools.filter((tool) => {
     if (!searchTerm) return true;
     const searchLower = searchTerm.toLowerCase();
+    // Match the name the row shows, so typing in the current locale finds
+    // the tool. The raw names stay searchable for anyone who knows them.
+    const shownName =
+      builtInToolNames[tool.in_code_tool_id ?? ""] ?? tool.display_name;
     return (
+      shownName?.toLowerCase().includes(searchLower) ||
       tool.display_name?.toLowerCase().includes(searchLower) ||
       tool.name.toLowerCase().includes(searchLower) ||
       tool.description?.toLowerCase().includes(searchLower)

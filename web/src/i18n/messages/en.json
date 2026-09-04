@@ -658,6 +658,35 @@
         "tooltip": "Show only enabled"
       }
     },
+    "toolNames": {
+      "internalSearch": {
+        "label": "Internal Search"
+      },
+      "imageGeneration": {
+        "label": "Image Generation"
+      },
+      "webSearch": {
+        "label": "Web Search"
+      },
+      "knowledgeGraph": {
+        "label": "Knowledge Graph Search"
+      },
+      "openUrl": {
+        "label": "Open URL"
+      },
+      "codeInterpreter": {
+        "label": "Code Interpreter"
+      },
+      "fileReader": {
+        "label": "File Reader"
+      },
+      "addMemory": {
+        "label": "Add Memory"
+      },
+      "codingAgent": {
+        "label": "Coding Agent"
+      }
+    },
     "toolsPopover": {
       "configureLinks": {
         "codeInterpreter": {

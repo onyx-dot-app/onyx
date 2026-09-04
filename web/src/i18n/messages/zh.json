@@ -658,6 +658,35 @@
         "tooltip": "仅显示已启用"
       }
     },
+    "toolNames": {
+      "internalSearch": {
+        "label": "内部搜索"
+      },
+      "imageGeneration": {
+        "label": "图像生成"
+      },
+      "webSearch": {
+        "label": "网络搜索"
+      },
+      "knowledgeGraph": {
+        "label": "知识图谱搜索"
+      },
+      "openUrl": {
+        "label": "打开 URL"
+      },
+      "codeInterpreter": {
+        "label": "代码解释器"
+      },
+      "fileReader": {
+        "label": "文件读取器"
+      },
+      "addMemory": {
+        "label": "添加到记忆"
+      },
+      "codingAgent": {
+        "label": "编码智能体"
+      }
+    },
     "toolsPopover": {
       "configureLinks": {
         "codeInterpreter": {
