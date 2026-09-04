@@ -33,7 +33,7 @@ from onyx.server.security.api import (
     get_pinned_fields_endpoint,
     put_security_settings_endpoint,
 )
-from onyx.server.security.models import SecuritySettingsOverrides
+from onyx.server.security.models import SecuritySettings, SecuritySettingsOverrides
 from onyx.server.security.store import (
     _build_env_defaults,
     _install_cache_for_test,
@@ -94,6 +94,12 @@ def _delete_kv(kv_key: str) -> None:
         pass
 
 
+def _delete_kv_backed_overrides() -> None:
+    kv_key: str
+    for kv_key in security_store.KV_BACKED_OVERRIDE_KEYS.values():
+        _delete_kv(kv_key)
+
+
 @pytest.fixture(autouse=True)
 def _clean_db_and_cache(
     db_session: Session,  # noqa: ARG001 — requested for side-effect (SQL engine init)
@@ -104,12 +110,10 @@ def _clean_db_and_cache(
     import time as _time
 
     _install_cache_for_test(ttl=10.0, timer=_time.monotonic)
-    for kv_key in security_store.KV_BACKED_OVERRIDE_KEYS.values():
-        _delete_kv(kv_key)
+    _delete_kv_backed_overrides()
     yield
     _delete_security_settings_row()
-    for kv_key in security_store.KV_BACKED_OVERRIDE_KEYS.values():
-        _delete_kv(kv_key)
+    _delete_kv_backed_overrides()
     invalidate_security_cache(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
 
 
@@ -420,13 +424,13 @@ def test_put_explicit_null_clears_kill_switch(
 def test_put_relink_window_persists_in_kv_not_row() -> None:
     """The relink window has no row column, so it lands in KV and clears back
     to the env default (off) on explicit null."""
-    result = _put({"allow_same_provider_subject_relink": True})
-    assert result.allow_same_provider_subject_relink is True
+    opened: SecuritySettings = _put({"allow_same_provider_subject_relink": True})
+    assert opened.allow_same_provider_subject_relink is True
     assert _load_kv(KV_ALLOW_SAME_PROVIDER_SUBJECT_RELINK_KEY) is True
     assert _load_row_as_dict() == {}
 
-    result = _put({"allow_same_provider_subject_relink": None})
-    assert result.allow_same_provider_subject_relink is False
+    cleared: SecuritySettings = _put({"allow_same_provider_subject_relink": None})
+    assert cleared.allow_same_provider_subject_relink is False
     assert _load_kv(KV_ALLOW_SAME_PROVIDER_SUBJECT_RELINK_KEY) is None
 
 
@@ -437,7 +441,7 @@ def test_put_multi_tenant_accepts_relink_window(
     monkeypatch.setattr(security_api, "MULTI_TENANT", True)
     monkeypatch.setattr(security_store, "MULTI_TENANT", True)
 
-    result = _put({"allow_same_provider_subject_relink": True})
+    result: SecuritySettings = _put({"allow_same_provider_subject_relink": True})
     assert result.allow_same_provider_subject_relink is True
     assert _load_kv(KV_ALLOW_SAME_PROVIDER_SUBJECT_RELINK_KEY) is True
 

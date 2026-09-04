@@ -20,6 +20,7 @@ from fastapi_users import exceptions
 from onyx.auth.schemas import UserCreate
 from onyx.auth.users import UserManager
 from onyx.db.enums import AccountType
+from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.security.store import _build_env_defaults
@@ -978,11 +979,13 @@ class TestOAuthNoAutoLinkExemptions:
             update={"allow_same_provider_subject_relink": True}
         )
 
-        stale_link = MagicMock(oauth_name="entra", account_id="old-sub")
-        linked = self._unclaimed(oauth_accounts=[*other_links, stale_link])
-        user_manager = self._manager_with_existing(linked, mock_user_db_cls)
+        stale_link: MagicMock = MagicMock(oauth_name="entra", account_id="old-sub")
+        linked: MagicMock = self._unclaimed(oauth_accounts=[*other_links, stale_link])
+        user_manager: UserManager = self._manager_with_existing(
+            linked, mock_user_db_cls
+        )
 
-        result = await user_manager.oauth_callback(
+        result: User = await user_manager.oauth_callback(
             oauth_name="entra",
             access_token="token",
             account_id="new-sub",
@@ -990,10 +993,13 @@ class TestOAuthNoAutoLinkExemptions:
             associate_by_email=associate_by_email,
         )
 
-        update_link = cast(AsyncMock, user_manager.user_db.update_oauth_account)
+        update_link: AsyncMock = cast(
+            AsyncMock, user_manager.user_db.update_oauth_account
+        )
         update_link.assert_awaited_once()
         assert update_link.await_args is not None
-        _, rewritten_link, update_dict = update_link.await_args.args
+        rewritten_link: object = update_link.await_args.args[1]
+        update_dict: dict[str, object] = update_link.await_args.args[2]
         assert rewritten_link is stale_link
         assert update_dict["account_id"] == "new-sub"
         cast(AsyncMock, user_manager.user_db.add_oauth_account).assert_not_awaited()
