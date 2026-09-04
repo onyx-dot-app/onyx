@@ -6089,7 +6089,7 @@
           "title": "メールドメインを制限"
         },
         "idpExpiry": {
-          "description": "上流の OAuth/OIDC プロバイダーのセッションが期限切れになったときに、ユーザーをログアウトします。",
+          "description": "上流の OAuth/OIDC プロバイダーのセッションが期限切れになったときに、ユーザーをログアウトします。OIDC または Google プロバイダーは、独自の設定でこれを上書きできます。",
           "title": "セッションの有効期限を ID プロバイダーと同期"
         },
         "openSignUp": {
@@ -6877,6 +6877,7 @@
             "description": "ログイン URL に使用する一意の小文字スラッグです。後から変更できません。",
             "title": "名前"
           },
+          "securitySettingsError": "このフォームが依存するセキュリティ設定を読み込めませんでした。閉じてからもう一度お試しください。",
           "providerTypeField": {
             "description": "このプロバイダーが認証に使用するプロトコルです。",
             "placeholder": "プロバイダーの種類を選択",

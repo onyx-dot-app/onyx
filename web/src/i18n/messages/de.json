@@ -6089,7 +6089,7 @@
           "title": "E-Mail-Domains beschränken"
         },
         "idpExpiry": {
-          "description": "Benutzer abmelden, wenn die Sitzung beim vorgelagerten OAuth-/OIDC-Anbieter abläuft.",
+          "description": "Benutzer abmelden, wenn die Sitzung beim vorgelagerten OAuth-/OIDC-Anbieter abläuft. Ein OIDC- oder Google-Anbieter kann dies in seinen eigenen Einstellungen überschreiben.",
           "title": "Sitzungsablauf mit dem Identitätsanbieter synchronisieren"
         },
         "openSignUp": {
@@ -6877,6 +6877,7 @@
             "description": "Eindeutiger Slug in Kleinbuchstaben, der in der Anmelde-URL verwendet wird. Kann später nicht geändert werden.",
             "title": "Name"
           },
+          "securitySettingsError": "Die Sicherheitseinstellungen, von denen dieses Formular abhängt, konnten nicht geladen werden. Schließen und erneut versuchen.",
           "providerTypeField": {
             "description": "Das Protokoll, mit dem sich dieser Anbieter authentifiziert.",
             "placeholder": "Anbietertyp auswählen",

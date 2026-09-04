@@ -81,6 +81,24 @@ def _no_pinned_persona_seeding() -> Iterator[None]:
         yield
 
 
+@pytest.fixture(autouse=True)
+def _no_provider_expiry_lookup() -> Iterator[None]:
+    """The provider-row lookups need a real session, so pin the env default (off)."""
+    with (
+        patch(
+            "onyx.auth.users.account_tracks_external_idp_expiry",
+            new_callable=AsyncMock,
+            return_value=False,
+        ),
+        patch(
+            "onyx.auth.users.user_tracks_external_idp_expiry_async",
+            new_callable=AsyncMock,
+            return_value=False,
+        ),
+    ):
+        yield
+
+
 def _mock_user_manager_methods(user_manager: UserManager) -> None:
     user_manager.validate_password = AsyncMock()
 

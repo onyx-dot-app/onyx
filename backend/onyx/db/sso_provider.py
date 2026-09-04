@@ -43,6 +43,9 @@ class _OAuth2ProviderConfig(_ProviderConfig):
     # OAuth scopes requested at login. Empty falls back to the env override,
     # then the built-in defaults.
     scopes: list[str] = []
+    # Ends Onyx sessions with this provider's token. None follows the global
+    # "Sync Session Expiry with Identity Provider" security setting.
+    track_external_idp_expiry: bool | None = None
 
 
 class GoogleProviderConfig(_OAuth2ProviderConfig):
@@ -233,6 +236,29 @@ async def fetch_sso_provider_by_name_async(
     disabling a provider stops new logins, not existing sessions."""
     stmt = select(SSOProvider).where(SSOProvider.name == name)
     return (await db_session.scalars(stmt)).first()
+
+
+def fetch_sso_providers_by_names(
+    db_session: Session, names: list[str]
+) -> list[SSOProvider]:
+    stmt = select(SSOProvider).where(SSOProvider.name.in_(names))
+    return list(db_session.scalars(stmt).all())
+
+
+async def fetch_sso_providers_by_names_async(
+    db_session: AsyncSession, names: list[str]
+) -> list[SSOProvider]:
+    stmt = select(SSOProvider).where(SSOProvider.name.in_(names))
+    return list((await db_session.scalars(stmt)).all())
+
+
+def sso_provider_config(provider: SSOProvider) -> dict[str, Any] | None:
+    """Decrypted config, or None when it cannot be read (key rotation)."""
+    try:
+        return provider.config.get_value(apply_mask=False) if provider.config else None
+    except Exception:
+        logger.exception("Could not read SSO provider %s config", provider.name)
+        return None
 
 
 def create_sso_provider(

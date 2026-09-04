@@ -11,6 +11,10 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi_users.manager import BaseUserManager
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from onyx.auth.idp_expiry import (
+    tracks_external_idp_expiry,
+    user_tracks_external_idp_expiry_async,
+)
 from onyx.auth.sso_url_guard import UnsafeSSOUrl, validate_idp_url
 from onyx.configs.app_configs import (
     OAUTH_CLIENT_ID,
@@ -20,7 +24,6 @@ from onyx.configs.app_configs import (
 from onyx.db.enums import SSOProviderType
 from onyx.db.models import OAuthAccount, User
 from onyx.db.sso_provider import fetch_sso_provider_by_name_async
-from onyx.server.security.store import get_security_settings
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -191,6 +194,8 @@ class _RefreshContext:
     client_id: str
     # repr=False keeps the secret out of any future log/repr of the context.
     client_secret: str = field(repr=False)
+    # Whether the refreshed token's expiry also ends the Onyx session.
+    track_external_idp_expiry: bool
 
 
 async def _resolve_refresh_context(
@@ -235,7 +240,12 @@ async def _resolve_refresh_context(
             else await _get_oidc_token_endpoint(config.get("openid_config_url") or "")
         )
         if endpoint and client_id and client_secret:
-            return _RefreshContext(endpoint, client_id, client_secret)
+            return _RefreshContext(
+                endpoint,
+                client_id,
+                client_secret,
+                tracks_external_idp_expiry(config),
+            )
         logger.error(
             "SSO provider %s cannot refresh tokens: has_endpoint=%s "
             "has_client_id=%s has_client_secret=%s",
@@ -255,7 +265,12 @@ async def _resolve_refresh_context(
             "No OAuth credentials configured to refresh provider: %s", oauth_name
         )
         return None
-    return _RefreshContext(endpoint, OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET)
+    return _RefreshContext(
+        endpoint,
+        OAUTH_CLIENT_ID,
+        OAUTH_CLIENT_SECRET,
+        tracks_external_idp_expiry(None),
+    )
 
 
 # NOTE: Keeping this as a utility function for potential future debugging,
@@ -359,14 +374,10 @@ async def refresh_oauth_token(
             if new_expires_at:
                 updated_data["expires_at"] = new_expires_at
 
-                if get_security_settings().track_external_idp_expiry:
-                    oidc_expiry = datetime.fromtimestamp(
-                        new_expires_at, tz=timezone.utc
-                    )
-                    await user_manager.user_db.update(
-                        user, {"oidc_expiry": oidc_expiry}
-                    )
-                    user.oidc_expiry = oidc_expiry
+            if new_expires_at and context.track_external_idp_expiry:
+                oidc_expiry = datetime.fromtimestamp(new_expires_at, tz=timezone.utc)
+                await user_manager.user_db.update(user, {"oidc_expiry": oidc_expiry})
+                user.oidc_expiry = oidc_expiry
 
             # Update the OAuth account
             await user_manager.user_db.update_oauth_account(  # ty: ignore[invalid-argument-type]
@@ -400,15 +411,23 @@ async def check_and_refresh_oauth_tokens(
     buffer_seconds = 300  # 5 minutes
 
     for oauth_account in user.oauth_accounts:
-        # Skip accounts without refresh tokens
-        if not oauth_account.refresh_token:
-            continue
-
         # If token is about to expire, refresh it
         if (
             oauth_account.expires_at
             and oauth_account.expires_at - now_timestamp < buffer_seconds
         ):
+            if user.oidc_expiry is not None and not (
+                await user_tracks_external_idp_expiry_async(db_session, user)
+            ):
+                # An earlier tracked login wrote this. Session checks would
+                # reject it once it passes, refreshable token or not.
+                await user_manager.user_db.update(user, {"oidc_expiry": None})
+                user.oidc_expiry = None  # ty: ignore[invalid-assignment]
+
+            # Skip accounts without refresh tokens
+            if not oauth_account.refresh_token:
+                continue
+
             # Coalesce concurrent refreshes for the same user. Re-read the
             # account inside the lock so the second coroutine sees the
             # refreshed `expires_at` (and `refresh_token` for IdPs that

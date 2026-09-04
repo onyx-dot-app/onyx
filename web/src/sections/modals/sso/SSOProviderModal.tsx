@@ -3,11 +3,13 @@
 import { useMemo, useState } from "react";
 import { Form, Formik, useField } from "formik";
 import { useTranslations } from "next-intl";
+import useSWR from "swr";
 import * as Yup from "yup";
 import {
   Button,
   Card,
   CopyButton,
+  IconLoader,
   InputTags,
   type TagItem,
   Text,
@@ -22,11 +24,15 @@ import type {
 } from "@/lib/sso/interfaces";
 import { useSupportedSSOProviderTypes } from "@/lib/sso/hooks";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
+import { errorHandlingFetcher } from "@/lib/fetcher";
+import { SWR_KEYS } from "@/lib/swr-keys";
+import type { SecuritySettings } from "@/lib/types";
 import { createSSOProvider, updateSSOProvider } from "@/lib/sso/svc";
 import SSODomainVerification from "@/sections/modals/sso/SSODomainVerification";
 import {
   CONFIG_FIELDS_BY_TYPE,
   CREATABLE_SSO_PROVIDER_TYPES,
+  IDP_EXPIRY_FIELD,
   SSO_PROVIDER_DETAILS,
   type SSOConfigField,
 } from "@/lib/sso/utils";
@@ -154,13 +160,16 @@ function buildConfig(
   return config;
 }
 
+// `switchDefaults` fills a switch the stored config leaves unset.
 function initialConfig(
-  config: Record<string, string | boolean | string[]>
+  config: Record<string, string | boolean | string[]>,
+  switchDefaults: Record<string, boolean | undefined>
 ): Record<string, string | boolean | string[]> {
   const initial: Record<string, string | boolean | string[]> = {};
   for (const field of ALL_CONFIG_FIELDS) {
     if (field.kind === "switch") {
-      initial[field.name] = config[field.name] === true;
+      initial[field.name] =
+        (config[field.name] ?? switchDefaults[field.name]) === true;
       continue;
     }
     if (field.kind === "chips") {
@@ -252,11 +261,24 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
     useSupportedSSOProviderTypes();
   const validationSchema = useMemo(() => buildValidationSchema(t), [t]);
 
+  // A row with the IdP expiry switch unset follows the deployment-wide
+  // setting, so the form starts from that value.
+  const {
+    data: securitySettings,
+    isLoading: securitySettingsLoading,
+    error: securitySettingsError,
+  } = useSWR<SecuritySettings>(
+    SWR_KEYS.adminSecuritySettings,
+    errorHandlingFetcher
+  );
+
   const initialValues: SSOProviderFormValues = {
     provider_type: provider?.provider_type ?? "GOOGLE_OAUTH",
     name: provider?.name ?? "",
     display_name: provider?.display_name ?? "",
-    config: initialConfig(provider?.config ?? {}),
+    config: initialConfig(provider?.config ?? {}, {
+      [IDP_EXPIRY_FIELD.name]: securitySettings?.track_external_idp_expiry,
+    }),
     allowed_email_domains: provider?.allowed_email_domains ?? [],
   };
 
@@ -301,6 +323,27 @@ export function SSOProviderModal({ provider, onSaved }: SSOProviderModalProps) {
     provider?.provider_type === "SAML"
       ? t("modals.provider.redirectField.acsLabel")
       : t("modals.provider.redirectField.redirectUriLabel");
+
+  // The form reinitializes when its seed values change, so wait for the
+  // deployment-wide setting rather than reset edits made while it loads.
+  // Without it a save would pin the switch off, so a failed fetch shows no form.
+  if (securitySettingsLoading || securitySettingsError) {
+    return (
+      <Modal open onOpenChange={onClose}>
+        <Modal.Content width="md" height="full" preventAccidentalClose>
+          <Section height="full" justifyContent="center" alignItems="center">
+            {securitySettingsError ? (
+              <Text font="main-ui-body" color="text-03">
+                {t("modals.provider.securitySettingsError")}
+              </Text>
+            ) : (
+              <IconLoader />
+            )}
+          </Section>
+        </Modal.Content>
+      </Modal>
+    );
+  }
 
   return (
     <Modal open onOpenChange={onClose}>
