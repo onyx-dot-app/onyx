@@ -528,6 +528,9 @@ interface EmptyRegistryProviderCase {
   // Fills the credential fields unique to this provider via the page object
   // (the shared model-spec fields are filled by the test body).
   fillCredentials: (indexSettings: IndexSettingsPage) => Promise<void>;
+  // Set only for providers whose modal offers the optional Matryoshka trim
+  // field. Providers that leave it unset must send reduced_dimension: null.
+  reducedDimension?: number;
 }
 
 const EMPTY_REGISTRY_PROVIDERS: EmptyRegistryProviderCase[] = [
@@ -551,6 +554,17 @@ const EMPTY_REGISTRY_PROVIDERS: EmptyRegistryProviderCase[] = [
         deploymentName: "my-deployment",
       }),
   },
+  {
+    providerType: "openai_compatible",
+    displayName: "OpenAI-Compatible",
+    fillCredentials: (indexSettings) =>
+      indexSettings.fillOpenAICompatibleCredentials({
+        apiBaseUrl: "http://localhost:8000/v1",
+        apiKey: "sk-test-key",
+      }),
+    // Trims the stored vector below the model's native size.
+    reducedDimension: 512,
+  },
 ];
 
 test.describe("Index Settings — empty-registry providers @exclusive", () => {
@@ -563,6 +577,7 @@ test.describe("Index Settings — empty-registry providers @exclusive", () => {
     providerType,
     displayName,
     fillCredentials,
+    reducedDimension,
   } of EMPTY_REGISTRY_PROVIDERS) {
     test(`connecting ${displayName} stages its model and applies with provider_type="${providerType}"`, async ({
       page,
@@ -611,6 +626,13 @@ test.describe("Index Settings — empty-registry providers @exclusive", () => {
         modelName: "my-embed-model",
         modelDim: 1024,
       });
+      if (reducedDimension !== undefined) {
+        // Truncation can only shorten a vector, so a trim wider than the
+        // model's native width must block submission.
+        await indexSettings.fillReducedDimension(2048);
+        await indexSettings.expectProviderSetupBlocked();
+        await indexSettings.fillReducedDimension(reducedDimension);
+      }
       await indexSettings.submitProviderSetup();
 
       // The just-defined model must be staged — Apply & Re-index appears.
@@ -624,6 +646,9 @@ test.describe("Index Settings — empty-registry providers @exclusive", () => {
       // sent as provider_type=null (which the backend treats as self-hosted
       // and would ignore the credentials we just saved).
       expect(body.provider_type).toBe(providerType);
+      // Providers without the trim field must send null, so we never ask a
+      // server for a `dimensions` value the admin did not choose.
+      expect(body.reduced_dimension).toBe(reducedDimension ?? null);
     });
   }
 });

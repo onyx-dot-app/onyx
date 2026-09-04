@@ -208,6 +208,10 @@ export async function setNewSearchSettings({
     body: JSON.stringify({
       model_name: model.modelName,
       model_dim: model.modelDim,
+      // Trims the stored vector for Matryoshka-capable models. The backend
+      // indexes at `reduced_dimension or model_dim`, and forwards this as the
+      // OpenAI `dimensions` parameter.
+      reduced_dimension: model.reducedDimension ?? null,
       normalize: model.normalize,
       query_prefix: model.queryPrefix,
       passage_prefix: model.passagePrefix,

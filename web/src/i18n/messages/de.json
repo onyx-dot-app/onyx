@@ -4681,6 +4681,7 @@
       "fields": {
         "apiKey": {
           "description": "Fügen Sie Ihren [API-Schlüssel]({link}) von {provider} ein, um auf Ihre Modelle zuzugreifen.",
+          "descriptionNoLink": "Fügen Sie den API-Schlüssel für Ihren {provider}-Endpunkt ein, um auf Ihre Modelle zuzugreifen.",
           "title": "API-Schlüssel"
         },
         "googleCredentials": {
@@ -4828,6 +4829,20 @@
         },
         "title": "Multipass-Indizierung"
       },
+      "openaiCompatible": {
+        "apiUrl": {
+          "description": "Basis-URL Ihres OpenAI-kompatiblen Endpunkts, zum Beispiel http://localhost:8000/v1. Onyx hängt den Pfad /embeddings an.",
+          "title": "API-Basis-URL"
+        },
+        "modelName": {
+          "description": "Onyx verbindet sich mit diesem Modell an Ihrem OpenAI-kompatiblen Endpunkt."
+        },
+        "reducedDimension": {
+          "description": "Fordern Sie kürzere Vektoren vom Modell an. Dies funktioniert nur bei Modellen, die Matryoshka Representation Learning unterstützen. Kürzere Vektoren benötigen weniger Speicher und werden schneller durchsucht. Leer lassen, um die volle Größe des Modells zu verwenden.",
+          "placeholder": "z. B. 1024",
+          "title": "Embedding-Dimensionen"
+        }
+      },
       "progressBanner": {
         "attentionButton": {
           "label": "Einheiten anzeigen, die Aufmerksamkeit erfordern"
@@ -4945,6 +4960,7 @@
         "modelDimPositive": "Muss eine positive ganze Zahl sein",
         "modelDimRequired": "Modelldimension ist erforderlich",
         "modelNameRequired": "Modellname ist erforderlich",
+        "reducedDimensionAboveModelDim": "Darf nicht größer als die Modelldimension sein",
         "serviceAccountJsonInvalid": "Muss eine gültige JSON-Datei für ein Google-Dienstkonto sein",
         "serviceAccountJsonRequired": "Dienstkonto-JSON ist erforderlich",
         "targetUrlRequired": "Ziel-URL ist erforderlich",
