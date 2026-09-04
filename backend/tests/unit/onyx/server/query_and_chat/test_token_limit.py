@@ -17,6 +17,7 @@ from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Session, sessionmaker
 
 import onyx.server.query_and_chat.token_limit as token_limit
+from onyx.db.llm_usage import LLMUsageRecord
 from onyx.db.models import TokenRateLimit, TokenRateLimitScope, UserUsage
 from onyx.db.user_usage import (
     TokenUsageBucket,
@@ -518,14 +519,16 @@ class TestCostEnforcementRealLedgerPath:
         record_user_usage(
             ledger_session,
             str(uuid.uuid4()),
-            "m",
-            "CHAT",
-            None,
-            1,
-            1,
-            0,
-            500.0,
-            ledger_window,
+            LLMUsageRecord(
+                model="m",
+                flow="CHAT",
+                provider=None,
+                input_tokens=1,
+                output_tokens=1,
+                cache_read_tokens=0,
+                cost_cents=500.0,
+                window_start=ledger_window,
+            ),
         )
 
         limit = _cost_limit(100.0, TokenRateLimitScope.GLOBAL, period_hours=24)
@@ -552,7 +555,18 @@ class TestCostEnforcementRealLedgerPath:
         current = get_cost_window_start(now, 24)
         prior = current - datetime.timedelta(days=1)
         record_user_usage(
-            ledger_session, str(uuid.uuid4()), "m", "CHAT", None, 1, 1, 0, 9999.0, prior
+            ledger_session,
+            str(uuid.uuid4()),
+            LLMUsageRecord(
+                model="m",
+                flow="CHAT",
+                provider=None,
+                input_tokens=1,
+                output_tokens=1,
+                cache_read_tokens=0,
+                cost_cents=9999.0,
+                window_start=prior,
+            ),
         )
 
         limit = _cost_limit(100.0, TokenRateLimitScope.GLOBAL, period_hours=24)

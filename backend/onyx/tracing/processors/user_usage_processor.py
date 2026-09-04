@@ -1,5 +1,4 @@
-"""Universal per-user usage recorder — buffers priced generation spans and
-drains them to the per-user usage rollup off the LLM hot path."""
+"""Buffers priced generation spans and drains them to user or system rollups."""
 
 from __future__ import annotations
 
@@ -13,10 +12,16 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.enums import IncognitoRecordMode
+from onyx.db.enums import IncognitoRecordMode, SystemUsageAttribution
+from onyx.db.llm_usage import LLMUsageRecord
+from onyx.db.system_usage import record_system_usage
 from onyx.db.user_usage import USER_USAGE_BUCKET_SECONDS, record_user_usage
 from onyx.llm.cost import compute_cost_cents
-from onyx.tracing.flows import IMAGE_FLOWS
+from onyx.tracing.flows import (
+    IMAGE_FLOWS,
+    SYSTEM_TEXT_GENERATION_FLOWS,
+    LLMFlow,
+)
 from onyx.tracing.framework.processor_interface import TracingProcessor
 from onyx.tracing.framework.span_data import GenerationSpanData
 from onyx.tracing.framework.spans import Span
@@ -49,7 +54,8 @@ class _UsageRecord:
     request contextvars are still valid (the drain thread has none)."""
 
     tenant_id: str
-    user_id: str
+    user_id: str | None
+    system_attribution: SystemUsageAttribution | None
     model: str
     flow: str
     provider: str | None
@@ -70,6 +76,16 @@ def _usage_field(usage: dict[str, Any], *names: str) -> int:
         if value is not None:
             return int(value)
     return 0
+
+
+def _system_attribution(flow: str) -> SystemUsageAttribution:
+    try:
+        llm_flow = LLMFlow(flow)
+    except ValueError:
+        return SystemUsageAttribution.UNATTRIBUTED
+    if llm_flow in SYSTEM_TEXT_GENERATION_FLOWS:
+        return SystemUsageAttribution.ATTRIBUTED
+    return SystemUsageAttribution.UNATTRIBUTED
 
 
 class UserUsageTracingProcessor(TracingProcessor):
@@ -118,10 +134,8 @@ class UserUsageTracingProcessor(TracingProcessor):
             return None
 
         user_id = get_current_user_id()
-        if user_id is None:
-            # No user id → skip (undercount, never wrong-user). The
-            # optional_user dependency sets this for any authenticated request,
-            # so it is absent only for work started outside one (e.g. Celery).
+        if user_id is None and not data.usage:
+            # TODO: Meter non-text flows after they expose provider billing units.
             return None
 
         model = data.model
@@ -147,6 +161,7 @@ class UserUsageTracingProcessor(TracingProcessor):
         return _UsageRecord(
             tenant_id=get_current_tenant_id(),
             user_id=user_id,
+            system_attribution=(_system_attribution(flow) if user_id is None else None),
             model=model,
             flow=flow,
             provider=provider,
@@ -209,12 +224,23 @@ class UserUsageTracingProcessor(TracingProcessor):
     @staticmethod
     def _aggregate_batch(batch: list[_UsageRecord]) -> list[_UsageRecord]:
         aggregated: dict[
-            tuple[str, str, str, str, str | None, bool, datetime], _UsageRecord
+            tuple[
+                str,
+                str | None,
+                SystemUsageAttribution | None,
+                str,
+                str,
+                str | None,
+                bool,
+                datetime,
+            ],
+            _UsageRecord,
         ] = {}
         for record in batch:
             key = (
                 record.tenant_id,
                 record.user_id,
+                record.system_attribution,
                 record.model,
                 record.flow,
                 record.provider,
@@ -260,9 +286,7 @@ class UserUsageTracingProcessor(TracingProcessor):
             image_count=record.image_count,
             db_session=db_session,
         )
-        record_user_usage(
-            db_session,
-            user_id=record.user_id,
+        usage = LLMUsageRecord(
             model=record.model,
             flow=record.flow,
             provider=record.provider,
@@ -272,7 +296,22 @@ class UserUsageTracingProcessor(TracingProcessor):
             cache_creation_tokens=record.cache_creation_tokens,
             cost_cents=input_cost + output_cost,
             window_start=record.window_start,
-            incognito=record.incognito,
+        )
+        if record.user_id is not None:
+            record_user_usage(
+                db_session=db_session,
+                user_id=record.user_id,
+                usage=usage,
+                incognito=record.incognito,
+            )
+            return
+
+        if record.system_attribution is None:
+            raise ValueError("Non-user usage requires system attribution")
+        record_system_usage(
+            db_session=db_session,
+            attribution=record.system_attribution,
+            usage=usage,
         )
 
     # --- TracingProcessor interface (non-generation events are no-ops) ---
