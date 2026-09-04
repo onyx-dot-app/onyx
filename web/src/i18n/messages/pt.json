@@ -658,6 +658,35 @@
         "tooltip": "Mostrar apenas as ativadas"
       }
     },
+    "toolNames": {
+      "internalSearch": {
+        "label": "Pesquisa interna"
+      },
+      "imageGeneration": {
+        "label": "Geração de imagens"
+      },
+      "webSearch": {
+        "label": "Pesquisa na web"
+      },
+      "knowledgeGraph": {
+        "label": "Pesquisa no grafo de conhecimento"
+      },
+      "openUrl": {
+        "label": "Abrir URL"
+      },
+      "codeInterpreter": {
+        "label": "Interpretador de código"
+      },
+      "fileReader": {
+        "label": "Leitor de arquivos"
+      },
+      "addMemory": {
+        "label": "Adicionar à memória"
+      },
+      "codingAgent": {
+        "label": "Agente de código"
+      }
+    },
     "toolsPopover": {
       "configureLinks": {
         "codeInterpreter": {

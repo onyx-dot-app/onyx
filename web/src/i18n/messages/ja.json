@@ -658,6 +658,35 @@
         "tooltip": "有効なもののみ表示"
       }
     },
+    "toolNames": {
+      "internalSearch": {
+        "label": "内部検索"
+      },
+      "imageGeneration": {
+        "label": "画像生成"
+      },
+      "webSearch": {
+        "label": "ウェブ検索"
+      },
+      "knowledgeGraph": {
+        "label": "ナレッジグラフ検索"
+      },
+      "openUrl": {
+        "label": "URLを開く"
+      },
+      "codeInterpreter": {
+        "label": "コードインタープリター"
+      },
+      "fileReader": {
+        "label": "ファイルリーダー"
+      },
+      "addMemory": {
+        "label": "メモリに追加"
+      },
+      "codingAgent": {
+        "label": "コーディングエージェント"
+      }
+    },
     "toolsPopover": {
       "configureLinks": {
         "codeInterpreter": {

@@ -24,7 +24,7 @@ import {
   SEARCH_TOOL_ID,
   WEB_SEARCH_TOOL_ID,
 } from "@/lib/tools/constants";
-import { useAvailableTools } from "@/lib/tools/hooks";
+import { useAvailableTools, useBuiltInToolNames } from "@/lib/tools/hooks";
 import { useToolsPopover } from "@/lib/tools/providers";
 import { ToolSnapshot } from "@/lib/tools/types";
 import { getAdminConfigureInfo, getToolTooltip } from "@/lib/tools/utils";
@@ -70,6 +70,7 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
   const { permissions } = useUser();
   const { vectorDbEnabled } = useSettings();
   const { tools: availableTools } = useAvailableTools();
+  const builtInToolNames = useBuiltInToolNames();
   const { ccPairs } = useCCPairs(vectorDbEnabled);
   const { currentProjectId } = useProjectsContext();
   const { getToolAuthStatus, authenticateTool } = useToolOAuthStatus(agent.id);
@@ -132,10 +133,14 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
       ? getAdminConfigureInfo(tool, configureTooltips)
       : null;
 
+  // A tool defined through the UI or served by MCP is named by whoever
+  // created it, so its own name is all there is to show.
   const label =
     inProject && isSearchTool
       ? t("actionLineItem.projectSearch.label")
-      : tool.display_name || tool.name;
+      : (builtInToolNames[tool.in_code_tool_id ?? ""] ??
+        tool.display_name ??
+        tool.name);
 
   // Only worth saying when the pin is narrowed to some of the sources.
   const sourcesNarrowed =

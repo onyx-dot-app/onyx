@@ -658,6 +658,35 @@
         "tooltip": "عرض المفعّلة فقط"
       }
     },
+    "toolNames": {
+      "internalSearch": {
+        "label": "البحث الداخلي"
+      },
+      "imageGeneration": {
+        "label": "توليد الصور"
+      },
+      "webSearch": {
+        "label": "البحث في الويب"
+      },
+      "knowledgeGraph": {
+        "label": "البحث في مخطط المعرفة"
+      },
+      "openUrl": {
+        "label": "فتح رابط"
+      },
+      "codeInterpreter": {
+        "label": "مفسر الأكواد"
+      },
+      "fileReader": {
+        "label": "قارئ الملفات"
+      },
+      "addMemory": {
+        "label": "إضافة إلى الذاكرة"
+      },
+      "codingAgent": {
+        "label": "وكيل البرمجة"
+      }
+    },
     "toolsPopover": {
       "configureLinks": {
         "codeInterpreter": {
