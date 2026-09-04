@@ -49,10 +49,16 @@ func (v Version) String() string {
 	return fmt.Sprintf("v%d.%d", v.Major, v.Minor)
 }
 
+// NextMinor returns the version of the next minor release after this branch,
+// e.g. v4.5 -> v4.6.
+func (v Version) NextMinor() Version {
+	return Version{Major: v.Major, Minor: v.Minor + 1}
+}
+
 // NextMinorBase returns the base version of the next minor release after this
 // branch, e.g. v4.5 -> "v4.6.0".
 func (v Version) NextMinorBase() string {
-	return fmt.Sprintf("v%d.%d.0", v.Major, v.Minor+1)
+	return fmt.Sprintf("%s.0", v.NextMinor())
 }
 
 // parseVersions extracts "release/vX.Y" versions from branch names and

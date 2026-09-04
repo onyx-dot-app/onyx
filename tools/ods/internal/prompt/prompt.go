@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
@@ -26,6 +27,33 @@ func String(prompt string) string {
 			return response
 		}
 		fmt.Println("Value cannot be empty.")
+	}
+}
+
+// Choose prompts the user with a numbered list of options and returns the
+// index of the chosen one. Empty input selects defaultIndex. It re-prompts
+// until the input names an option.
+func Choose(header string, options []string, defaultIndex int) int {
+	for {
+		fmt.Println(header)
+		for i, option := range options {
+			fmt.Printf("  %d) %s\n", i+1, option)
+		}
+		fmt.Printf("Choose 1-%d [%d]: ", len(options), defaultIndex+1)
+
+		response, err := reader.ReadString('\n')
+		if err != nil {
+			log.Fatalf("Failed to read input: %v", err)
+		}
+		response = strings.TrimSpace(response)
+		if response == "" {
+			return defaultIndex
+		}
+		choice, err := strconv.Atoi(response)
+		if err == nil && choice >= 1 && choice <= len(options) {
+			return choice - 1
+		}
+		fmt.Printf("Please enter a number between 1 and %d\n", len(options))
 	}
 }
 

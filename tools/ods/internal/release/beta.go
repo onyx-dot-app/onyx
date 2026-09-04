@@ -36,7 +36,7 @@ func ComputeBetaTag(ref, overrideVersion string) (tag, sha string, err error) {
 		}
 		minor = matches[1] + "." + matches[2]
 	} else {
-		version, err := newestReleaseVersion()
+		version, err := NewestReleaseVersion()
 		if err != nil {
 			return "", "", fmt.Errorf("failed to detect the target release branch (pass --version to override): %w", err)
 		}
@@ -114,9 +114,88 @@ func ComputeBetaTag(ref, overrideVersion string) (tag, sha string, err error) {
 	return tag, sha, nil
 }
 
-// newestReleaseVersion returns the version of the newest release/vX.Y branch
+// ComputeNewBetaBranch returns the release branch to create for the next minor
+// release, the first beta tag to cut on it, and the commit both should point
+// at. The branch is one minor past the newest release/vX.Y branch on origin —
+// the version cloud tags of main already preview — and it is cut from
+// origin/main. ref is the commit-ish to cut at; when empty, the main tip is
+// used. The commit must be on origin/main, the new branch must not exist on
+// origin yet, and its base must not have shipped as a stable tag.
+func ComputeNewBetaBranch(ref string) (branch, tag, sha string, err error) {
+	// The ancestry check below cannot be answered truthfully in a shallow
+	// clone; fail loudly instead.
+	shallow, err := git.IsShallowRepository()
+	if err != nil {
+		return "", "", "", err
+	}
+	if shallow {
+		return "", "", "", fmt.Errorf("this is a shallow clone, so a release branch cut cannot check main ancestry")
+	}
+
+	branchNames, err := listRemoteBranches()
+	if err != nil {
+		return "", "", "", err
+	}
+	versions := parseVersions(branchNames)
+	if len(versions) == 0 {
+		return "", "", "", fmt.Errorf("no release/vX.Y branches found on origin, so the next minor cannot be derived")
+	}
+	version := versions[0].NextMinor()
+	branch = fmt.Sprintf("release/%s", version)
+	for _, name := range branchNames {
+		if name == branch {
+			return "", "", "", fmt.Errorf("%s already exists on origin; re-run without --new-branch to cut its next beta", branch)
+		}
+	}
+	log.Infof("Newest release branch on origin: release/%s -> new branch %s", versions[0], branch)
+
+	// Cut points come from main, so the tip default and the ancestry check must
+	// run against its current state.
+	if err := git.RunCommand("fetch", "--quiet", "--force", "origin", "+refs/heads/main:refs/remotes/origin/main"); err != nil {
+		return "", "", "", fmt.Errorf("failed to fetch origin/main: %w", err)
+	}
+	if ref == "" {
+		ref = "origin/main"
+	}
+	sha, err = ResolveCommit(ref)
+	if err != nil {
+		return "", "", "", err
+	}
+	onMain, err := git.IsAncestor(sha, "origin/main")
+	if err != nil {
+		return "", "", "", err
+	}
+	if !onMain {
+		return "", "", "", fmt.Errorf("commit %.10s is not on origin/main; release branches are cut from main", sha)
+	}
+
+	// A beta of an already-released base is itself a new tag: origin would
+	// accept the push and only CI's check would reject it, so a failed fetch is
+	// an error rather than a stale-tags fallback.
+	base := version.String() + ".0"
+	if err := FetchTags(base + "*"); err != nil {
+		return "", "", "", fmt.Errorf("failed to fetch %s* tags: %w", base, err)
+	}
+	if tagExists(base) {
+		return "", "", "", fmt.Errorf("%s has already been released; a beta must precede its stable tag", base)
+	}
+	tag, err = nextSequencedTag(base+"-beta.", "")
+	if err != nil {
+		return "", "", "", err
+	}
+	// A fresh branch has no predecessor beta to anchor to, so betas of the base
+	// without the branch mean an earlier cut half-succeeded or the branch was
+	// deleted; both need a human.
+	if tag != base+"-beta.0" {
+		return "", "", "", fmt.Errorf("betas of %s already exist but %s does not, so the next tag would be %s with no branch to anchor it; resolve the branch state first", base, branch, tag)
+	}
+
+	return branch, tag, sha, nil
+}
+
+// NewestReleaseVersion returns the version of the newest release/vX.Y branch
 // on origin.
-func newestReleaseVersion() (Version, error) {
+func NewestReleaseVersion() (Version, error) {
 	branchNames, err := listRemoteBranches()
 	if err != nil {
 		return Version{}, err

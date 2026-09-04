@@ -97,6 +97,24 @@ func PushTag(tag string, force, verify bool) error {
 	return HintAfter(PushHookHintDelay, hint, func() error { return RunCommand(args...) })
 }
 
+// PushBranch pushes commitSHA to origin as branch. Pre-push hooks are skipped
+// unless verify is true, for the same reason PushTag skips them: the commit
+// already passed CI, and the hooks run over the whole branch. The push is not
+// forced, so origin rejects it when branch already exists there and commitSHA
+// is not a fast-forward of it.
+func PushBranch(commitSHA, branch string, verify bool) error {
+	args := []string{"push"}
+	if !verify {
+		args = append(args, "--no-verify")
+	}
+	args = append(args, "origin", fmt.Sprintf("%s:refs/heads/%s", commitSHA, branch))
+	if !verify {
+		return RunCommand(args...)
+	}
+	hint := "Push is slow because --verify runs the pre-push hooks over every commit on the branch. Re-run without --verify to skip them."
+	return HintAfter(PushHookHintDelay, hint, func() error { return RunCommand(args...) })
+}
+
 // GetCommitMessage gets the first line of a commit message
 func GetCommitMessage(commitSHA string) (string, error) {
 	cmd := exec.Command("git", "log", "-1", "--format=%s", commitSHA)
