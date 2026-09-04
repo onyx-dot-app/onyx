@@ -7861,6 +7861,9 @@
         "elevenlabsTts": {
           "subtitle": "API de conversão de texto em fala da ElevenLabs."
         },
+        "zoomScribe": {
+          "subtitle": "API de fala para texto em tempo real do Zoom Scribe."
+        },
         "tts1": {
           "subtitle": "O modelo de conversão de texto em fala da OpenAI otimizado para velocidade."
         },
@@ -7877,6 +7880,12 @@
           "label": "Chave de API",
           "placeholder": "Chave de API",
           "required": "A chave de API é obrigatória"
+        },
+        "apiSecret": {
+          "description": "Cole seu [segredo de API]({url}) do {provider} para acessar o Scribe.",
+          "label": "Segredo de API",
+          "placeholder": "Segredo de API",
+          "required": "O segredo de API é obrigatório"
         },
         "cancelButton": {
           "label": "Cancelar"
@@ -7905,6 +7914,12 @@
           "invalid": "Insira locales separados por vírgula, como en-US, fr-FR (um por idioma)",
           "label": "Idiomas falados",
           "selfHostedCapExceeded": "Os endpoints auto-hospedados oferecem suporte a no máximo {cap} idiomas falados (detecção no início)"
+        },
+        "sttLanguage": {
+          "description": "Selecione o locale que o Zoom Scribe deve usar para transcrição ao vivo. Consulte os [locales suportados]({docsUrl}).",
+          "invalid": "Selecione um idioma falado compatível",
+          "label": "Idioma falado",
+          "required": "O idioma falado é obrigatório"
         },
         "sttModel": {
           "label": "Modelo de STT"
@@ -9307,6 +9322,9 @@
         },
         "startRecording": {
           "ariaLabel": "Iniciar gravação"
+        },
+        "startingRecording": {
+          "ariaLabel": "Iniciando gravação"
         },
         "stopRecording": {
           "ariaLabel": "Parar gravação"

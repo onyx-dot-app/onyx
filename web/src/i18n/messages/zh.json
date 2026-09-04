@@ -7861,6 +7861,9 @@
         "elevenlabsTts": {
           "subtitle": "ElevenLabs 文字转语音 API。"
         },
+        "zoomScribe": {
+          "subtitle": "Zoom Scribe 实时语音转文字 API。"
+        },
         "tts1": {
           "subtitle": "OpenAI 针对速度优化的文字转语音模型。"
         },
@@ -7877,6 +7880,12 @@
           "label": "API 密钥",
           "placeholder": "API 密钥",
           "required": "API 密钥为必填项"
+        },
+        "apiSecret": {
+          "description": "粘贴来自 {provider} 的 [API 机密]({url})，以访问 Scribe。",
+          "label": "API 机密",
+          "placeholder": "API 机密",
+          "required": "API 机密为必填项"
         },
         "cancelButton": {
           "label": "取消"
@@ -7905,6 +7914,12 @@
           "invalid": "请输入以逗号分隔的区域设置，例如 en-US, fr-FR（每种语言一个）",
           "label": "语音语言",
           "selfHostedCapExceeded": "自托管端点最多支持 {cap} 种语音语言（在开始时检测）"
+        },
+        "sttLanguage": {
+          "description": "选择 Zoom Scribe 用于实时转录的区域设置。请参阅[支持的区域设置]({docsUrl})。",
+          "invalid": "请选择支持的语音语言",
+          "label": "语音语言",
+          "required": "语音语言为必填项"
         },
         "sttModel": {
           "label": "STT 模型"
@@ -9307,6 +9322,9 @@
         },
         "startRecording": {
           "ariaLabel": "开始录音"
+        },
+        "startingRecording": {
+          "ariaLabel": "正在开始录音"
         },
         "stopRecording": {
           "ariaLabel": "停止录音"

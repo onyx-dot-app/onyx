@@ -7861,6 +7861,9 @@
         "elevenlabsTts": {
           "subtitle": "API de synthèse vocale ElevenLabs."
         },
+        "zoomScribe": {
+          "subtitle": "API de reconnaissance vocale en temps réel Zoom Scribe."
+        },
         "tts1": {
           "subtitle": "Modèle de synthèse vocale d'OpenAI optimisé pour la rapidité."
         },
@@ -7877,6 +7880,12 @@
           "label": "Clé d'API",
           "placeholder": "Clé d'API",
           "required": "La clé d'API est obligatoire"
+        },
+        "apiSecret": {
+          "description": "Collez votre [secret d'API]({url}) de {provider} pour accéder à Scribe.",
+          "label": "Secret d'API",
+          "placeholder": "Secret d'API",
+          "required": "Le secret d'API est obligatoire"
         },
         "cancelButton": {
           "label": "Annuler"
@@ -7905,6 +7914,12 @@
           "invalid": "Saisissez des paramètres régionaux séparés par des virgules, comme en-US, fr-FR (un par langue)",
           "label": "Langues parlées",
           "selfHostedCapExceeded": "Les points de terminaison auto-hébergés prennent en charge au maximum {cap} langues parlées (détection au démarrage)"
+        },
+        "sttLanguage": {
+          "description": "Sélectionnez le paramètre régional que Zoom Scribe doit utiliser pour la transcription en direct. Consultez les [paramètres régionaux pris en charge]({docsUrl}).",
+          "invalid": "Sélectionnez une langue parlée prise en charge",
+          "label": "Langue parlée",
+          "required": "La langue parlée est obligatoire"
         },
         "sttModel": {
           "label": "Modèle de reconnaissance vocale"
@@ -9307,6 +9322,9 @@
         },
         "startRecording": {
           "ariaLabel": "Démarrer l'enregistrement"
+        },
+        "startingRecording": {
+          "ariaLabel": "Démarrage de l'enregistrement"
         },
         "stopRecording": {
           "ariaLabel": "Arrêter l'enregistrement"

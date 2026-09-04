@@ -7861,6 +7861,9 @@
         "elevenlabsTts": {
           "subtitle": "واجهة ElevenLabs لتحويل النص إلى كلام."
         },
+        "zoomScribe": {
+          "subtitle": "واجهة Zoom Scribe لتحويل الكلام إلى نص في الوقت الحقيقي."
+        },
         "tts1": {
           "subtitle": "نموذج OpenAI لتحويل النص إلى كلام محسّن للسرعة."
         },
@@ -7877,6 +7880,12 @@
           "label": "مفتاح API",
           "placeholder": "مفتاح API",
           "required": "مفتاح API مطلوب"
+        },
+        "apiSecret": {
+          "description": "الصق [سر API]({url}) من {provider} للوصول إلى Scribe.",
+          "label": "سر API",
+          "placeholder": "سر API",
+          "required": "سر API مطلوب"
         },
         "cancelButton": {
           "label": "إلغاء"
@@ -7905,6 +7914,12 @@
           "invalid": "أدخل لغات محلية مفصولة بفواصل مثل en-US, fr-FR (واحدة لكل لغة)",
           "label": "اللغات المنطوقة",
           "selfHostedCapExceeded": "تدعم نقاط النهاية المستضافة ذاتيًا ما لا يزيد على {cap} لغات منطوقة (اكتشاف عند البدء)"
+        },
+        "sttLanguage": {
+          "description": "اختر اللغة المحلية التي يجب أن يستخدمها Zoom Scribe للنسخ المباشر. راجع [اللغات المدعومة]({docsUrl}).",
+          "invalid": "اختر لغة منطوقة مدعومة",
+          "label": "اللغة المنطوقة",
+          "required": "اللغة المنطوقة مطلوبة"
         },
         "sttModel": {
           "label": "نموذج تحويل الكلام إلى نص"
@@ -9307,6 +9322,9 @@
         },
         "startRecording": {
           "ariaLabel": "بدء التسجيل"
+        },
+        "startingRecording": {
+          "ariaLabel": "جارٍ بدء التسجيل"
         },
         "stopRecording": {
           "ariaLabel": "إيقاف التسجيل"
