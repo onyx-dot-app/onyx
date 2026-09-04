@@ -13,6 +13,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/bunpkg"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
 )
 
@@ -56,7 +57,7 @@ func runDesktopScript(args []string) {
 		log.Fatalf("Failed to find repo root: %v", err)
 	}
 	rootNodeModules := filepath.Join(root, "node_modules")
-	if needsInstall, reason := nodeModulesNeedsInstall(rootNodeModules); needsInstall {
+	if needsInstall, reason := bunpkg.NodeModulesNeedsInstall(rootNodeModules); needsInstall {
 		log.Infof("%s, running bun install --frozen-lockfile...", reason)
 		installCmd := exec.Command("bun", "install", "--frozen-lockfile")
 		installCmd.Dir = root
