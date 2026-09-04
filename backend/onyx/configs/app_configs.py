@@ -1626,6 +1626,13 @@ DEFAULT_LLM_OUTPUT_COST_PER_MTOK = max(
     0.0, float(os.environ.get("DEFAULT_LLM_OUTPUT_COST_PER_MTOK") or 0.0)
 )
 
+# Re-download litellm's price map at most this often when a model is missing
+# from the copy loaded at startup (0 disables), so models released after the
+# process started get priced without a restart.
+LITELLM_MODEL_COST_REFRESH_SECONDS = max(
+    0, int(os.environ.get("LITELLM_MODEL_COST_REFRESH_SECONDS") or 3600)
+)
+
 
 #####
 # Tool Configs

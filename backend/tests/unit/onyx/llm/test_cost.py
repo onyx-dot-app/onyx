@@ -2,7 +2,7 @@
 
 import logging
 from collections.abc import Generator
-from typing import cast
+from typing import Any, cast
 
 import pytest
 from sqlalchemy import Table, create_engine
@@ -50,6 +50,16 @@ def _clear_override_cache() -> Generator[None, None, None]:
     yield
     cost_overrides._cache.clear()
     cost_overrides._last_known_cache.clear()
+
+
+@pytest.fixture(autouse=True)
+def _offline_refresh(monkeypatch: pytest.MonkeyPatch) -> Generator[None, None, None]:
+    # Keep unpriced-model paths off the network; refresh tests stub the fetch.
+    monkeypatch.setattr(cost_mod, "_fetch_litellm_model_cost", lambda: None)
+    monkeypatch.setattr(cost_mod, "_last_refresh_attempt", float("-inf"))
+    cost_mod._fallback_targets.clear()
+    yield
+    cost_mod._fallback_targets.clear()
 
 
 class TestComputeCostCents:
@@ -483,3 +493,130 @@ class TestGetOverride:
             output_cost_per_mtok=2.0,
             cache_read_cost_per_mtok=None,
         )
+
+
+def _chat_entry(provider: str, input_usd: float, output_usd: float) -> dict[str, Any]:
+    return {
+        "input_cost_per_token": input_usd,
+        "output_cost_per_token": output_usd,
+        "litellm_provider": provider,
+        "mode": "chat",
+    }
+
+
+class TestLitellmFallback:
+    def test_vendor_prefixed_key_prices_unknown_provider_name(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import litellm
+
+        # Onyx's provider name is not a litellm provider, but litellm prices the
+        # model under its vendor prefix.
+        monkeypatch.setitem(
+            litellm.model_cost,
+            "xai/onyx-test-vendor-model",
+            _chat_entry("xai", 1e-6, 2e-6),
+        )
+        in_cents, out_cents = compute_cost_cents(
+            model="onyx-test-vendor-model",
+            provider="openai_compatible",
+            prompt_tokens=1000,
+            completion_tokens=1000,
+        )
+        assert in_cents == pytest.approx(0.1)
+        assert out_cents == pytest.approx(0.2)
+
+    def test_price_per_million_uses_vendor_key(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import litellm
+
+        monkeypatch.setitem(
+            litellm.model_cost,
+            "xai/onyx-test-vendor-model",
+            _chat_entry("xai", 1e-6, 2e-6),
+        )
+        price = cost_mod.get_model_price_per_million(
+            "onyx-test-vendor-model", "openai_compatible"
+        )
+        assert price.input_per_mtok == pytest.approx(1.0)
+        assert price.output_per_mtok == pytest.approx(2.0)
+
+    def test_conflicting_vendor_keys_stay_unpriced(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import litellm
+
+        monkeypatch.setitem(
+            litellm.model_cost,
+            "vendor-a/onyx-test-dup-model",
+            _chat_entry("xai", 1e-6, 2e-6),
+        )
+        monkeypatch.setitem(
+            litellm.model_cost,
+            "vendor-b/onyx-test-dup-model",
+            _chat_entry("xai", 5e-6, 9e-6),
+        )
+        result = compute_cost_cents(
+            model="onyx-test-dup-model",
+            provider="openai_compatible",
+            prompt_tokens=1000,
+            completion_tokens=1000,
+        )
+        assert result == (0.0, 0.0)
+
+    def test_refresh_prices_model_released_after_startup(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import litellm
+
+        fetches = 0
+
+        def _fetch() -> dict[str, Any]:
+            nonlocal fetches
+            fetches += 1
+            return {"gemini/onyx-test-new-model": _chat_entry("gemini", 1e-6, 2e-6)}
+
+        monkeypatch.setattr(cost_mod, "_fetch_litellm_model_cost", _fetch)
+        try:
+            in_cents, out_cents = compute_cost_cents(
+                model="onyx-test-new-model",
+                provider="gemini",
+                prompt_tokens=1000,
+                completion_tokens=1000,
+            )
+            assert in_cents == pytest.approx(0.1)
+            assert out_cents == pytest.approx(0.2)
+            assert fetches == 1
+
+            # A second miss inside the refresh interval must not re-download.
+            compute_cost_cents(
+                model="onyx-test-still-unknown",
+                provider="gemini",
+                prompt_tokens=1000,
+                completion_tokens=1000,
+            )
+            assert fetches == 1
+        finally:
+            litellm.model_cost.pop("gemini/onyx-test-new-model", None)
+
+    def test_refresh_disabled_when_interval_is_zero(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        fetches = 0
+
+        def _fetch() -> dict[str, Any]:
+            nonlocal fetches
+            fetches += 1
+            return {}
+
+        monkeypatch.setattr(cost_mod, "_fetch_litellm_model_cost", _fetch)
+        monkeypatch.setattr(cost_mod, "LITELLM_MODEL_COST_REFRESH_SECONDS", 0)
+        result = compute_cost_cents(
+            model="onyx-test-still-unknown",
+            provider="gemini",
+            prompt_tokens=1000,
+            completion_tokens=1000,
+        )
+        assert result == (0.0, 0.0)
+        assert fetches == 0
