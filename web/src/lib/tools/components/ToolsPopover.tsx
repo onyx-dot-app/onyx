@@ -314,10 +314,13 @@ export default function ToolsPopover({
   const filteredTools = displayTools.filter((tool) => {
     if (!searchTerm) return true;
     const searchLower = searchTerm.toLowerCase();
-    // Match the name the row shows, so typing in the current locale finds
-    // the tool. The raw names stay searchable for anyone who knows them.
+    // Match the name the row actually shows, including the rename search
+    // takes on inside a project, so typing what is on screen finds it. The
+    // raw names stay searchable below for anyone who knows them.
     const shownName =
-      builtInToolNames[tool.in_code_tool_id ?? ""] ?? tool.display_name;
+      currentProjectId != null && tool.in_code_tool_id === SEARCH_TOOL_ID
+        ? t("actionLineItem.projectSearch.label")
+        : (builtInToolNames[tool.in_code_tool_id ?? ""] ?? tool.display_name);
     return (
       shownName?.toLowerCase().includes(searchLower) ||
       tool.display_name?.toLowerCase().includes(searchLower) ||
