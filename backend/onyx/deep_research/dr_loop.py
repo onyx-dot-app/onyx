@@ -67,6 +67,9 @@ from onyx.server.query_and_chat.streaming_models import (
 from onyx.tools.fake_tools.research_agent import run_research_agent_calls
 from onyx.tools.interface import Tool
 from onyx.tools.models import ToolCallInfo, ToolCallKickoff
+from onyx.tools.tool_implementations.coding_agent.coding_agent_tool import (
+    CodingAgentTool,
+)
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
@@ -238,8 +241,15 @@ def run_deep_research_llm_loop(
 
         llm_step_result: LlmStepResult | None = None
 
-        # Filter tools to only allow web search, internal search, and open URL
-        allowed_tool_names = {SearchTool.NAME, WebSearchTool.NAME, OpenURLTool.NAME}
+        # Filter tools to only allow web search, internal search, open URL,
+        # and the coding agent (used when code search escalates to
+        # repository-wide analysis)
+        allowed_tool_names = {
+            SearchTool.NAME,
+            WebSearchTool.NAME,
+            OpenURLTool.NAME,
+            CodingAgentTool.NAME,
+        }
         allowed_tools = [tool for tool in tools if tool.name in allowed_tool_names]
         include_internal_search_tunings = SearchTool.NAME in allowed_tool_names
         orchestrator_start_turn_index = 1

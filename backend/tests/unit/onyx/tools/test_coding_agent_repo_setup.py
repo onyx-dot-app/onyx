@@ -1,10 +1,38 @@
+import tarfile
+from contextlib import nullcontext
+from io import BytesIO
+from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import MagicMock, patch
 
+from onyx.configs.app_configs import REPO_ARCHIVE_FETCH_TIMEOUT, REPO_ARCHIVE_MAX_BYTES
+from onyx.repo_archives.github import GitHubArchiveProvider
+from onyx.repo_archives.models import RepoArchive, RepoRevision
 from onyx.tools.fake_tools import coding_agent
+from tests.utils.repo_archives import make_repo_tarball
+
+REPO_FILES = {
+    "src/main.py": b"def main():\n    return 1\n",
+    ".env.production": b"SECRET=hunter2\n",
+    "deploy/server.key": b"-----BEGIN PRIVATE KEY-----\n",
+}
 
 
-def test_coding_agent_downloads_and_extracts_repo_with_existing_policy() -> None:
+def _archive(tmp_path: Path) -> RepoArchive:
+    archive_path = tmp_path / "repo.tar.gz"
+    archive_path.write_bytes(make_repo_tarball(REPO_FILES))
+    return RepoArchive(
+        path=archive_path,
+        size=archive_path.stat().st_size,
+        revision=RepoRevision(
+            repo=GitHubArchiveProvider.repo_ref_from_url("onyx-dot-app/onyx"),
+            commit_sha="a" * 40,
+        ),
+    )
+
+
+def _client() -> MagicMock:
     client = MagicMock()
     client.__enter__.return_value = client
     client.__exit__.return_value = False
@@ -14,36 +42,77 @@ def test_coding_agent_downloads_and_extracts_repo_with_existing_policy() -> None
         exit_code=0,
         stderr="",
     )
+    return client
+
+
+def test_coding_agent_fetches_and_extracts_repo_with_existing_policy(
+    tmp_path: Path,
+) -> None:
+    archive = _archive(tmp_path)
+    client = _client()
 
     with (
         patch.object(
-            coding_agent,
-            "download_github_archive",
-            return_value=b"repository archive",
-        ) as download_archive,
+            coding_agent, "open_repo_archive", return_value=nullcontext(archive)
+        ) as open_archive,
         patch.object(coding_agent, "CodeInterpreterClient", return_value=client),
         coding_agent._setup_session(
-            repo="git@github.com:onyx-dot-app/onyx.git",
+            repo_ref=GitHubArchiveProvider.repo_ref_from_url("onyx-dot-app/onyx"),
             github_token="secret",
-        ) as session_id,
+        ) as (session_id, commit_sha),
     ):
         assert session_id == "session-id"
+        assert commit_sha == "a" * 40
 
-    source, revision, authorization = download_archive.call_args.args
-    assert (source.owner, source.repo) == ("onyx-dot-app", "onyx")
-    assert revision == "HEAD"
-    assert authorization == "Bearer secret"
-    assert download_archive.call_args.kwargs == {
-        "max_size_bytes": 500 * 1024 * 1024,
-        "timeout": (30, 300),
+    provider, repo_ref, ref = open_archive.call_args.args
+    assert isinstance(provider, GitHubArchiveProvider)
+    assert provider._authorization_header == "Bearer secret"
+    assert (repo_ref.owner, repo_ref.name) == ("onyx-dot-app", "onyx")
+    assert ref is None
+    assert open_archive.call_args.kwargs == {
+        "max_size_bytes": REPO_ARCHIVE_MAX_BYTES,
+        "timeout": REPO_ARCHIVE_FETCH_TIMEOUT,
     }
-    client.upload_file.assert_called_once_with(
-        b"repository archive",
-        coding_agent.REPO_TARBALL_PATH,
-    )
+    # Uploaded from a file object, so the bytes are not held for the run.
+    client.upload_file.assert_called_once()
+    uploaded_file, uploaded_name = client.upload_file.call_args.args
+    assert uploaded_name == coding_agent.REPO_TARBALL_PATH
+    assert uploaded_file.closed
     client.execute_bash_in_session.assert_called_once_with(
         session_id="session-id",
         cmd="tar -xzf repo.tar.gz --strip-components=1 && rm repo.tar.gz && ls",
         timeout_ms=coding_agent.CODING_AGENT_SETUP_TIMEOUT_MS,
     )
     client.delete_session.assert_called_once_with("session-id")
+
+
+def test_credential_files_never_reach_the_sandbox(tmp_path: Path) -> None:
+    """Indexing refuses these files. The agent runs shell commands over the
+    tree and answers to a user, so it must not receive them either."""
+    archive = _archive(tmp_path)
+    client = _client()
+    uploaded: dict[str, bytes] = {}
+
+    def _capture(file_obj: Any, _name: str) -> str:
+        uploaded["bytes"] = file_obj.read()
+        return "file-id"
+
+    client.upload_file.side_effect = _capture
+
+    with (
+        patch.object(
+            coding_agent, "open_repo_archive", return_value=nullcontext(archive)
+        ),
+        patch.object(coding_agent, "CodeInterpreterClient", return_value=client),
+        coding_agent._setup_session(
+            repo_ref=GitHubArchiveProvider.repo_ref_from_url("onyx-dot-app/onyx"),
+            github_token="secret",
+        ),
+    ):
+        pass
+
+    with tarfile.open(fileobj=BytesIO(uploaded["bytes"]), mode="r:gz") as sent:
+        names = {Path(name).name for name in sent.getnames()}
+
+    assert "main.py" in names
+    assert names.isdisjoint({".env.production", "server.key"})

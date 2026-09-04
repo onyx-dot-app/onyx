@@ -1,6 +1,8 @@
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Callable
 
 from onyx.chat.emitter import Emitter
@@ -11,12 +13,17 @@ from onyx.coding_agent.mock_tools import (
     BASH_TOOL_CMD_KEY,
     BASH_TOOL_NAME,
     CODING_AGENT_QUERY_KEY,
+    CODING_AGENT_REF_KEY,
     CODING_AGENT_REPO_KEY,
     GENERATE_ANSWER_TOOL_NAME,
     get_coding_agent_tool_definitions,
 )
 from onyx.coding_agent.models import CodingAgentCallResult, CodingAgentSpecialToolCalls
+from onyx.configs.app_configs import REPO_ARCHIVE_FETCH_TIMEOUT, REPO_ARCHIVE_MAX_BYTES
 from onyx.configs.constants import MessageType
+from onyx.connectors.cross_connector_utils.code_file_utils import (
+    is_sensitive_code_file,
+)
 from onyx.deep_research.dr_mock_tools import (
     THINK_TOOL_NAME,
     THINK_TOOL_RESPONSE_MESSAGE,
@@ -34,6 +41,10 @@ from onyx.prompts.coding_agent.coding_agent import (
     USER_FINAL_ANSWER_QUERY,
 )
 from onyx.prompts.prompt_utils import get_current_llm_day_time
+from onyx.repo_archives.filtering import write_filtered_archive
+from onyx.repo_archives.github import GitHubArchiveProvider
+from onyx.repo_archives.models import RepoRef
+from onyx.repo_archives.tarball_cache import open_repo_archive
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
     AgentResponseDelta,
@@ -53,7 +64,6 @@ from onyx.tools.tool_implementations.python.code_interpreter_client import (
     CodeInterpreterClient,
 )
 from onyx.tracing.framework.create import function_span
-from onyx.utils.github import download_github_archive, parse_github_source
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -76,35 +86,58 @@ REPO_TARBALL_PATH = "repo.tar.gz"
 # calls are not persisted to the DB through this loop, so the id is unused.
 BASH_TOOL_SENTINEL_ID = 0
 MAX_FINAL_ANSWER_TOKENS = 4000
-CODING_AGENT_GITHUB_MAX_REPO_BYTES = 500 * 1024 * 1024
-CODING_AGENT_GITHUB_DOWNLOAD_TIMEOUT = (30, 300)
 
 
 @contextmanager
 def _setup_session(
-    repo: str,
+    repo_ref: RepoRef,
     github_token: str | None,
-) -> Iterator[str]:
-    """Download ``repo``, create a code-interpreter session with the tarball
-    staged + extracted, yield the session id, and delete the session on exit.
+    ref: str | None = None,
+) -> Iterator[tuple[str, str | None]]:
+    """Materialize ``repo_ref`` at ``ref`` (default-branch HEAD when None),
+    create a code-interpreter session with the tarball staged + extracted,
+    yield (session id, resolved commit SHA), and delete the session on exit.
+
+    The requested ref is resolved to its current commit SHA before every run,
+    so the agent always analyzes the up-to-date state; unchanged repos come
+    from the file-store cache instead of a fresh download (see
+    repo_archives.tarball_cache).
 
     Creates its own :class:`CodeInterpreterClient` internally and tears it
     down on exit, so callers only deal with the ``session_id``.
     """
-    github_source = parse_github_source(
-        repo,
-        allow_ssh=True,
-    )
-    repo_bytes = download_github_archive(
-        github_source,
-        "HEAD",
-        f"Bearer {github_token}" if github_token else None,
-        max_size_bytes=CODING_AGENT_GITHUB_MAX_REPO_BYTES,
-        timeout=CODING_AGENT_GITHUB_DOWNLOAD_TIMEOUT,
-    )
+    provider = GitHubArchiveProvider.from_token(github_token)
 
-    with CodeInterpreterClient() as client:
-        ci_file_id = client.upload_file(repo_bytes, REPO_TARBALL_PATH)
+    with CodeInterpreterClient() as client, TemporaryDirectory() as staging:
+        # The archive can be hundreds of MB: it lives in temp files that are
+        # removed when this block exits, right after the upload, so nothing is
+        # held for the agent's whole (potentially 25-minute) run. The upload
+        # itself still buffers the file, so peak memory is the archive size.
+        with open_repo_archive(
+            provider,
+            repo_ref,
+            ref,
+            max_size_bytes=REPO_ARCHIVE_MAX_BYTES,
+            timeout=REPO_ARCHIVE_FETCH_TIMEOUT,
+        ) as repo_archive:
+            # Indexing refuses credential files, so the agent — which runs
+            # shell commands over the tree and answers to a user — must not
+            # receive them either.
+            sanitized = Path(staging) / REPO_TARBALL_PATH
+            dropped = write_filtered_archive(
+                repo_archive.path, sanitized, is_sensitive_code_file
+            )
+            if dropped:
+                logger.info(
+                    "Excluded %s credential file(s) from the %s archive",
+                    dropped,
+                    repo_ref.display,
+                )
+            with sanitized.open("rb") as archive_file:
+                ci_file_id = client.upload_file(archive_file, REPO_TARBALL_PATH)
+            commit_sha = (
+                repo_archive.revision.commit_sha if repo_archive.revision else None
+            )
         session_info = client.create_session(
             ttl_seconds=CODING_AGENT_SESSION_TTL_SECONDS,
             files=[{"path": REPO_TARBALL_PATH, "file_id": ci_file_id}],
@@ -130,7 +163,7 @@ def _setup_session(
                     f"Failed to extract repository tarball: {extract_result.stderr}"
                 )
             logger.info("Extracted repo into session %s", session_id)
-            yield session_id
+            yield session_id, commit_sha
         finally:
             try:
                 client.delete_session(session_id)
@@ -141,6 +174,18 @@ def _setup_session(
                 logger.warning(
                     "Failed to delete coding agent session %s: %s", session_id, e
                 )
+
+
+def _revision_line(commit_sha: str | None, ref: str | None) -> str:
+    """Agent-facing statement of the exact revision it is analyzing."""
+    if commit_sha:
+        requested = f"requested: {ref}" if ref else "current default-branch state"
+        return f"Checked-out revision: {commit_sha} ({requested})"
+    # No SHA means resolution failed and the fetch was unpinned, so the ref
+    # could have moved mid-flight. Say so rather than implying precision.
+    if ref:
+        return f"Checked-out revision: {ref} (not pinned to a commit)"
+    return "Checked-out revision: latest default-branch state"
 
 
 def _run_bash_call(
@@ -271,6 +316,8 @@ def run_coding_agent_call(
     token_counter: Callable[[str], int],
     user_identity: LLMUserIdentity | None,
     github_token: str | None = None,
+    seed_paths: list[str] | None = None,
+    repo_ref: RepoRef | None = None,
 ) -> CodingAgentCallResult | None:
     turn_index = coding_agent_call.placement.turn_index
     tab_index = coding_agent_call.placement.tab_index
@@ -283,17 +330,40 @@ def run_coding_agent_call(
         try:
             query = coding_agent_call.tool_args[CODING_AGENT_QUERY_KEY]
             repo = coding_agent_call.tool_args[CODING_AGENT_REPO_KEY]
+            ref = coding_agent_call.tool_args.get(CODING_AGENT_REF_KEY)
+            # Callers that already parsed the repo (CodingAgentTool) pass the
+            # RepoRef through so the string is parsed once per run.
+            resolved_repo_ref = repo_ref or GitHubArchiveProvider.repo_ref_from_url(
+                repo
+            )
 
-            with _setup_session(repo=repo, github_token=github_token) as session_id:
+            with _setup_session(
+                repo_ref=resolved_repo_ref, github_token=github_token, ref=ref
+            ) as (
+                session_id,
+                commit_sha,
+            ):
                 bash_tool = BashTool(
                     tool_id=BASH_TOOL_SENTINEL_ID,
                     session_id=session_id,
                     emitter=emitter,
                 )
 
+                revision_line = _revision_line(commit_sha, ref)
+                initial_message_str = (
+                    f"Repository: {repo}\n{revision_line}\n\nQuery:\n{query}"
+                )
+                if seed_paths:
+                    seed_lines = "\n".join(f"- {p}" for p in seed_paths)
+                    initial_message_str += (
+                        "\n\nFiles the code search index ranks as most "
+                        "relevant to this query. The index reflects whenever "
+                        "the repository was last indexed, so a path may have "
+                        "moved or gone; start here, but verify:\n" + seed_lines
+                    )
                 initial_user_message = ChatMessageSimple(
-                    message=(f"Repository: {repo}\n\nQuery:\n{query}"),
-                    token_count=token_counter(f"Repository: {repo}\n\nQuery:\n{query}"),
+                    message=initial_message_str,
+                    token_count=token_counter(initial_message_str),
                     message_type=MessageType.USER,
                 )
                 msg_history: list[ChatMessageSimple] = [initial_user_message]
