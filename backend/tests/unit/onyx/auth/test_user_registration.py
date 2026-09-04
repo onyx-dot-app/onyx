@@ -22,6 +22,7 @@ from onyx.auth.users import UserManager
 from onyx.db.enums import AccountType
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.security.store import _build_env_defaults
 from onyx.server.utils import BasicAuthenticationError
 
 # Note: Only async test methods are marked with @pytest.mark.asyncio individually
@@ -652,7 +653,9 @@ class TestOAuthNoAutoLinkExemptions:
     """With auto-link off, a web-login row refuses a same-email login once it is
     spoken for: a linked IdP (a second provider must not attach), a rename (a moved
     address stops proving whose row it is), or deactivation. A row with none of
-    those is claimed. Placeholders skip the checks and are promoted instead."""
+    those is claimed. Placeholders skip the checks and are promoted instead. A
+    stale link under the same provider is rewritten, but only inside the
+    admin-opened relink window for an IdP client change."""
 
     @staticmethod
     def _unclaimed(**attrs: object) -> MagicMock:
@@ -814,23 +817,33 @@ class TestOAuthNoAutoLinkExemptions:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
-        "overrides",
+        ("overrides", "relink_enabled"),
         [
-            # A second provider must not attach to a row an IdP already owns.
+            # A second provider must not attach to a row an IdP already owns,
+            # relink window or not.
             pytest.param(
                 {"oauth_accounts": [MagicMock(oauth_name="okta")]},
+                True,
                 id="linked-to-other-provider",
             ),
             # A rename moved this row onto the address, so the address no longer
             # proves whose row it is.
-            pytest.param({"prior_emails": ["old@corp.com"]}, id="renamed"),
-            # The same-provider exemption does not reach past a rename.
+            pytest.param({"prior_emails": ["old@corp.com"]}, False, id="renamed"),
+            # The relink window does not reach past a rename.
             pytest.param(
                 {
                     "prior_emails": ["old@corp.com"],
                     "oauth_accounts": [MagicMock(oauth_name="entra")],
                 },
+                True,
                 id="renamed-and-linked-to-same-provider",
+            ),
+            # The relink window is closed by default, so a same-provider link
+            # with a new subject is still spoken for.
+            pytest.param(
+                {"oauth_accounts": [MagicMock(oauth_name="entra")]},
+                False,
+                id="same-provider-relink-off",
             ),
         ],
     )
@@ -841,8 +854,10 @@ class TestOAuthNoAutoLinkExemptions:
     @patch("onyx.auth.users.get_async_session_context_manager")
     @patch("onyx.auth.users.remove_user_from_invited_users")
     @patch("onyx.auth.users.SQLAlchemyUserDatabase")
+    @patch("onyx.auth.users.get_security_settings")
     async def test_spoken_for_row_is_rejected(
         self,
+        mock_security_settings: MagicMock,
         mock_user_db_cls: MagicMock,
         mock_remove_invited: MagicMock,  # noqa: ARG002
         mock_session_manager: MagicMock,
@@ -850,12 +865,16 @@ class TestOAuthNoAutoLinkExemptions:
         mock_verify_domain: MagicMock,  # noqa: ARG002
         mock_verify_whitelist: MagicMock,  # noqa: ARG002
         overrides: dict[str, object],
+        relink_enabled: bool,
         mock_async_session: MagicMock,
     ) -> None:
         mock_session_manager.return_value = _AsyncSessionContextManager(
             mock_async_session
         )
         mock_fetch_ee.return_value = AsyncMock(return_value="test_tenant")
+        mock_security_settings.return_value = _build_env_defaults().model_copy(
+            update={"allow_same_provider_subject_relink": relink_enabled}
+        )
 
         user_manager = self._manager_with_existing(
             self._unclaimed(**overrides), mock_user_db_cls
@@ -934,8 +953,10 @@ class TestOAuthNoAutoLinkExemptions:
     @patch("onyx.auth.users.get_async_session_context_manager")
     @patch("onyx.auth.users.remove_user_from_invited_users")
     @patch("onyx.auth.users.SQLAlchemyUserDatabase")
+    @patch("onyx.auth.users.get_security_settings")
     async def test_same_provider_new_subject_rewrites_stale_link(
         self,
+        mock_security_settings: MagicMock,
         mock_user_db_cls: MagicMock,
         mock_remove_invited: MagicMock,  # noqa: ARG002
         mock_session_manager: MagicMock,
@@ -953,6 +974,9 @@ class TestOAuthNoAutoLinkExemptions:
             mock_async_session
         )
         mock_fetch_ee.return_value = AsyncMock(return_value="test_tenant")
+        mock_security_settings.return_value = _build_env_defaults().model_copy(
+            update={"allow_same_provider_subject_relink": True}
+        )
 
         stale_link = MagicMock(oauth_name="entra", account_id="old-sub")
         linked = self._unclaimed(oauth_accounts=[*other_links, stale_link])

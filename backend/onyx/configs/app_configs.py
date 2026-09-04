@@ -419,6 +419,12 @@ TRACK_EXTERNAL_IDP_EXPIRY = (
     os.environ.get("TRACK_EXTERNAL_IDP_EXPIRY", "").lower() == "true"
 )
 
+# Relink window for an OIDC client change, which hands every user a new subject.
+# Off by default: a reassigned email must not take over the old holder's account.
+ALLOW_SAME_PROVIDER_SUBJECT_RELINK = (
+    os.environ.get("ALLOW_SAME_PROVIDER_SUBJECT_RELINK", "").lower() == "true"
+)
+
 
 #####
 # DB Configs

@@ -6070,6 +6070,10 @@
         },
         "section": {
           "title": "身份验证"
+        },
+        "subjectRelink": {
+          "description": "允许被提供商分配了新主体 ID 的用户重新登录与其邮箱关联的账户。仅在更换 OIDC 客户端或应用注册期间开启。",
+          "title": "OIDC 客户端变更后重新关联账户"
         }
       },
       "jwt": {

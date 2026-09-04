@@ -9,7 +9,11 @@ from pydantic import ValidationError
 
 from onyx.cache.factory import get_cache_backend
 from onyx.configs import app_configs as _cfg
-from onyx.configs.constants import KV_PASSWORD_AUTH_ENABLED_KEY, OnyxRedisLocks
+from onyx.configs.constants import (
+    KV_ALLOW_SAME_PROVIDER_SUBJECT_RELINK_KEY,
+    KV_PASSWORD_AUTH_ENABLED_KEY,
+    OnyxRedisLocks,
+)
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import IncognitoRecordMode
 from onyx.db.security_settings import load_overrides as _db_load_overrides
@@ -18,7 +22,7 @@ from onyx.db.sso_provider import fetch_sso_providers
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.key_value_store.factory import get_kv_store
-from onyx.key_value_store.interface import KvKeyNotFoundError
+from onyx.key_value_store.interface import KeyValueStore, KvKeyNotFoundError
 from onyx.server.security.models import (
     ENV_PINNED_FIELDS,
     OPERATOR_LOCKED_FIELDS,
@@ -93,6 +97,7 @@ def _build_env_defaults() -> SecuritySettings:
     return SecuritySettings(
         user_directory_admin_only=_cfg.USER_DIRECTORY_ADMIN_ONLY,
         track_external_idp_expiry=_cfg.TRACK_EXTERNAL_IDP_EXPIRY,
+        allow_same_provider_subject_relink=_cfg.ALLOW_SAME_PROVIDER_SUBJECT_RELINK,
         # No env knob on purpose: incognito is off until an admin enables it.
         incognito_availability=IncognitoAvailability.OFF,
         incognito_record_mode=IncognitoRecordMode.USAGE_ONLY,
@@ -145,20 +150,32 @@ def merge_with_env(overrides: SecuritySettingsOverrides) -> SecuritySettings:
     return SecuritySettings(**merged)
 
 
-def _load_password_auth_override() -> bool | None:
+# Overrides with no security_settings column, so they backport without a
+# schema migration.
+KV_BACKED_OVERRIDE_KEYS: dict[str, str] = {
+    "password_auth_enabled": KV_PASSWORD_AUTH_ENABLED_KEY,
+    "allow_same_provider_subject_relink": KV_ALLOW_SAME_PROVIDER_SUBJECT_RELINK_KEY,
+}
+
+
+def _load_kv_bool_override(kv_store: KeyValueStore, kv_key: str) -> bool | None:
     try:
-        raw = get_kv_store().load(KV_PASSWORD_AUTH_ENABLED_KEY)
+        raw = kv_store.load(kv_key)
     except KvKeyNotFoundError:
         return None
     return raw if isinstance(raw, bool) else None
 
 
 def _load_raw_overrides_unlocked() -> SecuritySettingsOverrides:
-    """Uncached read: DB row overrides with the KV-backed override overlaid."""
+    """Uncached read: DB row overrides with the KV-backed overrides overlaid."""
     with get_session_with_current_tenant() as db_session:
         overrides = _db_load_overrides(db_session)
+    kv_store = get_kv_store()
     return overrides.model_copy(
-        update={"password_auth_enabled": _load_password_auth_override()}
+        update={
+            field: _load_kv_bool_override(kv_store, kv_key)
+            for field, kv_key in KV_BACKED_OVERRIDE_KEYS.items()
+        }
     )
 
 
@@ -172,7 +189,10 @@ def _store_overrides_unlocked(overrides: SecuritySettingsOverrides) -> None:
         )
     with get_session_with_current_tenant() as db_session:
         _db_upsert_overrides(db_session, overrides)
-    get_kv_store().store(KV_PASSWORD_AUTH_ENABLED_KEY, overrides.password_auth_enabled)
+    kv_store = get_kv_store()
+    override_values = overrides.model_dump()
+    for field, kv_key in KV_BACKED_OVERRIDE_KEYS.items():
+        kv_store.store(kv_key, override_values[field])
     invalidate_security_cache(_current_tenant_id_or_default())
 
 

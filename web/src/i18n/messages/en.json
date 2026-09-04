@@ -6070,6 +6070,10 @@
         },
         "section": {
           "title": "Authentication"
+        },
+        "subjectRelink": {
+          "description": "Let users whose provider issued them a new subject ID sign back in to the account linked to their email. Turn on only while changing the OIDC client or app registration.",
+          "title": "Relink Accounts After an OIDC Client Change"
         }
       },
       "jwt": {
