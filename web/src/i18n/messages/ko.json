@@ -1772,6 +1772,60 @@
       }
     },
     "connector": {
+      "seafile": {
+        "actions": {
+          "cancel": "취소",
+          "save": "변경 사항 저장",
+          "saving": "저장 중..."
+        },
+        "editModal": { "title": "Seafile 구성 편집" },
+        "fields": {
+          "allowedExtensions": {
+            "description": "이 커넥터가 색인할 파일 확장자입니다.",
+            "label": "허용된 확장자",
+            "placeholder": "확장자 입력"
+          },
+          "baseUrl": {
+            "description": "자체 호스팅 Seafile URL(예: https://seafile.example.com)",
+            "label": "기본 URL"
+          },
+          "libraries": {
+            "description": "색인할 Seafile 라이브러리를 선택하거나 입력하세요.",
+            "label": "라이브러리 ID"
+          },
+          "maxFileSize": {
+            "description": "이 제한보다 큰 파일은 건너뜁니다.",
+            "label": "최대 파일 크기(바이트)"
+          },
+          "pathPrefixes": {
+            "description": "각 라이브러리 내부의 경로입니다. 전체 라이브러리를 색인하려면 /를 유지하세요.",
+            "label": "경로 접두사",
+            "placeholder": "경로 접두사 입력"
+          }
+        },
+        "libraryPicker": {
+          "fetchError": "라이브러리를 가져올 수 없습니다.",
+          "loading": "Seafile 라이브러리 로드 중...",
+          "manualDescription": "라이브러리 검색을 사용할 수 없으면 ID를 직접 입력하세요.",
+          "manualLabel": "수동 라이브러리 ID",
+          "manualPlaceholder": "라이브러리 ID 입력",
+          "refresh": "새로 고침"
+        },
+        "toasts": {
+          "updated": "Seafile 설정을 업데이트했습니다. 전체 재색인을 실행하고 기존 문서를 정리하세요.",
+          "updateFailed": "Seafile 설정 업데이트 실패"
+        },
+        "validation": {
+          "baseUrlProtocol": "기본 URL은 http:// 또는 https://로 시작해야 합니다",
+          "baseUrlRequired": "기본 URL은 필수입니다",
+          "extensionRequired": "파일 확장자가 하나 이상 필요합니다",
+          "extensionUnsupported": "Seafile 커넥터에서 지원하지 않는 확장자가 있습니다",
+          "libraryRequired": "라이브러리 ID가 하나 이상 필요합니다",
+          "maxFileSizeInteger": "최대 파일 크기는 정수여야 합니다",
+          "maxFileSizePositive": "최대 파일 크기는 0보다 커야 합니다",
+          "maxFileSizeRequired": "최대 파일 크기는 필수입니다"
+        }
+      },
       "accessType": {
         "autoSyncOption": {
           "description": "소스에서 권한을 자동으로 동기화합니다. 검색을 수행하는 사용자가 소스에서 해당 문서에 액세스할 권한이 있는 경우에만 Onyx에서 문서를 검색할 수 있습니다.",

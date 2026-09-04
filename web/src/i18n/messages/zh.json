@@ -1772,6 +1772,60 @@
       }
     },
     "connector": {
+      "seafile": {
+        "actions": {
+          "cancel": "取消",
+          "save": "保存更改",
+          "saving": "正在保存..."
+        },
+        "editModal": { "title": "编辑 Seafile 配置" },
+        "fields": {
+          "allowedExtensions": {
+            "description": "此连接器应索引的文件扩展名。",
+            "label": "允许的扩展名",
+            "placeholder": "输入扩展名"
+          },
+          "baseUrl": {
+            "description": "自托管 Seafile 的 URL，例如 https://seafile.example.com",
+            "label": "基础 URL"
+          },
+          "libraries": {
+            "description": "选择或输入此连接器应索引的 Seafile 资料库。",
+            "label": "资料库 ID"
+          },
+          "maxFileSize": {
+            "description": "超过此限制的文件将被跳过。",
+            "label": "最大文件大小（字节）"
+          },
+          "pathPrefixes": {
+            "description": "每个资料库内的路径。保留 / 可索引整个资料库。",
+            "label": "路径前缀",
+            "placeholder": "输入路径前缀"
+          }
+        },
+        "libraryPicker": {
+          "fetchError": "无法获取资料库。",
+          "loading": "正在加载 Seafile 资料库...",
+          "manualDescription": "如果无法发现资料库，请直接输入其 ID。",
+          "manualLabel": "手动输入资料库 ID",
+          "manualPlaceholder": "输入资料库 ID",
+          "refresh": "刷新"
+        },
+        "toasts": {
+          "updated": "Seafile 设置已更新。请运行完整的重新索引，并让清理过程协调现有文档。",
+          "updateFailed": "无法更新 Seafile 设置"
+        },
+        "validation": {
+          "baseUrlProtocol": "基础 URL 必须以 http:// 或 https:// 开头",
+          "baseUrlRequired": "基础 URL 为必填项",
+          "extensionRequired": "至少需要一个文件扩展名",
+          "extensionUnsupported": "Seafile 连接器不支持一个或多个扩展名",
+          "libraryRequired": "至少需要一个资料库 ID",
+          "maxFileSizeInteger": "最大文件大小必须是整数",
+          "maxFileSizePositive": "最大文件大小必须大于零",
+          "maxFileSizeRequired": "最大文件大小为必填项"
+        }
+      },
       "accessType": {
         "autoSyncOption": {
           "description": "我们将自动从数据源同步权限。只有当执行搜索的用户在数据源中有权访问该文档时，该文档才能在 Onyx 中被搜索到。",
