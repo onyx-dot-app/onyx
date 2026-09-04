@@ -159,8 +159,8 @@ func chooseNewBranch() (newBranch, ok bool, err error) {
 		return false, false, fmt.Errorf("failed to detect the newest release branch (pass --version or --new-branch to override): %w", err)
 	}
 	options := []string{
-		fmt.Sprintf("Cut the next beta on the existing release/%s", version),
-		fmt.Sprintf("Create release/%s from origin/main and cut its first beta", version.NextMinor()),
+		fmt.Sprintf("Create a new release/%s from origin/main and cut its first beta", version.NextMinor()),
+		fmt.Sprintf("Increment the existing release/%s beta", version),
 	}
 
 	index, ok := prompt.Select("Which release branch should the beta be cut on?", options, 0)
@@ -169,7 +169,7 @@ func chooseNewBranch() (newBranch, ok bool, err error) {
 	}
 	// The list clears itself on exit, so echo the choice into the transcript.
 	log.Info(options[index])
-	return index == 1, true, nil
+	return index == 0, true, nil
 }
 
 // releaseBetaOnNewBranch creates the next minor's release branch from
