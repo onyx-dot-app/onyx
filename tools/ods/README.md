@@ -637,6 +637,40 @@ When set, the following defaults are applied:
 The S3 bucket defaults to `onyx-playwright-artifacts` and can be overridden with the
 `PLAYWRIGHT_S3_BUCKET` environment variable.
 
+**`compare` Output:**
+
+`compare` always writes `summary.json` next to the report. When it finds differences it
+also writes the HTML report and per-screenshot PNGs:
+
+```
+web/output/screenshot-diff/<project>/
+├── index.html              # self-contained report (images inlined as data URIs)
+├── summary.json            # counts plus a `screenshots` array of the differing images
+└── images/
+    ├── baseline/<name>.png # absent for added screenshots
+    ├── current/<name>.png  # absent for removed screenshots
+    └── diff/<name>.png     # changed screenshots only
+```
+
+The `images/` copies exist because `index.html` inlines everything as base64, which is
+convenient to share but unusable as input to other tools. CI attaches these files to the
+visual regression PR comment. Unchanged screenshots are skipped.
+
+`summary.json` lists differing screenshots in report order — changed first, by diff
+percent descending — so a consumer that shows only the top few gets the most significant
+changes:
+
+```json
+{
+  "project": "admin",
+  "changed": 1, "added": 0, "removed": 0, "unchanged": 42, "total": 43,
+  "has_differences": true,
+  "screenshots": [
+    { "name": "admin-users.png", "status": "changed", "diff_percent": 3.21 }
+  ]
+}
+```
+
 **`compare` Flags:**
 
 | Flag | Default | Description |
