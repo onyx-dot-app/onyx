@@ -37,7 +37,9 @@ def _make_llm(
     )
 
 
-def _run(llm: LitellmLLM, effort: ReasoningEffort, completion: Any = None) -> None:
+def _run(
+    llm: LitellmLLM, effort: ReasoningEffort | None, completion: Any = None
+) -> None:
     def default_completion(**_kwargs: Any) -> Any:
         return _SENTINEL
 
@@ -56,7 +58,7 @@ def _run(llm: LitellmLLM, effort: ReasoningEffort, completion: Any = None) -> No
 
 
 def test_captures_model_identity_and_sent_temperature() -> None:
-    _run(_make_llm(temperature=0.3, model_name="gpt-4o"), ReasoningEffort.AUTO)
+    _run(_make_llm(temperature=0.3, model_name="gpt-4o"), None)
 
     params = get_llm_request_params()
     assert params is not None
@@ -123,7 +125,7 @@ def test_tracing_and_capture_receive_the_same_object() -> None:
 def test_non_finite_floats_are_dropped() -> None:
     """These params ride to a JSONB column. Postgres rejects NaN and Infinity,
     so leaving one in would fail the commit that saves the answer."""
-    _run(_make_llm(temperature=float("nan"), model_name="gpt-4o"), ReasoningEffort.AUTO)
+    _run(_make_llm(temperature=float("nan"), model_name="gpt-4o"), None)
 
     params = get_llm_request_params()
     assert params is not None

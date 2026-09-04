@@ -306,7 +306,7 @@ class MockLLM(LLM, MockLLMController):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
-        reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
+        reasoning_effort: ReasoningEffort | None = None,
         user_identity: LLMUserIdentity | None = None,
         total_timeout_override: float | None = None,
     ) -> ModelResponse:
@@ -320,7 +320,7 @@ class MockLLM(LLM, MockLLMController):
         structured_response_format: dict | None = None,  # noqa: ARG002
         timeout_override: int | None = None,  # noqa: ARG002
         max_tokens: int | None = None,  # noqa: ARG002
-        reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,  # noqa: ARG002
+        reasoning_effort: ReasoningEffort | None = None,  # noqa: ARG002
         user_identity: LLMUserIdentity | None = None,  # noqa: ARG002
     ) -> Iterator[ModelResponseStream]:
         if not self.stream_controller:

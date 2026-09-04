@@ -35,7 +35,6 @@ class ReasoningEffort(str, Enum):
     - Gemini: Uses "none", "low", "medium", "high" for thinking_budget (via litellm mapping)
     """
 
-    AUTO = "auto"
     OFF = "off"
     LOW = "low"
     MEDIUM = "medium"
@@ -45,29 +44,9 @@ class ReasoningEffort(str, Enum):
     XHIGH = "xhigh"
 
 
-# Reasoning-effort values a user may pin per chat session. AUTO is excluded
-# because a cleared override (NULL) already resolves to AUTO.
-USER_SELECTABLE_REASONING_EFFORTS: frozenset[ReasoningEffort] = frozenset(
-    {
-        ReasoningEffort.OFF,
-        ReasoningEffort.LOW,
-        ReasoningEffort.MEDIUM,
-        ReasoningEffort.HIGH,
-        ReasoningEffort.XHIGH,
-    }
-)
+# What an unpinned request gets when no admin or user default names a level.
+DEFAULT_REASONING_EFFORT = ReasoningEffort.MEDIUM
 
-
-def parse_user_selectable_reasoning_effort(value: str) -> ReasoningEffort:
-    """Parse a user-supplied override value. Raises ValueError for an unknown
-    value or an explicit "auto", neither of which is user-selectable."""
-    effort = ReasoningEffort(value)
-    if effort not in USER_SELECTABLE_REASONING_EFFORTS:
-        raise ValueError(f"{value!r} is not a selectable reasoning effort")
-    return effort
-
-
-# AUTO has no rank: it defers a choice rather than naming an amount.
 _REASONING_EFFORT_RANK: dict[ReasoningEffort, int] = {
     ReasoningEffort.OFF: 0,
     ReasoningEffort.LOW: 1,
@@ -91,41 +70,34 @@ class UserChatDefaults(BaseModel):
 
 
 def resolve_reasoning_effort(
-    requested: ReasoningEffort,
+    requested: ReasoningEffort | None,
     *,
     default: ReasoningEffort | None,
     user_default: ReasoningEffort | None,
     maximum: ReasoningEffort | None,
 ) -> ReasoningEffort:
     """Settle a request against the admin's per-model default, the user's own
-    default, and the cap.
+    default, and the cap. None at any tier means nothing was pinned there.
 
-    Ordered chain, first concrete source wins. The cap applies last and
-    unconditionally.
-
-    AUTO is concretized before clamping because it maps to medium downstream,
-    which would quietly exceed a cap of LOW.
+    Ordered chain, first set source wins, then DEFAULT_REASONING_EFFORT. The
+    cap applies last and unconditionally.
     """
-    if requested != ReasoningEffort.AUTO:
+    if requested is not None:
         effort = requested
-    elif default is not None and default != ReasoningEffort.AUTO:
+    elif default is not None:
         effort = default
-    elif user_default is not None and user_default != ReasoningEffort.AUTO:
+    elif user_default is not None:
         effort = user_default
     else:
-        if maximum is None:
-            return ReasoningEffort.AUTO
-        effort = ReasoningEffort.MEDIUM
+        effort = DEFAULT_REASONING_EFFORT
 
     if maximum is not None and reasoning_effort_exceeds(effort, maximum):
         return maximum
     return effort
 
 
-# OpenAI reasoning effort mapping
-# Note: OpenAI API does not support "auto" - valid values are: none, minimal, low, medium, high, xhigh
+# OpenAI reasoning effort mapping. Valid API values: none, minimal, low, medium, high, xhigh
 OPENAI_REASONING_EFFORT: dict[ReasoningEffort, str] = {
-    ReasoningEffort.AUTO: "medium",  # Default to medium when auto is requested
     ReasoningEffort.OFF: "none",
     ReasoningEffort.LOW: "low",
     ReasoningEffort.MEDIUM: "medium",
@@ -136,7 +108,6 @@ OPENAI_REASONING_EFFORT: dict[ReasoningEffort, str] = {
 # Anthropic reasoning effort to budget tokens mapping
 # Loosely based on budgets from LiteLLM but this ensures it's not updated without our knowing from a version bump.
 ANTHROPIC_REASONING_EFFORT_BUDGET: dict[ReasoningEffort, int] = {
-    ReasoningEffort.AUTO: 2048,
     ReasoningEffort.LOW: 1024,
     ReasoningEffort.MEDIUM: 2048,
     ReasoningEffort.HIGH: 4096,
@@ -146,7 +117,6 @@ ANTHROPIC_REASONING_EFFORT_BUDGET: dict[ReasoningEffort, int] = {
 # Newer Anthropic models (Claude Opus 4.7+) use adaptive thinking with
 # output_config.effort instead of thinking.type.enabled + budget_tokens.
 ANTHROPIC_ADAPTIVE_REASONING_EFFORT: dict[ReasoningEffort, str] = {
-    ReasoningEffort.AUTO: "medium",
     ReasoningEffort.LOW: "low",
     ReasoningEffort.MEDIUM: "medium",
     ReasoningEffort.HIGH: "high",

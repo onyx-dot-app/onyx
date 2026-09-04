@@ -3,7 +3,7 @@ import type { LLMProviderConfiguredSource } from "@/lib/analytics/utils";
 
 /**
  * Per-session reasoning-effort override. Mirrors the backend ReasoningEffort
- * enum minus "auto", since no override (null) already means auto.
+ * enum. No override is null.
  */
 export type ReasoningEffortOverride =
   | "off"

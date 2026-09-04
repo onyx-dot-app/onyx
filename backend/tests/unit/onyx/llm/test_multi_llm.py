@@ -572,10 +572,10 @@ def test_openai_only_in_deployment_name_uses_responses_bridge() -> None:
 )
 @pytest.mark.parametrize(
     "reasoning_effort, expected_effort",
-    [(ReasoningEffort.AUTO, "medium"), (ReasoningEffort.HIGH, "high")],
+    [(None, "medium"), (ReasoningEffort.HIGH, "high")],
 )
 def test_claude_adaptive_thinking_uses_output_config(
-    model_name: str, reasoning_effort: ReasoningEffort, expected_effort: str
+    model_name: str, reasoning_effort: ReasoningEffort | None, expected_effort: str
 ) -> None:
     # Non-Vertex providers must use the adaptive thinking API for these models
     # (thinking.type=adaptive + output_config.effort) rather than the legacy
@@ -672,7 +672,7 @@ def test_vertex_stream_omits_stream_options(model_name: str) -> None:
         assert "stream_options" not in kwargs
 
 
-def test_openai_auto_reasoning_effort_maps_to_medium() -> None:
+def test_openai_unpinned_reasoning_effort_maps_to_medium() -> None:
     llm = LitellmLLM(
         api_key="test_key",
         timeout=30,
@@ -692,7 +692,7 @@ def test_openai_auto_reasoning_effort_maps_to_medium() -> None:
         mock_completion.return_value = []
 
         messages: LanguageModelInput = [UserMessage(content="Hi")]
-        list(llm.stream(messages, reasoning_effort=ReasoningEffort.AUTO))
+        list(llm.stream(messages, reasoning_effort=None))
 
         kwargs = mock_completion.call_args.kwargs
         assert kwargs["reasoning"]["effort"] == "medium"
@@ -1034,7 +1034,7 @@ def test_reasoning_effort_omitted_for_models_rejecting_it(
         mock_completion.return_value = []
 
         messages: LanguageModelInput = [UserMessage(content="Hi")]
-        list(llm.stream(messages, reasoning_effort=ReasoningEffort.AUTO))
+        list(llm.stream(messages, reasoning_effort=None))
 
         kwargs = mock_completion.call_args.kwargs
         assert "reasoning" not in kwargs
@@ -1053,7 +1053,7 @@ def test_reasoning_effort_sent_for_o1() -> None:
         mock_completion.return_value = []
 
         messages: LanguageModelInput = [UserMessage(content="Hi")]
-        list(llm.stream(messages, reasoning_effort=ReasoningEffort.AUTO))
+        list(llm.stream(messages, reasoning_effort=None))
 
         kwargs = mock_completion.call_args.kwargs
         assert kwargs["reasoning"]["effort"] == "medium"
@@ -1080,7 +1080,7 @@ def test_o1_mini_only_in_deployment_name_omits_reasoning_effort() -> None:
     with patch("litellm.completion") as mock_completion:
         mock_completion.return_value = []
         messages: LanguageModelInput = [UserMessage(content="Hi")]
-        list(llm.stream(messages, reasoning_effort=ReasoningEffort.AUTO))
+        list(llm.stream(messages, reasoning_effort=None))
 
         kwargs = mock_completion.call_args.kwargs
         assert kwargs["temperature"] == 1  # confirms is_reasoning resolved True
