@@ -9,7 +9,7 @@ A composite component that wraps `Interactive.Stateful > Interactive.Container >
 ```
 Interactive.Stateful         <- selectVariant, state, interaction, onClick, href, ref
   └─ Interactive.Container   <- width, rounding
-       └─ ContentAction      <- withInteractive, padding
+       └─ ContentAction      <- padding
             ├─ Content       <- icon, title, description, sizePreset, variant, ...
             └─ rightChildren
 ```
@@ -18,8 +18,7 @@ The row renders as a focusable `<div role="button">` (with Enter/Space activatio
 native `<button>`, so interactive `rightChildren` such as action buttons don't produce invalid
 button-in-button nesting. With `href` it renders an anchor instead.
 
-`withInteractive` is always `true` and is not exposed. `padding` is forwarded to the inner
-`ContentAction`, on top of the row's own `p-1.5` inset.
+`padding` is forwarded to the inner `ContentAction`, on top of the row's own `p-1.5` inset.
 
 It is not an open `Spacing`: the prop is inherited from `ContentActionProps`, which narrows it to
 `0 | 0.5 | 1 | 2` — the four paddings `Interactive.Container` applies at its size presets, so that a
@@ -40,6 +39,23 @@ row's label lines up with an adjacent button. A step outside that set is a type 
 | `group`         | `string`                           | —                | Interactive group key                             |
 | `ref`           | `React.Ref<HTMLElement>`           | —                | Forwarded ref                                     |
 | `disabled`      | `boolean`                          | `false`          | Disabled colors; suppresses the row's own click only — nested `rightChildren` stay clickable |
+
+### Row element
+
+These land on the row itself rather than on the content inside it. They are
+named individually because anything `LineItemButton` does not destructure goes
+to `ContentAction`, which never spreads onto a DOM node — a label or a handler
+left in that bag is silently dropped.
+
+| Prop                                                          | Type                                | Description                                     |
+| ------------------------------------------------------------- | ----------------------------------- | ----------------------------------------------- |
+| `aria-label` / `aria-labelledby` / `aria-describedby`          | `string`                            | Accessible name and description for the row     |
+| `onMouseEnter` / `onMouseLeave` / `onMouseMove` / `onMouseDown` | `MouseEventHandler<HTMLDivElement>`  | Mouse handlers, e.g. hover-to-open a flyout     |
+| `onPointerEnter` / `onPointerLeave`                            | `PointerEventHandler<HTMLDivElement>` | Pointer equivalents                             |
+
+`title` is deliberately *not* forwarded: it is the row's label to
+`ContentAction`, and forwarding it as the native attribute would put two
+meanings in one prop. Use `tooltip` for hover text.
 
 ### Sizing
 
@@ -63,7 +79,7 @@ row's label lines up with an adjacent button. A step outside that set is a type 
 | `rightChildren` | `ReactNode`             | —              | Content after the label (e.g. action button) |
 | `color`         | `ColorTypes`            | `"interactive"` | Content colour mode. Defaults to `"interactive"`, which is what lets the row's hover / selected / disabled colours reach its title and icon — passing anything else opts out of that. `undefined` counts as not passing one. |
 
-All other `ContentAction` / `Content` props (`editable`, `onTitleChange`, `optional`, `auxIcon`, `tag`, etc.) are also passed through. Note: `withInteractive` is always `true` inside `LineItemButton` and cannot be overridden.
+All other `ContentAction` / `Content` props (`editable`, `onTitleChange`, `optional`, `auxIcon`, `tag`, etc.) are also passed through.
 
 ## Usage
 
