@@ -10730,6 +10730,10 @@
         "ariaLabel": "Save"
       }
     },
+    "enabledCount": {
+      "label": "<value>{enabled}</value> of {total}",
+      "tools": "{total, plural, one {<value>{enabled}</value> of {total} tool} other {<value>{enabled}</value> of {total} tools}}"
+    },
     "errorPages": {
       "accessRestricted": {
         "billingAdminHint": {
