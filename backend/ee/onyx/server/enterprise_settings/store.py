@@ -2,7 +2,9 @@ import os
 from io import BytesIO
 from typing import IO, Any, cast
 
-from fastapi import HTTPException, UploadFile
+import puremagic
+from fastapi import UploadFile
+from PIL import Image
 
 from ee.onyx.server.enterprise_settings.models import (
     AnalyticsScriptUpload,
@@ -14,6 +16,8 @@ from onyx.configs.constants import (
     ONYX_DEFAULT_APPLICATION_NAME,
     FileOrigin,
 )
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
@@ -87,15 +91,37 @@ def store_analytics_script(analytics_script_upload: AnalyticsScriptUpload) -> No
 
 def is_valid_file_type(filename: str) -> bool:
     valid_extensions = (".png", ".jpg", ".jpeg")
-    return filename.endswith(valid_extensions)
+    return filename.lower().endswith(valid_extensions)
 
 
-def guess_file_type(filename: str) -> str:
-    if filename.lower().endswith(".png"):
-        return "image/png"
-    elif filename.lower().endswith(".jpg") or filename.lower().endswith(".jpeg"):
-        return "image/jpeg"
-    return "application/octet-stream"
+_RASTER_LOGO_TYPES = ("image/png", "image/jpeg")
+
+_MAX_LOGO_BYTES = 5 * 1024 * 1024
+
+_LOGO_TYPE_ERROR = "Invalid file type- only .png, .jpg, and .jpeg files are allowed."
+
+
+def sniff_logo_type(content: bytes) -> str | None:
+    """The stored bytes' real type, or None when nothing can render it."""
+    try:
+        matches = puremagic.magic_string(content)
+    except puremagic.PureError:
+        return None
+    except Exception:
+        logger.exception("Failed to sniff logo MIME type")
+        return None
+
+    for match in matches:
+        mime_type = cast(str, match.mime_type)
+        if mime_type in _RASTER_LOGO_TYPES:
+            try:
+                with Image.open(BytesIO(content)) as image:
+                    image.verify()
+            except Exception:
+                return None
+            return mime_type
+
+    return None
 
 
 def upload_logo(file: UploadFile | str, is_logotype: bool = False) -> bool:
@@ -110,21 +136,38 @@ def upload_logo(file: UploadFile | str, is_logotype: bool = False) -> bool:
             return False
 
         with open(file, "rb") as file_handle:
-            file_content = file_handle.read()
-        content = BytesIO(file_content)
+            file_content = file_handle.read(_MAX_LOGO_BYTES + 1)
+        if len(file_content) > _MAX_LOGO_BYTES:
+            logger.error("Logo must be under %d MB.", _MAX_LOGO_BYTES // (1024 * 1024))
+            return False
         display_name = file
-        file_type = guess_file_type(file)
+
+        file_type_or_none = sniff_logo_type(file_content)
+        if file_type_or_none is None:
+            logger.error(_LOGO_TYPE_ERROR)
+            return False
+        file_type = file_type_or_none
 
     else:
         logger.notice("Uploading logo from uploaded file")
         if not file.filename or not is_valid_file_type(file.filename):
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid file type- only .png, .jpg, and .jpeg files are allowed",
+            raise OnyxError(OnyxErrorCode.INVALID_INPUT, _LOGO_TYPE_ERROR)
+
+        file_content = file.file.read(_MAX_LOGO_BYTES + 1)
+        if len(file_content) > _MAX_LOGO_BYTES:
+            raise OnyxError(
+                OnyxErrorCode.PAYLOAD_TOO_LARGE,
+                f"Logo must be under {_MAX_LOGO_BYTES // (1024 * 1024)} MB.",
             )
-        content = file.file
+
         display_name = file.filename
-        file_type = file.content_type or "image/jpeg"
+
+        file_type_or_none = sniff_logo_type(file_content)
+        if file_type_or_none is None:
+            raise OnyxError(OnyxErrorCode.INVALID_INPUT, _LOGO_TYPE_ERROR)
+        file_type = file_type_or_none
+
+    content = BytesIO(file_content)
 
     file_store = get_default_file_store()
     file_store.save_file(
