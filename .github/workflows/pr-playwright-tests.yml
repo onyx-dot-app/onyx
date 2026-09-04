@@ -955,6 +955,8 @@ jobs:
       - runner=2cpu-linux-arm64
       - "run-id=${{ github.run_id }}-visual-regression-${{ matrix.project }}"
     timeout-minutes: 5
+    env:
+      GO_VERSION: "1.26.5"
     strategy:
       fail-fast: false
       matrix:
@@ -1000,11 +1002,20 @@ jobs:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
 
-      - name: Install the latest version of uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # ratchet:astral-sh/setup-uv@v10.0.1
+      # Build `ods` from this checkout rather than installing the published
+      # onyx-devtools wheel. The screenshot-diff output this job depends on
+      # (summary.json, images/) changes with tools/ods, so a source build keeps
+      # CI in step with the PR instead of waiting for the next release.
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # ratchet:actions/setup-go@v5 # zizmor: ignore[cache-poisoning]
         with:
-          enable-cache: false
-          version: "0.11.25"
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: tools/ods/go.sum
+
+      - name: Build ods
+        run: |
+          go build -o "${RUNNER_TEMP}/bin/ods" .
+          echo "${RUNNER_TEMP}/bin" >> "${GITHUB_PATH}"
+        working-directory: tools/ods
 
       - name: Determine baseline revision
         id: baseline-rev
@@ -1036,7 +1047,7 @@ jobs:
           PLAYWRIGHT_S3_BUCKET: ${{ env.PLAYWRIGHT_S3_BUCKET }}
           BASELINE_REV: ${{ steps.baseline-rev.outputs.rev }}
         run: |
-          uv run --no-sync --with onyx-devtools ods screenshot-diff compare \
+          ods screenshot-diff compare \
             --project "${PROJECT}" \
             --rev "${BASELINE_REV}"
 
@@ -1113,7 +1124,7 @@ jobs:
           BASELINE_REV: ${{ steps.baseline-rev.outputs.rev }}
         run: |
           if [ -d "web/output/screenshots/" ] && [ "$(ls -A web/output/screenshots/)" ]; then
-            uv run --no-sync --with onyx-devtools ods screenshot-diff upload-baselines \
+            ods screenshot-diff upload-baselines \
               --project "${PROJECT}" \
               --rev "${BASELINE_REV}" \
               --delete
