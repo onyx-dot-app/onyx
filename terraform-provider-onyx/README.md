@@ -434,11 +434,15 @@ run, which builds every archive and publishes none of them.
 
 One step is left, and it is the only reason a release is still cut by hand:
 
-- [ ] Give this repo a credential that can push to the mirror, and put it in a
-      `release-terraform-provider` environment. That environment does not exist yet, so
-      `release-terraform-provider.yml` cannot run. It currently expects a GitHub App:
-      the variable `TF_PROVIDER_RELEASE_APP_ID` and the secret
-      `TF_PROVIDER_RELEASE_APP_PRIVATE_KEY`.
+- [ ] Give this repo a credential that can push to the mirror. The
+      `release-terraform-provider` environment exists but is empty, so
+      `release-terraform-provider.yml` has nothing to authenticate with and has never
+      run. Create a GitHub App, install it on the mirror alone with **contents: write**,
+      and put two values in that environment:
+      - variable `TF_PROVIDER_RELEASE_APP_CLIENT_ID` — the App's **Client ID**
+        (`Iv23li...`) from its settings page, *not* the numeric App ID.
+      - secret `TF_PROVIDER_RELEASE_APP_PRIVATE_KEY` — the whole generated `.pem`,
+        `BEGIN`/`END` lines included.
 
 Until that exists, a release is the workflow's own commands run locally against the
 mirror, followed by the tag — about a minute. That is how `v0.1.0` shipped.

@@ -73,7 +73,10 @@ jobs:
         id: mirror-token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # ratchet:actions/create-github-app-token@v2
         with:
-          client-id: ${{ vars.TF_PROVIDER_RELEASE_APP_ID }}
+          # The App's Client ID (Iv23li...), not the numeric App ID. The action
+          # takes either, through different inputs, and only app-id is
+          # deprecated — so the variable is named for the one it holds.
+          client-id: ${{ vars.TF_PROVIDER_RELEASE_APP_CLIENT_ID }}
           private-key: ${{ secrets.TF_PROVIDER_RELEASE_APP_PRIVATE_KEY }}
           owner: onyx-dot-app
           repositories: terraform-provider-onyx
