@@ -4928,6 +4928,10 @@
         },
         "section": {
           "title": "Authentifizierung"
+        },
+        "subjectRelink": {
+          "description": "Lässt Benutzer, denen der Anbieter eine neue Subject-ID ausgestellt hat, sich wieder bei dem mit ihrer E-Mail verknüpften Konto anmelden. Nur während eines Wechsels des OIDC-Clients oder der App-Registrierung einschalten.",
+          "title": "Konten nach einem OIDC-Client-Wechsel neu verknüpfen"
         }
       },
       "jwt": {

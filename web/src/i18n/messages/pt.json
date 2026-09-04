@@ -4928,6 +4928,10 @@
         },
         "section": {
           "title": "Autenticação"
+        },
+        "subjectRelink": {
+          "description": "Permite que usuários que receberam um novo ID de sujeito do provedor voltem a entrar na conta vinculada ao seu e-mail. Ative apenas durante a mudança do cliente OIDC ou do registro do aplicativo.",
+          "title": "Revincular contas após uma mudança de cliente OIDC"
         }
       },
       "jwt": {

@@ -371,6 +371,17 @@ export default function SecurityHardeningPage() {
                 }
               />
 
+              <ToggleRow
+                title={t("authentication.subjectRelink.title")}
+                description={t("authentication.subjectRelink.description")}
+                checked={draft.allow_same_provider_subject_relink}
+                onCheckedChange={(checked) =>
+                  void saveSettings({
+                    allow_same_provider_subject_relink: checked,
+                  })
+                }
+              />
+
               {!isMultiTenant && (
                 <>
                   {isSingleTenantRuntime && (
