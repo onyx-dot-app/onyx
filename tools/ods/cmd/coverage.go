@@ -20,6 +20,8 @@ type CoverageOptions struct {
 	Check     bool
 	Update    bool
 	Profile   string
+	HTML      string
+	Markdown  string
 	Tolerance float64
 }
 
@@ -49,6 +51,8 @@ func NewCoverageCommand() *cobra.Command {
 	cmd.Flags().BoolVar(&opts.Check, "check", false, "Fail when a package drops below its baseline floor")
 	cmd.Flags().BoolVar(&opts.Update, "update", false, "Rewrite the baseline from this run")
 	cmd.Flags().StringVar(&opts.Profile, "profile", "", "Keep the coverage profile at this path, for go tool cover -html")
+	cmd.Flags().StringVar(&opts.HTML, "html", "", "Render the profile as a browsable page at this path")
+	cmd.Flags().StringVar(&opts.Markdown, "markdown", "", "Write the report as markdown at this path, for a PR comment or job summary")
 	cmd.Flags().Float64Var(&opts.Tolerance, "tolerance", coverage.DefaultTolerance,
 		"Percentage points a package may drop below its floor without failing")
 
@@ -99,6 +103,19 @@ func runCoverage(target string, opts *CoverageOptions) int {
 		return 1
 	}
 
+	if opts.HTML != "" {
+		htmlPath, err := filepath.Abs(opts.HTML)
+		if err != nil {
+			log.Errorf("Failed to resolve the html path %q: %v", opts.HTML, err)
+			return 1
+		}
+		if err := coverage.WriteHTML(moduleDir, profilePath, htmlPath); err != nil {
+			log.Errorf("Failed to render the html report: %v", err)
+			return 1
+		}
+		log.Infof("HTML report written to %s", htmlPath)
+	}
+
 	baselinePath := coverage.BaselinePath(moduleDir)
 
 	if opts.Update {
@@ -120,6 +137,14 @@ func runCoverage(target string, opts *CoverageOptions) int {
 	if err := coverage.WriteReport(os.Stdout, report); err != nil {
 		log.Errorf("Failed to write the report: %v", err)
 		return 1
+	}
+
+	if opts.Markdown != "" {
+		if err := writeMarkdown(opts.Markdown, suite.Dir, report); err != nil {
+			log.Errorf("Failed to write the markdown report: %v", err)
+			return 1
+		}
+		log.Infof("Markdown report written to %s", opts.Markdown)
 	}
 
 	if opts.Profile != "" {
@@ -159,6 +184,18 @@ func writeBaseline(baselinePath string, profile *coverage.Profile) int {
 	log.Infof("Wrote %s with a %.1f%% total coverage floor across %d packages",
 		baselinePath, baseline.Total, len(baseline.Packages))
 	return 0
+}
+
+func writeMarkdown(path, name string, report *coverage.Report) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return err
+	}
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = f.Close() }()
+	return coverage.WriteMarkdown(f, name, report)
 }
 
 // profileTarget resolves where the coverage profile is written. Without an

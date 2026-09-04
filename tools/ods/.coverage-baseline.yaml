@@ -5,17 +5,17 @@
 # tests with `ods coverage <suite> --update`.
 #
 # Generated file: do not edit by hand.
-total: 35.7
+total: 36.3
 packages:
   .: 0
-  cmd: 17.2
+  cmd: 17.1
   internal/alembic: 0
   internal/audit: 55.1
   internal/auditcmd: 0
   internal/childproc: 0
   internal/composegen: 96.8
   internal/config: 0
-  internal/coverage: 79.7
+  internal/coverage: 89.8
   internal/deployfilessync: 79.1
   internal/docker: 25.3
   internal/git: 32.5

@@ -65,4 +65,83 @@ jobs:
       - name: Test
         env:
           MODULE: ${{ matrix.modules }}
-        run: '"${RUNNER_TEMP}/ods" coverage "${MODULE}" --check'
+        run: |
+          "${RUNNER_TEMP}/ods" coverage "${MODULE}" --check \
+            --html "${RUNNER_TEMP}/coverage/coverage.html" \
+            --markdown "${RUNNER_TEMP}/coverage/report.md"
+
+      # The report goes to the job summary here, and to the PR comment below.
+      # Artifact names cannot contain "/", so "./tools/ods" becomes "tools-ods".
+      - name: Publish the coverage report
+        if: ${{ !cancelled() }}
+        id: report
+        env:
+          MODULE: ${{ matrix.modules }}
+        run: |
+          if [ -f "${RUNNER_TEMP}/coverage/report.md" ]; then
+            cat "${RUNNER_TEMP}/coverage/report.md" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "name=coverage-$(echo "${MODULE#./}" | tr '/' '-')" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # ratchet:actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: ${{ steps.report.outputs.name }}
+          path: ${{ runner.temp }}/coverage
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # One comment per PR, updated in place, with each module's report and a link
+  # to its HTML artifact. Fork PRs get a read-only token, so they only get the
+  # job summary.
+  coverage-comment:
+    needs: golang
+    if: >-
+      !cancelled() &&
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.fork == false
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      pull-requests: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # ratchet:actions/download-artifact@v4
+        with:
+          pattern: coverage-*
+          path: reports
+      - name: Post the coverage comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          RUN_ID: ${{ github.run_id }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          MARKER="<!-- golang-coverage -->"
+          ARTIFACTS=$(gh api "repos/${REPO}/actions/runs/${RUN_ID}/artifacts")
+
+          BODY="${MARKER}"$'\n'"### Go coverage"$'\n'
+          for dir in reports/coverage-*/; do
+            [ -f "${dir}report.md" ] || continue
+            NAME=$(basename "${dir}")
+            ARTIFACT_ID=$(jq -r --arg name "${NAME}" '.artifacts[] | select(.name == $name) | .id' <<< "${ARTIFACTS}")
+            BODY+=$'\n'"$(cat "${dir}report.md")"$'\n'
+            BODY+="[Download the HTML report](https://github.com/${REPO}/actions/runs/${RUN_ID}/artifacts/${ARTIFACT_ID})"$'\n'
+          done
+
+          if [ "${BODY}" = "${MARKER}"$'\n'"### Go coverage"$'\n' ]; then
+            echo "No coverage reports in this run (the tests failed) -- skipping the PR comment."
+            exit 0
+          fi
+
+          # Upsert: find the existing comment with the marker, or create one.
+          # --paginate: on a long PR the marker can sit past the first page.
+          EXISTING_COMMENT_ID=$(gh api --paginate "repos/${REPO}/issues/${PR_NUMBER}/comments" \
+            --jq ".[] | select(.body | startswith(\"${MARKER}\")) | .id" | head -1)
+
+          if [ -n "${EXISTING_COMMENT_ID}" ]; then
+            gh api --method PATCH "repos/${REPO}/issues/comments/${EXISTING_COMMENT_ID}" -f body="${BODY}" >/dev/null
+          else
+            gh api --method POST "repos/${REPO}/issues/${PR_NUMBER}/comments" -f body="${BODY}" >/dev/null
+          fi
