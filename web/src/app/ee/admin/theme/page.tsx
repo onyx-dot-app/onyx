@@ -27,7 +27,7 @@ const CHAR_LIMITS = {
   custom_greeting_message: 50,
   custom_login_subtitle: 100,
   custom_header_content: 100,
-  custom_lower_disclaimer_content: 200,
+  custom_lower_disclaimer_content: 500,
   custom_popup_header: 100,
   custom_popup_content: 500,
   consent_screen_prompt: 200,
