@@ -1,6 +1,7 @@
+import io
 import re
 from dataclasses import dataclass
-from typing import Final
+from typing import BinaryIO, Final
 from urllib.parse import quote, unquote, urlparse
 
 import requests
@@ -255,7 +256,30 @@ def download_github_archive(
     max_size_bytes: int,
     timeout: float | tuple[float, float] = _GITHUB_FETCH_TIMEOUT_SECONDS,
 ) -> bytes:
-    """Download a bounded tarball without forwarding credentials to archive hosts."""
+    """Download a bounded tarball into memory. See `stream_github_archive`."""
+    buf = io.BytesIO()
+    stream_github_archive(
+        source,
+        revision,
+        authorization_header,
+        max_size_bytes=max_size_bytes,
+        timeout=timeout,
+        sink=buf,
+    )
+    return buf.getvalue()
+
+
+def stream_github_archive(
+    source: GitHubSource,
+    revision: str,
+    authorization_header: str | None = None,
+    *,
+    max_size_bytes: int,
+    timeout: float | tuple[float, float] = _GITHUB_FETCH_TIMEOUT_SECONDS,
+    sink: BinaryIO,
+) -> int:
+    """Stream a bounded tarball into `sink` without forwarding credentials to
+    archive hosts. Returns the number of bytes written."""
     encoded_owner = quote(source.owner, safe="")
     encoded_repo = quote(source.repo, safe="")
     encoded_revision = quote(revision, safe="")
@@ -331,7 +355,6 @@ def download_github_archive(
                 OnyxErrorCode.BAD_GATEWAY,
                 "Couldn't download the repository from GitHub. Try again in a few minutes.",
             )
-        archive_chunks: list[bytes] = []
         archive_size = 0
         try:
             for chunk in response.iter_content(chunk_size=64 * 1024):
@@ -343,11 +366,11 @@ def download_github_archive(
                         OnyxErrorCode.PAYLOAD_TOO_LARGE,
                         f"Repository download exceeds the {max_size_bytes // (1024 * 1024)} MiB limit. Remove large files or use a smaller repository.",
                     )
-                archive_chunks.append(chunk)
+                sink.write(chunk)
         except requests.RequestException as exc:
             raise OnyxError(
                 OnyxErrorCode.BAD_GATEWAY,
                 "The GitHub repository download was interrupted. Try again.",
             ) from exc
 
-    return b"".join(archive_chunks)
+    return archive_size

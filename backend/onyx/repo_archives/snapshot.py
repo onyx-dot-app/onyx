@@ -30,7 +30,10 @@ from onyx.configs.app_configs import (
     REPO_SNAPSHOT_MAX_TOTAL_BYTES,
     REPO_SNAPSHOT_TTL_SECONDS,
 )
-from onyx.repo_archives.models import RepoArchive, RepoRevision
+from onyx.error_handling.exceptions import OnyxError
+from onyx.repo_archives.models import RepoArchive, RepoRef, RepoRevision
+from onyx.repo_archives.provider import RepoArchiveProvider
+from onyx.repo_archives.tarball_cache import open_revision_archive, resolve_revision
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -76,6 +79,13 @@ class RepoSnapshot:
                     continue
                 rel_path = os.path.relpath(full_path, root).replace(os.sep, "/")
                 yield rel_path, st.st_size
+
+    @property
+    def is_available(self) -> bool:
+        """False once the snapshot directory is gone — pruned by another
+        worker, or its disk lost. Tells a per-file read failure apart from
+        one that means every later read fails too."""
+        return self.root.is_dir()
 
     def read_file(self, rel_path: str, max_size_bytes: int) -> bytes:
         """Read a repo-relative file.
@@ -274,3 +284,39 @@ def get_or_create_snapshot(
         archive_size,
     )
     return RepoSnapshot(dest, revision)
+
+
+def snapshot_or_none(
+    provider: RepoArchiveProvider,
+    repo: RepoRef,
+    ref: str | None,
+    *,
+    max_size_bytes: int,
+    timeout: float | tuple[float, float],
+) -> RepoSnapshot | None:
+    """Snapshot of `repo` at `ref`, or None when one cannot be produced;
+    callers then fall back to their per-file path.
+
+    No resolved SHA, no snapshot: a ref-keyed cache could serve a stale tree
+    after the ref moves.
+    """
+    try:
+        pinned = resolve_revision(provider, repo, ref)
+        if pinned is None:
+            return None
+        return get_or_create_snapshot(
+            pinned,
+            lambda: open_revision_archive(
+                provider, pinned, max_size_bytes=max_size_bytes, timeout=timeout
+            ),
+        )
+    # Deliberately narrow: a bug in extraction must surface, not turn into a
+    # silent fallback to the much slower per-file path.
+    except (RepoSnapshotError, OnyxError, OSError):
+        logger.warning(
+            "Snapshot of %s@%s failed; falling back to per-file fetching",
+            repo.display,
+            ref or "HEAD",
+            exc_info=True,
+        )
+        return None

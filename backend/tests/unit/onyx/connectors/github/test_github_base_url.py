@@ -1,8 +1,10 @@
 from collections.abc import Iterator
 from contextlib import contextmanager
-from unittest.mock import patch
+from typing import cast
+from unittest.mock import MagicMock, patch
 
 import pytest
+from github import Repository
 
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.github.connector import GithubConnector
@@ -189,3 +191,30 @@ class TestCredentialBaseUrlSSRF:
         with _ssrf_env():
             connector.load_credentials({"github_access_token": "token"})
         assert _base_url_of(connector) == "https://10.0.0.1/api/v3"
+
+
+def test_enterprise_credential_disables_repo_snapshots(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The archive provider only speaks to github.com. A GitHub Enterprise host
+    supplied by the credential — with the env var unset — must still take the
+    API path, or that host's PAT would be sent to github.com."""
+    monkeypatch.setattr(
+        "onyx.connectors.github.connector.GITHUB_CONNECTOR_BASE_URL", None
+    )
+    connector = GithubConnector(
+        repo_owner="onyx-dot-app", repositories="onyx", include_code_files=True
+    )
+    with _ssrf_env():
+        connector.load_credentials(
+            {
+                "github_access_token": "token",
+                "github_base_url": "https://github.example.com",
+            }
+        )
+    repo = cast(Repository.Repository, MagicMock())
+    with patch(
+        "onyx.connectors.github.connector.GitHubArchiveProvider"
+    ) as archive_provider:
+        assert connector._ensure_snapshot(repo) is None
+    archive_provider.assert_not_called()
