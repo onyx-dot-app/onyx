@@ -25,6 +25,32 @@ interface TextProps extends WithoutStyles<
   /** Prevent text wrapping. */
   nowrap?: boolean;
 
+  /**
+   * How a run of characters with nowhere to wrap should behave. Ordinary
+   * wrapping only breaks at whitespace, so a URL, an identifier or any single
+   * long token overflows its container instead of wrapping.
+   *
+   * - `"wrap-normal"` — the CSS default: break at whitespace only, and let a
+   *   long run overflow. Spell it out to override an inherited value, since
+   *   `overflow-wrap` inherits and omitting this prop cannot undo an
+   *   ancestor's.
+   * - `"wrap-break-word"` — break only when the run would otherwise overflow.
+   * - `"wrap-anywhere"` — as above, and count the break when min-content is
+   *   measured, so the element can shrink as a flex item.
+   * - `"break-all"` — break between any two characters.
+   * - `"break-keep"` — never break within a word (CJK).
+   *
+   * Overlaps `nowrap`, which is the older way to say "one line" and wins
+   * because it removes the wrap opportunities this would act on. Prefer this
+   * prop; `nowrap` is kept so existing callers are undisturbed.
+   */
+  wordWrap?:
+    | "wrap-normal"
+    | "wrap-break-word"
+    | "wrap-anywhere"
+    | "break-all"
+    | "break-keep";
+
   /** Truncate text to N lines with ellipsis. `1` uses simple truncation; `2+` uses `-webkit-line-clamp`. */
   maxLines?: number;
 
@@ -94,6 +120,7 @@ function Text({
   color = "text-04",
   as: Tag = "span",
   nowrap,
+  wordWrap,
   maxLines,
   children,
   ...rest
@@ -103,6 +130,7 @@ function Text({
     FONT_CONFIG[font],
     COLOR_CONFIG[color],
     nowrap && "whitespace-nowrap",
+    wordWrap,
     maxLines === 1 && "truncate",
     maxLines && maxLines > 1 && "overflow-hidden"
   );
