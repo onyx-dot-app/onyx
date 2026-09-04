@@ -102,6 +102,9 @@ SLACK_SERVICE_ACCOUNT_EMAIL = (
 
 # Key-Value store keys
 KV_PASSWORD_AUTH_ENABLED_KEY = "password_auth_enabled_override"
+KV_ALLOW_SAME_PROVIDER_SUBJECT_RELINK_KEY = (
+    "allow_same_provider_subject_relink_override"
+)
 KV_REINDEX_KEY = "needs_reindexing"
 KV_UNSTRUCTURED_API_KEY = "unstructured_api_key"
 KV_USER_STORE_KEY = "INVITED_USERS"

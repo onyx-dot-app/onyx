@@ -6102,6 +6102,10 @@
         },
         "section": {
           "title": "Autenticación"
+        },
+        "subjectRelink": {
+          "description": "Permite que los usuarios a los que el proveedor asignó un nuevo ID de sujeto vuelvan a iniciar sesión en la cuenta vinculada a su correo. Actívalo solo mientras cambias el cliente OIDC o el registro de la aplicación.",
+          "title": "Volver a vincular cuentas tras un cambio de cliente OIDC"
         }
       },
       "jwt": {
