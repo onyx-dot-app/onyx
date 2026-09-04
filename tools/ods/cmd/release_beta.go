@@ -194,9 +194,7 @@ func releaseBetaOnNewBranch(opts *ReleaseBetaOptions) (string, error) {
 			return "", nil
 		}
 		// The prompt can wait a long time; recompute so the push reflects
-		// origin's current state, not the pre-prompt snapshot. This also keeps
-		// the window in which another cut could create the branch small, which
-		// the push itself only guards against for non-fast-forwards.
+		// origin's current state, not the pre-prompt snapshot.
 		freshBranch, freshTag, freshSHA, err := release.ComputeNewBetaBranch(opts.Ref)
 		if err != nil {
 			return "", err
@@ -207,8 +205,10 @@ func releaseBetaOnNewBranch(opts *ReleaseBetaOptions) (string, error) {
 	}
 
 	// The branch goes first: CI's tag check requires the beta's commit to be on
-	// origin/<branch>, and deployment.yml runs it as soon as the tag lands.
-	if err := git.PushBranch(sha, branch, opts.Verify); err != nil {
+	// origin/<branch>, and deployment.yml runs it as soon as the tag lands. The
+	// push creates the branch or fails; it never moves one another cut created
+	// meanwhile.
+	if err := git.PushNewBranch(sha, branch, opts.Verify); err != nil {
 		return "", fmt.Errorf("failed to push branch %s: %w", branch, err)
 	}
 	log.Infof("Created origin/%s at %.10s.", branch, sha)

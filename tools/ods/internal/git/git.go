@@ -97,17 +97,20 @@ func PushTag(tag string, force, verify bool) error {
 	return HintAfter(PushHookHintDelay, hint, func() error { return RunCommand(args...) })
 }
 
-// PushBranch pushes commitSHA to origin as branch. Pre-push hooks are skipped
-// unless verify is true, for the same reason PushTag skips them: the commit
-// already passed CI, and the hooks run over the whole branch. The push is not
-// forced, so origin rejects it when branch already exists there and commitSHA
-// is not a fast-forward of it.
-func PushBranch(commitSHA, branch string, verify bool) error {
+// PushNewBranch pushes commitSHA to origin as a branch that must not exist
+// there yet. An empty --force-with-lease expectation makes origin reject the
+// push when the branch appeared meanwhile, which a plain push would instead
+// fast-forward. Pre-push hooks are skipped unless verify is true, for the same
+// reason PushTag skips them: the commit already passed CI, and the hooks run
+// over the whole branch.
+func PushNewBranch(commitSHA, branch string, verify bool) error {
 	args := []string{"push"}
 	if !verify {
 		args = append(args, "--no-verify")
 	}
-	args = append(args, "origin", fmt.Sprintf("%s:refs/heads/%s", commitSHA, branch))
+	args = append(args,
+		fmt.Sprintf("--force-with-lease=refs/heads/%s:", branch),
+		"origin", fmt.Sprintf("%s:refs/heads/%s", commitSHA, branch))
 	if !verify {
 		return RunCommand(args...)
 	}

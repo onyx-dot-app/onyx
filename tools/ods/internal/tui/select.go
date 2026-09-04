@@ -35,6 +35,12 @@ func Select(title string, options []string, defaultIndex int) (int, error) {
 		screen.Show()
 
 		switch ev := screen.PollEvent().(type) {
+		case nil:
+			// PollEvent returns nil once the screen stops, which would
+			// otherwise spin this loop forever.
+			return -1, fmt.Errorf("the terminal stopped delivering events")
+		case *tcell.EventError:
+			return -1, fmt.Errorf("terminal error: %w", ev)
 		case *tcell.EventResize:
 			screen.Sync()
 		case *tcell.EventKey:
