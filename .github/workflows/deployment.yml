@@ -114,7 +114,7 @@ jobs:
           # Determine if this tag should get the "latest" Docker tag.
           # Only the highest semver stable tag (vX.Y.Z exactly) gets "latest".
           if [[ "$IS_STABLE" == "true" ]]; then
-            HIGHEST_STABLE=$(uv run --no-sync --with onyx-devtools ods latest-stable-tag) || {
+            HIGHEST_STABLE=$(uv run --no-sync --with onyx-devtools==0.13.2 ods latest-stable-tag) || {
               echo "::error::Failed to determine highest stable tag via 'ods latest-stable-tag'"
               exit 1
             }
@@ -184,7 +184,7 @@ jobs:
       - name: Run dependency audit
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: uv run --no-sync --with 'onyx-devtools[audit]' ods audit --fail-on=critical
+        run: uv run --no-sync --with 'onyx-devtools[audit]==0.13.2' ods audit --fail-on=critical
 
   # Validate that a pushed release tag is versioned correctly, via
   # `ods release --check`. A cloud tag must be the tag `ods release cloud`
@@ -216,7 +216,7 @@ jobs:
 
       - name: Validate the tag is versioned correctly
         run: |
-          uv run --no-sync --with onyx-devtools ods release --check --ref "$GITHUB_REF_NAME"
+          uv run --no-sync --with onyx-devtools==0.13.2 ods release --check --ref "$GITHUB_REF_NAME"
 
   notify-slack-on-tag-check-failure:
     needs:
@@ -2084,7 +2084,7 @@ jobs:
         # hard scan failure nothing is written, so seed a valid empty SARIF to keep
         # the always() upload below from choking.
         run: |
-          uv run --no-sync --with 'onyx-devtools[audit]' ods audit image "$IMAGE" \
+          uv run --no-sync --with 'onyx-devtools[audit]==0.13.2' ods audit image "$IMAGE" \
             --fail-on=critical --format=sarif,text > image-audit.sarif || status=$?
           if [ ! -s image-audit.sarif ]; then
             # $schema is a literal SARIF key, not a shell variable.
