@@ -94,9 +94,13 @@ func releaseBeta(opts *ReleaseBetaOptions) (string, error) {
 	// --version names an existing branch, and the non-interactive modes keep
 	// their long-standing meaning: cut on the newest release branch.
 	if !newBranch && !opts.Yes && !opts.DryRun && opts.Version == "" {
-		chosen, err := chooseNewBranch()
+		chosen, ok, err := chooseNewBranch()
 		if err != nil {
 			return "", err
+		}
+		if !ok {
+			log.Info("Exiting...")
+			return "", nil
 		}
 		newBranch = chosen
 	}
@@ -147,17 +151,25 @@ func releaseBeta(opts *ReleaseBetaOptions) (string, error) {
 }
 
 // chooseNewBranch asks whether to cut the first beta on a new release branch
-// (true) or the next beta on the newest existing one (false).
-func chooseNewBranch() (bool, error) {
+// (true) or the next beta on the newest existing one (false). The second
+// return is false when the user cancels the prompt.
+func chooseNewBranch() (newBranch, ok bool, err error) {
 	version, err := release.NewestReleaseVersion()
 	if err != nil {
-		return false, fmt.Errorf("failed to detect the newest release branch (pass --version or --new-branch to override): %w", err)
+		return false, false, fmt.Errorf("failed to detect the newest release branch (pass --version or --new-branch to override): %w", err)
 	}
 	options := []string{
 		fmt.Sprintf("Cut the next beta on the existing release/%s", version),
 		fmt.Sprintf("Create release/%s from origin/main and cut its first beta", version.NextMinor()),
 	}
-	return prompt.Choose("Which release branch should the beta be cut on?", options, 0) == 1, nil
+
+	index, ok := prompt.Select("Which release branch should the beta be cut on?", options, 0)
+	if !ok {
+		return false, false, nil
+	}
+	// The list clears itself on exit, so echo the choice into the transcript.
+	log.Info(options[index])
+	return index == 1, true, nil
 }
 
 // releaseBetaOnNewBranch creates the next minor's release branch from

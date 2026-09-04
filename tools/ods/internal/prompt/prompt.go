@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	log "github.com/sirupsen/logrus"
+
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/tui"
 )
 
 // reader is the input reader, can be replaced for testing
@@ -28,6 +30,23 @@ func String(prompt string) string {
 		}
 		fmt.Println("Value cannot be empty.")
 	}
+}
+
+// Select asks the user to choose one of options and returns its index. The
+// options are shown as an arrow-key list; when the terminal cannot run one
+// (piped input, CI, no TTY) it falls back to the numbered Choose prompt. The
+// second return is false when the user cancels the list, which the numbered
+// fallback cannot do.
+func Select(title string, options []string, defaultIndex int) (int, bool) {
+	index, err := tui.Select(title, options, defaultIndex)
+	if err != nil {
+		log.Debugf("Arrow-key select unavailable: %v", err)
+		return Choose(title, options, defaultIndex), true
+	}
+	if index < 0 {
+		return 0, false
+	}
+	return index, true
 }
 
 // Choose prompts the user with a numbered list of options and returns the
