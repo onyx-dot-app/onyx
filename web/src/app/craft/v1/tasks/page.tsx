@@ -62,7 +62,7 @@ function buildColumns(handlers: RowActionHandlers, t: TasksListTranslate) {
       weight: 25,
       enableSorting: false,
       cell: (value) => (
-        <Text font="main-ui-body" color="text-05" nowrap>
+        <Text font="main-ui-body" color="text-05" wordWrap="whitespace-nowrap">
           {value}
         </Text>
       ),
@@ -72,7 +72,7 @@ function buildColumns(handlers: RowActionHandlers, t: TasksListTranslate) {
       weight: 22,
       enableSorting: false,
       cell: (value) => (
-        <Text font="main-ui-body" color="text-03" nowrap>
+        <Text font="main-ui-body" color="text-03" wordWrap="whitespace-nowrap">
           {value}
         </Text>
       ),
@@ -119,7 +119,11 @@ function buildColumns(handlers: RowActionHandlers, t: TasksListTranslate) {
         }
         return (
           <Tooltip tooltip={formatAbsolute(nextRunAt)} side="top">
-            <Text font="main-ui-body" color="text-03" nowrap>
+            <Text
+              font="main-ui-body"
+              color="text-03"
+              wordWrap="whitespace-nowrap"
+            >
               {formatRelativeShort(nextRunAt)}
             </Text>
           </Tooltip>

@@ -54,18 +54,22 @@ function primaryText(toolCall: ToolCallState): string {
 function verbWithCode(verb: string, code: string, suffix?: string): ReactNode {
   return (
     <>
-      <Text font="main-ui-muted" color="text-04" nowrap>
+      <Text font="main-ui-muted" color="text-04" wordWrap="whitespace-nowrap">
         {verb}
       </Text>
       {/* 12px mono (vs the 14px sans verb): DM Mono renders visually larger
           than the sans face, so the smaller step matches their apparent size. */}
       <span className="rounded-sm bg-background-tint-01 px-1">
-        <Text font="secondary-mono" color="text-04" nowrap>
+        <Text
+          font="secondary-mono"
+          color="text-04"
+          wordWrap="whitespace-nowrap"
+        >
           {code}
         </Text>
       </span>
       {suffix && (
-        <Text font="main-ui-muted" color="text-04" nowrap>
+        <Text font="main-ui-muted" color="text-04" wordWrap="whitespace-nowrap">
           {suffix}
         </Text>
       )}
@@ -82,7 +86,7 @@ function renderPrimary(toolCall: ToolCallState): ReactNode {
   if (toolCall.kind === "execute" && toolCall.command) {
     if (toolCall.skillName && toolCall.description) {
       return (
-        <Text font="main-ui-muted" color="text-04" nowrap>
+        <Text font="main-ui-muted" color="text-04" wordWrap="whitespace-nowrap">
           {toolCall.description}
         </Text>
       );
@@ -102,7 +106,7 @@ function renderPrimary(toolCall: ToolCallState): ReactNode {
     return verbWithCode(`${toolCall.title} `, toolCall.description);
   }
   return (
-    <Text font="main-ui-muted" color="text-04" nowrap>
+    <Text font="main-ui-muted" color="text-04" wordWrap="whitespace-nowrap">
       {primaryText(toolCall)}
     </Text>
   );

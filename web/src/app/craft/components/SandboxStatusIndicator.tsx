@@ -90,7 +90,11 @@ export function SandboxStatusIndicatorView({
             exit={{ opacity: 0, y: -5 }}
             transition={{ duration: 0.2 }}
           >
-            <Text font="main-ui-body" color="text-05" nowrap>
+            <Text
+              font="main-ui-body"
+              color="text-05"
+              wordWrap="whitespace-nowrap"
+            >
               {label}
             </Text>
           </motion.span>

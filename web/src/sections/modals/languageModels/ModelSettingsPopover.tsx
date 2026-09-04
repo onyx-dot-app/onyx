@@ -91,7 +91,11 @@ function SectionHeader({
         rightChildren={
           rightValue !== undefined ? (
             <Tooltip tooltip={rightValueTooltip} side="top">
-              <Text font="secondary-mono" color="text-04" nowrap>
+              <Text
+                font="secondary-mono"
+                color="text-04"
+                wordWrap="whitespace-nowrap"
+              >
                 {rightValue}
               </Text>
             </Tooltip>
@@ -132,7 +136,11 @@ function PolicySlider({
       className="ms-8 me-2"
     >
       <Section alignItems="start" width="auto" height="auto" className="mx-0.5">
-        <Text font="secondary-action" color="text-03" nowrap>
+        <Text
+          font="secondary-action"
+          color="text-03"
+          wordWrap="whitespace-nowrap"
+        >
           {label}
         </Text>
       </Section>
@@ -152,7 +160,7 @@ function PolicySlider({
               key={mark}
               font="figure-small-value"
               color={index === activeMark ? "text-04" : "text-02"}
-              nowrap
+              wordWrap="whitespace-nowrap"
             >
               {mark}
             </Text>
@@ -260,7 +268,11 @@ export function ModelSettingsPopover({
             gap={0}
             className="mx-2.5 my-2"
           >
-            <Text font="main-ui-body" color="text-02" nowrap>
+            <Text
+              font="main-ui-body"
+              color="text-02"
+              wordWrap="whitespace-nowrap"
+            >
               {modelDisplayName(model)}
             </Text>
             <Text font="secondary-body" color="text-02">

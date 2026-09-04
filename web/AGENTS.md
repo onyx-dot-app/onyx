@@ -366,7 +366,8 @@ Key props:
 - `font`: `TextFont` — font preset (e.g., `"main-ui-body"`, `"heading-h2"`, `"secondary-action"`)
 - `color`: `TextColor` — text color (e.g., `"text-03"`, `"text-inverted-05"`)
 - `as`: `"p" | "span" | "li" | "h1" | "h2" | "h3"` — HTML tag (default: `"span"`)
-- `nowrap`: `boolean` — prevent text wrapping
+- `wordWrap`: `"whitespace-nowrap" | "wrap-normal" | "wrap-break-word" | "wrap-anywhere" | "break-all" | "break-keep"` — how the text wraps. `"whitespace-nowrap"` keeps it on one line; the `wrap-*` and `break-*` values let a long unbroken run split rather than overflow
+- `textPosition`: `"text-start" | "text-center" | "text-end" | "text-justify"` — how the text sits in its box. Only offered when `as` is a block tag, since `text-align` has nothing to align within on an inline `span`
 
 **`RichStr` convention:** When creating new components, any string prop that will be rendered as
 visible text in the DOM (e.g., `title`, `description`, `label`) should be typed as

@@ -273,7 +273,11 @@ function TokenBudgetField() {
       variant={meta.touched && meta.error ? "error" : "primary"}
       rightChildren={
         <div className="pe-1">
-          <Text font="secondary-action" color="text-03" nowrap>
+          <Text
+            font="secondary-action"
+            color="text-03"
+            wordWrap="whitespace-nowrap"
+          >
             {t("modal.tokenBudget.unit")}
           </Text>
         </div>
@@ -609,7 +613,7 @@ export default function CreateRateLimitModal({
                             <Text
                               font="secondary-action"
                               color="text-03"
-                              nowrap
+                              wordWrap="whitespace-nowrap"
                             >
                               {t("modal.costBudget.unit")}
                             </Text>
@@ -640,7 +644,7 @@ export default function CreateRateLimitModal({
                             <Text
                               font="secondary-action"
                               color="text-03"
-                              nowrap
+                              wordWrap="whitespace-nowrap"
                             >
                               {t("modal.period.unit")}
                             </Text>

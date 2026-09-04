@@ -123,7 +123,7 @@ function OpenButton({
     <Text
       font={labelFont ?? (isLarge ? "main-ui-body" : "secondary-body")}
       color={labelColor ?? "inherit"}
-      nowrap
+      wordWrap="whitespace-nowrap"
     >
       {children}
     </Text>

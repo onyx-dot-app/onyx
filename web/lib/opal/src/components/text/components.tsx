@@ -10,7 +10,14 @@ import { resolveStr } from "@opal/components/text/InlineMarkdown";
 // Types
 // ---------------------------------------------------------------------------
 
-interface TextProps extends WithoutStyles<
+/**
+ * Tags that establish a block box, so `text-align` has something to align
+ * within. `span` is deliberately absent: it is inline, and aligning an inline
+ * element is the parent's job, not its own.
+ */
+type BlockTag = "p" | "li" | "h1" | "h2" | "h3";
+
+interface TextBaseProps extends WithoutStyles<
   Omit<HTMLAttributes<HTMLElement>, "color" | "children">
 > {
   /** Font preset. Default: `"main-ui-body"`. */
@@ -19,17 +26,12 @@ interface TextProps extends WithoutStyles<
   /** Color variant. Default: `"text-04"`. */
   color?: TextColor;
 
-  /** HTML tag to render. Default: `"span"`. */
-  as?: "p" | "span" | "li" | "h1" | "h2" | "h3";
-
-  /** Prevent text wrapping. */
-  nowrap?: boolean;
-
   /**
-   * How a run of characters with nowhere to wrap should behave. Ordinary
-   * wrapping only breaks at whitespace, so a URL, an identifier or any single
-   * long token overflows its container instead of wrapping.
+   * How this text wraps. Ordinary wrapping only breaks at whitespace, so a
+   * URL, an identifier or any single long token overflows its container
+   * instead of wrapping.
    *
+   * - `"whitespace-nowrap"` — do not wrap at all; the text stays on one line.
    * - `"wrap-normal"` — the CSS default: break at whitespace only, and let a
    *   long run overflow. Spell it out to override an inherited value, since
    *   `overflow-wrap` inherits and omitting this prop cannot undo an
@@ -39,12 +41,9 @@ interface TextProps extends WithoutStyles<
    *   measured, so the element can shrink as a flex item.
    * - `"break-all"` — break between any two characters.
    * - `"break-keep"` — never break within a word (CJK).
-   *
-   * Overlaps `nowrap`, which is the older way to say "one line" and wins
-   * because it removes the wrap opportunities this would act on. Prefer this
-   * prop; `nowrap` is kept so existing callers are undisturbed.
    */
   wordWrap?:
+    | "whitespace-nowrap"
     | "wrap-normal"
     | "wrap-break-word"
     | "wrap-anywhere"
@@ -67,6 +66,30 @@ interface TextProps extends WithoutStyles<
    */
   children?: string | RichStr | RichNodes;
 }
+
+/**
+ * `textPosition` is only offered on a tag that makes a block box. On an inline
+ * `span` the property has nothing to align against — `text-align` positions a
+ * block's inline content, not the element itself — so allowing it there would
+ * be a prop that silently does nothing.
+ */
+type TextProps =
+  | (TextBaseProps & {
+      /** HTML tag to render. Default: `"span"`. */
+      as?: "span";
+      textPosition?: never;
+    })
+  | (TextBaseProps & {
+      /** HTML tag to render. */
+      as: BlockTag;
+
+      /**
+       * How the text sits within this element's box. Logical values, so they
+       * follow the reading direction rather than the screen: `"text-start"` is
+       * left in an LTR locale and right in an RTL one.
+       */
+      textPosition?: "text-start" | "text-center" | "text-end" | "text-justify";
+    });
 
 // ---------------------------------------------------------------------------
 // Config
@@ -126,8 +149,8 @@ function Text({
   font = "main-ui-body",
   color = "text-04",
   as: Tag = "span",
-  nowrap,
   wordWrap,
+  textPosition,
   maxLines,
   strikethrough,
   children,
@@ -137,8 +160,8 @@ function Text({
     "px-[2px]",
     FONT_CONFIG[font],
     COLOR_CONFIG[color],
-    nowrap && "whitespace-nowrap",
     wordWrap,
+    textPosition,
     maxLines === 1 && "truncate",
     maxLines && maxLines > 1 && "overflow-hidden",
     strikethrough && "line-through"

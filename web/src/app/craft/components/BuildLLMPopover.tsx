@@ -335,7 +335,7 @@ export function BuildLLMPopover({
                                   <Text
                                     font="secondary-body"
                                     color="text-03"
-                                    nowrap
+                                    wordWrap="whitespace-nowrap"
                                   >
                                     {group.displayName}
                                   </Text>

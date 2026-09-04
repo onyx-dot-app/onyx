@@ -126,7 +126,11 @@ function WindowCostSection({ windowCostCents, rows }: WindowCostSectionProps) {
                         {row.model}
                       </Text>
                     </Section>
-                    <Text font="main-ui-action" color="text-03" nowrap>
+                    <Text
+                      font="main-ui-action"
+                      color="text-03"
+                      wordWrap="whitespace-nowrap"
+                    >
                       {formatDollars(row.cost_cents)}
                     </Text>
                   </Section>
@@ -313,14 +317,22 @@ function ModelPriceSection({ prices, defaultPrice }: ModelPriceSectionProps) {
                           key={`${provider}-${price.model}`}
                           className="flex flex-row items-center justify-between gap-2 py-1 ps-3"
                         >
-                          <Text font="secondary-body" color="text-05" nowrap>
+                          <Text
+                            font="secondary-body"
+                            color="text-05"
+                            wordWrap="whitespace-nowrap"
+                          >
                             {isSameModelPrice(price, defaultPrice)
                               ? t("modelPrices.defaultTag.label", {
                                   model: price.model,
                                 })
                               : price.model}
                           </Text>
-                          <Text font="secondary-body" color="text-03" nowrap>
+                          <Text
+                            font="secondary-body"
+                            color="text-03"
+                            wordWrap="whitespace-nowrap"
+                          >
                             {`${formatMtok(price.input_per_mtok)} in · ${formatMtok(
                               price.output_per_mtok
                             )} out · ${formatMtok(

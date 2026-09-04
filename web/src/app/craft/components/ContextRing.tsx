@@ -50,7 +50,11 @@ export default function ContextRing({
         aria-label={`${view.displayPct} percent of context window used`}
       >
         {view.level !== "ok" && (
-          <Text font="secondary-body" color="text-03" nowrap>
+          <Text
+            font="secondary-body"
+            color="text-03"
+            wordWrap="whitespace-nowrap"
+          >
             {`${view.displayPct}%`}
           </Text>
         )}

@@ -84,7 +84,11 @@ function buildColumns(t: UsageTranslate) {
       weight: 38,
       cell: (value) => (
         <span className="underline-offset-2 group-hover/row:underline">
-          <Text font="main-ui-body" color="text-05" nowrap>
+          <Text
+            font="main-ui-body"
+            color="text-05"
+            wordWrap="whitespace-nowrap"
+          >
             {value}
           </Text>
         </span>
@@ -96,7 +100,11 @@ function buildColumns(t: UsageTranslate) {
       alignment: "right",
       cell: (value) => (
         <span className="tabular-nums">
-          <Text font="main-ui-action" color="text-05" nowrap>
+          <Text
+            font="main-ui-action"
+            color="text-05"
+            wordWrap="whitespace-nowrap"
+          >
             {formatCost(value)}
           </Text>
         </span>
@@ -108,7 +116,11 @@ function buildColumns(t: UsageTranslate) {
       alignment: "right",
       cell: (value) => (
         <span className="tabular-nums">
-          <Text font="main-ui-action" color="text-05" nowrap>
+          <Text
+            font="main-ui-action"
+            color="text-05"
+            wordWrap="whitespace-nowrap"
+          >
             {formatTokens(value)}
           </Text>
         </span>
@@ -120,7 +132,11 @@ function buildColumns(t: UsageTranslate) {
       alignment: "right",
       cell: (value) => (
         <span className="tabular-nums">
-          <Text font="main-ui-body" color="text-03" nowrap>
+          <Text
+            font="main-ui-body"
+            color="text-03"
+            wordWrap="whitespace-nowrap"
+          >
             {formatTokens(value)}
           </Text>
         </span>
@@ -132,7 +148,11 @@ function buildColumns(t: UsageTranslate) {
       alignment: "right",
       cell: (value) => (
         <span className="tabular-nums">
-          <Text font="main-ui-body" color="text-03" nowrap>
+          <Text
+            font="main-ui-body"
+            color="text-03"
+            wordWrap="whitespace-nowrap"
+          >
             {formatTokens(value)}
           </Text>
         </span>
