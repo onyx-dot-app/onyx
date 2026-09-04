@@ -6821,6 +6821,17 @@
         "label": "Entrar"
       }
     },
+    "emailPasswordForm": {
+      "createAccountButton": {
+        "label": "Criar uma conta"
+      },
+      "joinButton": {
+        "label": "Entrar na equipe"
+      },
+      "signInButton": {
+        "label": "Entrar"
+      }
+    },
     "error": {
       "accessRestrictionIssue": {
         "description": "Restrições de acesso ou permissões da conta"
@@ -6918,11 +6929,17 @@
       }
     },
     "login": {
+      "continueButton": {
+        "label": "Continuar"
+      },
       "createAccountButton": {
         "label": "Criar uma conta"
       },
       "noSsoProviders": {
         "error": "Não há login SSO configurado para esse endereço. Tente o Google ou sua senha abaixo."
+      },
+      "orDivider": {
+        "text": "ou"
       },
       "resetPasswordButton": {
         "label": "Redefinir senha"
@@ -6947,6 +6964,12 @@
       },
       "verifiedMessage": {
         "title": "Seu e-mail foi verificado! Entre para continuar."
+      },
+      "welcomeHeading": {
+        "title": "Boas-vindas ao {appName}"
+      },
+      "welcomeSubtitle": {
+        "text": "Sua plataforma de IA de código aberto para o trabalho"
       },
       "workEmailField": {
         "label": "E-mail de trabalho"

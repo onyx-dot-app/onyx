@@ -6821,6 +6821,17 @@
         "label": "Iniciar sesión"
       }
     },
+    "emailPasswordForm": {
+      "createAccountButton": {
+        "label": "Crear una cuenta"
+      },
+      "joinButton": {
+        "label": "Unirse"
+      },
+      "signInButton": {
+        "label": "Iniciar sesión"
+      }
+    },
     "error": {
       "accessRestrictionIssue": {
         "description": "Restricciones de acceso o permisos de la cuenta"
@@ -6918,11 +6929,17 @@
       }
     },
     "login": {
+      "continueButton": {
+        "label": "Continuar"
+      },
       "createAccountButton": {
         "label": "Crear una cuenta"
       },
       "noSsoProviders": {
         "error": "No hay inicio de sesión SSO configurado para esa dirección. Prueba con Google o tu contraseña abajo."
+      },
+      "orDivider": {
+        "text": "o"
       },
       "resetPasswordButton": {
         "label": "Restablecer contraseña"
@@ -6947,6 +6964,12 @@
       },
       "verifiedMessage": {
         "title": "¡Tu correo ha sido verificado! Inicia sesión para continuar."
+      },
+      "welcomeHeading": {
+        "title": "Te damos la bienvenida a {appName}"
+      },
+      "welcomeSubtitle": {
+        "text": "Tu plataforma de IA de código abierto para el trabajo"
       },
       "workEmailField": {
         "label": "Correo de trabajo"

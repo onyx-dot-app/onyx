@@ -6821,6 +6821,17 @@
         "label": "로그인"
       }
     },
+    "emailPasswordForm": {
+      "createAccountButton": {
+        "label": "계정 만들기"
+      },
+      "joinButton": {
+        "label": "참여"
+      },
+      "signInButton": {
+        "label": "로그인"
+      }
+    },
     "error": {
       "accessRestrictionIssue": {
         "description": "계정 액세스 제한 또는 권한 문제"
@@ -6918,11 +6929,17 @@
       }
     },
     "login": {
+      "continueButton": {
+        "label": "계속"
+      },
       "createAccountButton": {
         "label": "계정 만들기"
       },
       "noSsoProviders": {
         "error": "해당 주소로 설정된 SSO 로그인이 없습니다. 아래에서 Google 또는 비밀번호로 로그인해 보세요."
+      },
+      "orDivider": {
+        "text": "또는"
       },
       "resetPasswordButton": {
         "label": "비밀번호 재설정"
@@ -6947,6 +6964,12 @@
       },
       "verifiedMessage": {
         "title": "이메일이 인증되었습니다! 계속하려면 로그인하세요."
+      },
+      "welcomeHeading": {
+        "title": "{appName}에 오신 것을 환영합니다"
+      },
+      "welcomeSubtitle": {
+        "text": "업무를 위한 오픈 소스 AI 플랫폼"
       },
       "workEmailField": {
         "label": "회사 이메일"

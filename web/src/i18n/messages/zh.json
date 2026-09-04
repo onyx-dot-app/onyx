@@ -6821,6 +6821,17 @@
         "label": "登录"
       }
     },
+    "emailPasswordForm": {
+      "createAccountButton": {
+        "label": "创建账户"
+      },
+      "joinButton": {
+        "label": "加入"
+      },
+      "signInButton": {
+        "label": "登录"
+      }
+    },
     "error": {
       "accessRestrictionIssue": {
         "description": "账户访问限制或权限问题"
@@ -6918,11 +6929,17 @@
       }
     },
     "login": {
+      "continueButton": {
+        "label": "继续"
+      },
       "createAccountButton": {
         "label": "创建账户"
       },
       "noSsoProviders": {
         "error": "该地址未设置 SSO 登录。请尝试使用 Google 或下方的密码登录。"
+      },
+      "orDivider": {
+        "text": "或"
       },
       "resetPasswordButton": {
         "label": "重置密码"
@@ -6947,6 +6964,12 @@
       },
       "verifiedMessage": {
         "title": "您的邮箱已验证！请登录以继续。"
+      },
+      "welcomeHeading": {
+        "title": "欢迎使用 {appName}"
+      },
+      "welcomeSubtitle": {
+        "text": "面向工作的开源 AI 平台"
       },
       "workEmailField": {
         "label": "工作邮箱"
