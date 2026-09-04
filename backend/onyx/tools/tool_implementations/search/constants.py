@@ -26,6 +26,10 @@ SELECTION_TOKEN_BUDGET_MULTIPLIER = 2
 # Context Expansion
 FULL_DOC_NUM_CHUNKS_AROUND = 5
 
+# Cap on chunks fetched for a FULL_FILE code expansion. Files larger than this
+# fall back to the windowed expansion above.
+MAX_FULL_FILE_CHUNKS = 30
+
 # If a document is quite relevant and has many returned sections, likely it's enough to use the chunks around
 # the highest scoring section to detect relevance. This allows more other docs to be evaluated in the step.
 # This avoids documents with good titles or generally strong matches to flood out the rest of the search results.

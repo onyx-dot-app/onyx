@@ -187,7 +187,7 @@ the correct subject. Example: "How much did we quote ACME for project X", "ACME 
 - Even if only 1 of the adjacent sections is useful or there is a small piece in either that is useful.
 - Additional unseen sections are unlikely to contain valuable related information.
 
-**3 - INCLUDE_FULL_DOCUMENT**
+**3 - FULL_DOCUMENT**
 - Additional unseen sections are likely to contain valuable related information to the query.
 
 ## Additional Decision Notes
@@ -196,6 +196,72 @@ the correct subject. Example: "How much did we quote ACME for project X", "ACME 
 combination with other documents - use classification 1, 2 or 3, do not use 0.
 
 CRITICAL: ONLY output the NUMBER of the situation most applicable to the query and sections provided (0, 1, 2, or 3).
+
+Situation Number:
+""".strip()
+
+
+# Code-chunk variant of the context selection prompt. Adds two code-specific
+# outcomes: fetch the whole file, or escalate to repo-wide analysis when the
+# answer spans files (callers, definitions, configuration elsewhere).
+#
+# The categories lead so the prefix is identical for every section in a
+# search, which is what a provider's prompt cache can reuse. Only the code and
+# the query vary.
+CODE_CONTEXT_SELECTION_PROMPT = """
+Analyze whether a retrieved source-code section is enough to answer a search query and classify \
+according to the categories below.
+
+# Classification Categories:
+**0 - NOT_RELEVANT**
+- The code does not help answer the query or provide meaningful, relevant information.
+- Appears on topic but is a different subject (e.g. a same-named function in an unrelated module).
+
+**1 - MAIN_SECTION_ONLY**
+- The main code section alone contains the information needed to answer the query.
+
+**2 - INCLUDE_ADJACENT_SECTIONS**
+- The main section AND the adjacent code shown are needed (e.g. the enclosing class, nearby helpers).
+- The rest of the file is unlikely to add value.
+
+**3 - FULL_FILE**
+- Answering needs unseen parts of this same file (e.g. imports, other methods, module-level setup).
+
+**4 - REPO_ANALYSIS**
+- The code is relevant, but answering requires looking beyond this file: callers or callees in \
+other files, cross-file control flow, configuration, or repository-wide behavior.
+- Examples: "why does X fail", "where is X used", "how does X interact with Y", tracing a bug.
+
+## Additional Decision Notes
+- If the query is a lookup ("what does X do", "signature of X") answered by the visible code - use 1 or 2.
+- If in doubt between 3 and 4, prefer 3; use 4 only when other files are clearly required.
+
+# File Path / Metadata
+```
+{document_title}
+```
+
+# Code Above:
+```
+{section_above}
+```
+
+# Main Code Section:
+```
+{main_section}
+```
+
+# Code Below:
+```
+{section_below}
+```
+
+# User Query:
+```
+{user_query}
+```
+
+CRITICAL: ONLY output the NUMBER of the situation most applicable (0, 1, 2, 3, or 4).
 
 Situation Number:
 """.strip()
