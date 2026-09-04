@@ -25,26 +25,33 @@ jobs:
         with:
           enable-cache: false
           version: "0.11.25"
-      # Build every platform wheel first, then publish once. Publishing per
-      # platform would leave a partial release on PyPI if a later platform
-      # failed; building all up front keeps the release atomic. Remove the
-      # cached Go binary before each build so the build hook recompiles for the
-      # target platform instead of reusing the previous platform's binary.
+      # Build every platform wheel of both projects first, then publish once.
+      # Publishing per platform would leave a partial release on PyPI if a later
+      # platform failed; building all up front keeps the release atomic. Remove
+      # the cached Go binary before each build so the build hook recompiles for
+      # the target platform instead of reusing the previous platform's binary.
+      # onyx-devtools-audit ships the ods-audit binary that `ods audit` runs, so
+      # both go out under the same version from the same tag.
       - run: |
-          for goos in linux windows darwin; do
-            for goarch in amd64 arm64; do
-              rm -f ods
-              GOOS="$goos" GOARCH="$goarch" uv build --wheel
+          for project in ods ods-audit; do
+            for goos in linux windows darwin; do
+              for goarch in amd64 arm64; do
+                rm -f "tools/$project/$project"
+                GOOS="$goos" GOARCH="$goarch" uv build --wheel "tools/$project"
+              done
             done
           done
-        working-directory: tools/ods
       - name: Upload built wheels
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: onyx-devtools-wheels
-          path: tools/ods/dist/*.whl
+          path: tools/ods*/dist/*.whl
           if-no-files-found: error
           retention-days: 7
+      # Publish the auditor first: onyx-devtools[audit] depends on it, so it must
+      # exist by the time onyx-devtools is installable.
+      - run: uv publish
+        working-directory: tools/ods-audit
       - run: uv publish
         working-directory: tools/ods
 
