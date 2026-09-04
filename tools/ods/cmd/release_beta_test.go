@@ -17,8 +17,19 @@ package cmd
 //	E6 origin moves during the prompt        -> recompute mismatch aborts       TestReleaseBeta_staleStateAbortsBeforePush
 //	                                            before any tag or push          (tests the guard directly; the
 //	                                                                            prompt itself is interactive)
+//
+// With --new-branch the cut targets a new release/v4.6 at main's tip PostCutSHA
+// and tags it v4.6.0-beta.0. The branch choice prompt is interactive, so the
+// flag stands in for it here.
+//
+//	E7 real run                              -> branch and tag on origin at
+//	                                            the main tip                    TestReleaseBeta_newBranchCutsNextMinorFromMain
+//	E8 dry run                               -> creates neither branch nor tag  TestReleaseBeta_newBranchDryRunCreatesNothing
+//	E9 --new-branch with --version           -> rejected before any git work    TestReleaseBeta_newBranchRejectsVersionOverride
+//	E10 branch push rejected by origin       -> no tag created, no tag pushed   TestReleaseBeta_newBranchPushFailureLeavesNoTag
 
 import (
+	"os/exec"
 	"strings"
 	"testing"
 
@@ -152,5 +163,86 @@ func TestReleaseBeta_pushFailureRollsBackLocalTag(t *testing.T) {
 	}
 	if gittest.TagExists(repo.Work, "v4.5.0-beta.0") {
 		t.Error("local tag must be rolled back after a failed push")
+	}
+}
+
+func TestReleaseBeta_newBranchCutsNextMinorFromMain(t *testing.T) {
+	// Precondition: the newest branch is release/v4.5; main's tip is PostCutSHA.
+	repo := gittest.SetupReleaseBranchRepo(t)
+
+	// Under test.
+	tag, err := releaseBeta(&ReleaseBetaOptions{NewBranch: true, Yes: true})
+
+	// Postcondition.
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if tag != "v4.6.0-beta.0" {
+		t.Errorf("expected pushed tag v4.6.0-beta.0, got %q", tag)
+	}
+	branchSHA := gittest.Git(t, repo.Origin, "rev-parse", "refs/heads/release/v4.6")
+	if branchSHA != repo.PostCutSHA {
+		t.Errorf("expected origin/release/v4.6 at the main tip %s, got %s", repo.PostCutSHA, branchSHA)
+	}
+	// The tag must sit on the new branch, which is what CI's check requires.
+	taggedSHA := gittest.Git(t, repo.Origin, "rev-parse", "refs/tags/v4.6.0-beta.0^{commit}")
+	if taggedSHA != repo.PostCutSHA {
+		t.Errorf("expected origin tag at %s, got %s", repo.PostCutSHA, taggedSHA)
+	}
+}
+
+func TestReleaseBeta_newBranchDryRunCreatesNothing(t *testing.T) {
+	// Precondition.
+	repo := gittest.SetupReleaseBranchRepo(t)
+
+	// Under test.
+	tag, err := releaseBeta(&ReleaseBetaOptions{NewBranch: true, DryRun: true, Yes: true})
+
+	// Postcondition.
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if tag != "" {
+		t.Errorf("dry run must return no pushed tag, got %q", tag)
+	}
+	if gittest.TagExists(repo.Work, "v4.6.0-beta.0") || gittest.TagExists(repo.Origin, "v4.6.0-beta.0") {
+		t.Error("dry run must not create the tag")
+	}
+	if err := exec.Command("git", "-C", repo.Origin, "show-ref", "--verify", "--quiet", "refs/heads/release/v4.6").Run(); err == nil {
+		t.Error("dry run must not create the branch")
+	}
+}
+
+func TestReleaseBeta_newBranchRejectsVersionOverride(t *testing.T) {
+	// Precondition: the base of a new branch comes from the branch name, so the
+	// two flags cannot both hold.
+	gittest.SetupReleaseBranchRepo(t)
+
+	// Under test.
+	_, err := releaseBeta(&ReleaseBetaOptions{NewBranch: true, Version: "4.9.0", DryRun: true, Yes: true})
+
+	// Postcondition.
+	if err == nil || !strings.Contains(err.Error(), "cannot be combined with --version") {
+		t.Errorf("expected a flag conflict error, got %v", err)
+	}
+}
+
+func TestReleaseBeta_newBranchPushFailureLeavesNoTag(t *testing.T) {
+	// Precondition: origin rejects every push, so the branch never lands.
+	repo := gittest.SetupReleaseBranchRepo(t)
+	gittest.RejectPushes(t, repo.Origin)
+
+	// Under test.
+	tag, err := releaseBeta(&ReleaseBetaOptions{NewBranch: true, Yes: true})
+
+	// Postcondition.
+	if err == nil || !strings.Contains(err.Error(), "failed to push branch") {
+		t.Errorf("expected a branch push failure, got %v", err)
+	}
+	if tag != "" {
+		t.Errorf("failed push must return no pushed tag, got %q", tag)
+	}
+	if gittest.TagExists(repo.Work, "v4.6.0-beta.0") {
+		t.Error("the tag must not be created when the branch push fails")
 	}
 }

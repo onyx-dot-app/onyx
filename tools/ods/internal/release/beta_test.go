@@ -19,6 +19,16 @@ package release
 //	B9 shallow clone (even with --version) -> error                             TestComputeBetaTag_shallowCloneErrors
 //	B10 predecessor beta not an ancestor   -> error                             TestComputeBetaTag_predecessorNotAncestorErrors
 //	B11 origin unreachable                 -> error, no stale-state fallback    TestComputeBetaTag_fetchFailureErrors
+//
+// New branch cuts (ComputeNewBetaBranch) take the next minor after the newest
+// branch and cut it from origin/main, whose tip is PostCutSHA.
+//
+//	N1 newest branch release/v4.5          -> release/v4.6 at the main tip,
+//	                                          v4.6.0-beta.0                     TestComputeNewBetaBranch_cutsNextMinorFromMain
+//	N2 ref not on main                     -> error                             TestComputeNewBetaBranch_refNotOnMainErrors
+//	N3 another minor branch cut meanwhile  -> the cut follows the newest one     TestComputeNewBetaBranch_followsTheNewestBranch
+//	N4 next minor base already released    -> error                             TestComputeNewBetaBranch_releasedBaseErrors
+//	N5 shallow clone                       -> error                             TestComputeNewBetaBranch_shallowCloneErrors
 
 import (
 	"strings"
@@ -210,5 +220,92 @@ func TestComputeBetaTag_fetchFailureErrors(t *testing.T) {
 	// Postcondition.
 	if err == nil || !strings.Contains(err.Error(), "failed to fetch") {
 		t.Errorf("expected a fetch failure error, got %v", err)
+	}
+}
+
+func TestComputeNewBetaBranch_cutsNextMinorFromMain(t *testing.T) {
+	// Precondition: the newest branch is release/v4.5 and main's tip is
+	// PostCutSHA, which no release branch contains.
+	repo := gittest.SetupReleaseBranchRepo(t)
+
+	// Under test: an empty ref defaults to the main tip.
+	branch, tag, sha, err := ComputeNewBetaBranch("")
+
+	// Postcondition.
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if branch != "release/v4.6" {
+		t.Errorf("expected release/v4.6, got %s", branch)
+	}
+	if tag != "v4.6.0-beta.0" {
+		t.Errorf("expected v4.6.0-beta.0, got %s", tag)
+	}
+	if sha != repo.PostCutSHA {
+		t.Errorf("expected the main tip %s, got %s", repo.PostCutSHA, sha)
+	}
+}
+
+func TestComputeNewBetaBranch_refNotOnMainErrors(t *testing.T) {
+	// Precondition: a commit that was never pushed to main.
+	repo := gittest.SetupReleaseBranchRepo(t)
+	gittest.Git(t, repo.Work, "checkout", "--quiet", "-b", "side", repo.PreCutSHA)
+	sideSHA := gittest.Commit(t, repo.Work, "side.txt")
+	gittest.Git(t, repo.Work, "checkout", "--quiet", "main")
+
+	// Under test.
+	_, _, _, err := ComputeNewBetaBranch(sideSHA)
+
+	// Postcondition.
+	if err == nil || !strings.Contains(err.Error(), "not on origin/main") {
+		t.Errorf("expected a not-on-main error, got %v", err)
+	}
+}
+
+func TestComputeNewBetaBranch_followsTheNewestBranch(t *testing.T) {
+	// Precondition: release/v4.6 was cut already, so the next minor after the
+	// newest branch is release/v4.7 and this cut is a no-op.
+	repo := gittest.SetupReleaseBranchRepo(t)
+	gittest.PublishReleaseBranch(t, repo.Work, "release/v4.6", repo.PostCutSHA)
+
+	// Under test.
+	branch, _, _, err := ComputeNewBetaBranch("")
+
+	// Postcondition: the newest branch moved on, so v4.7 is cut instead.
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if branch != "release/v4.7" {
+		t.Errorf("expected release/v4.7, got %s", branch)
+	}
+}
+
+func TestComputeNewBetaBranch_releasedBaseErrors(t *testing.T) {
+	// Precondition: v4.6.0 shipped without its release branch. A beta of it
+	// would move the "beta" Docker tags backwards.
+	repo := gittest.SetupReleaseBranchRepo(t)
+	gittest.Git(t, repo.Work, "tag", "v4.6.0", repo.PostCutSHA)
+	gittest.Git(t, repo.Work, "push", "--quiet", "origin", "v4.6.0")
+	gittest.Git(t, repo.Work, "tag", "-d", "v4.6.0")
+
+	// Under test.
+	_, _, _, err := ComputeNewBetaBranch("")
+
+	// Postcondition.
+	if err == nil || !strings.Contains(err.Error(), "already been released") {
+		t.Errorf("expected an already-released error, got %v", err)
+	}
+}
+
+func TestComputeNewBetaBranch_shallowCloneErrors(t *testing.T) {
+	// Precondition.
+	gittest.SetupShallowClone(t)
+
+	// Under test.
+	_, _, _, err := ComputeNewBetaBranch("")
+
+	// Postcondition.
+	if err == nil || !strings.Contains(err.Error(), "shallow clone") {
+		t.Errorf("expected shallow-clone error, got %v", err)
 	}
 }
