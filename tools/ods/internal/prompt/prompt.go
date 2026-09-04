@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	log "github.com/sirupsen/logrus"
+	"golang.org/x/term"
 
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/tui"
 )
@@ -38,6 +39,13 @@ func String(prompt string) string {
 // second return is false when the user cancels the list, which the numbered
 // fallback cannot do.
 func Select(title string, options []string, defaultIndex int) (int, bool) {
+	// tcell reads keys from /dev/tty, not stdin, so a list started next to a
+	// piped stdin would wait for the terminal and never see the piped answer.
+	// The numbered prompt reads the same stdin as every other prompt here.
+	if !term.IsTerminal(int(os.Stdin.Fd())) {
+		return Choose(title, options, defaultIndex), true
+	}
+
 	index, err := tui.Select(title, options, defaultIndex)
 	if err != nil {
 		log.Debugf("Arrow-key select unavailable: %v", err)
