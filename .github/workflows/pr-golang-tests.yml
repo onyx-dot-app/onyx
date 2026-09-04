@@ -55,3 +55,45 @@ jobs:
 
       - run: go test -race ./...
         working-directory: ${{ matrix.modules }}
+
+  # A module opts into the coverage gate by committing a .coverage-baseline.yaml.
+  detect-coverage-modules:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      modules: ${{ steps.set-modules.outputs.modules }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+      - id: set-modules
+        run: echo "modules=$(find . -name '.coverage-baseline.yaml' -exec dirname {} \; | jq -Rc '[.,inputs]')" >> "$GITHUB_OUTPUT"
+
+  coverage:
+    needs: detect-coverage-modules
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        modules: ${{ fromJSON(needs.detect-coverage-modules.outputs.modules) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # zizmor: ignore[cache-poisoning]
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: "**/go.sum"
+
+      - name: Build ods
+        run: go build -o "${RUNNER_TEMP}/ods" .
+        working-directory: tools/ods
+
+      # Fails when a package drops below the floor recorded in its baseline.
+      # Raise the floors after adding tests with `ods coverage <suite> --update`.
+      - name: Check coverage against the baseline
+        env:
+          MODULE: ${{ matrix.modules }}
+        run: |
+          "${RUNNER_TEMP}/ods" coverage "${MODULE}" --check

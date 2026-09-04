@@ -282,6 +282,68 @@ ods test tools/ods/internal/testsuite/testsuite_test.go::TestResolveGoTargets
 ods test cli -run TestChat -v
 ```
 
+### `coverage` - Measure Go Coverage Against a Baseline
+
+Measure Go statement coverage per package and hold it against a committed
+baseline, so coverage can go up but not down.
+
+```shell
+ods coverage <suite|module-dir> [flags]
+```
+
+The baseline is a `.coverage-baseline.yaml` at the module root recording each
+package's floor. `--check` fails when a package drops below its floor, which is
+what `pr-golang-tests.yml` runs on every PR. After adding tests, `--update`
+raises the floors.
+
+Coverage is measured per package with `go test -coverprofile`, so a package's
+number counts only its own tests. That is a number the package's owner can act
+on; a cross-package `-coverpkg` total would credit a package for statements its
+own tests never assert on.
+
+The suites are the same Go modules `ods test` knows: `ods`, `cli`, and
+`terraform`. A module directory such as `tools/ods` is accepted in place of a
+suite name, which is what CI passes.
+
+**Flags:**
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--check` | `false` | Fail when a package drops below its baseline floor |
+| `--update` | `false` | Rewrite the baseline from this run |
+| `--profile` | | Keep the coverage profile at this path (for `go tool cover`) |
+| `--tolerance` | `0.1` | Percentage points a package may drop below its floor without failing |
+
+**Examples:**
+
+```shell
+# Report where each package stands
+ods coverage ods
+
+# Fail on a regression (what CI runs)
+ods coverage ods --check
+
+# Record today's numbers as the new floors
+ods coverage ods --update
+
+# Keep the profile and browse the uncovered lines
+ods coverage ods --profile /tmp/cover.out
+go tool cover -html=/tmp/cover.out
+```
+
+#### Raising the baseline
+
+The gate never fails on an improvement, so a baseline goes stale as tests are
+added. `ods coverage ods` reports how many packages have risen; commit the gain
+with `--update` so the new level becomes the floor.
+
+A module opts into the CI gate by committing a baseline, so `cli` and
+`terraform-provider-onyx` join by running `ods coverage <suite> --update` once.
+
+Floors are rounded down to one decimal, and a package may sit `--tolerance`
+below its floor without failing. That absorbs the jitter from suites that depend
+on ports or timing; a real regression is far larger.
+
 ### `dev` - Devcontainer Management
 
 Manage the Onyx devcontainer. Also available as `ods dc`.
