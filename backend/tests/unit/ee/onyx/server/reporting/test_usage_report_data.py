@@ -19,8 +19,9 @@ from ee.onyx.server.reporting.usage_report_pdf import (
     _display_name,
     render_usage_report_pdf,
 )
-from onyx.db.enums import AccountType
+from onyx.db.enums import AccountType, SystemUsageAttribution
 from onyx.db.models import User
+from onyx.db.system_usage import SystemUsageExportRow
 from onyx.db.user_usage import DELETED_USER_EXPORT_EMAIL, UsageExportRow
 
 _BRANDING = ReportBranding(application_name="Acme Intelligence", logo=None)
@@ -63,7 +64,29 @@ def _user(
     return user
 
 
-def _build(rows: list[UsageExportRow], users: list[User]) -> UsageReportData:
+def _system_row(
+    flow: str = "image_summarization",
+    cost: float = 7.0,
+) -> SystemUsageExportRow:
+    return SystemUsageExportRow(
+        attribution=SystemUsageAttribution.ATTRIBUTED,
+        model="claude-sonnet",
+        flow=flow,
+        provider="anthropic",
+        day="2026-07-01",
+        input_tokens=200,
+        output_tokens=40,
+        cache_read_tokens=20,
+        cache_creation_tokens=10,
+        cost_cents=cost,
+    )
+
+
+def _build(
+    rows: list[UsageExportRow],
+    users: list[User],
+    system_rows: list[SystemUsageExportRow] | None = None,
+) -> UsageReportData:
     with patch(
         "ee.onyx.server.reporting.usage_report_data.get_all_users", return_value=users
     ):
@@ -72,6 +95,7 @@ def _build(rows: list[UsageExportRow], users: list[User]) -> UsageReportData:
             rows=rows,
             period_start=PERIOD_START,
             period_end=PERIOD_END,
+            system_rows=system_rows or [],
         )
 
 
@@ -100,6 +124,26 @@ def test_deleted_user_counts_toward_spend_but_is_not_a_person() -> None:
     assert data.active_users == 1
     assert data.daily[0].active_users == 1
     assert data.total_cost_cents == pytest.approx(20.0)
+
+
+def test_system_usage_counts_toward_spend_but_not_people() -> None:
+    data = _build([_row("a@x.com", cost=10.0)], [_user("a@x.com")], [_system_row()])
+
+    assert data.total_cost_cents == pytest.approx(17.0)
+    assert data.system_cost_cents == pytest.approx(7.0)
+    assert data.active_users == 1
+    assert data.system_by_flow[0].name == "image_summarization"
+    assert sum(entry.cost_cents for entry in data.by_model) == pytest.approx(17.0)
+
+
+def test_pdf_includes_system_spend_section() -> None:
+    data = _build([_row("a@x.com")], [_user("a@x.com")], [_system_row()])
+
+    reader = PdfReader(BytesIO(render_usage_report_pdf(data, _BRANDING)))
+    text = "\n".join(page.extract_text() for page in reader.pages)
+
+    assert "System spend by flow" in text
+    assert "image_summarization" in text
 
 
 def test_api_key_usage_is_not_an_active_user() -> None:

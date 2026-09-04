@@ -20,7 +20,12 @@ from sqlalchemy.pool import StaticPool
 
 from onyx.auth.users import current_user
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import AccountType, Permission
+from onyx.db.enums import (
+    AccountType,
+    Permission,
+    SystemUsageAttribution,
+    UsageActorKind,
+)
 from onyx.db.models import UserUsage
 from onyx.db.user_usage import UsageExportRow, get_usage_export
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
@@ -150,6 +155,44 @@ def _seed_two_users(db_session: Session) -> tuple[str, str]:
     _seed_usage(db_session, bob, "model-a", "CHAT", "anthropic", 400, 80, 0, 4.0, _W2)
     db_session.commit()
     return alice, bob
+
+
+def _seed_system_usage(db_session: Session) -> None:
+    db_session.add_all(
+        [
+            UserUsage(
+                user_id=None,
+                actor_kind=UsageActorKind.SYSTEM,
+                system_attribution=SystemUsageAttribution.ATTRIBUTED,
+                window_start=_W1,
+                model="model-a",
+                flow="image_summarization",
+                provider="anthropic",
+                incognito=False,
+                input_tokens=100,
+                output_tokens=20,
+                cache_read_tokens=5,
+                cache_creation_tokens=3,
+                cost_cents=2.0,
+            ),
+            UserUsage(
+                user_id=None,
+                actor_kind=UsageActorKind.SYSTEM,
+                system_attribution=SystemUsageAttribution.UNATTRIBUTED,
+                window_start=_W1,
+                model="model-b",
+                flow="untagged_invoke",
+                provider="openai",
+                incognito=False,
+                input_tokens=50,
+                output_tokens=10,
+                cache_read_tokens=0,
+                cache_creation_tokens=0,
+                cost_cents=1.0,
+            ),
+        ]
+    )
+    db_session.commit()
 
 
 class TestGetUsageExportHelper:
@@ -359,6 +402,32 @@ class TestExportEndpoint:
         )
         assert resp.status_code == 400
         assert resp.json()["error_code"] == "INVALID_INPUT"
+
+
+class TestSystemUsageEndpoint:
+    def test_groups_system_usage_by_flow(self, db_session: Session) -> None:
+        _seed_system_usage(db_session)
+        client = TestClient(_make_app(db_session, _ADMIN))
+
+        response = client.get(
+            "/admin/usage/system",
+            params={"start": "2026-06-01", "end": "2026-06-07"},
+        )
+
+        assert response.status_code == 200
+        categories = {
+            category["category"]: category for category in response.json()["categories"]
+        }
+        assert set(categories) == {"image_summarization", "unattributed"}
+        assert categories["image_summarization"]["totals"]["cost_cents"] == 2.0
+        assert categories["unattributed"]["records"][0]["flow"] == "untagged_invoke"
+
+    def test_rejects_non_admin(self, db_session: Session) -> None:
+        client = TestClient(_make_app(db_session, _NON_ADMIN))
+
+        response = client.get("/admin/usage/system")
+
+        assert response.status_code == 403
 
 
 class TestResetUsageEndpoint:

@@ -9,13 +9,14 @@ the number.
 
 ## Where we are today
 
-`create_new_usage_report` builds a zip with three CSVs and a PDF review pack:
+`create_new_usage_report` builds a zip with four CSVs and a PDF review pack:
 
 | File                 | Contents                                                                              |
 | -------------------- | ------------------------------------------------------------------------------------- |
 | `chat_messages.csv`  | One row per message: session, user, flow, time, agent, email, tokens, model            |
 | `users.csv`          | `user_id`, `is_active`                                                                  |
 | `usage_by_user.csv`  | Per user, per day, per model/flow/provider: tokens, cache reads, cost                   |
+| `usage_by_system.csv`| Non-user text generation per day, model, flow, provider, and attribution               |
 | `usage_report.pdf`   | Summary of spend, adoption, seats, and usage attribution                                |
 
 The raw CSV files are still a data dump. They have three problems:

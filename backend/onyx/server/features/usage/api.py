@@ -13,12 +13,17 @@ from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_user
 from onyx.configs.constants import PUBLIC_API_TAGS
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import Permission
+from onyx.db.enums import Permission, SystemUsageAttribution
 from onyx.db.llm import (
     fetch_all_llm_providers_accessible_in_any_context,
     fetch_default_llm_model,
 )
 from onyx.db.models import TokenRateLimit, User
+from onyx.db.system_usage import (
+    OTHER_SYSTEM_USAGE_CATEGORY,
+    UNATTRIBUTED_SYSTEM_USAGE_CATEGORY,
+    get_system_usage_export,
+)
 from onyx.db.token_limit import (
     fetch_all_global_token_rate_limits,
     fetch_all_user_token_rate_limits,
@@ -54,6 +59,9 @@ from onyx.server.features.usage.models import (
     EffectiveCostBudget,
     ResetUsageRequest,
     ResetUsageResponse,
+    SystemUsageCategory,
+    SystemUsageRecord,
+    SystemUsageResponse,
     UsageExportRecord,
     UsageExportResponse,
     UsageExportTotals,
@@ -338,6 +346,54 @@ def export_usage(
         start=start_date.isoformat(),
         end=end_date.isoformat(),
         users=users,
+    )
+
+
+@admin_usage_router.get("/system")
+def get_system_usage(
+    start: date | None = None,
+    end: date | None = None,
+    model: str | None = None,
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> SystemUsageResponse:
+    end_date = end or datetime.now(timezone.utc).date()
+    start_date = start or _start_for_inclusive_range(
+        end_date, _DEFAULT_USAGE_RANGE_INCLUSIVE_DAYS
+    )
+    start_dt, end_dt = _date_range_to_utc_bounds(start_date, end_date)
+
+    records_by_category: dict[str, list[SystemUsageRecord]] = defaultdict(list)
+    for row in get_system_usage_export(db_session, start_dt, end_dt, model):
+        category = (
+            UNATTRIBUTED_SYSTEM_USAGE_CATEGORY
+            if row.attribution == SystemUsageAttribution.UNATTRIBUTED
+            else row.flow or OTHER_SYSTEM_USAGE_CATEGORY
+        )
+        records_by_category[category].append(
+            SystemUsageRecord.model_validate(row.model_dump())
+        )
+
+    categories = [
+        SystemUsageCategory(
+            category=category,
+            totals=UsageExportTotals(
+                input_tokens=sum(record.input_tokens for record in records),
+                output_tokens=sum(record.output_tokens for record in records),
+                cache_read_tokens=sum(record.cache_read_tokens for record in records),
+                cache_creation_tokens=sum(
+                    record.cache_creation_tokens for record in records
+                ),
+                cost_cents=sum(record.cost_cents for record in records),
+            ),
+            records=records,
+        )
+        for category, records in sorted(records_by_category.items())
+    ]
+    return SystemUsageResponse(
+        start=start_date.isoformat(),
+        end=end_date.isoformat(),
+        categories=categories,
     )
 
 
