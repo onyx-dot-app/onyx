@@ -131,3 +131,14 @@ def deserialize_repository(
         )
         repo_id = cached_repo.id
         return github_client.get_repo(repo_id)
+
+
+def parse_repositories_config(repositories: str | None) -> list[str]:
+    """Split the connector's comma-separated `repositories` config.
+
+    Whitespace is stripped and empty entries dropped. Case is preserved —
+    callers that compare names case-fold themselves.
+    """
+    if not repositories:
+        return []
+    return [name.strip() for name in repositories.split(",") if name.strip()]

@@ -1,13 +1,11 @@
 import time
 from collections.abc import Callable
 from datetime import datetime, timezone
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
-from github import Github
 from github.GithubException import GithubException, UnknownObjectException
-from github.RateLimit import RateLimit
-from github.Requester import Requester
 
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.github.connector import (
@@ -16,7 +14,13 @@ from onyx.connectors.github.connector import (
     _is_indexable_path,
 )
 from onyx.connectors.github.models import SerializedRepository
-from onyx.connectors.models import ConnectorFailure, Document
+from onyx.connectors.models import (
+    CodeSection,
+    ConnectorFailure,
+    Document,
+    TextSection,
+)
+from tests.unit.onyx.connectors.github.conftest import make_mock_repo
 from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_connector
 
 
@@ -61,21 +65,52 @@ def test_is_indexable_path(path: str, size: int | None, expected: bool) -> None:
     assert _is_indexable_path(path, size) is expected
 
 
-@pytest.fixture
-def mock_github_client() -> MagicMock:
-    mock = MagicMock(spec=Github)
-    mock.get_repo = MagicMock()
-    mock.get_rate_limit = MagicMock(return_value=MagicMock(spec=RateLimit))
-    mock._requester = MagicMock(spec=Requester)
-    return mock
+@pytest.mark.parametrize(
+    "path,size,expected",
+    [
+        # source code is included when the flag is on
+        ("main.py", 100, True),
+        ("src/app.tsx", 100, True),
+        ("native/lib.cpp", 100, True),
+        ("schema.sql", 100, True),
+        # config formats magika classifies as code are included too
+        ("data.json", 100, True),
+        ("config.yaml", 100, True),
+        # non-code stays excluded
+        ("logo.png", 100, False),
+        ("secrets.env", 100, False),
+        ("key.pem", 100, False),
+        # size cap and denylist still apply to code
+        ("huge.py", 5_000_000, False),
+        ("node_modules/pkg/index.js", 100, False),
+        ("target/debug/gen.rs", 100, False),
+        ("web/.next/static/chunk.js", 100, False),
+        ("coverage/lcov-report/index.js", 100, False),
+        # generated files are code, and are still not worth indexing
+        ("package-lock.json", 100, False),
+        ("Cargo.lock", 100, False),
+        ("static/jquery.min.js", 100, False),
+        # docs still included alongside code
+        ("README.md", 100, True),
+    ],
+)
+def test_is_indexable_path_with_code_files(
+    path: str, size: int | None, expected: bool
+) -> None:
+    assert _is_indexable_path(path, size, include_code_files=True) is expected
 
 
-def _tree_element(path: str, size: int, type_: str = "blob") -> MagicMock:
-    el = MagicMock()
-    el.path = path
-    el.size = size
-    el.type = type_
-    return el
+def test_is_indexable_path_code_only_excludes_docs() -> None:
+    assert (
+        _is_indexable_path(
+            "README.md", 100, include_docs=False, include_code_files=True
+        )
+        is False
+    )
+    assert (
+        _is_indexable_path("main.py", 100, include_docs=False, include_code_files=True)
+        is True
+    )
 
 
 @pytest.fixture
@@ -85,31 +120,7 @@ def create_mock_repo() -> Callable[..., MagicMock]:
         pushed_at: datetime | None = None,
         truncated: bool = False,
     ) -> MagicMock:
-        mock_repo = MagicMock()
-        mock_repo.name = "test-repo"
-        mock_repo.id = 1
-        mock_repo.full_name = "test-org/test-repo"
-        mock_repo.html_url = "https://github.com/test-org/test-repo"
-        mock_repo.default_branch = "main"
-        mock_repo.pushed_at = pushed_at or datetime(2023, 1, 1)
-        mock_repo.configure_mock(
-            raw_headers={"status": "200 OK"},
-            raw_data={"id": 1, "full_name": "test-org/test-repo"},
-        )
-
-        tree = MagicMock()
-        tree.tree = [_tree_element(p, len(c)) for p, c in files.items()]
-        tree.raw_data = {"truncated": truncated}
-        mock_repo.get_git_tree = MagicMock(return_value=tree)
-
-        def _get_contents(path: str, ref: str | None = None) -> MagicMock:
-            del ref  # accepted as a kwarg by the connector, unused in the mock
-            cf = MagicMock()
-            cf.decoded_content = files[path]
-            return cf
-
-        mock_repo.get_contents = MagicMock(side_effect=_get_contents)
-        return mock_repo
+        return make_mock_repo(files=files, pushed_at=pushed_at, truncated=truncated)
 
     return _create
 
@@ -117,6 +128,7 @@ def create_mock_repo() -> Callable[..., MagicMock]:
 def _build_connector(
     mock_github_client: MagicMock,
     include_files: bool = True,
+    include_code_files: bool = False,
     branch: str | None = None,
 ) -> GithubConnector:
     connector = GithubConnector(
@@ -125,6 +137,7 @@ def _build_connector(
         include_prs=False,
         include_issues=False,
         include_files=include_files,
+        include_code_files=include_code_files,
         branch=branch,
     )
     connector.github_client = mock_github_client
@@ -189,6 +202,65 @@ def test_files_indexed_when_enabled(
         "README.md",
     ]
     assert outputs[-1].next_checkpoint.has_more is False
+
+
+def test_code_files_indexed_as_code_sections(
+    mock_github_client: MagicMock,
+    create_mock_repo: Callable[..., MagicMock],
+) -> None:
+    connector = _build_connector(mock_github_client, include_code_files=True)
+    mock_repo = create_mock_repo(
+        {
+            "README.md": b"# Hello world",
+            "src/main.py": b"print('hi')",
+        }
+    )
+    mock_github_client.get_repo.return_value = mock_repo
+
+    with patch.object(SerializedRepository, "to_Repository", return_value=mock_repo):
+        outputs = load_everything_from_checkpoint_connector(connector, 0, time.time())
+
+    docs = [i for i in _all_items(outputs) if isinstance(i, Document)]
+    assert sorted(d.semantic_identifier for d in docs) == [
+        "README.md",
+        "src/main.py",
+    ]
+
+    code_doc = next(d for d in docs if d.semantic_identifier == "src/main.py")
+    code_section = code_doc.sections[0]
+    assert isinstance(code_section, CodeSection)
+    assert code_section.language == "python"
+    assert code_section.file_path == "src/main.py"
+    assert code_section.text == "print('hi')"
+    assert code_doc.metadata["type"] == "CodeFile"
+    assert code_doc.metadata["language"] == "python"
+
+    readme_doc = next(d for d in docs if d.semantic_identifier == "README.md")
+    assert isinstance(readme_doc.sections[0], TextSection)
+    assert "type" not in readme_doc.metadata
+
+
+def test_code_files_excluded_when_flag_off(
+    mock_github_client: MagicMock,
+    create_mock_repo: Callable[..., MagicMock],
+) -> None:
+    connector = _build_connector(
+        mock_github_client, include_files=False, include_code_files=True
+    )
+    mock_repo = create_mock_repo(
+        {
+            "README.md": b"# Hello world",
+            "src/main.py": b"print('hi')",
+        }
+    )
+    mock_github_client.get_repo.return_value = mock_repo
+
+    with patch.object(SerializedRepository, "to_Repository", return_value=mock_repo):
+        outputs = load_everything_from_checkpoint_connector(connector, 0, time.time())
+
+    docs = [i for i in _all_items(outputs) if isinstance(i, Document)]
+    # Docs off + code on: only the code file is indexed.
+    assert [d.semantic_identifier for d in docs] == ["src/main.py"]
 
 
 def test_binary_file_yields_failure(
@@ -428,6 +500,36 @@ def test_resumed_checkpoint_from_other_branch_relists(
     assert checkpoint.file_paths_branch == "gh-pages"
 
 
+def test_resumed_checkpoint_relists_when_code_indexing_is_toggled(
+    mock_github_client: MagicMock,
+    create_mock_repo: Callable[..., MagicMock],
+) -> None:
+    """Turning code indexing on changes what the listing contains, so a
+    checkpoint listed under the old setting has to be discarded like one
+    listed from another branch."""
+    connector = _build_connector(mock_github_client, include_code_files=True)
+    mock_repo = create_mock_repo({"README.md": b"docs", "main.py": b"code"})
+
+    checkpoint = connector.build_dummy_checkpoint()
+    checkpoint.stage = GithubConnectorStage.FILES
+    checkpoint.file_paths = ["README.md"]  # listed with code indexing off
+    checkpoint.file_paths_include_code = False
+    checkpoint.file_paths_branch = connector._resolve_branch(mock_repo)
+
+    list(
+        connector._fetch_repo_files(
+            mock_repo,
+            checkpoint,
+            start=None,
+            is_slim=False,
+            repo_external_access=None,
+        )
+    )
+
+    assert sorted(checkpoint.file_paths or []) == ["README.md", "main.py"]
+    assert checkpoint.file_paths_include_code is True
+
+
 def test_resumed_branch_change_bypasses_pushed_at_gate(
     mock_github_client: MagicMock,
     create_mock_repo: Callable[..., MagicMock],
@@ -546,3 +648,21 @@ def test_files_paginated_with_issues_enabled_no_stage_regression(
     assert len(ids) == 250
     assert len(set(ids)) == 250  # no duplicates from re-indexing page 0
     assert outputs[-1].next_checkpoint.has_more is False
+
+
+def test_connector_accepts_full_connector_specific_config() -> None:
+    """`instantiate_connector` splats connector_specific_config into __init__
+    unfiltered, so every key the admin form saves must be accepted."""
+    config: dict[str, Any] = {
+        "repo_owner": "test-org",
+        "repositories": "test-repo",
+        "include_prs": True,
+        "include_issues": False,
+        "include_files": True,
+        "include_code_files": True,
+        "branch": "main",
+    }
+
+    connector = GithubConnector(**config)
+
+    assert connector.include_code_files is True
