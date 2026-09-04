@@ -6089,7 +6089,7 @@
           "title": "限制邮箱域名"
         },
         "idpExpiry": {
-          "description": "当上游 OAuth/OIDC 提供商的会话过期时，让用户退出登录。",
+          "description": "当上游 OAuth/OIDC 提供商的会话过期时，让用户退出登录。OIDC 或 Google 提供商可以在其自身设置中覆盖此项。",
           "title": "会话过期时间与身份提供商同步"
         },
         "openSignUp": {
@@ -6877,6 +6877,7 @@
             "description": "用于登录 URL 的唯一小写标识符。创建后无法更改。",
             "title": "名称"
           },
+          "securitySettingsError": "无法加载此表单所依赖的安全设置。请关闭后重试。",
           "providerTypeField": {
             "description": "此提供商使用的认证协议。",
             "placeholder": "选择提供商类型",

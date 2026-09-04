@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.anonymous_user import fetch_anonymous_user_info
 from onyx.auth.email_utils import send_user_email_invite
+from onyx.auth.idp_expiry import user_tracks_external_idp_expiry
 from onyx.auth.invited_users import (
     get_invited_users,
     remove_user_from_invited_users,
@@ -1073,7 +1074,7 @@ def verify_user_logged_in(
         )
 
     token_expires_at = _get_token_expires_at(user, request, db_session)
-    track_oidc = get_security_settings().track_external_idp_expiry
+    track_oidc = user_tracks_external_idp_expiry(db_session, user)
     # When OIDC tracking is enabled, cap expiry at the IdP token's lifetime.
     # Guard against stale oidc_expiry from a previous OIDC session (same comment
     # as the old track_external_idp_expiry guard in UserInfo.from_model).

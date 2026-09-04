@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -41,7 +42,7 @@ def legacy_env_mode(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(oauth_refresher, "OAUTH_CLIENT_SECRET", "env-secret")
 
 
-def _provider_row(provider_type: SSOProviderType, config: dict[str, str]) -> MagicMock:
+def _provider_row(provider_type: SSOProviderType, config: dict[str, Any]) -> MagicMock:
     provider = MagicMock()
     provider.provider_type = provider_type
     provider.config = make_mock_sensitive_value(config)
@@ -237,6 +238,7 @@ async def test_check_and_refresh_oauth_tokens_coalesces_concurrent_refresh(
     user.id = "concurrent-test-user"
     user.email = "concurrent@example.com"
     user.oauth_accounts = [account]
+    user.oidc_expiry = None
 
     db_session = MagicMock()
     db_session.refresh = AsyncMock()
@@ -607,6 +609,119 @@ async def test_refresh_oauth_token_openid_provider(
     posted_url = mock_client.post.call_args[0][0]
     assert posted_url == "https://idp.example.com/oauth2/v2.0/token"
     mock_user_manager.user_db.update_oauth_account.assert_called_once()
+
+
+def _okta_row(
+    monkeypatch: pytest.MonkeyPatch, tracks: bool, global_tracks: bool
+) -> None:
+    """One OIDC provider row named okta, resolvable by both lookup paths."""
+    import time as _time
+
+    from onyx.auth import idp_expiry
+
+    discovery_url = "https://okta.example.com/.well-known/openid-configuration"
+    monkeypatch.setattr(
+        oauth_refresher,
+        "_OIDC_TOKEN_ENDPOINT_CACHE",
+        {
+            discovery_url: (
+                "https://okta.example.com/oauth2/v1/token",
+                _time.monotonic(),
+            )
+        },
+    )
+    provider_config: dict[str, Any] = {
+        "client_id": "row-cid",
+        "client_secret": "row-secret",
+        "openid_config_url": discovery_url,
+        "track_external_idp_expiry": tracks,
+    }
+    provider_row = _provider_row(SSOProviderType.OIDC, provider_config)
+    provider_row.name = "okta"
+    monkeypatch.setattr(
+        oauth_refresher,
+        "fetch_sso_provider_by_name_async",
+        AsyncMock(return_value=provider_row),
+    )
+    monkeypatch.setattr(
+        idp_expiry,
+        "fetch_sso_providers_by_names_async",
+        AsyncMock(return_value=[provider_row]),
+    )
+    global_settings = MagicMock()
+    global_settings.track_external_idp_expiry = global_tracks
+    monkeypatch.setattr(idp_expiry, "get_security_settings", lambda: global_settings)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("provider_tracks", "global_tracks"), [(True, False), (False, True)]
+)
+async def test_refresh_oauth_token_provider_switch_decides_expiry(
+    mock_user: MagicMock,
+    mock_oauth_account: MagicMock,
+    mock_user_manager: MagicMock,
+    mock_db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+    provider_tracks: bool,
+    global_tracks: bool,
+) -> None:
+    """The provider row's switch, not the global setting, decides oidc_expiry."""
+    _okta_row(monkeypatch, tracks=provider_tracks, global_tracks=global_tracks)
+    mock_oauth_account.oauth_name = "okta"
+    mock_oauth_account.refresh_token = "old_refresh_token"
+    mock_user.oauth_accounts = [mock_oauth_account]
+
+    token_response = MagicMock()
+    token_response.status_code = 200
+    token_response.json.return_value = {"access_token": "new", "expires_in": 3600}
+    mock_client = AsyncMock()
+    mock_client.post.return_value = token_response
+
+    with patch("onyx.auth.oauth_refresher.httpx.AsyncClient") as client_class_mock:
+        client_class_mock.return_value.__aenter__.return_value = mock_client
+        assert await refresh_oauth_token(
+            mock_user, mock_oauth_account, mock_db_session, mock_user_manager
+        )
+
+    if provider_tracks:
+        written = mock_user_manager.user_db.update.call_args[0][1]["oidc_expiry"]
+        assert written > datetime.now(timezone.utc)
+        assert mock_user.oidc_expiry == written
+    else:
+        mock_user_manager.user_db.update.assert_not_called()
+        assert mock_user.oidc_expiry is None
+
+
+@pytest.mark.asyncio
+async def test_check_and_refresh_clears_expiry_no_linked_provider_tracks(
+    mock_user: MagicMock,
+    mock_oauth_account: MagicMock,
+    mock_user_manager: MagicMock,
+    mock_db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A stale expiry from an earlier tracked login is cleared on the request
+    path itself, even when the account cannot be refreshed at all."""
+    _okta_row(monkeypatch, tracks=False, global_tracks=True)
+    mock_oauth_account.oauth_name = "okta"
+    mock_oauth_account.refresh_token = None
+    mock_oauth_account.expires_at = datetime.now(timezone.utc).timestamp() - 30
+    mock_user.oauth_accounts = [mock_oauth_account]
+    mock_user.oidc_expiry = datetime(2026, 1, 1, tzinfo=timezone.utc)
+
+    with patch(
+        "onyx.auth.oauth_refresher.refresh_oauth_token", AsyncMock(return_value=True)
+    ) as mock_refresh:
+        await check_and_refresh_oauth_tokens(
+            mock_user, mock_db_session, mock_user_manager
+        )
+
+    mock_refresh.assert_not_called()
+    mock_user_manager.user_db.update.assert_called_once_with(
+        mock_user, {"oidc_expiry": None}
+    )
+    assert mock_user.oidc_expiry is None
 
 
 @pytest.mark.asyncio

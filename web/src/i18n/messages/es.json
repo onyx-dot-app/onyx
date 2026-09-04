@@ -6089,7 +6089,7 @@
           "title": "Restringir los dominios de correo"
         },
         "idpExpiry": {
-          "description": "Cierra la sesión de los usuarios cuando caduca la sesión del proveedor OAuth/OIDC de origen.",
+          "description": "Cierra la sesión de los usuarios cuando caduca la sesión del proveedor OAuth/OIDC de origen. Un proveedor OIDC o de Google puede anular esto en su propia configuración.",
           "title": "Sincronizar la caducidad de la sesión con el proveedor de identidad"
         },
         "openSignUp": {
@@ -6877,6 +6877,7 @@
             "description": "Identificador único en minúsculas que se usa en la URL de inicio de sesión. No se puede cambiar después.",
             "title": "Nombre"
           },
+          "securitySettingsError": "No se pudo cargar la configuración de seguridad de la que depende este formulario. Cierra e inténtalo de nuevo.",
           "providerTypeField": {
             "description": "El protocolo con el que autentica este proveedor.",
             "placeholder": "Selecciona un tipo de proveedor",

@@ -6089,7 +6089,7 @@
           "title": "Restreindre les domaines de messagerie"
         },
         "idpExpiry": {
-          "description": "Déconnectez les utilisateurs quand la session du fournisseur OAuth/OIDC en amont expire.",
+          "description": "Déconnectez les utilisateurs quand la session du fournisseur OAuth/OIDC en amont expire. Un fournisseur OIDC ou Google peut remplacer ce réglage dans ses propres paramètres.",
           "title": "Synchroniser l'expiration de session avec le fournisseur d'identité"
         },
         "openSignUp": {
@@ -6877,6 +6877,7 @@
             "description": "Identifiant unique en minuscules utilisé dans l'URL de connexion. Il ne peut pas être modifié plus tard.",
             "title": "Nom"
           },
+          "securitySettingsError": "Impossible de charger les paramètres de sécurité dont dépend ce formulaire. Fermez et réessayez.",
           "providerTypeField": {
             "description": "Le protocole utilisé par ce fournisseur pour authentifier.",
             "placeholder": "Sélectionnez un type de fournisseur",

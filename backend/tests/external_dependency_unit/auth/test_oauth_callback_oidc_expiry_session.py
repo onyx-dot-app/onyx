@@ -15,6 +15,7 @@ from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
 from sqlalchemy import delete, text
 from sqlalchemy.orm import Session
 
+import onyx.auth.idp_expiry as idp_expiry_module
 import onyx.auth.users as users_module
 from onyx.auth.users import UserManager
 from onyx.db.engine.async_sql_engine import get_async_session_context_manager
@@ -90,13 +91,12 @@ async def _run_oauth_callback(
     exclude_pids: set[int],
 ) -> User:
     monkeypatch.setattr(users_module, "MULTI_TENANT", False)
-    monkeypatch.setattr(
-        users_module,
-        "get_security_settings",
-        lambda: _build_env_defaults().model_copy(
-            update={"track_external_idp_expiry": track_external_idp_expiry}
-        ),
+    settings = _build_env_defaults().model_copy(
+        update={"track_external_idp_expiry": track_external_idp_expiry}
     )
+    monkeypatch.setattr(users_module, "get_security_settings", lambda: settings)
+    # The login resolves the switch through idp_expiry, which reads the setting itself.
+    monkeypatch.setattr(idp_expiry_module, "get_security_settings", lambda: settings)
 
     async with get_async_session_context_manager() as injected_session:
         injected_pid = (

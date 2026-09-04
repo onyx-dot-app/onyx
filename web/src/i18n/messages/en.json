@@ -6089,7 +6089,7 @@
           "title": "Restrict Email Domains"
         },
         "idpExpiry": {
-          "description": "Log users out when the upstream OAuth/OIDC provider session expires.",
+          "description": "Log users out when the upstream OAuth/OIDC provider session expires. An OIDC or Google provider can override this in its own settings.",
           "title": "Sync Session Expiry with Identity Provider"
         },
         "openSignUp": {
@@ -6877,6 +6877,7 @@
             "description": "Unique lowercase slug used in the login URL. Cannot be changed later.",
             "title": "Name"
           },
+          "securitySettingsError": "Could not load the security settings this form depends on. Close and try again.",
           "providerTypeField": {
             "description": "The protocol this provider authenticates with.",
             "placeholder": "Select a provider type",
