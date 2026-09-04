@@ -10,6 +10,7 @@ the body is just `make_cc_pair` + `cleanup_cc_pair`.
 """
 
 from io import BytesIO
+from typing import Any
 from uuid import uuid4
 
 from sqlalchemy.orm import Session
@@ -84,6 +85,8 @@ def make_cc_pair(
     source: DocumentSource = DocumentSource.MOCK_CONNECTOR,
     *,
     commit: bool = True,
+    connector_specific_config: dict[str, Any] | None = None,
+    credential_json: dict[str, Any] | None = None,
 ) -> ConnectorCredentialPair:
     """Create a Connector + Credential + ConnectorCredentialPair for a test.
 
@@ -91,14 +94,16 @@ def make_cc_pair(
     to build a non-standard pair (e.g. INGESTION_API for push-based-pair tests).
     Pass ``commit=False`` to flush only (no commit) for lanes that rely on the
     surrounding transaction rollback for cleanup; the default commits +
-    refreshes for callers whose work spans separate sessions.
+    refreshes for callers whose work spans separate sessions. The config and
+    credential are set at construction, which is the only way credential_json
+    reaches its encrypting descriptor.
     """
     suffix = uuid4().hex[:8]
     connector = Connector(
         name=f"test-connector-{suffix}",
         source=source,
         input_type=InputType.LOAD_STATE,
-        connector_specific_config={},
+        connector_specific_config=connector_specific_config or {},
         refresh_freq=None,
         prune_freq=None,
         indexing_start=None,
@@ -108,7 +113,7 @@ def make_cc_pair(
 
     credential = Credential(
         source=source,
-        credential_json={},
+        credential_json=credential_json or {},
     )
     db_session.add(credential)
     db_session.flush()
