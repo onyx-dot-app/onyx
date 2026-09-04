@@ -26,12 +26,15 @@ on:
 permissions:
   contents: read
 
-# One group for every release, not one per tag. Each run reads the mirror's
-# current main and pushes one commit onto it, so two releases running together
-# read the same parent and the second atomic push is refused. Serialising them
-# costs nothing — a release is a minute — and removes that failure.
+# One group per version, so the same release cannot run twice at once — a tag
+# push and a manual dispatch for it share a group.
+#
+# Deliberately NOT one group for every release. A group holds one running and
+# one pending run, and a third cancels the pending one even with
+# cancel-in-progress false, so serialising here would drop a release silently.
+# Releases run in parallel instead and the mirror push re-reads its parent.
 concurrency:
-  group: Release-Terraform-Provider
+  group: Release-Terraform-Provider-${{ inputs.version || github.ref_name }}
   cancel-in-progress: false
 
 env:
@@ -112,27 +115,62 @@ jobs:
           set -euo pipefail
           mirror="https://github.com/${MIRROR_REPO}.git"
 
-          tree=$(git rev-parse "HEAD:${PROVIDER_DIR}")
-          parents=()
-          if git fetch --quiet "${mirror}" main 2>/dev/null; then
-            parents=(-p "$(git rev-parse FETCH_HEAD)")
-            echo "Building on the mirror's current main."
-          else
-            echo "The mirror has no main yet; this is its first commit."
+          tag_exists() {
+            git ls-remote --exit-code --tags "${mirror}" \
+              "refs/tags/${MIRROR_TAG}" >/dev/null 2>&1
+          }
+
+          # A version already on the mirror is never re-cut. Checking first
+          # separates that from the parent race below, which is retried.
+          if tag_exists; then
+            echo "::error::${MIRROR_TAG} is already on ${MIRROR_REPO}."
+            exit 1
           fi
 
+          tree=$(git rev-parse "HEAD:${PROVIDER_DIR}")
           message="${MIRROR_TAG}
 
           Published from ${GITHUB_REPOSITORY}@$(git rev-parse HEAD).
           Edit the provider there, never here."
-          commit=$(git commit-tree "${tree}" "${parents[@]}" -m "${message}")
 
-          # One atomic push, so a rejected tag cannot leave main advanced
-          # without it. Re-running a version that already shipped is refused
-          # whole rather than adding a second commit for the same release.
-          git push --atomic "${mirror}" \
-            "${commit}:refs/heads/main" \
-            "${commit}:refs/tags/${MIRROR_TAG}"
+          # Another release can land between reading main and pushing onto it,
+          # which the atomic push then refuses. Re-read main and rebuild the
+          # commit rather than serialising the workflow: a concurrency group
+          # holding every release would cancel a pending one instead.
+          pushed=false
+          for attempt in 1 2 3 4 5; do
+            parents=()
+            if git fetch --quiet "${mirror}" main 2>/dev/null; then
+              parents=(-p "$(git rev-parse FETCH_HEAD)")
+              echo "Attempt ${attempt}: building on the mirror's current main."
+            else
+              echo "Attempt ${attempt}: the mirror has no main yet."
+            fi
+
+            commit=$(git commit-tree "${tree}" "${parents[@]}" -m "${message}")
+
+            # One atomic push, so a rejected tag cannot leave main advanced
+            # without it.
+            if git push --atomic "${mirror}" \
+              "${commit}:refs/heads/main" \
+              "${commit}:refs/tags/${MIRROR_TAG}"; then
+              pushed=true
+              break
+            fi
+
+            # The tag is ours alone, so its arrival means a concurrent run
+            # shipped this same version. Retrying cannot help.
+            if tag_exists; then
+              echo "::error::${MIRROR_TAG} reached ${MIRROR_REPO} while pushing."
+              exit 1
+            fi
+            echo "main moved; re-reading it."
+          done
+
+          if [ "${pushed}" != true ]; then
+            echo "::error::could not push ${MIRROR_TAG} after 5 attempts."
+            exit 1
+          fi
 
           {
             echo "### Terraform provider ${MIRROR_TAG}"
