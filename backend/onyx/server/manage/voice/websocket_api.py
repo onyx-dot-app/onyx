@@ -15,6 +15,13 @@ from onyx.auth.users import current_user_from_websocket
 from onyx.db.engine.sql_engine import get_sqlalchemy_engine
 from onyx.db.models import User
 from onyx.db.voice import fetch_default_stt_provider, fetch_default_tts_provider
+from onyx.redis.redis_pool import (
+    ZOOM_VOICE_SESSION_LIMIT_MESSAGE,
+    ZOOM_VOICE_SESSION_MAX_SECONDS,
+    ZoomVoiceSessionLimitExceeded,
+    acquire_zoom_voice_session,
+    release_zoom_voice_session,
+)
 from onyx.server.manage.voice.text_utils import strip_markdown_for_tts
 from onyx.utils.logger import setup_logger
 from onyx.voice.factory import get_voice_provider
@@ -144,6 +151,9 @@ WS_MAX_TOTAL_BYTES = 25 * 1024 * 1024  # 25MB total per connection (matches REST
 WS_MAX_TEXT_MESSAGE_SIZE = 16 * 1024  # 16KB for text/JSON messages
 WS_MAX_TTS_TEXT_LENGTH = 4096  # Max text length per synthesize call (matches REST API)
 WS_SERVER_ERROR_CLOSE_CODE = 1011
+ZOOM_STREAMING_SESSION_TIMEOUT_MESSAGE = (
+    "Zoom Scribe session reached its maximum duration. Start a new recording."
+)
 
 
 class ChunkedTranscriber:
@@ -275,13 +285,14 @@ async def handle_streaming_transcription(
         try:
             while True:
                 result: TranscriptResult | None = await transcriber.receive_transcript()
-                if result is None:
+                if result is None:  # End of stream
                     logger.info("Streaming transcription: transcript stream ended")
                     break
                 if result.error:
                     logger.error("Streaming transcription: provider stream failed")
                     receiver_failed.set()
                     break
+                # Send if text changed OR if VAD detected end of speech (for auto-send trigger)
                 if result.text and (
                     result.text != last_transcript or result.is_vad_end
                 ):
@@ -590,6 +601,11 @@ async def websocket_transcribe(
 
     streaming_transcriber = None
     provider = None
+    zoom_session_member_id: str | None = None
+    zoom_session_provider_id: int | None = None
+    zoom_session_user_id = str(_user.id)
+    provider_id: int | None = None
+    provider_type: str | None = None
 
     try:
         # Get STT provider
@@ -624,6 +640,8 @@ async def websocket_transcribe(
                 provider_db.provider_type,
             )
             try:
+                provider_type = provider_db.provider_type
+                provider_id = provider_db.id
                 provider = get_voice_provider(provider_db)
                 logger.info(
                     "WebSocket transcribe: voice provider created, streaming supported: %s",
@@ -642,11 +660,46 @@ async def websocket_transcribe(
             provider.supports_streaming_stt() and not VOICE_DISABLE_STREAMING_STT
         )
 
+        if provider_type == "zoom" and provider_id is not None:
+            try:
+                zoom_session_member_id = await acquire_zoom_voice_session(
+                    provider_id=provider_id,
+                    user_id=zoom_session_user_id,
+                )
+                zoom_session_provider_id = provider_id
+            except ZoomVoiceSessionLimitExceeded:
+                await websocket.send_json(
+                    {
+                        "type": "error",
+                        "message": ZOOM_VOICE_SESSION_LIMIT_MESSAGE,
+                    }
+                )
+                return
+
         if use_streaming:
             try:
                 streaming_transcriber = await provider.create_streaming_transcriber()
                 logger.info("WebSocket transcribe: streaming transcriber created")
-                await handle_streaming_transcription(websocket, streaming_transcriber)
+                if provider_type == "zoom":
+                    await asyncio.wait_for(
+                        handle_streaming_transcription(
+                            websocket, streaming_transcriber
+                        ),
+                        timeout=ZOOM_VOICE_SESSION_MAX_SECONDS,
+                    )
+                else:
+                    await handle_streaming_transcription(
+                        websocket, streaming_transcriber
+                    )
+                return
+            except TimeoutError:
+                logger.info("WebSocket transcribe: Zoom streaming session timed out")
+                await websocket.send_json(
+                    {
+                        "type": "error",
+                        "message": ZOOM_STREAMING_SESSION_TIMEOUT_MESSAGE,
+                    }
+                )
                 return
             except WebSocketDisconnect:
                 raise
@@ -706,6 +759,15 @@ async def websocket_transcribe(
                 await streaming_transcriber.close()
             except Exception:
                 pass
+        if zoom_session_member_id is not None and zoom_session_provider_id is not None:
+            try:
+                await release_zoom_voice_session(
+                    provider_id=zoom_session_provider_id,
+                    user_id=zoom_session_user_id,
+                    session_member_id=zoom_session_member_id,
+                )
+            except Exception:
+                logger.warning("WebSocket transcribe: failed to release Zoom session")
         try:
             await websocket.close()
         except Exception:
