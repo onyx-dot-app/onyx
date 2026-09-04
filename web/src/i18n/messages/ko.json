@@ -5753,6 +5753,49 @@
         "description": "OpenAPI 서버를 연결해 에이전트용 사용자 지정 작업과 도구를 추가하세요."
       }
     },
+    "systemUsage": {
+      "categories": {
+        "contextualRagChunkContext": {
+          "label": "Contextual RAG chunk context"
+        },
+        "contextualRagDocumentSummary": {
+          "label": "Contextual RAG document summaries"
+        },
+        "imageSummarization": { "label": "Image summarization" },
+        "kgDeepExtraction": { "label": "Knowledge graph extraction" },
+        "kgDocumentClassification": {
+          "label": "Knowledge graph classification"
+        },
+        "unattributed": { "label": "Unattributed" }
+      },
+      "filters": {
+        "allModels": { "label": "All models" },
+        "allProviders": { "label": "All providers" }
+      },
+      "panel": {
+        "description": "{start} – {end} · Background text generation without a user.",
+        "emptyDescription": "Background text-generation spend for the selected period.",
+        "error": { "title": "Failed to load system usage for this period." },
+        "title": "System usage"
+      },
+      "summary": {
+        "spend": { "label": "System spend" },
+        "tokens": { "label": "Total tokens" },
+        "unattributed": { "label": "Unattributed spend" }
+      },
+      "table": {
+        "columns": {
+          "category": { "header": "Category" },
+          "input": { "header": "Input" },
+          "output": { "header": "Output" },
+          "spend": { "header": "Spend" },
+          "tokens": { "header": "Tokens" }
+        },
+        "empty": {
+          "description": "No system usage matches the current filters."
+        }
+      }
+    },
     "perUserUsage": {
       "panel": {
         "description": "{start} – {end} · 비용은 기록된 모델 사용량을 기준으로 계산됩니다.",
