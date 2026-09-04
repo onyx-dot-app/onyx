@@ -5,13 +5,15 @@
 # tests with `ods coverage <suite> --update`.
 #
 # Generated file: do not edit by hand.
-total: 36.4
+total: 37.1
 packages:
   .: 0
-  cmd: 17.1
+  cmd: 15.7
   internal/alembic: 0
   internal/audit: 55.1
   internal/auditcmd: 0
+  internal/backendenv: 92.3
+  internal/bunpkg: 80.2
   internal/childproc: 0
   internal/composegen: 96.8
   internal/config: 0
@@ -24,7 +26,7 @@ packages:
   internal/kube: 0
   internal/lazyimports: 61.2
   internal/openapi: 0
-  internal/paths: 30.3
+  internal/paths: 42.8
   internal/portutil: 75
   internal/postgres: 0
   internal/prompt: 0
@@ -32,7 +34,7 @@ packages:
   internal/release: 82.7
   internal/s3: 0
   internal/terraform: 83
-  internal/testsuite: 88.1
+  internal/testsuite: 92.5
   internal/tui: 38.8
   internal/version: 100
   odsaudit: 0
