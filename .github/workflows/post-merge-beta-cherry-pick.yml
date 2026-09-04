@@ -184,7 +184,7 @@ jobs:
             release_args+=(--release "${RELEASE}")
           fi
           set +e
-          uv run --no-sync --with onyx-devtools==0.13.2 ods cherry-pick "${MERGE_COMMIT_SHA}" "${release_args[@]}" --yes --no-verify 2>&1 | tee "$output_file"
+          uv run --no-sync --with onyx-devtools==0.13.3 ods cherry-pick "${MERGE_COMMIT_SHA}" "${release_args[@]}" --yes --no-verify 2>&1 | tee "$output_file"
           pipe_statuses=("${PIPESTATUS[@]}")
           exit_code="${pipe_statuses[0]}"
           tee_exit="${pipe_statuses[1]:-0}"

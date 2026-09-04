@@ -144,7 +144,7 @@ dev = [
     "ty==0.0.63",
     # Keep in sync with the pinned `onyx-devtools==` in the `ods` hooks in
     # .pre-commit-config.yaml, which install ods into an isolated overlay.
-    "onyx-devtools[audit]==0.13.2",
+    "onyx-devtools[audit]==0.13.3",
     "openapi-generator-cli==7.17.0",
     "pre-commit==3.2.2",
     "pytest-alembic==0.12.1",

@@ -1036,7 +1036,7 @@ jobs:
           PLAYWRIGHT_S3_BUCKET: ${{ env.PLAYWRIGHT_S3_BUCKET }}
           BASELINE_REV: ${{ steps.baseline-rev.outputs.rev }}
         run: |
-          uv run --no-sync --with onyx-devtools==0.13.2 ods screenshot-diff compare \
+          uv run --no-sync --with onyx-devtools==0.13.3 ods screenshot-diff compare \
             --project "${PROJECT}" \
             --rev "${BASELINE_REV}"
 
@@ -1107,7 +1107,7 @@ jobs:
           BASELINE_REV: ${{ steps.baseline-rev.outputs.rev }}
         run: |
           if [ -d "web/output/screenshots/" ] && [ "$(ls -A web/output/screenshots/)" ]; then
-            uv run --no-sync --with onyx-devtools==0.13.2 ods screenshot-diff upload-baselines \
+            uv run --no-sync --with onyx-devtools==0.13.3 ods screenshot-diff upload-baselines \
               --project "${PROJECT}" \
               --rev "${BASELINE_REV}" \
               --delete
