@@ -12,11 +12,13 @@ from typing import Any, cast
 
 from cachetools import TTLCache
 from pydantic import BaseModel
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine.cursor import CursorResult
 from sqlalchemy.orm import Session
 
+from onyx.db.enums import UsageActorKind
+from onyx.db.llm_usage import LLMUsageRecord
 from onyx.db.models import TokenRateLimit, User, User__UserGroup, UserUsage
 from onyx.utils.datetime import datetime_to_utc, get_window_start
 from onyx.utils.logger import setup_logger
@@ -39,6 +41,7 @@ _invalid_cost_budget_warning_cache: TTLCache[tuple[str | None, int, int], None] 
 # Not email-shaped on purpose: it can never collide with a real address.
 DELETED_USER_EXPORT_EMAIL = "(deleted user)"
 _CONFLICT_COLS = ["user_id", "window_start", "model", "flow", "provider", "incognito"]
+_USER_ACTOR_INDEX_PREDICATE = text("actor_kind = 'USER'")
 
 
 class TokenUsageBucket(BaseModel):
@@ -189,37 +192,30 @@ class UsageExportRow(BaseModel):
 def record_user_usage(
     db_session: Session,
     user_id: str,
-    model: str,
-    flow: str,
-    provider: str | None,
-    input_tokens: int,
-    output_tokens: int,
-    cache_read_tokens: int,
-    cost_cents: float,
-    window_start: datetime,
+    usage: LLMUsageRecord,
     incognito: bool = False,
-    *,
-    cache_creation_tokens: int = 0,
 ) -> None:
     """Atomically accumulate into the ledger (Postgres upsert). Caller commits."""
     # Store "" rather than NULL for a missing provider so the dedup unique index
     # collapses these rows on every Postgres version (no NULLS NOT DISTINCT).
-    provider = provider or ""
+    provider = usage.provider or ""
     stmt = pg_insert(UserUsage).values(
         user_id=user_id,
-        window_start=window_start,
-        model=model,
-        flow=flow,
+        actor_kind=UsageActorKind.USER,
+        window_start=usage.window_start,
+        model=usage.model,
+        flow=usage.flow,
         provider=provider,
         incognito=incognito,
-        input_tokens=input_tokens,
-        output_tokens=output_tokens,
-        cache_read_tokens=cache_read_tokens,
-        cache_creation_tokens=cache_creation_tokens,
-        cost_cents=cost_cents,
+        input_tokens=usage.input_tokens,
+        output_tokens=usage.output_tokens,
+        cache_read_tokens=usage.cache_read_tokens,
+        cache_creation_tokens=usage.cache_creation_tokens,
+        cost_cents=usage.cost_cents,
     )
     stmt = stmt.on_conflict_do_update(
         index_elements=_CONFLICT_COLS,
+        index_where=_USER_ACTOR_INDEX_PREDICATE,
         set_={
             "input_tokens": UserUsage.input_tokens + stmt.excluded.input_tokens,
             "output_tokens": UserUsage.output_tokens + stmt.excluded.output_tokens,
@@ -311,6 +307,7 @@ def _get_usage_export_query(
         # base, which ty resolves as a plain value rather than a column.
         .outerjoin(User, UserUsage.user_id == User.id)
         .where(
+            UserUsage.actor_kind == UsageActorKind.USER,
             UserUsage.window_start >= start,
             UserUsage.window_start < end,
         )

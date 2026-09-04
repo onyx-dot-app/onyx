@@ -23,6 +23,8 @@ from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Session, sessionmaker
 
 import onyx.db.user_usage as user_usage_module
+from onyx.db.enums import SystemUsageAttribution, UsageActorKind
+from onyx.db.llm_usage import LLMUsageRecord
 from onyx.db.models import (
     TokenRateLimit,
     TokenRateLimitScope,
@@ -119,6 +121,34 @@ def _seed_usage(
     db_session.flush()
 
 
+def _seed_system_usage(
+    db_session: Session,
+    window_start: datetime.datetime,
+    *,
+    input_tokens: int,
+    output_tokens: int,
+    cost_cents: float,
+) -> None:
+    db_session.add(
+        UserUsage(
+            user_id=None,
+            actor_kind=UsageActorKind.SYSTEM,
+            system_attribution=SystemUsageAttribution.ATTRIBUTED,
+            window_start=window_start,
+            model="m",
+            flow="image_summarization",
+            provider="anthropic",
+            incognito=False,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cache_read_tokens=0,
+            cache_creation_tokens=0,
+            cost_cents=cost_cents,
+        )
+    )
+    db_session.flush()
+
+
 @pytest.fixture
 def db_session() -> Generator[Session, None, None]:
     engine: Engine = create_engine("sqlite://")
@@ -155,15 +185,17 @@ class TestRecordUserUsage:
         record_user_usage(
             mock_session,
             user_id=user_id,
-            model="claude-3",
-            flow="CHAT",
-            provider="anthropic",
-            input_tokens=100,
-            output_tokens=50,
-            cache_read_tokens=10,
-            cache_creation_tokens=25,
-            cost_cents=1.5,
-            window_start=window,
+            usage=LLMUsageRecord(
+                model="claude-3",
+                flow="CHAT",
+                provider="anthropic",
+                input_tokens=100,
+                output_tokens=50,
+                cache_read_tokens=10,
+                cache_creation_tokens=25,
+                cost_cents=1.5,
+                window_start=window,
+            ),
         )
 
         mock_session.execute.assert_called_once()
@@ -184,14 +216,16 @@ class TestRecordUserUsage:
         record_user_usage(
             mock_session,
             user_id=str(uuid4()),
-            model="model-a",
-            flow="CHAT",
-            provider=None,
-            input_tokens=10,
-            output_tokens=5,
-            cache_read_tokens=0,
-            cost_cents=0.1,
-            window_start=window,
+            usage=LLMUsageRecord(
+                model="model-a",
+                flow="CHAT",
+                provider=None,
+                input_tokens=10,
+                output_tokens=5,
+                cache_read_tokens=0,
+                cost_cents=0.1,
+                window_start=window,
+            ),
         )
 
         stmt = mock_session.execute.call_args[0][0]
@@ -207,14 +241,16 @@ class TestRecordUserUsage:
         record_user_usage(
             mock_session,
             user_id=str(uuid4()),
-            model="model-a",
-            flow="CHAT",
-            provider="openai",
-            input_tokens=10,
-            output_tokens=5,
-            cache_read_tokens=0,
-            cost_cents=0.1,
-            window_start=window,
+            usage=LLMUsageRecord(
+                model="model-a",
+                flow="CHAT",
+                provider="openai",
+                input_tokens=10,
+                output_tokens=5,
+                cache_read_tokens=0,
+                cost_cents=0.1,
+                window_start=window,
+            ),
             incognito=True,
         )
 
@@ -258,6 +294,16 @@ class TestRecordUserUsage:
 
 
 class TestUsageExport:
+    def test_system_usage_is_excluded(self, db_session: Session) -> None:
+        window = datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc)
+        _seed_system_usage(
+            db_session, window, input_tokens=20, output_tokens=7, cost_cents=4.0
+        )
+
+        rows = get_usage_export(db_session, window, window + datetime.timedelta(days=1))
+
+        assert rows == []
+
     def test_orphaned_usage_is_exported_and_reconciles_with_total(
         self, db_session: Session
     ) -> None:
@@ -463,6 +509,15 @@ class TestTotalCostSince:
 
         assert get_total_cost_cents_since(db_session, window) == pytest.approx(7.0)
 
+    def test_includes_system_usage(self, db_session: Session) -> None:
+        window = datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc)
+        _seed_usage(db_session, str(uuid4()), "m", "CHAT", None, 1, 1, 0, 3.0, window)
+        _seed_system_usage(
+            db_session, window, input_tokens=5, output_tokens=2, cost_cents=4.0
+        )
+
+        assert get_total_cost_cents_since(db_session, window) == pytest.approx(7.0)
+
     def test_older_window_excluded(self, db_session: Session) -> None:
         u1 = str(uuid4())
         w1 = datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc)
@@ -503,6 +558,16 @@ class TestTotalCostBucketsSince:
         assert buckets[w1] == pytest.approx(7.0)
         assert buckets[w2] == pytest.approx(9.0)
 
+    def test_includes_system_usage(self, db_session: Session) -> None:
+        window = datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc)
+        _seed_system_usage(
+            db_session, window, input_tokens=5, output_tokens=2, cost_cents=4.0
+        )
+
+        assert dict(get_total_cost_cents_buckets_since(db_session, window))[
+            window
+        ] == pytest.approx(4.0)
+
 
 class TestTokenBuckets:
     def test_user_tokens_are_provider_input_plus_output(
@@ -527,6 +592,16 @@ class TestTokenBuckets:
 
         assert get_total_token_buckets_since(db_session, window) == [
             TokenUsageBucket(window_start=window, tokens=180)
+        ]
+
+    def test_total_tokens_include_system_usage(self, db_session: Session) -> None:
+        window = datetime.datetime(2026, 6, 1, tzinfo=datetime.timezone.utc)
+        _seed_system_usage(
+            db_session, window, input_tokens=50, output_tokens=10, cost_cents=1.0
+        )
+
+        assert get_total_token_buckets_since(db_session, window) == [
+            TokenUsageBucket(window_start=window, tokens=60)
         ]
 
 

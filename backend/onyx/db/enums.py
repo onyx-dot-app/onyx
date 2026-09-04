@@ -779,6 +779,16 @@ class SSOProviderType(str, PyEnum):
     SAML = "SAML"
 
 
+class SystemUsageAttribution(str, PyEnum):
+    ATTRIBUTED = "ATTRIBUTED"
+    UNATTRIBUTED = "UNATTRIBUTED"
+
+
+class UsageActorKind(str, PyEnum):
+    USER = "USER"
+    SYSTEM = "SYSTEM"
+
+
 class IncognitoRecordMode(str, PyEnum):
     """What a workspace retains from an incognito chat.
 
