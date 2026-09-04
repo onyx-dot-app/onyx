@@ -170,7 +170,7 @@ def _load_raw_overrides_unlocked() -> SecuritySettingsOverrides:
     """Uncached read: DB row overrides with the KV-backed overrides overlaid."""
     with get_session_with_current_tenant() as db_session:
         overrides = _db_load_overrides(db_session)
-    kv_store = get_kv_store()
+    kv_store: KeyValueStore = get_kv_store()
     return overrides.model_copy(
         update={
             field: _load_kv_bool_override(kv_store, kv_key)
@@ -189,8 +189,8 @@ def _store_overrides_unlocked(overrides: SecuritySettingsOverrides) -> None:
         )
     with get_session_with_current_tenant() as db_session:
         _db_upsert_overrides(db_session, overrides)
-    kv_store = get_kv_store()
-    override_values = overrides.model_dump()
+    kv_store: KeyValueStore = get_kv_store()
+    override_values: dict[str, Any] = overrides.model_dump()
     for field, kv_key in KV_BACKED_OVERRIDE_KEYS.items():
         kv_store.store(kv_key, override_values[field])
     invalidate_security_cache(_current_tenant_id_or_default())

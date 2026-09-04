@@ -1034,7 +1034,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     # No link matched this subject, so any link this provider holds on
                     # the row is stale: the IdP re-issued its subjects (a new Entra
                     # app registration).
-                    stale_link = next(
+                    stale_link: OAuthAccount | None = next(
                         (
                             link
                             for link in user.oauth_accounts
@@ -1056,7 +1056,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                         # is claimable, password signups included. The same provider
                         # with a new subject is admin-gated: the subject alone does
                         # not prove who holds the address now.
-                        relink_allowed = (
+                        relink_allowed: bool = (
                             stale_link is not None
                             and oauth_security_settings.allow_same_provider_subject_relink
                         )
