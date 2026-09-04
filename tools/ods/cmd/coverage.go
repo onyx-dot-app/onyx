@@ -105,13 +105,11 @@ func runCoverage(target string, opts *CoverageOptions) int {
 		return writeBaseline(baselinePath, profile)
 	}
 
+	// A module opts into the gate by committing a baseline. Without one the
+	// tests still run and the report still prints, but nothing can regress.
 	baseline, err := coverage.LoadBaseline(baselinePath)
 	if errors.Is(err, os.ErrNotExist) {
-		if opts.Check {
-			log.Errorf("No baseline at %s. Create one with: ods coverage %s --update", baselinePath, suite.Name)
-			return 1
-		}
-		log.Warnf("No baseline at %s; create one with: ods coverage %s --update", baselinePath, suite.Name)
+		log.Warnf("No baseline at %s, so nothing is gated. Opt in with: ods coverage %s --update", baselinePath, suite.Name)
 		baseline = nil
 	} else if err != nil {
 		log.Errorf("Failed to read the baseline: %v", err)
@@ -134,7 +132,7 @@ func runCoverage(target string, opts *CoverageOptions) int {
 			len(improvements), suite.Name)
 	}
 
-	if !opts.Check {
+	if !opts.Check || baseline == nil {
 		return 0
 	}
 	regressions := report.Regressions()

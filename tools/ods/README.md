@@ -337,7 +337,9 @@ The gate never fails on an improvement, so a baseline goes stale as tests are
 added. `ods coverage ods` reports how many packages have risen; commit the gain
 with `--update` so the new level becomes the floor.
 
-A module opts into the CI gate by committing a baseline, so `cli` and
+`pr-golang-tests.yml` runs `ods coverage <module> --check` for every Go module.
+Without a baseline the tests still run and the report prints, but nothing is
+gated. A module opts into the gate by committing a baseline, so `cli` and
 `terraform-provider-onyx` join by running `ods coverage <suite> --update` once.
 
 Floors are rounded down to one decimal, and a package may sit `--tolerance`
