@@ -636,6 +636,7 @@ export enum ValidSources {
   Mediawiki = "mediawiki",
   Asana = "asana",
   S3 = "s3",
+  RustFS = "rustfs",
   R2 = "r2",
   GoogleCloudStorage = "google_cloud_storage",
   Xenforo = "xenforo",

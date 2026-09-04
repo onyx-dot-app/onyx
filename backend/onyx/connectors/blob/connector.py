@@ -46,7 +46,10 @@ from onyx.connectors.models import (
 from onyx.file_processing.extract_file_text import extract_text_and_images, get_file_ext
 from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.file_processing.image_utils import store_image_and_create_section
+from onyx.server.security.models import web_connector_ssrf_enforced
+from onyx.server.security.store import get_security_settings
 from onyx.utils.logger import setup_logger
+from onyx.utils.url import SSRFException, validate_outbound_http_url
 
 if TYPE_CHECKING:
     from mypy_boto3_s3 import S3Client
@@ -67,6 +70,7 @@ class BlobStorageConnector(LoadConnector, PollConnector):
         batch_size: int = INDEX_BATCH_SIZE,
         european_residency: bool = False,
         region_name: str | None = None,
+        endpoint_url: str | None = None,
     ) -> None:
         self.bucket_type: BlobType = BlobType(bucket_type)
         self.bucket_name = bucket_name.strip()
@@ -83,6 +87,7 @@ class BlobStorageConnector(LoadConnector, PollConnector):
         self.region_name: str | None = (
             region_name.strip() if region_name and region_name.strip() else None
         )
+        self.endpoint_url = endpoint_url
 
     def set_allow_images(  # ty: ignore[invalid-method-override]
         self, allow_images: bool
@@ -113,12 +118,29 @@ class BlobStorageConnector(LoadConnector, PollConnector):
         except Exception as e:
             logger.warning("Failed to detect bucket region via head_bucket: %s", e)
 
+    def _validated_rustfs_endpoint(self) -> str:
+        if not self.endpoint_url:
+            raise ConnectorValidationError("A RustFS endpoint URL is required.")
+
+        enforce_ssrf = web_connector_ssrf_enforced(
+            get_security_settings().ssrf_protection_level
+        )
+        try:
+            return validate_outbound_http_url(
+                self.endpoint_url,
+                allow_private_network=not enforce_ssrf,
+                block_link_local_only=not enforce_ssrf,
+            ).rstrip("/")
+        except (SSRFException, ValueError) as e:
+            raise ConnectorValidationError(f"Invalid RustFS endpoint URL: {e}") from e
+
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         """Checks for boto3 credentials based on the bucket type.
         (1) R2: Access Key ID, Secret Access Key, Account ID
         (2) S3: AWS Access Key ID, AWS Secret Access Key or IAM role or Assume Role
-        (3) GOOGLE_CLOUD_STORAGE: Access Key ID, Secret Access Key, Project ID
-        (4) OCI_STORAGE: Namespace, Region, Access Key ID, Secret Access Key
+        (3) RUSTFS: Access Key, Secret Key, custom endpoint
+        (4) GOOGLE_CLOUD_STORAGE: Access Key ID, Secret Access Key, Project ID
+        (5) OCI_STORAGE: Namespace, Region, Access Key ID, Secret Access Key
 
         For each bucket type, the method initializes the appropriate S3 client:
         - R2: Uses Cloudflare R2 endpoint with S3v4 signature
@@ -223,6 +245,22 @@ class BlobStorageConnector(LoadConnector, PollConnector):
             # NOTE: the client region actually doesn't matter for accessing the bucket
             self._detect_bucket_region()
 
+        elif self.bucket_type == BlobType.RUSTFS:
+            if not all(credentials.get(key) for key in ("access_key", "secret_key")):
+                raise ConnectorMissingCredentialError("RustFS")
+
+            self.s3_client = boto3.client(
+                "s3",
+                endpoint_url=self._validated_rustfs_endpoint(),
+                aws_access_key_id=credentials["access_key"],
+                aws_secret_access_key=credentials["secret_key"],
+                region_name=self.region_name or "us-east-1",
+                config=Config(
+                    signature_version="s3v4",
+                    s3={"addressing_style": "path"},
+                ),
+            )
+
         elif self.bucket_type == BlobType.GOOGLE_CLOUD_STORAGE:
             if not all(
                 credentials.get(key) for key in ["access_key_id", "secret_access_key"]
@@ -313,6 +351,9 @@ class BlobStorageConnector(LoadConnector, PollConnector):
         # NOTE: We store the object dashboard URL instead of the actual object URL
         # This is because the actual object URL requires S3 client authentication
         # Accessing through the browser will always return an unauthorized error
+
+        if self.bucket_type == BlobType.RUSTFS:
+            return ""
 
         if self.s3_client is None:
             raise ConnectorMissingCredentialError("Blob storage")

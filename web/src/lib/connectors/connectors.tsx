@@ -1534,6 +1534,51 @@ For example, specifying .*-alerts as a "channel to exclude" will cause the conne
     advanced_values: [],
     overrideDefaultFreq: 60 * 60 * 24,
   },
+  rustfs: {
+    description: "Configure RustFS connector",
+    values: [
+      {
+        type: "text",
+        query: "Enter the RustFS endpoint URL:",
+        label: "Endpoint URL",
+        name: "endpoint_url",
+        description: "For example: http://rustfs:9000",
+        optional: false,
+      },
+      {
+        type: "text",
+        query: "Enter the bucket name:",
+        label: "Bucket Name",
+        name: "bucket_name",
+        optional: false,
+      },
+      {
+        type: "text",
+        query: "Enter the prefix:",
+        label: "Prefix",
+        name: "prefix",
+        optional: true,
+      },
+      {
+        type: "text",
+        query: "Enter the S3 region:",
+        label: "Region",
+        name: "region_name",
+        default: "us-east-1",
+        optional: false,
+      },
+      {
+        type: "text",
+        label: "Bucket Type",
+        name: "bucket_type",
+        optional: false,
+        default: "rustfs",
+        hidden: true,
+      },
+    ],
+    advanced_values: [],
+    overrideDefaultFreq: 60 * 60,
+  },
   r2: {
     description: "Configure R2 connector",
     values: [
@@ -2317,6 +2362,14 @@ export interface S3Config {
   bucket_type: "s3";
   bucket_name: string;
   prefix: string;
+}
+
+export interface RustFSConfig {
+  bucket_type: "rustfs";
+  endpoint_url: string;
+  bucket_name: string;
+  prefix: string;
+  region_name: string;
 }
 
 export interface R2Config {
