@@ -252,13 +252,18 @@ def respond_in_thread_or_channel(
     receiver_ids: list[str] | None = None,
     metadata: Metadata | None = None,
     unfurl: bool = True,
-    send_as_ephemeral: bool | None = True,  # noqa: ARG001
+    send_as_ephemeral: bool | None = True,
 ) -> list[str]:
     if not text and not blocks:
         raise ValueError("One of `text` or `blocks` must be provided")
 
     message_ids: list[str] = []
-    if not receiver_ids:
+    # Ephemeral delivery needs a target audience *and* the caller's consent.
+    # `receiver_ids` alone used to decide it, which silently overrode any caller
+    # that had explicitly asked for a public post -- notably the bot-DM carve-out
+    # in `handle_regular_answer`, which sets `send_as_ephemeral=False` and still
+    # passes the channel allowlist as `receiver_ids`.
+    if not receiver_ids or not send_as_ephemeral:
         try:
             response = client.chat_postMessage(
                 channel=channel,
