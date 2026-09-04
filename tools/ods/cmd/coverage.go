@@ -52,7 +52,7 @@ func NewCoverageCommand() *cobra.Command {
 	cmd.Flags().BoolVar(&opts.Update, "update", false, "Rewrite the baseline from this run")
 	cmd.Flags().StringVar(&opts.Profile, "profile", "", "Keep the coverage profile at this path, for go tool cover -html")
 	cmd.Flags().StringVar(&opts.HTML, "html", "", "Render the profile as a browsable page at this path")
-	cmd.Flags().StringVar(&opts.Markdown, "markdown", "", "Write the report as markdown at this path, for a PR comment or job summary")
+	cmd.Flags().StringVar(&opts.Markdown, "markdown", "", "Write the changed packages as a markdown table at this path, for a PR comment")
 	cmd.Flags().Float64Var(&opts.Tolerance, "tolerance", coverage.DefaultTolerance,
 		"Percentage points a package may drop below its floor without failing")
 

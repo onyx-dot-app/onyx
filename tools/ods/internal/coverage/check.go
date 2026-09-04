@@ -132,6 +132,20 @@ func (r *Report) Improvements() []Result {
 	return out
 }
 
+// Changed reports whether any package moved against a baseline. A run with no
+// baseline has nothing to change against.
+func (r *Report) Changed() bool {
+	if r.Total.Status == StatusNew {
+		return false
+	}
+	for _, pkg := range r.Packages {
+		if pkg.Status != StatusOK {
+			return true
+		}
+	}
+	return false
+}
+
 // ValidateTolerance rejects a tolerance that would make the comparison
 // meaningless. NaN and +Inf make every comparison pass, and a negative value
 // fails a package that holds exactly at its floor.

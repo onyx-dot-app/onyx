@@ -6,23 +6,43 @@ import (
 	"strings"
 )
 
+// Markers open a markdown report so a script can tell, without parsing the
+// table, whether the module is worth a reader's attention.
+const (
+	MarkerChanged    = "<!-- ods-coverage: changed -->"
+	MarkerUnchanged  = "<!-- ods-coverage: unchanged -->"
+	MarkerNoBaseline = "<!-- ods-coverage: no-baseline -->"
+)
+
 // WriteMarkdown renders a report as a GitHub-flavored markdown section for a
-// PR comment or job summary. A one-line verdict comes first; the per-package
-// table is collapsed so a comment covering several modules stays short.
+// PR comment or job summary. A marker line comes first, then a one-line
+// verdict. The table lists only the packages that moved, plus the total, so a
+// comment covering several modules stays short.
 func WriteMarkdown(w io.Writer, name string, report *Report) error {
 	var b strings.Builder
 
-	fmt.Fprintf(&b, "#### `%s`\n\n%s\n\n", name, markdownSummary(report))
-	b.WriteString("<details>\n<summary>Per-package report</summary>\n\n")
+	fmt.Fprintf(&b, "%s\n#### `%s`\n\n%s\n\n", markdownMarker(report), name, markdownSummary(report))
 	b.WriteString("| Package | Coverage | Floor | Change |\n| --- | ---: | ---: | --- |\n")
 	for _, pkg := range report.Packages {
-		b.WriteString(markdownRow(pkg))
+		if pkg.Status != StatusOK {
+			b.WriteString(markdownRow(pkg))
+		}
 	}
 	b.WriteString(markdownTotalRow(report.Total))
-	b.WriteString("\n</details>\n")
 
 	_, err := io.WriteString(w, b.String())
 	return err
+}
+
+func markdownMarker(report *Report) string {
+	switch {
+	case report.Total.Status == StatusNew:
+		return MarkerNoBaseline
+	case report.Changed():
+		return MarkerChanged
+	default:
+		return MarkerUnchanged
+	}
 }
 
 // markdownSummary is the one line a reader needs: what moved, and the total.

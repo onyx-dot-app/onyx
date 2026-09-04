@@ -118,6 +118,24 @@ func TestCompare_newPackageLoweringTotalDoesNotFail(t *testing.T) {
 	}
 }
 
+func TestReport_Changed(t *testing.T) {
+	profile := profileOf(map[string][2]int{"cmd": {1, 2}, "internal/new": {1, 2}})
+	cases := map[string]struct {
+		baseline *Baseline
+		want     bool
+	}{
+		"holding":     {&Baseline{Total: 50, Packages: map[string]float64{"cmd": 50, "internal/new": 50}}, false},
+		"improved":    {&Baseline{Total: 50, Packages: map[string]float64{"cmd": 10, "internal/new": 50}}, true},
+		"new package": {&Baseline{Total: 50, Packages: map[string]float64{"cmd": 50}}, true},
+		"no baseline": {nil, false},
+	}
+	for name, tc := range cases {
+		if got := Compare(profile, tc.baseline, DefaultTolerance).Changed(); got != tc.want {
+			t.Errorf("%s: Changed() = %v, want %v", name, got, tc.want)
+		}
+	}
+}
+
 func TestValidateTolerance(t *testing.T) {
 	for _, valid := range []float64{0, 0.1, 5} {
 		if err := ValidateTolerance(valid); err != nil {

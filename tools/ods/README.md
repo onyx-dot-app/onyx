@@ -313,7 +313,7 @@ suite name, which is what CI passes.
 | `--update` | `false` | Rewrite the baseline from this run |
 | `--profile` | | Keep the coverage profile at this path (for `go tool cover`) |
 | `--html` | | Render the profile as a browsable page at this path |
-| `--markdown` | | Write the report as markdown at this path, for a PR comment or job summary |
+| `--markdown` | | Write the changed packages as a markdown table at this path, for a PR comment |
 | `--tolerance` | `0.1` | Percentage points a package may drop below its floor without failing |
 
 **Examples:**
@@ -341,9 +341,13 @@ with `--update` so the new level becomes the floor.
 
 `pr-golang-tests.yml` runs `ods coverage <module> --check` for every Go module.
 Without a baseline the tests still run and the report prints, but nothing is
-gated. Each module's `--markdown` report goes to the job summary and to one PR
-comment, updated in place, and its `--html` page is uploaded as an artifact. A module opts into the gate by committing a baseline, so `cli` and
+gated. A module opts into the gate by committing a baseline, so `cli` and
 `terraform-provider-onyx` join by running `ods coverage <suite> --update` once.
+
+In CI, each module's `--markdown` report goes to the job summary, and its
+`--html` page is uploaded as an artifact and published to the reports bucket.
+One PR comment, updated in place, lists the modules with a baseline where a
+package moved, each with a link to its page.
 
 Floors are rounded down to one decimal, and a package may sit `--tolerance`
 below its floor without failing. That absorbs the jitter from suites that depend
