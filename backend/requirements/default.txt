@@ -384,9 +384,9 @@ botocore==1.39.11 \
 boxsdk==10.12.0 \
     --hash=sha256:0563eb38ec26a7f500318e8d98e190156912626f52c68e7d60e30ef43bebd467 \
     --hash=sha256:92e08a961d5203da0e9995ef7725d02331200b1677b6a09045c9c7e6becc3c86
-braintrust==0.3.9 \
-    --hash=sha256:2b903671837dea85d74e984403f154b60b77a3dde4c0bffa17121fdcb24f18d0 \
-    --hash=sha256:8c56ccb214bb102291968cdda67d7bf36a4b01fefc6b1998e53c272379eacab3
+braintrust==0.37.0 \
+    --hash=sha256:24ccfb8944b540c8c4817ab8526475cf15b266de83065274680411e916a08e3a \
+    --hash=sha256:7d45462cc06736ae8d303a407685e181a4914892554855b1ea543cb97394c6df
 brotli==1.2.0 \
     --hash=sha256:0cf8c3b8ba93d496b2fae778039e2f5ecc7cff99df84df337ca31d8f2252896c \
     --hash=sha256:1b1d6a4efedd53671c793be6dd760fcf2107da3a52331ad9ea429edf0902f27a \
@@ -905,14 +905,6 @@ fsspec==2025.10.0 \
     # via
     #   dask
     #   huggingface-hub
-gitdb==4.0.12 \
-    --hash=sha256:5ef71f855d191a3326fcfbc0d5da835f26b13fbcba60c32c21091c349ffdb571 \
-    --hash=sha256:67073e15955400952c6565cc3e707c554a4eea2e428946f7a4c162fab9bd9bcf
-    # via gitpython
-gitpython==3.1.61 \
-    --hash=sha256:8ab28c9da863cdd9e7d7694ec46cf3e6c9a12d8a30a1acd3447aec11975d530c \
-    --hash=sha256:f51c24d8c0f733a195447385f5774a5dfe8767f5acfd7994a33755644c6ecc95
-    # via braintrust
 google-api-core==2.28.1 \
     --hash=sha256:2b405df02d68e68ce0fbc138559e6036559e685159d148ae5861013dc201baf8 \
     --hash=sha256:4021b0f8ceb77a6fb4de6fde4502cecab45062e66ff4f2895169e0b35bc9466c
@@ -1295,6 +1287,7 @@ jsonschema==4.25.1 \
     --hash=sha256:3fba0169e345c7175110351d456342c364814cfcf3b964ba4587f22915230a63 \
     --hash=sha256:e4a9655ce0da0c0b67a085847e00a3a51449e1157f4f75e9fb5aa545e122eb85
     # via
+    #   braintrust
     #   litellm
     #   mcp
 jsonschema-path==0.4.6 \
@@ -1875,6 +1868,7 @@ packaging==25.0 \
     --hash=sha256:29572ef2b1f17581046b3a2227d5c611fb25ec70ca1ba8554b24b0e69331a484 \
     --hash=sha256:d443872c98d677bf60f6a1f2f8c1cb748e8fe762d2bf9d3148b5599295b0fc4f
     # via
+    #   braintrust
     #   dask
     #   distributed
     #   fastmcp
@@ -2404,7 +2398,6 @@ python-dotenv==1.2.2 \
     --hash=sha256:1d8214789a24de455a8b8bd8ae6fe3c6b69a5e3d64aa8a8e5d68e694bbcb285a \
     --hash=sha256:2c371a91fbd7ba082c2c1dc1f8bf89ca22564a087c2c287cd9b662adde799cf3
     # via
-    #   braintrust
     #   fastmcp
     #   litellm
     #   magika
@@ -2807,10 +2800,6 @@ six==1.17.0 \
 slack-sdk==3.20.2 \
     --hash=sha256:224fcb4fef9575226e76555d9a0acdbd93d7596a416bc3ae7b443b3b64e9f0e3 \
     --hash=sha256:f61db1f6e49dd2ee84e82ddb5d1c5db7a5987b8be9ba975dc00799334c84f8cd
-smmap==5.0.2 \
-    --hash=sha256:26ea65a03958fa0c8a1c7e8c7a58fdc77221b8910f6be2131affade476898ad5 \
-    --hash=sha256:b30115f0def7d7531d22a0fb6502488d879e75b260a9db4d0819cfb25403af5e
-    # via gitdb
 sniffio==1.3.1 \
     --hash=sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2 \
     --hash=sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc

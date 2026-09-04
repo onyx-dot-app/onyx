@@ -766,13 +766,13 @@ wheels = [
 
 [[package]]
 name = "braintrust"
-version = "0.3.9"
+version = "0.37.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "chevron" },
     { name = "exceptiongroup" },
-    { name = "gitpython" },
-    { name = "python-dotenv" },
+    { name = "jsonschema" },
+    { name = "packaging" },
     { name = "python-slugify" },
     { name = "requests" },
     { name = "sseclient-py" },
@@ -780,9 +780,9 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "wrapt" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/fb/5c/d4086bcf843a49916cefdd0379a138d9024d5fe75e6cea1e672da19cb272/braintrust-0.3.9.tar.gz", hash = "sha256:8c56ccb214bb102291968cdda67d7bf36a4b01fefc6b1998e53c272379eacab3", size = 237224, upload-time = "2025-11-25T22:20:24.368Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d0/ea/50956a987246d0dfd0faf28e807d42230791c43ffbfab816094cc28b37c0/braintrust-0.37.0.tar.gz", hash = "sha256:24ccfb8944b540c8c4817ab8526475cf15b266de83065274680411e916a08e3a", size = 854281, upload-time = "2026-09-03T16:00:27.121Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ed/b6/e21ddf4e815c3fc845c61b5084bd4d35b882700d78ec054e9e9803aa04db/braintrust-0.3.9-py3-none-any.whl", hash = "sha256:2b903671837dea85d74e984403f154b60b77a3dde4c0bffa17121fdcb24f18d0", size = 280622, upload-time = "2025-11-25T22:20:22.553Z" },
+    { url = "https://files.pythonhosted.org/packages/c3/f6/ca83e4dbf37f8dc9656098e1de01b132433a74e094e3f7b4c8beec887ece/braintrust-0.37.0-py3-none-any.whl", hash = "sha256:7d45462cc06736ae8d303a407685e181a4914892554855b1ea543cb97394c6df", size = 1001326, upload-time = "2026-09-03T16:00:24.403Z" },
 ]
 
 [[package]]
@@ -1997,30 +1997,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/77/7d/20606d1a4ae085eb3935e4d3625e7208911d0f1a0006c9fd962d88254d92/geventhttpclient-2.3.9-cp314-cp314t-musllinux_1_2_x86_64.whl", hash = "sha256:52516d5c153fcef0d3d2447e533244dc6360e8c2a190b958861137db6f227605", size = 115383, upload-time = "2026-03-03T08:08:49.454Z" },
     { url = "https://files.pythonhosted.org/packages/85/16/d20ac6ac73d63fe326ffe357a8e91c4f43b9e790faeeb9b15774eecf2550/geventhttpclient-2.3.9-cp314-cp314t-win32.whl", hash = "sha256:14eaa836bde26a70952e95ca462018f3a47c1c92642327315aa6502e54141016", size = 49749, upload-time = "2026-03-03T08:08:50.339Z" },
     { url = "https://files.pythonhosted.org/packages/59/f6/95d1ed1ace7902d8e1ce698db31931cb87d4abe621ec2df24e69daf49ae9/geventhttpclient-2.3.9-cp314-cp314t-win_amd64.whl", hash = "sha256:b9bbcbc7d5d875e5180f2b1f1c6fa8e092ef80d9debfb6ba22a4ec28f0565395", size = 50300, upload-time = "2026-03-03T08:08:51.482Z" },
-]
-
-[[package]]
-name = "gitdb"
-version = "4.0.12"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "smmap" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/72/94/63b0fc47eb32792c7ba1fe1b694daec9a63620db1e313033d18140c2320a/gitdb-4.0.12.tar.gz", hash = "sha256:5ef71f855d191a3326fcfbc0d5da835f26b13fbcba60c32c21091c349ffdb571", size = 394684, upload-time = "2025-01-02T07:20:46.413Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/a0/61/5c78b91c3143ed5c14207f463aecfc8f9dbb5092fb2869baf37c273b2705/gitdb-4.0.12-py3-none-any.whl", hash = "sha256:67073e15955400952c6565cc3e707c554a4eea2e428946f7a4c162fab9bd9bcf", size = 62794, upload-time = "2025-01-02T07:20:43.624Z" },
-]
-
-[[package]]
-name = "gitpython"
-version = "3.1.61"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "gitdb" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/6f/61/3285044215fb596bf093e39ccb96ece0a1076a8ca57a61e069a6a33cdb1b/gitpython-3.1.61.tar.gz", hash = "sha256:f51c24d8c0f733a195447385f5774a5dfe8767f5acfd7994a33755644c6ecc95", size = 231680, upload-time = "2026-08-28T11:01:13.761Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/6f/5e/49cc172da4d0578644ba37cec5cb365b1fefc603b26edea9bcac1c7f830a/gitpython-3.1.61-py3-none-any.whl", hash = "sha256:8ab28c9da863cdd9e7d7694ec46cf3e6c9a12d8a30a1acd3447aec11975d530c", size = 222118, upload-time = "2026-08-28T11:01:12.262Z" },
 ]
 
 [[package]]
@@ -4394,7 +4370,7 @@ backend = [
     { name = "beautifulsoup4", specifier = "==4.12.3" },
     { name = "boto3", specifier = "==1.39.11" },
     { name = "boxsdk", specifier = "==10.12.0" },
-    { name = "braintrust", specifier = "==0.3.9" },
+    { name = "braintrust", specifier = "==0.37.0" },
     { name = "celery", specifier = "==5.5.1" },
     { name = "chardet", specifier = "==5.2.0" },
     { name = "chonkie", specifier = "==1.0.10" },
@@ -6644,15 +6620,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/d6/ea/68e5d9df21fe120bf9e9d8e66ea978786d8fb15f8ebf2802dae799fe81be/slack_sdk-3.20.2.tar.gz", hash = "sha256:f61db1f6e49dd2ee84e82ddb5d1c5db7a5987b8be9ba975dc00799334c84f8cd", size = 215836, upload-time = "2023-03-10T11:43:09.081Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a3/5f/807ee50b6098c4e1e036ad75d868c6c0a2f0bff503f2096675c5b1bc5a02/slack_sdk-3.20.2-py2.py3-none-any.whl", hash = "sha256:224fcb4fef9575226e76555d9a0acdbd93d7596a416bc3ae7b443b3b64e9f0e3", size = 274881, upload-time = "2023-03-10T11:43:03.172Z" },
-]
-
-[[package]]
-name = "smmap"
-version = "5.0.2"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/44/cd/a040c4b3119bbe532e5b0732286f805445375489fceaec1f48306068ee3b/smmap-5.0.2.tar.gz", hash = "sha256:26ea65a03958fa0c8a1c7e8c7a58fdc77221b8910f6be2131affade476898ad5", size = 22329, upload-time = "2025-01-02T07:14:40.909Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/04/be/d09147ad1ec7934636ad912901c5fd7667e1c858e19d355237db0d0cd5e4/smmap-5.0.2-py3-none-any.whl", hash = "sha256:b30115f0def7d7531d22a0fb6502488d879e75b260a9db4d0819cfb25403af5e", size = 24303, upload-time = "2025-01-02T07:14:38.724Z" },
 ]
 
 [[package]]
