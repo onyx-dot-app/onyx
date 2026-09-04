@@ -468,6 +468,22 @@ ods lint tf deployment/terraform/modules/aws/vpc/main.tf
 
 ### `audit` - Audit Dependencies for Vulnerabilities
 
+> **Install the `audit` extra first.** The scanner is about 50 MB, most of the
+> download, so it ships as a separate `onyx-devtools-audit` wheel that provides
+> the `ods-audit` binary. `ods audit` forwards to it and prints an install hint
+> when it is missing.
+>
+> ```shell
+> # Install alongside ods
+> uv tool install 'onyx-devtools[audit]'
+>
+> # Or run it without installing (how CI runs the gate)
+> uv run --with 'onyx-devtools[audit]' ods audit
+> ```
+>
+> `ods-audit` takes the same arguments, so `ods audit --python` and
+> `ods-audit --python` are the same command.
+
 Scan the JavaScript (`bun.lock`) and Python (`uv.lock`) lockfiles via
 [osv-scanner](https://github.com/google/osv-scanner) (vendored as a library, no
 external binary required) and open GitHub Dependabot security alerts for known
