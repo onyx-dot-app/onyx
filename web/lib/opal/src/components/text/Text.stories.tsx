@@ -43,7 +43,7 @@ export const AsParagraph: Story = {
 export const Nowrap: Story = {
   render: () => (
     <div className="w-48 border border-border-02 rounded-sm p-2">
-      <Text font="main-ui-body" color="text-05" nowrap>
+      <Text font="main-ui-body" color="text-05" wordWrap="whitespace-nowrap">
         This text will not wrap even though the container is narrow
       </Text>
     </div>

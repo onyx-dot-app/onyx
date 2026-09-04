@@ -12,7 +12,7 @@ function EndOfList({ title }: EndOfListProps) {
   return (
     <div className="opal-end-of-list">
       <Divider paddingParallel={0} paddingPerpendicular={0} />
-      <Text font="secondary-body" color="text-03" nowrap>
+      <Text font="secondary-body" color="text-03" wordWrap="whitespace-nowrap">
         {title}
       </Text>
       <Divider paddingParallel={0} paddingPerpendicular={0} />

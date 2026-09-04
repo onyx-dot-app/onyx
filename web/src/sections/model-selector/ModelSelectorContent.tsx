@@ -237,7 +237,11 @@ function ModelDetailPane({ option, managers, onBack }: ModelDetailPaneProps) {
           onClick={onBack}
         />
         <div className="flex min-w-0 flex-1 flex-row items-baseline justify-between gap-2">
-          <Text font="main-ui-body" color="text-02" nowrap>
+          <Text
+            font="main-ui-body"
+            color="text-02"
+            wordWrap="whitespace-nowrap"
+          >
             {option.displayName}
           </Text>
           <div className="min-w-0 truncate">
@@ -355,7 +359,7 @@ function ModelDetailPane({ option, managers, onBack }: ModelDetailPaneProps) {
                           ? "text-04"
                           : "text-02"
                       }
-                      nowrap
+                      wordWrap="whitespace-nowrap"
                     >
                       {reasoningStopLabels[stop]}
                     </Text>

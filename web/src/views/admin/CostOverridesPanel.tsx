@@ -261,7 +261,11 @@ function OverrideRow({ override }: OverrideRowProps) {
       <Card border="solid" rounding={4} padding={2}>
         <div className="flex flex-row items-center justify-between gap-2 p-2">
           <div className="flex flex-col gap-0.5 min-w-0">
-            <Text font="main-ui-action" color="text-04" nowrap>
+            <Text
+              font="main-ui-action"
+              color="text-04"
+              wordWrap="whitespace-nowrap"
+            >
               {override.model}
             </Text>
             <Text font="secondary-body" color="text-03">

@@ -79,7 +79,7 @@ function Button({
       <Text
         font={isLarge ? "main-ui-body" : "secondary-body"}
         color="inherit"
-        nowrap
+        wordWrap="whitespace-nowrap"
       >
         {children}
       </Text>

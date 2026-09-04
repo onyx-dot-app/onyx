@@ -105,7 +105,11 @@ export default function ReindexErrorsModal({
         header: t("errorsModal.columns.id"),
         width: { weight: 12 },
         cell: (row) => (
-          <Text font="secondary-body" color="text-03" nowrap>
+          <Text
+            font="secondary-body"
+            color="text-03"
+            wordWrap="whitespace-nowrap"
+          >
             {row.cc_pair_id != null
               ? String(row.cc_pair_id)
               : row.user_id

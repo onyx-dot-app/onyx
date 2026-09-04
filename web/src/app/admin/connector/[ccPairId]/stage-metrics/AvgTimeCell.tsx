@@ -31,7 +31,7 @@ export default function AvgTimeCell({ stage, maxAvgMs }: AvgTimeCellProps) {
       height="fit"
       gap={1}
     >
-      <Text font="secondary-body" color="text-05" nowrap>
+      <Text font="secondary-body" color="text-05" wordWrap="whitespace-nowrap">
         {avgLabel}
       </Text>
       {avgPct > 0 && (

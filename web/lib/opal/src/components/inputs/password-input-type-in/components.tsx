@@ -182,7 +182,11 @@ function PasswordInputTypeIn({
           aria-hidden
           className="pointer-events-none absolute inset-y-0 start-[6px] end-10 flex items-center overflow-hidden"
         >
-          <Text font="main-ui-body" color="text-04" nowrap>
+          <Text
+            font="main-ui-body"
+            color="text-04"
+            wordWrap="whitespace-nowrap"
+          >
             {"✱".repeat(realValue.length)}
           </Text>
         </div>

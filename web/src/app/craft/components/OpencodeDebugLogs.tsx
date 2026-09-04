@@ -366,7 +366,11 @@ function StatusBar({
     <div className="flex items-center gap-3 px-3 py-2">
       <div className="flex items-center gap-2 shrink-0">
         <StatusDot status={status} paused={paused} />
-        <Text font="secondary-body" color="text-05" nowrap>
+        <Text
+          font="secondary-body"
+          color="text-05"
+          wordWrap="whitespace-nowrap"
+        >
           {stateLabel}
         </Text>
         {status !== "connecting" && status !== "error" && (
@@ -375,7 +379,11 @@ function StatusBar({
               className="h-3 w-px bg-border-02 shrink-0"
               aria-hidden="true"
             />
-            <Text font="secondary-body" color="text-05" nowrap>
+            <Text
+              font="secondary-body"
+              color="text-05"
+              wordWrap="whitespace-nowrap"
+            >
               {filtered
                 ? t("lines.filteredCount", {
                     visible: visibleLines,

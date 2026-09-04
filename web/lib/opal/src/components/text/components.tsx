@@ -22,14 +22,12 @@ interface TextProps extends WithoutStyles<
   /** HTML tag to render. Default: `"span"`. */
   as?: "p" | "span" | "li" | "h1" | "h2" | "h3";
 
-  /** Prevent text wrapping. */
-  nowrap?: boolean;
-
   /**
-   * How a run of characters with nowhere to wrap should behave. Ordinary
-   * wrapping only breaks at whitespace, so a URL, an identifier or any single
-   * long token overflows its container instead of wrapping.
+   * How this text wraps. Ordinary wrapping only breaks at whitespace, so a
+   * URL, an identifier or any single long token overflows its container
+   * instead of wrapping.
    *
+   * - `"whitespace-nowrap"` — do not wrap at all; the text stays on one line.
    * - `"wrap-normal"` — the CSS default: break at whitespace only, and let a
    *   long run overflow. Spell it out to override an inherited value, since
    *   `overflow-wrap` inherits and omitting this prop cannot undo an
@@ -39,17 +37,25 @@ interface TextProps extends WithoutStyles<
    *   measured, so the element can shrink as a flex item.
    * - `"break-all"` — break between any two characters.
    * - `"break-keep"` — never break within a word (CJK).
-   *
-   * Overlaps `nowrap`, which is the older way to say "one line" and wins
-   * because it removes the wrap opportunities this would act on. Prefer this
-   * prop; `nowrap` is kept so existing callers are undisturbed.
    */
   wordWrap?:
+    | "whitespace-nowrap"
     | "wrap-normal"
     | "wrap-break-word"
     | "wrap-anywhere"
     | "break-all"
     | "break-keep";
+
+  /**
+   * How the text sits within its own box. Logical values, so they follow the
+   * reading direction rather than the screen: `"text-start"` is left in an
+   * LTR locale and right in an RTL one.
+   *
+   * This aligns the text inside the element `Text` renders. Positioning that
+   * element within its parent is the parent's business — see the note on
+   * layout below.
+   */
+  textPosition?: "text-start" | "text-center" | "text-end" | "text-justify";
 
   /** Truncate text to N lines with ellipsis. `1` uses simple truncation; `2+` uses `-webkit-line-clamp`. */
   maxLines?: number;
@@ -126,8 +132,8 @@ function Text({
   font = "main-ui-body",
   color = "text-04",
   as: Tag = "span",
-  nowrap,
   wordWrap,
+  textPosition,
   maxLines,
   strikethrough,
   children,
@@ -137,8 +143,8 @@ function Text({
     "px-[2px]",
     FONT_CONFIG[font],
     COLOR_CONFIG[color],
-    nowrap && "whitespace-nowrap",
     wordWrap,
+    textPosition,
     maxLines === 1 && "truncate",
     maxLines && maxLines > 1 && "overflow-hidden",
     strikethrough && "line-through"
