@@ -278,7 +278,7 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
         rounding={2}
         state={isForced ? "selected" : "empty"}
         strikethrough={isDisabled}
-        color={isUnavailable && isForced ? "muted" : undefined}
+        color={(isUnavailable && isForced) || isDisabled ? "muted" : undefined}
         disabled={needsConnectors || (isUnavailable && !isForced)}
         tooltip={getToolTooltip(
           tool,
