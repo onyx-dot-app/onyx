@@ -91,7 +91,8 @@ def _rate_fields(entry: Mapping[str, Any], path: str) -> str:
     fields = {
         field: value
         for field, value in entry.items()
-        if ("cost" in field and path in field) or field == "tiered_pricing"
+        if ("cost" in field and path in field)
+        or (path == "token" and field == "tiered_pricing")
     }
     return json.dumps(fields, sort_keys=True, default=str)
 
