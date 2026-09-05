@@ -160,7 +160,9 @@ function initialConfig(
   const initial: Record<string, string | boolean | string[]> = {};
   for (const field of ALL_CONFIG_FIELDS) {
     if (field.kind === "switch") {
-      initial[field.name] = config[field.name] === true;
+      const stored = config[field.name];
+      initial[field.name] =
+        stored === undefined ? Boolean(field.switchDefault) : stored === true;
       continue;
     }
     if (field.kind === "chips") {

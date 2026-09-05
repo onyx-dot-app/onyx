@@ -159,6 +159,12 @@ def _sanitize_relay_state(candidate: str | None) -> str | None:
     if not relay_state or not relay_state.startswith("/"):
         return None
 
+    # Reject protocol-relative ("//evil.com") and Chrome's absolute "///" form.
+    # urlparse alone misses the "///" case: it reports an empty netloc for it,
+    # even though some browsers resolve it to a scheme-relative navigation.
+    if relay_state.startswith("//"):
+        return None
+
     if "\\" in relay_state:
         return None
 

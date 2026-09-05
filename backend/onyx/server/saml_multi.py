@@ -3,6 +3,7 @@ import uuid
 from typing import Any, NoReturn, TypedDict
 
 from fastapi import APIRouter, Depends, Request, Response
+from fastapi.responses import RedirectResponse
 from fastapi_users.authentication import Strategy
 from onelogin.saml2.auth import OneLogin_Saml2_Auth
 from onelogin.saml2.xml_utils import OneLogin_Saml2_XML
@@ -72,11 +73,16 @@ class _SamlIdpSettings(TypedDict):
     x509cert: str
 
 
+class _SamlSecuritySettings(TypedDict):
+    requestedAuthnContext: bool
+
+
 class _SamlSettings(TypedDict):
     strict: bool
     debug: bool
     sp: _SamlSpSettings
     idp: _SamlIdpSettings
+    security: _SamlSecuritySettings
 
 
 def build_saml_settings(config: SAMLProviderConfig) -> _SamlSettings:
@@ -101,6 +107,9 @@ def build_saml_settings(config: SAMLProviderConfig) -> _SamlSettings:
                 "binding": "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect",
             },
             "x509cert": config.idp_x509_cert,
+        },
+        "security": {
+            "requestedAuthnContext": config.request_authn_context,
         },
     }
 
@@ -356,7 +365,33 @@ async def _process_saml_callback(
     )
     response = await auth_backend.login(strategy, user)
     await user_manager.on_after_login(user, request, response)
-    return response
+
+    # The IdP posts the SAMLResponse via a genuine top-level browser navigation
+    # (its own auto-submitting form), not frontend JS. auth_backend.login()
+    # returns fastapi-users' CookieTransport default - a bare 204 with only a
+    # Set-Cookie header, meant for a JS caller that redirects itself. A 204
+    # with no Location header on a real navigation leaves the browser on the
+    # IdP's blank intermediate page even though the cookie was set. Wrap the
+    # response in a redirect to the relay-state destination, the same way
+    # onyx.auth.users.complete_login_flow (the OIDC/OAuth equivalent) wraps
+    # backend.login()'s response.
+    relay_state = req["post_data"].get("RelayState") or req["get_data"].get(
+        "RelayState"
+    )
+    next_path = (
+        _sanitize_relay_state(relay_state if isinstance(relay_state, str) else None)
+        or "/app"
+    )
+    redirect_response = RedirectResponse(next_path, status_code=302)
+    for header_name, header_value in response.headers.items():
+        header_name_lower = header_name.lower()
+        if header_name_lower == "set-cookie":
+            redirect_response.headers.append(header_name, header_value)
+            continue
+        if header_name_lower in {"location", "content-length"}:
+            continue
+        redirect_response.headers[header_name] = header_value
+    return redirect_response
 
 
 @router.post("/logout")

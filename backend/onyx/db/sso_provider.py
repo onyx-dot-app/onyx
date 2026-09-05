@@ -72,6 +72,11 @@ class SAMLProviderConfig(_ProviderConfig):
     # IdP attribute the email is read from. None falls back to the common keys
     # (email, mail, the Entra/ADFS claim URIs) the SAML callback already tries.
     email_attribute: str | None = None
+    # Whether AuthnRequests demand an exact-match PasswordProtectedTransport
+    # context. IdPs that require MFA/FIDO2 (e.g. Microsoft Entra ID with
+    # Conditional Access) reject the exact match with AADSTS75011, since the
+    # user's actual auth context is stronger than the requested one.
+    request_authn_context: bool = True
 
 
 # provider_type selects the config shape. A new auth method adds a model here.
