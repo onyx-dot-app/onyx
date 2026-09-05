@@ -49,6 +49,11 @@ def parse_zoom_datetime(value: str | None) -> datetime | None:
         return None
 
 
+# The client's mounted Retry covers 429 but not 408, so a timed-out request
+# reaches this unretried.
+_RETRY_WORTHY_CLIENT_ERRORS = frozenset({408, 429})
+
+
 def fails_the_whole_run(error: Exception) -> bool:
     """A ConnectorFailure ends the attempt COMPLETED_WITH_ERRORS, which Onyx
     counts as successful, so the next run rebuilds the checkpoint over a newer
@@ -63,7 +68,8 @@ def fails_the_whole_run(error: Exception) -> bool:
     if isinstance(error, requests.HTTPError):
         response = error.response
         return response is not None and (
-            response.status_code == 429 or response.status_code >= 500
+            response.status_code in _RETRY_WORTHY_CLIENT_ERRORS
+            or response.status_code >= 500
         )
     # HTTPError is the only requests error where a response came back to judge.
     # Anything else — dropped connection, exhausted Retry, truncated body — means
