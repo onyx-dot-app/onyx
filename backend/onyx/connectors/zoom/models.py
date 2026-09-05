@@ -49,8 +49,9 @@ class ZoomTranscript(BaseModel):
         )
 
 
-class ZoomPastMeetingDetails(BaseModel):
-    """Response shape of `GET /past_meetings/{meetingId}`."""
+class ZoomSessionDetails(BaseModel):
+    """The fields the connector reads from `GET /past_meetings/{meetingId}` and
+    from `GET /webinars/{webinarId}`, which return much more than this."""
 
     uuid: str
     id: int
@@ -69,8 +70,10 @@ class ZoomPastMeetingDetails(BaseModel):
     user_name: str
 
 
-class ZoomMeetingOccurrence(BaseModel):
-    """One entry from `GET /past_meetings/{meetingId}/instances`."""
+class ZoomSessionOccurrence(BaseModel):
+    """One entry from `GET /past_meetings/{meetingId}/instances` or
+    `GET /past_webinars/{webinarId}/instances` — identical shapes under
+    different response keys."""
 
     uuid: str
     start_time: str

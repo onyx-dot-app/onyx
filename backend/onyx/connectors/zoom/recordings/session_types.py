@@ -7,7 +7,7 @@ import abc
 from datetime import datetime
 
 from onyx.connectors.zoom.client import ZoomClient
-from onyx.connectors.zoom.models import ZoomMeetingOccurrence, ZoomPastMeetingDetails
+from onyx.connectors.zoom.models import ZoomSessionDetails, ZoomSessionOccurrence
 from onyx.connectors.zoom.recordings.models import ZoomSessionType
 
 
@@ -21,7 +21,7 @@ class SessionTypeHandler(abc.ABC):
         session_id: str,
         window_start: datetime,
         window_end: datetime,
-    ) -> list[ZoomMeetingOccurrence]:
+    ) -> list[ZoomSessionOccurrence]:
         """The window is a request to Zoom, not a promise: an endpoint that
         can't scope by date ignores it and hands back everything."""
         raise NotImplementedError
@@ -29,7 +29,7 @@ class SessionTypeHandler(abc.ABC):
     @abc.abstractmethod
     def get_occurrence_details(
         self, client: ZoomClient, occurrence_uuid: str
-    ) -> ZoomPastMeetingDetails | None:
+    ) -> ZoomSessionDetails | None:
         raise NotImplementedError
 
 
@@ -42,19 +42,39 @@ class MeetingSessionType(SessionTypeHandler):
         session_id: str,
         window_start: datetime,
         window_end: datetime,
-    ) -> list[ZoomMeetingOccurrence]:
+    ) -> list[ZoomSessionOccurrence]:
         return client.list_past_meeting_occurrences(
             session_id, window_start, window_end
         )
 
     def get_occurrence_details(
         self, client: ZoomClient, occurrence_uuid: str
-    ) -> ZoomPastMeetingDetails | None:
+    ) -> ZoomSessionDetails | None:
         return client.get_past_meeting_details(occurrence_uuid)
+
+
+class WebinarSessionType(SessionTypeHandler):
+    session_type = ZoomSessionType.WEBINAR
+
+    def list_occurrences(
+        self,
+        client: ZoomClient,
+        session_id: str,
+        window_start: datetime,  # noqa: ARG002
+        window_end: datetime,  # noqa: ARG002
+    ) -> list[ZoomSessionOccurrence]:
+        # Zoom's past-webinar instances endpoint takes no date scope.
+        return client.list_past_webinar_occurrences(session_id)
+
+    def get_occurrence_details(
+        self, client: ZoomClient, occurrence_uuid: str
+    ) -> ZoomSessionDetails | None:
+        return client.get_webinar_details(occurrence_uuid)
 
 
 _HANDLERS: dict[ZoomSessionType, SessionTypeHandler] = {
     ZoomSessionType.MEETING: MeetingSessionType(),
+    ZoomSessionType.WEBINAR: WebinarSessionType(),
 }
 
 

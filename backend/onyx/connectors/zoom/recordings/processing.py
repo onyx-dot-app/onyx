@@ -133,7 +133,7 @@ def process_occurrence(
                 work.session_id,
                 occurrence_uuid,
             )
-    topic = topic or f"Zoom Meeting {work.session_id}"
+    topic = topic or f"Zoom {work.session_type.value.capitalize()} {work.session_id}"
     occurrence_time = time_str_to_utc(started_at) if started_at else None
 
     return Document(
