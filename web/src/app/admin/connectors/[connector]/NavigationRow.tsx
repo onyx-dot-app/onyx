@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useFormContext } from "@/components/context/FormContext";
 import { Button } from "@opal/components";
 import { SvgArrowLeft, SvgArrowRight, SvgPlusCircle } from "@opal/icons";
@@ -19,6 +20,7 @@ export default function NavigationRow({
   onSubmit,
   isValid,
 }: NavigationRowProps) {
+  const t = useTranslations("admin.connectorsList");
   const { formStep, prevFormStep, nextFormStep } = useFormContext();
 
   return (
@@ -31,7 +33,7 @@ export default function NavigationRow({
             onClick={prevFormStep}
             icon={SvgArrowLeft}
           >
-            Previous
+            {t("navigation.previousButton.label")}
           </Button>
         )}
       </div>
@@ -42,7 +44,7 @@ export default function NavigationRow({
             rightIcon={SvgPlusCircle}
             onClick={onSubmit}
           >
-            Create Connector
+            {t("navigation.createButton.label")}
           </Button>
         )}
       </div>
@@ -54,7 +56,7 @@ export default function NavigationRow({
             rightIcon={SvgArrowRight}
             onClick={() => nextFormStep()}
           >
-            Continue
+            {t("navigation.continueButton.label")}
           </Button>
         )}
         {!noAdvanced && formStep === 1 && (
@@ -64,7 +66,7 @@ export default function NavigationRow({
             rightIcon={SvgArrowRight}
             onClick={() => nextFormStep()}
           >
-            Advanced
+            {t("navigation.advancedButton.label")}
           </Button>
         )}
       </div>

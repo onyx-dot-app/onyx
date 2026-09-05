@@ -1,8 +1,9 @@
 import React from "react";
+import { useTranslations } from "next-intl";
 import Text from "@/refresh-components/texts/Text";
 import { OptionItem } from "./OptionItem";
 import { ComboBoxOption } from "../types";
-import { cn } from "@opal/utils";
+import { cn, clickOnKeyDown } from "@opal/utils";
 import { SvgPlus } from "@opal/icons";
 import { sanitizeOptionId } from "../utils/aria";
 
@@ -49,6 +50,7 @@ export const OptionsList: React.FC<OptionsListProps> = ({
   showCreateOption,
   createPrefix,
 }) => {
+  const t = useTranslations("common.comboBox");
   // Index offset for other options when create option is shown
   const indexOffset = showCreateOption ? 1 : 0;
 
@@ -59,7 +61,7 @@ export const OptionsList: React.FC<OptionsListProps> = ({
   ) {
     return (
       <div className="px-3 py-2 text-text-02 font-secondary-body">
-        No options found
+        {t("options.empty")}
       </div>
     );
   }
@@ -72,12 +74,19 @@ export const OptionsList: React.FC<OptionsListProps> = ({
           id={`${fieldId}-option-${sanitizeOptionId(inputValue)}`}
           data-index={0}
           role="option"
+          tabIndex={-1}
           aria-selected={false}
-          aria-label={`${createPrefix ?? "Create"} "${inputValue}"`}
+          aria-label={t("createOption.ariaLabel", {
+            prefix: createPrefix ?? t("createOption.defaultPrefix"),
+            value: inputValue,
+          })}
           onClick={(e) => {
             e.stopPropagation();
             onSelect({ value: inputValue, label: inputValue });
           }}
+          onKeyDown={clickOnKeyDown(() =>
+            onSelect({ value: inputValue, label: inputValue })
+          )}
           onMouseDown={(e) => {
             e.preventDefault();
           }}
@@ -109,7 +118,7 @@ export const OptionsList: React.FC<OptionsListProps> = ({
           <SvgPlus
             className={cn(
               "w-4 h-4 shrink-0",
-              createPrefix ? "text-text-04 mx-1" : "text-text-03 ml-2"
+              createPrefix ? "text-text-04 mx-1" : "text-text-03 ms-2"
             )}
           />
         </div>

@@ -15,21 +15,19 @@ Inherits **all** props from [`Content`](../content/README.md) (same discriminate
 | Prop | Type | Default | Description |
 |---|---|---|---|
 | `rightChildren` | `ReactNode` | `undefined` | Content rendered on the right side. Wrapper stretches to the full height of the row. |
-| `padding` | `SizeVariant` | `"lg"` | Padding preset applied around the `Content` area. Uses the shared size scale from `@opal/shared`. |
+| `padding` | `0 \| 0.5 \| 1 \| 2` | `2` | Padding around the `Content` area, as a spacing step (`N / 4` rem). Narrowed to the paddings `Interactive.Container` uses. |
 | `fillRight` | `boolean` | `false` | When `true`, the `rightChildren` column grows to fill the row (capped at `--block-width-form-input-column-max`, 240px) instead of hugging its content. Use for full-width form inputs; leave off for compact controls like toggles/buttons. Ignored in the `responsive` branch. |
 
 ### `padding` reference
 
-| Value | Padding class | Effective padding |
-|---|---|---|
-| `lg` | `p-2` | 0.5rem (8px) |
-| `md` | `p-1` | 0.25rem (4px) |
-| `sm` | `p-1` | 0.25rem (4px) |
-| `xs` | `p-0.5` | 0.125rem (2px) |
-| `2xs` | `p-0.5` | 0.125rem (2px) |
-| `fit` | `p-0` | 0 |
+`padding` is a spacing step: `N` is `N / 4` rem. It is narrowed to `0 | 0.5 | 1 | 2`,
+and the default `2` is 0.5rem (8px).
 
-These values are identical to the padding applied by `Interactive.Container` at each size, so `ContentAction` labels naturally align with adjacent buttons of the same size.
+`Interactive.Container` still derives its padding from its `size` preset, and matching
+those paddings is the point of this prop — it is what makes a `ContentAction` label line
+up with an adjacent button of the same size. The equivalents are `lg` → `2`,
+`md` and `sm` → `1`, `xs` and `2xs` → `0.5`, `fit` → `0`. Note this is a *different*
+scale from `Card`, where `lg` was 24px rather than 8px.
 
 ## Layout Structure
 
@@ -61,7 +59,7 @@ import SvgSettings from "@opal/icons/settings";
   sizePreset="main-content"
   variant="section"
   tag={{ title: "Default", color: "blue" }}
-  padding="lg"
+  padding={2}
   rightChildren={
     <Button icon={SvgSettings} prominence="tertiary" onClick={handleEdit} />
   }
@@ -81,7 +79,7 @@ import { SvgArrowExchange, SvgCloud } from "@opal/icons";
   description="Gemini"
   sizePreset="main-content"
   variant="section"
-  padding="md"
+  padding={1}
   rightChildren={
     <Button rightIcon={SvgArrowExchange} prominence="tertiary">
       Connect
@@ -116,7 +114,7 @@ controls like `Switch`/`Button` should omit `fillRight` so they keep hugging the
   title="Section Header"
   sizePreset="main-content"
   variant="section"
-  padding="lg"
+  padding={2}
 />
 ```
 

@@ -15,6 +15,7 @@ import (
 
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/git"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/prompt"
+	"github.com/onyx-dot-app/onyx/tools/ods/internal/release"
 )
 
 const cherryPickPRLabel = "cherry-pick 🍒"
@@ -45,7 +46,8 @@ with fewer than 6 digits is treated as a PR number and resolved to its merge
 commit automatically.
 
 This command will:
-  1. Find the nearest stable version tag
+  1. Detect the newest release branch that does not already contain the commit
+     (unless --release is given)
   2. Fetch the corresponding release branch(es)
   3. Create a hotfix branch with the cherry-picked commit(s)
   4. Push and create a PR using the GitHub CLI
@@ -172,11 +174,11 @@ func runCherryPick(cmd *cobra.Command, args []string, opts *CherryPickOptions) {
 		}
 		log.Debugf("Using specified release versions: %v", releases)
 	} else {
-		// Find the nearest stable tag using the first commit
-		version, err := findNearestStableTag(commitSHAs[0])
+		// Find the newest release branch missing the first commit.
+		version, err := release.FindTargetVersion(commitSHAs[0])
 		if err != nil {
 			git.RestoreStash(stashResult)
-			log.Fatalf("Failed to find nearest stable tag: %v", err)
+			log.Fatalf("Failed to auto-detect the target release (pass --release explicitly): %v", err)
 		}
 
 		// Prompt user for confirmation
@@ -190,7 +192,7 @@ func runCherryPick(cmd *cobra.Command, args []string, opts *CherryPickOptions) {
 			log.Infof("Auto-detected release version: %s", version)
 		}
 
-		releases = []string{version}
+		releases = []string{version.String()}
 	}
 
 	// Get commit messages for PR title and body
@@ -388,7 +390,7 @@ func cherryPickToRelease(commitSHAs, commitMessages []string, branchSuffix, vers
 
 	// Fetch the release branch
 	log.Infof("Fetching release branch: %s", releaseBranch)
-	if err := git.RunCommand("fetch", "--prune", "--quiet", "origin", releaseBranch); err != nil {
+	if err := git.RunCommand("fetch", "--prune", "--quiet", "origin", release.BranchRefspec(releaseBranch)); err != nil {
 		return "", fmt.Errorf("failed to fetch release branch %s: %w", releaseBranch, err)
 	}
 
@@ -459,7 +461,7 @@ func cherryPickToRelease(commitSHAs, commitMessages []string, branchSuffix, vers
 	if noVerify {
 		pushArgs = []string{"push", "--no-verify", "-u", "origin", hotfixBranch}
 	}
-	if err := git.RunCommandVerboseOnError(pushArgs...); err != nil {
+	if err := pushWithHookHint(noVerify, func() error { return git.RunCommandVerboseOnError(pushArgs...) }); err != nil {
 		return "", fmt.Errorf("failed to push hotfix branch: %w", err)
 	}
 
@@ -568,28 +570,6 @@ func extractPRNumbers(commitMsg string) []string {
 	re := regexp.MustCompile(`#(\d+)`)
 	matches := re.FindAllString(commitMsg, -1)
 	return matches
-}
-
-// findNearestStableTag finds the nearest tag matching v*.*.* pattern and returns major.minor
-func findNearestStableTag(commitSHA string) (string, error) {
-	// Get tags that are ancestors of the commit, sorted by version
-	cmd := exec.Command("git", "describe", "--tags", "--abbrev=0", "--match", "v*.*.*", commitSHA)
-	output, err := cmd.Output()
-	if err != nil {
-		return "", fmt.Errorf("git describe failed: %w", err)
-	}
-
-	tag := strings.TrimSpace(string(output))
-	log.Debugf("Found tag: %s", tag)
-
-	// Extract major.minor with v prefix from tag (e.g., v1.2.3 -> v1.2)
-	re := regexp.MustCompile(`^(v\d+\.\d+)\.\d+`)
-	matches := re.FindStringSubmatch(tag)
-	if len(matches) < 2 {
-		return "", fmt.Errorf("tag %s does not match expected format v*.*.* ", tag)
-	}
-
-	return matches[1], nil
 }
 
 // createCherryPickPR creates a pull request for cherry-picks using the GitHub CLI

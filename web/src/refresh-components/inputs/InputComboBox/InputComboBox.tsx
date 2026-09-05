@@ -91,6 +91,7 @@ import {
   shift,
   size,
 } from "@floating-ui/react-dom";
+import { useTranslations } from "next-intl";
 import { noProp } from "@/lib/utils";
 import { cn } from "@opal/utils";
 import { InputTypeIn } from "@opal/components";
@@ -129,12 +130,13 @@ const InputComboBox = ({
   name,
   searchIcon = false,
   rightChildren,
-  separatorLabel = "Other options",
+  separatorLabel,
   createPrefix,
   showOtherOptions = false,
   dropdownMaxHeight,
   ...rest
 }: WithoutStyles<InputComboBoxProps>) => {
+  const t = useTranslations("common.comboBox");
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const fieldContext = useContext(FieldContext);
@@ -388,7 +390,10 @@ const InputComboBox = ({
           rightChildren={
             <>
               {rightChildren && (
+                // Propagation guard only — the children keep their own
+                // semantics.
                 <div
+                  role="presentation"
                   className="flex items-center"
                   onPointerDown={(e) => {
                     e.stopPropagation();
@@ -407,7 +412,11 @@ const InputComboBox = ({
                   size="sm"
                   onClick={noProp(toggleDropdown)}
                   icon={isOpen ? SvgChevronUp : SvgChevronDown}
-                  aria-label={isOpen ? "Close dropdown" : "Open dropdown"}
+                  aria-label={
+                    isOpen
+                      ? t("dropdown.closeAriaLabel")
+                      : t("dropdown.openAriaLabel")
+                  }
                   tabIndex={-1}
                   type="button"
                 />
@@ -430,7 +439,7 @@ const InputComboBox = ({
           matchedOptions={matchedOptions}
           unmatchedOptions={visibleUnmatchedOptions}
           hasSearchTerm={hasSearchTerm}
-          separatorLabel={separatorLabel}
+          separatorLabel={separatorLabel ?? t("separator.label")}
           value={value}
           highlightedIndex={highlightedIndex}
           onSelect={handleOptionSelect}
@@ -454,11 +463,11 @@ const InputComboBox = ({
 
       {/* Error message - only show internal error messages when not using external isError */}
       {!isValid && errorMessage && externalIsError === undefined && (
-        <FieldMessage variant="error" className="ml-0.5 mt-1">
+        <FieldMessage variant="error" className="ms-0.5 mt-1">
           <FieldMessage.Content
             id={`${fieldId}-error`}
             role="alert"
-            className="ml-0.5"
+            className="ms-0.5"
           >
             {errorMessage}
           </FieldMessage.Content>

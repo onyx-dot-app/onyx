@@ -68,7 +68,8 @@ class SummaryContent(NamedTuple):
 
 def calculate_total_history_tokens(chat_history: list[ChatMessage]) -> int:
     """
-    Calculate the total token count for the given chat history.
+    Calculate the total token count for the given chat history, including
+    tool-call argument tokens (which are replayed alongside the messages).
 
     Args:
         chat_history: Branch-aware list of messages
@@ -76,7 +77,12 @@ def calculate_total_history_tokens(chat_history: list[ChatMessage]) -> int:
     Returns:
         Total token count for the history
     """
-    return sum(m.token_count or 0 for m in chat_history)
+    total = 0
+    for m in chat_history:
+        total += m.token_count or 0
+        for tool_call in m.tool_calls or []:
+            total += tool_call.tool_call_tokens or 0
+    return total
 
 
 def get_compression_params(
@@ -155,6 +161,26 @@ def find_summary_for_branch(
     return None
 
 
+def get_summary_parent_message_id(chat_history: list[ChatMessage]) -> int:
+    """Parent for a new summary: the last USER message in the chain.
+
+    Every sibling branch — multi-model answers, regenerations — shares that
+    USER message, so the summary applies to whichever answer the user
+    continues from. Parenting to the assistant tail would orphan the summary
+    for all but that one branch (find_summary_for_branch matches on
+    parent_message_id being in the branch's history).
+    """
+    for msg in reversed(chat_history):
+        if msg.message_type == MessageType.USER:
+            return msg.id
+    logger.warning(
+        "No USER message in chat history when parenting summary "
+        "(session %s); falling back to chain tail",
+        chat_history[-1].chat_session_id,
+    )
+    return chat_history[-1].id
+
+
 def get_messages_to_summarize(
     chat_history: list[ChatMessage],
     existing_summary: ChatMessage | None,
@@ -192,7 +218,9 @@ def get_messages_to_summarize(
     tokens_used = 0
 
     for msg in reversed(messages):
-        msg_tokens = msg.token_count or 0
+        # Same per-message cost as the compression trigger (tool-call
+        # arguments included) so the verbatim tail respects the budget.
+        msg_tokens = calculate_total_history_tokens([msg])
         if tokens_used + msg_tokens > tokens_for_recent and recent_messages:
             break
         recent_messages.insert(0, msg)
@@ -202,6 +230,23 @@ def get_messages_to_summarize(
     # non-user messages from recent_messages to older_messages
     while recent_messages and recent_messages[0].message_type != MessageType.USER:
         recent_messages.pop(0)
+
+    if not recent_messages:
+        # The verbatim tail had no USER message (e.g. a tool-heavy turn).
+        # Rather than summarizing away the latest exchange, keep everything
+        # from the last USER message onward; with no USER at all, skip
+        # compression entirely (older_messages empty → caller no-ops).
+        last_user_idx = next(
+            (
+                i
+                for i in range(len(messages) - 1, -1, -1)
+                if messages[i].message_type == MessageType.USER
+            ),
+            None,
+        )
+        if last_user_idx is None:
+            return SummaryContent(older_messages=[], recent_messages=messages)
+        recent_messages = messages[last_user_idx:]
 
     # Everything else gets summarized
     recent_ids = {m.id for m in recent_messages}
@@ -435,7 +480,7 @@ def compress_chat_history(
                     message_type=MessageType.ASSISTANT,
                     message=summary_text,
                     token_count=summary_token_count,
-                    parent_message_id=chat_history[-1].id,
+                    parent_message_id=get_summary_parent_message_id(chat_history),
                     last_summarized_message_id=summary_content.older_messages[-1].id,
                 )
                 write_session.add(summary_message)

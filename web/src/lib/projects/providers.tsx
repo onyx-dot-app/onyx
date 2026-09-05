@@ -1,0 +1,899 @@
+"use client";
+
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  useRef,
+  ReactNode,
+  Dispatch,
+  SetStateAction,
+} from "react";
+import { useTranslations } from "next-intl";
+import useSWR from "swr";
+import { errorHandlingFetcher, skipRetryOnAuthError } from "@/lib/fetcher";
+import {
+  UserFileStatus,
+  type CategorizedFiles,
+  type Project,
+  type ProjectDetails,
+  type ProjectFile,
+  type UserFileDeleteResult,
+} from "@/lib/projects/types";
+import {
+  fetchProjects as svcFetchProjects,
+  createProject as svcCreateProject,
+  uploadFiles as svcUploadFiles,
+  getRecentFiles as svcGetRecentFiles,
+  getFilesInProject as svcGetFilesInProject,
+  getProject as svcGetProject,
+  getProjectInstructions as svcGetProjectInstructions,
+  upsertProjectInstructions as svcUpsertProjectInstructions,
+  getProjectDetails as svcGetProjectDetails,
+  renameProject as svcRenameProject,
+  deleteProject as svcDeleteProject,
+  deleteUserFile as svcDeleteUserFile,
+  getUserFileStatuses as svcGetUserFileStatuses,
+  unlinkFileFromProject as svcUnlinkFileFromProject,
+  linkFileToProject as svcLinkFileToProject,
+} from "@/lib/projects/svc";
+import { useSearchParams } from "next/navigation";
+import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
+import { useAppPosition } from "@/lib/position/hooks";
+import { ChatFileType } from "@/app/app/interfaces";
+import { toast } from "@opal/layouts";
+import { useProjects } from "@/lib/projects/hooks";
+import { useSettings } from "@/lib/settings/hooks";
+import { useIncognitoOptional } from "@/providers/IncognitoProvider";
+
+export type { Project, ProjectFile } from "@/lib/projects/types";
+
+// Helper to generate unique temp IDs
+const generateTempId = () => {
+  try {
+    return `temp_${crypto.randomUUID()}`;
+  } catch {
+    // Extremely unlikely fallback
+    return `temp_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+  }
+};
+
+// Create optimistic file from File object
+const createOptimisticFile = (
+  file: File,
+  projectId: number | null = null
+): ProjectFile => {
+  const tempId = generateTempId();
+  return {
+    id: tempId, // Use temp ID as the actual ID initially
+    file_id: tempId,
+    name: file.name,
+    project_id: projectId,
+    user_id: null,
+    created_at: new Date().toISOString(),
+    status: UserFileStatus.UPLOADING,
+    file_type: file.type,
+    last_accessed_at: new Date().toISOString(),
+    chat_file_type: ChatFileType.DOCUMENT,
+    token_count: null,
+    chunk_count: null,
+    temp_id: tempId, // Store temp_id for mapping later
+  };
+};
+
+function buildFileKey(file: File): string {
+  const namePrefix = (file.name ?? "").slice(0, 50);
+  return `${file.size}|${namePrefix}`;
+}
+
+interface ProjectsContextType {
+  projects: Project[];
+  recentFiles: ProjectFile[];
+  currentProjectDetails: ProjectDetails | null;
+  currentProjectId: number | null;
+  currentMessageFiles: ProjectFile[];
+  beginUpload: (
+    files: File[],
+    projectId?: number | null,
+    onSuccess?: (uploaded: CategorizedFiles) => void,
+    onFailure?: (failedTempIds: string[]) => void
+  ) => Promise<ProjectFile[]>;
+  allRecentFiles: ProjectFile[];
+  allCurrentProjectFiles: ProjectFile[];
+  isLoadingProjectDetails: boolean;
+  setCurrentMessageFiles: Dispatch<SetStateAction<ProjectFile[]>>;
+  upsertInstructions: (instructions: string) => Promise<void>;
+  fetchProjects: () => Promise<Project[]>;
+  createProject: (name: string) => Promise<Project>;
+  renameProject: (projectId: number, name: string) => Promise<Project>;
+  deleteProject: (projectId: number) => Promise<void>;
+  uploadFiles: (
+    files: File[],
+    projectId?: number | null
+  ) => Promise<CategorizedFiles>;
+  getRecentFiles: () => Promise<ProjectFile[]>;
+  getFilesInProject: (projectId: number) => Promise<ProjectFile[]>;
+  refreshCurrentProjectDetails: () => Promise<void>;
+  refreshRecentFiles: () => Promise<void>;
+  deleteUserFile: (fileId: string) => Promise<UserFileDeleteResult>;
+  unlinkFileFromProject: (projectId: number, fileId: string) => Promise<void>;
+  linkFileToProject?: (projectId: number, file: ProjectFile) => void;
+  lastFailedFiles: ProjectFile[];
+  clearLastFailedFiles: () => void;
+}
+
+const ProjectsContext = createContext<ProjectsContextType | undefined>(
+  undefined
+);
+
+interface ProjectsProviderProps {
+  children: ReactNode;
+}
+
+export function ProjectsProvider({ children }: ProjectsProviderProps) {
+  const t = useTranslations("chat");
+  // Use SWR hook for projects list - no more SSR initial data
+  const { projects, refreshProjects } = useProjects();
+  // Uploads made in an incognito chat are tied to its session so the server
+  // deletes them at teardown. Optional: falls back to disabled when no
+  // IncognitoProvider is mounted above.
+  const appPosition = useAppPosition();
+  const incognitoCtx = useIncognitoOptional();
+  const incognitoUploadsEnabled = incognitoCtx?.incognitoEnabled ?? false;
+  const incognitoSessionId = incognitoUploadsEnabled
+    ? (incognitoCtx?.incognitoSessionId ?? null)
+    : null;
+  const [recentFiles, setRecentFiles] = useState<ProjectFile[]>([]);
+  const [currentProjectDetails, setCurrentProjectDetails] =
+    useState<ProjectDetails | null>(null);
+  const searchParams = useSearchParams();
+  const currentProjectIdRaw = searchParams.get(SEARCH_PARAM_NAMES.PROJECT_ID);
+  const currentProjectId = currentProjectIdRaw
+    ? Number.parseInt(currentProjectIdRaw)
+    : null;
+  const [currentMessageFiles, setCurrentMessageFiles] = useState<ProjectFile[]>(
+    []
+  );
+  const currentMessageFilesRef = useRef<ProjectFile[]>([]);
+  const pollIntervalRef = useRef<number | null>(null);
+  const isPollingRef = useRef<boolean>(false);
+  const [lastFailedFiles, setLastFailedFiles] = useState<ProjectFile[]>([]);
+  const [trackedUploadIds, setTrackedUploadIds] = useState<Set<string>>(
+    new Set()
+  );
+  const [allRecentFiles, setAllRecentFiles] = useState<ProjectFile[]>([]);
+  const [allCurrentProjectFiles, setAllCurrentProjectFiles] = useState<
+    ProjectFile[]
+  >([]);
+  const [isLoadingProjectDetails, setIsLoadingProjectDetails] = useState(false);
+  const projectToUploadFilesMapRef = useRef<Map<number, ProjectFile[]>>(
+    new Map()
+  );
+  const settingsData = useSettings();
+  const userFileMaxUploadSizeMb = settingsData.user_file_max_upload_size_mb;
+
+  // SWR-backed fetch for recent files. Deduplicates across all mounts and
+  // handles React StrictMode double-invocation without firing duplicate requests.
+  const { data: recentFilesData, mutate: mutateRecentFiles } = useSWR<
+    ProjectFile[]
+  >("/api/user/files/recent", errorHandlingFetcher, {
+    revalidateOnFocus: false,
+    dedupingInterval: 60_000,
+    onErrorRetry: skipRetryOnAuthError,
+    onError: (err) =>
+      console.error("[ProjectsContext] recent files fetch failed:", err),
+  });
+  // Track whether allRecentFiles has been seeded from the initial server fetch.
+  // Subsequent updates come through the merge effect below, not a full reset.
+  const hasInitializedAllRecentFilesRef = useRef(false);
+
+  // Use SWR's mutate to refresh projects - returns the new data
+  const fetchProjects = useCallback(async (): Promise<Project[]> => {
+    try {
+      const result = await refreshProjects();
+      return result ?? [];
+    } catch (err) {
+      return [];
+    }
+  }, [refreshProjects]);
+
+  // Load full details for current project
+  const refreshCurrentProjectDetails = useCallback(async () => {
+    if (currentProjectId) {
+      setIsLoadingProjectDetails(true);
+      try {
+        const details = await svcGetProjectDetails(currentProjectId);
+        await fetchProjects();
+        setCurrentProjectDetails(details);
+        setAllCurrentProjectFiles(details.files || []);
+        if (projectToUploadFilesMapRef.current.has(currentProjectId)) {
+          setAllCurrentProjectFiles((prev) => [
+            ...prev,
+            ...(projectToUploadFilesMapRef.current.get(currentProjectId) || []),
+          ]);
+        }
+      } finally {
+        setIsLoadingProjectDetails(false);
+      }
+    }
+  }, [
+    fetchProjects,
+    currentProjectId,
+    setCurrentProjectDetails,
+    projectToUploadFilesMapRef,
+  ]);
+
+  const upsertInstructions = useCallback(
+    async (instructions: string) => {
+      if (!currentProjectId) {
+        throw new Error("No project selected");
+      }
+      await svcUpsertProjectInstructions(currentProjectId, instructions);
+      await refreshCurrentProjectDetails();
+    },
+    [currentProjectId, refreshCurrentProjectDetails]
+  );
+
+  const createProject = useCallback(
+    async (name: string): Promise<Project> => {
+      try {
+        const project: Project = await svcCreateProject(name);
+        // Navigate to the newly created project's page
+        appPosition.openProject(project.id);
+        // Refresh list to keep order consistent with backend
+        await fetchProjects();
+        return project;
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Failed to create project";
+        throw err;
+      }
+    },
+    [fetchProjects, appPosition]
+  );
+
+  const renameProject = useCallback(
+    async (projectId: number, name: string): Promise<Project> => {
+      // Optimistically update project details UI if this is the current project
+      if (currentProjectId === projectId) {
+        setCurrentProjectDetails((prev) =>
+          prev ? { ...prev, project: { ...prev.project, name } } : prev
+        );
+      }
+
+      try {
+        const updated = await svcRenameProject(projectId, name);
+        // Refresh to get canonical state from server (SWR handles projects list)
+        await fetchProjects();
+        if (currentProjectId === projectId) {
+          await refreshCurrentProjectDetails();
+        }
+        return updated;
+      } catch (err) {
+        // Refresh to restore on failure
+        await fetchProjects();
+        if (currentProjectId === projectId) {
+          await refreshCurrentProjectDetails();
+        }
+        const message =
+          err instanceof Error ? err.message : "Failed to rename project";
+        throw err;
+      }
+    },
+    [fetchProjects, currentProjectId, refreshCurrentProjectDetails]
+  );
+
+  const deleteProject = useCallback(
+    async (projectId: number): Promise<void> => {
+      await svcDeleteProject(projectId);
+      await fetchProjects();
+      if (currentProjectId === projectId) {
+        setCurrentProjectDetails(null);
+        setAllCurrentProjectFiles([]);
+        projectToUploadFilesMapRef.current.delete(projectId);
+        appPosition.openNewSession();
+      }
+    },
+    [fetchProjects, currentProjectId, projectToUploadFilesMapRef, appPosition]
+  );
+
+  const getRecentFiles = useCallback(async (): Promise<ProjectFile[]> => {
+    try {
+      const data: ProjectFile[] = await svcGetRecentFiles();
+      return data;
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Failed to fetch recent files";
+      return [];
+    }
+  }, []);
+
+  const refreshRecentFiles = useCallback(async () => {
+    await mutateRecentFiles();
+  }, [mutateRecentFiles]);
+
+  const getTempIdMap = (files: File[], optimisticFiles: ProjectFile[]) => {
+    const tempIdMap = new Map<string, string>();
+    for (const f of files) {
+      const tempId = optimisticFiles.find((o) => o.name === f.name)?.temp_id;
+      if (tempId) {
+        tempIdMap.set(buildFileKey(f), tempId);
+      }
+    }
+    return tempIdMap;
+  };
+
+  const removeOptimisticFilesByTempIds = useCallback(
+    (optimisticTempIds: Set<string>, projectId?: number | null) => {
+      // Remove from recent optimistic list
+      setAllRecentFiles((prev) =>
+        prev.filter((f) => !f.temp_id || !optimisticTempIds.has(f.temp_id))
+      );
+
+      // Remove from current message files if present
+      setCurrentMessageFiles((prev) =>
+        prev.filter((f) => !f.temp_id || !optimisticTempIds.has(f.temp_id))
+      );
+
+      // Remove from project optimistic list
+      if (projectId) {
+        setAllCurrentProjectFiles((prev) =>
+          prev.filter((f) => !f.temp_id || !optimisticTempIds.has(f.temp_id))
+        );
+
+        // Clear the tracked optimistic files for this project
+        let projectIdToFiles: ProjectFile[] =
+          projectToUploadFilesMapRef.current.get(projectId) || [];
+        projectIdToFiles = projectIdToFiles.filter(
+          (f: ProjectFile) => !f.temp_id || !optimisticTempIds.has(f.temp_id)
+        );
+        projectToUploadFilesMapRef.current.set(projectId, projectIdToFiles);
+      }
+    },
+    [projectToUploadFilesMapRef]
+  );
+
+  const beginUpload = useCallback(
+    async (
+      files: File[],
+      projectId?: number | null,
+      onSuccess?: (uploaded: CategorizedFiles) => void,
+      onFailure?: (failedTempIds: string[]) => void
+    ): Promise<ProjectFile[]> => {
+      const rawMax = userFileMaxUploadSizeMb;
+
+      const oversizedFiles =
+        rawMax && rawMax > 0
+          ? files.filter((file) => file.size > rawMax * 1024 * 1024)
+          : [];
+      const validFiles =
+        rawMax && rawMax > 0
+          ? files.filter((file) => file.size <= rawMax * 1024 * 1024)
+          : files;
+
+      if (oversizedFiles.length > 0) {
+        const skippedNames = oversizedFiles.map((file) => file.name).join(", ");
+        toast.warning(
+          t("projects.uploads.oversized.toast", {
+            count: oversizedFiles.length,
+            max: rawMax ?? 0,
+            names: skippedNames,
+          })
+        );
+      }
+
+      if (validFiles.length === 0) {
+        onFailure?.([]);
+        return [];
+      }
+
+      const optimisticFiles = validFiles.map((f) =>
+        createOptimisticFile(f, projectId)
+      );
+      const tempIdMap = getTempIdMap(validFiles, optimisticFiles);
+      if (!incognitoUploadsEnabled) {
+        setAllRecentFiles((prev) => [...optimisticFiles, ...prev]);
+      }
+      if (projectId && !incognitoUploadsEnabled) {
+        setAllCurrentProjectFiles((prev) => [...optimisticFiles, ...prev]);
+        projectToUploadFilesMapRef.current.set(projectId, optimisticFiles);
+      }
+      svcUploadFiles(validFiles, projectId, tempIdMap, incognitoSessionId)
+        .then((uploaded) => {
+          const uploadedFiles = uploaded.user_files || [];
+          const tempIdToUploadedFileMap = new Map(
+            uploadedFiles.map((f) => [f.temp_id, f])
+          );
+
+          setAllRecentFiles((prev) =>
+            prev.map((f) => {
+              if (f.temp_id) {
+                const u = tempIdToUploadedFileMap.get(f.temp_id);
+                return u ? { ...f, ...u } : f;
+              }
+              return f;
+            })
+          );
+          setCurrentMessageFiles((prev) =>
+            prev.map((f) => {
+              if (f.temp_id) {
+                const u = tempIdToUploadedFileMap.get(f.temp_id);
+                return u ? { ...f, ...u } : f;
+              }
+              return f;
+            })
+          );
+          if (projectId) {
+            setAllCurrentProjectFiles((prev) =>
+              prev.map((f) => {
+                if (f.temp_id) {
+                  const u = tempIdToUploadedFileMap.get(f.temp_id);
+                  return u ? { ...f, ...u } : f;
+                }
+                return f;
+              })
+            );
+            projectToUploadFilesMapRef.current.set(projectId, []);
+          }
+          const rejected_files = uploaded.rejected_files || [];
+
+          if (rejected_files.length > 0) {
+            const uniqueReasons = new Set(
+              rejected_files.map((rejected_file) => rejected_file.reason)
+            );
+            const detailsParts = Array.from(uniqueReasons);
+
+            toast.warning(
+              t("projects.uploads.rejected.toast", {
+                details: detailsParts.join(" | "),
+              })
+            );
+
+            const failedNameSet = new Set<string>(
+              rejected_files.map((file) => file.file_name)
+            );
+            const failedTempIds = Array.from(
+              new Set(
+                optimisticFiles
+                  .filter((f) => f.temp_id && failedNameSet.has(f.name))
+                  .map((f) => f.temp_id as string)
+              )
+            );
+            removeOptimisticFilesByTempIds(new Set(failedTempIds), projectId);
+            if (failedTempIds.length > 0) {
+              onFailure?.(failedTempIds);
+            }
+          }
+          if (uploadedFiles.length > 0) {
+            setTrackedUploadIds((prev) => {
+              const next = new Set(prev);
+              for (const f of uploadedFiles) next.add(f.id);
+              return next;
+            });
+          }
+          onSuccess?.(uploaded);
+        })
+        .catch((err) => {
+          // Roll back optimistic inserts on failure
+          const optimisticTempIds = new Set(
+            optimisticFiles
+              .map((f) => f.temp_id)
+              .filter((id): id is string => Boolean(id))
+          );
+
+          removeOptimisticFilesByTempIds(optimisticTempIds, projectId);
+
+          toast.error(t("projects.uploads.failed.toast"));
+
+          onFailure?.(Array.from(optimisticTempIds));
+        })
+        .finally(() => {
+          if (projectId && currentProjectId === projectId) {
+            refreshCurrentProjectDetails();
+          }
+          refreshRecentFiles();
+        });
+      return optimisticFiles;
+    },
+    [
+      currentProjectId,
+      refreshCurrentProjectDetails,
+      refreshRecentFiles,
+      removeOptimisticFilesByTempIds,
+      userFileMaxUploadSizeMb,
+      incognitoUploadsEnabled,
+      incognitoUploadsEnabled,
+      t,
+    ]
+  );
+
+  const uploadFiles = useCallback(
+    async (
+      files: File[],
+      projectId?: number | null
+    ): Promise<CategorizedFiles> => {
+      const uploaded: CategorizedFiles = await svcUploadFiles(
+        files,
+        projectId,
+        undefined,
+        incognitoSessionId
+      );
+      const uploadedFiles = uploaded.user_files || [];
+      // Track these uploaded file IDs for targeted polling
+      if (uploadedFiles.length > 0) {
+        setTrackedUploadIds((prev) => {
+          const next = new Set(prev);
+          for (const f of uploadedFiles) next.add(f.id);
+          return next;
+        });
+      }
+
+      // Refresh canonical sources instead of manual merges
+      if (projectId && currentProjectId === projectId) {
+        await refreshCurrentProjectDetails();
+      }
+      await refreshRecentFiles();
+      return uploaded;
+    },
+    [
+      currentProjectId,
+      refreshCurrentProjectDetails,
+      refreshRecentFiles,
+      incognitoUploadsEnabled,
+      incognitoUploadsEnabled,
+    ]
+  );
+
+  const getFilesInProject = useCallback(
+    async (projectId: number): Promise<ProjectFile[]> => {
+      try {
+        const data: ProjectFile[] = await svcGetFilesInProject(projectId);
+        return data;
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Failed to fetch project files";
+        return [];
+      }
+    },
+    []
+  );
+
+  useEffect(() => {
+    currentMessageFilesRef.current = currentMessageFiles;
+  }, [currentMessageFiles]);
+
+  // Sync SWR-fetched recent files into local state. On first arrival, seed
+  // allRecentFiles as well. Subsequent updates only touch recentFiles so the
+  // merge effect below can non-destructively apply them to allRecentFiles.
+  useEffect(() => {
+    if (!recentFilesData) return;
+    setRecentFiles(recentFilesData);
+    if (!hasInitializedAllRecentFilesRef.current) {
+      setAllRecentFiles(recentFilesData);
+      hasInitializedAllRecentFilesRef.current = true;
+    }
+  }, [recentFilesData]);
+
+  useEffect(() => {
+    setAllRecentFiles((prev) =>
+      prev.map((f) => {
+        const newFile = recentFiles.find((f2) => f2.id === f.id);
+        return newFile ? { ...f, ...newFile } : f;
+      })
+    );
+  }, [recentFiles]);
+
+  // Clear project details when switching projects to show skeleton
+  useEffect(() => {
+    setCurrentProjectDetails(null);
+    setAllCurrentProjectFiles([]);
+  }, [currentProjectId]);
+
+  useEffect(() => {
+    if (currentProjectId) {
+      refreshCurrentProjectDetails();
+    }
+  }, [currentProjectId, refreshCurrentProjectDetails]);
+
+  // Targeted polling for tracked uploaded files only
+  useEffect(() => {
+    const ids = Array.from(trackedUploadIds);
+    const shouldPoll = ids.length > 0;
+
+    const poll = async () => {
+      if (isPollingRef.current) return;
+      isPollingRef.current = true;
+      try {
+        const statuses = await svcGetUserFileStatuses(ids);
+        if (!statuses) return;
+        if (statuses.length === 0) {
+          // The server reports none of the REQUESTED files: they were deleted
+          // (e.g. incognito teardown). Drop only those, not ids registered
+          // while this request was in flight.
+          const requested = new Set(ids);
+          setTrackedUploadIds((prev) => {
+            const remaining = new Set<string>();
+            prev.forEach((id) => {
+              if (!requested.has(id)) remaining.add(id);
+            });
+            return remaining;
+          });
+          return;
+        }
+
+        // Build maps for quick lookup
+        const statusById = new Map(statuses.map((f) => [f.id, f]));
+
+        // Newly-failed detection uses the last committed snapshot.
+        // setLastFailedFiles (it drives the failure toast downstream) must
+        // stay outside the state updater.
+        const currentMessageFilesSnapshot = currentMessageFilesRef.current;
+        const newlyFailedLocal: ProjectFile[] = [];
+        for (const f of currentMessageFilesSnapshot) {
+          const latest = statusById.get(f.id);
+          if (
+            latest &&
+            String(latest.status).toLowerCase() === "failed" &&
+            String(f.status).toLowerCase() !== "failed"
+          ) {
+            newlyFailedLocal.push(latest);
+          }
+        }
+
+        // Merge statuses into whatever the files are now. A snapshot here
+        // would clobber adds/removes that landed during the fetch.
+        setCurrentMessageFiles((prev) => {
+          let changed = false;
+          const next: ProjectFile[] = [];
+          for (const f of prev) {
+            const latest = statusById.get(f.id);
+            if (latest) {
+              const latestStatus = String(latest.status).toLowerCase();
+              if (latestStatus === "failed") {
+                changed = true;
+                continue;
+              }
+              if (
+                latest.status !== f.status ||
+                latest.name !== f.name ||
+                latest.file_type !== f.file_type
+              ) {
+                next.push({ ...f, ...latest } as ProjectFile);
+                changed = true;
+                continue;
+              }
+            }
+            next.push(f);
+          }
+          return changed ? next : prev;
+        });
+        if (newlyFailedLocal.length > 0) {
+          setLastFailedFiles(newlyFailedLocal);
+        }
+
+        // Update currentProjectDetails.files with latest statuses
+        setCurrentProjectDetails((prev) => {
+          if (!prev || !prev.files || prev.files.length === 0) return prev;
+          let changed = false;
+          const nextFiles = prev.files.map((f) => {
+            const latest = statusById.get(f.id);
+            if (latest) {
+              if (
+                latest.status !== f.status ||
+                latest.name !== f.name ||
+                latest.file_type !== f.file_type
+              ) {
+                changed = true;
+                return { ...f, ...latest } as ProjectFile;
+              }
+            }
+            return f;
+          });
+          return changed
+            ? ({ ...prev, files: nextFiles } as ProjectDetails)
+            : prev;
+        });
+
+        // Update recent files list inline as well
+        setRecentFiles((prev) => {
+          if (prev.length === 0) return prev;
+          let changed = false;
+          const map = new Map(prev.map((f) => [f.id, f]));
+          for (const latest of statuses) {
+            const id = latest.id;
+            if (map.has(id)) {
+              const prevVal = map.get(id)!;
+              if (
+                latest.status !== prevVal.status ||
+                latest.name !== prevVal.name ||
+                latest.file_type !== prevVal.file_type
+              ) {
+                map.set(id, latest);
+                changed = true;
+              }
+            }
+          }
+          return changed ? Array.from(map.values()) : prev;
+        });
+
+        // Remove completed/skipped/failed from tracking
+        const remaining = new Set(trackedUploadIds);
+        const newlyFailed: ProjectFile[] = [];
+        for (const f of statuses) {
+          const s = String(f.status).toLowerCase();
+          if (s === "completed" || s === "skipped") {
+            remaining.delete(f.id);
+          } else if (s === "failed") {
+            remaining.delete(f.id);
+            newlyFailed.push(f);
+          }
+        }
+        // Requested ids the server no longer reports are deleted files: stop
+        // tracking them. Ids registered after this request went out stay.
+        for (const id of ids) {
+          if (!statusById.has(id)) {
+            remaining.delete(id);
+          }
+        }
+        if (newlyFailed.length > 0) {
+          setLastFailedFiles(newlyFailed);
+        }
+        const trackingChanged = remaining.size !== trackedUploadIds.size;
+        if (trackingChanged) {
+          setTrackedUploadIds(remaining);
+        }
+
+        // If all tracked uploads finished (completed or failed), do a single refresh
+        if (remaining.size === 0) {
+          if (currentProjectId) {
+            await refreshCurrentProjectDetails();
+          }
+          await refreshRecentFiles();
+        }
+      } finally {
+        isPollingRef.current = false;
+      }
+    };
+
+    if (shouldPoll && pollIntervalRef.current === null) {
+      // Kick once immediately, then start interval
+      poll();
+      pollIntervalRef.current = window.setInterval(poll, 3000);
+    }
+
+    if (!shouldPoll && pollIntervalRef.current !== null) {
+      window.clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+
+    return () => {
+      if (pollIntervalRef.current !== null) {
+        window.clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
+    };
+  }, [
+    trackedUploadIds,
+    currentProjectId,
+    refreshCurrentProjectDetails,
+    refreshRecentFiles,
+  ]);
+
+  const value: ProjectsContextType = useMemo(
+    () => ({
+      projects,
+      recentFiles,
+      currentProjectDetails,
+      currentProjectId,
+      currentMessageFiles,
+      allRecentFiles,
+      allCurrentProjectFiles,
+      isLoadingProjectDetails,
+      beginUpload,
+      setCurrentMessageFiles,
+      upsertInstructions,
+      fetchProjects,
+      createProject,
+      renameProject,
+      deleteProject,
+      uploadFiles,
+      getRecentFiles,
+      getFilesInProject,
+      refreshCurrentProjectDetails,
+      refreshRecentFiles,
+      lastFailedFiles,
+      clearLastFailedFiles: () => setLastFailedFiles([]),
+      deleteUserFile: async (fileId: string) => {
+        const result = await svcDeleteUserFile(fileId);
+        // If no associations, backend enqueues deletion and status moves to DELETING; refresh lists
+        if (!result.has_associations) {
+          if (currentProjectId) {
+            await refreshCurrentProjectDetails();
+          }
+          await refreshRecentFiles();
+        }
+        return result;
+      },
+      unlinkFileFromProject: async (projectId: number, fileId: string) => {
+        const file = allCurrentProjectFiles.find((f) => f.id === fileId);
+        if (!file) return;
+        setAllCurrentProjectFiles((prev) =>
+          prev.filter((f) => f.id !== file.id)
+        );
+        svcUnlinkFileFromProject(projectId, file.id).then(async (result) => {
+          if (result.ok) {
+            if (currentProjectId === projectId) {
+              await refreshCurrentProjectDetails();
+            }
+            await refreshRecentFiles();
+          } else {
+            if (currentProjectId === projectId) {
+              setAllCurrentProjectFiles((prev) => [file, ...prev]);
+            }
+          }
+        });
+      },
+      linkFileToProject: async (projectId: number, file: ProjectFile) => {
+        const existing = allCurrentProjectFiles.find((f) => f.id === file.id);
+        if (existing) return;
+        setAllCurrentProjectFiles((prev) => [file, ...prev]);
+        svcLinkFileToProject(projectId, file.id).then(async (result) => {
+          if (result.ok) {
+            if (currentProjectId === projectId) {
+              await refreshCurrentProjectDetails();
+            }
+            await refreshRecentFiles();
+          } else {
+            if (currentProjectId === projectId) {
+              setAllCurrentProjectFiles((prev) =>
+                prev.filter((f) => f.id !== file.id)
+              );
+            }
+          }
+        });
+      },
+    }),
+    [
+      projects,
+      recentFiles,
+      currentProjectDetails,
+      currentProjectId,
+      currentMessageFiles,
+      allRecentFiles,
+      allCurrentProjectFiles,
+      isLoadingProjectDetails,
+      beginUpload,
+      setCurrentMessageFiles,
+      upsertInstructions,
+      fetchProjects,
+      createProject,
+      renameProject,
+      deleteProject,
+      uploadFiles,
+      getRecentFiles,
+      getFilesInProject,
+      refreshCurrentProjectDetails,
+      refreshRecentFiles,
+      lastFailedFiles,
+    ]
+  );
+
+  return (
+    <ProjectsContext.Provider value={value}>
+      {children}
+    </ProjectsContext.Provider>
+  );
+}
+
+export function useProjectsContext(): ProjectsContextType {
+  const ctx = useContext(ProjectsContext);
+  if (!ctx) {
+    throw new Error(
+      "useProjectsContext must be used within a ProjectsProvider"
+    );
+  }
+  return ctx;
+}

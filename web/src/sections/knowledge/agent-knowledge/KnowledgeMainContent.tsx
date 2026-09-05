@@ -1,6 +1,7 @@
 "use client";
 
 import { memo } from "react";
+import { useTranslations } from "next-intl";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import Text from "@/refresh-components/texts/Text";
 import type { ValidSources } from "@/lib/types";
@@ -28,6 +29,8 @@ export const KnowledgeMainContent = memo(function KnowledgeMainContent({
   onAddKnowledge,
   onViewEdit,
 }: KnowledgeMainContentProps) {
+  const t = useTranslations("knowledge");
+
   if (!hasAnyKnowledge) {
     return (
       <GeneralLayouts.Section
@@ -37,7 +40,7 @@ export const KnowledgeMainContent = memo(function KnowledgeMainContent({
         height="auto"
       >
         <Text text03 secondaryBody>
-          Add documents or connected sources to use for this agent.
+          {t("mainContent.empty.description")}
         </Text>
         <Button
           icon={SvgPlusCircle}
@@ -64,8 +67,7 @@ export const KnowledgeMainContent = memo(function KnowledgeMainContent({
       height="auto"
     >
       <Text as="p" text03 secondaryBody>
-        {totalSelected} knowledge source{totalSelected !== 1 ? "s" : ""}{" "}
-        selected
+        {t("mainContent.selectedCount.label", { count: totalSelected })}
       </Text>
       <Button
         prominence="internal"
@@ -73,7 +75,7 @@ export const KnowledgeMainContent = memo(function KnowledgeMainContent({
         onClick={onViewEdit}
         aria-label="knowledge-view-edit"
       >
-        View / Edit
+        {t("mainContent.viewEdit.label")}
       </Button>
     </GeneralLayouts.Section>
   );

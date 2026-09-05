@@ -79,7 +79,7 @@ function FilterButton({
       </Interactive.Stateful>
 
       {active && (
-        <div className="absolute right-2 top-1/2 -translate-y-1/2">
+        <div className="absolute end-2 top-1/2 -translate-y-1/2">
           {/* Force hover state so the X stays visually prominent against
               the inverted selected background — without this it renders
               dimmed and looks disabled. */}

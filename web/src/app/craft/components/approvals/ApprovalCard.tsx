@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
 
 import { Button, Text, Tooltip } from "@opal/components";
@@ -40,13 +41,24 @@ interface ApprovalCardProps {
   defaultDecision?: ApprovalSubmitDecision | null;
 }
 
+type ApprovalsTranslate = ReturnType<typeof useTranslations<"craft.approvals">>;
+
 // Single-action: name the action; multi-action: just count them. The
 // per-action breakdown (with descriptions) is always shown in the body.
-function approvalHeadline(approval: ApprovalView): string {
+function approvalHeadline(
+  approval: ApprovalView,
+  t: ApprovalsTranslate
+): string {
   if (approval.actions.length === 1) {
-    return `${approval.actions[0]!.display_name} in ${approval.app_name}`;
+    return t("headline.singleAction", {
+      action: approval.actions[0]!.display_name,
+      app: approval.app_name,
+    });
   }
-  return `${approval.actions.length} actions in ${approval.app_name}`;
+  return t("headline.multiAction", {
+    count: approval.actions.length,
+    app: approval.app_name,
+  });
 }
 
 function ActionList({ actions }: { actions: ApprovalAction[] }) {
@@ -79,6 +91,7 @@ export default function ApprovalCard({
   defaultOpen = false,
   defaultDecision = null,
 }: ApprovalCardProps) {
+  const t = useTranslations("craft.approvals");
   const { mutate } = useSWRConfig();
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -102,12 +115,12 @@ export default function ApprovalCard({
   const swrKey = SWR_KEYS.buildSessionLiveApprovals(approval.session_id);
   const decided = decision !== null;
   const approved = decision === "APPROVED";
-  const headline = approvalHeadline(approval);
-  const headerText = decided ? headline : `Approval required: ${headline}`;
+  const headline = approvalHeadline(approval, t);
+  const headerText = decided ? headline : t("header.required", { headline });
 
   async function submitDecision(
     next: ApprovalSubmitDecision,
-    request: () => Promise<unknown>,
+    request: () => Promise<void>,
     refetchDelayMs = SETTLE_HOLD_MS
   ) {
     setSubmitting(true);
@@ -137,7 +150,7 @@ export default function ApprovalCard({
       if (mountedRef.current) {
         setDecision(null);
         setErrorMessage(
-          e instanceof Error ? e.message : "Failed to submit decision"
+          e instanceof Error ? e.message : t("submit.errorFallback")
         );
         // Expand so the error message + the payload the user tried to
         // approve are both visible. Avoids the "click Approve in a
@@ -171,14 +184,14 @@ export default function ApprovalCard({
         <Collapsible open={isOpen} onOpenChange={setIsOpen}>
           <div
             className={cn(
-              "flex items-center gap-1 pr-2 transition-colors",
+              "flex items-center gap-1 pe-2 transition-colors",
               "has-[[data-approval-trigger]:hover]:bg-background-tint-02"
             )}
           >
             <CollapsibleTrigger asChild>
               <button
                 data-approval-trigger
-                className="flex items-center gap-2 min-w-0 flex-1 text-left px-3 py-2"
+                className="flex items-center gap-2 min-w-0 flex-1 text-start px-3 py-2"
               >
                 {decided ? (
                   approved ? (
@@ -202,14 +215,18 @@ export default function ApprovalCard({
                 )}
               >
                 <Text font="main-ui-action" color="inherit" nowrap>
-                  {approved ? "Approved" : "Rejected"}
+                  {approved ? t("status.approved") : t("status.rejected")}
                 </Text>
               </div>
             ) : null}
             <CollapsibleTrigger asChild>
               <button
                 data-approval-trigger
-                aria-label={isOpen ? "Hide details" : "Show details"}
+                aria-label={
+                  isOpen
+                    ? t("details.hideAriaLabel")
+                    : t("details.showAriaLabel")
+                }
                 className="p-1.5"
               >
                 <SvgChevronDown
@@ -228,16 +245,19 @@ export default function ApprovalCard({
                 size="sm"
                 disabled={submitting}
                 onClick={() =>
-                  void submitDecision("APPROVED", () =>
-                    postApprovalDecision(approval.approval_id, "APPROVED")
-                  )
+                  void submitDecision("APPROVED", async () => {
+                    await postApprovalDecision(
+                      approval.approval_id,
+                      "APPROVED"
+                    );
+                  })
                 }
-                aria-label="Approve this action once"
+                aria-label={t("approveOnce.ariaLabel")}
               >
-                Approve once
+                {t("approveOnce.button")}
               </Button>
               <Tooltip
-                tooltip="Approve matching actions for this session"
+                tooltip={t("approveSession.tooltip")}
                 delayDuration={200}
               >
                 <Button
@@ -247,13 +267,15 @@ export default function ApprovalCard({
                   onClick={() =>
                     void submitDecision(
                       "APPROVED",
-                      () => postApprovalSessionGrant(approval.approval_id),
+                      async () => {
+                        await postApprovalSessionGrant(approval.approval_id);
+                      },
                       0
                     )
                   }
-                  aria-label="Approve matching actions for this session"
+                  aria-label={t("approveSession.tooltip")}
                 >
-                  Approve for session
+                  {t("approveSession.button")}
                 </Button>
               </Tooltip>
               <Button
@@ -261,13 +283,16 @@ export default function ApprovalCard({
                 size="sm"
                 disabled={submitting}
                 onClick={() =>
-                  void submitDecision("REJECTED", () =>
-                    postApprovalDecision(approval.approval_id, "REJECTED")
-                  )
+                  void submitDecision("REJECTED", async () => {
+                    await postApprovalDecision(
+                      approval.approval_id,
+                      "REJECTED"
+                    );
+                  })
                 }
-                aria-label="Reject this action"
+                aria-label={t("reject.ariaLabel")}
               >
-                Reject
+                {t("reject.button")}
               </Button>
             </div>
           )}

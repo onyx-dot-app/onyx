@@ -39,14 +39,14 @@ jobs:
       short-sha: ${{ steps.check.outputs.short-sha }}
     steps:
       - name: Checkout (for git tags)
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
           fetch-depth: 0
           fetch-tags: true
 
       - name: Setup uv
-        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # ratchet:astral-sh/setup-uv@v8.2.0
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # ratchet:astral-sh/setup-uv@v10.0.1
         with:
           version: "0.11.25"
           enable-cache: false
@@ -114,7 +114,7 @@ jobs:
           # Determine if this tag should get the "latest" Docker tag.
           # Only the highest semver stable tag (vX.Y.Z exactly) gets "latest".
           if [[ "$IS_STABLE" == "true" ]]; then
-            HIGHEST_STABLE=$(uv run --no-sync --with onyx-devtools ods latest-stable-tag) || {
+            HIGHEST_STABLE=$(uv run --no-sync --with onyx-devtools==0.13.2 ods latest-stable-tag) || {
               echo "::error::Failed to determine highest stable tag via 'ods latest-stable-tag'"
               exit 1
             }
@@ -164,19 +164,19 @@ jobs:
       security-events: read # read Dependabot alerts
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
       - name: Setup uv
-        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # ratchet:astral-sh/setup-uv@v8.2.0
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # ratchet:astral-sh/setup-uv@v10.0.1
         with:
           version: "0.11.25"
           enable-cache: false
 
       - name: Configure AWS credentials
         continue-on-error: true # the audit still runs (with no suppressions) if creds are unavailable
-        uses: aws-actions/configure-aws-credentials@517a711dbcd0e402f90c77e7e2f81e849156e31d # ratchet:aws-actions/configure-aws-credentials@v6.2.2
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # ratchet:aws-actions/configure-aws-credentials@v6.2.3
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -184,29 +184,39 @@ jobs:
       - name: Run dependency audit
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: uv run --no-sync --with onyx-devtools ods audit --fail-on=critical
+        run: uv run --no-sync --with 'onyx-devtools[audit]==0.13.2' ods audit --fail-on=critical
 
+  # Validate that a pushed release tag is versioned correctly, via
+  # `ods release --check`. A cloud tag must be the tag `ods release cloud`
+  # would have cut: its commit on origin/main, its base matching the release
+  # branches, its counter in sequence. Stable (vX.Y.Z) and beta
+  # (vX.Y.Z-beta.N) tags must sit on their release/vX.Y branch with the
+  # patch or counter in sequence; a beta must precede its stable release.
+  #
+  # Deliberately gated on the raw ref name, not on computed tag-type outputs:
+  # a tag that is neither a valid cloud nor stable tag fails loudly here
+  # instead of being skipped by a wrongly computed output.
   check-version-tag:
     runs-on: ubuntu-slim
     timeout-minutes: 10
     if: ${{ !startsWith(github.ref_name, 'nightly-latest') && github.ref_name != 'edge' && github.event_name != 'workflow_dispatch' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
           fetch-depth: 0
 
       - name: Setup uv
-        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # ratchet:astral-sh/setup-uv@v8.2.0
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # ratchet:astral-sh/setup-uv@v10.0.1
         with:
           version: "0.11.25"
           # NOTE: This isn't caching much and zizmor suggests this could be poisoned, so disable.
           enable-cache: false
 
-      - name: Validate tag is versioned correctly
+      - name: Validate the tag is versioned correctly
         run: |
-          uv run --no-sync --with release-tag tag --check
+          uv run --no-sync --with onyx-devtools==0.13.2 ods release --check --ref "$GITHUB_REF_NAME"
 
   notify-slack-on-tag-check-failure:
     needs:
@@ -217,7 +227,7 @@ jobs:
     environment: release
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -245,7 +255,7 @@ jobs:
       release-id: ${{ steps.create-release.outputs.id }}
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -327,14 +337,14 @@ jobs:
     timeout-minutes: 90
     environment: release
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v7.0.1
         with:
           # NOTE: persist-credentials is needed for tauri-action to upload assets to GitHub releases.
           persist-credentials: true # zizmor: ignore[artipacked]
 
       - name: Configure AWS credentials
         if: startsWith(matrix.platform, 'macos-')
-        uses: aws-actions/configure-aws-credentials@517a711dbcd0e402f90c77e7e2f81e849156e31d
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -500,12 +510,12 @@ jobs:
       - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@517a711dbcd0e402f90c77e7e2f81e849156e31d
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -535,14 +545,13 @@ jobs:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
 
-      # web/Dockerfile pulls its hardened Node base from dhi.io, authenticated with the same
-      # Docker account credentials (the account must have access to the DHI catalog).
-      - name: Login to Docker Hardened Images (dhi.io)
-        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
+      # web/Dockerfile defaults to the public Node bases. Release builds ship on the
+      # hardened DHI equivalents, passed as build args below.
+      - name: Resolve Docker Hardened Image bases
+        uses: ./.github/actions/dhi-base-images
         with:
-          registry: dhi.io
-          username: ${{ env.DOCKER_USERNAME }}
-          password: ${{ env.DOCKER_TOKEN }}
+          docker-username: ${{ env.DOCKER_USERNAME }}
+          docker-token: ${{ env.DOCKER_TOKEN }}
 
       - name: Build and push AMD64
         id: build
@@ -554,6 +563,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
+            ${{ env.DHI_NODE_BUILD_ARGS }}
             NODE_OPTIONS=--max-old-space-size=8192
           cache-from: |
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge
@@ -582,12 +592,12 @@ jobs:
       - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@517a711dbcd0e402f90c77e7e2f81e849156e31d
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -617,14 +627,13 @@ jobs:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
 
-      # web/Dockerfile pulls its hardened Node base from dhi.io, authenticated with the same
-      # Docker account credentials (the account must have access to the DHI catalog).
-      - name: Login to Docker Hardened Images (dhi.io)
-        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
+      # web/Dockerfile defaults to the public Node bases. Release builds ship on the
+      # hardened DHI equivalents, passed as build args below.
+      - name: Resolve Docker Hardened Image bases
+        uses: ./.github/actions/dhi-base-images
         with:
-          registry: dhi.io
-          username: ${{ env.DOCKER_USERNAME }}
-          password: ${{ env.DOCKER_TOKEN }}
+          docker-username: ${{ env.DOCKER_USERNAME }}
+          docker-token: ${{ env.DOCKER_TOKEN }}
 
       - name: Build and push ARM64
         id: build
@@ -636,6 +645,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
+            ${{ env.DHI_NODE_BUILD_ARGS }}
             NODE_OPTIONS=--max-old-space-size=8192
           cache-from: |
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge
@@ -664,7 +674,7 @@ jobs:
       - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@517a711dbcd0e402f90c77e7e2f81e849156e31d
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -756,12 +766,12 @@ jobs:
       - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@517a711dbcd0e402f90c77e7e2f81e849156e31d
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -791,14 +801,13 @@ jobs:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
 
-      # web/Dockerfile pulls its hardened Node base from dhi.io, authenticated with the same
-      # Docker account credentials (the account must have access to the DHI catalog).
-      - name: Login to Docker Hardened Images (dhi.io)
-        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
+      # web/Dockerfile defaults to the public Node bases. Release builds ship on the
+      # hardened DHI equivalents, passed as build args below.
+      - name: Resolve Docker Hardened Image bases
+        uses: ./.github/actions/dhi-base-images
         with:
-          registry: dhi.io
-          username: ${{ env.DOCKER_USERNAME }}
-          password: ${{ env.DOCKER_TOKEN }}
+          docker-username: ${{ env.DOCKER_USERNAME }}
+          docker-token: ${{ env.DOCKER_TOKEN }}
 
       - name: Build and push AMD64
         id: build
@@ -810,12 +819,12 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
+            ${{ env.DHI_NODE_BUILD_ARGS }}
             NEXT_PUBLIC_CLOUD_ENABLED=true
             WEB_FRAME_PROTECTION_ENABLED=false
             NEXT_PUBLIC_POSTHOG_KEY=${{ secrets.POSTHOG_KEY }}
             NEXT_PUBLIC_POSTHOG_HOST=${{ secrets.POSTHOG_HOST }}
             NEXT_PUBLIC_SENTRY_DSN=${{ secrets.SENTRY_DSN }}
-            NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${{ secrets.STRIPE_PUBLISHABLE_KEY }}
             NEXT_PUBLIC_RECAPTCHA_SITE_KEY=${{ vars.NEXT_PUBLIC_RECAPTCHA_SITE_KEY }}
             NEXT_PUBLIC_GTM_ENABLED=true
             NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED=true
@@ -849,12 +858,12 @@ jobs:
       - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@517a711dbcd0e402f90c77e7e2f81e849156e31d
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -884,14 +893,13 @@ jobs:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
 
-      # web/Dockerfile pulls its hardened Node base from dhi.io, authenticated with the same
-      # Docker account credentials (the account must have access to the DHI catalog).
-      - name: Login to Docker Hardened Images (dhi.io)
-        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
+      # web/Dockerfile defaults to the public Node bases. Release builds ship on the
+      # hardened DHI equivalents, passed as build args below.
+      - name: Resolve Docker Hardened Image bases
+        uses: ./.github/actions/dhi-base-images
         with:
-          registry: dhi.io
-          username: ${{ env.DOCKER_USERNAME }}
-          password: ${{ env.DOCKER_TOKEN }}
+          docker-username: ${{ env.DOCKER_USERNAME }}
+          docker-token: ${{ env.DOCKER_TOKEN }}
 
       - name: Build and push ARM64
         id: build
@@ -903,12 +911,12 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
+            ${{ env.DHI_NODE_BUILD_ARGS }}
             NEXT_PUBLIC_CLOUD_ENABLED=true
             WEB_FRAME_PROTECTION_ENABLED=false
             NEXT_PUBLIC_POSTHOG_KEY=${{ secrets.POSTHOG_KEY }}
             NEXT_PUBLIC_POSTHOG_HOST=${{ secrets.POSTHOG_HOST }}
             NEXT_PUBLIC_SENTRY_DSN=${{ secrets.SENTRY_DSN }}
-            NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${{ secrets.STRIPE_PUBLISHABLE_KEY }}
             NEXT_PUBLIC_RECAPTCHA_SITE_KEY=${{ vars.NEXT_PUBLIC_RECAPTCHA_SITE_KEY }}
             NEXT_PUBLIC_GTM_ENABLED=true
             NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED=true
@@ -942,7 +950,7 @@ jobs:
       - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@517a711dbcd0e402f90c77e7e2f81e849156e31d
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -1021,12 +1029,12 @@ jobs:
       - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@517a711dbcd0e402f90c77e7e2f81e849156e31d
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -1117,12 +1125,12 @@ jobs:
       - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@517a711dbcd0e402f90c77e7e2f81e849156e31d
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -1212,7 +1220,7 @@ jobs:
       - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@517a711dbcd0e402f90c77e7e2f81e849156e31d
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -1314,12 +1322,12 @@ jobs:
       - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@517a711dbcd0e402f90c77e7e2f81e849156e31d
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -1351,14 +1359,13 @@ jobs:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
 
-      # Dockerfile.model_server pulls its hardened Python base from dhi.io, authenticated
-      # with the same Docker account credentials (the account must have DHI catalog access).
-      - name: Login to Docker Hardened Images (dhi.io)
-        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
+      # Dockerfile.model_server defaults to the public Python bases. Release builds ship
+      # on the hardened DHI equivalents, passed as build args below.
+      - name: Resolve Docker Hardened Image bases
+        uses: ./.github/actions/dhi-base-images
         with:
-          registry: dhi.io
-          username: ${{ env.DOCKER_USERNAME }}
-          password: ${{ env.DOCKER_TOKEN }}
+          docker-username: ${{ env.DOCKER_USERNAME }}
+          docker-token: ${{ env.DOCKER_TOKEN }}
 
       - name: Build and push AMD64
         id: build
@@ -1372,6 +1379,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
+            ${{ env.DHI_PYTHON_BUILD_ARGS }}
           cache-from: |
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
@@ -1400,12 +1408,12 @@ jobs:
       - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@517a711dbcd0e402f90c77e7e2f81e849156e31d
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -1437,14 +1445,13 @@ jobs:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_TOKEN }}
 
-      # Dockerfile.model_server pulls its hardened Python base from dhi.io, authenticated
-      # with the same Docker account credentials (the account must have DHI catalog access).
-      - name: Login to Docker Hardened Images (dhi.io)
-        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
+      # Dockerfile.model_server defaults to the public Python bases. Release builds ship
+      # on the hardened DHI equivalents, passed as build args below.
+      - name: Resolve Docker Hardened Image bases
+        uses: ./.github/actions/dhi-base-images
         with:
-          registry: dhi.io
-          username: ${{ env.DOCKER_USERNAME }}
-          password: ${{ env.DOCKER_TOKEN }}
+          docker-username: ${{ env.DOCKER_USERNAME }}
+          docker-token: ${{ env.DOCKER_TOKEN }}
 
       - name: Build and push ARM64
         id: build
@@ -1458,6 +1465,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
+            ${{ env.DHI_PYTHON_BUILD_ARGS }}
           cache-from: |
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
@@ -1485,7 +1493,7 @@ jobs:
       - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@517a711dbcd0e402f90c77e7e2f81e849156e31d
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -1572,7 +1580,7 @@ jobs:
       SANDBOX_CONTEXT: backend/onyx/server/features/build/sandbox/image
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -1585,7 +1593,7 @@ jobs:
 
       - name: Configure AWS credentials
         if: needs.determine-builds.outputs.is-test-run != 'true' && vars.DOCKER_NO_CACHE != 'true'
-        uses: aws-actions/configure-aws-credentials@517a711dbcd0e402f90c77e7e2f81e849156e31d
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -1646,12 +1654,12 @@ jobs:
       - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@517a711dbcd0e402f90c77e7e2f81e849156e31d
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -1719,12 +1727,12 @@ jobs:
       - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@517a711dbcd0e402f90c77e7e2f81e849156e31d
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -1792,7 +1800,7 @@ jobs:
       - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@517a711dbcd0e402f90c77e7e2f81e849156e31d
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -1955,14 +1963,12 @@ jobs:
       - build-web-cloud-amd64
       - build-backend-amd64
       - build-model-server-amd64
-      - build-sandbox-amd64
     if: >-
       always() && !cancelled() &&
       (needs.build-web-amd64.result == 'success' ||
        needs.build-web-cloud-amd64.result == 'success' ||
        needs.build-backend-amd64.result == 'success' ||
-       needs.build-model-server-amd64.result == 'success' ||
-       needs.build-sandbox-amd64.result == 'success')
+       needs.build-model-server-amd64.result == 'success')
     runs-on:
       - runs-on
       # amd64 to match the images scanned: `ods audit image` uses the docker CLI,
@@ -1990,8 +1996,6 @@ jobs:
             registry-image: onyxdotapp/onyx-backend
           - component: model-server
             registry-image: onyxdotapp/onyx-model-server
-          - component: sandbox
-            registry-image: onyxdotapp/sandbox
     steps:
       - name: Check if this scan should run
         id: should-run
@@ -2001,7 +2005,6 @@ jobs:
             web-cloud) RESULT="$BUILD_WEB_CLOUD" ;;
             backend) RESULT="$BUILD_BACKEND" ;;
             model-server) RESULT="$BUILD_MODEL_SERVER" ;;
-            sandbox) RESULT="$BUILD_SANDBOX" ;;
           esac
           if [ "$RESULT" == "success" ]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
@@ -2014,20 +2017,19 @@ jobs:
           BUILD_WEB_CLOUD: ${{ needs.build-web-cloud-amd64.result }}
           BUILD_BACKEND: ${{ needs.build-backend-amd64.result }}
           BUILD_MODEL_SERVER: ${{ needs.build-model-server-amd64.result }}
-          BUILD_SANDBOX: ${{ needs.build-sandbox-amd64.result }}
 
       - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
         if: steps.should-run.outputs.run == 'true'
 
       - name: Checkout
         if: steps.should-run.outputs.run == 'true'
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
       - name: Setup uv
         if: steps.should-run.outputs.run == 'true'
-        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # ratchet:astral-sh/setup-uv@v8.2.0
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # ratchet:astral-sh/setup-uv@v10.0.1
         with:
           version: "0.11.25"
           enable-cache: false
@@ -2035,7 +2037,7 @@ jobs:
       - name: Configure AWS credentials
         if: steps.should-run.outputs.run == 'true'
         continue-on-error: true # the audit still runs (with no suppressions) if creds are unavailable
-        uses: aws-actions/configure-aws-credentials@517a711dbcd0e402f90c77e7e2f81e849156e31d # ratchet:aws-actions/configure-aws-credentials@v6.2.2
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # ratchet:aws-actions/configure-aws-credentials@v6.2.3
         with:
           role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
           aws-region: us-east-2
@@ -2058,7 +2060,6 @@ jobs:
             web-cloud) DIGEST="$DIGEST_WEB_CLOUD" ;;
             backend) DIGEST="$DIGEST_BACKEND" ;;
             model-server) DIGEST="$DIGEST_MODEL_SERVER" ;;
-            sandbox) DIGEST="$DIGEST_SANDBOX" ;;
           esac
           if [ "$IS_TEST_RUN" == "true" ]; then
             echo "image=${RUNS_ON_ECR_CACHE}@${DIGEST}" >> "$GITHUB_OUTPUT"
@@ -2073,7 +2074,6 @@ jobs:
           DIGEST_WEB_CLOUD: ${{ needs.build-web-cloud-amd64.outputs.digest }}
           DIGEST_BACKEND: ${{ needs.build-backend-amd64.outputs.digest }}
           DIGEST_MODEL_SERVER: ${{ needs.build-model-server-amd64.outputs.digest }}
-          DIGEST_SANDBOX: ${{ needs.build-sandbox-amd64.outputs.digest }}
 
       - name: Run image vulnerability audit
         if: steps.should-run.outputs.run == 'true'
@@ -2084,7 +2084,7 @@ jobs:
         # hard scan failure nothing is written, so seed a valid empty SARIF to keep
         # the always() upload below from choking.
         run: |
-          uv run --no-sync --with onyx-devtools ods audit image "$IMAGE" \
+          uv run --no-sync --with 'onyx-devtools[audit]==0.13.2' ods audit image "$IMAGE" \
             --fail-on=critical --format=sarif,text > image-audit.sarif || status=$?
           if [ ! -s image-audit.sarif ]; then
             # $schema is a literal SARIF key, not a shell variable.
@@ -2143,7 +2143,7 @@ jobs:
     environment: release
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 

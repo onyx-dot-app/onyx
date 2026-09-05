@@ -16,30 +16,30 @@ import { DM_Mono, Hanken_Grotesk } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import { TooltipProvider } from "@radix-ui/react-tooltip";
 import StatsOverlayLoader from "@/components/dev/StatsOverlayLoader";
-import { cn } from "@opal/utils";
 import AppHealthBanner from "@/sections/banners/HealthBanner";
 import BannerQueue from "@/sections/banners/BannerQueue";
 import { AuthenticationShell } from "@/lib/auth/components";
 import ProductGatingWrapper from "@/providers/ProductGatingWrapper";
 import SWRConfigProvider from "@/providers/SWRConfigProvider";
+import { NextIntlClientProvider } from "next-intl";
+import { getLocale, getMessages } from "next-intl/server";
+import { DirectionProvider } from "@radix-ui/react-direction";
+import { cookies } from "next/headers";
+import { htmlDirForLocale, type HtmlDir } from "@/i18n/config";
 
+// No generic at the end of either fallback list: the generic comes last in
+// the composed --font-* variables on <html> below, after the per-locale CJK
+// tail (--font-cjk-sans, defined in globals.css). A generic here would sit
+// before the CJK fonts and swallow every CJK codepoint.
 const hankenGrotesk = Hanken_Grotesk({
   subsets: ["latin"],
-  variable: "--font-hanken-grotesk",
   display: "swap",
-  fallback: [
-    "-apple-system",
-    "BlinkMacSystemFont",
-    "Segoe UI",
-    "Roboto",
-    "sans-serif",
-  ],
+  fallback: ["-apple-system", "BlinkMacSystemFont", "Segoe UI", "Roboto"],
 });
 
 const dmMono = DM_Mono({
   weight: "400",
   subsets: ["latin"],
-  variable: "--font-dm-mono",
   display: "swap",
   fallback: [
     "SF Mono",
@@ -48,7 +48,6 @@ const dmMono = DM_Mono({
     "Roboto Mono",
     "Consolas",
     "Courier New",
-    "monospace",
   ],
 });
 
@@ -64,11 +63,40 @@ interface LayoutProps {
   children: React.ReactNode;
 }
 
-export default function Layout({ children }: LayoutProps) {
+export default async function Layout({ children }: LayoutProps) {
+  // Locale comes from the NEXT_LOCALE cookie (see src/i18n/request.ts), which
+  // UserProvider keeps in sync with the user's stored language preference.
+  const locale = await getLocale();
+  const messages = await getMessages();
+
+  let dir: HtmlDir = htmlDirForLocale(locale);
+  // Dev-only escape hatch so QA can preview either direction without
+  // switching account language: set an "onyx-dir" cookie to "rtl" or
+  // "ltr" (with path=/) and reload.
+  if (process.env.NODE_ENV === "development") {
+    const dirOverride = (await cookies()).get("onyx-dir")?.value;
+    if (dirOverride === "rtl" || dirOverride === "ltr") {
+      dir = dirOverride;
+    }
+  }
+
   return (
     <html
-      lang="en"
-      className={cn(hankenGrotesk.variable, dmMono.variable)}
+      lang={locale}
+      dir={dir}
+      // The app-wide font variables are composed here instead of with
+      // next/font's `variable` option: the CJK tail (--font-cjk-sans,
+      // globals.css) must vary with the locale, so the loaded-webfont chain
+      // and the tail have to be joined in one declaration. Every
+      // `var(--font-hanken-grotesk)` / `var(--font-dm-mono)` consumer (Opal
+      // text presets, the font-hanken/font-sans utilities, app CSS) resolves
+      // through these.
+      style={
+        {
+          "--font-hanken-grotesk": `${hankenGrotesk.style.fontFamily}, var(--font-cjk-sans), sans-serif`,
+          "--font-dm-mono": `${dmMono.style.fontFamily}, var(--font-cjk-sans), monospace`,
+        } as React.CSSProperties
+      }
       suppressHydrationWarning
     >
       <head>
@@ -119,37 +147,45 @@ export default function Layout({ children }: LayoutProps) {
       </head>
 
       <body className={`relative font-hanken`}>
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
-          disableTransitionOnChange
-        >
-          <div className="text-text min-h-screen bg-background">
-            <TooltipProvider>
-              <PHProvider>
-                <SWRConfigProvider>
-                  <AppHealthBanner />
-                  <BannerQueue />
-                  <AuthenticationShell>
-                    <AppProvider>
-                      <PostHogRuntimeInitializer />
-                      <CustomAnalyticsScript />
-                      <PostHogPageTracker />
-                      <div id={MODAL_ROOT_ID} className="h-screen w-screen">
-                        <ProductGatingWrapper>{children}</ProductGatingWrapper>
-                      </div>
-                      <WebVitals />
-                      {process.env.NEXT_PUBLIC_ENABLE_STATS === "true" && (
-                        <StatsOverlayLoader />
-                      )}
-                    </AppProvider>
-                  </AuthenticationShell>
-                </SWRConfigProvider>
-              </PHProvider>
-            </TooltipProvider>
-          </div>
-        </ThemeProvider>
+        <NextIntlClientProvider locale={locale} messages={messages}>
+          {/* Radix reads direction from context, not the DOM, so popovers,
+              menus and roving focus need this alongside <html dir>. */}
+          <DirectionProvider dir={dir}>
+            <ThemeProvider
+              attribute="class"
+              defaultTheme="system"
+              enableSystem
+              disableTransitionOnChange
+            >
+              <div className="text-text min-h-screen bg-background">
+                <TooltipProvider>
+                  <PHProvider>
+                    <SWRConfigProvider>
+                      <AppHealthBanner />
+                      <BannerQueue />
+                      <AuthenticationShell>
+                        <AppProvider>
+                          <PostHogRuntimeInitializer />
+                          <CustomAnalyticsScript />
+                          <PostHogPageTracker />
+                          <div id={MODAL_ROOT_ID} className="h-screen w-screen">
+                            <ProductGatingWrapper>
+                              {children}
+                            </ProductGatingWrapper>
+                          </div>
+                          <WebVitals />
+                          {process.env.NEXT_PUBLIC_ENABLE_STATS === "true" && (
+                            <StatsOverlayLoader />
+                          )}
+                        </AppProvider>
+                      </AuthenticationShell>
+                    </SWRConfigProvider>
+                  </PHProvider>
+                </TooltipProvider>
+              </div>
+            </ThemeProvider>
+          </DirectionProvider>
+        </NextIntlClientProvider>
       </body>
     </html>
   );

@@ -1,7 +1,5 @@
 import { useState, KeyboardEvent } from "react";
-import { InputTypeIn } from "@opal/components";
-import Button from "@/refresh-components/buttons/Button";
-import { SvgX } from "@opal/icons";
+import { InputTypeIn, Tag } from "@opal/components";
 interface ListFieldInputProps {
   values: string[];
   onChange: (values: string[]) => void;
@@ -59,19 +57,13 @@ export function ListFieldInput({
       <div className="mt-3">
         <div className="flex flex-wrap gap-1.5">
           {values.map((value, index) => (
-            // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
-            <Button
+            <Tag
               key={index}
-              internal
-              secondary
-              type="button"
-              aria-label={`Remove ${value}`}
-              onClick={() => removeValue(index)}
-              rightIcon={SvgX}
-              className="rounded-sm h-8"
-            >
-              {value}
-            </Button>
+              size="md"
+              title={value}
+              disabled={disabled}
+              onRemove={() => removeValue(index)}
+            />
           ))}
         </div>
       </div>

@@ -1,4 +1,4 @@
-import type { AccountType, UserRole, UserStatus } from "@/lib/types";
+import type { AccountType, UserStatus } from "@/lib/types";
 
 export interface UserGroupInfo {
   id: number;
@@ -9,8 +9,8 @@ export interface UserGroupInfo {
 export interface FullUserSnapshot {
   id: string;
   email: string;
-  role: UserRole;
   account_type: AccountType;
+  is_admin: boolean;
   is_active: boolean;
   password_configured: boolean;
   personal_name: string | null;
@@ -25,7 +25,8 @@ export interface FullUserSnapshot {
 export interface UserRow {
   id: string | null;
   email: string;
-  role: UserRole | null;
+  account_type: AccountType | null;
+  is_admin: boolean;
   status: UserStatus;
   is_active: boolean;
   is_scim_synced: boolean;

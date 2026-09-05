@@ -11,14 +11,21 @@ interface ContainerCenter {
   centerY: number | null;
   /** Viewport x of the container's left edge (the sidebar/content boundary). */
   left: number | null;
+  /** Distance from the inline-start viewport edge, for logical positioning. */
+  inlineStart: number | null;
   hasContainerCenter: boolean;
 }
 
-const NULL_MEASURE = { x: null, y: null, left: null } as const;
+const NULL_MEASURE = {
+  x: null,
+  y: null,
+  left: null,
+  inlineStart: null,
+} as const;
 
 function measure(
   el: HTMLElement
-): { x: number; y: number; left: number } | null {
+): { x: number; y: number; left: number; inlineStart: number } | null {
   if (!el.isConnected) return null;
   const rect = el.getBoundingClientRect();
   if (rect.width === 0 && rect.height === 0) return null;
@@ -26,6 +33,12 @@ function measure(
     x: rect.left + rect.width / 2,
     y: rect.top + rect.height / 2,
     left: rect.left,
+    // Distance from the inline-start viewport edge, for consumers that
+    // position with logical properties.
+    inlineStart:
+      getComputedStyle(el).direction === "rtl"
+        ? window.innerWidth - rect.right
+        : rect.left,
   };
 }
 
@@ -49,10 +62,15 @@ function measure(
 export default function useContainerCenter(): ContainerCenter {
   const pathname = usePathname();
   const { isMediumScreen } = useScreenSize();
+  const [container, setContainer] = useState<HTMLElement | null>(() => {
+    if (typeof document === "undefined") return null;
+    return document.querySelector<HTMLElement>(SELECTOR);
+  });
   const [rect, setRect] = useState<{
     x: number | null;
     y: number | null;
     left: number | null;
+    inlineStart: number | null;
   }>(() => {
     if (typeof document === "undefined") return NULL_MEASURE;
     const el = document.querySelector<HTMLElement>(SELECTOR);
@@ -62,46 +80,54 @@ export default function useContainerCenter(): ContainerCenter {
   });
 
   useEffect(() => {
-    let resizeObserver: ResizeObserver | null = null;
-    let mutationObserver: MutationObserver | null = null;
-
-    const attach = (container: HTMLElement) => {
-      const update = () => setRect(measure(container) ?? NULL_MEASURE);
-      update();
-      resizeObserver = new ResizeObserver(update);
-      resizeObserver.observe(container);
-    };
-
     const existing = document.querySelector<HTMLElement>(SELECTOR);
     if (existing) {
-      attach(existing);
-    } else {
-      // The container can mount after this hook (e.g. a root-level consumer
-      // renders before the auth shell reveals the chrome). Watch for it.
-      setRect(NULL_MEASURE);
-      mutationObserver = new MutationObserver(() => {
-        const el = document.querySelector<HTMLElement>(SELECTOR);
-        if (!el) return;
-        mutationObserver?.disconnect();
-        mutationObserver = null;
-        attach(el);
-      });
-      mutationObserver.observe(document.body, {
-        childList: true,
-        subtree: true,
-      });
+      setContainer(existing);
+      setRect(measure(existing) ?? NULL_MEASURE);
+      return;
     }
 
+    // The container can mount after this hook (e.g. a root-level consumer
+    // renders before the auth shell reveals the chrome). Watch for it.
+    setContainer(null);
+    setRect(NULL_MEASURE);
+
+    const mutationObserver = new MutationObserver(() => {
+      const el = document.querySelector<HTMLElement>(SELECTOR);
+      if (!el) return;
+      setContainer(el);
+      setRect(measure(el) ?? NULL_MEASURE);
+      mutationObserver.disconnect();
+    });
+    mutationObserver.observe(document.body, {
+      childList: true,
+      subtree: true,
+    });
+
     return () => {
-      resizeObserver?.disconnect();
-      mutationObserver?.disconnect();
+      mutationObserver.disconnect();
     };
   }, [pathname]);
+
+  useEffect(() => {
+    if (!container) return;
+
+    const update = () => setRect(measure(container) ?? NULL_MEASURE);
+    update();
+
+    const resizeObserver = new ResizeObserver(update);
+    resizeObserver.observe(container);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, [container]);
 
   return {
     centerX: isMediumScreen ? null : rect.x,
     centerY: isMediumScreen ? null : rect.y,
     left: isMediumScreen ? null : rect.left,
+    inlineStart: isMediumScreen ? null : rect.inlineStart,
     hasContainerCenter: isMediumScreen
       ? false
       : rect.x !== null && rect.y !== null,

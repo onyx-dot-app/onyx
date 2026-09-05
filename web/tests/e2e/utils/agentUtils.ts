@@ -1,4 +1,5 @@
 import { Page } from "@playwright/test";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { expect } from "@playwright/test";
 import { verifyAgentIsChosen } from "./chatActions";
 
@@ -78,7 +79,7 @@ export async function pinAgentByName(
  */
 export async function ensureImageGenerationEnabled(page: Page): Promise<void> {
   // Navigate to the chat preferences page
-  await page.goto("/admin/configuration/chat-preferences");
+  await page.goto(ADMIN_ROUTES.CHAT_PREFERENCES.path);
   await page.waitForLoadState("networkidle");
 
   // The "Actions & Tools" collapsible is open by default.

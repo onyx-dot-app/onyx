@@ -175,8 +175,10 @@ def _collect_queue_metrics(redis_celery: Redis) -> list[Metric]:
         "llm_model_update_queue_length": OnyxCeleryQueues.LLM_MODEL_UPDATE,
         "checkpoint_cleanup_queue_length": OnyxCeleryQueues.CHECKPOINT_CLEANUP,
         "index_attempt_cleanup_queue_length": OnyxCeleryQueues.INDEX_ATTEMPT_CLEANUP,
+        "index_reclaim_queue_length": OnyxCeleryQueues.INDEX_RECLAIM,
         "chat_ttl_deletion_queue_length": OnyxCeleryQueues.CHAT_TTL_DELETION,
         "csv_generation_queue_length": OnyxCeleryQueues.CSV_GENERATION,
+        "capability_checks_queue_length": OnyxCeleryQueues.CAPABILITY_CHECKS,
         "user_file_processing_queue_length": OnyxCeleryQueues.USER_FILE_PROCESSING,
         "user_file_project_sync_queue_length": OnyxCeleryQueues.USER_FILE_PROJECT_SYNC,
         "user_file_delete_queue_length": OnyxCeleryQueues.USER_FILE_DELETE,
@@ -843,7 +845,7 @@ def cloud_check_alembic() -> bool | None:
                     tenant_to_revision[tenant_id] = ALEMBIC_NULL_REVISION
 
         # get the total count of each revision
-        for k, v in tenant_to_revision.items():
+        for v in tenant_to_revision.values():
             revision_counts[v] = revision_counts.get(v, 0) + 1
 
         # error if any null revision tenants are found
@@ -974,8 +976,12 @@ def monitor_celery_queues_helper(
     n_index_attempt_cleanup = celery_get_queue_length(
         OnyxCeleryQueues.INDEX_ATTEMPT_CLEANUP, r_celery
     )
+    n_index_reclaim = celery_get_queue_length(OnyxCeleryQueues.INDEX_RECLAIM, r_celery)
     n_csv_generation = celery_get_queue_length(
         OnyxCeleryQueues.CSV_GENERATION, r_celery
+    )
+    n_capability_checks = celery_get_queue_length(
+        OnyxCeleryQueues.CAPABILITY_CHECKS, r_celery
     )
     n_monitoring = celery_get_queue_length(OnyxCeleryQueues.MONITORING, r_celery)
     n_sandbox = celery_get_queue_length(OnyxCeleryQueues.SANDBOX, r_celery)
@@ -1011,7 +1017,9 @@ def monitor_celery_queues_helper(
         f"llm_model_update={n_llm_model_update} "
         f"checkpoint_cleanup={n_checkpoint_cleanup} "
         f"index_attempt_cleanup={n_index_attempt_cleanup} "
+        f"index_reclaim={n_index_reclaim} "
         f"csv_generation={n_csv_generation} "
+        f"capability_checks={n_capability_checks} "
         f"monitoring={n_monitoring} "
         f"sandbox={n_sandbox} "
         f"opensearch_migration={n_opensearch_migration} "

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import {
   Button,
   Card,
@@ -38,6 +39,7 @@ export default function AssociatedSkillsEditor({
   onCreateSkill,
   onUploadSkill,
 }: AssociatedSkillsEditorProps) {
+  const t = useTranslations("craft.apps.associatedSkills");
   const { data, isLoading } = useUserSkills();
   const [query, setQuery] = useState("");
   const [associateOpen, setAssociateOpen] = useState(false);
@@ -84,16 +86,16 @@ export default function AssociatedSkillsEditor({
   }, [app.id, customSkills, query]);
   function unavailableReason(skill: Skill): string | null {
     if (skill.is_valid === false) {
-      return "Invalid skill — fix it before associating.";
+      return t("unavailable.invalid");
     }
     if (
       skill.external_app !== null &&
       skill.external_app.external_app_id !== app.id
     ) {
-      return `Already associated with app “${skill.external_app.name}”.`;
+      return t("unavailable.otherApp", { name: skill.external_app.name });
     }
     if (!selectedIds.has(skill.id) && selectedNames.has(skill.name)) {
-      return `A skill named “${skill.name}” is already associated.`;
+      return t("unavailable.duplicateName", { name: skill.name });
     }
     return null;
   }
@@ -116,11 +118,9 @@ export default function AssociatedSkillsEditor({
     <div className="flex flex-col gap-3">
       <div className="flex items-start justify-between gap-3">
         <div className="flex flex-col gap-0.5">
-          <Text font="main-ui-action">Associated skills</Text>
+          <Text font="main-ui-action">{t("title")}</Text>
           <Text font="secondary-body" color="text-03">
-            Skills give Craft instructions for using this app. They are
-            organization-wide; users may need to enable all of them for the app
-            to work correctly.
+            {t("description")}
           </Text>
         </div>
         <div className="flex shrink-0 gap-2">
@@ -133,7 +133,7 @@ export default function AssociatedSkillsEditor({
             }}
           >
             <Popover.Trigger asChild>
-              <Button prominence="secondary">Associate existing</Button>
+              <Button prominence="secondary">{t("associateButton")}</Button>
             </Popover.Trigger>
             <Popover.Content align="end" sideOffset={4} width="xl">
               <div className="flex max-h-[min(20rem,calc(var(--radix-popover-content-available-height)-0.5rem))] flex-col gap-2 overflow-hidden p-2">
@@ -141,17 +141,17 @@ export default function AssociatedSkillsEditor({
                   searchIcon
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Search editable skills..."
+                  placeholder={t("search.placeholder")}
                   variant="internal"
                 />
                 <div className="flex min-h-0 flex-col gap-1 overflow-y-auto overscroll-contain">
                   {isLoading ? (
                     <Text font="secondary-body" color="text-03">
-                      Loading skills…
+                      {t("loading.label")}
                     </Text>
                   ) : selectableSkills.length === 0 ? (
                     <Text font="secondary-body" color="text-03">
-                      No editable skills found.
+                      {t("empty.label")}
                     </Text>
                   ) : (
                     selectableSkills.map((skill) => {
@@ -168,7 +168,9 @@ export default function AssociatedSkillsEditor({
                               <SvgCheck className="size-4 stroke-action-selection-05" />
                             ) : undefined
                           }
-                          aria-label={`Associate ${skill.name}`}
+                          aria-label={t("associateAriaLabel", {
+                            name: skill.name,
+                          })}
                         >
                           {skill.name}
                         </LineItem>
@@ -179,18 +181,17 @@ export default function AssociatedSkillsEditor({
                 {pendingPromotion && (
                   <div className="flex flex-col gap-2 border-t border-border-01 pt-2">
                     <Text font="main-ui-action">
-                      {`Make “${pendingPromotion.name}” organization-wide?`}
+                      {t("promote.title", { name: pendingPromotion.name })}
                     </Text>
                     <Text font="secondary-body" color="text-03">
-                      App-associated skills must be available to everyone. This
-                      change is applied when you save the app.
+                      {t("promote.description")}
                     </Text>
                     <div className="flex justify-end gap-2">
                       <Button
                         prominence="secondary"
                         onClick={() => setPendingPromotion(null)}
                       >
-                        Cancel
+                        {t("promote.cancelButton")}
                       </Button>
                       <Button
                         onClick={() => {
@@ -199,7 +200,7 @@ export default function AssociatedSkillsEditor({
                           setAssociateOpen(false);
                         }}
                       >
-                        Make organization-wide
+                        {t("promote.confirmButton")}
                       </Button>
                     </div>
                   </div>
@@ -209,7 +210,7 @@ export default function AssociatedSkillsEditor({
           </Popover>
           <Popover modal open={createOpen} onOpenChange={setCreateOpen}>
             <Popover.Trigger asChild>
-              <Button icon={SvgPlus}>Create skill</Button>
+              <Button icon={SvgPlus}>{t("createSkillButton")}</Button>
             </Popover.Trigger>
             <Popover.Content align="end" sideOffset={4} width="lg">
               <Popover.Menu>
@@ -219,10 +220,10 @@ export default function AssociatedSkillsEditor({
                     setCreateOpen(false);
                     onCreateSkill();
                   }}
-                  description="Write instructions and add supporting files."
+                  description={t("create.scratch.description")}
                   wrapDescription
                 >
-                  Start from scratch
+                  {t("create.scratch.label")}
                 </LineItem>
                 <LineItem
                   icon={SvgUploadCloud}
@@ -230,18 +231,18 @@ export default function AssociatedSkillsEditor({
                     setCreateOpen(false);
                     onUploadSkill();
                   }}
-                  description="Import a SKILL.md file, ZIP file, or skill folder."
+                  description={t("create.upload.description")}
                   wrapDescription
                 >
-                  Upload a skill
+                  {t("create.upload.label")}
                 </LineItem>
                 <LineItem
                   icon={SvgGithub}
                   disabled
-                  description="If your skills are in GitHub, import them on the Skills page first, then associate them with this app."
+                  description={t("create.github.description")}
                   wrapDescription
                 >
-                  Import from GitHub
+                  {t("create.github.label")}
                 </LineItem>
               </Popover.Menu>
             </Popover.Content>
@@ -250,14 +251,13 @@ export default function AssociatedSkillsEditor({
       </div>
 
       {selectedSkillIds.length === 0 ? (
-        <Card border="solid" rounding="lg" padding="sm">
+        <Card border="solid" rounding={4} padding={2}>
           <Text font="secondary-body" color="text-03">
-            No skills are associated yet. This app can still be saved and used
-            without one.
+            {t("noneAssociated.label")}
           </Text>
         </Card>
       ) : (
-        <Card border="solid" rounding="sm" padding="fit">
+        <Card border="solid" rounding={2} padding={0}>
           <div className="flex max-h-48 flex-col divide-y divide-border-01 overflow-y-auto overscroll-contain">
             {selectedSkillIds.map((skillId) => {
               const skill = customSkillById.get(skillId);
@@ -277,7 +277,7 @@ export default function AssociatedSkillsEditor({
                   >
                     <div className="min-w-0 flex-1">
                       <Text font="secondary-body">
-                        {`Unlink “${pendingUnlink.name}” from this app?`}
+                        {t("unlink.confirm", { name: pendingUnlink.name })}
                       </Text>
                     </div>
                     <Button
@@ -285,7 +285,7 @@ export default function AssociatedSkillsEditor({
                       prominence="secondary"
                       onClick={() => setPendingUnlink(null)}
                     >
-                      Cancel
+                      {t("unlink.cancelButton")}
                     </Button>
                     <Button
                       size="md"
@@ -299,7 +299,7 @@ export default function AssociatedSkillsEditor({
                         setPendingUnlink(null);
                       }}
                     >
-                      Unlink
+                      {t("unlink.button")}
                     </Button>
                   </div>
                 );
@@ -313,20 +313,20 @@ export default function AssociatedSkillsEditor({
                     <Text font="main-ui-action">{name}</Text>
                   </div>
                   {(skill?.is_valid ?? summary?.is_valid) === false && (
-                    <Tag title="Invalid" color="amber" />
+                    <Tag title={t("invalidTag")} color="amber" />
                   )}
                   <Button
                     size="md"
                     prominence="tertiary"
                     onClick={() => onOpenSkill(skillId)}
                   >
-                    {canEdit ? "Edit" : "View"}
+                    {canEdit ? t("editButton") : t("viewButton")}
                   </Button>
                   <Button
                     size="md"
                     prominence="tertiary"
                     icon={SvgX}
-                    aria-label={`Unlink ${name}`}
+                    aria-label={t("unlinkAriaLabel", { name })}
                     onClick={() => {
                       setPendingUnlink({ id: skillId, name });
                     }}

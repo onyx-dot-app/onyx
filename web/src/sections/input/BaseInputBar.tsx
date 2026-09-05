@@ -11,13 +11,15 @@ import {
   type ReactNode,
   type SyntheticEvent,
 } from "react";
+import { useTranslations } from "next-intl";
 import { getPastedFilesIfNoText } from "@/lib/clipboard";
 import { deleteTokenBeforeCursor, getTextContent } from "@/lib/contentEditable";
 import PasteTilePopover from "@/sections/input/PasteTilePopover";
 import { cn } from "@opal/utils";
+import { firstStrongTextDir } from "@/lib/rehypeDirection";
 import { Disabled } from "@opal/core";
 import IconButton from "@/refresh-components/buttons/IconButton";
-import { Text } from "@opal/components";
+import { Button, Text } from "@opal/components";
 import { SvgArrowUp, SvgLoader, SvgStop } from "@opal/icons";
 import Keycap from "@/refresh-components/Keycap";
 import { useContentEditable } from "@/hooks/useContentEditable";
@@ -78,7 +80,7 @@ const BaseInputBar = memo(
         onSubmit,
         isRunning,
         disabled = false,
-        placeholder = "Describe your task...",
+        placeholder,
         noBottomRounding = false,
         pasteTilesEnabled = false,
         sandboxInitializing = false,
@@ -98,8 +100,11 @@ const BaseInputBar = memo(
       },
       ref
     ) => {
+      const t = useTranslations("chat.input");
       const queueEnabled = !!onQueueMessage;
       const queue = queuedMessages ?? EMPTY_QUEUED_MESSAGES;
+      const resolvedPlaceholder =
+        placeholder ?? t("baseInputBar.input.placeholder");
 
       const inputWrapperRef = useRef<HTMLDivElement>(null);
       const {
@@ -274,7 +279,6 @@ const BaseInputBar = memo(
             <QueuedMessageBar
               messages={queue}
               highlightedIndex={queueNav.highlightedIndex}
-              awaitingPreferredSelection={false}
               onDiscard={(index) => onRemoveQueuedMessage?.(index)}
               onHighlight={queueNav.setHighlightedIndex}
             />
@@ -292,6 +296,14 @@ const BaseInputBar = memo(
               <div
                 ref={inputRef}
                 contentEditable={!disabled}
+                // Direction follows what the user types. While empty it
+                // follows the placeholder so its punctuation sits on the
+                // correct side in every locale.
+                dir={
+                  message
+                    ? "auto"
+                    : (firstStrongTextDir(resolvedPlaceholder) ?? "auto")
+                }
                 suppressContentEditableWarning
                 onPaste={handlePaste}
                 onInput={handleInput}
@@ -312,11 +324,11 @@ const BaseInputBar = memo(
                   scrollbarColor: "var(--border-02) transparent",
                 }}
                 role="textbox"
-                aria-label="Message input"
+                aria-label={t("baseInputBar.input.ariaLabel")}
                 aria-multiline={true}
                 aria-disabled={disabled}
-                aria-placeholder={placeholder}
-                data-placeholder={placeholder}
+                aria-placeholder={resolvedPlaceholder}
+                data-placeholder={resolvedPlaceholder}
                 data-empty={!message ? "" : undefined}
                 onCopy={handleCopy}
                 onCut={handleCut}
@@ -331,7 +343,7 @@ const BaseInputBar = memo(
                 {pasteExpandHintVisible ? (
                   <div className="flex items-center gap-1 select-none">
                     <Text font="secondary-body" color="text-02">
-                      Paste again to expand
+                      {t("baseInputBar.pasteExpandHint.text")}
                     </Text>
                   </div>
                 ) : (
@@ -341,7 +353,7 @@ const BaseInputBar = memo(
                     <div className="flex items-center gap-1 select-none">
                       <Keycap>↑</Keycap>
                       <Text font="secondary-body" color="text-02">
-                        to edit queued messages
+                        {t("baseInputBar.queuedMessagesHint.text")}
                       </Text>
                     </div>
                   )
@@ -365,24 +377,34 @@ const BaseInputBar = memo(
                     className="border-[1.5px] border-border-02"
                     disabled={!interruptible || isInterrupting}
                     onClick={handleInterrupt}
-                    tooltip="Stop · esc"
-                    aria-label="Stop generating"
+                    tooltip={t("baseInputBar.stopButton.tooltip")}
+                    aria-label={t("baseInputBar.stopButton.ariaLabel")}
                   />
                 </div>
-                <IconButton
-                  icon={sandboxInitializing ? SvgLoader : SvgArrowUp}
+                <Button
+                  icon={
+                    sandboxInitializing
+                      ? ({ className, style }) => (
+                          <SvgLoader
+                            className={cn(className, "animate-spin")}
+                            style={style}
+                          />
+                        )
+                      : SvgArrowUp
+                  }
                   onClick={handleSubmit}
                   disabled={!canSubmit}
                   tooltip={
                     sandboxInitializing
-                      ? "Initializing sandbox..."
+                      ? t("baseInputBar.sendButton.initializingTooltip")
                       : isRunning
-                        ? "Queue message"
-                        : "Send"
+                        ? t("baseInputBar.sendButton.queueLabel")
+                        : t("baseInputBar.sendButton.sendLabel")
                   }
-                  aria-label={isRunning ? "Queue message" : "Send"}
-                  iconClassName={
-                    sandboxInitializing ? "animate-spin" : undefined
+                  aria-label={
+                    isRunning
+                      ? t("baseInputBar.sendButton.queueLabel")
+                      : t("baseInputBar.sendButton.sendLabel")
                   }
                 />
               </div>

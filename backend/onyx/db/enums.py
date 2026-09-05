@@ -73,6 +73,16 @@ class IndexingStatus(str, PyEnum):
         )
 
 
+class NotificationSeverity(str, PyEnum):
+    """How loud a notification renders: INFO stays in the bell popover,
+    WARNING and ERROR also surface in the banner queue. Declared in
+    ascending loudness."""
+
+    INFO = "info"
+    WARNING = "warning"
+    ERROR = "error"
+
+
 class PermissionSyncStatus(str, PyEnum):
     """Status enum for permission sync attempts"""
 
@@ -223,13 +233,15 @@ class IndexReclaimStatus(str, PyEnum):
     PENDING: consented at reindex submit; waiting for the swap + port to drain.
     SOAKING: the old index stopped being read; waiting out the retention window.
     DELETING: deleting the old index's data (loops until count-verified empty).
+    RECLAIMED: terminal success — the old index's data is gone; the PAST row is kept
+        (not deleted) as the durable record that this index was reclaimed.
     BLOCKED: parked after repeated failures; alerted, needs operator/cooldown revival.
-    On success the PAST row is deleted, so there is no persisted terminal state.
     """
 
     PENDING = "PENDING"
     SOAKING = "SOAKING"
     DELETING = "DELETING"
+    RECLAIMED = "RECLAIMED"
     BLOCKED = "BLOCKED"
 
 
@@ -301,6 +313,10 @@ class SupportedLanguage(str, PyEnum):
     PT = "pt"
     FR = "fr"
     DE = "de"
+    JA = "ja"
+    ZH = "zh"
+    KO = "ko"
+    AR = "ar"
 
 
 class DefaultAppMode(str, PyEnum):
@@ -530,6 +546,25 @@ class ArtifactType(str, PyEnum):
     IMAGE = "image"
     MARKDOWN = "markdown"
     EXCEL = "excel"
+    PDF = "pdf"
+    CSV = "csv"
+    CODE = "code"
+    DIRECTORY = "directory"
+    AUDIO = "audio"
+    VIDEO = "video"
+    ARCHIVE = "archive"
+    # Generic file type used when no specific type applies.
+    FILE = "file"
+
+
+class ReceiptStatus(str, PyEnum):
+    """Lifecycle of an external-action receipt. The full contract lives on
+    ActionReceipt."""
+
+    PENDING = "pending"
+    CONFIRMED = "confirmed"
+    FAILED = "failed"
+    UNKNOWN = "unknown"
 
 
 class HierarchyNodeType(str, PyEnum):
@@ -574,6 +609,7 @@ class LLMModelFlowType(str, PyEnum):
     CONTEXTUAL_RAG = "contextual_rag"
     REASONING = "reasoning"
     CHAT_NAMING = "chat_naming"
+    CRAFT = "craft"
 
 
 class HookPoint(str, PyEnum):
@@ -608,6 +644,7 @@ class Permission(str, PyEnum):
     READ_DOCUMENT_SETS = "read:document_sets"
     READ_AGENTS = "read:agents"
     READ_USERS = "read:users"
+    READ_USER_GROUPS = "read:user_groups"
 
     # API-surface scopes — coarse, implied by basic/admin, used to scope PATs.
     READ_SEARCH = "read:search"
@@ -621,18 +658,18 @@ class Permission(str, PyEnum):
     ADD_AGENTS = "add:agents"
     MANAGE_AGENTS = "manage:agents"
     MANAGE_DOCUMENT_SETS = "manage:document_sets"
-    ADD_CONNECTORS = "add:connectors"
     MANAGE_CONNECTORS = "manage:connectors"
     MANAGE_LLMS = "manage:llms"
 
     # Toggle tokens
     READ_AGENT_ANALYTICS = "read:agent_analytics"
     MANAGE_ACTIONS = "manage:actions"
+    MANAGE_SKILLS = "manage:skills"
     READ_QUERY_HISTORY = "read:query_history"
     MANAGE_USER_GROUPS = "manage:user_groups"
     CREATE_USER_API_KEYS = "create:user_api_keys"
-    CREATE_SERVICE_ACCOUNT_API_KEYS = "create:service_account_api_keys"
-    CREATE_SLACK_DISCORD_BOTS = "create:slack_discord_bots"
+    MANAGE_SERVICE_ACCOUNT_API_KEYS = "manage:service_account_api_keys"
+    MANAGE_BOTS = "manage:bots"
 
     # Role scopes — a bundle token implying the surfaces a given machine
     # identity may use. PAT-only; never granted to a group/user.
@@ -652,6 +689,7 @@ Permission.IMPLIED = frozenset(
         Permission.READ_DOCUMENT_SETS,
         Permission.READ_AGENTS,
         Permission.READ_USERS,
+        Permission.READ_USER_GROUPS,
         Permission.READ_SEARCH,
         Permission.READ_CHAT,
         Permission.WRITE_CHAT,
@@ -660,6 +698,19 @@ Permission.IMPLIED = frozenset(
         Permission.USE_LLM_GATEWAY,
     }
 )
+
+
+class PermissionAuthority(PyEnum):
+    """The authority a user holds for a permission, returned by has_permission.
+
+    GLOBAL: holds the token outright / admin — unrestricted. SCOPED: group
+    manager — only within managed groups. NONE: not authorized. A scoped grant
+    is group-qualified, so it can't be a flat bool; callers act on the kind.
+    """
+
+    GLOBAL = "global"
+    SCOPED = "scoped"
+    NONE = "none"
 
 
 class PersonaSharePermission(str, PyEnum):
@@ -712,3 +763,96 @@ class SSOProviderType(str, PyEnum):
     GOOGLE_OAUTH = "GOOGLE_OAUTH"
     OIDC = "OIDC"
     SAML = "SAML"
+
+
+class IncognitoRecordMode(str, PyEnum):
+    """What a workspace retains from an incognito chat.
+
+    Both modes keep the chat out of the owner's own history and refuse memory
+    writes. The mode governs what else the workspace may record. Every mode
+    meters usage, since token rate limits read those rows and incognito must
+    never become a quota-evasion route. Feature-off is deliberately not a
+    member: disabling incognito is an admin setting, never a mode pinned on a
+    session.
+
+    Values differ from member names here, so the column storing this passes
+    ``values_callable`` to persist the value rather than the default name.
+    """
+
+    # Content persists as an ordinary chat, hidden only from the owner's own
+    # surfaces (history, search, project lists).
+    FULL_HISTORY = "full_history"
+    # No conversation content is written to Postgres. Usage is still metered.
+    USAGE_ONLY = "usage_only"
+
+    @classmethod
+    def from_context_value(cls, value: str | None) -> "IncognitoRecordMode | None":
+        """None outside incognito. Unknown values fail closed to USAGE_ONLY."""
+        if value is None:
+            return None
+        try:
+            return cls(value)
+        except ValueError:
+            return cls.USAGE_ONLY
+
+    @property
+    def persists_content(self) -> bool:
+        """Whether conversation content may be written to chat_message rows.
+
+        Content-free modes still write the rows, with empty text and real
+        token counts. False means content is never written, not
+        written-and-hidden: deletion is not atomic across WAL, replicas,
+        and backups.
+        """
+        return self is IncognitoRecordMode.FULL_HISTORY
+
+    @property
+    def emits_external_traces(self) -> bool:
+        """Whether spans may reach external trace processors.
+
+        Redacting a payload still sends a request to a destination the trust
+        boundary denies, so suppression is total rather than scrubbed. Internal
+        spans always run: the usage ledger is a tracing processor consuming
+        them, so metering needs no egress.
+        """
+        return self is IncognitoRecordMode.FULL_HISTORY
+
+    @property
+    def fires_hooks(self) -> bool:
+        """Whether the query-processing hook may run.
+
+        The hook ships the raw query and the user's email to a customer-
+        configured endpoint before persistence, which the trust boundary denies
+        for anything but a fully-recorded chat.
+        """
+        return self is IncognitoRecordMode.FULL_HISTORY
+
+
+def record_mode_persists_content(mode: IncognitoRecordMode | None) -> bool:
+    """None is an ordinary chat, which always persists content."""
+    return mode is None or mode.persists_content
+
+
+class CapabilityCheckTrigger(str, PyEnum):
+    """What initiated a capability-check run."""
+
+    MANUAL = "manual"
+    CREDENTIAL_CREATED = "credential_created"
+    # Recorded from the blocking validation at cc-pair creation/swap time.
+    CC_PAIR_VALIDATION = "cc_pair_validation"
+    # Recorded from the blocking validation at indexing-run start.
+    INDEXING_ATTEMPT = "indexing_attempt"
+    # Recorded from the blocking validation at doc-permission-sync run start.
+    PERM_SYNC_ATTEMPT = "perm_sync_attempt"
+
+
+class CapabilityReportRunStatus(str, PyEnum):
+    """Lifecycle of one persisted capability-report row.
+
+    Kept separate from the report payload so the last COMPLETED report stays
+    readable while a re-run is RUNNING.
+    """
+
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED_TO_RUN = "failed_to_run"

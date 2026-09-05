@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
+import { useFocusOnMount } from "@opal/hooks";
 import isEqual from "lodash/isEqual";
 import {
   Button,
@@ -97,6 +99,9 @@ export default function ActionPolicyEditorModal({
   allowPristineSave = false,
   closeAfterSave = true,
 }: ActionPolicyEditorModalProps) {
+  const t = useTranslations("craft.apps.policyEditor");
+  const focusFirstField =
+    useFocusOnMount<HTMLInputElement>(autoFocusFirstField);
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({
     ...initialFieldValues,
   });
@@ -196,7 +201,7 @@ export default function ActionPolicyEditorModal({
                     <div key={field.key} className="flex flex-col gap-1">
                       <Text font="main-ui-action">{field.label}</Text>
                       <Input
-                        autoFocus={autoFocusFirstField && field === fields[0]}
+                        ref={field === fields[0] ? focusFirstField : undefined}
                         value={fieldValues[field.key] ?? ""}
                         onChange={(e) =>
                           setFieldValues((prev) => ({
@@ -215,7 +220,7 @@ export default function ActionPolicyEditorModal({
 
                 {policyItems === undefined ? (
                   <Text font="main-content-body" color="text-03">
-                    Loading…
+                    {t("loading.label")}
                   </Text>
                 ) : policyItems.length === 0 ? (
                   <Text font="secondary-body" color="text-03">
@@ -245,10 +250,10 @@ export default function ActionPolicyEditorModal({
                   onClick={() => unsavedChanges.requestLeave(onClose)}
                   disabled={isSaving}
                 >
-                  Cancel
+                  {t("cancelButton")}
                 </Button>
                 <Button onClick={save} disabled={!canSave}>
-                  {isSaving ? "Saving…" : saveLabel}
+                  {isSaving ? t("savingButton") : saveLabel}
                 </Button>
               </div>
             </Modal.Footer>
@@ -287,6 +292,7 @@ interface PolicyEditorProps {
 /** Approval-policy section of the editor: a bulk Auto-approve/Ask selector
  * plus an Advanced section with a per-item three-state toggle. */
 function PolicyEditor({ items, policies, onChange }: PolicyEditorProps) {
+  const t = useTranslations("craft.apps.policyEditor");
   const bulkValue = bulkPolicyOf(items, policies);
   const [advancedOpen, setAdvancedOpen] = useState(bulkValue === "CUSTOM");
 
@@ -303,11 +309,9 @@ function PolicyEditor({ items, policies, onChange }: PolicyEditorProps) {
 
   return (
     <div className="flex flex-col gap-2 pt-2">
-      <Text font="main-ui-action">Permissions</Text>
+      <Text font="main-ui-action">{t("permissions.title")}</Text>
       <Text font="secondary-body" color="text-03">
-        Choose what the agent may do. “Ask” prompts you in chat before each
-        action runs; “Auto-approve” lets it run without prompting. Use Advanced
-        to set a policy per action.
+        {t("permissions.description")}
       </Text>
 
       <InputSelect
@@ -316,17 +320,21 @@ function PolicyEditor({ items, policies, onChange }: PolicyEditorProps) {
           if (value === "ALWAYS" || value === "ASK") applyBulk(value);
         }}
       >
-        <InputSelect.Trigger placeholder="Custom" />
+        <InputSelect.Trigger placeholder={t("permissions.customOption")} />
         <InputSelect.Content>
-          <InputSelect.Item value="ALWAYS">Auto-approve</InputSelect.Item>
-          <InputSelect.Item value="ASK">Ask</InputSelect.Item>
+          <InputSelect.Item value="ALWAYS">
+            {t("permissions.autoApproveOption")}
+          </InputSelect.Item>
+          <InputSelect.Item value="ASK">
+            {t("permissions.askOption")}
+          </InputSelect.Item>
         </InputSelect.Content>
       </InputSelect>
 
       <SimpleCollapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
         <SimpleCollapsible.Header
-          title="Advanced"
-          description="Set a policy for each action individually."
+          title={t("advanced.title")}
+          description={t("advanced.description")}
         />
         <SimpleCollapsible.Content>
           <div className="flex flex-col gap-2">

@@ -1,13 +1,15 @@
 "use client";
 
-import { Fragment } from "react";
+import { Fragment, ReactNode } from "react";
+import { useTranslations } from "next-intl";
 import { useFormContext } from "@/components/context/FormContext";
 import { credentialTemplates } from "@/lib/connectors/credentials";
-import { Content } from "@opal/layouts";
+import { Content, SidebarLayouts, useSidebarState } from "@opal/layouts";
+import { Divider, SidebarTab } from "@opal/components";
 import { cn } from "@opal/utils";
-import StepSidebar from "@/sections/sidebar/StepSidebarWrapper";
-import { useUser } from "@/providers/UserProvider";
-import { SvgSettings } from "@opal/icons";
+import { SvgX } from "@opal/icons";
+import { renderSidebarLogo } from "@/lib/sidebar/utils";
+import { useShowLogoWhenFolded } from "@/lib/sidebar/hooks";
 
 // Fixed height of each step row (px). A uniform row height lets the connecting
 // rail line up deterministically with every dot regardless of step count.
@@ -36,27 +38,85 @@ function SelectionIcon({ selected }: SelectionIconProps) {
   );
 }
 
-export default function Sidebar() {
+interface CreateConnectorSidebarShellProps {
+  children?: ReactNode;
+}
+
+/**
+ * Sidebar shared by the create-connector flows. Use it directly for a flow
+ * that has no steps to show; otherwise use the default export.
+ *
+ * It replaces `AdminSidebar`, so it must offer its own way back to the admin
+ * panel. Without one the user is stranded.
+ */
+export function CreateConnectorSidebarShell({
+  children,
+}: CreateConnectorSidebarShellProps) {
+  const t = useTranslations("sidebar");
+  const showLogoWhenFolded = useShowLogoWhenFolded();
+  const { folded } = useSidebarState();
+
+  return (
+    <SidebarLayouts.Root>
+      <SidebarLayouts.Header
+        renderAppLogo={renderSidebarLogo}
+        showLogoWhenFolded={showLogoWhenFolded}
+      />
+
+      <SidebarLayouts.Body scrollKey="create-connector">
+        {children}
+      </SidebarLayouts.Body>
+
+      {/* The way out sits at the bottom, like "Exit Admin Panel" in `AdminSidebar`. */}
+      <SidebarLayouts.Footer>
+        {!folded && <Divider paddingPerpendicular={2} />}
+        <SidebarTab
+          icon={SvgX}
+          href="/admin/add-connector"
+          variant="sidebar-light"
+          folded={folded}
+        >
+          {t("createConnector.exitSetup.label")}
+        </SidebarTab>
+      </SidebarLayouts.Footer>
+    </SidebarLayouts.Root>
+  );
+}
+
+interface SettingStep {
+  id: "credential" | "connector" | "advanced";
+  label: string;
+}
+
+export default function CreateConnectorSidebar() {
+  const t = useTranslations("sidebar");
   const { formStep, setFormStep, connector, allowAdvanced, allowCreate } =
     useFormContext();
   const noCredential = credentialTemplates[connector] == null;
 
-  const { isAdmin } = useUser();
-  const buttonName = isAdmin ? "Admin Page" : "Curator Page";
-
-  const settingSteps = [
-    ...(!noCredential ? ["Credential"] : []),
-    "Connector",
-    ...(connector == "file" ? [] : ["Advanced (optional)"]),
+  const settingSteps: SettingStep[] = [
+    ...(noCredential
+      ? []
+      : [
+          {
+            id: "credential" as const,
+            label: t("createConnector.credentialStep.label"),
+          },
+        ]),
+    { id: "connector", label: t("createConnector.connectorStep.label") },
+    ...(connector == "file"
+      ? []
+      : [
+          {
+            id: "advanced" as const,
+            label: t("createConnector.advancedStep.label"),
+          },
+        ]),
   ];
 
   return (
-    <StepSidebar
-      buttonName={buttonName}
-      buttonIcon={SvgSettings}
-      buttonHref="/admin/add-connector"
-    >
-      <div className="relative mx-2 flex flex-col">
+    <CreateConnectorSidebarShell>
+      <div className="relative mx-2 flex flex-col mt-2">
         {settingSteps.map((step, index) => {
           // The form numbers steps absolutely (0 = Credential, 1 = Connector,
           // 2 = Advanced) and clamps `formStep` to >= 1 when there's no
@@ -65,8 +125,8 @@ export default function Sidebar() {
           const stepValue = index + (noCredential ? 1 : 0);
 
           const allowed =
-            (step == "Connector" && allowCreate) ||
-            (step == "Advanced (optional)" && allowAdvanced) ||
+            (step.id === "connector" && allowCreate) ||
+            (step.id === "advanced" && allowAdvanced) ||
             stepValue <= formStep;
 
           const selected: SelectionType =
@@ -81,7 +141,7 @@ export default function Sidebar() {
               {index !== 0 && (
                 <div
                   className={cn(
-                    "absolute left-2 w-0.5",
+                    "absolute start-2 w-0.5",
                     stepValue <= formStep
                       ? "bg-action-selection-05"
                       : "bg-background-tint-04"
@@ -92,30 +152,28 @@ export default function Sidebar() {
                   }}
                 />
               )}
-              <div
+              <button
+                type="button"
+                disabled={!allowed}
                 className={cn(
                   "flex items-center",
                   allowed ? "cursor-pointer" : "cursor-not-allowed"
                 )}
                 style={{ height: STEP_ROW_PX }}
-                onClick={() => {
-                  if (allowed) {
-                    setFormStep(stepValue);
-                  }
-                }}
+                onClick={() => setFormStep(stepValue)}
               >
                 <Content
                   sizePreset="main-ui"
                   variant="body"
                   icon={() => <SelectionIcon selected={selected} />}
-                  title={step}
+                  title={step.label}
                   color={selected === "future" ? "muted" : "default"}
                 />
-              </div>
+              </button>
             </Fragment>
           );
         })}
       </div>
-    </StepSidebar>
+    </CreateConnectorSidebarShell>
   );
 }

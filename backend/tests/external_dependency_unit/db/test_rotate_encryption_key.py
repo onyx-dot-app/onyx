@@ -105,7 +105,9 @@ class TestDiscoverEncryptedColumns:
     def test_all_encrypted_string_columns_are_not_json(self) -> None:
         results = _discover_encrypted_columns()
         for model_cls, col_name, _, is_json in results:
-            col = getattr(model_cls, col_name).property.columns[0]
+            col = getattr(model_cls, col_name).property.columns[  # ods: ignore[getattr]
+                0
+            ]
             if isinstance(col.type, EncryptedString):
                 assert not is_json, (
                     f"{model_cls.__tablename__}.{col_name} is EncryptedString "  # ty: ignore[unresolved-attribute]
@@ -115,7 +117,9 @@ class TestDiscoverEncryptedColumns:
     def test_all_encrypted_json_columns_are_json(self) -> None:
         results = _discover_encrypted_columns()
         for model_cls, col_name, _, is_json in results:
-            col = getattr(model_cls, col_name).property.columns[0]
+            col = getattr(model_cls, col_name).property.columns[  # ods: ignore[getattr]
+                0
+            ]
             if isinstance(col.type, EncryptedJson):
                 assert is_json, (
                     f"{model_cls.__tablename__}.{col_name} is EncryptedJson "  # ty: ignore[unresolved-attribute]

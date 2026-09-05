@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { Button as OpalButton } from "@opal/components";
 import { ValidSources, AccessType } from "@/lib/types";
 import { submitCredential } from "@/components/admin/connectors/CredentialForm";
@@ -30,26 +31,33 @@ import CardSection from "@/components/admin/CardSection";
 import { CredentialFieldsRenderer } from "@/lib/credentials/components/CredentialFieldsRenderer";
 import { TypedFile } from "@/lib/connectors/fileTypes";
 import ConnectorDocsLink from "@/components/admin/connectors/ConnectorDocsLink";
+import { usePermissionAuthority } from "@/lib/permissions/hooks";
+import { Permission } from "@/lib/types";
 import { SvgPlusCircle } from "@opal/icons";
 const CreateButton = ({
   onClick,
   isSubmitting,
-  isAdmin,
+  requiresGroup,
   groups,
 }: {
   onClick: () => void;
   isSubmitting: boolean;
-  isAdmin: boolean;
+  // Only a scoped manager must land the credential in a group — GATE 2 requires
+  // it of them and of nobody else.
+  requiresGroup: boolean;
   groups: number[];
-}) => (
-  <OpalButton
-    disabled={isSubmitting || (!isAdmin && groups.length === 0)}
-    onClick={onClick}
-    icon={SvgPlusCircle}
-  >
-    Create
-  </OpalButton>
-);
+}) => {
+  const t = useTranslations("admin");
+  return (
+    <OpalButton
+      disabled={isSubmitting || (requiresGroup && groups.length === 0)}
+      onClick={onClick}
+      icon={SvgPlusCircle}
+    >
+      {t("credentials.create.createButton.label")}
+    </OpalButton>
+  );
+};
 
 type CreateCredentialFormValues = IsPublicGroupSelectorFormType & {
   name: string;
@@ -92,11 +100,14 @@ export default function CreateCredential({
   // Mutating parent state
   refresh?: () => void;
 }) {
+  const t = useTranslations("admin");
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
   const [authMethod, setAuthMethod] = useState<string>();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
 
-  const { isAdmin } = useUser();
+  const { isGlobalHolder, isScopedManager } = usePermissionAuthority(
+    Permission.MANAGE_CONNECTORS
+  );
 
   const handleSubmit = async (
     values: CreateCredentialFormValues,
@@ -148,7 +159,7 @@ export default function CreateCredential({
         if (action === "createAndSwap") {
           onSwap(credential, swapConnector.id, accessType);
         } else {
-          toast.success("Created new credential!");
+          toast.success(t("credentials.create.created.toast"));
         }
         onClose();
       } else {
@@ -169,7 +180,7 @@ export default function CreateCredential({
       }
     } catch (error) {
       console.error("Error submitting credential:", error);
-      toast.error("Error submitting credential");
+      toast.error(t("credentials.create.submitError.toast"));
     } finally {
       formikHelpers.setSubmitting(false);
     }
@@ -198,7 +209,7 @@ export default function CreateCredential({
       initialValues={
         {
           name: "",
-          is_public: isAdmin || !businessTier,
+          is_public: isGlobalHolder || !businessTier,
           groups: [],
           ...(initialAuthMethod && {
             authentication_method: initialAuthMethod,
@@ -223,8 +234,8 @@ export default function CreateCredential({
             <CardSection className="w-full items-start dark:bg-neutral-900 mt-4 flex flex-col gap-y-6">
               <TextFormField
                 name="name"
-                placeholder="(Optional) credential name.."
-                label="Name:"
+                placeholder={t("credentials.create.name.placeholder")}
+                label={t("credentials.create.name.label")}
               />
 
               <CredentialFieldsRenderer
@@ -237,17 +248,17 @@ export default function CreateCredential({
                 <div className="w-full sm:w-3/4 mb-4 sm:mb-0">
                   {businessTier && (
                     <div className="flex flex-col items-start">
-                      {isAdmin && (
+                      {isGlobalHolder && (
                         <AdvancedOptionsToggle
                           showAdvancedOptions={showAdvancedOptions}
                           setShowAdvancedOptions={setShowAdvancedOptions}
                         />
                       )}
-                      {(showAdvancedOptions || !isAdmin) && (
+                      {(showAdvancedOptions || !isGlobalHolder) && (
                         <IsPublicGroupSelector
                           formikProps={formikProps}
                           objectName="credential"
-                          publicToWhom="Curators"
+                          isGlobalHolder={isGlobalHolder}
                         />
                       )}
                     </div>
@@ -262,7 +273,7 @@ export default function CreateCredential({
                     )
                   }
                   isSubmitting={formikProps.isSubmitting}
-                  isAdmin={isAdmin}
+                  requiresGroup={isScopedManager}
                   groups={formikProps.values.groups}
                 />
               </div>

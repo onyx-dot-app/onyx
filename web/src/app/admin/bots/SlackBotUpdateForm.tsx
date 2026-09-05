@@ -2,6 +2,7 @@
 
 import { toast } from "@opal/layouts";
 import { SlackBot } from "@/lib/types";
+import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
 import { updateSlackBotField } from "@/lib/updateSlackBotField";
@@ -29,7 +30,7 @@ function Checkbox({
         checked={checked}
         onChange={onChange}
         type="checkbox"
-        className="mr-2 w-3.5 h-3.5 my-auto"
+        className="me-2 w-3.5 h-3.5 my-auto"
       />
       <span className="block font-medium text-text-700 text-sm">{label}</span>
     </label>
@@ -43,6 +44,7 @@ export const ExistingSlackBotForm = ({
   existingSlackBot: SlackBot;
   refreshSlackBot?: () => void;
 }) => {
+  const t = useTranslations("admin.slackBots");
   const [isExpanded, setIsExpanded] = useState(false);
   const [formValues, setFormValues] = useState(existingSlackBot);
   const router = useRouter();
@@ -62,9 +64,9 @@ export const ExistingSlackBotForm = ({
       if (!response.ok) {
         throw new Error(await response.text());
       }
-      toast.success(`Connector ${field} updated successfully`);
+      toast.success(t("updateForm.fieldUpdated.toast", { field }));
     } catch (error) {
-      toast.error(`Failed to update connector ${field}`);
+      toast.error(t("updateForm.fieldUpdateFailed.toast", { field }));
     }
     setFormValues((prev) => ({ ...prev, [field]: value }));
   };
@@ -111,19 +113,19 @@ export const ExistingSlackBotForm = ({
               )}
               onClick={() => setIsExpanded(!isExpanded)}
             >
-              Update Tokens
+              {t("updateForm.updateTokensButton.label")}
             </Button>
             <Button
               variant="danger"
               onClick={() => setShowDeleteModal(true)}
               icon={SvgTrash}
             >
-              Delete
+              {t("updateForm.deleteButton.label")}
             </Button>
           </div>
 
           {isExpanded && (
-            <div className="bg-background border rounded-lg border-background-200 shadow-lg absolute mt-12 right-0 z-10 w-full md:w-3/4 lg:w-1/2">
+            <div className="bg-background border rounded-lg border-background-200 shadow-lg absolute mt-12 end-0 z-10 w-full md:w-3/4 lg:w-1/2">
               <div className="p-4">
                 <SlackTokensForm
                   isUpdate={true}
@@ -141,16 +143,16 @@ export const ExistingSlackBotForm = ({
       <div className="mt-2">
         <div className="inline-block border rounded-lg border-background-200 p-2">
           <Checkbox
-            label="Enabled"
+            label={t("updateForm.enabledCheckbox.label")}
             checked={formValues.enabled}
             onChange={(e) => handleUpdateField("enabled", e.target.checked)}
           />
         </div>
         {showDeleteModal && (
           <GenericConfirmModal
-            title="Delete Slack Bot"
-            message="Are you sure you want to delete this Slack bot? This action cannot be undone."
-            confirmText="Delete"
+            title={t("deleteModal.title")}
+            message={t("deleteModal.message")}
+            confirmText={t("deleteModal.confirmButton.label")}
             onClose={() => setShowDeleteModal(false)}
             onConfirm={async () => {
               try {
@@ -158,10 +160,10 @@ export const ExistingSlackBotForm = ({
                 if (!response.ok) {
                   throw new Error(await response.text());
                 }
-                toast.success("Slack bot deleted successfully");
+                toast.success(t("deleteModal.success.toast"));
                 router.push("/admin/bots");
               } catch (error) {
-                toast.error("Failed to delete Slack bot");
+                toast.error(t("deleteModal.error.toast"));
               }
               setShowDeleteModal(false);
             }}

@@ -22,6 +22,14 @@ class LLMUserIdentity(BaseModel):
     session_id: str | None = None
 
 
+class LlmRequestPolicy(BaseModel):
+    """Per-request policy an LLM call must carry (e.g. incognito retention
+    suppression). Merged after every other source so nothing overrides it."""
+
+    headers: dict[str, str] = {}
+    model_kwargs: dict[str, Any] = {}
+
+
 class LLMConfig(BaseModel):
     model_provider: str
     model_name: str
@@ -32,6 +40,10 @@ class LLMConfig(BaseModel):
     deployment_name: str | None = None
     custom_config: dict[str, str] | None = None
     max_input_tokens: int
+    # Here rather than in the chat loop, so every invoke path gets it.
+    reasoning_effort_default: ReasoningEffort | None = None
+    reasoning_effort_user_default: ReasoningEffort | None = None
+    reasoning_effort_max: ReasoningEffort | None = None
     # This disables the "model_" protected namespace for pydantic
     model_config = {"protected_namespaces": ()}
 

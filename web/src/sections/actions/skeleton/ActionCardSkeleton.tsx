@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { useTranslations } from "next-intl";
 import { cn } from "@opal/utils";
 
 interface ActionCardSkeletonProps {
@@ -10,6 +11,8 @@ interface ActionCardSkeletonProps {
 const ActionCardSkeleton: React.FC<ActionCardSkeletonProps> = ({
   className,
 }) => {
+  const t = useTranslations("actions");
+
   return (
     <div
       className={cn(
@@ -17,13 +20,13 @@ const ActionCardSkeleton: React.FC<ActionCardSkeletonProps> = ({
         className
       )}
       role="status"
-      aria-label="Loading action card"
+      aria-label={t("cardSkeleton.card.ariaLabel")}
     >
       <div className="flex flex-col w-full">
         {/* Header Section */}
         <div className="flex items-start justify-between gap-2 p-3 w-full">
           {/* Left: Icon + Title / Description */}
-          <div className="flex gap-2 items-start flex-1 min-w-0 mr-2">
+          <div className="flex gap-2 items-start flex-1 min-w-0 me-2">
             {/* Icon */}
             <div className="flex items-center px-0 py-0.5 shrink-0">
               <div className="h-7 w-7 rounded-12 bg-background-tint-02 animate-pulse" />

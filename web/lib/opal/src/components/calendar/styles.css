@@ -23,11 +23,11 @@
 }
 
 .opal-calendar-nav {
-  @apply absolute right-0 top-0 flex items-center gap-2.5 p-0.5;
+  @apply absolute end-0 top-0 flex items-center gap-2.5 p-0.5;
 }
 
 .opal-calendar-caption {
-  @apply flex h-7 items-center p-1 pr-20;
+  @apply flex h-7 items-center p-1 pe-20;
 }
 
 .opal-calendar-caption-label {
@@ -91,30 +91,38 @@
    neighbor-facing side. Week edges stay flush and rounded. */
 .opal-calendar-cell--range-start::before,
 .opal-calendar-cell--range-middle::before,
-.opal-calendar-cell--range-end::before {
+.opal-calendar-cell--range-end::before,
+.opal-calendar-cell--range-preview-start::before,
+.opal-calendar-cell--range-preview-middle::before,
+.opal-calendar-cell--range-preview-end::before {
   content: "";
   position: absolute;
   top: 0;
   bottom: 0;
-  left: -3px;
-  right: -3px;
+  inset-inline: -3px;
   background-color: var(--background-tint-02);
 }
 
 .opal-calendar-cell--range-start::before,
 .opal-calendar-cell--range-middle:first-child::before,
-.opal-calendar-cell--range-end:first-child::before {
-  left: 0;
-  border-top-left-radius: var(--radius-08);
-  border-bottom-left-radius: var(--radius-08);
+.opal-calendar-cell--range-end:first-child::before,
+.opal-calendar-cell--range-preview-start::before,
+.opal-calendar-cell--range-preview-middle:first-child::before,
+.opal-calendar-cell--range-preview-end:first-child::before {
+  inset-inline-start: 0;
+  border-start-start-radius: var(--radius-08);
+  border-end-start-radius: var(--radius-08);
 }
 
 .opal-calendar-cell--range-end::before,
 .opal-calendar-cell--range-middle:last-child::before,
-.opal-calendar-cell--range-start:last-child::before {
-  right: 0;
-  border-top-right-radius: var(--radius-08);
-  border-bottom-right-radius: var(--radius-08);
+.opal-calendar-cell--range-start:last-child::before,
+.opal-calendar-cell--range-preview-end::before,
+.opal-calendar-cell--range-preview-middle:last-child::before,
+.opal-calendar-cell--range-preview-start:last-child::before {
+  inset-inline-end: 0;
+  border-start-end-radius: var(--radius-08);
+  border-end-end-radius: var(--radius-08);
 }
 
 .opal-calendar-cell--disabled .opal-calendar-day {

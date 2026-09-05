@@ -57,6 +57,9 @@ from typing import Any, cast
 from uuid import UUID
 
 from onyx.server.features.build.sandbox.base import SandboxEvent, SandboxManager
+from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
+    OutputsManifestResponse,
+)
 from onyx.server.features.build.sandbox.models import (
     CraftLLMProviderConfig,
     CraftMCPServerConfig,
@@ -156,6 +159,7 @@ class StubSandboxManager(SandboxManager):
         ] = {}
         self.create_opencode_history_snapshot_returns: bool | object = _UNSET
         self.list_directory_returns: list[FilesystemEntry] | None = None
+        self.outputs_manifest_returns: OutputsManifestResponse | None = None
         self.list_directory_returns_by_path: dict[str, list[FilesystemEntry]] | None = (
             None
         )
@@ -213,6 +217,7 @@ class StubSandboxManager(SandboxManager):
         self.send_message_count: int = 0
         self.subscribe_to_opencode_session_count: int = 0
         self.list_directory_count: int = 0
+        self.get_outputs_manifest_count: int = 0
         self.read_file_count: int = 0
         self.upload_file_count: int = 0
         self.delete_file_count: int = 0
@@ -239,6 +244,7 @@ class StubSandboxManager(SandboxManager):
         self.last_send_message_payload: dict[str, Any] | None = None
         self.last_subscribe_to_opencode_session_payload: dict[str, Any] | None = None
         self.last_list_directory_payload: dict[str, Any] | None = None
+        self.last_outputs_manifest_payload: dict[str, Any] | None = None
         self.list_directory_payloads: list[dict[str, Any]] = []
         self.last_read_file_payload: dict[str, Any] | None = None
         self.last_upload_file_payload: dict[str, Any] | None = None
@@ -602,6 +608,18 @@ class StubSandboxManager(SandboxManager):
         if self.list_directory_returns is None:
             raise _not_configured("list_directory")
         return self.list_directory_returns
+
+    def get_outputs_manifest(
+        self, sandbox_id: UUID, session_id: UUID
+    ) -> OutputsManifestResponse:
+        self.get_outputs_manifest_count += 1
+        self.last_outputs_manifest_payload = {
+            "sandbox_id": sandbox_id,
+            "session_id": session_id,
+        }
+        if self.outputs_manifest_returns is None:
+            raise _not_configured("get_outputs_manifest")
+        return self.outputs_manifest_returns
 
     def read_file(self, sandbox_id: UUID, session_id: UUID, path: str) -> bytes:
         self.read_file_count += 1

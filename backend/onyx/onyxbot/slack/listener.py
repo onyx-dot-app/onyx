@@ -80,6 +80,7 @@ from onyx.onyxbot.slack.handlers.handle_message import (
 from onyx.onyxbot.slack.models import SlackContext, SlackMessageInfo, ThreadMessage
 from onyx.onyxbot.slack.utils import (
     TenantSocketModeClient,
+    bot_user_info_fetcher,
     check_message_limit,
     decompose_action_id,
     get_channel_name_from_id,
@@ -940,7 +941,7 @@ def build_request_details(
         thread_ts = event.get("thread_ts")
         sender_id = event.get("user") or None
         expert_info = expert_info_from_slack_id(
-            sender_id, client.web_client, user_cache={}
+            sender_id, bot_user_info_fetcher(client.web_client), user_cache={}
         )
         email = expert_info.email if expert_info else None
 
@@ -1024,7 +1025,7 @@ def build_request_details(
         msg = req.payload["text"]
         sender = req.payload["user_id"]
         expert_info = expert_info_from_slack_id(
-            sender, client.web_client, user_cache={}
+            sender, bot_user_info_fetcher(client.web_client), user_cache={}
         )
         email = expert_info.email if expert_info else None
 

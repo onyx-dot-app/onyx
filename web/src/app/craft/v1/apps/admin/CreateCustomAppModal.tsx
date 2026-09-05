@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
+import { useFocusOnMount } from "@opal/hooks";
 import { useRouter } from "next/navigation";
 import isEqual from "lodash/isEqual";
 import {
@@ -69,8 +71,12 @@ export default function CreateCustomAppModal({
   onSaved,
   existingApp,
 }: CreateCustomAppModalProps) {
+  const t = useTranslations("craft.apps.customApp");
+  const tApps = useTranslations("craft.apps");
   const isEdit = existingApp !== null;
   const router = useRouter();
+  // Focus the name field for new apps only; edits keep the natural tab order.
+  const focusNameOnMount = useFocusOnMount<HTMLInputElement>(!isEdit);
 
   const [createdApp, setCreatedApp] = useState<ExternalAppAdminResponse | null>(
     null
@@ -120,13 +126,13 @@ export default function CreateCustomAppModal({
   // Headers and org credentials are optional; name + at least one upstream
   // pattern are required.
   const disabledCreateReason = (() => {
-    if (isSaving) return "Save is already in progress.";
-    if (isEdit && !configDirty) return "Make a change before saving.";
+    if (isSaving) return t("disabled.saving");
+    if (isEdit && !configDirty) return t("disabled.pristine");
     if (name.trim().length === 0) {
-      return "Enter a name before creating this custom app.";
+      return t("disabled.nameMissing");
     }
     if (upstreamPatterns.length === 0) {
-      return "Add at least one upstream URL pattern. Type a pattern and press Enter.";
+      return t("disabled.patternMissing");
     }
     return null;
   })();
@@ -134,11 +140,11 @@ export default function CreateCustomAppModal({
     <Button onClick={saveConfig} disabled={disabledCreateReason !== null}>
       {isSaving
         ? isEdit
-          ? "Saving…"
-          : "Creating…"
+          ? t("savingButton")
+          : t("creatingButton")
         : isEdit
-          ? "Save"
-          : "Create"}
+          ? t("saveButton")
+          : t("createButton")}
     </Button>
   );
 
@@ -258,7 +264,10 @@ export default function CreateCustomAppModal({
                 existingApp.associated_skills.some(
                   (skill) => skill.name === draft.contents.name
                 )
-                  ? `App “${existingApp.name}” already has an associated skill named “${draft.contents.name}”. Upload a skill with a different name.`
+                  ? tApps("errors.duplicateSkillName", {
+                      appName: existingApp.name,
+                      skillName: draft.contents.name,
+                    })
                   : null
               }
               onContinue={openSkillEditor}
@@ -271,32 +280,32 @@ export default function CreateCustomAppModal({
           <>
             <Modal.Header
               title={
-                existingApp ? `Edit ${existingApp.name}` : "Create custom app"
+                existingApp
+                  ? t("editTitle", { name: existingApp.name })
+                  : t("createTitle")
               }
               description={
-                isEdit
-                  ? "Update gateway settings and manage associated skills."
-                  : "Configure how the egress proxy reaches and authenticates this app. A skill is not required."
+                isEdit ? t("editDescription") : t("createDescription")
               }
             />
             <Modal.Body>
               <div className="flex flex-col gap-4">
                 <div className="flex flex-col gap-1">
-                  <Text font="main-ui-action">Name</Text>
+                  <Text font="main-ui-action">{t("fields.name.label")}</Text>
                   <InputTypeIn
-                    autoFocus={!isEdit}
+                    ref={focusNameOnMount}
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="My Custom App"
+                    placeholder={t("fields.name.placeholder")}
                   />
                 </div>
 
                 <div className="flex flex-col gap-1">
-                  <Text font="main-ui-action">Upstream URL patterns</Text>
+                  <Text font="main-ui-action">
+                    {t("fields.upstreamPatterns.label")}
+                  </Text>
                   <Text font="secondary-body" color="text-03">
-                    {
-                      "Outbound URLs the proxy may inject credentials into. Use * to match any characters (e.g. https://api.example.com/* covers every path on that host). The host must be literal — no wildcards before the first slash. Type a pattern and press Enter."
-                    }
+                    {t("fields.upstreamPatterns.description")}
                   </Text>
                   <ListFieldInput
                     values={upstreamPatterns}
@@ -306,38 +315,38 @@ export default function CreateCustomAppModal({
                 </div>
 
                 <div className="flex flex-col gap-1">
-                  <Text font="main-ui-action">Header credential pattern</Text>
+                  <Text font="main-ui-action">{t("fields.headers.label")}</Text>
                   <Text font="secondary-body" color="text-03">
-                    {`Optional — headers injected into outbound requests. Use {placeholder} for values the user (or org below) supplies, e.g. "Bearer {api_key}". Leave empty to allowlist the upstream patterns without injecting credentials.`}
+                    {t("fields.headers.description")}
                   </Text>
                   <InputKeyValue
-                    keyTitle="Header"
-                    valueTitle="Value"
+                    keyTitle={t("fields.headers.keyTitle")}
+                    valueTitle={t("fields.headers.valueTitle")}
                     keyPlaceholder="Authorization"
                     valuePlaceholder="Bearer {api_key}"
                     items={headers}
                     onChange={setHeaders}
                     mode="line"
-                    addButtonLabel="Add header"
+                    addButtonLabel={t("fields.headers.addButton")}
                   />
                 </div>
 
                 <div className="flex flex-col gap-1">
-                  <Text font="main-ui-action">Organization credentials</Text>
+                  <Text font="main-ui-action">
+                    {t("fields.orgCredentials.label")}
+                  </Text>
                   <Text font="secondary-body" color="text-03">
-                    Optional — values your org pre-fills for every user. Leave
-                    empty for apps where each user supplies their own
-                    credentials.
+                    {t("fields.orgCredentials.description")}
                   </Text>
                   <InputKeyValue
-                    keyTitle="Credential key"
-                    valueTitle="Value"
+                    keyTitle={t("fields.orgCredentials.keyTitle")}
+                    valueTitle={t("fields.orgCredentials.valueTitle")}
                     keyPlaceholder="api_key"
                     valuePlaceholder="sk-…"
                     items={orgCredentials}
                     onChange={setOrgCredentials}
                     mode="line"
-                    addButtonLabel="Add credential"
+                    addButtonLabel={t("fields.orgCredentials.addButton")}
                   />
                 </div>
 
@@ -358,7 +367,7 @@ export default function CreateCustomAppModal({
                 {error && (
                   <MessageCard
                     variant="error"
-                    title="Couldn't save"
+                    title={t("errors.saveFailedTitle")}
                     description={error}
                   />
                 )}
@@ -371,7 +380,7 @@ export default function CreateCustomAppModal({
                   onClick={() => unsavedChanges.requestLeave(onClose)}
                   disabled={isSaving}
                 >
-                  Cancel
+                  {t("cancelButton")}
                 </Button>
                 {disabledCreateReason ? (
                   <Tooltip tooltip={disabledCreateReason}>

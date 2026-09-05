@@ -1,13 +1,15 @@
+"use client";
+
 import { toast } from "@opal/layouts";
-import Button from "@/refresh-components/buttons/Button";
+import { Button } from "@opal/components";
 import { useRef, useState } from "react";
-import { DateRange } from "../../../../../components/dateRangeSelectors/AdminDateRangeSelector";
+import { useTranslations } from "next-intl";
+import type { DateRange } from "@/refresh-components/DateRangePicker";
 import { withRequestId, withDateRange } from "./utils";
 import {
   CHECK_QUERY_HISTORY_EXPORT_STATUS_URL,
   DOWNLOAD_QUERY_HISTORY_URL,
   MAX_RETRIES,
-  PREVIOUS_CSV_TASK_BUTTON_NAME,
   RETRY_COOLDOWN_MILLISECONDS,
 } from "./constants";
 import {
@@ -15,13 +17,14 @@ import {
   SpinnerStatus,
   StartQueryHistoryExportResponse,
 } from "./types";
-import { cn } from "@opal/utils";
-import { SvgLoader, SvgPlayCircle } from "@opal/icons";
+import { SvgPlayCircle, SvgSimpleLoader } from "@opal/icons";
+
 export default function KickoffCSVExport({
   dateRange,
 }: {
   dateRange: DateRange;
 }) {
+  const t = useTranslations("admin.queryHistory");
   const timerIdRef = useRef<null | number>(null);
   const retryCount = useRef<number>(0);
   const [, rerender] = useState<void>();
@@ -36,7 +39,7 @@ export default function KickoffCSVExport({
     retryCount.current = 0;
 
     if (failure) {
-      toast.error("Failed to download the query-history.");
+      toast.error(t("export.downloadFailed.message"));
     }
 
     rerender();
@@ -51,7 +54,9 @@ export default function KickoffCSVExport({
 
     setSpinnerStatus("spinning");
     toast.info(
-      `Generating CSV report. Click the '${PREVIOUS_CSV_TASK_BUTTON_NAME}' button to see all jobs.`
+      t("export.generating.message", {
+        button: t("previousExports.label"),
+      })
     );
     const response = await fetch(withDateRange(dateRange), {
       method: "POST",
@@ -67,10 +72,12 @@ export default function KickoffCSVExport({
 
     const { request_id } =
       (await response.json()) as StartQueryHistoryExportResponse;
-    const timer = setInterval(
+    // `window.setInterval` returns a number; the bare global resolves to the
+    // Node overload, which returns a `Timeout` object.
+    const timer = window.setInterval(
       () => checkStatus(request_id),
       RETRY_COOLDOWN_MILLISECONDS
-    ) as unknown as number;
+    );
     timerIdRef.current = timer;
     rerender();
   };
@@ -111,21 +118,17 @@ export default function KickoffCSVExport({
 
   return (
     <div className="flex flex-1 flex-col w-full justify-center">
-      {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
-      <Button
-        className="ml-auto"
-        onClick={startExport}
-        danger={spinnerStatus === "spinning"}
-        leftIcon={
-          spinnerStatus === "spinning"
-            ? ({ className }) => (
-                <SvgLoader className={cn(className, "animate-spin")} />
-              )
-            : SvgPlayCircle
-        }
-      >
-        {spinnerStatus === "spinning" ? "Cancel" : "Kickoff Export"}
-      </Button>
+      <div className="ms-auto">
+        <Button
+          onClick={startExport}
+          variant={spinnerStatus === "spinning" ? "danger" : "default"}
+          icon={spinnerStatus === "spinning" ? SvgSimpleLoader : SvgPlayCircle}
+        >
+          {spinnerStatus === "spinning"
+            ? t("export.cancel.label")
+            : t("export.kickoff.label")}
+        </Button>
+      </div>
     </div>
   );
 }

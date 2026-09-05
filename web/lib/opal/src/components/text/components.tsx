@@ -2,8 +2,8 @@ import type { HTMLAttributes } from "react";
 // Canonical TextFont/TextColor unions, shared with mobile via the neutral
 // @onyx-ai/shared/contracts (not the RN-only /native).
 import type { TextColor, TextFont } from "@onyx-ai/shared/contracts";
-import type { RichStr, WithoutStyles } from "@opal/types";
-import { cn } from "@opal/utils";
+import type { RichNodes, RichStr, WithoutStyles } from "@opal/types";
+import { cn, isRichNodes } from "@opal/utils";
 import { resolveStr } from "@opal/components/text/InlineMarkdown";
 
 // ---------------------------------------------------------------------------
@@ -25,11 +25,47 @@ interface TextProps extends WithoutStyles<
   /** Prevent text wrapping. */
   nowrap?: boolean;
 
+  /**
+   * How a run of characters with nowhere to wrap should behave. Ordinary
+   * wrapping only breaks at whitespace, so a URL, an identifier or any single
+   * long token overflows its container instead of wrapping.
+   *
+   * - `"wrap-normal"` — the CSS default: break at whitespace only, and let a
+   *   long run overflow. Spell it out to override an inherited value, since
+   *   `overflow-wrap` inherits and omitting this prop cannot undo an
+   *   ancestor's.
+   * - `"wrap-break-word"` — break only when the run would otherwise overflow.
+   * - `"wrap-anywhere"` — as above, and count the break when min-content is
+   *   measured, so the element can shrink as a flex item.
+   * - `"break-all"` — break between any two characters.
+   * - `"break-keep"` — never break within a word (CJK).
+   *
+   * Overlaps `nowrap`, which is the older way to say "one line" and wins
+   * because it removes the wrap opportunities this would act on. Prefer this
+   * prop; `nowrap` is kept so existing callers are undisturbed.
+   */
+  wordWrap?:
+    | "wrap-normal"
+    | "wrap-break-word"
+    | "wrap-anywhere"
+    | "break-all"
+    | "break-keep";
+
   /** Truncate text to N lines with ellipsis. `1` uses simple truncation; `2+` uses `-webkit-line-clamp`. */
   maxLines?: number;
 
-  /** Plain string or `markdown()` for inline markdown. */
-  children?: string | RichStr;
+  /**
+   * Strike the text through. This is a presentational state (e.g. an option
+   * that is switched off), so it stays a prop rather than `~~` in the content:
+   * the caller keeps passing the plain string, and no escaping is needed.
+   */
+  strikethrough?: boolean;
+
+  /**
+   * Plain string, `markdown()` for inline markdown, or `richNodes()` for
+   * sentences that embed inline components (e.g. next-intl `t.rich` output).
+   */
+  children?: string | RichStr | RichNodes;
 }
 
 // ---------------------------------------------------------------------------
@@ -91,7 +127,9 @@ function Text({
   color = "text-04",
   as: Tag = "span",
   nowrap,
+  wordWrap,
   maxLines,
+  strikethrough,
   children,
   ...rest
 }: TextProps) {
@@ -100,8 +138,10 @@ function Text({
     FONT_CONFIG[font],
     COLOR_CONFIG[color],
     nowrap && "whitespace-nowrap",
+    wordWrap,
     maxLines === 1 && "truncate",
-    maxLines && maxLines > 1 && "overflow-hidden"
+    maxLines && maxLines > 1 && "overflow-hidden",
+    strikethrough && "line-through"
   );
 
   const style =
@@ -115,7 +155,8 @@ function Text({
 
   return (
     <Tag {...rest} className={resolvedClassName} style={style}>
-      {children && resolveStr(children)}
+      {children &&
+        (isRichNodes(children) ? children.nodes : resolveStr(children))}
     </Tag>
   );
 }

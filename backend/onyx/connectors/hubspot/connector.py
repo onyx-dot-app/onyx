@@ -131,6 +131,8 @@ class HubSpotConnector(LoadConnector, PollConnector):
         self._portal_id = value
 
     def _call_hubspot(self, func: Callable[..., T], *args: Any, **kwargs: Any) -> T:
+        # The SDK sends requests with no timeout unless one is passed per call.
+        kwargs.setdefault("_request_timeout", REQUEST_TIMEOUT_SECONDS)
         return self._rate_limiter.call(func, *args, **kwargs)
 
     def _batch_read(
@@ -180,16 +182,20 @@ class HubSpotConnector(LoadConnector, PollConnector):
                 page_kwargs["after"] = after
 
             page = self._call_hubspot(fetch_page, **page_kwargs)
-            results = getattr(page, "results", [])
+            results = getattr(page, "results", [])  # ods: ignore[getattr]
             for result in results:
                 yield result
 
-            paging = getattr(page, "paging", None)
-            next_page = getattr(paging, "next", None) if paging else None
+            paging = getattr(page, "paging", None)  # ods: ignore[getattr]
+            next_page = (
+                getattr(paging, "next", None)  # ods: ignore[getattr]
+                if paging
+                else None
+            )
             if next_page is None:
                 break
 
-            after = getattr(next_page, "after", None)
+            after = getattr(next_page, "after", None)  # ods: ignore[getattr]
             if after is None:
                 break
 
@@ -235,15 +241,19 @@ class HubSpotConnector(LoadConnector, PollConnector):
                 sorts=sorts,
             )
             page = self._call_hubspot(search_fn, public_object_search_request=request)
-            results = getattr(page, "results", [])
+            results = getattr(page, "results", [])  # ods: ignore[getattr]
             for result in results:
                 yield result
 
-            paging = getattr(page, "paging", None)
-            next_page = getattr(paging, "next", None) if paging else None
+            paging = getattr(page, "paging", None)  # ods: ignore[getattr]
+            next_page = (
+                getattr(paging, "next", None)  # ods: ignore[getattr]
+                if paging
+                else None
+            )
             if next_page is None:
                 break
-            after = getattr(next_page, "after", None)
+            after = getattr(next_page, "after", None)  # ods: ignore[getattr]
             if after is None:
                 break
 
@@ -396,7 +406,7 @@ class HubSpotConnector(LoadConnector, PollConnector):
         caller falls back to a dedicated v4 associations API call instead.
         Returns [] when the type simply has no associations.
         """
-        associations = getattr(obj, "associations", None)
+        associations = getattr(obj, "associations", None)  # ods: ignore[getattr]
         if not isinstance(associations, dict):
             return None
         assoc_collection = associations.get(assoc_type)
@@ -718,8 +728,9 @@ class HubSpotConnector(LoadConnector, PollConnector):
             associated_notes = self._get_associated_notes(
                 api_client, ticket.id, "tickets"
             )
-            for note in associated_notes:
-                sections.append(self._create_object_section(note, "notes"))
+            sections.extend(
+                self._create_object_section(note, "notes") for note in associated_notes
+            )
 
             # Add association IDs to metadata
             if associated_contact_ids:
@@ -874,8 +885,9 @@ class HubSpotConnector(LoadConnector, PollConnector):
             associated_notes = self._get_associated_notes(
                 api_client, company.id, "companies"
             )
-            for note in associated_notes:
-                sections.append(self._create_object_section(note, "notes"))
+            sections.extend(
+                self._create_object_section(note, "notes") for note in associated_notes
+            )
 
             # Add association IDs to metadata
             if associated_contact_ids:
@@ -1028,8 +1040,9 @@ class HubSpotConnector(LoadConnector, PollConnector):
 
             # Get associated notes
             associated_notes = self._get_associated_notes(api_client, deal.id, "deals")
-            for note in associated_notes:
-                sections.append(self._create_object_section(note, "notes"))
+            sections.extend(
+                self._create_object_section(note, "notes") for note in associated_notes
+            )
 
             # Add association IDs to metadata
             if associated_contact_ids:
@@ -1202,8 +1215,9 @@ class HubSpotConnector(LoadConnector, PollConnector):
             associated_notes = self._get_associated_notes(
                 api_client, contact.id, "contacts"
             )
-            for note in associated_notes:
-                sections.append(self._create_object_section(note, "notes"))
+            sections.extend(
+                self._create_object_section(note, "notes") for note in associated_notes
+            )
 
             # Add association IDs to metadata
             if associated_company_ids:

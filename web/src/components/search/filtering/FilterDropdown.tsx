@@ -1,4 +1,5 @@
 import { JSX } from "react";
+import { useTranslations } from "next-intl";
 import { FiCheck, FiChevronDown, FiXCircle } from "react-icons/fi";
 import { CustomDropdown } from "../../Dropdown";
 
@@ -33,6 +34,7 @@ export function FilterDropdown({
   backgroundColor?: string;
   dropdownColor?: string;
 }) {
+  const t = useTranslations("common.filters");
   return (
     <div>
       <CustomDropdown
@@ -54,7 +56,8 @@ export function FilterDropdown({
             {options.map((option, ind) => {
               const isSelected = selected.includes(option.key);
               return (
-                <div
+                <button
+                  type="button"
                   key={`${option.key}-1`}
                   className={`
                       ${optionClassName}
@@ -86,11 +89,11 @@ export function FilterDropdown({
                   {option.icon}
                   {option.display}
                   {isSelected && (
-                    <div className="ml-auto my-auto mr-1">
+                    <div className="ms-auto my-auto me-1">
                       <FiCheck />
                     </div>
                   )}
-                </div>
+                </button>
               );
             })}
           </div>
@@ -118,17 +121,19 @@ export function FilterDropdown({
             <p className="line-clamp-1">{selected.join(", ")}</p>
           )}
           {resetValues && selected.length !== 0 ? (
-            <div
-              className="my-auto ml-auto p-0.5 rounded-full w-fit"
+            <button
+              type="button"
+              aria-label={t("clearButton.ariaLabel")}
+              className="my-auto ms-auto p-0.5 rounded-full w-fit"
               onClick={(e) => {
                 resetValues();
                 e.stopPropagation();
               }}
             >
               <FiXCircle />
-            </div>
+            </button>
           ) : (
-            <FiChevronDown className="my-auto ml-auto" />
+            <FiChevronDown className="my-auto ms-auto" />
           )}
         </div>
       </CustomDropdown>

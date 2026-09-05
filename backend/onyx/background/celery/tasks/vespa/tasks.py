@@ -159,8 +159,7 @@ def check_for_vespa_sync_task(self: Task, *, tenant_id: str) -> bool | None:
                         db_session=db_session, only_up_to_date=False
                     )
 
-                    for usergroup in user_groups:
-                        usergroup_ids.append(usergroup.id)
+                    usergroup_ids.extend(usergroup.id for usergroup in user_groups)
 
                 for usergroup_id in usergroup_ids:
                     lock_beat.reacquire()
@@ -432,7 +431,7 @@ def monitor_document_set_taskset(
         has_connector_pairs = bool(document_set.connector_credential_pairs)
         # Federated connectors should keep a document set alive even without cc pairs.
         has_federated_connectors = bool(
-            getattr(document_set, "federated_connectors", [])
+            getattr(document_set, "federated_connectors", [])  # ods: ignore[getattr]
         )
 
         if not has_connector_pairs and not has_federated_connectors:

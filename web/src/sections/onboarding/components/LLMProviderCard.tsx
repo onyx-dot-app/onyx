@@ -1,6 +1,8 @@
 "use client";
 
 import { memo, useCallback } from "react";
+import { useTranslations } from "next-intl";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import Text from "@/refresh-components/texts/Text";
 import Truncated from "@/refresh-components/texts/Truncated";
 import IconButton from "@/refresh-components/buttons/IconButton";
@@ -13,7 +15,7 @@ import {
   SvgServer,
   SvgSettings,
 } from "@opal/icons";
-import ModelIcon from "@/app/admin/configuration/language-models/ModelIcon";
+import { ModelIcon } from "@/lib/languageModels/components";
 
 export interface LLMProviderCardProps {
   title: string;
@@ -32,6 +34,7 @@ function LLMProviderCardInner({
   isConnected,
   onClick,
 }: LLMProviderCardProps) {
+  const t = useTranslations("onboarding");
   const handleCardClick = useCallback(() => {
     if (disabled) {
       return;
@@ -39,7 +42,7 @@ function LLMProviderCardInner({
 
     if (isConnected) {
       // If connected, redirect to admin page
-      window.location.href = "/admin/configuration/language-models";
+      window.location.href = ADMIN_ROUTES.LLM_MODELS.path;
       return;
     }
 
@@ -48,9 +51,7 @@ function LLMProviderCardInner({
   }, [disabled, isConnected, onClick]);
 
   const handleSettingsClick = useCallback(
-    noProp(
-      () => (window.location.href = "/admin/configuration/language-models")
-    ),
+    noProp(() => (window.location.href = ADMIN_ROUTES.LLM_MODELS.path)),
     []
   );
 
@@ -68,7 +69,7 @@ function LLMProviderCardInner({
             }
           }}
           className={cn(
-            "flex justify-between h-full w-full p-1 rounded-12 border border-border-01 bg-background-neutral-01 transition-colors text-left",
+            "flex justify-between h-full w-full p-1 rounded-12 border border-border-01 bg-background-neutral-01 transition-colors text-start",
             !disabled && "hover:bg-background-neutral-02 cursor-pointer"
           )}
         >
@@ -112,7 +113,7 @@ function LLMProviderCardInner({
             <div className="flex items-start p-1">
               <div className="flex items-center gap-0.5">
                 <Text as="p" text03 secondaryAction>
-                  Connect
+                  {t("llmStep.providerCard.connect.label")}
                 </Text>
                 <div className="p-0.5">
                   <SvgArrowExchange className="w-4 h-4 stroke-text-03" />

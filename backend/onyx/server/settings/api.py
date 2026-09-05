@@ -71,7 +71,7 @@ def admin_patch_settings(
     current_user: User = Depends(
         require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)
     ),
-) -> None:
+) -> Settings:
     if global_version.is_ee_version():
         from ee.onyx.utils.tier import get_tier
 
@@ -90,7 +90,8 @@ def admin_patch_settings(
         # must not silently reset them to pydantic defaults.
         merged = existing.model_copy(
             update={
-                field: getattr(settings, field) for field in settings.model_fields_set
+                field: getattr(settings, field)  # ods: ignore[getattr]
+                for field in settings.model_fields_set
             }
         )
 
@@ -133,6 +134,11 @@ def admin_patch_settings(
                 resource_type="settings",
                 extra={"craft_default_enabled": merged.craft_default_enabled},
             )
+
+        # Read back rather than returning `merged`, so the response matches what
+        # the next GET reports: the store clamps some values and env vars
+        # override others. Saves every caller a second round trip.
+        return load_settings(raise_on_error=True)
 
 
 def apply_license_status_to_settings(settings: Settings) -> Settings:

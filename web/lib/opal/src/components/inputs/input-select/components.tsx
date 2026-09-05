@@ -8,11 +8,16 @@ import { cn } from "@opal/utils";
 import type {
   IconFunctionComponent,
   InputVariants,
-  PaddingVariants,
   RichStr,
   WithoutStyles,
 } from "@opal/types";
-import { Divider, InputTypeIn, Text, Tooltip } from "@opal/components";
+import {
+  Divider,
+  type DividerSpacing,
+  InputTypeIn,
+  Text,
+  Tooltip,
+} from "@opal/components";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { ContentAction } from "@opal/layouts";
 import { SvgChevronDownSmall } from "@opal/icons";
@@ -103,7 +108,7 @@ function TruncatedDisplay({
         <div
           ref={hiddenRef}
           aria-hidden
-          className="pointer-events-none invisible absolute left-0 top-0 whitespace-nowrap"
+          className="pointer-events-none invisible absolute start-0 top-0 whitespace-nowrap"
         >
           {text}
         </div>
@@ -269,8 +274,8 @@ function InputSelectTrigger({
       data-variant={variant}
       {...props}
     >
-      {/* text-left counters the button element's centered default. */}
-      <div className="flex w-full flex-row items-center justify-between gap-1 p-0.5 text-left">
+      {/* text-start counters the button element's centered default. */}
+      <div className="flex w-full flex-row items-center justify-between gap-1 p-0.5 text-start">
         {children ?? displayContent}
 
         <div className="flex flex-row items-center gap-1">
@@ -292,6 +297,15 @@ function InputSelectTrigger({
 function InputSelectContent({
   children,
   ref,
+  /*
+   * Defaulted here rather than written before the spread below: a spread
+   * copies a key even when its value is `undefined`, so a caller writing
+   * `prop={condition ? x : undefined}` would replace the default rather than
+   * fall back to it.
+   */
+  sideOffset = 4,
+  position = "popper",
+  onMouseDown,
   ...props
 }: WithoutStyles<React.ComponentProps<typeof SelectPrimitive.Content>>) {
   return (
@@ -304,11 +318,17 @@ function InputSelectContent({
           "data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
           "data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95"
         )}
-        sideOffset={4}
-        position="popper"
+        sideOffset={sideOffset}
+        position={position}
+        /*
+         * Chained rather than overwritable: swallowing the press is what keeps
+         * a click inside the list from reaching whatever is behind it, so a
+         * caller adding a handler must not silently drop it.
+         */
         onMouseDown={(e) => {
           e.stopPropagation();
           e.preventDefault();
+          onMouseDown?.(e);
         }}
         {...props}
       >
@@ -355,16 +375,17 @@ function InputSelectItem({
   // registrations.
   const childrenRef = React.useRef<string | RichStr>(children);
   const iconRef = React.useRef(icon);
-  childrenRef.current = children;
-  iconRef.current = icon;
+  React.useLayoutEffect(() => {
+    childrenRef.current = children;
+    iconRef.current = icon;
+  }, [children, icon]);
 
   // Layout effect so the trigger never paints the placeholder on first
   // render when a value is already selected. Radix mounts closed Content
   // into a detached fragment, so this runs even while the menu is closed.
-  // Keyed on the rendered content (plain-text key, since RichStr identity
-  // churns per render) so the trigger mirror re-renders when the selected
-  // option's label or icon changes without a value change.
-  const childrenKey = toPlainString(children);
+  // Keyed on the raw rendered content so RichStr formatting changes still
+  // refresh the trigger without reacting to identity churn.
+  const childrenKey = typeof children === "string" ? children : children.raw;
   React.useLayoutEffect(() => {
     if (!isSelected) return;
     setSelectedItemDisplay({ childrenRef, iconRef });
@@ -397,7 +418,7 @@ function InputSelectItem({
           titleMaxLines={1}
           description={description}
           descriptionMaxLines={wrapDescription ? undefined : 1}
-          padding="fit"
+          padding={0}
           width="full"
         />
       </div>
@@ -433,8 +454,8 @@ function InputSelectLabel({
 }
 
 interface InputSelectSeparatorProps {
-  paddingParallel?: PaddingVariants;
-  paddingPerpendicular?: PaddingVariants;
+  paddingParallel?: DividerSpacing;
+  paddingPerpendicular?: DividerSpacing;
 }
 
 function InputSelectSeparator({
@@ -493,6 +514,7 @@ function InputSelectSearch({
   return (
     <div
       ref={rowRef}
+      role="presentation"
       className="opal-input-select-search"
       // Mousedown must not reach Content, whose preventDefault would kill
       // caret placement and text selection in the input.

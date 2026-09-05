@@ -233,12 +233,13 @@ def _extract_text_from_content(content: Any) -> str:
     if content is None:
         return ""
     if hasattr(content, "type") and content.type == "text":
-        return getattr(content, "text", "") or ""
+        return getattr(content, "text", "") or ""  # ods: ignore[getattr]
     if isinstance(content, list):
-        texts = []
-        for block in content:
-            if hasattr(block, "type") and block.type == "text":
-                texts.append(getattr(block, "text", "") or "")
+        texts = [
+            getattr(block, "text", "") or ""  # ods: ignore[getattr]
+            for block in content
+            if hasattr(block, "type") and block.type == "text"
+        ]
         return "".join(texts)
     return ""
 
@@ -436,7 +437,7 @@ def _save_pending_chunks(
 
 
 def _routing_meta_from_event(sandbox_event: Any) -> dict[str, Any] | None:
-    field_meta = getattr(sandbox_event, "field_meta", None)
+    field_meta = getattr(sandbox_event, "field_meta", None)  # ods: ignore[getattr]
     if not isinstance(field_meta, dict):
         return None
 

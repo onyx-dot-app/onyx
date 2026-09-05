@@ -9,6 +9,7 @@ export interface OAuthAdditionalKwargDescription {
 
 export interface OAuthDetails {
   oauth_enabled: boolean;
+  supports_manual_credentials: boolean;
   additional_kwargs: OAuthAdditionalKwargDescription[];
 }
 export interface AuthMethodOption<TFields> {
@@ -46,6 +47,7 @@ export interface Credential<T> extends CredentialBase<T> {
 }
 export interface GithubCredentialJson {
   github_access_token: string;
+  github_base_url: string | null;
 }
 
 export interface GitbookCredentialJson {
@@ -157,7 +159,7 @@ export interface LoopioCredentialJson {
 }
 
 export interface LinearCredentialJson {
-  linear_access_token: string;
+  linear_api_key: string;
 }
 
 export interface HubSpotCredentialJson {
@@ -214,12 +216,25 @@ export interface OCICredentialJson {
   access_key_id: string;
   secret_access_key: string;
 }
-export interface SalesforceCredentialJson {
+export interface SalesforceLegacyCredentialJson {
+  authentication_method?: "password";
   sf_username: string;
   sf_password: string;
   sf_security_token: string;
   is_sandbox: boolean;
 }
+
+export interface SalesforceOAuthCredentialJson {
+  authentication_method: "oauth";
+  sf_access_token: string;
+  sf_refresh_token: string;
+  sf_instance_url: string;
+  sf_login_url: string;
+}
+
+export type SalesforceCredentialJson =
+  | SalesforceLegacyCredentialJson
+  | SalesforceOAuthCredentialJson;
 
 export interface SharepointCredentialJson {
   sp_client_id: string;
@@ -304,7 +319,10 @@ export interface TestRailCredentialJson {
 }
 
 export const credentialTemplates: Record<ValidSources, any> = {
-  github: { github_access_token: "" } as GithubCredentialJson,
+  github: {
+    github_access_token: "",
+    github_base_url: null,
+  } as GithubCredentialJson,
   gitlab: {
     gitlab_url: "",
     gitlab_access_token: "",
@@ -347,7 +365,7 @@ export const credentialTemplates: Record<ValidSources, any> = {
     gong_base_url: null,
   } as GongCredentialJson,
   zulip: { zuliprc_content: "" } as ZulipCredentialJson,
-  linear: { linear_access_token: "" } as LinearCredentialJson,
+  linear: { linear_api_key: "" } as LinearCredentialJson,
   hubspot: { hubspot_access_token: "" } as HubSpotCredentialJson,
   document360: {
     portal_id: "",
@@ -533,6 +551,8 @@ export const credentialTemplates: Record<ValidSources, any> = {
 export const credentialDisplayNames: Record<string, string> = {
   // Github
   github_access_token: "GitHub Access Token",
+  github_base_url:
+    "GitHub Enterprise Server URL (optional; set your server host like https://github.example.com, leave blank for github.com)",
 
   // LumApps
   lumapps_application_id: "LumApps Application ID",
@@ -603,7 +623,7 @@ export const credentialDisplayNames: Record<string, string> = {
   loopio_client_token: "Loopio Client Token",
 
   // Linear
-  linear_access_token: "Linear Access Token",
+  linear_api_key: "Linear API Key",
 
   // HubSpot
   hubspot_access_token: "HubSpot Access Token",

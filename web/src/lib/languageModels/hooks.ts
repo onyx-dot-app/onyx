@@ -6,7 +6,7 @@ import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { isAuthPath } from "@/lib/auth/paths";
-import { useCurrentAgent } from "@/lib/agents/hooks";
+import { useActiveAgent } from "@/lib/agents/hooks";
 import {
   LLMProviderDescriptor,
   LLMProviderName,
@@ -99,6 +99,8 @@ function enrichViews(providers: RawLLMProviderView[]): LLMProviderView[] {
  *    while loading.
  * - `defaultText` — The global (or agent-overridden) default text model.
  * - `defaultVision` — The global (or agent-overridden) default vision model.
+ * - `defaultCraft`: the admin-configured default Craft model, or `null` if
+ *    unset. Craft then falls back to `defaultText`.
  * - `isLoading` — `true` until the first successful response or error.
  * - `error` — The SWR error object, if any.
  * - `refetch` — SWR `mutate` function to trigger a revalidation.
@@ -109,7 +111,7 @@ export function useLLMProviders(agentId?: number) {
   const url = onAuthPath
     ? null
     : agentId !== undefined
-      ? SWR_KEYS.llmProvidersForPersona(agentId)
+      ? SWR_KEYS.llmProvidersForAgent(agentId)
       : SWR_KEYS.llmProviders;
 
   // `revalidateIfStale` is intentionally left at its default (true), unlike
@@ -140,23 +142,29 @@ export function useLLMProviders(agentId?: number) {
     defaultText: data?.default_text ?? null,
     defaultVision: data?.default_vision ?? null,
     defaultChatNaming: data?.default_chat_naming ?? null,
+    defaultCraft: data?.default_craft ?? null,
     isLoading: !error && !data,
     error,
-    refetch: mutate as unknown as () => Promise<
-      LLMProviderResponse<LLMProviderDescriptor> | undefined
-    >,
+    // `mutate` resolves to the raw (unenriched) response, so callers must not
+    // read its result. Wrapping it keeps the revalidation without the lie.
+    refetch: async (): Promise<void> => {
+      await mutate();
+    },
   };
 }
 
 /**
- * Resolves the active agent via `useCurrentAgent` and fetches that agent's
+ * Resolves the active agent via `useActiveAgent` and fetches that agent's
  * LLM providers via `useLLMProviders`. User-facing model UIs (chat model
  * selectors, popovers) consistently need exactly this pairing, so this hook
  * keeps the resolution in one place instead of repeating it at each call site.
  */
 export function useCurrentAgentLLMProviders() {
-  const currentAgent = useCurrentAgent();
-  return useLLMProviders(currentAgent?.id);
+  const activeAgent = useActiveAgent();
+  // Scoped to the Assistant too. The endpoint answers "which providers may this
+  // user use with this agent", and the Assistant can carry restrictions like
+  // any other, so the unscoped list would over-report them.
+  return useLLMProviders(activeAgent?.id);
 }
 
 /**
@@ -176,6 +184,8 @@ export function useCurrentAgentLLMProviders() {
  *    while loading.
  * - `defaultText` — The global default text model.
  * - `defaultVision` — The global default vision model.
+ * - `defaultCraft`: the admin-configured default Craft model, or `null` if
+ *    unset. Craft then falls back to `defaultText`.
  * - `isLoading` — `true` until the first successful response or error.
  * - `error` — The SWR error object, if any.
  * - `refetch` — SWR `mutate` function to trigger a revalidation.
@@ -205,6 +215,7 @@ export function useAdminLLMProviders() {
     defaultText: data?.default_text ?? null,
     defaultVision: data?.default_vision ?? null,
     defaultChatNaming: data?.default_chat_naming ?? null,
+    defaultCraft: data?.default_craft ?? null,
     isLoading: !error && !data,
     error,
     refetch: mutate,

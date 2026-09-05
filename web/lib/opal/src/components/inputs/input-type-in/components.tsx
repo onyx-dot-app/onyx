@@ -75,6 +75,7 @@ export default function InputTypeIn({
 
   return (
     <div
+      role="presentation"
       data-variant={variant}
       className="opal-input"
       onClick={(e) => e.currentTarget.querySelector("input")?.focus()}
@@ -86,7 +87,7 @@ export default function InputTypeIn({
       )}
 
       {prefixText && (
-        <span className="select-none pointer-events-none text-text-02 pl-0.5">
+        <span className="select-none pointer-events-none text-text-02 ps-0.5">
           {prefixText}
         </span>
       )}
@@ -94,6 +95,9 @@ export default function InputTypeIn({
       <input
         ref={ref}
         type="text"
+        // dir="auto": typed text and, while empty, the placeholder decide
+        // the direction, so punctuation sits on the correct side.
+        dir="auto"
         name={name}
         disabled={disabled}
         readOnly={isReadOnly}

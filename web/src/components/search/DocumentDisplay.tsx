@@ -1,6 +1,7 @@
 "use client";
 
 import { JSX } from "react";
+import { useTranslations } from "next-intl";
 import { MinimalOnyxDocument, OnyxDocument } from "@/lib/search/interfaces";
 import { SourceIcon } from "../SourceIcon";
 import { WebResultIcon } from "../WebResultIcon";
@@ -131,6 +132,7 @@ export function CompactDocumentCard({
   document,
   updatePresentingDocument,
 }: CompactDocumentCardProps) {
+  const t = useTranslations("common.documentDisplay");
   const isWebSource =
     document.is_internet || document.source_type === ValidSources.Web;
 
@@ -141,9 +143,9 @@ export function CompactDocumentCard({
           openDocument(document, updatePresentingDocument);
         }}
         className="max-w-80 p-3 flex flex-col gap-1"
-        aria-label={`Open document: ${
-          document.semantic_identifier ?? document.document_id
-        }`}
+        aria-label={t("openDocument.ariaLabel", {
+          title: document.semantic_identifier ?? document.document_id,
+        })}
       >
         <div className="flex flex-row gap-2 items-center w-full">
           {isWebSource && document.link ? (
@@ -161,7 +163,7 @@ export function CompactDocumentCard({
             as="p"
             text03
             secondaryBody
-            className="line-clamp-2 text-left m-0!"
+            className="line-clamp-2 text-start m-0!"
           >
             {document.blurb}
           </Text>
@@ -173,9 +175,11 @@ export function CompactDocumentCard({
               as="p"
               text03
               figureSmallLabel
-              className="line-clamp-2 text-left m-0!"
+              className="line-clamp-2 text-start m-0!"
             >
-              Updated {new Date(document.updated_at).toLocaleDateString()}
+              {t("updated.text", {
+                date: new Date(document.updated_at).toLocaleDateString(),
+              })}
             </Text>
           )}
       </button>
@@ -192,27 +196,31 @@ export function CompactQuestionCard({
   question,
   openQuestion,
 }: CompactQuestionCardProps) {
+  const t = useTranslations("common.documentDisplay");
   return (
-    <div
+    <button
+      type="button"
       onClick={() => openQuestion(question)}
       className="max-w-[350px] gap-y-1 cursor-pointer pb-0 pt-0 mt-0 flex gap-y-0 flex-col content-start items-start gap-0"
     >
       <div className="text-sm pb-0! mb-0! font-semibold flex items-center gap-x-1 text-text-900 pt-0 mt-0 truncate w-full">
-        Question
+        {t("question.title")}
       </div>
       <div className="text-xs mb-0 text-text-600 line-clamp-2">
         {question.question}
       </div>
       <div className="flex mt-0 pt-0 items-center justify-between w-full">
         <span className="text-xs text-text-500">
-          {question.context_docs?.top_documents.length || 0} context docs
+          {t("contextDocs.text", {
+            count: question.context_docs?.top_documents.length || 0,
+          })}
         </span>
         {question.sub_queries && (
           <span className="text-xs text-text-500">
-            {question.sub_queries.length} subqueries
+            {t("subqueries.text", { count: question.sub_queries.length })}
           </span>
         )}
       </div>
-    </div>
+    </button>
   );
 }

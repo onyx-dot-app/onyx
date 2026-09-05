@@ -27,7 +27,11 @@ from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import MessageType
 from onyx.db.enums import BuildSessionStatus, SandboxStatus, SessionOrigin
 from onyx.db.external_app import get_connectable_apps_for_user
-from onyx.db.llm import fetch_all_accessible_llm_providers
+from onyx.db.llm import (
+    fetch_all_accessible_llm_providers,
+    fetch_default_craft_model,
+    fetch_default_llm_model,
+)
 from onyx.db.models import BuildMessage, BuildSession, Sandbox, User
 from onyx.db.users import fetch_user_by_id
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -36,7 +40,6 @@ from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.configs import (
     MAX_TOTAL_UPLOAD_SIZE_BYTES,
     MAX_UPLOAD_FILES_PER_SESSION,
-    OPENCODE_DISABLED_TOOLS,
 )
 from onyx.server.features.build.db.build_session import (
     create_build_session__no_commit,
@@ -64,6 +67,9 @@ from onyx.server.features.build.sandbox.models import (
     FilesystemEntry,
     PromptAttachment,
 )
+from onyx.server.features.build.sandbox.nextjs_dev import (
+    WEBAPP_PACKAGE_JSON_PATH,
+)
 from onyx.server.features.build.sandbox.serve_transport import PromptSlot
 from onyx.server.features.build.sandbox.snapshot_manager import SnapshotManager
 from onyx.server.features.build.sandbox.util.agent_instructions import (
@@ -83,6 +89,7 @@ from onyx.server.features.build.session.errors import (
 from onyx.server.features.build.session.interrupt_signal import request_interrupt
 from onyx.server.features.build.session.llm_config import (
     AgentSelection,
+    GatewaySelection,
     build_onyx_gateway_config,
     parse_agent_selection,
 )
@@ -99,6 +106,7 @@ from onyx.server.features.build.timeouts import (
     PROMPT_SLOT_KEEP_ALIVE_MAX_SECONDS,
     PROVISION_WAIT_SECONDS,
 )
+from onyx.server.features.build.utils import get_opencode_disabled_tools
 from onyx.server.metrics.craft_sandbox import SandboxReadyOutcome
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import start_thread_with_context
@@ -107,6 +115,23 @@ from shared_configs.contextvars import get_current_tenant_id
 logger = setup_logger()
 
 _DISPOSE_PENDING_TTL_SECONDS = 24 * 3600
+
+
+def _dispose_pending_key(session_id: UUID) -> str:
+    return f"craft:llm_config_dispose_pending:{session_id}"
+
+
+def mark_opencode_dispose_pending(session_id: UUID) -> None:
+    """Claim the dispose owed to a running instance after rewriting its config.
+
+    ``reconcile_session_llm_config`` performs it on the next turn, and needs the
+    marker because it short-circuits when the file already matches what it would
+    write — which it does after a workspace rebuild.
+    """
+    get_cache_backend().set(
+        _dispose_pending_key(session_id), "1", ex=_DISPOSE_PENDING_TTL_SECONDS
+    )
+
 
 # Webapp-ready probe on the UI-poll hot path; any response (even 404) counts.
 _WEBAPP_PROBE_TIMEOUT_SECONDS = 2.0
@@ -126,6 +151,9 @@ HIDDEN_PATTERNS = {
     "nextjs.log",
     "nextjs.pid",
 }
+
+_WEBAPP_DIRECTORY = str(Path(WEBAPP_PACKAGE_JSON_PATH).parent)
+_WEBAPP_PACKAGE_FILENAME = Path(WEBAPP_PACKAGE_JSON_PATH).name
 
 
 def _sanitize_zip_basename(name: str, *, allow_dots: bool) -> str:
@@ -171,9 +199,21 @@ class SessionManager:
         user: User,
         selection: AgentSelection | None = None,
     ) -> CraftLLMProviderConfig:
+        # Craft outranks chat: an admin can point Craft at a coding model while
+        # chat stays on something else.
+        configured_default_models = [
+            fetch_default_craft_model(self._db_session),
+            fetch_default_llm_model(self._db_session),
+        ]
+        configured_defaults = [
+            GatewaySelection(model.llm_provider_id, model.name)
+            for model in configured_default_models
+            if model is not None
+        ]
         gateway_config = build_onyx_gateway_config(
             fetch_all_accessible_llm_providers(self._db_session, user),
             selection,
+            configured_defaults,
         )
         if gateway_config is None:
             raise OnyxError(
@@ -248,7 +288,7 @@ class SessionManager:
         expected = json.dumps(
             build_provider_opencode_config(
                 llm_config,
-                disabled_tools=OPENCODE_DISABLED_TOOLS,
+                disabled_tools=get_opencode_disabled_tools(),
                 mcp_servers=mcp_servers,
                 session_id=str(session.id),
             )
@@ -270,7 +310,7 @@ class SessionManager:
             current = None
 
         cache = get_cache_backend()
-        dispose_pending_key = f"craft:llm_config_dispose_pending:{session.id}"
+        dispose_pending_key = _dispose_pending_key(session.id)
         if current == expected:
             # A matching file does NOT prove the running opencode instance
             # picked it up: a prior reconcile may have written the file and
@@ -296,7 +336,7 @@ class SessionManager:
         # the next reconcile, so the marker is the only thing that tells it to
         # retry the missed dispose. Setting it after the write leaves that exact
         # window uncovered.
-        cache.set(dispose_pending_key, "1", ex=_DISPOSE_PENDING_TTL_SECONDS)
+        mark_opencode_dispose_pending(session.id)
         self._sandbox_manager.regenerate_session_config(
             sandbox_id=sandbox.id,
             session_id=session.id,
@@ -1407,15 +1447,15 @@ class SessionManager:
         path: str,
     ) -> dict[str, Any] | None:
         """
-        Generate slide image previews for a PPTX file.
+        Generate slide image previews for a PowerPoint file.
 
-        Converts the PPTX to individual JPEG slide images using
+        Converts the presentation to individual JPEG slide images using
         soffice + pdftoppm, with caching to avoid re-conversion.
 
         Args:
             session_id: The session UUID
             user_id: The user ID to verify ownership
-            path: Relative path to the PPTX file within session workspace
+            path: Relative path to the PowerPoint file within session workspace
 
         Returns:
             Dict with slide_count, slide_paths, and cached flag,
@@ -1430,8 +1470,8 @@ class SessionManager:
         _, sandbox = resolved
 
         # Validate file extension
-        if not path.lower().endswith(".pptx"):
-            raise ValueError("Only .pptx files are supported for preview")
+        if Path(path).suffix.lower() not in {".ppt", ".pptx"}:
+            raise ValueError("Only .ppt and .pptx files are supported for preview")
 
         # Compute cache directory from path hash
         path_hash = hashlib.sha256(path.encode()).hexdigest()[:12]
@@ -1474,32 +1514,58 @@ class SessionManager:
         sandbox = get_sandbox_by_user_id(self._db_session, user_id)
         if sandbox is None:
             return {
-                "has_webapp": False,
+                "has_webapp": None,
                 "webapp_url": None,
                 "status": "no_sandbox",
                 "ready": False,
                 "sharing_scope": session.sharing_scope,
             }
 
+        has_webapp = (
+            self._has_scaffolded_webapp(sandbox.id, session_id)
+            if sandbox.status == SandboxStatus.RUNNING
+            else None
+        )
         # Return the proxy URL - the proxy handles routing to the correct sandbox
-        # for both local and Kubernetes environments
+        # for both local and Kubernetes environments.
         webapp_url = None
         ready = False
-        if session.nextjs_port:
+        if has_webapp and session.nextjs_port:
             webapp_url = f"{WEB_DOMAIN}/api/build/sessions/{session_id}/webapp"
-
-            # Quick health check: can the API server reach the NextJS dev server?
             ready = self._check_nextjs_ready(
                 sandbox.id, session_id, session.nextjs_port
             )
 
         return {
-            "has_webapp": session.nextjs_port is not None,
+            "has_webapp": has_webapp,
             "webapp_url": webapp_url,
             "status": sandbox.status.value,
             "ready": ready,
             "sharing_scope": session.sharing_scope,
         }
+
+    def _has_scaffolded_webapp(self, sandbox_id: UUID, session_id: UUID) -> bool | None:
+        """Return True if ``outputs/web/package.json`` exists in the session."""
+        try:
+            entries = self._sandbox_manager.list_directory(
+                sandbox_id=sandbox_id,
+                session_id=session_id,
+                path=_WEBAPP_DIRECTORY,
+            )
+        except ValueError:
+            return False
+        except RuntimeError:
+            logger.warning(
+                "Could not check webapp scaffold for session %s",
+                session_id,
+                exc_info=True,
+            )
+            return None
+
+        return any(
+            entry.name == _WEBAPP_PACKAGE_FILENAME and not entry.is_directory
+            for entry in entries
+        )
 
     def _check_nextjs_ready(
         self, sandbox_id: UUID, session_id: UUID, port: int

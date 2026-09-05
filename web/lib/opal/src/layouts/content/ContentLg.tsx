@@ -8,6 +8,7 @@ import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { cn } from "@opal/utils";
 import { useState } from "react";
+import useFocusOnMount from "@opal/hooks/useFocusOnMount";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -40,6 +41,9 @@ interface ContentLgProps {
 
   /** Clamp the title to N lines with ellipsis. Omit to wrap freely. */
   titleMaxLines?: number;
+
+  /** Strike the title through, for a row whose option is switched off. */
+  strikethrough?: boolean;
 
   /** Clamp the description to N lines. Maps to Text's maxLines prop. */
   descriptionMaxLines?: number;
@@ -89,12 +93,14 @@ function ContentLg({
   description,
   titleMaxLines,
   descriptionMaxLines,
+  strikethrough,
   editable,
   onTitleChange,
   ref,
 }: ContentLgProps) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(toPlainString(title));
+  const focusOnMount = useFocusOnMount<HTMLInputElement>();
 
   const config = CONTENT_LG_PRESETS[sizePreset];
 
@@ -144,7 +150,7 @@ function ContentLg({
                 value={editValue}
                 onChange={(e) => setEditValue(e.target.value)}
                 size={1}
-                autoFocus
+                ref={focusOnMount}
                 onFocus={(e) => e.currentTarget.select()}
                 onBlur={commit}
                 onKeyDown={(e) => {
@@ -162,6 +168,7 @@ function ContentLg({
               font={config.titleFont}
               color="inherit"
               maxLines={titleMaxLines}
+              strikethrough={strikethrough}
               title={toPlainString(title)}
               onClick={editable ? startEditing : undefined}
             >
@@ -200,7 +207,7 @@ function ContentLg({
         >
           <Text
             font="secondary-body"
-            color="text-03"
+            color="inherit"
             as="p"
             maxLines={descriptionMaxLines}
           >

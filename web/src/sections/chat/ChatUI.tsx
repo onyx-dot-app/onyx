@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useMemo, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import { Message } from "@/app/app/interfaces";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
 import HumanMessage from "@/app/app/message/HumanMessage";
@@ -15,6 +15,7 @@ import { SelectedModel } from "@/sections/model-selector/MultiModelSelector";
 import { buildModelProviderLookup } from "@/lib/languageModels/options";
 import DynamicBottomSpacer from "@/components/chat/DynamicBottomSpacer";
 import {
+  useCurrentChatState,
   useCurrentMessageHistory,
   useCurrentMessageTree,
   useLoadingError,
@@ -29,7 +30,7 @@ import { cn } from "@opal/utils";
 const MSG_MAX_W = "md:max-w-[720px] md:min-w-[400px]";
 
 export interface ChatUIProps {
-  liveAgent: MinimalAgent;
+  activeAgent: MinimalAgent;
   llmManager: LlmManager;
   setPresentingDocument: (doc: MinimalOnyxDocument | null) => void;
   onMessageSelection: (nodeId: number) => void;
@@ -70,7 +71,7 @@ export interface ChatUIProps {
 
 const ChatUI = React.memo(
   ({
-    liveAgent,
+    activeAgent,
     llmManager,
     setPresentingDocument,
     onMessageSelection,
@@ -88,6 +89,7 @@ const ChatUI = React.memo(
     const messageTree = useCurrentMessageTree();
     const error = useUncaughtError();
     const loadError = useLoadingError();
+    const chatState = useCurrentChatState();
     // Stable fallbacks to avoid changing prop identities on each render
     const emptyDocs = useMemo<OnyxDocument[]>(() => [], []);
     const emptyChildrenIds = useMemo<number[]>(() => [], []);
@@ -106,10 +108,13 @@ const ChatUI = React.memo(
     const deepResearchEnabledRef = useRef(deepResearchEnabled);
     const currentMessageFilesRef = useRef(currentMessageFiles);
     const selectedModelsRef = useRef(selectedModels);
-    onSubmitRef.current = onSubmit;
-    deepResearchEnabledRef.current = deepResearchEnabled;
-    currentMessageFilesRef.current = currentMessageFiles;
-    selectedModelsRef.current = selectedModels;
+
+    useEffect(() => {
+      onSubmitRef.current = onSubmit;
+      deepResearchEnabledRef.current = deepResearchEnabled;
+      currentMessageFilesRef.current = currentMessageFiles;
+      selectedModelsRef.current = selectedModels;
+    }, [onSubmit, deepResearchEnabled, currentMessageFiles, selectedModels]);
 
     const createRegenerator = useCallback(
       (regenerationRequest: {
@@ -169,7 +174,7 @@ const ChatUI = React.memo(
         <div
           className={cn(
             "flex flex-col w-full h-full pt-4 pb-8 gap-12",
-            !fullWidthChat && "md:pr-1"
+            !fullWidthChat && "md:pe-1"
           )}
         >
           {messages.map((message, i) => {
@@ -212,7 +217,7 @@ const ChatUI = React.memo(
                     <MultiModelResponseView
                       responses={multiModelResponses}
                       chatState={{
-                        agent: liveAgent,
+                        agent: activeAgent,
                         docs: emptyDocs,
                         citations: undefined,
                         setPresentingDocument,
@@ -225,6 +230,7 @@ const ChatUI = React.memo(
                         parentMessage?.childrenNodeIds ?? emptyChildrenIds
                       }
                       onMessageSelection={onMessageSelection}
+                      selectionDisabled={chatState !== "input"}
                     />
                   )}
                 </div>
@@ -259,7 +265,7 @@ const ChatUI = React.memo(
               }
 
               const chatStateData = {
-                agent: liveAgent,
+                agent: activeAgent,
                 docs: message.documents ?? emptyDocs,
                 citations: message.citations,
                 setPresentingDocument,

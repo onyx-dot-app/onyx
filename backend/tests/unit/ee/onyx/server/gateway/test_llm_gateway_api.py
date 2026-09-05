@@ -81,13 +81,14 @@ def _route_permission_dependency(path: str) -> Callable[..., Awaitable[User]]:
         next(
             route
             for route in application.routes
-            if getattr(route, "path", None) == f"{GATEWAY_PATH_PREFIX}{path}"
+            if getattr(route, "path", None)  # ods: ignore[getattr]
+            == f"{GATEWAY_PATH_PREFIX}{path}"
         ),
     )
     dependency = next(
         dep.call
         for dep in route.dependant.dependencies
-        if getattr(dep.call, "_is_require_permission", False)
+        if getattr(dep.call, "_is_require_permission", False)  # ods: ignore[getattr]
     )
     return cast("Callable[..., Awaitable[User]]", dependency)
 
@@ -935,14 +936,16 @@ def test_gateway_route_has_single_permission_dependency() -> None:
         next(
             route
             for route in application.routes
-            if getattr(route, "path", None)
+            if getattr(route, "path", None)  # ods: ignore[getattr]
             == f"{GATEWAY_PATH_PREFIX}/v1/chat/completions"
         ),
     )
     auth_dependencies = [
         dependency.call
         for dependency in gateway_route.dependant.dependencies
-        if getattr(dependency.call, "_is_require_permission", False)
+        if getattr(  # ods: ignore[getattr]
+            dependency.call, "_is_require_permission", False
+        )
     ]
     assert len(auth_dependencies) == 1
 
@@ -1845,13 +1848,16 @@ def test_responses_gateway_route_carries_same_permission_dependency() -> None:
         next(
             route
             for route in application.routes
-            if getattr(route, "path", None) == f"{GATEWAY_PATH_PREFIX}/v1/responses"
+            if getattr(route, "path", None)  # ods: ignore[getattr]
+            == f"{GATEWAY_PATH_PREFIX}/v1/responses"
         ),
     )
     auth_dependencies = [
         dependency.call
         for dependency in responses_route.dependant.dependencies
-        if getattr(dependency.call, "_is_require_permission", False)
+        if getattr(  # ods: ignore[getattr]
+            dependency.call, "_is_require_permission", False
+        )
     ]
     assert len(auth_dependencies) == 1
 
@@ -1988,13 +1994,16 @@ def test_models_route_has_single_permission_dependency() -> None:
         next(
             route
             for route in application.routes
-            if getattr(route, "path", None) == f"{GATEWAY_PATH_PREFIX}/v1/models"
+            if getattr(route, "path", None)  # ods: ignore[getattr]
+            == f"{GATEWAY_PATH_PREFIX}/v1/models"
         ),
     )
     auth_dependencies = [
         dependency.call
         for dependency in models_route.dependant.dependencies
-        if getattr(dependency.call, "_is_require_permission", False)
+        if getattr(  # ods: ignore[getattr]
+            dependency.call, "_is_require_permission", False
+        )
     ]
     assert len(auth_dependencies) == 1
 

@@ -1,13 +1,19 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useCreateModal } from "@opal/components";
+import { useTranslations } from "next-intl";
+import {
+  Button,
+  CopyButton,
+  Divider,
+  LineItemButton,
+  Popover,
+  Text,
+  useCreateModal,
+} from "@opal/components";
 import { noProp } from "@/lib/utils";
 import { formatDateTimeLog } from "@/lib/dateUtils";
-import { Button, Divider, Text } from "@opal/components";
 import { Content } from "@opal/layouts";
-import LineItem from "@/refresh-components/buttons/LineItem";
-import { Popover } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import {
   SvgAlertTriangle,
@@ -16,7 +22,6 @@ import {
   SvgXOctagon,
   SvgSimpleLoader,
 } from "@opal/icons";
-import { CopyButton } from "@opal/components";
 import { Hoverable } from "@opal/core";
 import { useHookExecutionLogs } from "@/ee/hooks/useHookExecutionLogs";
 import HookLogsModal from "@/ee/views/admin/HooksPage/HookLogsModal";
@@ -33,14 +38,15 @@ function ErrorLogRow({
   log: { created_at: string; error_message: string | null };
   group: string;
 }) {
+  const t = useTranslations("admin.hooks");
   return (
     <Hoverable.Root group={group}>
       <Section
         flexDirection="column"
         justifyContent="start"
         alignItems="start"
-        gap={0.25}
-        padding={0.25}
+        gap={1}
+        padding={1}
         height="fit"
       >
         <Section
@@ -61,7 +67,7 @@ function ErrorLogRow({
         </Section>
         <span className="break-all">
           <Text font="secondary-mono" color="text-03">
-            {log.error_message ?? "Unknown error"}
+            {log.error_message ?? t("logs.unknownError.label")}
           </Text>
         </span>
       </Section>
@@ -80,6 +86,7 @@ export default function HookStatusPopover({
   spec,
   isBusy,
 }: HookStatusPopoverProps) {
+  const t = useTranslations("admin.hooks");
   const logsModal = useCreateModal();
   const [open, setOpen] = useState(false);
   // true = opened by click (stays until dismissed); false = opened by hover (closes after 1s)
@@ -197,7 +204,9 @@ export default function HookStatusPopover({
             onClick={noProp(handleTriggerClick)}
             disabled={isBusy}
           >
-            {hook.is_reachable === false ? "Connection Lost" : "Connected"}
+            {hook.is_reachable === false
+              ? t("status.connectionLost.label")
+              : t("status.connected.label")}
           </Button>
         </Popover.Anchor>
 
@@ -221,8 +230,8 @@ export default function HookStatusPopover({
                   ? 20
                   : 12.5
             }
-            padding={0.125}
-            gap={0.25}
+            padding={0.5}
+            gap={1}
           >
             {isLoading ? (
               <Section justifyContent="center">
@@ -230,7 +239,7 @@ export default function HookStatusPopover({
               </Section>
             ) : error ? (
               <Text font="secondary-body" color="text-03">
-                Failed to load logs.
+                {t("logs.loadFailed.message")}
               </Text>
             ) : hook.is_reachable === false ? (
               <>
@@ -244,20 +253,20 @@ export default function HookStatusPopover({
                         className="text-status-error-05"
                       />
                     )}
-                    title="Most Recent Errors"
+                    title={t("status.recentErrors.title")}
                   />
                 </div>
 
                 {topErrors.length > 0 ? (
                   <>
-                    <Divider paddingPerpendicular="fit" />
+                    <Divider paddingPerpendicular={0} />
 
                     <Section
                       flexDirection="column"
                       justifyContent="start"
                       alignItems="start"
-                      gap={0.25}
-                      padding={0.25}
+                      gap={1}
+                      padding={1}
                       height="fit"
                     >
                       {topErrors.map((log, idx) => (
@@ -270,19 +279,20 @@ export default function HookStatusPopover({
                     </Section>
                   </>
                 ) : (
-                  <Divider paddingPerpendicular="fit" />
+                  <Divider paddingPerpendicular={0} />
                 )}
 
-                <LineItem
-                  muted
+                <LineItemButton
+                  sizePreset="main-ui"
+                  rounding={2}
+                  color="muted"
                   icon={SvgMaximize2}
                   onClick={noProp(() => {
                     handleOpenChange(false);
                     logsModal.toggle(true);
                   })}
-                >
-                  View More Lines
-                </LineItem>
+                  title={t("status.viewMore.label")}
+                />
               </>
             ) : hasRecentErrors ? (
               <>
@@ -298,24 +308,24 @@ export default function HookStatusPopover({
                     )}
                     title={
                       recentErrors.length <= 3
-                        ? `${recentErrors.length} ${
-                            recentErrors.length === 1 ? "Error" : "Errors"
-                          }`
-                        : "Most Recent Errors"
+                        ? t("status.errorCount.title", {
+                            count: recentErrors.length,
+                          })
+                        : t("status.recentErrors.title")
                     }
-                    description="in the past hour"
+                    description={t("status.pastHour.description")}
                   />
                 </div>
 
-                <Divider paddingPerpendicular="fit" />
+                <Divider paddingPerpendicular={0} />
 
                 {/* Log rows — at most 3, timestamp first then error message */}
                 <Section
                   flexDirection="column"
                   justifyContent="start"
                   alignItems="start"
-                  gap={0.25}
-                  padding={0.25}
+                  gap={1}
+                  padding={1}
                   height="fit"
                 >
                   {recentErrors.slice(0, 3).map((log, idx) => (
@@ -328,16 +338,17 @@ export default function HookStatusPopover({
                 </Section>
 
                 {/* View More Lines */}
-                <LineItem
-                  muted
+                <LineItemButton
+                  sizePreset="main-ui"
+                  rounding={2}
+                  color="muted"
                   icon={SvgMaximize2}
                   onClick={noProp(() => {
                     handleOpenChange(false);
                     logsModal.toggle(true);
                   })}
-                >
-                  View More Lines
-                </LineItem>
+                  title={t("status.viewMore.label")}
+                />
               </>
             ) : (
               // No errors state
@@ -347,24 +358,25 @@ export default function HookStatusPopover({
                     sizePreset="secondary"
                     variant="section"
                     icon={SvgCheckCircle}
-                    title="No Error"
-                    description="in the past hour"
+                    title={t("status.noError.title")}
+                    description={t("status.pastHour.description")}
                   />
                 </div>
 
-                <Divider paddingPerpendicular="fit" />
+                <Divider paddingPerpendicular={0} />
 
                 {/* View Older Errors */}
-                <LineItem
-                  muted
+                <LineItemButton
+                  sizePreset="main-ui"
+                  rounding={2}
+                  color="muted"
                   icon={SvgMaximize2}
                   onClick={noProp(() => {
                     handleOpenChange(false);
                     logsModal.toggle(true);
                   })}
-                >
-                  View Older Errors
-                </LineItem>
+                  title={t("status.viewOlder.label")}
+                />
               </>
             )}
           </Section>

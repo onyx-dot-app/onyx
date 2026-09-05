@@ -26,6 +26,7 @@ import { useVoiceMode } from "@/providers/VoiceModeProvider";
 import { getTextContent } from "@/app/app/services/packetUtils";
 import { removeThinkingTokens } from "@/app/app/services/thinkingTokens";
 import { cn } from "@opal/utils";
+import { useTranslations } from "next-intl";
 
 // Type for the regeneration factory function passed from ChatUI
 export type RegenerationFactory = (regenerationRequest: {
@@ -108,6 +109,7 @@ const AgentMessage = React.memo(function AgentMessage({
   disableTTS,
   fullWidthChat,
 }: AgentMessageProps) {
+  const t = useTranslations("chat.messages");
   const markdownRef = useRef<HTMLDivElement>(null);
   const finalAnswerRef = useRef<HTMLDivElement>(null);
 
@@ -355,7 +357,7 @@ const AgentMessage = React.memo(function AgentMessage({
         {pacedDisplayGroups.length === 0 &&
           stopReason === StopReason.USER_CANCELLED && (
             <Text as="p" secondaryBody text04>
-              User has stopped generation
+              {t("agentMessage.stoppedGeneration.text")}
             </Text>
           )}
       </div>

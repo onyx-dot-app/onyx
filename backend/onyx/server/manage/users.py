@@ -1,14 +1,14 @@
 import csv
 import io
 from datetime import datetime, timedelta, timezone
-from typing import cast
+from typing import Any, cast
 from uuid import UUID
 
 import jwt
 from email_validator import EmailNotValidError, EmailUndeliverableError, validate_email
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -20,7 +20,7 @@ from onyx.auth.invited_users import (
     write_invited_users,
 )
 from onyx.auth.permissions import get_effective_permissions, require_permission
-from onyx.auth.schemas import UserRole
+from onyx.auth.scoped_permissions import get_scoped_groups
 from onyx.auth.session_tokens import (
     SessionRejection,
     build_session_rejection_error,
@@ -28,7 +28,6 @@ from onyx.auth.session_tokens import (
 )
 from onyx.auth.users import (
     anonymous_user_enabled,
-    current_curator_or_admin_user,
     enforce_seat_limit_locked,
     optional_user,
     scope_exempt,
@@ -42,14 +41,20 @@ from onyx.configs.app_configs import (
     REDIS_AUTH_KEY_PREFIX,
     SESSION_EXPIRE_TIME_SECONDS,
     USER_AUTH_SECRET,
+    WEB_DOMAIN,
     AuthBackend,
 )
-from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME, PUBLIC_API_TAGS
+from onyx.configs.constants import (
+    FASTAPI_USERS_AUTH_COOKIE_NAME,
+    NEXT_LOCALE_COOKIE_NAME,
+    PUBLIC_API_TAGS,
+)
 from onyx.db.api_key import is_api_key_email_address
 from onyx.db.auth import get_live_users_count
 from onyx.db.engine.sql_engine import get_session, get_session_with_shared_schema
 from onyx.db.enums import AccountType, Permission, UserFileStatus
 from onyx.db.models import User, UserFile
+from onyx.db.pinned_personas import set_pinned_personas
 from onyx.db.tenant_invite_counter import release_trial_invites, reserve_trial_invites
 from onyx.db.user_preferences import (
     activate_user,
@@ -66,9 +71,9 @@ from onyx.db.user_preferences import (
     update_user_language,
     update_user_paste_as_tile,
     update_user_personalization,
-    update_user_pinned_assistants,
-    update_user_role,
+    update_user_reasoning_effort_default,
     update_user_shortcut_enabled,
+    update_user_temperature_default,
     update_user_temperature_override_enabled,
     update_user_theme_preference,
     update_users_craft_enabled,
@@ -81,12 +86,14 @@ from onyx.db.users import (
     get_page_of_filtered_users,
     get_total_filtered_users_count,
     get_user_by_email,
-    get_user_counts_by_role_and_status,
-    validate_user_role_update,
+    get_user_counts_by_account_type_and_status,
+    set_user_admin_access,
+    user_is_admin,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.key_value_store.factory import get_kv_store
+from onyx.llm.models import ReasoningEffort, parse_user_selectable_reasoning_effort
 from onyx.redis.redis_pool import get_raw_redis_client, get_redis_client
 from onyx.server.documents.models import PaginatedReturn
 from onyx.server.features.projects.models import UserFileSnapshot
@@ -107,12 +114,12 @@ from onyx.server.manage.models import (
     TenantInfo,
     TenantSnapshot,
     ThemePreferenceRequest,
+    UserAdminAccessUpdateRequest,
     UserByEmail,
     UserCraftAccessUpdateRequest,
     UserInfo,
+    UserPermissionsResponse,
     UserPreferences,
-    UserRoleResponse,
-    UserRoleUpdateRequest,
     UserSpecificAssistantPreference,
     UserSpecificAssistantPreferences,
 )
@@ -146,57 +153,41 @@ router = APIRouter()
 USERS_PAGE_SIZE = 10
 
 
-@router.patch("/manage/set-user-role", tags=PUBLIC_API_TAGS)
-def set_user_role(
-    user_role_update_request: UserRoleUpdateRequest,
+@router.patch("/manage/admin/users/admin-access", tags=PUBLIC_API_TAGS)
+def set_user_admin_access_endpoint(
+    admin_access_update_request: UserAdminAccessUpdateRequest,
     current_user: User = Depends(
         require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)
     ),
     db_session: Session = Depends(get_session),
 ) -> None:
-    user_to_update = get_user_by_email(
-        email=user_role_update_request.user_email, db_session=db_session
+    target = get_user_by_email(
+        email=admin_access_update_request.user_email, db_session=db_session
     )
-    if not user_to_update:
-        raise HTTPException(status_code=404, detail="User not found")
+    if not target:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "User not found")
 
-    current_role = user_to_update.role
-    requested_role = user_role_update_request.new_role
-    if requested_role == current_role:
+    was_admin = user_is_admin(target)
+    if was_admin == admin_access_update_request.is_admin:
         return
 
-    # This will raise an exception if the role update is invalid
-    validate_user_role_update(
-        requested_role=requested_role,
-        current_account_type=user_to_update.account_type,
-        explicit_override=user_role_update_request.explicit_override,
+    set_user_admin_access(
+        db_session=db_session,
+        actor=current_user,
+        target=target,
+        is_admin=admin_access_update_request.is_admin,
     )
-
-    if user_to_update.id == current_user.id:
-        raise HTTPException(
-            status_code=400,
-            detail="An admin cannot demote themselves from admin role!",
-        )
-
-    if requested_role == UserRole.CURATOR:
-        # Remove all curator db relationships before changing role
-        fetch_ee_implementation_or_noop(
-            "onyx.db.user_group",
-            "remove_curator_status__no_commit",
-        )(db_session, user_to_update)
-
-    update_user_role(user_to_update, requested_role, db_session)
 
     emit_audit_event(
         AuditAction.USER_ROLE_CHANGE,
         AuditOutcome.SUCCESS,
         actor=actor_from_user(current_user),
         resource_type="user",
-        resource_id=str(user_to_update.id),
+        resource_id=str(target.id),
         extra={
-            "target_email": user_to_update.email,
-            "old_role": current_role.value,
-            "new_role": requested_role.value,
+            "target_email": target.email,
+            "previous_is_admin": was_admin,
+            "is_admin": admin_access_update_request.is_admin,
         },
     )
 
@@ -254,7 +245,14 @@ async def test_upsert_user(
     user = await fetch_ee_implementation_or_noop(
         "onyx.server.saml", "upsert_saml_user", None
     )(email=request.email)
-    return FullUserSnapshot.from_user_model(user) if user else None
+    return (
+        FullUserSnapshot.from_user_model(
+            user,
+            is_admin=user_is_admin(user),
+        )
+        if user
+        else None
+    )
 
 
 @router.get("/manage/users/accepted", tags=PUBLIC_API_TAGS)
@@ -262,36 +260,48 @@ def list_accepted_users(
     q: str | None = Query(default=None),
     page_num: int = Query(0, ge=0),
     page_size: int = Query(10, ge=1, le=1000),
-    roles: list[UserRole] = Query(default=[]),
     is_active: bool | None = Query(default=None),
+    account_types: list[AccountType] = Query(default=[]),
+    # Accepted only to raise a clear error for callers still sending the
+    # removed ``roles`` filter; would otherwise be silently ignored by FastAPI
+    # and return unfiltered results.
+    roles: list[str] = Query(default=[], deprecated=True, include_in_schema=False),
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> PaginatedReturn[FullUserSnapshot]:
+    if roles:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "The 'roles' query parameter has been removed. Use 'account_types' "
+            "(values: standard, bot, ext_perm_user, service_account, anonymous) "
+            "instead. Admin status is no longer a user role — it derives from "
+            "group membership and is returned on each user as 'is_admin'.",
+        )
+
     filtered_accepted_users = get_page_of_filtered_users(
         db_session=db_session,
         page_size=page_size,
         page_num=page_num,
         email_filter_string=q,
         is_active_filter=is_active,
-        roles_filter=roles,
+        account_type_filter=account_types or None,
     )
 
     total_accepted_users_count = get_total_filtered_users_count(
         db_session=db_session,
         email_filter_string=q,
         is_active_filter=is_active,
-        roles_filter=roles,
+        account_type_filter=account_types or None,
     )
 
     if not filtered_accepted_users:
-        logger.info("No users found")
         return PaginatedReturn(
             items=[],
-            total_items=0,
+            total_items=total_accepted_users_count,
         )
 
     user_ids = [user.id for user in filtered_accepted_users]
-    groups_by_user = batch_get_user_groups(db_session, user_ids)
+    groups_by_user = batch_get_user_groups(db_session, user_ids, include_default=True)
 
     # Batch-fetch SCIM mappings to mark synced users
     scim_synced_ids: set[UUID] = set()
@@ -317,6 +327,7 @@ def list_accepted_users(
                     for gid, gname in groups_by_user.get(user.id, [])
                 ],
                 is_scim_synced=user.id in scim_synced_ids,
+                is_admin=user_is_admin(user),
             )
             for user in filtered_accepted_users
         ],
@@ -337,7 +348,7 @@ def list_all_accepted_users(
         return []
 
     user_ids = [user.id for user in users]
-    groups_by_user = batch_get_user_groups(db_session, user_ids)
+    groups_by_user = batch_get_user_groups(db_session, user_ids, include_default=True)
 
     # Batch-fetch SCIM mappings to mark synced users
     scim_synced_ids: set[UUID] = set()
@@ -362,6 +373,7 @@ def list_all_accepted_users(
                 for gid, gname in groups_by_user.get(user.id, [])
             ],
             is_scim_synced=user.id in scim_synced_ids,
+            is_admin=user_is_admin(user),
         )
         for user in users
     ]
@@ -372,7 +384,7 @@ def get_user_counts(
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> dict[str, dict[str, int]]:
-    return get_user_counts_by_role_and_status(db_session)
+    return get_user_counts_by_account_type_and_status(db_session)
 
 
 @router.get("/manage/users/invited", tags=PUBLIC_API_TAGS)
@@ -391,6 +403,32 @@ def list_invited_users(
     return [InvitedUserSnapshot(email=email) for email in filtered_invited_emails]
 
 
+def _snapshots_with_groups(
+    db_session: Session, accepted: list[User], slack: list[User]
+) -> tuple[list[FullUserSnapshot], list[FullUserSnapshot]]:
+    """One membership lookup for both lists. Slack users are included because bot
+    memberships predating the join gate can still exist."""
+    groups_by_user = batch_get_user_groups(
+        db_session,
+        [user.id for user in (*accepted, *slack)],
+        include_default=True,
+    )
+
+    def to_snapshot(user: User) -> FullUserSnapshot:
+        return FullUserSnapshot.from_user_model(
+            user,
+            groups=[
+                UserGroupInfo(id=gid, name=gname)
+                for gid, gname in groups_by_user.get(user.id, [])
+            ],
+            is_admin=user_is_admin(user),
+        )
+
+    return [to_snapshot(user) for user in accepted], [
+        to_snapshot(user) for user in slack
+    ]
+
+
 @router.get("/manage/users", tags=PUBLIC_API_TAGS)
 def list_all_users(
     q: str | None = None,
@@ -398,7 +436,7 @@ def list_all_users(
     slack_users_page: int | None = None,
     invited_page: int | None = None,
     include_api_keys: bool = False,
-    _: User = Depends(current_curator_or_admin_user),
+    _: User = Depends(require_permission(Permission.READ_USERS, allow_scope=True)),
     db_session: Session = Depends(get_session),
 ) -> AllUsersResponse:
     users = get_all_users(
@@ -434,13 +472,12 @@ def list_all_users(
 
     # If any of q, accepted_page, or invited_page is None, return all users
     if accepted_page is None or invited_page is None or slack_users_page is None:
+        accepted_snapshots, slack_snapshots = _snapshots_with_groups(
+            db_session, accepted_users, slack_users
+        )
         return AllUsersResponse(
-            accepted=[
-                FullUserSnapshot.from_user_model(user) for user in accepted_users
-            ],
-            slack_users=[
-                FullUserSnapshot.from_user_model(user) for user in slack_users
-            ],
+            accepted=accepted_snapshots,
+            slack_users=slack_snapshots,
             invited=[InvitedUserSnapshot(email=email) for email in invited_emails],
             accepted_pages=1,
             invited_pages=1,
@@ -449,20 +486,19 @@ def list_all_users(
 
     # Otherwise, return paginated results. Slice before building snapshots so
     # only the requested page is serialized.
+    accepted_snapshots, slack_snapshots = _snapshots_with_groups(
+        db_session,
+        accepted_users[
+            accepted_page * USERS_PAGE_SIZE : (accepted_page + 1) * USERS_PAGE_SIZE
+        ],
+        slack_users[
+            slack_users_page * USERS_PAGE_SIZE : (slack_users_page + 1)
+            * USERS_PAGE_SIZE
+        ],
+    )
     return AllUsersResponse(
-        accepted=[
-            FullUserSnapshot.from_user_model(user)
-            for user in accepted_users[
-                accepted_page * USERS_PAGE_SIZE : (accepted_page + 1) * USERS_PAGE_SIZE
-            ]
-        ],
-        slack_users=[
-            FullUserSnapshot.from_user_model(user)
-            for user in slack_users[
-                slack_users_page * USERS_PAGE_SIZE : (slack_users_page + 1)
-                * USERS_PAGE_SIZE
-            ]
-        ],
+        accepted=accepted_snapshots,
+        slack_users=slack_snapshots,
         invited=[
             InvitedUserSnapshot(email=email)
             for email in invited_emails[
@@ -498,7 +534,7 @@ def download_users_csv(
         writer.writerow(
             [
                 sanitize_csv_cell(user.email),
-                user.role.value if user.role else "",
+                user.account_type.value if user.account_type else "",
                 "Active" if user.is_active else "Inactive",
             ]
         )
@@ -899,13 +935,6 @@ def list_all_users_basic_info(
     ]
 
 
-@router.get("/get-user-role", tags=PUBLIC_API_TAGS)
-async def get_user_role(
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
-) -> UserRoleResponse:
-    return UserRoleResponse(role=user.role)
-
-
 def get_current_auth_token_expiry_redis(
     user: User, request: Request
 ) -> datetime | None:
@@ -1008,13 +1037,19 @@ def _get_token_expires_at(
 @router.get("/me/permissions", tags=PUBLIC_API_TAGS)
 def get_current_user_permissions(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
-) -> list[str]:
-    return sorted(p.value for p in get_effective_permissions(user))
+    db_session: Session = Depends(get_session),
+) -> UserPermissionsResponse:
+    return UserPermissionsResponse(
+        permissions=sorted(p.value for p in get_effective_permissions(user)),
+        is_manager=user.is_group_manager,
+        managed_group_ids=sorted(get_scoped_groups(user, db_session)),
+    )
 
 
 @router.get("/me", tags=PUBLIC_API_TAGS, dependencies=[Depends(scope_exempt)])
 def verify_user_logged_in(
     request: Request,
+    response: Response,
     user: User | None = Depends(optional_user),
     db_session: Session = Depends(get_session),
 ) -> UserInfo:
@@ -1099,12 +1134,73 @@ def verify_user_logged_in(
             invitation=tenant_invitation,
         ),
         memories=memories,
+        effective_permissions=sorted(p.value for p in get_effective_permissions(user)),
     )
+
+    # Reconcile the locale cookie with the stored preference so a login on a
+    # fresh browser (or after an identity switch) renders the user's language.
+    if request.cookies.get(NEXT_LOCALE_COOKIE_NAME) != user.language:
+        set_locale_cookie(response, user.language)
 
     return user_info
 
 
 """APIs to adjust user preferences"""
+
+
+class TemperatureDefaultRequest(BaseModel):
+    """The user's own default temperature. Null clears it."""
+
+    temperature_default: float | None = None
+
+    @field_validator("temperature_default")
+    @classmethod
+    def _validate_temperature(cls, value: float | None) -> float | None:
+        if value is not None and not 0 <= value <= 2:
+            raise OnyxError(
+                OnyxErrorCode.BAD_REQUEST,
+                f"temperature_default must be between 0 and 2, got {value}",
+            )
+        return value
+
+
+@router.patch("/temperature-default")
+def update_user_temperature_default_api(
+    request: TemperatureDefaultRequest,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> None:
+    update_user_temperature_default(user.id, request.temperature_default, db_session)
+
+
+class ReasoningEffortDefaultRequest(BaseModel):
+    """The user's own default reasoning effort. Null clears it."""
+
+    reasoning_effort_default: ReasoningEffort | None = None
+
+    @field_validator("reasoning_effort_default", mode="before")
+    @classmethod
+    def _validate_reasoning_effort(cls, value: Any) -> Any:
+        # AUTO has no rank and an unset column already means it.
+        if value is None:
+            return value
+        try:
+            return parse_user_selectable_reasoning_effort(
+                value.value if isinstance(value, ReasoningEffort) else value
+            )
+        except ValueError as e:
+            raise OnyxError(OnyxErrorCode.BAD_REQUEST, str(e))
+
+
+@router.patch("/reasoning-effort-default")
+def update_user_reasoning_effort_default_api(
+    request: ReasoningEffortDefaultRequest,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> None:
+    update_user_reasoning_effort_default(
+        user.id, request.reasoning_effort_default, db_session
+    )
 
 
 @router.patch("/temperature-override-enabled")
@@ -1158,13 +1254,33 @@ def update_user_theme_preference_api(
     update_user_theme_preference(user.id, request.theme_preference, db_session)
 
 
+LOCALE_COOKIE_MAX_AGE_SECONDS = 365 * 24 * 60 * 60
+
+
+def set_locale_cookie(response: Response, language: str) -> None:
+    """The backend owns the locale cookie: it is set from the stored
+    preference on PATCH /user/language and reconciled on GET /me, so the
+    client never writes it. The Next.js server layout is the only reader."""
+    response.set_cookie(
+        key=NEXT_LOCALE_COOKIE_NAME,
+        value=language,
+        max_age=LOCALE_COOKIE_MAX_AGE_SECONDS,
+        path="/",
+        secure=WEB_DOMAIN.startswith("https"),
+        httponly=True,
+        samesite="lax",
+    )
+
+
 @router.patch("/user/language")
 def update_user_language_api(
     request: LanguageRequest,
+    response: Response,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     update_user_language(user.id, request.language.value, db_session)
+    set_locale_cookie(response, request.language.value)
 
 
 @router.patch("/user/chat-background")
@@ -1243,13 +1359,15 @@ class ReorderPinnedAssistantsRequest(BaseModel):
 
 
 @router.patch("/user/pinned-assistants")
-def update_user_pinned_assistants_api(
+def set_pinned_personas_api(
     request: ReorderPinnedAssistantsRequest,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
     ordered_assistant_ids = request.ordered_assistant_ids
-    update_user_pinned_assistants(user.id, ordered_assistant_ids, db_session)
+    set_pinned_personas(
+        db_session=db_session, user=user, persona_ids=ordered_assistant_ids
+    )
 
 
 class ChosenAssistantsRequest(BaseModel):
@@ -1341,6 +1459,8 @@ def get_recent_files(
         .filter(UserFile.user_id == user_id)
         .filter(UserFile.status != UserFileStatus.FAILED)
         .filter(UserFile.status != UserFileStatus.DELETING)
+        # Incognito uploads live only inside their session, never in recents.
+        .filter(UserFile.incognito.is_(False))
         .order_by(UserFile.last_accessed_at.desc())
         .all()
     )

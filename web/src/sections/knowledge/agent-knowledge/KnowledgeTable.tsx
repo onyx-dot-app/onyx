@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { useTranslations } from "next-intl";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
 import Text from "@/refresh-components/texts/Text";
@@ -36,18 +37,19 @@ export function KnowledgeTable<T>({
   onToggleItem,
   searchValue,
   onSearchChange,
-  searchPlaceholder = "Filter...",
+  searchPlaceholder,
   headerActions,
-  emptyMessage = "No items available.",
+  emptyMessage,
   ariaLabelPrefix,
 }: KnowledgeTableProps<T> & { ariaLabelPrefix?: string }) {
+  const t = useTranslations("knowledge");
   return (
     <GeneralLayouts.Section gap={0} alignItems="stretch" justifyContent="start">
       <GeneralLayouts.Section
         flexDirection="row"
         justifyContent="start"
         alignItems="center"
-        gap={0.5}
+        gap={2}
         height="auto"
       >
         {onSearchChange !== undefined && (
@@ -55,7 +57,7 @@ export function KnowledgeTable<T>({
             <InputTypeIn
               value={searchValue ?? ""}
               onChange={(e) => onSearchChange?.(e.target.value)}
-              placeholder={searchPlaceholder}
+              placeholder={searchPlaceholder ?? t("table.filter.placeholder")}
               variant="internal"
               rightChildren={
                 <SvgFilter className="w-4 h-4 stroke-text-02 shrink-0" />
@@ -80,7 +82,7 @@ export function KnowledgeTable<T>({
               flexDirection="row"
               justifyContent="start"
               alignItems="center"
-              gap={0.25}
+              gap={1}
               height="auto"
             >
               <Text secondaryBody text03>
@@ -91,12 +93,12 @@ export function KnowledgeTable<T>({
         ))}
       </TableLayouts.TableRow>
 
-      <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+      <Divider paddingParallel={0} paddingPerpendicular={0} />
 
       {items.length === 0 ? (
-        <GeneralLayouts.Section height="auto" padding={1}>
+        <GeneralLayouts.Section height="auto" padding={4}>
           <Text text03 secondaryBody>
-            {emptyMessage}
+            {emptyMessage ?? t("table.empty.description")}
           </Text>
         </GeneralLayouts.Section>
       ) : (

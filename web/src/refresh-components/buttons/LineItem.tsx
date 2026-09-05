@@ -8,34 +8,34 @@ import type { Route } from "next";
 import { Section } from "@/layouts/general-layouts";
 import type { WithoutStyles } from "@opal/types";
 
-const buttonClassNames = {
+const rowClassNames = {
   main: {
-    normal: "line-item-button-main",
-    emphasized: "line-item-button-main-emphasized",
+    normal: "line-item-row-main",
+    emphasized: "line-item-row-main-emphasized",
   },
   strikethrough: {
-    normal: "line-item-button-strikethrough",
-    emphasized: "line-item-button-strikethrough-emphasized",
+    normal: "line-item-row-strikethrough",
+    emphasized: "line-item-row-strikethrough-emphasized",
   },
   disabled: {
-    normal: "line-item-button-disabled",
-    emphasized: "line-item-button-disabled-emphasized",
+    normal: "line-item-row-disabled",
+    emphasized: "line-item-row-disabled-emphasized",
   },
   danger: {
-    normal: "line-item-button-danger",
-    emphasized: "line-item-button-danger-emphasized",
+    normal: "line-item-row-danger",
+    emphasized: "line-item-row-danger-emphasized",
   },
   action: {
-    normal: "line-item-button-action",
-    emphasized: "line-item-button-action-emphasized",
+    normal: "line-item-row-action",
+    emphasized: "line-item-row-action-emphasized",
   },
   muted: {
-    normal: "line-item-button-muted",
-    emphasized: "line-item-button-muted-emphasized",
+    normal: "line-item-row-muted",
+    emphasized: "line-item-row-muted-emphasized",
   },
   skeleton: {
-    normal: "line-item-button-skeleton",
-    emphasized: "line-item-button-skeleton-emphasized",
+    normal: "line-item-row-skeleton",
+    emphasized: "line-item-row-skeleton-emphasized",
   },
 } as const;
 
@@ -226,23 +226,26 @@ export default function LineItem({
     props.onKeyUp?.(e);
   };
 
-  const content = (
-    <div
-      ref={ref}
-      role={interactive ? "button" : undefined}
-      tabIndex={interactive ? 0 : undefined}
-      aria-disabled={disabled || undefined}
-      className={cn(
-        "flex flex-row w-full items-start p-2 rounded-08 group/LineItem gap-2",
-        children && description ? "items-start" : "items-center",
-        buttonClassNames[variant][emphasisKey]
-      )}
-      data-selected={selected}
-      {...props}
-      onClick={handleClick}
-      onKeyDown={handleKeyDown}
-      onKeyUp={handleKeyUp}
-    >
+  const rowClassName = cn(
+    "flex flex-row w-full items-start p-2 rounded-08 group/LineItem gap-2",
+    children && description ? "items-start" : "items-center",
+    interactive && (disabled ? "cursor-not-allowed" : "cursor-pointer"),
+    rowClassNames[variant][emphasisKey]
+  );
+
+  const rowProps = {
+    ref,
+    "aria-disabled": disabled || undefined,
+    className: rowClassName,
+    "data-selected": selected,
+    ...props,
+    onClick: handleClick,
+    onKeyDown: handleKeyDown,
+    onKeyUp: handleKeyUp,
+  };
+
+  const body = (
+    <>
       {Icon && (
         <div
           className={cn(
@@ -258,10 +261,10 @@ export default function LineItem({
       <Section alignItems="start" gap={0}>
         {children ? (
           <>
-            <Section flexDirection="row" gap={0.5}>
+            <Section flexDirection="row" gap={2}>
               <Truncated
                 mainUiMuted
-                className={cn("text-left w-full", textClassNames[variant])}
+                className={cn("text-start w-full", textClassNames[variant])}
               >
                 {children}
               </Truncated>
@@ -273,23 +276,23 @@ export default function LineItem({
             </Section>
             {description &&
               (wrapDescription ? (
-                <Text as="p" secondaryBody text03 className="text-left w-full">
+                <Text as="p" secondaryBody text03 className="text-start w-full">
                   {description}
                 </Text>
               ) : (
-                <Truncated secondaryBody text03 className="text-left w-full">
+                <Truncated secondaryBody text03 className="text-start w-full">
                   {description}
                 </Truncated>
               ))}
           </>
         ) : description ? (
-          <Section flexDirection="row" gap={0.5}>
+          <Section flexDirection="row" gap={2}>
             {wrapDescription ? (
-              <Text as="p" secondaryBody text03 className="text-left w-full">
+              <Text as="p" secondaryBody text03 className="text-start w-full">
                 {description}
               </Text>
             ) : (
-              <Truncated secondaryBody text03 className="text-left w-full">
+              <Truncated secondaryBody text03 className="text-start w-full">
                 {description}
               </Truncated>
             )}
@@ -301,6 +304,18 @@ export default function LineItem({
           </Section>
         ) : null}
       </Section>
+    </>
+  );
+
+  // A non-interactive row sits inside another interactive primitive, which
+  // already carries the semantics and the keyboard handling.
+  const content = interactive ? (
+    <div role="button" tabIndex={0} {...rowProps}>
+      {body}
+    </div>
+  ) : (
+    <div role="presentation" {...rowProps}>
+      {body}
     </div>
   );
 

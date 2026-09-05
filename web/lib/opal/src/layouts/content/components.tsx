@@ -15,6 +15,7 @@ import {
 } from "@opal/layouts/content/ContentLg";
 import {
   ContentMd,
+  type ContentMdEditHandle,
   type ContentMdProps,
 } from "@opal/layouts/content/ContentMd";
 import type { TagProps } from "@opal/components";
@@ -48,11 +49,21 @@ interface ContentBaseProps {
   /** Clamp the title to N lines with ellipsis. Omit to wrap freely. */
   titleMaxLines?: number;
 
+  /**
+   * Strike the title through — a presentational state (e.g. an option that is
+   * switched off), not content, so callers keep passing a plain string.
+   */
+  strikethrough?: boolean;
+
   /** Clamp the description to N lines. Maps to Text's maxLines prop. */
   descriptionMaxLines?: number;
 
   /** Enable inline editing of the title. */
   editable?: boolean;
+
+  /** Handle for starting a title edit from an external control. Setting it
+   *  hides the built-in pencil. */
+  editHandle?: React.Ref<ContentMdEditHandle>;
 
   /** Called when the user commits an edit. */
   onTitleChange?: (newTitle: string) => void;

@@ -1,9 +1,10 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { SettingsLayouts } from "@opal/layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { DocumentSetCreationForm } from "../DocumentSetCreationForm";
-import { useConnectorStatus, useUserGroups } from "@/lib/hooks";
+import { useConnectorStatus } from "@/lib/hooks";
 import { PageLoader } from "@opal/layouts";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { useRouter } from "next/navigation";
@@ -14,6 +15,7 @@ import { useSettings } from "@/lib/settings/hooks";
 const route = ADMIN_ROUTES.DOCUMENT_SETS;
 
 function Main() {
+  const t = useTranslations("admin.documents");
   const router = useRouter();
   const { vectorDbEnabled } = useSettings();
 
@@ -23,10 +25,7 @@ function Main() {
     error: ccPairsError,
   } = useConnectorStatus(30000, vectorDbEnabled);
 
-  // EE only
-  const { data: userGroups, isLoading: userGroupsIsLoading } = useUserGroups();
-
-  if ((vectorDbEnabled && isCCPairsLoading) || userGroupsIsLoading) {
+  if (vectorDbEnabled && isCCPairsLoading) {
     return (
       <div className="flex justify-center items-center min-h-[400px]">
         <PageLoader />
@@ -37,7 +36,7 @@ function Main() {
   if (vectorDbEnabled && (ccPairsError || !ccPairs)) {
     return (
       <ErrorCallout
-        errorTitle="Failed to fetch Connectors"
+        errorTitle={t("sets.fetchConnectorsFailed.title")}
         errorMsg={ccPairsError}
       />
     );
@@ -48,7 +47,6 @@ function Main() {
       <CardSection>
         <DocumentSetCreationForm
           ccPairs={ccPairs ?? []}
-          userGroups={userGroups}
           onClose={() => {
             refreshDocumentSets();
             router.push("/admin/documents/sets");
@@ -60,11 +58,13 @@ function Main() {
 }
 
 export default function Page() {
+  const t = useTranslations("admin.documents");
+
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={route.icon}
-        title="New Document Set"
+        title={t("sets.new.header.title")}
         divider
         backButton
       />

@@ -1,9 +1,9 @@
 import { FormikProps, ErrorMessage } from "formik";
+import { useTranslations } from "next-intl";
 import Text from "@/refresh-components/texts/Text";
-import Button from "@/refresh-components/buttons/Button";
 import InputComboBox from "@/refresh-components/inputs/InputComboBox/InputComboBox";
+import { Tag } from "@opal/components";
 import { Disabled } from "@opal/core";
-import { SvgX } from "@opal/icons";
 export type GenericMultiSelectFormType<T extends string> = {
   [K in T]: number[];
 };
@@ -44,6 +44,7 @@ export function GenericMultiSelect<
   disabled = false,
   disabledMessage,
 }: GenericMultiSelectProps<T, F>) {
+  const t = useTranslations("common.genericMultiSelect");
   if (isLoading) {
     return (
       <div className="flex flex-col gap-2 w-full">
@@ -62,7 +63,7 @@ export function GenericMultiSelect<
           {label}
         </Text>
         <Text as="p" text03 className="text-action-danger-05">
-          Failed to load {label.toLowerCase()}. Please try again.
+          {t("loadFailed.text", { label: label.toLowerCase() })}
         </Text>
       </div>
     );
@@ -116,7 +117,7 @@ export function GenericMultiSelect<
       <Disabled disabled={disabled}>
         <div>
           <InputComboBox
-            placeholder="Search..."
+            placeholder={t("search.placeholder")}
             value=""
             onChange={() => {}}
             onValueChange={(selectedValue) => {
@@ -133,6 +134,7 @@ export function GenericMultiSelect<
               }))}
             strict
             searchIcon
+            data-testid={`${fieldName}-search-input`}
           />
         </div>
       </Disabled>
@@ -140,17 +142,13 @@ export function GenericMultiSelect<
       {selectedItems.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {selectedItems.map((item) => (
-            // TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved
-            <Button
+            <Tag
               key={item.id}
-              secondary
+              size="md"
+              title={item.name}
               disabled={disabled}
-              rightIcon={SvgX}
-              onClick={() => handleRemove(item.id)}
-              className="px-2! py-1!"
-            >
-              {item.name}
-            </Button>
+              onRemove={() => handleRemove(item.id)}
+            />
           ))}
         </div>
       )}

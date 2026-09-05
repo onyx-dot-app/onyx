@@ -3,10 +3,10 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from onyx.auth.schemas import UserRole
+from onyx.auth.permissions import has_global_permission
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import LLMModelFlowType
+from onyx.db.enums import LLMModelFlowType, Permission
 from onyx.db.llm import (
     can_user_access_llm_provider,
     fetch_default_contextual_rag_model,
@@ -20,7 +20,8 @@ from onyx.db.llm import (
 from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.db.models import Persona, SearchSettings, User
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.interfaces import LLM
+from onyx.llm.interfaces import LLM, LlmRequestPolicy
+from onyx.llm.models import ReasoningEffort, UserChatDefaults
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.utils import (
@@ -31,7 +32,7 @@ from onyx.llm.well_known_providers.constants import (
     PROVIDERS_WITH_SPECIAL_API_KEY_HANDLING,
 )
 from onyx.natural_language_processing.utils import get_tokenizer
-from onyx.server.manage.llm.models import LLMProviderView
+from onyx.server.manage.llm.models import LLMProviderView, ModelConfigurationView
 from onyx.utils.headers import build_llm_extra_headers
 from onyx.utils.logger import setup_logger
 
@@ -64,13 +65,13 @@ def _build_provider_extra_headers(
     return {}
 
 
-def _get_model_configured_max_input_tokens(
+def _get_model_configuration(
     llm_provider: LLMProviderView,
     model_name: str,
-) -> int | None:
+) -> ModelConfigurationView | None:
     for model_configuration in llm_provider.model_configurations:
         if model_configuration.name == model_name:
-            return model_configuration.max_input_tokens
+            return model_configuration
     return None
 
 
@@ -155,15 +156,21 @@ def get_llm_for_persona(
     user: User,
     llm_override: LLMOverride | None = None,
     additional_headers: dict[str, str] | None = None,
+    policy_fn: Callable[[str], LlmRequestPolicy] | None = None,
 ) -> LLM:
     """Get the appropriate LLM for a persona, with the following priority:
     1. LLM override (model configuration id, else provider + model version)
     2. Persona's model configuration override
     3. Default LLM
     """
+    user_defaults = UserChatDefaults(
+        temperature_default=user.temperature_default,
+        reasoning_effort_default=user.reasoning_effort_default,
+    )
+
     if persona is None:
         logger.warning("No persona provided, using default LLM")
-        return get_default_llm()
+        return get_default_llm(policy_fn=policy_fn, user_defaults=user_defaults)
 
     mc_id_override = llm_override.model_configuration_id if llm_override else None
     provider_name_override = llm_override.model_provider if llm_override else None
@@ -176,8 +183,10 @@ def get_llm_for_persona(
         and not persona.default_model_configuration_id
     ):
         return get_default_llm(
-            temperature=temperature_override or GEN_AI_TEMPERATURE,
+            temperature=temperature_override,
             additional_headers=additional_headers,
+            policy_fn=policy_fn,
+            user_defaults=user_defaults,
         )
 
     with get_session_with_current_tenant() as db_session:
@@ -190,19 +199,21 @@ def get_llm_for_persona(
         )
         if resolved is None:
             return get_default_llm(
-                temperature=(
-                    temperature_override
-                    if temperature_override is not None
-                    else GEN_AI_TEMPERATURE
-                ),
+                temperature=temperature_override,
                 additional_headers=additional_headers,
+                policy_fn=policy_fn,
+                user_defaults=user_defaults,
             )
         provider_model, model = resolved
 
         user_group_ids = fetch_user_group_ids(db_session, user)
 
         if not can_user_access_llm_provider(
-            provider_model, user_group_ids, persona, user.role == UserRole.ADMIN
+            provider_model,
+            user_group_ids,
+            persona,
+            # must match db/llm.py's gate; a mismatch silently swaps in the default model
+            has_global_permission(user, Permission.MANAGE_LLMS),
         ):
             logger.warning(
                 "User %s with persona %s cannot access provider %s. Falling back to default provider.",
@@ -211,8 +222,10 @@ def get_llm_for_persona(
                 provider_model.name,
             )
             return get_default_llm(
-                temperature=temperature_override or GEN_AI_TEMPERATURE,
+                temperature=temperature_override,
                 additional_headers=additional_headers,
+                policy_fn=policy_fn,
+                user_defaults=user_defaults,
             )
 
         llm_provider = LLMProviderView.from_model(provider_model)
@@ -222,6 +235,8 @@ def get_llm_for_persona(
         llm_provider=llm_provider,
         temperature=temperature_override,
         additional_headers=additional_headers,
+        policy_fn=policy_fn,
+        user_defaults=user_defaults,
     )
 
 
@@ -253,7 +268,9 @@ def get_default_llm_with_vision(
         default_model = fetch_default_vision_model(db_session)
         if default_model:
             if model_supports_image_input(
-                default_model.name, default_model.llm_provider.provider
+                default_model.name,
+                default_model.llm_provider.provider,
+                default_model.llm_provider.deployment_name,
             ):
                 logger.info(
                     "Using default vision model: %s (provider=%s)",
@@ -303,7 +320,9 @@ def get_default_llm_with_vision(
     )
 
     for model in sorted_models:
-        if model_supports_image_input(model.name, model.llm_provider.provider):
+        if model_supports_image_input(
+            model.name, model.llm_provider.provider, model.llm_provider.deployment_name
+        ):
             logger.info(
                 "Using fallback vision model: %s (provider=%s)",
                 model.name,
@@ -332,9 +351,14 @@ def llm_from_provider(
     timeout: int | None = None,
     temperature: float | None = None,
     additional_headers: dict[str, str] | None = None,
+    policy_fn: Callable[[str], LlmRequestPolicy] | None = None,
+    user_defaults: UserChatDefaults | None = None,
 ) -> LLM:
-    configured_max_input_tokens = _get_model_configured_max_input_tokens(
+    model_configuration = _get_model_configuration(
         llm_provider=llm_provider, model_name=model_name
+    )
+    configured_max_input_tokens = (
+        model_configuration.max_input_tokens if model_configuration else None
     )
     model_kwargs = _build_model_kwargs(
         provider=llm_provider.provider,
@@ -347,6 +371,15 @@ def llm_from_provider(
             llm_provider=llm_provider, model_name=model_name
         )
     )
+    # Session override wins, else the admin's model default, else the user's
+    # own default, else GEN_AI_TEMPERATURE.
+    if temperature is None and model_configuration:
+        temperature = model_configuration.temperature_default
+    if temperature is None and user_defaults:
+        temperature = user_defaults.temperature_default
+    # Resolved here, not at the call site: the caller hands policy as a
+    # provider-keyed function because it cannot know which provider wins.
+    policy = policy_fn(llm_provider.provider) if policy_fn else None
     return get_llm(
         provider=llm_provider.provider,
         model=model_name,
@@ -360,6 +393,19 @@ def llm_from_provider(
         additional_headers=additional_headers,
         max_input_tokens=max_input_tokens,
         model_kwargs=model_kwargs,
+        policy_headers=policy.headers if policy else None,
+        policy_model_kwargs=policy.model_kwargs if policy else None,
+        reasoning_effort_default=(
+            model_configuration.reasoning_effort_default
+            if model_configuration
+            else None
+        ),
+        reasoning_effort_user_default=(
+            user_defaults.reasoning_effort_default if user_defaults else None
+        ),
+        reasoning_effort_max=(
+            model_configuration.reasoning_effort_max if model_configuration else None
+        ),
     )
 
 
@@ -395,6 +441,8 @@ def get_default_llm(
     timeout: int | None = None,
     temperature: float | None = None,
     additional_headers: dict[str, str] | None = None,
+    policy_fn: Callable[[str], LlmRequestPolicy] | None = None,
+    user_defaults: UserChatDefaults | None = None,
 ) -> LLM:
     with get_session_with_current_tenant() as db_session:
         model = fetch_default_llm_model(db_session)
@@ -408,6 +456,8 @@ def get_default_llm(
             timeout=timeout,
             temperature=temperature,
             additional_headers=additional_headers,
+            policy_fn=policy_fn,
+            user_defaults=user_defaults,
         )
 
 
@@ -424,6 +474,11 @@ def get_llm(
     timeout: int | None = None,
     additional_headers: dict[str, str] | None = None,
     model_kwargs: dict[str, Any] | None = None,
+    policy_headers: dict[str, str] | None = None,
+    policy_model_kwargs: dict[str, Any] | None = None,
+    reasoning_effort_default: ReasoningEffort | None = None,
+    reasoning_effort_user_default: ReasoningEffort | None = None,
+    reasoning_effort_max: ReasoningEffort | None = None,
 ) -> LLM:
     if temperature is None:
         temperature = GEN_AI_TEMPERATURE
@@ -436,6 +491,16 @@ def get_llm(
     if provider_extra_headers:
         extra_headers.update(provider_extra_headers)
 
+    # Last on purpose: policy headers (e.g. incognito retention suppression)
+    # must win over request, deployment-env, and provider header sources.
+    if policy_headers:
+        extra_headers.update(policy_headers)
+
+    # Same precedence rule for body params (e.g. store=False).
+    merged_model_kwargs = dict(model_kwargs or {})
+    if policy_model_kwargs:
+        merged_model_kwargs.update(policy_model_kwargs)
+
     return LitellmLLM(
         model_provider=provider,
         model_name=model,
@@ -447,8 +512,11 @@ def get_llm(
         temperature=temperature,
         custom_config=custom_config,
         extra_headers=extra_headers,
-        model_kwargs=model_kwargs or {},
+        model_kwargs=merged_model_kwargs,
         max_input_tokens=max_input_tokens,
+        reasoning_effort_default=reasoning_effort_default,
+        reasoning_effort_user_default=reasoning_effort_user_default,
+        reasoning_effort_max=reasoning_effort_max,
     )
 
 

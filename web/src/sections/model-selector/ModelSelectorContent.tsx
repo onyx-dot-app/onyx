@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useRef, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import * as SliderPrimitive from "@radix-ui/react-slider";
 import {
   Button,
@@ -32,8 +33,19 @@ import {
   llmOptionKey,
 } from "@/lib/languageModels/options";
 import { ReasoningEffortOverride } from "@/lib/languageModels/types";
+import {
+  ALL_REASONING_STOPS,
+  PaneSlider,
+  SettingRow,
+  UNSET_REASONING_STOP,
+  cappedReasoningStop,
+  formatContextWindow,
+  maxReasoningStop,
+  reasoningStopIndex,
+} from "@/sections/model-selector/setting-controls";
 import { useCurrentAgentLLMProviders } from "@/lib/languageModels/hooks";
 import { useUser } from "@/providers/UserProvider";
+import { useSettings } from "@/lib/settings/hooks";
 import {
   Collapsible,
   CollapsibleContent,
@@ -44,6 +56,8 @@ export interface TemperatureManager {
   temperature: number;
   updateTemperature: (value: number) => void;
   maxTemperature: number;
+  /** True only when an override was set locally or is stored on the session. */
+  hasTemperatureOverride: boolean;
 }
 
 export interface ReasoningManager {
@@ -51,107 +65,70 @@ export interface ReasoningManager {
   updateReasoningEffort: (effort: ReasoningEffortOverride | null) => void;
 }
 
-/** Managers powering the per-model detail pane. Rows always render, and an absent manager leaves its row disabled. */
+/** Managers powering the per-model detail pane. A manager is absent when the
+ * host offers no such control, or an admin withheld it; either way its row
+ * does not render. Capability limits disable a row instead. */
 export interface ModelDetailManagers {
   temperature?: TemperatureManager;
   reasoning?: ReasoningManager;
 }
 
 /**
- * Builds the detail-pane managers for a selector host. Temperature is gated
- * on user.preferences.temperature_override_enabled. The result is undefined
- * when no block would render.
+ * Builds the detail-pane managers for a selector host. Each block is gated by
+ * an admin setting: temperature on user.preferences.temperature_override_enabled
+ * (a merge of the workspace setting and an unused per-user column), reasoning on
+ * the workspace setting directly. The result is undefined when no block would
+ * render, which also hides the drill-in affordance.
  */
 export function useModelDetailManagers(
   temperatureManager?: TemperatureManager,
   reasoningManager?: ReasoningManager
 ): ModelDetailManagers | undefined {
   const { user } = useUser();
+  const settings = useSettings();
   const temperatureOverrideEnabled =
     user?.preferences?.temperature_override_enabled;
+  // Fail closed while the settings fetch is in flight: the placeholder says
+  // enabled, which would flash the control into a workspace that withheld
+  // it. Temperature fails closed here too, by way of an undefined user.
+  const reasoningOverrideEnabled =
+    !settings.isLoading && (settings.reasoning_override_enabled ?? true);
   return useMemo(() => {
     const temperature =
       temperatureManager && temperatureOverrideEnabled
         ? temperatureManager
         : undefined;
-    return temperature || reasoningManager
-      ? { temperature, reasoning: reasoningManager }
-      : undefined;
-  }, [temperatureManager, reasoningManager, temperatureOverrideEnabled]);
+    const reasoning =
+      reasoningManager && reasoningOverrideEnabled
+        ? reasoningManager
+        : undefined;
+    return temperature || reasoning ? { temperature, reasoning } : undefined;
+  }, [
+    temperatureManager,
+    reasoningManager,
+    temperatureOverrideEnabled,
+    reasoningOverrideEnabled,
+  ]);
 }
 
-const BASE_REASONING_STOPS: ReasoningEffortOverride[] = [
-  "off",
-  "low",
-  "medium",
-  "high",
-];
-
-/** Every stop the slider renders. Unsupported stops are greyed, never hidden. */
-const ALL_REASONING_STOPS: ReasoningEffortOverride[] = [
-  ...BASE_REASONING_STOPS,
-  "xhigh",
-];
-
-const REASONING_STOP_LABELS: Record<ReasoningEffortOverride, string> = {
-  off: "Off",
-  low: "Low",
-  medium: "Medium",
-  high: "High",
-  xhigh: "XHigh",
-};
-
-/** Providers whose models can be true OpenAI models (responses API). */
-const TRUE_OPENAI_PROVIDERS = new Set(["openai", "azure", "litellm_proxy"]);
-
-/**
- * Approximates the backend's _parse_anthropic_model_version. Segments longer
- * than two digits are date snapshots, not minor versions, and parse as 0.
- */
-function anthropicModelVersion(modelName: string): [number, number] | null {
-  const name = modelName.toLowerCase();
-  const claudeIndex = name.indexOf("claude");
-  if (claudeIndex === -1) return null;
-  const match = name.slice(claudeIndex).match(/\d+(?:[.-]\d+)?/);
-  if (!match) return null;
-  const parts = match[0].split(/[.-]/);
-  if (!parts[0]) return null;
-  const minor = parts[1] && parts[1].length <= 2 ? parseInt(parts[1], 10) : 0;
-  return [parseInt(parts[0], 10), minor];
-}
-
-/**
- * Display-side mirror of the backend capability checks: xhigh is supported by
- * true OpenAI models and by Anthropic adaptive-thinking models (Claude >= 4.7,
- * matching _anthropic_uses_adaptive_thinking). The backend clamps unsupported
- * levels or strips rejected reasoning params and retries, so an imperfect
- * match here degrades gracefully.
- */
-function modelSupportsXhigh(option: LLMOption): boolean {
-  const openAiXhigh =
-    TRUE_OPENAI_PROVIDERS.has(option.provider) &&
-    /^(gpt-|o\d)/i.test(option.modelName);
-  const claudeVersion = anthropicModelVersion(option.modelName);
-  const anthropicXhigh =
-    claudeVersion !== null &&
-    (claudeVersion[0] > 4 || (claudeVersion[0] === 4 && claudeVersion[1] >= 7));
-  return openAiXhigh || anthropicXhigh;
-}
-
-function formatContextWindow(tokens: number): string {
-  if (tokens >= 1_000_000)
-    return `${(tokens / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
-  return tokens >= 1000 ? `${Math.round(tokens / 1000)}K` : `${tokens}`;
+/** Where the slider parks on open: the session's own choice, else the admin
+ *  default, else the user's own default, bounded by the selected model's
+ *  slider maximum. */
+function initialTemperature(
+  option: LLMOption,
+  manager: TemperatureManager | undefined,
+  userTemperatureDefault: number | null
+): number {
+  const sessionTemperature = manager?.temperature ?? 0.5;
+  if (manager?.hasTemperatureOverride) return sessionTemperature;
+  return Math.min(
+    option.temperatureDefault ?? userTemperatureDefault ?? sessionTemperature,
+    manager?.maxTemperature ?? 2
+  );
 }
 
 /** Fixed-height scroll box: the popover clips overflow instead of scrolling. */
 const DETAIL_PANE_HEIGHT_CLASS = "h-[352px]";
-
-const SLIDER_THUMB_CLASS =
-  "block size-3 rounded-full bg-background-neutral-00 shadow-[0_0_2px_1px_rgba(0,0,0,0.15)] focus:outline-none";
-const SLIDER_TRACK_CLASS =
-  "h-1.5 w-full overflow-hidden rounded bg-background-tint-02";
-const SLIDER_FILL_CLASS = "h-full bg-theme-primary-05";
 
 function EmptyIconSlot(props: IconProps) {
   return <div {...(props as any)} />;
@@ -171,155 +148,67 @@ function selectionIcon(selected: boolean): IconFunctionComponent {
   return selected ? SelectedCheckIcon : EmptyIconSlot;
 }
 
-interface PaneSliderProps {
-  value: number;
-  min: number;
-  max: number;
-  step: number;
-  disabled?: boolean;
-  onValueChange: (value: number) => void;
-  onValueCommit: (value: number) => void;
-}
-
-function PaneSlider({
-  value,
-  min,
-  max,
-  step,
-  disabled,
-  onValueChange,
-  onValueCommit,
-}: PaneSliderProps) {
-  return (
-    <SliderPrimitive.Root
-      className="relative flex h-7 w-full cursor-pointer touch-none select-none items-center"
-      value={[value]}
-      min={min}
-      max={max}
-      step={step}
-      disabled={disabled}
-      onValueChange={(vals) => vals[0] !== undefined && onValueChange(vals[0])}
-      onValueCommit={(vals) => vals[0] !== undefined && onValueCommit(vals[0])}
-    >
-      <SliderPrimitive.Track
-        className={cn(SLIDER_TRACK_CLASS, "relative grow")}
-      >
-        <SliderPrimitive.Range className={cn(SLIDER_FILL_CLASS, "absolute")} />
-      </SliderPrimitive.Track>
-      <SliderPrimitive.Thumb className={SLIDER_THUMB_CLASS} />
-    </SliderPrimitive.Root>
-  );
-}
-
-interface SettingRowProps {
-  icon: IconFunctionComponent;
-  title: string;
-  value?: string;
-  /** Shown when hovering the value readout. */
-  valueTooltip?: string;
-  caption: string;
-  disabled?: boolean;
-  /** Shown when hovering the row while disabled. */
-  disabledTooltip?: string;
-  children?: React.ReactNode;
-}
-
-function SettingRow({
-  icon: Icon,
-  title,
-  value,
-  valueTooltip,
-  caption,
-  disabled = false,
-  disabledTooltip,
-  children,
-}: SettingRowProps) {
-  return (
-    <Disabled disabled={disabled} tooltip={disabledTooltip} tooltipSide="top">
-      <Section
-        alignItems="stretch"
-        height="auto"
-        gap={0}
-        padding={0.375}
-        className="rounded-08"
-      >
-        <Section
-          flexDirection="row"
-          justifyContent="between"
-          height="auto"
-          gap={0.5}
-        >
-          <Section flexDirection="row" width="fit" height="auto" gap={0.5}>
-            <Section width={1.25} height={1.25} className="text-text-04">
-              <Icon size={16} />
-            </Section>
-            <Text font="main-ui-action">{title}</Text>
-          </Section>
-          {value !== undefined && (
-            <Tooltip tooltip={valueTooltip} side="top">
-              <Text font="secondary-mono" color="text-04">
-                {value}
-              </Text>
-            </Tooltip>
-          )}
-        </Section>
-        {children}
-        <Section alignItems="stretch" height="auto" className="mt-2">
-          <Text font="secondary-body" color="text-03">
-            {caption}
-          </Text>
-        </Section>
-      </Section>
-    </Disabled>
-  );
-}
-
 interface ModelDetailPaneProps {
   option: LLMOption;
   managers: ModelDetailManagers;
   onBack: () => void;
 }
 
-const UNSUPPORTED_SETTING_TOOLTIP =
-  "Modifying this setting is not supported for this model.";
-
-const UNKNOWN_CONTEXT_TOOLTIP =
-  "Context size is not available for this model. Chats still apply a token limit automatically.";
-
 function ModelDetailPane({ option, managers, onBack }: ModelDetailPaneProps) {
+  const t = useTranslations("chat.modelSelector");
+  const { user } = useUser();
   // Backend pins temperature to 1 (or omits it) for reasoning models, so
   // the slider is locked at 1.
   const temperatureManager = managers.temperature;
   const reasoningManager = managers.reasoning;
   const temperatureEnabled = !option.supportsReasoning && !!temperatureManager;
-  const reasoningEnabled = option.supportsReasoning && !!reasoningManager;
+  const capabilityStop = maxReasoningStop(option.supportedReasoningEfforts);
+  // The admin cap further limits which stops users may request.
+  const maxSupportedStop = cappedReasoningStop(
+    capabilityStop,
+    option.reasoningEffortMax
+  );
+  // A reasoning model with no supported levels takes no effort parameter at
+  // all (e.g. o1-mini), so the row stays disabled.
+  const reasoningEnabled =
+    option.supportsReasoning && !!reasoningManager && maxSupportedStop >= 0;
 
-  // Supported stops are always a prefix of ALL_REASONING_STOPS. The slider
-  // spans all stops for uniform geometry and clamps input to the max
-  // supported index.
-  const maxSupportedStop =
-    (modelSupportsXhigh(option)
-      ? ALL_REASONING_STOPS.length
-      : BASE_REASONING_STOPS.length) - 1;
-  const clampStop = (stop: number) => Math.min(stop, maxSupportedStop);
+  // The slider spans all stops for uniform geometry and clamps input to the
+  // max supported index. The lower bound keeps the disabled no-levels case on
+  // a valid stop.
+  const clampStop = (stop: number) =>
+    Math.max(0, Math.min(stop, maxSupportedStop));
 
-  const [localTemperature, setLocalTemperature] = useState(
-    temperatureManager?.temperature ?? 0.5
+  // temperature is always concrete, so the override flag decides when the
+  // admin default applies.
+  const [localTemperature, setLocalTemperature] = useState(() =>
+    initialTemperature(
+      option,
+      temperatureManager,
+      user?.preferences.temperature_default ?? null
+    )
   );
   // A stored level the model doesn't support (e.g. xhigh after switching
   // models) displays clamped to the highest supported stop.
-  const storedStop = ALL_REASONING_STOPS.indexOf(
-    reasoningManager?.reasoningEffort ?? "medium"
+  const storedStop = reasoningStopIndex(
+    reasoningManager?.reasoningEffort ??
+      option.reasoningEffortDefault ??
+      user?.preferences.reasoning_effort_default
   );
   const [localEffortStop, setLocalEffortStop] = useState(
-    clampStop(
-      storedStop === -1 ? ALL_REASONING_STOPS.indexOf("medium") : storedStop
-    )
+    clampStop(storedStop >= 0 ? storedStop : UNSET_REASONING_STOP)
   );
 
   const displayTemperature = temperatureEnabled ? localTemperature : 1;
+  const reasoningStopLabels = {
+    off: t("reasoningLevel.off.label"),
+    low: t("reasoningLevel.low.label"),
+    medium: t("reasoningLevel.medium.label"),
+    high: t("reasoningLevel.high.label"),
+    xhigh: t("reasoningLevel.xhigh.label"),
+  } satisfies Record<ReasoningEffortOverride, string>;
   const effortLabel =
-    REASONING_STOP_LABELS[ALL_REASONING_STOPS[localEffortStop] ?? "medium"];
+    reasoningStopLabels[ALL_REASONING_STOPS[localEffortStop] ?? "medium"];
 
   const maxTemperature = temperatureManager?.maxTemperature ?? 2;
   const temperatureFraction =
@@ -361,103 +250,122 @@ function ModelDetailPane({ option, managers, onBack }: ModelDetailPaneProps) {
 
       <SettingRow
         icon={SvgCode}
-        title="Context Window"
+        title={t("contextWindow.row.title")}
         value={contextLabel ?? "—"}
-        valueTooltip={contextLabel ? undefined : UNKNOWN_CONTEXT_TOOLTIP}
-        caption="Tokens limit for each session"
+        valueTooltip={
+          contextLabel ? undefined : t("contextWindow.unknown.tooltip")
+        }
+        caption={t("contextWindow.row.caption")}
       />
 
-      <SettingRow
-        icon={SvgThermometer}
-        title="Temperature"
-        value={displayTemperature.toFixed(1)}
-        caption="How predictable or creative the model should respond"
-        disabled={!temperatureEnabled}
-        disabledTooltip={UNSUPPORTED_SETTING_TOOLTIP}
-      >
-        <PaneSlider
-          value={displayTemperature}
-          min={0}
-          max={maxTemperature}
-          step={0.01}
+      {/* A row is absent when an admin withheld the control, and greyed
+          when the model cannot honour it. Greying the former would claim
+          the model does not support a setting it does. */}
+      {temperatureManager && (
+        <SettingRow
+          icon={SvgThermometer}
+          title={t("temperature.row.title")}
+          value={displayTemperature.toFixed(1)}
+          caption={t("temperature.row.caption")}
           disabled={!temperatureEnabled}
-          onValueChange={setLocalTemperature}
-          onValueCommit={(value) =>
-            temperatureManager?.updateTemperature(value)
-          }
-        />
-        <div className="flex flex-row items-center justify-between">
-          {["Deterministic", "Balanced", "Creative"].map((label, index) => (
-            <Text
-              key={label}
-              font="figure-small-value"
-              color={index === temperatureAnchor ? "text-04" : "text-02"}
-            >
-              {label}
-            </Text>
-          ))}
-        </div>
-      </SettingRow>
-
-      <SettingRow
-        icon={SvgBarChart}
-        title="Reasoning Level"
-        value={effortLabel}
-        caption="How much thinking the model should perform before answering"
-        disabled={!reasoningEnabled}
-        disabledTooltip={UNSUPPORTED_SETTING_TOOLTIP}
-      >
-        <PaneSlider
-          value={localEffortStop}
-          min={0}
-          max={ALL_REASONING_STOPS.length - 1}
-          step={1}
-          disabled={!reasoningEnabled}
-          onValueChange={(value) => setLocalEffortStop(clampStop(value))}
-          onValueCommit={(value) => {
-            const effort = ALL_REASONING_STOPS[clampStop(value)];
-            if (effort) reasoningManager?.updateReasoningEffort(effort);
-          }}
-        />
-        {/* Labels anchor at the slider's index/lastStop fractions so they
-              line up with the stops. End labels align to the row edges to
-              avoid overflow. */}
-        <div className="relative h-4 w-full">
-          {ALL_REASONING_STOPS.map((stop, index) => {
-            const lastStop = ALL_REASONING_STOPS.length - 1;
-            return (
-              <div
-                key={stop}
-                className={cn(
-                  "absolute top-0",
-                  index === lastStop
-                    ? "-translate-x-full"
-                    : index > 0 && "-translate-x-1/2"
-                )}
-                style={{ left: `${(index / lastStop) * 100}%` }}
+          disabledTooltip={t("unsupportedSetting.tooltip")}
+        >
+          <PaneSlider
+            value={displayTemperature}
+            min={0}
+            max={maxTemperature}
+            step={0.01}
+            disabled={!temperatureEnabled}
+            onValueChange={setLocalTemperature}
+            onValueCommit={(value) =>
+              temperatureManager?.updateTemperature(value)
+            }
+          />
+          <div className="flex flex-row items-center justify-between">
+            {[
+              t("temperature.deterministic.label"),
+              t("temperature.balanced.label"),
+              t("temperature.creative.label"),
+            ].map((label, index) => (
+              <Text
+                key={label}
+                font="figure-small-value"
+                color={index === temperatureAnchor ? "text-04" : "text-02"}
               >
-                <Disabled
-                  disabled={reasoningEnabled && index > maxSupportedStop}
-                  tooltip={UNSUPPORTED_SETTING_TOOLTIP}
-                  tooltipSide="top"
+                {label}
+              </Text>
+            ))}
+          </div>
+        </SettingRow>
+      )}
+
+      {reasoningManager && (
+        <SettingRow
+          icon={SvgBarChart}
+          title={t("reasoningLevel.row.title")}
+          value={effortLabel}
+          caption={t("reasoningLevel.row.caption")}
+          disabled={!reasoningEnabled}
+          disabledTooltip={t("unsupportedSetting.tooltip")}
+        >
+          <PaneSlider
+            value={localEffortStop}
+            min={0}
+            max={ALL_REASONING_STOPS.length - 1}
+            step={1}
+            disabled={!reasoningEnabled}
+            onValueChange={(value) => setLocalEffortStop(clampStop(value))}
+            onValueCommit={(value) => {
+              const effort = ALL_REASONING_STOPS[clampStop(value)];
+              if (effort) reasoningManager?.updateReasoningEffort(effort);
+            }}
+          />
+          {/* Labels anchor at the slider's index/lastStop fractions so they
+                line up with the stops. End labels align to the row edges to
+                avoid overflow. */}
+          <div className="relative h-4 w-full">
+            {ALL_REASONING_STOPS.map((stop, index) => {
+              const lastStop = ALL_REASONING_STOPS.length - 1;
+              return (
+                <div
+                  key={stop}
+                  className={cn(
+                    "absolute top-0",
+                    // rtl: the Radix slider mirrors, so labels position
+                    // from the inline start and negate their shift.
+                    index === lastStop
+                      ? "-translate-x-full rtl:translate-x-full"
+                      : index > 0 && "-translate-x-1/2 rtl:translate-x-1/2"
+                  )}
+                  style={{ insetInlineStart: `${(index / lastStop) * 100}%` }}
                 >
-                  <Text
-                    font="figure-small-value"
-                    color={
-                      reasoningEnabled && index === localEffortStop
-                        ? "text-04"
-                        : "text-02"
+                  <Disabled
+                    disabled={reasoningEnabled && index > maxSupportedStop}
+                    tooltip={
+                      index > capabilityStop
+                        ? t("unsupportedSetting.tooltip")
+                        : t("adminLimitedSetting.tooltip")
                     }
-                    nowrap
+                    tooltipSide="top"
                   >
-                    {REASONING_STOP_LABELS[stop]}
-                  </Text>
-                </Disabled>
-              </div>
-            );
-          })}
-        </div>
-      </SettingRow>
+                    <Text
+                      font="figure-small-value"
+                      color={
+                        reasoningEnabled && index === localEffortStop
+                          ? "text-04"
+                          : "text-02"
+                      }
+                      nowrap
+                    >
+                      {reasoningStopLabels[stop]}
+                    </Text>
+                  </Disabled>
+                </div>
+              );
+            })}
+          </div>
+        </SettingRow>
+      )}
     </div>
   );
 }
@@ -465,6 +373,12 @@ function ModelDetailPane({ option, managers, onBack }: ModelDetailPaneProps) {
 export interface ModelSelectorContentProps {
   currentModelName?: string;
   providerOptions?: ModelOptionProvider[];
+  /**
+   * Set by a host that fetches `providerOptions` itself, to report that the
+   * fetch is still in flight. An empty list then reads as "not here yet"
+   * instead of "no models".
+   */
+  isLoading?: boolean;
   includeHiddenModels?: boolean;
   requiresImageInput?: boolean;
   onSelect: (option: LLMOption) => void;
@@ -475,11 +389,15 @@ export interface ModelSelectorContentProps {
   includeGlobalDefault?: boolean;
   /** When provided, model rows gain a drill-in settings pane. */
   modelDetail?: ModelDetailManagers;
+  /** Opening a model's settings also selects it. Hosts pass their select
+   *  action WITHOUT closing the popover, so the pane stays visible. */
+  onDetailSelect?: (option: LLMOption) => void;
 }
 
 export default function ModelSelectorContent({
   currentModelName,
   providerOptions,
+  isLoading: isLoadingProp = false,
   includeHiddenModels = false,
   requiresImageInput,
   onSelect,
@@ -488,7 +406,10 @@ export default function ModelSelectorContent({
   scrollContainerRef: externalScrollRef,
   includeGlobalDefault = false,
   modelDetail,
+  onDetailSelect,
 }: ModelSelectorContentProps) {
+  const t = useTranslations("chat.modelSelector");
+  const { hide_provider_grouping: hideProviderGrouping } = useSettings();
   const [detailOption, setDetailOption] = useState<LLMOption | null>(null);
   const {
     llmProviders: currentAgentProviderOptions,
@@ -497,7 +418,8 @@ export default function ModelSelectorContent({
   } = useCurrentAgentLLMProviders();
   const llmProviders = providerOptions ?? currentAgentProviderOptions;
   const isLoading =
-    providerOptions === undefined && currentAgentProvidersLoading;
+    isLoadingProp ||
+    (providerOptions === undefined && currentAgentProvidersLoading);
 
   const globalDefaultDisplayName = useMemo(() => {
     if (!defaultText || !llmProviders) return null;
@@ -569,6 +491,9 @@ export default function ModelSelectorContent({
 
   const isGroupOpen = (key: string) => isSearching || expandedGroups.has(key);
 
+  // A lone group needs no header, and an admin can drop them workspace-wide.
+  const showFlatList = hideProviderGrouping || groupedOptions.length === 1;
+
   const renderModelItem = (option: LLMOption) => {
     const selected = isSelected(option);
     const disabled = isDisabled?.(option) ?? false;
@@ -594,9 +519,13 @@ export default function ModelSelectorContent({
                     icon={SvgSliders}
                     prominence="tertiary"
                     size="sm"
-                    aria-label={`${option.displayName} settings`}
+                    aria-label={t("modelSettingsButton.ariaLabel", {
+                      model: option.displayName,
+                    })}
+                    tooltip={t("modelSettingsButton.tooltip")}
                     onClick={(e) => {
                       e.stopPropagation();
+                      onDetailSelect?.(option);
                       setDetailOption(option);
                     }}
                   />
@@ -604,7 +533,7 @@ export default function ModelSelectorContent({
               ) : null
             }
             sizePreset="main-ui"
-            rounding="sm"
+            rounding={2}
           />
         </Hoverable.Root>
       </Disabled>
@@ -622,13 +551,13 @@ export default function ModelSelectorContent({
   }
 
   return (
-    <Section gap={0.5}>
+    <Section gap={2}>
       <InputTypeIn
         searchIcon
         variant="internal"
         value={searchQuery}
         onChange={(e) => setSearchQuery(e.target.value)}
-        placeholder="Search models..."
+        placeholder={t("searchInput.placeholder")}
       />
 
       <PopoverMenu scrollContainerRef={scrollContainerRef}>
@@ -646,7 +575,7 @@ export default function ModelSelectorContent({
                   description={globalDefaultDisplayName ?? undefined}
                   onClick={() => onSelect(GLOBAL_DEFAULT_LLM_OPTION)}
                   sizePreset="main-ui"
-                  rounding="sm"
+                  rounding={2}
                 />,
               ]
             : []),
@@ -654,23 +583,21 @@ export default function ModelSelectorContent({
           ...(isLoading
             ? [
                 <Text key="loading" font="secondary-body" color="text-03">
-                  Loading models...
+                  {t("list.loading.text")}
                 </Text>,
               ]
             : groupedOptions.length === 0
               ? [
                   <Text key="empty" font="secondary-body" color="text-03">
-                    No models found
+                    {t("list.empty.text")}
                   </Text>,
                 ]
-              : groupedOptions.length === 1
+              : showFlatList
                 ? [
-                    <Section
-                      key="single-provider"
-                      gap={0.25}
-                      alignItems="stretch"
-                    >
-                      {groupedOptions[0]!.options.map(renderModelItem)}
+                    <Section key="flat" gap={1} alignItems="stretch">
+                      {groupedOptions
+                        .flatMap((group) => group.options)
+                        .map(renderModelItem)}
                     </Section>,
                   ]
                 : groupedOptions.flatMap((group, groupIndex) => {
@@ -686,17 +613,17 @@ export default function ModelSelectorContent({
                           <Interactive.Stateless prominence="tertiary">
                             <Interactive.Container
                               size="fit"
-                              rounding="sm"
+                              rounding={2}
                               width="full"
                             >
-                              <div className="pl-2 pr-1 py-1 w-full rounded-08 bg-background-tint-01">
+                              <div className="ps-2 pe-1 py-1 w-full rounded-08 bg-background-tint-01">
                                 <ContentAction
                                   sizePreset="secondary"
                                   variant="body"
                                   color="muted"
                                   icon={group.Icon}
                                   title={group.displayName}
-                                  padding="fit"
+                                  padding={0}
                                   rightChildren={
                                     <Section>
                                       <Button
@@ -723,7 +650,7 @@ export default function ModelSelectorContent({
                         </CollapsibleTrigger>
 
                         <CollapsibleContent>
-                          <Section gap={0.25} alignItems="stretch">
+                          <Section gap={1} alignItems="stretch">
                             {group.options.map(renderModelItem)}
                           </Section>
                         </CollapsibleContent>

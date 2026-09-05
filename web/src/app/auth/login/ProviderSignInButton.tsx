@@ -17,9 +17,10 @@
 
 import { useState } from "react";
 import { Button } from "@opal/components";
-import { FcGoogle } from "react-icons/fc";
-import Text from "@/refresh-components/texts/Text";
+import { InputErrorText } from "@opal/layouts";
+import { SvgGoogle } from "@opal/logos";
 import { SSOProviderOption } from "@/lib/auth/types";
+import { useTranslations } from "next-intl";
 
 interface ProviderSignInButtonProps {
   provider: SSOProviderOption;
@@ -30,6 +31,7 @@ export default function ProviderSignInButton({
   provider,
   nextUrl,
 }: ProviderSignInButtonProps) {
+  const t = useTranslations("auth");
   const [isRedirecting, setIsRedirecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -40,16 +42,19 @@ export default function ProviderSignInButton({
     setIsRedirecting(true);
     setError(null);
     try {
-      const url = nextUrl
-        ? `${provider.authorizeUrl}?next=${encodeURIComponent(nextUrl)}`
-        : provider.authorizeUrl;
-      const res = await fetch(url, { credentials: "include" });
+      // The authorize URL may already carry a query (the workspace pin on
+      // cloud), so `next` has to be appended as a parameter, not concatenated.
+      const url = new URL(provider.authorizeUrl, window.location.origin);
+      if (nextUrl) url.searchParams.set("next", nextUrl);
+      const res = await fetch(url.toString(), { credentials: "include" });
       if (!res.ok) {
-        throw new Error(`Could not start sign-in (status ${res.status})`);
+        throw new Error(
+          t("login.ssoStartFailed.error", { status: res.status })
+        );
       }
       const data: { authorization_url?: string } = await res.json();
       if (!data.authorization_url) {
-        throw new Error("Sign-in response was missing the authorization URL");
+        throw new Error(t("login.ssoMissingAuthUrl.error"));
       }
       window.location.href = data.authorization_url;
     } catch (exc) {
@@ -64,17 +69,13 @@ export default function ProviderSignInButton({
       <Button
         prominence={isGoogle ? "secondary" : "primary"}
         width="full"
-        icon={isGoogle ? FcGoogle : undefined}
+        icon={isGoogle ? SvgGoogle : undefined}
         onClick={handleClick}
         disabled={isRedirecting}
       >
         {provider.displayName}
       </Button>
-      {error && (
-        <Text as="p" mainUiMuted className="text-status-error-05 mt-2">
-          {error}
-        </Text>
-      )}
+      {error && <InputErrorText>{error}</InputErrorText>}
     </>
   );
 }

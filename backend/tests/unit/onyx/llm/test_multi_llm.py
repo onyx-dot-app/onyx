@@ -1,8 +1,10 @@
 import os
 import threading
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any
-from unittest.mock import ANY, patch
+from unittest.mock import ANY, MagicMock, patch
 
 import litellm
 import pytest
@@ -14,7 +16,7 @@ from onyx.configs.app_configs import MOCK_LLM_RESPONSE
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.interfaces import LLMUserIdentity
 from onyx.llm.model_capabilities import get_max_input_tokens
-from onyx.llm.model_response import ModelResponse, ModelResponseStream
+from onyx.llm.model_response import ModelResponse, ModelResponseStream, Usage
 from onyx.llm.models import (
     AssistantMessage,
     FunctionCall,
@@ -30,11 +32,10 @@ from onyx.llm.multi_llm import (
     LitellmLLM,
     LLMTimeoutError,
     _consume_stream_with_timeout,
-    _parse_anthropic_model_version,
     temporary_env_and_lock,
 )
 
-VERTEX_OPUS_MODELS_REJECTING_OUTPUT_CONFIG = [
+VERTEX_OPUS_MODELS_REJECTING_STREAM_OPTIONS = [
     "claude-opus-4-5@20251101",
     "claude-opus-4-6",
     "claude-opus-4-7",
@@ -525,6 +526,35 @@ def test_claude_only_in_deployment_name_omits_temperature_and_reasons() -> None:
         assert kwargs["output_config"] == {"effort": "high"}
 
 
+def test_openai_only_in_deployment_name_uses_responses_bridge() -> None:
+    # is_openai_model must also check deployment_name: an Azure Foundry model
+    # identified only by its alias must still route through the responses
+    # bridge (and get the api-version override), not the plain chat surface.
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.AZURE,
+        model_name="foundry-deploy-4",
+        deployment_name="gpt-5.1",
+        api_base="https://my-resource.openai.azure.us",
+        api_version="2025-03-01-preview",
+        max_input_tokens=get_max_input_tokens(
+            model_provider=LlmProviderNames.AZURE,
+            model_name="foundry-deploy-4",
+        ),
+    )
+
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.return_value = []
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        list(llm.stream(messages, reasoning_effort=ReasoningEffort.HIGH))
+
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs["model"] == "azure/responses/gpt-5.1"
+        assert kwargs["api_version"] is None
+        assert kwargs["reasoning"]["effort"] == "high"
+
+
 @pytest.mark.parametrize(
     "model_name",
     [
@@ -619,53 +649,7 @@ def test_keeps_temperature_for_older_sonnet_models(model_name: str) -> None:
         assert "temperature" in kwargs
 
 
-@pytest.mark.parametrize(
-    "model_name, expected",
-    [
-        # Tier-first, hyphenated
-        ("claude-opus-4-8", (4, 8)),
-        ("claude-opus-4-7", (4, 7)),
-        ("claude-sonnet-4-6", (4, 6)),
-        ("claude-sonnet-4-5", (4, 5)),
-        # Tier-first, dot-separated
-        ("claude-opus-4.8", (4, 8)),
-        ("claude-opus-4.7", (4, 7)),
-        # Version-first (litellm_proxy / reversed schemes)
-        ("claude-4-8-opus", (4, 8)),
-        ("claude-4.8-opus", (4, 8)),
-        ("claude-4-7-opus", (4, 7)),
-        ("claude-4.7-opus", (4, 7)),
-        # Claude 5 named tiers, version digit on either side
-        ("claude-sonnet-5", (5, 0)),
-        ("claude-5-sonnet", (5, 0)),
-        ("claude-fable-5", (5, 0)),
-        ("claude-5-fable", (5, 0)),
-        ("claude-mythos-5", (5, 0)),
-        ("claude-5-mythos", (5, 0)),
-        ("claude-opus-5", (5, 0)),
-        ("claude-5-opus", (5, 0)),
-        # Date/snapshot suffixes stripped
-        ("claude-opus-4-8@20260101", (4, 8)),
-        ("claude-sonnet-5@20260203", (5, 0)),
-        ("claude-opus-4-5@20251101", (4, 5)),
-        ("claude-3-5-sonnet-20241022", (3, 5)),
-        # Legacy naming
-        ("claude-3-7-sonnet", (3, 7)),
-        # Provider-prefixed
-        ("anthropic/claude-opus-4-8", (4, 8)),
-        ("bedrock/anthropic.claude-opus-4-7", (4, 7)),
-        # Non-Claude models parse to None
-        ("gpt-5.2", None),
-        ("gemini-2.5-pro", None),
-    ],
-)
-def test_parse_anthropic_model_version(
-    model_name: str, expected: tuple[int, int] | None
-) -> None:
-    assert _parse_anthropic_model_version(model_name) == expected
-
-
-@pytest.mark.parametrize("model_name", VERTEX_OPUS_MODELS_REJECTING_OUTPUT_CONFIG)
+@pytest.mark.parametrize("model_name", VERTEX_OPUS_MODELS_REJECTING_STREAM_OPTIONS)
 def test_vertex_stream_omits_stream_options(model_name: str) -> None:
     llm = LitellmLLM(
         api_key="test_key",
@@ -714,8 +698,10 @@ def test_openai_auto_reasoning_effort_maps_to_medium() -> None:
         assert kwargs["reasoning"]["effort"] == "medium"
 
 
-@pytest.mark.parametrize("model_name", VERTEX_OPUS_MODELS_REJECTING_OUTPUT_CONFIG)
-def test_vertex_opus_omits_reasoning_effort(model_name: str) -> None:
+@pytest.mark.parametrize("model_name", VERTEX_OPUS_MODELS_REJECTING_STREAM_OPTIONS)
+def test_vertex_opus_still_sends_thinking(model_name: str) -> None:
+    """Rejecting stream_options must not cost these models their reasoning:
+    thinking is still sent."""
     llm = LitellmLLM(
         api_key="test_key",
         timeout=30,
@@ -734,10 +720,111 @@ def test_vertex_opus_omits_reasoning_effort(model_name: str) -> None:
         mock_completion.return_value = []
 
         messages: LanguageModelInput = [UserMessage(content="Hi")]
-        list(llm.stream(messages))
+        list(llm.stream(messages, reasoning_effort=ReasoningEffort.HIGH))
 
         kwargs = mock_completion.call_args.kwargs
+        assert "thinking" in kwargs
+
+
+def test_claude_via_openai_compatible_proxy_uses_reasoning_param() -> None:
+    """The wire format follows the API surface, not the model vendor: Claude
+    behind an OpenAI-shaped gateway asks for reasoning the OpenAI way, never
+    Anthropic's thinking/output_config."""
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.BIFROST,
+        model_name="anthropic/claude-sonnet-4-5",
+        api_base="https://gateway.example/v1",
+        max_input_tokens=200000,
+        custom_config={"bifrost_api_mode": "chat_completions"},
+    )
+
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.return_value = []
+
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        list(llm.stream(messages, reasoning_effort=ReasoningEffort.HIGH))
+
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs["reasoning"] == {"effort": "high", "summary": "auto"}
+        assert "thinking" not in kwargs
+        assert "output_config" not in kwargs
+
+
+@pytest.mark.parametrize("api_mode", ["chat_completions", "responses"])
+def test_openai_via_openai_compatible_proxy_reaches_xhigh(api_mode: str) -> None:
+    """An OpenAI model behind a gateway is still an OpenAI model: it takes the
+    OpenAI reasoning param, and xhigh reaches it instead of being clamped to
+    high by the LiteLLM fallback."""
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.BIFROST,
+        model_name="openai/gpt-5.1",
+        api_base="https://gateway.example/v1",
+        max_input_tokens=200000,
+        custom_config={"bifrost_api_mode": api_mode},
+    )
+
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.return_value = []
+
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        list(llm.stream(messages, reasoning_effort=ReasoningEffort.XHIGH))
+
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs["reasoning"] == {"effort": "xhigh", "summary": "auto"}
         assert "reasoning_effort" not in kwargs
+
+
+def test_gateway_chat_alias_only_silences_openai_models() -> None:
+    """The "-chat" rule is an OpenAI quirk (their chat models reject reasoning
+    params). A Claude alias that happens to contain it must still reason."""
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.BIFROST,
+        model_name="anthropic/claude-sonnet-4-5-chat",
+        api_base="https://gateway.example/v1",
+        max_input_tokens=200000,
+        custom_config={"bifrost_api_mode": "chat_completions"},
+    )
+
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.return_value = []
+
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        list(llm.stream(messages, reasoning_effort=ReasoningEffort.HIGH))
+
+        assert mock_completion.call_args.kwargs["reasoning"] == {
+            "effort": "high",
+            "summary": "auto",
+        }
+
+
+def test_aliased_claude_model_still_reasons() -> None:
+    """A gateway alias the litellm registry doesn't know still reasons: the
+    version parsed off the name decides, not the registry."""
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.VERTEX_AI,
+        model_name="gateway-claude-sonnet-4-5-prod",
+        max_input_tokens=100000,
+    )
+
+    with (
+        patch("litellm.completion") as mock_completion,
+        patch("onyx.llm.multi_llm.model_is_reasoning_model", return_value=False),
+    ):
+        mock_completion.return_value = []
+
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        list(llm.stream(messages, reasoning_effort=ReasoningEffort.HIGH))
+
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs["thinking"] == {"type": "enabled", "budget_tokens": 4096}
 
 
 def test_openai_chat_omits_reasoning_params() -> None:
@@ -785,6 +872,56 @@ def test_openai_chat_omits_reasoning_params() -> None:
         assert "reasoning_effort" not in kwargs
         assert mock_is_reasoning.called
         assert mock_is_openai.called
+
+
+def test_chat_variant_only_in_deployment_name_omits_reasoning() -> None:
+    """The "-chat" guard reads the wire string (deployment_name takes
+    priority), so a real gpt-5-chat model hidden behind an opaque alias
+    must still have reasoning omitted or OpenAI 400s it."""
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.AZURE,
+        model_name="gpt-5-chat",
+        deployment_name="prod-deploy-1",
+        api_base="https://my-resource.openai.azure.us",
+        max_input_tokens=get_max_input_tokens(
+            model_provider=LlmProviderNames.AZURE, model_name="gpt-5-chat"
+        ),
+    )
+
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.return_value = []
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        list(llm.stream(messages, reasoning_effort=ReasoningEffort.HIGH))
+
+        kwargs = mock_completion.call_args.kwargs
+        assert "reasoning" not in kwargs
+
+
+def test_coincidental_chat_alias_does_not_silence_reasoning() -> None:
+    """A deployment alias merely containing "-chat" (not a real gpt-5-chat
+    registry model) must not silently suppress reasoning for a model that
+    otherwise supports it."""
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.AZURE,
+        model_name="gpt-5.1",
+        deployment_name="prod-chat-1",
+        api_base="https://my-resource.openai.azure.us",
+        max_input_tokens=get_max_input_tokens(
+            model_provider=LlmProviderNames.AZURE, model_name="gpt-5.1"
+        ),
+    )
+
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.return_value = []
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        list(llm.stream(messages, reasoning_effort=ReasoningEffort.HIGH))
+
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs["reasoning"]["effort"] == "high"
 
 
 def _azure_llm(model_name: str, api_version: str | None) -> LitellmLLM:
@@ -920,6 +1057,35 @@ def test_reasoning_effort_sent_for_o1() -> None:
 
         kwargs = mock_completion.call_args.kwargs
         assert kwargs["reasoning"]["effort"] == "medium"
+
+
+def test_o1_mini_only_in_deployment_name_omits_reasoning_effort() -> None:
+    """The o1-mini/o1-preview rejection guard is name-only by design and must
+    consider the deployment alias too, not just model_name. Same identity
+    gap as test_claude_only_in_deployment_name_omits_temperature_and_reasons."""
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.AZURE,
+        model_name="foundry-deploy-2",
+        deployment_name="o1-mini",
+        api_base="https://my-resource.openai.azure.us",
+        api_version="2025-03-01-preview",
+        max_input_tokens=get_max_input_tokens(
+            model_provider=LlmProviderNames.AZURE,
+            model_name="foundry-deploy-2",
+        ),
+    )
+
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.return_value = []
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        list(llm.stream(messages, reasoning_effort=ReasoningEffort.AUTO))
+
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs["temperature"] == 1  # confirms is_reasoning resolved True
+        assert "reasoning" not in kwargs
+        assert "reasoning_effort" not in kwargs
 
 
 def test_user_identity_metadata_enabled(default_multi_llm: LitellmLLM) -> None:
@@ -1149,12 +1315,19 @@ def test_anthropic_model_passes_isolated_client() -> None:
         assert isinstance(kwargs["client"], HTTPHandler)
 
 
-def test_bedrock_model_passes_no_client() -> None:
-    """Test that Bedrock models don't get a client passed."""
+@pytest.mark.parametrize(
+    "model_provider",
+    [LlmProviderNames.BEDROCK, LlmProviderNames.BEDROCK_CONVERSE],
+)
+def test_bedrock_model_passes_isolated_client(model_provider: str) -> None:
+    """Bedrock gets a per-call HTTPHandler so abandoned streams can't deadlock
+    litellm's shared module_level_client pool (see _uses_isolated_client)."""
+    from litellm import HTTPHandler
+
     llm = LitellmLLM(
         api_key=None,
         timeout=30,
-        model_provider=LlmProviderNames.BEDROCK,
+        model_provider=model_provider,
         model_name="anthropic.claude-3-sonnet-20240229-v1:0",
         max_input_tokens=200000,
     )
@@ -1180,7 +1353,7 @@ def test_bedrock_model_passes_no_client() -> None:
 
         mock_completion.assert_called_once()
         kwargs = mock_completion.call_args.kwargs
-        assert kwargs["client"] is None
+        assert isinstance(kwargs["client"], HTTPHandler)
 
 
 def test_azure_openai_model_uses_httphandler_client() -> None:
@@ -1219,6 +1392,36 @@ def test_azure_openai_model_uses_httphandler_client() -> None:
 
         messages: LanguageModelInput = [UserMessage(content="Hi")]
         llm.invoke(messages)
+
+        mock_completion.assert_called_once()
+        kwargs = mock_completion.call_args.kwargs
+        assert isinstance(kwargs["client"], HTTPHandler)
+
+
+def test_openai_only_in_deployment_name_gets_isolated_client() -> None:
+    """_uses_isolated_client() must also check deployment_name: an Azure
+    Foundry model identified solely by its alias still needs the per-call
+    HTTPHandler, or it silently rejoins litellm's shared connection pool."""
+    from litellm import HTTPHandler
+
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.AZURE,
+        model_name="foundry-deploy-5",
+        deployment_name="gpt-5.1",
+        api_base="https://my-resource.openai.azure.us",
+        api_version="2025-03-01-preview",
+        max_input_tokens=get_max_input_tokens(
+            model_provider=LlmProviderNames.AZURE,
+            model_name="foundry-deploy-5",
+        ),
+    )
+
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.return_value = []
+        messages: LanguageModelInput = [UserMessage(content="Hi")]
+        list(llm.stream(messages))
 
         mock_completion.assert_called_once()
         kwargs = mock_completion.call_args.kwargs
@@ -2331,18 +2534,48 @@ _TOOL_CHOICE_DOWNGRADE_TOOLS = [
     [
         (LlmProviderNames.OPENROUTER, "qwen/qwen3.7-plus"),
         (LlmProviderNames.ANTHROPIC, "claude-sonnet-5"),
+        (LlmProviderNames.OPENROUTER, "z-ai/glm-5.3"),
     ],
 )
 def test_required_tool_choice_downgraded_to_auto(
     model_provider: str, model_name: str
 ) -> None:
-    """Claude and Qwen thinking models reject/degrade required tool_choice, so
-    it must be sent to the provider as AUTO instead."""
+    """Claude, Qwen thinking, and GLM models reject/degrade required
+    tool_choice, so it must be sent to the provider as AUTO instead."""
     llm = LitellmLLM(
         api_key="test_key",
         timeout=30,
         model_provider=model_provider,
         model_name=model_name,
+        max_input_tokens=32000,
+    )
+
+    with patch("litellm.completion") as mock_completion:
+        mock_completion.return_value = []
+
+        messages: LanguageModelInput = [UserMessage(content="Weather in NYC?")]
+        list(
+            llm.stream(
+                messages,
+                tools=_TOOL_CHOICE_DOWNGRADE_TOOLS,
+                tool_choice=ToolChoiceOptions.REQUIRED,
+            )
+        )
+
+        kwargs = mock_completion.call_args.kwargs
+        assert kwargs["tool_choice"] == ToolChoiceOptions.AUTO
+
+
+def test_qwen_only_in_deployment_name_downgrades_tool_choice() -> None:
+    """is_qwen_model must also check deployment_name, same identity gap as
+    is_claude_model above it. A Qwen model reachable only by alias must
+    still get the required->auto downgrade or the provider 400s."""
+    llm = LitellmLLM(
+        api_key="test_key",
+        timeout=30,
+        model_provider=LlmProviderNames.LITELLM_PROXY,
+        model_name="foundry-deploy-3",
+        deployment_name="qwen/qwen3.7-plus",
         max_input_tokens=32000,
     )
 
@@ -3047,3 +3280,68 @@ def test_invoke_caps_read_timeout_at_total_budget(
             total_timeout_override=total_timeout_override,
         )
         assert mock_completion.call_args.kwargs["timeout"] == expected_read_timeout
+
+
+def test_policy_extra_body_keeps_deployment_siblings_under_the_same_key() -> None:
+    """The OpenRouter retention policy sets one key under `provider`. The
+    deployment's other keys under `provider` must survive that merge."""
+    llm = LitellmLLM(
+        api_key="or-test-key",
+        timeout=30,
+        model_provider=LlmProviderNames.OPENROUTER,
+        model_name="openai/gpt-5.6",
+        max_input_tokens=128_000,
+        model_kwargs={"extra_body": {"provider": {"data_collection": "deny"}}},
+        extra_body={"provider": {"order": ["Azure"], "allow_fallbacks": False}},
+    )
+
+    assert llm._model_kwargs["extra_body"]["provider"] == {
+        "order": ["Azure"],
+        "allow_fallbacks": False,
+        "data_collection": "deny",
+    }
+
+
+def test_track_llm_cost_prices_cache_creation_at_write_rate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    llm = LitellmLLM(
+        api_key="managed-key",
+        timeout=30,
+        model_provider=LlmProviderNames.ANTHROPIC,
+        model_name="claude-sonnet-4-5",
+        max_input_tokens=200000,
+    )
+    db_session = MagicMock()
+
+    @contextmanager
+    def _fake_session() -> Iterator[Any]:
+        yield db_session
+
+    monkeypatch.setattr(
+        "onyx.server.usage_limits.is_usage_limits_enabled", lambda: True
+    )
+    monkeypatch.setattr(
+        "onyx.server.usage_limits.is_onyx_managed_api_key", lambda _key: True
+    )
+    monkeypatch.setattr(
+        "onyx.db.engine.sql_engine.get_session_with_current_tenant", _fake_session
+    )
+    monkeypatch.setattr(
+        "onyx.llm.cost.cost_overrides.get_override",
+        lambda _session, _model, _provider: None,
+    )
+    increment_usage = MagicMock()
+    monkeypatch.setattr("onyx.db.usage.increment_usage", increment_usage)
+
+    llm._track_llm_cost(
+        Usage(
+            prompt_tokens=3000,
+            completion_tokens=0,
+            total_tokens=3000,
+            cache_read_input_tokens=0,
+            cache_creation_input_tokens=2000,
+        )
+    )
+
+    assert increment_usage.call_args.args[2] == pytest.approx(1.05)

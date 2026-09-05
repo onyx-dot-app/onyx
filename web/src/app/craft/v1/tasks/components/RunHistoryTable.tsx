@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import useSWR from "swr";
+import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import {
   Button,
@@ -36,6 +37,7 @@ import {
   formatRelativeShort,
   formatRunDuration,
   getNonClickableReason,
+  type RunReasonTranslate,
 } from "@/app/craft/v1/tasks/utils";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -45,6 +47,9 @@ interface RunHistoryTableProps {
 }
 
 const tc = createTableColumns<ScheduledRunSummary>();
+type RunHistoryTranslate = ReturnType<
+  typeof useTranslations<"craft.tasks.runHistory">
+>;
 const RUN_HISTORY_REFRESH_INTERVAL_MS = 5000;
 const SUMMARY_TOOLTIP_THRESHOLD_CHARS = 80;
 const SUMMARY_TOOLTIP_MAX_CHARS = 400;
@@ -84,7 +89,8 @@ interface SummaryCellProps {
 }
 
 function SummaryCell({ row }: SummaryCellProps) {
-  const reason = getNonClickableReason(row);
+  const tReason = useTranslations("craft.tasks.runHistory.nonClickable");
+  const reason = getNonClickableReason(row, tReason);
   const raw = row.summary ?? row.skip_reason ?? row.error_class;
   // Heading strip must run before toPlainString collapses newlines.
   const stripped = raw
@@ -118,14 +124,14 @@ function SummaryCell({ row }: SummaryCellProps) {
   );
 }
 
-function buildColumns() {
+function buildColumns(t: RunHistoryTranslate, tReason: RunReasonTranslate) {
   return [
     tc.column("started_at", {
-      header: "Started",
+      header: t("columns.started"),
       weight: 22,
       enableSorting: false,
       cell: (value, row) => (
-        <NonClickableCell reason={getNonClickableReason(row)}>
+        <NonClickableCell reason={getNonClickableReason(row, tReason)}>
           <div className="flex flex-col gap-0.5">
             <Text font="main-ui-body" color="text-05" nowrap>
               {formatAbsolute(value)}
@@ -138,11 +144,11 @@ function buildColumns() {
       ),
     }),
     tc.column("status", {
-      header: "Status",
+      header: t("columns.status"),
       weight: 14,
       enableSorting: false,
       cell: (status, row) => {
-        const reason = getNonClickableReason(row);
+        const reason = getNonClickableReason(row, tReason);
         return (
           // Wrapper exposes the status to Playwright (and lets the row's
           // ``onRowClick`` still navigate via event bubbling).
@@ -156,7 +162,7 @@ function buildColumns() {
                 <SvgLock
                   size={12}
                   className="text-text-03"
-                  aria-label="Not openable"
+                  aria-label={t("status.notOpenableAriaLabel")}
                 />
               )}
             </div>
@@ -166,10 +172,10 @@ function buildColumns() {
     }),
     tc.displayColumn({
       id: "duration",
-      header: "Duration",
+      header: t("columns.duration"),
       width: { weight: 12 },
       cell: (row) => (
-        <NonClickableCell reason={getNonClickableReason(row)}>
+        <NonClickableCell reason={getNonClickableReason(row, tReason)}>
           <Text font="main-ui-body" color="text-03" nowrap>
             {formatRunDuration(row.started_at, row.finished_at)}
           </Text>
@@ -178,18 +184,20 @@ function buildColumns() {
     }),
     tc.displayColumn({
       id: "summary",
-      header: "Summary",
+      header: t("columns.summary"),
       width: { weight: 38 },
       cell: (row) => <SummaryCell row={row} />,
     }),
     tc.column("trigger_source", {
-      header: "Trigger",
+      header: t("columns.trigger"),
       weight: 14,
       enableSorting: false,
       cell: (value, row) => (
-        <NonClickableCell reason={getNonClickableReason(row)}>
+        <NonClickableCell reason={getNonClickableReason(row, tReason)}>
           <Text font="main-ui-body" color="text-03" nowrap>
-            {value === "MANUAL_RUN_NOW" ? "Run Now" : "Schedule"}
+            {value === "MANUAL_RUN_NOW"
+              ? t("trigger.runNow")
+              : t("trigger.schedule")}
           </Text>
         </NonClickableCell>
       ),
@@ -198,6 +206,7 @@ function buildColumns() {
 }
 
 export default function RunHistoryTable({ taskId }: RunHistoryTableProps) {
+  const t = useTranslations("craft.tasks.runHistory");
   const router = useRouter();
   const [olderPages, setOlderPages] = useState<ScheduledRunSummary[][]>([]);
   const [olderNextCursor, setOlderNextCursor] = useState<string | null>(null);
@@ -242,7 +251,8 @@ export default function RunHistoryTable({ taskId }: RunHistoryTableProps) {
     void mutate();
   }, [mutate]);
 
-  const columns = useMemo(() => buildColumns(), []);
+  const tReason = useTranslations("craft.tasks.runHistory.nonClickable");
+  const columns = useMemo(() => buildColumns(t, tReason), [t, tReason]);
 
   const allRuns = useMemo(() => {
     const runs: ScheduledRunSummary[] = [];
@@ -274,9 +284,9 @@ export default function RunHistoryTable({ taskId }: RunHistoryTableProps) {
 
   if (error) {
     return (
-      <Section gap={0.5}>
+      <Section gap={2}>
         <Text font="main-ui-body" color="text-03">
-          Failed to load run history.
+          {t("errors.loadFailed")}
         </Text>
         <Button
           variant="default"
@@ -284,7 +294,7 @@ export default function RunHistoryTable({ taskId }: RunHistoryTableProps) {
           onClick={refresh}
           size="sm"
         >
-          Try again
+          {t("errors.tryAgainButton")}
         </Button>
       </Section>
     );
@@ -294,22 +304,21 @@ export default function RunHistoryTable({ taskId }: RunHistoryTableProps) {
     return (
       <div className="py-6 text-center">
         <Text font="main-ui-body" color="text-03">
-          No runs yet. The task will create one each time it fires, or use Run
-          Now above.
+          {t("empty.label")}
         </Text>
       </div>
     );
   }
 
   return (
-    <Section gap={0.5} alignItems="stretch">
+    <Section gap={2} alignItems="stretch">
       <Table
         data={allRuns}
         columns={columns}
         getRowId={(row) => row.id}
         selectionBehavior="single-select"
         onRowClick={(row) => {
-          if (!getNonClickableReason(row) && row.session_id) {
+          if (!getNonClickableReason(row, tReason) && row.session_id) {
             router.push(buildSessionPath(row.session_id));
           }
         }}
@@ -322,7 +331,7 @@ export default function RunHistoryTable({ taskId }: RunHistoryTableProps) {
             onClick={() => void loadMore()}
             disabled={loadingMore}
           >
-            {loadingMore ? "Loading..." : "Load more"}
+            {loadingMore ? t("loadMore.loadingButton") : t("loadMore.button")}
           </Button>
         </div>
       )}

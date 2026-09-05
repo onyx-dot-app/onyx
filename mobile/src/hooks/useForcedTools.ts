@@ -1,20 +1,21 @@
-// Ephemeral "force this tool for the next turn" state. Web stores a number[] but only ever fills
-// it with one id and sends forcedToolIds[0] (web/src/lib/hooks/useForcedTools.ts), so a single
-// nullable id is the same thing without the dead cardinality.
+// Web stores a `number[]` but only ever holds one id, so a nullable id is the same thing.
 import { useCallback, useEffect, useRef, useState } from "react";
 
 interface UseForcedToolsArgs {
   chatSessionId: string | null;
   // undefined = unresolved (agents loading, or a new session missing from the sessions list).
   agentId: number | undefined;
-  // null = not in a project. A project composer is a different conversation scope, so crossing
-  // the boundary resets, matching web (web/src/views/AppPage.tsx:166-169).
   projectId: number | null;
 }
 
 export interface ForcedTools {
   forcedToolId: number | null;
   toggleForcedTool: (toolId: number) => void;
+  /*
+   * Unconditional: the source coupling pins search on every source change, where a toggle would
+   * release an already-pinned one.
+   */
+  forceTool: (toolId: number) => void;
   clearForcedTool: () => void;
 }
 
@@ -37,8 +38,10 @@ export function useForcedTools({
     }
   }, [chatSessionId]);
 
-  // Only known→known counts as a switch; the unresolved step after a send must not clear the
-  // force that send just used.
+  /*
+   * Only known→known counts as a switch; the unresolved step after a send must not clear the
+   * force that send just used.
+   */
   useEffect(() => {
     if (agentId === undefined) return;
     const previousId = previousAgentId.current;
@@ -48,8 +51,10 @@ export function useForcedTools({
     }
   }, [agentId]);
 
-  // Needs no such guard: the send that creates a chat has already read its options by the time
-  // the route flips, so every project transition is a real scope change.
+  /*
+   * No such guard needed: the send reads its options before the route flips, so every project
+   * transition is a real scope change.
+   */
   useEffect(() => {
     const previousId = previousProjectId.current;
     previousProjectId.current = projectId;
@@ -60,7 +65,11 @@ export function useForcedTools({
     setForcedToolId((current) => (current === toolId ? null : toolId));
   }, []);
 
+  const forceTool = useCallback((toolId: number) => {
+    setForcedToolId(toolId);
+  }, []);
+
   const clearForcedTool = useCallback(() => setForcedToolId(null), []);
 
-  return { forcedToolId, toggleForcedTool, clearForcedTool };
+  return { forcedToolId, toggleForcedTool, forceTool, clearForcedTool };
 }

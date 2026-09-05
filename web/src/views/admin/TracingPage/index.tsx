@@ -1,6 +1,8 @@
 "use client";
 
+import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useState, type ReactNode } from "react";
+import { useTranslations } from "next-intl";
 import { SettingsLayouts } from "@opal/layouts";
 import { MessageCard } from "@opal/components";
 import ProviderCard from "@/sections/admin/ProviderCard";
@@ -21,20 +23,21 @@ import {
 import { TracingDisconnectModal } from "@/views/admin/TracingPage/TracingDisconnectModal";
 
 const route = ADMIN_ROUTES.TRACING;
-const DESCRIPTION =
-  "Connect observability platforms to monitor and evaluate LLM calls.";
 
 interface ShellProps {
   children: ReactNode;
 }
 
 function Shell({ children }: ShellProps) {
+  const t = useTranslations("admin.tracing");
+  const adminRouteTitle = useAdminRouteTitle();
+
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={route.icon}
-        title={route.title}
-        description={DESCRIPTION}
+        title={adminRouteTitle(route)}
+        description={t("page.description")}
         divider
       />
       <SettingsLayouts.Body>{children}</SettingsLayouts.Body>
@@ -43,6 +46,7 @@ function Shell({ children }: ShellProps) {
 }
 
 export default function TracingPage() {
+  const t = useTranslations("admin.tracing");
   const [activeProvider, setActiveProvider] =
     useState<TracingSetupModalState | null>(null);
   const [disconnectTarget, setDisconnectTarget] =
@@ -61,8 +65,8 @@ export default function TracingPage() {
       <Shell>
         <MessageCard
           variant="error"
-          title="Failed to load tracing settings"
-          description={detail ?? "Unable to load tracing configuration."}
+          title={t("loadError.title")}
+          description={detail ?? t("loadError.description")}
         />
       </Shell>
     );
@@ -93,7 +97,7 @@ export default function TracingPage() {
                 title={detail.label}
                 description={detail.description}
                 status={connected ? "selected" : "disconnected"}
-                selectedLabel="Connected"
+                selectedLabel={t("provider.connected.label")}
                 onConnect={() => {
                   setActiveProvider({ providerType, detail, provider });
                   setupModal.toggle(true);
@@ -134,7 +138,12 @@ export default function TracingPage() {
 
       {activeProvider && (
         <setupModal.Provider>
-          <TracingSetupModal state={activeProvider} onSaved={mutateProviders} />
+          <TracingSetupModal
+            state={activeProvider}
+            onSaved={async () => {
+              await mutateProviders();
+            }}
+          />
         </setupModal.Provider>
       )}
 
@@ -142,7 +151,9 @@ export default function TracingPage() {
         <disconnectModal.Provider>
           <TracingDisconnectModal
             target={disconnectTarget}
-            onDisconnected={mutateProviders}
+            onDisconnected={async () => {
+              await mutateProviders();
+            }}
           />
         </disconnectModal.Provider>
       )}

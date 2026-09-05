@@ -91,7 +91,7 @@ class ArtifactResponse(BaseModel):
             type=artifact.type,
             name=artifact.name,
             path=artifact.path,
-            preview_url=getattr(artifact, "preview_url", None),
+            preview_url=getattr(artifact, "preview_url", None),  # ods: ignore[getattr]
             created_at=artifact.created_at,
             updated_at=artifact.updated_at,
         )
@@ -279,7 +279,8 @@ class MessageListResponse(BaseModel):
 
 
 class WebappInfo(BaseModel):
-    has_webapp: bool  # Whether a webapp exists in outputs/web
+    # None means the sandbox is unavailable, so existence cannot be inspected.
+    has_webapp: bool | None
     webapp_url: str | None  # URL to access the webapp (e.g., http://localhost:3015)
     status: str  # Sandbox status (running, terminated, etc.)
     ready: bool  # Whether the NextJS dev server is actually responding

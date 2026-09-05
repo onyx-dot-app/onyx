@@ -1,6 +1,7 @@
 "use client";
 
 import { Text } from "@opal/components";
+import { useTranslations } from "next-intl";
 import ToolCardSurface, {
   ToolCardSection,
 } from "@/app/craft/components/tool-cards/ToolCardSurface";
@@ -12,6 +13,7 @@ import type { ToolCardBodyProps } from "@/app/craft/components/tool-cards/interf
  * (grep) exactly as the tool emitted it — no per-line icon rows.
  */
 export default function SearchBody({ toolCall }: ToolCardBodyProps) {
+  const t = useTranslations("craft.toolCards.search");
   const output = toolCall.rawOutput?.trim();
 
   if (!output) {
@@ -19,7 +21,7 @@ export default function SearchBody({ toolCall }: ToolCardBodyProps) {
       <ToolCardSurface>
         <ToolCardSection>
           <Text font="secondary-mono" color="text-02">
-            No matches
+            {t("noMatches.label")}
           </Text>
         </ToolCardSection>
       </ToolCardSurface>

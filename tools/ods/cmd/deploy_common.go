@@ -15,12 +15,21 @@ import (
 )
 
 const (
+	// The repo whose deployment.yml builds images on tag pushes, shared by the
+	// deploy and release commands.
+	onyxRepo               = "onyx-dot-app/onyx"
+	deploymentWorkflowFile = "deployment.yml"
+
 	// Polling configuration shared by the deploy subcommands. The "discover"
 	// phase polls fast for a short window because a run usually appears within
 	// seconds of pushing the tag / dispatching the workflow.
 	runDiscoveryInterval = 5 * time.Second
 	runDiscoveryTimeout  = 2 * time.Minute
 	runProgressInterval  = 30 * time.Second
+
+	// Build runs typically take 15-30 minutes. The ceiling is hang detection:
+	// the workflow runs staged jobs that each get up to 90 minutes.
+	buildPollTimeout = 120 * time.Minute
 )
 
 // resolveDeployTarget returns the deploy target repo and workflow to use,
@@ -68,6 +77,21 @@ func resolveDeployTarget(flagRepo, flagWorkflow string, workflowSelector func(*c
 	}
 
 	return repo, workflow
+}
+
+// announceDeploymentRun looks up the deployment.yml run triggered by pushing
+// tag and prints its URL. The lookup is best-effort: the tag is already pushed
+// and the build runs regardless, so failures only warn.
+func announceDeploymentRun(tag string) {
+	log.Info("Looking up the deployment run...")
+	run, err := waitForNewRun(onyxRepo, deploymentWorkflowFile, "push", tag, 0)
+	if err != nil {
+		log.Warnf("Could not find the deployment run for %s: %v", tag, err)
+		log.Warnf("Find it at https://github.com/%s/actions/workflows/%s", onyxRepo, deploymentWorkflowFile)
+		return
+	}
+	log.Infof("Deployment run: %s", run.URL)
+	fmt.Println(run.URL)
 }
 
 // workflowRun is a partial representation of a `gh run list` JSON entry.

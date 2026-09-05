@@ -7,16 +7,22 @@ import React, {
   useCallback,
   useRef,
 } from "react";
+import { useTranslations } from "next-intl";
 import * as GeneralLayouts from "@/layouts/general-layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
-import { Button, CopyButton, Divider as OpalDivider } from "@opal/components";
+import {
+  Button,
+  Checkbox,
+  CopyButton,
+  Divider as OpalDivider,
+  InputTypeIn,
+  LineItemButton,
+  Popover,
+  Spacer,
+} from "@opal/components";
 import { Hoverable } from "@opal/core";
 import Text from "@/refresh-components/texts/Text";
 import Truncated from "@/refresh-components/texts/Truncated";
-import { Checkbox } from "@opal/components";
-import { InputTypeIn } from "@opal/components";
-import { Popover } from "@opal/components";
-import LineItem from "@/refresh-components/buttons/LineItem";
 import SelectButton from "@/refresh-components/buttons/SelectButton";
 import Divider from "@/refresh-components/Divider";
 import {
@@ -47,7 +53,6 @@ import {
 } from "@/lib/hierarchy/svc";
 import { AgentAttachedDocument } from "@/lib/agents/types";
 import { timeAgo } from "@opal/time";
-import { Spacer } from "@opal/components";
 
 // Compact, human-readable form of a node/document link, used as a secondary
 // label so siblings that share a display name (common for orphaned nodes that
@@ -88,7 +93,7 @@ function HierarchyBreadcrumb({
       flexDirection="row"
       justifyContent="start"
       alignItems="center"
-      gap={0.25}
+      gap={1}
       height="auto"
     >
       {/* Root source link */}
@@ -184,6 +189,8 @@ export default function SourceHierarchyBrowser({
   onSelectionCountChange,
   initialNodeId,
 }: SourceHierarchyBrowserProps) {
+  const t = useTranslations("knowledge");
+
   // State for hierarchy nodes (loaded once per source)
   const [allNodes, setAllNodes] = useState<HierarchyNodeSummary[]>([]);
   const [isLoadingNodes, setIsLoadingNodes] = useState(false);
@@ -214,6 +221,9 @@ export default function SourceHierarchyBrowser({
 
   // Store path before entering view selected mode so we can restore it
   const [savedPath, setSavedPath] = useState<HierarchyNodeSummary[]>([]);
+  const pathRef = useRef(path);
+  const savedPathRef = useRef(savedPath);
+  const viewSelectedOnlyRef = useRef(viewSelectedOnly);
 
   // Store selected document details (for showing all selected documents in view selected mode)
   // Note: useState (not useMemo) because this is modified independently when users select/deselect documents
@@ -244,7 +254,9 @@ export default function SourceHierarchyBrowser({
         setAllNodes(response.nodes);
       } catch (error) {
         setNodesError(
-          error instanceof Error ? error.message : "Failed to load folders"
+          error instanceof Error
+            ? error.message
+            : t("browser.loadFoldersError.description")
         );
       } finally {
         setIsLoadingNodes(false);
@@ -252,7 +264,7 @@ export default function SourceHierarchyBrowser({
     };
 
     loadNodes();
-  }, [source]);
+  }, [source, t]);
 
   // Track the last initialNodeId we navigated to, so a new value (even to a
   // previously-visited node) re-triggers navigation instead of being skipped
@@ -525,6 +537,18 @@ export default function SourceHierarchyBrowser({
     onSelectionCountChange?.(source, currentSourceSelectedCount);
   }, [source, currentSourceSelectedCount, onSelectionCountChange]);
 
+  useEffect(() => {
+    pathRef.current = path;
+  }, [path]);
+
+  useEffect(() => {
+    savedPathRef.current = savedPath;
+  }, [savedPath]);
+
+  useEffect(() => {
+    viewSelectedOnlyRef.current = viewSelectedOnly;
+  }, [viewSelectedOnly]);
+
   // Header checkbox state: count how many visible items are selected
   const visibleSelectedCount = useMemo(() => {
     return filteredItems.filter((item) => {
@@ -649,18 +673,22 @@ export default function SourceHierarchyBrowser({
   };
 
   // Handler for toggling view selected mode
-  const handleToggleViewSelected = () => {
-    setViewSelectedOnly((prev) => {
-      if (!prev) {
-        // Entering view selected mode - save current path
-        setSavedPath(path);
-      } else {
-        // Exiting view selected mode - restore saved path
-        setPath(savedPath);
-      }
-      return !prev;
-    });
-  };
+  const handleToggleViewSelected = useCallback(() => {
+    if (!viewSelectedOnlyRef.current) {
+      // Entering view selected mode - save current path
+      const currentPath = pathRef.current;
+      savedPathRef.current = currentPath;
+      setSavedPath(currentPath);
+      viewSelectedOnlyRef.current = true;
+      setViewSelectedOnly(true);
+      return;
+    }
+
+    // Exiting view selected mode - restore saved path
+    setPath(savedPathRef.current);
+    viewSelectedOnlyRef.current = false;
+    setViewSelectedOnly(false);
+  }, []);
 
   // Handler for clicking a row (folder or document)
   const handleItemClick = (item: HierarchyItem) => {
@@ -700,9 +728,9 @@ export default function SourceHierarchyBrowser({
   // Render loading state
   if (isLoadingNodes) {
     return (
-      <GeneralLayouts.Section height="auto" padding={1}>
+      <GeneralLayouts.Section height="auto" padding={4}>
         <Text text03 secondaryBody>
-          Loading folders...
+          {t("browser.loadingFolders.description")}
         </Text>
       </GeneralLayouts.Section>
     );
@@ -711,7 +739,7 @@ export default function SourceHierarchyBrowser({
   // Render error state
   if (nodesError) {
     return (
-      <GeneralLayouts.Section height="auto" padding={1}>
+      <GeneralLayouts.Section height="auto" padding={4}>
         <Text text03 secondaryBody>
           {nodesError}
         </Text>
@@ -726,14 +754,14 @@ export default function SourceHierarchyBrowser({
         flexDirection="row"
         justifyContent="start"
         alignItems="center"
-        gap={0.5}
+        gap={2}
         height="auto"
       >
         <GeneralLayouts.Section height="auto" width="fit">
           <InputTypeIn
             value={searchValue}
             onChange={(e) => setSearchValue(e.target.value)}
-            placeholder="Filter..."
+            placeholder={t("table.filter.placeholder")}
             variant="internal"
             rightChildren={
               <SvgFilter className="w-4 h-4 stroke-text-02 shrink-0" />
@@ -751,7 +779,7 @@ export default function SourceHierarchyBrowser({
             prominence="tertiary"
             onClick={handleToggleViewSelected}
           >
-            Selected items
+            {t("browser.selectedItems.label")}
           </Button>
         </>
       ) : (
@@ -783,7 +811,7 @@ export default function SourceHierarchyBrowser({
         </TableLayouts.CheckboxCell>
         <TableLayouts.TableCell flex>
           <Text secondaryBody text03>
-            Name
+            {t("table.columns.name.header")}
           </Text>
         </TableLayouts.TableCell>
         <TableLayouts.TableCell width={8}>
@@ -795,87 +823,115 @@ export default function SourceHierarchyBrowser({
                   transient={sortDropdownOpen}
                   onClick={() => setSortDropdownOpen(true)}
                 >
-                  {sortField === "name" ? "Name" : "Last Updated"}
+                  {sortField === "name"
+                    ? t("table.columns.name.header")
+                    : t("table.columns.lastUpdated.header")}
                 </SelectButton>
               </div>
             </Popover.Trigger>
             <Popover.Content align="end" sideOffset={4} width="lg">
               <Popover.Menu>
                 {/* Sort by section */}
-                <Divider showTitle text="Sort by" dividerLine={false} />
-                <LineItem
-                  selected={sortField === "name"}
+                <Divider
+                  showTitle
+                  text={t("browser.sort.sortBy.title")}
+                  dividerLine={false}
+                />
+                <LineItemButton
+                  sizePreset="main-ui"
+                  rounding={2}
+                  state={sortField === "name" ? "selected" : "empty"}
                   onClick={() => setSortField("name")}
                   rightChildren={
                     sortField === "name" ? <SvgCheck size={16} /> : undefined
                   }
-                >
-                  Name
-                </LineItem>
-                <LineItem
-                  selected={sortField === "last_updated"}
+                  title={t("table.columns.name.header")}
+                />
+                <LineItemButton
+                  sizePreset="main-ui"
+                  rounding={2}
+                  state={sortField === "last_updated" ? "selected" : "empty"}
                   onClick={() => setSortField("last_updated")}
                   rightChildren={
                     sortField === "last_updated" ? (
                       <SvgCheck size={16} />
                     ) : undefined
                   }
-                >
-                  Last Updated
-                </LineItem>
+                  title={t("table.columns.lastUpdated.header")}
+                />
                 {/* Sorting Order section */}
-                <Divider showTitle text="Sorting Order" dividerLine={false} />
-                <LineItem
-                  selected={sortDirection === "desc"}
+                <Divider
+                  showTitle
+                  text={t("browser.sort.sortingOrder.title")}
+                  dividerLine={false}
+                />
+                <LineItemButton
+                  sizePreset="main-ui"
+                  rounding={2}
+                  state={sortDirection === "desc" ? "selected" : "empty"}
                   onClick={() => setSortDirection("desc")}
                   rightChildren={
                     sortDirection === "desc" ? (
                       <SvgCheck size={16} />
                     ) : undefined
                   }
-                >
-                  {sortField === "name" ? "Z to A" : "Recent to Old"}
-                </LineItem>
-                <LineItem
-                  selected={sortDirection === "asc"}
+                  title={
+                    sortField === "name"
+                      ? t("browser.sort.descending.name.label")
+                      : t("browser.sort.descending.lastUpdated.label")
+                  }
+                />
+                <LineItemButton
+                  sizePreset="main-ui"
+                  rounding={2}
+                  state={sortDirection === "asc" ? "selected" : "empty"}
                   onClick={() => setSortDirection("asc")}
                   rightChildren={
                     sortDirection === "asc" ? <SvgCheck size={16} /> : undefined
                   }
-                >
-                  {sortField === "name" ? "A to Z" : "Old to Recent"}
-                </LineItem>
+                  title={
+                    sortField === "name"
+                      ? t("browser.sort.ascending.name.label")
+                      : t("browser.sort.ascending.lastUpdated.label")
+                  }
+                />
                 {/* Folders section */}
-                <Divider showTitle text="Folders" dividerLine={false} />
-                <LineItem
-                  selected={folderPosition === "on_top"}
+                <Divider
+                  showTitle
+                  text={t("browser.sort.folders.title")}
+                  dividerLine={false}
+                />
+                <LineItemButton
+                  sizePreset="main-ui"
+                  rounding={2}
+                  state={folderPosition === "on_top" ? "selected" : "empty"}
                   onClick={() => setFolderPosition("on_top")}
                   rightChildren={
                     folderPosition === "on_top" ? (
                       <SvgCheck size={16} />
                     ) : undefined
                   }
-                >
-                  On top
-                </LineItem>
-                <LineItem
-                  selected={folderPosition === "mixed"}
+                  title={t("browser.sort.foldersOnTop.label")}
+                />
+                <LineItemButton
+                  sizePreset="main-ui"
+                  rounding={2}
+                  state={folderPosition === "mixed" ? "selected" : "empty"}
                   onClick={() => setFolderPosition("mixed")}
                   rightChildren={
                     folderPosition === "mixed" ? (
                       <SvgCheck size={16} />
                     ) : undefined
                   }
-                >
-                  Mixed with Files
-                </LineItem>
+                  title={t("browser.sort.foldersMixed.label")}
+                />
               </Popover.Menu>
             </Popover.Content>
           </Popover>
         </TableLayouts.TableCell>
       </TableLayouts.TableRow>
 
-      <OpalDivider paddingParallel="fit" paddingPerpendicular="fit" />
+      <OpalDivider paddingParallel={0} paddingPerpendicular={0} />
 
       {/* Scrollable table body */}
       <div
@@ -884,11 +940,11 @@ export default function SourceHierarchyBrowser({
         className="overflow-y-auto max-h-80"
       >
         {filteredItems.length === 0 && !isLoadingDocuments ? (
-          <GeneralLayouts.Section height="auto" padding={1}>
+          <GeneralLayouts.Section height="auto" padding={4}>
             <Text text03 secondaryBody>
               {path.length === 0
-                ? "Select a folder to browse documents."
-                : "No items in this folder."}
+                ? t("browser.empty.root.description")
+                : t("browser.empty.folder.description")}
             </Text>
           </GeneralLayouts.Section>
         ) : (
@@ -916,7 +972,7 @@ export default function SourceHierarchyBrowser({
                         flexDirection="row"
                         justifyContent="start"
                         alignItems="center"
-                        gap={0.25}
+                        gap={1}
                         height="auto"
                       >
                         <GeneralLayouts.Section
@@ -942,7 +998,7 @@ export default function SourceHierarchyBrowser({
                             <CopyButton
                               size="sm"
                               getCopyText={() => item.data.link ?? ""}
-                              tooltip="Copy link"
+                              tooltip={t("browser.copyLink.tooltip")}
                             />
                           </Hoverable.Item>
                         )}
@@ -977,9 +1033,9 @@ export default function SourceHierarchyBrowser({
 
             {/* Loading more indicator */}
             {isLoadingDocuments && documents.length > 0 && (
-              <GeneralLayouts.Section height="auto" padding={0.5}>
+              <GeneralLayouts.Section height="auto" padding={2}>
                 <Text text03 secondaryBody>
-                  Loading more...
+                  {t("browser.loadingMore.description")}
                 </Text>
               </GeneralLayouts.Section>
             )}
@@ -995,12 +1051,13 @@ export default function SourceHierarchyBrowser({
             flexDirection="row"
             justifyContent="start"
             alignItems="center"
-            gap={0.5}
+            gap={2}
             height="auto"
           >
             <Text text03 secondaryBody>
-              {currentSourceSelectedCount}{" "}
-              {currentSourceSelectedCount === 1 ? "item" : "items"} selected
+              {t("browser.selectedCount.label", {
+                count: currentSourceSelectedCount,
+              })}
             </Text>
             <Button
               icon={SvgEye}

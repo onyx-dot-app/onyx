@@ -1,0 +1,455 @@
+/**
+ * Service layer for MCP (Model Context Protocol) related API calls
+ */
+
+import {
+  MCPServer,
+  MCPServerCreateRequest,
+  MCPServerUpdateRequest,
+  MCPServerStatus,
+  ApiResponse,
+  MethodSpec,
+  ToolSnapshot,
+  MCPAuthenticationType,
+  MCPAuthenticationPerformer,
+  MCPOAuthProviderMode,
+  MCPTransportType,
+  MCPAuthTemplate,
+} from "@/lib/tools/types";
+import { parseErrorDetail } from "@/lib/fetcher";
+
+export interface ToolStatusUpdateRequest {
+  tool_ids: number[];
+  enabled: boolean;
+}
+
+export interface ToolStatusUpdateResponse {
+  updated_count: number;
+  tool_ids: number[];
+}
+
+/**
+ * Delete an MCP server
+ */
+export async function deleteMCPServer(serverId: number): Promise<void> {
+  const response = await fetch(`/api/admin/mcp/server/${serverId}`, {
+    method: "DELETE",
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || "Failed to delete MCP server");
+  }
+}
+
+/**
+ * This performs actual discovery from the MCP server and syncs to DB
+ */
+export async function refreshMCPServerTools(
+  serverId: number
+): Promise<ToolSnapshot[]> {
+  // Discovers tools from MCP server, upserts to DB, and returns ToolSnapshot format
+  const response = await fetch(
+    `/api/admin/mcp/server/${serverId}/tools/snapshots?source=mcp`
+  );
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || "Failed to refresh tools");
+  }
+
+  return await response.json();
+}
+
+/**
+ * Update status (enable/disable) for one or more tools
+ */
+export async function updateToolsStatus(
+  toolIds: number[],
+  enabled: boolean
+): Promise<ToolStatusUpdateResponse> {
+  const response = await fetch("/api/admin/tool/status", {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      tool_ids: toolIds,
+      enabled: enabled,
+    } as ToolStatusUpdateRequest),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || "Failed to update tool status");
+  }
+
+  return await response.json();
+}
+
+/**
+ * Update status for a single tool
+ */
+export async function updateToolStatus(
+  toolId: number,
+  enabled: boolean
+): Promise<ToolStatusUpdateResponse> {
+  return updateToolsStatus([toolId], enabled);
+}
+
+/**
+ * Disable all tools for a specific MCP server
+ */
+export async function disableAllServerTools(
+  toolIds: number[]
+): Promise<ToolStatusUpdateResponse> {
+  return updateToolsStatus(toolIds, false);
+}
+
+/**
+ * Create a new MCP server with basic information
+ */
+export async function createMCPServer(
+  data: MCPServerCreateRequest
+): Promise<MCPServer> {
+  const response = await fetch("/api/admin/mcp/server", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || "Failed to create MCP server");
+  }
+
+  return await response.json();
+}
+
+/**
+ * Update an existing MCP server
+ */
+export async function updateMCPServer(
+  serverId: number,
+  data: MCPServerUpdateRequest
+): Promise<MCPServer> {
+  const response = await fetch(`/api/admin/mcp/server/${serverId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || "Failed to update MCP server");
+  }
+
+  return await response.json();
+}
+
+/**
+ * Update the status of an MCP server
+ */
+export async function updateMCPServerStatus(
+  serverId: number,
+  status: MCPServerStatus
+): Promise<void> {
+  const response = await fetch(
+    `/api/admin/mcp/server/${serverId}/status?status=${status}`,
+    {
+      method: "PATCH",
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || "Failed to update MCP server status");
+  }
+}
+
+interface UpsertMCPServerResponse {
+  server_id: number;
+  server_name: string;
+  server_url: string;
+  auth_type: string;
+  auth_performer: string;
+  oauth_provider_mode?: MCPOAuthProviderMode;
+  oauth_authorization_endpoint?: string;
+  oauth_token_endpoint?: string;
+  oauth_scopes_override?: string[];
+  oauth_additional_auth_params?: Record<string, string>;
+  no_user_authentication_required: boolean;
+}
+
+export async function upsertMCPServer(serverData: {
+  name: string;
+  description?: string;
+  server_url: string;
+  transport: string;
+  auth_type: MCPAuthenticationType;
+  auth_performer: MCPAuthenticationPerformer;
+  api_token?: string;
+  api_token_changed?: boolean;
+  oauth_client_id?: string;
+  oauth_client_secret?: string;
+  oauth_provider_mode?: MCPOAuthProviderMode;
+  oauth_authorization_endpoint?: string;
+  oauth_token_endpoint?: string;
+  oauth_scopes_override?: string[];
+  oauth_additional_auth_params?: Record<string, string>;
+  // Mirrors the LLM-provider `api_key_changed` pattern: explicitly signal
+  // whether the OAuth credential fields were edited so the backend doesn't
+  // overwrite stored values with masked placeholders on resubmit.
+  oauth_client_id_changed?: boolean;
+  oauth_client_secret_changed?: boolean;
+  auth_template?: MCPAuthTemplate;
+  admin_credentials?: Record<string, string>;
+  // Per-key analogue of `oauth_client_*_changed` for `admin_credentials`.
+  admin_credentials_changed?: Record<string, boolean>;
+  existing_server_id?: number;
+}): Promise<ApiResponse<UpsertMCPServerResponse>> {
+  try {
+    const response = await fetch("/api/admin/mcp/servers/create", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(serverData),
+    });
+
+    if (!response.ok) {
+      const errorDetail = (await response.json()).detail;
+      return {
+        data: null,
+        error: `Failed to create MCP server: ${errorDetail}`,
+      };
+    }
+
+    const result: UpsertMCPServerResponse = await response.json();
+    return { data: result, error: null };
+  } catch (error) {
+    console.error("Error creating MCP server:", error);
+    return { data: null, error: `Error creating MCP server: ${error}` };
+  }
+}
+
+// ── User-side connect flows (shared by chat and the Craft Apps page) ────────
+
+export type MCPUserOAuthStartResponse =
+  | {
+      status: "authorization_required";
+      server_id: number;
+      authorization_url: string;
+      redirect_url: string;
+    }
+  | {
+      status: "already_authenticated";
+      server_id: number;
+      authorization_url: null;
+      redirect_url: string;
+    };
+
+export function getMCPUserOAuthNavigationUrl(
+  response: MCPUserOAuthStartResponse
+): string {
+  return response.status === "authorization_required"
+    ? response.authorization_url
+    : response.redirect_url;
+}
+
+/** Start OAuth or return the internal destination when already authenticated. */
+export async function startMCPUserOAuth(
+  serverId: number,
+  returnPath: string,
+  options: { forceReauthentication?: boolean } = {}
+): Promise<MCPUserOAuthStartResponse> {
+  const res = await fetch("/api/mcp/oauth/connect", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      server_id: serverId,
+      return_path: returnPath,
+      include_resource_param: true,
+      force_reauthentication: options.forceReauthentication ?? false,
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(
+      await parseErrorDetail(res, "Failed to start authorization")
+    );
+  }
+  return res.json();
+}
+
+export interface MCPOAuthCallbackResponse {
+  success: boolean;
+  server_id: number;
+  server_name: string;
+  message: string;
+  redirect_url: string;
+}
+
+/** Complete the OAuth flow started by `startMCPUserOAuth`: exchange the
+ * provider's authorization code for tokens and store them for the current
+ * user. The code + state are single-use — call at most once per callback. */
+export async function completeMCPUserOAuth(
+  code: string,
+  state: string
+): Promise<MCPOAuthCallbackResponse> {
+  const params = new URLSearchParams({ code, state });
+  const res = await fetch(`/api/mcp/oauth/callback?${params.toString()}`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    throw new Error(
+      await parseErrorDetail(res, "Failed to complete authorization")
+    );
+  }
+  return res.json();
+}
+
+/** Save per-user credentials (API key / template fields) for an MCP server. */
+export async function saveMCPUserCredentials(
+  serverId: number,
+  credentials: Record<string, string>,
+  transport: MCPTransportType = MCPTransportType.STREAMABLE_HTTP
+): Promise<void> {
+  const res = await fetch("/api/mcp/user-credentials", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      server_id: serverId,
+      credentials,
+      transport,
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(await parseErrorDetail(res, "Failed to save credentials"));
+  }
+}
+
+/** Disconnect the current user from an MCP server (removes their own
+ * credentials; admin-managed configuration is untouched). */
+export async function disconnectMCPServer(serverId: number): Promise<void> {
+  const res = await fetch(`/api/mcp/user-credentials/${serverId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    throw new Error(await parseErrorDetail(res, "Failed to disconnect"));
+  }
+}
+
+export async function validateToolDefinition(toolData: {
+  definition: Record<string, any>;
+}): Promise<ApiResponse<MethodSpec[]>> {
+  try {
+    const response = await fetch(`/api/admin/tool/custom/validate`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(toolData),
+    });
+
+    if (!response.ok) {
+      const errorDetail = (await response.json()).detail;
+      return { data: null, error: errorDetail };
+    }
+
+    const responseJson = await response.json();
+    return { data: responseJson.methods, error: null };
+  } catch (error) {
+    console.error("Error validating tool:", error);
+    return { data: null, error: "Unexpected error validating tool definition" };
+  }
+}
+
+export async function createCustomTool(toolData: {
+  name: string;
+  description?: string;
+  definition: Record<string, any>;
+  custom_headers: { key: string; value: string }[];
+  passthrough_auth: boolean;
+}): Promise<ApiResponse<ToolSnapshot>> {
+  try {
+    const response = await fetch("/api/admin/tool/custom", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(toolData),
+    });
+
+    if (!response.ok) {
+      const errorDetail = (await response.json()).detail;
+      return { data: null, error: `Failed to create tool: ${errorDetail}` };
+    }
+
+    const tool: ToolSnapshot = await response.json();
+    return { data: tool, error: null };
+  } catch (error) {
+    console.error("Error creating tool:", error);
+    return { data: null, error: "Error creating tool" };
+  }
+}
+
+type ToolUpdatePayload = {
+  name?: string;
+  description?: string;
+  definition?: Record<string, any>;
+  custom_headers?: { key: string; value: string }[] | null;
+  passthrough_auth?: boolean;
+  oauth_config_id?: number | null;
+};
+
+export async function updateCustomTool(
+  toolId: number,
+  toolData: ToolUpdatePayload
+): Promise<ApiResponse<ToolSnapshot>> {
+  try {
+    const response = await fetch(`/api/admin/tool/custom/${toolId}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(toolData),
+    });
+
+    if (!response.ok) {
+      const errorDetail = (await response.json()).detail;
+      return { data: null, error: `Failed to update tool: ${errorDetail}` };
+    }
+
+    const updatedTool: ToolSnapshot = await response.json();
+    return { data: updatedTool, error: null };
+  } catch (error) {
+    console.error("Error updating tool:", error);
+    return { data: null, error: "Error updating tool" };
+  }
+}
+
+export async function deleteCustomTool(
+  toolId: number
+): Promise<ApiResponse<boolean>> {
+  try {
+    const response = await fetch(`/api/admin/tool/custom/${toolId}`, {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      const errorDetail = (await response.json()).detail;
+      return { data: false, error: `Failed to delete tool: ${errorDetail}` };
+    }
+
+    return { data: true, error: null };
+  } catch (error) {
+    console.error("Error deleting tool:", error);
+    return { data: false, error: "Error deleting tool" };
+  }
+}

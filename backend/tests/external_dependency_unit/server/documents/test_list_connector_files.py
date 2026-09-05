@@ -25,7 +25,6 @@ from onyx.db.models import (
     ConnectorCredentialPair,
     Credential,
     FileRecord,
-    UserRole,
 )
 from onyx.file_store.file_store import FILE_SIZE_MISSING_SENTINEL
 from onyx.server.documents.connector import list_connector_files
@@ -33,7 +32,7 @@ from tests.external_dependency_unit.conftest import create_test_user
 
 
 def test_list_connector_files_batched_lookup(db_session: Session) -> None:
-    admin_user = create_test_user(db_session, "files_admin", role=UserRole.ADMIN)
+    admin_user = create_test_user(db_session, "files_admin", is_admin=True)
 
     suffix = uuid4().hex[:8]
     sized_id_a = f"test-files-{suffix}-a"
@@ -134,7 +133,7 @@ def test_list_connector_files_degrades_to_basic_info_on_lookup_failure(
 ) -> None:
     """A record-lookup failure must not fail the listing — entries degrade to
     id + name with no size/date, matching the old per-file fallback."""
-    admin_user = create_test_user(db_session, "files_admin_fb", role=UserRole.ADMIN)
+    admin_user = create_test_user(db_session, "files_admin_fb", is_admin=True)
 
     suffix = uuid4().hex[:8]
     file_id = f"test-files-{suffix}-fb"
@@ -206,7 +205,7 @@ def test_list_connector_files_backfills_legacy_sizes(
     """Records written before file_size existed get their size looked up from
     the object store once and persisted, so subsequent listings skip the
     lookup entirely."""
-    admin_user = create_test_user(db_session, "files_admin_bf", role=UserRole.ADMIN)
+    admin_user = create_test_user(db_session, "files_admin_bf", is_admin=True)
 
     suffix = uuid4().hex[:8]
     legacy_id = f"test-files-{suffix}-bf"
@@ -296,7 +295,7 @@ def test_list_connector_files_marks_missing_blobs_terminally(
 ) -> None:
     """A confirmed-missing object is persisted as the sentinel, rendered as
     unknown, and never probed again on subsequent listings."""
-    admin_user = create_test_user(db_session, "files_admin_ms", role=UserRole.ADMIN)
+    admin_user = create_test_user(db_session, "files_admin_ms", is_admin=True)
 
     suffix = uuid4().hex[:8]
     legacy_id = f"test-files-{suffix}-ms"

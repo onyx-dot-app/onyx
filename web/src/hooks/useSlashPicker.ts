@@ -1,4 +1,10 @@
-import { useCallback, useRef, useState, type RefObject } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
 import type { BaseInputBarHandle } from "@/sections/input/BaseInputBar";
 import type { PickerEntry } from "@/lib/skills/picker";
 import {
@@ -34,8 +40,11 @@ export default function useSlashPicker({
   const [session, setSession] = useState<PickerSession>(INITIAL_PICKER_SESSION);
   // Mirror into a ref so the returned handlers keep a stable identity.
   const sessionRef = useRef(session);
-  sessionRef.current = session;
   const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
+
+  useEffect(() => {
+    sessionRef.current = session;
+  }, [session]);
 
   const reset = useCallback(() => setSession(INITIAL_PICKER_SESSION), []);
   const onClose = useCallback(() => setSession(reduceOnDismiss), []);

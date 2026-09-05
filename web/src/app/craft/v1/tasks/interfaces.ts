@@ -79,6 +79,7 @@ export interface ScheduledTaskDetail {
   next_runs: string[];
   last_run: ScheduledRunSummary | null;
   pre_approved_app_ids: number[];
+  pre_approved_mcp_server_ids: number[];
   created_at: string;
   updated_at: string;
 }
@@ -91,6 +92,7 @@ export interface ScheduledTaskCreateBody {
   status?: ScheduledTaskStatus;
   run_immediately?: boolean;
   pre_approved_app_ids?: number[];
+  pre_approved_mcp_server_ids?: number[];
 }
 
 export interface ScheduledTaskPatchBody {
@@ -100,6 +102,7 @@ export interface ScheduledTaskPatchBody {
   editor_payload?: EditorPayload;
   status?: ScheduledTaskStatus;
   pre_approved_app_ids?: number[];
+  pre_approved_mcp_server_ids?: number[];
 }
 
 export interface ScheduledTaskListResponse {

@@ -1,6 +1,5 @@
 @import "@onyx-ai/opal/root.css";
-@import "./css/attachment-button.css" layer(base);
-@import "./css/button.css" layer(base);
+@import "./css/attachment-item.css" layer(base);
 @import "./css/content-editable.css" layer(base);
 @import "./css/card.css" layer(base);
 @import "./css/comet.css" layer(base);
@@ -64,6 +63,46 @@
     flex-direction: column;
     align-items: start;
   }
+
+  /* CJK system-font tail for the app font variables (composed into
+     --font-hanken-grotesk / --font-dm-mono in src/app/layout.tsx). Font
+     selection is per-character and first-match-wins, and macOS/Windows
+     preinstall the fonts for every CJK language — so the active locale's
+     fonts must come first or shared Han codepoints render with another
+     language's glyph variants (e.g. Japanese forms on a Chinese UI). The
+     default order serves ja and non-CJK locales. */
+  :root {
+    --font-cjk-sans:
+      "Hiragino Sans", "Yu Gothic UI", "PingFang SC", "Microsoft YaHei",
+      "Apple SD Gothic Neo", "Malgun Gothic";
+  }
+
+  :root:lang(zh) {
+    --font-cjk-sans:
+      "PingFang SC", "Microsoft YaHei", "Hiragino Sans", "Yu Gothic UI",
+      "Apple SD Gothic Neo", "Malgun Gothic";
+  }
+
+  :root:lang(ko) {
+    --font-cjk-sans:
+      "Apple SD Gothic Neo", "Malgun Gothic", "PingFang SC", "Microsoft YaHei",
+      "Hiragino Sans", "Yu Gothic UI";
+  }
+
+  /* CJK line breaking. The server layout sets <html lang> per locale, so
+     :lang() matches the whole document in that UI language.
+     - ja/zh: no word spaces; `strict` applies full kinsoku rules (no line
+       starting with a small kana or closing bracket, etc.).
+     - ko: spaces separate words; `keep-all` breaks at spaces like Latin
+       instead of inside words. */
+  :lang(ja),
+  :lang(zh) {
+    line-break: strict;
+  }
+
+  :lang(ko) {
+    word-break: keep-all;
+  }
 }
 
 /* Markdown chat overrides — placed in `utilities` so they sit in the same
@@ -99,14 +138,14 @@
 
   .prose ol {
     list-style-type: decimal;
-    padding-left: 1.5rem;
-    margin-left: 0;
+    padding-inline-start: 1.5rem;
+    margin-inline-start: 0;
   }
 
   .prose ul {
     list-style-type: disc;
-    padding-left: 1.5rem;
-    margin-left: 0;
+    padding-inline-start: 1.5rem;
+    margin-inline-start: 0;
   }
 
   .prose li {
@@ -214,6 +253,71 @@
   /* Preserves whitespace and wraps text */
 }
 
+/* Text shimmer for streaming status lines (see ShimmerText.tsx). The base
+   text renders normally; an inert clone above it is masked to its own glyphs,
+   and a highlight bar slides across the clone. Only `translate` animates, so
+   the effect composites on the GPU instead of repainting every frame. */
+.shimmer-text {
+  position: relative;
+  color: var(--shimmer-base);
+}
+
+.shimmer-text-overlay {
+  position: absolute;
+  inset: 0;
+  overflow: clip;
+  color: transparent;
+  contain: strict;
+  pointer-events: none;
+  mask-image: linear-gradient(#fff, #fff);
+  -webkit-mask-clip: text;
+}
+
+.shimmer-text-overlay::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(
+    90deg,
+    transparent 35%,
+    var(--shimmer-highlight) 50%,
+    transparent 65%
+  );
+  will-change: transform;
+  animation: shimmer-slide 1s ease-out infinite;
+}
+
+@keyframes shimmer-slide {
+  from {
+    translate: -100% 0;
+  }
+  to {
+    translate: 100% 0;
+  }
+}
+
+/* Browsers without text mask clipping (Firefox) fall back to the animated
+   background gradient. It repaints each frame but looks the same. */
+@supports not (-webkit-mask-clip: text) {
+  .shimmer-text {
+    animation: shimmer 1s ease-out infinite;
+    background-size: 300% 100%;
+    background-image: linear-gradient(
+      90deg,
+      var(--shimmer-base) 35%,
+      var(--shimmer-highlight) 50%,
+      var(--shimmer-base) 65%
+    );
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
+  }
+
+  .shimmer-text-overlay {
+    display: none;
+  }
+}
+
 @keyframes shimmer {
   0% {
     background-position: 100% 0;
@@ -223,18 +327,18 @@
   }
 }
 
-.shimmer-text {
-  animation: shimmer 1s ease-out infinite;
-  background-size: 300% 100%;
-  background-image: linear-gradient(
-    90deg,
-    var(--shimmer-base) 35%,
-    var(--shimmer-highlight) 50%,
-    var(--shimmer-base) 65%
-  );
-  background-clip: text;
-  -webkit-background-clip: text;
-  color: transparent;
+@media (prefers-reduced-motion: reduce) {
+  .shimmer-text {
+    animation: none;
+    background-image: none;
+    background-clip: border-box;
+    -webkit-background-clip: border-box;
+    color: var(--shimmer-base);
+  }
+
+  .shimmer-text-overlay {
+    display: none;
+  }
 }
 
 .collapsible {

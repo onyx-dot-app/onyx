@@ -60,6 +60,7 @@ from onyx.db.engine.async_sql_engine import (
 from onyx.db.engine.connection_warmup import warm_up_connections
 from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
 from onyx.db.sso_provider import seed_saml_provider_from_conf_dir
+from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
 from onyx.file_store.file_store import get_default_file_store
 from onyx.hooks.registry import validate_registry
@@ -72,6 +73,9 @@ from onyx.server.auth_check import check_router_auth
 from onyx.server.documents.cc_pair import router as cc_pair_router
 from onyx.server.documents.connector import router as connector_router
 from onyx.server.documents.credential import router as credential_router
+from onyx.server.documents.credential_capabilities import (
+    router as credential_capabilities_router,
+)
 from onyx.server.documents.document import router as document_router
 from onyx.server.documents.standard_oauth import router as standard_oauth_router
 from onyx.server.documents.targeted_reindex import router as targeted_reindex_router
@@ -157,9 +161,10 @@ from onyx.server.query_and_chat.query_backend import admin_router as admin_query
 from onyx.server.query_and_chat.query_backend import basic_router as query_router
 from onyx.server.saml_multi import router as saml_multi_router
 from onyx.server.security.api import admin_router as security_admin_router
+from onyx.server.security.store import seed_jwt_settings_from_env
 from onyx.server.settings.api import admin_router as settings_admin_router
 from onyx.server.settings.api import basic_router as settings_router
-from onyx.server.token_rate_limits.api import router as token_rate_limit_settings_router
+from onyx.server.sso_discovery import router as sso_discovery_router
 from onyx.server.utils import BasicAuthenticationError
 from onyx.setup import setup_multitenant_onyx, setup_onyx
 from onyx.tracing.setup import setup_tracing
@@ -211,7 +216,14 @@ def validation_exception_handler(request: Request, exc: Exception) -> JSONRespon
 
     exc_str = f"{exc}".replace("\n", " ").replace("   ", " ")
     logger.exception("%s: %s", request, exc_str)
-    content = {"status_code": 422, "message": exc_str, "data": None}
+    # message/status_code/data are kept for existing clients; error_code and
+    # detail make the body match every other error the API returns.
+    content = {
+        "status_code": 422,
+        "message": exc_str,
+        "data": None,
+        **OnyxErrorCode.VALIDATION_ERROR.detail(exc_str),
+    }
     return JSONResponse(content=content, status_code=422)
 
 
@@ -225,9 +237,14 @@ def value_error_handler(_: Request, exc: Exception) -> JSONResponse:
     except Exception:
         # log stacktrace
         logger.exception("ValueError")
+    # "message" is what this handler has always returned; the code and detail
+    # are added so a bare ValueError reads like any other Onyx error.
     return JSONResponse(
         status_code=400,
-        content={"message": str(exc)},
+        content={
+            "message": str(exc),
+            **OnyxErrorCode.BAD_REQUEST.detail(str(exc)),
+        },
     )
 
 
@@ -406,6 +423,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
             # api_server has the mount the migration job lacks, so this is where it
             # runs. No-op unless AUTH_TYPE=saml with no SAML row yet.
             seed_saml_provider_from_conf_dir(db_session)
+            # No-op when env is unset or the row already matches.
+            seed_jwt_settings_from_env()
             # set up the file store (e.g. create bucket if needed). On multi-tenant,
             # this is done via IaC
             get_default_file_store().initialize()
@@ -466,7 +485,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
 
 
 def log_http_error(request: Request, exc: Exception) -> JSONResponse:
-    status_code = getattr(exc, "status_code", 500)
+    status_code = getattr(exc, "status_code", 500)  # ods: ignore[getattr]
 
     if isinstance(exc, BasicAuthenticationError):
         # For BasicAuthenticationError, just log a brief message without stack trace
@@ -483,9 +502,14 @@ def log_http_error(request: Request, exc: Exception) -> JSONResponse:
         logger.error(error_msg)
 
     detail = exc.detail if isinstance(exc, HTTPException) else str(exc)
+    # Routes that raise HTTPException name no error code, so derive the
+    # canonical one for the status. Clients reading "detail" are unaffected.
     return JSONResponse(
         status_code=status_code,
-        content={"detail": detail},
+        content={
+            "error_code": OnyxErrorCode.for_status(status_code).code,
+            "detail": detail,
+        },
     )
 
 
@@ -535,6 +559,9 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, admin_router)
     include_router_with_global_prefix_prepended(application, connector_router)
     include_router_with_global_prefix_prepended(application, credential_router)
+    include_router_with_global_prefix_prepended(
+        application, credential_capabilities_router
+    )
     include_router_with_global_prefix_prepended(application, input_prompt_router)
     include_router_with_global_prefix_prepended(application, admin_input_prompt_router)
     include_router_with_global_prefix_prepended(application, cc_pair_router)
@@ -589,9 +616,6 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, voice_websocket_router)
     include_router_with_global_prefix_prepended(
         application, opensearch_migration_admin_router
-    )
-    include_router_with_global_prefix_prepended(
-        application, token_rate_limit_settings_router
     )
     include_router_with_global_prefix_prepended(application, cost_override_router)
     include_router_with_global_prefix_prepended(application, user_usage_router)
@@ -698,6 +722,13 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_auth_router_with_prefix(
         application,
         oidc_multi_router,
+    )
+
+    # Resolves which workspace's providers to offer before any of the above can
+    # run. Mounted unconditionally: single-tenant answers from its one schema.
+    include_auth_router_with_prefix(
+        application,
+        sso_discovery_router,
     )
 
     include_auth_router_with_prefix(

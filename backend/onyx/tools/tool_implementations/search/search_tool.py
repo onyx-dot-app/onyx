@@ -120,6 +120,7 @@ from onyx.tools.tool_implementations.search.constants import (
     LLM_SEMANTIC_QUERY_WEIGHT,
     MAX_CHUNKS_FOR_RELEVANCE,
     ORIGINAL_QUERY_WEIGHT,
+    SELECTION_TOKEN_BUDGET_MULTIPLIER,
 )
 from onyx.tools.tool_implementations.search.search_utils import (
     expand_section_with_context,
@@ -462,6 +463,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 bot_token=bot_token,
                 team_id=None,
                 search_settings=search_settings,
+                llm=self.llm,
             )
 
             logger.info("Slack federated search returned %s chunks", len(chunks))
@@ -922,12 +924,12 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             if semantic_query
             else []
         )
-        for llm_query in llm_queries:
-            # In rare cases, the LLM may fail to provide real queries
-            if llm_query:
-                semantic_queries_with_weights.append(
-                    (llm_query, LLM_NON_CUSTOM_QUERY_WEIGHT)
-                )
+        # In rare cases, the LLM may fail to provide real queries
+        semantic_queries_with_weights.extend(
+            (llm_query, LLM_NON_CUSTOM_QUERY_WEIGHT)
+            for llm_query in llm_queries
+            if llm_query
+        )
         if override_kwargs.original_query:
             semantic_queries_with_weights.append(
                 (override_kwargs.original_query, ORIGINAL_QUERY_WEIGHT)
@@ -1085,8 +1087,10 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # Only consider MAX_CHUNKS_FOR_RELEVANCE chunks per section to avoid flooding from
         # documents with many matching sections
         max_tokens_for_selection = (
-            override_kwargs.max_llm_chunks or MAX_CHUNKS_FED_TO_CHAT
-        ) * DOC_EMBEDDING_CONTEXT_SIZE
+            (override_kwargs.max_llm_chunks or MAX_CHUNKS_FED_TO_CHAT)
+            * DOC_EMBEDDING_CONTEXT_SIZE
+            * SELECTION_TOKEN_BUDGET_MULTIPLIER
+        )
 
         # This is approximate since it doesn't build the exact string of the call below
         # Some things are estimated and may be under (like the metadata tokens)

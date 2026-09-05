@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Button, Text } from "@opal/components";
+import { useTranslations } from "next-intl";
+import { Button, LineItemButton, Text } from "@opal/components";
 import type { RichStr } from "@opal/types";
 import {
   SvgChevronRight,
@@ -10,10 +11,10 @@ import {
   SvgFolderOpen,
   SvgTrash,
 } from "@opal/icons";
+import { ContentAction } from "@opal/layouts";
 import { cn } from "@opal/utils";
 import { formatBytes } from "@/lib/utils";
 import type { SkillBundleFile } from "@/lib/skills/types";
-import LineItem from "@/refresh-components/buttons/LineItem";
 
 interface SkillFileTreeNode {
   name: string;
@@ -41,6 +42,8 @@ function SkillFileTreeNodes({
   removingPath,
   removeDisabled,
 }: SkillFileTreeNodesProps) {
+  const t = useTranslations("skills.sections");
+
   return nodes.map((node) => {
     const isDirectory = node.size === null;
     const isExpanded = expandedPaths.has(node.path);
@@ -50,45 +53,61 @@ function SkillFileTreeNodes({
         : SvgFolder
       : SvgFileText;
 
+    const rightChildren = isDirectory ? (
+      <SvgChevronRight
+        size={14}
+        className={cn(
+          "stroke-text-03 transition-transform",
+          isExpanded && "rotate-90"
+        )}
+      />
+    ) : (
+      <div className="flex items-center gap-1">
+        <Text font="secondary-body" color="text-02">
+          {formatBytes(node.size!, 1)}
+        </Text>
+        {onRemove && (
+          <Button
+            type="button"
+            icon={SvgTrash}
+            size="sm"
+            prominence="tertiary"
+            aria-label={t("fileTree.remove.label", { name: node.name })}
+            tooltip={t("fileTree.remove.label", { name: node.name })}
+            disabled={removeDisabled || removingPath !== null}
+            onClick={() => onRemove(node.path)}
+          />
+        )}
+      </div>
+    );
+
     return (
       <div key={node.path}>
         <div style={{ paddingLeft: `${depth * 20}px` }}>
-          <LineItem
-            interactive={isDirectory}
-            icon={FileIcon}
-            onClick={isDirectory ? () => onToggle(node.path) : undefined}
-            rightChildren={
-              isDirectory ? (
-                <SvgChevronRight
-                  size={14}
-                  className={cn(
-                    "stroke-text-03 transition-transform",
-                    isExpanded && "rotate-90"
-                  )}
-                />
-              ) : (
-                <div className="flex items-center gap-1">
-                  <Text font="secondary-body" color="text-02">
-                    {formatBytes(node.size!, 1)}
-                  </Text>
-                  {onRemove && (
-                    <Button
-                      type="button"
-                      icon={SvgTrash}
-                      size="sm"
-                      prominence="tertiary"
-                      aria-label={`Remove ${node.name}`}
-                      tooltip={`Remove ${node.name}`}
-                      disabled={removeDisabled || removingPath !== null}
-                      onClick={() => onRemove(node.path)}
-                    />
-                  )}
-                </div>
-              )
-            }
-          >
-            {node.name}
-          </LineItem>
+          {isDirectory ? (
+            <LineItemButton
+              sizePreset="main-ui"
+              rounding={2}
+              icon={FileIcon}
+              onClick={() => onToggle(node.path)}
+              rightChildren={rightChildren}
+              title={node.name}
+            />
+          ) : (
+            // A file row does nothing when pressed. Only the directory rows
+            // toggle, so only they are buttons — the file row is a label with
+            // its own controls beside it. The padding matches what
+            // LineItemButton applies, so the two line up.
+            <div className="w-full p-1.5">
+              <ContentAction
+                sizePreset="main-ui"
+                padding={0.5}
+                icon={FileIcon}
+                rightChildren={rightChildren}
+                title={node.name}
+              />
+            </div>
+          )}
         </div>
         {isDirectory && isExpanded && (
           <SkillFileTreeNodes
@@ -116,11 +135,12 @@ interface SkillFileTreeProps {
 
 export default function SkillFileTree({
   files,
-  emptyMessage = "No supporting files yet.",
+  emptyMessage,
   onRemove,
   removingPath = null,
   removeDisabled = false,
 }: SkillFileTreeProps) {
+  const t = useTranslations("skills.sections");
   const nodes = useMemo(() => {
     const root: SkillFileTreeNode = {
       name: "",
@@ -180,7 +200,7 @@ export default function SkillFileTree({
     return (
       <div className="flex min-h-24 items-center justify-center p-3">
         <Text font="secondary-body" color="text-03">
-          {emptyMessage}
+          {emptyMessage ?? t("fileTree.empty.description")}
         </Text>
       </div>
     );

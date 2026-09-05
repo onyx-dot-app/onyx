@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useState, useRef, useEffect, useCallback } from "react";
+import { useTranslations } from "next-intl";
 import { Modal } from "@opal/components";
 import { Section } from "@/layouts/general-layouts";
 import { InputTextArea, InputTypeIn } from "@opal/components";
@@ -45,6 +46,7 @@ function MemoryItem({
   shouldHighlight,
   onHighlighted,
 }: MemoryItemProps) {
+  const t = useTranslations("settings.memory");
   const [isFocused, setIsFocused] = useState(false);
   const [isHighlighting, setIsHighlighting] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -86,11 +88,11 @@ function MemoryItem({
           "bg-action-selection-01 hover:bg-action-selection-01 border-action-selection-05 duration-700"
       )}
     >
-      <Section gap={0.25} alignItems="start">
-        <Section flexDirection="row" alignItems="start" gap={0.5}>
+      <Section gap={1} alignItems="start">
+        <Section flexDirection="row" alignItems="start" gap={2}>
           <InputTextArea
             ref={textareaRef}
-            placeholder="Type or paste in a personal note or memory"
+            placeholder={t("item.placeholder")}
             value={memory.content}
             onChange={(e) => onUpdate(originalIndex, e.target.value)}
             onFocus={() => setIsFocused(true)}
@@ -119,8 +121,8 @@ function MemoryItem({
             prominence="tertiary"
             icon={SvgMinusCircle}
             onClick={() => void onRemove(originalIndex)}
-            aria-label="Remove Line"
-            tooltip="Remove Line"
+            aria-label={t("removeLineButton.label")}
+            tooltip={t("removeLineButton.label")}
           />
         </Section>
         <div
@@ -168,6 +170,7 @@ export default function MemoriesModal({
   highlightOnOpen = false,
   focusNewLine = false,
 }: MemoriesModalProps) {
+  const t = useTranslations("settings.memory");
   const close = useModalClose(onClose);
   const [focusMemoryId, setFocusMemoryId] = useState<number | null>(null);
 
@@ -177,8 +180,8 @@ export default function MemoriesModal({
     user,
     updateUserPersonalization,
     {
-      onSuccess: () => toast.success("Preferences saved"),
-      onError: () => toast.error("Failed to save preferences"),
+      onSuccess: () => toast.success(t("toasts.saved")),
+      onError: () => toast.error(t("toasts.saveFailed")),
     }
   );
 
@@ -265,13 +268,13 @@ export default function MemoriesModal({
       <Modal.Content width="sm" height="lg" position="top">
         <Modal.Header
           icon={SvgAddLines}
-          title="Memory"
-          description="Let Onyx reference these stored notes and memories in chats."
+          title={t("title")}
+          description={t("modal.description")}
           onClose={close}
         >
-          <Section flexDirection="row" gap={0.5}>
+          <Section flexDirection="row" gap={2}>
             <InputTypeIn
-              placeholder="Search..."
+              placeholder={t("modal.searchPlaceholder")}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               searchIcon
@@ -283,26 +286,26 @@ export default function MemoriesModal({
               rightIcon={SvgPlusCircle}
               title={
                 !canAddMemory
-                  ? `Maximum of ${MAX_MEMORY_COUNT} memories reached`
+                  ? t("addLineButton.maxReached", { count: MAX_MEMORY_COUNT })
                   : undefined
               }
             >
-              Add Line
+              {t("addLineButton.label")}
             </Button>
           </Section>
         </Modal.Header>
 
-        <Modal.Body padding={0.5}>
+        <Modal.Body padding={2}>
           {filteredMemories.length === 0 ? (
-            <Section alignItems="center" padding={2}>
+            <Section alignItems="center" padding={8}>
               <Text secondaryBody text03>
                 {searchQuery.trim()
-                  ? "No memories match your search."
-                  : 'No memories yet. Click "Add Line" to get started.'}
+                  ? t("empty.noMatches")
+                  : t("empty.getStarted")}
               </Text>
             </Section>
           ) : (
-            <Section gap={0.5}>
+            <Section gap={2}>
               {filteredMemories.map(({ memory, originalIndex }) => (
                 <Fragment key={memory.id}>
                   <MemoryItem
@@ -319,7 +322,7 @@ export default function MemoriesModal({
                     }}
                   />
                   {memory.isNew && (
-                    <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+                    <Divider paddingParallel={0} paddingPerpendicular={0} />
                   )}
                 </Fragment>
               ))}
@@ -327,7 +330,7 @@ export default function MemoriesModal({
           )}
           <TextSeparator
             count={totalLineCount}
-            text={totalLineCount === 1 ? "Line" : "Lines"}
+            text={t("lineCount.label", { count: totalLineCount })}
           />
         </Modal.Body>
       </Modal.Content>

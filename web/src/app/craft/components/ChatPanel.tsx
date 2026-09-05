@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { track, AnalyticsEvent } from "@/lib/analytics/utils";
 import {
   useSession,
@@ -94,6 +95,7 @@ function toMessageAttachments(files: BuildFile[]): BuildMessageAttachment[] {
 export default function BuildChatPanel({
   existingSessionId,
 }: BuildChatPanelProps) {
+  const t = useTranslations("craft.chatPanel");
   const router = useRouter();
   const outputPanelOpen = useOutputPanelOpen();
   const session = useSession();
@@ -118,7 +120,7 @@ export default function BuildChatPanel({
   const toggleOutputPanel = useToggleOutputPanel();
   const onWakeIntent = useWakeOnIntent();
 
-  const { llmProviders } = useLLMProviders();
+  const { llmProviders, defaultText, defaultCraft } = useLLMProviders();
   // Sessions can outlive the org's supported providers — gate sends until one
   // exists (the model picker stays enabled so admins can connect from it).
   const hasProvider = hasSupportedCraftProvider(llmProviders);
@@ -143,8 +145,19 @@ export default function BuildChatPanel({
     () =>
       (sessionId ? modelBySession[sessionId] : undefined) ??
       sessionModel ??
-      getPreferredLlmSelection(user?.id, llmProviders),
-    [sessionId, modelBySession, sessionModel, user?.id, llmProviders]
+      getPreferredLlmSelection(user?.id, llmProviders, [
+        defaultCraft,
+        defaultText,
+      ]),
+    [
+      sessionId,
+      modelBySession,
+      sessionModel,
+      user?.id,
+      llmProviders,
+      defaultCraft,
+      defaultText,
+    ]
   );
 
   const contextUsage = useMemo(() => {
@@ -206,6 +219,9 @@ export default function BuildChatPanel({
     turnId: string;
     timer: ReturnType<typeof setTimeout>;
   } | null>(null);
+  const nameSessionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
   const isPreProvisioning = useIsPreProvisioning();
   const isPreProvisioningFailed = useIsPreProvisioningFailed();
   const preProvisionedSessionId = usePreProvisionedSessionId();
@@ -441,7 +457,7 @@ export default function BuildChatPanel({
       modelOverride?: BuildLlmSelection | null
     ) => {
       if (scheduledRunInFlight) {
-        toast.error("Please wait for the scheduled run to finish.");
+        toast.error(t("toast.scheduledRunWait"));
         return;
       }
 
@@ -453,7 +469,7 @@ export default function BuildChatPanel({
         // Existing session flow
         // Check if response is still streaming - show toast like main chat does
         if (isRunning) {
-          toast.error("Please wait for the current operation to complete.");
+          toast.error(t("toast.operationWait"));
           return;
         }
 
@@ -474,7 +490,7 @@ export default function BuildChatPanel({
         if (!newSessionId) {
           // This should not happen if UI properly disables input until ready
           console.error("[ChatPanel] No pre-provisioned session available");
-          toast.error("Please wait for sandbox to initialize");
+          toast.error(t("toast.sandboxWait"));
           return;
         }
 
@@ -536,7 +552,16 @@ export default function BuildChatPanel({
         // Schedule naming after delay (message will be saved by then)
         // Note: Don't call refreshSessionHistory() here - it would overwrite the
         // optimistic update from consumePreProvisionedSession() before the message is saved
-        setTimeout(() => nameBuildSession(newSessionId), 1000);
+        if (nameSessionTimeoutRef.current !== null) {
+          clearTimeout(nameSessionTimeoutRef.current);
+        }
+        // Session naming is a store action that must survive unmount. Firing
+        // before the 1s save window would name against an unsaved message.
+        // oxlint-disable-next-line react-doctor/effect-needs-cleanup
+        nameSessionTimeoutRef.current = setTimeout(() => {
+          nameSessionTimeoutRef.current = null;
+          nameBuildSession(newSessionId);
+        }, 1000);
 
         // Stream the response (uses session ID directly, not currentSessionId)
         await streamMessage(newSessionId, message, chosen, attachments);
@@ -555,6 +580,7 @@ export default function BuildChatPanel({
       router,
       hasUploadingFiles,
       selectedModel,
+      t,
     ]
   );
 
@@ -641,17 +667,17 @@ export default function BuildChatPanel({
             {...getRootProps()}
             className={cn(
               "flex flex-col h-full transition-all duration-300 ease-in-out outline-hidden",
-              outputPanelOpen ? "w-1/2 pl-4" : "w-full"
+              outputPanelOpen ? "w-1/2 ps-4" : "w-full"
             )}
           >
             {/* Chat header */}
-            <div className="flex flex-row items-center justify-between pl-4 pr-4 py-3 relative overflow-visible">
+            <div className="flex flex-row items-center justify-between ps-4 pe-4 py-3 relative overflow-visible">
               <div className="flex min-w-0 flex-row items-center gap-2 max-w-[75%]">
                 {/* Mobile sidebar toggle - only show on mobile when sidebar is folded */}
                 {isMobile && leftSidebarFolded && (
                   <OpalButton
                     icon={SvgSidebar}
-                    aria-label="Open Sidebar"
+                    aria-label={t("openSidebar.ariaLabel")}
                     onClick={() => setLeftSidebarFolded(false)}
                     prominence="tertiary"
                     size="sm"
@@ -675,7 +701,9 @@ export default function BuildChatPanel({
                   icon={SvgSidebar}
                   onClick={toggleOutputPanel}
                   tooltip={
-                    outputPanelOpen ? "Close output panel" : "Open output panel"
+                    outputPanelOpen
+                      ? t("outputPanel.closeTooltip")
+                      : t("outputPanel.openTooltip")
                   }
                   tertiary
                   className={cn(
@@ -689,7 +717,7 @@ export default function BuildChatPanel({
               </div>
               {/* Soft fade border at bottom */}
               {!videoBackgroundEnabled && (
-                <div className="absolute bottom-0 left-0 right-0 h-10 bg-linear-to-b from-background-neutral-01 to-transparent pointer-events-none translate-y-full z-10" />
+                <div className="absolute bottom-0 start-0 end-0 h-10 bg-linear-to-b from-background-neutral-01 to-transparent pointer-events-none translate-y-full z-10" />
               )}
             </div>
 
@@ -731,7 +759,7 @@ export default function BuildChatPanel({
                           {wasInterrupted && !displayIsRunning && (
                             <div className="flex items-center gap-2 text-sm text-text-03">
                               <SvgStopCircle className="size-4 shrink-0 stroke-text-03" />
-                              <span>Response stopped</span>
+                              <span>{t("responseStopped.label")}</span>
                             </div>
                           )}
                           <LiveApprovalsRegion
@@ -750,7 +778,7 @@ export default function BuildChatPanel({
               <div className="px-4 pb-8 pt-4 relative">
                 {/* Soft fade border at top */}
                 {!videoBackgroundEnabled && (
-                  <div className="absolute top-0 left-0 right-0 h-12 bg-linear-to-t from-background-neutral-01 to-transparent pointer-events-none -translate-y-full" />
+                  <div className="absolute top-0 start-0 end-0 h-12 bg-linear-to-t from-background-neutral-01 to-transparent pointer-events-none -translate-y-full" />
                 )}
                 <div
                   className="max-w-[720px] mx-auto"
@@ -760,7 +788,10 @@ export default function BuildChatPanel({
                   {/* Scroll to bottom button - shown when user has scrolled away */}
                   {showScrollButton && (
                     <div className="absolute -top-12 left-1/2 -translate-x-1/2 z-10">
-                      <Tooltip tooltip="Scroll to bottom" delayDuration={200}>
+                      <Tooltip
+                        tooltip={t("scrollToBottom.label")}
+                        delayDuration={200}
+                      >
                         <button
                           onClick={scrollToBottom}
                           className={cn(
@@ -771,7 +802,7 @@ export default function BuildChatPanel({
                             "transition-all duration-200",
                             "hover:bg-background-tint-inverted-01"
                           )}
-                          aria-label="Scroll to bottom"
+                          aria-label={t("scrollToBottom.label")}
                         >
                           <SvgChevronDown
                             size={20}
@@ -781,8 +812,6 @@ export default function BuildChatPanel({
                       </Tooltip>
                     </div>
                   )}
-                  {/* Model is locked once the session starts — show the picker
-                  only before the first message. */}
                   {sessionId && session?.skillsStale && (
                     <div className="pb-2">
                       <SkillsStaleNotice
@@ -791,7 +820,10 @@ export default function BuildChatPanel({
                       />
                     </div>
                   )}
-                  {session?.isLoaded && session.messages.length === 0 && (
+                  {/* The selected model is sent with each message, so a
+                  switch applies from the next turn. Subagent transcripts
+                  cannot send, so they get no picker. */}
+                  {session?.isLoaded && !isViewingSubagent && (
                     <div className="flex justify-end pb-2">
                       <ModelPickerButton
                         selection={selectedModel}
@@ -803,7 +835,6 @@ export default function BuildChatPanel({
                             }));
                           }
                         }}
-                        disabled={isViewingSubagent}
                       />
                     </div>
                   )}
@@ -824,10 +855,10 @@ export default function BuildChatPanel({
                     }
                     placeholder={
                       isViewingSubagent
-                        ? "Switch to the main agent to send a message"
+                        ? t("input.subagentPlaceholder")
                         : scheduledRunInFlight
-                          ? "Scheduled run in progress..."
-                          : "Continue the conversation..."
+                          ? t("input.scheduledRunPlaceholder")
+                          : t("input.continuePlaceholder")
                     }
                     queuedMessages={queuedMessages}
                     onQueueMessage={handleQueueMessage}

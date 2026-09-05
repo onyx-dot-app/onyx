@@ -12,7 +12,10 @@ from office365.onedrive.driveitems.driveItem import DriveItem
 from office365.runtime.client_request import ClientRequestException
 from office365.sharepoint.client_context import ClientContext
 from office365.sharepoint.permissions.roles.definitions.definition import RoleDefinition
-from office365.sharepoint.permissions.securable_object import RoleAssignmentCollection
+from office365.sharepoint.permissions.securable_object import (
+    RoleAssignmentCollection,
+    SecurableObject,
+)
 from office365.sharepoint.principal.users.collection import UserCollection
 from pydantic import BaseModel
 
@@ -24,9 +27,17 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.sharepoint.connector import (
     GRAPH_API_MAX_RETRIES,
     GRAPH_API_RETRYABLE_STATUSES,
+    LIST_ITEM_ID_PROPERTY,
     SHARED_DOCUMENTS_MAP_REVERSE,
+    SHAREPOINT_IDS_PROPERTY,
     sleep_and_retry,
 )
+from onyx.connectors.sharepoint.connector_utils import (
+    SharepointGroup,
+    SharepointGroupExpansion,
+    SharepointPermissionCache,
+)
+from onyx.db.enums import HierarchyNodeType
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_after import parse_retry_after_seconds
 
@@ -40,6 +51,8 @@ AZURE_AD_GROUP_PRINCIPAL_TYPE = 4  # Azure Active Directory security groups
 SHAREPOINT_GROUP_PRINCIPAL_TYPE = 8  # SharePoint site groups (local to the site)
 MICROSOFT_DOMAIN = ".onmicrosoft"
 SHAREPOINT_GROUP_SCOPE_SEPARATOR = "::"
+GROUP_CACHE_KEY_SEPARATOR = ":"
+GET_SHAREPOINT_LIST_ITEM_ID_LABEL = "get_sharepoint_list_item_id"
 # PnP RoleType defines Guest=1 and RestrictedGuest=9:
 # https://github.com/pnp/pnpcore/blob/4e4f58fcac797f2957bfcd14fedcecd690dfe7ee/src/sdk/PnP.Core/Model/SharePoint/Core/Public/Enums/RoleType.cs
 LIMITED_ACCESS_ROLE_TYPES = frozenset({1, 9})
@@ -141,16 +154,13 @@ def _normalize_email(email: str) -> str:
     return email
 
 
-class SharepointGroup(BaseModel):
-    model_config = {"frozen": True}
-
-    name: str
-    login_name: str
-    principal_type: int
-
-
 class GroupsResult(BaseModel):
     groups_to_emails: dict[str, set[str]]
+    found_public_group: bool
+
+
+class DocumentGroupsResult(BaseModel):
+    group_ids: set[str]
     found_public_group: bool
 
 
@@ -217,24 +227,20 @@ def _get_group_guid_from_identifier(
 
 def _get_sharepoint_list_item_id(drive_item: DriveItem) -> str | None:
     try:
-        # First try to get the list item directly from the drive item
+        properties = getattr(drive_item, "properties", None)  # ods: ignore[getattr]
+        sharepoint_ids = properties.get(SHAREPOINT_IDS_PROPERTY) if properties else None
+        if isinstance(sharepoint_ids, dict):
+            if list_item_id := sharepoint_ids.get(LIST_ITEM_ID_PROPERTY):
+                return str(list_item_id)
+
         if hasattr(drive_item, "listItem"):
             list_item = drive_item.listItem
             if list_item:
-                # Load the list item properties to get the ID
-                sleep_and_retry(list_item.get(), "get_sharepoint_list_item_id")
+                sleep_and_retry(list_item.get(), GET_SHAREPOINT_LIST_ITEM_ID_LABEL)
                 if hasattr(list_item, "id") and list_item.id:
                     return str(list_item.id)
 
-        # The SharePoint list item ID is typically available in the sharepointIds property
-        sharepoint_ids = getattr(drive_item, "sharepoint_ids", None)
-        if sharepoint_ids and hasattr(sharepoint_ids, "listItemId"):
-            return sharepoint_ids.listItemId
-
-        # Alternative: try to get it from the properties
-        properties = getattr(drive_item, "properties", None)
         if properties:
-            # Sometimes the SharePoint list item ID is in the properties
             for prop_name, prop_value in properties.items():
                 if "listitemid" in prop_name.lower():
                     return str(prop_value)
@@ -511,23 +517,94 @@ def _get_groups_and_members_recursively(
     )
 
 
-def get_external_access_from_sharepoint(
+def _group_cache_key(
+    client_context: ClientContext,
+    group: SharepointGroup,
+) -> str:
+    identity = group.login_name
+    if group.principal_type == SHAREPOINT_GROUP_PRINCIPAL_TYPE:
+        identity = _get_site_scoped_group_name(client_context, identity)
+    elif guid := _extract_guid_from_claims_token(identity):
+        identity = guid
+    return f"{group.principal_type}{GROUP_CACHE_KEY_SEPARATOR}{identity}"
+
+
+def _get_cached_group_expansion(
     client_context: ClientContext,
     graph_client: GraphClient,
-    drive_name: str | None,
-    drive_item: DriveItem | None,
-    site_page: dict[str, Any] | None,
+    group: SharepointGroup,
+    permission_cache: SharepointPermissionCache,
+) -> SharepointGroupExpansion:
+    cache_key = _group_cache_key(client_context, group)
+    cached_expansion = permission_cache.group_expansions.get(cache_key)
+    if cached_expansion is not None:
+        return cached_expansion
+
+    try:
+        if group.principal_type == SHAREPOINT_GROUP_PRINCIPAL_TYPE:
+            nested_groups, _ = _get_sharepoint_groups(
+                client_context, group.login_name, graph_client
+            )
+        else:
+            nested_groups, _ = _get_azuread_groups(graph_client, group.login_name)
+    except ClientRequestException as e:
+        if (
+            group.principal_type != AZURE_AD_GROUP_PRINCIPAL_TYPE
+            or e.response is None
+            or e.response.status_code != 404
+        ):
+            raise
+        logger.warning("Group %s not found", group.login_name)
+        nested_groups = set()
+
+    expansion = SharepointGroupExpansion(nested_groups=nested_groups)
+    permission_cache.group_expansions[cache_key] = expansion
+    return expansion
+
+
+def _resolve_document_groups(
+    client_context: ClientContext,
+    graph_client: GraphClient,
+    groups: set[SharepointGroup],
+    permission_cache: SharepointPermissionCache,
+) -> DocumentGroupsResult:
+    group_queue: deque[SharepointGroup] = deque(groups)
+    visited_group_keys: set[str] = set()
+    group_ids: set[str] = set()
+
+    while group_queue:
+        group = group_queue.popleft()
+        if _is_public_login_name(group.login_name):
+            return DocumentGroupsResult(group_ids=set(), found_public_group=True)
+
+        group_ids.add(group.name)
+        cache_key = _group_cache_key(client_context, group)
+        if cache_key in visited_group_keys:
+            continue
+        visited_group_keys.add(cache_key)
+
+        expansion = _get_cached_group_expansion(
+            client_context, graph_client, group, permission_cache
+        )
+        group_queue.extend(expansion.nested_groups)
+
+    return DocumentGroupsResult(
+        group_ids=group_ids,
+        found_public_group=False,
+    )
+
+
+def _get_external_access_from_securable_object(
+    client_context: ClientContext,
+    graph_client: GraphClient,
+    securable_object: SecurableObject,
+    permission_cache: SharepointPermissionCache,
     add_prefix: bool = False,
-    treat_sharing_link_as_public: bool = False,
 ) -> ExternalAccess:
-    """
-    Get external access information from SharePoint.
-    """
     groups: set[SharepointGroup] = set()
     user_emails: set[str] = set()
     group_ids: set[str] = set()
 
-    # Add all members to a processing set first
     def add_user_and_group_to_sets(
         role_assignments: RoleAssignmentCollection,
     ) -> None:
@@ -571,6 +648,56 @@ def get_external_access_from_sharepoint(
                         )
                     )
 
+    sleep_and_retry(
+        securable_object.role_assignments.expand(
+            ["Member", "RoleDefinitionBindings"]
+        ).get_all(
+            page_size=ROLE_ASSIGNMENTS_PAGE_SIZE,
+            page_loaded=add_user_and_group_to_sets,
+        ),
+        "get_external_access_from_sharepoint",
+    )
+
+    resolved_groups = _resolve_document_groups(
+        client_context,
+        graph_client,
+        groups,
+        permission_cache,
+    )
+    if resolved_groups.found_public_group:
+        return ExternalAccess(
+            external_user_emails=set(),
+            external_user_group_ids=set(),
+            is_public=True,
+        )
+
+    for group_name in resolved_groups.group_ids:
+        if add_prefix:
+            group_name = build_ext_group_name_for_onyx(
+                group_name, DocumentSource.SHAREPOINT
+            )
+        group_ids.add(group_name.lower())
+
+    logger.info("User emails: %s", len(user_emails))
+    logger.info("Group IDs: %s", len(group_ids))
+    return ExternalAccess(
+        external_user_emails=user_emails,
+        external_user_group_ids=group_ids,
+        is_public=False,
+    )
+
+
+def get_external_access_from_sharepoint(
+    client_context: ClientContext,
+    graph_client: GraphClient,
+    drive_name: str | None,
+    drive_item: DriveItem | None,
+    site_page: dict[str, Any] | None,
+    add_prefix: bool = False,
+    treat_sharing_link_as_public: bool = False,
+    permission_cache: SharepointPermissionCache | None = None,
+) -> ExternalAccess:
+    permission_cache = permission_cache or SharepointPermissionCache()
     if drive_item and drive_name:
         is_public = _is_public_item(drive_item, treat_sharing_link_as_public)
         if is_public:
@@ -594,14 +721,6 @@ def get_external_access_from_sharepoint(
         item = client_context.web.lists.get_by_title(drive_name).items.get_by_id(
             item_id
         )
-
-        sleep_and_retry(
-            item.role_assignments.expand(["Member", "RoleDefinitionBindings"]).get_all(
-                page_size=ROLE_ASSIGNMENTS_PAGE_SIZE,
-                page_loaded=add_user_and_group_to_sets,
-            ),
-            "get_external_access_from_sharepoint",
-        )
     elif site_page:
         site_url = site_page.get("webUrl")
         # Keep percent-encoding intact so the path matches the encoding
@@ -614,43 +733,46 @@ def get_external_access_from_sharepoint(
             server_relative_url
         )
         item = file_obj.listItemAllFields
-
-        sleep_and_retry(
-            item.role_assignments.expand(["Member", "RoleDefinitionBindings"]).get_all(
-                page_size=ROLE_ASSIGNMENTS_PAGE_SIZE,
-                page_loaded=add_user_and_group_to_sets,
-            ),
-            "get_external_access_from_sharepoint",
-        )
     else:
         raise RuntimeError("No drive item or site page provided")
 
-    groups_and_members: GroupsResult = _get_groups_and_members_recursively(
-        client_context, graph_client, groups
+    return _get_external_access_from_securable_object(
+        client_context,
+        graph_client,
+        item,
+        permission_cache,
+        add_prefix,
     )
 
-    # If the site is public, w have default groups assigned to it, so we return early
-    if groups_and_members.found_public_group:
-        return ExternalAccess(
-            external_user_emails=set(),
-            external_user_group_ids=set(),
-            is_public=True,
-        )
 
-    for group_name, _ in groups_and_members.groups_to_emails.items():
-        if add_prefix:
-            group_name = build_ext_group_name_for_onyx(
-                group_name, DocumentSource.SHAREPOINT
-            )
-        group_ids.add(group_name.lower())
+def get_hierarchy_node_external_access_from_sharepoint(
+    client_context: ClientContext,
+    graph_client: GraphClient,
+    node_type: HierarchyNodeType,
+    drive_name: str | None,
+    folder_url: str | None,
+    permission_cache: SharepointPermissionCache | None = None,
+) -> ExternalAccess:
+    permission_cache = permission_cache or SharepointPermissionCache()
+    if node_type == HierarchyNodeType.SITE:
+        securable_object = client_context.web
+    elif node_type == HierarchyNodeType.DRIVE and drive_name:
+        list_name = SHARED_DOCUMENTS_MAP_REVERSE.get(drive_name, drive_name)
+        securable_object = client_context.web.lists.get_by_title(list_name)
+    elif node_type == HierarchyNodeType.FOLDER and folder_url:
+        server_relative_url = urlparse(folder_url).path
+        securable_object = client_context.web.get_folder_by_server_relative_url(
+            server_relative_url
+        ).list_item_all_fields
+    else:
+        raise ValueError(f"Unsupported SharePoint hierarchy node: {node_type}")
 
-    logger.info("User emails: %s", len(user_emails))
-    logger.info("Group IDs: %s", len(group_ids))
-
-    return ExternalAccess(
-        external_user_emails=user_emails,
-        external_user_group_ids=group_ids,
-        is_public=False,
+    return _get_external_access_from_securable_object(
+        client_context,
+        graph_client,
+        securable_object,
+        permission_cache,
+        add_prefix=True,
     )
 
 
@@ -771,9 +893,10 @@ def get_sharepoint_external_groups(
         return external_user_groups
 
     already_resolved = set(groups_and_members.groups_to_emails.keys())
-    for group in _enumerate_ad_groups_paginated(
-        get_access_token, already_resolved, graph_api_base
-    ):
-        external_user_groups.append(group)
+    external_user_groups.extend(
+        _enumerate_ad_groups_paginated(
+            get_access_token, already_resolved, graph_api_base
+        )
+    )
 
     return external_user_groups

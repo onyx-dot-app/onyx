@@ -8,9 +8,12 @@ import httpx
 from fastmcp.server.auth.auth import AccessToken
 from pydantic import BaseModel, TypeAdapter, ValidationError
 
+from onyx.configs.app_configs import MCP_SERVER_API_REQUEST_TIMEOUT_SECONDS
 from onyx.configs.constants import DocumentSource
 from onyx.mcp_server.api import mcp_server
 from onyx.mcp_server.utils import (
+    AgentEntry,
+    get_accessible_agents,
     get_http_client,
     get_indexed_sources,
     require_access_token,
@@ -53,6 +56,9 @@ async def _post_model(
             "Authorization": f"Bearer {access_token.token}",
             "Content-Type": "application/json",
         },
+        timeout=httpx.Timeout(
+            float(MCP_SERVER_API_REQUEST_TIMEOUT_SECONDS), connect=10.0
+        ),
     )
 
 
@@ -94,6 +100,34 @@ def _error_payload(error: str) -> dict[str, Any]:
 
 _TIME_CUTOFF_ADAPTER: TypeAdapter[datetime | None] = TypeAdapter(datetime | None)
 
+# Keeps the unknown-agent error readable when a tenant has many agents.
+_MAX_AGENT_NAMES_IN_ERROR = 50
+
+
+def _match_agents(agent: str, agents: list[AgentEntry]) -> list[AgentEntry]:
+    """Match an agent by name, preferring an exact hit over a case-fold one."""
+    exact = [entry for entry in agents if entry.name == agent]
+    if exact:
+        return exact
+    folded = agent.casefold()
+    return [entry for entry in agents if entry.name.casefold() == folded]
+
+
+def _unknown_agent_error(agent: str, agents: list[AgentEntry]) -> str:
+    """Name the valid agents so the caller can retry without a lookup call.
+
+    An unresolvable agent has to fail rather than fall back to an unscoped
+    search — the wrong scope returned as if it were right is worse than an
+    error.
+    """
+    if not agents:
+        return f"Agent '{agent}' not found. No agents are accessible to this user."
+
+    names = sorted(entry.name for entry in agents)
+    shown = names[:_MAX_AGENT_NAMES_IN_ERROR]
+    suffix = f" (and {len(names) - len(shown)} more)" if len(names) > len(shown) else ""
+    return f"Agent '{agent}' not found. Available agents: {', '.join(shown)}{suffix}."
+
 
 def _record_requested_sources(source_types: list[str] | None) -> None:
     canonical_sources: set[str] = set()
@@ -113,6 +147,7 @@ async def search_indexed_documents(
     document_set_names: list[str] | None = None,
     time_cutoff: str | None = None,
     skip_query_expansion: bool = False,
+    agent: str | None = None,
 ) -> dict[str, Any]:
     """
     Search the user's knowledge base indexed in Onyx.
@@ -134,6 +169,14 @@ async def search_indexed_documents(
     `skip_query_expansion` bypasses the LLM query-expansion step; useful when
     you already know the exact phrase to search for (faster, no LLM call for
     expansion).
+    `agent` runs the search as a named Onyx agent, applying that agent's
+    knowledge scope (its document sets, attached documents and start date) and
+    its configured model. Pass the name the user gave you — no lookup call is
+    needed first. If the name does not resolve, the error names the agents
+    available to this user, so you can retry with a valid one. Use the `agents`
+    resource to browse them. `agent` and `document_set_names` are mutually
+    exclusive: explicit document sets replace an agent's knowledge scope rather
+    than narrowing it, so passing both is rejected.
 
     Returns ``{"results": [{title, url, source_type, content, updated_at},
     ...]}``. Results are ordered by LLM-judged relevance. ``content`` is the
@@ -150,14 +193,23 @@ async def search_indexed_documents(
         "time_cutoff": "2025-11-24T00:00:00Z",
     }
     ```
+
+    Scoping the same question to an agent instead:
+    ```
+    {
+        "query": "What is the latest status of PROJ-1234?",
+        "agent": "Engineering Support",
+    }
+    ```
     """
     _start = time.monotonic()
     tool = MCPServerToolName.SEARCH_INDEXED_DOCUMENTS
     logger.info(
-        "Onyx MCP Server: document search: query='%s', sources=%s, document_sets=%s",
+        "Onyx MCP Server: document search: query='%s', sources=%s, document_sets=%s, agent=%s",
         query,
         source_types,
         document_set_names,
+        agent,
     )
 
     _record_requested_sources(source_types)
@@ -167,6 +219,7 @@ async def search_indexed_documents(
     # "no filter" (None).
     source_types = source_types or None
     document_set_names = document_set_names or None
+    agent = (agent or "").strip() or None
 
     # Get authenticated user from FastMCP's access token
     access_token = require_access_token()
@@ -174,24 +227,58 @@ async def search_indexed_documents(
     result_count: int | None = None
 
     try:
-        try:
-            sources = await get_indexed_sources(access_token)
-        except Exception as err:
-            logger.error(
-                "Onyx MCP Server: Error checking indexed sources: %s",
-                err,
-                exc_info=True,
-            )
-            return _error_payload(f"Failed to check indexed sources: {str(err)}")
-
-        if not sources:
-            logger.info("Onyx MCP Server: No indexed sources available for tenant")
-            outcome = MCPToolCallStatus.SUCCESS
-            result_count = 0
+        # _build_index_filters lets explicit document sets *replace* the
+        # agent's own sets rather than narrow them, so honouring both would
+        # silently search outside the agent's knowledge scope.
+        if agent is not None and document_set_names is not None:
             return _error_payload(
-                "No document sources are indexed yet. Add connectors or upload data "
-                "through Onyx before calling search_indexed_documents."
+                "Pass either `agent` or `document_set_names`, not both. Explicit "
+                "document sets replace an agent's knowledge scope instead of "
+                "narrowing it, so the results would not be scoped to the agent."
             )
+
+        # Resolve the agent before the indexed-sources guard below: a bad name
+        # deserves its own actionable error, and an agent can carry attached
+        # documents even when no connector has indexed anything.
+        persona_id: int | None = None
+        if agent is not None:
+            try:
+                accessible_agents = await get_accessible_agents(access_token)
+            except Exception as err:
+                logger.error(
+                    "Onyx MCP Server: Error fetching agents: %s", err, exc_info=True
+                )
+                return _error_payload(f"Failed to look up agents: {str(err)}")
+
+            matches = _match_agents(agent, accessible_agents)
+            if not matches:
+                return _error_payload(_unknown_agent_error(agent, accessible_agents))
+            if len(matches) > 1:
+                return _error_payload(
+                    f"Agent name '{agent}' is ambiguous: {len(matches)} accessible "
+                    "agents share it. Ask the user which one they mean."
+                )
+            persona_id = matches[0].id
+
+        if agent is None:
+            try:
+                sources = await get_indexed_sources(access_token)
+            except Exception as err:
+                logger.error(
+                    "Onyx MCP Server: Error checking indexed sources: %s",
+                    err,
+                    exc_info=True,
+                )
+                return _error_payload(f"Failed to check indexed sources: {str(err)}")
+
+            if not sources:
+                logger.info("Onyx MCP Server: No indexed sources available for tenant")
+                outcome = MCPToolCallStatus.SUCCESS
+                result_count = 0
+                return _error_payload(
+                    "No document sources are indexed yet. Add connectors or upload data "
+                    "through Onyx before calling search_indexed_documents."
+                )
 
         source_type_enums: list[DocumentSource] | None = None
         if source_types is not None:
@@ -221,6 +308,7 @@ async def search_indexed_documents(
             document_sets=document_set_names,
             time_cutoff=parsed_cutoff,
             skip_query_expansion=skip_query_expansion,
+            persona_id=persona_id,
         )
         endpoint = f"{build_api_server_url_for_http_requests(respect_env_override_if_set=True)}/search"
         response = await _post_model(endpoint, request, access_token)

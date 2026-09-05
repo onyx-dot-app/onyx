@@ -22,6 +22,18 @@ class DocumentSetEntry(BaseModel):
     description: str | None = None
 
 
+class AgentEntry(BaseModel):
+    """Minimal agent (persona) shape surfaced to MCP clients.
+
+    Projected from the backend's MinimalPersonaSnapshot to keep MCP decoupled
+    from chat-UI fields (tools, starter messages, icons, ...).
+    """
+
+    id: int
+    name: str
+    description: str | None = None
+
+
 logger = setup_logger()
 
 # Shared HTTP client reused across requests
@@ -126,3 +138,32 @@ async def get_accessible_document_sets(
             exc_info=True,
         )
         raise RuntimeError(f"Failed to fetch document sets: {exc}") from exc
+
+
+_AGENT_ENTRIES_ADAPTER = TypeAdapter(list[AgentEntry])
+
+
+async def get_accessible_agents(
+    access_token: AccessToken,
+) -> list[AgentEntry]:
+    """Fetch the agents (personas) the current user can search with."""
+    headers = {"Authorization": f"Bearer {access_token.token}"}
+    try:
+        response = await get_http_client().get(
+            f"{build_api_server_url_for_http_requests(respect_env_override_if_set=True)}/persona",
+            headers=headers,
+        )
+        response.raise_for_status()
+        return _AGENT_ENTRIES_ADAPTER.validate_json(response.content)
+    except (httpx.HTTPStatusError, httpx.RequestError, ValueError):
+        logger.error(
+            "Onyx MCP Server: Failed to fetch agents",
+            exc_info=True,
+        )
+        raise
+    except Exception as exc:
+        logger.error(
+            "Onyx MCP Server: Unexpected error fetching agents",
+            exc_info=True,
+        )
+        raise RuntimeError(f"Failed to fetch agents: {exc}") from exc

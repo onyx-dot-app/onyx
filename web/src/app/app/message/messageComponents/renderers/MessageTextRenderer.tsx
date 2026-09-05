@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import ReactMarkdown, { Components } from "react-markdown";
 import type { PluggableList } from "unified";
 import remarkGfm from "remark-gfm";
@@ -29,6 +30,7 @@ import { CodeBlock } from "@/app/app/message/CodeBlock";
 import { InMessageImage } from "@/app/app/components/files/images/InMessageImage";
 import { extractChatImageFileId } from "@/app/app/components/files/images/utils";
 import { transformLinkUri } from "@/lib/utils";
+import { rehypeDirection } from "@/lib/rehypeDirection";
 import { cn } from "@opal/utils";
 import { useSmoothStreaming } from "@/hooks/useSmoothStreaming";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
@@ -82,7 +84,7 @@ const STREAMING_REMARK_PLUGINS: PluggableList = [
   remarkGfm,
   [remarkMath, { singleDollarTextMath: true }],
 ];
-const STREAMING_REHYPE_PLUGINS: PluggableList = [rehypeKatex];
+const STREAMING_REHYPE_PLUGINS: PluggableList = [rehypeKatex, rehypeDirection];
 const FULL_REMARK_PLUGINS: PluggableList = STREAMING_REMARK_PLUGINS;
 
 export const MessageTextRenderer: MessageRenderer<
@@ -100,6 +102,7 @@ export const MessageTextRenderer: MessageRenderer<
   stopReason,
   children,
 }) => {
+  const t = useTranslations("chat.messages");
   const { enabled: smoothStreamingEnabled } = useSmoothStreaming();
   const setLatestMessageRenderComplete = useChatSessionStore(
     (state) => state.setLatestMessageRenderComplete
@@ -283,7 +286,11 @@ export const MessageTextRenderer: MessageRenderer<
   const fullRehypePlugins = useMemo<PluggableList>(
     () =>
       highlightLanguages
-        ? [[rehypeHighlight, { languages: highlightLanguages }], rehypeKatex]
+        ? [
+            [rehypeHighlight, { languages: highlightLanguages }],
+            rehypeKatex,
+            rehypeDirection,
+          ]
         : STREAMING_REHYPE_PLUGINS,
     [highlightLanguages]
   );
@@ -339,8 +346,10 @@ export const MessageTextRenderer: MessageRenderer<
   // never change — otherwise every typewriter tick would invalidate
   // React reconciliation on the markdown subtree.
   const stateRef = useRef(state);
+  // oxlint-disable-next-line react-doctor/no-ref-current-in-render -- render-phase mirror keeps markdownComponents identities stable (see block comment above)
   stateRef.current = state;
   const processedContentRef = useRef(processedContent);
+  // oxlint-disable-next-line react-doctor/no-ref-current-in-render -- render-phase mirror keeps markdownComponents identities stable (see block comment above)
   processedContentRef.current = processedContent;
 
   const markdownComponents = useMemo<Components>(
@@ -371,8 +380,8 @@ export const MessageTextRenderer: MessageRenderer<
           </MemoizedAnchor>
         );
       },
-      p: ({ children }) => (
-        <MemoizedParagraph className="font-main-content-body">
+      p: ({ children, dir }) => (
+        <MemoizedParagraph dir={dir} className="font-main-content-body">
           {children}
         </MemoizedParagraph>
       ),
@@ -449,7 +458,7 @@ export const MessageTextRenderer: MessageRenderer<
       content:
         shouldShowThinkingPlaceholder || shouldShowSpeechWarmupIndicator ? (
           <Text as="span" secondaryBody text04 className="italic">
-            Thinking
+            {t("text.thinkingPlaceholder.text")}
           </Text>
         ) : displayedContent.length > 0 ? (
           <div

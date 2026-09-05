@@ -83,7 +83,6 @@ from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.configs import (
     ATTACHMENTS_DIRECTORY,
     ONYX_SERVER_URL,
-    OPENCODE_DISABLED_TOOLS,
     OPENCODE_SERVE_PORT,
     OPENCODE_SERVER_PASSWORD,
     SANDBOX_CONTAINER_IMAGE,
@@ -113,6 +112,9 @@ from onyx.server.features.build.sandbox.docker.internal.exec_helpers import (
     stream_stdin_to_container,
     stream_stdout_from_container,
 )
+from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
+    OutputsManifestResponse,
+)
 from onyx.server.features.build.sandbox.labels import (
     LABEL_K8S_MANAGED_BY,
     LABEL_K8S_MANAGED_BY_ONYX,
@@ -130,7 +132,7 @@ from onyx.server.features.build.sandbox.models import (
 )
 from onyx.server.features.build.sandbox.nextjs_dev import (
     allowed_dev_origins,
-    build_nextjs_start_script,
+    build_webapp_restore_script,
 )
 from onyx.server.features.build.sandbox.serve_transport import ServeConnectionInfo
 from onyx.server.features.build.sandbox.session_workspace import (
@@ -157,6 +159,7 @@ from onyx.server.features.build.timeouts import (
     POLL_INTERVAL_SECONDS,
     PROVISION_DEADLINE_SECONDS,
 )
+from onyx.server.features.build.utils import get_opencode_disabled_tools
 from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
 
@@ -201,6 +204,8 @@ _OPENCODE_SESSION_TAG_PLUGIN_PATH = "/workspace/opencode-plugins/session-proxy-t
 _OPENCODE_CONNECT_APP_PLUGIN_PATH = "/workspace/opencode-plugins/connect-app.ts"
 # Soft turn-budget wrap-up steer (reads the per-turn deadline stamp).
 _OPENCODE_TURN_BUDGET_PLUGIN_PATH = "/workspace/opencode-plugins/turn-budget.ts"
+# Surfaces the `webapp` tool (start/status/logs/restart); always on.
+_OPENCODE_WEBAPP_PLUGIN_PATH = "/workspace/opencode-plugins/webapp.ts"
 _MUTABLE_SANDBOX_IMAGE_TAGS = {"latest", "beta", "edge"}
 
 # In-container opencode-history archive builder: reuses the sandbox_daemon
@@ -841,11 +846,13 @@ class DockerSandboxManager(SandboxManager):
             # opencode-serve reads provider config from env at startup; must be
             # in create_kwargs before the container ever runs.
             opencode_password = secrets.token_urlsafe(32)
-            # connect_app is always loaded; the egress-tagging plugin only when
-            # the proxy is wired up (else it no-ops — no HTTP(S)_PROXY to re-tag).
+            # connect_app, turn_budget, and webapp are always loaded; the
+            # egress-tagging plugin only when the proxy is wired up (else it
+            # no-ops — no HTTP(S)_PROXY to re-tag).
             plugins = [
                 _OPENCODE_CONNECT_APP_PLUGIN_PATH,
                 _OPENCODE_TURN_BUDGET_PLUGIN_PATH,
+                _OPENCODE_WEBAPP_PLUGIN_PATH,
             ]
             if SANDBOX_PROXY_HOST:
                 plugins.append(_OPENCODE_SESSION_TAG_PLUGIN_PATH)
@@ -853,7 +860,7 @@ class DockerSandboxManager(SandboxManager):
                 SANDBOX_PROXY_INJECTED_PLACEHOLDER if SANDBOX_PROXY_HOST else onyx_pat
             )
             opencode_config = build_opencode_base_config(
-                disabled_tools=OPENCODE_DISABLED_TOOLS,
+                disabled_tools=get_opencode_disabled_tools(),
                 plugins=plugins,
             )
             opencode_config_json = json.dumps(opencode_config)
@@ -1006,7 +1013,10 @@ class DockerSandboxManager(SandboxManager):
         try:
             return self._docker.containers.create(**run_kwargs), True
         except APIError as e:
-            if "Conflict" in str(e) or getattr(e, "status_code", None) == 409:
+            if (
+                "Conflict" in str(e)
+                or getattr(e, "status_code", None) == 409  # ods: ignore[getattr]
+            ):
                 logger.info("Sandbox container %s already exists, reusing.", sandbox_id)
                 return self._require_container(sandbox_id), False
             raise RuntimeError(f"Failed to create sandbox container: {e}") from e
@@ -1054,9 +1064,7 @@ class DockerSandboxManager(SandboxManager):
         *,
         agent_provider: str | None,
         agent_model: str | None,
-        nextjs_port: int | None,
         connectable_apps_section: str,
-        session_id: UUID | None = None,
         user_name: str | None = None,
     ) -> str:
         """Raw (unescaped) AGENTS.md content."""
@@ -1065,9 +1073,7 @@ class DockerSandboxManager(SandboxManager):
             connectable_apps_section=connectable_apps_section,
             provider=agent_provider,
             model_name=agent_model,
-            nextjs_port=nextjs_port,
-            session_id=session_id,
-            disabled_tools=OPENCODE_DISABLED_TOOLS,
+            disabled_tools=get_opencode_disabled_tools(),
             user_name=user_name,
             organization_instructions=load_settings().craft_instructions,
         )
@@ -1087,15 +1093,13 @@ class DockerSandboxManager(SandboxManager):
         agents_md = self._build_agents_md(
             agent_provider=llm_config.provider,
             agent_model=llm_config.model_name,
-            nextjs_port=nextjs_port,
             connectable_apps_section=connectable_apps_section,
-            session_id=session_id,
             user_name=user_name,
         )
         session_opencode_config = json.dumps(
             build_provider_opencode_config(
                 llm_config,
-                disabled_tools=OPENCODE_DISABLED_TOOLS,
+                disabled_tools=get_opencode_disabled_tools(),
                 mcp_servers=mcp_servers,
                 session_id=str(session_id),
             )
@@ -1480,16 +1484,18 @@ fi
         )
 
         if nextjs_port is not None:
-            start_script = build_nextjs_start_script(
-                session_path, nextjs_port, check_node_modules=True
+            restore_webapp_script = build_webapp_restore_script(
+                session_path, nextjs_port
             )
             try:
                 _run_in_container_as_sandbox_user(
                     container,
-                    ["/bin/sh", "-c", start_script],
+                    ["/bin/sh", "-c", restore_webapp_script],
                 )
             except ExecError as e:
-                raise RuntimeError(f"Failed to start Next.js after restore: {e}") from e
+                raise RuntimeError(
+                    f"Failed to restore webapp bootstrap script: {e}"
+                ) from e
 
     def regenerate_session_config(
         self,
@@ -1505,21 +1511,23 @@ fi
         mcp_servers: Sequence[CraftMCPServerConfig] = (),
     ) -> None:
         """Rewrite generated session configuration and managed symlinks."""
+        # nextjs_port stays in the signature to match the abstract contract
+        # (base.py) shared with restore_snapshot's own webapp-script rewrite;
+        # AGENTS.md no longer embeds it.
+        _ = nextjs_port
         container = self._require_container(sandbox_id)
         session_path = f"{SESSIONS_ROOT}/{session_id}"
         agents_md = self._build_agents_md(
             agent_provider=agent_provider,
             agent_model=agent_model,
-            nextjs_port=nextjs_port,
             connectable_apps_section=connectable_apps_section,
-            session_id=session_id,
             user_name=user_name,
         )
         session_opencode_config = (
             json.dumps(
                 build_provider_opencode_config(
                     llm_config,
-                    disabled_tools=OPENCODE_DISABLED_TOOLS,
+                    disabled_tools=get_opencode_disabled_tools(),
                     mcp_servers=mcp_servers,
                     session_id=str(session_id),
                 )
@@ -1618,6 +1626,32 @@ fi
 
         entries = self._parse_ls_output(output, clean_path)
         return sorted(entries, key=lambda e: (not e.is_directory, e.name.lower()))
+
+    def get_outputs_manifest(
+        self, sandbox_id: UUID, session_id: UUID
+    ) -> OutputsManifestResponse:
+        container = self._require_container(sandbox_id)
+        try:
+            # Root-owned interpreter and module: the sandbox user owns
+            # /workspace, so anything under it could be swapped to lie.
+            # workdir=/opt is load-bearing, python -m imports the root-owned
+            # /opt/sandbox_daemon only because cwd leads sys.path. -E -s
+            # ignore PYTHON* env vars and the user site directory.
+            result = _run_in_container_as_sandbox_user(
+                container,
+                [
+                    "/usr/local/bin/python3",
+                    "-E",
+                    "-s",
+                    "-m",
+                    "sandbox_daemon.manifest",
+                    str(session_id),
+                ],
+                workdir="/opt",
+            )
+        except ExecError as e:
+            raise RuntimeError(f"Failed to build outputs manifest: {e}") from e
+        return OutputsManifestResponse.model_validate_json(result.stdout_text)
 
     def _parse_ls_output(self, ls_output: str, base_path: str) -> list[FilesystemEntry]:
         entries: list[FilesystemEntry] = []

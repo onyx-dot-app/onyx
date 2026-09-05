@@ -147,7 +147,7 @@ jobs:
           permission-workflows: write
 
       - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           fetch-depth: 0
           persist-credentials: true
@@ -155,7 +155,7 @@ jobs:
           token: ${{ steps.app-token.outputs.token }}
 
       - name: Install the latest version of uv
-        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d
         with:
           enable-cache: false
           version: "0.11.25"
@@ -184,7 +184,7 @@ jobs:
             release_args+=(--release "${RELEASE}")
           fi
           set +e
-          uv run --no-sync --with onyx-devtools ods cherry-pick "${MERGE_COMMIT_SHA}" "${release_args[@]}" --yes --no-verify 2>&1 | tee "$output_file"
+          uv run --no-sync --with onyx-devtools==0.13.2 ods cherry-pick "${MERGE_COMMIT_SHA}" "${release_args[@]}" --yes --no-verify 2>&1 | tee "$output_file"
           pipe_statuses=("${PIPESTATUS[@]}")
           exit_code="${pipe_statuses[0]}"
           tee_exit="${pipe_statuses[1]:-0}"
@@ -245,7 +245,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
 
@@ -298,7 +298,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
 

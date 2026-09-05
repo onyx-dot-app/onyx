@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import { BuildFile } from "@/app/craft/contexts/UploadFilesContext";
 import { useVideoBackgroundToggleClick } from "@/app/craft/components/video-background/useVideoBackgroundToggleClick";
 import Text from "@/refresh-components/texts/Text";
@@ -37,6 +38,7 @@ export default function BuildWelcome({
   isRunning,
   sandboxInitializing = false,
 }: BuildWelcomeProps) {
+  const t = useTranslations("craft.welcome");
   const inputBarRef = useRef<CraftInputBarHandle>(null);
   const [selectedModel, setSelectedModel] = useState<BuildLlmSelection | null>(
     null
@@ -66,7 +68,8 @@ export default function BuildWelcome({
           <div className="flex flex-row items-center justify-between gap-4 pb-6">
             {/* The wordmark's baseline sits ~79% down its box, so nudge it
                 down (~0.21 × size) to share craft's baseline. */}
-            <div
+            <button
+              type="button"
               className="flex flex-row items-baseline gap-2 select-none"
               onClick={handleWordmarkClick}
             >
@@ -85,7 +88,7 @@ export default function BuildWelcome({
               >
                 craft
               </Text>
-            </div>
+            </button>
             <ModelPickerButton
               selection={selectedModel}
               onChange={setSelectedModel}
@@ -103,7 +106,7 @@ export default function BuildWelcome({
               onSubmit(message, files, selectedModel)
             }
             isRunning={isRunning}
-            placeholder="Analyze my data and create a dashboard..."
+            placeholder={t("input.placeholder")}
             sandboxInitializing={sandboxInitializing}
             disabled={!hasAnyProvider}
           />

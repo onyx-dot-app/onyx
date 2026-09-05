@@ -97,6 +97,47 @@ def get_tenant_id_for_email(email: str) -> str:
     return tenant_id
 
 
+def lookup_tenant_id_for_login(email: str) -> str | None:
+    """Workspace this address may sign in to, resolved without side effects.
+
+    SSO discovery runs before the user has authenticated, so unlike
+    ``get_tenant_id_for_email`` it must not accept a pending invitation on the
+    caller's behalf. An address that names no single workspace resolves to
+    None, which the caller surfaces as "no SSO here" rather than an error.
+    """
+    if not MULTI_TENANT:
+        return POSTGRES_DEFAULT_SCHEMA
+
+    email = email.lower()
+    with get_catalog_session() as db_session:
+        active_tenant_ids = (
+            db_session.scalars(
+                select(UserTenantMapping.tenant_id).where(
+                    UserTenantMapping.email == email,
+                    UserTenantMapping.active.is_(True),
+                )
+            )
+            .unique()
+            .all()
+        )
+        if len(active_tenant_ids) == 1:
+            return active_tenant_ids[0]
+        if active_tenant_ids:
+            return None
+
+        pending_tenant_ids = (
+            db_session.scalars(
+                select(UserTenantMapping.tenant_id).where(
+                    UserTenantMapping.email == email,
+                    UserTenantMapping.active.is_(False),
+                )
+            )
+            .unique()
+            .all()
+        )
+        return pending_tenant_ids[0] if len(pending_tenant_ids) == 1 else None
+
+
 def resolve_tenant_id(
     email: str, oauth_name: str | None = None, account_id: str | None = None
 ) -> str | None:
@@ -176,6 +217,59 @@ def user_owns_a_tenant(email: str) -> bool:
             .first()
         )
         return result is not None
+
+
+def is_active_member(
+    tenant_id: str, email: str, oauth_name: str, account_id: str
+) -> bool:
+    """Whether this login is already an active member of tenant_id, by address
+    or by a subject linked to an active membership here. A retired (inactive)
+    membership does not count, so it cannot be reactivated on an unverified
+    domain."""
+    if not MULTI_TENANT:
+        return False
+
+    normalized_email = email.lower()
+    with get_catalog_session() as db_session:
+        by_email = db_session.scalar(
+            select(UserTenantMapping.tenant_id).where(
+                UserTenantMapping.email == normalized_email,
+                UserTenantMapping.tenant_id == tenant_id,
+                UserTenantMapping.active.is_(True),
+            )
+        )
+    if by_email is not None:
+        return True
+    return get_tenant_id_for_oauth_account(oauth_name, account_id) == tenant_id
+
+
+def ensure_tenant_membership(
+    email: str, tenant_id: str, oauth_name: str, account_id: str
+) -> None:
+    """Record an active workspace membership for someone the IdP just vouched for.
+
+    A first SSO login creates the user inside the workspace schema, but nothing
+    else writes the catalog row that makes them a member. Without it they are
+    unbilled, unresolvable by address, and cannot link an IdP subject.
+
+    `add_users_to_tenant` guarantees a row exists (active, with the seat enforced,
+    when they belong nowhere else). If it leaves the row inactive because they are
+    active in another workspace, or an invitation was already pending, the
+    vouching login is the acceptance: activate it, retire the rival, and move this
+    login's subject onto it.
+    """
+    if not MULTI_TENANT:
+        return
+
+    normalized_email = email.lower()
+    add_users_to_tenant([normalized_email], tenant_id)
+
+    with get_catalog_session() as db_session:
+        mapping = db_session.get(UserTenantMapping, (normalized_email, tenant_id))
+        needs_activation = mapping is not None and not mapping.active
+
+    if needs_activation:
+        accept_user_invite(normalized_email, tenant_id, [(oauth_name, account_id)])
 
 
 def record_oauth_identity(

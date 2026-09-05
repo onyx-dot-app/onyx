@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { Table, Button, Divider } from "@opal/components";
 import { IllustrationContent, toast } from "@opal/layouts";
 import { SvgUsers, SvgSimpleLoader } from "@opal/icons";
@@ -16,13 +17,17 @@ import {
   updateAgentGroupSharing,
   updateDocSetGroupSharing,
   saveTokenLimits,
+  saveGroupPermissions,
 } from "./svc";
-import { memberTableColumns, PAGE_SIZE } from "./shared";
+import { makeMemberTableColumns, PAGE_SIZE } from "./shared";
 import SharedGroupResources from "@/views/admin/GroupsPage/SharedGroupResources";
+import GroupPermissionsSection from "./GroupPermissionsSection";
 import TokenLimitSection from "./TokenLimitSection";
 import type { TokenLimit } from "./TokenLimitSection";
+import { useUser } from "@/providers/UserProvider";
 
 function CreateGroupPage() {
+  const t = useTranslations("admin.groups");
   const router = useRouter();
   const [groupName, setGroupName] = useState("");
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
@@ -31,6 +36,9 @@ function CreateGroupPage() {
   const [selectedCcPairIds, setSelectedCcPairIds] = useState<number[]>([]);
   const [selectedDocSetIds, setSelectedDocSetIds] = useState<number[]>([]);
   const [selectedAgentIds, setSelectedAgentIds] = useState<number[]>([]);
+  const [enabledPermissions, setEnabledPermissions] = useState<Set<string>>(
+    new Set()
+  );
   const [tokenLimits, setTokenLimits] = useState<TokenLimit[]>([
     {
       tokenId: null,
@@ -41,12 +49,23 @@ function CreateGroupPage() {
     },
   ]);
 
+  const { isAdmin } = useUser();
   const { rows: allRows, isLoading, error } = useGroupMemberCandidates();
+
+  const memberColumns = useMemo(
+    () =>
+      makeMemberTableColumns({
+        name: t("members.table.name.header"),
+        accountType: t("members.table.accountType.header"),
+        manager: t("members.managerTag.label"),
+      }),
+    [t]
+  );
 
   async function handleCreate() {
     const trimmed = groupName.trim();
     if (!trimmed) {
-      toast.error("Group name is required");
+      toast.error(t("form.toasts.nameRequired"));
       return;
     }
 
@@ -57,31 +76,36 @@ function CreateGroupPage() {
         selectedUserIds,
         selectedCcPairIds
       );
+      if (isAdmin) {
+        await saveGroupPermissions(groupId, enabledPermissions);
+      }
       await updateAgentGroupSharing(groupId, [], selectedAgentIds);
       await updateDocSetGroupSharing(groupId, [], selectedDocSetIds);
       await saveTokenLimits(groupId, tokenLimits, []);
-      toast.success(`Group "${trimmed}" created`);
+      toast.success(t("create.toasts.created", { name: trimmed }));
       router.push("/admin/groups");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to create group");
+      toast.error(
+        e instanceof Error ? e.message : t("create.toasts.createFailed")
+      );
     } finally {
       setIsSubmitting(false);
     }
   }
 
   const headerActions = (
-    <Section flexDirection="row" gap={0.5} width="auto" height="auto">
+    <Section flexDirection="row" gap={2} width="auto" height="auto">
       <Button
         prominence="secondary"
         onClick={() => router.push("/admin/groups")}
       >
-        Cancel
+        {t("form.cancel.label")}
       </Button>
       <Button
         onClick={handleCreate}
         disabled={!groupName.trim() || isSubmitting}
       >
-        Create
+        {t("create.submit.label")}
       </Button>
     </Section>
   );
@@ -90,7 +114,7 @@ function CreateGroupPage() {
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={SvgUsers}
-        title="Create Group"
+        title={t("create.header.title")}
         divider
         rightChildren={headerActions}
       />
@@ -98,35 +122,35 @@ function CreateGroupPage() {
       <SettingsLayouts.Body>
         {/* Group Name */}
         <Section
-          gap={0.5}
+          gap={2}
           height="auto"
           alignItems="stretch"
           justifyContent="start"
         >
           <Text mainUiBody text04>
-            Group Name
+            {t("form.name.label")}
           </Text>
           <InputTypeIn
-            placeholder="Name your group"
+            placeholder={t("form.name.placeholder")}
             value={groupName}
             onChange={(e) => setGroupName(e.target.value)}
           />
         </Section>
 
-        <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+        <Divider paddingParallel={0} paddingPerpendicular={0} />
 
         {/* Members table */}
         {isLoading && <SvgSimpleLoader />}
 
         {error ? (
           <Text as="p" secondaryBody text03>
-            Failed to load users.
+            {t("members.loadError.text")}
           </Text>
         ) : null}
 
         {!isLoading && !error && (
           <Section
-            gap={0.75}
+            gap={3}
             height="auto"
             alignItems="stretch"
             justifyContent="start"
@@ -134,12 +158,12 @@ function CreateGroupPage() {
             <InputTypeIn
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search users and accounts..."
+              placeholder={t("members.searchUsers.placeholder")}
               searchIcon
             />
             <Table
               data={allRows}
-              columns={memberTableColumns}
+              columns={memberColumns}
               getRowId={(row) => row.id ?? row.email}
               pageSize={PAGE_SIZE}
               searchTerm={searchTerm}
@@ -149,13 +173,20 @@ function CreateGroupPage() {
               emptyState={
                 <IllustrationContent
                   illustration={SvgNoResult}
-                  title="No users found"
-                  description="No users match your search."
+                  title={t("members.noUsers.title")}
+                  description={t("members.noUsers.description")}
                 />
               }
             />
           </Section>
         )}
+        {isAdmin && (
+          <GroupPermissionsSection
+            enabledPermissions={enabledPermissions}
+            onPermissionsChange={setEnabledPermissions}
+          />
+        )}
+
         <SharedGroupResources
           selectedCcPairIds={selectedCcPairIds}
           onCcPairIdsChange={setSelectedCcPairIds}

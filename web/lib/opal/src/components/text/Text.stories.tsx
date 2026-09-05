@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { Text } from "@opal/components";
 import type { TextFont, TextColor } from "@opal/components";
-import { markdown } from "@opal/utils";
+import { markdown, richNodes } from "@opal/utils";
 
 const meta: Meta<typeof Text> = {
   title: "opal/components/Text",
@@ -258,6 +258,29 @@ export const PlainStringNotParsed: Story = {
 };
 
 // ---------------------------------------------------------------------------
+// Inline React nodes via RichNodes
+// ---------------------------------------------------------------------------
+
+export const RichNodesInlineComponent: Story = {
+  render: () => (
+    <Text font="main-ui-body" color="text-04">
+      {richNodes(
+        <>
+          Click{" "}
+          <button
+            className="underline underline-offset-2"
+            onClick={() => alert("clicked")}
+          >
+            here
+          </button>{" "}
+          to request a new email.
+        </>
+      )}
+    </Text>
+  ),
+};
+
+// ---------------------------------------------------------------------------
 // Tag Variants
 // ---------------------------------------------------------------------------
 
@@ -273,7 +296,7 @@ export const TagVariants: Story = {
       <Text font="heading-h2" color="text-05" as="h2">
         Heading (h2): semantic heading
       </Text>
-      <ul className="list-disc pl-6">
+      <ul className="list-disc ps-6">
         <Text font="main-ui-body" color="text-05" as="li">
           List item (li): inside a list
         </Text>

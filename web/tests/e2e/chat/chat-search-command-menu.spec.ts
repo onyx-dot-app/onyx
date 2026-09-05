@@ -24,7 +24,7 @@ function getCommandMenuContent(page: Page): Locator {
  * Helper to open the command menu and return a scoped locator
  */
 async function openCommandMenu(page: Page): Promise<Locator> {
-  await page.getByLabel("Open chat search").click();
+  await page.getByRole("button", { name: "Search Chats" }).click();
   const dialog = getCommandMenuContent(page);
   await expect(
     dialog.getByPlaceholder("Search chat sessions, projects...")

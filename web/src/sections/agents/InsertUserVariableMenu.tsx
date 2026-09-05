@@ -1,10 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { useFormikContext } from "formik";
-import { Popover, PopoverMenu } from "@opal/components";
-import LineItem from "@/refresh-components/buttons/LineItem";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button, LineItemButton, Popover, PopoverMenu } from "@opal/components";
 import { SvgBracketCurly } from "@opal/icons";
 import {
   USER_DIRECTORY_PLACEHOLDERS,
@@ -25,6 +24,7 @@ interface InsertUserVariableMenuProps {
 export default function InsertUserVariableMenu({
   fieldName,
 }: InsertUserVariableMenuProps) {
+  const t = useTranslations("agents");
   const [open, setOpen] = useState(false);
   const { setFieldValue, values } = useFormikContext<Record<string, unknown>>();
 
@@ -57,14 +57,15 @@ export default function InsertUserVariableMenu({
 
   function renderItem(placeholder: UserPlaceholder) {
     return (
-      <LineItem
+      <LineItemButton
+        sizePreset="main-ui"
+        rounding={2}
         key={placeholder.key}
         icon={SvgBracketCurly}
         description={userPlaceholderToken(placeholder.key)}
         onClick={() => insertToken(placeholder.key)}
-      >
-        {placeholder.label}
-      </LineItem>
+        title={placeholder.label}
+      />
     );
   }
 
@@ -72,11 +73,11 @@ export default function InsertUserVariableMenu({
     <Popover open={open} onOpenChange={setOpen}>
       <Popover.Trigger asChild>
         <div>
-          <IconButton
-            internal
-            small
+          <Button
+            prominence="internal"
+            size="xs"
             icon={SvgBracketCurly}
-            tooltip="Insert user variable"
+            tooltip={t("userVariables.insert.tooltip")}
           />
         </div>
       </Popover.Trigger>

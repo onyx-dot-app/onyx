@@ -9,15 +9,52 @@ Assumptions:
     - chat:write.public
 """
 
+from collections.abc import Callable, Generator
 from typing import Any, cast
 from uuid import uuid4
 
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
+from slack_sdk.web import SlackResponse
 
-from onyx.connectors.slack.connector import get_channel_messages
-from onyx.connectors.slack.models import ChannelType
-from onyx.connectors.slack.utils import make_paginated_slack_api_call
+from onyx.connectors.slack.models import ChannelType, MessageType
+
+_SLACK_LIMIT = 900
+
+
+def make_paginated_slack_api_call(
+    call: Callable[..., SlackResponse], **kwargs: Any
+) -> Generator[dict[str, Any], None, None]:
+    """Cursor pagination over the test-management client.
+
+    Test setup drives its own admin ``WebClient`` (kicks members, deletes
+    messages), so it keeps a local paginator instead of going through the
+    connector's source-operations gateway.
+    """
+    cursor: str | None = None
+    has_more = True
+    while has_more:
+        response = call(cursor=cursor, limit=_SLACK_LIMIT, **kwargs)
+        yield cast(dict[str, Any], response.validate())
+        cursor = cast(dict[str, Any], response.get("response_metadata", {})).get(
+            "next_cursor", ""
+        )
+        has_more = bool(cursor)
+
+
+def get_channel_messages(
+    slack_client: WebClient, channel: ChannelType
+) -> Generator[list[MessageType], None, None]:
+    """Yields message batches for a channel via the test-management client."""
+    if not channel["is_member"]:
+        # Join only works for public channels; private membership needs an
+        # invite, handled by the test setup.
+        slack_client.conversations_join(channel=channel["id"])
+    for result in make_paginated_slack_api_call(
+        slack_client.conversations_history,
+        channel=channel["id"],
+    ):
+        yield cast(list[MessageType], result["messages"])
 
 
 def _get_slack_channel_id(channel: ChannelType) -> str:

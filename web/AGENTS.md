@@ -213,7 +213,9 @@ primary input cannot hover (touch), items are always shown in their revealed sta
 stay reachable on mobile.
 
 - **`Hoverable.Root`** — Wraps a hover group. Renders a container with a `data-hover-group`
-  attribute; CSS `:hover`/`:focus-within` on it reveals descendant items.
+  attribute; CSS `:hover`/`:has(:focus-visible)` on it reveals descendant items. Focus reveals
+  only where a focus ring is warranted, so a mouse press on a link or button does not leave the
+  items stuck open after the pointer moves away.
 - **`Hoverable.Item`** — Marks an element that should appear on hover. Supports two modes:
   - **Group mode** (`group` prop provided): visibility driven by CSS `:hover` on the
     `Hoverable.Root` ancestor.
@@ -407,15 +409,14 @@ interface InfoCardProps {
 
 ```typescript
 // ✅ Good
-import Button from '@/refresh-components/buttons/Button'
-import InputTypeIn from '@/refresh-components/inputs/InputTypeIn'
-import SvgPlusCircle from '@/icons/plus-circle'
+import { Button, InputTypeIn } from '@opal/components'
+import { SvgPlusCircle } from '@opal/icons'
 
 function ContactForm() {
   return (
     <form>
       <InputTypeIn placeholder="Search..." />
-      <Button type="submit" leftIcon={SvgPlusCircle}>Submit</Button>
+      <Button type="submit" icon={SvgPlusCircle}>Submit</Button>
     </form>
   )
 }
@@ -469,6 +470,39 @@ function ContactForm() {
 
 **Reason:** Client side fetching allows us to load the skeleton of the page without waiting for data to load, leading to a snappier UX. Loading data where needed reduces dependencies between a component and its parent component(s).
 
+## 7. Internationalization (i18n)
+
+The UI is being migrated to next-intl. English message catalogs live in
+`web/src/i18n/messages/en.json`; the locale registry is `web/src/i18n/config.ts`.
+
+- **In migrated directories** (listed in the `i18n/no-raw-jsx-text` override in
+  `web/.oxlintrc.json`), never hardcode user-facing strings. Use
+  `const t = useTranslations("<namespace>")` (client) or
+  `await getTranslations("<namespace>")` (server) and add the English value to
+  `en.json`. The oxlint rule and the `types:check` key augmentation both fail on
+  violations.
+- **Update every locale when you touch a key.** `en.json` is the source of
+  truth. When you add or change a key, also give `es/pt/fr/de.json` your best
+  translation of the English value. Key parity is a compile-time check:
+  `src/i18n/messages/keyParity.ts` makes a missing or extra locale key fail
+  `types:check` (pre-commit, CI, IDE). Keep the ICU shape (arguments, tags,
+  plurals) identical across locales — `web/src/i18n/__tests__/catalog.test.ts`
+  enforces this.
+- Keys are stable identifiers, not English sentences:
+  `<namespace>.<section>.<element>.<role>` in camelCase
+  (e.g. `settings.appearance.colorMode.title`). Rewording English copy must not
+  change the key.
+- Use ICU for interpolation and plurals: `"Hello {name}"`,
+  `"{count, plural, one {# item} other {# items}}"`. Never concatenate
+  translated fragments.
+- When you finish migrating a directory, add its glob to the
+  `i18n/no-raw-jsx-text` override in `.oxlintrc.json` so it cannot regress.
+- Locale-aware date/number formatting: prefer `useFormatter`/`useLocale` from
+  next-intl over hardcoded `"en-US"` `Intl` calls.
+- Prefer CSS logical properties (`ms-`/`me-`/`ps-`/`pe-`/`start-`/`end-`) over
+  physical ones (`ml-`/`mr-`/`pl-`/`pr-`/`left-`/`right-`) in new styles so a
+  future RTL locale does not require re-touching them.
+
 # Stylistic Preferences
 
 ## 1. Import Standards
@@ -510,11 +544,14 @@ const UserProfile = ({ userId }: UserProfileProps) => {
 
 **Extract prop types into their own interface definitions. Keep prop interfaces in the same file
 as the component they belong to. Non-prop types (shared models, API response shapes, enums, etc.)
-should be placed in a co-located `interfaces.ts` file.**
+should be placed in a co-located `types.ts` file.**
 
 **Reason:** Prop interfaces are tightly coupled to their component and rarely imported elsewhere,
-so co-location keeps things simple. Shared types belong in `interfaces.ts` so they can be
+so co-location keeps things simple. Shared types belong in `types.ts` so they can be
 imported without pulling in component code.
+
+Some feature directories still use `interfaces.ts`; they predate this rule. Use `types.ts` for new
+files, and rename an existing one when you are already working in that feature.
 
 ```typescript
 // ✅ Good — props interface in the same file as the component
@@ -529,15 +566,15 @@ function UserCard({ user, showActions = false, onEdit }: UserCardProps) {
   return <div>User Card</div>
 }
 
-// ✅ Good — shared types in interfaces.ts
-// interfaces.ts
+// ✅ Good — shared types in types.ts
+// types.ts
 export interface User {
   id: string
   name: string
-  role: UserRole
+  accessLevel: AccessLevel
 }
 
-export type UserRole = "admin" | "member" | "viewer"
+export type AccessLevel = "admin" | "member" | "viewer"
 
 // ❌ Bad — inline prop types
 function UserCard({

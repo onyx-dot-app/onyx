@@ -17,7 +17,6 @@ import pytest
 from fastapi_users.password import PasswordHelper
 from sqlalchemy.orm import Query, Session
 
-from onyx.auth.schemas import UserRole
 from onyx.configs.constants import FileOrigin, MessageType
 from onyx.db.enums import (
     AccountType,
@@ -1103,7 +1102,6 @@ class TestPortAllocator:
             hashed_password=password_helper.hash(password_helper.generate()),
             is_active=True,
             is_verified=True,
-            role=UserRole.EXT_PERM_USER,
             account_type=AccountType.EXT_PERM_USER,
         )
         db_session.add(other_user)
@@ -1414,8 +1412,12 @@ class TestRestoreSession:
                 "No available ports in configured range",
             )
 
+        # Patched where the port is now reserved: restore and the turn runner
+        # both rebuild the workspace through ``ensure_session_ready``, so the
+        # endpoint no longer reserves it itself.
         monkeypatch.setattr(
-            "onyx.server.features.build.session.api.reserve_nextjs_port__no_commit",
+            "onyx.server.features.build.session.session_ready."
+            "reserve_nextjs_port__no_commit",
             _raise_port_exhausted,
         )
 

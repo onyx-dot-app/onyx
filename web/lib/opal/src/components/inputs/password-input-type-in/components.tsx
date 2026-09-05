@@ -177,10 +177,10 @@ function PasswordInputTypeIn({
       {showAsteriskOverlay && (
         // Left inset = .opal-input border (1px) + padding (5px), and Text's
         // px-[2px] mirrors .opal-input-field's p-0.5, so the glyphs line up
-        // with the hidden input text. The right inset clears the toggle.
+        // with the hidden input text. The end inset clears the toggle.
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-y-0 left-[6px] right-10 flex items-center overflow-hidden"
+          className="pointer-events-none absolute inset-y-0 start-[6px] end-10 flex items-center overflow-hidden"
         >
           <Text font="main-ui-body" color="text-04" nowrap>
             {"✱".repeat(realValue.length)}

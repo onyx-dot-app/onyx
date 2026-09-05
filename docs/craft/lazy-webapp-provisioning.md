@@ -83,10 +83,13 @@ create conflicts and drift.
   path to a working preview.
 - **Tamper hardening (simplified 2026-08).** A single `start-webapp.sh` at the
   session root, `chmod 444` (rewrites unlink-then-write, since 444 blocks
-  in-place overwrite). No canonical/visible pair and no tool-side restore: if
-  the agent deletes it, the tool reports unavailable and setup/restore
-  regenerates it. Liveness is guarded once, inside the embedded start script
-  (pid + cwd identity); the bootstrap wrapper does not duplicate the check.
+  in-place overwrite). OpenCode's edit/write/patch permissions deny mutations
+  to the script, and bash permissions deny commands that mention it except the
+  documented `bash start-webapp.sh` fallback. No canonical/visible pair and no
+  tool-side restore: if the script is otherwise deleted, the tool reports
+  unavailable and setup/restore regenerates it. Liveness is guarded once,
+  inside the embedded start script (pid + cwd identity); the bootstrap wrapper
+  does not duplicate the check.
 - **Restore auto-starts only when a webapp exists**, keyed on
   `outputs/web/package.json` in the restored snapshot. Self-heals legacy sessions
   and skips sessions that never built a webapp — no migration needed.

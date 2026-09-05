@@ -59,9 +59,17 @@ repos:
           ]
         files: ^(pyproject\.toml|uv\.lock|backend/requirements/.*\.txt)$
       - id: uv-run
+        name: Check getattr
+        # Keep the pinned version in sync with `onyx-devtools` in the dev
+        # dependency group in pyproject.toml, here and in every `ods` hook
+        # below. Without the pin, `--with` resolves the latest published wheel.
+        args: ["--no-project", "--with=onyx-devtools==0.13.2", "ods", "check-getattr"]
+        pass_filenames: true
+        files: ^backend/.*\.py$
+      - id: uv-run
         name: Check lazy imports
         args:
-          ["--no-project", "--with=onyx-devtools", "ods", "check-lazy-imports"]
+          ["--no-project", "--with=onyx-devtools==0.13.2", "ods", "check-lazy-imports"]
         pass_filenames: true
         files: ^backend/(?!\.venv/|scripts/).*\.py$
       - id: uv-run
@@ -76,7 +84,7 @@ repos:
         # release that adds the embedded-copy sync, the extra trigger paths below
         # are harmless no-ops (the cli module's drift test still gates staleness).
         args:
-          ["--no-project", "--with=onyx-devtools", "ods", "generate-compose", "--write"]
+          ["--no-project", "--with=onyx-devtools==0.13.2", "ods", "generate-compose", "--write"]
         pass_filenames: false
         files: >-
           (?x)^(
@@ -87,6 +95,7 @@ repos:
               |docker-compose\.prod-no-letsencrypt\.yml
               |docker-compose\.onyx-lite\.yml
               |docker-compose\.craft\.yml
+              |docker-compose\.dev\.yml
               |env\.template
               |env\.prod\.template
               |env\.nginx\.template
@@ -104,7 +113,7 @@ repos:
         # Scope to backend/, matching `[tool.ty.src] include = ["backend"]` in
         # pyproject. The full ty run only discovers backend/, but pre-commit
         # passes explicit filenames, which bypass that discovery-time include —
-        # without this, a touched file outside backend/ (examples/, loadtest/,
+        # without this, a touched file outside backend/ (examples/, tools/loadtest/,
         # tools/, …) would get type-checked against the backend venv it was
         # never meant to run in.
         files: ^backend/
@@ -135,6 +144,29 @@ repos:
         pass_filenames: true
         types_or: [python]
       - id: uv-run
+        alias: terraform-fmt
+        name: terraform fmt
+        # Applies hclwrite.Format, the routine `terraform fmt` itself uses, so
+        # the result matches terraform byte for byte without needing the
+        # binary on PATH. Replaces the pre-commit-terraform terraform_fmt hook.
+        # `ods fmt tf` and `ods lint tf` ship in onyx-devtools (tools/ods), and
+        # `--with=onyx-devtools==` resolves a published wheel, so both hooks
+        # need an ods release and a version bump before they can run. Tag
+        # `ods/` first.
+        args: ["--no-project", "--with=onyx-devtools==0.13.2", "ods", "fmt", "tf"]
+        pass_filenames: true
+        files: \.tf$
+      - id: uv-run
+        alias: terraform-public-safe
+        name: terraform public-safe values
+        # These modules are published but stay in sync with what Onyx runs, so
+        # an internal value can travel across by accident. Fails on account
+        # ids, access key ids, routable IPv4 CIDRs, and email addresses.
+        # Append '# public-safe: ok' to accept a line.
+        args: ["--no-project", "--with=onyx-devtools==0.13.2", "ods", "lint", "tf"]
+        pass_filenames: true
+        files: ^deployment/terraform/.*\.tf$
+      - id: uv-run
         alias: zizmor
         name: zizmor
         # Run zizmor in an isolated overlay (`--no-project --with`) so the hook
@@ -145,7 +177,7 @@ repos:
         # in sync with the `zizmor` dependency group in pyproject.toml.
         args: ["--no-project", "--with=zizmor==1.25.2", "zizmor", "--offline"]
         pass_filenames: true
-        files: ^\.github/(workflows/.+\.ya?ml|actions/.+/action\.ya?ml)$
+        files: (^|/)\.github/(workflows/.+\.ya?ml|actions/.+/action\.ya?ml)$
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c # frozen: v6.0.0
@@ -168,6 +200,9 @@ repos:
     rev: a443f344ff32813837fa49f7aa6cbc478d770e62 # frozen: v1.7.9
     hooks:
       - id: actionlint
+        # Also lint workflows that ship inside a subdirectory to run in another
+        # repository, such as terraform-provider-onyx/.github/workflows/.
+        files: (^|/)\.github/workflows/.+\.ya?ml$
 
   - repo: https://github.com/shellcheck-py/shellcheck-py
     rev: 745eface02aef23e168a8afb6b5737818efbea95 # frozen: v0.11.0.1
@@ -191,14 +226,27 @@ repos:
       - id: ripsecrets
         args:
           - --strict-ignore
+          # ripsecrets joins every pattern into one regex and runs it over the
+          # whole file, so `^`/`$` anchor to the start and end of the file, not
+          # a line -- an anchored pattern here silently matches nothing.
+          # `\b` keeps the prefix a real token start: without it the pattern
+          # matches inside words, e.g. the "sk-" in "celery-task-meta-<uuid>".
+          # The capture group makes ripsecrets test the key body for
+          # randomness, which drops placeholders like "sk-test-key-0000...".
           - --additional-pattern
-          - ^sk-[A-Za-z0-9_\-]{20,}$
+          - \bsk-([A-Za-z0-9_\-]{20,})
 
   - repo: https://github.com/antonbabenko/pre-commit-terraform
     rev: d0e12caebb2ab0ee8bf98181c8bfe9702bca103d
     hooks:
-      - id: terraform_fmt
-        files: \.tf$
+      # terraform_fmt is replaced by `ods fmt tf` above, which needs no local
+      # terraform. terraform_validate stays: it resolves provider schemas via
+      # `terraform init`, so it catches wrong argument names and bad module
+      # references that no in-process HCL parser can see.
+      - id: terraform_validate
+        files: ^deployment/terraform/.*\.tf$
+        args:
+          - --tf-init-args=-backend=false
 
   - repo: local
     hooks:
@@ -304,7 +352,9 @@ repos:
 
         language: system
         pass_filenames: false
-        files: ^web/.*\.(ts|tsx)$
+        # The i18n catalogs are part of the type graph: keyParity.ts turns a
+        # missing or extra locale key into a compile error.
+        files: ^web/(.*\.(ts|tsx)|src/i18n/messages/.*\.json)$
 
       - id: widget-typescript-check
         name: widget TypeScript type check

@@ -1,10 +1,10 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { Dispatch, SetStateAction, useMemo, useState } from "react";
 import { useSWRConfig } from "swr";
 import { useFormikContext } from "formik";
 import { InputDivider, InputVertical, toast } from "@opal/layouts";
-import { markdown } from "@opal/utils";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import {
   LLMProviderFormProps,
@@ -15,16 +15,16 @@ import {
   useInitialValues,
   buildValidationSchema,
   BaseLLMFormValues,
-  mergeFetchedModelConfigurations,
+  withFetchedModels,
 } from "@/sections/modals/languageModels/utils";
 import { submitProvider } from "@/sections/modals/languageModels/svc";
 import { LLMProviderConfiguredSource } from "@/lib/analytics/utils";
 import {
-  CONTAINERIZED_HOST_NOTE,
   ModelSelectionField,
   DisplayNameField,
   ModelAccessField,
   ModalWrapper,
+  useApiBaseSubDescription,
 } from "@/sections/modals/languageModels/shared";
 import { fetchOllamaModels } from "@/lib/languageModels/svc";
 import { Card, Tabs } from "@opal/components";
@@ -55,8 +55,11 @@ function OllamaModalInternals({
   tab,
   setTab,
 }: OllamaModalInternalsProps) {
+  const t = useTranslations("admin.languageModels.modals");
   const formikProps = useFormikContext<OllamaModalValues>();
-  const settings = useSettings();
+  const apiBaseSubDescription = useApiBaseSubDescription(
+    t("ollama.apiBaseField.description")
+  );
 
   const isFetchDisabled = useMemo(
     () =>
@@ -80,41 +83,31 @@ function OllamaModalInternals({
     if (error) {
       throw new Error(error);
     }
-    formikProps.setFieldValue(
-      "model_configurations",
-      mergeFetchedModelConfigurations(
-        models,
-        formikProps.values.model_configurations
-      )
-    );
+    formikProps.setValues(withFetchedModels(models));
   };
 
   return (
     <>
-      <Card background="light" border="none" padding="sm">
+      <Card background="light" border="none" padding={2}>
         <Tabs value={tab} onValueChange={(value) => setTab(value as Tab)}>
           <Tabs.List>
             <Tabs.Trigger value={Tab.TAB_SELF_HOSTED}>
-              Self-hosted Ollama
+              {t("ollama.tabs.selfHosted.label")}
             </Tabs.Trigger>
-            <Tabs.Trigger value={Tab.TAB_CLOUD}>Ollama Cloud</Tabs.Trigger>
+            <Tabs.Trigger value={Tab.TAB_CLOUD}>
+              {t("ollama.tabs.cloud.label")}
+            </Tabs.Trigger>
           </Tabs.List>
           <div className="pt-4">
             <Tabs.Content value={Tab.TAB_SELF_HOSTED}>
               <InputVertical
                 withLabel="api_base"
-                title="API Base URL"
-                subDescription={
-                  settings.is_containerized
-                    ? markdown(
-                        `The base URL for your Ollama instance. ${CONTAINERIZED_HOST_NOTE}`
-                      )
-                    : "The base URL for your Ollama instance."
-                }
+                title={t("setup.apiBaseField.title")}
+                subDescription={apiBaseSubDescription}
               >
                 <InputTypeInField
                   name="api_base"
-                  placeholder="Your Ollama API base URL"
+                  placeholder={t("ollama.apiBaseField.placeholder")}
                 />
               </InputVertical>
             </Tabs.Content>
@@ -122,12 +115,12 @@ function OllamaModalInternals({
             <Tabs.Content value={Tab.TAB_CLOUD}>
               <InputVertical
                 withLabel="api_key"
-                title="API Key"
-                subDescription="Your Ollama Cloud API key."
+                title={t("setup.apiKeyField.title")}
+                subDescription={t("ollama.apiKeyField.description")}
               >
                 <PasswordInputTypeInField
                   name="api_key"
-                  placeholder="API Key"
+                  placeholder={t("ollama.apiKeyField.placeholder")}
                 />
               </InputVertical>
             </Tabs.Content>
@@ -166,6 +159,7 @@ export default function OllamaModal({
   onSuccess,
   analyticsSource,
 }: LLMProviderFormProps) {
+  const t = useTranslations("admin.languageModels.modals");
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
   const settings = useSettings();
@@ -190,11 +184,11 @@ export default function OllamaModal({
 
   const validationSchema = useMemo(
     () =>
-      buildValidationSchema(isOnboarding, {
+      buildValidationSchema(t, isOnboarding, {
         apiBase: tab === Tab.TAB_SELF_HOSTED,
         apiKey: tab === Tab.TAB_CLOUD,
       }),
-    [tab, isOnboarding]
+    [t, tab, isOnboarding]
   );
 
   return (
@@ -212,6 +206,7 @@ export default function OllamaModal({
         };
 
         await submitProvider({
+          t,
           analyticsSource:
             analyticsSource ??
             (isOnboarding
@@ -232,8 +227,8 @@ export default function OllamaModal({
               await refreshLlmProviderCaches(mutate);
               toast.success(
                 existingLlmProvider
-                  ? "Provider updated successfully!"
-                  : "Provider enabled successfully!"
+                  ? t("toasts.providerUpdated")
+                  : t("toasts.providerEnabled")
               );
             }
           },

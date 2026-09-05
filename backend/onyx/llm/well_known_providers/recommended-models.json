@@ -1,6 +1,6 @@
 {
-  "version": "1.10",
-  "updated_at": "2026-07-24T00:00:00Z",
+  "version": "1.14",
+  "updated_at": "2026-09-01T00:00:00Z",
   "providers": {
     "openai": {
       "default_model": "gpt-5.6-sol",
@@ -27,8 +27,8 @@
           "display_name": "Claude Opus 5"
         },
         {
-          "name": "claude-fable-5",
-          "display_name": "Claude Fable 5"
+          "name": "claude-fable-5-1",
+          "display_name": "Claude Fable 5.1"
         },
         {
           "name": "claude-sonnet-5",
@@ -48,25 +48,25 @@
           "display_name": "Gemini 3.1 Pro"
         },
         {
-          "name": "gemini-3.6-flash",
-          "display_name": "Gemini 3.6 Flash"
+          "name": "gemini-3.7-flash",
+          "display_name": "Gemini 3.7 Flash"
         }
       ]
     },
     "openrouter": {
-      "default_model": "z-ai/glm-5.2",
+      "default_model": "z-ai/glm-5.3",
       "additional_visible_models": [
         {
-          "name": "z-ai/glm-5.2",
-          "display_name": "GLM 5.2"
+          "name": "z-ai/glm-5.3",
+          "display_name": "GLM 5.3"
         },
         {
           "name": "deepseek/deepseek-v4-pro",
-          "display_name": "DeepSeek V4 Pro"
+          "display_name": "DeepSeek V4 Pro 0423"
         },
         {
-          "name": "qwen/qwen3.7-plus",
-          "display_name": "Qwen3.7 Plus"
+          "name": "qwen/qwen3.8-max",
+          "display_name": "Qwen3.8 Max"
         },
         {
           "name": "moonshotai/kimi-k3",

@@ -2,6 +2,7 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import type { Route } from "next";
+import { useTranslations } from "next-intl";
 import { SettingsLayouts } from "@opal/layouts";
 import { SidebarTab, Text } from "@opal/components";
 import { SvgSliders } from "@opal/icons";
@@ -9,6 +10,10 @@ import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { useUser } from "@/providers/UserProvider";
 import { useIsMultiTenant } from "@/lib/auth/hooks";
 import { Section } from "@/layouts/general-layouts";
+import { useTierAtLeast } from "@/hooks/useTierAtLeast";
+import { LLM_GATEWAY_MIN_TIER } from "@/lib/tiers";
+import { useLLMProviders } from "@/lib/languageModels/hooks";
+import { hasVisibleLLMModel } from "@/lib/languageModels/utils";
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -20,23 +25,43 @@ interface SettingsTab {
 }
 
 export default function Layout({ children }: LayoutProps) {
+  const t = useTranslations("settings.layout");
   const pathname = usePathname();
   const router = useRouter();
   const { user } = useUser();
   const isMultiTenant = useIsMultiTenant();
+  const gatewayTier = useTierAtLeast(LLM_GATEWAY_MIN_TIER);
+  const { llmProviders } = useLLMProviders();
 
   const showPasswordSection = Boolean(user?.password_configured);
   const showTokensSection = isMultiTenant !== null;
   const showAccountsAccessTab = showPasswordSection || showTokensSection;
+  const showGatewayTab = gatewayTier && hasVisibleLLMModel(llmProviders);
 
   const tabs: SettingsTab[] = [
-    { href: "/app/settings/general", label: "General" },
-    { href: "/app/settings/chat-preferences", label: "Chat Preferences" },
+    { href: "/app/settings/general", label: t("tabs.general.label") },
+    {
+      href: "/app/settings/chat-preferences",
+      label: t("tabs.chatPreferences.label"),
+    },
     ...(showAccountsAccessTab
-      ? [{ href: "/app/settings/accounts-access", label: "Accounts & Access" }]
+      ? [
+          {
+            href: "/app/settings/accounts-access",
+            label: t("tabs.accountsAccess.label"),
+          },
+        ]
       : []),
-    { href: "/app/settings/connectors", label: "Connectors" },
-    { href: "/app/settings/usage", label: "Usage" },
+    ...(showGatewayTab
+      ? [
+          {
+            href: "/app/settings/llm-gateway",
+            label: t("tabs.llmGateway.label"),
+          },
+        ]
+      : []),
+    { href: "/app/settings/connectors", label: t("tabs.connectors.label") },
+    { href: "/app/settings/usage", label: t("tabs.usage.label") },
   ];
 
   // Derive the trigger label from the pathname directly. InputSelect normally
@@ -47,14 +72,18 @@ export default function Layout({ children }: LayoutProps) {
 
   return (
     <SettingsLayouts.Root width="lg">
-      <SettingsLayouts.Header icon={SvgSliders} title="Settings" divider />
+      <SettingsLayouts.Header
+        icon={SvgSliders}
+        title={t("header.title")}
+        divider
+      />
 
       <SettingsLayouts.Body>
         <Section
           flexDirection="column"
           justifyContent="start"
           alignItems="stretch"
-          gap={1.5}
+          gap={6}
           className="sm:flex-row sm:items-start"
         >
           {/* Narrow screens: dropdown navigation above the tab content */}
@@ -68,7 +97,7 @@ export default function Layout({ children }: LayoutProps) {
                 router.push(href as Route, { scroll: false })
               }
             >
-              <InputSelect.Trigger placeholder="Select a section">
+              <InputSelect.Trigger placeholder={t("sectionSelect.placeholder")}>
                 {activeTab && (
                   <Text font="main-ui-body" color="text-04" nowrap>
                     {activeTab.label}

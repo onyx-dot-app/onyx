@@ -5,6 +5,7 @@ const helpText = `Onyx CLI Commands
   /help              Show this help message
   /clear             Clear chat and start a new session
   /agent             List and switch agents
+  /model             List and switch models
   /attach <path>     Attach a file to next message
   /sessions          Browse and resume previous sessions
   /configure         Re-run connection setup

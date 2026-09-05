@@ -22,6 +22,10 @@ class QueryExpansionType(Enum):
 
 
 class SearchSettingsCreationRequest(IndexingSetting):
+    # cc_pairs the admin consented to delete (shown as "won't be ported"). Gates deletion:
+    # the server rejects if its authoritative recompute includes an unacknowledged cc_pair.
+    acknowledged_wont_port_cc_pair_ids: list[int] | None = None
+
     @classmethod
     def from_db_model(
         cls, search_settings: SearchSettings
@@ -54,6 +58,10 @@ class SavedSearchSettings(IndexingSetting):
             enable_contextual_rag=search_settings.enable_contextual_rag,
             contextual_rag_model_configuration_id=search_settings.contextual_rag_model_configuration_id,
         )
+
+
+class ContextualRagModelUpdateResponse(BaseModel):
+    contextual_rag_model_configuration_id: int
 
 
 class Tag(BaseModel):

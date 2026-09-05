@@ -24,9 +24,10 @@ def build_total_descriptor_chunks(
     if analysis.row_count == 0:
         return []
 
-    lines: list[str] = []
-    for idx in analysis.numeric_cols:
-        lines.append(_numeric_totals_line(headers[idx], analysis.numeric_stats[idx]))
+    lines: list[str] = [
+        _numeric_totals_line(headers[idx], analysis.numeric_stats[idx])
+        for idx in analysis.numeric_cols
+    ]
     for idx in analysis.categorical_cols:
         line = _categorical_top_line(headers[idx], analysis.categorical_counts[idx])
         if line:

@@ -1,9 +1,11 @@
 import React, { FC, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import { TabOption } from "@/lib/connectors/connectors";
 import SelectInput from "./ConnectorInput/SelectInput";
 import NumberInput from "./ConnectorInput/NumberInput";
 import { TextFormField, MultiSelectField } from "@/components/Field";
 import ListInput from "./ConnectorInput/ListInput";
+import StringPairListInput from "./ConnectorInput/StringPairListInput";
 import FileInput from "./ConnectorInput/FileInput";
 import { ConfigurableSources } from "@/lib/types";
 import { Credential } from "@/lib/connectors/credentials";
@@ -32,6 +34,7 @@ const TabsField: FC<TabsFieldProps> = ({
   connector,
   currentCredential,
 }) => {
+  const t = useTranslations("admin.connectorsList");
   const { setFieldValue } = useFormikContext<FormValues>();
 
   const resolvedLabel =
@@ -44,7 +47,7 @@ const TabsField: FC<TabsFieldProps> = ({
       : tabField.description;
 
   return (
-    <GeneralLayouts.Section gap={0.5} alignItems="start">
+    <GeneralLayouts.Section gap={2} alignItems="start">
       {tabField.label && (
         <Content
           title={resolvedLabel ?? ""}
@@ -57,7 +60,7 @@ const TabsField: FC<TabsFieldProps> = ({
       {/* Ensure there's at least one tab before rendering */}
       {tabField.tabs.length === 0 ? (
         <Text text03 secondaryBody>
-          No tabs to display.
+          {t("tabs.empty.label")}
         </Text>
       ) : (
         <Tabs
@@ -85,7 +88,7 @@ const TabsField: FC<TabsFieldProps> = ({
           </Tabs.List>
           {tabField.tabs.map((tab) => (
             <Tabs.Content key={tab.value} value={tab.value}>
-              <GeneralLayouts.Section gap={0.75} alignItems="start">
+              <GeneralLayouts.Section gap={3} alignItems="start">
                 {tab.fields.map((subField) => {
                   // Check visibility condition first
                   if (
@@ -127,6 +130,7 @@ export const RenderField: FC<RenderFieldProps> = ({
   connector,
   currentCredential,
 }) => {
+  const t = useTranslations("admin.connectorsList");
   const { setFieldValue } = useFormikContext<FormValues>(); // Get Formik's context functions
 
   const label =
@@ -177,6 +181,18 @@ export const RenderField: FC<RenderFieldProps> = ({
         />
       ) : field.type === "list" ? (
         <ListInput name={field.name} label={label} description={description} />
+      ) : field.type === "string_pair_list" ? (
+        <StringPairListInput
+          name={field.name}
+          label={label}
+          description={description}
+          leftKey={field.leftKey}
+          rightKey={field.rightKey}
+          leftLabel={field.leftLabel}
+          rightLabel={field.rightLabel}
+          leftPlaceholder={field.leftPlaceholder}
+          rightPlaceholder={field.rightPlaceholder}
+        />
       ) : field.type === "select" ? (
         <SelectInput
           name={field.name}
@@ -211,7 +227,7 @@ export const RenderField: FC<RenderFieldProps> = ({
           flexDirection="row"
           justifyContent="start"
           alignItems="start"
-          gap={0.5}
+          gap={2}
         >
           <CheckboxField
             name={field.name}
@@ -227,7 +243,9 @@ export const RenderField: FC<RenderFieldProps> = ({
             withLabel={field.name}
             title={label}
             description={description}
-            suffix={field.optional ? "optional" : undefined}
+            suffix={
+              field.optional ? t("field.optionalSuffix.label") : undefined
+            }
           >
             <InputTextAreaField
               name={field.name}
@@ -255,7 +273,10 @@ export const RenderField: FC<RenderFieldProps> = ({
           </Text>
         </GeneralLayouts.Section>
       ) : (
-        <>INVALID FIELD TYPE</>
+        <>
+          {/* oxlint-disable-next-line i18n/no-raw-jsx-text -- developer diagnostic, not copy */}
+          INVALID FIELD TYPE
+        </>
       )}
     </>
   );

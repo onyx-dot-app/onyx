@@ -1,6 +1,5 @@
 import {
   OnyxDocument,
-  Filters,
   SearchOnyxDocument,
   StreamStopReason,
 } from "@/lib/search/interfaces";
@@ -77,13 +76,6 @@ export interface ChatSearchResponse {
 
 // The number of messages to buffer on the client side.
 export const BUFFER_COUNT = 35;
-
-export interface RetrievalDetails {
-  run_search: "always" | "never" | "auto";
-  real_time: boolean;
-  filters?: Filters;
-  enable_auto_detect_filters?: boolean | null;
-}
 
 // Citation number -> Document ID (allows O(1) lookup when rendering citations)
 export type CitationMap = { [citation_num: number]: string };
@@ -213,6 +205,8 @@ export interface BackendChatSession {
   packets: Packet[][];
   // Set while a run is in flight and resumable via the resume-stream endpoint
   current_run?: { run_id: number } | null;
+  // True for sessions pinned to an incognito record mode.
+  incognito?: boolean;
 }
 
 export function toChatSession(backend: BackendChatSession): ChatSession {
@@ -343,12 +337,6 @@ export interface AddPromptModalProps {
   onClose: () => void;
   onSubmit: (promptData: CreateInputPromptRequest) => void;
 }
-export interface PromptData {
-  id: number;
-  prompt: string;
-  content: string;
-}
-
 /**
  * // Start of Selection
  */

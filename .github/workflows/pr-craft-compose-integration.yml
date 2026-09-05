@@ -70,7 +70,7 @@ jobs:
     steps:
       - name: Checkout code
         if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
       - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706
@@ -91,6 +91,7 @@ jobs:
               - 'backend/tests/integration/tests/craft/*.py'
               - 'backend/tests/integration/tests/craft/docker_e2e/**'
               - '.github/workflows/pr-craft-compose-integration.yml'
+              - '.github/actions/setup-test-license/**'
               - '.github/actions/setup-python-and-install-dependencies/**'
               - '.github/actions/login-ecr-pullthrough-cache/**'
 
@@ -105,7 +106,7 @@ jobs:
       test-files: ${{ steps.set-matrix.outputs.test-files }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -174,7 +175,7 @@ jobs:
       - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -199,6 +200,10 @@ jobs:
             ${{ matrix.extra_build_args }}
           tags: ${{ env.RUNS_ON_ECR_CACHE }}:craft-compose-${{ matrix.image }}-${{ github.run_id }}
           push: true
+          # Attestations attach as ECR referrers to the image digest, which is
+          # stable across runs and caps out at 100 per subject.
+          provenance: false
+          sbom: false
           cache-from: type=gha,scope=craft-compose-${{ matrix.image }}
           cache-to: type=gha,scope=craft-compose-${{ matrix.image }},mode=max
 
@@ -206,6 +211,9 @@ jobs:
     name: craft-compose (${{ matrix.test-file.name }})
     needs: [changes, discover-test-files, build-images]
     if: needs.changes.outputs.craft_compose == 'true'
+    permissions:
+      contents: read
+      id-token: write
     runs-on:
       - runs-on
       - runner=4cpu-linux-x64
@@ -229,9 +237,14 @@ jobs:
       - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+
+      - name: Fetch dev license
+        uses: ./.github/actions/setup-test-license
+        with:
+          aws-oidc-role-arn: ${{ secrets.AWS_OIDC_ROLE_ARN }}
 
       - name: Setup Python + deps
         uses: ./.github/actions/setup-python-and-install-dependencies
@@ -303,6 +316,13 @@ jobs:
           docker ps --format 'table {{.Names}}\t{{.Status}}'
           curl --fail -sS -o /dev/null -w "api_server /health -> %{http_code}\n" \
             http://localhost:8080/health
+
+      - name: Seed dev license
+        run: |
+          docker exec \
+            -e ONYX_DEV_LICENSE="${ONYX_DEV_LICENSE}" \
+            onyx-api_server-1 \
+            python -m scripts.seed_dev_license
 
       - name: Run integration tests
         timeout-minutes: 25

@@ -1,10 +1,10 @@
 import type React from "react";
-import {
-  Interactive,
-  type InteractiveStatefulProps,
-  InteractiveContainerRoundingVariant,
-} from "@opal/core";
-import type { ExtremaSizeVariants, DistributiveOmit } from "@opal/types";
+import { Interactive, type InteractiveStatefulProps } from "@opal/core";
+import type {
+  ExtremaSizeVariants,
+  DistributiveOmit,
+  Rounding,
+} from "@opal/types";
 import { Tooltip, type TooltipSide } from "@opal/components";
 import { type ContentActionProps, ContentAction } from "@opal/layouts";
 
@@ -14,18 +14,25 @@ import { type ContentActionProps, ContentAction } from "@opal/layouts";
 
 type ContentPassthroughProps = DistributiveOmit<
   ContentActionProps,
-  "padding" | "width" | "ref"
+  "width" | "ref"
 >;
 
 type LineItemButtonOwnProps = Pick<
   InteractiveStatefulProps,
-  "state" | "interaction" | "onClick" | "href" | "target" | "group" | "ref"
+  | "state"
+  | "interaction"
+  | "onClick"
+  | "href"
+  | "target"
+  | "group"
+  | "ref"
+  | "disabled"
 > & {
   /** Interactive select variant. @default "select-light" */
   selectVariant?: "select-light" | "select-heavy";
 
-  /** Corner rounding preset (height is always content-driven). @default "md" */
-  rounding?: InteractiveContainerRoundingVariant;
+  /** Corner rounding step (height is always content-driven). @default 3 */
+  rounding?: Rounding;
 
   /** Container width. @default "full" */
   width?: ExtremaSizeVariants;
@@ -89,12 +96,25 @@ function LineItemButton({
   target,
   group,
   ref,
+  disabled,
 
   // Sizing
-  rounding = "md",
+  rounding = 3,
   width = "full",
+  padding = 0.5,
   tooltip,
   tooltipSide = "top",
+
+  /*
+   * Taken out of the pass-through and defaulted here rather than written
+   * before the spread. A spread copies a key even when its value is
+   * `undefined`, so `color={condition ? "muted" : undefined}` — the obvious
+   * way to colour a row conditionally — used to overwrite the default and drop
+   * the row to `"default"`, which pins its colours and stops it responding to
+   * hover, selection or disablement. A destructuring default treats `undefined`
+   * as absent, so that call now means what it looks like.
+   */
+  color = "interactive",
 
   // ContentAction pass-through
   ...contentActionProps
@@ -121,6 +141,7 @@ function LineItemButton({
       target={target}
       group={group}
       ref={ref}
+      disabled={disabled}
     >
       <Interactive.Container
         width={width}
@@ -128,11 +149,11 @@ function LineItemButton({
         rounding={rounding}
         {...rowButtonProps}
       >
-        <div className="w-full p-2">
+        <div className="w-full p-1.5">
           <ContentAction
-            color="interactive"
+            color={color}
             {...(contentActionProps as ContentActionProps)}
-            padding="fit"
+            padding={padding}
           />
         </div>
       </Interactive.Container>

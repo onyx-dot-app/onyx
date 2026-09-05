@@ -264,8 +264,8 @@ def invalidate_billing_info_cache() -> None:
     """Drop the cached billing entries once the subscription is known to have moved.
 
     Best-effort. Busts the 5-min admin /billing-information entry, plus (cloud
-    only) the 24h per-tenant trial-status entry the indexing path reads via
-    ``cached_is_tenant_on_trial`` — without this a trial→paid conversion keeps
+    only) the per-tenant trial-status entry that usage limits read via
+    ``cached_is_tenant_on_trial``. Without this a trial→paid conversion keeps
     usage limits on stale trial status for up to a full TTL.
     """
     redis_client = _billing_cache_client()

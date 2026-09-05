@@ -15,6 +15,7 @@ from onyx.llm.well_known_providers.auto_update_models import (
     LLMRecommendations,
 )
 from onyx.llm.well_known_providers.models import SimpleKnownModel
+from onyx.server.features.build.configs import OPENCODE_DISABLED_TOOLS
 from onyx.server.features.build.sandbox.models import CraftLLMProviderConfig
 from onyx.server.features.build.sandbox.util.opencode_config import (
     build_provider_opencode_config,
@@ -359,6 +360,8 @@ def test_manager_prefers_provider_recommended_default_in_provider_order() -> Non
             "fetch_all_accessible_llm_providers",
             return_value=[anthropic, bedrock],
         ) as fetch_providers,
+        patch.object(manager_module, "fetch_default_llm_model", return_value=None),
+        patch.object(manager_module, "fetch_default_craft_model", return_value=None),
     ):
         config = manager.build_llm_configs(user)
 
@@ -367,6 +370,212 @@ def test_manager_prefers_provider_recommended_default_in_provider_order() -> Non
     assert config.provider == "onyx"
     assert config.model_name == "7/bedrock-pro"
     fetch_providers.assert_called_once_with(manager._db_session, user)
+
+
+def test_manager_prefers_configured_default_over_recommendation() -> None:
+    anthropic = _provider(
+        3,
+        "anthropic",
+        [_model("claude-sonnet-5"), _model("claude-opus-5")],
+        name="Zulu provider",
+    )
+    bedrock = _provider(
+        7,
+        "bedrock",
+        [_model("bedrock-lite"), _model("bedrock-pro")],
+        name="Alpha provider",
+    )
+    manager = SessionManager.__new__(SessionManager)
+    manager._db_session = cast(Session, MagicMock(spec=Session))  # type: ignore[attr-defined]
+    user = cast(User, MagicMock(spec=User))
+
+    configured_default = MagicMock()
+    configured_default.configure_mock(llm_provider_id=3, name="claude-sonnet-5")
+    with (
+        patch.object(llm_config, "ONYX_SERVER_URL", "https://onyx.test"),
+        patch.object(
+            manager_module,
+            "fetch_all_accessible_llm_providers",
+            return_value=[anthropic, bedrock],
+        ),
+        patch.object(
+            manager_module, "fetch_default_llm_model", return_value=configured_default
+        ),
+        patch.object(manager_module, "fetch_default_craft_model", return_value=None),
+    ):
+        config = manager.build_llm_configs(user)
+
+    assert config.model_name == "3/claude-sonnet-5"
+
+
+def test_manager_falls_back_to_recommendation_when_configured_default_not_visible() -> (
+    None
+):
+    anthropic = _provider(
+        3,
+        "anthropic",
+        [_model("claude-sonnet-5", is_visible=False), _model("claude-opus-5")],
+        name="Zulu provider",
+    )
+    bedrock = _provider(
+        7,
+        "bedrock",
+        [_model("bedrock-lite"), _model("bedrock-pro")],
+        name="Alpha provider",
+    )
+    manager = SessionManager.__new__(SessionManager)
+    manager._db_session = cast(Session, MagicMock(spec=Session))  # type: ignore[attr-defined]
+    user = cast(User, MagicMock(spec=User))
+
+    configured_default = MagicMock()
+    configured_default.configure_mock(llm_provider_id=3, name="claude-sonnet-5")
+    with (
+        patch.object(llm_config, "ONYX_SERVER_URL", "https://onyx.test"),
+        patch.object(
+            manager_module,
+            "fetch_all_accessible_llm_providers",
+            return_value=[anthropic, bedrock],
+        ),
+        patch.object(
+            manager_module, "fetch_default_llm_model", return_value=configured_default
+        ),
+        patch.object(manager_module, "fetch_default_craft_model", return_value=None),
+    ):
+        config = manager.build_llm_configs(user)
+
+    assert config.model_name == "7/bedrock-pro"
+
+
+def test_manager_prefers_craft_default_over_chat_default() -> None:
+    anthropic = _provider(3, "anthropic", [_model("claude-sonnet-5")])
+    bedrock = _provider(7, "bedrock", [_model("bedrock-pro")])
+    manager = SessionManager.__new__(SessionManager)
+    manager._db_session = cast(Session, MagicMock(spec=Session))  # type: ignore[attr-defined]
+    user = cast(User, MagicMock(spec=User))
+
+    chat_default = MagicMock()
+    chat_default.configure_mock(llm_provider_id=3, name="claude-sonnet-5")
+    craft_default = MagicMock()
+    craft_default.configure_mock(llm_provider_id=7, name="bedrock-pro")
+    with (
+        patch.object(llm_config, "ONYX_SERVER_URL", "https://onyx.test"),
+        patch.object(
+            manager_module,
+            "fetch_all_accessible_llm_providers",
+            return_value=[anthropic, bedrock],
+        ),
+        patch.object(
+            manager_module, "fetch_default_llm_model", return_value=chat_default
+        ),
+        patch.object(
+            manager_module, "fetch_default_craft_model", return_value=craft_default
+        ),
+    ):
+        config = manager.build_llm_configs(user)
+
+    assert config.model_name == "7/bedrock-pro"
+
+
+def test_manager_stored_selection_outranks_craft_default() -> None:
+    anthropic = _provider(3, "anthropic", [_model("claude-sonnet-5")])
+    bedrock = _provider(7, "bedrock", [_model("bedrock-pro")])
+    manager = SessionManager.__new__(SessionManager)
+    manager._db_session = cast(Session, MagicMock(spec=Session))  # type: ignore[attr-defined]
+    user = cast(User, MagicMock(spec=User))
+
+    craft_default = MagicMock()
+    craft_default.configure_mock(llm_provider_id=7, name="bedrock-pro")
+    with (
+        patch.object(llm_config, "ONYX_SERVER_URL", "https://onyx.test"),
+        patch.object(
+            manager_module,
+            "fetch_all_accessible_llm_providers",
+            return_value=[anthropic, bedrock],
+        ),
+        patch.object(manager_module, "fetch_default_llm_model", return_value=None),
+        patch.object(
+            manager_module, "fetch_default_craft_model", return_value=craft_default
+        ),
+    ):
+        config = manager.build_llm_configs(
+            user, llm_config.GatewaySelection(3, "claude-sonnet-5")
+        )
+
+    assert config.model_name == "3/claude-sonnet-5"
+
+
+def test_manager_craft_default_not_visible_falls_through_to_chat_default() -> None:
+    """A craft default that is no longer visible/accessible must fall through
+    to the chat default, not straight to the recommendation."""
+    anthropic = _provider(
+        3,
+        "anthropic",
+        [_model("claude-sonnet-5"), _model("claude-opus-5")],
+        name="Zulu provider",
+    )
+    bedrock = _provider(
+        7,
+        "bedrock",
+        [_model("bedrock-lite", is_visible=False), _model("bedrock-pro")],
+        name="Alpha provider",
+    )
+    manager = SessionManager.__new__(SessionManager)
+    manager._db_session = cast(Session, MagicMock(spec=Session))  # type: ignore[attr-defined]
+    user = cast(User, MagicMock(spec=User))
+
+    chat_default = MagicMock()
+    chat_default.configure_mock(llm_provider_id=3, name="claude-sonnet-5")
+    craft_default = MagicMock()
+    craft_default.configure_mock(llm_provider_id=7, name="bedrock-lite")
+    with (
+        patch.object(llm_config, "ONYX_SERVER_URL", "https://onyx.test"),
+        patch.object(
+            manager_module,
+            "fetch_all_accessible_llm_providers",
+            return_value=[anthropic, bedrock],
+        ),
+        patch.object(
+            manager_module, "fetch_default_llm_model", return_value=chat_default
+        ),
+        patch.object(
+            manager_module, "fetch_default_craft_model", return_value=craft_default
+        ),
+    ):
+        config = manager.build_llm_configs(user)
+
+    assert config.model_name == "3/claude-sonnet-5"
+
+
+def test_selection_outranks_configured_default() -> None:
+    """A session's own pick must survive an org default pointing elsewhere —
+    reversing these two would silently move every existing session's model."""
+    anthropic = _provider(3, "anthropic", [_model("claude-sonnet-5")])
+    bedrock = _provider(7, "bedrock", [_model("bedrock-pro")])
+
+    with patch.object(llm_config, "ONYX_SERVER_URL", "https://onyx.test"):
+        config = llm_config.build_onyx_gateway_config(
+            [anthropic, bedrock],
+            llm_config.GatewaySelection(7, "bedrock-pro"),
+            [llm_config.GatewaySelection(3, "claude-sonnet-5")],
+        )
+
+    assert config is not None
+    assert config.model_name == "7/bedrock-pro"
+
+
+def test_stale_selection_falls_through_to_configured_default() -> None:
+    anthropic = _provider(3, "anthropic", [_model("claude-sonnet-5")])
+    bedrock = _provider(7, "bedrock", [_model("bedrock-pro")])
+
+    with patch.object(llm_config, "ONYX_SERVER_URL", "https://onyx.test"):
+        config = llm_config.build_onyx_gateway_config(
+            [anthropic, bedrock],
+            llm_config.GatewaySelection(7, "retired-model"),
+            [llm_config.GatewaySelection(3, "claude-sonnet-5")],
+        )
+
+    assert config is not None
+    assert config.model_name == "3/claude-sonnet-5"
 
 
 def _gateway_config() -> CraftLLMProviderConfig:
@@ -424,9 +633,7 @@ def test_empty_gateway_session_skips_unchanged_catalog() -> None:
     config = _gateway_config()
     manager, sandbox_manager, build_llm_configs = _reconcile_manager(config)
     expected = json.dumps(
-        build_provider_opencode_config(
-            config, disabled_tools=manager_module.OPENCODE_DISABLED_TOOLS
-        )
+        build_provider_opencode_config(config, disabled_tools=OPENCODE_DISABLED_TOOLS)
     )
     assert expected is not None
     sandbox_manager.read_file.return_value = expected.encode()
@@ -451,9 +658,7 @@ def test_unchanged_catalog_retries_pending_dispose() -> None:
     config = _gateway_config()
     manager, sandbox_manager, build_llm_configs = _reconcile_manager(config)
     expected = json.dumps(
-        build_provider_opencode_config(
-            config, disabled_tools=manager_module.OPENCODE_DISABLED_TOOLS
-        )
+        build_provider_opencode_config(config, disabled_tools=OPENCODE_DISABLED_TOOLS)
     )
     assert expected is not None
     sandbox_manager.read_file.return_value = expected.encode()
@@ -594,3 +799,54 @@ def test_empty_gateway_session_restarts_instance_for_changed_catalog() -> None:
     )
     cache.set.assert_called_once()
     cache.delete.assert_called_once()
+
+
+def test_workspace_rebuild_claims_a_dispose_the_next_reconcile_honours() -> None:
+    """Restoring a session rewrites opencode.json but cannot dispose the
+    running instance itself; it claims the dispose and the next turn performs it.
+
+    Both halves go through the real cache key on purpose. The failure this pins
+    is silent: the rebuilt file matches what reconcile would write, so reconcile
+    short-circuits, the instance keeps the catalog it started with, and the
+    first turn after a wake dies with "model not found" while the config on
+    disk looks perfect.
+    """
+    config = _gateway_config()
+    manager, sandbox_manager, _ = _reconcile_manager(config)
+    expected = json.dumps(
+        build_provider_opencode_config(config, disabled_tools=OPENCODE_DISABLED_TOOLS)
+    )
+    # Exactly the post-rebuild state: file already correct on disk.
+    sandbox_manager.read_file.return_value = expected.encode()
+
+    store: dict[str, str] = {}
+    cache = MagicMock()
+    cache.set.side_effect = lambda key, value, ex=None: store.__setitem__(  # noqa: ARG005
+        key, value
+    )
+    cache.get.side_effect = store.get
+    cache.delete.side_effect = lambda key: store.pop(key, None)
+
+    session = cast(
+        BuildSession,
+        MagicMock(
+            id=2,
+            agent_provider=None,
+            agent_model=None,
+            opencode_session_id="ses_restored",
+        ),
+    )
+
+    with patch.object(manager_module, "get_cache_backend", return_value=cache):
+        # What the restore path does after rebuilding the workspace.
+        manager_module.mark_opencode_dispose_pending(session.id)
+        assert store, "the claim must be recorded before the next turn runs"
+
+        manager.reconcile_session_llm_config(
+            cast(Sandbox, MagicMock(id=1)),
+            session,
+            cast(User, MagicMock(spec=User)),
+        )
+
+    sandbox_manager.dispose_opencode_instance.assert_called_once()
+    assert store == {}, "the claim must be cleared once the dispose succeeded"

@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { Button } from "@opal/components";
 import { SvgLock } from "@opal/icons";
 import { ContentAction } from "@opal/layouts";
@@ -9,6 +10,7 @@ import { ContentAction } from "@opal/layouts";
  * no supported provider available — only admins can configure one.
  */
 export default function CraftLlmLockedState() {
+  const t = useTranslations("craft.onboarding.llmLocked");
   return (
     <div
       className="flex flex-col w-full p-1 rounded-16 border border-border-01 bg-background-tint-00"
@@ -16,14 +18,14 @@ export default function CraftLlmLockedState() {
     >
       <ContentAction
         icon={SvgLock}
-        title="An LLM provider is required"
-        description="Onyx Craft needs a model provider, and only admins can set one up. Ask your admin to connect Anthropic, OpenAI, or OpenRouter."
+        title={t("title")}
+        description={t("description")}
         sizePreset="main-ui"
         variant="section"
-        padding="lg"
+        padding={2}
         rightChildren={
           <Button prominence="tertiary" href="/app">
-            Back to Chat
+            {t("backToChatButton")}
           </Button>
         }
       />

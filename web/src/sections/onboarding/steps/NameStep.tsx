@@ -1,16 +1,16 @@
 "use client";
 
 import React, { useRef } from "react";
+import { useTranslations } from "next-intl";
 import Text from "@/refresh-components/texts/Text";
-import { InputTypeIn } from "@opal/components";
+import { Button, InputTypeIn } from "@opal/components";
 import {
   OnboardingState,
   OnboardingActions,
   OnboardingStep,
 } from "@/interfaces/onboarding";
 import InputAvatar from "@/refresh-components/inputs/InputAvatar";
-import { cn } from "@opal/utils";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { cn, clickOnKeyDown } from "@opal/utils";
 import { SvgCheckCircle, SvgEdit, SvgUser } from "@opal/icons";
 import { InputHorizontal } from "@opal/layouts";
 import { Hoverable } from "@opal/core";
@@ -22,6 +22,7 @@ export interface NameStepProps {
 
 const NameStep = React.memo(
   ({ state: onboardingState, actions: onboardingActions }: NameStepProps) => {
+    const t = useTranslations("onboarding");
     const { userName } = onboardingState.data;
     const { updateName, goToStep, setButtonActive, nextStep } =
       onboardingActions;
@@ -39,37 +40,47 @@ const NameStep = React.memo(
     };
 
     const inputRef = useRef<HTMLInputElement>(null);
+
+    const handleEdit = () => {
+      setButtonActive(true);
+      goToStep(OnboardingStep.Name);
+    };
+
     return isActive ? (
       <div
         className={containerClasses}
-        onClick={() => inputRef.current?.focus()}
         role="group"
         aria-label="onboarding-name-step"
       >
-        <InputHorizontal
-          responsive
-          icon={SvgUser}
-          title="What should Onyx call you?"
-          description="We will display this name in the app."
+        {/* Pointer convenience only — the input is already keyboard reachable. */}
+        <div
+          role="presentation"
+          className="contents"
+          onClick={() => inputRef.current?.focus()}
         >
-          <InputTypeIn
-            ref={inputRef}
-            placeholder="Your name"
-            value={userName || ""}
-            onChange={(e) => updateName(e.target.value)}
-            onKeyDown={handleKeyDown}
-          />
-        </InputHorizontal>
+          <InputHorizontal
+            responsive
+            icon={SvgUser}
+            title={t("nameStep.title")}
+            description={t("nameStep.description")}
+          >
+            <InputTypeIn
+              ref={inputRef}
+              placeholder={t("nameStep.input.placeholder")}
+              value={userName || ""}
+              onChange={(e) => updateName(e.target.value)}
+              onKeyDown={handleKeyDown}
+            />
+          </InputHorizontal>
+        </div>
       </div>
     ) : (
       <Hoverable.Root group="nameStep" width="full">
         <div
           className={containerClasses}
-          onClick={() => {
-            setButtonActive(true);
-            goToStep(OnboardingStep.Name);
-          }}
-          aria-label="Edit display name"
+          onClick={handleEdit}
+          onKeyDown={clickOnKeyDown(handleEdit)}
+          aria-label={t("nameStep.edit.ariaLabel")}
           role="button"
           tabIndex={0}
         >
@@ -91,9 +102,13 @@ const NameStep = React.memo(
             </Text>
           </div>
           <div className="p-1 flex items-center gap-1">
-            {/* TODO(@raunakab): migrate to opal Button once className/iconClassName is resolved */}
             <Hoverable.Item group="nameStep" variant="appear-on-hover">
-              <IconButton internal icon={SvgEdit} tooltip="Edit" />
+              <Button
+                prominence="internal"
+                size="sm"
+                icon={SvgEdit}
+                tooltip={t("nameStep.edit.tooltip")}
+              />
             </Hoverable.Item>
             <SvgCheckCircle
               className={cn(

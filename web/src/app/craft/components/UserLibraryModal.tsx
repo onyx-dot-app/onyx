@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useCallback, useRef, useMemo, useEffect } from "react";
+import { useTranslations } from "next-intl";
+import { useFocusOnMount } from "@opal/hooks";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
@@ -12,7 +14,7 @@ import {
 } from "@/app/craft/services/apiServices";
 import { LibraryEntry } from "@/app/craft/types/user-library";
 import { Modal } from "@opal/components";
-import { cn } from "@opal/utils";
+import { cn, clickOnKeyDown } from "@opal/utils";
 import {
   SvgFolder,
   SvgFolderOpen,
@@ -94,12 +96,14 @@ export default function UserLibraryModal({
   onClose,
   onChanges,
 }: UserLibraryModalProps) {
+  const t = useTranslations("craft.userLibrary");
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
   const [isUploading, setIsUploading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [entryToDelete, setEntryToDelete] = useState<LibraryEntry | null>(null);
   const [showNewFolderModal, setShowNewFolderModal] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
+  const focusOnMount = useFocusOnMount<HTMLInputElement>();
   const [searchQuery, setSearchQuery] = useState("");
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -179,12 +183,14 @@ export default function UserLibraryModal({
         mutate();
         onChanges?.();
       } catch (err) {
-        setActionError(err instanceof Error ? err.message : "Upload failed");
+        setActionError(
+          err instanceof Error ? err.message : t("errors.uploadFailed")
+        );
       } finally {
         setIsUploading(false);
       }
     },
-    [mutate, onChanges]
+    [mutate, onChanges, t]
   );
 
   const handleFileInputChange = useCallback(
@@ -246,11 +252,13 @@ export default function UserLibraryModal({
       mutate();
       onChanges?.();
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : "Failed to delete");
+      setActionError(
+        err instanceof Error ? err.message : t("errors.deleteFailed")
+      );
     } finally {
       setEntryToDelete(null);
     }
-  }, [entryToDelete, mutate, onChanges]);
+  }, [entryToDelete, mutate, onChanges, t]);
 
   const handleCreateDirectory = useCallback(async () => {
     const name = newFolderName.trim();
@@ -262,13 +270,13 @@ export default function UserLibraryModal({
       mutate();
     } catch (err) {
       setActionError(
-        err instanceof Error ? err.message : "Failed to create folder"
+        err instanceof Error ? err.message : t("errors.createFolderFailed")
       );
     } finally {
       setShowNewFolderModal(false);
       setNewFolderName("");
     }
-  }, [mutate, newFolderName]);
+  }, [mutate, newFolderName, t]);
 
   const isEmpty = hierarchicalTree.length === 0;
   const noMatches = !isEmpty && visibleTree.length === 0;
@@ -279,13 +287,13 @@ export default function UserLibraryModal({
         <Modal.Content width="sm" height="fit" preventAccidentalClose={false}>
           <Modal.Header
             icon={SvgFolder}
-            title="Library"
-            description="Files your agent can read in every session."
+            title={t("modal.title")}
+            description={t("modal.description")}
             onClose={onClose}
           >
-            <Section flexDirection="row" gap={0.5}>
+            <Section flexDirection="row" gap={2}>
               <InputTypeIn
-                placeholder="Search files..."
+                placeholder={t("search.placeholder")}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 searchIcon
@@ -295,15 +303,15 @@ export default function UserLibraryModal({
                 prominence="secondary"
                 icon={SvgFolderPlus}
                 onClick={() => setShowNewFolderModal(true)}
-                tooltip="New folder"
-                aria-label="New folder"
+                tooltip={t("newFolder.label")}
+                aria-label={t("newFolder.label")}
               />
               <Button
                 icon={SvgUploadCloud}
                 disabled={isUploading}
                 onClick={() => handleUploadToFolder("/")}
               >
-                {isUploading ? "Uploading…" : "Upload"}
+                {isUploading ? t("upload.uploadingButton") : t("upload.button")}
               </Button>
             </Section>
           </Modal.Header>
@@ -337,13 +345,13 @@ export default function UserLibraryModal({
                 {isLoading ? (
                   <div className="flex items-center justify-center py-12">
                     <Text font="secondary-body" color="text-03">
-                      Loading files…
+                      {t("loading.label")}
                     </Text>
                   </div>
                 ) : error ? (
                   <div className="flex items-center justify-center py-12">
                     <Text font="secondary-body" color="status-error-05">
-                      Failed to load files
+                      {t("errors.loadFailed")}
                     </Text>
                   </div>
                 ) : isEmpty ? (
@@ -354,7 +362,7 @@ export default function UserLibraryModal({
                 ) : noMatches ? (
                   <div className="flex items-center justify-center py-12">
                     <Text font="secondary-body" color="text-03">
-                      No files match your search
+                      {t("search.noResults")}
                     </Text>
                   </div>
                 ) : (
@@ -376,7 +384,7 @@ export default function UserLibraryModal({
                 {isDragging && (
                   <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-12 border-2 border-dashed border-action-selection-04 bg-action-selection-01/90">
                     <Text font="main-ui-action" color="text-05">
-                      Drop files to upload
+                      {t("upload.dropOverlay")}
                     </Text>
                   </div>
                 )}
@@ -386,7 +394,7 @@ export default function UserLibraryModal({
 
           <Modal.Footer>
             <Button prominence="secondary" onClick={onClose}>
-              Done
+              {t("modal.doneButton")}
             </Button>
           </Modal.Footer>
         </Modal.Content>
@@ -396,14 +404,18 @@ export default function UserLibraryModal({
       {entryToDelete && (
         <ConfirmEntityModal
           danger
-          entityType={entryToDelete.is_directory ? "folder" : "file"}
+          entityType={
+            entryToDelete.is_directory
+              ? t("delete.entityTypeFolder")
+              : t("delete.entityTypeFile")
+          }
           entityName={entryToDelete.name}
-          action="delete"
-          actionButtonText="Delete"
+          action={t("delete.action")}
+          actionButtonText={t("delete.button")}
           additionalDetails={
             entryToDelete.is_directory
-              ? "This will delete the folder and all its contents."
-              : "This file will be removed from your library."
+              ? t("delete.folderDetails")
+              : t("delete.fileDetails")
           }
           onClose={() => setEntryToDelete(null)}
           onSubmit={handleDeleteConfirm}
@@ -423,7 +435,7 @@ export default function UserLibraryModal({
         <Modal.Content width="sm" height="fit">
           <Modal.Header
             icon={SvgFolder}
-            title="New folder"
+            title={t("newFolder.label")}
             onClose={() => {
               setShowNewFolderModal(false);
               setNewFolderName("");
@@ -432,18 +444,18 @@ export default function UserLibraryModal({
           <Modal.Body>
             <div className="flex flex-col items-stretch gap-2">
               <Text font="secondary-body" color="text-03">
-                Folder name
+                {t("newFolder.nameLabel")}
               </Text>
               <InputTypeIn
                 value={newFolderName}
                 onChange={(e) => setNewFolderName(e.target.value)}
-                placeholder="Enter folder name"
+                placeholder={t("newFolder.namePlaceholder")}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && newFolderName.trim()) {
                     handleCreateDirectory();
                   }
                 }}
-                autoFocus
+                ref={focusOnMount}
               />
             </div>
           </Modal.Body>
@@ -455,13 +467,13 @@ export default function UserLibraryModal({
                 setNewFolderName("");
               }}
             >
-              Cancel
+              {t("newFolder.cancelButton")}
             </Button>
             <Button
               disabled={!newFolderName.trim()}
               onClick={handleCreateDirectory}
             >
-              Create
+              {t("newFolder.createButton")}
             </Button>
           </Modal.Footer>
         </Modal.Content>
@@ -476,6 +488,7 @@ interface UploadDropzoneProps {
 }
 
 function UploadDropzone({ onClick, active }: UploadDropzoneProps) {
+  const t = useTranslations("craft.userLibrary");
   return (
     <div
       role="button"
@@ -496,10 +509,10 @@ function UploadDropzone({ onClick, active }: UploadDropzoneProps) {
     >
       <SvgUploadCloud size={28} className="stroke-text-03" />
       <Text font="main-ui-action" color="text-04">
-        Drag files here or click to upload
+        {t("dropzone.title")}
       </Text>
       <Text font="secondary-body" color="text-03">
-        Excel, Word, PowerPoint, PDF, or ZIP
+        {t("dropzone.formats")}
       </Text>
     </div>
   );
@@ -525,6 +538,7 @@ function LibraryTreeView({
   onUploadToFolder,
   depth = 0,
 }: LibraryTreeViewProps) {
+  const t = useTranslations("craft.userLibrary");
   // Sort entries: directories first, then alphabetically
   const sortedEntries = [...entries].sort((a, b) => {
     if (a.is_directory && !b.is_directory) return -1;
@@ -540,104 +554,123 @@ function LibraryTreeView({
       {sortedEntries.map((entry) => {
         const isExpanded = forceExpanded || expandedPaths.has(entry.path);
 
-        return (
-          <div key={entry.id} className="flex flex-col">
-            <div
-              className={cn(
-                "group flex items-center gap-2 rounded-8 px-2 py-1.5 transition-colors hover:bg-background-tint-01",
-                entry.is_directory && "cursor-pointer"
-              )}
-              onClick={
-                entry.is_directory
-                  ? () => onToggleFolder(entry.path)
-                  : undefined
-              }
-            >
-              {/* Indent for nesting depth */}
-              {depth > 0 && (
-                <span
-                  aria-hidden
-                  className="shrink-0"
-                  style={{ width: `${depth * 1.25}rem` }}
-                />
-              )}
+        const rowClassName = cn(
+          "group flex items-center gap-2 rounded-8 px-2 py-1.5 transition-colors hover:bg-background-tint-01",
+          entry.is_directory && "cursor-pointer"
+        );
 
-              {/* Expand/collapse for directories (icon swap avoids a rotate style) */}
-              {entry.is_directory ? (
-                <Button
-                  prominence="tertiary"
-                  size="2xs"
-                  icon={isExpanded ? SvgChevronDown : SvgChevronRight}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onToggleFolder(entry.path);
-                  }}
-                  tooltip={isExpanded ? "Collapse" : "Expand"}
-                  aria-label={isExpanded ? "Collapse" : "Expand"}
-                />
+        const rowBody = (
+          <>
+            {/* Indent for nesting depth */}
+            {depth > 0 && (
+              <span
+                aria-hidden
+                className="shrink-0"
+                style={{ width: `${depth * 1.25}rem` }}
+              />
+            )}
+
+            {/* Expand/collapse for directories (icon swap avoids a rotate style) */}
+            {entry.is_directory ? (
+              <Button
+                prominence="tertiary"
+                size="2xs"
+                icon={isExpanded ? SvgChevronDown : SvgChevronRight}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleFolder(entry.path);
+                }}
+                tooltip={
+                  isExpanded
+                    ? t("tree.collapseTooltip")
+                    : t("tree.expandTooltip")
+                }
+                aria-label={
+                  isExpanded
+                    ? t("tree.collapseTooltip")
+                    : t("tree.expandTooltip")
+                }
+              />
+            ) : (
+              hasDirectories && <span aria-hidden className="w-5 shrink-0" />
+            )}
+
+            {/* Type icon */}
+            {entry.is_directory ? (
+              isExpanded ? (
+                <SvgFolderOpen size={16} className="shrink-0 stroke-text-03" />
               ) : (
-                hasDirectories && <span aria-hidden className="w-5 shrink-0" />
-              )}
+                <SvgFolder size={16} className="shrink-0 stroke-text-03" />
+              )
+            ) : (
+              <SvgFileText size={16} className="shrink-0 stroke-text-03" />
+            )}
 
-              {/* Type icon */}
-              {entry.is_directory ? (
-                isExpanded ? (
-                  <SvgFolderOpen
-                    size={16}
-                    className="shrink-0 stroke-text-03"
-                  />
-                ) : (
-                  <SvgFolder size={16} className="shrink-0 stroke-text-03" />
-                )
-              ) : (
-                <SvgFileText size={16} className="shrink-0 stroke-text-03" />
-              )}
+            {/* Name */}
+            <div className="min-w-0 flex-1">
+              <Text font="main-ui-muted" color="text-04" maxLines={1}>
+                {entry.name}
+              </Text>
+            </div>
 
-              {/* Name */}
-              <div className="min-w-0 flex-1">
-                <Text font="main-ui-muted" color="text-04" maxLines={1}>
-                  {entry.name}
-                </Text>
-              </div>
+            {/* File size */}
+            {!entry.is_directory && entry.file_size !== null && (
+              <Text font="secondary-body" color="text-03" nowrap>
+                {formatFileSize(entry.file_size)}
+              </Text>
+            )}
 
-              {/* File size */}
-              {!entry.is_directory && entry.file_size !== null && (
-                <Text font="secondary-body" color="text-03" nowrap>
-                  {formatFileSize(entry.file_size)}
-                </Text>
-              )}
-
-              {/* Row actions — revealed on hover/focus */}
-              <div className="flex items-center gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100 no-hover:opacity-100">
-                {entry.is_directory && (
-                  <Button
-                    prominence="tertiary"
-                    size="sm"
-                    icon={SvgUploadCloud}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      const uploadPath =
-                        entry.path.replace(/^user_library/, "") || "/";
-                      onUploadToFolder(uploadPath);
-                    }}
-                    tooltip="Upload to this folder"
-                    aria-label="Upload to this folder"
-                  />
-                )}
+            {/* Row actions — revealed on hover/focus */}
+            <div className="flex items-center gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100 no-hover:opacity-100">
+              {entry.is_directory && (
                 <Button
-                  variant="danger"
                   prominence="tertiary"
                   size="sm"
-                  icon={SvgTrash}
+                  icon={SvgUploadCloud}
                   onClick={(e) => {
                     e.stopPropagation();
-                    onDelete(entry);
+                    const uploadPath =
+                      entry.path.replace(/^user_library/, "") || "/";
+                    onUploadToFolder(uploadPath);
                   }}
-                  tooltip="Delete"
-                  aria-label="Delete"
+                  tooltip={t("tree.uploadToFolderTooltip")}
+                  aria-label={t("tree.uploadToFolderTooltip")}
                 />
-              </div>
+              )}
+              <Button
+                variant="danger"
+                prominence="tertiary"
+                size="sm"
+                icon={SvgTrash}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete(entry);
+                }}
+                tooltip={t("tree.deleteTooltip")}
+                aria-label={t("tree.deleteTooltip")}
+              />
             </div>
+          </>
+        );
+
+        return (
+          <div key={entry.id} className="flex flex-col">
+            {entry.is_directory ? (
+              // The row holds its own buttons, so a clickable folder row stays
+              // a div with button semantics rather than a nested <button>.
+              <div
+                className={rowClassName}
+                role="button"
+                tabIndex={0}
+                aria-label={t("tree.toggleAriaLabel", { name: entry.name })}
+                onKeyDown={clickOnKeyDown(() => onToggleFolder(entry.path))}
+                onClick={() => onToggleFolder(entry.path)}
+              >
+                {rowBody}
+              </div>
+            ) : (
+              <div className={rowClassName}>{rowBody}</div>
+            )}
 
             {/* Children */}
             {entry.is_directory && isExpanded && entry.children && (

@@ -6,7 +6,7 @@ metadata:
     {{- include "onyx.labels" . | nindent 4 }}
 data:
   {{- $craftEnabled := eq (include "onyx.craftEnabled" .) "true" }}
-  INTERNAL_URL: "http://{{ include "onyx.fullname" . }}-api-service:{{ .Values.api.service.servicePort | default 8080 }}"
+  INTERNAL_URL: "http://{{ include "onyx.resourceName" (list . "api-service") }}:{{ .Values.api.service.servicePort | default 8080 }}"
   {{- if .Values.postgresql.enabled }}
   POSTGRES_HOST: {{ .Release.Name }}-pg-rw
   {{- end }}
@@ -24,11 +24,11 @@ data:
   {{- /* configMap overrides win (rendered by the range below) — emitting the
   default too would produce a duplicate YAML key. */}}
   {{- if not (index .Values.configMap "MODEL_SERVER_HOST") }}
-  MODEL_SERVER_HOST: "{{ include "onyx.fullname" . }}-inference-model-service"
+  MODEL_SERVER_HOST: "{{ include "onyx.resourceName" (list . "inference-model-service") }}"
   {{- end }}
   {{- if .Values.vectorDB.enabled }}
   {{- if not (index .Values.configMap "INDEXING_MODEL_SERVER_HOST") }}
-  INDEXING_MODEL_SERVER_HOST: "{{ include "onyx.fullname" . }}-indexing-model-service"
+  INDEXING_MODEL_SERVER_HOST: "{{ include "onyx.resourceName" (list . "indexing-model-service") }}"
   {{- end }}
   DISABLE_VECTOR_DB: "false"
   {{- else }}
@@ -36,10 +36,23 @@ data:
   {{- end }}
 {{- range $key, $value := .Values.configMap }}
 {{- $skipCraftProxyKey := and $craftEnabled (or (eq $key "SANDBOX_PROXY_HOST") (eq $key "SANDBOX_PROXY_PORT")) }}
-{{- if and (not (empty $value)) (not $skipCraftProxyKey) }}
+{{- $skipPostgresTlsKey := and (eq (include "onyx.postgresTls.enabled" $) "true") (or (eq $key "POSTGRES_SSLMODE") (eq $key "POSTGRES_SSLROOTCERT")) }}
+{{- $skipRedisTlsKey := and (eq (include "onyx.redisTls.enabled" $) "true") (or (eq $key "REDIS_SSL") (eq $key "REDIS_SSL_CERT_REQS") (eq $key "REDIS_SSL_CA_CERTS") (eq $key "REDIS_SSL_CHECK_HOSTNAME")) }}
+{{- if and (not (empty $value)) (not $skipCraftProxyKey) (not $skipPostgresTlsKey) (not $skipRedisTlsKey) }}
   {{ $key }}: "{{ $value }}"
 {{- end }}
 {{- end }}
+  {{- if eq (include "onyx.postgresTls.enabled" .) "true" }}
+  POSTGRES_SSLMODE: {{ .Values.postgresTls.sslMode | default "verify-ca" | quote }}
+  POSTGRES_SSLROOTCERT: {{ .Values.postgresTls.caMountPath | default "/etc/postgres-ca/ca.crt" | quote }}
+  {{- end }}
+  {{- if eq (include "onyx.redisTls.enabled" .) "true" }}
+  {{- $redisTls := .Values.redisTls | default dict }}
+  REDIS_SSL: "true"
+  REDIS_SSL_CERT_REQS: "required"
+  REDIS_SSL_CA_CERTS: {{ $redisTls.caMountPath | default "/etc/ssl/certs/redis-ca.crt" | quote }}
+  REDIS_SSL_CHECK_HOSTNAME: {{ include "onyx.redisTls.checkHostname" . | quote }}
+  {{- end }}
   {{- if .Values.minio.enabled }}
   S3_ENDPOINT_URL: "http://{{ .Release.Name }}-minio:{{ default 9000 .Values.minio.service.port }}"
   {{- end }}

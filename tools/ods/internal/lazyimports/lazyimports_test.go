@@ -68,7 +68,10 @@ from typing import Dict
 	defer func() { _ = os.Remove(testPath) }()
 
 	patterns := createPatterns([]string{"google.genai", "transformers"})
-	result := findEagerImports(testPath, patterns)
+	result, err := findEagerImports(testPath, patterns)
+	if err != nil {
+		t.Fatalf("findEagerImports failed: %v", err)
+	}
 
 	// Should find 4 violations (lines 2, 3, 4, 5)
 	if len(result.ViolationLines) != 4 {
@@ -127,7 +130,10 @@ from transformers import BertModel
 	defer func() { _ = os.Remove(testPath) }()
 
 	patterns := createPatterns([]string{"google.genai", "transformers"})
-	result := findEagerImports(testPath, patterns)
+	result, err := findEagerImports(testPath, patterns)
+	if err != nil {
+		t.Fatalf("findEagerImports failed: %v", err)
+	}
 
 	// Should only find violations for top-level imports (lines 14, 15)
 	if len(result.ViolationLines) != 2 {
@@ -167,7 +173,10 @@ import mygenai  # Should not be flagged
 	defer func() { _ = os.Remove(testPath) }()
 
 	patterns := createPatterns([]string{"google.genai"})
-	result := findEagerImports(testPath, patterns)
+	result, err := findEagerImports(testPath, patterns)
+	if err != nil {
+		t.Fatalf("findEagerImports failed: %v", err)
+	}
 
 	// Should find 2 violations (lines 2, 3)
 	if len(result.ViolationLines) != 2 {
@@ -209,7 +218,10 @@ import os
 	defer func() { _ = os.Remove(testPath) }()
 
 	patterns := createPatterns([]string{"google.genai"})
-	result := findEagerImports(testPath, patterns)
+	result, err := findEagerImports(testPath, patterns)
+	if err != nil {
+		t.Fatalf("findEagerImports failed: %v", err)
+	}
 
 	// Should find no violations
 	if len(result.ViolationLines) != 0 {
@@ -236,7 +248,10 @@ def some_function():
 	defer func() { _ = os.Remove(testPath) }()
 
 	patterns := createPatterns([]string{"google.genai", "transformers"})
-	result := findEagerImports(testPath, patterns)
+	result, err := findEagerImports(testPath, patterns)
+	if err != nil {
+		t.Fatalf("findEagerImports failed: %v", err)
+	}
 
 	// Should find no violations
 	if len(result.ViolationLines) != 0 {
@@ -248,18 +263,12 @@ def some_function():
 }
 
 func TestFindEagerImportsFileReadError(t *testing.T) {
-	// Test handling of file read errors.
+	// Test that an unreadable file fails the check instead of passing it.
 	nonexistentPath := "/nonexistent/path/test.py"
 
 	patterns := createPatterns([]string{"google.genai"})
-	result := findEagerImports(nonexistentPath, patterns)
-
-	// Should return empty result on error
-	if len(result.ViolationLines) != 0 {
-		t.Errorf("Expected 0 violations for nonexistent file, got %d", len(result.ViolationLines))
-	}
-	if len(result.ViolatedModules) != 0 {
-		t.Errorf("Expected 0 violated modules for nonexistent file, got %d", len(result.ViolatedModules))
+	if _, err := findEagerImports(nonexistentPath, patterns); err == nil {
+		t.Fatalf("Expected an error for a nonexistent file")
 	}
 }
 
@@ -280,7 +289,10 @@ def some_function():
 	defer func() { _ = os.Remove(testPath) }()
 
 	patterns := createPatterns([]string{"onyx.llm.litellm_singleton"})
-	result := findEagerImports(testPath, patterns)
+	result, err := findEagerImports(testPath, patterns)
+	if err != nil {
+		t.Fatalf("findEagerImports failed: %v", err)
+	}
 
 	// Should find one violation (line 3)
 	if len(result.ViolationLines) != 1 {
@@ -321,7 +333,10 @@ class SomeClass:
 	defer func() { _ = os.Remove(testPath) }()
 
 	patterns := createPatterns([]string{"onyx.llm.litellm_singleton"})
-	result := findEagerImports(testPath, patterns)
+	result, err := findEagerImports(testPath, patterns)
+	if err != nil {
+		t.Fatalf("findEagerImports failed: %v", err)
+	}
 
 	// Should find no violations
 	if len(result.ViolationLines) != 0 {
@@ -506,7 +521,10 @@ def allowed_function():
 	defer func() { _ = os.Remove(testPath) }()
 
 	patterns := createPatterns([]string{"playwright"})
-	result := findEagerImports(testPath, patterns)
+	result, err := findEagerImports(testPath, patterns)
+	if err != nil {
+		t.Fatalf("findEagerImports failed: %v", err)
+	}
 
 	// Should find 4 violations (lines 2, 3, 4, 5)
 	if len(result.ViolationLines) != 4 {
@@ -555,7 +573,10 @@ def allowed_function():
 	defer func() { _ = os.Remove(testPath) }()
 
 	patterns := createPatterns([]string{"nltk"})
-	result := findEagerImports(testPath, patterns)
+	result, err := findEagerImports(testPath, patterns)
+	if err != nil {
+		t.Fatalf("findEagerImports failed: %v", err)
+	}
 
 	// Should find 4 violations (lines 2, 3, 4, 5)
 	if len(result.ViolationLines) != 4 {
@@ -605,7 +626,10 @@ def allowed_usage():
 	defer func() { _ = os.Remove(testPath) }()
 
 	patterns := createPatterns([]string{"google.genai", "playwright", "nltk"})
-	result := findEagerImports(testPath, patterns)
+	result, err := findEagerImports(testPath, patterns)
+	if err != nil {
+		t.Fatalf("findEagerImports failed: %v", err)
+	}
 
 	// Should find 3 violations (lines 2, 3, 4)
 	if len(result.ViolationLines) != 3 {
@@ -841,7 +865,10 @@ func TestEmptyFile(t *testing.T) {
 	defer func() { _ = os.Remove(testPath) }()
 
 	patterns := createPatterns([]string{"google.genai"})
-	result := findEagerImports(testPath, patterns)
+	result, err := findEagerImports(testPath, patterns)
+	if err != nil {
+		t.Fatalf("findEagerImports failed: %v", err)
+	}
 
 	if len(result.ViolationLines) != 0 {
 		t.Errorf("Expected 0 violations for empty file, got %d", len(result.ViolationLines))
@@ -859,7 +886,10 @@ func TestFileWithOnlyComments(t *testing.T) {
 	defer func() { _ = os.Remove(testPath) }()
 
 	patterns := createPatterns([]string{"google.genai"})
-	result := findEagerImports(testPath, patterns)
+	result, err := findEagerImports(testPath, patterns)
+	if err != nil {
+		t.Fatalf("findEagerImports failed: %v", err)
+	}
 
 	if len(result.ViolationLines) != 0 {
 		t.Errorf("Expected 0 violations for comment-only file, got %d", len(result.ViolationLines))
@@ -878,7 +908,10 @@ import google.genai
 
 	// Use patterns that might both match the same line
 	patterns := createPatterns([]string{"google.genai", "google"})
-	result := findEagerImports(testPath, patterns)
+	result, err := findEagerImports(testPath, patterns)
+	if err != nil {
+		t.Fatalf("findEagerImports failed: %v", err)
+	}
 
 	// The line should be flagged by google.genai pattern
 	if len(result.ViolationLines) < 1 {
@@ -923,5 +956,29 @@ func TestIgnoreEnvDirectory(t *testing.T) {
 		if base == "env_file.py" || base == "dotenv_file.py" {
 			t.Errorf("File %s should have been ignored", f)
 		}
+	}
+}
+
+func TestCollectPythonFilesResolvesSelectors(t *testing.T) {
+	// Backend-relative selectors resolve via the backend fallback, and a
+	// selector that resolves to nothing is an error.
+	backendDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(backendDir, "pkg"), 0755); err != nil {
+		t.Fatalf("Failed to create pkg dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(backendDir, "pkg", "a.py"), []byte("import os"), 0644); err != nil {
+		t.Fatalf("Failed to create pkg/a.py: %v", err)
+	}
+
+	files, err := collectPythonFiles([]string{"pkg"}, backendDir)
+	if err != nil {
+		t.Fatalf("collectPythonFiles failed: %v", err)
+	}
+	if len(files) != 1 || files[0] != filepath.Join(backendDir, "pkg", "a.py") {
+		t.Fatalf("Expected only pkg/a.py, got %v", files)
+	}
+
+	if _, err := collectPythonFiles([]string{"nonexistent"}, backendDir); err == nil {
+		t.Fatalf("Expected an error for a selector that matches nothing")
 	}
 }

@@ -64,7 +64,7 @@ jobs:
     steps:
       - name: Checkout code
         if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
       - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706
@@ -82,7 +82,7 @@ jobs:
               - 'uv.lock'
               - '.github/workflows/pr-integration-tests.yml'
               - '.github/actions/setup-test-license/**'
-              - '.github/actions/install-deps-and-generate-openapi-client/**'
+              - '.github/actions/install-python-deps/**'
               - '.github/actions/login-ecr-pullthrough-cache/**'
             gateway:
               - 'backend/onyx/server/gateway/**'
@@ -99,7 +99,7 @@ jobs:
       editions: ${{ steps.set-editions.outputs.editions }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -153,7 +153,7 @@ jobs:
     steps:
       - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -184,7 +184,7 @@ jobs:
     steps:
       - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -219,6 +219,10 @@ jobs:
           build-args: |
             BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
           tags: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }}
+          # Attestations attach as ECR referrers to the image digest, which is
+          # stable across runs and caps out at 100 per subject.
+          provenance: false
+          sbom: false
           cache-from: |
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:devcontainer-cache-${{ github.event.pull_request.head.sha || github.sha }}
             type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:devcontainer-cache-${{ steps.format-branch.outputs.cache-suffix }}
@@ -256,7 +260,7 @@ jobs:
     steps:
       - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -315,6 +319,10 @@ jobs:
           EOF
           fi
 
+      # NOTE: only `inference_model_server` runs. `indexing_model_server` is the
+      # same image with the same routes (INDEXING_ONLY only changes the log
+      # request-id prefix), so the tests point both hosts at the one container
+      # and skip a second load of the embedding model.
       - name: Start Docker containers
         run: |
           cd deployment/docker_compose
@@ -324,8 +332,7 @@ jobs:
             opensearch \
             cache \
             minio \
-            inference_model_server \
-            indexing_model_server
+            inference_model_server
         id: start_docker
 
       - name: Start Mock Services
@@ -348,8 +355,8 @@ jobs:
           cd cli
           GOARCH=arm64 GOOS=linux go build -o ${{ github.workspace }}/onyx-cli-test .
 
-      - name: Install Python deps and generate OpenAPI client
-        uses: ./.github/actions/install-deps-and-generate-openapi-client
+      - name: Install Python deps
+        uses: ./.github/actions/install-python-deps
         with:
           devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }}
 
@@ -397,7 +404,7 @@ jobs:
               -e OPENSEARCH_HOST=opensearch \
               -e REDIS_HOST=cache \
               -e MODEL_SERVER_HOST=inference_model_server \
-              -e INDEXING_MODEL_SERVER_HOST=indexing_model_server \
+              -e INDEXING_MODEL_SERVER_HOST=inference_model_server \
               -e S3_ENDPOINT_URL=http://minio:9000 \
               -e S3_AWS_ACCESS_KEY_ID=minioadmin \
               -e S3_AWS_SECRET_ACCESS_KEY=minioadmin \
@@ -469,7 +476,7 @@ jobs:
     steps:
       - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -506,8 +513,8 @@ jobs:
             relational_db
         id: start_docker_onyx_lite
 
-      - name: Install Python deps and generate OpenAPI client
-        uses: ./.github/actions/install-deps-and-generate-openapi-client
+      - name: Install Python deps
+        uses: ./.github/actions/install-python-deps
         with:
           devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }}
 
@@ -576,7 +583,7 @@ jobs:
     steps:
       - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -585,6 +592,8 @@ jobs:
         with:
           ecr-registry: ${{ vars.ECR_REGISTRY }}
 
+      # NOTE: `indexing_model_server` is intentionally not started. See the
+      # integration-tests job above.
       - name: Start Docker containers for multi-tenant tests
         env:
           ECR_CACHE: ${{ env.RUNS_ON_ECR_CACHE }}
@@ -606,12 +615,11 @@ jobs:
             opensearch \
             cache \
             minio \
-            inference_model_server \
-            indexing_model_server
+            inference_model_server
         id: start_docker_multi_tenant
 
-      - name: Install Python deps and generate OpenAPI client
-        uses: ./.github/actions/install-deps-and-generate-openapi-client
+      - name: Install Python deps
+        uses: ./.github/actions/install-python-deps
         with:
           devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}:integration-test-devcontainer-${{ github.run_id }}
 
@@ -636,7 +644,7 @@ jobs:
             -e OPENSEARCH_HOST=opensearch \
             -e REDIS_HOST=cache \
             -e MODEL_SERVER_HOST=inference_model_server \
-            -e INDEXING_MODEL_SERVER_HOST=indexing_model_server \
+            -e INDEXING_MODEL_SERVER_HOST=inference_model_server \
             -e S3_ENDPOINT_URL=http://minio:9000 \
             -e S3_AWS_ACCESS_KEY_ID=minioadmin \
             -e S3_AWS_SECRET_ACCESS_KEY=minioadmin \

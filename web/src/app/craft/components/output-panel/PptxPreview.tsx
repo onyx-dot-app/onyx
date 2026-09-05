@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useTranslations } from "next-intl";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { cn } from "@opal/utils";
@@ -17,7 +18,7 @@ interface PptxPreviewProps {
 }
 
 /**
- * PptxPreview - Displays PPTX files as navigable slide images.
+ * PptxPreview - Displays PowerPoint files as navigable slide images.
  * Triggers on-demand conversion via the backend, then renders
  * individual slide JPEGs in a carousel with keyboard navigation.
  */
@@ -26,6 +27,7 @@ export default function PptxPreview({
   filePath,
   refreshKey,
 }: PptxPreviewProps) {
+  const t = useTranslations("craft.pptxPreview");
   const [currentSlide, setCurrentSlide] = useState(0);
   const [imageLoading, setImageLoading] = useState(true);
 
@@ -68,9 +70,11 @@ export default function PptxPreview({
   // Keyboard navigation
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "ArrowLeft") {
+      // Horizontal arrows follow the reading direction, so RTL swaps them.
+      const isRtl = document.documentElement.dir === "rtl";
+      if (e.key === (isRtl ? "ArrowRight" : "ArrowLeft")) {
         goToPrev();
-      } else if (e.key === "ArrowRight") {
+      } else if (e.key === (isRtl ? "ArrowLeft" : "ArrowRight")) {
         goToNext();
       }
     }
@@ -84,10 +88,10 @@ export default function PptxPreview({
         height="full"
         alignItems="center"
         justifyContent="center"
-        padding={2}
+        padding={8}
       >
         <Text font="secondary-body" color="text-03">
-          Converting presentation...
+          {t("converting.label")}
         </Text>
       </Section>
     );
@@ -99,11 +103,11 @@ export default function PptxPreview({
         height="full"
         alignItems="center"
         justifyContent="center"
-        padding={2}
+        padding={8}
       >
         <SvgFileText size={48} className="stroke-text-02" />
         <Text font="heading-h3" color="text-03">
-          Cannot preview presentation
+          {t("error.title")}
         </Text>
         <div className="text-center max-w-md">
           <Text font="secondary-body" color="text-02">
@@ -120,11 +124,11 @@ export default function PptxPreview({
         height="full"
         alignItems="center"
         justifyContent="center"
-        padding={2}
+        padding={8}
       >
         <SvgFileText size={48} className="stroke-text-02" />
         <Text font="secondary-body" color="text-03">
-          No slides in this presentation
+          {t("empty.label")}
         </Text>
       </Section>
     );
@@ -140,13 +144,16 @@ export default function PptxPreview({
         {imageLoading && (
           <div className="absolute">
             <Text font="secondary-body" color="text-03">
-              Loading slide...
+              {t("loadingSlide.label")}
             </Text>
           </div>
         )}
         <img
           src={slideUrl}
-          alt={`Slide ${currentSlide + 1} of ${slideCount}`}
+          alt={t("slide.counter", {
+            current: currentSlide + 1,
+            total: slideCount,
+          })}
           className={cn(
             "max-w-full max-h-full object-contain transition-opacity",
             imageLoading ? "opacity-0" : "opacity-100"
@@ -172,7 +179,10 @@ export default function PptxPreview({
             <SvgChevronLeft size={16} className="stroke-text-02" />
           </button>
           <Text font="secondary-body" color="text-03">
-            {`Slide ${currentSlide + 1} of ${slideCount}`}
+            {t("slide.counter", {
+              current: currentSlide + 1,
+              total: slideCount,
+            })}
           </Text>
           <button
             onClick={goToNext}

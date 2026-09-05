@@ -1,5 +1,7 @@
 "use client";
 
+import { useAdminRouteTitle } from "@/lib/adminNavLabels";
+import { useTranslations } from "next-intl";
 import { SettingsLayouts, toast } from "@opal/layouts";
 import { useStandardAnswers, useStandardAnswerCategories } from "./hooks";
 import { PageLoader } from "@opal/layouts";
@@ -18,6 +20,7 @@ import type { Route } from "next";
 import { StandardAnswer, StandardAnswerCategory } from "@/lib/types";
 import { SvgSearch } from "@opal/icons";
 import { useState, JSX } from "react";
+import { useFocusOnMount } from "@opal/hooks";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { deleteStandardAnswer } from "./lib";
@@ -25,7 +28,7 @@ import { FilterDropdown } from "@/components/search/filtering/FilterDropdown";
 import { FiTag } from "react-icons/fi";
 import { PageSelector } from "@/components/PageSelector";
 import { Text } from "@opal/components";
-import { markdown } from "@opal/utils";
+import { cn, clickOnKeyDown, markdown } from "@opal/utils";
 import { Spacer } from "@opal/components";
 import { TableHeader } from "@/components/ui/table";
 import { SvgEdit, SvgPlusCircle, SvgTrash } from "@opal/icons";
@@ -69,36 +72,36 @@ const CategoryBubble = ({
 }: {
   name: string;
   onDelete?: () => void;
-}) => (
-  <span
-    className={`
-      inline-block
-      px-2
-      py-1
-      mr-1
-      mb-1
-      text-xs
-      font-semibold
-      text-emphasis
-      bg-accent-background-hovered
-      rounded-full
-      items-center
-      w-fit
-      ${onDelete ? "cursor-pointer" : ""}
-    `}
-    onClick={onDelete}
-  >
-    {name}
-    {onDelete && (
+}) => {
+  const t = useTranslations("admin.standardAnswers");
+  const className = cn(
+    "inline-block px-2 py-1 me-1 mb-1 text-xs font-semibold text-emphasis bg-accent-background-hovered rounded-full items-center w-fit",
+    onDelete && "cursor-pointer"
+  );
+
+  if (!onDelete) return <span className={className}>{name}</span>;
+
+  return (
+    // The bubble holds its own remove button, so it stays a span with button
+    // semantics rather than a <button> wrapping a <button>.
+    <span
+      className={className}
+      role="button"
+      tabIndex={0}
+      aria-label={t("categoryBubble.remove.ariaLabel", { name })}
+      onKeyDown={clickOnKeyDown(onDelete)}
+      onClick={onDelete}
+    >
+      {name}
       <button
-        className="ml-1 text-subtle hover:text-emphasis"
-        aria-label="Remove category"
+        className="ms-1 text-subtle hover:text-emphasis"
+        aria-label={t("categoryBubble.removeButton.ariaLabel")}
       >
         &times;
       </button>
-    )}
-  </span>
-);
+    </span>
+  );
+};
 
 const StandardAnswersTableRow = ({
   standardAnswer,
@@ -107,6 +110,7 @@ const StandardAnswersTableRow = ({
   standardAnswer: StandardAnswer;
   handleDelete: (id: number) => void;
 }) => {
+  const t = useTranslations("admin.standardAnswers");
   return (
     <RowTemplate
       id={standardAnswer.id}
@@ -132,9 +136,13 @@ const StandardAnswersTableRow = ({
           className="flex items-center"
         >
           {standardAnswer.match_regex ? (
-            <span className="text-green-500 font-medium">Yes</span>
+            <span className="text-green-500 font-medium">
+              {t("table.matchRegexYes.label")}
+            </span>
           ) : (
-            <span className="text-gray-500">No</span>
+            <span className="text-gray-500">
+              {t("table.matchRegexNo.label")}
+            </span>
           )}
         </div>,
         <ReactMarkdown
@@ -163,17 +171,19 @@ const StandardAnswersTable = ({
   standardAnswerCategories: StandardAnswerCategory[];
   refresh: () => void;
 }) => {
+  const t = useTranslations("admin.standardAnswers");
   const [query, setQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedCategories, setSelectedCategories] = useState<
     StandardAnswerCategory[]
   >([]);
+  const focusOnMount = useFocusOnMount<HTMLTextAreaElement>();
   const columns = [
     { name: "", key: "edit" },
-    { name: "Categories", key: "category" },
-    { name: "Keywords/Pattern", key: "keyword" },
-    { name: "Match regex?", key: "match_regex" },
-    { name: "Answer", key: "answer" },
+    { name: t("table.categories.header"), key: "category" },
+    { name: t("table.keywords.header"), key: "keyword" },
+    { name: t("table.matchRegex.header"), key: "match_regex" },
+    { name: t("table.answer.header"), key: "answer" },
     { name: "", key: "delete" },
   ];
 
@@ -215,10 +225,10 @@ const StandardAnswersTable = ({
   const handleDelete = async (id: number) => {
     const response = await deleteStandardAnswer(id);
     if (response.ok) {
-      toast.success(`Standard answer ${id} deleted`);
+      toast.success(t("toasts.deleted.message", { id }));
     } else {
       const errorMsg = await response.text();
-      toast.error(`Failed to delete standard answer - ${errorMsg}`);
+      toast.error(t("toasts.deleteFailed.message", { error: errorMsg }));
     }
     refresh();
   };
@@ -238,11 +248,9 @@ const StandardAnswersTable = ({
       <div className="flex items-center w-full border-2 border-border rounded-lg px-4 py-2 focus-within:border-accent">
         <SvgSearch className="w-4 h-4" />
         <textarea
-          autoFocus
-          className="grow ml-2 h-6 bg-transparent outline-hidden placeholder-subtle overflow-hidden whitespace-normal resize-none"
-          role="textarea"
-          aria-multiline
-          placeholder="Find standard answers by keyword/phrase..."
+          ref={focusOnMount}
+          className="grow ms-2 h-6 bg-transparent outline-hidden placeholder-subtle overflow-hidden whitespace-normal resize-none"
+          placeholder={t("search.placeholder")}
           value={query}
           onChange={(event) => {
             setQuery(event.target.value);
@@ -273,11 +281,11 @@ const StandardAnswersTable = ({
             );
           }}
           icon={
-            <div className="my-auto mr-2 w-[16px] h-[16px]">
+            <div className="my-auto me-2 w-[16px] h-[16px]">
               <FiTag size={16} />
             </div>
           }
-          defaultDisplay="All Categories"
+          defaultDisplay={t("filter.allCategories.label")}
         />
         <div className="flex flex-wrap pb-4 mt-3">
           {selectedCategories.map((category) => (
@@ -316,18 +324,14 @@ const StandardAnswersTable = ({
         <div>
           {paginatedStandardAnswers.length === 0 && (
             <div className="flex justify-center">
-              <Text as="p">No matching standard answers found...</Text>
+              <Text as="p">{t("table.empty.message")}</Text>
             </div>
           )}
         </div>
         {paginatedStandardAnswers.length > 0 && (
           <>
             <div className="mt-4">
-              <Text as="p">
-                {markdown(
-                  "Ensure that you have added the category to the relevant [Slack Bot](/admin/bots)."
-                )}
-              </Text>
+              <Text as="p">{markdown(t("table.slackNote.message"))}</Text>
             </div>
             <div className="mt-4 flex justify-center">
               <PageSelector
@@ -345,6 +349,7 @@ const StandardAnswersTable = ({
 };
 
 function Main() {
+  const t = useTranslations("admin.standardAnswers");
   const {
     data: standardAnswers,
     error: standardAnswersError,
@@ -364,7 +369,7 @@ function Main() {
   if (standardAnswersError || !standardAnswers) {
     return (
       <ErrorCallout
-        errorTitle="Error loading standard answers"
+        errorTitle={t("errors.loadAnswersFailed.title")}
         errorMsg={
           standardAnswersError.info?.detail ||
           standardAnswersError.info?.message
@@ -376,7 +381,7 @@ function Main() {
   if (standardAnswerCategoriesError || !standardAnswerCategories) {
     return (
       <ErrorCallout
-        errorTitle="Error loading standard answer categories"
+        errorTitle={t("errors.loadCategoriesFailed.title")}
         errorMsg={
           standardAnswerCategoriesError.info?.detail ||
           standardAnswerCategoriesError.info?.message
@@ -387,15 +392,11 @@ function Main() {
 
   return (
     <div className="mb-8">
-      <Text as="p">
-        {markdown(
-          "Manage the standard answers for pre-defined questions.\nNote: Currently, only questions asked from Slack can receive standard answers."
-        )}
-      </Text>
+      <Text as="p">{markdown(t("intro.description"))}</Text>
       <Spacer rem={0.5} />
       {standardAnswers.length == 0 && (
         <>
-          <Text as="p">Add your first standard answer below!</Text>
+          <Text as="p">{t("intro.addFirst.message")}</Text>
           <Spacer rem={0.5} />
         </>
       )}
@@ -406,7 +407,7 @@ function Main() {
         prominence="secondary"
         href="/admin/standard-answer/new"
       >
-        New Standard Answer
+        {t("newStandardAnswer.label")}
       </Button>
 
       <Divider />
@@ -423,9 +424,14 @@ function Main() {
 }
 
 export default function Page() {
+  const adminRouteTitle = useAdminRouteTitle();
   return (
     <SettingsLayouts.Root>
-      <SettingsLayouts.Header icon={route.icon} title={route.title} divider />
+      <SettingsLayouts.Header
+        icon={route.icon}
+        title={adminRouteTitle(route)}
+        divider
+      />
       <SettingsLayouts.Body>
         <Main />
       </SettingsLayouts.Body>

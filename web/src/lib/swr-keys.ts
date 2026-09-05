@@ -20,21 +20,30 @@ export const SWR_KEYS = {
   customAnalyticsScript: "/api/enterprise-settings/custom-analytics-script",
   authType: "/api/auth/type",
   adminSecuritySettings: "/api/admin/security",
+  adminSecurityPinnedFields: "/api/admin/security/pinned-fields",
+  incognitoAvailability: "/api/chat/incognito-availability",
   adminSsoProviders: "/api/admin/sso/provider",
+  adminSsoProviderTypes: "/api/admin/sso/provider-type",
+  adminSsoDomains: "/api/admin/sso/domain",
+  // Cache key for the POST /records lookup, keyed by the domains being configured.
+  adminSsoDomainRecords: (domains: string[]) => [
+    "sso-domain-records",
+    ...domains,
+  ],
 
-  // ── Agents / Personas ─────────────────────────────────────────────────────
-  personas: "/api/persona",
-  persona: (id: number) => `/api/persona/${id}`,
-  agentPreferences: "/api/user/assistant/preferences",
+  // ── Agents ────────────────────────────────────────────────────────────────
+  agents: "/api/persona",
+  agent: (agentId: number) => `/api/persona/${agentId}`,
   defaultAssistantConfig: "/api/admin/default-assistant/configuration",
-  personaLabels: "/api/persona/labels",
+  agentLabels: "/api/persona/labels",
+  adminAgentLabel: (labelId: number) => `/api/admin/persona/label/${labelId}`,
   adminAgents: "/api/admin/agents",
   adminPersona: "/api/admin/persona",
 
   // ── LLM Providers ─────────────────────────────────────────────────────────
   llmProviders: "/api/llm/provider",
-  llmProvidersForPersona: (personaId: number) =>
-    `/api/llm/persona/${personaId}/providers`,
+  llmProvidersForAgent: (agentId: number) =>
+    `/api/llm/persona/${agentId}/providers`,
   adminLlmProviders: "/api/admin/llm/provider",
   llmProvidersWithImageGen: "/api/admin/llm/provider?include_image_gen=true",
   customProviderNames: "/api/admin/llm/custom-provider-names",
@@ -42,7 +51,7 @@ export const SWR_KEYS = {
   wellKnownLlmProvider: (providerEndpoint: string) =>
     `/api/admin/llm/built-in/options/${providerEndpoint}`,
   llmContextualCost: "/api/admin/llm/provider-contextual-cost",
-  userUsage: (days: number) => `/api/user/usage?days=${days}`,
+  userUsage: "/api/user/usage",
   costOverrides: "/api/admin/cost-overrides",
   adminUsageExport: "/api/admin/usage/export",
   adminUsageReset: "/api/admin/usage/reset",
@@ -96,9 +105,9 @@ export const SWR_KEYS = {
     });
     return `/api/notifications?${params.toString()}`;
   },
-  notificationsByType: (notifType: string, pageSize: number) => {
+  notificationsBySeverity: (minSeverity: string, pageSize: number) => {
     const params = new URLSearchParams({
-      notif_type: notifType,
+      min_severity: minSeverity,
       page_size: pageSize.toString(),
     });
     return `/api/notifications?${params.toString()}`;
@@ -120,7 +129,12 @@ export const SWR_KEYS = {
 
   // ── Groups ────────────────────────────────────────────────────────────────
   adminUserGroups: "/api/manage/admin/user-group",
+  adminUserGroupsWithDefault:
+    "/api/manage/admin/user-group?include_default=true",
   shareableGroups: "/api/manage/user-groups/minimal",
+  userGroupPermissions: (groupId: number) =>
+    `/api/manage/admin/user-group/${groupId}/permissions`,
+  permissionRegistry: "/api/manage/admin/permissions/registry",
   scimToken: "/api/admin/enterprise-settings/scim/token",
 
   // ── MCP Servers ───────────────────────────────────────────────────────────
@@ -129,8 +143,7 @@ export const SWR_KEYS = {
     `/api/admin/mcp/server/${serverId}/tools/snapshots?source=db`,
   mcpServers: "/api/mcp/servers",
   mcpServersCraft: "/api/mcp/servers/craft",
-  personaMcpServers: (personaId: number) =>
-    `/api/mcp/servers/persona/${personaId}`,
+  agentMcpServers: (agentId: number) => `/api/mcp/servers/persona/${agentId}`,
 
   // ── Skills ────────────────────────────────────────────────────────────────
   userSkills: "/api/skills",
@@ -199,6 +212,7 @@ export const SWR_KEYS = {
   // ── Admin ─────────────────────────────────────────────────────────────────
   hooks: "/api/admin/hooks",
   hookSpecs: "/api/admin/hooks/specs",
+  logExportStatus: (exportId: string) => `/api/admin/log-export/${exportId}`,
 
   // ── Slack Bots ────────────────────────────────────────────────────────────
   slackChannels: "/api/manage/admin/slack-app/channel",

@@ -5,32 +5,32 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.8.11
+version: 0.8.20
 appVersion: latest
 annotations:
   category: Productivity
   licenses: MIT
+  # Links the GHCR package back to this repository. `helm push` copies chart
+  # annotations onto the OCI manifest, and GHCR reads this key to attach the
+  # package to the repo.
+  org.opencontainers.image.source: https://github.com/onyx-dot-app/onyx
   images: |
     - name: webserver
       image: docker.io/onyxdotapp/onyx-web-server:latest
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
-    - kind: changed
-      description: values-localdev.yaml now disables the sandbox image prepuller.
-        Local kind clusters side-load the sandbox image (kind load + IfNotPresent),
-        so there is no registry pull to front-run, and with the localdev defaults
-        (:edge, pullPolicy Always) the prepuller would eagerly pull the ~3.3 GB
-        image from Docker Hub onto the kind node. Production values are unchanged.
-    - kind: fixed
-      description: Fixed "helm upgrade" failing with 'PriorityClass ... value: Forbidden;
-        may not be changed in an update' after the sandbox image prepuller landed in
-        0.8.6. PriorityClass.value is immutable and helm upgrade patches, so the
-        prepuller no longer ships a PriorityClass at all; it was buying very little.
-        Upgrading from 0.8.6 deletes it, and the prepuller runs at the cluster default
-        priority — set sandboxImagePrepull.priorityClassName to an existing class to
-        keep it preemptible. Running pods are unaffected, because pod priority is
-        resolved at admission. The chart now renders no cluster-scoped objects.
+    - kind: added
+      description: Optional verified TLS for an external Redis. Set
+        `redisTls.enabled=true` and supply the Redis server CA in a Secret
+        (`redisTls.caSecretName`) or a ConfigMap (`redisTls.caConfigMapName`).
+        The chart then mounts the CA read-only into every Redis client workload
+        and sets `REDIS_SSL`, `REDIS_SSL_CERT_REQS=required`,
+        `REDIS_SSL_CA_CERTS`, and `REDIS_SSL_CHECK_HOSTNAME`. Hostname
+        verification defaults to true; set `redisTls.checkHostname=false` only
+        for an endpoint whose certificate cannot match its host. Rendering fails
+        if `redis.enabled=true`, or if both CA sources are set, or if neither
+        is. Default deployments keep their current Redis configuration.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it
@@ -76,6 +76,6 @@ dependencies:
     repository: https://charts.min.io/
     condition: minio.enabled
   - name: code-interpreter
-    version: 0.4.3
+    version: 0.4.6
     repository: https://onyx-dot-app.github.io/python-sandbox/
     condition: codeInterpreter.enabled

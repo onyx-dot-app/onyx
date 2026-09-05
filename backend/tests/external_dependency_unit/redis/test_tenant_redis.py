@@ -136,6 +136,16 @@ class TestRoundTrip:
             None,
         ]
 
+    def test_set_mget(self, tenant_redis: TenantRedisClient) -> None:
+        first, second = _unique_key(), _unique_key()
+        tenant_redis.set(first, "v1")
+        tenant_redis.set(second, "v2")
+        assert tenant_redis.mget([first, second, _unique_key()]) == [
+            b"v1",
+            b"v2",
+            None,
+        ]
+
     def test_incr_then_get_sees_same_counter(
         self, tenant_redis: TenantRedisClient
     ) -> None:

@@ -1,312 +1,247 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Button, Card, InputTypeIn, MessageCard, Text } from "@opal/components";
-import { SvgChevronLeft, SvgChevronRight, SvgX } from "@opal/icons";
-import { PageLoader, toast } from "@opal/layouts";
-import {
-  resetUserUsage,
-  useUsageExport,
-  UsageExportUser,
-} from "@/lib/usage/userUsage";
+import React, { useMemo, useState } from "react";
+import { useLocale, useTranslations } from "next-intl";
+import { Card, MessageCard, Text } from "@opal/components";
+import { SvgX } from "@opal/icons";
+import { PageLoader, Section } from "@opal/layouts";
+import type { DateRange } from "@/refresh-components/DateRangePicker";
+import { formatCalendarDay } from "@/lib/dateUtils";
+import { useUsageExport } from "@/lib/usage/userUsage";
+import { formatCost, formatTokens } from "@/lib/utils";
+import SpendByUserTable from "@/sections/usage/SpendByUserTable";
+import UserUsageDetailModal from "@/sections/usage/UserUsageDetailModal";
 
-const PAGE_SIZE = 10;
-
-type SortKey =
-  | "email"
-  | "input_tokens"
-  | "output_tokens"
-  | "cache_read_tokens"
-  | "cost_cents";
-type SortDir = "asc" | "desc";
-
-function formatTokens(n: number): string {
-  return n.toLocaleString();
+function formatDate(value: string): string {
+  return formatCalendarDay(value, { withYear: true });
 }
 
-function formatCost(cents: number): string {
-  return `$${(cents / 100).toFixed(2)}`;
-}
-
-function sortValue(user: UsageExportUser, key: SortKey): number | string {
-  if (key === "email") return user.email.toLowerCase();
-  return user.totals[key];
-}
-
-interface UsageRowProps {
-  user: UsageExportUser;
-  onReset: () => void;
-}
-
-function UsageRow({ user, onReset }: UsageRowProps) {
-  const [resetting, setResetting] = useState(false);
-  const totals = user.totals;
-
-  async function handleReset() {
-    setResetting(true);
-    try {
-      await resetUserUsage(user.email);
-      toast.success(`Reset usage for ${user.email}.`);
-      onReset();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "unknown error";
-      toast.error(`Failed to reset usage: ${message}`);
-    } finally {
-      setResetting(false);
-    }
-  }
-
-  return (
-    <div
-      className="flex flex-row items-center gap-4 py-2"
-      data-testid={`usage-row-${user.email}`}
-    >
-      <div className="flex-1 truncate">
-        <Text font="main-ui-body">{user.email}</Text>
-      </div>
-      <div className="w-24 text-right">
-        <Text font="main-ui-body" color="text-03">
-          {formatTokens(totals.input_tokens)}
-        </Text>
-      </div>
-      <div className="w-24 text-right">
-        <Text font="main-ui-body" color="text-03">
-          {formatTokens(totals.output_tokens)}
-        </Text>
-      </div>
-      <div className="w-24 text-right">
-        <Text font="main-ui-body" color="text-03">
-          {formatTokens(totals.cache_read_tokens)}
-        </Text>
-      </div>
-      <div className="w-24 text-right">
-        <Text font="main-ui-body">{formatCost(totals.cost_cents)}</Text>
-      </div>
-      <Button
-        variant="default"
-        prominence="tertiary"
-        size="sm"
-        disabled={resetting}
-        onClick={handleReset}
-      >
-        Reset
-      </Button>
-    </div>
-  );
-}
-
-interface SortHeaderProps {
-  label: string;
-  sortKey: SortKey;
-  activeKey: SortKey;
-  dir: SortDir;
-  onSort: (key: SortKey) => void;
-  align: "left" | "right";
-}
-
-function SortHeader({
+function SummaryMetric({
   label,
-  sortKey,
-  activeKey,
-  dir,
-  onSort,
-  align,
-}: SortHeaderProps) {
-  const active = activeKey === sortKey;
-  const indicator = active ? (dir === "desc" ? " ↓" : " ↑") : "";
+  value,
+  detail,
+}: {
+  label: string;
+  value: string;
+  detail: string;
+}) {
   return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={() => onSort(sortKey)}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onSort(sortKey);
-        }
-      }}
-      className={`cursor-pointer select-none ${
-        align === "right" ? "w-24 text-right" : "flex-1"
-      }`}
-    >
-      <Text font="main-ui-action" color={active ? "text-05" : "text-03"}>
-        {`${label}${indicator}`}
+    <div className="flex min-w-0 flex-col gap-0.5 px-3 py-3 sm:px-4">
+      <Text font="secondary-body" color="text-03">
+        {label}
       </Text>
+      <span className="tabular-nums">
+        <Text font="heading-h3">{value}</Text>
+      </span>
+      <span className="block min-w-0 truncate" title={detail}>
+        <Text font="secondary-body" color="text-03">
+          {detail}
+        </Text>
+      </span>
     </div>
   );
 }
 
-/** Searchable, sortable admin per-user usage totals. */
-export default function PerUserUsagePanel() {
-  const { usage, isLoading, error, refetch } = useUsageExport();
-  const [page, setPage] = useState(0);
-  const [query, setQuery] = useState("");
-  const [sortKey, setSortKey] = useState<SortKey>("cost_cents");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
+interface PerUserUsagePanelProps {
+  timeRange?: DateRange;
+}
+
+export default function PerUserUsagePanel({
+  timeRange,
+}: PerUserUsagePanelProps) {
+  const t = useTranslations("admin.perUserUsage");
+  const locale = useLocale();
+  const { usage, isLoading, error } = useUsageExport(timeRange);
+  const [selectedEmail, setSelectedEmail] = useState<string | null>(null);
 
   const users = usage?.users ?? [];
+  const selectedUser =
+    users.find((user) => user.email === selectedEmail) ?? null;
 
-  const visible = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const filtered = q
-      ? users.filter((u) => u.email.toLowerCase().includes(q))
-      : users;
-    return [...filtered].sort((a, b) => {
-      const av = sortValue(a, sortKey);
-      const bv = sortValue(b, sortKey);
-      const cmp =
-        typeof av === "string" && typeof bv === "string"
-          ? av.localeCompare(bv)
-          : (av as number) - (bv as number);
-      return sortDir === "asc" ? cmp : -cmp;
-    });
-  }, [users, query, sortKey, sortDir]);
+  const totalCostCents = useMemo(
+    () => users.reduce((total, user) => total + user.totals.cost_cents, 0),
+    [users]
+  );
+  const totalTokens = useMemo(
+    () =>
+      users.reduce(
+        (total, user) =>
+          total + user.totals.input_tokens + user.totals.output_tokens,
+        0
+      ),
+    [users]
+  );
+  const activeUsers = users.filter(
+    (user) =>
+      user.totals.input_tokens > 0 ||
+      user.totals.output_tokens > 0 ||
+      user.totals.cache_read_tokens > 0 ||
+      user.totals.cost_cents > 0
+  ).length;
+  const topSpender = users.reduce<(typeof users)[number] | null>(
+    (top, user) =>
+      user.totals.cost_cents > 0 &&
+      (top === null || user.totals.cost_cents > top.totals.cost_cents)
+        ? user
+        : top,
+    null
+  );
 
-  const pageCount = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
+  const header = (
+    <Section
+      flexDirection="column"
+      justifyContent="start"
+      alignItems="stretch"
+      gap={0.125}
+      width="full"
+      height="fit"
+    >
+      <Text font="heading-h3">{t("panel.title")}</Text>
+      {/* Holds the selected period, so visual tests mask it. */}
+      <Text
+        font="secondary-body"
+        color="text-03"
+        data-testid="usage-overview-period"
+      >
+        {usage
+          ? t("panel.description", {
+              start: formatDate(usage.start),
+              end: formatDate(usage.end),
+            })
+          : t("panel.emptyDescription")}
+      </Text>
+    </Section>
+  );
 
-  // Jump back to the first page whenever the filter or sort reshapes the list.
-  useEffect(() => {
-    setPage(0);
-  }, [query, sortKey, sortDir]);
-
-  // Clamp the page when the list shrinks (e.g. a reset drops a user off).
-  useEffect(() => {
-    if (page > pageCount - 1) setPage(pageCount - 1);
-  }, [page, pageCount]);
-
-  function handleSort(key: SortKey) {
-    if (key === sortKey) {
-      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    } else {
-      setSortKey(key);
-      // Numeric columns lead high→low (leaderboard); email reads A→Z.
-      setSortDir(key === "email" ? "asc" : "desc");
-    }
+  if (isLoading) {
+    return (
+      <Section
+        flexDirection="column"
+        justifyContent="start"
+        alignItems="stretch"
+        gap={1}
+        width="full"
+        height="fit"
+      >
+        {header}
+        <PageLoader />
+      </Section>
+    );
   }
-
-  if (isLoading) return <PageLoader />;
   if (error) {
     return (
-      <MessageCard
-        variant="error"
-        icon={SvgX}
-        title="Failed to load per-user usage."
-      />
+      <Section
+        flexDirection="column"
+        justifyContent="start"
+        alignItems="stretch"
+        gap={1}
+        width="full"
+        height="fit"
+      >
+        {header}
+        <MessageCard
+          variant="error"
+          icon={SvgX}
+          title={t("panel.error.title")}
+        />
+      </Section>
     );
   }
 
-  const pageUsers = visible.slice(
-    page * PAGE_SIZE,
-    page * PAGE_SIZE + PAGE_SIZE
-  );
-
   return (
-    <Card border="solid" rounding="lg" padding="sm">
-      <div className="flex flex-col gap-2">
-        <Text font="heading-h3">Per-user usage</Text>
-        <Text font="secondary-body" color="text-03">
-          Tokens (input, output, cache reads) and cost per user over the report
-          window. Click a column to rank by it, or search by email. Reset clears
-          usage from every currently active limit window.
-        </Text>
+    <Section
+      flexDirection="column"
+      justifyContent="start"
+      alignItems="stretch"
+      gap={1}
+      width="full"
+      height="fit"
+    >
+      {header}
 
-        <InputTypeIn
-          value={query}
-          placeholder="Search users by email…"
-          onChange={(e) => setQuery(e.target.value)}
-        />
+      <Card border="solid" rounding={4} padding={0}>
+        <div className="grid grid-cols-2 lg:grid-cols-4">
+          <div className="border-b border-border-02 lg:border-b-0">
+            <SummaryMetric
+              label={t("summary.workspaceSpend.label")}
+              value={formatCost(totalCostCents, locale)}
+              detail={t("summary.workspaceSpend.detail")}
+            />
+          </div>
+          <div className="border-b border-s border-border-02 lg:border-b-0">
+            <SummaryMetric
+              label={t("summary.totalTokens.label")}
+              value={formatTokens(totalTokens, locale)}
+              detail={t("summary.totalTokens.detail")}
+            />
+          </div>
+          <div className="border-b border-border-02 lg:border-b-0 lg:border-s">
+            <SummaryMetric
+              label={t("summary.activeUsers.label")}
+              value={formatTokens(activeUsers, locale)}
+              detail={t("summary.activeUsers.detail", { count: users.length })}
+            />
+          </div>
+          <div className="border-s border-border-02">
+            <SummaryMetric
+              label={t("summary.topSpender.label")}
+              value={
+                topSpender
+                  ? formatCost(topSpender.totals.cost_cents, locale)
+                  : "—"
+              }
+              detail={topSpender?.email ?? t("summary.topSpender.noSpend")}
+            />
+          </div>
+        </div>
+      </Card>
+
+      <Section
+        flexDirection="column"
+        justifyContent="start"
+        alignItems="stretch"
+        gap={0.5}
+        width="full"
+        height="fit"
+      >
+        <Section
+          flexDirection="column"
+          justifyContent="start"
+          alignItems="stretch"
+          gap={0.125}
+          width="full"
+          height="fit"
+        >
+          <Text font="heading-h3">{t("users.title")}</Text>
+          <Text font="secondary-body" color="text-03">
+            {t("users.description")}
+          </Text>
+        </Section>
 
         {users.length === 0 ? (
-          <Text font="main-ui-body" color="text-03">
-            No usage recorded yet.
-          </Text>
-        ) : visible.length === 0 ? (
-          <Text font="main-ui-body" color="text-03">
-            {`No users match "${query}".`}
-          </Text>
+          <Card border="solid" rounding={4} padding={3}>
+            <Text font="main-ui-body" color="text-03">
+              {t("users.empty.description")}
+            </Text>
+          </Card>
         ) : (
-          <>
-            <div className="overflow-x-auto">
-              <div className="min-w-[740px] flex flex-col divide-y divide-border-01">
-                <div className="flex flex-row items-center gap-4 py-2">
-                  <SortHeader
-                    label="User"
-                    sortKey="email"
-                    activeKey={sortKey}
-                    dir={sortDir}
-                    onSort={handleSort}
-                    align="left"
-                  />
-                  <SortHeader
-                    label="Input"
-                    sortKey="input_tokens"
-                    activeKey={sortKey}
-                    dir={sortDir}
-                    onSort={handleSort}
-                    align="right"
-                  />
-                  <SortHeader
-                    label="Output"
-                    sortKey="output_tokens"
-                    activeKey={sortKey}
-                    dir={sortDir}
-                    onSort={handleSort}
-                    align="right"
-                  />
-                  <SortHeader
-                    label="Cache"
-                    sortKey="cache_read_tokens"
-                    activeKey={sortKey}
-                    dir={sortDir}
-                    onSort={handleSort}
-                    align="right"
-                  />
-                  <SortHeader
-                    label="Cost"
-                    sortKey="cost_cents"
-                    activeKey={sortKey}
-                    dir={sortDir}
-                    onSort={handleSort}
-                    align="right"
-                  />
-                  <div className="w-[68px]" />
-                </div>
-                {pageUsers.map((user) => (
-                  <UsageRow key={user.email} user={user} onReset={refetch} />
-                ))}
-              </div>
-            </div>
-
-            {pageCount > 1 && (
-              <div className="flex flex-row items-center justify-end gap-3 pt-2">
-                <Button
-                  variant="default"
-                  prominence="tertiary"
-                  size="sm"
-                  icon={SvgChevronLeft}
-                  tooltip="Previous page"
-                  aria-label="Previous page"
-                  disabled={page === 0}
-                  onClick={() => setPage((p) => Math.max(0, p - 1))}
-                />
-                <Text font="main-ui-body" color="text-03">
-                  {`Page ${page + 1} of ${pageCount} · ${visible.length} users`}
-                </Text>
-                <Button
-                  variant="default"
-                  prominence="tertiary"
-                  size="sm"
-                  icon={SvgChevronRight}
-                  tooltip="Next page"
-                  aria-label="Next page"
-                  disabled={page >= pageCount - 1}
-                  onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
-                />
-              </div>
-            )}
-          </>
+          <SpendByUserTable users={users} onSelectUser={setSelectedEmail} />
         )}
-      </div>
-    </Card>
+      </Section>
+
+      {selectedUser && (
+        <UserUsageDetailModal
+          user={selectedUser}
+          periodLabel={
+            usage
+              ? `${formatDate(usage.start)} – ${formatDate(usage.end)}`
+              : undefined
+          }
+          onOpenChange={(open) => {
+            if (!open) setSelectedEmail(null);
+          }}
+        />
+      )}
+    </Section>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { AccessType, ValidSources } from "@/lib/types";
+import { useTranslations } from "next-intl";
 import useSWR, { mutate } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { useState } from "react";
@@ -10,14 +11,13 @@ import {
   updateCredential,
   updateCredentialWithPrivateKey,
 } from "@/lib/credential";
-import { toast } from "@opal/layouts";
+import { Section, toast } from "@opal/layouts";
 import { CCPairFullInfo } from "@/app/admin/connector/[ccPairId]/types";
-import { Card, Text } from "@opal/components";
+import { Button, Card, Modal, Text } from "@opal/components";
 import {
   buildCCPairInfoUrl,
   buildSimilarCredentialInfoURL,
 } from "@/app/admin/connector/[ccPairId]/lib";
-import { Modal } from "@opal/components";
 import { getSourceDisplayName } from "@/lib/sources";
 import {
   ConfluenceCredentialJson,
@@ -32,6 +32,12 @@ import { isTypedFileField, TypedFile } from "@/lib/connectors/fileTypes";
 import { SvgEdit, SvgKey } from "@opal/icons";
 import CreateCredential from "@/lib/credentials/components/CreateCredential";
 import { CreateStdOAuthCredential } from "@/lib/credentials/components/CreateStdOAuthCredential";
+import {
+  CredentialCreationMethod,
+  getCredentialCreationActionLabel,
+  getCredentialCreationMethods,
+  shouldRedirectToOAuth,
+} from "@/lib/credentials/credentialCreation";
 import EditCredential from "@/lib/credentials/components/EditCredential";
 import ModifyCredential from "@/lib/credentials/components/ModifyCredential";
 
@@ -46,6 +52,8 @@ export default function CredentialSection({
   sourceType,
   refresh,
 }: CredentialSectionProps) {
+  const t = useTranslations("admin");
+  const tCommon = useTranslations("common");
   const { data: credentials } = useSWR<Credential<ConfluenceCredentialJson>[]>(
     buildSimilarCredentialInfoURL(sourceType),
     errorHandlingFetcher,
@@ -59,27 +67,54 @@ export default function CredentialSection({
   const { data: oauthDetails, isLoading: oauthDetailsLoading } =
     useOAuthDetails(sourceType);
 
-  const makeShowCreateCredential = async () => {
-    if (oauthDetailsLoading || !oauthDetails) {
+  const credentialCreationMethods = getCredentialCreationMethods(oauthDetails);
+  const sourceDisplayName = getSourceDisplayName(sourceType) || sourceType;
+
+  const openCredentialCreationMethod = async (
+    method: CredentialCreationMethod
+  ) => {
+    if (
+      method === CredentialCreationMethod.OAuth &&
+      oauthDetails &&
+      shouldRedirectToOAuth(oauthDetails)
+    ) {
+      try {
+        const redirectUrl = await getConnectorOauthRedirectUrl(sourceType, {});
+        window.location.href = redirectUrl;
+      } catch (error) {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : t("credentials.oauth.startError.message")
+        );
+      }
+      return;
+    }
+    if (method === CredentialCreationMethod.OAuth && !oauthDetails) {
       return;
     }
 
-    if (oauthDetails.oauth_enabled) {
-      if (oauthDetails.additional_kwargs.length > 0) {
-        setShowModifyCredential(false);
-        setEditingCredential(null);
-        setShowCreateCredential(true);
-      } else {
-        const redirectUrl = await getConnectorOauthRedirectUrl(sourceType, {});
-        if (redirectUrl) {
-          window.location.href = redirectUrl;
-        }
-      }
-    } else {
-      setShowModifyCredential(false);
-      setEditingCredential(null);
-      setShowCreateCredential(true);
+    setShowModifyCredential(false);
+    setEditingCredential(null);
+    setCredentialCreationMethod(method);
+    setShowCreateCredential(true);
+  };
+
+  const makeShowCreateCredential = async () => {
+    if (oauthDetailsLoading) {
+      return;
     }
+
+    const onlyMethod = credentialCreationMethods.at(0);
+    if (credentialCreationMethods.length === 1 && onlyMethod) {
+      await openCredentialCreationMethod(onlyMethod);
+      return;
+    }
+
+    setShowModifyCredential(false);
+    setEditingCredential(null);
+    setCredentialCreationMethod(null);
+    setShowCreateCredential(true);
   };
 
   const onSwap = async (
@@ -96,13 +131,16 @@ export default function CredentialSection({
       mutate(buildSimilarCredentialInfoURL(sourceType));
       refresh();
 
-      toast.success("Swapped credential successfully!");
+      toast.success(t("credentials.swap.success.toast"));
     } else {
       const errorData = await response.json();
       toast.error(
-        `Issue swapping credential: ${
-          errorData.detail || errorData.message || "Unknown error"
-        }`
+        t("credentials.swap.error.toast", {
+          detail:
+            errorData.detail ||
+            errorData.message ||
+            tCommon("errors.unknown.message"),
+        })
       );
     }
   };
@@ -130,10 +168,10 @@ export default function CredentialSection({
       response = await updateCredential(selectedCredential.id, details);
     }
     if (response.ok) {
-      toast.success("Updated credential");
+      toast.success(t("credentials.update.success.toast"));
       onSucces();
     } else {
-      toast.error("Issue updating credential");
+      toast.error(t("credentials.update.error.toast"));
     }
   };
 
@@ -151,6 +189,8 @@ export default function CredentialSection({
 
   const [showModifyCredential, setShowModifyCredential] = useState(false);
   const [showCreateCredential, setShowCreateCredential] = useState(false);
+  const [credentialCreationMethod, setCredentialCreationMethod] =
+    useState<CredentialCreationMethod | null>(null);
   const [editingCredential, setEditingCredential] =
     useState<Credential<any> | null>(null);
 
@@ -166,6 +206,7 @@ export default function CredentialSection({
 
   const closeCreateCredential = () => {
     setShowCreateCredential(false);
+    setCredentialCreationMethod(null);
   };
 
   const closeEditingCredential = () => {
@@ -196,10 +237,12 @@ export default function CredentialSection({
   const showCredentialModal =
     showModifyCredential || editingCredential != null || showCreateCredential;
   const credentialModalTitle = showCreateCredential
-    ? `Create ${getSourceDisplayName(sourceType)} Credential`
+    ? t("credentials.modal.createTitle", {
+        source: getSourceDisplayName(sourceType) ?? sourceType,
+      })
     : editingCredential
-      ? "Edit Credential"
-      : "Update Credentials";
+      ? t("credentials.modal.editTitle")
+      : t("credentials.modal.updateTitle");
   const closeCurrentCredentialView = showCreateCredential
     ? closeCreateCredential
     : editingCredential
@@ -217,9 +260,9 @@ export default function CredentialSection({
       rounded-lg
       bg-background"
     >
-      <Card padding="lg" border="solid" rounding="lg">
+      <Card padding={6} border="solid" rounding={4}>
         <div className="flex items-center">
-          <div className="shrink-0 mr-3">
+          <div className="shrink-0 me-3">
             <SvgKey size={16} className="text-muted-foreground" />
           </div>
           <div className="grow flex flex-col justify-center">
@@ -227,24 +270,26 @@ export default function CredentialSection({
               <div>
                 <Text as="p">
                   {ccPair.credential.name ||
-                    `Credential #${ccPair.credential.id}`}
+                    t("credentials.card.unnamed.label", {
+                      id: ccPair.credential.id,
+                    })}
                 </Text>
                 <div className="text-xs text-muted-foreground/70">
-                  Created{" "}
-                  <i>
-                    {new Date(
-                      ccPair.credential.time_created
-                    ).toLocaleDateString(undefined, {
-                      year: "numeric",
-                      month: "short",
-                      day: "numeric",
-                    })}
-                  </i>
-                  {ccPair.credential.user_email && (
-                    <>
-                      {" "}
-                      by <i>{ccPair.credential.user_email}</i>
-                    </>
+                  {t.rich(
+                    ccPair.credential.user_email
+                      ? "credentials.card.createdOnBy.label"
+                      : "credentials.card.createdOn.label",
+                    {
+                      i: (chunks) => <i>{chunks}</i>,
+                      date: new Date(
+                        ccPair.credential.time_created
+                      ).toLocaleDateString(undefined, {
+                        year: "numeric",
+                        month: "short",
+                        day: "numeric",
+                      }),
+                      email: ccPair.credential.user_email ?? "",
+                    }
                   )}
                 </div>
               </div>
@@ -261,7 +306,9 @@ export default function CredentialSection({
                   transition-colors"
               >
                 <SvgEdit size={16} />
-                <span className="sr-only">Update Credentials</span>
+                <span className="sr-only">
+                  {t("credentials.modal.updateTitle")}
+                </span>
               </button>
             </div>
           </div>
@@ -278,28 +325,58 @@ export default function CredentialSection({
             />
             <Modal.Body alignItems="stretch">
               {showCreateCredential ? (
-                <>
-                  {oauthDetailsLoading ? (
-                    <Spinner />
+                oauthDetailsLoading ? (
+                  <Spinner />
+                ) : credentialCreationMethod === null ? (
+                  <Section alignItems="start" gap={1}>
+                    {credentialCreationMethods.map((method) => (
+                      <Button
+                        key={method}
+                        onClick={() => openCredentialCreationMethod(method)}
+                      >
+                        {getCredentialCreationActionLabel(
+                          method,
+                          sourceDisplayName,
+                          true
+                        )}
+                      </Button>
+                    ))}
+                  </Section>
+                ) : credentialCreationMethod ===
+                    CredentialCreationMethod.OAuth && oauthDetails ? (
+                  shouldRedirectToOAuth(oauthDetails) ? (
+                    <Section alignItems="start">
+                      <Text as="p" font="main-ui-body" color="text-03">
+                        {t("credentials.oauth.redirectFailed.message", {
+                          source:
+                            getSourceDisplayName(sourceType) ?? sourceType,
+                        })}
+                      </Text>
+                      <Button
+                        onClick={() =>
+                          openCredentialCreationMethod(
+                            CredentialCreationMethod.OAuth
+                          )
+                        }
+                      >
+                        {t("credentials.oauth.retryButton.label")}
+                      </Button>
+                    </Section>
                   ) : (
-                    <>
-                      {oauthDetails && oauthDetails.oauth_enabled ? (
-                        <CreateStdOAuthCredential
-                          sourceType={sourceType}
-                          additionalFields={oauthDetails.additional_kwargs}
-                        />
-                      ) : (
-                        <CreateCredential
-                          sourceType={sourceType}
-                          accessType={ccPair.access_type}
-                          swapConnector={ccPair.connector}
-                          onSwap={onSwap}
-                          onClose={closeCreateCredential}
-                        />
-                      )}
-                    </>
-                  )}
-                </>
+                    <CreateStdOAuthCredential
+                      sourceType={sourceType}
+                      additionalFields={oauthDetails.additional_kwargs}
+                    />
+                  )
+                ) : (
+                  <CreateCredential
+                    sourceType={sourceType}
+                    accessType={ccPair.access_type}
+                    swapConnector={ccPair.connector}
+                    onSwap={onSwap}
+                    onClose={closeCreateCredential}
+                  />
+                )
               ) : editingCredential ? (
                 <EditCredential
                   onUpdate={onUpdateCredential}

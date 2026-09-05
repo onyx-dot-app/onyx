@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import Card from "@/refresh-components/cards/Card";
-import { Button } from "@opal/components";
+import { useTranslations } from "next-intl";
+import { Button, Card } from "@opal/components";
 import Text from "@/refresh-components/texts/Text";
 import InputFile from "@/refresh-components/inputs/InputFile";
 import { Section } from "@/layouts/general-layouts";
@@ -29,6 +29,7 @@ export default function LicenseActivationCard({
   license,
   hideClose,
 }: LicenseActivationCardProps) {
+  const t = useTranslations("admin.billing");
   const [licenseKey, setLicenseKey] = useState("");
   const [isActivating, setIsActivating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -49,7 +50,7 @@ export default function LicenseActivationCard({
 
   const handleActivate = async () => {
     if (!licenseKey.trim()) {
-      setError("Please enter a license key");
+      setError(t("license.emptyKey.error"));
       return;
     }
 
@@ -66,7 +67,7 @@ export default function LicenseActivationCard({
     } catch (err) {
       console.error("Error activating license:", err);
       setError(
-        err instanceof Error ? err.message : "Failed to activate license"
+        err instanceof Error ? err.message : t("license.activateFailed.error")
       );
     } finally {
       setIsActivating(false);
@@ -86,47 +87,52 @@ export default function LicenseActivationCard({
   // License status view (when license exists and not editing)
   if (hasLicense && !showInput) {
     return (
-      <Card padding={1} alignItems="stretch">
-        <Section
-          flexDirection="row"
-          justifyContent="between"
-          alignItems="center"
-          height="auto"
-        >
+      <Card border="solid" padding={4} rounding={4}>
+        <Section alignItems="stretch" height="fit">
           <Section
-            flexDirection="column"
-            alignItems="start"
-            gap={0.5}
+            flexDirection="row"
+            justifyContent="between"
+            alignItems="center"
             height="auto"
-            width="auto"
           >
-            {isExpired ? (
-              <SvgXOctagon size={16} className="stroke-status-error-05" />
-            ) : (
-              <SvgCheckCircle size={16} className="stroke-status-success-05" />
-            )}
-            <Text secondaryBody text03>
+            <Section
+              flexDirection="column"
+              alignItems="start"
+              gap={2}
+              height="auto"
+              width="auto"
+            >
               {isExpired ? (
-                <>License key expired</>
+                <SvgXOctagon size={16} className="stroke-status-error-05" />
               ) : (
-                <>
-                  License key active until{" "}
-                  <Text secondaryBody text04>
-                    {expirationDate}
-                  </Text>
-                </>
+                <SvgCheckCircle
+                  size={16}
+                  className="stroke-status-success-05"
+                />
               )}
-            </Text>
-          </Section>
-          <Section flexDirection="row" gap={0.5} height="auto" width="auto">
-            <Button prominence="secondary" onClick={() => setShowInput(true)}>
-              Update Key
-            </Button>
-            {!hideClose && (
-              <Button prominence="tertiary" onClick={handleClose}>
-                Close
+              <Text secondaryBody text03>
+                {isExpired
+                  ? t("license.expired.label")
+                  : t.rich("license.activeUntil.label", {
+                      date: expirationDate ?? "",
+                      value: (chunks) => (
+                        <Text secondaryBody text04>
+                          {chunks}
+                        </Text>
+                      ),
+                    })}
+              </Text>
+            </Section>
+            <Section flexDirection="row" gap={2} height="auto" width="auto">
+              <Button prominence="secondary" onClick={() => setShowInput(true)}>
+                {t("license.updateKey.label")}
               </Button>
-            )}
+              {!hideClose && (
+                <Button prominence="tertiary" onClick={handleClose}>
+                  {t("license.close.label")}
+                </Button>
+              )}
+            </Section>
           </Section>
         </Section>
       </Card>
@@ -135,103 +141,116 @@ export default function LicenseActivationCard({
 
   // License input form
   return (
-    <Card padding={0} alignItems="stretch" gap={0}>
-      {/* Header */}
-      <Section flexDirection="column" alignItems="stretch" gap={0} padding={1}>
-        <Section
-          flexDirection="row"
-          justifyContent="between"
-          alignItems="center"
-        >
-          <Text headingH3>
-            {hasLicense ? "Update License Key" : "Activate License Key"}
-          </Text>
-          <Button
-            disabled={isActivating}
-            prominence="secondary"
-            onClick={handleClose}
-          >
-            Cancel
-          </Button>
-        </Section>
-        <Text secondaryBody text03>
-          Manually add and activate a license for this Onyx instance.
-        </Text>
-      </Section>
-
-      {/* Content */}
-      <div className="billing-content-area">
+    <Card border="solid" padding={0} rounding={4}>
+      <Section alignItems="stretch" height="fit" gap={0}>
+        {/* Header */}
         <Section
           flexDirection="column"
           alignItems="stretch"
-          gap={0.5}
-          padding={1}
+          gap={0}
+          padding={4}
         >
-          {success && (
-            <div className="billing-success-message">
-              <Text secondaryBody>
-                License {hasLicense ? "updated" : "activated"} successfully!
-              </Text>
-            </div>
-          )}
-
-          <InputVertical
-            title="License Key"
-            subDescription={
-              error
-                ? undefined
-                : "Paste or attach your license key file you received from Onyx."
-            }
-            withLabel
+          <Section
+            flexDirection="row"
+            justifyContent="between"
+            alignItems="center"
           >
-            <InputFile
-              placeholder="eyJwYXlsb2FkIjogeyJ2ZXJzaW9..."
-              setValue={(value) => {
-                setLicenseKey(value);
-                setError(null);
-              }}
-              error={!!error}
-            />
-            {error && (
-              <Section
-                flexDirection="row"
-                alignItems="center"
-                justifyContent="start"
-                gap={0.25}
-                height="auto"
-              >
-                <div className="billing-error-icon">
-                  <SvgXCircle size={12} />
-                </div>
-                <Text secondaryBody text04>
-                  {error}.{" "}
-                  <a
-                    href={BILLING_HELP_URL}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="billing-help-link"
-                  >
-                    Billing Help
-                  </a>
-                </Text>
-              </Section>
-            )}
-          </InputVertical>
+            <Text headingH3>
+              {hasLicense
+                ? t("license.updateTitle.title")
+                : t("license.activateTitle.title")}
+            </Text>
+            <Button
+              disabled={isActivating}
+              prominence="secondary"
+              onClick={handleClose}
+            >
+              {t("license.cancel.label")}
+            </Button>
+          </Section>
+          <Text secondaryBody text03>
+            {t("license.description")}
+          </Text>
         </Section>
-      </div>
 
-      {/* Footer */}
-      <Section flexDirection="row" justifyContent="end" padding={1}>
-        <Button
-          disabled={isActivating || !licenseKey.trim() || success}
-          onClick={handleActivate}
-        >
-          {isActivating
-            ? "Activating..."
-            : hasLicense
-              ? "Update License"
-              : "Activate License"}
-        </Button>
+        {/* Content */}
+        <div className="billing-content-area">
+          <Section
+            flexDirection="column"
+            alignItems="stretch"
+            gap={2}
+            padding={4}
+          >
+            {success && (
+              <div className="billing-success-message">
+                <Text secondaryBody>
+                  {hasLicense
+                    ? t("license.updateSuccess.message")
+                    : t("license.activateSuccess.message")}
+                </Text>
+              </div>
+            )}
+
+            <InputVertical
+              title={t("license.keyField.title")}
+              subDescription={
+                error ? undefined : t("license.keyField.description")
+              }
+              withLabel
+            >
+              <InputFile
+                placeholder="eyJwYXlsb2FkIjogeyJ2ZXJzaW9..."
+                setValue={(value) => {
+                  setLicenseKey(value);
+                  setError(null);
+                }}
+                error={!!error}
+              />
+              {error && (
+                <Section
+                  flexDirection="row"
+                  alignItems="center"
+                  justifyContent="start"
+                  gap={1}
+                  height="auto"
+                >
+                  <div className="billing-error-icon">
+                    <SvgXCircle size={12} />
+                  </div>
+                  <Text secondaryBody text04>
+                    {t.rich("license.error.text", {
+                      error,
+                      link: (chunks) => (
+                        <a
+                          href={BILLING_HELP_URL}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="billing-help-link"
+                        >
+                          {chunks}
+                        </a>
+                      ),
+                    })}
+                  </Text>
+                </Section>
+              )}
+            </InputVertical>
+          </Section>
+        </div>
+
+        {/* Footer */}
+        <Section flexDirection="row" justifyContent="end" padding={4}>
+          <Button
+            disabled={isActivating || !licenseKey.trim() || success}
+            onClick={handleActivate}
+          >
+            {isActivating
+              ? t("license.activating.label")
+              : hasLicense
+                ? t("license.updateLicense.label")
+                : t("license.activateLicense.label")}
+          </Button>
+        </Section>
       </Section>
     </Card>
   );

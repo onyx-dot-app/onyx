@@ -95,7 +95,7 @@ def _normalize_one_entity(
 
         # generate trigrams of the queried entity Q
         query_trigrams = db_session.query(
-            getattr(func, POSTGRES_DEFAULT_SCHEMA)
+            getattr(func, POSTGRES_DEFAULT_SCHEMA)  # ods: ignore[getattr]
             .show_trgm(cleaned_entity)
             .cast(ARRAY(String(3)))
             .label("trigrams")
@@ -251,11 +251,11 @@ def normalize_entities(
     mapping: list[str | None] = run_functions_tuples_in_parallel(
         [
             (_normalize_one_entity, (entity, attributes, allowed_docs_temp_view_name))
-            for entity, attributes in zip(raw_entities, entity_attributes)
+            for entity, attributes in zip(raw_entities, entity_attributes, strict=True)
         ]
     )
     for entity, attributes, normalized_entity in zip(
-        raw_entities, entity_attributes, mapping
+        raw_entities, entity_attributes, mapping, strict=True
     ):
         if normalized_entity is not None:
             normalized_entities.append(normalized_entity)

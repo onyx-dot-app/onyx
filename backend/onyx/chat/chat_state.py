@@ -1,6 +1,7 @@
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -15,8 +16,9 @@ from onyx.chat.models import (
     SearchParams,
 )
 from onyx.context.search.models import SearchDoc
+from onyx.db.enums import IncognitoRecordMode
 from onyx.db.memory import UserMemoryContext
-from onyx.db.models import ChatMessage, ChatSession, Persona
+from onyx.db.models import ChatMessage, Persona
 from onyx.llm.interfaces import LLM, LLMUserIdentity
 from onyx.llm.models import ReasoningEffort
 from onyx.onyxbot.slack.models import SlackContext
@@ -54,6 +56,8 @@ class ChatStateContainer:
         self.is_clarification: bool = False
         # Pre-answer processing time (time before answer starts) in seconds
         self.pre_answer_processing_time: float | None = None
+        # Per-model: the outcome is persisted from whichever thread claims it.
+        self.request_params: dict[str, Any] | None = None
         # Note: LLM cost tracking is now handled in multi_llm.py
         # Search doc collection - maps dedup key to SearchDoc for all docs from tool calls
         self._all_search_docs: dict[SearchDocKey, SearchDoc] = {}
@@ -74,6 +78,16 @@ class ChatStateContainer:
         """Set the answer tokens from the final answer generation."""
         with self._lock:
             self.answer_tokens = answer
+
+    def set_request_params(self, request_params: dict[str, Any] | None) -> None:
+        """Set the request params the answer generation sent to the provider."""
+        with self._lock:
+            self.request_params = request_params
+
+    def get_request_params(self) -> dict[str, Any] | None:
+        """Thread-safe getter for request_params."""
+        with self._lock:
+            return self.request_params
 
     def set_citation_mapping(self, citation_to_doc: CitationMapping) -> None:
         """Set the citation mapping from citation processor."""
@@ -183,18 +197,24 @@ class ChatTurnSetup:
     """Immutable context produced by ``build_chat_turn`` and consumed by ``_run_models``.
 
     **Detached-safety contract:** instances of this class travel outside the DB
-    session that built them. Every ORM object reachable from this dataclass
-    (``chat_session``, ``persona``, ``user_message``, ``reserved_messages``,
-    ``llms``) is detached after ``build_chat_turn`` returns. Downstream code
-    must only read column attributes that were eager-loaded during setup —
-    do NOT access lazy-loaded relationships (e.g. ``setup.chat_session.messages``,
-    ``setup.persona.tools[i].some_lazy_field``) or SQLAlchemy will raise
-    ``DetachedInstanceError`` at runtime."""
+    session that built them. The ORM objects still reachable from this dataclass
+    (``persona``, ``reserved_messages``) are detached after ``build_chat_turn``
+    returns. Downstream code must only read column attributes that were
+    eager-loaded during setup. Do NOT access lazy-loaded relationships
+    (e.g. ``setup.persona.tools[i].some_lazy_field``) or SQLAlchemy will raise
+    ``DetachedInstanceError`` at runtime. Closures stored here count: bind the
+    ids they need, never the rows.
+
+    Session and user-message identity are carried as plain scalars: the turn
+    needs only their ids and the session's project id."""
 
     new_msg_req: SendMessageRequest
-    chat_session: ChatSession
+    chat_session_id: UUID
+    chat_session_project_id: int | None
+    # The session's pinned recording policy. None is an ordinary chat.
+    incognito_record_mode: IncognitoRecordMode | None
     persona: Persona
-    user_message: ChatMessage
+    user_message_id: int
     user_identity: LLMUserIdentity
     llms: list[LLM]  # length 1 for single-model, N for multi-model
     model_display_names: list[str]  # parallel to llms

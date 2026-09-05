@@ -1,0 +1,150 @@
+# Interim replacement for the Enterprise Edition entries that were in .github/CODEOWNERS.
+# It asserts that the PR author and every commit author of changes to the ee/ directories
+# are inside the organization. "Inside the organization" is approximated as "has write
+# access to this repository", because the default GITHUB_TOKEN cannot read org membership.
+# TODO: Decide the long-term ownership model for the ee/ directories. A future
+# version can check true org membership (needs an org-scoped token) and add an
+# explicit-approval path (for example, a maintainer-applied label).
+name: Ensure EE changes come from org members
+concurrency:
+  group: Ensure-EE-changes-come-from-org-members-${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+on:
+  # pull_request_target runs the base-branch version of this workflow, so a PR
+  # cannot edit this file to bypass the check. This is safe ONLY because the job
+  # never checks out or executes PR code. Do not add a checkout step.
+  pull_request_target: # zizmor: ignore[dangerous-triggers]
+    paths:
+      - "backend/ee/**"
+      - "web/src/ee/**"
+      - "web/src/app/ee/**"
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  ee-ownership-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check that the PR author and all commit authors are org members
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_COMMIT_COUNT: ${{ github.event.pull_request.commits }}
+          AUTHOR_ASSOCIATION: ${{ github.event.pull_request.author_association }}
+          # Automation and AI-agent logins that author commits for org developers.
+          # Note: anyone can run these agents, also on forks. A commit authored by
+          # one of these logins passes without proof of who drove the agent.
+          IGNORED_AUTHORS: |
+            dependabot[bot]
+            onyx-cherry-pick[bot]
+            claude[bot]
+            cursoragent
+            Copilot
+            devin-ai-integration[bot]
+            greptile-apps[bot]
+            cubic-dev-ai[bot]
+          # Bot author emails that are not linked to any GitHub account (cubic, OmX).
+          # These emails are easy to spoof, so commits with them pass only when the
+          # PR also has a commit author from the organization.
+          IGNORED_AUTHOR_EMAILS: |
+            contact@cubic.dev
+            omx@oh-my-codex.dev
+        run: |
+          # The pull request commits API returns at most 250 commits.
+          # Fail if the check cannot see every commit.
+          if [ "${PR_COMMIT_COUNT}" -gt 250 ]; then
+            echo "::error::This PR has ${PR_COMMIT_COUNT} commits. The EE ownership check can only inspect 250. Split the PR."
+            exit 1
+          fi
+
+          commits="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/commits?per_page=100" --jq '.[]' | jq -s '.')"
+
+          normalized_ignored="$(printf '%s\n' "${IGNORED_AUTHORS}" | tr '[:upper:]' '[:lower:]')"
+          normalized_ignored_emails="$(printf '%s\n' "${IGNORED_AUTHOR_EMAILS}" | tr '[:upper:]' '[:lower:]')"
+
+          is_ignorelisted() {
+            normalized_login="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+            printf '%s\n' "${normalized_ignored}" | grep -Fxq "${normalized_login}"
+          }
+
+          # A login is "org" when it is an org-member PR author or has write
+          # access to this repository.
+          is_org() {
+            login="$1"
+            if [ "${login}" = "${PR_AUTHOR}" ]; then
+              case "${AUTHOR_ASSOCIATION}" in
+                MEMBER|OWNER) return 0 ;;
+              esac
+            fi
+            permission="$(gh api "repos/${GITHUB_REPOSITORY}/collaborators/${login}/permission" --jq '.permission' 2>/dev/null || echo "unknown")"
+            [ "${permission}" = "admin" ] || [ "${permission}" = "write" ]
+          }
+
+          failures=""
+          add_failure() {
+            if [ -n "${failures}" ]; then
+              failures="${failures}"$'\n'"$1"
+            else
+              failures="$1"
+            fi
+          }
+
+          # Check every mapped commit author. Record whether the PR has at least
+          # one commit author from the organization. Ignorelisted bot logins do
+          # not count as org authors.
+          commit_logins="$(jq -r '[.[] | select(.author != null) | .author.login] | unique | .[]' <<< "${commits}")"
+          org_author_present=false
+          while IFS= read -r login; do
+            [ -z "${login}" ] && continue
+            if is_ignorelisted "${login}"; then
+              continue
+            fi
+            if is_org "${login}"; then
+              org_author_present=true
+            else
+              add_failure "  ${login} is not in the organization (no write access to this repository)"
+            fi
+          done <<< "${commit_logins}"
+
+          # Check the PR author too. The PR author can have zero commits, for
+          # example on a run-ci mirror of a fork PR.
+          if ! printf '%s\n' "${commit_logins}" | grep -Fxq "${PR_AUTHOR}"; then
+            if ! is_ignorelisted "${PR_AUTHOR}" && ! is_org "${PR_AUTHOR}"; then
+              add_failure "  ${PR_AUTHOR} is not in the organization (no write access to this repository)"
+            fi
+          fi
+
+          # Commits whose author email is not linked to any GitHub account cannot
+          # be verified. Ignorelisted agent emails pass only when an org member
+          # also authored a commit in this PR. The PR author does not count: a
+          # run-ci mirror has an org PR author, and must not excuse agent commits
+          # from a fork. All other unlinked emails fail.
+          unmapped="$(jq -r '.[] | select(.author == null) | "\(.sha[0:10])\t\(.commit.author.email)\t\(.commit.author.name)"' <<< "${commits}")"
+          while IFS=$'\t' read -r sha email name; do
+            [ -z "${sha}" ] && continue
+            normalized_email="$(printf '%s' "${email}" | tr '[:upper:]' '[:lower:]')"
+            if printf '%s\n' "${normalized_ignored_emails}" | grep -Fxq "${normalized_email}"; then
+              if [ "${org_author_present}" = "true" ]; then
+                continue
+              fi
+              add_failure "  commit ${sha} is authored by agent email ${email}, but no commit in this PR has an author from the organization"
+            else
+              add_failure "  commit ${sha} has no linked GitHub account (${name} <${email}>)"
+            fi
+          done <<< "${unmapped}"
+
+          if [ -n "${failures}" ]; then
+            echo "This PR changes EE code (backend/ee/, web/src/ee/, or web/src/app/ee/)."
+            echo "Only organization members can author changes to these directories."
+            echo "Problems found:"
+            echo "${failures}"
+            echo "::error::EE ownership check failed. See the job log for the list of authors."
+            exit 1
+          fi
+
+          echo "The PR author and all commit authors are allowed. Check passed."

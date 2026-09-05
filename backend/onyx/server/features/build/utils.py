@@ -11,7 +11,11 @@ from onyx.db.models import User
 from onyx.db.notification import create_notification
 from onyx.feature_flags.factory import get_default_feature_flag_provider
 from onyx.feature_flags.interface import NoOpFeatureFlagProvider
-from onyx.server.features.build.configs import ENABLE_CRAFT, MAX_UPLOAD_FILE_SIZE_BYTES
+from onyx.server.features.build.configs import (
+    ENABLE_CRAFT,
+    MAX_UPLOAD_FILE_SIZE_BYTES,
+    OPENCODE_DISABLED_TOOLS,
+)
 from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
@@ -103,6 +107,13 @@ def validate_file(size: int) -> tuple[bool, str | None]:
 # Flag logic: True = enabled, False/null/not found = disabled
 ONYX_CRAFT_ENABLED_FLAG = "onyx-craft-enabled"
 
+# PostHog multivariate flag; each variant key maps to a fixed disabled-tools
+# list below. An unrecognized/missing variant falls back to OPENCODE_DISABLED_TOOLS.
+OPENCODE_DISABLED_TOOLS_FLAG = "onyx-craft-opencode-disabled-tools"
+OPENCODE_DISABLED_TOOLS_VARIANTS: dict[str, list[str]] = {
+    "none": [],
+}
+
 # Feature identifier in additional_data
 BUILD_MODE_FEATURE_ID = "build_mode"
 
@@ -173,6 +184,26 @@ def is_craft_enabled_for_user(
     if deployment_available is None:
         deployment_available = is_craft_available_for_deployment(user)
     return deployment_available
+
+
+def get_opencode_disabled_tools() -> list[str]:
+    """Deployment-wide, not per-user: every user in a tenant/deployment gets
+    the same answer, so PostHog release conditions target tenant_id rather
+    than a per-user rollout."""
+    feature_flag_provider = get_default_feature_flag_provider()
+
+    if isinstance(feature_flag_provider, NoOpFeatureFlagProvider):
+        return OPENCODE_DISABLED_TOOLS
+
+    variant = feature_flag_provider.feature_variant_for_tenant(
+        OPENCODE_DISABLED_TOOLS_FLAG,
+        get_current_tenant_id(),
+    )
+
+    if isinstance(variant, str) and variant in OPENCODE_DISABLED_TOOLS_VARIANTS:
+        return OPENCODE_DISABLED_TOOLS_VARIANTS[variant]
+
+    return OPENCODE_DISABLED_TOOLS
 
 
 def ensure_build_mode_intro_notification(user: User, db_session: Session) -> None:

@@ -301,7 +301,11 @@ def create_scim_token(
     revokes all previous tokens. The raw token value is returned exactly once
     in the response; it cannot be retrieved again.
     """
-    raw_token, hashed_token, token_display = generate_scim_token()
+    # The tenant is baked into the token so the IdP's later SCIM calls, which
+    # carry nothing but this bearer token, resolve to the right workspace.
+    raw_token, hashed_token, token_display = generate_scim_token(
+        get_current_tenant_id()
+    )
     token = dal.create_token(
         name=body.name,
         hashed_token=hashed_token,

@@ -1,8 +1,10 @@
+from enum import Enum, auto
+
 from sqlalchemy import delete, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, load_only, selectinload
 
-from onyx.auth.schemas import UserRole
+from onyx.auth.permissions import Permission, has_global_permission
 from onyx.db.enums import LLMModelFlowType
 from onyx.db.models import CloudEmbeddingProvider as CloudEmbeddingProviderModel
 from onyx.db.models import (
@@ -21,6 +23,10 @@ from onyx.db.models import (
 from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.db.models import Tool as ToolModel
 from onyx.db.persona import get_raw_personas_for_user
+from onyx.db.user_group import assert_not_shared_with_default_group
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
+from onyx.llm.models import ReasoningEffort
 from onyx.llm.utils import model_supports_image_input
 from onyx.llm.well_known_providers.auto_update_models import LLMRecommendations
 from onyx.server.manage.embedding.models import (
@@ -31,8 +37,11 @@ from onyx.server.manage.llm.models import (
     LLMProviderUpsertRequest,
     LLMProviderView,
     SyncModelEntry,
+    ensure_default_within_max,
 )
+from onyx.utils.encryption import is_masked_credential, mask_string
 from onyx.utils.logger import setup_logger
+from onyx.utils.sensitive import SensitiveValue
 from shared_configs.enums import EmbeddingProvider
 
 logger = setup_logger()
@@ -43,6 +52,8 @@ def update_group_llm_provider_relationships__no_commit(
     group_ids: list[int] | None,
     db_session: Session,
 ) -> None:
+    assert_not_shared_with_default_group(db_session, group_ids or [])
+
     # Delete existing relationships
     db_session.query(LLMProvider__UserGroup).filter(
         LLMProvider__UserGroup.llm_provider_id == llm_provider_id
@@ -108,7 +119,7 @@ def can_user_access_llm_provider(
     provider: LLMProviderModel,
     user_group_ids: set[int],
     persona: Persona | None,
-    is_admin: bool = False,
+    can_manage_llms: bool = False,
 ) -> bool:
     """Check if a user may use an LLM provider.
 
@@ -116,23 +127,23 @@ def can_user_access_llm_provider(
         provider: The LLM provider to check access for
         user_group_ids: Set of user group IDs the user belongs to
         persona: The persona being used (if any)
-        is_admin: If True, bypass user group restrictions but still respect persona restrictions
+        can_manage_llms: If True, bypass user group restrictions but still respect persona restrictions
 
     Access logic:
     - is_public controls USER access (group bypass): when True, all users can access
       regardless of group membership. When False, user must be in a whitelisted group
-      (or be admin).
+      (or hold MANAGE_LLMS).
     - Persona restrictions are ALWAYS enforced when set, regardless of is_public.
-      This allows admins to make a provider available to all users while still
-      restricting which personas (assistants) can use it.
+      This allows MANAGE_LLMS holders to make a provider available to all users
+      while still restricting which personas (assistants) can use it.
 
     Decision matrix:
     1. is_public=True, no personas set → everyone has access
     2. is_public=True, personas set → all users, but only whitelisted personas
-    3. is_public=False, groups+personas set → must satisfy BOTH (admins bypass groups)
-    4. is_public=False, only groups set → must be in group (admins bypass)
+    3. is_public=False, groups+personas set → must satisfy BOTH (MANAGE_LLMS bypasses groups)
+    4. is_public=False, only groups set → must be in group (MANAGE_LLMS bypasses)
     5. is_public=False, only personas set → must use whitelisted persona
-    6. is_public=False, neither set → admin-only (locked)
+    6. is_public=False, neither set → MANAGE_LLMS-only (locked)
     """
     provider_group_ids = {g.id for g in (provider.groups or [])}
     provider_persona_ids = {p.id for p in (provider.personas or [])}
@@ -147,10 +158,10 @@ def can_user_access_llm_provider(
         return True
 
     if has_groups:
-        return is_admin or bool(user_group_ids & provider_group_ids)
+        return can_manage_llms or bool(user_group_ids & provider_group_ids)
 
-    # No groups: either persona-whitelisted (already passed) or admin-only if locked
-    return has_personas or is_admin
+    # No groups: either persona-whitelisted (already passed) or MANAGE_LLMS-only if locked
+    return has_personas or can_manage_llms
 
 
 def validate_persona_ids_exist(
@@ -194,6 +205,77 @@ def fetch_persona_with_groups(db_session: Session, persona_id: int) -> Persona |
     )
 
 
+class ApiKeyIntent(Enum):
+    """What a request states about the api_key it carries."""
+
+    # A new key, taken as given. The only way to rotate to a value equal to the
+    # stored key's mask, which UNSTATED reads as an unchanged echo.
+    ROTATED = auto()
+    # Keep the stored key and ignore whatever api_key holds. The admin UI sends
+    # this with no api_key at all when the key is left alone.
+    UNCHANGED = auto()
+    # The caller does not set the flag, so the mask-echo heuristic decides. This
+    # is what keeps callers predating the flag able to rotate a key.
+    UNSTATED = auto()
+
+    @classmethod
+    def from_request_flag(cls, api_key_changed: bool | None) -> "ApiKeyIntent":
+        if api_key_changed is None:
+            return cls.UNSTATED
+        return cls.ROTATED if api_key_changed else cls.UNCHANGED
+
+
+def _resolve_embedding_api_key(
+    incoming: str | None,
+    existing: SensitiveValue[str] | None,
+    intent: ApiKeyIntent,
+) -> str | None:
+    """Pick the api_key to store for an embedding provider."""
+    if intent is ApiKeyIntent.ROTATED:
+        return incoming
+    if intent is ApiKeyIntent.UNCHANGED and existing is not None:
+        return existing.get_value(apply_mask=False)
+    # UNCHANGED with nothing stored says to keep a key that does not exist, so
+    # read the request instead of creating a provider with no key at all.
+    return _restore_masked_embedding_api_key(incoming, existing)
+
+
+def _restore_masked_embedding_api_key(
+    incoming: str | None,
+    existing: SensitiveValue[str] | None,
+) -> str | None:
+    """Restore the stored key when the caller submits the masked placeholder.
+
+    Reads mask the key, so a read-modify-write cycle would otherwise persist the
+    mask itself as the real credential. Mirrors resolve_masked_credentials in
+    onyx/db/external_app.py.
+    """
+    if incoming is None:
+        return incoming
+
+    stored = existing.get_value(apply_mask=False) if existing is not None else None
+
+    if stored is not None:
+        # Compare against this key's own mask rather than the general shape
+        # test, so a real key that happens to look like a placeholder is still
+        # stored instead of being swallowed. Whatever is stored is preserved:
+        # the stored value cannot be told apart from a real key of the same
+        # shape, so refusing it would break providers holding a valid one.
+        #
+        # A caller rotating to a key that equals this mask exactly is read as an
+        # unchanged echo, and keeps the old key. Only api_key_changed on the
+        # request separates the two.
+        return stored if incoming == mask_string(stored) else incoming
+
+    if is_masked_credential(incoming):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "api_key was submitted masked but has no stored value to restore — "
+            "provide the actual key.",
+        )
+    return incoming
+
+
 def upsert_cloud_embedding_provider(
     db_session: Session, provider: CloudEmbeddingProviderCreationRequest
 ) -> CloudEmbeddingProvider:
@@ -203,10 +285,24 @@ def upsert_cloud_embedding_provider(
         .first()
     )
     if existing_provider:
-        for key, value in provider.model_dump().items():
+        # api_key_changed is a request-only flag; every remaining key is setattr'd
+        # straight onto the model.
+        updates = provider.model_dump(exclude={"api_key_changed"})
+        updates["api_key"] = _resolve_embedding_api_key(
+            provider.api_key,
+            existing_provider.api_key,
+            ApiKeyIntent.from_request_flag(provider.api_key_changed),
+        )
+        for key, value in updates.items():
             setattr(existing_provider, key, value)
     else:
-        new_provider = CloudEmbeddingProviderModel(**provider.model_dump())
+        creation = provider.model_dump(exclude={"api_key_changed"})
+        creation["api_key"] = _resolve_embedding_api_key(
+            provider.api_key,
+            None,
+            ApiKeyIntent.from_request_flag(provider.api_key_changed),
+        )
+        new_provider = CloudEmbeddingProviderModel(**creation)
 
         db_session.add(new_provider)
         existing_provider = new_provider
@@ -283,26 +379,80 @@ def upsert_llm_provider(
         for mc in llm_provider_upsert_request.model_configurations
     }
 
-    # Delete removed models
-    removed_ids = [
-        mc.id for name, mc in existing_by_name.items() if name not in models_to_exist
-    ]
+    # supports_image_input and supports_reasoning are optional, so an omitted one
+    # used to read as false and drop the flow — taking any deployment default that
+    # flow carried with it. Merge them against what is stored, the same way the
+    # reasoning and temperature fields below are merged.
+    merged_capabilities: dict[str, set[LLMModelFlowType]] = {}
+    for mc_request in llm_provider_upsert_request.model_configurations:
+        existing_mc = existing_by_name.get(mc_request.name)
+        stored_flows = set(existing_mc.llm_model_flow_types) if existing_mc else set()
+        merged: set[LLMModelFlowType] = set()
+        for capability_flow, sent in (
+            (LLMModelFlowType.VISION, mc_request.supports_image_input),
+            (LLMModelFlowType.REASONING, mc_request.supports_reasoning),
+        ):
+            keeps = sent if sent is not None else capability_flow in stored_flows
+            if keeps:
+                merged.add(capability_flow)
+        merged_capabilities[mc_request.name] = merged
 
-    default_model = fetch_default_llm_model(db_session)
+    # Delete removed models, unless the caller asked to keep what it did not send
+    removed_ids = (
+        []
+        if llm_provider_upsert_request.keep_existing_models
+        else [
+            mc.id
+            for name, mc in existing_by_name.items()
+            if name not in models_to_exist
+        ]
+    )
 
-    # Prevent removing and hiding the default model
-    if default_model:
-        for name, mc in existing_by_name.items():
-            if mc.id == default_model.id:
-                if default_model.id in removed_ids:
-                    raise ValueError(
-                        f"Cannot remove the default model '{name}'. Please change the default model before removing."
-                    )
-                if not requested_visibility.get(name, True):
-                    raise ValueError(
-                        f"Cannot hide the default model '{name}'. Please change the default model before hiding."
-                    )
-                break
+    # Every deployment default lives on a flow row pointing at a model, and
+    # _update_default_model__no_commit makes that model visible, so a model
+    # holding any default must stay present and visible. Checking only the chat
+    # default let an edit hide the model contextual RAG or Craft still resolves
+    # to, since neither resolver looks at is_visible.
+    #
+    # Only the visible-to-hidden transition is refused, not the steady state. A
+    # default can already sit on a hidden model — sync_auto_mode_models hides
+    # models dropped from the recommendations and re-points only the chat
+    # default — and both the admin form and the auto-mode transition re-send
+    # every model's stored visibility. Refusing the steady state would fail
+    # unrelated edits such as an API key rotation.
+    defaults_by_model_id = fetch_default_flows_by_model_id(db_session)
+
+    for name, mc in existing_by_name.items():
+        held_flows = defaults_by_model_id.get(mc.id)
+        if not held_flows:
+            continue
+        held = ", ".join(sorted(flow.value for flow in held_flows))
+        if mc.id in removed_ids:
+            raise ValueError(
+                f"Cannot remove the default model '{name}'. It is the default for: "
+                f"{held}. Please change those defaults before removing."
+            )
+        if mc.is_visible and not requested_visibility.get(name, True):
+            raise ValueError(
+                f"Cannot hide the default model '{name}'. It is the default for: "
+                f"{held}. Please change those defaults before hiding."
+            )
+        # Dropping a capability deletes the flow row that represents it, so a
+        # model holding that flow's default must keep it.
+        for capability_flow in (
+            LLMModelFlowType.VISION,
+            LLMModelFlowType.REASONING,
+        ):
+            if (
+                capability_flow in held_flows
+                and name in merged_capabilities
+                and capability_flow not in merged_capabilities[name]
+            ):
+                raise ValueError(
+                    f"Cannot disable {capability_flow.value} support on '{name}'. "
+                    f"It is the deployment's {capability_flow.value} default "
+                    "model. Please change that default first."
+                )
 
     if removed_ids:
         db_session.query(ModelConfiguration).filter(
@@ -312,13 +462,28 @@ def upsert_llm_provider(
 
     for model_config in llm_provider_upsert_request.model_configurations:
         supported_flows = [LLMModelFlowType.CHAT]
-        if model_config.supports_image_input:
-            supported_flows.append(LLMModelFlowType.VISION)
-        if model_config.supports_reasoning:
-            supported_flows.append(LLMModelFlowType.REASONING)
+        supported_flows.extend(merged_capabilities.get(model_config.name, set()))
 
         existing = existing_by_name.get(model_config.name)
         if existing:
+            # An omitted field keeps the stored value. Validate the merged
+            # policy, not just what was sent.
+            merged_reasoning_max = (
+                model_config.reasoning_effort_max
+                if model_config.reasoning_effort_max_provided
+                else existing.reasoning_effort_max
+            )
+            merged_reasoning_default = (
+                model_config.reasoning_effort_default
+                if model_config.reasoning_effort_default_provided
+                else existing.reasoning_effort_default
+            )
+            merged_temperature = (
+                model_config.temperature_default
+                if model_config.temperature_default_provided
+                else existing.temperature_default
+            )
+            ensure_default_within_max(merged_reasoning_default, merged_reasoning_max)
             update_model_configuration__no_commit(
                 db_session=db_session,
                 model_configuration_id=existing.id,
@@ -327,6 +492,9 @@ def upsert_llm_provider(
                 max_input_tokens=model_config.max_input_tokens,
                 display_name=model_config.display_name,
                 custom_display_name=model_config.custom_display_name,
+                reasoning_effort_max=merged_reasoning_max,
+                reasoning_effort_default=merged_reasoning_default,
+                temperature_default=merged_temperature,
             )
         else:
             insert_new_model_configuration__no_commit(
@@ -338,6 +506,9 @@ def upsert_llm_provider(
                 max_input_tokens=model_config.max_input_tokens,
                 display_name=model_config.display_name,
                 custom_display_name=model_config.custom_display_name,
+                reasoning_effort_max=model_config.reasoning_effort_max,
+                reasoning_effort_default=model_config.reasoning_effort_default,
+                temperature_default=model_config.temperature_default,
             )
 
     # Make sure the relationship table stays up to date
@@ -546,7 +717,7 @@ def fetch_first_accessible_llm_provider_by_type(
         .order_by(LLMProviderModel.id.asc())
     )
     user_group_ids = fetch_user_group_ids(db_session, user)
-    is_admin = user.role == UserRole.ADMIN
+    can_manage_llms = has_global_permission(user, Permission.MANAGE_LLMS)
     provider = next(
         (
             provider
@@ -555,7 +726,7 @@ def fetch_first_accessible_llm_provider_by_type(
                 provider,
                 user_group_ids,
                 persona=None,
-                is_admin=is_admin,
+                can_manage_llms=can_manage_llms,
             )
         ),
         None,
@@ -582,14 +753,14 @@ def fetch_all_accessible_llm_providers(
         )
     )
     user_group_ids = fetch_user_group_ids(db_session, user)
-    is_admin = user.role == UserRole.ADMIN
+    can_manage_llms = has_global_permission(user, Permission.MANAGE_LLMS)
     # This per-turn catalog never uses the key (the gateway injects it per
     # selected model), so skip the per-provider decrypt + audit.
     return [
         LLMProviderView.from_model(p, include_api_key=False)
         for p in provider_models
         if can_user_access_llm_provider(
-            p, user_group_ids, persona=None, is_admin=is_admin
+            p, user_group_ids, persona=None, can_manage_llms=can_manage_llms
         )
     ]
 
@@ -609,17 +780,17 @@ def fetch_all_llm_providers_accessible_in_any_context(
     }
     provider_models = fetch_existing_llm_providers(db_session, [])
     user_group_ids = fetch_user_group_ids(db_session, user)
-    is_admin = user.role == UserRole.ADMIN
+    can_manage_llms = has_global_permission(user, Permission.MANAGE_LLMS)
 
     def is_accessible(provider: LLMProviderModel) -> bool:
         if can_user_access_llm_provider(
-            provider, user_group_ids, persona=None, is_admin=is_admin
+            provider, user_group_ids, persona=None, can_manage_llms=can_manage_llms
         ):
             return True
         return any(
             persona.id in accessible_persona_ids
             and can_user_access_llm_provider(
-                provider, user_group_ids, persona, is_admin=is_admin
+                provider, user_group_ids, persona, can_manage_llms=can_manage_llms
             )
             for persona in provider.personas
         )
@@ -678,7 +849,7 @@ def fetch_accessible_llm_provider_by_id(
         provider_model,
         user_group_ids,
         persona=None,
-        is_admin=user.role == UserRole.ADMIN,
+        can_manage_llms=has_global_permission(user, Permission.MANAGE_LLMS),
     ):
         return None
     return LLMProviderView.from_model(provider_model)
@@ -778,6 +949,31 @@ def fetch_default_chat_naming_model(
     db_session: Session,
 ) -> ModelConfiguration | None:
     return fetch_default_model(db_session, LLMModelFlowType.CHAT_NAMING)
+
+
+def fetch_default_craft_model(db_session: Session) -> ModelConfiguration | None:
+    return fetch_default_model(db_session, LLMModelFlowType.CRAFT)
+
+
+def fetch_default_flows_by_model_id(
+    db_session: Session,
+) -> dict[int, set[LLMModelFlowType]]:
+    """Which deployment defaults each model configuration currently holds.
+
+    One model commonly holds several — the chat default is very often the vision
+    default too — so the value is a set rather than a single flow.
+    """
+    rows = db_session.execute(
+        select(
+            LLMModelFlow.model_configuration_id,
+            LLMModelFlow.llm_model_flow_type,
+        ).where(LLMModelFlow.is_default == True)  # noqa: E712
+    ).all()
+
+    defaults: dict[int, set[LLMModelFlowType]] = {}
+    for model_configuration_id, flow_type in rows:
+        defaults.setdefault(model_configuration_id, set()).add(flow_type)
+    return defaults
 
 
 def fetch_default_model(
@@ -907,7 +1103,9 @@ def update_default_vision_provider(
     if provider is None:
         raise ValueError(f"LLM Provider with id={provider_id} does not exist")
 
-    if not model_supports_image_input(vision_model, provider.provider):
+    if not model_supports_image_input(
+        vision_model, provider.provider, provider.deployment_name
+    ):
         raise ValueError(
             f"Model '{vision_model}' for provider '{provider.provider} does not support image input"
         )
@@ -940,6 +1138,37 @@ def update_default_chat_naming_provider(
     )
 
 
+def update_default_craft_provider(
+    provider_id: int, model_name: str, db_session: Session
+) -> None:
+    # CRAFT is a pointer flow, not a capability: nothing populates it during
+    # provider upsert, so the row has to be created before it can be defaulted.
+    model_config = db_session.scalar(
+        select(ModelConfiguration).where(
+            ModelConfiguration.llm_provider_id == provider_id,
+            ModelConfiguration.name == model_name,
+        )
+    )
+    if not model_config:
+        raise ValueError(
+            f"Model '{model_name}' is not a valid model for provider_id={provider_id}"
+        )
+
+    create_new_flow_mapping__no_commit(
+        db_session=db_session,
+        model_configuration_id=model_config.id,
+        flow_type=LLMModelFlowType.CRAFT,
+    )
+    db_session.flush()
+
+    _update_default_model(
+        db_session,
+        provider_id,
+        model_name,
+        LLMModelFlowType.CRAFT,
+    )
+
+
 def update_no_default_chat_naming_provider(
     db_session: Session,
 ) -> None:
@@ -947,6 +1176,18 @@ def update_no_default_chat_naming_provider(
         update(LLMModelFlow)
         .where(
             LLMModelFlow.llm_model_flow_type == LLMModelFlowType.CHAT_NAMING,
+            LLMModelFlow.is_default == True,  # noqa: E712
+        )
+        .values(is_default=False)
+    )
+    db_session.commit()
+
+
+def update_no_default_craft_provider(db_session: Session) -> None:
+    db_session.execute(
+        update(LLMModelFlow)
+        .where(
+            LLMModelFlow.llm_model_flow_type == LLMModelFlowType.CRAFT,
             LLMModelFlow.is_default == True,  # noqa: E712
         )
         .values(is_default=False)
@@ -1054,13 +1295,6 @@ def sync_auto_mode_models(
         ).all()
     }
 
-    # Mark models that are no longer in GitHub config as not visible
-    for model_name, model in existing_models.items():
-        if model_name not in recommended_visible_model_names:
-            if model.is_visible:
-                model.is_visible = False
-                changes += 1
-
     # Add or update models from GitHub config
     for model_config in recommended_visible_models:
         if model_config.name in existing_models:
@@ -1091,6 +1325,8 @@ def sync_auto_mode_models(
             changes += 1
 
     # Update the default if this provider currently holds the global CHAT default.
+    # This runs before the models the config dropped are hidden, so a model that
+    # gives up the chat default here can still be hidden below.
     # We flush (but don't commit) so that _update_default_model can see the new
     # model rows, then commit everything atomically to avoid a window where the
     # old default is invisible but still pointed-to.
@@ -1112,6 +1348,63 @@ def sync_auto_mode_models(
                 flow_type=LLMModelFlowType.CHAT,
             )
             changes += 1
+
+    # Reconcile the visibility of the models the config dropped. A model still
+    # holding a deployment default stays visible: only the chat default is
+    # re-pointed above, so hiding the rest would strand a default on a model the
+    # admin can no longer see or change. Every other write path keeps a default
+    # model visible.
+    #
+    # Both statements test the default in SQL rather than from a snapshot read
+    # here. A default assigned between the two would otherwise be missed, and
+    # the model hidden anyway. They synchronize the session because sessions are
+    # built with expire_on_commit=False, so a caller holding these rows — as
+    # put_llm_provider does — would otherwise serialize stale visibility.
+    db_session.flush()
+
+    dropped_names = [
+        name for name in existing_models if name not in recommended_visible_model_names
+    ]
+    if dropped_names:
+        holds_a_default = (
+            select(LLMModelFlow.id)
+            .where(
+                LLMModelFlow.model_configuration_id == ModelConfiguration.id,
+                LLMModelFlow.is_default == True,  # noqa: E712
+            )
+            .exists()
+        )
+        dropped_models = (
+            ModelConfiguration.llm_provider_id == provider.id,
+            ModelConfiguration.name.in_(dropped_names),
+        )
+
+        hidden = db_session.execute(
+            update(ModelConfiguration)
+            .where(
+                *dropped_models,
+                ModelConfiguration.is_visible == True,  # noqa: E712
+                ~holds_a_default,
+            )
+            .values(is_visible=False)
+            .execution_options(synchronize_session="fetch")
+        )
+
+        # An earlier sync could have hidden a model that still holds a default,
+        # so restore those rather than leaving the default unreachable forever.
+        restored = db_session.execute(
+            update(ModelConfiguration)
+            .where(
+                *dropped_models,
+                ModelConfiguration.is_visible == False,  # noqa: E712
+                holds_a_default,
+            )
+            .values(is_visible=True)
+            .execution_options(synchronize_session="fetch")
+        )
+
+        changes += int(hidden.rowcount)  # ty: ignore[unresolved-attribute]
+        changes += int(restored.rowcount)  # ty: ignore[unresolved-attribute]
 
     db_session.commit()
     return changes
@@ -1159,6 +1452,9 @@ def insert_new_model_configuration__no_commit(
     max_input_tokens: int | None,
     display_name: str | None,
     custom_display_name: str | None = None,
+    reasoning_effort_max: ReasoningEffort | None = None,
+    reasoning_effort_default: ReasoningEffort | None = None,
+    temperature_default: float | None = None,
 ) -> int | None:
     result = db_session.execute(
         insert(ModelConfiguration)
@@ -1170,6 +1466,9 @@ def insert_new_model_configuration__no_commit(
             display_name=display_name,
             custom_display_name=custom_display_name,
             supports_image_input=LLMModelFlowType.VISION in supported_flows,
+            reasoning_effort_max=reasoning_effort_max,
+            reasoning_effort_default=reasoning_effort_default,
+            temperature_default=temperature_default,
         )
         .on_conflict_do_nothing()
         .returning(ModelConfiguration.id)
@@ -1198,6 +1497,9 @@ def update_model_configuration__no_commit(
     max_input_tokens: int | None,
     display_name: str | None,
     custom_display_name: str | None = None,
+    reasoning_effort_max: ReasoningEffort | None = None,
+    reasoning_effort_default: ReasoningEffort | None = None,
+    temperature_default: float | None = None,
 ) -> None:
     result = db_session.execute(
         update(ModelConfiguration)
@@ -1207,6 +1509,9 @@ def update_model_configuration__no_commit(
             display_name=display_name,
             custom_display_name=custom_display_name,
             supports_image_input=LLMModelFlowType.VISION in supported_flows,
+            reasoning_effort_max=reasoning_effort_max,
+            reasoning_effort_default=reasoning_effort_default,
+            temperature_default=temperature_default,
         )
         .where(ModelConfiguration.id == model_configuration_id)
         .returning(ModelConfiguration)
@@ -1223,10 +1528,20 @@ def update_model_configuration__no_commit(
         for flow_type in supported_flows
         if flow_type not in model_configuration.llm_model_flow_types
     }
+    # Only the capability-derived flows are reconciled here. The pointer flows —
+    # CONTEXTUAL_RAG, CHAT_NAMING and CRAFT — are set by their own endpoints and
+    # are implied by no supports_* field, so they are never in supported_flows.
+    # Without this filter an ordinary provider update deletes them, and the
+    # deployment default each one carries goes with it.
+    reconciled_flows = {
+        LLMModelFlowType.CHAT,
+        LLMModelFlowType.VISION,
+        LLMModelFlowType.REASONING,
+    }
     removed_flows = {
         flow_type
         for flow_type in model_configuration.llm_model_flow_types
-        if flow_type not in supported_flows
+        if flow_type not in supported_flows and flow_type in reconciled_flows
     }
 
     for flow_type in new_flows:

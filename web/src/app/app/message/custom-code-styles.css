@@ -319,13 +319,13 @@ pre[class*="language-"] {
   background: var(--border-03);
 }
 
-/* Fade the right edge via an ::after overlay on the non-scrolling card.
-   Stays pinned while table scrolls; doesn't affect the sticky column. */
+/* Fade the scroll-end edge via an ::after overlay on the non-scrolling
+   card. Stays pinned while the table scrolls. */
 .markdown-table-card::after {
   content: "";
   position: absolute;
   top: 0;
-  right: 0;
+  inset-inline-end: 0;
   bottom: 0;
   width: 2rem;
   pointer-events: none;
@@ -339,45 +339,24 @@ pre[class*="language-"] {
   opacity: 0;
   transition: opacity 0.15s;
 }
+.markdown-table-card:dir(rtl)::after {
+  background: linear-gradient(
+    to left,
+    transparent,
+    var(--background-neutral-01)
+  );
+  border-radius: 0.5rem 0 0 0.5rem;
+}
 .markdown-table-card[data-overflows="true"]::after {
   opacity: 1;
 }
 
-/* Sticky first column — inherits the container's background so it
-   matches regardless of theme or custom wallpaper. */
+/* Edge padding on the outer columns. */
 .markdown-table-breakout th:first-child,
 .markdown-table-breakout td:first-child {
-  position: sticky;
-  left: 0;
-  z-index: 1;
-  padding-left: 0.75rem;
-  background: var(--background-neutral-01);
+  padding-inline-start: 0.75rem;
 }
 .markdown-table-breakout th:last-child,
 .markdown-table-breakout td:last-child {
-  padding-right: 0.75rem;
-}
-
-/* Shadow on sticky column when scrolled. Uses an ::after pseudo-element
-   so it isn't clipped by the overflow container or the mask-image fade. */
-.markdown-table-breakout th:first-child::after,
-.markdown-table-breakout td:first-child::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  right: -6px;
-  bottom: 0;
-  width: 6px;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.15s;
-  box-shadow: inset 6px 0 8px -4px var(--alpha-grey-100-25);
-}
-.dark .markdown-table-breakout th:first-child::after,
-.dark .markdown-table-breakout td:first-child::after {
-  box-shadow: inset 6px 0 8px -4px var(--alpha-grey-100-60);
-}
-.markdown-table-breakout[data-scrolled="true"] th:first-child::after,
-.markdown-table-breakout[data-scrolled="true"] td:first-child::after {
-  opacity: 1;
+  padding-inline-end: 0.75rem;
 }

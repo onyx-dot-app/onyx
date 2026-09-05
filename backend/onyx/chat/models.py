@@ -37,6 +37,9 @@ class CustomToolResponse(BaseModel):
 
 class CreateChatSessionID(BaseModel):
     chat_session_id: UUID
+    # Echoes the pinned mode so the client can verify the server honored an
+    # incognito request. A server that omits it did not.
+    incognito: bool = False
 
 
 AnswerStreamPart = (
@@ -93,6 +96,9 @@ class ChatFullResponse(BaseModel):
     # Metadata
     message_id: int
     chat_session_id: UUID | None = None
+    # Echoes the pinned mode for newly-created sessions, like the streaming
+    # packet does. A server that omits it did not honor an incognito request.
+    incognito: bool = False
     error_msg: str | None = None
 
 
@@ -156,6 +162,10 @@ class ChatMessageSimple(BaseModel):
     message_type: MessageType
     # Only for USER type messages
     image_files: list[ChatLoadedFile] | None = None
+    # Portion of token_count contributed by image_files. Kept separate so
+    # budgeting can discount it when a non-vision model replays the images
+    # as text markers instead.
+    image_token_count: int = 0
     # Only for TOOL_CALL_RESPONSE type messages
     tool_call_id: str | None = None
     # For ASSISTANT messages with tool calls (OpenAI parallel tool calling format)

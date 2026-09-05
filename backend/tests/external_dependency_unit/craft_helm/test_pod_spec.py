@@ -134,6 +134,19 @@ def _render_pod_template_yaml(extra_args: list[str] | None = None) -> str:
     return result.stdout
 
 
+def _render_config_map_yaml(extra_args: list[str] | None = None) -> str:
+    """Render the shared runtime ConfigMap from the chart."""
+    cmd = [
+        *_helm_template_cmd(extra_args),
+        "--show-only",
+        "templates/configmap.yaml",
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        _skip_or_fail(f"helm template failed (chart deps?): {result.stderr.strip()}")
+    return result.stdout
+
+
 def _render_chart(
     extra_args: list[str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
@@ -636,6 +649,137 @@ def test_ca_bundle_mounted_read_only_on_both_containers(pod: client.V1Pod) -> No
         mount = _mount(container, "sandbox-ca-bundle")
         assert mount.read_only is True
         assert mount.mount_path == "/etc/ssl/sandbox"
+
+
+def test_redis_tls_mounts_ca_in_all_enabled_redis_workloads() -> None:
+    """Every enabled Redis client must receive the configured server CA."""
+    redis_tls_args = [
+        "--set",
+        "redis.enabled=false",
+        "--set",
+        "redisTls.enabled=true",
+        "--set",
+        "redisTls.caConfigMapName=redis-ca-config",
+        "--set",
+        "redisTls.caKey=redis-root.pem",
+    ]
+    rendered = _render_chart(redis_tls_args)
+    assert rendered.returncode == 0, rendered.stderr
+    deployments = {
+        doc["metadata"]["name"]: doc
+        for doc in yaml.safe_load_all(rendered.stdout)
+        if doc and doc.get("kind") == "Deployment"
+    }
+    redis_workload_names = {
+        "onyx-api-server",
+        "onyx-celery-beat",
+        "onyx-celery-worker-primary",
+        "onyx-celery-worker-light",
+        "onyx-celery-worker-heavy",
+        "onyx-celery-worker-scheduled-tasks",
+        "onyx-sandbox-proxy",
+    }
+    assert redis_workload_names <= deployments.keys()
+
+    for workload_name in redis_workload_names:
+        pod_spec = deployments[workload_name]["spec"]["template"]["spec"]
+        volume = next(
+            item for item in pod_spec["volumes"] if item["name"] == "redis-ca"
+        )
+        assert volume == {
+            "name": "redis-ca",
+            "configMap": {
+                "name": "redis-ca-config",
+                "items": [{"key": "redis-root.pem", "path": "redis-ca.crt"}],
+            },
+        }
+        for container in pod_spec["containers"]:
+            assert {
+                "name": "redis-ca",
+                "mountPath": "/etc/ssl/certs/redis-ca.crt",
+                "subPath": "redis-ca.crt",
+                "readOnly": True,
+            } in container["volumeMounts"]
+
+    config_map = yaml.safe_load(_render_config_map_yaml(redis_tls_args))
+    assert config_map["data"]["REDIS_SSL"] == "true"
+    assert config_map["data"]["REDIS_SSL_CERT_REQS"] == "required"
+    assert config_map["data"]["REDIS_SSL_CA_CERTS"] == "/etc/ssl/certs/redis-ca.crt"
+    assert config_map["data"]["REDIS_SSL_CHECK_HOSTNAME"] == "true"
+
+
+def test_redis_tls_rejects_bundled_redis() -> None:
+    """Bundled Redis has no TLS listener, so the values cannot be combined."""
+    result = _render_chart(
+        [
+            "--set",
+            "redis.enabled=true",
+            "--set",
+            "redisTls.enabled=true",
+            "--set",
+            "redisTls.caConfigMapName=redis-ca-config",
+        ]
+    )
+
+    assert result.returncode != 0
+    assert "redisTls.enabled requires redis.enabled=false" in result.stderr
+
+
+def test_redis_tls_can_disable_hostname_verification() -> None:
+    """Operators can opt out when an endpoint certificate cannot match its host."""
+    config_map = yaml.safe_load(
+        _render_config_map_yaml(
+            [
+                "--set",
+                "redis.enabled=false",
+                "--set",
+                "redisTls.enabled=true",
+                "--set",
+                "redisTls.caConfigMapName=redis-ca-config",
+                "--set",
+                "redisTls.checkHostname=false",
+            ]
+        )
+    )
+
+    assert config_map["data"]["REDIS_SSL_CHECK_HOSTNAME"] == "false"
+
+
+def test_redis_tls_null_hostname_verification_uses_secure_default() -> None:
+    """A null hostname option must not silently disable identity verification."""
+    config_map = yaml.safe_load(
+        _render_config_map_yaml(
+            [
+                "--set",
+                "redis.enabled=false",
+                "--set",
+                "redisTls.enabled=true",
+                "--set",
+                "redisTls.caConfigMapName=redis-ca-config",
+                "--set",
+                "redisTls.checkHostname=null",
+            ]
+        )
+    )
+
+    assert config_map["data"]["REDIS_SSL_CHECK_HOSTNAME"] == "true"
+
+
+def test_null_redis_tls_map_renders_without_tls_configuration() -> None:
+    """A reused null Redis TLS map must not cause a Helm template error."""
+    rendered = _render_chart(["--set", "redisTls=null"])
+
+    assert rendered.returncode == 0, rendered.stderr
+
+
+def test_redis_tls_disabled_does_not_override_redis_configuration() -> None:
+    """The optional feature must not change the default Redis configuration."""
+    config_map = yaml.safe_load(_render_config_map_yaml())
+
+    assert "REDIS_SSL" not in config_map["data"]
+    assert "REDIS_SSL_CERT_REQS" not in config_map["data"]
+    assert "REDIS_SSL_CA_CERTS" not in config_map["data"]
+    assert "REDIS_SSL_CHECK_HOSTNAME" not in config_map["data"]
 
 
 def test_missing_container_raises_clear_error_on_version_skew() -> None:

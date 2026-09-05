@@ -3,8 +3,10 @@
 import { useState } from "react";
 import { buildImgUrl } from "./utils";
 import { FullImageModal } from "./FullImageModal";
+import { useTranslations } from "next-intl";
 
 export function InputBarPreviewImage({ fileId }: { fileId: string }) {
+  const t = useTranslations("chat.files");
   const [fullImageShowing, setFullImageShowing] = useState(false);
 
   return (
@@ -14,7 +16,10 @@ export function InputBarPreviewImage({ fileId }: { fileId: string }) {
         open={fullImageShowing}
         onOpenChange={(open) => setFullImageShowing(open)}
       />
-      <div
+      <button
+        type="button"
+        aria-label={t("inputBarPreviewImage.viewFullImage.label")}
+        onClick={() => setFullImageShowing(true)}
         className={`
           bg-transparent
           border-none
@@ -29,12 +34,11 @@ export function InputBarPreviewImage({ fileId }: { fileId: string }) {
       `}
       >
         <img
-          alt="preview"
-          onClick={() => setFullImageShowing(true)}
+          alt={t("inputBarPreviewImage.image.alt")}
           className="h-6 w-6 object-cover rounded-lg bg-background cursor-pointer"
           src={buildImgUrl(fileId)}
         />
-      </div>
+      </button>
     </>
   );
 }

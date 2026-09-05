@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { useTranslations } from "next-intl";
 import { InputTypeIn, Tabs, Text } from "@opal/components";
 import InputSelect from "@/refresh-components/inputs/InputSelect";
 import { Section } from "@/layouts/general-layouts";
@@ -13,21 +14,19 @@ import type {
   IntervalUnit,
 } from "@/app/craft/v1/tasks/interfaces";
 
-// 0=Sun..6=Sat (cron convention).
-const WEEKDAY_LABELS: ReadonlyArray<{ value: number; short: string }> = [
-  { value: 0, short: "Sun" },
-  { value: 1, short: "Mon" },
-  { value: 2, short: "Tue" },
-  { value: 3, short: "Wed" },
-  { value: 4, short: "Thu" },
-  { value: 5, short: "Fri" },
-  { value: 6, short: "Sat" },
-];
+// 0=Sun..6=Sat (cron convention). Short labels come from the
+// craft.tasks.scheduleEditor.weekdays message namespace.
+const WEEKDAY_LABELS = [
+  { value: 0, key: "sun" },
+  { value: 1, key: "mon" },
+  { value: 2, key: "tue" },
+  { value: 3, key: "wed" },
+  { value: 4, key: "thu" },
+  { value: 5, key: "fri" },
+  { value: 6, key: "sat" },
+] as const;
 
-const INTERVAL_UNITS: ReadonlyArray<{ value: IntervalUnit; label: string }> = [
-  { value: "minutes", label: "minutes" },
-  { value: "hours", label: "hours" },
-];
+const INTERVAL_UNITS: ReadonlyArray<IntervalUnit> = ["minutes", "hours"];
 
 export interface ScheduleEditorProps {
   mode: EditorMode;
@@ -45,12 +44,13 @@ export default function ScheduleEditor({
   onPayloadChange,
   error,
 }: ScheduleEditorProps) {
+  const t = useTranslations("craft.tasks.scheduleEditor");
   // Cache the active payload per mode so flipping tabs back and forth doesn't
   // wipe out a partially-filled form on the other tab.
   const tabContent = useMemo(
     () => ({
       interval: {
-        name: "Interval",
+        name: t("tabs.interval"),
         content: (
           <IntervalEditor
             payload={
@@ -63,7 +63,7 @@ export default function ScheduleEditor({
         ),
       },
       daily_weekly: {
-        name: "Daily / Weekly",
+        name: t("tabs.dailyWeekly"),
         content: (
           <DailyWeeklyEditor
             payload={
@@ -76,13 +76,13 @@ export default function ScheduleEditor({
         ),
       },
     }),
-    [mode, payload, onPayloadChange]
+    [mode, payload, onPayloadChange, t]
   );
 
   const tabEntries = Object.entries(tabContent);
 
   return (
-    <Section gap={0.5}>
+    <Section gap={2}>
       <Tabs
         value={mode}
         onValueChange={(value) => {
@@ -153,11 +153,12 @@ interface IntervalEditorProps {
 }
 
 function IntervalEditor({ payload, onChange }: IntervalEditorProps) {
+  const t = useTranslations("craft.tasks.scheduleEditor");
   return (
-    <Section gap={0.5}>
+    <Section gap={2}>
       <div className="flex items-center gap-2 flex-wrap">
         <Text font="main-ui-body" color="text-05">
-          Every
+          {t("interval.everyLabel")}
         </Text>
         <div className="w-28">
           <InputTypeIn
@@ -179,9 +180,9 @@ function IntervalEditor({ payload, onChange }: IntervalEditorProps) {
           >
             <InputSelect.Trigger />
             <InputSelect.Content>
-              {INTERVAL_UNITS.map((u) => (
-                <InputSelect.Item key={u.value} value={u.value}>
-                  {u.label}
+              {INTERVAL_UNITS.map((unit) => (
+                <InputSelect.Item key={unit} value={unit}>
+                  {t(`intervalUnits.${unit}`)}
                 </InputSelect.Item>
               ))}
             </InputSelect.Content>
@@ -202,19 +203,20 @@ interface DailyWeeklyEditorProps {
 }
 
 function DailyWeeklyEditor({ payload, onChange }: DailyWeeklyEditorProps) {
+  const t = useTranslations("craft.tasks.scheduleEditor");
   const weekdaySet = new Set(payload.weekdays ?? []);
   const selectedDays = WEEKDAY_LABELS.filter((d) =>
     weekdaySet.has(d.value)
-  ).map((d) => d.short);
+  ).map((d) => t(`weekdays.${d.key}`));
   const scheduleNote =
     selectedDays.length === 0
-      ? "Runs every day"
-      : `Runs on ${selectedDays.join(", ")}`;
+      ? t("dailyWeekly.runsEveryDay")
+      : t("dailyWeekly.runsOn", { days: selectedDays.join(", ") });
   return (
-    <Section gap={0.5}>
+    <Section gap={2}>
       <div className="flex items-center gap-2">
         <Text font="main-ui-body" color="text-05">
-          At
+          {t("dailyWeekly.atLabel")}
         </Text>
         <div className="w-44">
           <InputTypeIn
@@ -229,7 +231,7 @@ function DailyWeeklyEditor({ payload, onChange }: DailyWeeklyEditorProps) {
       </div>
       <div className="flex flex-col gap-1">
         <Text font="secondary-body" color="text-03">
-          On these days
+          {t("dailyWeekly.daysLabel")}
         </Text>
         <div className="flex items-center gap-1 flex-wrap">
           {WEEKDAY_LABELS.map((day) => {
@@ -256,7 +258,7 @@ function DailyWeeklyEditor({ payload, onChange }: DailyWeeklyEditorProps) {
                     : "bg-background-neutral-00 border-border-02 text-text-03 hover:bg-background-tint-01"
                 )}
               >
-                {day.short}
+                {t(`weekdays.${day.key}`)}
               </button>
             );
           })}

@@ -1,8 +1,8 @@
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
-import React, { useState, useEffect } from "react";
+import React, { useEffect } from "react";
+import { useTranslations } from "next-intl";
 import { FormikProps } from "formik";
-import { UserRole } from "@/lib/types";
 import { useUserGroups } from "@/lib/hooks";
 import { BooleanFormField } from "@/components/Field";
 import { useUser } from "@/providers/UserProvider";
@@ -18,10 +18,11 @@ export type IsPublicGroupSelectorFormType = {
 export const IsPublicGroupSelector = <T extends IsPublicGroupSelectorFormType>({
   formikProps,
   objectName,
-  publicToWhom = "Users",
+  publicToWhom,
   removeIndent = false,
   enforceGroupSelection = true,
   smallLabels = false,
+  isGlobalHolder,
 }: {
   formikProps: FormikProps<T>;
   objectName: string;
@@ -29,82 +30,53 @@ export const IsPublicGroupSelector = <T extends IsPublicGroupSelectorFormType>({
   removeIndent?: boolean;
   enforceGroupSelection?: boolean;
   smallLabels?: boolean;
+  // Whether the caller holds this object's manage permission org-wide. The
+  // component is shared across connectors, document sets and actions, so each
+  // caller supplies its own; falls back to admin when omitted.
+  isGlobalHolder?: boolean;
 }) => {
+  const t = useTranslations("common.isPublicSelector");
+  const effectivePublicToWhom = publicToWhom ?? t("usersFallback.text");
   const { data: userGroups, isLoading: userGroupsIsLoading } = useUserGroups();
-  const { isAdmin, user, isCurator } = useUser();
+  const { isAdmin, user } = useUser();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
-  const [shouldHideContent, setShouldHideContent] = useState(false);
+  const canActGlobally = isGlobalHolder ?? isAdmin;
 
+  // A scoped manager can only create non-public objects. Group selection stays
+  // theirs to make — auto-assigning the org's only group and hiding the picker
+  // was curator-era behaviour that silently scoped objects without consent.
   useEffect(() => {
-    if (user && userGroups && businessTier) {
-      const isUserAdmin = user.role === UserRole.ADMIN;
-      if (!isUserAdmin && userGroups.length > 0) {
-        formikProps.setFieldValue("is_public", false);
-      }
-      if (
-        userGroups.length === 1 &&
-        userGroups[0] !== undefined &&
-        !isUserAdmin
-      ) {
-        formikProps.setFieldValue("groups", [userGroups[0].id]);
-        setShouldHideContent(true);
-      } else if (formikProps.values.is_public) {
-        formikProps.setFieldValue("groups", []);
-        setShouldHideContent(false);
-      } else {
-        setShouldHideContent(false);
-      }
+    if (!user || !businessTier) return;
+    if (!canActGlobally) {
+      formikProps.setFieldValue("is_public", false);
+    } else if (formikProps.values.is_public) {
+      formikProps.setFieldValue("groups", []);
     }
-  }, [user, userGroups, businessTier]);
+  }, [user, userGroups, businessTier, canActGlobally]);
 
   if (userGroupsIsLoading) {
-    return <div>Loading...</div>;
+    return <div>{t("loading.text")}</div>;
   }
   if (!businessTier) {
     return null;
   }
 
-  let firstUserGroupName = "Unknown";
-  if (userGroups) {
-    const userGroup = userGroups[0];
-    if (userGroup) {
-      firstUserGroupName = userGroup.name;
-    }
-  }
-
-  if (shouldHideContent && enforceGroupSelection) {
-    return (
-      <>
-        {userGroups && (
-          <div className="mb-1 font-medium text-base">
-            This {objectName} will be assigned to group{" "}
-            <b>{firstUserGroupName}</b>.
-          </div>
-        )}
-      </>
-    );
-  }
-
   return (
     <div>
-      {isAdmin && (
+      {canActGlobally && (
         <>
           <BooleanFormField
             name="is_public"
             removeIndent={removeIndent}
             small={smallLabels}
-            label={
-              publicToWhom === "Curators"
-                ? `Make this ${objectName} Curator Accessible?`
-                : `Make this ${objectName} Public?`
-            }
-            disabled={!isAdmin}
+            label={t("makePublic.label", { objectName })}
             subtext={
               <span className="block mt-2 text-sm text-text-600 dark:text-neutral-400">
-                If set, then this {objectName} will be usable by{" "}
-                <b>All {publicToWhom}</b>. Otherwise, only <b>Admins</b> and{" "}
-                <b>{publicToWhom}</b> who have explicitly been given access to
-                this {objectName} (e.g. via a User Group) will have access.
+                {t.rich("makePublic.subtext", {
+                  objectName,
+                  publicToWhom: effectivePublicToWhom,
+                  b: (chunks) => <b>{chunks}</b>,
+                })}
               </span>
             }
           />
@@ -113,14 +85,14 @@ export const IsPublicGroupSelector = <T extends IsPublicGroupSelectorFormType>({
 
       <GroupsMultiSelect
         formikProps={formikProps}
-        label={`Assign group access for this ${objectName}`}
+        label={t("assignGroups.label", { objectName })}
         subtext={
-          isAdmin || !enforceGroupSelection
-            ? `This ${objectName} will be visible/accessible by the groups selected below`
-            : `Curators must select one or more groups to give access to this ${objectName}`
+          canActGlobally || !enforceGroupSelection
+            ? t("assignGroups.visibleSubtext", { objectName })
+            : t("assignGroups.scopedSubtext", { objectName })
         }
-        disabled={formikProps.values.is_public && !isCurator}
-        disabledMessage={`This ${objectName} is public and available to all users.`}
+        disabled={formikProps.values.is_public}
+        disabledMessage={t("publicDisabled.message", { objectName })}
       />
     </div>
   );

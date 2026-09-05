@@ -47,7 +47,7 @@ async function createFreshAdmin(page: Page): Promise<void> {
   await page.context().clearCookies();
   await loginAs(page, "admin");
   const adminClient = new OnyxApiClient(page.request);
-  await adminClient.setUserRole(email, "admin");
+  await adminClient.addUserToAdminGroup(email);
 
   await page.context().clearCookies();
   await apiLogin(page, email, password);

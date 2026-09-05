@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import { SvgCheck, SvgCopy, SvgTerminal, SvgTrash } from "@opal/icons";
 import { Button, InputTypeIn, Text } from "@opal/components";
 import { Modal } from "@opal/components";
@@ -99,6 +100,7 @@ interface LogStreamPaneProps {
 }
 
 function LogStreamPane({ open }: LogStreamPaneProps) {
+  const t = useTranslations("craft.debugLogs");
   const [lines, setLines] = useState<LogLine[]>([]);
   const [status, setStatus] = useState<StreamStatus>("connecting");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -115,7 +117,9 @@ function LogStreamPane({ open }: LogStreamPaneProps) {
   // Refs mirror the state inside the SSE reader's hot loop without
   // forcing it to re-bind on every state change.
   const followRef = useRef<boolean>(follow);
-  followRef.current = follow;
+  useEffect(() => {
+    followRef.current = follow;
+  }, [follow]);
 
   const appendLine = useCallback((text: string) => {
     const line: LogLine = {
@@ -155,10 +159,10 @@ function LogStreamPane({ open }: LogStreamPaneProps) {
           setStatus("error");
           setErrorMessage(
             response.status === 404
-              ? "Debug endpoint disabled (ENABLE_OPENCODE_DEBUGGING=false)"
+              ? t("error.endpointDisabled")
               : response.status === 409
-                ? "No running sandbox to tail logs from"
-                : `HTTP ${response.status}`
+                ? t("error.noSandbox")
+                : t("error.http", { status: response.status })
           );
           return;
         }
@@ -211,7 +215,7 @@ function LogStreamPane({ open }: LogStreamPaneProps) {
       controller.abort();
       abortRef.current = null;
     };
-  }, [open, appendLine]);
+  }, [open, appendLine, t]);
 
   // Auto-scroll to bottom when follow=true and lines change.
   useEffect(() => {
@@ -299,12 +303,12 @@ function LogStreamPane({ open }: LogStreamPaneProps) {
         empty={
           lines.length === 0
             ? status === "connecting"
-              ? "Waiting for the first log line…"
+              ? t("empty.waiting")
               : status === "error"
-                ? (errorMessage ?? "Error")
-                : "No lines yet."
+                ? (errorMessage ?? t("status.error"))
+                : t("empty.noLines")
             : filter && filteredLines.length === 0
-              ? `No lines match "${filter}"`
+              ? t("empty.noMatch", { filter })
               : null
         }
       />
@@ -341,17 +345,18 @@ function StatusBar({
   copyJustSucceeded,
   onResume,
 }: StatusBarProps) {
+  const t = useTranslations("craft.debugLogs");
   const filtered = !!filter && visibleLines !== totalLines;
   const stateLabel =
     status === "error"
-      ? (errorMessage ?? "Error")
+      ? (errorMessage ?? t("status.error"))
       : status === "closed"
-        ? "Closed"
+        ? t("status.closed")
         : status === "connecting"
-          ? "Connecting"
+          ? t("status.connecting")
           : paused
-            ? "Paused"
-            : "Streaming";
+            ? t("status.paused")
+            : t("status.streaming");
 
   // Single-line toolbar: status pill (state + count) on the left, filter
   // input expanding through the middle, action icons on the right. This
@@ -372,8 +377,11 @@ function StatusBar({
             />
             <Text font="secondary-body" color="text-05" nowrap>
               {filtered
-                ? `${visibleLines.toLocaleString()} / ${totalLines.toLocaleString()} lines`
-                : `${totalLines.toLocaleString()} lines`}
+                ? t("lines.filteredCount", {
+                    visible: visibleLines,
+                    total: totalLines,
+                  })
+                : t("lines.count", { count: totalLines })}
             </Text>
           </>
         )}
@@ -387,7 +395,7 @@ function StatusBar({
               "hover:bg-status-warning-02 transition-colors"
             )}
           >
-            +{newSincePaused.toLocaleString()} new · jump
+            {t("newSincePaused.button", { count: newSincePaused })}
           </button>
         )}
       </div>
@@ -395,7 +403,7 @@ function StatusBar({
       <div className="flex-1 min-w-0">
         <InputTypeIn
           searchIcon
-          placeholder="Filter…"
+          placeholder={t("filter.placeholder")}
           value={filter}
           onChange={(e) => onFilterChange(e.target.value)}
           clearButton
@@ -409,7 +417,9 @@ function StatusBar({
           size="sm"
           icon={copyJustSucceeded ? SvgCheck : SvgCopy}
           onClick={onCopy}
-          tooltip={copyJustSucceeded ? "Copied" : "Copy visible"}
+          tooltip={
+            copyJustSucceeded ? t("copy.doneTooltip") : t("copy.tooltip")
+          }
         />
         <Button
           variant="default"
@@ -417,7 +427,7 @@ function StatusBar({
           size="sm"
           icon={SvgTrash}
           onClick={onClear}
-          tooltip="Clear"
+          tooltip={t("clear.tooltip")}
         />
       </div>
     </div>
@@ -485,6 +495,7 @@ interface OpencodeDebugLogsButtonProps {
 export default function OpencodeDebugLogsButton({
   folded = false,
 }: OpencodeDebugLogsButtonProps) {
+  const t = useTranslations("craft.debugLogs");
   const settings = useSettings();
   const [open, setOpen] = useState(false);
 
@@ -501,15 +512,15 @@ export default function OpencodeDebugLogsButton({
         icon={SvgTerminal}
         onClick={() => setOpen(true)}
       >
-        {folded ? "" : "Pod logs"}
+        {folded ? "" : t("open.button")}
       </Button>
       {open && (
         <Modal open onOpenChange={(o) => !o && setOpen(false)}>
           <Modal.Content width="xl" height="lg">
             <Modal.Header
               icon={SvgTerminal}
-              title="Opencode pod logs"
-              description="Live tail of the sandbox container — dev/debug only."
+              title={t("modal.title")}
+              description={t("modal.description")}
               onClose={() => setOpen(false)}
             />
             <Modal.Body>
