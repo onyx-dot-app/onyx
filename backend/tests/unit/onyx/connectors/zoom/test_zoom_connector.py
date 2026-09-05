@@ -82,7 +82,8 @@ def _configure_happy_path(mock_client: MagicMock) -> None:
         ZoomSessionOccurrence(uuid=f"uuid-{session_id}", start_time=_days_ago(7))
     ]
     mock_client.get_meeting_transcript.side_effect = lambda uuid: ZoomTranscript(
-        download_url=f"https://zoom.example/{uuid}.vtt"
+        download_url=f"https://zoom.example/{uuid}.vtt",
+        meeting_topic="Recorded Session",
     )
     mock_client.download_transcript_vtt.return_value = _SAMPLE_VTT
     mock_client.get_past_meeting_details.return_value = ZoomSessionDetails(
@@ -93,6 +94,14 @@ def _configure_happy_path(mock_client: MagicMock) -> None:
     ]
     mock_client.get_webinar_details.return_value = ZoomSessionDetails(
         topic="Product Launch"
+    )
+
+
+def _transcript_without_a_topic(mock_client: MagicMock) -> None:
+    """Zoom names the session in the transcript response, so the details
+    endpoints are only reached when it doesn't."""
+    mock_client.get_meeting_transcript.side_effect = lambda uuid: ZoomTranscript(
+        download_url=f"https://zoom.example/{uuid}.vtt"
     )
 
 
@@ -173,7 +182,10 @@ class TestZoomConnectorCheckpoint:
         # meeting id would silently index only the most recent occurrence.
         assert doc.id == "ZOOM_MEETING_uuid-111"
         mock_client.get_meeting_transcript.assert_called_once_with("uuid-111")
-        assert doc.semantic_identifier == "Weekly Sync"
+        # The transcript names the session, so the details endpoint — and the
+        # one-year cap that comes with it — is never reached.
+        assert doc.semantic_identifier == "Recorded Session"
+        mock_client.get_past_meeting_details.assert_not_called()
         assert doc.metadata == {"session_type": "meeting"}
         assert outputs[-1].next_checkpoint.has_more is False
 
@@ -457,7 +469,8 @@ class TestSessionSourceTypes:
         doc = docs[0]
         assert doc.id == "ZOOM_WEBINAR_uuid-222"
         assert doc.metadata == {"session_type": "webinar"}
-        assert doc.semantic_identifier == "Product Launch"
+        assert doc.semantic_identifier == "Recorded Session"
+        mock_client.get_webinar_details.assert_not_called()
         # A webinar's transcript comes from the meeting endpoint; Zoom has no
         # webinar one.
         mock_client.get_meeting_transcript.assert_called_once_with("uuid-222")
@@ -502,9 +515,23 @@ class TestSessionSourceTypes:
             "ZOOM_WEBINAR_shared-uuid",
         ]
 
+    def test_a_titleless_webinar_falls_back_to_its_own_details_endpoint(
+        self,
+    ) -> None:
+        connector, mock_client = _make_connector(meeting_ids=[], webinar_ids=["222"])
+        _configure_happy_path(mock_client)
+        _transcript_without_a_topic(mock_client)
+
+        docs = self._documents(connector)
+
+        assert docs[0].semantic_identifier == "Product Launch"
+        mock_client.get_webinar_details.assert_called_once_with("uuid-222")
+        mock_client.get_past_meeting_details.assert_not_called()
+
     def test_a_webinar_without_a_title_is_not_labelled_a_meeting(self) -> None:
         connector, mock_client = _make_connector(meeting_ids=[], webinar_ids=["222"])
         _configure_happy_path(mock_client)
+        _transcript_without_a_topic(mock_client)
         mock_client.get_webinar_details.return_value = None
 
         docs = self._documents(connector)
