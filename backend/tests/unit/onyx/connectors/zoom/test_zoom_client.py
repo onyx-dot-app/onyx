@@ -14,7 +14,6 @@ from onyx.connectors.exceptions import (
 from onyx.connectors.zoom.client import (
     _API_BASE_URL,
     _OAUTH_TOKEN_URL,
-    _ZOOM_HOST,
     ZoomClient,
     _encode_meeting_identifier,
     _reject_non_zoom_download_url,
@@ -389,11 +388,16 @@ class TestDownloadUrlGuard:
     ) -> None:
         _reject_non_zoom_download_url(url)
 
-    def test_the_allowlist_tracks_whichever_zoom_the_client_talks_to(self) -> None:
-        # Point the client at Zoom for Government without moving the allowlist
-        # and every download fails as a non-Zoom host.
+    @patch("onyx.connectors.zoom.client.validate_outbound_http_url")
+    def test_the_guard_accepts_the_host_the_client_talks_to(
+        self,
+        ssrf: MagicMock,  # noqa: ARG002
+    ) -> None:
+        # _ZOOM_HOST and _API_BASE_URL have to move together: point the client at
+        # Zoom for Government without the allowlist and every download is refused.
         api_host = urlparse(_API_BASE_URL).hostname or ""
-        assert api_host == _ZOOM_HOST or api_host.endswith(f".{_ZOOM_HOST}")
+
+        _reject_non_zoom_download_url(f"https://{api_host}/rec/download/abc.vtt")
 
     def test_the_guard_runs_before_the_token_is_sent(self) -> None:
         client = _client()
