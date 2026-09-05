@@ -769,7 +769,7 @@ def get_persona(
 def get_persona_avatar(
     persona_id: int,
     request: Request,
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    user: User | None = Depends(optional_user),
     db_session: Session = Depends(get_session),
 ) -> Response:
     # Mirror `fetch_chat_file`: return 404 (not 403) for any failure so
