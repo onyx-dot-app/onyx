@@ -158,6 +158,7 @@ def _build_ephemeral_publication_block(
             answer_filters=channel_conf.get("answer_filters"),
             follow_up_tags=channel_conf.get("follow_up_tags"),
             show_continue_in_web_ui=channel_conf.get("show_continue_in_web_ui", False),
+            remove_feedback_buttons=channel_conf.get("remove_feedback_buttons", False),
         )
     )
 
@@ -505,7 +506,14 @@ def build_slack_response_blocks(
 
     ai_feedback_block: list[Block] = []
 
-    if answer.message_id is not None and not skip_ai_feedback:
+    remove_feedback_buttons = bool(
+        channel_conf and channel_conf.get("remove_feedback_buttons", False)
+    )
+    if (
+        answer.message_id is not None
+        and not skip_ai_feedback
+        and not remove_feedback_buttons
+    ):
         ai_feedback_block.append(
             _build_qa_feedback_block(
                 message_id=answer.message_id,
