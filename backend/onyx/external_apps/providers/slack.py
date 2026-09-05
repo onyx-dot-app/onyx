@@ -4,7 +4,7 @@ from onyx.configs.app_configs import (
     EXT_APP_SLACK_CLIENT_ID,
     EXT_APP_SLACK_CLIENT_SECRET,
 )
-from onyx.db.enums import EndpointPolicy, ExternalAppType
+from onyx.db.enums import ActionEffect, EndpointPolicy, ExternalAppType
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.actions import (
@@ -82,18 +82,21 @@ _ENDPOINTS: list[EndpointSpec] = [
     ),
     EndpointSpec(
         id=SlackAction.MESSAGES_WRITE,
+        effect=ActionEffect.WRITE,
         normalised_name="Post a message",
         description="Post a message to a channel or conversation.",
         matches=(RestRoute(method="POST", path="/api/chat.postMessage"),),
     ),
     EndpointSpec(
         id=SlackAction.DM_OPEN,
+        effect=ActionEffect.WRITE,
         normalised_name="Open a direct message",
         description="Open (or resume) a direct message conversation with a user.",
         matches=(RestRoute(method="POST", path="/api/conversations.open"),),
     ),
     EndpointSpec(
         id=SlackAction.FILES_WRITE,
+        effect=ActionEffect.WRITE,
         normalised_name="Upload files",
         description=(
             "Upload a file and share it to a channel, direct message, or "

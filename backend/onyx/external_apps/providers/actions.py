@@ -3,7 +3,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, InstanceOf, field_validator
 
-from onyx.db.enums import EndpointPolicy
+from onyx.db.enums import ActionEffect, EndpointPolicy
 
 
 class ExternalAppAction(str, Enum):
@@ -120,6 +120,9 @@ class EndpointSpec(BaseModel):
     # The policy a freshly-created built-in app starts this action at, unless the
     # admin overrides it.
     default_policy: EndpointPolicy = EndpointPolicy.ASK
+    # Write-effect actions leave a receipt when they execute. Declared per
+    # action, defaulting to the harmless case.
+    effect: ActionEffect = ActionEffect.READ
     # Set when the action needs a scope only a self-hosted deployment requests,
     # which drops it from the cloud catalog (``registry.get_endpoint_catalog``).
     requires_self_hosted_scope: bool = False
