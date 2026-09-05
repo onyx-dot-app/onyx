@@ -84,7 +84,7 @@ def _configure_happy_path(mock_client: MagicMock) -> None:
         ]
     )
     mock_client.get_meeting_transcript.side_effect = lambda uuid: transcript(
-        download_url=f"https://zoom.example/{uuid}.vtt"
+        download_url=f"https://zoom.example/{uuid}.vtt", meeting_topic=""
     )
     mock_client.download_transcript_vtt.return_value = _SAMPLE_VTT
     mock_client.get_past_meeting_details.return_value = session_details(
