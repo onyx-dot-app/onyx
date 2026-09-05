@@ -241,6 +241,10 @@ class _Host(BaseModel):
 class _UserRecordingsCursor(BaseModel):
     host_index: int = 0
     page_token: str | None = None
+    # Set only while this host is being walked a second time after a page fetch
+    # failed. A successful fetch clears it, so it guards against back-to-back
+    # failures rather than against a long host being interrupted more than once.
+    restarted: bool = False
 
 
 def _work_from_recording(recording: ZoomRecordingEntry) -> OccurrenceWork | None:
@@ -374,6 +378,27 @@ class _UserRecordingsSource(DiscoverySource):
         except Exception as e:
             if fails_the_whole_run(e):
                 raise
+            # Zoom expires a page token 15 minutes after issuing it, so a crawl
+            # that resumes later sends a dead one. Reporting that would abandon
+            # everything after this page: the attempt still ends as a success,
+            # so the next run moves its poll window on and never comes back.
+            # Walking the host again from its first page costs duplicates the
+            # upsert absorbs, and is only tried once in a row.
+            if position.page_token and not position.restarted:
+                logger.warning(
+                    "Restarting Zoom recordings for %s from the first page: %s",
+                    host.entity_id,
+                    e,
+                )
+                return DiscoveryStepResult(
+                    failures=failures,
+                    next_cursor={
+                        "host_index": position.host_index,
+                        "restarted": True,
+                    },
+                    done=False,
+                )
+
             logger.exception("Failed to list Zoom recordings for %s", host.entity_id)
             failures.append(
                 _entity_failure(

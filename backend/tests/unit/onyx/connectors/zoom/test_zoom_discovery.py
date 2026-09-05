@@ -533,6 +533,13 @@ def _recording(
     )
 
 
+def _bad_request() -> requests.Response:
+    """How Zoom refuses an expired next_page_token: HTTP 400, its own code 300."""
+    response = requests.Response()
+    response.status_code = 400
+    return response
+
+
 def _client_for_hosts(
     users: list[ZoomUser] | None = None,
     members: list[ZoomUser] | None = None,
@@ -804,6 +811,115 @@ class TestUserRecordingsPaging:
         assert result.work == []
         assert result.done is True
         client.list_user_recordings.assert_not_called()
+
+
+class TestExpiredPageToken:
+    """Zoom expires a page token after 15 minutes, so a crawl interrupted mid-host
+    resumes holding a dead one. Reporting that would lose every recording after
+    that page: the attempt still ends as a success, so the poll window moves on."""
+
+    def _source_failing_on_the_second_page(
+        self, pages_before_failure: int = 1
+    ) -> tuple[GroupSource, MagicMock]:
+        source = GroupSource("group-1")
+        client = _client_for_hosts(members=[ZoomUser(id="u1"), ZoomUser(id="u2")])
+        client.list_user_recordings.side_effect = [
+            ZoomRecordingPage(recordings=[_recording("uuid-1")], next_page_token="tok"),
+            *(
+                [requests.HTTPError("400", response=_bad_request())]
+                * pages_before_failure
+            ),
+            ZoomRecordingPage(recordings=[_recording("uuid-1")]),
+        ]
+        return source, client
+
+    def test_a_dead_token_walks_the_host_again_instead_of_losing_its_tail(
+        self,
+    ) -> None:
+        source, client = self._source_failing_on_the_second_page()
+
+        first = source.discover_step(client, _START, _END, None)
+        second = source.discover_step(client, _START, _END, first.next_cursor)
+
+        # Same host, no token: the walk starts over rather than moving on.
+        assert second.next_cursor == {"host_index": 0, "restarted": True}
+        assert second.failures == []
+        assert second.done is False
+
+    def test_the_restarted_walk_reaches_the_rest_of_the_host(self) -> None:
+        source, client = self._source_failing_on_the_second_page()
+
+        cursor: dict | None = None
+        seen: list[str] = []
+        for _ in range(3):
+            result = source.discover_step(client, _START, _END, cursor)
+            seen.extend(w.occurrence_uuid for w in result.work)
+            cursor = result.next_cursor
+
+        assert client.list_user_recordings.call_args.kwargs["page_token"] is None
+        # The first page is fetched twice, which the upsert absorbs.
+        assert seen == ["uuid-1", "uuid-1"]
+
+    def test_failing_twice_in_a_row_reports_rather_than_restarting_forever(
+        self,
+    ) -> None:
+        source, client = self._source_failing_on_the_second_page(pages_before_failure=2)
+
+        cursor: dict | None = None
+        results = []
+        for _ in range(3):
+            result = source.discover_step(client, _START, _END, cursor)
+            results.append(result)
+            cursor = result.next_cursor
+
+        assert results[-1].failures[0].failed_entity is not None
+        assert results[-1].failures[0].failed_entity.entity_id == "host:u1"
+        # Having reported it, the walk moves to the next host rather than looping.
+        assert results[-1].next_cursor == {"host_index": 1}
+
+    def test_a_first_page_failure_is_reported_without_a_pointless_retry(self) -> None:
+        # There is no token to have expired, so walking again would send the
+        # identical request.
+        source = GroupSource("group-1")
+        client = _client_for_hosts(members=[ZoomUser(id="u1")])
+        client.list_user_recordings.side_effect = RuntimeError("boom")
+
+        result = source.discover_step(client, _START, _END, None)
+
+        assert result.failures[0].failed_entity is not None
+        assert result.done is True
+        assert client.list_user_recordings.call_count == 1
+
+    def test_a_successful_page_clears_the_restart_flag(self) -> None:
+        # A long host interrupted twice should get a second chance, so the flag
+        # guards back-to-back failures only.
+        source = GroupSource("group-1")
+        client = _client_for_hosts(members=[ZoomUser(id="u1")])
+        client.list_user_recordings.return_value = ZoomRecordingPage(
+            recordings=[_recording("uuid-1")], next_page_token="tok"
+        )
+
+        result = source.discover_step(
+            client, _START, _END, {"host_index": 0, "restarted": True}
+        )
+
+        assert result.next_cursor == {"host_index": 0, "page_token": "tok"}
+
+    def test_a_rate_limit_mid_host_still_stops_the_run(self) -> None:
+        # Restarting would throw away the checkpoint's place for an error that
+        # will outlive this host too.
+        source = GroupSource("group-1")
+        client = _client_for_hosts(members=[ZoomUser(id="u1")])
+        response = requests.Response()
+        response.status_code = 429
+        client.list_user_recordings.side_effect = requests.HTTPError(
+            "429", response=response
+        )
+
+        with pytest.raises(requests.HTTPError):
+            source.discover_step(
+                client, _START, _END, {"host_index": 0, "page_token": "tok"}
+            )
 
 
 class TestUserRecordingsPollWindow:
