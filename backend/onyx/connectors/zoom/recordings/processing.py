@@ -55,6 +55,7 @@ def process_occurrence(
                 document_id=zoom_document_id(work.session_type, occurrence_uuid)
             ),
             failure_message=f"Failed to fetch transcript for Zoom session {work.session_id} occurrence {occurrence_uuid}: {e}",
+            exception=e,
         )
         return
 
@@ -66,27 +67,29 @@ def process_occurrence(
         )
         return
 
-    if transcript.download_restriction_reason == "NOT_READY":
-        logger.info(
-            "Zoom transcript for session %s occurrence %s isn't ready yet; "
-            "will pick it up on a future sync",
-            work.session_id,
-            occurrence_uuid,
-        )
-        return
-
-    if not transcript.download_url:
-        logger.warning(
-            "Zoom transcript for session %s occurrence %s has no download URL "
-            "(restriction=%s); skipping",
-            work.session_id,
-            occurrence_uuid,
-            transcript.download_restriction_reason,
-        )
+    download_url = transcript.download_url
+    if not transcript.is_downloadable or not download_url:
+        if transcript.download_restriction_reason == "NOT_READY":
+            logger.info(
+                "Zoom transcript for session %s occurrence %s isn't ready yet; "
+                "will pick it up on a future sync",
+                work.session_id,
+                occurrence_uuid,
+            )
+        else:
+            logger.warning(
+                "Zoom transcript for session %s occurrence %s can't be downloaded "
+                "(restriction=%s, can_download=%s, has_url=%s); skipping",
+                work.session_id,
+                occurrence_uuid,
+                transcript.download_restriction_reason,
+                transcript.can_download,
+                bool(download_url),
+            )
         return
 
     try:
-        vtt_content = client.download_transcript_vtt(transcript.download_url)
+        vtt_content = client.download_transcript_vtt(download_url)
     except Exception as e:
         if fails_the_whole_run(e):
             raise
@@ -100,6 +103,7 @@ def process_occurrence(
                 document_id=zoom_document_id(work.session_type, occurrence_uuid)
             ),
             failure_message=f"Failed to download transcript for Zoom session {work.session_id} occurrence {occurrence_uuid}: {e}",
+            exception=e,
         )
         return
 
