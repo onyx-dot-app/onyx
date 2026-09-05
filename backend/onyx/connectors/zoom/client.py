@@ -1,7 +1,7 @@
 import time
 from collections.abc import Callable
 from typing import Any
-from urllib.parse import quote, urlparse
+from urllib.parse import quote, urljoin, urlparse
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -17,7 +17,11 @@ from onyx.connectors.zoom.models import (
     ZoomPastMeetingDetails,
     ZoomTranscript,
 )
-from onyx.utils.url import SSRFException, validate_outbound_http_url
+from onyx.utils.url import (
+    SSRFException,
+    ssrf_safe_get,
+    validate_outbound_http_url,
+)
 
 _OAUTH_TOKEN_URL = "https://zoom.us/oauth/token"
 _API_BASE_URL = "https://api.zoom.us/v2"
@@ -208,6 +212,12 @@ class ZoomClient:
         return [ZoomMeetingOccurrence.model_validate(o) for o in occurrences]
 
     def download_transcript_vtt(self, download_url: str) -> str:
+        """The download redirects to a storage host, so every hop is checked
+        before it is followed — an open redirect on a Zoom host would otherwise
+        make this connector fetch private addresses. The token goes only to the
+        Zoom host checked up front, since the storage host authenticates from
+        the signed URL.
+        """
         _reject_non_zoom_download_url(download_url)
 
         def send(token: str) -> requests.Response:
@@ -215,8 +225,22 @@ class ZoomClient:
                 download_url,
                 headers={"Authorization": f"Bearer {token}"},
                 timeout=REQUEST_TIMEOUT_SECONDS,
+                allow_redirects=False,
             )
 
         response = self._send_authorized("the transcript download", send)
+        if response.is_redirect:
+            location = urljoin(download_url, response.headers["Location"])
+            try:
+                response = ssrf_safe_get(
+                    location,
+                    timeout=REQUEST_TIMEOUT_SECONDS,
+                    https_only=True,
+                )
+            except SSRFException as e:
+                raise ValueError(
+                    f"Zoom redirected the transcript download somewhere unsafe: {e}"
+                ) from e
+
         _raise_for_zoom_error(response, "the transcript download")
         return response.text

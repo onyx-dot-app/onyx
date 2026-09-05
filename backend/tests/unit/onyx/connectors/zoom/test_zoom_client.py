@@ -35,10 +35,17 @@ _DOCUMENTED_TRANSCRIPT = {
 }
 
 
-def _response(status: int, payload: Any = None, text: str = "") -> MagicMock:
+def _response(
+    status: int,
+    payload: Any = None,
+    text: str = "",
+    location: str | None = None,
+) -> MagicMock:
     response = MagicMock()
     response.status_code = status
     response.ok = status < 400
+    response.is_redirect = location is not None
+    response.headers = {"Location": location} if location else {}
     response.json.return_value = payload if payload is not None else {}
     response.text = text
     return response
@@ -451,3 +458,54 @@ class TestZoomErrorMessages:
 
         with pytest.raises(requests.HTTPError):
             client.list_past_meeting_occurrences("111")
+
+
+class TestDownloadRedirects:
+    @patch("onyx.connectors.zoom.client.validate_outbound_http_url")
+    def test_a_redirect_to_a_private_address_is_refused(
+        self,
+        ssrf: MagicMock,  # noqa: ARG002
+    ) -> None:
+        # ssrf_safe_get runs unpatched here, or this stops testing SSRF at all.
+        client = _client()
+        client._session = MagicMock()
+        client._session.get.return_value = _response(
+            302, location="https://169.254.169.254/latest/meta-data/"
+        )
+
+        with pytest.raises(ValueError):
+            client.download_transcript_vtt(_ZOOM_DOWNLOAD_URL)
+
+    @patch("onyx.connectors.zoom.client.ssrf_safe_get")
+    @patch("onyx.connectors.zoom.client.validate_outbound_http_url")
+    def test_the_token_does_not_follow_the_redirect(
+        self,
+        ssrf: MagicMock,  # noqa: ARG002
+        safe_get: MagicMock,
+    ) -> None:
+        safe_get.return_value = _response(200, text="WEBVTT\n")
+        client = _client()
+        client._session = MagicMock()
+        client._session.get.return_value = _response(
+            302, location="https://cdn.example.com/t.vtt"
+        )
+
+        client.download_transcript_vtt(_ZOOM_DOWNLOAD_URL)
+
+        assert "Authorization" not in (safe_get.call_args.kwargs.get("headers") or {})
+        assert "tok" not in str(safe_get.call_args)
+
+    @patch("onyx.connectors.zoom.client.ssrf_safe_get")
+    @patch("onyx.connectors.zoom.client.validate_outbound_http_url")
+    def test_a_relative_location_resolves_against_the_download_url(
+        self,
+        ssrf: MagicMock,  # noqa: ARG002
+        safe_get: MagicMock,
+    ) -> None:
+        safe_get.return_value = _response(200, text="WEBVTT\n")
+        client = _client()
+        client._session = MagicMock()
+        client._session.get.return_value = _response(302, location="/rec/other.vtt")
+
+        assert client.download_transcript_vtt(_ZOOM_DOWNLOAD_URL) == "WEBVTT\n"
+        assert safe_get.call_args.args[0] == "https://zoom.us/rec/other.vtt"
