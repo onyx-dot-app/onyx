@@ -1,7 +1,6 @@
 from onyx.connectors.zoom.recordings.vtt import parse_vtt_transcript
 
-# Shaped after a real Zoom audio_transcript.vtt: numbered cue, timing line,
-# then the speaker name inline with the speech.
+# A real Zoom audio_transcript.vtt shape, not an invented one.
 _ZOOM_VTT = """WEBVTT
 
 1
@@ -58,9 +57,6 @@ class TestParseVttTranscript:
 
 
 class TestParseVttKeepsSpeechThatLooksLikeScaffolding:
-    """These cues would be dropped by shape-matching on "is it a number" or
-    "does it contain an arrow", which silently loses what someone said."""
-
     def test_speech_containing_an_arrow_is_kept(self) -> None:
         vtt = (
             "WEBVTT\n\n1\n00:00:01.000 --> 00:00:02.000\n"
@@ -74,8 +70,8 @@ class TestParseVttKeepsSpeechThatLooksLikeScaffolding:
 
 
 class TestParseVttDropsNonSpeechBlocks:
-    """Anything that reaches the return value gets indexed and shows up in
-    search, so non-speech blocks have to be excluded."""
+    """Whatever this returns gets indexed, so parser scaffolding leaking
+    through would show up in search results."""
 
     def test_header_with_trailing_text_is_dropped(self) -> None:
         vtt = (
@@ -108,3 +104,33 @@ class TestParseVttDropsNonSpeechBlocks:
             "<v Jane Doe>hello <i>there</i></v>\n"
         )
         assert parse_vtt_transcript(vtt) == "hello there"
+
+
+class TestParseVttDecodesCharacterReferences:
+    """Drop the decoding and "R&D" gets indexed as "R&amp;D", so nobody
+    searching for it finds the meeting."""
+
+    def test_ampersand_is_decoded(self) -> None:
+        vtt = "WEBVTT\n\n1\n00:00:01.000 --> 00:00:02.000\nJane: our R&amp;D team\n"
+        assert parse_vtt_transcript(vtt) == "Jane: our R&D team"
+
+    def test_angle_brackets_are_decoded(self) -> None:
+        vtt = "WEBVTT\n\n1\n00:00:01.000 --> 00:00:02.000\nJane: a &lt;div&gt; tag\n"
+        assert parse_vtt_transcript(vtt) == "Jane: a <div> tag"
+
+    def test_numeric_reference_is_decoded(self) -> None:
+        vtt = "WEBVTT\n\n1\n00:00:01.000 --> 00:00:02.000\nJane: it&#39;s fine\n"
+        assert parse_vtt_transcript(vtt) == "Jane: it's fine"
+
+    def test_non_breaking_space_becomes_a_normal_space(self) -> None:
+        vtt = "WEBVTT\n\n1\n00:00:01.000 --> 00:00:02.000\nJane: a&nbsp;b\n"
+        assert parse_vtt_transcript(vtt) == "Jane: a b"
+        assert "\xa0" not in parse_vtt_transcript(vtt)
+
+    def test_escaped_markup_survives_as_text(self) -> None:
+        vtt = (
+            "WEBVTT\n\n1\n00:00:01.000 --> 00:00:02.000\n"
+            "&lt;v Jane&gt;hello&lt;/v&gt;\n"
+        )
+        # Guards the order: decoding first would read this as a tag.
+        assert parse_vtt_transcript(vtt) == "<v Jane>hello</v>"
