@@ -1734,6 +1734,17 @@ def _docprocessing_task(
         )
         if not documents:
             task_logger.error(f"No documents found for batch {batch_num}")
+            # Every doc was dropped at deserialization (legacy or unknown
+            # section types). Mark the batch complete with zero counts so
+            # the attempt's completion check does not wait on it forever.
+            with get_session_with_current_tenant() as db_session:
+                IndexingCoordination.update_batch_completion_and_docs(
+                    db_session=db_session,
+                    index_attempt_id=index_attempt_id,
+                    total_docs_indexed=0,
+                    new_docs_indexed=0,
+                    total_chunks=0,
+                )
             return
 
         # FIX: Monitor memory after loading documents
