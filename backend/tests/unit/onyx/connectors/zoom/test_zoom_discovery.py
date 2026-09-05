@@ -2,6 +2,10 @@ import time
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
+import pytest
+import requests
+
+from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.zoom.client import ZoomClient
 from onyx.connectors.zoom.models import ZoomMeetingOccurrence
 from onyx.connectors.zoom.recordings.discovery import (
@@ -97,7 +101,7 @@ class TestIdAllowlistSource:
         assert len(result.failures) == 1
         failure = result.failures[0]
         assert failure.failed_entity is not None
-        assert failure.failed_entity.entity_id == "111"
+        assert failure.failed_entity.entity_id == "meeting:111"
         # Discovery moves on, so the failure has to say which window went
         # uncovered or the gap is invisible to an admin.
         missed = failure.failed_entity.missed_time_range
@@ -357,3 +361,30 @@ class TestBuildDiscoverySources:
         sources = build_discovery_sources(["111"])
         assert len(sources) == 1
         assert isinstance(sources[0], IdAllowlistSource)
+
+
+class TestDiscoverySystemicFailures:
+    """Skipping a session it couldn't list is right for a session-specific
+    error and wrong for a rate limit, which would skip every session left."""
+
+    def test_rate_limit_stops_discovery_instead_of_skipping_the_session(self) -> None:
+        source = IdAllowlistSource(["111", "222"])
+        client = MagicMock(spec=ZoomClient)
+        response = requests.Response()
+        response.status_code = 429
+        client.list_past_meeting_occurrences.side_effect = requests.HTTPError(
+            "429", response=response
+        )
+
+        with pytest.raises(requests.HTTPError):
+            source.discover_step(client, _START, _END, None)
+
+    def test_expired_credentials_stop_discovery(self) -> None:
+        source = IdAllowlistSource(["111", "222"])
+        client = MagicMock(spec=ZoomClient)
+        client.list_past_meeting_occurrences.side_effect = CredentialExpiredError(
+            "token expired"
+        )
+
+        with pytest.raises(CredentialExpiredError):
+            source.discover_step(client, _START, _END, None)
