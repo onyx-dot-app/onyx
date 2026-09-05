@@ -29,7 +29,7 @@ def process_with_prompt_cache(
     ready for LLM API calls along with optional cache metadata.
 
     Args:
-        llm: The LLM instance (used to determine provider and model)
+        llm_config: Config of the LLM, used to determine provider and model
         cacheable_prefix: Optional cacheable prefix. If None, no caching is attempted.
         suffix: The non-cacheable suffix to append
         continuation: If True, suffix should be appended to the last message

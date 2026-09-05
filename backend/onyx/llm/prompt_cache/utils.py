@@ -22,7 +22,6 @@ def combine_messages_with_continuation(
         prefix_msgs: Normalized cacheable prefix messages
         suffix_msgs: Normalized suffix messages
         continuation: If True, append suffix content to the last message of prefix
-        was_prefix_string: Deprecated, no longer used
 
     Returns:
         Combined messages
