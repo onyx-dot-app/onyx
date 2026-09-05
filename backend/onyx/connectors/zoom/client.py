@@ -1,7 +1,7 @@
 import time
 from collections.abc import Callable
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -18,15 +18,16 @@ from onyx.connectors.zoom.models import (
     ZoomTranscript,
 )
 from onyx.utils.logger import setup_logger
+from onyx.utils.url import SSRFException, validate_outbound_http_url
 
 logger = setup_logger()
 
 _OAUTH_TOKEN_URL = "https://zoom.us/oauth/token"
 _API_BASE_URL = "https://api.zoom.us/v2"
 
-# Zoom access tokens last about an hour, so refresh early rather than letting
-# one lapse mid-request.
-_TOKEN_REFRESH_MARGIN_SECONDS = 60
+_ZOOM_HOST = "zoom.us"
+
+_TOKEN_REFRESH_MARGIN_SECONDS = 60  # Zoom's own tokens last about an hour.
 
 
 def _encode_meeting_identifier(identifier: str) -> str:
@@ -37,6 +38,24 @@ def _encode_meeting_identifier(identifier: str) -> str:
     if identifier.startswith("/") or "//" in identifier:
         encoded = quote(encoded, safe="")
     return encoded
+
+
+def _reject_non_zoom_download_url(download_url: str) -> None:
+    """Zoom supplies this URL, but the download carries the account-wide bearer
+    token, so a wrong or tampered one would hand that credential to whatever
+    host it names. requests drops the header on a cross-host redirect, so only
+    the first host needs checking.
+    """
+    host = (urlparse(download_url).hostname or "").rstrip(".").lower()
+    if host != _ZOOM_HOST and not host.endswith(f".{_ZOOM_HOST}"):
+        raise ValueError(
+            f"Refusing to send Zoom credentials to a non-Zoom host: {host or download_url!r}"
+        )
+
+    try:
+        validate_outbound_http_url(download_url, https_only=True)
+    except (SSRFException, ValueError) as e:
+        raise ValueError(f"Unsafe Zoom transcript download URL: {e}") from e
 
 
 class ZoomClient:
@@ -129,8 +148,8 @@ class ZoomClient:
 
     def get_meeting_transcript(self, meeting_identifier: str) -> ZoomTranscript | None:
         """This endpoint takes a meeting ID, a webinar ID, or a single
-        occurrence's UUID. None means Zoom has no recording for it, so the
-        caller should skip it rather than treat it as an error."""
+        occurrence's UUID. A meeting with no recording is a normal skip, not a
+        failure, so that comes back as None rather than raising."""
         response = self._request(
             "GET",
             f"/meetings/{_encode_meeting_identifier(meeting_identifier)}/transcript",
@@ -168,6 +187,8 @@ class ZoomClient:
         return [ZoomMeetingOccurrence.model_validate(o) for o in occurrences]
 
     def download_transcript_vtt(self, download_url: str) -> str:
+        _reject_non_zoom_download_url(download_url)
+
         def send(token: str) -> requests.Response:
             return requests.get(
                 download_url,

@@ -1,5 +1,6 @@
 from typing import Any
 from unittest.mock import MagicMock, patch
+from urllib.parse import urlparse
 
 import pytest
 
@@ -7,7 +8,15 @@ from onyx.connectors.exceptions import (
     CredentialExpiredError,
     InsufficientPermissionsError,
 )
-from onyx.connectors.zoom.client import ZoomClient, _encode_meeting_identifier
+from onyx.connectors.zoom.client import (
+    _API_BASE_URL,
+    _ZOOM_HOST,
+    ZoomClient,
+    _encode_meeting_identifier,
+    _reject_non_zoom_download_url,
+)
+
+_ZOOM_DOWNLOAD_URL = "https://zoom.us/rec/download/abc.vtt"
 
 
 def _response(status: int, payload: Any = None, text: str = "") -> MagicMock:
@@ -124,10 +133,14 @@ class TestStaleTokenIsRetried:
 
         assert client._session.request.call_count == 2
 
+    @patch("onyx.connectors.zoom.client.validate_outbound_http_url")
     @patch("onyx.connectors.zoom.client.requests.get")
     @patch("onyx.connectors.zoom.client.requests.post")
     def test_transcript_download_also_retries(
-        self, post: MagicMock, get: MagicMock
+        self,
+        post: MagicMock,
+        get: MagicMock,
+        ssrf: MagicMock,  # noqa: ARG002
     ) -> None:
         post.return_value = _response(
             200, {"access_token": "fresh", "expires_in": 3600}
@@ -135,15 +148,17 @@ class TestStaleTokenIsRetried:
         get.side_effect = [_response(401), _response(200, text="WEBVTT\n")]
         client = _client()
 
-        assert (
-            client.download_transcript_vtt("https://zoom.example/t.vtt") == "WEBVTT\n"
-        )
+        assert client.download_transcript_vtt(_ZOOM_DOWNLOAD_URL) == "WEBVTT\n"
         assert get.call_count == 2
 
+    @patch("onyx.connectors.zoom.client.validate_outbound_http_url")
     @patch("onyx.connectors.zoom.client.requests.get")
     @patch("onyx.connectors.zoom.client.requests.post")
     def test_transcript_download_reports_a_typed_error(
-        self, post: MagicMock, get: MagicMock
+        self,
+        post: MagicMock,
+        get: MagicMock,
+        ssrf: MagicMock,  # noqa: ARG002
     ) -> None:
         post.return_value = _response(
             200, {"access_token": "fresh", "expires_in": 3600}
@@ -151,9 +166,8 @@ class TestStaleTokenIsRetried:
         get.return_value = _response(403)
         client = _client()
 
-        # Not a bare HTTPError: the download shares the API's error mapping.
         with pytest.raises(InsufficientPermissionsError):
-            client.download_transcript_vtt("https://zoom.example/t.vtt")
+            client.download_transcript_vtt(_ZOOM_DOWNLOAD_URL)
 
 
 class TestRequestErrorMapping:
@@ -273,12 +287,69 @@ class TestListPastMeetingOccurrences:
 
 
 class TestDownloadTranscriptVtt:
+    @patch("onyx.connectors.zoom.client.validate_outbound_http_url")
     @patch("onyx.connectors.zoom.client.requests.get")
-    def test_returns_body_and_authenticates(self, get: MagicMock) -> None:
+    def test_returns_body_and_authenticates(
+        self,
+        get: MagicMock,
+        ssrf: MagicMock,  # noqa: ARG002
+    ) -> None:
         get.return_value = _response(200, text="WEBVTT\n")
         client = _client()
 
-        body = client.download_transcript_vtt("https://zoom.example/t.vtt")
+        body = client.download_transcript_vtt(_ZOOM_DOWNLOAD_URL)
 
         assert body == "WEBVTT\n"
         assert get.call_args.kwargs["headers"]["Authorization"] == "Bearer tok"
+
+
+class TestDownloadUrlGuard:
+    """Relax the host check and the account-wide bearer token goes to whatever
+    host the URL names."""
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "https://evil.example.com/steal.vtt",
+            "https://zoom.us.evil.example.com/steal.vtt",
+            "http://169.254.169.254/latest/meta-data/",
+            "https://notzoom.us/x.vtt",
+        ],
+    )
+    def test_non_zoom_host_is_refused(self, url: str) -> None:
+        with pytest.raises(ValueError):
+            _reject_non_zoom_download_url(url)
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            # Real shapes from Zoom's docs, not invented ones.
+            "https://us02web.zoom.us/rec/download/3lwWGTDTAhGO9UHg",
+            "https://us02web.zoom.us/rec/webhook_download/14q-E-JtEehWe",
+            "https://mycompany.zoom.us/rec/download/abc.vtt",
+            "https://zoom.us/rec/download/abc.vtt",
+            "https://ZOOM.US/rec/download/abc.vtt",
+        ],
+    )
+    @patch("onyx.connectors.zoom.client.validate_outbound_http_url")
+    def test_zoom_hosts_are_allowed(
+        self,
+        ssrf: MagicMock,  # noqa: ARG002
+        url: str,
+    ) -> None:
+        _reject_non_zoom_download_url(url)
+
+    def test_the_allowlist_tracks_whichever_zoom_the_client_talks_to(self) -> None:
+        # Point the client at Zoom for Government (api.zoomgov.com) without
+        # moving the allowlist and every download fails as a non-Zoom host.
+        api_host = urlparse(_API_BASE_URL).hostname or ""
+        assert api_host == _ZOOM_HOST or api_host.endswith(f".{_ZOOM_HOST}")
+
+    @patch("onyx.connectors.zoom.client.requests.get")
+    def test_the_guard_runs_before_the_token_is_sent(self, get: MagicMock) -> None:
+        client = _client()
+
+        with pytest.raises(ValueError):
+            client.download_transcript_vtt("https://evil.example.com/steal.vtt")
+
+        get.assert_not_called()
