@@ -301,6 +301,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     category: SourceCategory.TicketingAndTaskManagement,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/clickup`,
   },
+  clickup_docs: {
+    icon: SvgClickup,
+    displayName: "ClickUp Docs",
+    category: SourceCategory.Wiki,
+    docs: `${DOCS_ADMINS_PATH}/connectors/official/clickup`,
+  },
   productboard: {
     icon: SvgProductboard,
     displayName: "Productboard",
