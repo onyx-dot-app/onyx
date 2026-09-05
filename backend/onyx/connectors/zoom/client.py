@@ -1,5 +1,6 @@
 import time
 from collections.abc import Callable
+from datetime import date
 from typing import Any
 from urllib.parse import quote, urljoin, urlparse
 
@@ -14,9 +15,12 @@ from onyx.connectors.exceptions import (
     InsufficientPermissionsError,
 )
 from onyx.connectors.zoom.models import (
+    ZoomRecordingPage,
     ZoomSessionDetails,
     ZoomSessionOccurrence,
     ZoomTranscript,
+    ZoomUser,
+    ZoomUserPage,
 )
 from onyx.utils.url import (
     SSRFException,
@@ -42,14 +46,27 @@ _WEBINAR_ACCESS_HINT = (
 # rather than 403.
 _ZOOM_NOT_ENTITLED_ERROR_CODE = 200
 
+# Zoom caps page_size at 300 on every listing this client pages through.
+_MAX_PAGE_SIZE = 300
+
+
+def _encode_path_segment(value: str) -> str:
+    return quote(value, safe="")
+
 
 def _encode_meeting_identifier(identifier: str) -> str:
     """Zoom requires a UUID to be encoded twice when it starts with "/" or
     contains "//"."""
-    encoded = quote(identifier, safe="")
+    encoded = _encode_path_segment(identifier)
     if identifier.startswith("/") or "//" in identifier:
-        encoded = quote(encoded, safe="")
+        encoded = _encode_path_segment(encoded)
     return encoded
+
+
+def _next_page_token(body: dict[str, Any]) -> str | None:
+    """Zoom ends a listing with an empty string instead of dropping the field, and
+    sending that empty token back asks for page one again, forever."""
+    return body.get("next_page_token") or None
 
 
 def _reject_non_zoom_download_url(download_url: str) -> None:
@@ -291,6 +308,69 @@ class ZoomClient:
         _raise_for_zoom_error(response, f"the occurrences for webinar {webinar_id}")
         occurrences = response.json().get("webinars", [])
         return [ZoomSessionOccurrence.model_validate(o) for o in occurrences]
+
+    def list_group_members(
+        self, group_id: str, page_token: str | None = None
+    ) -> ZoomUserPage:
+        """Zoom cannot grant a session to a Group, so a Group only ever scopes
+        Discovery here and this must never be used as an access list."""
+        params: dict[str, Any] = {"page_size": _MAX_PAGE_SIZE}
+        if page_token:
+            params["next_page_token"] = page_token
+
+        response = self._request(
+            "GET", f"/groups/{_encode_path_segment(group_id)}/members", params=params
+        )
+        _raise_for_zoom_error(response, f"the members of group {group_id}")
+        body = response.json()
+        return ZoomUserPage(
+            users=[ZoomUser.model_validate(m) for m in body.get("members", [])],
+            next_page_token=_next_page_token(body),
+        )
+
+    def list_users(self, page_token: str | None = None) -> ZoomUserPage:
+        """Zoom never documents that the `{userId}` path parameter accepts an email
+        address, so a host allowlist is matched against this listing instead."""
+        params: dict[str, Any] = {"page_size": _MAX_PAGE_SIZE}
+        if page_token:
+            params["next_page_token"] = page_token
+
+        response = self._request("GET", "/users", params=params)
+        _raise_for_zoom_error(response, "the account's users")
+        body = response.json()
+        return ZoomUserPage(
+            users=[ZoomUser.model_validate(u) for u in body.get("users", [])],
+            next_page_token=_next_page_token(body),
+        )
+
+    def list_user_recordings(
+        self,
+        user_id: str,
+        from_date: date,
+        to_date: date,
+        page_size: int,
+        page_token: str | None = None,
+    ) -> ZoomRecordingPage:
+        """A 404 here is not "nothing to index": Zoom sends it when the user id
+        doesn't exist, so swallowing it would turn a mistyped host email into an
+        empty index with nothing to explain it."""
+        params: dict[str, Any] = {
+            "from": from_date.isoformat(),
+            "to": to_date.isoformat(),
+            "page_size": page_size,
+        }
+        if page_token:
+            params["next_page_token"] = page_token
+
+        response = self._request(
+            "GET", f"/users/{_encode_path_segment(user_id)}/recordings", params=params
+        )
+        _raise_for_zoom_error(response, f"the recordings for user {user_id}")
+        body = response.json()
+        return ZoomRecordingPage(
+            recordings=body.get("meetings", []),
+            next_page_token=_next_page_token(body),
+        )
 
     def download_transcript_vtt(self, download_url: str) -> str:
         """The download redirects to a storage host, so every hop is checked

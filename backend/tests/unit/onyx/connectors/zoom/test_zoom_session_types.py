@@ -1,5 +1,7 @@
 from unittest.mock import MagicMock
 
+import pytest
+
 from onyx.connectors.zoom.client import ZoomClient
 from onyx.connectors.zoom.models import ZoomSessionDetails, ZoomSessionOccurrence
 from onyx.connectors.zoom.recordings.models import ZoomSessionType
@@ -7,6 +9,8 @@ from onyx.connectors.zoom.recordings.session_types import (
     MeetingSessionType,
     WebinarSessionType,
     get_session_type_handler,
+    is_portal_upload,
+    session_type_for_recording,
 )
 
 
@@ -76,3 +80,36 @@ class TestWebinarSessionType:
         mock_client.get_webinar_details.assert_called_once_with("uuid-1")
         mock_client.get_past_meeting_details.assert_not_called()
         assert result == ZoomSessionDetails(topic="Product Launch")
+
+
+class TestSessionTypeForRecording:
+    """The recording listing is the only discovery path that has to work out a
+    session's type at runtime — the ID allowlist has the admin declare it."""
+
+    @pytest.mark.parametrize("code", ["1", "2", "3", "4", "7", "8"])
+    def test_every_meeting_code_is_a_meeting(self, code: str) -> None:
+        assert session_type_for_recording(code) == ZoomSessionType.MEETING
+
+    @pytest.mark.parametrize("code", ["5", "6", "9"])
+    def test_every_webinar_code_is_a_webinar(self, code: str) -> None:
+        assert session_type_for_recording(code) == ZoomSessionType.WEBINAR
+
+    def test_an_integer_code_is_read_the_same_as_a_string_one(self) -> None:
+        # Zoom documents these as strings and sends them as integers.
+        assert session_type_for_recording(5) == ZoomSessionType.WEBINAR
+        assert session_type_for_recording(2) == ZoomSessionType.MEETING
+
+    def test_a_portal_upload_is_no_session_at_all(self) -> None:
+        assert session_type_for_recording("99") is None
+        assert is_portal_upload("99") is True
+
+    def test_an_unknown_or_missing_code_is_no_session_either(self) -> None:
+        # A document id freezes the session type and ticket 04 picks the
+        # access-list endpoint from it, so a wrong guess can never be undone.
+        assert session_type_for_recording("42") is None
+        assert session_type_for_recording(None) is None
+
+    def test_an_unknown_code_is_not_mistaken_for_a_portal_upload(self) -> None:
+        # The two skip for different reasons and only one of them is expected.
+        assert is_portal_upload("42") is False
+        assert is_portal_upload(None) is False
