@@ -388,3 +388,15 @@ class TestDiscoverySystemicFailures:
 
         with pytest.raises(CredentialExpiredError):
             source.discover_step(client, _START, _END, None)
+
+    def test_a_truncated_response_body_stops_discovery(self) -> None:
+        # The occurrence listing ends in response.json(), so a truncated body
+        # surfaces as this rather than as an HTTP error.
+        source = IdAllowlistSource(["111", "222"])
+        client = MagicMock(spec=ZoomClient)
+        client.list_past_meeting_occurrences.side_effect = (
+            requests.exceptions.JSONDecodeError("truncated", "{", 1)
+        )
+
+        with pytest.raises(requests.exceptions.JSONDecodeError):
+            source.discover_step(client, _START, _END, None)
