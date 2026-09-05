@@ -66,5 +66,16 @@ def get_voice_provider(provider: VoiceProvider) -> VoiceProviderInterface:
             default_voice=default_voice,
         )
 
+    elif provider_type == "gandr":
+        from onyx.voice.providers.gandr import GandrVoiceProvider
+
+        return GandrVoiceProvider(
+            api_key=api_key,
+            api_base=api_base,
+            stt_model=stt_model,
+            tts_model=tts_model,
+            default_voice=default_voice,
+        )
+
     else:
         raise ValueError(f"Unsupported voice provider type: {provider_type}")
