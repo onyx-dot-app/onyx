@@ -2,8 +2,10 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
+import requests
 from pydantic import BaseModel, Field
 
+from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -45,3 +47,28 @@ def parse_zoom_datetime(value: str | None) -> datetime | None:
     except ValueError:
         logger.warning("Couldn't parse Zoom timestamp: %s", value)
         return None
+
+
+def fails_the_whole_run(error: Exception) -> bool:
+    """A ConnectorFailure ends the attempt COMPLETED_WITH_ERRORS, which Onyx
+    counts as successful, so the next run rebuilds the checkpoint over a newer
+    poll window and never revisits the skipped work. Raising instead fails the
+    attempt and keeps the checkpoint, so the next run resumes on the same item.
+
+    Don't wait and retry here. The client already did, honouring Zoom's
+    Retry-After, so anything that reaches this has outlived it.
+    """
+    if isinstance(error, ConnectorValidationError):
+        return True
+    # A 429 reaches this as one of two types. The retried calls raise RetryError
+    # once the client's Retry gives up, which is not an HTTPError; the transcript
+    # download's redirect hop runs on a plain session with no Retry mounted, so
+    # there it stays an ordinary HTTPError.
+    if isinstance(error, requests.exceptions.RetryError):
+        return True
+    if isinstance(error, requests.HTTPError):
+        response = error.response
+        return response is not None and (
+            response.status_code == 429 or response.status_code >= 500
+        )
+    return isinstance(error, (requests.ConnectionError, requests.Timeout))

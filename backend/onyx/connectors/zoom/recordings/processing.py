@@ -16,6 +16,7 @@ from onyx.connectors.zoom.client import ZoomClient
 from onyx.connectors.zoom.recordings.models import (
     OccurrenceWork,
     ZoomSessionType,
+    fails_the_whole_run,
     parse_zoom_datetime,
 )
 from onyx.connectors.zoom.recordings.session_types import get_session_type_handler
@@ -42,6 +43,8 @@ def process_occurrence(
     try:
         transcript = client.get_meeting_transcript(occurrence_uuid)
     except Exception as e:
+        if fails_the_whole_run(e):
+            raise
         logger.exception(
             "Failed to fetch Zoom transcript for session %s occurrence %s",
             work.session_id,
@@ -85,6 +88,8 @@ def process_occurrence(
     try:
         vtt_content = client.download_transcript_vtt(transcript.download_url)
     except Exception as e:
+        if fails_the_whole_run(e):
+            raise
         logger.exception(
             "Failed to download Zoom transcript for session %s occurrence %s",
             work.session_id,

@@ -23,6 +23,7 @@ from onyx.connectors.zoom.models import ZoomMeetingOccurrence
 from onyx.connectors.zoom.recordings.models import (
     OccurrenceWork,
     ZoomSessionType,
+    fails_the_whole_run,
     parse_zoom_datetime,
 )
 from onyx.connectors.zoom.recordings.session_types import get_session_type_handler
@@ -109,17 +110,23 @@ class IdAllowlistSource(DiscoverySource):
         try:
             occurrences = handler.list_occurrences(client, session_id)
         except Exception as e:
+            if fails_the_whole_run(e):
+                raise
             logger.exception(
                 "Failed to list Zoom occurrences for session %s", session_id
             )
-            # Record the window this session went uncovered for, the way the
-            # Slack and SharePoint connectors do for a channel or site that
-            # won't enumerate. Discovery moves on, so without this an admin
-            # sees that it failed but not what period is missing.
+            # Discovery moves on, and this window is the only trace the
+            # skipped session leaves. Targeted reindex is keyed on document
+            # ids, so an entity failure can never be replayed: recovery means
+            # widening ZOOM_TRANSCRIPT_LAG_BUFFER_HOURS or reindexing from
+            # scratch.
             failures.append(
                 ConnectorFailure(
                     failed_entity=EntityFailure(
-                        entity_id=session_id,
+                        # 111 is a legal id for both a meeting and a webinar, so
+                        # the type has to travel with it or an admin can't tell
+                        # which one failed.
+                        entity_id=f"{session_type.value}:{session_id}",
                         missed_time_range=(
                             datetime.fromtimestamp(
                                 start - _OCCURRENCE_POLL_OVERLAP_SECONDS,
@@ -128,7 +135,7 @@ class IdAllowlistSource(DiscoverySource):
                             datetime.fromtimestamp(end, tz=timezone.utc),
                         ),
                     ),
-                    failure_message=f"Failed to list occurrences for Zoom session {session_id}: {e}",
+                    failure_message=f"Failed to list occurrences for Zoom {session_type.value} {session_id}: {e}",
                     exception=e,
                 )
             )
