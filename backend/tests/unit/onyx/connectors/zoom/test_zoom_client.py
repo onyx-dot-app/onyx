@@ -335,6 +335,140 @@ class TestListPastMeetingOccurrences:
         assert client.list_past_meeting_occurrences("111") == []
 
 
+class TestGetWebinarDetails:
+    def test_parses_the_response(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(
+            200, {"topic": "Product Launch", "start_time": "2026-01-15T10:00:00Z"}
+        )
+
+        details = client.get_webinar_details("222")
+
+        assert details is not None
+        assert details.topic == "Product Launch"
+        assert details.start_time == "2026-01-15T10:00:00Z"
+
+    def test_404_returns_none(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(404)
+
+        assert client.get_webinar_details("222") is None
+
+
+class TestListPastWebinarOccurrences:
+    def test_reads_the_webinars_key(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(
+            200,
+            {
+                "webinars": [
+                    {"uuid": "w1", "start_time": "2026-01-01T10:00:00Z"},
+                    {"uuid": "w2", "start_time": "2026-01-08T10:00:00Z"},
+                ]
+            },
+        )
+
+        occurrences = client.list_past_webinar_occurrences("222")
+
+        assert [o.uuid for o in occurrences] == ["w1", "w2"]
+        assert occurrences[0].start_time == "2026-01-01T10:00:00Z"
+
+    def test_calls_the_webinar_endpoint_not_the_meeting_one(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(200, {"webinars": []})
+
+        client.list_past_webinar_occurrences("222")
+
+        url = client._session.request.call_args.args[1]
+        assert url == f"{_API_BASE_URL}/past_webinars/222/instances"
+
+    def test_404_yields_an_empty_list(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(404)
+
+        assert client.list_past_webinar_occurrences("222") == []
+
+    def test_missing_webinars_key_yields_an_empty_list(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(200, {})
+
+        assert client.list_past_webinar_occurrences("222") == []
+
+
+class TestWebinarAddOnErrors:
+    """A Pro account without the Webinar add-on fails every webinar call, and
+    the generic scope message sends the admin to re-check scopes that are
+    already correct."""
+
+    def test_403_names_the_add_on(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(403)
+
+        with pytest.raises(InsufficientPermissionsError) as caught:
+            client.list_past_webinar_occurrences("222")
+
+        assert "Webinar add-on" in str(caught.value)
+
+    def test_400_with_zooms_no_permission_code_names_the_add_on(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(
+            400, {"code": 200, "message": "No permission."}
+        )
+
+        with pytest.raises(InsufficientPermissionsError) as caught:
+            client.list_past_webinar_occurrences("222")
+
+        assert "Webinar add-on" in str(caught.value)
+
+    def test_a_missing_plan_keeps_the_user_zoom_named(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(
+            400,
+            {
+                "code": 200,
+                "message": (
+                    "Webinar plan is missing. You must subscribe to the webinar "
+                    "plan and enable webinars for user abc123 to perform this action."
+                ),
+            },
+        )
+
+        with pytest.raises(InsufficientPermissionsError) as caught:
+            client.get_webinar_details("222")
+
+        assert "Webinar add-on" in str(caught.value)
+        assert "abc123" in str(caught.value)
+
+    def test_a_string_error_code_is_still_recognised(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(
+            400, {"code": "200", "message": "No permission."}
+        )
+
+        with pytest.raises(InsufficientPermissionsError):
+            client.list_past_webinar_occurrences("222")
+
+    def test_an_unrelated_400_is_still_an_http_error(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(
+            400, {"code": 300, "message": "Invalid webinar ID."}
+        )
+
+        with pytest.raises(requests.HTTPError):
+            client.list_past_webinar_occurrences("222")
+
+
 class TestDownloadTranscriptVtt:
     @patch("onyx.connectors.zoom.client.validate_outbound_http_url")
     def test_returns_body_and_authenticates(

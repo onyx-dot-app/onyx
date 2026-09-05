@@ -5,9 +5,12 @@ from unittest.mock import MagicMock
 import pytest
 import requests
 
-from onyx.connectors.exceptions import CredentialExpiredError
+from onyx.connectors.exceptions import (
+    CredentialExpiredError,
+    InsufficientPermissionsError,
+)
 from onyx.connectors.zoom.client import ZoomClient
-from onyx.connectors.zoom.models import ZoomMeetingOccurrence
+from onyx.connectors.zoom.models import ZoomSessionOccurrence
 from onyx.connectors.zoom.recordings.discovery import (
     _MAX_WORK_PER_STEP,
     _OCCURRENCE_POLL_OVERLAP_SECONDS,
@@ -24,15 +27,15 @@ _END = 2_000_000_000.0
 _ONE_HOUR = 60 * 60
 
 
-def _occurrence_at(uuid: str, epoch_seconds: float) -> ZoomMeetingOccurrence:
-    return ZoomMeetingOccurrence(
+def _occurrence_at(uuid: str, epoch_seconds: float) -> ZoomSessionOccurrence:
+    return ZoomSessionOccurrence(
         uuid=uuid,
         start_time=datetime.fromtimestamp(epoch_seconds, tz=timezone.utc).isoformat(),
     )
 
 
 def _client_with_occurrences(
-    occurrences: list[ZoomMeetingOccurrence],
+    occurrences: list[ZoomSessionOccurrence],
 ) -> MagicMock:
     client = MagicMock(spec=ZoomClient)
     client.list_past_meeting_occurrences.return_value = occurrences
@@ -44,7 +47,7 @@ class TestIdAllowlistSource:
         source = IdAllowlistSource(["111", "222"])
         client = MagicMock(spec=ZoomClient)
         client.list_past_meeting_occurrences.side_effect = lambda session_id: [
-            ZoomMeetingOccurrence(uuid=f"uuid-{session_id}")
+            ZoomSessionOccurrence(uuid=f"uuid-{session_id}")
         ]
 
         first = source.discover_step(client, _START, _END, None)
@@ -60,7 +63,7 @@ class TestIdAllowlistSource:
     def test_work_items_carry_session_identity(self) -> None:
         source = IdAllowlistSource(["111"])
         client = _client_with_occurrences(
-            [ZoomMeetingOccurrence(uuid="uuid-1", start_time="2026-01-15T10:00:00Z")]
+            [ZoomSessionOccurrence(uuid="uuid-1", start_time="2026-01-15T10:00:00Z")]
         )
 
         result = source.discover_step(client, _START, _END, None)
@@ -75,9 +78,9 @@ class TestIdAllowlistSource:
         source = IdAllowlistSource(["111"])
         client = _client_with_occurrences(
             [
-                ZoomMeetingOccurrence(uuid="uuid-1", start_time="2026-01-01T10:00:00Z"),
-                ZoomMeetingOccurrence(uuid="uuid-2", start_time="2026-01-08T10:00:00Z"),
-                ZoomMeetingOccurrence(uuid="uuid-3", start_time="2026-01-15T10:00:00Z"),
+                ZoomSessionOccurrence(uuid="uuid-1", start_time="2026-01-01T10:00:00Z"),
+                ZoomSessionOccurrence(uuid="uuid-2", start_time="2026-01-08T10:00:00Z"),
+                ZoomSessionOccurrence(uuid="uuid-3", start_time="2026-01-15T10:00:00Z"),
             ]
         )
 
@@ -185,7 +188,7 @@ class TestIdAllowlistPollWindow:
         source = IdAllowlistSource(["111"])
         now = time.time()
         client = _client_with_occurrences(
-            [ZoomMeetingOccurrence(uuid="uuid-junk", start_time="not-a-date")]
+            [ZoomSessionOccurrence(uuid="uuid-junk", start_time="not-a-date")]
         )
 
         # A narrow window that a real date would fall outside of: the point is
@@ -198,7 +201,7 @@ class TestIdAllowlistPollWindow:
         source = IdAllowlistSource(["111"])
         now = time.time()
         client = _client_with_occurrences(
-            [ZoomMeetingOccurrence(uuid="uuid-no-time", start_time=None)]
+            [ZoomSessionOccurrence(uuid="uuid-no-time", start_time=None)]
         )
 
         # A window so narrow any dated occurrence would fall outside it.
@@ -213,7 +216,7 @@ class TestIdAllowlistPaging:
         source = IdAllowlistSource(["111"])
         client = _client_with_occurrences(
             [
-                ZoomMeetingOccurrence(
+                ZoomSessionOccurrence(
                     uuid=f"uuid-{i:04d}",
                     start_time=f"2026-01-01T{i // 60:02d}:{i % 60:02d}:00Z",
                 )
@@ -241,7 +244,7 @@ class TestIdAllowlistPaging:
         source = IdAllowlistSource(["111"])
         client = _client_with_occurrences(
             [
-                ZoomMeetingOccurrence(
+                ZoomSessionOccurrence(
                     uuid=f"uuid-{i:04d}",
                     start_time=f"2026-01-01T00:{i // 60:02d}:{i % 60:02d}Z",
                 )
@@ -260,7 +263,7 @@ class TestIdAllowlistPaging:
     def test_unrecognised_cursor_restarts_the_id_instead_of_raising(self) -> None:
         source = IdAllowlistSource(["111"])
         client = _client_with_occurrences(
-            [ZoomMeetingOccurrence(uuid="uuid-1", start_time="2026-01-15T10:00:00Z")]
+            [ZoomSessionOccurrence(uuid="uuid-1", start_time="2026-01-15T10:00:00Z")]
         )
 
         # A checkpoint we can't make sense of should re-do work, never skip it.
@@ -272,7 +275,7 @@ class TestIdAllowlistPaging:
         source = IdAllowlistSource(["111", "222"])
         client = _client_with_occurrences(
             [
-                ZoomMeetingOccurrence(
+                ZoomSessionOccurrence(
                     uuid=f"uuid-{i:04d}", start_time=f"2026-01-01T00:{i:02d}:00Z"
                 )
                 for i in range(_MAX_WORK_PER_STEP + 1)
@@ -290,7 +293,7 @@ class TestIdAllowlistPaging:
         source = IdAllowlistSource(["111"])
         client = MagicMock(spec=ZoomClient)
         base = [
-            ZoomMeetingOccurrence(
+            ZoomSessionOccurrence(
                 uuid=f"uuid-{i:04d}", start_time=f"2026-01-01T00:{i:02d}:00Z"
             )
             for i in range(_MAX_WORK_PER_STEP + 5)
@@ -298,7 +301,7 @@ class TestIdAllowlistPaging:
         # The meeting runs again between steps, and Zoom returns the newest
         # entry first — order the connector must not depend on.
         later = [
-            ZoomMeetingOccurrence(uuid="uuid-9999", start_time="2026-06-01T00:00:00Z")
+            ZoomSessionOccurrence(uuid="uuid-9999", start_time="2026-06-01T00:00:00Z")
         ] + base
         client.list_past_meeting_occurrences.side_effect = [base, later]
 
@@ -312,7 +315,7 @@ class TestIdAllowlistPaging:
     def test_old_cursor_without_offset_still_loads(self) -> None:
         source = IdAllowlistSource(["111", "222"])
         client = _client_with_occurrences(
-            [ZoomMeetingOccurrence(uuid="uuid-1", start_time="2026-01-15T10:00:00Z")]
+            [ZoomSessionOccurrence(uuid="uuid-1", start_time="2026-01-15T10:00:00Z")]
         )
 
         # A checkpoint written before paging existed carries only "index".
@@ -356,11 +359,21 @@ class TestBuildDiscoverySources:
     def test_no_config_yields_no_sources(self) -> None:
         assert build_discovery_sources(None) == []
         assert build_discovery_sources([]) == []
+        assert build_discovery_sources([], []) == []
 
     def test_meeting_ids_yield_allowlist_source(self) -> None:
         sources = build_discovery_sources(["111"])
         assert len(sources) == 1
         assert isinstance(sources[0], IdAllowlistSource)
+
+    def test_webinar_ids_alone_still_yield_a_source(self) -> None:
+        sources = build_discovery_sources(None, ["222"])
+        assert len(sources) == 1
+        assert isinstance(sources[0], IdAllowlistSource)
+
+    def test_both_kinds_of_id_share_one_source(self) -> None:
+        sources = build_discovery_sources(["111"], ["222"])
+        assert len(sources) == 1
 
 
 class TestDiscoverySystemicFailures:
@@ -399,4 +412,73 @@ class TestDiscoverySystemicFailures:
         )
 
         with pytest.raises(requests.exceptions.JSONDecodeError):
+            source.discover_step(client, _START, _END, None)
+
+
+class TestIdAllowlistWebinars:
+    def _client_with_webinar_occurrences(
+        self, occurrences: list[ZoomSessionOccurrence]
+    ) -> MagicMock:
+        client = MagicMock(spec=ZoomClient)
+        client.list_past_webinar_occurrences.return_value = occurrences
+        return client
+
+    def test_webinar_id_is_listed_through_the_webinar_endpoint(self) -> None:
+        source = IdAllowlistSource([], ["222"])
+        client = self._client_with_webinar_occurrences(
+            [ZoomSessionOccurrence(uuid="w-1", start_time="2026-01-15T10:00:00Z")]
+        )
+
+        result = source.discover_step(client, _START, _END, None)
+
+        client.list_past_webinar_occurrences.assert_called_once_with("222")
+        client.list_past_meeting_occurrences.assert_not_called()
+        work = result.work[0]
+        assert work.session_type == ZoomSessionType.WEBINAR
+        assert work.session_id == "222"
+        assert work.occurrence_uuid == "w-1"
+
+    def test_meetings_run_before_webinars_in_one_cursor_walk(self) -> None:
+        source = IdAllowlistSource(["111"], ["222"])
+        client = MagicMock(spec=ZoomClient)
+        client.list_past_meeting_occurrences.return_value = [
+            ZoomSessionOccurrence(uuid="m-1", start_time="2026-01-15T10:00:00Z")
+        ]
+        client.list_past_webinar_occurrences.return_value = [
+            ZoomSessionOccurrence(uuid="w-1", start_time="2026-01-16T10:00:00Z")
+        ]
+
+        first = source.discover_step(client, _START, _END, None)
+        second = source.discover_step(client, _START, _END, first.next_cursor)
+
+        assert [(w.session_type, w.occurrence_uuid) for w in first.work] == [
+            (ZoomSessionType.MEETING, "m-1")
+        ]
+        assert [(w.session_type, w.occurrence_uuid) for w in second.work] == [
+            (ZoomSessionType.WEBINAR, "w-1")
+        ]
+        assert second.done is True
+
+    def test_failure_names_the_webinar_rather_than_the_bare_id(self) -> None:
+        source = IdAllowlistSource([], ["111"])
+        client = MagicMock(spec=ZoomClient)
+        client.list_past_webinar_occurrences.side_effect = RuntimeError("boom")
+
+        result = source.discover_step(client, _START, _END, None)
+
+        assert result.failures[0].failed_entity is not None
+        assert result.failures[0].failed_entity.entity_id == "webinar:111"
+
+    def test_a_missing_add_on_stops_discovery_instead_of_skipping_webinars(
+        self,
+    ) -> None:
+        # Without the add-on every webinar call fails, so skipping this one
+        # silently skips them all and still reports success.
+        source = IdAllowlistSource([], ["222", "333"])
+        client = MagicMock(spec=ZoomClient)
+        client.list_past_webinar_occurrences.side_effect = InsufficientPermissionsError(
+            "no add-on"
+        )
+
+        with pytest.raises(InsufficientPermissionsError):
             source.discover_step(client, _START, _END, None)

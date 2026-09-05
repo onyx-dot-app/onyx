@@ -15,8 +15,8 @@ from onyx.connectors.models import (
 from onyx.connectors.zoom.client import ZoomClient
 from onyx.connectors.zoom.connector import ZoomConnector, ZoomConnectorCheckpoint
 from onyx.connectors.zoom.models import (
-    ZoomMeetingOccurrence,
-    ZoomPastMeetingDetails,
+    ZoomSessionDetails,
+    ZoomSessionOccurrence,
     ZoomTranscript,
 )
 from onyx.connectors.zoom.recordings.models import (
@@ -62,12 +62,14 @@ John Smith: Thanks for having me.
 
 def _make_connector(
     meeting_ids: list[str] | None = None,
+    webinar_ids: list[str] | None = None,
 ) -> tuple[ZoomConnector, MagicMock]:
     # Don't write `meeting_ids or [...]` here: it swaps a caller's empty list
     # for the default, and the empty-allowlist tests below then pass for the
     # wrong reason.
     connector = ZoomConnector(
-        meeting_ids=["111"] if meeting_ids is None else meeting_ids
+        meeting_ids=["111"] if meeting_ids is None else meeting_ids,
+        webinar_ids=webinar_ids,
     )
     connector.load_credentials(_ZOOM_CREDS)
     mock_client = MagicMock(spec=ZoomClient)
@@ -77,14 +79,29 @@ def _make_connector(
 
 def _configure_happy_path(mock_client: MagicMock) -> None:
     mock_client.list_past_meeting_occurrences.side_effect = lambda session_id: [
-        ZoomMeetingOccurrence(uuid=f"uuid-{session_id}", start_time=_days_ago(7))
+        ZoomSessionOccurrence(uuid=f"uuid-{session_id}", start_time=_days_ago(7))
     ]
     mock_client.get_meeting_transcript.side_effect = lambda uuid: ZoomTranscript(
-        download_url=f"https://zoom.example/{uuid}.vtt"
+        download_url=f"https://zoom.example/{uuid}.vtt",
+        meeting_topic="Recorded Session",
     )
     mock_client.download_transcript_vtt.return_value = _SAMPLE_VTT
-    mock_client.get_past_meeting_details.return_value = ZoomPastMeetingDetails(
+    mock_client.get_past_meeting_details.return_value = ZoomSessionDetails(
         topic="Weekly Sync"
+    )
+    mock_client.list_past_webinar_occurrences.side_effect = lambda session_id: [
+        ZoomSessionOccurrence(uuid=f"uuid-{session_id}", start_time=_days_ago(7))
+    ]
+    mock_client.get_webinar_details.return_value = ZoomSessionDetails(
+        topic="Product Launch"
+    )
+
+
+def _transcript_without_a_topic(mock_client: MagicMock) -> None:
+    """Zoom names the session in the transcript response, so the details
+    endpoints are only reached when it doesn't."""
+    mock_client.get_meeting_transcript.side_effect = lambda uuid: ZoomTranscript(
+        download_url=f"https://zoom.example/{uuid}.vtt"
     )
 
 
@@ -109,6 +126,10 @@ class TestZoomConnectorValidateSettings:
 
     def test_configured_meeting_ids_accepted(self) -> None:
         connector = ZoomConnector(meeting_ids=["111"])
+        connector.validate_connector_settings()
+
+    def test_webinar_ids_alone_are_a_discovery_mechanism(self) -> None:
+        connector = ZoomConnector(webinar_ids=["222"])
         connector.validate_connector_settings()
 
 
@@ -161,7 +182,10 @@ class TestZoomConnectorCheckpoint:
         # meeting id would silently index only the most recent occurrence.
         assert doc.id == "ZOOM_MEETING_uuid-111"
         mock_client.get_meeting_transcript.assert_called_once_with("uuid-111")
-        assert doc.semantic_identifier == "Weekly Sync"
+        # The transcript names the session, so the details endpoint — and the
+        # one-year cap that comes with it — is never reached.
+        assert doc.semantic_identifier == "Recorded Session"
+        mock_client.get_past_meeting_details.assert_not_called()
         assert doc.metadata == {"session_type": "meeting"}
         assert outputs[-1].next_checkpoint.has_more is False
 
@@ -170,9 +194,9 @@ class TestZoomConnectorCheckpoint:
         _configure_happy_path(mock_client)
         mock_client.list_past_meeting_occurrences.side_effect = None
         mock_client.list_past_meeting_occurrences.return_value = [
-            ZoomMeetingOccurrence(uuid="uuid-1", start_time=_days_ago(21)),
-            ZoomMeetingOccurrence(uuid="uuid-2", start_time=_days_ago(14)),
-            ZoomMeetingOccurrence(uuid="uuid-3", start_time=_days_ago(7)),
+            ZoomSessionOccurrence(uuid="uuid-1", start_time=_days_ago(21)),
+            ZoomSessionOccurrence(uuid="uuid-2", start_time=_days_ago(14)),
+            ZoomSessionOccurrence(uuid="uuid-3", start_time=_days_ago(7)),
         ]
 
         outputs = load_everything_from_checkpoint_connector(
@@ -197,9 +221,9 @@ class TestZoomConnectorCheckpoint:
         _configure_happy_path(mock_client)
         mock_client.list_past_meeting_occurrences.side_effect = None
         mock_client.list_past_meeting_occurrences.return_value = [
-            ZoomMeetingOccurrence(uuid="uuid-1", start_time=_days_ago(21)),
-            ZoomMeetingOccurrence(uuid="uuid-2", start_time=_days_ago(14)),
-            ZoomMeetingOccurrence(uuid="uuid-3", start_time=_days_ago(7)),
+            ZoomSessionOccurrence(uuid="uuid-1", start_time=_days_ago(21)),
+            ZoomSessionOccurrence(uuid="uuid-2", start_time=_days_ago(14)),
+            ZoomSessionOccurrence(uuid="uuid-3", start_time=_days_ago(7)),
         ]
 
         def _transcript(uuid: str) -> ZoomTranscript:
@@ -229,11 +253,11 @@ class TestZoomConnectorCheckpoint:
         connector, mock_client = _make_connector(meeting_ids=["111", "222"])
         _configure_happy_path(mock_client)
 
-        def _occurrences(session_id: str) -> list[ZoomMeetingOccurrence]:
+        def _occurrences(session_id: str) -> list[ZoomSessionOccurrence]:
             if session_id == "111":
                 raise RuntimeError("boom")
             return [
-                ZoomMeetingOccurrence(
+                ZoomSessionOccurrence(
                     uuid=f"uuid-{session_id}", start_time=_days_ago(7)
                 )
             ]
@@ -408,3 +432,108 @@ class TestSystemicFailureDoesNotAdvanceWork:
 
         assert [isinstance(item, ConnectorFailure) for item in items] == [True]
         assert returned.recordings.work_index == 1
+
+
+class TestSessionSourceTypes:
+    """The admin picks Meeting only, Webinar only, or Both at setup, so
+    nothing has to detect a session's type at runtime."""
+
+    def _documents(self, connector: ZoomConnector) -> list[Document]:
+        outputs = load_everything_from_checkpoint_connector(
+            connector, 0, _FULL_HISTORY_END
+        )
+        assert outputs[-1].next_checkpoint.has_more is False
+        return [
+            item
+            for output in outputs
+            for item in output.items
+            if isinstance(item, Document)
+        ]
+
+    def test_meeting_only_never_calls_a_webinar_endpoint(self) -> None:
+        connector, mock_client = _make_connector(meeting_ids=["111"])
+        _configure_happy_path(mock_client)
+
+        docs = self._documents(connector)
+
+        assert [d.id for d in docs] == ["ZOOM_MEETING_uuid-111"]
+        mock_client.list_past_webinar_occurrences.assert_not_called()
+
+    def test_webinar_only_indexes_a_tagged_webinar_document(self) -> None:
+        connector, mock_client = _make_connector(meeting_ids=[], webinar_ids=["222"])
+        _configure_happy_path(mock_client)
+
+        docs = self._documents(connector)
+
+        assert len(docs) == 1
+        doc = docs[0]
+        assert doc.id == "ZOOM_WEBINAR_uuid-222"
+        assert doc.metadata == {"session_type": "webinar"}
+        assert doc.semantic_identifier == "Recorded Session"
+        mock_client.get_webinar_details.assert_not_called()
+        # A webinar's transcript comes from the meeting endpoint; Zoom has no
+        # webinar one.
+        mock_client.get_meeting_transcript.assert_called_once_with("uuid-222")
+        mock_client.list_past_meeting_occurrences.assert_not_called()
+
+    def test_both_dispatches_each_id_to_its_own_endpoint(self) -> None:
+        connector, mock_client = _make_connector(
+            meeting_ids=["111"], webinar_ids=["222"]
+        )
+        _configure_happy_path(mock_client)
+
+        docs = self._documents(connector)
+
+        assert [d.id for d in docs] == [
+            "ZOOM_MEETING_uuid-111",
+            "ZOOM_WEBINAR_uuid-222",
+        ]
+        assert [d.metadata["session_type"] for d in docs] == ["meeting", "webinar"]
+        mock_client.list_past_meeting_occurrences.assert_called_once_with("111")
+        mock_client.list_past_webinar_occurrences.assert_called_once_with("222")
+
+    def test_the_same_id_in_both_fields_is_indexed_as_two_documents(self) -> None:
+        # The same number can be a meeting id and a webinar id, and those are
+        # two different sessions.
+        connector, mock_client = _make_connector(
+            meeting_ids=["111"], webinar_ids=["111"]
+        )
+        _configure_happy_path(mock_client)
+        mock_client.list_past_meeting_occurrences.side_effect = None
+        mock_client.list_past_meeting_occurrences.return_value = [
+            ZoomSessionOccurrence(uuid="shared-uuid", start_time=_days_ago(7))
+        ]
+        mock_client.list_past_webinar_occurrences.side_effect = None
+        mock_client.list_past_webinar_occurrences.return_value = [
+            ZoomSessionOccurrence(uuid="shared-uuid", start_time=_days_ago(7))
+        ]
+
+        docs = self._documents(connector)
+
+        assert [d.id for d in docs] == [
+            "ZOOM_MEETING_shared-uuid",
+            "ZOOM_WEBINAR_shared-uuid",
+        ]
+
+    def test_a_titleless_webinar_falls_back_to_its_own_details_endpoint(
+        self,
+    ) -> None:
+        connector, mock_client = _make_connector(meeting_ids=[], webinar_ids=["222"])
+        _configure_happy_path(mock_client)
+        _transcript_without_a_topic(mock_client)
+
+        docs = self._documents(connector)
+
+        assert docs[0].semantic_identifier == "Product Launch"
+        mock_client.get_webinar_details.assert_called_once_with("uuid-222")
+        mock_client.get_past_meeting_details.assert_not_called()
+
+    def test_a_webinar_without_a_title_is_not_labelled_a_meeting(self) -> None:
+        connector, mock_client = _make_connector(meeting_ids=[], webinar_ids=["222"])
+        _configure_happy_path(mock_client)
+        _transcript_without_a_topic(mock_client)
+        mock_client.get_webinar_details.return_value = None
+
+        docs = self._documents(connector)
+
+        assert docs[0].semantic_identifier == "Zoom Webinar 222"
