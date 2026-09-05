@@ -3,6 +3,7 @@ import {
   SvgExa,
   SvgFirecrawl,
   SvgGoogle,
+  SvgKeenable,
   SvgSearxng,
   SvgSerper,
   SvgTavily,
@@ -68,6 +69,14 @@ export const SEARCH_PROVIDER_DETAILS: Record<
     apiKeyUrl: "https://app.tavily.com/home",
     logo: SvgTavily,
   },
+  keenable: {
+    label: "Keenable",
+    subtitle: "Keenable Search API",
+    helper:
+      "Connect to Keenable to set up web search. Works without an API key (keyless free tier); add a key to lift rate limits.",
+    logo: SvgKeenable,
+    apiKeyUrl: "https://keenable.ai/console",
+  },
 };
 
 export const SEARCH_PROVIDER_ORDER = Object.keys(
@@ -124,6 +133,10 @@ const SEARCH_PROVIDER_CAPABILITIES: Record<
   },
   tavily: {
     requiresApiKey: true,
+    requiredConfigKeys: [],
+  },
+  keenable: {
+    requiresApiKey: false,
     requiredConfigKeys: [],
   },
 };
