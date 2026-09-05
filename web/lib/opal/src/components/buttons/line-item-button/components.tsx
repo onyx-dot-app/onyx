@@ -2,20 +2,78 @@ import type React from "react";
 import { Interactive, type InteractiveStatefulProps } from "@opal/core";
 import type {
   ExtremaSizeVariants,
-  DistributiveOmit,
+  IconFunctionComponent,
+  ColorTypes,
+  RichStr,
   Rounding,
 } from "@opal/types";
 import { Tooltip, type TooltipSide } from "@opal/components";
-import { type ContentActionProps, ContentAction } from "@opal/layouts";
+import {
+  type ContentActionProps,
+  type ContentVariant,
+  type SizePreset,
+  ContentAction,
+} from "@opal/layouts";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-type ContentPassthroughProps = DistributiveOmit<
-  ContentActionProps,
-  "width" | "ref"
->;
+/**
+ * The `ContentAction` props a row actually uses — nine of the twenty-two it
+ * offers. Listed rather than spread, so that everything a caller passes which
+ * is *not* here is DOM, and reaches the row element.
+ *
+ * That inversion is the point. Spreading the remainder into `ContentAction`
+ * put every unrecognised prop somewhere that never renders it, so a label or a
+ * handler was accepted and silently dropped. Now the leftover lands on the row
+ * instead, and the compiler has the last word on the rest.
+ *
+ * `sizePreset` and `variant` come from the flattened aliases, which loses the
+ * cross-constraint `ContentProps` keeps between them. Every call site states
+ * both explicitly, so what is given up is the compiler rejecting a pair that
+ * no one writes.
+ */
+type RowContentProps = {
+  /** Main label. */
+  title: string | RichStr;
+
+  /** Leading icon. */
+  icon?: IconFunctionComponent;
+
+  /** Secondary line under the title. */
+  description?: string | RichStr;
+
+  /** Content after the label — an action button, a count, a chevron. */
+  rightChildren?: React.ReactNode;
+
+  /** Content size preset. @default "headline" */
+  sizePreset?: SizePreset;
+
+  /** Content layout variant. @default "heading" */
+  variant?: ContentVariant;
+
+  /**
+   * Content colour mode. `"interactive"` is what lets the row's hover,
+   * selected and disabled colours reach its title and icon; anything else
+   * opts out of that.
+   *
+   * @default "interactive"
+   */
+  color?: ColorTypes;
+
+  /** Strike the label through, e.g. a row switched off. */
+  strikethrough?: boolean;
+
+  /**
+   * Padding around the inner `ContentAction`, on top of the row's own inset.
+   * Narrowed to the four `Interactive.Container` applies at its size presets,
+   * which is what lines a label up with an adjacent button.
+   *
+   * @default 0.5
+   */
+  padding?: 0 | 0.5 | 1 | 2;
+};
 
 type LineItemButtonOwnProps = Pick<
   InteractiveStatefulProps,
@@ -42,20 +100,17 @@ type LineItemButtonOwnProps = Pick<
 
   /** Which side the tooltip appears on. @default "top" */
   tooltipSide?: TooltipSide;
-} & Pick<
-    React.HTMLAttributes<HTMLDivElement>,
-    | "aria-label"
-    | "aria-describedby"
-    | "aria-labelledby"
-    | "onMouseEnter"
-    | "onMouseLeave"
-    | "onMouseMove"
-    | "onMouseDown"
-    | "onPointerEnter"
-    | "onPointerLeave"
-  >;
+};
 
-type LineItemButtonProps = ContentPassthroughProps & LineItemButtonOwnProps;
+/**
+ * `title` and `color` are omitted from the DOM attributes because the row
+ * already means something by them — its label and its colour mode — and the
+ * native attributes would put two meanings in one prop. `children` is omitted
+ * because a row renders none: its content comes from `title` and friends.
+ */
+type LineItemButtonProps = LineItemButtonOwnProps &
+  RowContentProps &
+  Omit<React.HTMLAttributes<HTMLDivElement>, "title" | "color" | "children">;
 
 // ---------------------------------------------------------------------------
 // LineItemButton
@@ -112,9 +167,18 @@ function LineItemButton({
   // Sizing
   rounding = 3,
   width = "full",
-  padding = 0.5,
   tooltip,
   tooltipSide = "top",
+
+  // Content
+  title,
+  icon,
+  description,
+  rightChildren,
+  sizePreset,
+  variant,
+  strikethrough,
+  padding,
 
   /*
    * Taken out of the pass-through and defaulted here rather than written
@@ -128,25 +192,12 @@ function LineItemButton({
   color = "interactive",
 
   /*
-   * Named individually so they reach the row element rather than the content
-   * inside it. Everything not destructured here goes to `ContentAction`, which
-   * does not spread onto a DOM node — so a label or a pointer handler left in
-   * that bag is silently dropped. Not a blanket `HTMLAttributes` extend either:
-   * `title` means the row's label to `ContentAction` and a native tooltip to
-   * the DOM, and the two would collide.
+   * Whatever is left is DOM — labels, handlers, `data-*` — and belongs on the
+   * row. It used to go the other way, into `ContentAction`, which never
+   * spreads onto an element, so an unrecognised prop was accepted and then
+   * silently dropped.
    */
-  "aria-label": ariaLabel,
-  "aria-describedby": ariaDescribedBy,
-  "aria-labelledby": ariaLabelledBy,
-  onMouseEnter,
-  onMouseLeave,
-  onMouseMove,
-  onMouseDown,
-  onPointerEnter,
-  onPointerLeave,
-
-  // ContentAction pass-through
-  ...contentActionProps
+  ...rowProps
 }: LineItemButtonProps) {
   // The row renders as a focusable div (role="button") instead of a native
   // <button> so interactive `rightChildren` (e.g. action buttons) don't nest
@@ -176,22 +227,31 @@ function LineItemButton({
         width={width}
         size="fit"
         rounding={rounding}
-        aria-label={ariaLabel}
-        aria-describedby={ariaDescribedBy}
-        aria-labelledby={ariaLabelledBy}
-        onMouseEnter={onMouseEnter}
-        onMouseLeave={onMouseLeave}
-        onMouseMove={onMouseMove}
-        onMouseDown={onMouseDown}
-        onPointerEnter={onPointerEnter}
-        onPointerLeave={onPointerLeave}
+        {...rowProps}
         {...rowButtonProps}
       >
         <div className="w-full p-1.5">
           <ContentAction
-            color={color}
-            {...(contentActionProps as ContentActionProps)}
-            padding={padding}
+            {...({
+              title,
+              icon,
+              description,
+              rightChildren,
+              sizePreset,
+              variant,
+              strikethrough,
+              color,
+              padding: padding ?? 0.5,
+              /*
+               * `ContentActionProps` is a union whose arms pair a `sizePreset`
+               * with the `variant`s valid for it. Flattening the two into
+               * `SizePreset` and `ContentVariant` is what keeps a row's props
+               * flat for its callers, and it costs that pairing — so the
+               * assertion is the flattening, stated once, over a set this
+               * component names in full. It is not the old blanket cast over
+               * whatever a caller happened to pass.
+               */
+            } as ContentActionProps)}
           />
         </div>
       </Interactive.Container>
