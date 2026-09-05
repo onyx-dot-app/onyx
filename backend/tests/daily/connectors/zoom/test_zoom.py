@@ -13,6 +13,8 @@ pytestmark = pytest.mark.secrets(
     TestSecret.ZOOM_CLIENT_SECRET,
     TestSecret.ZOOM_TEST_MEETING_ID,
     TestSecret.ZOOM_TEST_WEBINAR_ID,
+    TestSecret.ZOOM_TEST_HOST_EMAIL,
+    TestSecret.ZOOM_TEST_GROUP_ID,
 )
 
 
@@ -51,14 +53,38 @@ def zoom_webinar_connector(
     )
 
 
-def test_zoom_basic(zoom_connector: ZoomConnector) -> None:
-    outputs = load_everything_from_checkpoint_connector(zoom_connector, 0, time.time())
-    docs = [
+@pytest.fixture
+def zoom_host_connector(
+    test_secrets: dict[TestSecret, str],
+) -> ZoomConnector:
+    return _authenticated(
+        ZoomConnector(host_emails=[test_secrets[TestSecret.ZOOM_TEST_HOST_EMAIL]]),
+        test_secrets,
+    )
+
+
+@pytest.fixture
+def zoom_group_connector(
+    test_secrets: dict[TestSecret, str],
+) -> ZoomConnector:
+    return _authenticated(
+        ZoomConnector(group_id=test_secrets[TestSecret.ZOOM_TEST_GROUP_ID]),
+        test_secrets,
+    )
+
+
+def _documents(connector: ZoomConnector) -> list[Document]:
+    outputs = load_everything_from_checkpoint_connector(connector, 0, time.time())
+    return [
         item
         for output in outputs
         for item in output.items
         if isinstance(item, Document)
     ]
+
+
+def test_zoom_basic(zoom_connector: ZoomConnector) -> None:
+    docs = _documents(zoom_connector)
 
     # Not ==1: if the configured meeting recurs, every recorded occurrence
     # produces its own document.
@@ -69,17 +95,29 @@ def test_zoom_basic(zoom_connector: ZoomConnector) -> None:
 
 
 def test_zoom_webinar(zoom_webinar_connector: ZoomConnector) -> None:
-    outputs = load_everything_from_checkpoint_connector(
-        zoom_webinar_connector, 0, time.time()
-    )
-    docs = [
-        item
-        for output in outputs
-        for item in output.items
-        if isinstance(item, Document)
-    ]
+    docs = _documents(zoom_webinar_connector)
 
     assert len(docs) >= 1
     assert all(doc.id.startswith("ZOOM_WEBINAR_") for doc in docs)
     assert all(doc.metadata == {"session_type": "webinar"} for doc in docs)
+    assert all(doc.sections[0].text for doc in docs)
+
+
+def test_zoom_host_allowlist(zoom_host_connector: ZoomConnector) -> None:
+    # Polling from 0 asks Zoom for everything since the epoch, so this test is
+    # also what settles whether the endpoint's rumoured one-month range cap is
+    # real. Zoom's own reference does not mention it.
+    docs = _documents(zoom_host_connector)
+
+    assert len(docs) >= 1
+    assert all(doc.id.startswith(("ZOOM_MEETING_", "ZOOM_WEBINAR_")) for doc in docs)
+    assert all(doc.metadata["session_type"] in ("meeting", "webinar") for doc in docs)
+    assert all(doc.sections[0].text for doc in docs)
+
+
+def test_zoom_group_discovery(zoom_group_connector: ZoomConnector) -> None:
+    docs = _documents(zoom_group_connector)
+
+    assert len(docs) >= 1
+    assert all(doc.id.startswith(("ZOOM_MEETING_", "ZOOM_WEBINAR_")) for doc in docs)
     assert all(doc.sections[0].text for doc in docs)

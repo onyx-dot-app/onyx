@@ -15,9 +15,13 @@ from onyx.connectors.models import (
 from onyx.connectors.zoom.client import ZoomClient
 from onyx.connectors.zoom.connector import ZoomConnector, ZoomConnectorCheckpoint
 from onyx.connectors.zoom.models import (
+    ZoomRecordingEntry,
+    ZoomRecordingPage,
     ZoomSessionDetails,
     ZoomSessionOccurrence,
     ZoomTranscript,
+    ZoomUser,
+    ZoomUserPage,
 )
 from onyx.connectors.zoom.recordings.models import (
     OccurrenceWork,
@@ -63,6 +67,8 @@ John Smith: Thanks for having me.
 def _make_connector(
     meeting_ids: list[str] | None = None,
     webinar_ids: list[str] | None = None,
+    host_emails: list[str] | None = None,
+    group_id: str | None = None,
 ) -> tuple[ZoomConnector, MagicMock]:
     # Don't write `meeting_ids or [...]` here: it swaps a caller's empty list
     # for the default, and the empty-allowlist tests below then pass for the
@@ -70,6 +76,8 @@ def _make_connector(
     connector = ZoomConnector(
         meeting_ids=["111"] if meeting_ids is None else meeting_ids,
         webinar_ids=webinar_ids,
+        host_emails=host_emails,
+        group_id=group_id,
     )
     connector.load_credentials(_ZOOM_CREDS)
     mock_client = MagicMock(spec=ZoomClient)
@@ -131,6 +139,28 @@ class TestZoomConnectorValidateSettings:
     def test_webinar_ids_alone_are_a_discovery_mechanism(self) -> None:
         connector = ZoomConnector(webinar_ids=["222"])
         connector.validate_connector_settings()
+
+    def test_host_emails_alone_are_a_discovery_mechanism(self) -> None:
+        connector = ZoomConnector(host_emails=["host@example.com"])
+        connector.validate_connector_settings()
+
+    def test_a_group_alone_is_a_discovery_mechanism(self) -> None:
+        connector = ZoomConnector(group_id="group-1")
+        connector.validate_connector_settings()
+
+    def test_all_three_mechanisms_empty_is_rejected(self) -> None:
+        connector = ZoomConnector(
+            meeting_ids=[], webinar_ids=[], host_emails=[], group_id=None
+        )
+        with pytest.raises(ConnectorValidationError):
+            connector.validate_connector_settings()
+
+    def test_fields_left_blank_are_not_a_discovery_mechanism(self) -> None:
+        # An admin who clears a field leaves whitespace behind, and accepting
+        # that is what would start a full-organization crawl.
+        connector = ZoomConnector(host_emails=["  "], group_id="  ")
+        with pytest.raises(ConnectorValidationError):
+            connector.validate_connector_settings()
 
 
 class TestZoomConnectorCheckpoint:
@@ -537,3 +567,181 @@ class TestSessionSourceTypes:
         docs = self._documents(connector)
 
         assert docs[0].semantic_identifier == "Zoom Webinar 222"
+
+
+def _recording(
+    uuid: str,
+    session_id: int = 6840331990,
+    topic: str = "Weekly Sync",
+    recording_type: str = "2",
+) -> ZoomRecordingEntry:
+    return ZoomRecordingEntry(
+        uuid=uuid,
+        id=session_id,
+        topic=topic,
+        start_time=_days_ago(7),
+        type=recording_type,
+    )
+
+
+def _configure_user_recordings(
+    mock_client: MagicMock, recordings_by_user: dict[str, list[ZoomRecordingEntry]]
+) -> None:
+    mock_client.list_users.return_value = ZoomUserPage(
+        users=[
+            ZoomUser(id="host-user", email="host@example.com"),
+            ZoomUser(id="member-user", email="member@example.com"),
+        ]
+    )
+    mock_client.list_group_members.return_value = ZoomUserPage(
+        users=[ZoomUser(id="member-user", email="member@example.com")]
+    )
+    mock_client.list_user_recordings.side_effect = lambda user_id, **_: (
+        ZoomRecordingPage(recordings=recordings_by_user.get(user_id, []))
+    )
+
+
+class TestDiscoveryMechanismUnion:
+    """An admin turns on any mix of the three mechanisms and gets the union, each
+    one walking its own cursor in turn."""
+
+    def _documents(self, connector: ZoomConnector) -> list[Document]:
+        outputs = load_everything_from_checkpoint_connector(
+            connector, 0, _FULL_HISTORY_END
+        )
+        assert outputs[-1].next_checkpoint.has_more is False
+        return [
+            item
+            for output in outputs
+            for item in output.items
+            if isinstance(item, Document)
+        ]
+
+    def test_a_host_allowlist_indexes_that_hosts_sessions(self) -> None:
+        connector, mock_client = _make_connector(
+            meeting_ids=[], host_emails=["host@example.com"]
+        )
+        _configure_happy_path(mock_client)
+        _configure_user_recordings(
+            mock_client,
+            {
+                "host-user": [
+                    _recording("uuid-town-hall", topic="Town Hall"),
+                    _recording("uuid-webinar", topic="Launch", recording_type="5"),
+                ]
+            },
+        )
+
+        docs = self._documents(connector)
+
+        assert [d.id for d in docs] == [
+            "ZOOM_MEETING_uuid-town-hall",
+            "ZOOM_WEBINAR_uuid-webinar",
+        ]
+        assert [d.metadata["session_type"] for d in docs] == ["meeting", "webinar"]
+        # The listing already named both sessions, so neither details endpoint —
+        # nor the age cap each one carries — is ever reached.
+        assert [d.semantic_identifier for d in docs] == ["Town Hall", "Launch"]
+        mock_client.get_past_meeting_details.assert_not_called()
+        mock_client.get_webinar_details.assert_not_called()
+
+    def test_a_group_indexes_every_members_sessions(self) -> None:
+        connector, mock_client = _make_connector(meeting_ids=[], group_id="group-1")
+        _configure_happy_path(mock_client)
+        _configure_user_recordings(
+            mock_client, {"member-user": [_recording("uuid-standup")]}
+        )
+
+        docs = self._documents(connector)
+
+        assert [d.id for d in docs] == ["ZOOM_MEETING_uuid-standup"]
+        mock_client.list_group_members.assert_called_once_with(
+            "group-1", page_token=None
+        )
+
+    def test_all_three_mechanisms_union_into_one_run(self) -> None:
+        connector, mock_client = _make_connector(
+            meeting_ids=["111"],
+            host_emails=["host@example.com"],
+            group_id="group-1",
+        )
+        _configure_happy_path(mock_client)
+        _configure_user_recordings(
+            mock_client,
+            {
+                "host-user": [_recording("uuid-host")],
+                "member-user": [_recording("uuid-member")],
+            },
+        )
+
+        docs = self._documents(connector)
+
+        assert [d.id for d in docs] == [
+            "ZOOM_MEETING_uuid-111",
+            "ZOOM_MEETING_uuid-host",
+            "ZOOM_MEETING_uuid-member",
+        ]
+
+    def test_an_occurrence_two_mechanisms_both_reach_keeps_one_identity(self) -> None:
+        # Nothing dedupes across mechanisms, because a document is keyed by its
+        # occurrence uuid and the upsert makes the second copy a no-op.
+        connector, mock_client = _make_connector(
+            meeting_ids=[], host_emails=["host@example.com"], group_id="group-1"
+        )
+        _configure_happy_path(mock_client)
+        _configure_user_recordings(
+            mock_client,
+            {
+                "host-user": [_recording("uuid-shared")],
+                "member-user": [_recording("uuid-shared")],
+            },
+        )
+
+        docs = self._documents(connector)
+
+        assert [d.id for d in docs] == [
+            "ZOOM_MEETING_uuid-shared",
+            "ZOOM_MEETING_uuid-shared",
+        ]
+
+    def test_a_mechanism_that_finds_nothing_does_not_stall_the_others(self) -> None:
+        connector, mock_client = _make_connector(
+            meeting_ids=[], host_emails=["host@example.com"], group_id="group-1"
+        )
+        _configure_happy_path(mock_client)
+        _configure_user_recordings(
+            mock_client, {"member-user": [_recording("uuid-member")]}
+        )
+
+        docs = self._documents(connector)
+
+        assert [d.id for d in docs] == ["ZOOM_MEETING_uuid-member"]
+
+    def test_a_run_resumes_mid_group_from_a_serialized_checkpoint(self) -> None:
+        connector, mock_client = _make_connector(meeting_ids=[], group_id="group-1")
+        _configure_happy_path(mock_client)
+        _configure_user_recordings(
+            mock_client, {"member-user": [_recording("uuid-standup")]}
+        )
+
+        checkpoint = connector.build_dummy_checkpoint()
+        generator = connector.load_from_checkpoint(0, _FULL_HISTORY_END, checkpoint)
+        try:
+            while True:
+                next(generator)
+        except StopIteration as stop:
+            checkpoint = stop.value
+        restored = connector.validate_checkpoint_json(checkpoint.model_dump_json())
+
+        outputs = load_everything_from_checkpoint_connector_from_checkpoint(
+            connector, 0, _FULL_HISTORY_END, restored
+        )
+        docs = [
+            item
+            for output in outputs
+            for item in output.items
+            if isinstance(item, Document)
+        ]
+
+        assert [d.id for d in docs] == ["ZOOM_MEETING_uuid-standup"]
+        assert outputs[-1].next_checkpoint.has_more is False
