@@ -164,6 +164,10 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.blob.connector",
         class_name="BlobStorageConnector",
     ),
+    DocumentSource.RUSTFS: ConnectorMapping(
+        module_path="onyx.connectors.blob.connector",
+        class_name="BlobStorageConnector",
+    ),
     DocumentSource.R2: ConnectorMapping(
         module_path="onyx.connectors.blob.connector",
         class_name="BlobStorageConnector",

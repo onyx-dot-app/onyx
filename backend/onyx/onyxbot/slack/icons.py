@@ -45,6 +45,7 @@ _SOURCE_IMAGE_FILENAMES: Mapping[DocumentSource, str] = {
     DocumentSource.WIKIPEDIA: "Wikipedia.png",
     DocumentSource.ASANA: "Asana.png",
     DocumentSource.S3: "S3.png",
+    DocumentSource.RUSTFS: "S3.png",
     DocumentSource.R2: "R2.png",
     DocumentSource.GOOGLE_CLOUD_STORAGE: "GoogleCloudStorage.png",
     DocumentSource.OCI_STORAGE: "OCI.png",

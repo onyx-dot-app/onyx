@@ -285,6 +285,7 @@ class DocumentSource(str, Enum):
     WIKIPEDIA = "wikipedia"
     ASANA = "asana"
     S3 = "s3"
+    RUSTFS = "rustfs"
     R2 = "r2"
     GOOGLE_CLOUD_STORAGE = "google_cloud_storage"
     OCI_STORAGE = "oci_storage"
@@ -342,6 +343,7 @@ class NotificationType(str, Enum):
 class BlobType(str, Enum):
     R2 = "r2"
     S3 = "s3"
+    RUSTFS = "rustfs"
     GOOGLE_CLOUD_STORAGE = "google_cloud_storage"
     OCI_STORAGE = "oci_storage"
 
@@ -806,6 +808,7 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.WIKIPEDIA: "Encyclopedia articles",
     DocumentSource.ASANA: "Tasks and project management",
     DocumentSource.S3: "Cloud-stored files and objects",
+    DocumentSource.RUSTFS: "Cloud-stored files and objects",
     DocumentSource.R2: "Cloud-stored files and objects",
     DocumentSource.GOOGLE_CLOUD_STORAGE: "Cloud-stored files and objects",
     DocumentSource.OCI_STORAGE: "Cloud-stored files and objects",

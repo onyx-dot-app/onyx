@@ -205,6 +205,11 @@ export interface S3CredentialJson {
   aws_role_arn?: string;
 }
 
+export interface RustFSCredentialJson {
+  access_key: string;
+  secret_key: string;
+}
+
 export interface GCSCredentialJson {
   access_key_id: string;
   secret_access_key: string;
@@ -475,6 +480,10 @@ export const credentialTemplates: Record<ValidSources, any> = {
       },
     ],
   } as CredentialTemplateWithAuth<S3CredentialJson>,
+  rustfs: {
+    access_key: "",
+    secret_key: "",
+  } as RustFSCredentialJson,
   r2: {
     account_id: "",
     r2_access_key_id: "",
@@ -668,6 +677,10 @@ export const credentialDisplayNames: Record<string, string> = {
   aws_secret_access_key: "AWS Secret Access Key",
   aws_role_arn: "AWS Role ARN",
   authentication_method: "Authentication Method",
+
+  // RustFS
+  access_key: "RustFS Access Key",
+  secret_key: "RustFS Secret Key",
 
   // GCS
   access_key_id: "GCS Access Key ID",
