@@ -9,7 +9,7 @@ from onyx.connectors.exceptions import (
 )
 from onyx.connectors.models import ConnectorFailure, Document
 from onyx.connectors.zoom.client import ZoomClient
-from onyx.connectors.zoom.models import ZoomPastMeetingDetails, ZoomTranscript
+from onyx.connectors.zoom.models import ZoomSessionDetails, ZoomTranscript
 from onyx.connectors.zoom.recordings.models import OccurrenceWork, ZoomSessionType
 from onyx.connectors.zoom.recordings.processing import (
     process_occurrence,
@@ -47,7 +47,7 @@ def _client_with_transcript() -> MagicMock:
         download_url="https://zoom.example/transcript.vtt"
     )
     client.download_transcript_vtt.return_value = _SAMPLE_VTT
-    client.get_past_meeting_details.return_value = ZoomPastMeetingDetails(
+    client.get_past_meeting_details.return_value = ZoomSessionDetails(
         topic="Weekly Sync"
     )
     return client
@@ -201,7 +201,7 @@ class TestProcessOccurrence:
 
     def test_details_fill_in_a_timestamp_discovery_did_not_have(self) -> None:
         client = _client_with_transcript()
-        client.get_past_meeting_details.return_value = ZoomPastMeetingDetails(
+        client.get_past_meeting_details.return_value = ZoomSessionDetails(
             topic="Weekly Sync", start_time="2026-01-15T10:00:00Z"
         )
 
@@ -214,7 +214,7 @@ class TestProcessOccurrence:
 
     def test_empty_prefetched_topic_still_asks_for_details(self) -> None:
         client = _client_with_transcript()
-        client.get_past_meeting_details.return_value = ZoomPastMeetingDetails(
+        client.get_past_meeting_details.return_value = ZoomSessionDetails(
             topic="Weekly Sync", start_time="2026-01-15T10:00:00Z"
         )
 
