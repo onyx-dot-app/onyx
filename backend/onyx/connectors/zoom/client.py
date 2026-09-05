@@ -10,6 +10,7 @@ from urllib3.util import Retry
 from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS
 from onyx.connectors.exceptions import (
     CredentialExpiredError,
+    CredentialInvalidError,
     InsufficientPermissionsError,
 )
 from onyx.connectors.zoom.models import (
@@ -108,9 +109,16 @@ class ZoomClient:
             auth=(self.client_id, self.client_secret),
             timeout=REQUEST_TIMEOUT_SECONDS,
         )
+        # A Server-to-Server client secret never expires, so this 401 is invalid,
+        # not expired. The 401 in _send_authorized is a real token expiry.
         if response.status_code == 401:
-            raise CredentialExpiredError(
+            raise CredentialInvalidError(
                 "Zoom rejected the Server-to-Server OAuth client credentials"
+            )
+        if response.status_code == 403:
+            raise InsufficientPermissionsError(
+                "Zoom refused to issue a token for this app — check that it is "
+                "activated and its scopes are granted"
             )
         _raise_for_zoom_error(response, "the OAuth token request")
 

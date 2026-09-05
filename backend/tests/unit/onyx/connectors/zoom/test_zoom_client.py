@@ -8,6 +8,7 @@ from requests.adapters import HTTPAdapter
 
 from onyx.connectors.exceptions import (
     CredentialExpiredError,
+    CredentialInvalidError,
     InsufficientPermissionsError,
 )
 from onyx.connectors.zoom.client import (
@@ -109,12 +110,20 @@ class TestAccessToken:
         assert client._get_access_token() == "t2"
         assert post.call_count == 2
 
-    def test_rejected_credentials_raise_a_typed_error(self) -> None:
+    @pytest.mark.parametrize(
+        "status, expected",
+        [(401, CredentialInvalidError), (403, InsufficientPermissionsError)],
+    )
+    def test_a_refused_token_raises_a_typed_error(
+        self, status: int, expected: type[Exception]
+    ) -> None:
+        # An untyped error here is retried forever instead of telling the admin
+        # the credentials are wrong.
         client = ZoomClient(account_id="a", client_id="c", client_secret="s")
         client._session = MagicMock()
-        client._session.post.return_value = _response(401)
+        client._session.post.return_value = _response(status)
 
-        with pytest.raises(CredentialExpiredError):
+        with pytest.raises(expected):
             client._get_access_token()
 
 
