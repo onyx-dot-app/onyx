@@ -1379,6 +1379,16 @@ JIRA_SLIM_PAGE_SIZE = int(os.environ.get("JIRA_SLIM_PAGE_SIZE", 500))
 
 GONG_CONNECTOR_START_TIME = os.environ.get("GONG_CONNECTOR_START_TIME")
 
+# An occurrence is picked up by when the meeting ran, but its transcript
+# lands later, so each poll reaches back this far to catch ones that were
+# still processing. Zoom publishes no maximum for that lag, so raise this if
+# a deployment sees transcripts arrive later than the default covers.
+# Clamped at zero: a negative value would narrow the poll window instead of
+# widening it, quietly skipping occurrences the connector should have indexed.
+ZOOM_TRANSCRIPT_LAG_BUFFER_HOURS = max(
+    0, int(os.environ.get("ZOOM_TRANSCRIPT_LAG_BUFFER_HOURS") or 72)
+)
+
 GITHUB_CONNECTOR_BASE_URL = os.environ.get("GITHUB_CONNECTOR_BASE_URL") or None
 
 GITLAB_CONNECTOR_INCLUDE_CODE_FILES = (

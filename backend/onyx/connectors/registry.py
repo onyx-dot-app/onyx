@@ -192,6 +192,10 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.fireflies.connector",
         class_name="FirefliesConnector",
     ),
+    DocumentSource.ZOOM: ConnectorMapping(
+        module_path="onyx.connectors.zoom.connector",
+        class_name="ZoomConnector",
+    ),
     DocumentSource.EGNYTE: ConnectorMapping(
         module_path="onyx.connectors.egnyte.connector",
         class_name="EgnyteConnector",
