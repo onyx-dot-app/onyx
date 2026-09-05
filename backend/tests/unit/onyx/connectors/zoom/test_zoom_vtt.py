@@ -1,3 +1,5 @@
+import pytest
+
 from onyx.connectors.zoom.recordings.vtt import parse_vtt_transcript
 
 # A real Zoom audio_transcript.vtt shape, not an invented one.
@@ -134,3 +136,30 @@ class TestParseVttDecodesCharacterReferences:
         )
         # Guards the order: decoding first would read this as a tag.
         assert parse_vtt_transcript(vtt) == "<v Jane>hello</v>"
+
+
+class TestParseVttKeepsCuesNamedLikeReservedWords:
+    """A cue identifier is free text, so matching these words too loosely throws
+    away the block and the speech under it."""
+
+    @pytest.mark.parametrize(
+        "identifier", ["1", "NOTE-1", "REGION:2", "STYLE 3", "note-x", "NOTES"]
+    )
+    def test_identifier_starting_with_a_reserved_word_is_still_a_cue(
+        self, identifier: str
+    ) -> None:
+        vtt = (
+            f"WEBVTT\n\n{identifier}\n"
+            "00:00:01.000 --> 00:00:02.000\nJane: real speech\n"
+        )
+        assert parse_vtt_transcript(vtt) == "Jane: real speech"
+
+    @pytest.mark.parametrize(
+        "block", ["NOTE a comment", "NOTE", "STYLE", "REGION", "WEBVTT - title"]
+    )
+    def test_genuine_non_cue_blocks_are_still_dropped(self, block: str) -> None:
+        vtt = (
+            f"WEBVTT\n\n{block}\npayload\n\n"
+            "1\n00:00:01.000 --> 00:00:02.000\nJane: kept\n"
+        )
+        assert parse_vtt_transcript(vtt) == "Jane: kept"

@@ -17,23 +17,19 @@ from onyx.connectors.zoom.models import (
     ZoomPastMeetingDetails,
     ZoomTranscript,
 )
-from onyx.utils.logger import setup_logger
 from onyx.utils.url import SSRFException, validate_outbound_http_url
-
-logger = setup_logger()
 
 _OAUTH_TOKEN_URL = "https://zoom.us/oauth/token"
 _API_BASE_URL = "https://api.zoom.us/v2"
 
 _ZOOM_HOST = "zoom.us"
 
-_TOKEN_REFRESH_MARGIN_SECONDS = 60  # Zoom's own tokens last about an hour.
+_TOKEN_REFRESH_MARGIN_SECONDS = 60
 
 
 def _encode_meeting_identifier(identifier: str) -> str:
-    """Zoom's docs require encoding a UUID twice when it starts with "/" or
-    contains "//", because something in front of their API decodes one layer
-    before the request arrives."""
+    """Zoom requires a UUID to be encoded twice when it starts with "/" or
+    contains "//"."""
     encoded = quote(identifier, safe="")
     if identifier.startswith("/") or "//" in identifier:
         encoded = quote(encoded, safe="")
@@ -41,10 +37,9 @@ def _encode_meeting_identifier(identifier: str) -> str:
 
 
 def _reject_non_zoom_download_url(download_url: str) -> None:
-    """Zoom supplies this URL, but the download carries the account-wide bearer
-    token, so a wrong or tampered one would hand that credential to whatever
-    host it names. requests drops the header on a cross-host redirect, so only
-    the first host needs checking.
+    """The download sends the account-wide bearer token, so a tampered URL would
+    hand that credential to whatever host it names. Only the first host needs
+    checking, because requests drops the header on a cross-host redirect.
     """
     host = (urlparse(download_url).hostname or "").rstrip(".").lower()
     if host != _ZOOM_HOST and not host.endswith(f".{_ZOOM_HOST}"):
@@ -56,6 +51,27 @@ def _reject_non_zoom_download_url(download_url: str) -> None:
         validate_outbound_http_url(download_url, https_only=True)
     except (SSRFException, ValueError) as e:
         raise ValueError(f"Unsafe Zoom transcript download URL: {e}") from e
+
+
+def _raise_for_zoom_error(response: requests.Response, description: str) -> None:
+    """requests' own message stops at "400 Client Error" and drops Zoom's
+    explanation, which is where codes like 12702 (meeting over a year old) live.
+    """
+    if response.ok:
+        return
+
+    try:
+        body = response.json()
+    except ValueError:
+        body = None
+
+    detail = ""
+    if isinstance(body, dict) and body.get("message"):
+        detail = f": {body['message']} (Zoom code {body.get('code')})"
+
+    raise requests.HTTPError(
+        f"{response.status_code} from {description}{detail}", response=response
+    )
 
 
 class ZoomClient:
@@ -74,10 +90,12 @@ class ZoomClient:
             status_forcelist=[429, 500, 502, 503, 504],
             allowed_methods=["GET", "POST"],
         )
-        self._session.mount(_API_BASE_URL, HTTPAdapter(max_retries=retry_strategy))
+        # Mount on the scheme, not per URL: the API, token endpoint and download
+        # are three different Zoom hosts, and a missed one silently gets no retries.
+        self._session.mount("https://", HTTPAdapter(max_retries=retry_strategy))
 
     def _fetch_access_token(self) -> None:
-        response = requests.post(
+        response = self._session.post(
             _OAUTH_TOKEN_URL,
             params={
                 "grant_type": "account_credentials",
@@ -90,7 +108,7 @@ class ZoomClient:
             raise CredentialExpiredError(
                 "Zoom rejected the Server-to-Server OAuth client credentials"
             )
-        response.raise_for_status()
+        _raise_for_zoom_error(response, "the OAuth token request")
 
         token_data = response.json()
         self._access_token = token_data["access_token"]
@@ -110,11 +128,10 @@ class ZoomClient:
     def _send_authorized(
         self, description: str, send: Callable[[str], requests.Response]
     ) -> requests.Response:
-        """Zoom can reject a token before the expiry it gave us, so try a
-        fresh one before reporting a 401. CredentialExpiredError cancels the
-        indexing attempt, and five of them in a row mark the connector
-        invalid and email the admins. Retrying is safe because a 401 is
-        refused before the request does anything.
+        """Zoom sometimes rejects a token before the expiry it gave us, so retry
+        once with a fresh one. Reporting the 401 instead raises
+        CredentialExpiredError, and five of those in a row mark the connector
+        invalid and email the admins.
         """
         response = send(self._get_access_token())
         if response.status_code == 401:
@@ -147,16 +164,17 @@ class ZoomClient:
         return self._send_authorized(endpoint, send)
 
     def get_meeting_transcript(self, meeting_identifier: str) -> ZoomTranscript | None:
-        """This endpoint takes a meeting ID, a webinar ID, or a single
-        occurrence's UUID. A meeting with no recording is a normal skip, not a
-        failure, so that comes back as None rather than raising."""
+        """Takes a meeting ID, a webinar ID, or one occurrence's UUID. Zoom has
+        no webinar transcript endpoint, so webinars come through here too.
+        Returns None when the session was never recorded, which is a normal skip.
+        """
         response = self._request(
             "GET",
             f"/meetings/{_encode_meeting_identifier(meeting_identifier)}/transcript",
         )
         if response.status_code == 404:
             return None
-        response.raise_for_status()
+        _raise_for_zoom_error(response, f"the transcript for {meeting_identifier}")
         return ZoomTranscript.model_validate(response.json())
 
     def get_past_meeting_details(
@@ -167,22 +185,25 @@ class ZoomClient:
         )
         if response.status_code == 404:
             return None
-        response.raise_for_status()
+        _raise_for_zoom_error(response, f"the details for {meeting_identifier}")
         return ZoomPastMeetingDetails.model_validate(response.json())
 
     def list_past_meeting_occurrences(
         self, meeting_id: str
     ) -> list[ZoomMeetingOccurrence]:
-        """A recurring meeting records each run separately, and passing the
-        bare meeting_id to the transcript endpoint only ever reaches the
-        latest one. Call this first to get every past occurrence's UUID."""
+        """A recurring meeting records each run separately, and the bare
+        meeting_id only ever reaches the latest one, so call this first for every
+        occurrence's UUID. This endpoint is not paginated. Zoom returns nothing
+        for meetings older than 15 months, silently and with no way to detect it,
+        so scope by host or group to reach further back.
+        """
         response = self._request(
             "GET",
             f"/past_meetings/{_encode_meeting_identifier(meeting_id)}/instances",
         )
         if response.status_code == 404:
             return []
-        response.raise_for_status()
+        _raise_for_zoom_error(response, f"the occurrences for {meeting_id}")
         occurrences = response.json().get("meetings", [])
         return [ZoomMeetingOccurrence.model_validate(o) for o in occurrences]
 
@@ -190,12 +211,12 @@ class ZoomClient:
         _reject_non_zoom_download_url(download_url)
 
         def send(token: str) -> requests.Response:
-            return requests.get(
+            return self._session.get(
                 download_url,
                 headers={"Authorization": f"Bearer {token}"},
                 timeout=REQUEST_TIMEOUT_SECONDS,
             )
 
         response = self._send_authorized("the transcript download", send)
-        response.raise_for_status()
+        _raise_for_zoom_error(response, "the transcript download")
         return response.text
