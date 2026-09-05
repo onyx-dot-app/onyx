@@ -1054,7 +1054,7 @@ def _verify_indexing_completeness(
             f"Updatable IDs: {updatable_ids}, "
             f"Returned IDs: {all_returned_doc_ids}. "
             f"This should never happen. "
-            f"This occured for document index {document_index_name}"
+            f"This occurred for document index {document_index_name}"
         )
 
 
