@@ -13,6 +13,8 @@ from onyx.file_processing.enums import HtmlBasedConnectorTransformLinksStrategy
 from onyx.prompts.image_analysis import (
     DEFAULT_IMAGE_SUMMARIZATION_SYSTEM_PROMPT,
     DEFAULT_IMAGE_SUMMARIZATION_USER_PROMPT,
+    DEFAULT_SCANNED_DOCUMENT_SYSTEM_PROMPT,
+    DEFAULT_SCANNED_DOCUMENT_USER_PROMPT,
 )
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
@@ -2003,6 +2005,17 @@ IMAGE_SUMMARIZATION_SYSTEM_PROMPT = os.environ.get(
 IMAGE_SUMMARIZATION_USER_PROMPT = os.environ.get(
     "IMAGE_SUMMARIZATION_USER_PROMPT",
     DEFAULT_IMAGE_SUMMARIZATION_USER_PROMPT,
+)
+
+# Scanned document OCR prompts - used when a document has no text content, only images
+SCANNED_DOCUMENT_SYSTEM_PROMPT = os.environ.get(
+    "SCANNED_DOCUMENT_SYSTEM_PROMPT",
+    DEFAULT_SCANNED_DOCUMENT_SYSTEM_PROMPT,
+)
+# The user prompt for scanned document OCR - the image filename will be automatically prepended
+SCANNED_DOCUMENT_USER_PROMPT = os.environ.get(
+    "SCANNED_DOCUMENT_USER_PROMPT",
+    DEFAULT_SCANNED_DOCUMENT_USER_PROMPT,
 )
 
 # Knowledge Graph Read Only User Configuration
