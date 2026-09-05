@@ -1,4 +1,5 @@
 import time
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
 import pytest
@@ -36,6 +37,17 @@ _ZOOM_CREDS = {
 
 _FULL_HISTORY_END = time.time()
 
+
+def _days_ago(days: int) -> str:
+    # Discovery drops any occurrence outside the poll window, so the timestamps
+    # have to come off the same clock as _FULL_HISTORY_END. A pinned calendar
+    # date silently empties every result set on a machine whose clock is older.
+    moment = datetime.fromtimestamp(_FULL_HISTORY_END, tz=timezone.utc) - timedelta(
+        days=days
+    )
+    return moment.isoformat()
+
+
 _SAMPLE_VTT = """WEBVTT
 
 1
@@ -65,9 +77,7 @@ def _make_connector(
 
 def _configure_happy_path(mock_client: MagicMock) -> None:
     mock_client.list_past_meeting_occurrences.side_effect = lambda session_id: [
-        ZoomMeetingOccurrence(
-            uuid=f"uuid-{session_id}", start_time="2026-01-15T10:00:00Z"
-        )
+        ZoomMeetingOccurrence(uuid=f"uuid-{session_id}", start_time=_days_ago(7))
     ]
     mock_client.get_meeting_transcript.side_effect = lambda uuid: ZoomTranscript(
         download_url=f"https://zoom.example/{uuid}.vtt"
@@ -160,9 +170,9 @@ class TestZoomConnectorCheckpoint:
         _configure_happy_path(mock_client)
         mock_client.list_past_meeting_occurrences.side_effect = None
         mock_client.list_past_meeting_occurrences.return_value = [
-            ZoomMeetingOccurrence(uuid="uuid-1", start_time="2026-01-01T10:00:00Z"),
-            ZoomMeetingOccurrence(uuid="uuid-2", start_time="2026-01-08T10:00:00Z"),
-            ZoomMeetingOccurrence(uuid="uuid-3", start_time="2026-01-15T10:00:00Z"),
+            ZoomMeetingOccurrence(uuid="uuid-1", start_time=_days_ago(21)),
+            ZoomMeetingOccurrence(uuid="uuid-2", start_time=_days_ago(14)),
+            ZoomMeetingOccurrence(uuid="uuid-3", start_time=_days_ago(7)),
         ]
 
         outputs = load_everything_from_checkpoint_connector(
@@ -187,9 +197,9 @@ class TestZoomConnectorCheckpoint:
         _configure_happy_path(mock_client)
         mock_client.list_past_meeting_occurrences.side_effect = None
         mock_client.list_past_meeting_occurrences.return_value = [
-            ZoomMeetingOccurrence(uuid="uuid-1", start_time="2026-01-01T10:00:00Z"),
-            ZoomMeetingOccurrence(uuid="uuid-2", start_time="2026-01-08T10:00:00Z"),
-            ZoomMeetingOccurrence(uuid="uuid-3", start_time="2026-01-15T10:00:00Z"),
+            ZoomMeetingOccurrence(uuid="uuid-1", start_time=_days_ago(21)),
+            ZoomMeetingOccurrence(uuid="uuid-2", start_time=_days_ago(14)),
+            ZoomMeetingOccurrence(uuid="uuid-3", start_time=_days_ago(7)),
         ]
 
         def _transcript(uuid: str) -> ZoomTranscript:
@@ -224,7 +234,7 @@ class TestZoomConnectorCheckpoint:
                 raise RuntimeError("boom")
             return [
                 ZoomMeetingOccurrence(
-                    uuid=f"uuid-{session_id}", start_time="2026-01-15T10:00:00Z"
+                    uuid=f"uuid-{session_id}", start_time=_days_ago(7)
                 )
             ]
 

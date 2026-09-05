@@ -175,7 +175,6 @@ class TestProcessOccurrence:
 
         doc = items[0]
         assert isinstance(doc, Document)
-        # Don't discard a timestamp from a details call we already paid for.
         assert doc.doc_created_at is not None
         assert doc.doc_updated_at == doc.doc_created_at
 
