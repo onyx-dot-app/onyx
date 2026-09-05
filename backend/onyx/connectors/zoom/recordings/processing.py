@@ -117,7 +117,9 @@ def process_occurrence(
         )
         return
 
-    topic = work.topic
+    # Zoom caps the details endpoint below at one year, so a title taken from
+    # here is the only one an older meeting gets.
+    topic = work.topic or transcript.meeting_topic
     started_at = work.start_time
     if not topic or not started_at:
         try:

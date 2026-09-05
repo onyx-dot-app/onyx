@@ -306,3 +306,53 @@ class TestSystemicFailuresStopTheRun:
 
         assert len(items) == 1
         assert isinstance(items[0], ConnectorFailure)
+
+
+class TestTopicComesFromTheTranscript:
+    """The transcript already names the session, so the details endpoint is a
+    second call for a field we hold, and Zoom caps it at one year."""
+
+    def test_transcript_topic_is_used_without_a_details_call(self) -> None:
+        client = _client_with_transcript()
+        client.get_meeting_transcript.return_value = ZoomTranscript(
+            download_url="https://zoom.example/transcript.vtt",
+            meeting_topic="Quarterly Review",
+        )
+
+        docs = _run(client, _work())
+
+        assert isinstance(docs[0], Document)
+        assert docs[0].semantic_identifier == "Quarterly Review"
+        client.get_past_meeting_details.assert_not_called()
+
+    def test_details_still_fill_in_when_the_transcript_has_no_topic(self) -> None:
+        client = _client_with_transcript()
+
+        docs = _run(client, _work())
+
+        assert isinstance(docs[0], Document)
+        assert docs[0].semantic_identifier == "Weekly Sync"
+        client.get_past_meeting_details.assert_called_once_with("uuid-abc")
+
+    def test_discovery_topic_still_wins_over_the_transcript(self) -> None:
+        client = _client_with_transcript()
+        client.get_meeting_transcript.return_value = ZoomTranscript(
+            download_url="https://zoom.example/transcript.vtt",
+            meeting_topic="Quarterly Review",
+        )
+
+        docs = _run(client, _work(topic="From Discovery"))
+
+        assert isinstance(docs[0], Document)
+        assert docs[0].semantic_identifier == "From Discovery"
+
+    def test_a_missing_start_time_still_costs_a_details_call(self) -> None:
+        client = _client_with_transcript()
+        client.get_meeting_transcript.return_value = ZoomTranscript(
+            download_url="https://zoom.example/transcript.vtt",
+            meeting_topic="Quarterly Review",
+        )
+
+        _run(client, _work(start_time=None))
+
+        client.get_past_meeting_details.assert_called_once_with("uuid-abc")
