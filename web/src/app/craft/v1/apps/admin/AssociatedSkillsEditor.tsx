@@ -6,6 +6,7 @@ import {
   Button,
   Card,
   InputTypeIn,
+  LineItemButton,
   Popover,
   Tag,
   Text,
@@ -15,7 +16,6 @@ import { SvgGithub } from "@opal/logos";
 import useUserSkills from "@/hooks/useUserSkills";
 import type { Skill } from "@/lib/skills/types";
 import type { ExternalAppAdminResponse } from "@/app/craft/v1/apps/registry";
-import LineItem from "@/refresh-components/buttons/LineItem";
 
 interface AssociatedSkillsEditorProps {
   app: ExternalAppAdminResponse;
@@ -157,12 +157,17 @@ export default function AssociatedSkillsEditor({
                     selectableSkills.map((skill) => {
                       const disabledReason = unavailableReason(skill);
                       return (
-                        <LineItem
+                        <LineItemButton
                           key={skill.id}
+                          sizePreset="main-ui"
+                          variant="section"
+                          title={skill.name}
                           onClick={() => select(skill)}
                           description={disabledReason ?? skill.description}
                           disabled={disabledReason !== null}
-                          selected={selectedIds.has(skill.id)}
+                          state={
+                            selectedIds.has(skill.id) ? "selected" : "empty"
+                          }
                           rightChildren={
                             selectedIds.has(skill.id) ? (
                               <SvgCheck className="size-4 stroke-action-selection-05" />
@@ -171,9 +176,7 @@ export default function AssociatedSkillsEditor({
                           aria-label={t("associateAriaLabel", {
                             name: skill.name,
                           })}
-                        >
-                          {skill.name}
-                        </LineItem>
+                        />
                       );
                     })
                   )}
@@ -214,36 +217,36 @@ export default function AssociatedSkillsEditor({
             </Popover.Trigger>
             <Popover.Content align="end" sideOffset={4} width="lg">
               <Popover.Menu>
-                <LineItem
+                <LineItemButton
+                  sizePreset="main-ui"
+                  variant="section"
                   icon={SvgEdit}
+                  title={t("create.scratch.label")}
                   onClick={() => {
                     setCreateOpen(false);
                     onCreateSkill();
                   }}
                   description={t("create.scratch.description")}
-                  wrapDescription
-                >
-                  {t("create.scratch.label")}
-                </LineItem>
-                <LineItem
+                />
+                <LineItemButton
+                  sizePreset="main-ui"
+                  variant="section"
                   icon={SvgUploadCloud}
+                  title={t("create.upload.label")}
                   onClick={() => {
                     setCreateOpen(false);
                     onUploadSkill();
                   }}
                   description={t("create.upload.description")}
-                  wrapDescription
-                >
-                  {t("create.upload.label")}
-                </LineItem>
-                <LineItem
+                />
+                <LineItemButton
+                  sizePreset="main-ui"
+                  variant="section"
                   icon={SvgGithub}
+                  title={t("create.github.label")}
                   disabled
                   description={t("create.github.description")}
-                  wrapDescription
-                >
-                  {t("create.github.label")}
-                </LineItem>
+                />
               </Popover.Menu>
             </Popover.Content>
           </Popover>
