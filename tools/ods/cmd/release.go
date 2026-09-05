@@ -62,6 +62,7 @@ Example usage:
 	cmd.Flags().BoolVar(&check, "check", false, "Validate an existing release tag (named by --ref, or pointing at it) instead of cutting one")
 	cmd.Flags().StringVar(&ref, "ref", "HEAD", "Tag to check, or a commit-ish that a single release tag points at")
 
+	cmd.AddCommand(NewReleaseBetaCommand())
 	cmd.AddCommand(NewReleaseOpalCommand())
 	cmd.AddCommand(NewReleaseTFProviderCommand())
 

@@ -64,6 +64,9 @@
       "addConnectors": {
         "label": "إضافة موصّلات"
       },
+      "authenticate": {
+        "label": "مصادقة"
+      },
       "configure": {
         "tooltip": "تكوين"
       },
@@ -653,6 +656,35 @@
       "showEnabledButton": {
         "ariaLabel": "عرض الأدوات المفعّلة فقط",
         "tooltip": "عرض المفعّلة فقط"
+      }
+    },
+    "toolNames": {
+      "internalSearch": {
+        "label": "البحث الداخلي"
+      },
+      "imageGeneration": {
+        "label": "توليد الصور"
+      },
+      "webSearch": {
+        "label": "البحث في الويب"
+      },
+      "knowledgeGraph": {
+        "label": "البحث في مخطط المعرفة"
+      },
+      "openUrl": {
+        "label": "فتح رابط"
+      },
+      "codeInterpreter": {
+        "label": "مفسر الأكواد"
+      },
+      "fileReader": {
+        "label": "قارئ الملفات"
+      },
+      "addMemory": {
+        "label": "إضافة إلى الذاكرة"
+      },
+      "codingAgent": {
+        "label": "وكيل البرمجة"
       }
     },
     "toolsPopover": {
@@ -6070,6 +6102,10 @@
         },
         "section": {
           "title": "المصادقة"
+        },
+        "subjectRelink": {
+          "description": "يتيح للمستخدمين الذين أصدر لهم الموفر معرّف موضوع جديدًا تسجيل الدخول مجددًا إلى الحساب المرتبط ببريدهم الإلكتروني. فعّله فقط أثناء تغيير عميل OIDC أو تسجيل التطبيق.",
+          "title": "إعادة ربط الحسابات بعد تغيير عميل OIDC"
         }
       },
       "jwt": {

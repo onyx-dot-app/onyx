@@ -64,6 +64,9 @@
       "addConnectors": {
         "label": "Adicionar conectores"
       },
+      "authenticate": {
+        "label": "Autenticar"
+      },
       "configure": {
         "tooltip": "Configurar"
       },
@@ -653,6 +656,35 @@
       "showEnabledButton": {
         "ariaLabel": "Mostrar apenas as ferramentas ativadas",
         "tooltip": "Mostrar apenas as ativadas"
+      }
+    },
+    "toolNames": {
+      "internalSearch": {
+        "label": "Pesquisa interna"
+      },
+      "imageGeneration": {
+        "label": "Geração de imagens"
+      },
+      "webSearch": {
+        "label": "Pesquisa na web"
+      },
+      "knowledgeGraph": {
+        "label": "Pesquisa no grafo de conhecimento"
+      },
+      "openUrl": {
+        "label": "Abrir URL"
+      },
+      "codeInterpreter": {
+        "label": "Interpretador de código"
+      },
+      "fileReader": {
+        "label": "Leitor de arquivos"
+      },
+      "addMemory": {
+        "label": "Adicionar à memória"
+      },
+      "codingAgent": {
+        "label": "Agente de código"
       }
     },
     "toolsPopover": {
@@ -6070,6 +6102,10 @@
         },
         "section": {
           "title": "Autenticação"
+        },
+        "subjectRelink": {
+          "description": "Permite que usuários que receberam um novo ID de sujeito do provedor voltem a entrar na conta vinculada ao seu e-mail. Ative apenas durante a mudança do cliente OIDC ou do registro do aplicativo.",
+          "title": "Revincular contas após uma mudança de cliente OIDC"
         }
       },
       "jwt": {

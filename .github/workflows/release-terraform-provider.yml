@@ -26,8 +26,12 @@ on:
 permissions:
   contents: read
 
+# One group for every release, so two never push to the mirror at once. Each
+# run reads the mirror's main and commits onto it, so overlapping runs read the
+# same parent and the second atomic push is refused. Releases are manual and
+# take about a minute, so serialising them costs nothing.
 concurrency:
-  group: Release-Terraform-Provider-${{ github.ref_name }}
+  group: Release-Terraform-Provider
   cancel-in-progress: false
 
 env:
@@ -66,7 +70,10 @@ jobs:
         id: mirror-token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # ratchet:actions/create-github-app-token@v2
         with:
-          client-id: ${{ vars.TF_PROVIDER_RELEASE_APP_ID }}
+          # The App's Client ID (Iv23li...), not the numeric App ID. The action
+          # takes either through different inputs, and app-id is deprecated, so
+          # the variable is named for the one this passes.
+          client-id: ${{ vars.TF_PROVIDER_RELEASE_APP_CLIENT_ID }}
           private-key: ${{ secrets.TF_PROVIDER_RELEASE_APP_PRIVATE_KEY }}
           owner: onyx-dot-app
           repositories: terraform-provider-onyx

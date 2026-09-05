@@ -64,6 +64,9 @@
       "addConnectors": {
         "label": "コネクタを追加"
       },
+      "authenticate": {
+        "label": "認証"
+      },
       "configure": {
         "tooltip": "設定"
       },
@@ -653,6 +656,35 @@
       "showEnabledButton": {
         "ariaLabel": "有効なツールのみ表示",
         "tooltip": "有効なもののみ表示"
+      }
+    },
+    "toolNames": {
+      "internalSearch": {
+        "label": "内部検索"
+      },
+      "imageGeneration": {
+        "label": "画像生成"
+      },
+      "webSearch": {
+        "label": "ウェブ検索"
+      },
+      "knowledgeGraph": {
+        "label": "ナレッジグラフ検索"
+      },
+      "openUrl": {
+        "label": "URLを開く"
+      },
+      "codeInterpreter": {
+        "label": "コードインタープリター"
+      },
+      "fileReader": {
+        "label": "ファイルリーダー"
+      },
+      "addMemory": {
+        "label": "メモリに追加"
+      },
+      "codingAgent": {
+        "label": "コーディングエージェント"
       }
     },
     "toolsPopover": {
@@ -6070,6 +6102,10 @@
         },
         "section": {
           "title": "認証"
+        },
+        "subjectRelink": {
+          "description": "プロバイダーから新しいサブジェクト ID を発行されたユーザーが、メールアドレスに関連付けられたアカウントに再度サインインできるようにします。OIDC クライアントやアプリ登録の変更中のみ有効にしてください。",
+          "title": "OIDC クライアント変更後にアカウントを再リンク"
         }
       },
       "jwt": {

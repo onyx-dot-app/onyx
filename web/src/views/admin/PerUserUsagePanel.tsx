@@ -97,7 +97,12 @@ export default function PerUserUsagePanel({
       height="fit"
     >
       <Text font="heading-h3">{t("panel.title")}</Text>
-      <Text font="secondary-body" color="text-03">
+      {/* Holds the selected period, so visual tests mask it. */}
+      <Text
+        font="secondary-body"
+        color="text-03"
+        data-testid="usage-overview-period"
+      >
         {usage
           ? t("panel.description", {
               start: formatDate(usage.start),

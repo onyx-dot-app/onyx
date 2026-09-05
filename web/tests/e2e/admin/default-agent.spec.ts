@@ -4,6 +4,8 @@ import type { Page, Locator } from "@playwright/test";
 import { loginAs } from "@tests/e2e/utils/auth";
 import {
   TOOL_IDS,
+  TOOL_NAMES,
+  toolOption,
   waitForUnifiedGreeting,
   openActionManagement,
 } from "@tests/e2e/utils/tools";
@@ -643,17 +645,15 @@ test.describe("Chat Preferences Admin Page @exclusive", () => {
     console.log(`[toggle-all] Popover text: ${popoverText}`);
 
     // Verify at least Internal Search is visible (it should always be enabled)
-    await expect(page.locator(TOOL_IDS.searchOption)).toBeVisible({
+    await expect(toolOption(page, TOOL_NAMES.internalSearch)).toBeVisible({
       timeout: 10000,
     });
 
     // Check if other tools are visible (they might not be if there's a form state issue)
-    const webSearchVisible = await page
-      .locator(TOOL_IDS.webSearchOption)
+    const webSearchVisible = await toolOption(page, TOOL_NAMES.webSearch)
       .isVisible()
       .catch(() => false);
-    const imageGenVisible = await page
-      .locator(TOOL_IDS.imageGenerationOption)
+    const imageGenVisible = await toolOption(page, TOOL_NAMES.imageGeneration)
       .isVisible()
       .catch(() => false);
     console.log(

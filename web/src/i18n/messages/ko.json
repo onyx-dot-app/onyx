@@ -64,6 +64,9 @@
       "addConnectors": {
         "label": "커넥터 추가"
       },
+      "authenticate": {
+        "label": "인증"
+      },
       "configure": {
         "tooltip": "구성"
       },
@@ -653,6 +656,35 @@
       "showEnabledButton": {
         "ariaLabel": "활성화된 도구만 표시",
         "tooltip": "활성화된 항목만 표시"
+      }
+    },
+    "toolNames": {
+      "internalSearch": {
+        "label": "내부 검색"
+      },
+      "imageGeneration": {
+        "label": "이미지 생성"
+      },
+      "webSearch": {
+        "label": "웹 검색"
+      },
+      "knowledgeGraph": {
+        "label": "지식 그래프 검색"
+      },
+      "openUrl": {
+        "label": "URL 열기"
+      },
+      "codeInterpreter": {
+        "label": "코드 인터프리터"
+      },
+      "fileReader": {
+        "label": "파일 리더"
+      },
+      "addMemory": {
+        "label": "메모리에 추가"
+      },
+      "codingAgent": {
+        "label": "코딩 에이전트"
       }
     },
     "toolsPopover": {
@@ -6070,6 +6102,10 @@
         },
         "section": {
           "title": "인증"
+        },
+        "subjectRelink": {
+          "description": "제공자가 새 주체 ID를 발급한 사용자가 이메일에 연결된 계정으로 다시 로그인할 수 있게 합니다. OIDC 클라이언트 또는 앱 등록을 변경하는 동안에만 켜십시오.",
+          "title": "OIDC 클라이언트 변경 후 계정 다시 연결"
         }
       },
       "jwt": {

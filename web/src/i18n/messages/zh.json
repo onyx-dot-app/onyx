@@ -64,6 +64,9 @@
       "addConnectors": {
         "label": "添加连接器"
       },
+      "authenticate": {
+        "label": "身份验证"
+      },
       "configure": {
         "tooltip": "配置"
       },
@@ -653,6 +656,35 @@
       "showEnabledButton": {
         "ariaLabel": "仅显示已启用的工具",
         "tooltip": "仅显示已启用"
+      }
+    },
+    "toolNames": {
+      "internalSearch": {
+        "label": "内部搜索"
+      },
+      "imageGeneration": {
+        "label": "图像生成"
+      },
+      "webSearch": {
+        "label": "网络搜索"
+      },
+      "knowledgeGraph": {
+        "label": "知识图谱搜索"
+      },
+      "openUrl": {
+        "label": "打开 URL"
+      },
+      "codeInterpreter": {
+        "label": "代码解释器"
+      },
+      "fileReader": {
+        "label": "文件读取器"
+      },
+      "addMemory": {
+        "label": "添加到记忆"
+      },
+      "codingAgent": {
+        "label": "编码智能体"
       }
     },
     "toolsPopover": {
@@ -6070,6 +6102,10 @@
         },
         "section": {
           "title": "身份验证"
+        },
+        "subjectRelink": {
+          "description": "允许被提供商分配了新主体 ID 的用户重新登录与其邮箱关联的账户。仅在更换 OIDC 客户端或应用注册期间开启。",
+          "title": "OIDC 客户端变更后重新关联账户"
         }
       },
       "jwt": {

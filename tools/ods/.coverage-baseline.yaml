@@ -1,0 +1,38 @@
+# Minimum statement coverage per package, in percent.
+#
+# `ods coverage <suite> --check` fails when a package drops below its floor,
+# which is how CI keeps coverage from regressing. Raise the floors after adding
+# tests with `ods coverage <suite> --update`.
+#
+# Generated file: do not edit by hand.
+total: 36.4
+packages:
+  .: 0
+  cmd: 17.1
+  internal/alembic: 0
+  internal/audit: 55.1
+  internal/auditcmd: 0
+  internal/childproc: 0
+  internal/composegen: 96.8
+  internal/config: 0
+  internal/coverage: 90.1
+  internal/deployfilessync: 79.1
+  internal/docker: 25.3
+  internal/git: 32.5
+  internal/gittest: 0
+  internal/imgdiff: 68.2
+  internal/kube: 0
+  internal/lazyimports: 61.2
+  internal/openapi: 0
+  internal/paths: 30.3
+  internal/portutil: 75
+  internal/postgres: 0
+  internal/prompt: 0
+  internal/pycheck: 74.1
+  internal/release: 82.7
+  internal/s3: 0
+  internal/terraform: 83
+  internal/testsuite: 88.1
+  internal/tui: 38.8
+  internal/version: 100
+  odsaudit: 0
