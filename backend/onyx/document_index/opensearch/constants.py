@@ -20,10 +20,11 @@ ASSUMED_DOCUMENT_AGE_DAYS = 90
 # Size of the dynamic list used to consider elements during kNN graph creation.
 # Higher values improve search quality but increase indexing time. Values
 # typically range between 100 - 512.
-EF_CONSTRUCTION = 256
+EF_CONSTRUCTION = int(os.environ.get("OPENSEARCH_EF_CONSTRUCTION", "256"))
 # Number of bi-directional links per element. Higher values improve search
 # quality but increase memory footprint. Values typically range between 12 - 48.
-M = 32  # Set relatively high for better accuracy.
+# Set relatively high by default for better accuracy.
+M = int(os.environ.get("OPENSEARCH_M", "32"))
 
 # When performing hybrid search, we need to consider more candidates than the
 # number of results to be returned. This is because the scoring is hybrid and
@@ -49,7 +50,20 @@ DEFAULT_NUM_HYBRID_SUBQUERY_CANDIDATES = int(
 # larger than k, you can provide the size parameter to limit the final number of
 # results to k." from
 # https://docs.opensearch.org/latest/query-dsl/specialized/k-nn/index/#ef_search
-EF_SEARCH = DEFAULT_NUM_HYBRID_SUBQUERY_CANDIDATES
+EF_SEARCH = int(
+    os.environ.get("OPENSEARCH_EF_SEARCH", str(DEFAULT_NUM_HYBRID_SUBQUERY_CANDIDATES))
+)
+
+# OpenSearch 3.x enables derived _source for knn indices by default (a storage
+# optimization that reconstructs _source instead of storing it). Under
+# sustained indexing load we have hit transient update failures attributed to
+# it (https://github.com/opensearch-project/k-NN/issues/3191 — the client
+# already retries those); this escape hatch lets a deployment turn the
+# optimization off entirely at index-creation time. Only affects indices
+# created after the setting changes.
+OPENSEARCH_KNN_DERIVED_SOURCE_ENABLED = (
+    os.environ.get("OPENSEARCH_KNN_DERIVED_SOURCE_ENABLED", "true").lower() == "true"
+)
 
 
 class OpenSearchAuthMethod(str, Enum):
