@@ -221,9 +221,11 @@ class TestSystemicFailuresStopTheRun:
             _http_error(503),
             requests.ConnectionError("reset"),
             requests.Timeout("timed out"),
-            # Not a duplicate of the 429 above: this is what a sustained 429
-            # becomes once the client's Retry gives up, and it is not an HTTPError.
+            # None of these three is an HTTPError, so classifying on status
+            # code alone reads a broken exchange as one bad session and skips it.
             requests.exceptions.RetryError("too many 429s"),
+            requests.exceptions.ChunkedEncodingError("body stopped early"),
+            requests.exceptions.JSONDecodeError("truncated", "{", 1),
             CredentialExpiredError("token expired"),
             InsufficientPermissionsError("scope missing"),
         ],
