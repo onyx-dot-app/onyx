@@ -744,6 +744,87 @@ def epub_to_text(file: IO[Any]) -> str:
         return TEXT_SECTION_SEPARATOR.join(text_content)
 
 
+def ipynb_to_text(file: IO[Any]) -> str:
+    """Extract markdown text, code cells, and text outputs from a Jupyter notebook."""
+    encoding = detect_encoding(file)
+    text_content_raw, _ = read_text_file(
+        file, encoding=encoding, ignore_onyx_metadata=True
+    )
+    try:
+        notebook_data = json.loads(text_content_raw)
+    except Exception as json_err:
+        logger.warning("Failed to parse JSON for ipynb file: %s", json_err)
+        return text_content_raw
+
+    if not isinstance(notebook_data, dict):
+        return text_content_raw
+
+    cells = notebook_data.get("cells", [])
+    if not isinstance(cells, list):
+        return text_content_raw
+
+    extracted_sections: list[str] = []
+    for cell in cells:
+        if not isinstance(cell, dict):
+            continue
+
+        cell_type = cell.get("cell_type")
+        source = cell.get("source", "")
+        if isinstance(source, list):
+            source_text = "".join(str(s) for s in source)
+        elif isinstance(source, str):
+            source_text = source
+        else:
+            source_text = ""
+
+        source_text = source_text.strip()
+
+        if cell_type == "markdown":
+            if source_text:
+                extracted_sections.append(source_text)
+        elif cell_type == "code":
+            cell_blocks: list[str] = []
+            if source_text:
+                cell_blocks.append(f"```python\n{source_text}\n```")
+            outputs = cell.get("outputs", [])
+            if isinstance(outputs, list):
+                for output in outputs:
+                    if not isinstance(output, dict):
+                        continue
+                    output_type = output.get("output_type")
+                    output_text = ""
+                    if output_type == "stream":
+                        text_val = output.get("text", "")
+                        if isinstance(text_val, list):
+                            output_text = "".join(str(t) for t in text_val)
+                        elif isinstance(text_val, str):
+                            output_text = text_val
+                    elif output_type in ("execute_result", "display_data"):
+                        data_dict = output.get("data", {})
+                        if isinstance(data_dict, dict) and "text/plain" in data_dict:
+                            text_val = data_dict["text/plain"]
+                            if isinstance(text_val, list):
+                                output_text = "".join(str(t) for t in text_val)
+                            elif isinstance(text_val, str):
+                                output_text = text_val
+                    elif output_type == "error":
+                        ename = output.get("ename", "")
+                        evalue = output.get("evalue", "")
+                        if ename or evalue:
+                            output_text = f"{ename}: {evalue}".strip()
+
+                    output_text = output_text.strip()
+                    if output_text:
+                        cell_blocks.append(f"Output:\n{output_text}")
+            if cell_blocks:
+                extracted_sections.append("\n".join(cell_blocks))
+        elif cell_type == "raw":
+            if source_text:
+                extracted_sections.append(source_text)
+
+    return TEXT_SECTION_SEPARATOR.join(extracted_sections)
+
+
 def file_io_to_text(file: IO[Any]) -> str:
     encoding = detect_encoding(file)
     file_content, _ = read_text_file(file, encoding=encoding)
@@ -771,6 +852,7 @@ def extract_file_text(
         ".eml": eml_to_text,
         ".epub": epub_to_text,
         ".html": parse_html_page_basic,
+        ".ipynb": ipynb_to_text,
     }
 
     try:
@@ -953,6 +1035,13 @@ def _extract_text_and_images(
         if extension == ".html":
             return ExtractionResult(
                 text_content=parse_html_page_basic(file),
+                embedded_images=[],
+                metadata={},
+            )
+
+        if extension == ".ipynb":
+            return ExtractionResult(
+                text_content=ipynb_to_text(file),
                 embedded_images=[],
                 metadata={},
             )
