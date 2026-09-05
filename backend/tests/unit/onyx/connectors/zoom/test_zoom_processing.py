@@ -106,6 +106,37 @@ class TestProcessOccurrence:
         assert _run(client, _work()) == []
         client.download_transcript_vtt.assert_not_called()
 
+    def test_restricted_transcript_is_skipped_even_with_a_url(self) -> None:
+        # Zoom really does return a url next to a restriction, so the url on its
+        # own is not enough to go on.
+        client = _client_with_transcript()
+        client.get_meeting_transcript.return_value = ZoomTranscript(
+            download_url="https://zoom.example/t.vtt",
+            download_restriction_reason="NO_TRANSCRIPT_DATA",
+        )
+
+        assert _run(client, _work()) == []
+        client.download_transcript_vtt.assert_not_called()
+
+    def test_can_download_false_is_skipped_even_with_a_url(self) -> None:
+        client = _client_with_transcript()
+        client.get_meeting_transcript.return_value = ZoomTranscript(
+            download_url="https://zoom.example/t.vtt", can_download=False
+        )
+
+        assert _run(client, _work()) == []
+        client.download_transcript_vtt.assert_not_called()
+
+    def test_can_download_unset_still_downloads(self) -> None:
+        # Zoom omits can_download far more often than it sets it, so tightening
+        # is_downloadable to `is True` would skip almost every real transcript.
+        client = _client_with_transcript()
+        client.get_meeting_transcript.return_value = ZoomTranscript(
+            download_url="https://zoom.example/t.vtt", can_download=None
+        )
+
+        assert len(_run(client, _work())) == 1
+
     def test_missing_download_url_is_skipped(self) -> None:
         client = _client_with_transcript()
         client.get_meeting_transcript.return_value = ZoomTranscript(download_url=None)
@@ -124,6 +155,8 @@ class TestProcessOccurrence:
         assert isinstance(failure, ConnectorFailure)
         assert failure.failed_document is not None
         assert failure.failed_document.document_id == "ZOOM_MEETING_uuid-abc"
+        # The runner only reports a failure to Sentry when this is set.
+        assert failure.exception is not None
 
     def test_transcript_download_failure_yields_document_failure(self) -> None:
         client = _client_with_transcript()
@@ -136,6 +169,7 @@ class TestProcessOccurrence:
         assert isinstance(failure, ConnectorFailure)
         assert failure.failed_document is not None
         assert failure.failed_document.document_id == "ZOOM_MEETING_uuid-abc"
+        assert failure.exception is not None
 
     def test_empty_transcript_after_parsing_is_skipped(self) -> None:
         client = _client_with_transcript()
@@ -215,6 +249,7 @@ class TestSystemicFailuresStopTheRun:
     @pytest.mark.parametrize(
         "error",
         [
+            _http_error(408),
             _http_error(429),
             _http_error(500),
             _http_error(503),
