@@ -60,15 +60,12 @@ def fails_the_whole_run(error: Exception) -> bool:
     """
     if isinstance(error, ConnectorValidationError):
         return True
-    # A 429 reaches this as one of two types. The retried calls raise RetryError
-    # once the client's Retry gives up, which is not an HTTPError; the transcript
-    # download's redirect hop runs on a plain session with no Retry mounted, so
-    # there it stays an ordinary HTTPError.
-    if isinstance(error, requests.exceptions.RetryError):
-        return True
     if isinstance(error, requests.HTTPError):
         response = error.response
         return response is not None and (
             response.status_code == 429 or response.status_code >= 500
         )
-    return isinstance(error, (requests.ConnectionError, requests.Timeout))
+    # HTTPError is the only requests error where a response came back to judge.
+    # Anything else — dropped connection, exhausted Retry, truncated body — means
+    # the exchange broke, which says nothing about this particular session.
+    return isinstance(error, requests.RequestException)
