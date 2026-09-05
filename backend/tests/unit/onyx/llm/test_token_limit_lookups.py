@@ -8,6 +8,7 @@ from onyx.llm.model_capabilities import (
     get_llm_max_output_tokens,
     get_max_input_tokens,
     llm_max_input_tokens,
+    resolve_max_output_tokens,
 )
 
 
@@ -225,3 +226,54 @@ class TestGetMaxInputTokens:
             )
         assert isinstance(result, int)
         assert result > 0
+
+
+class TestResolveMaxOutputTokens:
+    """`resolve_max_output_tokens` must never guess a ceiling: it returns the
+    model's real limit or None, so callers don't send a value the provider
+    rejects."""
+
+    def test_resolves_known_model(self) -> None:
+        model_map = {"anthropic/claude-sonnet-5": {"max_output_tokens": 128000}}
+        with patch("onyx.llm.model_capabilities.get_model_map", return_value=model_map):
+            assert resolve_max_output_tokens("claude-sonnet-5", "anthropic") == 128000
+
+    def test_returns_none_for_unknown_model(self) -> None:
+        with patch("onyx.llm.model_capabilities.get_model_map", return_value={}):
+            assert resolve_max_output_tokens("some-local-model", "ollama") is None
+
+    def test_returns_none_when_entry_lacks_output_tokens(self) -> None:
+        model_map = {"ollama/llama3": {"max_input_tokens": 8192}}
+        with patch("onyx.llm.model_capabilities.get_model_map", return_value=model_map):
+            assert resolve_max_output_tokens("llama3", "ollama") is None
+
+    def test_strips_bedrock_inference_profile_prefix(self) -> None:
+        # GovCloud ids are absent from LiteLLM's map; the base id is present.
+        model_map = {"anthropic.claude-sonnet-5": {"max_output_tokens": 128000}}
+        with patch("onyx.llm.model_capabilities.get_model_map", return_value=model_map):
+            assert (
+                resolve_max_output_tokens("us-gov.anthropic.claude-sonnet-5", "bedrock")
+                == 128000
+            )
+
+    def test_prefix_strip_requires_a_vendor_namespace(self) -> None:
+        # A self-hosted model merely starting with "us." must not inherit an
+        # unrelated model's ceiling.
+        model_map = {"foo": {"max_output_tokens": 128000}}
+        with patch("onyx.llm.model_capabilities.get_model_map", return_value=model_map):
+            assert resolve_max_output_tokens("us.foo", "ollama") is None
+
+    def test_prefix_strip_requires_a_known_bedrock_vendor(self) -> None:
+        # A dotted remainder is not enough — it must be a Bedrock vendor.
+        model_map = {"foo.bar": {"max_output_tokens": 128000}}
+        with patch("onyx.llm.model_capabilities.get_model_map", return_value=model_map):
+            assert resolve_max_output_tokens("us.foo.bar", "ollama") is None
+
+    def test_prefix_strip_still_returns_none_when_base_unknown(self) -> None:
+        with patch("onyx.llm.model_capabilities.get_model_map", return_value={}):
+            assert (
+                resolve_max_output_tokens(
+                    "us-gov.anthropic.claude-sonnet-4-5", "bedrock"
+                )
+                is None
+            )
