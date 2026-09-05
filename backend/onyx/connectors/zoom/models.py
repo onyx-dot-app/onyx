@@ -5,7 +5,7 @@ only where Zoom types it `string | null`, and it has a default only where
 Zoom's own text says the field is conditional.
 """
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ZoomAccessToken(BaseModel):
@@ -130,3 +130,38 @@ class ZoomSessionOccurrence(BaseModel):
 
     uuid: str
     start_time: str
+
+
+class ZoomUser(BaseModel):
+    """The fields the connector reads from `GET /users` and from
+    `GET /groups/{groupId}/members` — two endpoints that describe a user the
+    same way under different response keys."""
+
+    id: str | None = None
+    email: str | None = None
+
+
+class ZoomUserPage(BaseModel):
+    users: list[ZoomUser] = Field(default_factory=list)
+    next_page_token: str | None = None
+
+
+class ZoomRecordingEntry(BaseModel):
+    """One entry from the `meetings` array of `GET /users/{userId}/recordings`."""
+
+    uuid: str
+    # Zoom sends the meeting number as an integer here and as a string everywhere else.
+    id: int | str | None = None
+    topic: str | None = None
+    start_time: str | None = None
+    type: int | str | None = None
+
+    @property
+    def session_id(self) -> str:
+        # A recording uploaded through the web portal has no meeting number.
+        return str(self.id) if self.id is not None else self.uuid
+
+
+class ZoomRecordingPage(BaseModel):
+    recordings: list[ZoomRecordingEntry] = Field(default_factory=list)
+    next_page_token: str | None = None

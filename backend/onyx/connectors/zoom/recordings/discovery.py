@@ -10,7 +10,7 @@ documents are keyed by occurrence UUID and get upserted.
 """
 
 import abc
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -19,14 +19,18 @@ from onyx.configs.app_configs import ZOOM_TRANSCRIPT_LAG_BUFFER_HOURS
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import ConnectorFailure, EntityFailure
 from onyx.connectors.zoom.client import ZoomClient
-from onyx.connectors.zoom.models import ZoomSessionOccurrence
+from onyx.connectors.zoom.models import ZoomRecordingEntry, ZoomSessionOccurrence
 from onyx.connectors.zoom.recordings.models import (
     OccurrenceWork,
     ZoomSessionType,
     fails_the_whole_run,
     parse_zoom_datetime,
 )
-from onyx.connectors.zoom.recordings.session_types import get_session_type_handler
+from onyx.connectors.zoom.recordings.session_types import (
+    get_session_type_handler,
+    is_portal_upload,
+    session_type_for_recording,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -39,6 +43,55 @@ _OCCURRENCE_POLL_OVERLAP_SECONDS = ZOOM_TRANSCRIPT_LAG_BUFFER_HOURS * 60 * 60
 # after the first re-lists the meeting and slices further in; 200 keeps
 # almost every real meeting to a single listing.
 _MAX_WORK_PER_STEP = 200
+
+# Zoom expires a next_page_token 15 minutes after issuing it, and every occurrence
+# on a page is processed before the next page is asked for. Small pages keep that
+# gap well inside the token's life.
+_RECORDINGS_PAGE_SIZE = 30
+
+
+def _entity_failure(
+    entity_id: str,
+    message: str,
+    start: SecondsSinceUnixEpoch,
+    end: SecondsSinceUnixEpoch,
+    error: Exception | None = None,
+) -> ConnectorFailure:
+    """Discovery moves on, and this window is the only trace the skipped scope
+    leaves. Targeted reindex is keyed on document ids, so an entity failure can
+    never be replayed: recovery means widening ZOOM_TRANSCRIPT_LAG_BUFFER_HOURS
+    or reindexing from scratch.
+    """
+    return ConnectorFailure(
+        failed_entity=EntityFailure(
+            entity_id=entity_id,
+            missed_time_range=(
+                datetime.fromtimestamp(
+                    start - _OCCURRENCE_POLL_OVERLAP_SECONDS, tz=timezone.utc
+                ),
+                datetime.fromtimestamp(end, tz=timezone.utc),
+            ),
+        ),
+        failure_message=message,
+        exception=error,
+    )
+
+
+def _poll_window_dates(
+    start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
+) -> tuple[date, date]:
+    """The lag buffer comes off the start before the dates are rounded, or a
+    transcript that lands slowly falls outside the window and is never indexed.
+
+    The window is sent whole however long it is, even a first run's epoch-to-now.
+    The one-month range cap everyone repeats for this endpoint is not in Zoom's own
+    reference, and narrowing it on a guess would silently index a slice of the
+    history the admin asked for.
+    """
+    from_moment = datetime.fromtimestamp(
+        max(start - _OCCURRENCE_POLL_OVERLAP_SECONDS, 0), tz=timezone.utc
+    )
+    return from_moment.date(), datetime.fromtimestamp(end, tz=timezone.utc).date()
 
 
 def _occurrence_in_poll_window(
@@ -120,28 +173,16 @@ class IdAllowlistSource(DiscoverySource):
             logger.exception(
                 "Failed to list Zoom occurrences for session %s", session_id
             )
-            # Discovery moves on, and this window is the only trace the
-            # skipped session leaves. Targeted reindex is keyed on document
-            # ids, so an entity failure can never be replayed: recovery means
-            # widening ZOOM_TRANSCRIPT_LAG_BUFFER_HOURS or reindexing from
-            # scratch.
             failures.append(
-                ConnectorFailure(
-                    failed_entity=EntityFailure(
-                        # 111 is a legal id for both a meeting and a webinar, so
-                        # the type has to travel with it or an admin can't tell
-                        # which one failed.
-                        entity_id=f"{session_type.value}:{session_id}",
-                        missed_time_range=(
-                            datetime.fromtimestamp(
-                                start - _OCCURRENCE_POLL_OVERLAP_SECONDS,
-                                tz=timezone.utc,
-                            ),
-                            datetime.fromtimestamp(end, tz=timezone.utc),
-                        ),
-                    ),
-                    failure_message=f"Failed to list occurrences for Zoom {session_type.value} {session_id}: {e}",
-                    exception=e,
+                _entity_failure(
+                    # 111 is a legal id for both a meeting and a webinar, so
+                    # the type has to travel with it or an admin can't tell
+                    # which one failed.
+                    entity_id=f"{session_type.value}:{session_id}",
+                    message=f"Failed to list occurrences for Zoom {session_type.value} {session_id}: {e}",
+                    start=start,
+                    end=end,
+                    error=e,
                 )
             )
 
@@ -188,10 +229,273 @@ class IdAllowlistSource(DiscoverySource):
         )
 
 
+class _Host(BaseModel):
+    user_id: str
+    email: str | None = None
+
+    @property
+    def entity_id(self) -> str:
+        return f"host:{self.email or self.user_id}"
+
+
+class _UserRecordingsCursor(BaseModel):
+    host_index: int = 0
+    page_token: str | None = None
+
+
+def _work_from_recording(recording: ZoomRecordingEntry) -> OccurrenceWork | None:
+    session_type = session_type_for_recording(recording.type)
+    if session_type is None:
+        if is_portal_upload(recording.type):
+            logger.info(
+                "Skipping Zoom recording %s: uploaded through the web portal rather "
+                "than recorded from a session",
+                recording.uuid,
+            )
+        else:
+            # Loud, because it means Zoom has added a type code and every
+            # recording carrying it is going unindexed until someone widens
+            # the sets in session_types.py.
+            logger.warning(
+                "Skipping Zoom recording %s: unrecognised session type %r",
+                recording.uuid,
+                recording.type,
+            )
+        return None
+    return OccurrenceWork(
+        session_type=session_type,
+        session_id=recording.session_id,
+        occurrence_uuid=recording.uuid,
+        start_time=recording.start_time,
+        topic=recording.topic,
+    )
+
+
+class _UserRecordingsSource(DiscoverySource):
+    """Shared body of the host and Group mechanisms, which differ only in how they
+    find their set of hosts.
+
+    `GET /users/{userId}/recordings` declares no age limit, unlike the meeting-ID
+    path's 15-month cap, so these two mechanisms are how an admin reaches older
+    history. Depth is bounded by the account's own auto-delete policy instead.
+    """
+
+    def __init__(self, scope_entity_id: str) -> None:
+        self._scope_entity_id = scope_entity_id
+        self._resolved: list[_Host] | None = None
+
+    @abc.abstractmethod
+    def _resolve_hosts(
+        self,
+        client: ZoomClient,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+    ) -> tuple[list[_Host], list[ConnectorFailure]]:
+        """The hosts to crawl, plus a failure for anything the admin configured
+        that resolved to nobody."""
+        raise NotImplementedError
+
+    def _hosts(
+        self,
+        client: ZoomClient,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+    ) -> tuple[list[_Host], list[ConnectorFailure]]:
+        """Resolution costs several API calls, so it runs once per run. Its failures
+        come back only on the step that did the work, or every later step would
+        report the same failure again.
+        """
+        if self._resolved is not None:
+            return self._resolved, []
+
+        try:
+            hosts, failures = self._resolve_hosts(client, start, end)
+        except Exception as e:
+            if fails_the_whole_run(e):
+                raise
+            logger.exception(
+                "Failed to resolve Zoom hosts for %s", self._scope_entity_id
+            )
+            hosts = []
+            failures = [
+                _entity_failure(
+                    entity_id=self._scope_entity_id,
+                    message=f"Failed to resolve the Zoom hosts for {self._scope_entity_id}: {e}",
+                    start=start,
+                    end=end,
+                    error=e,
+                )
+            ]
+
+        # Zoom promises no order. A resumed run resolves again, and the cursor
+        # is an index into this list, so a different order would step past a
+        # host that was never crawled.
+        hosts.sort(key=lambda host: host.user_id)
+        self._resolved = hosts
+        return hosts, failures
+
+    def discover_step(
+        self,
+        client: ZoomClient,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        cursor: dict[str, Any] | None,
+    ) -> DiscoveryStepResult:
+        position = (
+            _UserRecordingsCursor.model_validate(cursor)
+            if cursor
+            else _UserRecordingsCursor()
+        )
+        hosts, failures = self._hosts(client, start, end)
+        if position.host_index >= len(hosts):
+            return DiscoveryStepResult(failures=failures, done=True)
+
+        host = hosts[position.host_index]
+        from_date, to_date = _poll_window_dates(start, end)
+
+        work: list[OccurrenceWork] = []
+        next_page_token: str | None = None
+        try:
+            page = client.list_user_recordings(
+                user_id=host.user_id,
+                from_date=from_date,
+                to_date=to_date,
+                page_size=_RECORDINGS_PAGE_SIZE,
+                page_token=position.page_token,
+            )
+            work = [
+                item
+                for item in (
+                    _work_from_recording(recording) for recording in page.recordings
+                )
+                if item is not None
+            ]
+            next_page_token = page.next_page_token
+        except Exception as e:
+            if fails_the_whole_run(e):
+                raise
+            logger.exception("Failed to list Zoom recordings for %s", host.entity_id)
+            failures.append(
+                _entity_failure(
+                    entity_id=host.entity_id,
+                    message=f"Failed to list Zoom recordings for {host.entity_id}: {e}",
+                    start=start,
+                    end=end,
+                    error=e,
+                )
+            )
+
+        if next_page_token:
+            return DiscoveryStepResult(
+                work=work,
+                failures=failures,
+                next_cursor={
+                    "host_index": position.host_index,
+                    "page_token": next_page_token,
+                },
+                done=False,
+            )
+
+        next_index = position.host_index + 1
+        done = next_index >= len(hosts)
+        return DiscoveryStepResult(
+            work=work,
+            failures=failures,
+            next_cursor=None if done else {"host_index": next_index},
+            done=done,
+        )
+
+
+class HostAllowlistSource(_UserRecordingsSource):
+    def __init__(self, host_emails: list[str]) -> None:
+        super().__init__("host-allowlist")
+        self._emails = sorted(
+            {email.strip().lower() for email in host_emails if email.strip()}
+        )
+
+    def _resolve_hosts(
+        self,
+        client: ZoomClient,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+    ) -> tuple[list[_Host], list[ConnectorFailure]]:
+        unmatched = set(self._emails)
+        hosts: list[_Host] = []
+        page_token: str | None = None
+        while unmatched:
+            page = client.list_users(page_token=page_token)
+            for user in page.users:
+                email = (user.email or "").strip().lower()
+                # Zoom withholds the user id until an invitation is accepted, so
+                # leaving that email unmatched reports it below rather than
+                # dropping the host in silence.
+                if email not in unmatched or not user.id:
+                    continue
+                unmatched.discard(email)
+                hosts.append(_Host(user_id=user.id, email=user.email))
+
+            page_token = page.next_page_token
+            if not page_token:
+                break
+
+        return hosts, [
+            _entity_failure(
+                entity_id=f"host:{email}",
+                message=f"No active Zoom user has the email {email}, so none of that host's sessions were indexed",
+                start=start,
+                end=end,
+            )
+            for email in sorted(unmatched)
+        ]
+
+
+class GroupSource(_UserRecordingsSource):
+    def __init__(self, group_id: str) -> None:
+        self._group_id = group_id.strip()
+        super().__init__(f"group:{self._group_id}")
+
+    def _resolve_hosts(
+        self,
+        client: ZoomClient,
+        start: SecondsSinceUnixEpoch,  # noqa: ARG002
+        end: SecondsSinceUnixEpoch,  # noqa: ARG002
+    ) -> tuple[list[_Host], list[ConnectorFailure]]:
+        """A group id that doesn't exist comes back as a 404, so there is no such
+        thing here as a group that resolved to nobody."""
+        hosts: list[_Host] = []
+        page_token: str | None = None
+        while True:
+            page = client.list_group_members(self._group_id, page_token=page_token)
+            for member in page.users:
+                if not member.id:
+                    logger.warning(
+                        "Skipping Zoom group member %s: no user id until the "
+                        "invitation is accepted",
+                        member.email,
+                    )
+                    continue
+                hosts.append(_Host(user_id=member.id, email=member.email))
+
+            page_token = page.next_page_token
+            if not page_token:
+                break
+
+        if not hosts:
+            logger.info("Zoom group %s has no members to crawl", self._group_id)
+        return hosts, []
+
+
 def build_discovery_sources(
-    meeting_ids: list[str] | None, webinar_ids: list[str] | None = None
+    meeting_ids: list[str] | None,
+    webinar_ids: list[str] | None = None,
+    host_emails: list[str] | None = None,
+    group_id: str | None = None,
 ) -> list[DiscoverySource]:
     sources: list[DiscoverySource] = []
     if meeting_ids or webinar_ids:
         sources.append(IdAllowlistSource(meeting_ids or [], webinar_ids or []))
+    if host_emails and any(email.strip() for email in host_emails):
+        sources.append(HostAllowlistSource(host_emails))
+    if group_id and group_id.strip():
+        sources.append(GroupSource(group_id))
     return sources
