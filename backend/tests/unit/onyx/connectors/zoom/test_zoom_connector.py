@@ -2,12 +2,14 @@ import time
 from unittest.mock import MagicMock
 
 import pytest
+import requests
 
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.models import (
     ConnectorFailure,
     ConnectorMissingCredentialError,
     Document,
+    HierarchyNode,
 )
 from onyx.connectors.zoom.client import ZoomClient
 from onyx.connectors.zoom.connector import ZoomConnector, ZoomConnectorCheckpoint
@@ -238,7 +240,7 @@ class TestZoomConnectorCheckpoint:
         assert [d.id for d in docs] == ["ZOOM_MEETING_uuid-222"]
         assert len(failures) == 1
         assert failures[0].failed_entity is not None
-        assert failures[0].failed_entity.entity_id == "111"
+        assert failures[0].failed_entity.entity_id == "meeting:111"
         assert outputs[-1].next_checkpoint.has_more is False
 
     def test_meeting_with_no_occurrences_completes_without_documents(self) -> None:
@@ -269,7 +271,7 @@ class TestZoomConnectorCheckpoint:
 
         assert len(failures) == 1
         assert failures[0].failed_entity is not None
-        assert failures[0].failed_entity.entity_id == "111"
+        assert failures[0].failed_entity.entity_id == "meeting:111"
         assert outputs[-1].next_checkpoint.has_more is False
 
     def test_iterates_multiple_meeting_ids_across_checkpoint_calls(self) -> None:
@@ -337,3 +339,62 @@ class TestZoomConnectorCheckpoint:
         assert outputs[0].items == []
         assert outputs[0].next_checkpoint.has_more is False
         mock_client.list_past_meeting_occurrences.assert_not_called()
+
+
+class TestSystemicFailureDoesNotAdvanceWork:
+    """work_index advances as soon as an occurrence is processed. A rate limit
+    has to leave it alone, or the next run starts past the occurrence that
+    never got indexed."""
+
+    def _checkpoint(self) -> ZoomConnectorCheckpoint:
+        return ZoomConnectorCheckpoint(
+            has_more=True,
+            recordings=RecordingsState(
+                pending_work=[
+                    OccurrenceWork(
+                        session_type=ZoomSessionType.MEETING,
+                        session_id="111",
+                        occurrence_uuid=uuid,
+                    )
+                    for uuid in ("uuid-1", "uuid-2")
+                ],
+                work_index=0,
+            ),
+        )
+
+    def test_rate_limit_raises_instead_of_advancing_past_the_occurrence(self) -> None:
+        connector, mock_client = _make_connector(meeting_ids=["111"])
+        response = requests.Response()
+        response.status_code = 429
+        mock_client.get_meeting_transcript.side_effect = requests.HTTPError(
+            "429", response=response
+        )
+
+        checkpoint = self._checkpoint()
+        with pytest.raises(requests.HTTPError):
+            list(connector.load_from_checkpoint(0, _FULL_HISTORY_END, checkpoint))
+
+        # The runner re-saves the checkpoint it came in with, so this is the
+        # one the next attempt resumes from.
+        assert checkpoint.recordings.work_index == 0
+
+    def test_a_document_specific_failure_still_advances(self) -> None:
+        connector, mock_client = _make_connector(meeting_ids=["111"])
+        response = requests.Response()
+        response.status_code = 404
+        mock_client.get_meeting_transcript.side_effect = requests.HTTPError(
+            "404", response=response
+        )
+
+        generator = connector.load_from_checkpoint(
+            0, _FULL_HISTORY_END, self._checkpoint()
+        )
+        items: list[Document | HierarchyNode | ConnectorFailure] = []
+        try:
+            while True:
+                items.append(next(generator))
+        except StopIteration as stop:
+            returned = stop.value
+
+        assert [isinstance(item, ConnectorFailure) for item in items] == [True]
+        assert returned.recordings.work_index == 1

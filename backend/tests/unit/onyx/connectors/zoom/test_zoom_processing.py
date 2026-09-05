@@ -1,5 +1,12 @@
 from unittest.mock import MagicMock
 
+import pytest
+import requests
+
+from onyx.connectors.exceptions import (
+    CredentialExpiredError,
+    InsufficientPermissionsError,
+)
 from onyx.connectors.models import ConnectorFailure, Document
 from onyx.connectors.zoom.client import ZoomClient
 from onyx.connectors.zoom.models import ZoomPastMeetingDetails, ZoomTranscript
@@ -193,3 +200,73 @@ class TestProcessOccurrence:
         assert isinstance(doc, Document)
         assert doc.semantic_identifier == "Town Hall"
         client.get_past_meeting_details.assert_not_called()
+
+
+def _http_error(status: int) -> requests.HTTPError:
+    response = requests.Response()
+    response.status_code = status
+    return requests.HTTPError(f"{status}", response=response)
+
+
+class TestSystemicFailuresStopTheRun:
+    """Recording a ConnectorFailure lets the attempt finish as a success, and
+    an occurrence older than the lag buffer is then never retried. An error
+    that will hit every occurrence has to stop the run instead."""
+
+    @pytest.mark.parametrize(
+        "error",
+        [
+            _http_error(429),
+            _http_error(500),
+            _http_error(503),
+            requests.ConnectionError("reset"),
+            requests.Timeout("timed out"),
+            # Not a duplicate of the 429 above: this is what a sustained 429
+            # becomes once the client's Retry gives up, and it is not an HTTPError.
+            requests.exceptions.RetryError("too many 429s"),
+            CredentialExpiredError("token expired"),
+            InsufficientPermissionsError("scope missing"),
+        ],
+    )
+    def test_fetch_failure_that_outlives_this_occurrence_propagates(
+        self, error: Exception
+    ) -> None:
+        client = _client_with_transcript()
+        client.get_meeting_transcript.side_effect = error
+
+        with pytest.raises(type(error)):
+            _run(client, _work())
+
+    @pytest.mark.parametrize(
+        "error",
+        [_http_error(429), _http_error(502), CredentialExpiredError("expired")],
+    )
+    def test_download_failure_that_outlives_this_occurrence_propagates(
+        self, error: Exception
+    ) -> None:
+        client = _client_with_transcript()
+        client.download_transcript_vtt.side_effect = error
+
+        with pytest.raises(type(error)):
+            _run(client, _work())
+
+    @pytest.mark.parametrize("status", [400, 403, 404, 410])
+    def test_client_errors_stay_scoped_to_the_one_document(self, status: int) -> None:
+        client = _client_with_transcript()
+        client.get_meeting_transcript.side_effect = _http_error(status)
+
+        items = _run(client, _work())
+
+        assert len(items) == 1
+        assert isinstance(items[0], ConnectorFailure)
+
+    def test_an_http_error_carrying_no_response_is_not_treated_as_systemic(
+        self,
+    ) -> None:
+        client = _client_with_transcript()
+        client.get_meeting_transcript.side_effect = requests.HTTPError("no response")
+
+        items = _run(client, _work())
+
+        assert len(items) == 1
+        assert isinstance(items[0], ConnectorFailure)
