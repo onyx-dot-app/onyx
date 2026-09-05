@@ -8,8 +8,8 @@ the field under test as an override.
 from typing import Any
 
 from onyx.connectors.zoom.models import (
-    ZoomMeetingOccurrence,
-    ZoomPastMeetingDetails,
+    ZoomSessionDetails,
+    ZoomSessionOccurrence,
     ZoomTranscript,
 )
 
@@ -26,7 +26,7 @@ def transcript(**overrides: Any) -> ZoomTranscript:
     return ZoomTranscript(**(fields | overrides))
 
 
-def past_meeting_details(**overrides: Any) -> ZoomPastMeetingDetails:
+def session_details(**overrides: Any) -> ZoomSessionDetails:
     fields: dict[str, Any] = {
         "uuid": "uaFkQyFCSwya8iNYtkAw3A==",
         "id": 111,
@@ -44,12 +44,12 @@ def past_meeting_details(**overrides: Any) -> ZoomPastMeetingDetails:
         "user_email": "host@example.com",
         "user_name": "Host User",
     }
-    return ZoomPastMeetingDetails(**(fields | overrides))
+    return ZoomSessionDetails(**(fields | overrides))
 
 
-def occurrence(**overrides: Any) -> ZoomMeetingOccurrence:
+def occurrence(**overrides: Any) -> ZoomSessionOccurrence:
     fields: dict[str, Any] = {
         "uuid": "uuid-1",
         "start_time": "2026-01-15T10:00:00Z",
     }
-    return ZoomMeetingOccurrence(**(fields | overrides))
+    return ZoomSessionOccurrence(**(fields | overrides))

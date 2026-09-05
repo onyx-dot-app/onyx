@@ -134,7 +134,7 @@ def process_occurrence(
                 work.session_id,
                 occurrence_uuid,
             )
-    topic = topic or f"Zoom Meeting {work.session_id}"
+    topic = topic or f"Zoom {work.session_type.value.capitalize()} {work.session_id}"
     occurrence_time = parse_zoom_datetime(started_at)
 
     yield Document(

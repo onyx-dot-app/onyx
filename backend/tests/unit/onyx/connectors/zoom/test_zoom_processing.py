@@ -15,7 +15,7 @@ from onyx.connectors.zoom.recordings.processing import (
     zoom_document_id,
 )
 from tests.unit.onyx.connectors.zoom.zoom_api_shapes import (
-    past_meeting_details,
+    session_details,
     transcript,
 )
 
@@ -50,9 +50,7 @@ def _client_with_transcript() -> MagicMock:
         download_url="https://zoom.example/transcript.vtt"
     )
     client.download_transcript_vtt.return_value = _SAMPLE_VTT
-    client.get_past_meeting_details.return_value = past_meeting_details(
-        topic="Weekly Sync"
-    )
+    client.get_past_meeting_details.return_value = session_details(topic="Weekly Sync")
     return client
 
 
@@ -193,7 +191,7 @@ class TestProcessOccurrence:
 
     def test_details_fill_in_a_timestamp_discovery_did_not_have(self) -> None:
         client = _client_with_transcript()
-        client.get_past_meeting_details.return_value = past_meeting_details(
+        client.get_past_meeting_details.return_value = session_details(
             topic="Weekly Sync", start_time="2026-01-15T10:00:00Z"
         )
 
@@ -206,7 +204,7 @@ class TestProcessOccurrence:
 
     def test_empty_prefetched_topic_still_asks_for_details(self) -> None:
         client = _client_with_transcript()
-        client.get_past_meeting_details.return_value = past_meeting_details(
+        client.get_past_meeting_details.return_value = session_details(
             topic="Weekly Sync", start_time="2026-01-15T10:00:00Z"
         )
 
