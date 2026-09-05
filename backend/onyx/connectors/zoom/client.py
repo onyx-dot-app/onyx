@@ -1,4 +1,5 @@
 import time
+from collections.abc import Callable
 from typing import Any
 from urllib.parse import quote
 
@@ -23,8 +24,8 @@ logger = setup_logger()
 _OAUTH_TOKEN_URL = "https://zoom.us/oauth/token"
 _API_BASE_URL = "https://api.zoom.us/v2"
 
-# Zoom access tokens last about an hour. Refresh this many seconds early so a
-# request never goes out holding a token that expires mid-flight.
+# Zoom access tokens last about an hour, so refresh early rather than letting
+# one lapse mid-request.
 _TOKEN_REFRESH_MARGIN_SECONDS = 60
 
 
@@ -87,23 +88,44 @@ class ZoomClient:
         assert self._access_token is not None
         return self._access_token
 
+    def _send_authorized(
+        self, description: str, send: Callable[[str], requests.Response]
+    ) -> requests.Response:
+        """Zoom can reject a token before the expiry it gave us, so try a
+        fresh one before reporting a 401. CredentialExpiredError cancels the
+        indexing attempt, and five of them in a row mark the connector
+        invalid and email the admins. Retrying is safe because a 401 is
+        refused before the request does anything.
+        """
+        response = send(self._get_access_token())
+        if response.status_code == 401:
+            self._access_token = None
+            response = send(self._get_access_token())
+
+        if response.status_code == 401:
+            raise CredentialExpiredError(
+                f"Zoom rejected {description} as unauthorized, even with a fresh token"
+            )
+        if response.status_code == 403:
+            raise InsufficientPermissionsError(
+                f"Zoom denied access to {description} — check the app's granted scopes"
+            )
+        return response
+
     def _request(self, method: str, endpoint: str, **kwargs: Any) -> requests.Response:
         url = f"{_API_BASE_URL}{endpoint}"
         headers = kwargs.pop("headers", {})
-        headers["Authorization"] = f"Bearer {self._get_access_token()}"
 
-        response = self._session.request(
-            method, url, headers=headers, timeout=REQUEST_TIMEOUT_SECONDS, **kwargs
-        )
-
-        if response.status_code == 401:
-            raise CredentialExpiredError("Zoom rejected the request as unauthorized")
-        if response.status_code == 403:
-            raise InsufficientPermissionsError(
-                f"Zoom denied access to {endpoint} — check the app's granted scopes"
+        def send(token: str) -> requests.Response:
+            return self._session.request(
+                method,
+                url,
+                headers={**headers, "Authorization": f"Bearer {token}"},
+                timeout=REQUEST_TIMEOUT_SECONDS,
+                **kwargs,
             )
 
-        return response
+        return self._send_authorized(endpoint, send)
 
     def get_meeting_transcript(self, meeting_identifier: str) -> ZoomTranscript | None:
         """This endpoint takes a meeting ID, a webinar ID, or a single
@@ -146,10 +168,13 @@ class ZoomClient:
         return [ZoomMeetingOccurrence.model_validate(o) for o in occurrences]
 
     def download_transcript_vtt(self, download_url: str) -> str:
-        response = requests.get(
-            download_url,
-            headers={"Authorization": f"Bearer {self._get_access_token()}"},
-            timeout=REQUEST_TIMEOUT_SECONDS,
-        )
+        def send(token: str) -> requests.Response:
+            return requests.get(
+                download_url,
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=REQUEST_TIMEOUT_SECONDS,
+            )
+
+        response = self._send_authorized("the transcript download", send)
         response.raise_for_status()
         return response.text

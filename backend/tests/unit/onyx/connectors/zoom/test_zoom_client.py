@@ -21,17 +21,13 @@ def _response(status: int, payload: Any = None, text: str = "") -> MagicMock:
 
 def _client() -> ZoomClient:
     client = ZoomClient(account_id="acct", client_id="cid", client_secret="secret")
-    # Skip the OAuth round trip; token handling has its own tests below.
+    # Token handling has its own tests, so skip the OAuth round trip here.
     client._access_token = "tok"
     client._token_expires_at = float("inf")
     return client
 
 
 class TestEncodeMeetingIdentifier:
-    """Zoom's docs require encoding a uuid twice when it starts with "/" or
-    contains "//", because something in front of their API decodes one layer
-    before the request arrives."""
-
     def test_plain_numeric_id_is_untouched(self) -> None:
         assert _encode_meeting_identifier("81234567890") == "81234567890"
 
@@ -75,8 +71,6 @@ class TestAccessToken:
         client = ZoomClient(account_id="a", client_id="c", client_secret="s")
         assert client._get_access_token() == "t1"
 
-        # Inside the refresh margin: a request must not go out holding a token
-        # that lapses mid-flight.
         client._token_expires_at = 0.0
 
         assert client._get_access_token() == "t2"
@@ -91,8 +85,36 @@ class TestAccessToken:
             client._get_access_token()
 
 
-class TestRequestErrorMapping:
-    def test_unauthorized_raises_credential_expired(self) -> None:
+class TestStaleTokenIsRetried:
+    """Delete the retry and a stale token starts reporting itself as a bad
+    credential, which eventually marks the connector invalid."""
+
+    @patch("onyx.connectors.zoom.client.requests.post")
+    def test_stale_token_is_refreshed_and_the_request_succeeds(
+        self, post: MagicMock
+    ) -> None:
+        post.return_value = _response(
+            200, {"access_token": "fresh", "expires_in": 3600}
+        )
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.side_effect = [_response(401), _response(200, {})]
+
+        response = client._request("GET", "/anything")
+
+        assert response.status_code == 200
+        assert client._session.request.call_count == 2
+        # The retry must carry the new token, not the rejected one.
+        assert (
+            client._session.request.call_args.kwargs["headers"]["Authorization"]
+            == "Bearer fresh"
+        )
+
+    @patch("onyx.connectors.zoom.client.requests.post")
+    def test_a_second_rejection_is_reported_as_expired(self, post: MagicMock) -> None:
+        post.return_value = _response(
+            200, {"access_token": "fresh", "expires_in": 3600}
+        )
         client = _client()
         client._session = MagicMock()
         client._session.request.return_value = _response(401)
@@ -100,6 +122,41 @@ class TestRequestErrorMapping:
         with pytest.raises(CredentialExpiredError):
             client._request("GET", "/anything")
 
+        assert client._session.request.call_count == 2
+
+    @patch("onyx.connectors.zoom.client.requests.get")
+    @patch("onyx.connectors.zoom.client.requests.post")
+    def test_transcript_download_also_retries(
+        self, post: MagicMock, get: MagicMock
+    ) -> None:
+        post.return_value = _response(
+            200, {"access_token": "fresh", "expires_in": 3600}
+        )
+        get.side_effect = [_response(401), _response(200, text="WEBVTT\n")]
+        client = _client()
+
+        assert (
+            client.download_transcript_vtt("https://zoom.example/t.vtt") == "WEBVTT\n"
+        )
+        assert get.call_count == 2
+
+    @patch("onyx.connectors.zoom.client.requests.get")
+    @patch("onyx.connectors.zoom.client.requests.post")
+    def test_transcript_download_reports_a_typed_error(
+        self, post: MagicMock, get: MagicMock
+    ) -> None:
+        post.return_value = _response(
+            200, {"access_token": "fresh", "expires_in": 3600}
+        )
+        get.return_value = _response(403)
+        client = _client()
+
+        # Not a bare HTTPError: the download shares the API's error mapping.
+        with pytest.raises(InsufficientPermissionsError):
+            client.download_transcript_vtt("https://zoom.example/t.vtt")
+
+
+class TestRequestErrorMapping:
     def test_forbidden_raises_insufficient_permissions(self) -> None:
         client = _client()
         client._session = MagicMock()

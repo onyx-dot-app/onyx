@@ -10,11 +10,9 @@ _CUE_TAG_RE = re.compile(r"<[^>]*>")
 
 
 def parse_vtt_transcript(vtt_content: str) -> str:
-    """Follows the W3C WebVTT spec, which is as far as Zoom commits: their docs
-    name the file type and say it holds timestamped sections, but never define
-    the layout inside it. Real Zoom files put the speaker inline in the cue
-    text ("Jane Doe: hello"), which is undocumented — if that ever changed to
-    <v> tags the speech would survive but the names would be lost.
+    """Follows the W3C WebVTT spec, because Zoom names the file type but never
+    defines the layout inside it. Real Zoom files put the speaker inline in
+    the cue text ("Jane Doe: hello"), which is undocumented and could change.
     """
     normalized = vtt_content.lstrip("﻿").replace("\r\n", "\n").replace("\r", "\n")
 
