@@ -7,6 +7,7 @@ from typing import Any, TypeVar
 
 import gitlab
 import pytz
+from gitlab.exceptions import GitlabError, GitlabGetError
 from gitlab.v4.objects import Project
 
 from onyx.configs.app_configs import (
@@ -134,6 +135,12 @@ exclude_patterns: list[str] = DEFAULT_EXCLUDE_PATTERNS + list(
     GITLAB_CONNECTOR_EXCLUDE_PATTERNS
 )
 
+# Upper bound on commits a single poll will diff. Above this, the poll falls back
+# to a full tree walk: many commits usually mean a wide change set, and the walk
+# costs fewer API calls than diffing every commit. Also caps the very first poll,
+# which arrives with a window starting at the epoch.
+MAX_POLL_COMMITS = 100
+
 
 def _batch_gitlab_objects(git_objs: Iterable[T], batch_size: int) -> Iterator[list[T]]:
     it = iter(git_objs)
@@ -223,6 +230,48 @@ def _looks_like_binary(data: bytes, sample_size: int = 8192) -> bool:
     return (non_text / len(sample)) > 0.30
 
 
+def _decode_file_content(raw_bytes: bytes) -> str:
+    try:
+        return raw_bytes.decode("utf-8")
+    except UnicodeDecodeError:
+        # Fall back to latin-1 for legitimately text-encoded files that use
+        # a legacy single-byte encoding. Guarded by the binary check above.
+        return raw_bytes.decode("latin-1")
+
+
+def _build_code_document(
+    blob_id: str,
+    file_name: str,
+    file_path: str,
+    file_content: str,
+    url: str,
+    project_name: str,
+    project_owner: str,
+    default_branch: str,
+    doc_updated_at: datetime | None,
+) -> Document:
+    """Build a code-file Document.
+
+    `doc_updated_at` is the commit time that last touched the blob, or None when
+    the caller does not know it. Never use fetch time here: the indexing pipeline
+    treats an advanced timestamp as proof of change and then skips its content
+    hash check, so a fetch-time stamp re-embeds every file on every poll.
+    """
+    file_url = (
+        f"{url}/{project_owner}/{project_name}/-/blob/{default_branch}/{file_path}"
+    )
+
+    return Document(
+        id=blob_id,
+        sections=[TextSection(link=file_url, text=file_content)],
+        source=DocumentSource.GITLAB,
+        semantic_identifier=file_name,
+        doc_updated_at=doc_updated_at,
+        primary_owners=[],  # Add owners if needed
+        metadata={"type": "CodeFile"},
+    )
+
+
 def _convert_code_to_document(
     project: Project, file: Any, url: str, projectName: str, projectOwner: str
 ) -> Document | None:
@@ -244,29 +293,135 @@ def _convert_code_to_document(
             "Skipping likely-binary GitLab file %s", file.get("path", "<unknown>")
         )
         return None
+
+    return _build_code_document(
+        blob_id=file["id"],
+        file_name=file["name"],
+        file_path=file["path"],
+        file_content=_decode_file_content(raw_bytes),
+        url=url,
+        project_name=projectName,
+        project_owner=projectOwner,
+        default_branch=default_branch,
+        # A full walk has no per-file commit time. Leaving this unset lets the
+        # pipeline's content hash gate skip files whose bytes have not changed.
+        doc_updated_at=None,
+    )
+
+
+def _fetch_code_document_by_path(
+    project: Project,
+    file_path: str,
+    url: str,
+    project_name: str,
+    project_owner: str,
+    doc_updated_at: datetime | None,
+) -> Document | None:
+    """Fetch one blob by path. Returns None when the path is gone or is binary.
+
+    The blob id returned here is the same git object id that `repository_tree`
+    reports as `id`, so a document built by a poll and one built by a full walk
+    share an id. Pruning relies on that: it enumerates ids with `load_from_state`
+    and deletes indexed ids the walk does not produce.
+    """
+    default_branch = project.default_branch
+
     try:
-        file_content = raw_bytes.decode("utf-8")
-    except UnicodeDecodeError:
-        # Fall back to latin-1 for legitimately text-encoded files that use
-        # a legacy single-byte encoding. Guarded by the binary check above.
-        file_content = raw_bytes.decode("latin-1")
+        file_content_obj = project.files.get(file_path=file_path, ref=default_branch)
+    except GitlabGetError as e:
+        if e.response_code == 404:
+            # The branch moved between listing the commit and reading the blob.
+            logger.debug("Skipping %s: not present on %s", file_path, default_branch)
+            return None
+        raise
 
-    # Construct the file URL dynamically using the default branch
-    file_url = (
-        f"{url}/{projectOwner}/{projectName}/-/blob/{default_branch}/{file['path']}"
+    raw_bytes = file_content_obj.decode()
+    if _looks_like_binary(raw_bytes):
+        # Apply the same guard as the full walk, so a poll and a walk agree on
+        # which blobs produce a document.
+        logger.debug("Skipping likely-binary GitLab file %s", file_path)
+        return None
+
+    return _build_code_document(
+        blob_id=file_content_obj.blob_id,
+        file_name=file_content_obj.file_name,
+        file_path=file_path,
+        file_content=_decode_file_content(raw_bytes),
+        url=url,
+        project_name=project_name,
+        project_owner=project_owner,
+        default_branch=default_branch,
+        doc_updated_at=doc_updated_at,
     )
 
-    # Create and return a Document object
-    doc = Document(
-        id=file["id"],
-        sections=[TextSection(link=file_url, text=file_content)],
-        source=DocumentSource.GITLAB,
-        semantic_identifier=file["name"],
-        doc_updated_at=datetime.now().replace(tzinfo=timezone.utc),
-        primary_owners=[],  # Add owners if needed
-        metadata={"type": "CodeFile"},
-    )
-    return doc
+
+def _changed_paths_in_window(
+    project: Project, start: datetime, end: datetime
+) -> dict[str, datetime] | None:
+    """Map each path changed on the default branch in [start, end] to its commit time.
+
+    Returns None when the change set cannot be determined and the caller must fall
+    back to a full tree walk. An empty dict means the window held no commits, so
+    there is nothing to re-index.
+
+    Deleted paths are left out. `poll_source` cannot express a deletion — it only
+    yields documents that exist — so the pruning job removes those documents.
+    """
+    default_branch = project.default_branch
+    if not default_branch:
+        logger.warning("Project has no default branch; falling back to a full walk")
+        return None
+
+    try:
+        commits = list(
+            project.commits.list(
+                ref_name=default_branch,
+                since=start.isoformat(),
+                until=end.isoformat(),
+                page=1,
+                per_page=MAX_POLL_COMMITS,
+            )
+        )
+    except GitlabError:
+        logger.exception("Listing commits failed; falling back to a full walk")
+        return None
+
+    if len(commits) >= MAX_POLL_COMMITS:
+        logger.info(
+            "Window holds at least %s commits; falling back to a full walk",
+            MAX_POLL_COMMITS,
+        )
+        return None
+
+    path_to_updated_at: dict[str, datetime] = {}
+    for commit in commits:
+        # Fall back to the window end so an unparseable commit date still yields
+        # the file rather than dropping the change.
+        committed_at = _gitlab_datetime_to_utc(commit.committed_date) or end
+        try:
+            # For a merge commit GitLab diffs against the first parent, so a
+            # branch merged into the window contributes all of its changes even
+            # when its own commits are older than the window.
+            diffs = commit.diff(get_all=True)
+        except GitlabError:
+            logger.exception(
+                "Diffing commit %s failed; falling back to a full walk", commit.id
+            )
+            return None
+
+        for diff in diffs:
+            if diff.get("deleted_file"):
+                continue
+            # A rename reports the destination in new_path; the source path's
+            # document keeps its own id and the pruning job removes it.
+            path = diff.get("new_path") or diff.get("old_path")
+            if not path:
+                continue
+            known_at = path_to_updated_at.get(path)
+            if known_at is None or committed_at > known_at:
+                path_to_updated_at[path] = committed_at
+
+    return path_to_updated_at
 
 
 def _should_exclude(path: str) -> bool:
@@ -323,6 +478,88 @@ class GitlabConnector(LoadConnector, PollConnector):
         )
         return None
 
+    def _walk_all_code_files(self, project: Project) -> GenerateDocumentsOutput:
+        """Yield every blob on the default branch.
+
+        The pruning job calls `load_from_state` to enumerate the ids that still
+        exist and deletes any indexed id this walk does not produce. It must stay
+        complete, so a partial result here would delete live documents.
+        """
+        assert self.gitlab_client is not None
+
+        # Fetching using BFS as project.report_tree with recursion causing slow load
+        queue = deque([""])  # Start with the root directory
+        while queue:
+            current_path = queue.popleft()
+            files = project.repository_tree(path=current_path, all=True)
+            for file_batch in _batch_gitlab_objects(files, self.batch_size):
+                code_doc_batch: list[Document | HierarchyNode] = []
+                for file in file_batch:
+                    if _should_exclude(file["path"]):
+                        continue
+
+                    if file["type"] == "blob":
+                        code_doc = _convert_code_to_document(
+                            project,
+                            file,
+                            self.gitlab_client.url,
+                            self.project_name,
+                            self.project_owner,
+                        )
+                        if code_doc is not None:
+                            code_doc_batch.append(code_doc)
+                    elif file["type"] == "tree":
+                        queue.append(file["path"])
+
+                if code_doc_batch:
+                    yield code_doc_batch
+
+    def _fetch_changed_code_files(
+        self, project: Project, path_to_updated_at: dict[str, datetime]
+    ) -> GenerateDocumentsOutput:
+        """Yield only the blobs the poll window changed."""
+        assert self.gitlab_client is not None
+
+        paths = [
+            path for path in sorted(path_to_updated_at) if not _should_exclude(path)
+        ]
+        for path_batch in _batch_gitlab_objects(paths, self.batch_size):
+            code_doc_batch: list[Document | HierarchyNode] = []
+            for path in path_batch:
+                doc = _fetch_code_document_by_path(
+                    project,
+                    path,
+                    self.gitlab_client.url,
+                    self.project_name,
+                    self.project_owner,
+                    path_to_updated_at[path],
+                )
+                if doc is not None:
+                    code_doc_batch.append(doc)
+
+            if code_doc_batch:
+                yield code_doc_batch
+
+    def _fetch_code_files(
+        self, project: Project, start: datetime | None, end: datetime | None
+    ) -> GenerateDocumentsOutput:
+        if start is None or end is None:
+            yield from self._walk_all_code_files(project)
+            return
+
+        path_to_updated_at = _changed_paths_in_window(project, start, end)
+        if path_to_updated_at is None:
+            yield from self._walk_all_code_files(project)
+            return
+
+        logger.info(
+            "Poll window changed %s code file(s) in %s/%s",
+            len(path_to_updated_at),
+            self.project_owner,
+            self.project_name,
+        )
+        yield from self._fetch_changed_code_files(project, path_to_updated_at)
+
     def _fetch_from_gitlab(
         self, start: datetime | None = None, end: datetime | None = None
     ) -> GenerateDocumentsOutput:
@@ -334,32 +571,7 @@ class GitlabConnector(LoadConnector, PollConnector):
 
         # Fetch code files
         if self.include_code_files:
-            # Fetching using BFS as project.report_tree with recursion causing slow load
-            queue = deque([""])  # Start with the root directory
-            while queue:
-                current_path = queue.popleft()
-                files = project.repository_tree(path=current_path, all=True)
-                for file_batch in _batch_gitlab_objects(files, self.batch_size):
-                    code_doc_batch: list[Document | HierarchyNode] = []
-                    for file in file_batch:
-                        if _should_exclude(file["path"]):
-                            continue
-
-                        if file["type"] == "blob":
-                            code_doc = _convert_code_to_document(
-                                project,
-                                file,
-                                self.gitlab_client.url,
-                                self.project_name,
-                                self.project_owner,
-                            )
-                            if code_doc is not None:
-                                code_doc_batch.append(code_doc)
-                        elif file["type"] == "tree":
-                            queue.append(file["path"])
-
-                    if code_doc_batch:
-                        yield code_doc_batch
+            yield from self._fetch_code_files(project, start, end)
 
         if self.include_mrs:
             merge_requests = project.mergerequests.list(
