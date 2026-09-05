@@ -18,7 +18,9 @@ def test_resolve_allowlist_empty_or_blank_returns_none():
 
 def test_resolve_allowlist_strips_valid_entries():
     client = MagicMock()
-    client.users_lookupByEmail.return_value = {"ok": True, "user": {"id": "U12345"}}
+    mock_user_resp = MagicMock()
+    mock_user_resp.data = {"ok": True, "user": {"id": "U12345"}}
+    client.users_lookupByEmail.return_value = mock_user_resp
 
     resolved, missing = _resolve_allowlist_user_ids(
         {"respond_member_group_list": ["  user@example.com  ", ""]},
@@ -26,3 +28,4 @@ def test_resolve_allowlist_strips_valid_entries():
     )
     assert resolved == ["U12345"]
     assert missing == []
+

@@ -23,8 +23,10 @@ from onyx.auth.permissions import (
 from onyx.auth.users import (
     current_chat_accessible_user,
     current_limited_user,
+    optional_user,
     scope_exempt,
 )
+
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import PUBLIC_API_TAGS, FileOrigin, MilestoneRecordType
 from onyx.db.engine.sql_engine import get_session
@@ -765,7 +767,7 @@ def get_persona(
     return snapshot
 
 
-@basic_router.get("/{persona_id}/avatar")
+@basic_router.get("/{persona_id}/avatar", dependencies=[Depends(scope_exempt)])
 def get_persona_avatar(
     persona_id: int,
     request: Request,
@@ -784,7 +786,11 @@ def get_persona_avatar(
     except ValueError:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Avatar not found")
 
+    if user is None and not persona.is_public:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Avatar not found")
+
     file_id = persona.uploaded_image_id
+
     if not file_id:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Avatar not found")
 
