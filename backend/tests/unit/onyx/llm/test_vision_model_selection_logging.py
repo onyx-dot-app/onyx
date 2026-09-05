@@ -7,7 +7,7 @@ Verifies that operators get clear feedback about:
 3. When no vision-capable model exists at all
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 from onyx.llm.factory import get_default_llm_with_vision
 
@@ -86,13 +86,18 @@ def test_warns_when_default_model_lacks_vision(
 @patch(f"{_FACTORY}.logger")
 def test_warns_when_no_models_exist(
     mock_logger: MagicMock,
-    mock_fetch_models: MagicMock,  # noqa: ARG001
+    mock_fetch_models: MagicMock,
     mock_fetch_default: MagicMock,  # noqa: ARG001
     mock_session: MagicMock,  # noqa: ARG001
 ) -> None:
     result = get_default_llm_with_vision()
 
     assert result is None
+    mock_fetch_models.assert_called_once_with(
+        db_session=mock_session.return_value.__enter__.return_value,
+        flow_types=[ANY, ANY],
+        only_visible=True,
+    )
     mock_logger.warning.assert_called_once()
     log_msg = mock_logger.warning.call_args[0][0]
     assert "no llm models" in log_msg.lower()
