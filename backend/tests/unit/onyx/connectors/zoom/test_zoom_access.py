@@ -4,7 +4,7 @@ import pytest
 import requests
 
 from onyx.connectors.exceptions import InsufficientPermissionsError
-from onyx.connectors.zoom.client import ZoomClient
+from onyx.connectors.zoom.client import ZoomClient, ZoomNotEntitledError
 from onyx.connectors.zoom.models import (
     ZoomInvitee,
     ZoomPanelist,
@@ -258,6 +258,20 @@ class TestPermanentVersusTransientFailures:
 
         with pytest.raises(type(error)):
             _resolve(client, _work())
+
+    def test_a_missing_webinar_add_on_costs_only_that_source(self) -> None:
+        """Host and group discovery finds webinars through the recordings
+        listing, which needs no add-on, so an account without one still indexes
+        them. Failing here would take the whole run down, meetings included."""
+        error = ZoomNotEntitledError("Webinar plan is missing.")
+        assert permanently_unavailable(error) is True
+
+        client = _client(
+            registrants=[ZoomRegistrant(email="b@example.com", status="approved")]
+        )
+        client.list_past_webinar_participants.side_effect = error
+
+        assert _resolve(client, _work(ZoomSessionType.WEBINAR)) == {"b@example.com"}
 
     def test_a_missing_scope_is_never_swallowed(self) -> None:
         """Swallowing this would empty the access list of every document on the

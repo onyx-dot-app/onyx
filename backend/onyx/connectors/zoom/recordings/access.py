@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 import requests
 
 from onyx.access.models import ExternalAccess
-from onyx.connectors.zoom.client import ZoomClient
+from onyx.connectors.zoom.client import ZoomClient, ZoomNotEntitledError
 from onyx.connectors.zoom.models import (
     APPROVED_REGISTRANT_STATUS,
     ZOOM_MEETING_TOO_OLD_CODE,
@@ -50,11 +50,24 @@ def _zoom_error_code(error: requests.HTTPError) -> str | None:
     return str(body["code"])
 
 
+def _is_plan_denial(error: Exception) -> bool:
+    """Zoom refuses on plan or licence grounds two different ways: a typed error
+    on the webinar endpoints, and a code on the rest."""
+    if isinstance(error, ZoomNotEntitledError):
+        return True
+    return (
+        isinstance(error, requests.HTTPError)
+        and _zoom_error_code(error) == ZOOM_NOT_ENTITLED_CODE
+    )
+
+
 def permanently_unavailable(error: Exception) -> bool:
-    """A missing scope is deliberately left out of this set. It arrives as
-    InsufficientPermissionsError and fails the whole run so an admin fixes it,
-    instead of quietly emptying the access list of every document on the account.
+    """A missing scope is deliberately left out of this set. It arrives as a
+    plain InsufficientPermissionsError and fails the whole run so an admin fixes
+    it, instead of quietly emptying every document's access list.
     """
+    if _is_plan_denial(error):
+        return True
     if not isinstance(error, requests.HTTPError):
         return False
     response = error.response
@@ -106,10 +119,7 @@ def union_source_emails(sources: list[AccessSource]) -> set[str]:
         except Exception as e:
             if not permanently_unavailable(e):
                 raise
-            if (
-                isinstance(e, requests.HTTPError)
-                and _zoom_error_code(e) == ZOOM_NOT_ENTITLED_CODE
-            ):
+            if _is_plan_denial(e):
                 logger.warning("Zoom refused %s on plan grounds: %s", description, e)
             else:
                 logger.info(

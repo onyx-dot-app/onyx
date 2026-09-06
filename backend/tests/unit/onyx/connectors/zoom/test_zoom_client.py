@@ -18,6 +18,7 @@ from onyx.connectors.zoom.client import (
     _MAX_PAGE_SIZE,
     _OAUTH_TOKEN_URL,
     ZoomClient,
+    ZoomNotEntitledError,
     _encode_meeting_identifier,
     _reject_non_zoom_download_url,
 )
@@ -1184,16 +1185,26 @@ class TestListWebinarPanelists:
 
         assert client.list_webinar_panelists("222")[0].email == "speaker@example.com"
 
-    def test_a_missing_webinar_addon_still_names_the_add_on(self) -> None:
-        """Every webinar endpoint fails the same way without the add-on, and
-        Zoom sends it as a 400 rather than a 403."""
+    def test_a_missing_webinar_addon_raises_the_entitlement_type(self) -> None:
+        """Zoom sends this as a 400, not a 403. It gets its own type so callers
+        can carry on without the data, unlike a missing scope."""
         client = _client()
         client._session = MagicMock()
         client._session.request.return_value = _response(
             400, {"code": 200, "message": "Webinar plan is missing."}
         )
 
-        with pytest.raises(InsufficientPermissionsError) as caught:
+        with pytest.raises(ZoomNotEntitledError) as caught:
             client.list_webinar_panelists("222")
 
         assert "Webinar add-on" in str(caught.value)
+
+    def test_a_missing_scope_stays_a_plain_permissions_error(self) -> None:
+        client = _client()
+        client._session = MagicMock()
+        client._session.request.return_value = _response(403)
+
+        with pytest.raises(InsufficientPermissionsError) as caught:
+            client.list_webinar_panelists("222")
+
+        assert not isinstance(caught.value, ZoomNotEntitledError)

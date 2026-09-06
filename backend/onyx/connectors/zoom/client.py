@@ -62,6 +62,12 @@ _MAX_ACCESS_LIST_PAGES = 200
 _AccessRecordT = TypeVar("_AccessRecordT")
 
 
+class ZoomNotEntitledError(InsufficientPermissionsError):
+    """The account's plan or licence does not cover an endpoint, which no retry
+    and no scope change can fix. Kept apart from a missing scope so a caller can
+    carry on without the data instead of failing the run."""
+
+
 def _encode_path_segment(value: str) -> str:
     return quote(value, safe="")
 
@@ -231,7 +237,7 @@ class ZoomClient:
             if denial is not None:
                 # Zoom's message names the user whose licence is missing, which
                 # the hint can't know.
-                raise InsufficientPermissionsError(
+                raise ZoomNotEntitledError(
                     f"{_WEBINAR_ACCESS_HINT} Zoom said: {denial}"
                 )
         return response
