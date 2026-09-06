@@ -89,13 +89,7 @@ def _usable_emails(description: str, emails: list[str | None]) -> set[str]:
             len(emails),
             description,
         )
-    # Keep both spellings, as Zoom sent it and lower-cased. Onyx compares these
-    # exactly but stores a user's address however it arrived: SSO lower-cases it,
-    # basic registration does not. Carrying one spelling loses the match for
-    # whichever half spells it the other way. Adding the second reaches nobody
-    # new, because Onyx already looks users up case-insensitively, so a case
-    # variant can never be a different person.
-    return {spelling for email in usable for spelling in (email, email.lower())}
+    return {email.lower() for email in usable}
 
 
 AccessSource = tuple[str, Callable[[], list[str | None]]]
@@ -172,6 +166,10 @@ class ZoomAccessResolver(AccessResolver):
             external_user_group_ids=set(),
             is_public=False,
         )
+        # Keep the list rather than enforce the limit, which Onyx documents as
+        # advisory. Dropping it hands the document to connector-level access,
+        # failing it can never succeed on a retry, and truncating silently picks
+        # who loses access.
         if access.num_entries > ExternalAccess.MAX_NUM_ENTRIES:
             logger.warning(
                 "Zoom access list for %s occurrence %s has %s entries, over the "
