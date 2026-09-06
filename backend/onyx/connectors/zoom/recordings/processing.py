@@ -12,7 +12,7 @@ from onyx.connectors.models import (
     TextSection,
 )
 from onyx.connectors.zoom.client import ZoomClient
-from onyx.connectors.zoom.recordings.access import AccessResolver
+from onyx.connectors.zoom.recordings.access import zoom_access_resolver
 from onyx.connectors.zoom.recordings.models import (
     OccurrenceWork,
     ZoomSessionType,
@@ -34,7 +34,7 @@ def zoom_document_id(session_type: ZoomSessionType, occurrence_uuid: str) -> str
 
 
 def process_occurrence(
-    client: ZoomClient, work: OccurrenceWork, access_resolver: AccessResolver
+    client: ZoomClient, work: OccurrenceWork, *, include_access: bool
 ) -> Document | ConnectorFailure | None:
     """One occurrence is at most one transcript, so this answers with the
     document, the failure that replaces it, or nothing when the occurrence has
@@ -142,7 +142,9 @@ def process_occurrence(
     # calls. Failing the document beats indexing it with an access list we know
     # is wrong, and a targeted reindex can come back for it later.
     try:
-        external_access = access_resolver.resolve(client, work, handler)
+        external_access = (
+            zoom_access_resolver(client, work, handler) if include_access else None
+        )
     except Exception as e:
         if fails_the_whole_run(e):
             raise

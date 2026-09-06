@@ -12,9 +12,8 @@ from onyx.connectors.zoom.models import (
     ZoomRegistrant,
 )
 from onyx.connectors.zoom.recordings.access import (
-    NoAccessResolver,
-    ZoomAccessResolver,
     permanently_unavailable,
+    zoom_access_resolver,
 )
 from onyx.connectors.zoom.recordings.models import OccurrenceWork, ZoomSessionType
 from onyx.connectors.zoom.recordings.session_types import get_session_type_handler
@@ -45,7 +44,7 @@ def _client(
 
 
 def _resolve(client: MagicMock, work: OccurrenceWork) -> set[str] | None:
-    access = ZoomAccessResolver().resolve(
+    access = zoom_access_resolver(
         client, work, get_session_type_handler(work.session_type)
     )
     return access.external_user_emails if access else None
@@ -221,7 +220,7 @@ class TestGroupsAreNeverAnAccessPrincipal:
             invitees=[ZoomInvitee(email="c@example.com")],
         )
 
-        access = ZoomAccessResolver().resolve(
+        access = zoom_access_resolver(
             client, _work(), get_session_type_handler(ZoomSessionType.MEETING)
         )
 
@@ -308,19 +307,3 @@ class TestPermanentVersusTransientFailures:
         client.list_meeting_invitees.side_effect = _http_error(404)
 
         assert _resolve(client, _work()) is None
-
-
-class TestNoAccessResolver:
-    def test_it_never_calls_zoom(self) -> None:
-        """A connector that is not permission synced must not pay for the extra
-        calls it cannot use."""
-        client = _client(participants=[ZoomParticipant(user_email="a@example.com")])
-
-        access = NoAccessResolver().resolve(
-            client, _work(), get_session_type_handler(ZoomSessionType.MEETING)
-        )
-
-        assert access is None
-        client.list_past_meeting_participants.assert_not_called()
-        client.list_meeting_registrants.assert_not_called()
-        client.list_meeting_invitees.assert_not_called()
