@@ -787,49 +787,46 @@ class TestUserRecordingsPaging:
         assert len(set(seen)) == total
         assert second.done is True
 
-    def test_a_recording_added_mid_walk_does_not_displace_an_unwalked_one(
-        self,
-    ) -> None:
+    def test_a_host_is_listed_once_however_many_steps_it_takes(self) -> None:
         source = GroupSource("group-1")
-        base = [
-            _recording(f"uuid-{i:04d}", start_time=f"2026-01-01T00:{i % 60:02d}:00Z")
-            for i in range(_MAX_WORK_PER_STEP + 5)
-        ]
-        client = _client_for_hosts(members=[ZoomUser(id="u1")])
-        client.list_user_recordings.side_effect = [
-            ZoomRecordingPage(recordings=base),
-            ZoomRecordingPage(
-                recordings=[
-                    _recording("uuid-9999", start_time="2026-06-01T00:00:00Z"),
-                    *base,
-                ]
-            ),
-        ]
+        client = _client_for_hosts(
+            members=[ZoomUser(id="u1")],
+            recordings=[
+                _recording(
+                    f"uuid-{i:04d}", start_time=f"2026-01-01T00:{i % 60:02d}:00Z"
+                )
+                for i in range(_MAX_WORK_PER_STEP + 5)
+            ],
+        )
 
         first = source.discover_step(client, _START, _END, None)
-        second = source.discover_step(client, _START, _END, first.next_cursor)
+        source.discover_step(client, _START, _END, first.next_cursor)
 
-        seen = [w.occurrence_uuid for w in first.work + second.work]
-        assert {r.uuid for r in base}.issubset(set(seen))
-        assert len(seen) == len(set(seen))
+        assert client.list_user_recordings.call_count == 1
 
-    def test_a_reshuffled_second_listing_skips_nothing(self) -> None:
-        source = GroupSource("group-1")
+    def test_a_resumed_attempt_reaches_the_rest_however_the_list_moved(self) -> None:
+        # Two sources, because only a resumed attempt lists again. With one, the
+        # cache would serve the first listing and the sort would go untested.
         batch = [
             _recording(f"uuid-{i:04d}", start_time=f"2026-01-01T00:{i % 60:02d}:00Z")
             for i in range(_MAX_WORK_PER_STEP + 5)
         ]
-        client = _client_for_hosts(members=[ZoomUser(id="u1")])
-        client.list_user_recordings.side_effect = [
-            ZoomRecordingPage(recordings=batch),
-            ZoomRecordingPage(recordings=list(reversed(batch))),
-        ]
+        first_client = _client_for_hosts(members=[ZoomUser(id="u1")], recordings=batch)
+        first = GroupSource("group-1").discover_step(first_client, _START, _END, None)
 
-        first = source.discover_step(client, _START, _END, None)
-        second = source.discover_step(client, _START, _END, first.next_cursor)
+        resumed_client = _client_for_hosts(
+            members=[ZoomUser(id="u1")],
+            recordings=[
+                _recording("uuid-9999", start_time="2026-06-01T00:00:00Z"),
+                *reversed(batch),
+            ],
+        )
+        second = GroupSource("group-1").discover_step(
+            resumed_client, _START, _END, first.next_cursor
+        )
 
         seen = [w.occurrence_uuid for w in first.work + second.work]
-        assert sorted(seen) == sorted(r.uuid for r in batch)
+        assert {r.uuid for r in batch}.issubset(set(seen))
         assert len(seen) == len(set(seen))
 
     def test_an_unrecognised_cursor_restarts_rather_than_skipping_a_host(self) -> None:

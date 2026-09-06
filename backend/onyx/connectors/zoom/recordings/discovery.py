@@ -316,6 +316,8 @@ class _UserRecordingsSource(DiscoverySource):
     def __init__(self, scope_entity_id: str) -> None:
         self._scope_entity_id = scope_entity_id
         self._resolved: list[_Host] | None = None
+        self._listed_host: str | None = None
+        self._listed: list[ZoomRecordingEntry] = []
 
     @abc.abstractmethod
     def _resolve_hosts(
@@ -367,6 +369,29 @@ class _UserRecordingsSource(DiscoverySource):
         self._resolved = hosts
         return hosts, failures
 
+    def _recordings(
+        self,
+        client: ZoomClient,
+        host: _Host,
+        from_date: date,
+        to_date: date,
+    ) -> list[ZoomRecordingEntry]:
+        """Listing a host again on every step costs another pass over its pages, and
+        Zoom's rate limit is account-wide, shared with every other integration the
+        customer runs.
+
+        Zoom documents no order here, and an offset only lines up if the order is the
+        same every time. Sorting oldest first puts a recording that finishes
+        mid-backfill after the offset, where it displaces nothing already walked.
+        """
+        if self._listed_host != host.user_id:
+            recordings = _list_every_recording(client, host, from_date, to_date)
+            self._listed = sorted(
+                recordings, key=lambda r: (r.start_time or "", r.uuid)
+            )
+            self._listed_host = host.user_id
+        return self._listed
+
     def discover_step(
         self,
         client: ZoomClient,
@@ -390,9 +415,9 @@ class _UserRecordingsSource(DiscoverySource):
         offset = position.offset if host.user_id == position.host_id else 0
         from_date, to_date = _poll_window_dates(start, end)
 
-        recordings: list[ZoomRecordingEntry] = []
+        ordered: list[ZoomRecordingEntry] = []
         try:
-            recordings = _list_every_recording(client, host, from_date, to_date)
+            ordered = self._recordings(client, host, from_date, to_date)
         except Exception as e:
             if fails_the_whole_run(e):
                 raise
@@ -407,11 +432,6 @@ class _UserRecordingsSource(DiscoverySource):
                 )
             )
 
-        # Zoom documents no order here, and an offset only lines up if the order is
-        # the same every time. Sorting oldest first also puts a recording that
-        # finishes mid-backfill after the offset, so it displaces nothing already
-        # walked.
-        ordered = sorted(recordings, key=lambda r: (r.start_time or "", r.uuid))
         page = ordered[offset : offset + _MAX_WORK_PER_STEP]
         work = [
             item
