@@ -10,7 +10,7 @@ documents are keyed by occurrence UUID and get upserted.
 """
 
 import abc
-from bisect import bisect_left
+from bisect import bisect_left, bisect_right
 from datetime import date, datetime, timezone
 from typing import Any
 
@@ -236,7 +236,11 @@ class _Host(BaseModel):
 
 class _UserRecordingsCursor(BaseModel):
     host_id: str | None = None
-    offset: int = 0
+    after: tuple[str, str] | None = None
+
+
+def _recording_key(recording: ZoomRecordingEntry) -> tuple[str, str]:
+    return (recording.start_time or "", recording.uuid)
 
 
 def _resume_at(hosts: list[_Host], host_id: str | None) -> int:
@@ -380,9 +384,8 @@ class _UserRecordingsSource(DiscoverySource):
         Zoom's rate limit is account-wide, shared with every other integration the
         customer runs.
 
-        Zoom documents no order here, and an offset only lines up if the order is the
-        same every time. Sorting oldest first puts a recording that finishes
-        mid-backfill after the offset, where it displaces nothing already walked.
+        Zoom documents no order here, and a resumed attempt only lines up if the
+        order is the same every time.
         """
         if self._listed_host != host.user_id:
             recordings = _list_every_recording(client, host, from_date, to_date)
@@ -410,9 +413,7 @@ class _UserRecordingsSource(DiscoverySource):
             return DiscoveryStepResult(failures=failures, done=True)
 
         host = hosts[index]
-        # The cursor's host may be gone, and reusing its offset would skip that
-        # many recordings of whoever now sits in its place.
-        offset = position.offset if host.user_id == position.host_id else 0
+        resume_after = position.after if host.user_id == position.host_id else None
         from_date, to_date = _poll_window_dates(start, end)
 
         ordered: list[ZoomRecordingEntry] = []
@@ -432,19 +433,30 @@ class _UserRecordingsSource(DiscoverySource):
                 )
             )
 
-        page = ordered[offset : offset + _MAX_WORK_PER_STEP]
+        # A resumed attempt lists the host again, and Zoom's late transcripts
+        # arrive carrying their meeting's own old start time, so entries appear
+        # and vanish ahead of where we stopped. A count would move with them; the
+        # recording we stopped on does not.
+        first = (
+            bisect_right([_recording_key(r) for r in ordered], resume_after)
+            if resume_after
+            else 0
+        )
+        page = ordered[first : first + _MAX_WORK_PER_STEP]
         work = [
             item
             for item in (_work_from_recording(recording) for recording in page)
             if item is not None
         ]
 
-        next_offset = offset + len(page)
-        if next_offset < len(ordered):
+        if first + len(page) < len(ordered):
             return DiscoveryStepResult(
                 work=work,
                 failures=failures,
-                next_cursor={"host_id": host.user_id, "offset": next_offset},
+                next_cursor={
+                    "host_id": host.user_id,
+                    "after": _recording_key(page[-1]),
+                },
                 done=False,
             )
 

@@ -763,7 +763,7 @@ class TestUserRecordingsPaging:
         assert result.next_cursor is None
         assert result.done is True
 
-    def test_a_host_longer_than_one_step_is_walked_by_offset(self) -> None:
+    def test_a_host_longer_than_one_step_is_walked_across_steps(self) -> None:
         source = GroupSource("group-1")
         total = _MAX_WORK_PER_STEP + 5
         client = _client_for_hosts(
@@ -777,7 +777,8 @@ class TestUserRecordingsPaging:
         )
 
         first = source.discover_step(client, _START, _END, None)
-        assert first.next_cursor == {"host_id": "u1", "offset": _MAX_WORK_PER_STEP}
+        assert first.next_cursor is not None
+        assert first.next_cursor["host_id"] == "u1"
         assert first.done is False
 
         second = source.discover_step(client, _START, _END, first.next_cursor)
@@ -803,6 +804,35 @@ class TestUserRecordingsPaging:
         source.discover_step(client, _START, _END, first.next_cursor)
 
         assert client.list_user_recordings.call_count == 1
+
+    def test_a_late_transcript_for_an_old_meeting_costs_nothing(self) -> None:
+        batch = [
+            _recording(f"uuid-{i:04d}", start_time=f"2026-01-02T00:{i % 60:02d}:00Z")
+            for i in range(_MAX_WORK_PER_STEP + 5)
+        ]
+        first = GroupSource("group-1").discover_step(
+            _client_for_hosts(members=[ZoomUser(id="u1")], recordings=batch),
+            _START,
+            _END,
+            None,
+        )
+
+        resumed = GroupSource("group-1").discover_step(
+            _client_for_hosts(
+                members=[ZoomUser(id="u1")],
+                recordings=[
+                    _recording("uuid-late", start_time="2026-01-01T09:00:00Z"),
+                    *batch,
+                ],
+            ),
+            _START,
+            _END,
+            first.next_cursor,
+        )
+
+        seen = [w.occurrence_uuid for w in first.work + resumed.work]
+        assert {r.uuid for r in batch}.issubset(set(seen))
+        assert len(seen) == len(set(seen))
 
     def test_a_resumed_attempt_reaches_the_rest_however_the_list_moved(self) -> None:
         # Two sources, because only a resumed attempt lists again. With one, the
