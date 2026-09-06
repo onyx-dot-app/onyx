@@ -344,7 +344,6 @@ class ZoomClient:
         user_id: str,
         from_date: date,
         to_date: date,
-        page_size: int,
         page_token: str | None = None,
     ) -> ZoomRecordingPage:
         """A 404 here is not "nothing to index": Zoom sends it when the user id
@@ -353,7 +352,7 @@ class ZoomClient:
         params: dict[str, Any] = {
             "from": from_date.isoformat(),
             "to": to_date.isoformat(),
-            "page_size": page_size,
+            "page_size": _MAX_PAGE_SIZE,
         }
         if page_token:
             params["next_page_token"] = page_token

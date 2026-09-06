@@ -580,9 +580,7 @@ class TestListUserRecordings:
         client._session = MagicMock()
         client._session.request.return_value = _response(200, self._page())
 
-        page = client.list_user_recordings(
-            "u1", date(2026, 1, 1), date(2026, 2, 1), page_size=30
-        )
+        page = client.list_user_recordings("u1", date(2026, 1, 1), date(2026, 2, 1))
 
         recording = page.recordings[0]
         assert recording.uuid == "BOKXuumlTAGXuqwr3bLyuQ=="
@@ -595,9 +593,7 @@ class TestListUserRecordings:
         client._session = MagicMock()
         client._session.request.return_value = _response(200, self._page())
 
-        page = client.list_user_recordings(
-            "u1", date(2026, 1, 1), date(2026, 2, 1), page_size=30
-        )
+        page = client.list_user_recordings("u1", date(2026, 1, 1), date(2026, 2, 1))
 
         assert page.recordings[0].session_id == "6840331990"
 
@@ -607,14 +603,14 @@ class TestListUserRecordings:
         client._session.request.return_value = _response(200, {"meetings": []})
 
         client.list_user_recordings(
-            "u1", date(2026, 1, 1), date(2026, 2, 1), page_size=30, page_token="tok"
+            "u1", date(2026, 1, 1), date(2026, 2, 1), page_token="tok"
         )
 
         params = client._session.request.call_args.kwargs["params"]
         assert params == {
             "from": "2026-01-01",
             "to": "2026-02-01",
-            "page_size": 30,
+            "page_size": _MAX_PAGE_SIZE,
             "next_page_token": "tok",
         }
         url = client._session.request.call_args.args[1]
@@ -628,18 +624,14 @@ class TestListUserRecordings:
         )
 
         with pytest.raises(requests.HTTPError, match="User does not exist"):
-            client.list_user_recordings(
-                "nope", date(2026, 1, 1), date(2026, 2, 1), page_size=30
-            )
+            client.list_user_recordings("nope", date(2026, 1, 1), date(2026, 2, 1))
 
     def test_missing_meetings_key_yields_an_empty_page(self) -> None:
         client = _client()
         client._session = MagicMock()
         client._session.request.return_value = _response(200, {})
 
-        page = client.list_user_recordings(
-            "u1", date(2026, 1, 1), date(2026, 2, 1), page_size=30
-        )
+        page = client.list_user_recordings("u1", date(2026, 1, 1), date(2026, 2, 1))
 
         assert page.recordings == []
         assert page.next_page_token is None

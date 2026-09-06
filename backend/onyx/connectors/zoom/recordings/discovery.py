@@ -44,11 +44,6 @@ _OCCURRENCE_POLL_OVERLAP_SECONDS = ZOOM_TRANSCRIPT_LAG_BUFFER_HOURS * 60 * 60
 # almost every real meeting to a single listing.
 _MAX_WORK_PER_STEP = 200
 
-# Zoom expires a next_page_token 15 minutes after issuing it, and every occurrence
-# on a page is processed before the next page is asked for. Small pages keep that
-# gap well inside the token's life.
-_RECORDINGS_PAGE_SIZE = 30
-
 
 def _entity_failure(
     entity_id: str,
@@ -240,7 +235,7 @@ class _Host(BaseModel):
 
 class _UserRecordingsCursor(BaseModel):
     host_index: int = 0
-    page_token: str | None = None
+    offset: int = 0
 
 
 def _work_from_recording(recording: ZoomRecordingEntry) -> OccurrenceWork | None:
@@ -269,6 +264,32 @@ def _work_from_recording(recording: ZoomRecordingEntry) -> OccurrenceWork | None
         start_time=recording.start_time,
         topic=recording.topic,
     )
+
+
+def _list_every_recording(
+    client: ZoomClient,
+    host: _Host,
+    from_date: date,
+    to_date: date,
+) -> list[ZoomRecordingEntry]:
+    """Zoom expires a next_page_token 15 minutes after issuing it, so no token may
+    outlive one step. A crawl that resumed holding one would send a dead token, and
+    reporting that loses the host's remaining recordings for good: the attempt still
+    ends as a success, so the next run moves its poll window on and never returns.
+    """
+    recordings: list[ZoomRecordingEntry] = []
+    page_token: str | None = None
+    while True:
+        page = client.list_user_recordings(
+            user_id=host.user_id,
+            from_date=from_date,
+            to_date=to_date,
+            page_token=page_token,
+        )
+        recordings.extend(page.recordings)
+        page_token = page.next_page_token
+        if not page_token:
+            return recordings
 
 
 class _UserRecordingsSource(DiscoverySource):
@@ -353,24 +374,9 @@ class _UserRecordingsSource(DiscoverySource):
         host = hosts[position.host_index]
         from_date, to_date = _poll_window_dates(start, end)
 
-        work: list[OccurrenceWork] = []
-        next_page_token: str | None = None
+        recordings: list[ZoomRecordingEntry] = []
         try:
-            page = client.list_user_recordings(
-                user_id=host.user_id,
-                from_date=from_date,
-                to_date=to_date,
-                page_size=_RECORDINGS_PAGE_SIZE,
-                page_token=position.page_token,
-            )
-            work = [
-                item
-                for item in (
-                    _work_from_recording(recording) for recording in page.recordings
-                )
-                if item is not None
-            ]
-            next_page_token = page.next_page_token
+            recordings = _list_every_recording(client, host, from_date, to_date)
         except Exception as e:
             if fails_the_whole_run(e):
                 raise
@@ -385,13 +391,26 @@ class _UserRecordingsSource(DiscoverySource):
                 )
             )
 
-        if next_page_token:
+        # Zoom documents no order here, and an offset only lines up if the order is
+        # the same every time. Sorting oldest first also puts a recording that
+        # finishes mid-backfill after the offset, so it displaces nothing already
+        # walked.
+        ordered = sorted(recordings, key=lambda r: (r.start_time or "", r.uuid))
+        page = ordered[position.offset : position.offset + _MAX_WORK_PER_STEP]
+        work = [
+            item
+            for item in (_work_from_recording(recording) for recording in page)
+            if item is not None
+        ]
+
+        next_offset = position.offset + len(page)
+        if next_offset < len(ordered):
             return DiscoveryStepResult(
                 work=work,
                 failures=failures,
                 next_cursor={
                     "host_index": position.host_index,
-                    "page_token": next_page_token,
+                    "offset": next_offset,
                 },
                 done=False,
             )

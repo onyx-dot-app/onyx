@@ -20,7 +20,6 @@ from onyx.connectors.zoom.models import (
 from onyx.connectors.zoom.recordings.discovery import (
     _MAX_WORK_PER_STEP,
     _OCCURRENCE_POLL_OVERLAP_SECONDS,
-    _RECORDINGS_PAGE_SIZE,
     GroupSource,
     HostAllowlistSource,
     IdAllowlistSource,
@@ -749,7 +748,7 @@ class TestGroupSource:
 
 
 class TestUserRecordingsPaging:
-    def test_zooms_own_page_token_is_carried_in_the_cursor(self) -> None:
+    def test_no_page_token_ever_outlives_a_step(self) -> None:
         source = GroupSource("group-1")
         client = _client_for_hosts(members=[ZoomUser(id="u1")])
         client.list_user_recordings.side_effect = [
@@ -757,25 +756,81 @@ class TestUserRecordingsPaging:
             ZoomRecordingPage(recordings=[_recording("uuid-2")]),
         ]
 
+        result = source.discover_step(client, _START, _END, None)
+
+        assert client.list_user_recordings.call_count == 2
+        assert [w.occurrence_uuid for w in result.work] == ["uuid-1", "uuid-2"]
+        assert result.next_cursor is None
+        assert result.done is True
+
+    def test_a_host_longer_than_one_step_is_walked_by_offset(self) -> None:
+        source = GroupSource("group-1")
+        total = _MAX_WORK_PER_STEP + 5
+        client = _client_for_hosts(
+            members=[ZoomUser(id="u1")],
+            recordings=[
+                _recording(
+                    f"uuid-{i:04d}", start_time=f"2026-01-01T00:{i % 60:02d}:00Z"
+                )
+                for i in range(total)
+            ],
+        )
+
         first = source.discover_step(client, _START, _END, None)
-        assert first.next_cursor == {"host_index": 0, "page_token": "tok"}
+        assert first.next_cursor == {"host_index": 0, "offset": _MAX_WORK_PER_STEP}
         assert first.done is False
 
         second = source.discover_step(client, _START, _END, first.next_cursor)
 
-        assert client.list_user_recordings.call_args.kwargs["page_token"] == "tok"
-        assert [w.occurrence_uuid for w in second.work] == ["uuid-2"]
+        seen = [w.occurrence_uuid for w in first.work + second.work]
+        assert len(seen) == total
+        assert len(set(seen)) == total
         assert second.done is True
 
-    def test_pages_are_small_enough_to_outlive_zooms_token_expiry(self) -> None:
+    def test_a_recording_added_mid_walk_does_not_displace_an_unwalked_one(
+        self,
+    ) -> None:
         source = GroupSource("group-1")
+        base = [
+            _recording(f"uuid-{i:04d}", start_time=f"2026-01-01T00:{i % 60:02d}:00Z")
+            for i in range(_MAX_WORK_PER_STEP + 5)
+        ]
         client = _client_for_hosts(members=[ZoomUser(id="u1")])
+        client.list_user_recordings.side_effect = [
+            ZoomRecordingPage(recordings=base),
+            ZoomRecordingPage(
+                recordings=[
+                    _recording("uuid-9999", start_time="2026-06-01T00:00:00Z"),
+                    *base,
+                ]
+            ),
+        ]
 
-        source.discover_step(client, _START, _END, None)
+        first = source.discover_step(client, _START, _END, None)
+        second = source.discover_step(client, _START, _END, first.next_cursor)
 
-        page_size = client.list_user_recordings.call_args.kwargs["page_size"]
-        assert page_size == _RECORDINGS_PAGE_SIZE
-        assert page_size <= _MAX_WORK_PER_STEP
+        seen = [w.occurrence_uuid for w in first.work + second.work]
+        assert {r.uuid for r in base}.issubset(set(seen))
+        assert len(seen) == len(set(seen))
+
+    def test_a_reshuffled_second_listing_skips_nothing(self) -> None:
+        source = GroupSource("group-1")
+        batch = [
+            _recording(f"uuid-{i:04d}", start_time=f"2026-01-01T00:{i % 60:02d}:00Z")
+            for i in range(_MAX_WORK_PER_STEP + 5)
+        ]
+        client = _client_for_hosts(members=[ZoomUser(id="u1")])
+        client.list_user_recordings.side_effect = [
+            ZoomRecordingPage(recordings=batch),
+            ZoomRecordingPage(recordings=list(reversed(batch))),
+        ]
+
+        first = source.discover_step(client, _START, _END, None)
+        second = source.discover_step(client, _START, _END, first.next_cursor)
+
+        seen = [w.occurrence_uuid for w in first.work + second.work]
+        assert sorted(seen) == sorted(r.uuid for r in batch)
+        assert len(seen) == len(set(seen))
 
     def test_an_unrecognised_cursor_restarts_rather_than_skipping_a_host(self) -> None:
         source = GroupSource("group-1")
