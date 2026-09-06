@@ -102,6 +102,9 @@ class MeetingSessionType(SessionTypeHandler):
             ),
             (
                 f"the invitees of meeting {work.session_id}",
+                # Zoom returns an external invitee's real address here, unlike
+                # the participants endpoint which blanks it. Being invited is what
+                # grants access, so don't filter these on internal_user.
                 lambda: [
                     i.email for i in client.list_meeting_invitees(work.session_id)
                 ],

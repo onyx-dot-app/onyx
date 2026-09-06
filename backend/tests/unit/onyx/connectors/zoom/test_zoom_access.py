@@ -144,6 +144,22 @@ class TestCancelledRegistrations:
         assert _resolve(client, _work()) is None
 
 
+class TestExternalInvitees:
+    def test_an_external_invitee_still_gets_access(self) -> None:
+        """Being invited is what grants access, wherever the person works."""
+        client = _client(
+            invitees=[
+                ZoomInvitee(email="colleague@example.com", internal_user=True),
+                ZoomInvitee(email="outsider@vendor.com", internal_user=False),
+            ]
+        )
+
+        assert _resolve(client, _work()) == {
+            "colleague@example.com",
+            "outsider@vendor.com",
+        }
+
+
 class TestBlankEmails:
     """Zoom returns an empty email for anyone outside the host's account, and a
     person with no email cannot be granted access."""

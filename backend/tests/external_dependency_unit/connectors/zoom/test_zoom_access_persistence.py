@@ -117,6 +117,9 @@ class TestZoomAccessListReachesPostgres:
         documents = _zoom_documents(meeting_id)
         assert len(documents) == 1
 
+        # Deliberately the narrower call: index_doc_batch_prepare also writes
+        # document__tag rows from Document.metadata, and cleanup_cc_pair does not
+        # reap those, so teardown fails on a foreign key.
         _upsert_documents_in_db(
             documents=documents,
             index_attempt_metadata=IndexAttemptMetadata(
