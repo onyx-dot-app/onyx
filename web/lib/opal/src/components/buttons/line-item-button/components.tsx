@@ -137,6 +137,21 @@ function handleRowKeyUp(e: React.KeyboardEvent<HTMLDivElement>) {
   }
 }
 
+// The caller's handler runs first and can stop the row's own activation with
+// `preventDefault()` — the order a native control gives you. Composed rather
+// than replaced, because a row that accepts a handler and then overwrites it
+// is the same silent drop this component exists to avoid.
+function composeKeyHandler(
+  caller: React.KeyboardEventHandler<HTMLDivElement> | undefined,
+  row: React.KeyboardEventHandler<HTMLDivElement>
+): React.KeyboardEventHandler<HTMLDivElement> {
+  if (!caller) return row;
+  return (e) => {
+    caller(e);
+    if (!e.defaultPrevented) row(e);
+  };
+}
+
 // Ignore clicks originating from nested interactive children (e.g.
 // `rightChildren` action buttons) so they don't also activate the row.
 function guardNestedInteractiveClick(
@@ -192,6 +207,16 @@ function LineItemButton({
   color = "interactive",
 
   /*
+   * Named so the row can defer to a caller's value instead of overwriting it.
+   * They would otherwise ride `rowProps` onto the container and be replaced by
+   * the button semantics spread after it — accepted by the type, then gone.
+   */
+  role,
+  tabIndex,
+  onKeyDown,
+  onKeyUp,
+
+  /*
    * Whatever is left is DOM — labels, handlers, `data-*` — and belongs on the
    * row. It used to go the other way, into `ContentAction`, which never
    * spreads onto an element, so an unrecognised prop was accepted and then
@@ -201,15 +226,17 @@ function LineItemButton({
 }: LineItemButtonProps) {
   // The row renders as a focusable div (role="button") instead of a native
   // <button> so interactive `rightChildren` (e.g. action buttons) don't nest
-  // a <button> inside a <button> — invalid HTML that breaks hydration.
+  // a <button> inside a <button> — invalid HTML that breaks hydration. An
+  // anchor row is already focusable and already activates on Enter, so it
+  // takes the caller's values unchanged.
   const rowButtonProps = href
-    ? undefined
-    : ({
-        role: "button",
-        tabIndex: 0,
-        onKeyDown: handleRowKeyDown,
-        onKeyUp: handleRowKeyUp,
-      } as const);
+    ? { role, tabIndex, onKeyDown, onKeyUp }
+    : {
+        role: role ?? "button",
+        tabIndex: tabIndex ?? 0,
+        onKeyDown: composeKeyHandler(onKeyDown, handleRowKeyDown),
+        onKeyUp: composeKeyHandler(onKeyUp, handleRowKeyUp),
+      };
 
   const item = (
     <Interactive.Stateful

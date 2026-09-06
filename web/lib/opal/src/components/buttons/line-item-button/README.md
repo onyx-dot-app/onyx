@@ -42,10 +42,16 @@ row's label lines up with an adjacent button. A step outside that set is a type 
 
 ### Row element
 
-These land on the row itself rather than on the content inside it. They are
-named individually because anything `LineItemButton` does not destructure goes
-to `ContentAction`, which never spreads onto a DOM node — a label or a handler
-left in that bag is silently dropped.
+These land on the row itself rather than on the content inside it. Anything
+`LineItemButton` does not name reaches the row element, so the table below is
+illustrative, not exhaustive — `data-*`, the rest of `aria-*`, and the other
+`HTMLAttributes<HTMLDivElement>` handlers all arrive the same way.
+
+`role`, `tabIndex`, `onKeyDown` and `onKeyUp` are the exception: a non-anchor
+row sets the first two to make itself a focusable `"button"`, and uses the
+latter two for Enter/Space activation. Pass your own and the row defers —
+handlers compose, yours first, and `preventDefault()` stops the row's own
+activation.
 
 | Prop                                                          | Type                                | Description                                     |
 | ------------------------------------------------------------- | ----------------------------------- | ----------------------------------------------- |
@@ -79,7 +85,12 @@ meanings in one prop. Use `tooltip` for hover text.
 | `rightChildren` | `ReactNode`             | —              | Content after the label (e.g. action button) |
 | `color`         | `ColorTypes`            | `"interactive"` | Content colour mode. Defaults to `"interactive"`, which is what lets the row's hover / selected / disabled colours reach its title and icon — passing anything else opts out of that. `undefined` counts as not passing one. |
 
-All other `ContentAction` / `Content` props (`editable`, `onTitleChange`, `optional`, `auxIcon`, `tag`, etc.) are also passed through.
+| `strikethrough` | `boolean`               | `false`         | Strike the label through, e.g. a row switched off |
+
+That table is the entire content surface. The remaining `ContentAction` /
+`Content` props — `editable`, `onTitleChange`, `auxIcon`, `tag`, and the rest —
+are **not** part of `LineItemButton`'s type; no call site passed one. Naming
+only what a row uses is what lets everything else reach the row element.
 
 ## Usage
 
