@@ -30,7 +30,7 @@ from onyx.connectors.zoom.models import (
     ZoomTranscript,
 )
 from onyx.db.models import ConnectorCredentialPair
-from onyx.indexing.indexing_pipeline import _upsert_documents_in_db
+from onyx.indexing.indexing_pipeline import index_doc_batch_prepare
 from tests.external_dependency_unit.indexing_helpers import (
     cleanup_cc_pair,
     get_doc_row,
@@ -117,10 +117,7 @@ class TestZoomAccessListReachesPostgres:
         documents = _zoom_documents(meeting_id)
         assert len(documents) == 1
 
-        # Deliberately the narrower call: index_doc_batch_prepare also writes
-        # document__tag rows from Document.metadata, and cleanup_cc_pair does not
-        # reap those, so teardown fails on a foreign key.
-        _upsert_documents_in_db(
+        index_doc_batch_prepare(
             documents=documents,
             index_attempt_metadata=IndexAttemptMetadata(
                 connector_id=cc_pair.connector_id,
