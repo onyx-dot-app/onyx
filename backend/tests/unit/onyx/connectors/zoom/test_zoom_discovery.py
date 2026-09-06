@@ -711,7 +711,7 @@ class TestGroupSource:
 
         assert client.list_group_members.call_count == 2
         assert first.done is False
-        assert first.next_cursor == {"host_index": 1}
+        assert first.next_cursor == {"host_id": "u2"}
 
     def test_an_empty_group_completes_without_crawling(self) -> None:
         source = GroupSource("group-1")
@@ -777,7 +777,7 @@ class TestUserRecordingsPaging:
         )
 
         first = source.discover_step(client, _START, _END, None)
-        assert first.next_cursor == {"host_index": 0, "offset": _MAX_WORK_PER_STEP}
+        assert first.next_cursor == {"host_id": "u1", "offset": _MAX_WORK_PER_STEP}
         assert first.done is False
 
         second = source.discover_step(client, _START, _END, first.next_cursor)
@@ -846,11 +846,63 @@ class TestUserRecordingsPaging:
         source = GroupSource("group-1")
         client = _client_for_hosts(members=[ZoomUser(id="u1")])
 
-        result = source.discover_step(client, _START, _END, {"host_index": 5})
+        result = source.discover_step(client, _START, _END, {"host_id": "zzz"})
 
         assert result.work == []
         assert result.done is True
         client.list_user_recordings.assert_not_called()
+
+
+class TestHostListChangesBetweenAttempts:
+    """The host list is resolved again on every attempt, so a position in it would
+    slide onto a different host whenever a member joined or left."""
+
+    def _crawl(
+        self, members: list[ZoomUser], cursor: dict | None
+    ) -> tuple[list[str], MagicMock]:
+        client = _client_for_hosts(members=members)
+        client.list_user_recordings.side_effect = lambda user_id, **_: (
+            ZoomRecordingPage(recordings=[_recording(f"rec-{user_id}")])
+        )
+        source = GroupSource("group-1")
+        seen: list[str] = []
+        for _ in range(10):
+            result = source.discover_step(client, _START, _END, cursor)
+            seen.extend(w.occurrence_uuid for w in result.work)
+            cursor = result.next_cursor
+            if result.done:
+                break
+        return seen, client
+
+    def test_a_member_leaving_does_not_skip_the_host_behind_them(self) -> None:
+        everyone = [ZoomUser(id=i) for i in ("a", "b", "c")]
+        first, _ = self._crawl(everyone, None)
+        assert first[0] == "rec-a"
+
+        resumed, _ = self._crawl([u for u in everyone if u.id != "a"], {"host_id": "b"})
+
+        assert resumed == ["rec-b", "rec-c"]
+
+    def test_a_member_joining_ahead_does_not_recrawl_what_is_done(self) -> None:
+        everyone = [ZoomUser(id=i) for i in ("b", "c")]
+
+        resumed, _ = self._crawl([ZoomUser(id="a"), *everyone], {"host_id": "b"})
+
+        # A member who joins mid-crawl gets their back catalogue only from a full
+        # reindex, exactly as one who joins after the crawl finishes does.
+        assert resumed == ["rec-b", "rec-c"]
+
+    def test_the_named_host_vanishing_starts_the_next_one_cleanly(self) -> None:
+        source = GroupSource("group-1")
+        client = _client_for_hosts(
+            members=[ZoomUser(id="c")], recordings=[_recording("rec-c")]
+        )
+
+        result = source.discover_step(
+            client, _START, _END, {"host_id": "b", "offset": 150}
+        )
+
+        assert [w.occurrence_uuid for w in result.work] == ["rec-c"]
 
 
 class TestUserRecordingsPollWindow:

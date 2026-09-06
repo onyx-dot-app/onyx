@@ -10,6 +10,7 @@ documents are keyed by occurrence UUID and get upserted.
 """
 
 import abc
+from bisect import bisect_left
 from datetime import date, datetime, timezone
 from typing import Any
 
@@ -234,8 +235,19 @@ class _Host(BaseModel):
 
 
 class _UserRecordingsCursor(BaseModel):
-    host_index: int = 0
+    host_id: str | None = None
     offset: int = 0
+
+
+def _resume_at(hosts: list[_Host], host_id: str | None) -> int:
+    """The cursor names the host it stopped on rather than its position, because
+    the host list is resolved again on every attempt. A member leaving shifts every
+    later position back by one, and the host that slides under the cursor is skipped
+    and never indexed.
+    """
+    if host_id is None:
+        return 0
+    return bisect_left([host.user_id for host in hosts], host_id)
 
 
 def _work_from_recording(recording: ZoomRecordingEntry) -> OccurrenceWork | None:
@@ -368,10 +380,14 @@ class _UserRecordingsSource(DiscoverySource):
             else _UserRecordingsCursor()
         )
         hosts, failures = self._hosts(client, start, end)
-        if position.host_index >= len(hosts):
+        index = _resume_at(hosts, position.host_id)
+        if index >= len(hosts):
             return DiscoveryStepResult(failures=failures, done=True)
 
-        host = hosts[position.host_index]
+        host = hosts[index]
+        # The cursor's host may be gone, and reusing its offset would skip that
+        # many recordings of whoever now sits in its place.
+        offset = position.offset if host.user_id == position.host_id else 0
         from_date, to_date = _poll_window_dates(start, end)
 
         recordings: list[ZoomRecordingEntry] = []
@@ -396,31 +412,28 @@ class _UserRecordingsSource(DiscoverySource):
         # finishes mid-backfill after the offset, so it displaces nothing already
         # walked.
         ordered = sorted(recordings, key=lambda r: (r.start_time or "", r.uuid))
-        page = ordered[position.offset : position.offset + _MAX_WORK_PER_STEP]
+        page = ordered[offset : offset + _MAX_WORK_PER_STEP]
         work = [
             item
             for item in (_work_from_recording(recording) for recording in page)
             if item is not None
         ]
 
-        next_offset = position.offset + len(page)
+        next_offset = offset + len(page)
         if next_offset < len(ordered):
             return DiscoveryStepResult(
                 work=work,
                 failures=failures,
-                next_cursor={
-                    "host_index": position.host_index,
-                    "offset": next_offset,
-                },
+                next_cursor={"host_id": host.user_id, "offset": next_offset},
                 done=False,
             )
 
-        next_index = position.host_index + 1
+        next_index = index + 1
         done = next_index >= len(hosts)
         return DiscoveryStepResult(
             work=work,
             failures=failures,
-            next_cursor=None if done else {"host_index": next_index},
+            next_cursor=None if done else {"host_id": hosts[next_index].user_id},
             done=done,
         )
 
