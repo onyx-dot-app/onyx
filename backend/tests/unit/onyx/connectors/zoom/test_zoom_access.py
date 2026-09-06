@@ -105,19 +105,13 @@ class TestAccessListSources:
 
         assert _resolve(client, _work()) == {"same@example.com"}
 
-    def test_both_spellings_of_a_mixed_case_address_are_kept(self) -> None:
-        """Onyx compares ACL emails exactly but stores a user's address however
-        it arrived: the OAuth and JWT paths lower-case it, basic registration
-        keeps the original. Only one spelling would lose the match for whichever
-        half spells it the other way, so both go in. The extra entry reaches
-        nobody new — Onyx looks users up case-insensitively, so a case variant
-        cannot be a different person."""
-        client = _client(participants=[ZoomParticipant(user_email="Jane@Example.com")])
+    def test_addresses_are_lower_cased_to_one_spelling(self) -> None:
+        client = _client(
+            participants=[ZoomParticipant(user_email="Jane@Example.com")],
+            registrants=[ZoomRegistrant(email="jane@example.com", status="approved")],
+        )
 
-        assert _resolve(client, _work()) == {
-            "Jane@Example.com",
-            "jane@example.com",
-        }
+        assert _resolve(client, _work()) == {"jane@example.com"}
 
     def test_surrounding_whitespace_is_trimmed(self) -> None:
         client = _client(participants=[ZoomParticipant(user_email="  a@example.com  ")])

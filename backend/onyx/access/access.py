@@ -154,6 +154,18 @@ def source_should_fetch_permissions_during_indexing(source: DocumentSource) -> b
     return _source_should_fetch_permissions_during_indexing_func(source)
 
 
+def source_should_sync_on_every_index(source: DocumentSource) -> bool:
+    _source_should_sync_on_every_index_func = cast(
+        Callable[[DocumentSource], bool],
+        fetch_ee_implementation_or_noop(
+            "onyx.external_permissions.sync_params",
+            "source_should_sync_on_every_index",
+            False,
+        ),
+    )
+    return _source_should_sync_on_every_index_func(source)
+
+
 def get_access_for_user_files(
     user_file_ids: list[str],
     db_session: Session,
