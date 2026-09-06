@@ -209,3 +209,50 @@ class ZoomRecordingPage(BaseModel):
 
     recordings: list[ZoomRecordingEntry] = Field(default_factory=list)
     next_page_token: str | None = None
+
+
+class ZoomParticipant(BaseModel):
+    """One entry from `GET /past_meetings/{meetingId}/participants` or
+    `GET /past_webinars/{webinarId}/participants`."""
+
+    # Zoom blanks this for anyone outside the host's account, so it is not
+    # required and callers must cope with an empty string.
+    user_email: str | None = None
+    name: str | None = None
+
+
+# Zoom has no cancelled state: cancelling a registration sets the status to
+# "denied". The other values are "approved" and "pending".
+APPROVED_REGISTRANT_STATUS = "approved"
+
+# Zoom's own error codes, which it sends in the response body under an HTTP 400
+# or 404. NOT_ENTITLED really is "200" — it is a Zoom code, not an HTTP status.
+# Compare them as text: Zoom sends the code as a number on some endpoints and as
+# a string on others.
+ZOOM_MEETING_TOO_OLD_CODE = "12702"
+ZOOM_NOT_FOUND_CODE = "3001"
+ZOOM_NOT_ENTITLED_CODE = "200"
+
+
+class ZoomRegistrant(BaseModel):
+    """One entry from `GET /meetings/{meetingId}/registrants` or
+    `GET /webinars/{webinarId}/registrants`."""
+
+    email: str | None = None
+    status: str | None = None
+
+
+class ZoomInvitee(BaseModel):
+    """One entry of `settings.meeting_invitees[]` from
+    `GET /meetings/{meetingId}`. Webinars have no equivalent field."""
+
+    email: str | None = None
+    internal_user: bool = False
+
+
+class ZoomPanelist(BaseModel):
+    """One entry from `GET /webinars/{webinarId}/panelists` — a webinar
+    speaker, who does not necessarily register or appear as a participant."""
+
+    email: str | None = None
+    name: str | None = None

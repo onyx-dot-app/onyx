@@ -9,6 +9,7 @@ from onyx.connectors.exceptions import (
 )
 from onyx.connectors.models import ConnectorFailure, Document
 from onyx.connectors.zoom.client import ZoomClient
+from onyx.connectors.zoom.recordings.access import AccessResolver, NoAccessResolver
 from onyx.connectors.zoom.recordings.models import OccurrenceWork, ZoomSessionType
 from onyx.connectors.zoom.recordings.processing import (
     process_occurrence,
@@ -56,10 +57,16 @@ def _client_with_transcript() -> MagicMock:
     return client
 
 
-def _run(client: MagicMock, work: OccurrenceWork) -> list[Document | ConnectorFailure]:
-    """process_occurrence answers with at most one item; the tests read it as a
-    list so an unexpected extra one would show up as a length mismatch."""
-    processed = process_occurrence(client, work)
+def _run(
+    client: MagicMock,
+    work: OccurrenceWork,
+    access_resolver: AccessResolver | None = None,
+) -> list[Document | ConnectorFailure]:
+    """Defaults to the no-op resolver: these tests are about transcripts, and
+    access lists have their own file. process_occurrence answers with at most
+    one item; the tests read it as a list so an unexpected extra one would show
+    up as a length mismatch."""
+    processed = process_occurrence(client, work, access_resolver or NoAccessResolver())
     return [] if processed is None else [processed]
 
 
