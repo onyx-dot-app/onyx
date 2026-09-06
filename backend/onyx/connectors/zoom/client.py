@@ -1,7 +1,7 @@
 import time
 from collections.abc import Callable
 from datetime import date
-from typing import Any
+from typing import Any, TypeVar
 from urllib.parse import quote, urljoin, urlparse
 
 import requests
@@ -15,9 +15,15 @@ from onyx.connectors.exceptions import (
     InsufficientPermissionsError,
 )
 from onyx.connectors.zoom.models import (
+    APPROVED_REGISTRANT_STATUS,
+    ZOOM_NOT_ENTITLED_CODE,
     ZoomAccessToken,
+    ZoomInvitee,
+    ZoomPanelist,
+    ZoomParticipant,
     ZoomPastMeetingDetails,
     ZoomRecordingPage,
+    ZoomRegistrant,
     ZoomSessionOccurrence,
     ZoomTranscript,
     ZoomUser,
@@ -43,13 +49,17 @@ _WEBINAR_ACCESS_HINT = (
     "neither, so credentials that read meetings can still fail here."
 )
 
-# Zoom's own error code from the response body, not an HTTP status. It covers
-# every "this account may not do that" case, and Zoom sends it under HTTP 400
-# rather than 403.
-_ZOOM_NOT_ENTITLED_ERROR_CODE = 200
-
 # Zoom caps page_size at 300 on every listing this client pages through.
 _MAX_PAGE_SIZE = 300
+
+# A next_page_token dies 15 minutes after Zoom issues it, so an access list is
+# paged straight through here instead of being resumed from the checkpoint. This
+# bound only stops a broken cursor looping forever: at 300 people per page it is
+# far larger than any real session, so lowering it would silently cut people out
+# of an access list.
+_MAX_ACCESS_LIST_PAGES = 200
+
+_AccessRecordT = TypeVar("_AccessRecordT")
 
 
 def _encode_path_segment(value: str) -> str:
@@ -204,13 +214,15 @@ class ZoomClient:
 
         return self._send_authorized(endpoint, send)
 
-    def _request_webinar(self, endpoint: str) -> requests.Response:
+    def _request_webinar(
+        self, endpoint: str, params: dict[str, Any] | None = None
+    ) -> requests.Response:
         """Every webinar endpoint fails the same way without the Webinar add-on,
         and the generic scope message sends the admin to check scopes that are
         already correct.
         """
         try:
-            response = self._request("GET", endpoint)
+            response = self._request("GET", endpoint, params=params or {})
         except InsufficientPermissionsError as e:
             raise InsufficientPermissionsError(f"{_WEBINAR_ACCESS_HINT} ({e})") from e
 
@@ -232,9 +244,7 @@ class ZoomClient:
             return None
         if not isinstance(body, dict):
             return None
-        # Compared as text: if Zoom ever sends the code as a string, an int
-        # comparison falls through and the admin loses the add-on hint.
-        if str(body.get("code")) != str(_ZOOM_NOT_ENTITLED_ERROR_CODE):
+        if str(body.get("code")) != ZOOM_NOT_ENTITLED_CODE:
             return None
         return str(body.get("message") or "no permission")
 
@@ -366,6 +376,131 @@ class ZoomClient:
             recordings=body.get("meetings", []),
             next_page_token=_next_page_token(body),
         )
+
+    def _request_meeting(
+        self, endpoint: str, params: dict[str, Any] | None = None
+    ) -> requests.Response:
+        return self._request("GET", endpoint, params=params or {})
+
+    def _list_access_pages(
+        self,
+        description: str,
+        endpoint: str,
+        request: Callable[[str, dict[str, Any] | None], requests.Response],
+        response_key: str,
+        parse: Callable[[Any], _AccessRecordT],
+        extra_params: dict[str, Any] | None = None,
+    ) -> list[_AccessRecordT]:
+        """Drains every page in one go. A 404 or an empty page is a normal answer
+        for these endpoints: Zoom returns nothing for a session with a single
+        attendee, or one where registration was never turned on.
+        """
+        records: list[_AccessRecordT] = []
+        page_token: str | None = None
+
+        for _ in range(_MAX_ACCESS_LIST_PAGES):
+            params: dict[str, Any] = {
+                "page_size": _MAX_PAGE_SIZE,
+                **(extra_params or {}),
+            }
+            if page_token:
+                params["next_page_token"] = page_token
+
+            response = request(endpoint, params)
+            if response.status_code == 404:
+                return records
+            _raise_for_zoom_error(response, description)
+
+            body = response.json()
+            records.extend(parse(entry) for entry in body.get(response_key, []))
+            page_token = _next_page_token(body)
+            if not page_token:
+                return records
+
+        raise ValueError(f"Zoom kept paging {description} past the page limit")
+
+    def list_past_meeting_participants(
+        self, occurrence_uuid: str
+    ) -> list[ZoomParticipant]:
+        """This is the only access source with an age limit: Zoom deletes
+        attendance after the retention window and then answers 400 with code
+        12702. Registrants and invitees still answer for the same old meeting."""
+        identifier = _encode_meeting_identifier(occurrence_uuid)
+        return self._list_access_pages(
+            f"the participants of meeting {occurrence_uuid}",
+            f"/past_meetings/{identifier}/participants",
+            self._request_meeting,
+            "participants",
+            ZoomParticipant.model_validate,
+        )
+
+    def list_past_webinar_participants(
+        self, occurrence_uuid: str
+    ) -> list[ZoomParticipant]:
+        identifier = _encode_meeting_identifier(occurrence_uuid)
+        return self._list_access_pages(
+            f"the participants of webinar {occurrence_uuid}",
+            f"/past_webinars/{identifier}/participants",
+            self._request_webinar,
+            "participants",
+            ZoomParticipant.model_validate,
+        )
+
+    def list_meeting_registrants(self, meeting_id: str) -> list[ZoomRegistrant]:
+        """Registrants belong to the scheduled meeting, not to one occurrence, so
+        a recurring series returns the same list for every run. The status
+        parameter only narrows what Zoom sends, so each record keeps its own
+        status for the caller to check."""
+        identifier = _encode_meeting_identifier(meeting_id)
+        return self._list_access_pages(
+            f"the registrants of meeting {meeting_id}",
+            f"/meetings/{identifier}/registrants",
+            self._request_meeting,
+            "registrants",
+            ZoomRegistrant.model_validate,
+            extra_params={"status": APPROVED_REGISTRANT_STATUS},
+        )
+
+    def list_webinar_registrants(self, webinar_id: str) -> list[ZoomRegistrant]:
+        identifier = _encode_meeting_identifier(webinar_id)
+        return self._list_access_pages(
+            f"the registrants of webinar {webinar_id}",
+            f"/webinars/{identifier}/registrants",
+            self._request_webinar,
+            "registrants",
+            ZoomRegistrant.model_validate,
+            extra_params={"status": APPROVED_REGISTRANT_STATUS},
+        )
+
+    def list_meeting_invitees(self, meeting_id: str) -> list[ZoomInvitee]:
+        """Who was invited, which is not the same as who turned up. The list
+        hangs off the scheduled meeting, so a recurring series has one covering
+        every run and an ad-hoc meeting has none at all. There is no age limit
+        here, so an old meeting still answers.
+        """
+        identifier = _encode_meeting_identifier(meeting_id)
+        response = self._request("GET", f"/meetings/{identifier}")
+        if response.status_code == 404:
+            return []
+        _raise_for_zoom_error(response, f"the details for meeting {meeting_id}")
+
+        settings = response.json().get("settings") or {}
+        return [
+            ZoomInvitee.model_validate(i) for i in settings.get("meeting_invitees", [])
+        ]
+
+    def list_webinar_panelists(self, webinar_id: str) -> list[ZoomPanelist]:
+        """A panelist does not have to register, so without this a presenter is
+        missing from the access list of a webinar they spoke at. Not paginated.
+        """
+        identifier = _encode_meeting_identifier(webinar_id)
+        response = self._request_webinar(f"/webinars/{identifier}/panelists")
+        if response.status_code == 404:
+            return []
+        _raise_for_zoom_error(response, f"the panelists of webinar {webinar_id}")
+        return [
+            ZoomPanelist.model_validate(p) for p in response.json().get("panelists", [])
+        ]
 
     def download_transcript_vtt(self, download_url: str) -> str:
         """The download redirects to a storage host, so every hop is checked

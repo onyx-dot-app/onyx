@@ -1,0 +1,184 @@
+"""Builds a document access list from the people Zoom recorded on a Session.
+
+Zoom has no sharing API, so access is inferred from who attended, who registered
+and who was invited. Two things shape the whole module. Zoom returns an empty
+email for anyone outside the host's account, and those people are dropped because
+nobody can be granted access without an address. Zoom also deletes this data after
+a retention window and then answers with an error instead of an empty list, so
+that error means "no data" here and never becomes a document failure. Returning
+None leaves the document on document-set and group access.
+"""
+
+import abc
+from collections.abc import Callable
+from typing import TYPE_CHECKING
+
+import requests
+
+from onyx.access.models import ExternalAccess
+from onyx.connectors.zoom.client import ZoomClient
+from onyx.connectors.zoom.models import (
+    APPROVED_REGISTRANT_STATUS,
+    ZOOM_MEETING_TOO_OLD_CODE,
+    ZOOM_NOT_ENTITLED_CODE,
+    ZOOM_NOT_FOUND_CODE,
+    ZoomRegistrant,
+)
+from onyx.connectors.zoom.recordings.models import OccurrenceWork
+from onyx.utils.logger import setup_logger
+
+if TYPE_CHECKING:
+    from onyx.connectors.zoom.recordings.session_types import SessionTypeHandler
+
+logger = setup_logger()
+
+_PERMANENT_ERROR_CODES = frozenset(
+    {ZOOM_MEETING_TOO_OLD_CODE, ZOOM_NOT_FOUND_CODE, ZOOM_NOT_ENTITLED_CODE}
+)
+
+
+def _zoom_error_code(error: requests.HTTPError) -> str | None:
+    response = error.response
+    if response is None:
+        return None
+    try:
+        body = response.json()
+    except ValueError:
+        return None
+    if not isinstance(body, dict) or body.get("code") is None:
+        return None
+    return str(body["code"])
+
+
+def permanently_unavailable(error: Exception) -> bool:
+    """A missing scope is deliberately left out of this set. It arrives as
+    InsufficientPermissionsError and fails the whole run so an admin fixes it,
+    instead of quietly emptying the access list of every document on the account.
+    """
+    if not isinstance(error, requests.HTTPError):
+        return False
+    response = error.response
+    if response is None:
+        return False
+    if response.status_code == 404:
+        return True
+    return (
+        response.status_code == 400
+        and _zoom_error_code(error) in _PERMANENT_ERROR_CODES
+    )
+
+
+def approved_registrant_emails(registrants: list[ZoomRegistrant]) -> list[str | None]:
+    """The client already asks Zoom for approved registrants only. This checks
+    again so access never depends on Zoom honouring a query parameter."""
+    return [
+        registrant.email
+        for registrant in registrants
+        if registrant.status == APPROVED_REGISTRANT_STATUS
+    ]
+
+
+def _usable_emails(description: str, emails: list[str | None]) -> set[str]:
+    usable = [email.strip() for email in emails if email and email.strip()]
+    dropped = len(emails) - len(usable)
+    if dropped:
+        logger.info(
+            "Dropped %s of %s people from %s: Zoom returned no email for them, "
+            "which it does for anyone outside the host's account",
+            dropped,
+            len(emails),
+            description,
+        )
+    # Keep both spellings, as Zoom sent it and lower-cased. Onyx compares these
+    # exactly but stores a user's address however it arrived: SSO lower-cases it,
+    # basic registration does not. Carrying one spelling loses the match for
+    # whichever half spells it the other way. Adding the second reaches nobody
+    # new, because Onyx already looks users up case-insensitively, so a case
+    # variant can never be a different person.
+    return {spelling for email in usable for spelling in (email, email.lower())}
+
+
+AccessSource = tuple[str, Callable[[], list[str | None]]]
+
+
+def union_source_emails(sources: list[AccessSource]) -> set[str]:
+    """Unions every source that can still answer. A source Zoom has forgotten
+    contributes nothing; any other failure is raised for the caller to turn into
+    a document failure."""
+    emails: set[str] = set()
+    for description, fetch in sources:
+        try:
+            emails |= _usable_emails(description, fetch())
+        except Exception as e:
+            if not permanently_unavailable(e):
+                raise
+            if (
+                isinstance(e, requests.HTTPError)
+                and _zoom_error_code(e) == ZOOM_NOT_ENTITLED_CODE
+            ):
+                logger.warning("Zoom refused %s on plan grounds: %s", description, e)
+            else:
+                logger.info(
+                    "Zoom has no %s any more (deleted or past its retention window)",
+                    description,
+                )
+    return emails
+
+
+class AccessResolver(abc.ABC):
+    @abc.abstractmethod
+    def resolve(
+        self,
+        client: ZoomClient,
+        work: OccurrenceWork,
+        handler: "SessionTypeHandler",
+    ) -> ExternalAccess | None:
+        raise NotImplementedError
+
+
+class NoAccessResolver(AccessResolver):
+    def resolve(
+        self,
+        client: ZoomClient,  # noqa: ARG002
+        work: OccurrenceWork,  # noqa: ARG002
+        handler: "SessionTypeHandler",  # noqa: ARG002
+    ) -> ExternalAccess | None:
+        return None
+
+
+class ZoomAccessResolver(AccessResolver):
+    def resolve(
+        self,
+        client: ZoomClient,
+        work: OccurrenceWork,
+        handler: "SessionTypeHandler",
+    ) -> ExternalAccess | None:
+        emails = handler.fetch_access_list(client, work)
+        if not emails:
+            logger.warning(
+                "No Zoom access list for %s occurrence %s; falling back to "
+                "document-set and group access",
+                work.session_id,
+                work.occurrence_uuid,
+            )
+            return None
+
+        access = ExternalAccess(
+            external_user_emails=emails,
+            # Zoom cannot grant a Session to a Group, so this stays empty. A Zoom
+            # Group only provisions licences and scopes discovery; filling it here
+            # would give everyone in that group access to meetings they never
+            # attended.
+            external_user_group_ids=set(),
+            is_public=False,
+        )
+        if access.num_entries > ExternalAccess.MAX_NUM_ENTRIES:
+            logger.warning(
+                "Zoom access list for %s occurrence %s has %s entries, over the "
+                "%s Onyx expects",
+                work.session_id,
+                work.occurrence_uuid,
+                access.num_entries,
+                ExternalAccess.MAX_NUM_ENTRIES,
+            )
+        return access

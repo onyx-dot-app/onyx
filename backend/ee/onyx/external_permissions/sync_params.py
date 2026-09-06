@@ -81,14 +81,16 @@ class SyncConfig(BaseModel):
     censoring_config: CensoringConfig | None = None
 
 
-# Mock doc sync function for testing (no-op)
-def mock_doc_sync(
+def noop_doc_sync(
     cc_pair: "ConnectorCredentialPair",  # noqa: ARG001
     fetch_all_docs_fn: FetchAllDocumentsFunction,  # noqa: ARG001
     fetch_all_docs_ids_fn: FetchAllDocumentsIdsFunction,  # noqa: ARG001
     callback: Optional["IndexingHeartbeatInterface"],  # noqa: ARG001
 ) -> Generator["DocExternalAccess", None, None]:
-    """Mock doc sync function for testing - returns empty list since permissions are fetched during indexing"""
+    """For sources that build their access lists while indexing, leaving a
+    periodic sync nothing to do. DocSyncConfig still requires a function, and
+    registering the config is what switches access lists on during indexing.
+    """
     yield from []
 
 
@@ -186,10 +188,19 @@ _SOURCE_TO_SYNC_CONFIG: dict[DocumentSource, SyncConfig] = {
             chunk_censoring_func=censor_salesforce_chunks,
         ),
     ),
+    # Zoom has no group sharing: a Zoom Group provisions licences and cannot be
+    # granted a meeting, so access is only ever individual emails.
+    DocumentSource.ZOOM: SyncConfig(
+        doc_sync_config=DocSyncConfig(
+            doc_sync_frequency=DEFAULT_PERMISSION_DOC_SYNC_FREQUENCY,
+            doc_sync_func=noop_doc_sync,
+            initial_index_should_sync=True,
+        ),
+    ),
     DocumentSource.MOCK_CONNECTOR: SyncConfig(
         doc_sync_config=DocSyncConfig(
             doc_sync_frequency=DEFAULT_PERMISSION_DOC_SYNC_FREQUENCY,
-            doc_sync_func=mock_doc_sync,
+            doc_sync_func=noop_doc_sync,
             initial_index_should_sync=True,
         ),
     ),

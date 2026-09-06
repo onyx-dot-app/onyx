@@ -7,7 +7,12 @@ import abc
 
 from onyx.connectors.zoom.client import ZoomClient
 from onyx.connectors.zoom.models import ZoomSessionDetails, ZoomSessionOccurrence
-from onyx.connectors.zoom.recordings.models import ZoomSessionType
+from onyx.connectors.zoom.recordings.access import (
+    AccessSource,
+    approved_registrant_emails,
+    union_source_emails,
+)
+from onyx.connectors.zoom.recordings.models import OccurrenceWork, ZoomSessionType
 
 # Zoom's `type` code on an entry of the recording listing.
 _MEETING_RECORDING_TYPES = frozenset({"1", "2", "3", "4", "7", "8"})
@@ -55,6 +60,12 @@ class SessionTypeHandler(abc.ABC):
     ) -> ZoomSessionDetails:
         raise NotImplementedError
 
+    @abc.abstractmethod
+    def fetch_access_list(self, client: ZoomClient, work: OccurrenceWork) -> set[str]:
+        """An empty set means no source could name anybody, which the caller
+        turns into document-set and group access rather than an empty ACL."""
+        raise NotImplementedError
+
 
 class MeetingSessionType(SessionTypeHandler):
     session_type = ZoomSessionType.MEETING
@@ -69,6 +80,35 @@ class MeetingSessionType(SessionTypeHandler):
     ) -> ZoomSessionDetails:
         return client.get_past_meeting_details(occurrence_uuid)
 
+    def fetch_access_list(self, client: ZoomClient, work: OccurrenceWork) -> set[str]:
+        """Only participants are per-occurrence. Registrants and invitees hang
+        off the scheduled meeting, so on a recurring series they grant access to
+        every run, which is accepted: being invited to a series counts as access
+        to the series.
+        """
+        sources: list[AccessSource] = [
+            (
+                f"the participants of meeting {work.occurrence_uuid}",
+                lambda: [
+                    p.user_email
+                    for p in client.list_past_meeting_participants(work.occurrence_uuid)
+                ],
+            ),
+            (
+                f"the registrants of meeting {work.session_id}",
+                lambda: approved_registrant_emails(
+                    client.list_meeting_registrants(work.session_id)
+                ),
+            ),
+            (
+                f"the invitees of meeting {work.session_id}",
+                lambda: [
+                    i.email for i in client.list_meeting_invitees(work.session_id)
+                ],
+            ),
+        ]
+        return union_source_emails(sources)
+
 
 class WebinarSessionType(SessionTypeHandler):
     session_type = ZoomSessionType.WEBINAR
@@ -82,6 +122,33 @@ class WebinarSessionType(SessionTypeHandler):
         self, client: ZoomClient, occurrence_uuid: str
     ) -> ZoomSessionDetails:
         return client.get_webinar_details(occurrence_uuid)
+
+    def fetch_access_list(self, client: ZoomClient, work: OccurrenceWork) -> set[str]:
+        """A webinar has no invitee list to read. Zoom records only who
+        registered, who presented and who attended.
+        """
+        sources: list[AccessSource] = [
+            (
+                f"the participants of webinar {work.occurrence_uuid}",
+                lambda: [
+                    p.user_email
+                    for p in client.list_past_webinar_participants(work.occurrence_uuid)
+                ],
+            ),
+            (
+                f"the registrants of webinar {work.session_id}",
+                lambda: approved_registrant_emails(
+                    client.list_webinar_registrants(work.session_id)
+                ),
+            ),
+            (
+                f"the panelists of webinar {work.session_id}",
+                lambda: [
+                    p.email for p in client.list_webinar_panelists(work.session_id)
+                ],
+            ),
+        ]
+        return union_source_emails(sources)
 
 
 _HANDLERS: dict[ZoomSessionType, SessionTypeHandler] = {

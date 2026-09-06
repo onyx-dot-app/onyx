@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 import requests
 
+from onyx.connectors.connector_runner import CheckpointOutputWrapper
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.models import (
     ConnectorFailure,
@@ -15,8 +16,11 @@ from onyx.connectors.models import (
 from onyx.connectors.zoom.client import ZoomClient
 from onyx.connectors.zoom.connector import ZoomConnector, ZoomConnectorCheckpoint
 from onyx.connectors.zoom.models import (
+    ZoomInvitee,
+    ZoomParticipant,
     ZoomRecordingEntry,
     ZoomRecordingPage,
+    ZoomRegistrant,
     ZoomSessionOccurrence,
     ZoomTranscript,
     ZoomUserPage,
@@ -754,3 +758,106 @@ class TestDiscoveryMechanismUnion:
 
         assert [d.id for d in docs] == ["ZOOM_MEETING_uuid-standup"]
         assert outputs[-1].next_checkpoint.has_more is False
+
+
+def _run_with_perm_sync(
+    connector: ZoomConnector,
+) -> list[Document | ConnectorFailure]:
+    """The shared helper only drives load_from_checkpoint, so the permission
+    sync entry point needs its own loop."""
+    checkpoint = connector.build_dummy_checkpoint()
+    items: list[Document | ConnectorFailure] = []
+    while checkpoint.has_more:
+        generator = CheckpointOutputWrapper[ZoomConnectorCheckpoint]()(
+            connector.load_from_checkpoint_with_perm_sync(
+                0, _FULL_HISTORY_END, checkpoint
+            )
+        )
+        for document, _hierarchy, failure, next_checkpoint in generator:
+            if document is not None:
+                items.append(document)
+            if failure is not None:
+                items.append(failure)
+            if next_checkpoint is not None:
+                checkpoint = next_checkpoint
+    return items
+
+
+class TestPermissionSyncEntryPoint:
+    """Onyx calls load_from_checkpoint_with_perm_sync only for a connector set
+    to SYNC access, and load_from_checkpoint for every other one. The two must
+    not behave the same, or a connector that cannot use an access list still
+    pays two to three extra Zoom calls for every document."""
+
+    def _access_configured(self, mock_client: MagicMock) -> None:
+        _configure_happy_path(mock_client)
+        mock_client.list_past_meeting_participants.return_value = [
+            ZoomParticipant(user_email="attended@example.com"),
+            ZoomParticipant(user_email=""),
+        ]
+        mock_client.list_meeting_registrants.return_value = [
+            ZoomRegistrant(email="approved@example.com", status="approved"),
+            ZoomRegistrant(email="cancelled@example.com", status="denied"),
+        ]
+        mock_client.list_meeting_invitees.return_value = [
+            ZoomInvitee(email="invited@example.com")
+        ]
+
+    def test_perm_sync_run_populates_the_access_list(self) -> None:
+        connector, mock_client = _make_connector()
+        self._access_configured(mock_client)
+
+        documents = [
+            d for d in _run_with_perm_sync(connector) if isinstance(d, Document)
+        ]
+
+        assert len(documents) == 1
+        access = documents[0].external_access
+        assert access is not None
+        assert access.external_user_emails == {
+            "attended@example.com",
+            "approved@example.com",
+            "invited@example.com",
+        }
+        assert access.external_user_group_ids == set()
+        assert access.is_public is False
+
+    def test_a_normal_run_leaves_the_access_list_alone(self) -> None:
+        connector, mock_client = _make_connector()
+        self._access_configured(mock_client)
+
+        outputs = load_everything_from_checkpoint_connector(
+            connector, 0, _FULL_HISTORY_END
+        )
+        documents = [
+            item
+            for output in outputs
+            for item in output.items
+            if isinstance(item, Document)
+        ]
+
+        assert len(documents) == 1
+        assert documents[0].external_access is None
+        mock_client.list_past_meeting_participants.assert_not_called()
+        mock_client.list_meeting_registrants.assert_not_called()
+        mock_client.list_meeting_invitees.assert_not_called()
+
+    def test_an_access_list_failure_becomes_a_document_failure(self) -> None:
+        """A document indexed with the wrong access is worse than one a targeted
+        reindex can come back for."""
+        connector, mock_client = _make_connector()
+        _configure_happy_path(mock_client)
+        response = requests.Response()
+        response.status_code = 400
+        response._content = b'{"code": 300, "message": "unexpected"}'
+        mock_client.list_past_meeting_participants.side_effect = requests.HTTPError(
+            "boom", response=response
+        )
+
+        items = _run_with_perm_sync(connector)
+
+        assert [type(item) for item in items] == [ConnectorFailure]
+        failure = items[0]
+        assert isinstance(failure, ConnectorFailure)
+        assert failure.failed_document is not None
+        assert "access list" in failure.failure_message
