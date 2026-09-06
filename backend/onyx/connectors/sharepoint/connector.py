@@ -2594,16 +2594,22 @@ class SharepointConnector(
             return []
 
     def _build_folder_url(
-        self, site_url: str, drive_name: str, folder_path: str
+        self,
+        site_url: str,
+        drive_name: str,
+        folder_path: str,
+        drive_web_url: str | None = None,
     ) -> str:
         """Build a URL for a folder to use as raw_node_id.
 
-        NOTE: This constructs an approximate folder URL from components rather than
-        fetching the actual webUrl from the API. The constructed URL may differ
-        slightly from SharePoint's canonical webUrl (e.g., URL encoding differences),
-        but it functions correctly as a unique identifier for hierarchy tracking.
-        We avoid fetching folder metadata to minimize API calls.
+        Uses drive_web_url if provided so that non-English or localized document libraries
+        (where drive.name != server relative URL path, e.g. "Dokumente" vs "Freigegebene Dokumente")
+        resolve accurately.
         """
+        if drive_web_url:
+            clean_drive_url = drive_web_url.rstrip("/")
+            clean_folder = folder_path.strip("/")
+            return f"{clean_drive_url}/{clean_folder}"
         return f"{site_url}/{drive_name}/{folder_path}"
 
     def _extract_folder_path_from_parent_reference(
@@ -2729,7 +2735,9 @@ class SharepointConnector(
 
         for i, part in enumerate(path_parts):
             current_path = "/".join(path_parts[: i + 1])
-            folder_url = self._build_folder_url(site_url, drive_name, current_path)
+            folder_url = self._build_folder_url(
+                site_url, drive_name, current_path, drive_web_url=drive_web_url
+            )
 
             if folder_url in checkpoint.seen_hierarchy_node_raw_ids:
                 continue
@@ -2753,7 +2761,9 @@ class SharepointConnector(
             else:
                 # Parent is the previous folder
                 parent_path = "/".join(path_parts[:i])
-                parent_url = self._build_folder_url(site_url, drive_name, parent_path)
+                parent_url = self._build_folder_url(
+                    site_url, drive_name, parent_path, drive_web_url=drive_web_url
+                )
 
             yield HierarchyNode(
                 raw_node_id=folder_url,
@@ -2782,7 +2792,9 @@ class SharepointConnector(
         )
 
         if folder_path:
-            return self._build_folder_url(site_url, drive_name, folder_path)
+            return self._build_folder_url(
+                site_url, drive_name, folder_path, drive_web_url=drive_web_url
+            )
 
         # Document is at drive root
         return drive_web_url
