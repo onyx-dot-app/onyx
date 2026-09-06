@@ -1,15 +1,14 @@
 """Builds a document access list from the people Zoom recorded on a Session.
 
 Zoom has no sharing API, so access is inferred from who attended, who registered
-and who was invited. Two things shape the whole module. Zoom returns an empty
-email for anyone outside the host's account, and those people are dropped because
-nobody can be granted access without an address. Zoom also deletes this data after
-a retention window and then answers with an error instead of an empty list, so
-that error means "no data" here and never becomes a document failure. Returning
-None leaves the document on document-set and group access.
+and who was invited. Zoom returns an empty email for anyone outside the host's
+account, and those people are dropped because nobody can be granted access
+without an address. Zoom also deletes this data after a retention window and
+then answers with an error instead of an empty list, so that error means "no
+data" here and never becomes a document failure. Returning None leaves the
+document on document-set and group access.
 """
 
-import abc
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
@@ -109,9 +108,8 @@ AccessSource = tuple[str, Callable[[], list[str | None]]]
 
 
 def union_source_emails(sources: list[AccessSource]) -> set[str]:
-    """Unions every source that can still answer. A source Zoom has forgotten
-    contributes nothing; any other failure is raised for the caller to turn into
-    a document failure."""
+    """A source Zoom has forgotten contributes nothing; any other failure is
+    raised for the caller to turn into a document failure."""
     emails: set[str] = set()
     for description, fetch in sources:
         try:
@@ -129,64 +127,40 @@ def union_source_emails(sources: list[AccessSource]) -> set[str]:
     return emails
 
 
-class AccessResolver(abc.ABC):
-    @abc.abstractmethod
-    def resolve(
-        self,
-        client: ZoomClient,
-        work: OccurrenceWork,
-        handler: "SessionTypeHandler",
-    ) -> ExternalAccess | None:
-        raise NotImplementedError
-
-
-class NoAccessResolver(AccessResolver):
-    def resolve(
-        self,
-        client: ZoomClient,  # noqa: ARG002
-        work: OccurrenceWork,  # noqa: ARG002
-        handler: "SessionTypeHandler",  # noqa: ARG002
-    ) -> ExternalAccess | None:
+def zoom_access_resolver(
+    client: ZoomClient,
+    work: OccurrenceWork,
+    handler: "SessionTypeHandler",
+) -> ExternalAccess | None:
+    emails = handler.fetch_access_list(client, work)
+    if not emails:
+        logger.warning(
+            "No Zoom access list for %s occurrence %s; falling back to "
+            "document-set and group access",
+            work.session_id,
+            work.occurrence_uuid,
+        )
         return None
 
-
-class ZoomAccessResolver(AccessResolver):
-    def resolve(
-        self,
-        client: ZoomClient,
-        work: OccurrenceWork,
-        handler: "SessionTypeHandler",
-    ) -> ExternalAccess | None:
-        emails = handler.fetch_access_list(client, work)
-        if not emails:
-            logger.warning(
-                "No Zoom access list for %s occurrence %s; falling back to "
-                "document-set and group access",
-                work.session_id,
-                work.occurrence_uuid,
-            )
-            return None
-
-        access = ExternalAccess(
-            external_user_emails=emails,
-            # Zoom cannot grant a Session to a Group, so this stays empty. A Zoom
-            # Group only provisions licences and scopes discovery; filling it here
-            # would give everyone in that group access to meetings they never
-            # attended.
-            external_user_group_ids=set(),
-            is_public=False,
+    access = ExternalAccess(
+        external_user_emails=emails,
+        # Zoom cannot grant a Session to a Group, so this stays empty. A Group
+        # only provisions licences, and filling it in would give everyone in it
+        # access to meetings they never attended.
+        external_user_group_ids=set(),
+        is_public=False,
+    )
+    # Keep the list rather than enforce the limit, which Onyx documents as
+    # advisory. Dropping it hands the document to connector-level access,
+    # failing it can never succeed on a retry, and truncating silently picks
+    # who loses access.
+    if access.num_entries > ExternalAccess.MAX_NUM_ENTRIES:
+        logger.warning(
+            "Zoom access list for %s occurrence %s has %s entries, over the "
+            "%s Onyx expects",
+            work.session_id,
+            work.occurrence_uuid,
+            access.num_entries,
+            ExternalAccess.MAX_NUM_ENTRIES,
         )
-        # Keep the list rather than enforce the limit, which Onyx documents as
-        # advisory. Dropping it hands the document to connector-level access,
-        # failing it can never succeed on a retry, and truncating silently picks
-        # who loses access.
-        if access.num_entries > ExternalAccess.MAX_NUM_ENTRIES:
-            logger.warning(
-                "Zoom access list for %s occurrence %s has %s entries, over the "
-                "%s Onyx expects",
-                work.session_id,
-                work.occurrence_uuid,
-                access.num_entries,
-                ExternalAccess.MAX_NUM_ENTRIES,
-            )
-        return access
+    return access
