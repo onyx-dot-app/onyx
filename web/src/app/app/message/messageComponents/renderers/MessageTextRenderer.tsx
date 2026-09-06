@@ -30,6 +30,7 @@ import { CodeBlock } from "@/app/app/message/CodeBlock";
 import { InMessageImage } from "@/app/app/components/files/images/InMessageImage";
 import { extractChatImageFileId } from "@/app/app/components/files/images/utils";
 import { transformLinkUri } from "@/lib/utils";
+import { rehypeDirection } from "@/lib/rehypeDirection";
 import { cn } from "@opal/utils";
 import { useSmoothStreaming } from "@/hooks/useSmoothStreaming";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
@@ -83,7 +84,7 @@ const STREAMING_REMARK_PLUGINS: PluggableList = [
   remarkGfm,
   [remarkMath, { singleDollarTextMath: true }],
 ];
-const STREAMING_REHYPE_PLUGINS: PluggableList = [rehypeKatex];
+const STREAMING_REHYPE_PLUGINS: PluggableList = [rehypeKatex, rehypeDirection];
 const FULL_REMARK_PLUGINS: PluggableList = STREAMING_REMARK_PLUGINS;
 
 export const MessageTextRenderer: MessageRenderer<
@@ -285,7 +286,11 @@ export const MessageTextRenderer: MessageRenderer<
   const fullRehypePlugins = useMemo<PluggableList>(
     () =>
       highlightLanguages
-        ? [[rehypeHighlight, { languages: highlightLanguages }], rehypeKatex]
+        ? [
+            [rehypeHighlight, { languages: highlightLanguages }],
+            rehypeKatex,
+            rehypeDirection,
+          ]
         : STREAMING_REHYPE_PLUGINS,
     [highlightLanguages]
   );
@@ -375,8 +380,8 @@ export const MessageTextRenderer: MessageRenderer<
           </MemoizedAnchor>
         );
       },
-      p: ({ children }) => (
-        <MemoizedParagraph className="font-main-content-body">
+      p: ({ children, dir }) => (
+        <MemoizedParagraph dir={dir} className="font-main-content-body">
           {children}
         </MemoizedParagraph>
       ),

@@ -67,7 +67,7 @@ function dailySpend(user: UsageExportUser): DailySpend[] {
 
 function StatCell({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex min-w-0 flex-col gap-0.5 px-3 first:pl-0 last:pr-0">
+    <div className="flex min-w-0 flex-col gap-0.5 px-3 first:ps-0 last:pe-0">
       <Text font="secondary-body" color="text-03" nowrap>
         {label}
       </Text>

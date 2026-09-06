@@ -74,7 +74,7 @@ export default function ImpersonatePage() {
                 name="email"
                 type="email"
                 label={t("impersonate.emailField.label")}
-                placeholder="email@yourcompany.com"
+                placeholder={t("impersonate.emailField.placeholder")}
               />
 
               <TextFormField

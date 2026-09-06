@@ -113,7 +113,7 @@ const SourceTagDetailsCardInner = ({
 
       <div className="p-1 flex flex-col gap-1">
         {/* Header with icon and title */}
-        <div className="flex items-start gap-1 p-0.5 min-h-7 w-full text-left hover:bg-background-tint-01 rounded-08 transition-colors">
+        <div className="flex items-start gap-1 p-0.5 min-h-7 w-full text-start hover:bg-background-tint-01 rounded-08 transition-colors">
           <div className="flex items-center justify-center p-0.5 shrink-0 w-5 h-5">
             {isQuestion ? (
               <SvgQuestionMarkSmall size={16} className="text-text-03" />

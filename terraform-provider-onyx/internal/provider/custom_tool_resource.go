@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -63,9 +64,11 @@ func (r *customToolResource) Schema(_ context.Context, _ resource.SchemaRequest,
 			"Attach one to an assistant through `tool_ids` on `onyx_persona`.\n\n" +
 			"~> **Deleting an action detaches it from every agent that uses it**, including agents " +
 			"Terraform does not manage. Onyx does not refuse the delete or warn about it.\n\n" +
-			"~> **`custom_headers` holds secrets and Onyx returns them in full.** Anyone who can read " +
-			"the deployment's actions can read the values, and they are stored in Terraform state in " +
-			"clear text. Supply them from a secret store rather than literals.",
+			"~> **`custom_headers` holds secrets.** Onyx masks the values on reads, but they are " +
+			"stored in Terraform state in clear text. Supply them from a secret store rather than " +
+			"literals, or use `custom_headers_wo` to keep them out of state entirely. Masked reads " +
+			"also mean a rotation made outside Terraform is only visible when its mask differs, so " +
+			"rotate values through Terraform, ideally `custom_headers_wo` with its version attribute.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:            true,
@@ -298,9 +301,9 @@ func applyRemoteCustomTool(ctx context.Context, model *customToolResourceModel, 
 	if !ok {
 		return false
 	}
-	// Onyx returns header values in full. Refreshing them is what makes an
-	// out-of-band change visible, but for a write-only header map it would put
-	// the very secret Terraform was told not to keep back into state.
+	// Onyx masks header values on reads, so the refresh resolves masks against
+	// state. A write-only header map skips even that: those values must never
+	// reach state at all.
 	if !headersAreWriteOnly {
 		model.CustomHeaders = headersFromRemote(ctx, model.CustomHeaders, remote, diags)
 		if diags.HasError() {
@@ -323,18 +326,53 @@ func applyRemoteCustomTool(ctx context.Context, model *customToolResourceModel, 
 	return true
 }
 
+// isMaskedHeaderValue mirrors the backend's is_masked_credential: a bullet
+// mask for short values, or the first4...last4 shape for longer ones.
+func isMaskedHeaderValue(value string) bool {
+	return strings.ContainsRune(value, '\u2022') || maskedLongRE.MatchString(value)
+}
+
+var maskedLongRE = regexp.MustCompile(`^.{4}\.{3}.{4}$`)
+
+// maskHeaderValue mirrors the backend's mask_string, which slices
+// characters, so the comparison works on runes rather than bytes.
+func maskHeaderValue(value string) string {
+	runes := []rune(value)
+	if len(runes) < 14 {
+		return strings.Repeat("\u2022", 12)
+	}
+	return string(runes[:4]) + "..." + string(runes[len(runes)-4:])
+}
+
 // headersFromRemote rebuilds the header map from the server's list. A repeated
-// key keeps its last value, which is all a map can hold.
+// key keeps its last value, which is all a map can hold. An action with no
+// headers reads back as null only when nothing was configured.
 //
-// An action with no headers reads back as null only when nothing was
-// configured; a configuration that sets an empty map keeps one, so the applied
-// result matches the plan.
+// Onyx masks values on reads: a mask matching the state value keeps the
+// known value, an unmatched mask stays in state and surfaces as drift.
+// Colliding masks (all short values share one) make an out-of-band
+// rotation invisible, which only a changed-flag in the API could fix;
+// rotate through custom_headers_wo and its version instead.
 func headersFromRemote(ctx context.Context, current types.Map, remote *client.CustomTool, diags *diag.Diagnostics) types.Map {
 	if len(remote.CustomHeaders) == 0 && current.IsNull() {
 		return types.MapNull(types.StringType)
 	}
+	known := map[string]string{}
+	if !current.IsNull() && !current.IsUnknown() {
+		for key, value := range current.Elements() {
+			if str, ok := value.(types.String); ok && !str.IsNull() && !str.IsUnknown() {
+				known[key] = str.ValueString()
+			}
+		}
+	}
 	values := make(map[string]string, len(remote.CustomHeaders))
 	for _, header := range remote.CustomHeaders {
+		if isMaskedHeaderValue(header.Value) {
+			if knownValue, ok := known[header.Key]; ok && maskHeaderValue(knownValue) == header.Value {
+				values[header.Key] = knownValue
+				continue
+			}
+		}
 		values[header.Key] = header.Value
 	}
 	value, mapDiags := types.MapValueFrom(ctx, types.StringType, values)

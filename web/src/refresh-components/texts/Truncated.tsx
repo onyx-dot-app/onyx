@@ -59,7 +59,7 @@ export default function Truncated({
   const text = (
     <Text
       as="p"
-      className={cn("line-clamp-1 break-all text-left", className)}
+      className={cn("line-clamp-1 break-all text-start", className)}
       {...rest}
     >
       {children}
@@ -85,7 +85,10 @@ export default function Truncated({
   return (
     <>
       <Tooltip tooltip={tooltipContent} side={side} sideOffset={sideOffset}>
-        <div ref={visibleRef} className="grow overflow-hidden text-left w-full">
+        <div
+          ref={visibleRef}
+          className="grow overflow-hidden text-start w-full"
+        >
           <div onPointerMove={blockPointerWhenInert}>{text}</div>
         </div>
       </Tooltip>
@@ -105,7 +108,7 @@ export default function Truncated({
       */}
       <div
         ref={hiddenRef}
-        className="fixed left-[-9999px] top-0 whitespace-nowrap pointer-events-none opacity-0"
+        className="fixed start-[-9999px] top-0 whitespace-nowrap pointer-events-none opacity-0"
         aria-hidden="true"
       >
         {text}

@@ -395,8 +395,8 @@ resource "onyx_custom_tool" "conflict_wo" {
 	})
 }
 
-// testAccCheckCustomToolHeader reads the header back from Onyx, which returns
-// action headers in full rather than masked.
+// testAccCheckCustomToolHeader reads the header back from Onyx, which masks
+// action header values, so the check compares against the masked form.
 func testAccCheckCustomToolHeader(t *testing.T, name, headerKey, want string) resource.TestCheckFunc {
 	return func(state *terraform.State) error {
 		rs, ok := state.RootModule().Resources[name]
@@ -415,8 +415,8 @@ func testAccCheckCustomToolHeader(t *testing.T, name, headerKey, want string) re
 			if header.Key != headerKey {
 				continue
 			}
-			if header.Value != want {
-				return fmt.Errorf("header %q is %q on the server, want %q", headerKey, header.Value, want)
+			if header.Value != maskHeaderValue(want) {
+				return fmt.Errorf("header %q is %q on the server, want %q", headerKey, header.Value, maskHeaderValue(want))
 			}
 			return nil
 		}

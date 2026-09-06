@@ -151,7 +151,7 @@ export default function IndexAttemptErrorsModal({
         </Modal.Body>
         <Modal.Footer>
           {hasUnresolvedErrors && (
-            <div className="ml-4">
+            <div className="ms-4">
               <Button onClick={onResolveAll}>
                 {t("errorsModal.resolveAllButton.label")}
               </Button>

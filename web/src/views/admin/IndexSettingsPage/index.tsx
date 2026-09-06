@@ -1,5 +1,6 @@
 "use client";
 
+import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Formik } from "formik";
 import { markdown } from "@opal/utils";
@@ -8,6 +9,9 @@ import { useRouter } from "next/navigation";
 import { mutate } from "swr";
 import { PageLoader } from "@opal/layouts";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import { useConnectorIndexingStatusWithPagination } from "@/lib/hooks";
+import type { ConnectorIndexingStatusLite } from "@/lib/types";
+import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/types";
 import { Content, IllustrationContent, toast } from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { SettingsLayouts } from "@opal/layouts";
@@ -39,6 +43,7 @@ import {
   SvgServer,
   SvgSettings,
   SvgSlowTime,
+  SvgTrash,
   SvgUnplug,
   SvgVector,
 } from "@opal/icons";
@@ -105,6 +110,23 @@ const MODEL_TAB_CLOUD = "cloud-based";
 const MODEL_TAB_SELF = "self-hosted";
 // Developer-facing log label only; the user-visible copy comes from `t`.
 const CONTEXTUAL_MODEL_UPDATE_LOG = "Failed to update Contextual Retrieval LLM";
+
+// Mirrors the backend's compute_wont_port_cc_pair_ids, so the modal shows the admin the
+// same set the server will delete. The two have to be changed together.
+function computeWontPortConnectors(
+  statuses: ConnectorIndexingStatusLite[],
+  switchoverType: SwitchoverType
+): ConnectorIndexingStatusLite[] {
+  return statuses.filter((s) => {
+    if (s.cc_pair_status === ConnectorCredentialPairStatus.INVALID) {
+      return true;
+    }
+    return (
+      s.cc_pair_status === ConnectorCredentialPairStatus.PAUSED &&
+      switchoverType === SwitchoverType.ACTIVE_ONLY
+    );
+  });
+}
 
 /**
  * Wrapper that disables its children when either:
@@ -597,6 +619,7 @@ function isContextualModelOnlyChange(
 
 export default function IndexSettingsPage() {
   const t = useTranslations("admin.indexSettings");
+  const adminRouteTitle = useAdminRouteTitle();
   const router = useRouter();
   const settings = useSettings();
   const editModal = useCreateModal();
@@ -722,6 +745,47 @@ export default function IndexSettingsPage() {
   const cancelReindexModal = useCreateModal();
   const forwardOnlyModal = useCreateModal();
   const customModelModal = useCreateModal();
+  const wontPortConsentModal = useCreateModal();
+
+  // SWR reports isLoading=false the instant it serves a cached list, so stale statuses can
+  // look ready. Staying subscribed through a reindex, rather than pausing and resuming the
+  // hook, keeps the 30s poll refreshing them. Cloud skips this and has no banner.
+  const {
+    data: indexingStatusData,
+    isLoading: isLoadingStatuses,
+    isValidating: isValidatingStatuses,
+    error: statusesError,
+  } = useConnectorIndexingStatusWithPagination(
+    { get_all_connectors: true },
+    30000,
+    !NEXT_PUBLIC_CLOUD_ENABLED
+  );
+  const connectorStatuses = useMemo<ConnectorIndexingStatusLite[]>(
+    () =>
+      (indexingStatusData ?? [])
+        .flatMap((group) => group.indexing_statuses)
+        // Federated entries have no cc_pair — they aren't port-tracked, so drop them.
+        .filter((s): s is ConnectorIndexingStatusLite => "cc_pair_status" in s),
+    [indexingStatusData]
+  );
+  const wontPortConnectors = useMemo(
+    () => computeWontPortConnectors(connectorStatuses, switchoverType),
+    [connectorStatuses, switchoverType]
+  );
+  // Frozen when Apply is pressed, and read by both the modal and the submitted
+  // acknowledgement, so a background poll can't grow the set under an open confirmation.
+  // A ref rather than state so the no-modal path can submit the value it just froze.
+  const frozenWontPortRef = useRef<ConnectorIndexingStatusLite[]>([]);
+  // Waits for the mount revalidation to settle, not just for isLoading to clear, so a
+  // cached list can't pass as ready. Later 30s polls leave this true, so Apply doesn't
+  // flicker between enabled and disabled.
+  const [statusesSettled, setStatusesSettled] = useState(false);
+  useEffect(() => {
+    if (!isLoadingStatuses && !isValidatingStatuses) setStatusesSettled(true);
+  }, [isLoadingStatuses, isValidatingStatuses]);
+  // An empty won't-port set before the statuses arrive is a false empty, and submitting on
+  // it skips the consent modal only to be rejected by the server's drift check.
+  const connectorStatusesReady = statusesSettled && !statusesError;
 
   const {
     llmProviders,
@@ -865,7 +929,11 @@ export default function IndexSettingsPage() {
   ) {
     return (
       <SettingsLayouts.Root>
-        <SettingsLayouts.Header icon={route.icon} title={route.title} divider />
+        <SettingsLayouts.Header
+          icon={route.icon}
+          title={adminRouteTitle(route)}
+          divider
+        />
         <SettingsLayouts.Body>
           <PageLoader />
         </SettingsLayouts.Body>
@@ -910,7 +978,7 @@ export default function IndexSettingsPage() {
       <SettingsLayouts.Root>
         <SettingsLayouts.Header
           icon={route.icon}
-          title={route.title}
+          title={adminRouteTitle(route)}
           description={t("header.description")}
           divider
         />
@@ -943,13 +1011,29 @@ export default function IndexSettingsPage() {
                 contextualRagModelConfigurationId: values.enable_contextual_rag
                   ? values.contextual_rag_model_configuration_id
                   : null,
+                acknowledgedWontPortCcPairIds: frozenWontPortRef.current.map(
+                  (c) => c.cc_pair_id
+                ),
               });
 
               if (!response.ok) {
-                toast.error(t("toasts.applyFailed"));
+                // The server's detail tells the admin the connector set drifted and to
+                // reload; a generic failure would lose that.
+                const detail = await response
+                  .json()
+                  .then((body) => body?.detail as string | undefined)
+                  .catch((parseError) => {
+                    console.error(
+                      "Failed to parse set-new-search-settings error response",
+                      parseError
+                    );
+                    return undefined;
+                  });
+                toast.error(detail || t("toasts.applyFailed"));
                 return;
               }
 
+              wontPortConsentModal.toggle(false);
               toast.success(t("toasts.reindexStarted"));
               setSwitchoverType(SwitchoverType.REINDEX);
               await Promise.all([
@@ -1026,8 +1110,24 @@ export default function IndexSettingsPage() {
               );
               const rebuildButton = (
                 <Button
-                  onClick={() => void submitForm()}
-                  disabled={contextualRagModelMissing}
+                  onClick={() => {
+                    frozenWontPortRef.current = wontPortConnectors;
+                    if (wontPortConnectors.length > 0) {
+                      wontPortConsentModal.toggle(true);
+                    } else {
+                      void submitForm();
+                    }
+                  }}
+                  disabled={
+                    contextualRagModelMissing || !connectorStatusesReady
+                  }
+                  tooltip={
+                    !connectorStatusesReady
+                      ? statusesError
+                        ? t("actions.applyReindex.statusesFailed")
+                        : t("actions.applyReindex.statusesLoading")
+                      : undefined
+                  }
                 >
                   {contextualModelOnlyChange
                     ? t("actions.rebuildAll.label")
@@ -1091,6 +1191,53 @@ export default function IndexSettingsPage() {
                     />
                   </customModelModal.Provider>
 
+                  <wontPortConsentModal.Provider>
+                    <ConfirmationModalLayout
+                      icon={SvgTrash}
+                      title={t("wontPortConsentModal.title", {
+                        count: frozenWontPortRef.current.length,
+                      })}
+                      submit={
+                        <Button
+                          variant="danger"
+                          onClick={() => void submitForm()}
+                        >
+                          {t("wontPortConsentModal.submit")}
+                        </Button>
+                      }
+                    >
+                      <div className="flex flex-col gap-3">
+                        <Text font="main-ui-body" color="text-03" as="p">
+                          {t("wontPortConsentModal.description", {
+                            count: frozenWontPortRef.current.length,
+                          })}
+                        </Text>
+                        <div className="flex max-h-48 flex-col gap-1 overflow-y-auto rounded-08 border border-border-02 p-3">
+                          {frozenWontPortRef.current.map((c) => (
+                            <Text
+                              key={c.cc_pair_id}
+                              font="main-ui-body"
+                              color="text-04"
+                              as="p"
+                            >
+                              {t("wontPortConsentModal.connector", {
+                                name: c.name,
+                                status:
+                                  c.cc_pair_status ===
+                                  ConnectorCredentialPairStatus.INVALID
+                                    ? t("wontPortConsentModal.statusInvalid")
+                                    : t("wontPortConsentModal.statusPaused"),
+                              })}
+                            </Text>
+                          ))}
+                        </div>
+                        <Text font="main-ui-body" color="text-03" as="p">
+                          {t("wontPortConsentModal.restoreHint")}
+                        </Text>
+                      </div>
+                    </ConfirmationModalLayout>
+                  </wontPortConsentModal.Provider>
+
                   {isReindexing ? (
                     secondarySearchSettings?.use_port_flow ||
                     isPortBackfilling ? (
@@ -1101,7 +1248,13 @@ export default function IndexSettingsPage() {
                           secondarySearchSettings?.model_name ??
                           searchSettings?.model_name
                         }
-                        onCancel={() => cancelReindexModal.toggle(true)}
+                        // No secondary => INSTANT backfill (new model already live):
+                        // not revertible, so show progress only (no Cancel button).
+                        onCancel={
+                          secondarySearchSettings
+                            ? () => cancelReindexModal.toggle(true)
+                            : undefined
+                        }
                       />
                     ) : (
                       // Non-port reindex has no PortAttempt progress → the original banner.

@@ -40,6 +40,10 @@ export function isAuthStatusError(error: unknown): boolean {
   );
 }
 
+export function isNotFoundError(error: unknown): boolean {
+  return error instanceof FetchError && error.status === 404;
+}
+
 /**
  * SWR `onErrorRetry` callback that suppresses automatic retries for
  * auth or tier-gated errors (401/402/403). Pass this to any SWR hook whose

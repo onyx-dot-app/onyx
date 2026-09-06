@@ -1,5 +1,6 @@
 "use client";
 
+import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { SettingsLayouts } from "@opal/layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { Explorer } from "./Explorer";
@@ -19,9 +20,14 @@ export default function DocumentExplorerPage({
   connectors,
   documentSets,
 }: DocumentExplorerPageProps) {
+  const adminRouteTitle = useAdminRouteTitle();
   return (
     <SettingsLayouts.Root>
-      <SettingsLayouts.Header icon={route.icon} title={route.title} divider />
+      <SettingsLayouts.Header
+        icon={route.icon}
+        title={adminRouteTitle(route)}
+        divider
+      />
 
       <SettingsLayouts.Body>
         <Explorer

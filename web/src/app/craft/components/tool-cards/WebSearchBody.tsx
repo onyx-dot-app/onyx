@@ -107,13 +107,13 @@ export default function WebSearchBody({ toolCall }: ToolCardBodyProps) {
                 </Text>
               </span>
             </div>
-            <div className="pl-5 truncate">
+            <div className="ps-5 truncate">
               <Text font="secondary-mono" color="text-02" nowrap>
                 {result.url}
               </Text>
             </div>
             {result.snippet && (
-              <div className="pl-5">
+              <div className="ps-5">
                 <Text font="secondary-body" color="text-03">
                   {result.snippet}
                 </Text>

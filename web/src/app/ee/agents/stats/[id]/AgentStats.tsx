@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
+import { useTranslations } from "next-intl";
 import { Card, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
 import {
@@ -56,6 +57,7 @@ interface AgentStatsProps {
 }
 
 export function AgentStats({ agentId }: AgentStatsProps) {
+  const t = useTranslations("admin");
   const [agentStats, setAgentStats] = useState<AgentStatsResponse | null>(null);
   const { agents } = useAgents();
   const [isLoading, setIsLoading] = useState(false);
@@ -83,16 +85,18 @@ export function AgentStats({ agentId }: AgentStatsProps) {
 
         if (!res.ok) {
           if (res.status === 403) {
-            throw new Error("You don't have permission to view these stats.");
+            throw new Error(t("agentStats.permissionDenied.message"));
           }
-          throw new Error("Failed to fetch agent stats");
+          throw new Error(t("agentStats.fetchFailed.message"));
         }
 
         const data = (await res.json()) as AgentStatsResponse;
         setAgentStats(data);
       } catch (err) {
         setError(
-          err instanceof Error ? err.message : "An unknown error occurred"
+          err instanceof Error
+            ? err.message
+            : t("agentStats.unknownError.message")
         );
       } finally {
         setIsLoading(false);
@@ -100,24 +104,23 @@ export function AgentStats({ agentId }: AgentStatsProps) {
     }
 
     fetchStats();
-  }, [agentId, dateRange]);
+  }, [agentId, dateRange, t]);
 
   const state: ChartState = error
     ? { status: "error", message: error }
     : resolveChartState({
         isLoading: isLoading || !agent,
         error: null,
-        errorMessage: "Failed to fetch agent stats.",
-        emptyMessage:
-          "No data found for this agent in the selected date range.",
+        errorMessage: t("agentStats.fetchFailed.message"),
+        emptyMessage: t("agentStats.empty.message"),
         series: [
           chartSeries(
-            "Messages",
+            t("analytics.agentChart.series.messages.label"),
             agentStats?.daily_stats,
             (entry) => entry.total_messages
           ),
           chartSeries(
-            "Unique Users",
+            t("analytics.agentChart.series.uniqueUsers.label"),
             agentStats?.daily_stats,
             (entry) => entry.total_unique_users
           ),
@@ -135,7 +138,7 @@ export function AgentStats({ agentId }: AgentStatsProps) {
     >
       {/* sm:flex-row / sm:items-center / sm:justify-between have no Section equivalent, kept as a raw div */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <Text font="heading-h2">Agent Analytics</Text>
+        <Text font="heading-h2">{t("analytics.agentChart.title")}</Text>
         <DateRangePicker value={dateRange} onValueChange={setDateRange} />
       </div>
 
@@ -186,11 +189,11 @@ export function AgentStats({ agentId }: AgentStatsProps) {
               height="fit"
             >
               <SummaryMetric
-                label="Total Messages"
+                label={t("agentStats.totalMessages.label")}
                 value={agentStats?.total_messages ?? 0}
               />
               <SummaryMetric
-                label="Total Unique Users"
+                label={t("agentStats.totalUniqueUsers.label")}
                 value={agentStats?.total_unique_users ?? 0}
               />
             </Section>
@@ -199,8 +202,8 @@ export function AgentStats({ agentId }: AgentStatsProps) {
       </Section>
 
       <AnalyticsChart
-        title="Messages and unique users"
-        description="Per day for the selected range"
+        title={t("agentStats.chart.title")}
+        description={t("agentStats.chart.description")}
         timeRange={dateRange}
         state={state}
       />

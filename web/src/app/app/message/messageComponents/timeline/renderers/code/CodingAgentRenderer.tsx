@@ -150,7 +150,7 @@ function ThinkingStep({ step, isLastStep, isHover }: ThinkingStepProps) {
       collapsible={true}
       supportsCollapsible={true}
     >
-      <div className="pl-(--timeline-common-text-padding)">
+      <div className="ps-(--timeline-common-text-padding)">
         <Text as="p" font="main-ui-muted" color="text-02">
           {step.content}
         </Text>
@@ -178,7 +178,7 @@ function BashStepBody({ call }: { call: BashStepView }) {
   const hasResponse = hasStdout || hasStderr || call.isComplete;
 
   return (
-    <div className="flex flex-col gap-3 pl-(--timeline-common-text-padding)">
+    <div className="flex flex-col gap-3 ps-(--timeline-common-text-padding)">
       <div>
         <IoBlockLabel label={t("codingAgent.bashRequest.label")} />
         <div className="prose max-w-full">
@@ -289,7 +289,7 @@ function CodingTaskStep({
       isFirstStep={true}
       isHover={isHover}
     >
-      <div className="pl-(--timeline-common-text-padding)">
+      <div className="ps-(--timeline-common-text-padding)">
         <Text as="p" font="main-ui-muted" color="text-02">
           {taskText}
         </Text>
@@ -316,7 +316,7 @@ function ResponseStep({ answer, isLastStep, isHover }: ResponseStepProps) {
       collapsible={true}
       supportsCollapsible={true}
     >
-      <div className="pl-(--timeline-common-text-padding)">
+      <div className="ps-(--timeline-common-text-padding)">
         <Text as="p" font="main-ui-muted" color="text-02">
           {answer}
         </Text>
@@ -402,7 +402,7 @@ export const CodingAgentRenderer: MessageRenderer<CodingAgentPacket, {}> = ({
 
     if (header === null) return wrap(<></>);
     return wrap(
-      <div className="flex flex-col gap-1 pl-(--timeline-common-text-padding)">
+      <div className="flex flex-col gap-1 ps-(--timeline-common-text-padding)">
         <Text as="p" font="main-ui-muted" color="text-04">
           {header}
         </Text>

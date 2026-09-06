@@ -476,6 +476,12 @@ class CCPairFullInfo(BaseModel):
     # uses this to route Resolve-All to targeted reindex vs full reindex.
     supports_targeted_reindex: bool
 
+    # Written at create time on the association route but not returned until now,
+    # so a client could never refresh or import them.
+    groups: list[int]
+    auto_sync_options: dict[str, Any] | None
+    processing_mode: ProcessingMode
+
     @classmethod
     def _get_last_full_permission_sync(
         cls, cc_pair_model: ConnectorCredentialPair
@@ -528,6 +534,7 @@ class CCPairFullInfo(BaseModel):
         mask_credential_prefix: bool,
         is_connectors_admin: bool = False,
         owns_groupless: bool = False,
+        groups: list[int] | None = None,
         last_successful_index_time: datetime | None = None,
         last_permission_sync_attempt_status: PermissionSyncStatus | None = None,
         permission_syncing: bool = False,
@@ -598,6 +605,9 @@ class CCPairFullInfo(BaseModel):
             last_permission_sync_attempt_finished=last_permission_sync_attempt_finished,
             last_permission_sync_attempt_error_message=last_permission_sync_attempt_error_message,
             supports_targeted_reindex=supports_targeted_reindex,
+            groups=groups or [],
+            auto_sync_options=cc_pair_model.auto_sync_options,
+            processing_mode=cc_pair_model.processing_mode,
         )
 
 

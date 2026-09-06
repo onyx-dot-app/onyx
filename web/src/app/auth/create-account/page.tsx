@@ -19,7 +19,7 @@ export default function Page() {
         <p className="text-text-700 max-w-md text-center">
           {t("createAccount.notFound.description")}
         </p>
-        <ul className="list-disc text-left text-text-600 w-full pl-6 mx-auto">
+        <ul className="list-disc text-start text-text-600 w-full ps-6 mx-auto">
           <li>{t("createAccount.inviteOption.text")}</li>
           <li>{t("createAccount.createTeamOption.text")}</li>
         </ul>

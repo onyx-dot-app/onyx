@@ -1,5 +1,6 @@
 "use client";
 
+import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { markdown } from "@opal/utils";
 import React, {
   useCallback,
@@ -665,6 +666,7 @@ function RetentionField({ value, disabled, onSave }: RetentionFieldProps) {
 
 export default function ChatPreferencesPage() {
   const t = useTranslations("admin.chatPreferences");
+  const adminRouteTitle = useAdminRouteTitle();
   const router = useRouter();
   const settings = useSettings();
   const s = settings;
@@ -929,7 +931,7 @@ export default function ChatPreferencesPage() {
       <SettingsLayouts.Root>
         <SettingsLayouts.Header
           icon={route.icon}
-          title={route.title}
+          title={adminRouteTitle(route)}
           description={t("header.description")}
           divider
         />

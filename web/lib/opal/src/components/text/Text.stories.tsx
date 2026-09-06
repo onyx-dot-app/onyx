@@ -296,7 +296,7 @@ export const TagVariants: Story = {
       <Text font="heading-h2" color="text-05" as="h2">
         Heading (h2): semantic heading
       </Text>
-      <ul className="list-disc pl-6">
+      <ul className="list-disc ps-6">
         <Text font="main-ui-body" color="text-05" as="li">
           List item (li): inside a list
         </Text>

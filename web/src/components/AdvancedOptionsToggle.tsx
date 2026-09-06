@@ -13,7 +13,7 @@ export function AdvancedOptionsToggle({
   title,
 }: AdvancedOptionsToggleProps) {
   return (
-    <div className="mr-auto">
+    <div className="me-auto">
       <Button
         prominence="internal"
         icon={({ className, style }) => (

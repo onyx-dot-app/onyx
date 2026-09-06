@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback } from "react";
+import { useTranslations } from "next-intl";
 import { useParams, useRouter } from "next/navigation";
 import useSWR from "swr";
 import { SettingsLayouts } from "@opal/layouts";
@@ -16,6 +17,7 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 
 export default function EditScheduledTaskPage() {
+  const t = useTranslations("craft.tasks.editPage");
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const taskId = params?.id;
@@ -36,13 +38,13 @@ export default function EditScheduledTaskPage() {
       <SettingsLayouts.Root>
         <SettingsLayouts.Header
           icon={SvgClock}
-          title="Edit scheduled task"
+          title={t("fallbackTitle")}
           backButton={handleBack}
           divider
         />
         <SettingsLayouts.Body>
           <Text font="main-ui-body" color="text-03">
-            Missing task id.
+            {t("missingTaskId")}
           </Text>
         </SettingsLayouts.Body>
       </SettingsLayouts.Root>
@@ -54,7 +56,7 @@ export default function EditScheduledTaskPage() {
       <SettingsLayouts.Root>
         <SettingsLayouts.Header
           icon={SvgClock}
-          title={data ? `Edit "${data.name}"` : "Edit scheduled task"}
+          title={data ? t("title", { name: data.name }) : t("fallbackTitle")}
           backButton={handleBack}
           divider
         />
@@ -65,7 +67,7 @@ export default function EditScheduledTaskPage() {
             </div>
           ) : (
             <Text font="main-ui-body" color="text-03">
-              Failed to load scheduled task.
+              {t("loadFailed")}
             </Text>
           )}
         </SettingsLayouts.Body>
@@ -77,7 +79,7 @@ export default function EditScheduledTaskPage() {
     <ScheduleTaskForm
       initial={toFormInitial(data)}
       isEdit
-      title={`Edit "${data.name}"`}
+      title={t("title", { name: data.name })}
       onBack={handleBack}
     />
   );

@@ -45,7 +45,7 @@ export function SelectedBubble({
       onClick={onClick}
     >
       {children}
-      <FiX className="ml-2" size={14} />
+      <FiX className="ms-2" size={14} />
     </button>
   );
 }
@@ -107,7 +107,7 @@ export function HorizontalFilters({
                     sourceType={source.baseSourceType || source.internalName}
                     iconSize={16}
                   />
-                  <span className="ml-2 text-sm">{source.displayName}</span>
+                  <span className="ms-2 text-sm">{source.displayName}</span>
                 </>
               ),
             };
@@ -119,7 +119,7 @@ export function HorizontalFilters({
             )
           }
           icon={
-            <div className="my-auto mr-2 w-[16px] h-[16px]">
+            <div className="my-auto me-2 w-[16px] h-[16px]">
               <FiMap size={16} />
             </div>
           }
@@ -136,7 +136,7 @@ export function HorizontalFilters({
                     <div className="my-auto">
                       <FiBookmark />
                     </div>
-                    <span className="ml-2 text-sm">{documentSet.name}</span>
+                    <span className="ms-2 text-sm">{documentSet.name}</span>
                   </>
                 ),
               };
@@ -144,7 +144,7 @@ export function HorizontalFilters({
             selected={selectedDocumentSets}
             handleSelect={(option) => handleDocumentSetSelect(option.key)}
             icon={
-              <div className="my-auto mr-2 w-[16px] h-[16px]">
+              <div className="my-auto me-2 w-[16px] h-[16px]">
                 <FiBook size={16} />
               </div>
             }
@@ -171,7 +171,7 @@ export function HorizontalFilters({
                     sourceType={source.baseSourceType || source.internalName}
                     iconSize={16}
                   />
-                  <span className="ml-2 text-sm">{source.displayName}</span>
+                  <span className="ms-2 text-sm">{source.displayName}</span>
                 </>
               </SelectedBubble>
             ))}
@@ -185,7 +185,7 @@ export function HorizontalFilters({
                   <div>
                     <FiBookmark />
                   </div>
-                  <span className="ml-2 text-sm">{documentSetName}</span>
+                  <span className="ms-2 text-sm">{documentSetName}</span>
                 </>
               </SelectedBubble>
             ))}

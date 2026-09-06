@@ -69,6 +69,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef } from "react";
+import { useTranslations } from "next-intl";
 import { cn } from "@opal/utils";
 import { InputTypeIn } from "@opal/components";
 import { Button, EmptyMessageCard } from "@opal/components";
@@ -117,6 +118,7 @@ function KeyValueInputItem({
   canRemove,
   index,
 }: KeyValueInputItemProps) {
+  const t = useTranslations("common.keyValue");
   return (
     <>
       <div className="flex flex-col gap-y-0.5">
@@ -124,7 +126,10 @@ function KeyValueInputItem({
           placeholder={keyPlaceholder}
           value={item.key}
           onChange={(e) => onChange({ ...item, key: e.target.value })}
-          aria-label={`${keyPlaceholder || "Key"} ${index + 1}`}
+          aria-label={t("input.ariaLabel", {
+            label: keyPlaceholder || t("keyColumn.title"),
+            index: index + 1,
+          })}
           aria-invalid={!!error?.key}
         />
         {error?.key && <InputErrorText>{error.key}</InputErrorText>}
@@ -134,7 +139,10 @@ function KeyValueInputItem({
           placeholder={valuePlaceholder}
           value={item.value}
           onChange={(e) => onChange({ ...item, value: e.target.value })}
-          aria-label={`${valuePlaceholder || "Value"} ${index + 1}`}
+          aria-label={t("input.ariaLabel", {
+            label: valuePlaceholder || t("valueColumn.title"),
+            index: index + 1,
+          })}
           aria-invalid={!!error?.value}
         />
         {error?.value && <InputErrorText>{error.value}</InputErrorText>}
@@ -144,7 +152,10 @@ function KeyValueInputItem({
         prominence="tertiary"
         icon={SvgMinusCircle}
         onClick={onRemove}
-        aria-label={`Remove ${keyPlaceholder || "key-value"} pair ${index + 1}`}
+        aria-label={t("removeButton.ariaLabel", {
+          label: keyPlaceholder || t("pair.fallbackLabel"),
+          index: index + 1,
+        })}
       />
     </>
   );
@@ -185,8 +196,8 @@ export interface KeyValueInputProps extends WithoutStyles<
 }
 
 export default function KeyValueInput({
-  keyTitle = "Key",
-  valueTitle = "Value",
+  keyTitle: keyTitleProp,
+  valueTitle: valueTitleProp,
   keyPlaceholder,
   valuePlaceholder,
   items = [],
@@ -194,9 +205,18 @@ export default function KeyValueInput({
   mode = "line",
   layout = "equal",
   onValidationError,
-  addButtonLabel = "Add Line",
+  addButtonLabel: addButtonLabelProp,
   ...rest
 }: KeyValueInputProps) {
+  const t = useTranslations("common.keyValue");
+  const keyTitle = keyTitleProp ?? t("keyColumn.title");
+  const valueTitle = valueTitleProp ?? t("valueColumn.title");
+  const addButtonLabel = addButtonLabelProp ?? t("addButton.label");
+  // Row errors and the summary both compare against these translated
+  // messages, so the strings stay consistent within a render.
+  const emptyKeyMessage = t("error.emptyKey");
+  const duplicateKeyMessage = t("error.duplicateKey");
+
   // Validation logic
   const errors = useMemo((): KeyValueError[] => {
     if (!items || items.length === 0) return [];
@@ -209,7 +229,7 @@ export default function KeyValueInput({
       if (item.key.trim() === "" && item.value.trim() !== "") {
         const error = errorsList[index];
         if (error) {
-          error.key = "Key cannot be empty";
+          error.key = emptyKeyMessage;
         }
       }
 
@@ -227,14 +247,14 @@ export default function KeyValueInput({
         indices.forEach((index) => {
           const error = errorsList[index];
           if (error) {
-            error.key = "Duplicate key";
+            error.key = duplicateKeyMessage;
           }
         });
       }
     });
 
     return errorsList;
-  }, [items]);
+  }, [items, emptyKeyMessage, duplicateKeyMessage]);
 
   const hasAnyError = useMemo(() => {
     return errors.some((error) => error.key || error.value);
@@ -246,23 +266,17 @@ export default function KeyValueInput({
 
     const errorCount = errors.filter((e) => e.key || e.value).length;
     const duplicateCount = errors.filter(
-      (e) => e.key === "Duplicate key"
+      (e) => e.key === duplicateKeyMessage
     ).length;
-    const emptyCount = errors.filter(
-      (e) => e.key === "Key cannot be empty"
-    ).length;
+    const emptyCount = errors.filter((e) => e.key === emptyKeyMessage).length;
 
     if (duplicateCount > 0) {
-      return `${duplicateCount} duplicate ${
-        duplicateCount === 1 ? "key" : "keys"
-      } found`;
+      return t("error.duplicateSummary", { count: duplicateCount });
     } else if (emptyCount > 0) {
-      return `${emptyCount} empty ${emptyCount === 1 ? "key" : "keys"} found`;
+      return t("error.emptySummary", { count: emptyCount });
     }
-    return `${errorCount} validation ${
-      errorCount === 1 ? "error" : "errors"
-    } found`;
-  }, [hasAnyError, errors]);
+    return t("error.validationSummary", { count: errorCount });
+  }, [hasAnyError, errors, duplicateKeyMessage, emptyKeyMessage, t]);
 
   // Notify parent of validation changes
   const onValidationErrorRef = useRef(onValidationError);
@@ -314,7 +328,7 @@ export default function KeyValueInput({
     <div
       className="w-full flex flex-col gap-y-2"
       role="group"
-      aria-label={`${keyTitle} and ${valueTitle} pairs`}
+      aria-label={t("group.ariaLabel", { keyTitle, valueTitle })}
       {...rest}
     >
       {items && items.length > 0 ? (
@@ -346,7 +360,7 @@ export default function KeyValueInput({
         </div>
       ) : (
         <EmptyMessageCard
-          title="No items added yet."
+          title={t("empty.title")}
           padding={2}
           sizePreset="secondary"
         />
@@ -356,7 +370,7 @@ export default function KeyValueInput({
         prominence="secondary"
         onClick={handleAdd}
         icon={SvgPlusCircle}
-        aria-label={`Add ${keyTitle} and ${valueTitle} pair`}
+        aria-label={t("addButton.ariaLabel", { keyTitle, valueTitle })}
         type="button"
       >
         {addButtonLabel}

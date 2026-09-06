@@ -220,7 +220,7 @@ export const GmailAuthSection = ({
                 </Text>
                 <InputTypeInField
                   name="google_primary_admin"
-                  placeholder="admin@yourcompany.com"
+                  placeholder={t("gmail.primaryAdmin.placeholder")}
                 />
                 <Text font="secondary-body" color="text-03">
                   {t("gmail.primaryAdmin.description")}

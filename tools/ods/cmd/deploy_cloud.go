@@ -84,7 +84,7 @@ Example usage:
 				return err
 			}
 			if opts.NoWatch {
-				announceCloudRun(tag)
+				announceDeploymentRun(tag)
 				return nil
 			}
 			log.Infof("Watching the release; Ctrl-C is safe, re-attach with: ods deploy cloud --attach %s", tag)
@@ -159,19 +159,4 @@ func deployCloud(opts *DeployCloudOptions) (string, error) {
 	}
 	log.Infof("Pushed %s; deployment.yml will build the cloud images.", tag)
 	return tag, nil
-}
-
-// announceCloudRun looks up the deployment.yml run triggered by pushing tag and
-// prints its URL. The lookup is best-effort: the tag is already pushed and the
-// build runs regardless, so failures only warn.
-func announceCloudRun(tag string) {
-	log.Info("Looking up the deployment run...")
-	run, err := waitForNewRun(onyxRepo, deploymentWorkflowFile, "push", tag, 0)
-	if err != nil {
-		log.Warnf("Could not find the deployment run for %s: %v", tag, err)
-		log.Warnf("Find it at https://github.com/%s/actions/workflows/%s", onyxRepo, deploymentWorkflowFile)
-		return
-	}
-	log.Infof("Deployment run: %s", run.URL)
-	fmt.Println(run.URL)
 }

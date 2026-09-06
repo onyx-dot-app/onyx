@@ -1,4 +1,5 @@
 import { FC } from "react";
+import { useTranslations } from "next-intl";
 import { StandardAnswerCategoryResponse } from "./getStandardAnswerCategoriesIfEE";
 import { Label } from "@/components/Field";
 import InputComboBox from "@/refresh-components/inputs/InputComboBox/InputComboBox";
@@ -16,6 +17,8 @@ interface StandardAnswerCategoryDropdownFieldProps {
 export const StandardAnswerCategoryDropdownField: FC<
   StandardAnswerCategoryDropdownFieldProps
 > = ({ standardAnswerCategoryResponse, categories, setCategories }) => {
+  const t = useTranslations("admin.standardAnswers.categoryDropdown");
+
   if (!standardAnswerCategoryResponse.paidEnterpriseFeaturesEnabled) {
     return null;
   }
@@ -23,8 +26,10 @@ export const StandardAnswerCategoryDropdownField: FC<
   if (standardAnswerCategoryResponse.error != null) {
     return (
       <ErrorCallout
-        errorTitle="Something went wrong :("
-        errorMsg={`Failed to fetch standard answer categories - ${standardAnswerCategoryResponse.error.message}`}
+        errorTitle={t("fetchError.title")}
+        errorMsg={t("fetchError.message", {
+          message: standardAnswerCategoryResponse.error.message,
+        })}
       />
     );
   }
@@ -38,10 +43,10 @@ export const StandardAnswerCategoryDropdownField: FC<
 
   return (
     <div>
-      <Label>Standard Answer Categories</Label>
+      <Label>{t("categories.label")}</Label>
       <div className="w-64 flex flex-col gap-2">
         <InputComboBox
-          placeholder="Search categories..."
+          placeholder={t("search.placeholder")}
           value=""
           onChange={() => {}}
           onValueChange={(value) => {

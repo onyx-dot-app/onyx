@@ -74,7 +74,7 @@ export function SearchAndFilterControls({
         />
 
         {hasActiveFilters && (
-          <div className="flex flex-none items-center gap-1 ml-2 max-w-[500px]">
+          <div className="flex flex-none items-center gap-1 ms-2 max-w-[500px]">
             {filterOptions.accessType &&
               filterOptions.accessType.length > 0 && (
                 <Badge variant="secondary" className="px-2 py-0.5 text-xs">

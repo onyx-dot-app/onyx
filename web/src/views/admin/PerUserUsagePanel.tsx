@@ -97,7 +97,12 @@ export default function PerUserUsagePanel({
       height="fit"
     >
       <Text font="heading-h3">{t("panel.title")}</Text>
-      <Text font="secondary-body" color="text-03">
+      {/* Holds the selected period, so visual tests mask it. */}
+      <Text
+        font="secondary-body"
+        color="text-03"
+        data-testid="usage-overview-period"
+      >
         {usage
           ? t("panel.description", {
               start: formatDate(usage.start),
@@ -163,21 +168,21 @@ export default function PerUserUsagePanel({
               detail={t("summary.workspaceSpend.detail")}
             />
           </div>
-          <div className="border-b border-l border-border-02 lg:border-b-0">
+          <div className="border-b border-s border-border-02 lg:border-b-0">
             <SummaryMetric
               label={t("summary.totalTokens.label")}
               value={formatTokens(totalTokens, locale)}
               detail={t("summary.totalTokens.detail")}
             />
           </div>
-          <div className="border-b border-border-02 lg:border-b-0 lg:border-l">
+          <div className="border-b border-border-02 lg:border-b-0 lg:border-s">
             <SummaryMetric
               label={t("summary.activeUsers.label")}
               value={formatTokens(activeUsers, locale)}
               detail={t("summary.activeUsers.detail", { count: users.length })}
             />
           </div>
-          <div className="border-l border-border-02">
+          <div className="border-s border-border-02">
             <SummaryMetric
               label={t("summary.topSpender.label")}
               value={

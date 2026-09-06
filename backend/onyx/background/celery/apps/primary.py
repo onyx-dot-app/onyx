@@ -353,6 +353,7 @@ celery_app.autodiscover_tasks(
         [
             "onyx.background.celery.tasks.connector_deletion",
             "onyx.background.celery.tasks.docprocessing",
+            "onyx.background.celery.tasks.index_reclaim",
             "onyx.background.celery.tasks.port",
             "onyx.background.celery.tasks.evals",
             "onyx.background.celery.tasks.hierarchyfetching",
@@ -362,6 +363,7 @@ celery_app.autodiscover_tasks(
             "onyx.background.celery.tasks.vespa",
             "onyx.background.celery.tasks.llm_model_update",
             "onyx.background.celery.tasks.user_file_processing",
+            "onyx.background.celery.tasks.capability_checks",
         ]
     )
 )

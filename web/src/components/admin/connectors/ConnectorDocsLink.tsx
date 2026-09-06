@@ -1,5 +1,6 @@
 import { ValidSources } from "@/lib/types";
 import { getSourceDocLink } from "@/lib/sources";
+import { useTranslations } from "next-intl";
 
 export default function ConnectorDocsLink({
   sourceType,
@@ -8,6 +9,7 @@ export default function ConnectorDocsLink({
   sourceType: ValidSources;
   className?: string;
 }) {
+  const t = useTranslations("admin.connector.docsLink");
   const docsLink = getSourceDocLink(sourceType);
 
   if (!docsLink) {
@@ -18,17 +20,18 @@ export default function ConnectorDocsLink({
 
   return (
     <p className={paragraphClass}>
-      Check out
-      <a
-        className="text-blue-600 hover:underline"
-        target="_blank"
-        rel="noopener"
-        href={docsLink}
-      >
-        {" "}
-        our docs{" "}
-      </a>
-      for more info on configuring this connector.
+      {t.rich("checkOutDocs.text", {
+        link: (chunks) => (
+          <a
+            className="text-blue-600 hover:underline"
+            target="_blank"
+            rel="noopener"
+            href={docsLink}
+          >
+            {chunks}
+          </a>
+        ),
+      })}
     </p>
   );
 }

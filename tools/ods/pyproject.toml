@@ -18,11 +18,18 @@ classifiers = [
     "Operating System :: MacOS",
     "Operating System :: Microsoft :: Windows",
 ]
-dynamic = ["version"]
+dynamic = ["version", "optional-dependencies"]
 dependencies = [
     "fastapi>=0.116.1",
     "openapi-generator-cli>=7.17.0",
 ]
+
+
+# `ods audit` needs the ods-audit binary, which ships in its own wheel because
+# its scanner is most of the download. The "audit" extra pins it to this exact
+# release; the metadata hook fills in the version.
+[tool.hatch.metadata.hooks.custom]
+path = "hatch_build.py"
 
 
 [project.urls]

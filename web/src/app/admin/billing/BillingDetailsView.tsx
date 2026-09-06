@@ -324,7 +324,7 @@ function SubscriptionCard({
           width="fit"
         >
           {isManualLicenseOnly ? (
-            <Text secondaryBody text03 className="text-right">
+            <Text secondaryBody text03 className="text-end">
               {t.rich("subscription.managedBySales.text", {
                 br: () => <br />,
                 link: (chunks) => (

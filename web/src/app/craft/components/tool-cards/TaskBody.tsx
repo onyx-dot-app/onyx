@@ -51,7 +51,7 @@ export default function TaskBody({ toolCall }: ToolCardBodyProps) {
       onClick={open}
       aria-label={subagent ? `View subagent: ${label}` : label}
       className={cn(
-        "group/task flex w-full items-center gap-2 rounded-08 px-3 py-2 text-left",
+        "group/task flex w-full items-center gap-2 rounded-08 px-3 py-2 text-start",
         subagent
           ? "cursor-pointer transition-colors hover:bg-background-tint-02"
           : "cursor-default"

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import { useFocusOnMount } from "@opal/hooks";
 import {
   Button,
@@ -43,9 +44,12 @@ export default function SwitchList({
   allDisabled,
   onDisableAll,
   onEnableAll,
+  disableAllLabel,
+  enableAllLabel,
   onBack,
   footer,
 }: SwitchListProps) {
+  const t = useTranslations("actions");
   const [searchTerm, setSearchTerm] = useState("");
   const focusOnMount = useFocusOnMount<HTMLInputElement>();
   const filteredItems = useMemo(() => {
@@ -68,7 +72,7 @@ export default function SwitchList({
             icon={SvgChevronLeft}
             prominence="tertiary"
             size="sm"
-            aria-label="Back"
+            aria-label={t("switchList.back.ariaLabel")}
             onClick={() => {
               setSearchTerm("");
               onBack();
@@ -89,7 +93,7 @@ export default function SwitchList({
           key="enable-disable-all"
           icon={allDisabled ? SvgPlug : SvgUnplug}
           onClick={allDisabled ? onEnableAll : onDisableAll}
-          title={allDisabled ? "Enable All" : "Disable All"}
+          title={allDisabled ? enableAllLabel : disableAllLabel}
         />,
 
         ...filteredItems.map((item) => {
@@ -125,7 +129,9 @@ export default function SwitchList({
                     <Switch
                       checked={item.isEnabled}
                       onCheckedChange={item.onToggle}
-                      aria-label={`Toggle ${item.label}`}
+                      aria-label={t("switchList.toggle.ariaLabel", {
+                        name: item.label,
+                      })}
                       disabled={item.disabled}
                     />
                   }

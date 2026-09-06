@@ -174,7 +174,7 @@ function ErrorMessageCell({
       type="button"
       onClick={() => onErrorClick(modalContent ?? errorMessage)}
       aria-label={t("syncTables.errorCell.ariaLabel")}
-      className="text-left w-full cursor-pointer hover:underline"
+      className="text-start w-full cursor-pointer hover:underline"
     >
       <Text as="span" font="secondary-body" color="text-03" maxLines={2}>
         {errorMessage}

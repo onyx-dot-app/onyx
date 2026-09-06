@@ -1,6 +1,7 @@
 "use client";
 
 import useSWR from "swr";
+import { useTranslations } from "next-intl";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { MCPServer, ToolSnapshot } from "@/lib/tools/types";
@@ -22,6 +23,7 @@ export default function McpServerPolicyModal({
   onSaved,
   server,
 }: McpServerPolicyModalProps) {
+  const t = useTranslations("craft.apps.mcpPolicy");
   const { data: toolSnapshots } = useSWR<ToolSnapshot[]>(
     SWR_KEYS.adminMcpServerToolSnapshots(server.id),
     errorHandlingFetcher
@@ -41,8 +43,8 @@ export default function McpServerPolicyModal({
   return (
     <ActionPolicyEditorModal
       onClose={onClose}
-      title={`Edit ${server.name}`}
-      description="Configure what the Craft agent may do with this MCP server's tools."
+      title={t("title", { name: server.name })}
+      description={t("description")}
       fields={[]}
       initialFieldValues={{}}
       // Policies are keyed by the tool's raw name (what the backend validates
@@ -55,8 +57,8 @@ export default function McpServerPolicyModal({
         defaultPolicy: "ASK",
       }))}
       initialPolicies={{ ...server.tool_policies }}
-      emptyPoliciesMessage="No enabled tools on this server. Enable tools on the MCP actions page first."
-      saveLabel="Save"
+      emptyPoliciesMessage={t("emptyPolicies")}
+      saveLabel={t("saveButton")}
       onSave={save}
     />
   );

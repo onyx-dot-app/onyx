@@ -1,10 +1,11 @@
+import { useTranslations } from "next-intl";
 import { createTableColumns } from "@opal/components";
 import { Content } from "@opal/layouts";
 import { SvgUser, SvgUserManage, SvgGlobe } from "@opal/icons";
 import { SvgSlack } from "@opal/logos";
 import type { IconFunctionComponent } from "@opal/types";
 import Text from "@/refresh-components/texts/Text";
-import { AccountType, ACCOUNT_TYPE_LABELS, UserStatus } from "@/lib/types";
+import { AccountType, UserStatus } from "@/lib/types";
 import type { ApiKeyDescriptor, MemberRow } from "./interfaces";
 
 // ---------------------------------------------------------------------------
@@ -17,17 +18,27 @@ export const PAGE_SIZE = 10;
 // Helpers
 // ---------------------------------------------------------------------------
 
-export function apiKeyToMemberRow(key: ApiKeyDescriptor): MemberRow {
+// Translated copy threaded in by the calling component, matching
+// MemberColumnLabels below.
+export interface ApiKeyMemberRowLabels {
+  serviceAccountEmail: string;
+  unnamedKey: string;
+}
+
+export function apiKeyToMemberRow(
+  key: ApiKeyDescriptor,
+  labels: ApiKeyMemberRowLabels
+): MemberRow {
   return {
     id: key.user_id,
-    email: "Service Account",
+    email: labels.serviceAccountEmail,
     account_type: AccountType.SERVICE_ACCOUNT,
     is_admin: false,
     status: UserStatus.ACTIVE,
     is_active: true,
     is_scim_synced: false,
     craft_enabled: null,
-    personal_name: key.api_key_name ?? "Unnamed Key",
+    personal_name: key.api_key_name ?? labels.unnamedKey,
     created_at: null,
     updated_at: null,
     groups: [],
@@ -51,7 +62,15 @@ const ACCOUNT_TYPE_ICONS: Partial<Record<AccountType, IconFunctionComponent>> =
 // Column renderers
 // ---------------------------------------------------------------------------
 
-function renderAccountTypeColumn(_value: unknown, row: MemberRow) {
+function AccountTypeCell({ row }: { row: MemberRow }) {
+  const t = useTranslations("admin.users.accountType");
+  const labels: Record<AccountType, string> = {
+    [AccountType.STANDARD]: t("standard.label"),
+    [AccountType.BOT]: t("bot.label"),
+    [AccountType.EXT_PERM_USER]: t("extPermUser.label"),
+    [AccountType.SERVICE_ACCOUNT]: t("serviceAccount.label"),
+    [AccountType.ANONYMOUS]: t("anonymous.label"),
+  };
   const Icon =
     (row.account_type && ACCOUNT_TYPE_ICONS[row.account_type]) || SvgUser;
   return (
@@ -59,11 +78,15 @@ function renderAccountTypeColumn(_value: unknown, row: MemberRow) {
       <Icon className="w-4 h-4 text-text-03" />
       <Text as="span" mainUiBody text03>
         {row.account_type
-          ? (ACCOUNT_TYPE_LABELS[row.account_type] ?? row.account_type)
+          ? (labels[row.account_type] ?? row.account_type)
           : "\u2014"}
       </Text>
     </div>
   );
+}
+
+function renderAccountTypeColumn(_value: unknown, row: MemberRow) {
+  return <AccountTypeCell row={row} />;
 }
 
 // ---------------------------------------------------------------------------

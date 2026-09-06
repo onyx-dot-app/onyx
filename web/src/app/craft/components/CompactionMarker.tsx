@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import { Text } from "@opal/components";
 import { SvgFold, SvgChevronDown } from "@opal/icons";
 import { cn } from "@opal/utils";
@@ -15,6 +16,7 @@ interface CompactionMarkerProps {
 }
 
 export default function CompactionMarker({ summary }: CompactionMarkerProps) {
+  const t = useTranslations("craft.compaction");
   const [open, setOpen] = useState(false);
   const summaryLines = useMemo(
     () => (summary?.trim() ? summary.replace(/\s+$/, "").split("\n") : []),
@@ -27,7 +29,7 @@ export default function CompactionMarker({ summary }: CompactionMarkerProps) {
       <span className="flex items-center gap-1.5">
         <SvgFold className="size-3.5 shrink-0 stroke-text-04" />
         <Text font="main-ui-muted" color="text-04" nowrap>
-          Context compacted to free up space
+          {t("marker.label")}
         </Text>
         {withChevron && (
           <SvgChevronDown

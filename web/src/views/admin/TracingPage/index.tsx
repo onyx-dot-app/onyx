@@ -1,5 +1,6 @@
 "use client";
 
+import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import { SettingsLayouts } from "@opal/layouts";
@@ -29,12 +30,13 @@ interface ShellProps {
 
 function Shell({ children }: ShellProps) {
   const t = useTranslations("admin.tracing");
+  const adminRouteTitle = useAdminRouteTitle();
 
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={route.icon}
-        title={route.title}
+        title={adminRouteTitle(route)}
         description={t("page.description")}
         divider
       />

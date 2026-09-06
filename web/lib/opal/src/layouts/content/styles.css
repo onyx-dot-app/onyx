@@ -208,7 +208,7 @@
 }
 
 .opal-content-xl-description {
-  @apply text-left w-full;
+  @apply text-start w-full;
 }
 
 /* ===========================================================================
@@ -296,7 +296,7 @@
    --------------------------------------------------------------------------- */
 
 .opal-content-lg-description {
-  @apply text-left w-full;
+  @apply text-start w-full;
 }
 
 /* ===========================================================================
@@ -361,7 +361,7 @@
   /* Keep the description aligned under the title (past the icon), matching the
      non-responsive desktop layout. */
   .opal-content-md[data-stacked] > .opal-content-md-description {
-    padding-left: var(--opal-content-md-desc-indent, 0);
+    padding-inline-start: var(--opal-content-md-desc-indent, 0);
   }
 }
 
@@ -451,7 +451,7 @@
    --------------------------------------------------------------------------- */
 
 .opal-content-md-description {
-  @apply text-left w-full;
+  @apply text-start w-full;
 }
 
 /* ===========================================================================

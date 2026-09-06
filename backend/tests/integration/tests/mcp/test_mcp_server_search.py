@@ -14,7 +14,7 @@ from mcp.client.streamable_http import streamablehttp_client
 from mcp.types import CallToolResult, TextContent
 from pydantic import AnyUrl
 
-from onyx.db.enums import AccessType
+from onyx.db.enums import AccessType, Permission
 from tests.integration.common_utils.constants import MCP_SERVER_URL
 from tests.integration.common_utils.managers.api_key import APIKeyManager
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
@@ -22,6 +22,7 @@ from tests.integration.common_utils.managers.document import DocumentManager
 from tests.integration.common_utils.managers.document_set import DocumentSetManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.pat import PATManager
+from tests.integration.common_utils.managers.persona import PersonaManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.test_models import DATestUser
@@ -30,6 +31,7 @@ from tests.integration.common_utils.test_models import DATestUser
 MCP_SEARCH_TOOL = "search_indexed_documents"
 INDEXED_SOURCES_RESOURCE_URI = "resource://indexed_sources"
 DOCUMENT_SETS_RESOURCE_URI = "resource://document_sets"
+AGENTS_RESOURCE_URI = "resource://agents"
 STREAMABLE_HTTP_URL = f"{MCP_SERVER_URL.rstrip('/')}/?transportType=streamable-http"
 
 
@@ -71,6 +73,7 @@ def _call_search_tool(
     headers: dict[str, str],
     query: str,
     document_set_names: list[str] | None = None,
+    agent: str | None = None,
 ) -> CallToolResult:
     """Call the search_indexed_documents tool via MCP."""
 
@@ -79,17 +82,24 @@ def _call_search_tool(
         arguments: dict[str, Any] = {"query": query}
         if document_set_names is not None:
             arguments["document_set_names"] = document_set_names
+        if agent is not None:
+            arguments["agent"] = agent
         return await session.call_tool(MCP_SEARCH_TOOL, arguments)
 
     return _run_with_mcp_session(headers, _action)
 
 
-def _auth_headers(user: DATestUser, name: str) -> dict[str, str]:
+def _auth_headers(
+    user: DATestUser,
+    name: str,
+    scopes: list[Permission] | None = None,
+) -> dict[str, str]:
     """Create authorization headers with a PAT token."""
     pat = PATManager.create(
         name=name,
         expiration_days=7,
         user_performing_action=user,
+        scopes=scopes,
     )
     return {"Authorization": f"Bearer {pat.token}"}
 
@@ -299,3 +309,103 @@ def test_mcp_search_filters_by_document_set(
     ]
     assert any(in_set_content in content for content in empty_list_contents)
     assert any(out_of_set_content in content for content in empty_list_contents)
+
+
+def test_mcp_search_scopes_to_agent(
+    admin_user: DATestUser,
+) -> None:
+    """Passing `agent` should apply that agent's knowledge scope to the search."""
+    LLMProviderManager.create(user_performing_action=admin_user)
+
+    api_key = APIKeyManager.create(user_performing_action=admin_user)
+    cc_pair_in_scope = CCPairManager.create_from_scratch(
+        user_performing_action=admin_user,
+    )
+    cc_pair_out_of_scope = CCPairManager.create_from_scratch(
+        user_performing_action=admin_user,
+    )
+
+    shared_phrase = "agent-scope-shared-phrase"
+    in_scope_content = f"{shared_phrase} inside the agent's knowledge"
+    out_of_scope_content = f"{shared_phrase} outside the agent's knowledge"
+
+    DocumentManager.seed_doc_with_content(cc_pair_in_scope, in_scope_content, api_key)
+    DocumentManager.seed_doc_with_content(
+        cc_pair_out_of_scope, out_of_scope_content, api_key
+    )
+
+    doc_set = DocumentSetManager.create(
+        cc_pair_ids=[cc_pair_in_scope.id],
+        user_performing_action=admin_user,
+    )
+    DocumentSetManager.wait_for_sync(
+        user_performing_action=admin_user,
+        document_sets_to_check=[doc_set],
+    )
+
+    persona = PersonaManager.create(
+        user_performing_action=admin_user,
+        document_set_ids=[doc_set.id],
+    )
+
+    headers = _auth_headers(admin_user, name="mcp-agent-scope")
+
+    # The agents resource should surface the new agent so clients can browse
+    # the names accepted by the `agent` filter.
+    async def _read_agents(session: ClientSession) -> Any:
+        await session.initialize()
+        resources = await session.list_resources()
+        contents = await session.read_resource(AnyUrl(AGENTS_RESOURCE_URI))
+        return resources, contents
+
+    resources_result, agents_contents = _run_with_mcp_session(headers, _read_agents)
+    resource_uris = {str(resource.uri) for resource in resources_result.resources}
+    assert AGENTS_RESOURCE_URI in resource_uris
+    agents_payload = json.loads(agents_contents.contents[0].text)
+    assert persona.name in {entry["name"] for entry in agents_payload}
+
+    # Without the agent both documents are visible.
+    unfiltered_payload = _extract_tool_payload(
+        _call_search_tool(headers, shared_phrase)
+    )
+    unfiltered_contents = [
+        doc.get("content") or "" for doc in unfiltered_payload["results"]
+    ]
+    assert any(in_scope_content in content for content in unfiltered_contents)
+    assert any(out_of_scope_content in content for content in unfiltered_contents)
+
+    # Scoped to the agent, only its document set is searched.
+    scoped_payload = _extract_tool_payload(
+        _call_search_tool(headers, shared_phrase, agent=persona.name)
+    )
+    scoped_contents = [doc.get("content") or "" for doc in scoped_payload["results"]]
+    assert "error" not in scoped_payload, scoped_payload
+    assert len(scoped_payload["results"]) >= 1
+    assert any(in_scope_content in content for content in scoped_contents)
+    assert all(out_of_scope_content not in content for content in scoped_contents)
+
+    # An unresolvable agent must fail loudly and name the valid options, rather
+    # than silently falling back to an unscoped search.
+    unknown_payload = _extract_tool_payload(
+        _call_search_tool(headers, shared_phrase, agent="no-such-agent")
+    )
+    assert unknown_payload["results"] == []
+    assert "no-such-agent" in unknown_payload["error"]
+    assert persona.name in unknown_payload["error"]
+
+    # A scoped PAT must still resolve the agent name: /persona carries no
+    # require_permission marker, so it needs the scope_exempt marker to be
+    # reachable at all.
+    scoped_pat_headers = _auth_headers(
+        admin_user,
+        name="mcp-agent-scope-scoped-pat",
+        scopes=[Permission.BASIC_ACCESS, Permission.READ_SEARCH],
+    )
+    scoped_pat_payload = _extract_tool_payload(
+        _call_search_tool(scoped_pat_headers, shared_phrase, agent=persona.name)
+    )
+    assert "error" not in scoped_pat_payload, scoped_pat_payload
+    assert any(
+        in_scope_content in (doc.get("content") or "")
+        for doc in scoped_pat_payload["results"]
+    )

@@ -109,7 +109,7 @@ export default function ScimSyncCard({
                     as="p"
                     secondaryBody
                     text03
-                    className="max-w-[240px] text-right"
+                    className="max-w-[240px] text-end"
                   >
                     {t("card.waiting.description")}
                   </Text>

@@ -1,5 +1,6 @@
 "use client";
 
+import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useTranslations } from "next-intl";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { PageLoader } from "@opal/layouts";
@@ -47,7 +48,7 @@ function Main() {
       </p>
 
       <div className="mb-2">
-        <ul className="list-disc mt-2 ml-4 text-sm text-muted-foreground">
+        <ul className="list-disc mt-2 ms-4 text-sm text-muted-foreground">
           <li>{t("intro.autoAnswer.item")}</li>
           <li>{t("intro.documentSets.item")}</li>
           <li>{t("intro.directMessage.item")}</li>
@@ -83,9 +84,14 @@ function Main() {
 }
 
 export default function Page() {
+  const adminRouteTitle = useAdminRouteTitle();
   return (
     <SettingsLayouts.Root>
-      <SettingsLayouts.Header icon={route.icon} title={route.title} divider />
+      <SettingsLayouts.Header
+        icon={route.icon}
+        title={adminRouteTitle(route)}
+        divider
+      />
       <SettingsLayouts.Body>
         <InstantSSRAutoRefresh />
         <Main />

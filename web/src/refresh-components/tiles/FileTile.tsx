@@ -1,4 +1,5 @@
 import type { FunctionComponent } from "react";
+import { useTranslations } from "next-intl";
 import { Button } from "@opal/components";
 import { cn, clickOnKeyDown } from "@opal/utils";
 import { SvgMaximize2, SvgTextLines, SvgX } from "@opal/icons";
@@ -32,10 +33,11 @@ interface RemoveButtonProps {
 }
 
 function RemoveButton({ onRemove }: RemoveButtonProps) {
+  const t = useTranslations("common.fileTile");
   return (
     <div
       className={cn(
-        "absolute -left-1 -top-1 z-10",
+        "absolute -start-1 -top-1 z-10",
         "pointer-events-none focus-within:pointer-events-auto"
       )}
     >
@@ -46,8 +48,8 @@ function RemoveButton({ onRemove }: RemoveButtonProps) {
             e.stopPropagation();
             onRemove();
           }}
-          title="Remove"
-          aria-label="Remove"
+          title={t("removeButton.label")}
+          aria-label={t("removeButton.label")}
           className={cn(
             "h-4 w-4",
             "flex items-center justify-center",
@@ -74,6 +76,7 @@ export default function FileTile({
   onOpen,
   state = "default",
 }: FileTileProps) {
+  const t = useTranslations("common.fileTile");
   const Icon = icon ?? SvgTextLines;
   const isMuted = state === "processing" || state === "disabled";
   const canOpen = !!onOpen && state !== "disabled";
@@ -112,7 +115,7 @@ export default function FileTile({
       </div>
 
       {(title || description || onOpen) && (
-        <div className="min-w-0 flex pl-1 w-full justify-between h-full">
+        <div className="min-w-0 flex ps-1 w-full justify-between h-full">
           {isMuted ? (
             <div className="flex flex-col min-w-0">
               {title && (
@@ -177,7 +180,9 @@ export default function FileTile({
         <div
           role="button"
           tabIndex={0}
-          aria-label={`Open ${title ?? "file"}`}
+          aria-label={t("open.ariaLabel", {
+            title: title ?? t("file.fallback"),
+          })}
           onKeyDown={clickOnKeyDown(onOpen)}
           onClick={() => onOpen()}
           className={tileClassName}

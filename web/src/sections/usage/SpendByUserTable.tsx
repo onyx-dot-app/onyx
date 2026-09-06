@@ -217,7 +217,7 @@ export default function SpendByUserTable({
             onChange={(event) => setSearchTerm(event.target.value)}
           />
         </div>
-        <div className="flex w-full flex-col gap-2 sm:ml-auto sm:w-auto sm:flex-row">
+        <div className="flex w-full flex-col gap-2 sm:ms-auto sm:w-auto sm:flex-row">
           {models.length > 0 && (
             <div className="w-full sm:w-44">
               <InputSelect value={model} onValueChange={setModel}>

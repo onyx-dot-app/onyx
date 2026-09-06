@@ -75,8 +75,8 @@ export * as AuthLayouts from "@opal/layouts/auth/components";
 export type {
   CardProps as AuthCardProps,
   FieldsProps as AuthFieldsProps,
+  OrSeparatorProps as AuthOrSeparatorProps,
   SubmitProps as AuthSubmitProps,
-  SubmitLabel as AuthSubmitLabel,
 } from "@opal/layouts/auth/components";
 
 /* TagList */

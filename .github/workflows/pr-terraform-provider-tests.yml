@@ -81,6 +81,14 @@ jobs:
           filters: |
             provider:
               - 'terraform-provider-onyx/**'
+              # The suite drives live API routes end to end, so server-side
+              # changes must run it: a tool-API masking change once slipped
+              # through while only the provider directory was filtered.
+              - 'backend/onyx/server/**'
+              - 'backend/ee/onyx/server/**'
+              # The masking contract the provider mirrors lives here.
+              - 'backend/onyx/utils/encryption.py'
+              - 'backend/onyx/configs/constants.py'
               - 'backend/Dockerfile'
               - 'deployment/docker_compose/docker-compose.yml'
               - 'deployment/docker_compose/docker-compose.dev.yml'

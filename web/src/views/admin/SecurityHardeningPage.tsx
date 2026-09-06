@@ -1,5 +1,6 @@
 "use client";
 
+import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import useSWR, { mutate } from "swr";
@@ -150,6 +151,7 @@ function JwtTextRow({
 
 export default function SecurityHardeningPage() {
   const t = useTranslations("admin.security");
+  const adminRouteTitle = useAdminRouteTitle();
   const isMultiTenant = NEXT_PUBLIC_CLOUD_ENABLED;
   const { authTypeMetadata, isLoading: authTypeLoading } =
     useAuthTypeMetadata();
@@ -308,7 +310,11 @@ export default function SecurityHardeningPage() {
   if (settingsLoading || !draft) {
     return (
       <SettingsLayouts.Root>
-        <SettingsLayouts.Header icon={route.icon} title={route.title} divider />
+        <SettingsLayouts.Header
+          icon={route.icon}
+          title={adminRouteTitle(route)}
+          divider
+        />
         <SettingsLayouts.Body />
       </SettingsLayouts.Root>
     );
@@ -346,7 +352,7 @@ export default function SecurityHardeningPage() {
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={route.icon}
-        title={route.title}
+        title={adminRouteTitle(route)}
         description={t("page.description")}
         divider
       />
@@ -368,6 +374,17 @@ export default function SecurityHardeningPage() {
                 checked={draft.track_external_idp_expiry}
                 onCheckedChange={(checked) =>
                   void saveSettings({ track_external_idp_expiry: checked })
+                }
+              />
+
+              <ToggleRow
+                title={t("authentication.subjectRelink.title")}
+                description={t("authentication.subjectRelink.description")}
+                checked={draft.allow_same_provider_subject_relink}
+                onCheckedChange={(checked) =>
+                  void saveSettings({
+                    allow_same_provider_subject_relink: checked,
+                  })
                 }
               />
 

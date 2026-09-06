@@ -930,6 +930,17 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             )
         return
 
+    async def _rewrite_oauth_link(
+        self, user: User, link: OAuthAccount, oauth_account_dict: dict[str, Any]
+    ) -> User:
+        return await self.user_db.update_oauth_account(
+            user,
+            # OAuthAccount implements OAuthAccountProtocol, but the type
+            # checker cannot see it through the fastapi-users generics.
+            link,  # ty: ignore[invalid-argument-type]
+            oauth_account_dict,
+        )
+
     @log_function_time(print_only=True)
     async def oauth_callback(  # ty: ignore[invalid-method-override]
         self,
@@ -1020,6 +1031,18 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     user = await self.user_db.get_by_email(account_email)
                     if user is None:
                         raise exceptions.UserNotExists()
+                    # No link matched this subject, so any link this provider holds on
+                    # the row is stale: the IdP re-issued its subjects (a new Entra
+                    # app registration).
+                    stale_link: OAuthAccount | None = next(
+                        (
+                            link
+                            for link in user.oauth_accounts
+                            if link.oauth_name == oauth_name
+                        ),
+                        None,
+                    )
+
                     # Placeholders (EXT_PERM_USER, bots) carry no credentials or
                     # sessions, so neither check applies and the upgrade claims them.
                     if user.account_type.is_web_login():
@@ -1030,15 +1053,37 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
                         # An owned row must not take a second provider, and a
                         # rename stops the address identifying the row. All else
-                        # is claimable, password signups included.
+                        # is claimable, password signups included. The same provider
+                        # with a new subject is admin-gated: the subject alone does
+                        # not prove who holds the address now.
+                        relink_allowed: bool = (
+                            stale_link is not None
+                            and oauth_security_settings.allow_same_provider_subject_relink
+                        )
                         if not associate_by_email and (
-                            user.oauth_accounts or user.prior_emails
+                            user.prior_emails
+                            or (user.oauth_accounts and not relink_allowed)
                         ):
                             raise exceptions.UserAlreadyExists()
 
-                    user = await self.user_db.add_oauth_account(
-                        user, oauth_account_dict
-                    )
+                    # Rewrite rather than append: bearer pass-through reads
+                    # oauth_accounts[0], and a second link for this provider could
+                    # hand it the dead token.
+                    if stale_link is None:
+                        user = await self.user_db.add_oauth_account(
+                            user, oauth_account_dict
+                        )
+                    else:
+                        logger.notice(
+                            "Relinked %s login for user %s from subject %s to %s",
+                            oauth_name,
+                            user.id,
+                            stale_link.account_id,
+                            account_id,
+                        )
+                        user = await self._rewrite_oauth_link(
+                            user, stale_link, oauth_account_dict
+                        )
 
                 except exceptions.UserNotExists:
                     # OAuth-created accounts are not subject to the dotted-Gmail
@@ -1077,12 +1122,8 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                             existing_oauth_account.account_id == account_id
                             and existing_oauth_account.oauth_name == oauth_name
                         ):
-                            user = await self.user_db.update_oauth_account(
-                                user,
-                                # NOTE: OAuthAccount DOES implement the OAuthAccountProtocol
-                                # but the type checker doesn't know that :(
-                                existing_oauth_account,  # ty: ignore[invalid-argument-type]
-                                oauth_account_dict,
+                            user = await self._rewrite_oauth_link(
+                                user, existing_oauth_account, oauth_account_dict
                             )
 
             assert user is not None

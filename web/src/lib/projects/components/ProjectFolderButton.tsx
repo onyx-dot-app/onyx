@@ -7,6 +7,7 @@ import React, {
   useMemo,
   useState,
 } from "react";
+import { useTranslations } from "next-intl";
 import { useDroppable } from "@dnd-kit/core";
 import {
   Button,
@@ -62,6 +63,7 @@ const FolderIconContext = createContext<FolderIconState | null>(null);
  * without changing type, and the fold state comes through the context.
  */
 export function FolderIcon() {
+  const t = useTranslations("chat");
   const state = useContext(FolderIconContext);
   const [hovering, setHovering] = useState(false);
   const [previewEnabled, setPreviewEnabled] = useState(true);
@@ -85,7 +87,11 @@ export function FolderIcon() {
       type="button"
       data-testid="ProjectFolderIcon"
       // The glyph carries no text, so the control needs its own name and state.
-      aria-label={open ? "Collapse project" : "Expand project"}
+      aria-label={
+        open
+          ? t("projects.folder.collapse.ariaLabel")
+          : t("projects.folder.expand.ariaLabel")
+      }
       aria-expanded={open}
       /* Above the tab's click overlay. `SidebarTab` lays an absolute
          `z-99` control over the whole row whenever it has an `onClick`, and a
@@ -136,6 +142,7 @@ export interface ProjectFolderButtonProps {
   project: Project;
 }
 export function ProjectFolderButton({ project }: ProjectFolderButtonProps) {
+  const t = useTranslations("chat");
   const appPosition = useAppPosition();
   const activeSidebar = useAppPosition();
   const activeProject = useActiveProject();
@@ -178,7 +185,7 @@ export function ProjectFolderButton({ project }: ProjectFolderButtonProps) {
       sizePreset="main-ui"
       rounding={2}
       icon={SvgEdit}
-      title="Rename Project"
+      title={t("projects.folder.rename.label")}
       onClick={noProp(() => setIsEditing(true))}
     />,
     null,
@@ -188,7 +195,7 @@ export function ProjectFolderButton({ project }: ProjectFolderButtonProps) {
       rounding={2}
       color="danger"
       icon={SvgTrash}
-      title="Delete Project"
+      title={t("projects.folder.delete.label")}
       onClick={noProp(() => setDeleteConfirmationModalOpen(true))}
     />,
   ];
@@ -204,7 +211,7 @@ export function ProjectFolderButton({ project }: ProjectFolderButtonProps) {
       {/* Confirmation Modal (only for deletion) */}
       {deleteConfirmationModalOpen && (
         <ConfirmationModalLayout
-          title="Delete Project"
+          title={t("projects.folder.deleteModal.title")}
           icon={SvgTrash}
           onClose={() => setDeleteConfirmationModalOpen(false)}
           submit={
@@ -215,12 +222,11 @@ export function ProjectFolderButton({ project }: ProjectFolderButtonProps) {
                 deleteProject(project.id);
               }}
             >
-              Delete
+              {t("projects.folder.deleteModal.confirmButton.label")}
             </Button>
           }
         >
-          Are you sure you want to delete this project? This action cannot be
-          undone.
+          {t("projects.folder.deleteModal.message")}
         </ConfirmationModalLayout>
       )}
 

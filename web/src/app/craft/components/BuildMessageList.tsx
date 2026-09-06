@@ -331,7 +331,7 @@ export default function BuildMessageList({
                 group="craftAgentMessage"
                 variant="appear-on-hover"
               >
-                <div className="flex flex-row -ml-1">
+                <div className="flex flex-row -ms-1">
                   <CopyButton
                     getCopyText={() =>
                       convertMarkdownTablesToTsv(message.content)

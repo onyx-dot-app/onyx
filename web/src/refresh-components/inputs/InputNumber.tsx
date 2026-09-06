@@ -152,7 +152,7 @@ export default function InputNumber({
     <div
       role="presentation"
       className={cn(
-        "flex flex-row items-center justify-between w-full h-fit pr-1.5 pl-1.5 rounded-08",
+        "flex flex-row items-center justify-between w-full h-fit pe-1.5 ps-1.5 rounded-08",
         wrapperClasses[variant],
         className
       )}

@@ -989,6 +989,9 @@ REDIS_POOL_MAX_CONNECTIONS = int(os.environ.get("REDIS_POOL_MAX_CONNECTIONS", 12
 # should be one of "required", "optional", or "none"
 REDIS_SSL_CERT_REQS = os.getenv("REDIS_SSL_CERT_REQS", "none")
 REDIS_SSL_CA_CERTS = os.getenv("REDIS_SSL_CA_CERTS", None)
+REDIS_SSL_CHECK_HOSTNAME = (
+    os.getenv("REDIS_SSL_CHECK_HOSTNAME", "false").lower() == "true"
+)
 # Client certificate + key for Redis mutual TLS (the server authenticating us).
 # Both must be set together and require REDIS_SSL=true. A managed Redis may hand
 # these out base64-encoded — decode them to files (e.g. a mounted secret) and
@@ -1091,10 +1094,10 @@ MAX_CONSECUTIVE_PORT_FAILURES_BEFORE_PAUSE = max(
 )
 
 # Old-index reclamation (post-reindex deletion of the now-PAST index).
-# Master switch: when False the reclaim beat task no-ops entirely. Ships dark
-# (default off); flip True to go live. Instant kill switch if anything goes wrong.
+# Master switch: when False the reclaim beat task and every dispatched task no-op.
+# Set it to false to turn reclamation off; that takes effect once the workers restart.
 OLD_INDEX_RECLAIM_ENABLED = (
-    os.environ.get("OLD_INDEX_RECLAIM_ENABLED", "").lower() == "true"
+    os.environ.get("OLD_INDEX_RECLAIM_ENABLED", "true").lower() == "true"
 )
 # Soak before deleting a PAST index, anchored to when it stopped being read.
 # 0 = delete immediately once the soak gate is reached.

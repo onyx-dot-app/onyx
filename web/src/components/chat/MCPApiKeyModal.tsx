@@ -224,13 +224,13 @@ export default function MCPApiKeyModal({
                         placeholder={t("credentialField.placeholder", {
                           field: field.replace(/_/g, " "),
                         })}
-                        className="pr-10"
+                        className="pe-10"
                         required
                       />
                       <button
                         type="button"
                         onClick={() => toggleCredentialVisibility(field)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-subtle hover:text-emphasis"
+                        className="absolute end-3 top-1/2 -translate-y-1/2 text-subtle hover:text-emphasis"
                         aria-label={
                           showCredentials[field]
                             ? t("credentialVisibilityButton.hideAriaLabel")
@@ -260,13 +260,13 @@ export default function MCPApiKeyModal({
                     value={apiKey}
                     onChange={(e) => setApiKey(e.target.value)}
                     placeholder={t("apiKeyField.placeholder")}
-                    className="pr-10"
+                    className="pe-10"
                     required
                   />
                   <button
                     type="button"
                     onClick={() => setShowApiKey(!showApiKey)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-subtle hover:text-emphasis"
+                    className="absolute end-3 top-1/2 -translate-y-1/2 text-subtle hover:text-emphasis"
                     aria-label={
                       showApiKey
                         ? t("apiKeyVisibilityButton.hideAriaLabel")

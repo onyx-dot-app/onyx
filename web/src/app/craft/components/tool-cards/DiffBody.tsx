@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import { cn } from "@opal/utils";
 import { Text, Button } from "@opal/components";
 import { SvgColumn, SvgMenu } from "@opal/icons";
@@ -103,6 +104,7 @@ function computeDiff(oldText: string, newText: string): DiffLine[] {
 
 function collapseUnchanged(
   lines: DiffLine[],
+  formatUnchanged: (count: number) => string,
   contextLines: number = 3
 ): DiffLine[] {
   const result: DiffLine[] = [];
@@ -116,7 +118,7 @@ function collapseUnchanged(
 
   if (changeIndices.length === 0) {
     if (lines.length > 10) {
-      return [{ type: "header", content: `${lines.length} unchanged lines` }];
+      return [{ type: "header", content: formatUnchanged(lines.length) }];
     }
     return lines;
   }
@@ -136,7 +138,7 @@ function collapseUnchanged(
     if (count <= 0) return;
     result.push({
       type: "header",
-      content: `${count} unchanged line${count > 1 ? "s" : ""}`,
+      content: formatUnchanged(count),
     });
   };
 
@@ -277,13 +279,16 @@ function SideBySideDiff({ lines }: { lines: DiffLine[] }) {
  * larger than SIDE_BY_SIDE_AUTO_THRESHOLD.
  */
 export default function DiffBody({ toolCall }: ToolCardBodyProps) {
+  const t = useTranslations("craft.toolCards.diff");
   const oldContent = toolCall.oldContent ?? "";
   const newContent = toolCall.newContent ?? "";
 
   const diffLines = useMemo(() => {
     const rawDiff = computeDiff(oldContent, newContent);
-    return collapseUnchanged(rawDiff);
-  }, [oldContent, newContent]);
+    return collapseUnchanged(rawDiff, (count) =>
+      t("unchangedLines.label", { count })
+    );
+  }, [oldContent, newContent, t]);
 
   const stats = useMemo(() => {
     const added = diffLines.filter((l) => l.type === "added").length;
@@ -341,8 +346,8 @@ export default function DiffBody({ toolCall }: ToolCardBodyProps) {
             }
             tooltip={
               mode === "unified"
-                ? "Switch to side-by-side"
-                : "Switch to unified"
+                ? t("viewToggle.sideBySideTooltip")
+                : t("viewToggle.unifiedTooltip")
             }
           />
         </div>

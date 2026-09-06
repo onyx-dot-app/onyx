@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { Card, Checkbox, Text } from "@opal/components";
 import { SvgMcp } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
@@ -28,6 +29,7 @@ export default function PreApprovalPicker({
   onAppChange,
   onMcpServerChange,
 }: PreApprovalPickerProps) {
+  const t = useTranslations("craft.tasks.preApproval");
   const {
     data: apps,
     isLoading: appsLoading,
@@ -42,7 +44,9 @@ export default function PreApprovalPicker({
   const appOptions: PreApprovalOption[] = (apps ?? []).map((app) => ({
     id: app.id,
     name: app.name,
-    status: app.authenticated ? "Connected" : "Connection required",
+    status: app.authenticated
+      ? t("status.connected")
+      : t("status.connectionRequired"),
     icon: getAppTypeLogo(app.app_type),
     testId: `pre-approval-app-${app.id}`,
   }));
@@ -54,7 +58,9 @@ export default function PreApprovalPicker({
     ...visibleMcpServers.map((server) => ({
       id: server.id,
       name: server.name,
-      status: server.craft_connected ? "Connected" : "Connection required",
+      status: server.craft_connected
+        ? t("status.connected")
+        : t("status.connectionRequired"),
       icon: getActionIcon(server.server_url, server.name),
       testId: `pre-approval-mcp-server-${server.id}`,
     })),
@@ -63,8 +69,8 @@ export default function PreApprovalPicker({
           .filter((id) => !visibleMcpServerIds.has(id))
           .map((id) => ({
             id,
-            name: `MCP server #${id}`,
-            status: "No longer available",
+            name: t("mcpServerFallbackName", { id }),
+            status: t("status.unavailable"),
             icon: SvgMcp,
             testId: `pre-approval-mcp-server-${id}`,
           }))
@@ -76,7 +82,7 @@ export default function PreApprovalPicker({
     return (
       <Card background="none" border="dashed" rounding={4}>
         <Text font="secondary-body" color="text-03">
-          Loading apps and MCP servers…
+          {t("loading.label")}
         </Text>
       </Card>
     );
@@ -86,7 +92,7 @@ export default function PreApprovalPicker({
     return (
       <Card background="none" border="dashed" rounding={4}>
         <Text font="secondary-body" color="text-03">
-          Couldn’t load apps and MCP servers. Refresh to try again.
+          {t("errors.loadFailed")}
         </Text>
       </Card>
     );
@@ -96,7 +102,7 @@ export default function PreApprovalPicker({
     return (
       <Card background="none" border="dashed" rounding={4}>
         <Text font="secondary-body" color="text-03">
-          No apps or MCP servers are available in Craft yet.
+          {t("empty.label")}
         </Text>
       </Card>
     );
@@ -110,13 +116,13 @@ export default function PreApprovalPicker({
       {(appsError || mcpError) && (
         <Card background="none" border="dashed" rounding={4}>
           <Text font="secondary-body" color="text-03">
-            Some pre-approval options couldn’t load. Refresh to try again.
+            {t("errors.partialLoadFailed")}
           </Text>
         </Card>
       )}
       {appOptions.length > 0 && (
         <PreApprovalGroup
-          title="Apps"
+          title={t("appsGroupTitle")}
           options={appOptions}
           selectedIds={selectedAppIds}
           onToggle={(id) => onAppChange(toggledIds(selectedAppIds, id))}
@@ -124,7 +130,7 @@ export default function PreApprovalPicker({
       )}
       {mcpOptions.length > 0 && (
         <PreApprovalGroup
-          title="MCP servers"
+          title={t("mcpGroupTitle")}
           options={mcpOptions}
           selectedIds={selectedMcpServerIds}
           onToggle={(id) =>

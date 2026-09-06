@@ -1,6 +1,6 @@
 import { SourceIcon } from "@/components/SourceIcon";
 import { MinimalOnyxDocument, OnyxDocument } from "@/lib/search/interfaces";
-import { FiTag } from "react-icons/fi";
+import { SvgTag } from "@opal/icons";
 import { buildDocumentSummaryDisplay } from "@/components/search/DocumentDisplay";
 import { DocumentUpdatedAtBadge } from "@/components/search/DocumentUpdatedAtBadge";
 import { MetadataBadge } from "@/components/MetadataBadge";
@@ -38,12 +38,12 @@ function DocumentMetadataBlock({
               .map(([key, value], index) => (
                 <MetadataBadge
                   key={index}
-                  icon={FiTag}
+                  icon={SvgTag}
                   value={`${key}=${value}`}
                 />
               ))}
             {metadataEntries.length > MAX_METADATA_ITEMS && (
-              <span className="ml-1 text-xs text-text-500">...</span>
+              <span className="ms-1 text-xs text-text-500">...</span>
             )}
           </div>
         </>
@@ -83,7 +83,7 @@ export default function ChatDocumentDisplay({
       type="button"
       onClick={() => openDocument(document, setPresentingDocument)}
       className={cn(
-        "flex w-full flex-col p-3 gap-2 rounded-12 hover:bg-background-tint-00 cursor-pointer text-left",
+        "flex w-full flex-col p-3 gap-2 rounded-12 hover:bg-background-tint-00 cursor-pointer text-start",
         isSelected && "bg-action-selection-02"
       )}
     >
@@ -102,7 +102,7 @@ export default function ChatDocumentDisplay({
         <DocumentMetadataBlock modal={modal} document={document} />
       )}
 
-      <Text as="p" className="line-clamp-2 text-left" secondaryBody text03>
+      <Text as="p" className="line-clamp-2 text-start" secondaryBody text03>
         {buildDocumentSummaryDisplay(document.match_highlights, document.blurb)}
       </Text>
     </button>

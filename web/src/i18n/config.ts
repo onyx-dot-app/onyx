@@ -12,6 +12,7 @@ export const SUPPORTED_LOCALES = [
   "ja",
   "zh",
   "ko",
+  "ar",
 ] as const;
 
 export type Locale = (typeof SUPPORTED_LOCALES)[number];
@@ -35,12 +36,25 @@ export const LOCALE_ENDONYMS = {
   ja: "日本語",
   zh: "简体中文",
   ko: "한국어",
+  ar: "العربية",
 } satisfies Record<Locale, string>;
 
 export function isSupportedLocale(
   value: string | null | undefined
 ): value is Locale {
-  // SAFETY: the cast only widens the argument for the readonly-array
-  // `includes` signature; membership is still checked at runtime.
+  // SAFETY: the cast narrows only to satisfy the readonly-array
+  // `includes` signature. Membership is still checked at runtime.
   return SUPPORTED_LOCALES.includes(value as Locale);
+}
+
+// Locales whose UI renders right-to-left. Drives <html dir> and the
+// Radix DirectionProvider in the root layout. A new RTL locale is
+// registered here after joining SUPPORTED_LOCALES.
+export const RTL_LOCALES: readonly Locale[] = ["ar"];
+
+export type HtmlDir = "ltr" | "rtl";
+
+export function htmlDirForLocale(locale: string): HtmlDir {
+  // SAFETY: cast narrows only for the readonly-array `includes` signature.
+  return RTL_LOCALES.includes(locale as Locale) ? "rtl" : "ltr";
 }

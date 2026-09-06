@@ -88,7 +88,8 @@ export function SearchChipList<T>({
           <div
             key={key}
             className={cn("text-xs", {
-              "animate-in fade-in slide-in-from-left-2 duration-150": isNew,
+              "animate-in fade-in slide-in-from-left-2 rtl:slide-in-from-right-2 duration-150":
+                isNew,
             })}
             style={
               isNew

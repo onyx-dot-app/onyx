@@ -136,12 +136,12 @@ function TokenLimitSection({
                 width="full"
               >
                 {/* Column headers */}
-                <div className="flex flex-wrap items-center gap-1 pr-[40px]">
+                <div className="flex flex-wrap items-center gap-1 pe-[40px]">
                   <div className="flex-1 flex items-center min-w-[160px]">
                     <Text mainUiAction text04>
                       {t("tokenLimits.tokenLimit.header")}
                     </Text>
-                    <Text mainUiMuted text03 className="ml-0.5">
+                    <Text mainUiMuted text03 className="ms-0.5">
                       {t("tokenLimits.tokenLimit.unit")}
                     </Text>
                   </div>
@@ -149,7 +149,7 @@ function TokenLimitSection({
                     <Text mainUiAction text04>
                       {t("tokenLimits.costLimit.header")}
                     </Text>
-                    <Text mainUiMuted text03 className="ml-0.5">
+                    <Text mainUiMuted text03 className="ms-0.5">
                       {t("tokenLimits.costLimit.unit")}
                     </Text>
                   </div>
@@ -157,7 +157,7 @@ function TokenLimitSection({
                     <Text mainUiAction text04>
                       {t("tokenLimits.timeWindow.header")}
                     </Text>
-                    <Text mainUiMuted text03 className="ml-0.5">
+                    <Text mainUiMuted text03 className="ms-0.5">
                       {t("tokenLimits.timeWindow.unit")}
                     </Text>
                   </div>

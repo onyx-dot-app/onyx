@@ -263,7 +263,7 @@ export default function InlineFileManagement({
                           {file.file_name}
                         </span>
                         {isMarkedForRemoval && (
-                          <span className="ml-2 text-xs font-semibold text-red-600 dark:text-red-400">
+                          <span className="ms-2 text-xs font-semibold text-red-600 dark:text-red-400">
                             {t("fileManagement.removingBadge.label")}
                           </span>
                         )}

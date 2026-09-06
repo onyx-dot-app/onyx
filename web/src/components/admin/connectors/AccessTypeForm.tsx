@@ -6,6 +6,7 @@ import {
   validAutoSyncSources,
 } from "@/lib/types";
 import { useField } from "formik";
+import { useTranslations } from "next-intl";
 import { AutoSyncOptions } from "./AutoSyncOptions";
 import { useTierAtLeast } from "@/hooks/useTierAtLeast";
 import { Tier } from "@/lib/settings/types";
@@ -28,6 +29,7 @@ export function AccessTypeForm({
   connector: ConfigurableSources;
   currentCredential?: Credential<any> | null;
 }) {
+  const t = useTranslations("admin.connector.accessType");
   const [access_type, meta, access_type_helpers] =
     useField<AccessType>("access_type");
   const { isScopedManager } = usePermissionAuthority(
@@ -74,10 +76,9 @@ export function AccessTypeForm({
 
     if (businessTier) {
       built.push({
-        name: "Private",
+        name: t("privateOption.name"),
         value: "private",
-        description:
-          "Only users who have explicitly been given access to this connector (through the User Groups page) can access the documents pulled in by this connector",
+        description: t("privateOption.description"),
         disabled: false,
         disabledReason: "",
       });
@@ -88,10 +89,9 @@ export function AccessTypeForm({
     // Offering the option would only produce a 403 on submit.
     if (!isScopedManager) {
       built.push({
-        name: "Public",
+        name: t("publicOption.name"),
         value: "public",
-        description:
-          "Everyone with an account on Onyx can access the documents pulled in by this connector",
+        description: t("publicOption.description"),
         disabled: false,
         disabledReason: "",
       });
@@ -99,18 +99,16 @@ export function AccessTypeForm({
 
     if (showAutoSync) {
       built.push({
-        name: "Auto Sync Permissions",
+        name: t("autoSyncOption.name"),
         value: "sync",
-        description:
-          "We will automatically sync permissions from the source. A document will be searchable in Onyx if and only if the user performing the search has permission to access the document in the source.",
+        description: t("autoSyncOption.description"),
         disabled: isSyncDisabledByAuth,
-        disabledReason:
-          "Current credential auth method doesn't support Auto Sync Permissions. Please change the credential auth method to a supported one.",
+        disabledReason: t("autoSyncOption.disabledReason"),
       });
     }
 
     return built;
-  }, [businessTier, isScopedManager, showAutoSync, isSyncDisabledByAuth]);
+  }, [businessTier, isScopedManager, showAutoSync, isSyncDisabledByAuth, t]);
 
   useEffect(() => {
     if (!businessTier || !options.length) return;
@@ -133,10 +131,8 @@ export function AccessTypeForm({
   return (
     <>
       <div>
-        <p className="text-text-950 font-medium">Document Access</p>
-        <p className="text-sm text-text-500">
-          Control who has access to the documents indexed by this connector.
-        </p>
+        <p className="text-text-950 font-medium">{t("heading.title")}</p>
+        <p className="text-sm text-text-500">{t("heading.description")}</p>
       </div>
       <DefaultDropdown
         options={options}

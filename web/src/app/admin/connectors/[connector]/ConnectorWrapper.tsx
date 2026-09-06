@@ -54,7 +54,7 @@ export default function ConnectorWrapper({
             <HeaderTitle>
               <p>{t("invalidConnector.title", { connector })}</p>
             </HeaderTitle>
-            <div className="mr-auto">
+            <div className="me-auto">
               <Button
                 onClick={() => window.open("/admin/indexing/status", "_self")}
               >

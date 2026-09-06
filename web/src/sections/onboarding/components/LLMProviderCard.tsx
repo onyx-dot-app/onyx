@@ -69,7 +69,7 @@ function LLMProviderCardInner({
             }
           }}
           className={cn(
-            "flex justify-between h-full w-full p-1 rounded-12 border border-border-01 bg-background-neutral-01 transition-colors text-left",
+            "flex justify-between h-full w-full p-1 rounded-12 border border-border-01 bg-background-neutral-01 transition-colors text-start",
             !disabled && "hover:bg-background-neutral-02 cursor-pointer"
           )}
         >

@@ -17,6 +17,7 @@ from onyx.configs.app_configs import (
     OAUTH_CLIENT_SECRET,
     OPENID_CONFIG_URL,
 )
+from onyx.db.auth import reload_user_oidc_expiry
 from onyx.db.enums import SSOProviderType
 from onyx.db.models import OAuthAccount, User
 from onyx.db.sso_provider import fetch_sso_provider_by_name_async
@@ -424,6 +425,17 @@ async def check_and_refresh_oauth_tokens(
                     # at worst the second coroutine sees the same stale
                     # state we'd see without the lock.
                     pass
+
+                try:
+                    # This User was loaded before any concurrent refresh. Its
+                    # oidc_expiry is re-read so a stale one cannot reject the request.
+                    await reload_user_oidc_expiry(db_session, user)
+                except Exception:
+                    logger.exception(
+                        "Could not reload oidc_expiry for %s, a stale value may "
+                        "reject this request",
+                        user.email,
+                    )
 
                 if (
                     oauth_account.expires_at

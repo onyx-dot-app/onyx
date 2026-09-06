@@ -214,7 +214,7 @@ function CustomConfigKeyValue() {
   return (
     <KeyValueInput
       items={formikProps.values.custom_config_list}
-      keyPlaceholder="e.g. OPENAI_ORGANIZATION"
+      keyPlaceholder={t("custom.envVars.keyInput.placeholder")}
       onChange={(items) =>
         formikProps.setFieldValue("custom_config_list", items)
       }

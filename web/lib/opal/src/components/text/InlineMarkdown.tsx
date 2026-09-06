@@ -33,16 +33,26 @@ const ALLOWED_ELEMENTS = [
 ];
 
 const INLINE_COMPONENTS = {
+  // dir="auto" isolates each block's direction so LTR technical copy
+  // inside an RTL page keeps its own reading order.
   p: ({ children }: { children?: ReactNode }) => (
-    <span className="block">{children}</span>
+    <span dir="auto" className="block">
+      {children}
+    </span>
   ),
   ul: ({ children }: { children?: ReactNode }) => (
-    <ul className="list-disc pl-3 space-y-0">{children}</ul>
+    <ul dir="auto" className="list-disc ps-3 space-y-0">
+      {children}
+    </ul>
   ),
   ol: ({ children }: { children?: ReactNode }) => (
-    <ol className="list-decimal pl-3">{children}</ol>
+    <ol dir="auto" className="list-decimal ps-3">
+      {children}
+    </ol>
   ),
-  li: ({ children }: { children?: ReactNode }) => <li>{children}</li>,
+  li: ({ children }: { children?: ReactNode }) => (
+    <li dir="auto">{children}</li>
+  ),
   a: ({ children, href }: { children?: ReactNode; href?: string }) => {
     if (!href) return <>{children}</>;
     // rehype-sanitize has already stripped unsafe hrefs — routing decision only.
